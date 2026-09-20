@@ -1,0 +1,57 @@
+{
+  "profile_id": "KM-JRA-FULLPIPELINE-CORRECTNESS-HARDENING-20260920-R3",
+  "status": "ACTIVE / JRA-WIDE / CORRECTNESS-HARDENING / NON-PREDICTIVE / FAIL-CLOSED",
+  "effective_at": "2026-09-20T16:35:00+09:00",
+  "predecessor": "KM-JRA-FULLPIPELINE-CORRECTNESS-HARDENING-20260920-R2",
+  "purpose": "Close the two R12 failures prospectively: Actual Calculation 0/N and post-start external completion, without changing prediction weights, probabilities, KRS physics, ticket policy or capital policy.",
+  "index_provenance_replay": {
+    "authority": "JRA v1.0-IPL / index_formula_registry JRA v1.0",
+    "input": "Frozen base-index final values with rule_id, mapping_version, evidence_refs, source_fact, DCR six-component ledger, weak-penalty major-index set, scenario_fit provenance.",
+    "builder": "runtime/jra_index_provenance_builder.py",
+    "builder_commit": "95c80ab894e65589a9d00fe035a071d3f00c062b",
+    "derived_formulas": ["DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"],
+    "rule": "No post-hoc pseudo-formula for HPI-VMI. Base values must already be pre-race frozen formal judgments with provenance. Derived values are replayed from Formula Registry v1.0.",
+    "formal_full_condition": "calculated_count == required_count && ruled_hold_count == 0 && not_applicable_count == 0 && unresolved_count == 0"
+  },
+  "deadline_fastpath": {
+    "order": [
+      "Source Snapshot Freeze",
+      "Base44 ExecutionSession",
+      "Index Provenance Ledger Freeze",
+      "Static / Role / Ticket Freeze",
+      "External Request Dispatch",
+      "PRE_KRS Verify",
+      "KRS Verify",
+      "FINAL Verify",
+      "User-facing audit/render"
+    ],
+    "external_dispatch_deadline_required": true,
+    "guard": "FORMAL-PRE-RACE requests fail before external runtime when current time is later than external_dispatch_deadline_at.",
+    "principle": "No lengthy audit narrative or noncritical research may precede external dispatch once the final source snapshot is available."
+  },
+  "source_integrity": {
+    "canonical_source_sha_recompute": true,
+    "base44_orchestration_binding": true,
+    "all_available_bet_types_disposition_required": true
+  },
+  "acceptance": {
+    "fixture": "KM-ACCEPT-HSN-INDEX-REPLAY-20260920-T07",
+    "github_run": 35497228086,
+    "manifest": {
+      "required_count": 60,
+      "calculated_count": 60,
+      "ruled_hold_count": 0,
+      "unresolved_count": 0
+    },
+    "base44_execution_session_id": "6aaf8c44f34caf7e88dea267",
+    "source_snapshot_sha256": "8f7cab6b5e3b9ea9ce7a6319f18d716e58b8233fb6a49fabc81bc8b8d6081bf6",
+    "pre_krs_receipt_sha256": "4569518ed2e94d66f6c7ce11d65eb2be79bec1a15418a047ed84425b524e8dc7",
+    "krs_receipt_sha256": "5eb4eda3f0983ae25338b35ccb16795f75de556b86a78aeb0dbe9a583a7128b1",
+    "final_receipt_sha256": "5401ce808c34165a4093e313af970c893cc97c8d4007311229c1dcfc78dec48d",
+    "requested_run_count": 5000,
+    "actual_run_count": 5000,
+    "external_runner_duration_seconds": 4,
+    "result": "FULL_FORMAL_E2E_PASS"
+  },
+  "temporal_integrity": "Prospective only. HSN R12 remains immutable: pre-race Prediction/Ticket frozen, Actual Calculation 0/300, external execution post-start."
+}
