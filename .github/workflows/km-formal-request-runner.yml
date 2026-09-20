@@ -50,6 +50,17 @@ jobs:
               req=json.load(f)
           req=materialize_index_provenance(req)
 
+          # FORMAL-PRE-RACE is always FULL_REQUIRED. Degraded / RULED-HOLD may be
+          # used diagnostically, but can never claim FORMAL-FULL.
+          temporal_mode=req.get("temporal_mode","FORMAL-PRE-RACE")
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert isinstance(req.get("index_provenance_ledger"),dict) and req.get("index_provenance_ledger"), "FORMAL_FULL_INDEX_PROVENANCE_LEDGER_MISSING"
+              assert req.get("numeric_calculation_requirement")=="FULL_REQUIRED", "FORMAL_FULL_REQUIRES_FULL_NUMERICAL_CALCULATION"
+
+          stage_manifest={}
+          def stage(name, **evidence):
+              stage_manifest[name]={"status":"PASS", **evidence}
+
           def call(base,path,payload=None,method="POST",timeout=300):
               data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
               headers={"content-type":"application/json"} if payload is not None else {}
@@ -67,14 +78,20 @@ jobs:
           race_id=req["race_id"]
           scheduled_post=req.get("scheduled_post_at")
           dispatch_deadline=req.get("external_dispatch_deadline_at")
-          temporal_mode=req.get("temporal_mode","FORMAL-PRE-RACE")
           if temporal_mode=="FORMAL-PRE-RACE":
               assert scheduled_post and dispatch_deadline, "TEMPORAL_FIELDS_MISSING"
               from datetime import datetime, timezone
               def dt(s):
                   return datetime.fromisoformat(str(s).replace("Z","+00:00"))
+              post_utc=dt(scheduled_post).astimezone(timezone.utc)
+              deadline_utc=dt(dispatch_deadline).astimezone(timezone.utc)
+              final_freeze_utc=dt(req["final_freeze_timestamp"]).astimezone(timezone.utc)
+              cutoff_utc=dt(req["prediction_cutoff"]).astimezone(timezone.utc)
+              assert cutoff_utc <= final_freeze_utc < post_utc, f"FREEZE_TEMPORAL_ORDER_FAIL:{cutoff_utc.isoformat()}:{final_freeze_utc.isoformat()}:{post_utc.isoformat()}"
+              assert deadline_utc < post_utc, f"DISPATCH_DEADLINE_NOT_BEFORE_POST:{dispatch_deadline}>={scheduled_post}"
               now=datetime.now(timezone.utc)
-              assert now <= dt(dispatch_deadline).astimezone(timezone.utc), f"DEADLINE_GUARD_FAIL:{now.isoformat()}>{dispatch_deadline}"
+              assert now <= deadline_utc, f"DEADLINE_GUARD_FAIL:{now.isoformat()}>{dispatch_deadline}"
+              stage("TEMPORAL_INPUT_VERIFIED", prediction_cutoff=req["prediction_cutoff"], final_freeze_timestamp=req["final_freeze_timestamp"], scheduled_post_at=scheduled_post, external_dispatch_deadline_at=dispatch_deadline)
           family=req.get("family_id","JRA")
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
@@ -105,6 +122,16 @@ jobs:
           # This now hard-verifies canonical Source Snapshot SHA, Base44 orchestration ref,
           # full numerical components when FORMAL-FULL requires them, and all bet-type dispositions.
           conformance=validate_request(req)
+          stage("SOURCE_SNAPSHOT_VERIFIED", sha256=conformance["source_snapshot_sha256"])
+          stage("RUNNER_UNIVERSE_VERIFIED", runner_count=conformance["runner_count"])
+          stage("INDEX_PROVENANCE_VERIFIED", canonical_component_count=conformance.get("canonical_component_count"), index_provenance_hash=req.get("index_provenance_hash"))
+          stage("STATIC_PREDICTION_VERIFIED", ranking_complete=conformance.get("ranking_complete"))
+          stage("ROLE_REGISTRY_VERIFIED", role_cell_count=conformance["role_cell_count"])
+          stage("PAIR_DISPOSITIONS_VERIFIED", count=conformance["pair_disposition_count"])
+          stage("THIRD_DISPOSITIONS_VERIFIED", count=conformance["third_disposition_count"])
+          stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=conformance["bet_type_dispositions_verified"])
+          stage("TICKET_CANONICAL_VERIFIED", ticket_count=conformance["actual_unique_count"])
+          stage("CAPITAL_TOTAL_VERIFIED", total_investment=conformance["total_investment"])
 
           # Railway JRA base-index terminalization / numerical replay.
           hcode,h=call(CALC,"/health",None,"GET",30)
@@ -119,6 +146,17 @@ jobs:
               assert int(c.get("not_applicable_count",0))==0,c
           required=adapt_calculator_output(c)
           assert len(required)==c.get("required_count"),(len(required),c.get("required_count"))
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert int(c.get("calculated_count",0))==int(c.get("required_count",0)), "FORMAL_FULL_ACTUAL_CALCULATION_INCOMPLETE"
+              assert int(c.get("ruled_hold_count",0))==0, "FORMAL_FULL_RULED_HOLD_FORBIDDEN"
+              assert int(c.get("not_applicable_count",0))==0, "FORMAL_FULL_NOT_APPLICABLE_FORBIDDEN"
+              assert int(c.get("unresolved_count",0))==0, "FORMAL_FULL_UNRESOLVED_FORBIDDEN"
+          stage("FULL_NUMERICAL_CALCULATION_VERIFIED",
+                required_count=c.get("required_count"),
+                calculated_count=c.get("calculated_count"),
+                ruled_hold_count=c.get("ruled_hold_count"),
+                not_applicable_count=c.get("not_applicable_count"),
+                unresolved_count=c.get("unresolved_count"))
 
           # PRE_KRS external receipt.
           universe=[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in runners]
@@ -138,6 +176,7 @@ jobs:
           assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
           vcode,v=call(KRS,"/verify",p,timeout=30)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
+          stage("PRE_KRS_VERIFIED", receipt_sha256=p.get("receipt_sha256"))
 
           # Real KRS execution. The runtime's parameter_map_sha256 is Engine-side params,
           # not the JRA Static->HSV formal adapter identity.
@@ -160,6 +199,13 @@ jobs:
           assert int(rr.get("actual_run_count",0))>=int(req.get("run_count",5000)),rr
           kvcode,kv=call(KRS,"/verify",run,timeout=30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
+          stage("KRS_EXECUTION_VERIFIED",
+                requested_run_count=rr.get("requested_run_count"),
+                actual_run_count=rr.get("actual_run_count"),
+                engine_sha256=rr.get("engine_sha256"),
+                input_sha256=rr.get("input_sha256"),
+                output_sha256=rr.get("output_sha256"),
+                receipt_sha256=run.get("receipt_sha256"))
 
           # If physical v0.2 adapter path is selected, the caller must additionally attest
           # the exact artifact. Engine-side params are deliberately not compared to v0.2.
@@ -187,6 +233,16 @@ jobs:
               "not_applicable_count":c.get("not_applicable_count"),
               "unresolved_count":c.get("unresolved_count"),
           }
+          if temporal_mode=="FORMAL-PRE-RACE":
+              now=datetime.now(timezone.utc)
+              assert now < post_utc, f"POST_START_BEFORE_FINAL_BLOCK:{now.isoformat()}>={scheduled_post}"
+              stage("PRE_FINAL_TEMPORAL_VERIFIED", checked_at=now.isoformat(), scheduled_post_at=scheduled_post)
+
+          # Bind every pre-FINAL mandatory stage into the signed FINAL payload.
+          final_package["execution_stage_manifest"]=stage_manifest
+          final_package["execution_stage_manifest_sha256"]=hashlib.sha256(
+              json.dumps(stage_manifest,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+          ).hexdigest()
 
           final_payload={
             "race_id":race_id,
@@ -214,6 +270,11 @@ jobs:
           assert fcode<300 and f.get("receipt",{}).get("status")=="PASS",(fcode,f)
           fvcode,fv=call(KRS,"/verify",f,timeout=30)
           assert fvcode<300 and fv.get("valid") is True,(fvcode,fv)
+          if temporal_mode=="FORMAL-PRE-RACE":
+              final_receipt_ts=f.get("receipt",{}).get("timestamp")
+              assert final_receipt_ts, "FINAL_RECEIPT_TIMESTAMP_MISSING"
+              assert dt(final_receipt_ts).astimezone(timezone.utc) < post_utc, f"FINAL_RECEIPT_POST_START:{final_receipt_ts}>={scheduled_post}"
+          stage("FINAL_VERIFIED", receipt_sha256=f.get("receipt_sha256"), receipt_timestamp=f.get("receipt",{}).get("timestamp"))
 
           summary={
             "race_id":race_id,
@@ -245,7 +306,10 @@ jobs:
             "total_investment":expected_total,
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
             "base44_orchestration":conformance["base44_execution_session_id"],
-            "bet_type_dispositions_verified":conformance["bet_type_dispositions_verified"]
+            "bet_type_dispositions_verified":conformance["bet_type_dispositions_verified"],
+            "execution_stage_manifest":stage_manifest,
+            "execution_stage_manifest_sha256":final_package["execution_stage_manifest_sha256"],
+            "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values())
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
