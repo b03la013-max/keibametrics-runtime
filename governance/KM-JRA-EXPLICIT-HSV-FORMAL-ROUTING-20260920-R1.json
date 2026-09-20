@@ -1,0 +1,62 @@
+{
+  "profile_id": "KM-JRA-EXPLICIT-HSV-FORMAL-ROUTING-20260920-R1",
+  "status": "ACTIVE / JRA-WIDE / PRODUCTION-EXECUTION-OVERLAY / NON-NUMERICAL / FAIL-CLOSED",
+  "effective_at": "2026-09-20T14:45:00+09:00",
+  "purpose": "Restore fully executable JRA formal path without fabricating lost parameter_map-JRA v0.2 physical bytes.",
+  "authority_basis": [
+    "KRS-Engine運用接続規程 JRA Formal Adapter: explicit engine_hsv has priority over adapter-derived HSV",
+    "Engine v1.1.0 remains frozen",
+    "No numeric coefficient/scenario/KRS calibration change"
+  ],
+  "adapter_routing": {
+    "primary_when_complete": "EXPLICIT_ENGINE_HSV",
+    "requirements": [
+      "all 30 HSV present per active runner",
+      "all 11 Static present per active runner",
+      "all values numeric finite 0..100",
+      "source snapshot SHA256 present",
+      "mapping authority/provenance present",
+      "full runner universe identity match"
+    ],
+    "artifact_fallback": "JRA_V0_2_ARTIFACT",
+    "artifact_fallback_sha256": "8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5",
+    "fail_closed_if": "explicit 30+11 incomplete AND exact v0.2 artifact unavailable"
+  },
+  "receipt_semantics": {
+    "jra_adapter_identity": "record separately as jra_adapter.mode/provenance",
+    "runtime_parameter_map_sha256": "rename/interpret as engine_parameter_map_sha256; it is not parameter_map-JRA v0.2 identity"
+  },
+  "mandatory_path": [
+    "CANON_RESOLVE",
+    "RUNNER_UNIVERSE",
+    "REQUIRED_INDEX_MANIFEST",
+    "INDEX_TERMINAL",
+    "STATIC_NUMERIC_FREEZE",
+    "EXPLICIT_30HSV_11STATIC_VALIDATE",
+    "ROLE_MATRIX_TERMINAL",
+    "HEAD_P2_DISPOSITION",
+    "PAIR_P3_DISPOSITION",
+    "CANONICAL_REVERSE_EXACT_PREFLIGHT",
+    "BASE44_SESSION",
+    "RAILWAY_PRE_KRS",
+    "PRE_KRS_VERIFY",
+    "KRS_EXECUTE",
+    "KRS_VERIFY",
+    "TICKET_COUNT_STAKE_RECONCILE",
+    "RAILWAY_FINAL",
+    "FINAL_VERIFY",
+    "BASE44_RECEIPT_LEDGER"
+  ],
+  "acceptance": {
+    "race_id": "KM-ACCEPT-HSN-EXPLICIT-HSV-20260920-T04",
+    "github_actions_run_id": 35492022852,
+    "status": "FULL_FORMAL_E2E_PASS",
+    "required_indices": "60/60 CALCULATED, unresolved 0",
+    "pre_krs_receipt_sha256": "34987e88ad77e3e78b6d9135c79a26a84bb0f6e2d1049c587be0efde05e046fa",
+    "krs_actual_run_count": 5000,
+    "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+    "engine_parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+    "krs_receipt_sha256": "6e8ccdde0bf0bf78a2f3e30a75689bf0e12da6c8771ed6523df0f39b507750db",
+    "final_receipt_sha256": "3856950c0b0c6fe50781e8e84f81085ca1ac41fe4115420888a941da1654e223"
+  }
+}
