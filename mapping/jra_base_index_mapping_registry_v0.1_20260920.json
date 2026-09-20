@@ -1,0 +1,79 @@
+{
+  "registry_id": "JRA-BASE-INDEX-MAPPING-REGISTRY-v0.1-20260920",
+  "status": "ACTIVE-REPRODUCIBILITY-REPAIR / NON-NUMERICAL / NO-PSEUDO-PRECISION",
+  "authority_basis": [
+    "Central Index Provenance: rule ID + mapping version required for rule-based base indices",
+    "parameter_map-JRA v0.2: UNKNOWN fields use neutral 50 + missing flag deterministically",
+    "KM-FAMILY-EXECUTION-ARCHITECTURE-20260920-R2: RULED-HOLD is protocol-complete"
+  ],
+  "base_indices": [
+    "HPI",
+    "SSI",
+    "CFI",
+    "RFI",
+    "BVI",
+    "JTI",
+    "CSI",
+    "TRI",
+    "BWI",
+    "GCI",
+    "PRI",
+    "KGI",
+    "VMI"
+  ],
+  "derived_indices": [
+    "DCR",
+    "TPI",
+    "ZAI_WIN",
+    "ZAI_PLACE",
+    "SRI",
+    "F3S",
+    "T3I"
+  ],
+  "rules": {
+    "JRA-CANONICAL-COMPONENT-REPLAY-v1": {
+      "applies_when": "caller supplies frozen canonical component value with rule_id + mapping_version + evidence refs",
+      "terminal_status": "CALCULATED",
+      "transport": "use canonical final value"
+    },
+    "JRA-UNKNOWN-NEUTRAL-50-v1": {
+      "applies_when": "canonical numeric mapping/value is unavailable, inapplicable to a newcomer, or evidence is insufficient for reproducible numeric scoring",
+      "terminal_status": "RULED-HOLD",
+      "formal_value": null,
+      "transport_value": 50,
+      "missing_flag": true,
+      "semantics": "50 is transport-neutral only; it is not ability=50, probability=50%, weakness, or market belief"
+    },
+    "JRA-NOT-APPLICABLE-v1": {
+      "applies_when": "the active canon explicitly declares an index not applicable",
+      "terminal_status": "NOT-APPLICABLE",
+      "formal_value": null,
+      "transport_value": 50,
+      "missing_flag": true
+    }
+  },
+  "newcomer_policy": {
+    "unknown_not_weak": true,
+    "no_auto_winner_promotion": true,
+    "winner_reaudit_trigger": "two or more independent positive evidence groups may trigger Winner Re-Audit, never automatic W",
+    "evidence_groups": [
+      "gate",
+      "dash_position_acquisition",
+      "workout_capability",
+      "distance_fit",
+      "pedigree_physical",
+      "jockey_tactical_fit",
+      "sustain_reserve",
+      "body_condition_growth",
+      "stable_trainer_state",
+      "course_fit"
+    ]
+  },
+  "prohibited": [
+    "inventing precise 0-100 scores from narrative",
+    "treating neutral 50 as a formal ability score",
+    "using odds/VMI as physical KRS ability input",
+    "turning UNKNOWN into WEAK",
+    "claiming CALCULATED without canonical rule provenance"
+  ]
+}
