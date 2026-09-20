@@ -1,0 +1,33 @@
+name: KM Result Contract Probe 20260920
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-result-contract-probe-20260920.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe RESULT contract without mutation assumptions
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error
+          BASE="https://quorumprobe-production.up.railway.app"
+          tests=[
+            {},
+            {"race_id":"KM-RESULT-PROBE"},
+            {"race_id":"KM-RESULT-PROBE","official_result":{"finish_order":[1,2,3]}},
+            {"race_id":"KM-RESULT-PROBE","official_result":{"finish_order":[1,2,3]},"settlement":{"total_payout":0}},
+            {"race_id":"KM-RESULT-PROBE","official_result":{"finish_order":[1,2,3]},"settlement":{"total_payout":0},"final_receipt_sha256":"0"*64}
+          ]
+          for i,p in enumerate(tests,1):
+            req=urllib.request.Request(BASE+"/result",data=json.dumps(p).encode(),headers={"content-type":"application/json"},method="POST")
+            try:
+              with urllib.request.urlopen(req,timeout=30) as r:
+                raw=r.read().decode()
+                print("PROBE",i,"HTTP",r.status,"BODY",raw)
+            except urllib.error.HTTPError as e:
+              print("PROBE",i,"HTTP",e.code,"BODY",e.read().decode(errors="replace"))
+          PY
