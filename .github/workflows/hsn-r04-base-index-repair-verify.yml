@@ -1,0 +1,107 @@
+name: HSN R04 Base Index Repair Verify
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/hsn-r04-base-index-repair-verify.yml"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify calculator and repaired PRE_KRS
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          CALC="https://jra-validation-sandbox-production.up.railway.app"
+          KRS="https://quorumprobe-production.up.railway.app"
+          RID="KM-JRA-HSN-20260920-R04-REPAIR-VERIFY"
+          horses=[
+            (1,"ナムラモモタロー",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
+            (2,"ベルウッドスーパー",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
+            (3,"テリオスベラ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","pedigree_physical":"POSITIVE"}),
+            (4,"ダイユウエゾフジ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
+            (5,"スイートモンブラン",{"gate":"STRONG","dash_position_acquisition":"POSITIVE","distance_fit":"STRONG","pedigree_physical":"POSITIVE","stable_trainer_state":"POSITIVE"}),
+            (6,"レタートゥブリッジ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","pedigree_physical":"POSITIVE"}),
+            (7,"リュコス",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
+            (8,"ペンタクルクイーン",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"STRONG","distance_fit":"POSITIVE","stable_trainer_state":"STRONG"}),
+            (9,"ホットハニーラグ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"POSITIVE"}),
+            (10,"フィリップヴィル",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"STRONG","distance_fit":"STRONG","sustain_reserve":"STRONG","stable_trainer_state":"STRONG"}),
+            (11,"キタノゲートウェイ",{"gate":"POSITIVE"}),
+            (12,"レグルスロウ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"POSITIVE","distance_fit":"POSITIVE","sustain_reserve":"STRONG"}),
+            (13,"トリオハピネス",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"POSITIVE","distance_fit":"STRONG","stable_trainer_state":"POSITIVE"}),
+            (14,"バトゥル",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
+            (15,"エスアンヴィユ",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE","workout_capability":"POSITIVE","pedigree_physical":"POSITIVE"})
+          ]
+          def call(base,path,payload=None,method="POST",timeout=60):
+              data=None if payload is None else json.dumps(payload,separators=(",",":")).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      body=r.read().decode()
+                      return r.status,json.loads(body) if body else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+          hcode,h=call(CALC,"/health",None,"GET",30)
+          print("CALC_HEALTH",hcode,json.dumps(h,ensure_ascii=False))
+          assert hcode==200 and h.get("status")=="READY"
+          payload={"race_id":RID,"runners":[{"runner_id":str(n),"name":nm,"newcomer":True,"raw_evidence":ev} for n,nm,ev in horses]}
+          ccode,c=call(CALC,"/calculate-jra-base",payload,"POST",60)
+          print("CALC_RESULT",ccode,json.dumps({k:c.get(k) for k in ["status","registry_id","required_count","calculated_count","ruled_hold_count","not_applicable_count","unresolved_count"]},ensure_ascii=False))
+          assert ccode==200 and c.get("status")=="PASS"
+          assert c.get("required_count")==300 and c.get("unresolved_count")==0
+          assert c.get("ruled_hold_count")==300
+          required=[]
+          for r in c["runners"]:
+              for item in r["items"]:
+                  required.append({
+                    "runner_id":r["runner_id"],
+                    "name":item["index_name"],
+                    "status":item["terminal_status"],
+                    "value":item.get("transport_value"),
+                    "formal_value":item.get("formal_value"),
+                    "missing_flag":item.get("missing_flag"),
+                    "rule_id":item.get("calculation_rule_id"),
+                    "mapping_version":item.get("mapping_version")
+                  })
+          pre={
+            "race_id":RID,
+            "runner_universe":[{"horse_no":n,"name":nm} for n,nm,_ in horses],
+            "required_indices":required,
+            "static_prediction":{
+              "ranking":[10,8,13,5,12,6,9,3,15,1,2,14,4,7,11],
+              "roles":{"10":["W","P2"],"8":["W","P2"],"13":["W","P2","P3"],"5":["P2","P3"],"12":["P2","P3"],"6":["P3"],"9":["P3"],"3":["P3"],"15":["P3"]},
+              "status":"EVIDENCE-LED / FROZEN-1049",
+              "note":"No invented precise base-index scores; newcomer unknown fields terminalized by canonical RULED-HOLD adapter."
+            },
+            "prediction_cutoff":"2026-09-20T10:50:00+09:00",
+            "krs_required":True,
+            "krs_executable":True
+          }
+          pcode,p=call(KRS,"/pre-krs",pre,"POST",60)
+          print("PRE_KRS_HTTP",pcode)
+          print("PRE_KRS_STATUS",p.get("receipt",{}).get("status"))
+          print("PRE_KRS_ERRORS",json.dumps(p.get("receipt",{}).get("errors",[]),ensure_ascii=False))
+          print("PRE_KRS_RECEIPT_SHA",p.get("receipt_sha256"))
+          assert pcode<300 and p.get("receipt",{}).get("status")=="PASS"
+          vcode,v=call(KRS,"/verify",p,"POST",30)
+          print("PRE_KRS_VERIFY",vcode,json.dumps(v,ensure_ascii=False))
+          assert vcode<300 and v.get("valid") is True
+          print("HSN_R04_BASE_INDEX_REPAIR_PASS",json.dumps({
+            "race_id":RID,
+            "calculator_registry":c.get("registry_id"),
+            "required_count":c.get("required_count"),
+            "ruled_hold_count":c.get("ruled_hold_count"),
+            "unresolved_count":c.get("unresolved_count"),
+            "pre_krs":"PASS_VERIFIED",
+            "receipt_sha256":p.get("receipt_sha256")
+          },ensure_ascii=False))
+          PY
