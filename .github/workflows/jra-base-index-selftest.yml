@@ -1,0 +1,60 @@
+name: JRA Base Index Calculator Selftest
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/base-index-service/**"
+      - "mapping/jra_base_index_mapping_registry_v0.1_20260920.json"
+      - ".github/workflows/jra-base-index-selftest.yml"
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start calculator and verify terminal semantics
+        shell: bash
+        run: |
+          node runtime/base-index-service/server.mjs > /tmp/km-base-index.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:3000/health >/tmp/health.json; then break; fi
+            sleep 0.5
+          done
+          cat /tmp/health.json
+          python - <<'PY'
+          import json, urllib.request
+          def post(p):
+              req=urllib.request.Request("http://127.0.0.1:3000/calculate-jra-base",
+                  data=json.dumps(p).encode(),headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(req,timeout=10) as r: return json.load(r)
+          p={
+            "race_id":"JRA-BASE-INDEX-SELFTEST-20260920",
+            "runners":[{
+              "runner_id":"1","name":"NEWCOMER","newcomer":True,
+              "canonical_components":{
+                "TRI":{"value":88,"rule_id":"TRI-CANON-TEST","mapping_version":"TEST-v1","evidence_refs":["workout-1"]}
+              },
+              "not_applicable_indices":["RFI"],
+              "raw_evidence":{"gate":"POSITIVE","workout_capability":"STRONG"}
+            }]
+          }
+          x=post(p)
+          print(json.dumps(x,ensure_ascii=False))
+          assert x["status"]=="PASS"
+          assert x["required_count"]==20
+          assert x["unresolved_count"]==0
+          assert x["calculated_count"]==1
+          assert x["not_applicable_count"]==1
+          assert x["ruled_hold_count"]==18
+          r=x["runners"][0]
+          assert r["winner_reaudit_trigger"] is True
+          by={i["index_name"]:i for i in r["items"]}
+          assert by["TRI"]["terminal_status"]=="CALCULATED" and by["TRI"]["formal_value"]==88
+          assert by["RFI"]["terminal_status"]=="NOT-APPLICABLE" and by["RFI"]["formal_value"] is None and by["RFI"]["transport_value"]==50
+          assert by["HPI"]["terminal_status"]=="RULED-HOLD" and by["HPI"]["formal_value"] is None and by["HPI"]["transport_value"]==50 and by["HPI"]["missing_flag"] is True
+          assert "not ability/probability/weakness" in by["HPI"]["semantics"]
+          print("JRA_BASE_INDEX_SELFTEST_PASS")
+          PY
