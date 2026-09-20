@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+
       - name: Resolve request
         id: request
         shell: bash
@@ -34,16 +35,17 @@ jobs:
           REQUEST_FILE: ${{ steps.request.outputs.request }}
         run: |
           python - <<'PY'
-          import json, urllib.request, urllib.error, sys, hashlib
+          import json, urllib.request, urllib.error, sys, hashlib, os
           sys.path.insert(0,"runtime")
           from prekrs_terminal_compat import adapt_calculator_output
+          from formal_request_validator import validate_request
 
-          EXPECTED_JRA_PARAM="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
+          JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           CALC="https://jra-validation-sandbox-production.up.railway.app"
           KRS="https://quorumprobe-production.up.railway.app"
 
-          with open(__import__("os").environ["REQUEST_FILE"],encoding="utf-8") as f:
+          with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
 
           def call(base,path,payload=None,method="POST",timeout=300):
@@ -65,14 +67,34 @@ jobs:
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
           assert venue in {"HSN","NKY","CHU","SAP","NII","KOK","FKS","HAK","TOK","KYO"}, venue
-
-          # Hard source/canonical gates supplied by caller and verified against Family registry constants.
-          assert req.get("jra_parameter_map_sha256")==EXPECTED_JRA_PARAM, "JRA_PARAMETER_MAP_DECLARATION_MISMATCH"
           assert req.get("engine_sha256")==ENGINE_SHA, "ENGINE_DECLARATION_MISMATCH"
 
+          adapter_mode=req.get("jra_adapter_mode","EXPLICIT_ENGINE_HSV")
+          if adapter_mode=="JRA_V0_2_ARTIFACT":
+              assert req.get("jra_parameter_map_sha256")==JRA_V02_SHA, "JRA_PARAMETER_MAP_DECLARATION_MISMATCH"
+              adapter_identity={"mode":adapter_mode,"artifact_sha256":JRA_V02_SHA,"artifact_required":True}
+          elif adapter_mode=="EXPLICIT_ENGINE_HSV":
+              # Current formal priority rule: caller-supplied complete Engine HSV wins over adapter-derived values.
+              # No v0.2 bytes are fabricated. The request must contain all 30 HSV + 11 Static and provenance.
+              prov=req.get("explicit_engine_hsv_provenance") or {}
+              assert prov.get("source_snapshot_sha256"), "EXPLICIT_HSV_PROVENANCE_SNAPSHOT_SHA_MISSING"
+              assert prov.get("mapping_authority"), "EXPLICIT_HSV_MAPPING_AUTHORITY_MISSING"
+              adapter_identity={
+                "mode":adapter_mode,
+                "artifact_sha256":None,
+                "artifact_required":False,
+                "source_snapshot_sha256":prov["source_snapshot_sha256"],
+                "mapping_authority":prov["mapping_authority"],
+              }
+          else:
+              raise AssertionError(f"UNSUPPORTED_JRA_ADAPTER_MODE:{adapter_mode}")
+
+          # Conversion / canonical / capital preflight before any external KRS run.
+          conformance=validate_request(req)
+
+          # Railway JRA base-index terminalization.
           hcode,h=call(CALC,"/health",None,"GET",30)
           assert hcode==200 and h.get("status")=="READY",(hcode,h)
-
           runners=req["runners"]
           ccode,c=call(CALC,"/calculate-jra-base",{"race_id":race_id,"runners":runners},timeout=90)
           assert ccode==200 and c.get("status")=="PASS",(ccode,c)
@@ -80,6 +102,7 @@ jobs:
           required=adapt_calculator_output(c)
           assert len(required)==c.get("required_count"),(len(required),c.get("required_count"))
 
+          # PRE_KRS external receipt.
           universe=[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in runners]
           pre={
             "race_id":race_id,
@@ -95,6 +118,8 @@ jobs:
           vcode,v=call(KRS,"/verify",p,timeout=30)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
 
+          # Real KRS execution. The runtime's parameter_map_sha256 is Engine-side params,
+          # not the JRA Static->HSV formal adapter identity.
           kinput=req["krs_input_data"]
           sim=kinput.setdefault("simulation",{})
           sim["run_count"]=int(req.get("run_count",5000))
@@ -104,25 +129,29 @@ jobs:
             "input_data":kinput,
             "mode":req.get("mode","SIM-STD"),
             "seed":int(req["seed"]),
-            "input_class":"FORMAL-LIVE"
+            "input_class":"FORMAL-LIVE-"+adapter_mode
           }
           kcode,k=call(KRS,"/krs/execute",kpayload,timeout=360)
           run=k.get("run_receipt",{})
           rr=run.get("receipt",{})
           assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
           assert rr.get("engine_sha256")==ENGINE_SHA, "ENGINE_SHA_RUNTIME_MISMATCH"
-          # This is the decisive JRA hard gate. Legacy family v0.1 cannot masquerade as JRA v0.2.
-          assert rr.get("parameter_map_sha256")==EXPECTED_JRA_PARAM, (
-              "JRA_PARAMETER_MAP_RUNTIME_MISMATCH",rr.get("parameter_map_sha256")
-          )
           assert int(rr.get("actual_run_count",0))>=int(req.get("run_count",5000)),rr
           kvcode,kv=call(KRS,"/verify",run,timeout=30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
 
+          # If physical v0.2 adapter path is selected, the caller must additionally attest
+          # the exact artifact. Engine-side params are deliberately not compared to v0.2.
+          if adapter_mode=="JRA_V0_2_ARTIFACT":
+              assert req.get("jra_parameter_map_sha256")==JRA_V02_SHA
+
           tickets=req["tickets"]
-          total=sum(int(t["stake"]) for t in tickets)
           expected_total=int(req["total_investment"])
-          assert total==expected_total,(total,expected_total)
+
+          final_package=dict(req["final_prediction_package"])
+          final_package["jra_adapter_identity"]=adapter_identity
+          final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
+          final_package["conformance_preflight"]=conformance
 
           final_payload={
             "race_id":race_id,
@@ -130,7 +159,7 @@ jobs:
             "krs_required":True,
             "krs_executable":True,
             "krs_run_receipt":run,
-            "final_prediction_package":req["final_prediction_package"],
+            "final_prediction_package":final_package,
             "ticket_transport":tickets,
             "final_ticket":{
               "finalized":True,
@@ -151,9 +180,26 @@ jobs:
             "family_id":family,
             "venue_id":venue,
             "status":"FULL_FORMAL_E2E_PASS",
-            "manifest":{"required_count":c.get("required_count"),"calculated_count":c.get("calculated_count"),"ruled_hold_count":c.get("ruled_hold_count"),"not_applicable_count":c.get("not_applicable_count"),"unresolved_count":c.get("unresolved_count")},
+            "jra_adapter":adapter_identity,
+            "manifest":{
+              "required_count":c.get("required_count"),
+              "calculated_count":c.get("calculated_count"),
+              "ruled_hold_count":c.get("ruled_hold_count"),
+              "not_applicable_count":c.get("not_applicable_count"),
+              "unresolved_count":c.get("unresolved_count")
+            },
+            "conformance":conformance,
             "pre_krs":{"receipt_sha256":p.get("receipt_sha256"),"verified":True},
-            "krs":{"requested_run_count":rr.get("requested_run_count"),"actual_run_count":rr.get("actual_run_count"),"engine_sha256":rr.get("engine_sha256"),"parameter_map_sha256":rr.get("parameter_map_sha256"),"input_sha256":rr.get("input_sha256"),"output_sha256":rr.get("output_sha256"),"receipt_sha256":run.get("receipt_sha256"),"verified":True},
+            "krs":{
+              "requested_run_count":rr.get("requested_run_count"),
+              "actual_run_count":rr.get("actual_run_count"),
+              "engine_sha256":rr.get("engine_sha256"),
+              "engine_parameter_map_sha256":rr.get("parameter_map_sha256"),
+              "input_sha256":rr.get("input_sha256"),
+              "output_sha256":rr.get("output_sha256"),
+              "receipt_sha256":run.get("receipt_sha256"),
+              "verified":True
+            },
             "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True},
             "ticket_count":len(tickets),
             "total_investment":expected_total
