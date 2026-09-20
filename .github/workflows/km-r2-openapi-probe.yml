@@ -1,22 +1,228 @@
-name: KM R2 OpenAPI Probe
+name: KM R2 E2E Acceptance Probe
 on:
   push:
     branches:
       - km-r2-e2e-probe-20260920
 jobs:
-  probe:
+  e2e:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch Railway Runtime OpenAPI
+      - name: Run R2 acceptance test
         shell: bash
         run: |
           python - <<'PY'
-          import urllib.request
-          u='https://quorumprobe-production.up.railway.app/openapi.json'
-          with urllib.request.urlopen(u, timeout=30) as r:
-              body=r.read().decode('utf-8','replace')
-              print('KM_OPENAPI_HTTP', r.status)
-              print('KM_OPENAPI_BEGIN')
-              print(body)
-              print('KM_OPENAPI_END')
+          import json, urllib.request, urllib.error, sys, time
+
+          BASE='https://quorumprobe-production.up.railway.app'
+          SEED=20260920
+
+          def http(method, path, obj=None):
+              data=None if obj is None else json.dumps(obj,separators=(',',':')).encode()
+              req=urllib.request.Request(BASE+path,data=data,method=method,headers={'content-type':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=180) as r:
+                      raw=r.read().decode('utf-8','replace')
+                      try: parsed=json.loads(raw)
+                      except Exception: parsed=raw
+                      print('HTTP_RESULT',method,path,r.status,json.dumps(parsed,ensure_ascii=False) if not isinstance(parsed,str) else parsed)
+                      return r.status, parsed
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode('utf-8','replace')
+                  try: parsed=json.loads(raw)
+                  except Exception: parsed=raw
+                  print('HTTP_ERROR',method,path,e.code,json.dumps(parsed,ensure_ascii=False) if not isinstance(parsed,str) else parsed)
+                  return e.code, parsed
+              except Exception as e:
+                  print('HTTP_EXCEPTION',method,path,repr(e))
+                  return 0, {'exception':repr(e)}
+
+          print('=== HEALTH ===')
+          http('GET','/health')
+
+          print('=== NEGATIVE PRE_KRS: UNRESOLVED MUST BLOCK ===')
+          neg_race='KM-R2-E2E-ACCEPT-20260920-T01-NEG'
+          neg={
+            'race_id':neg_race,
+            'test_fixture':True,
+            'runner_universe':[
+              {'horse_no':1,'name':'R2-NEG-1'},
+              {'horse_no':2,'name':'R2-NEG-2'},
+              {'horse_no':3,'name':'R2-NEG-3'}
+            ],
+            'required_indices':[
+              {'name':'SRI','status':'CALCULATED','value':50,'runner_id':'1','source_fact':'fixture','calculation_rule_id':'TEST-RULE'},
+              {'name':'HPI','status':'UNRESOLVED','runner_id':'2','source_fact':'fixture-missing','calculation_rule_id':'TEST-RULE'},
+              {'name':'TPI','status':'CALCULATED','value':50,'runner_id':'3','source_fact':'fixture','calculation_rule_id':'TEST-RULE'}
+            ],
+            'required_index_manifest':{
+              'required_count':3,'terminal_count':2,'unresolved_count':1,'status':'INDEX-BLOCKED'
+            },
+            'static_prediction':{'ranking':[1,2,3],'roles':{'1':['W'],'2':['P2'],'3':['P3']}},
+            'prediction_cutoff':'2026-09-20T10:30:00+09:00',
+            'krs_required':True,'krs_executable':False
+          }
+          neg_status,neg_resp=http('POST','/pre-krs',neg)
+          neg_blocked = not (neg_status in (200,201) and isinstance(neg_resp,dict) and (
+              neg_resp.get('status')=='PASS' or (isinstance(neg_resp.get('receipt'),dict) and neg_resp['receipt'].get('status')=='PASS')
+          ))
+          print('NEGATIVE_GATE_BLOCKED',neg_blocked)
+
+          print('=== POSITIVE PRE_KRS ===')
+          race='KM-R2-E2E-ACCEPT-20260920-T01'
+          runners=[
+            {'horse_no':1,'name':'R2-ACC-1'},
+            {'horse_no':2,'name':'R2-ACC-2'},
+            {'horse_no':3,'name':'R2-ACC-3'}
+          ]
+          req=[]
+          for h in runners:
+              n=str(h['horse_no'])
+              req.extend([
+                {'name':'SRI','status':'CALCULATED','value':60-h['horse_no'],'runner_id':n,'source_fact':'fixture','calculation_rule_id':'TEST-SRI','rule_version':'R2'},
+                {'name':'HPI','status':'CALCULATED','value':55-h['horse_no'],'runner_id':n,'source_fact':'fixture','calculation_rule_id':'TEST-HPI','rule_version':'R2'},
+                {'name':'TPI','status':'CALCULATED','value':50-h['horse_no'],'runner_id':n,'source_fact':'fixture','calculation_rule_id':'TEST-TPI','rule_version':'R2'}
+              ])
+          pre={
+            'race_id':race,
+            'test_fixture':True,
+            'runner_universe':runners,
+            'required_indices':req,
+            'required_index_manifest':{
+              'required_count':len(req),'terminal_count':len(req),'unresolved_count':0,'status':'PASS'
+            },
+            'static_prediction':{'ranking':[1,2,3],'roles':{'1':['W'],'2':['P2'],'3':['P3']}},
+            'prediction_cutoff':'2026-09-20T10:30:00+09:00',
+            'krs_required':True,'krs_executable':True
+          }
+          pre_status,pre_env=http('POST','/pre-krs',pre)
+
+          def verify(label,env):
+              variants=[
+                env,
+                {'envelope':env},
+                {'receipt_envelope':env}
+              ]
+              for i,v in enumerate(variants,1):
+                  st,r=http('POST','/verify',v)
+                  ok=(st in (200,201) and isinstance(r,dict) and (r.get('verified') is True or r.get('valid') is True or r.get('status') in ('PASS','VERIFIED')))
+                  print('VERIFY_ATTEMPT',label,i,'OK',ok)
+                  if ok: return True,st,r
+              return False,st,r
+
+          pre_verified=False
+          if pre_status in (200,201) and isinstance(pre_env,dict):
+              pre_verified,_,_=verify('PRE_KRS',pre_env)
+          print('PRE_KRS_VERIFIED',pre_verified)
+
+          print('=== KRS SIM-STD 5000 ===')
+          krs_payload={
+            'race_id':race,
+            'input_data':{
+              'race':{'race_id':race,'test_fixture':True},
+              'environment':{},
+              'horses':[
+                {'horse_no':1,'name':'R2-ACC-1','hsv':{},'static_roles':['W']},
+                {'horse_no':2,'name':'R2-ACC-2','hsv':{},'static_roles':['P2']},
+                {'horse_no':3,'name':'R2-ACC-3','hsv':{},'static_roles':['P3']}
+              ],
+              'simulation':{'run_count':5000,'master_seed':SEED}
+            },
+            'mode':'SIM-STD',
+            'seed':SEED,
+            'input_class':'MINIMUM-EXECUTABLE'
+          }
+          krs_status,krs_env=http('POST','/krs/execute',krs_payload)
+          krs_verified=False
+          actual=None; requested=None; eng=None; param=None; insha=None; outsha=None
+          if isinstance(krs_env,dict):
+              rr=krs_env.get('receipt',{})
+              if isinstance(rr,dict):
+                  actual=rr.get('actual_run_count'); requested=rr.get('requested_run_count')
+                  eng=rr.get('engine_sha256'); param=rr.get('parameter_map_sha256')
+                  insha=rr.get('input_sha256'); outsha=rr.get('output_sha256')
+              if krs_status in (200,201):
+                  krs_verified,_,_=verify('KRS',krs_env)
+          print('KRS_METRICS',json.dumps({'actual_run_count':actual,'requested_run_count':requested,'engine_sha256':eng,'parameter_map_sha256':param,'input_sha256':insha,'output_sha256':outsha},ensure_ascii=False))
+          print('KRS_VERIFIED',krs_verified)
+          run_count_ok=isinstance(actual,int) and actual>=5000
+          print('KRS_5000_OK',run_count_ok)
+
+          print('=== FINAL WITH PREDICTION + TICKETS + CAPITAL ===')
+          final_payload={
+            'race_id':race,
+            'test_fixture':True,
+            'no_bet':False,
+            'krs_required':True,
+            'krs_executable':True,
+            'krs_run_receipt':krs_env if isinstance(krs_env,dict) else {},
+            'final_prediction_package':{
+              'ranking':[1,2,3],
+              'roles':{'1':['W'],'2':['P2'],'3':['P3']},
+              'prediction_source':'PRE_KRS+KRS_SIM_STD_5000',
+              'krs_output_sha256':outsha
+            },
+            'ticket_transport':[
+              {'bet_type':'WIN','selection':[1],'stake':100},
+              {'bet_type':'PLACE','selection':[2],'stake':100},
+              {'bet_type':'QUINELLA','selection':[1,2],'stake':100},
+              {'bet_type':'WIDE','selection':[1,2],'stake':100},
+              {'bet_type':'EXACTA','selection':[1,2],'orientation':'1>2','stake':100},
+              {'bet_type':'TRIO','selection':[1,2,3],'stake':100},
+              {'bet_type':'TRIFECTA','selection':[1,2,3],'orientation':'1>2>3','stake':100}
+            ],
+            'ticket_decisions':[
+              {'bet_type':'WIN','selection_key':'1','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'PLACE','selection_key':'2','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'QUINELLA','selection_key':'1-2','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'WIDE','selection_key':'1-2','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'EXACTA','selection_key':'1>2','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'TRIO','selection_key':'1-2-3','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'TRIFECTA','selection_key':'1>2>3','decision_status':'PURCHASED','stake':100},
+              {'bet_type':'BRACKET_QUINELLA','selection_key':'NA','decision_status':'NOT-APPLICABLE','stake':0}
+            ],
+            'capital':{'budget':700,'allocated':700,'unallocated':0,'status':'PASS'},
+            'final_ticket':{
+              'finalized':True,
+              'frozen_at':'2026-09-20T10:31:00+09:00',
+              'no_bet':False,
+              'total_investment':700,
+              'tickets':[
+                {'bet_type':'WIN','selection':[1],'stake':100},
+                {'bet_type':'PLACE','selection':[2],'stake':100},
+                {'bet_type':'QUINELLA','selection':[1,2],'stake':100},
+                {'bet_type':'WIDE','selection':[1,2],'stake':100},
+                {'bet_type':'EXACTA','selection':[1,2],'orientation':'1>2','stake':100},
+                {'bet_type':'TRIO','selection':[1,2,3],'stake':100},
+                {'bet_type':'TRIFECTA','selection':[1,2,3],'orientation':'1>2>3','stake':100}
+              ]
+            },
+            'final_freeze_timestamp':'2026-09-20T10:31:00+09:00'
+          }
+          final_status,final_env=http('POST','/final',final_payload)
+          final_verified=False
+          if final_status in (200,201) and isinstance(final_env,dict):
+              final_verified,_,_=verify('FINAL',final_env)
+          print('FINAL_VERIFIED',final_verified)
+
+          pre_pass=(pre_status in (200,201) and isinstance(pre_env,dict) and (
+              pre_env.get('status')=='PASS' or (isinstance(pre_env.get('receipt'),dict) and pre_env['receipt'].get('status')=='PASS')
+          ))
+          final_pass=(final_status in (200,201) and isinstance(final_env,dict) and (
+              final_env.get('status')=='PASS' or (isinstance(final_env.get('receipt'),dict) and final_env['receipt'].get('status')=='PASS')
+          ))
+          acceptance = all([neg_blocked,pre_pass,pre_verified,krs_status in (200,201),run_count_ok,krs_verified,final_pass,final_verified])
+          print('=== ACCEPTANCE SUMMARY ===')
+          print('R2_E2E_ACCEPTANCE', 'PASS' if acceptance else 'FAIL')
+          print('SUMMARY_JSON',json.dumps({
+            'negative_gate_blocked':neg_blocked,
+            'pre_krs_pass':pre_pass,
+            'pre_krs_verified':pre_verified,
+            'krs_http_status':krs_status,
+            'krs_5000_ok':run_count_ok,
+            'krs_verified':krs_verified,
+            'final_pass':final_pass,
+            'final_verified':final_verified
+          },ensure_ascii=False))
+          if not acceptance:
+              sys.exit(2)
           PY
