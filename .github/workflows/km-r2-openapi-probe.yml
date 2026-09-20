@@ -1,0 +1,22 @@
+name: KM R2 OpenAPI Probe
+on:
+  push:
+    branches:
+      - km-r2-e2e-probe-20260920
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Railway Runtime OpenAPI
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request
+          u='https://quorumprobe-production.up.railway.app/openapi.json'
+          with urllib.request.urlopen(u, timeout=30) as r:
+              body=r.read().decode('utf-8','replace')
+              print('KM_OPENAPI_HTTP', r.status)
+              print('KM_OPENAPI_BEGIN')
+              print(body)
+              print('KM_OPENAPI_END')
+          PY
