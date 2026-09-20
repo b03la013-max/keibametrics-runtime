@@ -1,0 +1,73 @@
+name: HSN R04 Real Race Fail-Closed Gate
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/hsn-r04-real-failclosed.yml"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Assert real-race PRE_KRS blocks unresolved canonical mapping
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          BASE="https://quorumprobe-production.up.railway.app"
+          RID="KM-JRA-HSN-20260920-R04"
+          names=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
+          horses=[
+            (1,"ナムラモモタロー"),(2,"ベルウッドスーパー"),(3,"テリオスベラ"),
+            (4,"ダイユウエゾフジ"),(5,"スイートモンブラン"),(6,"レタートゥブリッジ"),
+            (7,"リュコス"),(8,"ペンタクルクイーン"),(9,"ホットハニーラグ"),
+            (10,"フィリップヴィル"),(11,"キタノゲートウェイ"),(12,"レグルスロウ"),
+            (13,"トリオハピネス"),(14,"バトゥル"),(15,"エスアンヴィユ")
+          ]
+          required=[]
+          for no,nm in horses:
+            for idx in names:
+              required.append({"runner_id":str(no),"name":idx,"status":"UNRESOLVED","value":None,
+                "reason":"CANONICAL_BASE_MAPPING_REGISTRY_NOT_LOCATED"})
+          payload={
+            "race_id":RID,
+            "runner_universe":[{"horse_no":n,"name":nm} for n,nm in horses],
+            "required_indices":required,
+            "static_prediction":{"status":"BLOCKED","reason":"INDEX-PROVENANCE-MAPPING-MISSING"},
+            "prediction_cutoff":"2026-09-20T10:50:00+09:00",
+            "krs_required":True,
+            "krs_executable":False
+          }
+          def req(path,p):
+            data=json.dumps(p,separators=(",",":")).encode()
+            r=urllib.request.Request(BASE+path,data=data,headers={"content-type":"application/json"},method="POST")
+            try:
+              with urllib.request.urlopen(r,timeout=60) as x:
+                return x.status,json.loads(x.read().decode())
+            except urllib.error.HTTPError as e:
+              body=e.read().decode(errors="replace")
+              try: body=json.loads(body)
+              except: body={"raw":body}
+              return e.code,body
+          code,body=req("/pre-krs",payload)
+          print("REAL_RACE_PRE_KRS_HTTP",code)
+          print("REAL_RACE_PRE_KRS_BODY",json.dumps(body,ensure_ascii=False))
+          receipt=body.get("receipt",{})
+          assert receipt.get("race_id")==RID
+          assert receipt.get("status")=="FAIL", "FAIL-CLOSED BREACH: unresolved real-race indices were accepted"
+          vcode,vbody=req("/verify",body)
+          print("REAL_RACE_PRE_KRS_VERIFY",vcode,json.dumps(vbody,ensure_ascii=False))
+          assert vcode<300 and vbody.get("valid") is True
+          print("HSN_R04_REAL_FAILCLOSED_PASS",json.dumps({
+            "race_id":RID,
+            "required_index_items":len(required),
+            "pre_krs_status":receipt.get("status"),
+            "errors":receipt.get("errors"),
+            "receipt_sha256":body.get("receipt_sha256"),
+            "verified":vbody.get("valid"),
+            "krs":"NOT_RUN",
+            "final":"BLOCKED"
+          },ensure_ascii=False))
+          PY
