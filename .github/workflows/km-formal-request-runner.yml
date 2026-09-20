@@ -39,6 +39,7 @@ jobs:
           sys.path.insert(0,"runtime")
           from prekrs_terminal_compat import adapt_calculator_output
           from formal_request_validator import validate_request
+          from jra_index_provenance_builder import materialize_index_provenance
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
@@ -47,6 +48,7 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+          req=materialize_index_provenance(req)
 
           def call(base,path,payload=None,method="POST",timeout=300):
               data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
@@ -63,6 +65,16 @@ jobs:
                   return e.code,body
 
           race_id=req["race_id"]
+          scheduled_post=req.get("scheduled_post_at")
+          dispatch_deadline=req.get("external_dispatch_deadline_at")
+          temporal_mode=req.get("temporal_mode","FORMAL-PRE-RACE")
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert scheduled_post and dispatch_deadline, "TEMPORAL_FIELDS_MISSING"
+              from datetime import datetime, timezone
+              def dt(s):
+                  return datetime.fromisoformat(str(s).replace("Z","+00:00"))
+              now=datetime.now(timezone.utc)
+              assert now <= dt(dispatch_deadline).astimezone(timezone.utc), f"DEADLINE_GUARD_FAIL:{now.isoformat()}>{dispatch_deadline}"
           family=req.get("family_id","JRA")
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
@@ -117,6 +129,7 @@ jobs:
             "static_prediction":req["static_prediction"],
             "prediction_cutoff":req["prediction_cutoff"],
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
+            "index_provenance_hash":req.get("index_provenance_hash"),
             "orchestration_ref":req["orchestration_ref"],
             "krs_required":True,
             "krs_executable":True
@@ -161,6 +174,8 @@ jobs:
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
           final_package["source_snapshot_sha256"]=conformance["source_snapshot_sha256"]
+          final_package["index_provenance_hash"]=req.get("index_provenance_hash")
+          final_package["index_provenance_replay"]=req.get("index_provenance_replay")
           final_package["orchestration_ref"]=req["orchestration_ref"]
           final_package["bet_type_dispositions"]=req["bet_type_dispositions"]
           final_package["available_bet_types"]=req["available_bet_types"]
