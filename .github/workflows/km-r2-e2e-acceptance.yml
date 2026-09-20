@@ -1,0 +1,213 @@
+name: KM R2 E2E Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-r2-e2e-acceptance.yml"
+      - "governance/KM-FAMILY-EXECUTION-ARCHITECTURE-20260920-R2.md"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260920_R2.json"
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Run R2 external E2E acceptance
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error, sys, time
+
+          BASE = "https://quorumprobe-production.up.railway.app"
+          RID = "KM-R2-E2E-ACCEPT-20260920-T01"
+          NAMES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
+
+          def req(method, path, payload=None, timeout=120):
+              data = None if payload is None else json.dumps(payload, separators=(",",":")).encode()
+              headers = {"content-type":"application/json"} if payload is not None else {}
+              r = urllib.request.Request(BASE+path, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(r, timeout=timeout) as x:
+                      body = x.read().decode()
+                      return x.status, json.loads(body) if body else {}
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode(errors="replace")
+                  try: parsed = json.loads(body)
+                  except Exception: parsed = {"raw":body}
+                  return e.code, parsed
+
+          def signed_status(x):
+              if isinstance(x, dict):
+                  if isinstance(x.get("receipt"), dict) and "status" in x["receipt"]:
+                      return x["receipt"]["status"]
+                  if "status" in x:
+                      return x["status"]
+              return None
+
+          def verify_envelope(env):
+              attempts = [
+                  env,
+                  {"envelope":env},
+                  {"signed_receipt":env},
+                  {"receipt_envelope":env},
+              ]
+              last = None
+              for p in attempts:
+                  code, body = req("POST","/verify",p,30)
+                  last = (code, body)
+                  if code < 300:
+                      if body.get("verified") is True:
+                          return True, code, body
+                      if str(body.get("status","")).upper() in {"PASS","VERIFIED","VALID"}:
+                          return True, code, body
+                      if body.get("valid") is True:
+                          return True, code, body
+              return False, last[0], last[1]
+
+          # Health
+          hcode, h = req("GET","/health",None,30)
+          print("HEALTH", hcode, json.dumps(h,ensure_ascii=False))
+          assert hcode == 200
+
+          # Negative control: one required index unresolved.
+          neg_indices = [{"name":n,"status":"CALCULATED","value":50} for n in NAMES]
+          neg_indices[0] = {"name":"HPI","status":"UNRESOLVED","value":None}
+          neg = {
+              "race_id":RID+"-NEG",
+              "runner_universe":[
+                  {"horse_no":1,"name":"NEG-1"},
+                  {"horse_no":2,"name":"NEG-2"},
+                  {"horse_no":3,"name":"NEG-3"}
+              ],
+              "required_indices":neg_indices,
+              "static_prediction":{"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]}},
+              "prediction_cutoff":"2026-09-20T10:40:00+09:00",
+              "krs_required":True,
+              "krs_executable":True
+          }
+          ncode, nbody = req("POST","/pre-krs",neg,60)
+          nstatus = signed_status(nbody)
+          print("NEG_PRE_KRS", ncode, nstatus, json.dumps(nbody,ensure_ascii=False))
+          if nstatus == "PASS":
+              raise SystemExit("FAIL: PRE_KRS accepted UNRESOLVED required index")
+
+          # Positive PRE_KRS.
+          pos_indices = [{"name":n,"status":"CALCULATED","value":50+i} for i,n in enumerate(NAMES)]
+          pre_payload = {
+              "race_id":RID,
+              "runner_universe":[
+                  {"horse_no":1,"name":"R2-1"},
+                  {"horse_no":2,"name":"R2-2"},
+                  {"horse_no":3,"name":"R2-3"}
+              ],
+              "required_indices":pos_indices,
+              "static_prediction":{"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]}},
+              "prediction_cutoff":"2026-09-20T10:45:00+09:00",
+              "krs_required":True,
+              "krs_executable":True
+          }
+          pcode, pre = req("POST","/pre-krs",pre_payload,60)
+          pstatus = signed_status(pre)
+          print("PRE_KRS", pcode, pstatus, json.dumps(pre,ensure_ascii=False))
+          assert pcode < 300 and pstatus == "PASS"
+
+          pv, pvcode, pvbody = verify_envelope(pre)
+          print("PRE_KRS_VERIFY", pv, pvcode, json.dumps(pvbody,ensure_ascii=False))
+          assert pv
+
+          # KRS SIM-STD 5,000
+          krs_payload = {
+              "race_id":RID,
+              "input_data":{
+                  "race":{"race_id":RID},
+                  "environment":{},
+                  "horses":[
+                      {"horse_no":1,"name":"R2-1","hsv":{},"static_roles":["W"]},
+                      {"horse_no":2,"name":"R2-2","hsv":{},"static_roles":["P2"]},
+                      {"horse_no":3,"name":"R2-3","hsv":{},"static_roles":["P3"]}
+                  ],
+                  "simulation":{"run_count":5000,"master_seed":20260920}
+              },
+              "mode":"SIM-STD",
+              "seed":20260920,
+              "input_class":"MINIMUM-EXECUTABLE"
+          }
+          kcode, krs = req("POST","/krs/execute",krs_payload,180)
+          print("KRS_HTTP", kcode)
+          print("KRS_STATUS", krs.get("status"))
+          run_env = krs.get("run_receipt")
+          if not isinstance(run_env, dict):
+              raise SystemExit("FAIL: missing signed KRS run_receipt")
+          rr = run_env.get("receipt",{})
+          print("KRS_RECEIPT", json.dumps(rr,ensure_ascii=False))
+          assert kcode < 300 and rr.get("status") == "EXECUTED"
+          assert int(rr.get("actual_run_count",0)) >= 5000
+          assert int(rr.get("actual_run_count",0)) >= int(rr.get("requested_run_count",5000))
+          assert rr.get("engine_sha256")
+          assert rr.get("parameter_map_sha256")
+          assert rr.get("input_sha256")
+          assert rr.get("output_sha256")
+
+          kv, kvcode, kvbody = verify_envelope(run_env)
+          print("KRS_VERIFY", kv, kvcode, json.dumps(kvbody,ensure_ascii=False))
+          assert kv
+
+          out_sha = rr["output_sha256"]
+          tickets = [
+              {"bet_type":"WIN","selection":[1],"stake":100},
+              {"bet_type":"PLACE","selection":[1],"stake":100},
+              {"bet_type":"QUINELLA","selection":[1,2],"stake":100},
+              {"bet_type":"WIDE","selection":[1,2],"stake":100},
+              {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
+              {"bet_type":"TRIO","selection":[1,2,3],"stake":100},
+              {"bet_type":"TRIFECTA","selection":[1,2,3],"orientation":"1>2>3","stake":100}
+          ]
+          final_payload = {
+              "race_id":RID,
+              "no_bet":False,
+              "krs_required":True,
+              "krs_executable":True,
+              "krs_run_receipt":run_env,
+              "final_prediction_package":{
+                  "ranking":[1,2,3],
+                  "roles":{"1":["W"],"2":["P2"],"3":["P3"]},
+                  "prediction_source":"R2_PRE_KRS+KRS_SIM_STD",
+                  "krs_output_sha256":out_sha
+              },
+              "ticket_transport":tickets,
+              "final_ticket":{
+                  "finalized":True,
+                  "frozen_at":"2026-09-20T10:50:00+09:00",
+                  "no_bet":False,
+                  "total_investment":700,
+                  "tickets":tickets
+              },
+              "final_freeze_timestamp":"2026-09-20T10:50:00+09:00"
+          }
+          fcode, final = req("POST","/final",final_payload,60)
+          fstatus = signed_status(final)
+          print("FINAL", fcode, fstatus, json.dumps(final,ensure_ascii=False))
+          assert fcode < 300 and fstatus == "PASS"
+
+          fv, fvcode, fvbody = verify_envelope(final)
+          print("FINAL_VERIFY", fv, fvcode, json.dumps(fvbody,ensure_ascii=False))
+          assert fv
+
+          result = {
+              "profile":"KM-FAMILY-EXECUTION-ARCHITECTURE-20260920-R2",
+              "race_id":RID,
+              "negative_control":"PASS",
+              "pre_krs":"PASS_VERIFIED",
+              "krs":"EXECUTED_VERIFIED",
+              "requested_run_count":rr.get("requested_run_count"),
+              "actual_run_count":rr.get("actual_run_count"),
+              "engine_sha256":rr.get("engine_sha256"),
+              "parameter_map_sha256":rr.get("parameter_map_sha256"),
+              "output_sha256":rr.get("output_sha256"),
+              "ticket_types":[x["bet_type"] for x in tickets],
+              "final":"PASS_VERIFIED"
+          }
+          print("KM_R2_E2E_ACCEPTANCE", json.dumps(result,ensure_ascii=False))
+          PY
