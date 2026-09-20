@@ -1,6 +1,8 @@
 from __future__ import annotations
 from itertools import combinations
 from math import isfinite
+import hashlib
+import json
 
 HSV_KEYS = [
     "base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit",
@@ -18,6 +20,14 @@ STATIC_KEYS = [
 ROLE_COLUMNS = ("W","P2","P3")
 ROLE_ACTIVE = {"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
 DISP_STATES = {"PURCHASE","PROTECT","EXCLUDE"}
+REQUIRED_INDEX_KEYS = [
+    "HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI",
+    "DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I",
+]
+BET_DECISION_STATES = {
+    "PURCHASED","BUDGET-NONSELECTED","STRUCTURAL-INELIGIBLE",
+    "EVIDENCE-RANKED-LOWER","NOT-APPLICABLE","NO-BET",
+}
 
 class FormalValidationError(ValueError):
     pass
@@ -174,16 +184,133 @@ def validate_tickets(req, purchased_pairs):
         "expected_exact_count":len(expected),
     }
 
+
+def canonical_json_sha256(obj):
+    raw=json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+def validate_source_snapshot(req):
+    snap=req.get("source_snapshot")
+    if not isinstance(snap,dict) or not snap:
+        raise FormalValidationError("SOURCE_SNAPSHOT_MISSING")
+    declared=str(req.get("source_snapshot_sha256") or "")
+    if not declared:
+        declared=str((req.get("explicit_engine_hsv_provenance") or {}).get("source_snapshot_sha256") or "")
+    if not declared:
+        raise FormalValidationError("SOURCE_SNAPSHOT_SHA_MISSING")
+    actual=canonical_json_sha256(snap)
+    if actual != declared:
+        raise FormalValidationError(f"SOURCE_SNAPSHOT_SHA_MISMATCH:{actual}!={declared}")
+    return {"source_snapshot_sha256":actual,"source_snapshot_verified":True}
+
+def validate_orchestration_ref(req):
+    ref=req.get("orchestration_ref")
+    if not isinstance(ref,dict):
+        raise FormalValidationError("BASE44_ORCHESTRATION_REF_MISSING")
+    if str(ref.get("authority"))!="BASE44":
+        raise FormalValidationError("BASE44_ORCHESTRATION_AUTHORITY_INVALID")
+    sid=str(ref.get("execution_session_id") or "").strip()
+    nonce=str(ref.get("session_nonce") or "").strip()
+    created=str(ref.get("created_at") or "").strip()
+    if not sid or not nonce or not created:
+        raise FormalValidationError("BASE44_ORCHESTRATION_REF_INCOMPLETE")
+    return {
+        "base44_execution_session_id":sid,
+        "base44_session_nonce":nonce,
+        "base44_session_created_at":created,
+        "orchestration_authority":"BASE44",
+    }
+
+def validate_canonical_index_components(req, runner_ids):
+    mode=str(req.get("numeric_calculation_requirement","ALLOW_RULED_HOLD"))
+    if mode!="FULL_REQUIRED":
+        return {"numeric_calculation_requirement":mode,"canonical_component_count":0}
+    total=0
+    for r in req.get("runners",[]):
+        no=str(r.get("runner_id"))
+        cc=r.get("canonical_components")
+        if not isinstance(cc,dict):
+            raise FormalValidationError(f"CANONICAL_COMPONENTS_MISSING:{no}")
+        missing=sorted(set(REQUIRED_INDEX_KEYS)-set(cc))
+        if missing:
+            raise FormalValidationError(f"CANONICAL_COMPONENTS_INCOMPLETE:{no}:{missing}")
+        for idx in REQUIRED_INDEX_KEYS:
+            c=cc[idx]
+            if not isinstance(c,dict):
+                raise FormalValidationError(f"CANONICAL_COMPONENT_BAD:{no}:{idx}")
+            _finite_0_100(c.get("value"),f"CANONICAL:{no}:{idx}")
+            if not str(c.get("rule_id") or "").strip():
+                raise FormalValidationError(f"CANONICAL_RULE_ID_MISSING:{no}:{idx}")
+            if not str(c.get("mapping_version") or "").strip():
+                raise FormalValidationError(f"CANONICAL_MAPPING_VERSION_MISSING:{no}:{idx}")
+            refs=c.get("evidence_refs")
+            if not isinstance(refs,list) or not refs:
+                raise FormalValidationError(f"CANONICAL_EVIDENCE_REFS_MISSING:{no}:{idx}")
+            if not str(c.get("source_fact") or "").strip():
+                raise FormalValidationError(f"CANONICAL_SOURCE_FACT_MISSING:{no}:{idx}")
+            total+=1
+    expected=len(runner_ids)*len(REQUIRED_INDEX_KEYS)
+    if total!=expected:
+        raise FormalValidationError(f"CANONICAL_COMPONENT_COUNT_MISMATCH:{total}!={expected}")
+    return {
+        "numeric_calculation_requirement":"FULL_REQUIRED",
+        "canonical_component_count":total,
+        "canonical_component_expected":expected,
+    }
+
+def validate_bet_type_dispositions(req):
+    available=req.get("available_bet_types")
+    rows=req.get("bet_type_dispositions")
+    if not isinstance(available,list) or not available:
+        raise FormalValidationError("AVAILABLE_BET_TYPES_MISSING")
+    available_norm=[str(x).upper() for x in available]
+    if len(available_norm)!=len(set(available_norm)):
+        raise FormalValidationError("DUPLICATE_AVAILABLE_BET_TYPE")
+    if not isinstance(rows,list):
+        raise FormalValidationError("BET_TYPE_DISPOSITIONS_MISSING")
+    by={}
+    for r in rows:
+        bt=str(r.get("bet_type","")).upper()
+        if not bt or bt in by:
+            raise FormalValidationError(f"BAD_OR_DUPLICATE_BET_TYPE_DISPOSITION:{bt}")
+        st=str(r.get("status",""))
+        if st not in BET_DECISION_STATES:
+            raise FormalValidationError(f"BAD_BET_TYPE_DISPOSITION_STATUS:{bt}:{st}")
+        if st!="PURCHASED" and not str(r.get("reason","")).strip():
+            raise FormalValidationError(f"BET_TYPE_DISPOSITION_REASON_MISSING:{bt}")
+        by[bt]=r
+    missing=sorted(set(available_norm)-set(by))
+    extra=sorted(set(by)-set(available_norm))
+    if missing or extra:
+        raise FormalValidationError(f"BET_TYPE_DISPOSITION_UNIVERSE_MISMATCH:missing={missing}:extra={extra}")
+    actual_purchase_types={str(t.get("bet_type","")).upper() for t in req.get("tickets",[])}
+    declared_purchase_types={bt for bt,r in by.items() if r.get("status")=="PURCHASED"}
+    if actual_purchase_types != declared_purchase_types:
+        raise FormalValidationError(
+            f"BET_TYPE_PURCHASE_MISMATCH:actual={sorted(actual_purchase_types)}:declared={sorted(declared_purchase_types)}"
+        )
+    return {
+        "available_bet_type_count":len(available_norm),
+        "purchased_bet_type_count":len(declared_purchase_types),
+        "nonpurchased_bet_type_count":len(available_norm)-len(declared_purchase_types),
+        "bet_type_dispositions_verified":True,
+    }
+
+
 def validate_request(req):
     runners=req.get("runners")
     if not isinstance(runners,list) or len(runners)<2: raise FormalValidationError("RUNNERS_INVALID")
     runner_ids=[str(r.get("runner_id")) for r in runners]
     if len(runner_ids)!=len(set(runner_ids)): raise FormalValidationError("DUPLICATE_RUNNER_ID")
     if any(x in {"None",""} for x in runner_ids): raise FormalValidationError("RUNNER_ID_MISSING")
+    source=validate_source_snapshot(req)
+    orchestration=validate_orchestration_ref(req)
+    canonical=validate_canonical_index_components(req,runner_ids)
     role=normalize_role_registry(req,runner_ids)
     numeric=validate_numeric_input(req.get("krs_input_data") or {},runner_ids)
     pair,third,heads,pairs=validate_dispositions(req,runner_ids,role)
     ticket=validate_tickets(req,pairs)
+    bet_types=validate_bet_type_dispositions(req)
     return {
         "runner_count":len(runner_ids),
         "role_cell_count":len(role),
@@ -191,5 +318,5 @@ def validate_request(req):
         "third_disposition_count":len(third),
         "purchased_head_count":len(heads),
         "purchased_pair_count":len(pairs),
-        **numeric,**ticket
+        **source,**orchestration,**canonical,**numeric,**ticket,**bet_types
     }
