@@ -173,6 +173,7 @@ jobs:
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
+          final_package["prediction_utility_metrics"]={k:conformance.get(k) for k in ["runner_count","ranking_complete","active_w_count","active_p2_count","active_p3_count","purchased_head_count","noncapitalized_active_w","expected_pair_count","pair_purchase_count","pair_protect_count","pair_exclude_count","pair_purchase_density","expected_third_count","third_purchase_count","third_protect_count","third_exclude_count","third_purchase_density","head_stake","max_head","max_head_stake","head_capital_concentration","bet_type_stake","total_investment"]}
           final_package["source_snapshot_sha256"]=conformance["source_snapshot_sha256"]
           final_package["index_provenance_hash"]=req.get("index_provenance_hash")
           final_package["index_provenance_replay"]=req.get("index_provenance_replay")
@@ -204,7 +205,8 @@ jobs:
               "available_bet_types":req["available_bet_types"],
               "bet_type_dispositions":req["bet_type_dispositions"],
               "source_snapshot_sha256":conformance["source_snapshot_sha256"],
-              "orchestration_ref":req["orchestration_ref"]
+              "orchestration_ref":req["orchestration_ref"],
+              "prediction_utility_metrics":final_package["prediction_utility_metrics"]
             },
             "final_freeze_timestamp":req["final_freeze_timestamp"]
           }
