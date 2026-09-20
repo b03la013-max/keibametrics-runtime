@@ -1,0 +1,147 @@
+name: KM Full E2E Smoke 20260920
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-full-e2e-smoke-20260920.yml"
+  workflow_dispatch:
+
+jobs:
+  full-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: BaseIndex PRE_KRS KRS FINAL real acceptance
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error, sys
+          sys.path.insert(0,"runtime")
+          from prekrs_terminal_compat import adapt_calculator_output
+
+          CALC="https://jra-validation-sandbox-production.up.railway.app"
+          KRS="https://quorumprobe-production.up.railway.app"
+          RID="KM-ACCEPT-HSN-FULL-20260920-T03"
+          CUTOFF="2026-09-20T14:30:00+09:00"
+
+          runners=[
+            {"runner_id":"1","name":"ACCEPT-A","newcomer":False,"raw_evidence":{"gate":"POSITIVE","distance_fit":"POSITIVE"}},
+            {"runner_id":"2","name":"ACCEPT-B","newcomer":False,"raw_evidence":{"workout_capability":"POSITIVE","course_fit":"POSITIVE"}},
+            {"runner_id":"3","name":"ACCEPT-C","newcomer":False,"raw_evidence":{"sustain_reserve":"POSITIVE","body_condition_growth":"POSITIVE"}}
+          ]
+          ranking=[1,2,3]
+          roles={"1":["W","P2","P3"],"2":["W","P2","P3"],"3":["P2","P3"]}
+
+          def call(base,path,payload=None,method="POST",timeout=240):
+              data=None if payload is None else json.dumps(payload,separators=(",",":")).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      raw=r.read().decode()
+                      return r.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          hcode,h=call(CALC,"/health",None,"GET",30)
+          assert hcode==200 and h.get("status")=="READY",(hcode,h)
+
+          ccode,c=call(CALC,"/calculate-jra-base",{"race_id":RID,"runners":runners},timeout=60)
+          assert ccode==200 and c.get("status")=="PASS",(ccode,c)
+          assert c.get("required_count")==60,c
+          assert c.get("unresolved_count")==0,c
+
+          required=adapt_calculator_output(c)
+          assert len(required)==60,len(required)
+
+          pre={
+            "race_id":RID,
+            "runner_universe":[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in runners],
+            "required_indices":required,
+            "static_prediction":{"ranking":ranking,"roles":roles,"status":"FROZEN-ACCEPTANCE"},
+            "prediction_cutoff":CUTOFF,
+            "krs_required":True,
+            "krs_executable":True
+          }
+          pcode,p=call(KRS,"/pre-krs",pre,timeout=60)
+          assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
+          vcode,v=call(KRS,"/verify",p,timeout=30)
+          assert vcode<300 and v.get("valid") is True,(vcode,v)
+
+          by_runner={r["runner_id"]:{i["index_name"]:i.get("transport_value",50) for i in r["items"]} for r in c["runners"]}
+          horses=[{"horse_no":int(r["runner_id"]),"name":r["name"],"hsv":by_runner[r["runner_id"]],"static_roles":roles.get(r["runner_id"],[])} for r in runners]
+          kpayload={
+            "race_id":RID,
+            "input_data":{
+              "race":{"race_id":RID,"venue":"阪神","surface":"turf","distance":2000,"course":"inner","going":"good","class":"acceptance_test"},
+              "environment":{"track":"B","weather":"clear","source_cutoff":CUTOFF},
+              "horses":horses,
+              "simulation":{"run_count":5000,"master_seed":20260920}
+            },
+            "mode":"SIM-STD","seed":20260920,"input_class":"FULL-E2E-ACCEPTANCE"
+          }
+          kcode,k=call(KRS,"/krs/execute",kpayload,timeout=300)
+          run=k.get("run_receipt",{})
+          rr=run.get("receipt",{})
+          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
+          assert int(rr.get("actual_run_count",0))>=5000,rr
+          kvcode,kv=call(KRS,"/verify",run,timeout=30)
+          assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
+
+          tickets=[
+            {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
+            {"bet_type":"TRIO","selection":[1,2,3],"stake":100},
+            {"bet_type":"TRIFECTA","selection":[1,2,3],"orientation":"1>2>3","stake":100}
+          ]
+          frozen="2026-09-20T14:30:30+09:00"
+          final_payload={
+            "race_id":RID,"no_bet":False,"krs_required":True,"krs_executable":True,"krs_run_receipt":run,
+            "final_prediction_package":{
+              "ranking":ranking,"roles":roles,
+              "prediction_source":"FULL_E2E_ACCEPTANCE",
+              "krs_output_sha256":rr.get("output_sha256")
+            },
+            "ticket_transport":tickets,
+            "final_ticket":{"finalized":True,"frozen_at":frozen,"no_bet":False,"total_investment":300,"tickets":tickets},
+            "final_freeze_timestamp":frozen
+          }
+          fcode,f=call(KRS,"/final",final_payload,timeout=60)
+          assert fcode<300 and f.get("receipt",{}).get("status")=="PASS",(fcode,f)
+          fvcode,fv=call(KRS,"/verify",f,timeout=30)
+          assert fvcode<300 and fv.get("valid") is True,(fvcode,fv)
+
+          summary={
+            "race_id":RID,
+            "calc":{
+              "status":c.get("status"),
+              "registry_id":c.get("registry_id"),
+              "required_count":c.get("required_count"),
+              "calculated_count":c.get("calculated_count"),
+              "ruled_hold_count":c.get("ruled_hold_count"),
+              "not_applicable_count":c.get("not_applicable_count"),
+              "unresolved_count":c.get("unresolved_count")
+            },
+            "pre_krs":{"receipt_sha256":p.get("receipt_sha256"),"verified":v.get("valid")},
+            "krs":{
+              "requested_run_count":rr.get("requested_run_count"),
+              "actual_run_count":rr.get("actual_run_count"),
+              "engine_version":rr.get("engine_version"),
+              "engine_sha256":rr.get("engine_sha256"),
+              "parameter_map_sha256":rr.get("parameter_map_sha256"),
+              "input_sha256":rr.get("input_sha256"),
+              "output_sha256":rr.get("output_sha256"),
+              "receipt_sha256":run.get("receipt_sha256"),
+              "verified":kv.get("valid")
+            },
+            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":fv.get("valid"),"status":f.get("receipt",{}).get("status")},
+            "ticket_count":len(tickets),
+            "total_investment":300,
+            "status":"FULL_E2E_PASS"
+          }
+          print("KM_FULL_E2E_SUMMARY="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
+          PY
