@@ -21,7 +21,7 @@ jobs:
           import json, urllib.request, urllib.error, sys, time
 
           BASE = "https://quorumprobe-production.up.railway.app"
-          RID = "KM-R2-E2E-ACCEPT-20260920-T02"
+          RID = "KM-R2-E2E-ACCEPT-20260920-T03"
           NAMES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
 
           def req(method, path, payload=None, timeout=120):
@@ -158,6 +158,7 @@ jobs:
           tickets = [
               {"bet_type":"WIN","selection":[1],"stake":100},
               {"bet_type":"PLACE","selection":[1],"stake":100},
+              {"bet_type":"FRAME_QUINELLA","selection":[1,2],"stake":100},
               {"bet_type":"QUINELLA","selection":[1,2],"stake":100},
               {"bet_type":"WIDE","selection":[1,2],"stake":100},
               {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
