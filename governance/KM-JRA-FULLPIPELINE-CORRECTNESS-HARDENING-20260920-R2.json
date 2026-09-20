@@ -1,0 +1,59 @@
+{
+  "profile_id": "KM-JRA-FULLPIPELINE-CORRECTNESS-HARDENING-20260920-R2",
+  "status": "ACTIVE / JRA-WIDE / CORRECTNESS-HARDENING / NON-PREDICTIVE / FAIL-CLOSED",
+  "effective_at": "2026-09-20T15:37:04+09:00",
+  "purpose": "Close false-full execution gaps without changing prediction formulas, weights, KRS coefficients, ticket policy, or capital policy.",
+  "formal_full_requirements": {
+    "base44_orchestration_ref": "REQUIRED and must pre-exist request dispatch",
+    "source_snapshot_sha256": "RECOMPUTED_CANONICAL_JSON_SHA256_AND_MATCHED",
+    "required_index_terminalization": "100%",
+    "actual_numerical_calculation": "100% CALCULATED for FULL_REQUIRED; RULED-HOLD=0; UNRESOLVED=0",
+    "canonical_index_component_provenance": "value + rule_id + mapping_version + evidence_refs + source_fact for all 20 indices per runner",
+    "all_available_bet_types": "100% dispositioned before FINAL",
+    "prekrs_signed_receipt": "VERIFIED",
+    "krs_signed_run_receipt": "VERIFIED",
+    "final_signed_receipt": "VERIFIED"
+  },
+  "hard_blocks": [
+    "SOURCE_SNAPSHOT_SHA_MISMATCH",
+    "BASE44_ORCHESTRATION_REF_MISSING_OR_INCOMPLETE",
+    "CANONICAL_COMPONENTS_INCOMPLETE",
+    "CANONICAL_RULE_ID_OR_MAPPING_VERSION_MISSING",
+    "ACTUAL_NUMERICAL_CALCULATION_LT_100_FOR_FULL_REQUIRED",
+    "RULED_HOLD_GT_0_FOR_FULL_REQUIRED",
+    "BET_TYPE_DISPOSITION_UNIVERSE_MISMATCH",
+    "PRE_KRS_RECEIPT_NOT_VERIFIED",
+    "KRS_RUN_RECEIPT_NOT_VERIFIED",
+    "FINAL_RECEIPT_NOT_VERIFIED"
+  ],
+  "acceptance": {
+    "race_id": "KM-ACCEPT-HSN-FULLPIPELINE-20260920-T05",
+    "base44_execution_session_id": "6aaf7e859781e2a1aa2a665e",
+    "base44_session_nonce": "KM-BASE44-ORCH-T05-20260920-R1",
+    "github_request_commit": "c293b275af78c95c00bf8d4dc74a77dda4429be1",
+    "github_actions_run_id": 35494682079,
+    "workflow_conclusion": "success",
+    "source_snapshot_sha256": "89f87ae1fad9d252ff519a198bff9187bce5962a9e52c9ad18a4c49eb66d68e9",
+    "source_snapshot_verified": true,
+    "required_index_count": 320,
+    "calculated_count": 320,
+    "ruled_hold_count": 0,
+    "unresolved_count": 0,
+    "available_bet_type_count": 9,
+    "bet_type_dispositions_verified": true,
+    "prekrs_receipt_sha256": "6f3fa92ea7cf7000ee44b3fa4a3fb61c83c8dd9fa123bb62e3fb6fbc4481895a",
+    "krs_receipt_sha256": "8ed78590e53d3b328095b6a6dfacd2e7f32b1c74ffcd1b724cc361669e0bebcd",
+    "final_receipt_sha256": "2edac2a212646986ffa4ab08ea31c76ffa6e0d81cc117c6cd7966a9eaa9d0271",
+    "krs_requested_run_count": 5000,
+    "krs_actual_run_count": 5000,
+    "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+  },
+  "production_boundary": {
+    "note": "Acceptance proves end-to-end enforcement and execution when canonical components are supplied. It does not authorize invention of HPI-VMI numeric mappings from raw evidence.",
+    "raw_to_base_index_mapping": "Must come from existing Production mapping/rule ledger. If unavailable for a live race, FORMAL-FULL is blocked/downgraded rather than fabricated."
+  },
+  "code": {
+    "validator_commit": "306f6c6d05c4f164ab740a28b3cfe7e7e55e1035",
+    "runner_commit": "549e215d310a7582c8c86b7d4129b573df9c6b81"
+  }
+}
