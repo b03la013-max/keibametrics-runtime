@@ -1,0 +1,36 @@
+name: KM Parameter Map v0.2 Discovery 20260920
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-param-v02-discovery-20260920.yml"
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover canonical parameter_map-JRA v0.2 bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find . -maxdepth 1 -type f -name '*ExecutableExecutionKernel*v1.0*20260916*.zip' -print -quit)"
+          echo "ZIP=$ZIP"
+          test -n "$ZIP"
+          rm -rf /tmp/kmkernel && mkdir -p /tmp/kmkernel
+          unzip -q "$ZIP" -d /tmp/kmkernel
+          echo "CANDIDATES_BEGIN"
+          find /tmp/kmkernel -type f \( -iname '*parameter*map*.json' -o -iname '*parameter_map*' \) -print | while read -r f; do
+            sha="$(sha256sum "$f" | awk '{print $1}')"
+            echo "CANDIDATE_SHA=$sha PATH=$f"
+            if [ "$sha" = "8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5" ]; then
+              echo "TARGET_FOUND=$f"
+              echo "TARGET_B64_BEGIN"
+              base64 -w0 "$f"
+              echo
+              echo "TARGET_B64_END"
+            fi
+          done
+          echo "CANDIDATES_END"
