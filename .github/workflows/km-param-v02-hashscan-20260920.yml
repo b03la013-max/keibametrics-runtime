@@ -1,0 +1,31 @@
+name: KM Parameter Map v0.2 Hash Scan 20260920
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-param-v02-hashscan-20260920.yml"
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hash scan all kernel files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find . -maxdepth 1 -type f -name '*ExecutableExecutionKernel*v1.0*20260916*.zip' -print -quit)"
+          rm -rf /tmp/kmkernel && mkdir -p /tmp/kmkernel
+          unzip -q "$ZIP" -d /tmp/kmkernel
+          find /tmp/kmkernel -type f -print0 | while IFS= read -r -d '' f; do
+            sha="$(sha256sum "$f" | awk '{print $1}')"
+            size="$(wc -c < "$f")"
+            echo "FILE_SHA=$sha SIZE=$size PATH=$f"
+            if [ "$sha" = "8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5" ]; then
+              echo "TARGET_FOUND=$f"
+              echo "TARGET_B64_BEGIN"
+              base64 -w0 "$f"
+              echo
+              echo "TARGET_B64_END"
+            fi
+          done
