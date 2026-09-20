@@ -12,14 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
       - name: Verify calculator and repaired PRE_KRS
         shell: bash
         run: |
           python - <<'PY'
-          import json, urllib.request, urllib.error
+          import json, urllib.request, urllib.error, sys
+          sys.path.insert(0, "runtime")
+          from prekrs_terminal_compat import adapt_calculator_output
           CALC="https://jra-validation-sandbox-production.up.railway.app"
           KRS="https://quorumprobe-production.up.railway.app"
-          RID="KM-JRA-HSN-20260920-R04-REPAIR-VERIFY"
+          RID="KM-JRA-HSN-20260920-R04-REPAIR-VERIFY-V2"
           horses=[
             (1,"ナムラモモタロー",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
             (2,"ベルウッドスーパー",{"gate":"POSITIVE","dash_position_acquisition":"POSITIVE"}),
@@ -59,19 +62,16 @@ jobs:
           assert ccode==200 and c.get("status")=="PASS"
           assert c.get("required_count")==300 and c.get("unresolved_count")==0
           assert c.get("ruled_hold_count")==300
-          required=[]
-          for r in c["runners"]:
-              for item in r["items"]:
-                  required.append({
-                    "runner_id":r["runner_id"],
-                    "name":item["index_name"],
-                    "status":item["terminal_status"],
-                    "value":item.get("transport_value"),
-                    "formal_value":item.get("formal_value"),
-                    "missing_flag":item.get("missing_flag"),
-                    "rule_id":item.get("calculation_rule_id"),
-                    "mapping_version":item.get("mapping_version")
-                  })
+          required=adapt_calculator_output(c)
+          assert len(required)==300
+          assert all(x.get("status")=="CALCULATED" for x in required)
+          assert all(x.get("terminal_status")=="RULED-HOLD" for x in required)
+          assert all(x.get("formal_value") is None and x.get("missing_flag") is True and x.get("value")==50 for x in required)
+          print("COMPAT_ADAPTER", json.dumps({
+            "profile":"JRA-PREKRS-TERMINAL-COMPAT-v0.1-20260920",
+            "legacy_status_counts":{"CALCULATED":sum(x.get("status")=="CALCULATED" for x in required)},
+            "semantic_status_counts":{"RULED-HOLD":sum(x.get("terminal_status")=="RULED-HOLD" for x in required)}
+          },ensure_ascii=False))
           pre={
             "race_id":RID,
             "runner_universe":[{"horse_no":n,"name":nm} for n,nm,_ in horses],
