@@ -1,0 +1,183 @@
+name: HSN R05 Live Formal 20260920
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/hsn-r05-live-formal-20260920.yml"
+  workflow_dispatch:
+
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: HSN R05 BaseIndex PRE_KRS KRS FINAL
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error, sys, datetime
+          sys.path.insert(0,"runtime")
+          from prekrs_terminal_compat import adapt_calculator_output
+
+          CALC="https://jra-validation-sandbox-production.up.railway.app"
+          KRS="https://quorumprobe-production.up.railway.app"
+          RID="KM-JRA-HSN-20260920-R05"
+          CUTOFF="2026-09-20T11:58:50+09:00"
+          runners=[
+            (1,"キュールエポルト",{"gate":"POSITIVE","dash":"POSITIVE","workout":"NEUTRAL","comment":"IMMATURE","body_weight":474}),
+            (2,"アリサ",{"gate":"POSITIVE","dash":"POSITIVE","workout":"POSITIVE","comment":"TURF_POSITIVE","body_weight":418}),
+            (3,"ナンヨーカルチャー",{"gate":"POSITIVE","dash":"POSITIVE","workout":"POSITIVE_LATE","comment":"NEEDS_RUN","body_weight":416}),
+            (4,"ホワイトパンサー",{"gate":"POSITIVE","dash":"POSITIVE","workout":"STRONG","comment":"HEART_POSITIVE","market_conflict":"POSITIVE","body_weight":436}),
+            (5,"ジョリーエピキュア",{"gate":"STRONG","dash":"POSITIVE","workout":"STRONG","comment":"SENSE_POSITIVE","market":"FAVORITE","body_weight":408}),
+            (6,"クインズローマ",{"gate":"POSITIVE","dash":"POSITIVE","workout":"POSITIVE","comment":"NORMAL_POSITIVE","body_weight":460}),
+            (7,"ドラーダアスール",{"gate":"POSITIVE","dash":"POSITIVE","workout":"MIXED","comment":"DEVELOPING","body_weight":438}),
+            (8,"ジーティールーナ",{"gate":"POSITIVE","dash":"POSITIVE","workout":"MIXED_POSITIVE","comment":"QUALITY_POSITIVE","body_weight":482}),
+            (9,"イーサンマリーン",{"gate":"POSITIVE","dash":"POSITIVE","workout":"POSITIVE","comment":"FIT_POSITIVE","claim_kg":2,"market_place_conflict":"STRONG","body_weight":422}),
+            (10,"ミランダスマイル",{"gate":"POSITIVE","dash":"POSITIVE","workout":"VERY_STRONG","comment":"REACTION_POSITIVE","late_market":"STRONG","body_weight":494}),
+            (11,"シャーロットタウン",{"gate":"POSITIVE","dash":"POSITIVE","workout":"VERY_STRONG","comment":"READY_POSITIVE","body_weight":450}),
+            (12,"タイセイプリュム",{"gate":"POSITIVE","dash":"POSITIVE","workout":"POSITIVE","comment":"TURF_DISTANCE_POSITIVE","body_weight":432}),
+            (13,"ヴェルソドルチェ",{"gate":"POSITIVE","dash":"POSITIVE","workout":"STRONG","comment":"TALENT_POSITIVE_STAMINA_CAUTION","body_weight":492}),
+            (14,"メイショウキボウ",{"gate":"POSITIVE","dash":"POSITIVE","workout":"WEAK_NEUTRAL","comment":"FORWARD_MIND","body_weight":444})
+          ]
+          ranking=[10,5,11,13,4,9,12,2,8,6,3,1,7,14]
+          roles={
+            "10":["W","P2","P3"],"5":["W","P2","P3"],"11":["W","P2","P3"],"13":["W","P2","P3"],
+            "4":["W","P2","P3"],"9":["W","P2","P3"],"12":["P2","P3"],"2":["P2","P3"],
+            "8":["P3"],"6":["P3"],"3":["P3"],"1":["P3"],"7":["P3"],"14":["P3"]
+          }
+
+          def call(base,path,payload=None,method="POST",timeout=180):
+              data=None if payload is None else json.dumps(payload,separators=(",",":")).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      raw=r.read().decode()
+                      return r.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+
+          hcode,h=call(CALC,"/health",None,"GET",30)
+          assert hcode==200 and h.get("status")=="READY"
+          ccode,c=call(CALC,"/calculate-jra-base",{
+              "race_id":RID,
+              "runners":[{"runner_id":str(n),"name":nm,"newcomer":True,"raw_evidence":ev} for n,nm,ev in runners]
+          },timeout=60)
+          print("CALC",ccode,json.dumps({k:c.get(k) for k in ["status","registry_id","required_count","calculated_count","ruled_hold_count","not_applicable_count","unresolved_count"]},ensure_ascii=False))
+          assert ccode==200 and c.get("status")=="PASS"
+          assert c.get("required_count")==280 and c.get("unresolved_count")==0
+          required=adapt_calculator_output(c)
+          assert len(required)==280
+
+          pre={
+            "race_id":RID,
+            "runner_universe":[{"horse_no":n,"name":nm} for n,nm,_ in runners],
+            "required_indices":required,
+            "static_prediction":{
+              "ranking":ranking,"roles":roles,
+              "status":"FROZEN-PRE-RACE-115850",
+              "evidence_summary":{
+                "core":["10 VERY_STRONG workout + late market","5 strong gate/sense + top AI/market"],
+                "alternatives":["11 very strong 3-win-class work","13 talent/pedigree with stamina caution","4 market-low strong work/heart"],
+                "secondary":["9 place-market conflict + 2kg claim","12 turf/distance fit","2 course-work positive"]
+              }
+            },
+            "prediction_cutoff":CUTOFF,
+            "krs_required":True,
+            "krs_executable":True
+          }
+          pcode,p=call(KRS,"/pre-krs",pre,timeout=60)
+          print("PRE_KRS",pcode,p.get("receipt",{}).get("status"),p.get("receipt_sha256"))
+          assert pcode<300 and p.get("receipt",{}).get("status")=="PASS"
+          vcode,v=call(KRS,"/verify",p,timeout=30)
+          assert vcode<300 and v.get("valid") is True
+
+          by_runner={r["runner_id"]:{i["index_name"]:i.get("transport_value",50) for i in r["items"]} for r in c["runners"]}
+          horses=[{"horse_no":n,"name":nm,"hsv":by_runner[str(n)],"static_roles":roles.get(str(n),[])} for n,nm,_ in runners]
+          kpayload={
+            "race_id":RID,
+            "input_data":{
+              "race":{"race_id":RID,"venue":"阪神","surface":"turf","distance":1600,"course":"outer","going":"good","class":"2yo_newcomer_female"},
+              "environment":{"track":"B","weather":"sunny","source_cutoff":CUTOFF},
+              "horses":horses,
+              "simulation":{"run_count":5000,"master_seed":20260920}
+            },
+            "mode":"SIM-STD","seed":20260920,"input_class":"REAL-RACE-PRE-RACE-FROZEN-RULED-HOLD-TRANSPORT"
+          }
+          kcode,k=call(KRS,"/krs/execute",kpayload,timeout=240)
+          run=k.get("run_receipt",{})
+          rr=run.get("receipt",{})
+          print("KRS",kcode,json.dumps(rr,ensure_ascii=False))
+          assert kcode<300 and rr.get("status")=="EXECUTED" and int(rr.get("actual_run_count",0))>=5000
+          kvcode,kv=call(KRS,"/verify",run,timeout=30)
+          assert kvcode<300 and kv.get("valid") is True
+
+          tickets=[
+            {"bet_type":"WIN","selection":[10],"stake":400},
+            {"bet_type":"WIN","selection":[5],"stake":200},
+            {"bet_type":"PLACE","selection":[11],"stake":300},
+            {"bet_type":"PLACE","selection":[4],"stake":200},
+            {"bet_type":"QUINELLA","selection":[5,10],"stake":500},
+            {"bet_type":"QUINELLA","selection":[10,11],"stake":200},
+            {"bet_type":"QUINELLA","selection":[5,11],"stake":100},
+            {"bet_type":"QUINELLA","selection":[10,13],"stake":100},
+            {"bet_type":"QUINELLA","selection":[4,10],"stake":100},
+            {"bet_type":"WIDE","selection":[5,10],"stake":300},
+            {"bet_type":"WIDE","selection":[10,11],"stake":200},
+            {"bet_type":"WIDE","selection":[4,10],"stake":100},
+            {"bet_type":"WIDE","selection":[9,10],"stake":100},
+            {"bet_type":"EXACTA","selection":[10,5],"orientation":"10>5","stake":300},
+            {"bet_type":"EXACTA","selection":[5,10],"orientation":"5>10","stake":200},
+            {"bet_type":"EXACTA","selection":[10,11],"orientation":"10>11","stake":100},
+            {"bet_type":"EXACTA","selection":[10,13],"orientation":"10>13","stake":100},
+            {"bet_type":"TRIO","selection":[5,10,11],"stake":300},
+            {"bet_type":"TRIO","selection":[5,10,13],"stake":200},
+            {"bet_type":"TRIO","selection":[4,5,10],"stake":200},
+            {"bet_type":"TRIO","selection":[5,9,10],"stake":100},
+            {"bet_type":"TRIFECTA","selection":[10,5,11],"orientation":"10>5>11","stake":100},
+            {"bet_type":"TRIFECTA","selection":[10,5,13],"orientation":"10>5>13","stake":100},
+            {"bet_type":"TRIFECTA","selection":[10,5,4],"orientation":"10>5>4","stake":100},
+            {"bet_type":"TRIFECTA","selection":[5,10,11],"orientation":"5>10>11","stake":100},
+            {"bet_type":"TRIFECTA","selection":[5,10,13],"orientation":"5>10>13","stake":100},
+            {"bet_type":"TRIFECTA","selection":[11,10,5],"orientation":"11>10>5","stake":100},
+            {"bet_type":"TRIFECTA","selection":[13,10,5],"orientation":"13>10>5","stake":100}
+          ]
+          assert sum(x["stake"] for x in tickets)==5000
+          frozen=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).isoformat()
+          final_payload={
+            "race_id":RID,"no_bet":False,"krs_required":True,"krs_executable":True,"krs_run_receipt":run,
+            "final_prediction_package":{
+              "ranking":ranking,"roles":roles,
+              "prediction_source":"USER_SNAPSHOT+HSN_v1.2+BASE_INDEX_TERMINAL+KRS_SIM_STD",
+              "krs_output_sha256":rr.get("output_sha256"),
+              "semantic_note":"KRS frequencies uncalibrated; static role authority preserved. RULED-HOLD transport 50 is neutral, not ability score."
+            },
+            "ticket_transport":tickets,
+            "final_ticket":{"finalized":True,"frozen_at":frozen,"no_bet":False,"total_investment":5000,"tickets":tickets},
+            "final_freeze_timestamp":frozen
+          }
+          fcode,f=call(KRS,"/final",final_payload,timeout=60)
+          print("FINAL",fcode,f.get("receipt",{}).get("status"),f.get("receipt_sha256"))
+          print("FINAL_BODY",json.dumps(f,ensure_ascii=False))
+          assert fcode<300 and f.get("receipt",{}).get("status")=="PASS"
+          fvcode,fv=call(KRS,"/verify",f,timeout=30)
+          print("FINAL_VERIFY",fvcode,json.dumps(fv,ensure_ascii=False))
+          assert fvcode<300 and fv.get("valid") is True
+
+          print("HSN_R05_FORMAL_PASS",json.dumps({
+            "race_id":RID,"source_cutoff":CUTOFF,
+            "required_count":c.get("required_count"),"ruled_hold_count":c.get("ruled_hold_count"),"unresolved_count":c.get("unresolved_count"),
+            "pre_krs_receipt":p.get("receipt_sha256"),
+            "requested_run_count":rr.get("requested_run_count"),"actual_run_count":rr.get("actual_run_count"),
+            "engine_sha256":rr.get("engine_sha256"),"parameter_map_sha256":rr.get("parameter_map_sha256"),
+            "krs_input_sha256":rr.get("input_sha256"),"krs_output_sha256":rr.get("output_sha256"),
+            "krs_receipt":run.get("receipt_sha256"),
+            "final_receipt":f.get("receipt_sha256"),
+            "ranking":ranking,"roles":roles,"total_investment":5000,"ticket_count":len(tickets)
+          },ensure_ascii=False))
+          PY
