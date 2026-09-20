@@ -90,15 +90,21 @@ jobs:
               raise AssertionError(f"UNSUPPORTED_JRA_ADAPTER_MODE:{adapter_mode}")
 
           # Conversion / canonical / capital preflight before any external KRS run.
+          # This now hard-verifies canonical Source Snapshot SHA, Base44 orchestration ref,
+          # full numerical components when FORMAL-FULL requires them, and all bet-type dispositions.
           conformance=validate_request(req)
 
-          # Railway JRA base-index terminalization.
+          # Railway JRA base-index terminalization / numerical replay.
           hcode,h=call(CALC,"/health",None,"GET",30)
           assert hcode==200 and h.get("status")=="READY",(hcode,h)
           runners=req["runners"]
           ccode,c=call(CALC,"/calculate-jra-base",{"race_id":race_id,"runners":runners},timeout=90)
           assert ccode==200 and c.get("status")=="PASS",(ccode,c)
           assert c.get("unresolved_count")==0,c
+          if req.get("numeric_calculation_requirement")=="FULL_REQUIRED":
+              assert int(c.get("calculated_count",0))==int(c.get("required_count",0)),c
+              assert int(c.get("ruled_hold_count",0))==0,c
+              assert int(c.get("not_applicable_count",0))==0,c
           required=adapt_calculator_output(c)
           assert len(required)==c.get("required_count"),(len(required),c.get("required_count"))
 
@@ -110,6 +116,8 @@ jobs:
             "required_indices":required,
             "static_prediction":req["static_prediction"],
             "prediction_cutoff":req["prediction_cutoff"],
+            "source_snapshot_sha256":conformance["source_snapshot_sha256"],
+            "orchestration_ref":req["orchestration_ref"],
             "krs_required":True,
             "krs_executable":True
           }
@@ -152,6 +160,17 @@ jobs:
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
+          final_package["source_snapshot_sha256"]=conformance["source_snapshot_sha256"]
+          final_package["orchestration_ref"]=req["orchestration_ref"]
+          final_package["bet_type_dispositions"]=req["bet_type_dispositions"]
+          final_package["available_bet_types"]=req["available_bet_types"]
+          final_package["actual_numerical_calculation"]={
+              "required_count":c.get("required_count"),
+              "calculated_count":c.get("calculated_count"),
+              "ruled_hold_count":c.get("ruled_hold_count"),
+              "not_applicable_count":c.get("not_applicable_count"),
+              "unresolved_count":c.get("unresolved_count"),
+          }
 
           final_payload={
             "race_id":race_id,
@@ -166,7 +185,11 @@ jobs:
               "frozen_at":req["final_freeze_timestamp"],
               "no_bet":False,
               "total_investment":expected_total,
-              "tickets":tickets
+              "tickets":tickets,
+              "available_bet_types":req["available_bet_types"],
+              "bet_type_dispositions":req["bet_type_dispositions"],
+              "source_snapshot_sha256":conformance["source_snapshot_sha256"],
+              "orchestration_ref":req["orchestration_ref"]
             },
             "final_freeze_timestamp":req["final_freeze_timestamp"]
           }
@@ -202,7 +225,10 @@ jobs:
             },
             "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True},
             "ticket_count":len(tickets),
-            "total_investment":expected_total
+            "total_investment":expected_total,
+            "source_snapshot_sha256":conformance["source_snapshot_sha256"],
+            "base44_orchestration":conformance["base44_execution_session_id"],
+            "bet_type_dispositions_verified":conformance["bet_type_dispositions_verified"]
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
