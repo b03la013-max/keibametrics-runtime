@@ -185,6 +185,79 @@ def validate_tickets(req, purchased_pairs):
     }
 
 
+
+def validate_prediction_utility(req, runner_ids, role_map, pair, third, purchased_heads, purchased_pairs):
+    sp=req.get("static_prediction") or {}
+    ranking=[str(x) for x in sp.get("ranking",[])]
+    expected=set(map(str,runner_ids))
+    if len(ranking)!=len(runner_ids) or set(ranking)!=expected:
+        raise FormalValidationError(f"RANKING_UNIVERSE_MISMATCH:{ranking}")
+
+    active_w={no for no in expected if role_map[(no,"W")]["status"] in ROLE_ACTIVE}
+    active_p2={no for no in expected if role_map[(no,"P2")]["status"] in ROLE_ACTIVE}
+    active_p3={no for no in expected if role_map[(no,"P3")]["status"] in ROLE_ACTIVE}
+
+    noncap=sorted(active_w-purchased_heads,key=lambda x:int(x) if x.isdigit() else x)
+    reasons=req.get("head_nonselection_reasons") or {}
+    for h in noncap:
+        if not str(reasons.get(h) or reasons.get(int(h) if h.isdigit() else h) or "").strip():
+            raise FormalValidationError(f"ACTIVE_W_HEAD_NONSELECTION_REASON_MISSING:{h}")
+
+    expected_pairs={(h,s) for h in purchased_heads for s in active_p2 if h!=s}
+    pair_counts={st:0 for st in DISP_STATES}
+    for k in expected_pairs:
+        pair_counts[str(pair[k]["status"])]+=1
+
+    expected_thirds={(h,s,t) for h,s in purchased_pairs for t in active_p3 if t not in {h,s}}
+    third_counts={st:0 for st in DISP_STATES}
+    for k in expected_thirds:
+        third_counts[str(third[k]["status"])]+=1
+
+    tickets=req.get("tickets") or []
+    total=sum(int(t.get("stake",0)) for t in tickets)
+    head_stake={}
+    bettype_stake={}
+    for t in tickets:
+        stake=int(t.get("stake",0))
+        bt=str(t.get("bet_type","")).upper()
+        bettype_stake[bt]=bettype_stake.get(bt,0)+stake
+        if bt in {"EXACTA","TRIFECTA"}:
+            sel=t.get("selection") or []
+            if sel:
+                h=str(sel[0])
+                head_stake[h]=head_stake.get(h,0)+stake
+
+    max_head=max(head_stake,key=head_stake.get) if head_stake else None
+    max_head_stake=head_stake.get(max_head,0) if max_head else 0
+    head_concentration=(max_head_stake/total) if total else 0.0
+
+    return {
+        "runner_count":len(runner_ids),
+        "ranking_complete":True,
+        "active_w_count":len(active_w),
+        "active_p2_count":len(active_p2),
+        "active_p3_count":len(active_p3),
+        "purchased_head_count":len(purchased_heads),
+        "noncapitalized_active_w":noncap,
+        "expected_pair_count":len(expected_pairs),
+        "pair_purchase_count":pair_counts["PURCHASE"],
+        "pair_protect_count":pair_counts["PROTECT"],
+        "pair_exclude_count":pair_counts["EXCLUDE"],
+        "pair_purchase_density":(pair_counts["PURCHASE"]/len(expected_pairs)) if expected_pairs else 0.0,
+        "expected_third_count":len(expected_thirds),
+        "third_purchase_count":third_counts["PURCHASE"],
+        "third_protect_count":third_counts["PROTECT"],
+        "third_exclude_count":third_counts["EXCLUDE"],
+        "third_purchase_density":(third_counts["PURCHASE"]/len(expected_thirds)) if expected_thirds else 0.0,
+        "head_stake":head_stake,
+        "max_head":max_head,
+        "max_head_stake":max_head_stake,
+        "head_capital_concentration":round(head_concentration,6),
+        "bet_type_stake":bettype_stake,
+        "total_investment":total,
+    }
+
+
 def canonical_json_sha256(obj):
     raw=json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
@@ -310,6 +383,7 @@ def validate_request(req):
     numeric=validate_numeric_input(req.get("krs_input_data") or {},runner_ids)
     pair,third,heads,pairs=validate_dispositions(req,runner_ids,role)
     ticket=validate_tickets(req,pairs)
+    utility=validate_prediction_utility(req,runner_ids,role,pair,third,heads,pairs)
     bet_types=validate_bet_type_dispositions(req)
     return {
         "runner_count":len(runner_ids),
@@ -318,5 +392,5 @@ def validate_request(req):
         "third_disposition_count":len(third),
         "purchased_head_count":len(heads),
         "purchased_pair_count":len(pairs),
-        **source,**orchestration,**canonical,**numeric,**ticket,**bet_types
+        **source,**orchestration,**canonical,**numeric,**ticket,**utility,**bet_types
     }
