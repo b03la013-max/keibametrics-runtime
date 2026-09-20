@@ -1,0 +1,78 @@
+name: KeibaMetrics Formal Result Runner
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/results/*.json"
+  workflow_dispatch:
+
+jobs:
+  result-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Resolve result request
+        id: result
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' | tail -1)"
+          if [ -z "$REQ" ]; then
+            REQ="$(find runtime/results -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
+          fi
+          test -n "$REQ"
+          echo "request=$REQ" >> "$GITHUB_OUTPUT"
+          echo "RESULT_FILE=$REQ"
+      - name: Submit and verify RESULT receipt
+        shell: bash
+        env:
+          RESULT_FILE: ${{ steps.result.outputs.request }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request, urllib.error
+          BASE="https://quorumprobe-production.up.railway.app"
+          with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
+              p=json.load(f)
+          required=["race_id","official_result","settlement","frozen_prediction_ref","learning_event"]
+          missing=[k for k in required if not p.get(k)]
+          assert not missing, f"RESULT_REQUIRED_MISSING:{missing}"
+          assert p["settlement"].get("status")=="SETTLED","SETTLEMENT_STATUS_MUST_BE_SETTLED"
+
+          def call(path,payload,timeout=60):
+              req=urllib.request.Request(BASE+path,data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode(),
+                                         headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      raw=r.read().decode()
+                      return r.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          code,res=call("/result",p)
+          assert code<300,(code,res)
+          rec=res.get("receipt",{})
+          assert rec.get("phase")=="RESULT",res
+          assert rec.get("status")=="PASS",res
+          assert not rec.get("errors"),res
+          vcode,v=call("/verify",res)
+          assert vcode<300 and v.get("valid") is True,(vcode,v)
+          summary={
+            "race_id":p["race_id"],
+            "status":"RESULT_E2E_PASS",
+            "receipt_sha256":res.get("receipt_sha256"),
+            "artifact_sha256":rec.get("artifact_sha256"),
+            "signer_key_id":res.get("signer_key_id"),
+            "signature_alg":res.get("signature_alg"),
+            "verified":True,
+            "settlement_status":p["settlement"]["status"],
+            "frozen_prediction_ref":p["frozen_prediction_ref"]
+          }
+          print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
+          PY
