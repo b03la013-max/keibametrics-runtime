@@ -1,0 +1,32 @@
+name: KM Result Contract Probe2 20260920
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-result-contract-probe2-20260920.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe RESULT settlement status and refs
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error
+          BASE="https://quorumprobe-production.up.railway.app"
+          for st in ["SETTLED","COMPLETE","PASS","OFFICIAL","FINAL","VALID","CONFIRMED"]:
+            p={
+              "race_id":"KM-RESULT-PROBE2-"+st,
+              "official_result":{"finish_order":[1,2,3],"status":"OFFICIAL"},
+              "settlement":{"status":st,"total_investment":300,"total_payout":0,"refund":0},
+              "frozen_prediction_ref":{"prediction_id":"ACCEPTANCE-T04","final_receipt_sha256":"3856950c0b0c6fe50781e8e84f81085ca1ac41fe4115420888a941da1654e223"},
+              "learning_event":{"status":"RECORDED","event_type":"ACCEPTANCE_RESULT","notes":"synthetic acceptance"}
+            }
+            req=urllib.request.Request(BASE+"/result",data=json.dumps(p).encode(),headers={"content-type":"application/json"},method="POST")
+            try:
+              with urllib.request.urlopen(req,timeout=30) as r:
+                print("STATUS",st,"HTTP",r.status,"BODY",r.read().decode())
+            except urllib.error.HTTPError as e:
+              print("STATUS",st,"HTTP",e.code,"BODY",e.read().decode(errors="replace"))
+          PY
