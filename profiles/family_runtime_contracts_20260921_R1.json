@@ -1,0 +1,57 @@
+{
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260921-R1",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED",
+  "families": {
+    "JRA": {
+      "execution_status": "EXECUTABLE",
+      "runtime": "GitHub Actions Formal Request Runner + quorumprobe external runtime",
+      "engine": "KRS-Engine v1.1.0",
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "external_endpoint": "https://quorumprobe-production.up.railway.app",
+      "formal_runner": ".github/workflows/km-formal-request-runner.yml"
+    },
+    "LOCAL": {
+      "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
+      "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+      "common_canon": "地方版 v4.12 Rev.3",
+      "krs": "v1.6-KRS Rev.3",
+      "runtime": "KRS-LOCAL Runtime Package v1.2.0",
+      "formal_guard": "FCG-LOCAL v1.1.0",
+      "engine": "KRS-Engine v1.1.0",
+      "parameter_map": "v0.1-provisional / PROVISIONAL_UNCALIBRATED",
+      "external_endpoint": null,
+      "required_attestation": [
+        "adapter_sha256",
+        "engine_sha256",
+        "parameter_map_sha256_or_fingerprint",
+        "external_endpoint",
+        "signed_receipt_authority",
+        "runtime_version"
+      ],
+      "note": "Current Production documents explicitly describe full-pipeline automation as partial."
+    },
+    "BAN": {
+      "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
+      "main": "v3.7-BAN Rev.2",
+      "krs": "v2.5 Rev.2",
+      "runtime": "v2.4",
+      "review": "v2.5",
+      "kms": "v2.5-KMS",
+      "engine": "KRS-Engine v1.1.0 unchanged",
+      "parameter_map": "parameter_map-BAN Rev.13 unchanged / numeric unchanged",
+      "parameter_numeric_fingerprint_sha256": "94a47a3715f67f465d28a918c9cead17b6559f09f199b56f8cba38e8e906a871",
+      "external_endpoint": null,
+      "required_attestation": [
+        "adapter_sha256",
+        "engine_sha256",
+        "parameter_map_sha256_or_fingerprint",
+        "external_endpoint",
+        "signed_receipt_authority",
+        "runtime_version"
+      ],
+      "note": "Current v3.7-BAN Rev.2 build records Engine execution status NOT-RUN; selftests may not be represented as real execution."
+    }
+  },
+  "rule": "Never route one Family through another Family's parameter_map/adapter. Missing physical runtime means FORMAL-FULL blocked, not silent fallback."
+}
