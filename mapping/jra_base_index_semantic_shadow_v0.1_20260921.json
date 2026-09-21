@@ -1,0 +1,250 @@
+{
+  "mapping_id": "JRA-BASE-INDEX-SEMANTIC-SHADOW-v0.1-20260921",
+  "status": "SHADOW / NON-PRODUCTION / NUMERICAL / SEMANTIC-CONFORMANCE-REPAIR / OOS-REQUIRED / NO-LIVE-AUTHORITY",
+  "predecessor": "JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+  "production_unchanged": true,
+  "scope": "JRA research-only shadow mapping over frozen pre-race Evidence Feature Ledgers",
+  "invariants": {
+    "category_scale": "UNCHANGED_FROM_PRODUCTION_v1.0",
+    "derived_formula_registry": "index_formula_registry JRA v1.0 UNCHANGED",
+    "dcr_rules": "UNCHANGED",
+    "no_probability_authority": true,
+    "no_result_derived_features": true,
+    "no_retroactive_production_rewrite": true
+  },
+  "semantic_repairs": {
+    "HPI": "Remove current-state workout/physical inputs from established/low-career HPI; keep ability/class/opponent/performance domain.",
+    "SSI": "Remove workout_speed and gate_quality from established/low-career SSI; keep realized speed/closing/dash/pace domain.",
+    "CFI": "Remove going-fit from CFI; preserve course/distance/geometry/surface domain.",
+    "RFI": "Remove physical_readiness from established/low-career RFI; preserve repeatability/rotation/preparation domain.",
+    "JTI": "Reduce generic jockey-quality dominance and increase venue/style/horse fit.",
+    "GCI": "Remove pedigree duplication; use going/same-day bias/weather domain.",
+    "KGI": "Remove trainer/jockey/workout leakage; concentrate class/opponent/hidden-class/recent-class evidence.",
+    "VMI": "Redefine as internal-minus-market value mismatch rather than popularity/support score.",
+    "PRI": "Add conservative race-relative position-acquisition transform while preserving individual PRI.",
+    "weak_penalty": "Use deterministic race-family-specific major-index sets, because Central canon requires race-condition-specific L1/L2 majors.",
+    "coverage": "Preserve raw ability value; record coverage confidence separately rather than imputing UNKNOWN as 50 or WEAK."
+  },
+  "category_scale": {
+    "EXCEPTIONAL": 94,
+    "VERY_STRONG": 88,
+    "STRONG": 82,
+    "POSITIVE": 74,
+    "NEUTRAL": 64,
+    "MIXED": 54,
+    "CAUTION": 44,
+    "WEAK": 34,
+    "VERY_WEAK": 24
+  },
+  "profiles": {
+    "ESTABLISHED": {
+      "minimum_index_coverage_weight": 0.42
+    },
+    "LOW_CAREER": {
+      "minimum_index_coverage_weight": 0.38
+    },
+    "NEWCOMER": {
+      "policy": "unchanged_production_v1.0_until_separate_newcomer_evidence_program"
+    }
+  },
+  "index_profiles": {
+    "ESTABLISHED": {
+      "HPI": {
+        "recent_performance": 0.3,
+        "recent_speed": 0.24,
+        "class_performance": 0.2,
+        "opponent_strength": 0.16,
+        "finish_margin": 0.1
+      },
+      "SSI": {
+        "recent_speed": 0.34,
+        "speed_reliability": 0.16,
+        "closing_quality": 0.2,
+        "dash_quality": 0.16,
+        "pace_resilience": 0.14
+      },
+      "CFI": {
+        "same_course_fit": 0.22,
+        "same_distance_fit": 0.22,
+        "similar_geometry_fit": 0.16,
+        "surface_fit": 0.18,
+        "turn_direction_fit": 0.08,
+        "draw_course_fit": 0.06,
+        "course_geometry_fit": 0.08
+      },
+      "RFI": {
+        "recent_consistency": 0.3,
+        "rotation_fit": 0.18,
+        "position_reproducibility": 0.2,
+        "preparation_continuity": 0.12,
+        "layoff_readiness": 0.1,
+        "workout_consistency": 0.1
+      },
+      "JTI": {
+        "jockey_quality": 0.2,
+        "jockey_venue_fit": 0.28,
+        "jockey_style_fit": 0.28,
+        "jockey_horse_fit": 0.24
+      },
+      "GCI": {
+        "going_fit": 0.36,
+        "same_day_track_fit": 0.34,
+        "track_bias_fit": 0.18,
+        "weather_fit": 0.12
+      },
+      "PRI": {
+        "gate_quality": 0.18,
+        "dash_quality": 0.2,
+        "position_quality": 0.18,
+        "position_reproducibility": 0.14,
+        "draw_course_fit": 0.08,
+        "pressure_resilience": 0.12,
+        "progression_ability": 0.1
+      },
+      "KGI": {
+        "class_performance": 0.38,
+        "opponent_strength": 0.3,
+        "hidden_class": 0.2,
+        "recent_performance": 0.12
+      }
+    },
+    "LOW_CAREER": {
+      "HPI": {
+        "recent_performance": 0.26,
+        "recent_speed": 0.22,
+        "class_performance": 0.16,
+        "opponent_strength": 0.12,
+        "pedigree_class": 0.12,
+        "closing_quality": 0.12
+      },
+      "SSI": {
+        "recent_speed": 0.32,
+        "closing_quality": 0.24,
+        "dash_quality": 0.22,
+        "speed_reliability": 0.12,
+        "forward_speed_comment": 0.1
+      },
+      "CFI": {
+        "same_course_fit": 0.16,
+        "same_distance_fit": 0.18,
+        "similar_geometry_fit": 0.14,
+        "surface_fit": 0.22,
+        "pedigree_surface": 0.1,
+        "pedigree_distance": 0.1,
+        "turn_direction_fit": 0.05,
+        "course_geometry_fit": 0.05
+      },
+      "RFI": {
+        "recent_consistency": 0.26,
+        "preparation_continuity": 0.2,
+        "workout_consistency": 0.18,
+        "rotation_fit": 0.14,
+        "layoff_readiness": 0.12,
+        "stable_readiness": 0.1
+      },
+      "JTI": {
+        "jockey_quality": 0.24,
+        "jockey_venue_fit": 0.28,
+        "jockey_style_fit": 0.28,
+        "jockey_horse_fit": 0.2
+      },
+      "GCI": {
+        "going_fit": 0.36,
+        "same_day_track_fit": 0.34,
+        "track_bias_fit": 0.18,
+        "weather_fit": 0.12
+      },
+      "PRI": {
+        "gate_quality": 0.2,
+        "dash_quality": 0.22,
+        "position_quality": 0.16,
+        "draw_course_fit": 0.12,
+        "pressure_resilience": 0.12,
+        "progression_ability": 0.1,
+        "jockey_style_fit": 0.08
+      },
+      "KGI": {
+        "class_performance": 0.3,
+        "opponent_strength": 0.24,
+        "pedigree_class": 0.18,
+        "hidden_class": 0.16,
+        "recent_performance": 0.12
+      }
+    }
+  },
+  "inherited_indices": [
+    "BVI",
+    "CSI",
+    "TRI",
+    "BWI"
+  ],
+  "vmi_shadow_formula": {
+    "internal_reference": "TPI before VMI (TPI itself has no VMI term)",
+    "market_reference": "market_rank category score",
+    "formula": "VMI_shadow = clip(50 + TPI_preVMI - market_rank_score, 0, 100)",
+    "semantics": "50=fair-to-market; >50 internally stronger than market support; <50 internally weaker than market support",
+    "external_expert_support": "XDI audit only; not direct VMI support"
+  },
+  "pri_relative_formula": {
+    "individual_pri_weight": 0.75,
+    "race_relative_percentile_weight": 0.25,
+    "percentile": "best individual PRI=100, worst=0, linear rank percentile within runner universe",
+    "formula": "PRI_shadow = 0.75*PRI_individual + 0.25*PRI_field_percentile"
+  },
+  "weak_penalty_sets": {
+    "TURF_MIDDLE_LONG": {
+      "when": "surface=turf and distance>=1800",
+      "indices": [
+        "HPI",
+        "CFI",
+        "RFI",
+        "GCI",
+        "PRI",
+        "KGI"
+      ]
+    },
+    "DIRT_SPRINT_MILE": {
+      "when": "surface=dirt and distance<=1600",
+      "indices": [
+        "HPI",
+        "SSI",
+        "CFI",
+        "GCI",
+        "PRI",
+        "KGI"
+      ]
+    },
+    "DEFAULT": {
+      "indices": [
+        "HPI",
+        "SSI",
+        "CFI",
+        "RFI",
+        "GCI",
+        "PRI"
+      ]
+    }
+  },
+  "coverage_diagnostic": {
+    "ability_value_adjustment": "NONE",
+    "fields": [
+      "coverage_weight_per_index",
+      "mean_coverage",
+      "minimum_coverage"
+    ],
+    "principle": "UNKNOWN is not converted to 50/WEAK; coverage is a separate confidence diagnostic."
+  },
+  "promotion_gate": {
+    "current_decision": "REJECT",
+    "reason": "20260921 R10-R12 development replay shows mixed utility and regression on HSN R11 T3I; no unknown-future OOS evidence.",
+    "required": [
+      "larger frozen historical sample",
+      "strict prequential future sample",
+      "ablation",
+      "winner/P2/P3 discrimination",
+      "ticket conversion",
+      "PFS",
+      "simpler-baseline comparison"
+    ]
+  }
+}
