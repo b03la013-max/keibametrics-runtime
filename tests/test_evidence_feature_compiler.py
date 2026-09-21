@@ -14,5 +14,5 @@ try:
     compile_evidence_feature_ledger(req["race_id"],req["source_snapshot_sha256"],bad,mp)
     raise AssertionError("tampered rule must fail")
 except EvidenceCompilerError as e:
-    assert "NONCANONICAL_RULE_ID" in str(e)
+    assert "UNREGISTERED_RULE_ID" in str(e)
 print("EVIDENCE_FEATURE_COMPILER_ACCEPTANCE_PASS",a["sha256"])
