@@ -246,7 +246,7 @@ jobs:
           # Persist the actual structured KRS output and derive a pre-result SHADOW utility delta.
           # This does not alter Production roles/tickets; it makes KRS prediction contribution measurable.
           utility=build_krs_prediction_utility(req,k)
-          artifact_dir=os.path.join(".krs-artifacts",race_id)
+          artifact_dir=os.path.join("krs-artifacts",race_id)
           os.makedirs(artifact_dir,exist_ok=True)
           with open(os.path.join(artifact_dir,"krs_response.json"),"w",encoding="utf-8") as fh:
               json.dump(k,fh,ensure_ascii=False,sort_keys=True,indent=2)
@@ -279,6 +279,18 @@ jobs:
           final_package["orchestration_ref"]=req["orchestration_ref"]
           final_package["bet_type_dispositions"]=req["bet_type_dispositions"]
           final_package["available_bet_types"]=req["available_bet_types"]
+          final_package["krs_prediction_utility_shadow"]={
+              "utility_revision":utility.get("utility_revision"),
+              "utility_class":utility.get("utility_class"),
+              "material_shadow_delta":utility.get("material_shadow_delta"),
+              "utility_sha256":utility.get("sha256"),
+              "role_proposals":utility.get("role_proposals"),
+              "ordered_pair_proposals":utility.get("ordered_pair_proposals"),
+              "pair_third_proposals":utility.get("pair_third_proposals"),
+              "sim_xdi":utility.get("sim_xdi"),
+              "role_audit_triggers":utility.get("role_audit_triggers"),
+              "production_effect":"NONE"
+          }
           final_package["actual_numerical_calculation"]={
               "required_count":c.get("required_count"),
               "calculated_count":c.get("calculated_count"),
@@ -375,6 +387,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: krs-utility-${{ github.run_id }}
-          path: .krs-artifacts/
+          path: krs-artifacts/
           if-no-files-found: error
           retention-days: 90
