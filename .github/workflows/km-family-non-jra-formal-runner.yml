@@ -1,0 +1,64 @@
+name: KeibaMetrics Non-JRA Family Formal Bridge
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/family_requests/*.json"
+  workflow_dispatch:
+
+jobs:
+  formal-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve and execute family-isolated external runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/family_requests/*.json' | tail -1)"
+          if [ -z "$REQ" ]; then
+            REQ="$(find runtime/family_requests -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
+          fi
+          test -n "$REQ"
+          REQUEST_FILE="$REQ" python - <<'PY'
+          import json,os,sys,urllib.request,urllib.error
+          sys.path.insert(0,"runtime")
+          from family_runtime_contract import load_contracts, resolve_family_runtime
+          with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
+              req=json.load(f)
+          fam=str(req.get("family_id") or "").upper()
+          assert fam in {"LOCAL","BAN"}, f"NON_JRA_BRIDGE_FAMILY_INVALID:{fam}"
+          resolved=resolve_family_runtime(req,load_contracts())
+          assert resolved["executable"] is True
+          endpoint=resolved["external_endpoint"]
+          def call(path,payload,timeout=360):
+              data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              rq=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+          code,res=call("/formal",req)
+          assert code<300,(code,res)
+          receipt=res.get("receipt") or {}
+          assert receipt.get("status") in {"PASS","FULL_FORMAL_E2E_PASS"},res
+          vcode,v=call("/verify",res,60)
+          assert vcode<300 and v.get("valid") is True,(vcode,v)
+          print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
+            "race_id":req.get("race_id"),"family_id":fam,
+            "status":"FULL_FORMAL_E2E_PASS",
+            "external_endpoint":endpoint,
+            "receipt_sha256":res.get("receipt_sha256"),
+            "verified":True
+          },separators=(",",":"),ensure_ascii=False))
+          PY
