@@ -1,0 +1,39 @@
+{
+  "profile_id": "KM-JRA-BASE-INDEX-PRODUCTION-CLOSURE-20260921-R1",
+  "status": "ACTIVE / JRA-WIDE / PRODUCTION-NUMERICAL-MAPPING / HUMAN-AUTHORIZED / FAIL-CLOSED / PREQUENTIAL-MEASUREMENT-REQUIRED",
+  "effective_at": "2026-09-21T14:00:00+09:00",
+  "purpose": "Close the missing production path from real pre-race evidence to all 13 JRA base indices so every JRA flat race can satisfy FULL_REQUIRED when minimum evidence coverage and temporal requirements are met.",
+  "authority_change": {
+    "class": "PREDICTION-NUMERICAL-MAPPING-IMPLEMENTATION",
+    "user_authorization": "Explicit instruction on 2026-09-21 to repair the system so all races can be Production-capable.",
+    "downstream_formulas_changed": false,
+    "engine_changed": false,
+    "parameter_map_changed": false,
+    "ticket_policy_changed": false,
+    "capital_policy_changed": false
+  },
+  "artifacts": {
+    "mapping": "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",
+    "materializer": "runtime/jra_evidence_to_base_production.py",
+    "derived_builder": "runtime/jra_index_provenance_builder.py",
+    "base_runtime": "runtime/base-index-service/server.mjs"
+  },
+  "runner_profiles": [
+    "ESTABLISHED",
+    "LOW_CAREER",
+    "NEWCOMER"
+  ],
+  "hard_requirements": [
+    "Feature ledger categories must be deterministic and evidence-linked.",
+    "Per-index minimum evidence coverage must pass.",
+    "All 13 base indices must materialize numerically.",
+    "Derived 7 remain index_formula_registry JRA v1.0.",
+    "Every canonical component must carry value/rule_id/mapping_version/evidence_refs/source_fact.",
+    "No result-derived input.",
+    "DCR may be low for newcomers; low DCR is uncertainty, not ability zero.",
+    "Production capability does not imply calibration or probability validity."
+  ],
+  "formal_grade_rule": "FORMAL-FULL remains blocked unless calculated_count==required_count, ruled_hold_count==0, not_applicable_count==0, unresolved_count==0, all mandatory stages pass, and PRE_KRS/KRS/FINAL signed receipts verify before post.",
+  "calibration_status": "UNCALIBRATED_RULE_BASED_BASE_INDEX_MAPPING",
+  "prequential_requirement": "Every race records mapping version, profile, feature coverage, Static/KRS/Final differences and post-race outcome; later revision requires frozen OOS evidence."
+}
