@@ -1,0 +1,50 @@
+name: KeibaMetrics Family MEC Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/minimum_efficient_coverage.py"
+      - "runtime/formal_request_validator.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - "tests/test_minimum_efficient_coverage.py"
+      - "governance/KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R1.md"
+      - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R1.json"
+      - ".github/workflows/km-family-mec-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: MEC unit and family acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/test_minimum_efficient_coverage.py
+          python - <<'PY'
+          import json,sys
+          sys.path.insert(0,"runtime")
+          from minimum_efficient_coverage import build_mec_plan, validate_mec_plan
+          rows={}
+          for p in [
+            "runtime/requests/KM-JRA-HSN-20260921-R10.json",
+            "runtime/requests/KM-JRA-HSN-20260921-R11-POSTSTART-REPLAY-R1.json",
+            "runtime/requests/KM-JRA-HSN-20260921-R12.json",
+          ]:
+              req=json.load(open(p,encoding="utf-8"))
+              plan=build_mec_plan(req,strict_head_closure=False)
+              validate_mec_plan(plan)
+              rows[req["race_id"]]={
+                "legacy_ticket_count":len(req.get("tickets") or []),
+                "legacy_capital":req.get("total_investment"),
+                "mec_ticket_count":plan["ticket_count"],
+                "mec_minimum_capital":plan["minimum_required_capital"],
+                "width_band":plan["diagnostic_width_band"],
+                "coverage_ratio":plan["material_coverage_ratio"],
+                "uncovered_active_w_heads":plan["uncovered_active_w_heads"],
+              }
+          print("MEC_TODAY_REPLAY="+json.dumps(rows,separators=(",",":"),ensure_ascii=False))
+          PY
