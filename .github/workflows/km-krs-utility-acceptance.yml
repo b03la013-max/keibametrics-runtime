@@ -1,0 +1,37 @@
+name: KeibaMetrics KRS Utility Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-krs-utility-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate formal workflow and KRS utility gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import re, yaml
+          from pathlib import Path
+          p=Path(".github/workflows/km-formal-request-runner.yml")
+          obj=yaml.safe_load(p.read_text())
+          assert isinstance(obj,dict) and "jobs" in obj
+          text=p.read_text()
+          assert "KRS_PREDICTION_UTILITY_CAPTURED" in text
+          assert 'final_package["krs_prediction_utility_shadow"]' in text
+          assert "Upload KRS structured output and utility delta" in text
+          m=re.search(r"python - <<'PY'\n(.*?)\n\s*PY\n",text,re.S)
+          assert m, "INLINE_PYTHON_NOT_FOUND"
+          body="\n".join(line[10:] if line.startswith("          ") else line for line in m.group(1).splitlines())
+          compile(body,"formal-inline.py","exec")
+          print("FORMAL_WORKFLOW_SYNTAX_PASS")
+          PY
+          python tests/test_krs_prediction_utility.py
