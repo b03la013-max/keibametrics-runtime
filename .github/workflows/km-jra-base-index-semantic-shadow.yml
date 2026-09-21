@@ -1,0 +1,35 @@
+name: KeibaMetrics JRA Base Index Semantic Shadow Replay
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "mapping/jra_base_index_semantic_shadow_v0.1_20260921.json"
+      - "runtime/shadow/jra_base_index_semantic_shadow_replay.py"
+      - "runtime/shadow/hsn_20260921_r10_r12_outcomes.json"
+      - "governance/KM-JRA-BASE-INDEX-SEMANTIC-SHADOW-20260921-R1.json"
+      - ".github/workflows/km-jra-base-index-semantic-shadow.yml"
+  workflow_dispatch:
+
+jobs:
+  shadow-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run frozen-evidence ablation replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runtime/shadow/jra_base_index_semantic_shadow_replay.py > /tmp/shadow.json
+          python - <<'PY'
+          import json
+          p=json.load(open('/tmp/shadow.json'))
+          assert p['status'].startswith('SHADOW')
+          assert p['promotion_decision']=='REJECT'
+          assert len(p['per_race'])==3
+          for rid,b in p['per_race'].items():
+              assert len(b['actual_top3'])==3
+              assert set(b['arms'])=={'CONTROL','SEMANTIC','VMI','PRI_REL','COND_WEAK','FULL'}
+          print('KM_JRA_BASE_INDEX_SHADOW_RESULT='+json.dumps(p,separators=(',',':'),ensure_ascii=False))
+          PY
