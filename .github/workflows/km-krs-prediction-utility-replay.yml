@@ -17,7 +17,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .krs-utility-replay
+          mkdir -p krs-utility-replay
           python - <<'PY'
           import json, urllib.request, sys, os, hashlib
           sys.path.insert(0,"runtime")
@@ -53,7 +53,7 @@ jobs:
                   k=json.loads(x.read().decode())
               utility=build_krs_prediction_utility(req,k)
               evaluation=evaluate_against_result(utility,actual[req["race_id"]])
-              race_dir=os.path.join(".krs-utility-replay",req["race_id"])
+              race_dir=os.path.join("krs-utility-replay",req["race_id"])
               os.makedirs(race_dir,exist_ok=True)
               json.dump(k,open(os.path.join(race_dir,"krs_response.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
               json.dump(utility,open(os.path.join(race_dir,"utility.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
@@ -67,12 +67,12 @@ jobs:
                 "role_audit_triggers":utility["role_audit_triggers"],
                 "evaluation":evaluation,
               }
-          json.dump(combined,open(".krs-utility-replay/combined.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          json.dump(combined,open("krs-utility-replay/combined.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
           print("KRS_UTILITY_REPLAY="+json.dumps(combined,separators=(",",":"),ensure_ascii=False))
           PY
       - name: Upload replay raw outputs
         uses: actions/upload-artifact@v4
         with:
           name: krs-prediction-utility-replay-${{ github.run_id }}
-          path: .krs-utility-replay/
+          path: krs-utility-replay/
           retention-days: 90
