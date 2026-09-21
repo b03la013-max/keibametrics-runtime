@@ -1,0 +1,75 @@
+{
+  "profile_id": "KM-JRA-BASE-INDEX-SEMANTIC-SHADOW-20260921-R1",
+  "status": "SHADOW / NON-PRODUCTION / NUMERICAL / SEMANTIC-CONFORMANCE-REPAIR / PROMOTION-REJECTED / OOS-REQUIRED",
+  "created_at": "2026-09-21T19:05:00+09:00",
+  "purpose": "Reconcile the 13 base-index numerical implementation with KeibaMetrics index semantics without changing derived formulas or Production authority.",
+  "production_control": {
+    "registry": "JRA-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260921",
+    "mapping": "JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+    "changed": false
+  },
+  "authority_basis": [
+    "Central canon: T3I uses VMI and is responsible for longshot in-the-money intrusion.",
+    "Central canon: Weak Penalty major indices are selected by race conditions.",
+    "HSN canon: PRI is Today's Tactical Choice and Position Acquisition must be generated independently from ability rank.",
+    "Central/Venue doctrine: external AI/index support is for discrepancy audit, not direct TPI/VMI substitution.",
+    "UNKNOWN is not WEAK; missing evidence cannot be silently imputed as neutral ability."
+  ],
+  "artifacts": {
+    "mapping": "mapping/jra_base_index_semantic_shadow_v0.1_20260921.json",
+    "replay": "runtime/shadow/jra_base_index_semantic_shadow_replay.py",
+    "outcomes": "runtime/shadow/hsn_20260921_r10_r12_outcomes.json",
+    "results": "runtime/shadow/KM-JRA-BASE-INDEX-SEMANTIC-SHADOW-20260921-R1-results.json",
+    "workflow": ".github/workflows/km-jra-base-index-semantic-shadow.yml",
+    "workflow_run_id": 35586421247
+  },
+  "tested_arms": [
+    "CONTROL",
+    "SEMANTIC",
+    "VMI",
+    "PRI_REL",
+    "COND_WEAK",
+    "FULL"
+  ],
+  "verified_findings": {
+    "semantic_cleanup": "No ranking improvement on R10-R12; semantic responsibility boundaries are cleaner but utility-neutral on this sample.",
+    "vmi": "R12 actual third 13 T3I improves 11->9; R11 actual second 4 worsens 3->4.",
+    "pri_relative": "R12 actual third 13 T3I improves 11->8; R11 actual second 4 worsens 3->5.",
+    "condition_weak": "No gain on this sample; aggregate T3I mean rank worsens.",
+    "full": "Aggregate T3I top3 hits fall from CONTROL 4/9 to FULL 3/9; no promotion basis."
+  },
+  "decisions": {
+    "production_promotion": "REJECT",
+    "production_weight_change": "NONE",
+    "production_formula_change": "NONE",
+    "production_category_scale_change": "NONE",
+    "keep_shadow": [
+      "VMI semantic correction",
+      "PRI race-relative diagnostic",
+      "Responsibility-boundary cleanup",
+      "Coverage confidence diagnostic"
+    ],
+    "hold_or_revise": [
+      "Condition-specific Weak Penalty numeric sets require more evidence.",
+      "PRI relative coefficient 0.25 is uncalibrated.",
+      "VMI 1:1 internal-minus-market gap is semantically clean but uncalibrated."
+    ]
+  },
+  "next_evidence_gate": {
+    "required": [
+      "larger leakage-free frozen historical sample across venues/distances/surfaces",
+      "strict future prequential OOS",
+      "ablation by index family",
+      "prediction accuracy and ordered-role discrimination",
+      "deterministic role adapter before ticket/PFS comparison",
+      "ticket conversion and PFS comparison only on pre-frozen decision policies",
+      "simpler-baseline comparison"
+    ],
+    "forbidden": [
+      "retroactive role/ticket reconstruction from post-race results",
+      "promotion from R10-R12 development replay",
+      "result-derived feature relabeling",
+      "changing Production weights because R12 #13 improved"
+    ]
+  }
+}
