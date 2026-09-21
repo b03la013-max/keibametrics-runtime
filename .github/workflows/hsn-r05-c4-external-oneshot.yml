@@ -48,7 +48,8 @@ jobs:
               return o
 
           universe=[{"runner_id":str(r["runner_id"]),"name":r.get("name","")} for r in req["runners"]]
-          required_names=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]\n          required=[{"name":n,"index_name":n,"status":"CALCULATED","required":True} for n in required_names]
+          required_names=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
+          required=[{"name":n,"index_name":n,"status":"CALCULATED","required":True} for n in required_names]
           pre_body=dict(req)
           pre_body.update({
             "runner_universe":universe,
