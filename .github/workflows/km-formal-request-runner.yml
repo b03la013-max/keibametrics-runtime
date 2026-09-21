@@ -38,16 +38,21 @@ jobs:
           import json, urllib.request, urllib.error, sys, hashlib, os
           sys.path.insert(0,"runtime")
           from prekrs_terminal_compat import adapt_calculator_output
-          from formal_request_validator import validate_request
+          from formal_request_validator import validate_request, validate_pre_krs_request
           from jra_index_provenance_builder import materialize_index_provenance
           from jra_evidence_to_base_production import load_mapping as load_production_mapping, attach_production_ledger_to_request
           from jra_krs_input_builder_production import build_krs_input
           from krs_prediction_utility import build_krs_prediction_utility
+          from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           CALC="https://jra-validation-sandbox-production.up.railway.app"
           KRS="https://quorumprobe-production.up.railway.app"
+          from datetime import datetime, timezone
+          def dt(s):
+              return datetime.fromisoformat(str(s).replace("Z","+00:00"))
+          MEC_EFFECTIVE_UTC=dt("2026-09-21T19:33:00+09:00").astimezone(timezone.utc)
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
@@ -61,6 +66,10 @@ jobs:
           # FORMAL-PRE-RACE is always FULL_REQUIRED. Degraded / RULED-HOLD may be
           # used diagnostically, but can never claim FORMAL-FULL.
           temporal_mode=req.get("temporal_mode","FORMAL-PRE-RACE")
+          cutoff_utc=dt(req["prediction_cutoff"]).astimezone(timezone.utc) if req.get("prediction_cutoff") else None
+          mec_required=bool(req.get("mec_profile")==MEC_PROFILE or (
+              temporal_mode=="FORMAL-PRE-RACE" and cutoff_utc is not None and cutoff_utc>=MEC_EFFECTIVE_UTC
+          ))
           if temporal_mode=="FORMAL-PRE-RACE":
               assert isinstance(req.get("index_provenance_ledger"),dict) and req.get("index_provenance_ledger"), "FORMAL_FULL_INDEX_PROVENANCE_LEDGER_MISSING"
               assert req.get("numeric_calculation_requirement")=="FULL_REQUIRED", "FORMAL_FULL_REQUIRES_FULL_NUMERICAL_CALCULATION"
@@ -88,18 +97,16 @@ jobs:
           dispatch_deadline=req.get("external_dispatch_deadline_at")
           if temporal_mode=="FORMAL-PRE-RACE":
               assert scheduled_post and dispatch_deadline, "TEMPORAL_FIELDS_MISSING"
-              from datetime import datetime, timezone
-              def dt(s):
-                  return datetime.fromisoformat(str(s).replace("Z","+00:00"))
               post_utc=dt(scheduled_post).astimezone(timezone.utc)
               deadline_utc=dt(dispatch_deadline).astimezone(timezone.utc)
-              final_freeze_utc=dt(req["final_freeze_timestamp"]).astimezone(timezone.utc)
-              cutoff_utc=dt(req["prediction_cutoff"]).astimezone(timezone.utc)
-              assert cutoff_utc <= final_freeze_utc < post_utc, f"FREEZE_TEMPORAL_ORDER_FAIL:{cutoff_utc.isoformat()}:{final_freeze_utc.isoformat()}:{post_utc.isoformat()}"
+              static_freeze_value=req.get("static_freeze_timestamp") or req.get("final_freeze_timestamp")
+              assert static_freeze_value, "STATIC_FREEZE_TIMESTAMP_MISSING"
+              static_freeze_utc=dt(static_freeze_value).astimezone(timezone.utc)
+              assert cutoff_utc <= static_freeze_utc < post_utc, f"STATIC_FREEZE_TEMPORAL_ORDER_FAIL:{cutoff_utc.isoformat()}:{static_freeze_utc.isoformat()}:{post_utc.isoformat()}"
               assert deadline_utc < post_utc, f"DISPATCH_DEADLINE_NOT_BEFORE_POST:{dispatch_deadline}>={scheduled_post}"
               now=datetime.now(timezone.utc)
               assert now <= deadline_utc, f"DEADLINE_GUARD_FAIL:{now.isoformat()}>{dispatch_deadline}"
-              stage("TEMPORAL_INPUT_VERIFIED", prediction_cutoff=req["prediction_cutoff"], final_freeze_timestamp=req["final_freeze_timestamp"], scheduled_post_at=scheduled_post, external_dispatch_deadline_at=dispatch_deadline)
+              stage("TEMPORAL_INPUT_VERIFIED", prediction_cutoff=req["prediction_cutoff"], static_freeze_timestamp=static_freeze_value, scheduled_post_at=scheduled_post, external_dispatch_deadline_at=dispatch_deadline, mec_required=mec_required)
           family=req.get("family_id","JRA")
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
@@ -129,7 +136,7 @@ jobs:
           # Conversion / canonical / capital preflight before any external KRS run.
           # This now hard-verifies canonical Source Snapshot SHA, Base44 orchestration ref,
           # full numerical components when FORMAL-FULL requires them, and all bet-type dispositions.
-          conformance=validate_request(req)
+          conformance=validate_pre_krs_request(req) if mec_required else validate_request(req)
           stage("SOURCE_SNAPSHOT_VERIFIED", sha256=conformance["source_snapshot_sha256"])
           stage("RUNNER_UNIVERSE_VERIFIED", runner_count=conformance["runner_count"])
           stage("INDEX_PROVENANCE_VERIFIED", canonical_component_count=conformance.get("canonical_component_count"), index_provenance_hash=req.get("index_provenance_hash"))
@@ -137,9 +144,12 @@ jobs:
           stage("ROLE_REGISTRY_VERIFIED", role_cell_count=conformance["role_cell_count"])
           stage("PAIR_DISPOSITIONS_VERIFIED", count=conformance["pair_disposition_count"])
           stage("THIRD_DISPOSITIONS_VERIFIED", count=conformance["third_disposition_count"])
-          stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=conformance["bet_type_dispositions_verified"])
-          stage("TICKET_CANONICAL_VERIFIED", ticket_count=conformance["actual_unique_count"])
-          stage("CAPITAL_TOTAL_VERIFIED", total_investment=conformance["total_investment"])
+          if mec_required:
+              stage("MEC_PRE_KRS_SEMANTIC_UNIVERSE_VERIFIED", available_bet_type_count=conformance.get("available_bet_type_count"), fixed_ticket_cap=None)
+          else:
+              stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=conformance["bet_type_dispositions_verified"])
+              stage("TICKET_CANONICAL_VERIFIED", ticket_count=conformance["actual_unique_count"])
+              stage("CAPITAL_TOTAL_VERIFIED", total_investment=conformance["total_investment"])
 
           # JRA Production numerical calculation.
           # Operational failover: when Railway base-index service is deployment-drifted,
@@ -268,19 +278,60 @@ jobs:
           if adapter_mode=="JRA_V0_2_ARTIFACT":
               assert req.get("jra_parameter_map_sha256")==JRA_V02_SHA
 
-          tickets=req["tickets"]
-          expected_total=int(req["total_investment"])
+          if mec_required:
+              mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
+              mec_check=validate_mec_plan(mec)
+              tickets=mec["tickets"]
+              expected_total=int(mec["minimum_required_capital"])
+              final_bet_type_dispositions=mec["bet_type_dispositions"]
+              final_freeze_timestamp=datetime.now(timezone.utc).isoformat()
+              if temporal_mode=="FORMAL-PRE-RACE":
+                  assert dt(final_freeze_timestamp).astimezone(timezone.utc) < post_utc, f"MEC_FINAL_FREEZE_POST_START:{final_freeze_timestamp}>={scheduled_post}"
+              stage("MATERIAL_COVERAGE_UNIVERSE_VERIFIED",
+                    coverage_unit_count=mec["coverage_unit_count"],
+                    semantic_pair_count=mec["semantic_pair_count"],
+                    semantic_third_count=mec["semantic_third_count"])
+              stage("MINIMUM_EFFICIENT_COVERAGE_VERIFIED",
+                    mec_sha256=mec["sha256"],
+                    ticket_count=mec["ticket_count"],
+                    minimum_required_capital=mec["minimum_required_capital"],
+                    material_coverage_ratio=mec["material_coverage_ratio"],
+                    diagnostic_width_band=mec["diagnostic_width_band"],
+                    fixed_ticket_cap=None)
+              stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=True, source="MEC")
+              stage("TICKET_CANONICAL_VERIFIED", ticket_count=len(tickets), source="MEC")
+              stage("CAPITAL_COMPATIBILITY_VERIFIED",
+                    policy="MINIMUM_REQUIRED_CAPITAL_ONLY_NO_EXTERNAL_BANKROLL_CAP",
+                    minimum_required_capital=expected_total)
+              stage("FINAL_TICKET_FREEZE", final_freeze_timestamp=final_freeze_timestamp)
+          else:
+              mec=None
+              mec_check=None
+              tickets=req["tickets"]
+              expected_total=int(req["total_investment"])
+              final_bet_type_dispositions=final_bet_type_dispositions
+              final_freeze_timestamp=final_freeze_timestamp
 
           final_package=dict(req["final_prediction_package"])
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
           final_package["prediction_utility_metrics"]={k:conformance.get(k) for k in ["runner_count","ranking_complete","active_w_count","active_p2_count","active_p3_count","purchased_head_count","noncapitalized_active_w","expected_pair_count","pair_purchase_count","pair_protect_count","pair_exclude_count","pair_purchase_density","expected_third_count","third_purchase_count","third_protect_count","third_exclude_count","third_purchase_density","head_stake","max_head","max_head_stake","head_capital_concentration","bet_type_stake","total_investment"]}
+          if mec is not None:
+              final_package["prediction_utility_metrics"].update({
+                  "mec_profile":mec["profile"],
+                  "mec_ticket_count":mec["ticket_count"],
+                  "mec_minimum_required_capital":mec["minimum_required_capital"],
+                  "mec_material_coverage_ratio":mec["material_coverage_ratio"],
+                  "mec_width_band":mec["diagnostic_width_band"],
+                  "mec_fixed_ticket_cap":None,
+              })
+              final_package["minimum_efficient_coverage"]=mec
           final_package["source_snapshot_sha256"]=conformance["source_snapshot_sha256"]
           final_package["index_provenance_hash"]=req.get("index_provenance_hash")
           final_package["index_provenance_replay"]=req.get("index_provenance_replay")
           final_package["orchestration_ref"]=req["orchestration_ref"]
-          final_package["bet_type_dispositions"]=req["bet_type_dispositions"]
+          final_package["bet_type_dispositions"]=final_bet_type_dispositions
           final_package["available_bet_types"]=req["available_bet_types"]
           final_package["krs_prediction_utility_shadow"]={
               "utility_revision":utility.get("utility_revision"),
@@ -326,17 +377,17 @@ jobs:
             "ticket_transport":tickets,
             "final_ticket":{
               "finalized":True,
-              "frozen_at":req["final_freeze_timestamp"],
+              "frozen_at":final_freeze_timestamp,
               "no_bet":False,
               "total_investment":expected_total,
               "tickets":tickets,
               "available_bet_types":req["available_bet_types"],
-              "bet_type_dispositions":req["bet_type_dispositions"],
+              "bet_type_dispositions":final_bet_type_dispositions,
               "source_snapshot_sha256":conformance["source_snapshot_sha256"],
               "orchestration_ref":req["orchestration_ref"],
               "prediction_utility_metrics":final_package["prediction_utility_metrics"]
             },
-            "final_freeze_timestamp":req["final_freeze_timestamp"]
+            "final_freeze_timestamp":final_freeze_timestamp
           }
           fcode,f=call(KRS,"/final",final_payload,timeout=60)
           assert fcode<300 and f.get("receipt",{}).get("status")=="PASS",(fcode,f)
@@ -381,7 +432,7 @@ jobs:
             "total_investment":expected_total,
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
             "base44_orchestration":conformance["base44_execution_session_id"],
-            "bet_type_dispositions_verified":conformance["bet_type_dispositions_verified"],
+            "bet_type_dispositions_verified":True if mec_required else conformance["bet_type_dispositions_verified"],
             "execution_stage_manifest":stage_manifest,
             "execution_stage_manifest_sha256":final_package["execution_stage_manifest_sha256"],
             "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values())
