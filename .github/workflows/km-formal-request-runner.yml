@@ -1,5 +1,8 @@
 name: KeibaMetrics Formal Request Runner
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main ]
@@ -402,6 +405,43 @@ jobs:
               assert dt(final_receipt_ts).astimezone(timezone.utc) < post_utc, f"FINAL_RECEIPT_POST_START:{final_receipt_ts}>={scheduled_post}"
           stage("FINAL_VERIFIED", receipt_sha256=f.get("receipt_sha256"), receipt_timestamp=f.get("receipt",{}).get("timestamp"))
 
+          # Persist an immutable, Git-versioned FINAL artifact for the post-result
+          # closed loop. This is the authoritative bridge RESULT -> Learning.
+          os.makedirs("runtime/final_artifacts",exist_ok=True)
+          immutable_final_artifact={
+            "artifact_type":"KM_IMMUTABLE_FINAL",
+            "race_id":race_id,
+            "family_id":family,
+            "venue_id":venue_canonical,
+            "venue_id_input":venue,
+            "prediction_cutoff":req.get("prediction_cutoff"),
+            "static_freeze_timestamp":req.get("static_freeze_timestamp"),
+            "final_freeze_timestamp":final_freeze_timestamp,
+            "source_snapshot_sha256":conformance["source_snapshot_sha256"],
+            "index_provenance_hash":req.get("index_provenance_hash"),
+            "static_prediction":req.get("static_prediction"),
+            "role_registry":req.get("role_registry"),
+            "purchased_heads":req.get("purchased_heads"),
+            "pair_dispositions":req.get("pair_dispositions"),
+            "third_dispositions":req.get("third_dispositions"),
+            "orientation_exclusions":req.get("orientation_exclusions"),
+            "krs_prediction_utility":utility,
+            "minimum_efficient_coverage":mec,
+            "final_prediction_package":final_package,
+            "final_ticket":final_payload["final_ticket"],
+            "pre_krs_receipt":p,
+            "krs_run_receipt":run,
+            "final_receipt":f,
+            "final_receipt_sha256":f.get("receipt_sha256"),
+            "execution_stage_manifest":stage_manifest,
+            "production_history_immutable":True
+          }
+          immutable_final_artifact["sha256"]=hashlib.sha256(
+              json.dumps(immutable_final_artifact,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+          ).hexdigest()
+          with open(os.path.join("runtime","final_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
+              json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           summary={
             "race_id":race_id,
             "family_id":family,
@@ -431,7 +471,7 @@ jobs:
               "prediction_utility_sha256":utility.get("sha256"),
               "material_shadow_delta":utility.get("material_shadow_delta")
             },
-            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True},
+            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"]},
             "ticket_count":len(tickets),
             "total_investment":expected_total,
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
@@ -443,6 +483,21 @@ jobs:
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
+
+      - name: Persist immutable FINAL artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d runtime/final_artifacts ] && find runtime/final_artifacts -type f -name '*.json' | grep -q .; then
+            git config user.name "keibametrics-runtime"
+            git config user.email "actions@users.noreply.github.com"
+            git add runtime/final_artifacts/*.json
+            if ! git diff --cached --quiet; then
+              git commit -m "runtime: persist immutable FINAL artifact [skip ci]"
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
+          fi
 
       - name: Upload KRS structured output and utility delta
         if: always()
