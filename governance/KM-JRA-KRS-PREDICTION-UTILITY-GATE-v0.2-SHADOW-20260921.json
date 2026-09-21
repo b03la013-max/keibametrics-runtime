@@ -1,0 +1,162 @@
+{
+  "profile_id": "KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.2-SHADOW-20260921",
+  "supersedes": "KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.1-SHADOW-20260921",
+  "status": "SHADOW / NON-PRODUCTION / PREDICTION-UTILITY / ACTIONABLE-DELTA / STRUCTURED-OUTPUT-PERSISTENCE / OOS-REQUIRED / PROMOTION-BLOCKED",
+  "production_effect": "NONE",
+  "raison_detre": "Convert KRS from execution proof into a measurable incremental prediction layer that can rescue, confirm, or challenge Static before ticket construction.",
+  "invariants": [
+    "KRS EXECUTED is not KRS USEFUL.",
+    "SSR/LSR/Z4R and occurrence frequencies are uncalibrated simulation support, not probabilities or EV.",
+    "No post-result rewrite of frozen predictions.",
+    "No direct Production role/ticket/capital authority in v0.2.",
+    "No automatic Static deletion from KRS disagreement.",
+    "Candidate width must be measured; KRS proposals cannot be blindly capitalized."
+  ],
+  "runtime_contract": {
+    "raw_output_persistence": "GitHub Actions artifact, 90-day retention",
+    "structured_fields": [
+      "SSR-W",
+      "SSR-P2",
+      "SSR-P3",
+      "SSR-T3",
+      "LSR",
+      "Z4R-W",
+      "Z4R-P2",
+      "Z4R-P3",
+      "Robustness",
+      "positions",
+      "ERS",
+      "Leadership-Acquisition",
+      "Leadership-Survival",
+      "scenario_analysis",
+      "top_exacta_occurrence",
+      "top_trifecta_occurrence",
+      "SIM-XDI",
+      "role_audit_triggers",
+      "convergence_audit",
+      "seed_stability_audit"
+    ],
+    "final_binding": "final_prediction_package.krs_prediction_utility_shadow",
+    "mandatory_stage": "KRS_PREDICTION_UTILITY_CAPTURED",
+    "implementation": "runtime/krs_prediction_utility.py",
+    "formal_runner": ".github/workflows/km-formal-request-runner.yml"
+  },
+  "actionability": {
+    "role": {
+      "W": "Actionable only when Static already has P2 or P3 and KRS SSR-W is inside W zone with Robustness A/B.",
+      "P2": "Actionable when Static already has P3 and KRS SSR-P2 is inside P2 zone.",
+      "P3": "Actionable only when KRS SSR-T3 is top-3 within P3 zone with Robustness A/B.",
+      "otherwise": "AUDIT_ONLY"
+    },
+    "ordered_pair": {
+      "rule": "After actionable role upgrades, W/P2-consistent pairs appearing in overall or any scenario top-exacta occurrence may become PROTECTION_SHADOW.",
+      "worlds": [
+        "overall",
+        "natural",
+        "low_friction",
+        "high_friction",
+        "leader_success",
+        "leader_failure"
+      ]
+    },
+    "pair_third": {
+      "rule": "For a current PURCHASE pair or KRS-actionable pair, P3-consistent triples appearing in overall/scenario trifecta occurrence may become TAIL_SHADOW.",
+      "capitalizable": false
+    }
+  },
+  "utility_classes": {
+    "pre_result": [
+      "NO-MATERIAL-UPDATE",
+      "MATERIAL-AUDIT-DELTA",
+      "MATERIAL-ACTIONABLE-SHADOW-DELTA"
+    ],
+    "post_result": [
+      "UNIQUE-RESCUE",
+      "SUPPORTIVE",
+      "MIXED",
+      "NO-OBSERVED-RESCUE"
+    ]
+  },
+  "calibration_20260921": {
+    "replay_run_id": 35588384586,
+    "replay_artifact_id": 10633775787,
+    "replay_artifact_digest": "sha256:d8323964e1dba04683e6f4d4a885d930325677530343c9d903de16f5e6495668",
+    "acceptance_run_id": 35588434437,
+    "acceptance": "SUCCESS",
+    "R10": {
+      "result": [
+        11,
+        9,
+        7
+      ],
+      "classification": "UNIQUE-RESCUE",
+      "rescues": [
+        "#11 ジョイボーイ: Static P2/P3 -> ADD_W_SHADOW; SSR-W 0.1672 rank3/zone4, Robustness A",
+        "#9 ファームツエンティ: Static P3 -> ADD_P2_SHADOW; SSR-P2 0.0326 rank6/zone8",
+        "11>9 Ordered Pair supported in leader_failure scenario"
+      ],
+      "misses": [
+        "#7 third-place Tail not rescued",
+        "11>9>7 exact not supported"
+      ]
+    },
+    "R11": {
+      "result": [
+        1,
+        4,
+        8
+      ],
+      "classification": "SUPPORTIVE",
+      "supports": [
+        "#1 winner W confirmed",
+        "#4 P2 confirmed",
+        "1>4 ordered pair confirmed"
+      ],
+      "misses": [
+        "#8 P3 not rescued",
+        "1>4>8 exact not supported"
+      ]
+    },
+    "R12": {
+      "result": [
+        5,
+        9,
+        13
+      ],
+      "classification": "SUPPORTIVE",
+      "supports": [
+        "#5 winner W confirmed",
+        "#9 P2 confirmed",
+        "5>9 ordered pair confirmed"
+      ],
+      "misses": [
+        "#13 exact-third not rescued; SSR-T3 rank11 outside P3 zone10",
+        "5>9>13 exact not supported"
+      ]
+    },
+    "aggregate": {
+      "races": 3,
+      "unique_rescue": 1,
+      "supportive": 2,
+      "tail_rescue": 0,
+      "main_weakness": "P3 / exact-third tail rescue"
+    }
+  },
+  "correction_to_prior_reviews": {
+    "statement": "Prior NO-MATERIAL-UPDATE labels were based on unchanged authoritative Final and are incomplete as KRS-utility assessments.",
+    "corrected_interpretation": "KRS generated actionable shadow deltas that the old pipeline discarded; Production history remains unchanged.",
+    "rewrite_past_prediction": false
+  },
+  "promotion_gate": {
+    "decision": "BLOCKED",
+    "required": [
+      "Future pre-race OOS utility artifacts frozen before post",
+      "Rescue precision / false-positive width",
+      "Static-only vs Static+KRS role/order coverage",
+      "P3/exact-third tail rescue evidence",
+      "Deterministic ticket-constructor comparison under fixed capital",
+      "PFS delta on pre-frozen policies",
+      "No degradation of strong Static positives"
+    ]
+  }
+}
