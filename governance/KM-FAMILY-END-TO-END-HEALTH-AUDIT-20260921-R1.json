@@ -1,0 +1,116 @@
+{
+  "audit_id": "KM-FAMILY-END-TO-END-HEALTH-AUDIT-20260921-R1",
+  "audited_at": "2026-09-21T19:40:00+09:00",
+  "overall_status": "AMBER / PARTIALLY-HEALTHY / JRA-PRE-RACE-GREEN / FAMILY-CLOSED-LOOP-INCOMPLETE",
+  "raison_detre_test": "Unknown-future prediction -> KRS incremental utility -> executable tickets -> capital -> signed final -> result -> learning -> long-run PFS improvement.",
+  "confirmed_green": [
+    {
+      "stage": "JRA Formal pre-race downstream pipeline",
+      "evidence": "Workflow 35591539643 FULL_FORMAL_E2E_PASS",
+      "details": [
+        "320/320 numerical indices",
+        "PRE_KRS verified",
+        "KRS 5000/5000",
+        "KRS utility captured",
+        "MEC 100% of declared material universe",
+        "FINAL signed and verified"
+      ]
+    },
+    {
+      "stage": "MEC family governance",
+      "evidence": "Workflow 35592795935 SUCCESS",
+      "details": [
+        "JRA/LOCAL/BAN family scope",
+        "fixed_ticket_cap=null",
+        "no legacy width fallback governance"
+      ]
+    },
+    {
+      "stage": "JRA route/runtime correctness",
+      "evidence": "Correctness repair commits fc94acfc5155c18a2a82ec7a215923f1b132d938 and f5a812968428d748890ed45b7cb4c2375b97f103",
+      "details": [
+        "canonical venue IDs aligned",
+        "legacy aliases preserved",
+        "JRA registry updated to v1.0"
+      ]
+    }
+  ],
+  "structural_gaps": [
+    {
+      "id": "H1_KRS_AUTHORITY_GAP",
+      "severity": "HIGH",
+      "status": "OPEN / INTENTIONAL-SHADOW",
+      "finding": "KRS structured utility can produce actionable shadow deltas, but MEC Production capital does not consume them.",
+      "consequence": "Architecture says KRS precedes Final roles, but actual Production ticket universe still derives from pre-KRS role/pair/third dispositions.",
+      "required_repair": "OOS promotion gate for KRS role/pair/third deltas before any Production capital authority."
+    },
+    {
+      "id": "H2_PREFILTERED_COVERAGE_GAP",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "finding": "MEC 100% coverage is 100% of PURCHASE/PROTECT structures after pair-local filtering, not 100% of the full semantic P3 universe.",
+      "evidence": "HSN R12 #13 was global P3 PROTECTED but 5>9>13 was EXCLUDE/LOWER_PAIR_LOCAL_MATERIALITY; MEC cannot restore it.",
+      "consequence": "MEC may widen to many tickets while still omitting the actual decisive tail.",
+      "required_repair": "Create pre-compression Semantic Coverage Universe and require explicit protection policy for globally active P3 under material purchased pairs; compare Core/Protection/Tail before semantic exclusion."
+    },
+    {
+      "id": "H3_RESULT_LEARNING_GAP",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "finding": "Formal Result Runner signs/verifies RESULT but does not automatically calculate MEC/KRS utility, PFS, failure localization, or write Reflection/KMS learning state.",
+      "consequence": "Closed-loop learning remains manual and can drift from prequential governance.",
+      "required_repair": "Automated post-result analyzer bound to immutable FINAL artifact and Result receipt."
+    },
+    {
+      "id": "H4_LOCAL_BAN_RUNTIME_GAP",
+      "severity": "HIGH",
+      "status": "OPEN / FAIL-CLOSED",
+      "finding": "Current formal request runner asserts family==JRA. LOCAL and BAN have governance inheritance but no verified common external formal runtime.",
+      "consequence": "Family-wide policy is consistent, but whole-family executable closure is not yet proven.",
+      "required_repair": "Family adapter/runtime contracts for LOCAL and BAN with same receipt/MEC/result gates."
+    },
+    {
+      "id": "H5_SOURCE_TO_EVIDENCE_GAP",
+      "severity": "MEDIUM-HIGH",
+      "status": "OPEN",
+      "finding": "Production mapping numerically resolves Evidence Feature categories, but raw source -> evidence_features/category construction has no single canonical compiler in repository.",
+      "consequence": "Downstream calculation is reproducible while upstream semantic categorization can remain operator-authored.",
+      "required_repair": "Canonical source-fact-to-feature rule engine or signed evidence-feature ledger generator."
+    },
+    {
+      "id": "H6_CAPITAL_POLICY_GAP",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "finding": "MEC computes minimum required capital, but runtime currently has no external bankroll/race budget policy and records MINIMUM_REQUIRED_CAPITAL_ONLY_NO_EXTERNAL_BANKROLL_CAP.",
+      "consequence": "It can identify minimum coverage cost but cannot decide LIMITED/PAPER/NO-BET from user capital compatibility automatically.",
+      "required_repair": "Explicit capital policy input; no invented default bankroll."
+    }
+  ],
+  "health_by_stage": {
+    "CANON_RESOLVE": "GREEN-JRA / GOVERNANCE-ONLY-LOCAL-BAN",
+    "SOURCE_SNAPSHOT": "GREEN-DOWNSTREAM-VALIDATION / AMBER-UPSTREAM-GENERATION",
+    "FULL_RUNNER_UNIVERSE": "GREEN-JRA",
+    "BASE_INDEX_TERMINALIZATION": "GREEN-JRA",
+    "STATIC_FREEZE": "GREEN-JRA",
+    "PRE_KRS": "GREEN-JRA",
+    "KRS_EXECUTION": "GREEN-JRA",
+    "KRS_PREDICTION_UTILITY": "GREEN-SHADOW / NOT-PRODUCTION-AUTHORITY",
+    "FINAL_ROLE_PAIR_THIRD": "AMBER",
+    "MEC": "AMBER because input universe may already be overcompressed",
+    "CAPITAL": "AMBER because no bankroll compatibility input",
+    "FINAL_SIGNED": "GREEN-JRA",
+    "RESULT_RECEIPT": "GREEN-JRA",
+    "REFLECTION_KMS": "AMBER-MANUAL",
+    "LOCAL_BAN_E2E": "RED-NOT-VERIFIED / FAIL-CLOSED"
+  },
+  "overall_decision": "DO_NOT_DECLARE_FAMILY_FULLY-HEALTHY_YET",
+  "safe_operational_claim": "JRA pre-race numerical/KRS/MEC/final execution is mechanically healthy and fail-closed; full semantic and learning closure remains incomplete.",
+  "next_priority": [
+    "Fix H2 prefiltered coverage gap first",
+    "Automate H3 result-learning closure",
+    "Keep H1 KRS authority shadow until OOS evidence",
+    "Build H4 LOCAL/BAN executable adapters",
+    "Close H5 source-to-evidence compiler",
+    "Add H6 explicit capital policy"
+  ]
+}
