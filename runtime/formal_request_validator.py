@@ -394,3 +394,44 @@ def validate_request(req):
         "purchased_pair_count":len(pairs),
         **source,**orchestration,**canonical,**numeric,**ticket,**utility,**bet_types
     }
+
+
+def validate_pre_krs_request(req):
+    """MEC-era pre-KRS validation.
+
+    Validates the full semantic/numerical universe but deliberately does not
+    require a final ticket portfolio before KRS. Final tickets are constructed
+    only after KRS -> Material Coverage -> MEC.
+    """
+    runners=req.get("runners")
+    if not isinstance(runners,list) or len(runners)<2:
+        raise FormalValidationError("RUNNERS_INVALID")
+    runner_ids=[str(r.get("runner_id")) for r in runners]
+    if len(runner_ids)!=len(set(runner_ids)):
+        raise FormalValidationError("DUPLICATE_RUNNER_ID")
+    if any(x in {"None",""} for x in runner_ids):
+        raise FormalValidationError("RUNNER_ID_MISSING")
+    source=validate_source_snapshot(req)
+    orchestration=validate_orchestration_ref(req)
+    canonical=validate_canonical_index_components(req,runner_ids)
+    role=normalize_role_registry(req,runner_ids)
+    numeric=validate_numeric_input(req.get("krs_input_data") or {},runner_ids)
+    pair,third,heads,pairs=validate_dispositions(req,runner_ids,role)
+    utility=validate_prediction_utility(req,runner_ids,role,pair,third,heads,pairs)
+    available=req.get("available_bet_types")
+    if not isinstance(available,list) or not available:
+        raise FormalValidationError("AVAILABLE_BET_TYPES_MISSING")
+    available_norm=[str(x).upper() for x in available]
+    if len(available_norm)!=len(set(available_norm)):
+        raise FormalValidationError("DUPLICATE_AVAILABLE_BET_TYPE")
+    return {
+        "runner_count":len(runner_ids),
+        "role_cell_count":len(role),
+        "pair_disposition_count":len(pair),
+        "third_disposition_count":len(third),
+        "purchased_head_count":len(heads),
+        "purchased_pair_count":len(pairs),
+        "available_bet_type_count":len(available_norm),
+        "pre_krs_ticketless_validation":True,
+        **source,**orchestration,**canonical,**numeric,**utility
+    }
