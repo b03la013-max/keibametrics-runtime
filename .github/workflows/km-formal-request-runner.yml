@@ -143,21 +143,26 @@ jobs:
           # Railway JRA base-index terminalization / numerical replay.
           hcode,h=call(CALC,"/health",None,"GET",30)
           assert hcode==200 and h.get("status")=="READY",(hcode,h)
+          assert h.get("mapping_id")=="JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921", f"STALE_OR_WRONG_BASE_INDEX_RUNTIME:{h}"
           runners=req["runners"]
           ccode,c=call(CALC,"/calculate-jra-base",{"race_id":race_id,"runners":runners},timeout=90)
           assert ccode==200 and c.get("status")=="PASS",(ccode,c)
-          assert c.get("unresolved_count")==0,c
+          assert c.get("mapping_id")=="JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921", f"CALCULATOR_MAPPING_ID_MISMATCH:{c}"
+          contract_keys=["required_count","calculated_count","ruled_hold_count","not_applicable_count","unresolved_count"]
+          missing_contract=[k for k in contract_keys if k not in c or c.get(k) is None]
+          assert not missing_contract, f"CALCULATOR_CONTRACT_MISSING:{missing_contract}:{c}"
+          assert int(c["unresolved_count"])==0,c
           if req.get("numeric_calculation_requirement")=="FULL_REQUIRED":
-              assert int(c.get("calculated_count",0))==int(c.get("required_count",0)),c
-              assert int(c.get("ruled_hold_count",0))==0,c
-              assert int(c.get("not_applicable_count",0))==0,c
+              assert int(c["calculated_count"])==int(c["required_count"]),c
+              assert int(c["ruled_hold_count"])==0,c
+              assert int(c["not_applicable_count"])==0,c
           required=adapt_calculator_output(c)
           assert len(required)==c.get("required_count"),(len(required),c.get("required_count"))
           if temporal_mode=="FORMAL-PRE-RACE":
-              assert int(c.get("calculated_count",0))==int(c.get("required_count",0)), "FORMAL_FULL_ACTUAL_CALCULATION_INCOMPLETE"
-              assert int(c.get("ruled_hold_count",0))==0, "FORMAL_FULL_RULED_HOLD_FORBIDDEN"
-              assert int(c.get("not_applicable_count",0))==0, "FORMAL_FULL_NOT_APPLICABLE_FORBIDDEN"
-              assert int(c.get("unresolved_count",0))==0, "FORMAL_FULL_UNRESOLVED_FORBIDDEN"
+              assert int(c["calculated_count"])==int(c["required_count"]), "FORMAL_FULL_ACTUAL_CALCULATION_INCOMPLETE"
+              assert int(c["ruled_hold_count"])==0, "FORMAL_FULL_RULED_HOLD_FORBIDDEN"
+              assert int(c["not_applicable_count"])==0, "FORMAL_FULL_NOT_APPLICABLE_FORBIDDEN"
+              assert int(c["unresolved_count"])==0, "FORMAL_FULL_UNRESOLVED_FORBIDDEN"
           stage("FULL_NUMERICAL_CALCULATION_VERIFIED",
                 required_count=c.get("required_count"),
                 calculated_count=c.get("calculated_count"),
