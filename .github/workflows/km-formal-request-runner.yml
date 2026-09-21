@@ -42,6 +42,7 @@ jobs:
           from jra_index_provenance_builder import materialize_index_provenance
           from jra_evidence_to_base_production import load_mapping as load_production_mapping, attach_production_ledger_to_request
           from jra_krs_input_builder_production import build_krs_input
+          from krs_prediction_utility import build_krs_prediction_utility
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
@@ -242,6 +243,23 @@ jobs:
                 output_sha256=rr.get("output_sha256"),
                 receipt_sha256=run.get("receipt_sha256"))
 
+          # Persist the actual structured KRS output and derive a pre-result SHADOW utility delta.
+          # This does not alter Production roles/tickets; it makes KRS prediction contribution measurable.
+          utility=build_krs_prediction_utility(req,k)
+          artifact_dir=os.path.join(".krs-artifacts",race_id)
+          os.makedirs(artifact_dir,exist_ok=True)
+          with open(os.path.join(artifact_dir,"krs_response.json"),"w",encoding="utf-8") as fh:
+              json.dump(k,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          with open(os.path.join(artifact_dir,"krs_prediction_utility.json"),"w",encoding="utf-8") as fh:
+              json.dump(utility,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          stage("KRS_PREDICTION_UTILITY_CAPTURED",
+                utility_class=utility.get("utility_class"),
+                material_shadow_delta=utility.get("material_shadow_delta"),
+                utility_sha256=utility.get("sha256"),
+                role_proposal_count=len(utility.get("role_proposals") or []),
+                pair_proposal_count=len(utility.get("ordered_pair_proposals") or []),
+                third_proposal_count=len(utility.get("pair_third_proposals") or []))
+
           # If physical v0.2 adapter path is selected, the caller must additionally attest
           # the exact artifact. Engine-side params are deliberately not compared to v0.2.
           if adapter_mode=="JRA_V0_2_ARTIFACT":
@@ -334,7 +352,10 @@ jobs:
               "input_sha256":rr.get("input_sha256"),
               "output_sha256":rr.get("output_sha256"),
               "receipt_sha256":run.get("receipt_sha256"),
-              "verified":True
+              "verified":True,
+              "prediction_utility_class":utility.get("utility_class"),
+              "prediction_utility_sha256":utility.get("sha256"),
+              "material_shadow_delta":utility.get("material_shadow_delta")
             },
             "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True},
             "ticket_count":len(tickets),
@@ -348,3 +369,12 @@ jobs:
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
+
+      - name: Upload KRS structured output and utility delta
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: krs-utility-${{ github.run_id }}
+          path: .krs-artifacts/
+          if-no-files-found: error
+          retention-days: 90
