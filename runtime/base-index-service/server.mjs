@@ -1,4 +1,4 @@
-const MAP_URL="https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/repair/jra-production-mapping-20260921-r1/mapping/jra_base_index_evidence_mapping_v1.0_20260921.json";
+const MAP_URL="https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/main/mapping/jra_base_index_evidence_mapping_v1.0_20260921.json";
 const BASE=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"];
 const DERIVED=["DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"];
 let MAP=null;
