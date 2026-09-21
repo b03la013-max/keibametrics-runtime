@@ -1,0 +1,149 @@
+{
+  "artifact_id": "KM-JRA-KRS-PREDICTION-UTILITY-CALIBRATION-20260921-R1",
+  "status": "SHADOW / POST-RACE REPLAY / NON-PRODUCTION / CORRECTIVE-ADDENDUM",
+  "utility_revision": "KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.2-SHADOW-20260921",
+  "replay_workflow_run_id": 35588384586,
+  "acceptance_workflow_run_id": 35588434437,
+  "raw_artifact": {
+    "artifact_id": 10633775787,
+    "digest": "sha256:d8323964e1dba04683e6f4d4a885d930325677530343c9d903de16f5e6495668",
+    "retained_until": "2026-12-20T10:22:22Z"
+  },
+  "correction": {
+    "prior_interpretation": "NO-MATERIAL-UPDATE was inferred from unchanged authoritative Final.",
+    "corrected_interpretation": "All three races contained MATERIAL-ACTIONABLE-SHADOW-DELTA in KRS structured output. The old pipeline failed to preserve and bind that delta.",
+    "production_history_unchanged": true
+  },
+  "races": {
+    "KM-JRA-HSN-20260921-R10": {
+      "actual_top3": [
+        11,
+        9,
+        7
+      ],
+      "classification": "UNIQUE-RESCUE",
+      "rescues": [
+        "WINNER_ROLE_RESCUE: #11 P2/P3 -> +W",
+        "P2_ROLE_RESCUE: #9 P3 -> +P2",
+        "ORDERED_PAIR_RESCUE: #11>#9 supported in leader_failure world"
+      ],
+      "unresolved": [
+        "#7 third-place tail not supported by KRS role zones",
+        "11>9>7 ordered exact not supported"
+      ],
+      "key_engine_evidence": {
+        "9": {
+          "SSR_P2": 0.0326,
+          "SSR_P2_rank": 6,
+          "Robustness": "D",
+          "P2_zone_max_rank": 8
+        },
+        "11": {
+          "SSR_W": 0.1672,
+          "SSR_W_rank": 3,
+          "Robustness": "A",
+          "W_zone_max_rank": 4
+        },
+        "11>9": {
+          "world": "leader_failure",
+          "frequency": 0.008,
+          "non_probability": true
+        }
+      }
+    },
+    "KM-JRA-HSN-20260921-R11": {
+      "actual_top3": [
+        1,
+        4,
+        8
+      ],
+      "classification": "SUPPORTIVE",
+      "supports": [
+        "WINNER_ROLE_CONFIRMED #1",
+        "P2_ROLE_CONFIRMED #4",
+        "ORDERED_PAIR_CONFIRMED 1>4"
+      ],
+      "unresolved": [
+        "#8 P3 failure not rescued",
+        "1>4>8 ordered exact not supported"
+      ],
+      "key_engine_evidence": {
+        "1": {
+          "SSR_W": 0.8278,
+          "SSR_W_rank": 1,
+          "Robustness": "A"
+        },
+        "4": {
+          "SSR_P2": 0.2622,
+          "SSR_P2_rank": 2,
+          "Robustness": "A"
+        },
+        "1>4": {
+          "overall_frequency": 0.2458,
+          "non_probability": true
+        }
+      }
+    },
+    "KM-JRA-HSN-20260921-R12": {
+      "actual_top3": [
+        5,
+        9,
+        13
+      ],
+      "classification": "SUPPORTIVE",
+      "supports": [
+        "WINNER_ROLE_CONFIRMED #5",
+        "P2_ROLE_CONFIRMED #9",
+        "ORDERED_PAIR_CONFIRMED 5>9"
+      ],
+      "unresolved": [
+        "#13 global P3 existed but KRS SSR-T3 rank 11 was outside P3 zone 10",
+        "5>9>13 ordered exact not supported"
+      ],
+      "key_engine_evidence": {
+        "5": {
+          "SSR_W": 0.2124,
+          "SSR_W_rank": 2,
+          "Robustness": "A"
+        },
+        "9": {
+          "SSR_P2": 0.215,
+          "SSR_P2_rank": 2,
+          "Robustness": "A"
+        },
+        "13": {
+          "SSR_T3": 0.0002,
+          "SSR_T3_rank": 11,
+          "Z4R_P3": 0.7402,
+          "P3_zone_max_rank": 10,
+          "Robustness": "D"
+        },
+        "5>9": {
+          "overall_frequency": 0.1578,
+          "non_probability": true
+        }
+      }
+    }
+  },
+  "aggregate": {
+    "races": 3,
+    "unique_rescue_races": 1,
+    "supportive_races": 2,
+    "observed_tail_rescue_races": 0,
+    "conclusion": "KRS has demonstrated incremental semantic/order utility, especially R10, but third-place tail rescue remains the principal weakness."
+  },
+  "downstream_policy": {
+    "current": "SHADOW ONLY",
+    "direct_ticket_authority": false,
+    "capitalizable": false,
+    "rule": "KRS actionable deltas must be handed to a separate Ticket Constructor comparison under fixed capital; KRS cannot directly widen Production tickets.",
+    "next_oos_measurements": [
+      "rescue precision",
+      "false-positive candidate width",
+      "ordered-pair lift",
+      "P3 tail rescue",
+      "ticket conversion",
+      "PFS delta"
+    ]
+  }
+}
