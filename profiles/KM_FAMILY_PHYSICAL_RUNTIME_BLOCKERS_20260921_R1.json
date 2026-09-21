@@ -1,0 +1,51 @@
+{
+  "profile_id": "KM-FAMILY-PHYSICAL-RUNTIME-BLOCKERS-20260921-R1",
+  "status": "ACTIVE / FAIL-CLOSED / EXTERNAL-ARTIFACT-DEPENDENCY",
+  "checked_at": "2026-09-21T20:45:00+09:00",
+  "railway_connected_project": "keibametrics-runtime",
+  "railway_services_found": 0,
+  "file_library_search_result": "Specifications/registries found; no deployable family-specific LOCAL/BAN endpoint+adapter+parameter artifact bundle identified.",
+  "LOCAL": {
+    "formal_full_activation": "BLOCKED",
+    "present_authority": [
+      "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+      "地方版 v4.12 Rev.3",
+      "KRS v1.6-KRS Rev.3",
+      "KRS-LOCAL Runtime Package v1.2.0",
+      "FCG-LOCAL v1.1.0",
+      "KRS-Engine v1.1.0",
+      "parameter_map v0.1-provisional"
+    ],
+    "missing_physical_activation_artifacts": [
+      "family-specific executable Static->Engine adapter bytes + SHA256",
+      "family-specific Engine invocation adapter bytes + SHA256",
+      "exact parameter_map bytes + SHA256/fingerprint bound to deployment",
+      "deployed HTTPS formal endpoint",
+      "signed receipt authority/key identity",
+      "live external E2E acceptance receipt"
+    ],
+    "forbidden_fallback": "Do not reuse JRA adapter/parameter_map or claim FULL_FORMAL_E2E_PASS."
+  },
+  "BAN": {
+    "formal_full_activation": "BLOCKED",
+    "present_authority": [
+      "v3.7-BAN Rev.2",
+      "KRS-BAN v2.5 Rev.2",
+      "Runtime v2.4",
+      "KRS-Engine v1.1.0",
+      "parameter_map-BAN Rev.13",
+      "numeric fingerprint 94a47a3715f67f465d28a918c9cead17b6559f09f199b56f8cba38e8e906a871"
+    ],
+    "missing_physical_activation_artifacts": [
+      "deployable BAN adapter bytes + SHA256",
+      "parameter_map-BAN Rev.13 executable bytes bound to stated numeric fingerprint",
+      "deployed HTTPS formal endpoint",
+      "signed receipt authority/key identity",
+      "real KRS Engine execution receipt",
+      "live external E2E acceptance receipt"
+    ],
+    "forbidden_fallback": "Selftest/Shadow/Compiler test cannot be represented as real Engine execution; JRA assets cannot substitute."
+  },
+  "bridge_ready": ".github/workflows/km-family-non-jra-formal-runner.yml",
+  "resolver": "runtime/family_runtime_contract.py"
+}
