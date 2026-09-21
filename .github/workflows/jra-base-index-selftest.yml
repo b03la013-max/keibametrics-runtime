@@ -23,10 +23,11 @@ jobs:
           python-version: "3.12"
       - name: Python production mapping selftest
         run: python tests/test_jra_production_mapping_selftest.py
+      - uses: oven-sh/setup-bun@v2
       - name: Start calculator and verify mixed runner profiles
         shell: bash
         run: |
-          node runtime/base-index-service/server.mjs > /tmp/km-base-index.log 2>&1 &
+          bun runtime/base-index-service/server.mjs > /tmp/km-base-index.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
           for i in {1..30}; do
