@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - ".github/workflows/km-krs-prediction-utility-replay.yml"
+      - "runtime/krs_prediction_utility.py"
   workflow_dispatch:
 
 jobs:
@@ -61,8 +62,11 @@ jobs:
                 "utility_class":utility["utility_class"],
                 "utility_sha256":utility["sha256"],
                 "role_proposals":utility["role_proposals"],
+                "actionable_role_proposals":utility["actionable_role_proposals"],
                 "ordered_pair_proposals":utility["ordered_pair_proposals"],
+                "actionable_ordered_pair_proposals":utility["actionable_ordered_pair_proposals"],
                 "pair_third_proposals":utility["pair_third_proposals"],
+                "actionable_pair_third_proposals":utility["actionable_pair_third_proposals"],
                 "sim_xdi":utility["sim_xdi"],
                 "role_audit_triggers":utility["role_audit_triggers"],
                 "evaluation":evaluation,
