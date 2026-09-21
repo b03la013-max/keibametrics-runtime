@@ -1,0 +1,104 @@
+name: KeibaMetrics KRS Utility Final Handoff Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-krs-utility-final-handoff-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  final-handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify structured KRS utility survives signed FINAL handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, urllib.request, sys
+          sys.path.insert(0,"runtime")
+          from jra_evidence_to_base_production import load_mapping, attach_production_ledger_to_request
+          from jra_index_provenance_builder import materialize_index_provenance
+          from jra_krs_input_builder_production import build_krs_input
+          from krs_prediction_utility import build_krs_prediction_utility
+
+          KRS="https://quorumprobe-production.up.railway.app"
+          def call(path,payload,timeout=360):
+              data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              req=urllib.request.Request(KRS+path,data=data,headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(req,timeout=timeout) as x:
+                  return x.status,json.loads(x.read().decode())
+
+          req=json.load(open("runtime/requests/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          mp=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          req=attach_production_ledger_to_request(req,mp)
+          req=materialize_index_provenance(req)
+          req=build_krs_input(req)
+
+          kinput=req["krs_input_data"]
+          kinput.setdefault("simulation",{})["run_count"]=int(req.get("run_count",5000))
+          kinput["simulation"]["master_seed"]=int(req["seed"])
+          kpayload={
+            "race_id":req["race_id"],
+            "input_data":kinput,
+            "mode":req.get("mode","SIM-STD"),
+            "seed":int(req["seed"]),
+            "input_class":"SHADOW-KRS-UTILITY-FINAL-HANDOFF-ACCEPTANCE"
+          }
+          kcode,k=call("/krs/execute",kpayload)
+          assert kcode<300 and k.get("status")=="EXECUTED",k
+          run=k["run_receipt"]
+          utility=build_krs_prediction_utility(req,k)
+
+          compact={
+            "utility_revision":utility["utility_revision"],
+            "utility_class":utility["utility_class"],
+            "material_shadow_delta":utility["material_shadow_delta"],
+            "actionable_shadow_delta":utility["actionable_shadow_delta"],
+            "utility_sha256":utility["sha256"],
+            "actionable_role_proposals":utility["actionable_role_proposals"],
+            "actionable_ordered_pair_proposals":utility["actionable_ordered_pair_proposals"],
+            "actionable_pair_third_proposals":utility["actionable_pair_third_proposals"],
+            "shadow_role_registry":utility["shadow_role_registry"],
+            "production_effect":"NONE"
+          }
+          fp=dict(req["final_prediction_package"])
+          fp["krs_prediction_utility_shadow"]=compact
+          fp["acceptance_only"]=True
+          payload={
+            "race_id":req["race_id"],
+            "no_bet":False,
+            "krs_required":True,
+            "krs_executable":True,
+            "krs_run_receipt":run,
+            "final_prediction_package":fp,
+            "ticket_transport":req["tickets"],
+            "final_ticket":{
+              "finalized":True,
+              "frozen_at":req["final_freeze_timestamp"],
+              "no_bet":False,
+              "total_investment":req["total_investment"],
+              "tickets":req["tickets"],
+              "available_bet_types":req["available_bet_types"],
+              "bet_type_dispositions":req["bet_type_dispositions"]
+            },
+            "final_freeze_timestamp":req["final_freeze_timestamp"]
+          }
+          fcode,f=call("/final",payload,60)
+          assert fcode<300 and f.get("receipt",{}).get("status")=="PASS",(fcode,f)
+          vcode,v=call("/verify",f,30)
+          assert vcode<300 and v.get("valid") is True,(vcode,v)
+          print("KRS_UTILITY_FINAL_HANDOFF_ACCEPTANCE="+json.dumps({
+             "status":"PASS",
+             "utility_revision":utility["utility_revision"],
+             "utility_class":utility["utility_class"],
+             "utility_sha256":utility["sha256"],
+             "final_receipt_sha256":f.get("receipt_sha256"),
+             "final_receipt_timestamp":f.get("receipt",{}).get("timestamp"),
+             "verified":True,
+             "production_effect":"NONE"
+          },separators=(",",":"),ensure_ascii=False))
+          PY
