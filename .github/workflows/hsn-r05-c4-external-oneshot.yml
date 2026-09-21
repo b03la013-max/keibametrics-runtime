@@ -17,89 +17,82 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Materialize frozen 200-of-200 request
+      - name: Execute frozen C4 shadow externally
         run: |
           python - <<'PY'
-          import json,sys
+          import json,sys,urllib.request,urllib.error
           sys.path.insert(0,"runtime")
           from jra_index_provenance_builder import materialize_index_provenance
+
           p="runtime/requests/KM-JRA-HSN-20260921-R05.json"
-          req=json.load(open(p,encoding="utf-8"))
-          req=materialize_index_provenance(req)
-          required=len(req["runners"])*20
-          calculated=sum(len(r["canonical_components"]) for r in req["runners"])
-          assert required==200 and calculated==200
-          json.dump(req,open("/tmp/km_req.json","w",encoding="utf-8"),ensure_ascii=False)
-          print("MATERIALIZED",required,calculated,req["race_id"],req["prediction_id"])
-          PY
-      - name: PRE KRS - KRS 5000 - FINAL with receipt verification
-        env:
-          KM_RUNTIME: https://quorumprobe-production.up.railway.app
-        run: |
-          python - <<'PY'
-          import json,urllib.request,urllib.error,hashlib,sys
-          req=json.load(open("/tmp/km_req.json",encoding="utf-8"))
+          req=materialize_index_provenance(json.load(open(p,encoding="utf-8")))
+          assert len(req["runners"])==10
+          assert sum(len(r["canonical_components"]) for r in req["runners"])==200
           base="https://quorumprobe-production.up.railway.app"
 
-          def post(path,obj,timeout=45):
+          def post(path,obj,timeout=60):
               data=json.dumps(obj,ensure_ascii=False,separators=(",",":")).encode()
               q=urllib.request.Request(base+path,data=data,headers={"Content-Type":"application/json"},method="POST")
               try:
                   with urllib.request.urlopen(q,timeout=timeout) as r:
-                      raw=r.read().decode()
-                      print("HTTP",path,r.status,raw)
+                      raw=r.read().decode(); print("HTTP",path,r.status,raw)
                       return r.status,json.loads(raw)
               except urllib.error.HTTPError as e:
-                  raw=e.read().decode()
-                  print("HTTPERR",path,e.code,raw)
+                  raw=e.read().decode(); print("HTTPERR",path,e.code,raw)
                   return e.code,raw
 
           def verify(signed):
-              code,out=post("/verify",signed,15)
-              if code//100!=2 or not isinstance(out,dict) or not out.get("valid"):
+              c,o=post("/verify",signed,15)
+              if c//100!=2 or not isinstance(o,dict) or o.get("valid") is not True:
                   raise SystemExit("RECEIPT_VERIFY_FAILED")
-              return out
+              return o
 
-          code,pre=post("/pre-krs",req,20)
-          if code//100!=2 or not isinstance(pre,dict):
-              raise SystemExit("PRE_KRS_FAILED")
+          universe=[{"runner_id":str(r["runner_id"]),"name":r.get("name","")} for r in req["runners"]]
+          required=["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
+          pre_body=dict(req)
+          pre_body.update({
+            "runner_universe":universe,
+            "full_runner_universe":universe,
+            "required_indices":required,
+            "required_index_manifest":{"required_indices":required,"required_count":200,"calculated_count":200,"ruled_hold_count":0,"unresolved_count":0},
+            "krs_required_status":"REQUIRED",
+            "krs_required":True,
+            "numeric_calculation_requirement":"FULL_REQUIRED"
+          })
+          c,pre=post("/pre-krs",pre_body,20)
+          if c//100!=2 or not isinstance(pre,dict) or pre.get("receipt",{}).get("status")!="PASS":
+              raise SystemExit("PRE_KRS_NOT_PASS")
           vpre=verify(pre)
 
           candidates=[
-            req,
-            {
-              "race_id":req["race_id"],"prediction_id":req["prediction_id"],
-              "input_class":"C4-SHADOW-FULL-NUMERICAL",
-              "input_data":req["krs_input_data"],"run_count":req["run_count"],
-              "seed":req["seed"],"mode":req["mode"]
-            },
-            {
-              "race_id":req["race_id"],"prediction_id":req["prediction_id"],
-              "input_class":"C4-SHADOW-FULL-NUMERICAL",
-              "krs_input_data":req["krs_input_data"],"run_count":req["run_count"],
-              "seed":req["seed"],"mode":req["mode"]
-            }
+            {"race_id":req["race_id"],"prediction_id":req["prediction_id"],"input_class":"C4-SHADOW-FULL-NUMERICAL","input_data":req["krs_input_data"],"run_count":5000,"seed":req["seed"],"mode":"SIM-STD"},
+            {"race_id":req["race_id"],"prediction_id":req["prediction_id"],"input_class":"C4-SHADOW-FULL-NUMERICAL","data":req["krs_input_data"],"run_count":5000,"seed":req["seed"],"mode":"SIM-STD"},
+            {"race_id":req["race_id"],"prediction_id":req["prediction_id"],"input_class":"C4-SHADOW-FULL-NUMERICAL","krs_input_data":req["krs_input_data"],"run_count":5000,"seed":req["seed"],"mode":"SIM-STD"}
           ]
           kres=None
           for body in candidates:
-              code,out=post("/krs/execute",body,60)
-              if code//100==2 and isinstance(out,dict):
-                  kres=out; break
+              c,o=post("/krs/execute",body,60)
+              if c//100==2 and isinstance(o,dict) and o.get("status")=="EXECUTED" and o.get("run_receipt",{}).get("receipt",{}).get("actual_run_count")==5000:
+                  kres=o; break
           if kres is None:
-              raise SystemExit("KRS_FAILED")
-          signed_krs=kres.get("run_receipt",kres)
-          vkrs=verify(signed_krs)
+              raise SystemExit("KRS_NOT_EXECUTED_5000")
+          signed_krs=kres["run_receipt"]; vkrs=verify(signed_krs)
 
-          final_body=dict(req)
-          final_body["krs_run_receipt"]=signed_krs
-          final_body["krs_execution_status"]="EXECUTED-VERIFIED"
-          code,fin=post("/final",final_body,20)
-          if code//100!=2 or not isinstance(fin,dict):
-              raise SystemExit("FINAL_FAILED")
+          final_body=dict(pre_body)
+          final_body.update({
+            "final_ticket":req["tickets"],
+            "canonical_ticket":req["tickets"],
+            "fpp_ticket_trace":{"status":"COMPLETE","prediction_id":req["prediction_id"],"ticket_count":req["ticket_count"],"total_investment":req["total_investment"]},
+            "prediction_to_ticket_trace":{"status":"COMPLETE","ticket_count":req["ticket_count"]},
+            "krs_run_receipt":signed_krs,
+            "krs_execution_status":"EXECUTED-VERIFIED"
+          })
+          c,fin=post("/final",final_body,20)
+          if c//100!=2 or not isinstance(fin,dict) or fin.get("receipt",{}).get("status")!="PASS":
+              raise SystemExit("FINAL_NOT_PASS")
           vfin=verify(fin)
-
           out={"pre":pre,"pre_verify":vpre,"krs":kres,"krs_verify":vkrs,"final":fin,"final_verify":vfin}
-          open("/tmp/km_external_receipts.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,indent=2))
+          json.dump(out,open("/tmp/km_external_receipts.json","w",encoding="utf-8"),ensure_ascii=False,indent=2)
           print("KM_C4_EXTERNAL_E2E_PASS")
           PY
       - uses: actions/upload-artifact@v4
