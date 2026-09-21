@@ -1,0 +1,55 @@
+{
+  "profile_id": "KM-JRA-BASE-INDEX-EVIDENCE-MAPPING-C4-CANDIDATE-20260921-R1",
+  "status": "C4-CANDIDATE / NON-PRODUCTION / NUMERICAL / PREQUENTIAL-OOS-REQUIRED / NO-LIVE-AUTHORITY",
+  "effective_scope": "JRA research/candidate only",
+  "purpose": "Create a reproducible bridge from pre-result real-race evidence to the 13 JRA base indices without freehand per-horse 0-100 scores.",
+  "problem_closed": "Current Production can replay frozen base values and derive DCR/TPI/ZAI/SRI/F3S/T3I, but cannot reproducibly derive HPI/SSI/CFI/RFI/BVI/JTI/CSI/TRI/BWI/GCI/PRI/KGI/VMI from raw real-race evidence.",
+  "mapping_authority": "JRA-EVIDENCE-TO-BASE-MAPPING-v0.1-CANDIDATE-20260921",
+  "implementation": {
+    "mapping": "mapping/jra_base_index_evidence_mapping_v0.1_candidate_20260921.json",
+    "feature_normalizer": "runtime/jra_evidence_feature_normalizer_candidate.py",
+    "calculator": "runtime/jra_evidence_to_base_candidate.py",
+    "derived_formula_authority": "index_formula_registry JRA v1.0 via runtime/jra_index_provenance_builder.py",
+    "production_runtime_modified": false
+  },
+  "method": {
+    "stage_1": "Convert objective source facts/symbols/numerics to finite categorical evidence features with deterministic bands.",
+    "stage_2": "Convert feature categories to component scores by the candidate registry.",
+    "stage_3": "Compute each base index by a fixed weighted mean over its own evidence domain; missing features are omitted and remaining weights renormalized only when minimum evidence coverage is met.",
+    "stage_4": "Emit value + rule_id + mapping_version + evidence_refs + source_fact + component trace.",
+    "stage_5": "Use the existing fixed derived-index formulas; do not change TPI/ZAI/SRI/F3S/T3I equations."
+  },
+  "newcomer_support": {
+    "enabled": true,
+    "principle": "Newcomer is not treated as ability=50. Real available gate/dash, workout, pedigree, rider, stable, body, course/going and market evidence is mapped; absent realized race evidence lowers DCR confidence rather than fabricating past-performance evidence.",
+    "dcr": "official_recent, same_course_distance and successful-bodyweight-range receive zero evidence points for a true debutant; training/comments, same-day GCI and market-change evidence remain scoreable."
+  },
+  "hard_prohibitions": [
+    "No result-derived feature categories.",
+    "No retroactive upgrade of HSN 20260921 R04 or any already-started race.",
+    "No freehand numeric base-index values.",
+    "No treating transport-neutral 50 as a model score.",
+    "No automatic Production promotion.",
+    "No probability/EV interpretation of candidate index values."
+  ],
+  "promotion_gate": {
+    "class": "C4",
+    "required_sequence": [
+      "frozen historical training set construction without leakage",
+      "mapping stability/reproducibility test",
+      "prequential validation set",
+      "later unknown OOS races",
+      "Prediction Accuracy comparison",
+      "Order/Role discrimination comparison",
+      "Ticket Conversion comparison",
+      "PFS comparison where frozen ticket/stake exists",
+      "ablation against simpler baseline",
+      "promotion decision"
+    ],
+    "production_promotion_now": false
+  },
+  "temporal_integrity": {
+    "hsn_20260921_r04": "IMMUTABLE / original pre-race Actual Numerical Calculation remains 0/300; candidate mapping may only be used as POST-START research replay.",
+    "rule": "Race_n result may update Mapping/Calibration State_{n+1}; never rewrite Race_n pre-race grade."
+  }
+}

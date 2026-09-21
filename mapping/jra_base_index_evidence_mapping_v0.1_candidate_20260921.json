@@ -1,0 +1,51 @@
+{
+  "mapping_id": "JRA-EVIDENCE-TO-BASE-MAPPING-v0.1-CANDIDATE-20260921",
+  "status": "C4-CANDIDATE / NON-PRODUCTION / NUMERICAL / PREQUENTIAL-OOS-REQUIRED",
+  "family": "JRA",
+  "scope": "Evidence features -> 13 base indices for real-race pre-result use; derived indices remain index_formula_registry JRA v1.0",
+  "category_scale": {
+    "EXCEPTIONAL": 92.0,
+    "VERY_STRONG": 86.0,
+    "STRONG": 80.0,
+    "POSITIVE": 72.0,
+    "NEUTRAL": 60.0,
+    "MIXED": 52.0,
+    "CAUTION": 44.0,
+    "WEAK": 34.0,
+    "VERY_WEAK": 24.0
+  },
+  "minimum_coverage_weight": 0.50,
+  "newcomer_profile": true,
+  "indices": {
+    "HPI": {"workout_capability":0.30,"pedigree_class_proxy":0.20,"gate_quality":0.15,"dash_quality":0.10,"stable_readiness":0.10,"jockey_quality":0.05,"physical_readiness":0.10},
+    "SSI": {"dash_quality":0.25,"gate_quality":0.15,"workout_speed":0.30,"sprint_pedigree":0.15,"forward_speed_comment":0.15},
+    "CFI": {"surface_fit":0.30,"distance_fit":0.25,"turn_direction_fit":0.10,"course_geometry_fit":0.15,"gate_quality":0.10,"physical_readiness":0.10},
+    "RFI": {"workout_consistency":0.35,"preparation_continuity":0.25,"stable_readiness":0.20,"gate_quality":0.10,"physical_readiness":0.10},
+    "BVI": {"surface_pedigree":0.35,"distance_pedigree":0.25,"sire_newcomer_signal":0.15,"maternal_class_signal":0.15,"physical_pedigree_fit":0.10},
+    "JTI": {"jockey_quality":0.50,"jockey_venue_fit":0.25,"jockey_style_fit":0.25},
+    "CSI": {"stable_readiness":0.40,"trainer_quality":0.25,"target_intent":0.20,"preparation_continuity":0.15},
+    "TRI": {"workout_capability":0.35,"workout_speed":0.25,"workout_partner_level":0.15,"workout_finish":0.15,"workout_consistency":0.10},
+    "BWI": {"bodyweight_suitability":0.35,"bodyweight_vs_estimate":0.25,"physical_readiness":0.25,"equipment_state":0.15},
+    "GCI": {"surface_fit":0.35,"going_fit":0.30,"physical_pedigree_fit":0.15,"same_day_track_fit":0.20},
+    "PRI": {"gate_quality":0.25,"dash_quality":0.25,"forward_speed_comment":0.20,"draw_course_fit":0.15,"pressure_resilience":0.15},
+    "KGI": {"pedigree_class_proxy":0.35,"workout_partner_level":0.25,"stable_trainer_class":0.15,"jockey_quality":0.10,"maternal_class_signal":0.15},
+    "VMI": {"market_rank":0.40,"market_stability":0.25,"public_expert_support":0.20,"external_index_support":0.15}
+  },
+  "dcr": {
+    "official_recent":{"max_points":25,"newcomer_default_points":0},
+    "same_course_distance":{"max_points":20,"newcomer_default_points":0},
+    "training_comments":{"max_points":15,"feature":"training_comments_quality"},
+    "bodyweight_range":{"max_points":15,"newcomer_default_points":0},
+    "same_day_gci":{"max_points":15,"feature":"same_day_track_fit"},
+    "late_market_changes":{"max_points":10,"feature":"market_stability"}
+  },
+  "scenario_fit":{"PRI":0.40,"CFI":0.25,"GCI":0.20,"SSI":0.15},
+  "weak_penalty_major_indices":["HPI","SSI","CFI","RFI","TRI","PRI"],
+  "prohibited":[
+    "freehand 0-100 score entry without feature category and evidence reference",
+    "result-derived feature categories",
+    "retroactive use for a race already started",
+    "automatic Production promotion",
+    "probability interpretation of index scores"
+  ]
+}
