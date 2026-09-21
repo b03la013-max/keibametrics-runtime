@@ -8,8 +8,10 @@ on:
       - "runtime/formal_request_validator.py"
       - ".github/workflows/km-formal-request-runner.yml"
       - "tests/test_minimum_efficient_coverage.py"
-      - "governance/KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R1.md"
-      - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R1.json"
+      - "governance/KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3.md"
+      - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R3.json"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R5.json"
+      - "profiles/venue_chat_routes_20260921_R5.json"
       - ".github/workflows/km-family-mec-acceptance.yml"
   workflow_dispatch:
 
@@ -46,5 +48,8 @@ jobs:
                 "coverage_ratio":plan["material_coverage_ratio"],
                 "uncovered_active_w_heads":plan["uncovered_active_w_heads"],
               }
+          r12=json.load(open("runtime/requests/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          p12=build_mec_plan(r12,strict_head_closure=False)
+          assert any(t["bet_type"]=="TRIO" and set(map(str,t["selection"]))=={"5","9","13"} for t in p12["tickets"])
           print("MEC_TODAY_REPLAY="+json.dumps(rows,separators=(",",":"),ensure_ascii=False))
           PY
