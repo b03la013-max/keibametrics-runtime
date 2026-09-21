@@ -1,0 +1,57 @@
+name: JRA C4 Shadow Full-Numerical Materialization
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/shadow_requests/*.json"
+  workflow_dispatch:
+    inputs:
+      request_path:
+        description: "Path to a C4 shadow request JSON"
+        required: true
+        type: string
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Resolve shadow request
+        id: req
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.request_path || '' }}" ]; then
+            REQ="${{ inputs.request_path }}"
+          else
+            REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/shadow_requests/*.json' | tail -1)"
+          fi
+          test -n "$REQ"
+          test -f "$REQ"
+          echo "path=$REQ" >> "$GITHUB_OUTPUT"
+      - name: Materialize candidate full numerical ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python runtime/jra_candidate_fullnumerical_materializer.py             "${{ steps.req.outputs.path }}"             --mapping mapping/jra_base_index_evidence_mapping_v0.1_candidate_20260921.json             --out artifacts/candidate_fullnumerical.json
+          python - <<'PY'
+          import json
+          p=json.load(open("artifacts/candidate_fullnumerical.json"))
+          s=p["candidate_full_numerical_summary"]
+          assert s["production_authority"] is False
+          assert s["full_numerical_complete"] is True
+          assert s["required_count"] == s["calculated_count"]
+          assert s["ruled_hold_count"] == 0
+          assert s["unresolved_count"] == 0
+          print(json.dumps(s,indent=2,ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jra-c4-shadow-fullnumerical
+          path: artifacts/candidate_fullnumerical.json
