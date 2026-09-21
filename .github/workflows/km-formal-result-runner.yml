@@ -39,6 +39,7 @@ jobs:
           import json, os, urllib.request, urllib.error, sys
           sys.path.insert(0,"runtime")
           from post_result_learning import build_post_result_review, build_learning_state
+          from krs_oos_promotion_gate import build_oos_measurement
           BASE="https://quorumprobe-production.up.railway.app"
           with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
               p=json.load(f)
@@ -76,12 +77,16 @@ jobs:
               final_artifact=json.load(fh)
           review=build_post_result_review(p,final_artifact)
           learning=build_learning_state(review)
+          oos=build_oos_measurement(review,final_artifact)
           os.makedirs("runtime/reviews_auto",exist_ok=True)
           os.makedirs("runtime/learning_states",exist_ok=True)
+          os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
           with open(os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json"),"w",encoding="utf-8") as fh:
               json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
           with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
               json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+              json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
           summary={
             "race_id":p["race_id"],
@@ -97,7 +102,9 @@ jobs:
             "learning_state_sha256":learning.get("sha256"),
             "first_material_failure":review.get("failure_localization",{}).get("first_material_failure"),
             "pfs":review.get("capital",{}).get("pfs"),
-            "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification")
+            "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification"),
+            "krs_oos_eligible":oos.get("eligible"),
+            "krs_oos_measurement_sha256":oos.get("sha256")
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -108,7 +115,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/reviews_auto/*.json runtime/learning_states/*.json
+          git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
             git pull --rebase origin main
