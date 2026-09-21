@@ -110,7 +110,10 @@ jobs:
           family=req.get("family_id","JRA")
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
-          assert venue in {"HSN","NKY","CHU","SAP","NII","KOK","FKS","HAK","TOK","KYO"}, venue
+          venue_aliases={"CHU":"CHK","SAP":"SPP","NII":"NGT","KOK":"KKR","HAK":"HKD","TOK":"TKY"}
+          venue_canonical=venue_aliases.get(venue,venue)
+          assert venue_canonical in {"HSN","NKY","CHK","SPP","NGT","KKR","FKS","HKD","TKY","KYO"}, f"UNSUPPORTED_JRA_VENUE:{venue}"
+          stage("VENUE_AUTHORITY_RESOLVED", venue_input=venue, venue_canonical=venue_canonical, legacy_alias_used=(venue!=venue_canonical))
           assert req.get("engine_sha256")==ENGINE_SHA, "ENGINE_DECLARATION_MISMATCH"
 
           adapter_mode=req.get("jra_adapter_mode","EXPLICIT_ENGINE_HSV")
@@ -402,7 +405,8 @@ jobs:
           summary={
             "race_id":race_id,
             "family_id":family,
-            "venue_id":venue,
+            "venue_id":venue_canonical,
+            "venue_id_input":venue,
             "status":"FULL_FORMAL_E2E_PASS",
             "jra_adapter":adapter_identity,
             "manifest":{
