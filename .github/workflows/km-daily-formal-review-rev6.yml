@@ -1,0 +1,46 @@
+name: KeibaMetrics Daily Formal Review Rev6
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/daily_review_rev6.py"
+      - "runtime/results/KM-JRA-HSN-20260921-R10.json"
+      - "runtime/results/KM-JRA-HSN-20260921-R11.json"
+      - "runtime/results/KM-JRA-HSN-20260921-R12.json"
+      - "runtime/reviews_auto/KM-JRA-HSN-20260921-R10-AUTO.json"
+      - "runtime/reviews_auto/KM-JRA-HSN-20260921-R11-AUTO.json"
+      - "runtime/reviews_auto/KM-JRA-HSN-20260921-R12-AUTO.json"
+      - "runtime/requests/KM-JRA-HSN-20260921-R10.json"
+      - "runtime/requests/KM-JRA-HSN-20260921-R11-POSTSTART-REPLAY-R1.json"
+      - "runtime/requests/KM-JRA-HSN-20260921-R12.json"
+      - "runtime/reviews/KM-JRA-KRS-PREDICTION-UTILITY-CALIBRATION-20260921-R1.json"
+      - ".github/workflows/km-daily-formal-review-rev6.yml"
+  workflow_dispatch:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Daily Formal Review Rev6
+        shell: bash
+        run: |
+          set -euo pipefail
+          python runtime/daily_review_rev6.py
+      - name: Persist Daily Review
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/daily_reviews/*.json
+          if ! git diff --cached --quiet; then
+            git commit -m "review: persist HSN 20260921 Daily Formal Review Rev6 [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
