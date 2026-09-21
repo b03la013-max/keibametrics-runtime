@@ -8,9 +8,11 @@ on:
       - "mapping/jra_base_index_evidence_mapping_v0.1_candidate_20260921.json"
       - "runtime/jra_evidence_to_base_candidate.py"
       - "runtime/jra_evidence_feature_normalizer_candidate.py"
+      - "runtime/jra_candidate_fullnumerical_materializer.py"
       - "runtime/jra_index_provenance_builder.py"
       - "tests/test_jra_evidence_to_base_candidate.py"
       - "tests/test_jra_evidence_feature_normalizer_candidate.py"
+      - "tests/test_jra_candidate_fullnumerical_materializer.py"
       - ".github/workflows/jra-c4-evidence-mapping-selftest.yml"
   workflow_dispatch:
 
@@ -23,4 +25,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --quiet pytest
-      - run: python -m pytest tests/test_jra_evidence_to_base_candidate.py tests/test_jra_evidence_feature_normalizer_candidate.py -q
+      - run: python -m pytest tests/test_jra_evidence_to_base_candidate.py tests/test_jra_evidence_feature_normalizer_candidate.py tests/test_jra_candidate_fullnumerical_materializer.py -q
