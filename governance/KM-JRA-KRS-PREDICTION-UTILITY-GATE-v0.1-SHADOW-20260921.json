@@ -1,0 +1,113 @@
+{
+  "profile_id": "KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.1-SHADOW-20260921",
+  "status": "SHADOW / NON-PRODUCTION / PREDICTION-UTILITY / STRUCTURED-OUTPUT-PERSISTENCE / PRE-RESULT-DELTA / PROMOTION-BLOCKED",
+  "created_at": "2026-09-21T19:19:00+09:00",
+  "raison_detre": "KRS must improve or challenge the frozen Static prediction, not merely prove that simulation executed.",
+  "production_effect": "NONE",
+  "core_invariant": "Execution PASS is not Prediction Utility. KRS utility exists only when structured KRS output creates measurable pre-result information beyond Static, or robustly confirms Static under multiple worlds.",
+  "runtime_changes": {
+    "formal_runner": ".github/workflows/km-formal-request-runner.yml",
+    "utility_gateway": "runtime/krs_prediction_utility.py",
+    "acceptance": ".github/workflows/km-krs-utility-acceptance.yml",
+    "replay": ".github/workflows/km-krs-prediction-utility-replay.yml",
+    "raw_output_persistence": "GitHub Actions artifact, 90-day retention",
+    "signed_final_binding": "final_prediction_package.krs_prediction_utility_shadow",
+    "mandatory_stage": "KRS_PREDICTION_UTILITY_CAPTURED"
+  },
+  "captured_krs_fields": [
+    "SSR-W",
+    "SSR-P2",
+    "SSR-P3",
+    "SSR-T3",
+    "LSR",
+    "Z4R-W",
+    "Z4R-P2",
+    "Z4R-P3",
+    "Robustness",
+    "1角/3角/4角 position distributions",
+    "ERS",
+    "Leadership-Acquisition",
+    "Leadership-Survival",
+    "scenario_analysis",
+    "top_exacta_occurrence",
+    "top_trifecta_occurrence",
+    "SIM-XDI",
+    "role_audit_triggers",
+    "convergence_audit",
+    "seed_stability_audit"
+  ],
+  "pre_result_shadow_delta_rules": {
+    "W": "If SSR-W rank is inside Engine W role zone and Static lacks W, emit ADD_W_SHADOW.",
+    "P2": "If SSR-P2 rank is inside Engine P2 role zone and Static lacks P2, emit ADD_P2_SHADOW.",
+    "P3": "If SSR-T3 rank is inside Engine P3 role zone and Static lacks P3, emit ADD_P3_SHADOW.",
+    "pair": "Engine top exacta occurrence absent from PURCHASE emits ADD_ORDERED_PAIR_SHADOW.",
+    "third": "For an already PURCHASED ordered pair, Engine top trifecta occurrence whose third is not PURCHASE emits ADD_PAIR_THIRD_SHADOW.",
+    "deletions": "No automatic Static role deletion in v0.1; downward disagreement is audit-only.",
+    "authority": "All proposals are SHADOW only until OOS promotion."
+  },
+  "utility_classes": {
+    "pre_result": [
+      "NO-MATERIAL-UPDATE",
+      "MATERIAL-SHADOW-DELTA"
+    ],
+    "post_result": [
+      "UNIQUE-RESCUE",
+      "SUPPORTIVE",
+      "MIXED",
+      "UNIQUE-HARM",
+      "NO-OBSERVED-RESCUE",
+      "LOW-DISCRIMINATION"
+    ]
+  },
+  "evidence_20260921": {
+    "replay_workflow_run_id": 35587861682,
+    "artifact_id": 10633178581,
+    "artifact_digest": "sha256:2220735bbb9d5f6cb8cda36bac03426d8c467fd4c4fd4a619792c4d0e830a31c",
+    "acceptance_workflow_run_id": 35588035806,
+    "acceptance": "SUCCESS",
+    "races": {
+      "KM-JRA-HSN-20260921-R10": {
+        "classification": "UNIQUE-RESCUE",
+        "observed_rescues": [
+          "Actual winner #11: Static P2/P3 -> KRS ADD_W_SHADOW",
+          "Actual second #9: Static P3 -> KRS ADD_P2_SHADOW"
+        ],
+        "not_rescued": "Actual third #7 was not newly rescued into the missing decisive layer.",
+        "implication": "KRS Engine contained material role-order information that the old Final handoff discarded."
+      },
+      "KM-JRA-HSN-20260921-R11": {
+        "classification": "NO-OBSERVED-RESCUE",
+        "observed_rescues": [],
+        "implication": "Actual third #8 remained unresolved; KRS did not fix the principal P3 discovery failure."
+      },
+      "KM-JRA-HSN-20260921-R12": {
+        "classification": "NO-OBSERVED-RESCUE",
+        "observed_rescues": [],
+        "implication": "Actual third #13 was already global P3, but KRS did not rescue it as the missing third under the correct 5>9 pair."
+      }
+    }
+  },
+  "correction_to_prior_interpretation": {
+    "old_label": "NO-MATERIAL-UPDATE based only on unchanged authoritative Final",
+    "corrected_label": "KRS may have MATERIAL-SHADOW-DELTA even when Production Final remains unchanged.",
+    "reason": "Old runner discarded structured KRS output and therefore conflated 'not applied downstream' with 'not discovered by KRS'."
+  },
+  "promotion_gate": {
+    "current_decision": "BLOCKED",
+    "required": [
+      "future pre-race OOS races with utility artifact frozen before post",
+      "measure rescue precision and false-positive cost",
+      "compare Static-only vs Static+KRS Shadow role/order coverage",
+      "deterministic ticket-conversion comparison under fixed capital",
+      "PFS comparison on pre-frozen policies",
+      "demonstrate incremental benefit net of added candidate width",
+      "no degradation of clear Static positives"
+    ],
+    "forbidden": [
+      "promoting from same-day post-result replay",
+      "treating SSR/LSR/Z4R as probabilities or EV",
+      "adding every KRS proposal to Production tickets",
+      "rewriting past frozen predictions"
+    ]
+  }
+}
