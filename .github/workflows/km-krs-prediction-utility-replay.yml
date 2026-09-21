@@ -1,0 +1,78 @@
+name: KeibaMetrics KRS Prediction Utility Replay
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-krs-prediction-utility-replay.yml"
+  workflow_dispatch:
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-run frozen R10-R12 and evaluate KRS prediction utility
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .krs-utility-replay
+          python - <<'PY'
+          import json, urllib.request, sys, os, hashlib
+          sys.path.insert(0,"runtime")
+          from jra_evidence_to_base_production import load_mapping, attach_production_ledger_to_request
+          from jra_index_provenance_builder import materialize_index_provenance
+          from jra_krs_input_builder_production import build_krs_input
+          from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
+
+          paths=[
+            "runtime/requests/KM-JRA-HSN-20260921-R10.json",
+            "runtime/requests/KM-JRA-HSN-20260921-R11.json",
+            "runtime/requests/KM-JRA-HSN-20260921-R12.json",
+          ]
+          actual={
+            "KM-JRA-HSN-20260921-R10":[11,9,7],
+            "KM-JRA-HSN-20260921-R11":[1,4,8],
+            "KM-JRA-HSN-20260921-R12":[5,9,13],
+          }
+          mp=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          combined={"status":"SHADOW / POST-RACE REPLAY / NON-PRODUCTION","races":{}}
+          for path in paths:
+              req=json.load(open(path,encoding="utf-8"))
+              req=attach_production_ledger_to_request(req,mp)
+              req=materialize_index_provenance(req)
+              req=build_krs_input(req)
+              kinput=req["krs_input_data"]
+              kinput.setdefault("simulation",{})["run_count"]=int(req.get("run_count",5000))
+              kinput["simulation"]["master_seed"]=int(req["seed"])
+              payload={"race_id":req["race_id"],"input_data":kinput,"mode":req.get("mode","SIM-STD"),"seed":int(req["seed"]),"input_class":"SHADOW-PREDICTION-UTILITY-REPLAY"}
+              data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              rq=urllib.request.Request("https://quorumprobe-production.up.railway.app/krs/execute",data=data,headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(rq,timeout=360) as x:
+                  k=json.loads(x.read().decode())
+              utility=build_krs_prediction_utility(req,k)
+              evaluation=evaluate_against_result(utility,actual[req["race_id"]])
+              race_dir=os.path.join(".krs-utility-replay",req["race_id"])
+              os.makedirs(race_dir,exist_ok=True)
+              json.dump(k,open(os.path.join(race_dir,"krs_response.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+              json.dump(utility,open(os.path.join(race_dir,"utility.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+              combined["races"][req["race_id"]]={
+                "utility_class":utility["utility_class"],
+                "utility_sha256":utility["sha256"],
+                "role_proposals":utility["role_proposals"],
+                "ordered_pair_proposals":utility["ordered_pair_proposals"],
+                "pair_third_proposals":utility["pair_third_proposals"],
+                "sim_xdi":utility["sim_xdi"],
+                "role_audit_triggers":utility["role_audit_triggers"],
+                "evaluation":evaluation,
+              }
+          json.dump(combined,open(".krs-utility-replay/combined.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          print("KRS_UTILITY_REPLAY="+json.dumps(combined,separators=(",",":"),ensure_ascii=False))
+          PY
+      - name: Upload replay raw outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: krs-prediction-utility-replay-${{ github.run_id }}
+          path: .krs-utility-replay/
+          retention-days: 90
