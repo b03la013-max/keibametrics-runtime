@@ -1,0 +1,41 @@
+name: KeibaMetrics Closed Loop Learning Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/post_result_learning.py"
+      - "runtime/final_artifacts/KM-JRA-HSN-20260921-R12.json"
+      - "runtime/results/KM-JRA-HSN-20260921-R12.json"
+      - ".github/workflows/km-closed-loop-learning-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RESULT to Learning closed loop on frozen R12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,sys
+          sys.path.insert(0,"runtime")
+          from post_result_learning import build_post_result_review, build_learning_state
+          result=json.load(open("runtime/results/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          final=json.load(open("runtime/final_artifacts/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          review=build_post_result_review(result,final)
+          learning=build_learning_state(review)
+          assert review["failure_localization"]["first_material_failure"]=="THIRD_SET_COVERAGE",review
+          assert abs(review["capital"]["pfs"]-88.5714285714)<1e-6,review["capital"]
+          assert review["prediction"]["role_capture"]=={"winner_w":True,"second_p2":True,"third_p3":True}
+          assert review["conversion"]["ordered_pair_ticket_coverage"] is True
+          assert review["conversion"]["top3_set_ticket_coverage"] is False
+          assert "PAIR_THIRD_TAIL_COVERAGE" in learning["shadow_candidates"]
+          assert learning["production_change_authorized"] is False
+          print("CLOSED_LOOP_LEARNING_ACCEPTANCE_PASS")
+          print("AUTO_REVIEW="+json.dumps(review,separators=(",",":"),ensure_ascii=False))
+          print("LEARNING_STATE="+json.dumps(learning,separators=(",",":"),ensure_ascii=False))
+          PY
