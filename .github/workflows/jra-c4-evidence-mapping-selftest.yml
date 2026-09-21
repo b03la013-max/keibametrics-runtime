@@ -1,0 +1,24 @@
+name: JRA C4 Evidence Mapping Selftest
+
+on:
+  push:
+    branches:
+      - c4/jra-base-evidence-mapping-v0.1-20260921
+    paths:
+      - "mapping/jra_base_index_evidence_mapping_v0.1_candidate_20260921.json"
+      - "runtime/jra_evidence_to_base_candidate.py"
+      - "runtime/jra_index_provenance_builder.py"
+      - "tests/test_jra_evidence_to_base_candidate.py"
+      - ".github/workflows/jra-c4-evidence-mapping-selftest.yml"
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --quiet pytest
+      - run: python -m pytest tests/test_jra_evidence_to_base_candidate.py -q
