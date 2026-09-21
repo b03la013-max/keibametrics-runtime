@@ -257,8 +257,11 @@ jobs:
                 material_shadow_delta=utility.get("material_shadow_delta"),
                 utility_sha256=utility.get("sha256"),
                 role_proposal_count=len(utility.get("role_proposals") or []),
+                actionable_role_proposal_count=len(utility.get("actionable_role_proposals") or []),
                 pair_proposal_count=len(utility.get("ordered_pair_proposals") or []),
-                third_proposal_count=len(utility.get("pair_third_proposals") or []))
+                actionable_pair_proposal_count=len(utility.get("actionable_ordered_pair_proposals") or []),
+                third_proposal_count=len(utility.get("pair_third_proposals") or []),
+                actionable_third_proposal_count=len(utility.get("actionable_pair_third_proposals") or []))
 
           # If physical v0.2 adapter path is selected, the caller must additionally attest
           # the exact artifact. Engine-side params are deliberately not compared to v0.2.
@@ -285,8 +288,12 @@ jobs:
               "material_shadow_delta":utility.get("material_shadow_delta"),
               "utility_sha256":utility.get("sha256"),
               "role_proposals":utility.get("role_proposals"),
+              "actionable_role_proposals":utility.get("actionable_role_proposals"),
               "ordered_pair_proposals":utility.get("ordered_pair_proposals"),
+              "actionable_ordered_pair_proposals":utility.get("actionable_ordered_pair_proposals"),
               "pair_third_proposals":utility.get("pair_third_proposals"),
+              "actionable_pair_third_proposals":utility.get("actionable_pair_third_proposals"),
+              "shadow_role_registry":utility.get("shadow_role_registry"),
               "sim_xdi":utility.get("sim_xdi"),
               "role_audit_triggers":utility.get("role_audit_triggers"),
               "production_effect":"NONE"
