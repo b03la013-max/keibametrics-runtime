@@ -1,0 +1,82 @@
+{
+  "profile_id": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R2",
+  "predecessor": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R1",
+  "status": "ACTIVE",
+  "authority": "FAMILY-WIDE-PRODUCTION-EXECUTION-OVERLAY",
+  "numerical_effect": "NONE",
+  "mandatory": true,
+  "no_legacy_width_fallback": true,
+  "family_scope": [
+    "JRA",
+    "LOCAL",
+    "BAN",
+    "ALL_VENUES"
+  ],
+  "fixed_ticket_cap": null,
+  "objective": "MINIMUM_REQUIRED_CAPITAL_FOR_100_PERCENT_MATERIAL_COVERAGE",
+  "stop_buying": "NO_NEW_MATERIAL_COVERAGE",
+  "stop_compressing": "REMOVAL_BREAKS_MATERIAL_COVERAGE",
+  "width_direction": "HEAD_LT_PAIR_LT_THIRD",
+  "diagnostic_width_bands": [
+    {
+      "min": 1,
+      "max": 8,
+      "label": "CONCENTRATED"
+    },
+    {
+      "min": 9,
+      "max": 16,
+      "label": "STANDARD"
+    },
+    {
+      "min": 17,
+      "max": 24,
+      "label": "DIVERSE"
+    },
+    {
+      "min": 25,
+      "max": 36,
+      "label": "HIGH_UNCERTAINTY"
+    },
+    {
+      "min": 37,
+      "max": null,
+      "label": "VERY_WIDE_REVIEW"
+    }
+  ],
+  "marginal_coverage_valid": [
+    "NEW_WORLD",
+    "NEW_HEAD_PATH",
+    "NEW_PAIR",
+    "NEW_THIRD",
+    "NEW_ORIENTATION",
+    "STRUCTURAL_PROTECTION"
+  ],
+  "marginal_coverage_invalid": [
+    "REDUNDANT",
+    "BET_TYPE_ONLY_DUPLICATION",
+    "SAME_WORLD_DUPLICATION"
+  ],
+  "budget_rule": "NO_SEMANTIC_DELETION_FOR_BUDGET; LIMITED_PAPER_OR_NO_BET_IF_REQUIRED_CAPITAL_INCOMPATIBLE",
+  "krs_shadow_capital_authority": false,
+  "runtime_enforcement": {
+    "JRA": "MANDATORY_RUNTIME",
+    "LOCAL": "MANDATORY_GOVERNANCE_FAIL_CLOSED_UNTIL_RUNTIME_VERIFIED",
+    "BAN": "MANDATORY_GOVERNANCE_FAIL_CLOSED_UNTIL_RUNTIME_VERIFIED"
+  },
+  "runtime_module": "runtime/minimum_efficient_coverage.py",
+  "measurements": [
+    "material_coverage_ratio",
+    "minimum_required_capital",
+    "ticket_count",
+    "diagnostic_width_band",
+    "coverage_saturation_curve",
+    "redundant_ticket_count",
+    "marginal_coverage_per_ticket",
+    "krs_shadow_noncapitalized_delta",
+    "head_width",
+    "pair_width",
+    "third_width",
+    "capital_by_bet_type"
+  ]
+}
