@@ -1,0 +1,41 @@
+# ケイバメトリクスFamily 実行Architecture正式統合改定 R5
+
+制定日：2026-09-21
+Profile：KM-FAMILY-EXECUTION-ARCHITECTURE-20260921-R5
+Predecessor：R4
+Status：ACTIVE / FAMILY-WIDE / PRODUCTION-EXECUTION-OVERLAY / NON-NUMERICAL / CLOSED-LOOP-HARDENING / FAIL-CLOSED
+
+## 中心命題
+未知未来Predictionのための情報を、上流SemanticからKRS、Ticket、Capital、Result、Learningまで一貫して保持する。
+
+## 正式順序
+CANON_RESOLVE
+→ SOURCE_SNAPSHOT
+→ FULL_RUNNER_UNIVERSE
+→ EVIDENCE_FEATURE_COMPILER
+→ REQUIRED_INDEX_MANIFEST
+→ ACTUAL_NUMERICAL_TERMINALIZATION
+→ STATIC_FREEZE
+→ PRE_KRS
+→ KRS
+→ KRS_UTILITY_CAPTURE
+→ FINAL_ROLE/PAIR/THIRD
+→ PRECOMPRESSION_SEMANTIC_UNIVERSE
+→ MEC-R3
+→ CAPITAL_POLICY
+→ FINAL_FREEZE
+→ SIGNED_FINAL
+→ SIGNED_RESULT
+→ AUTO_POSTRESULT_REVIEW
+→ LEARNING_STATE_N+1
+→ KRS_OOS_R30_GATE
+
+## Authority
+KRS UtilityはOOS Promotion前はSHADOW。
+MEC-R3はGlobal P3をSoft Pair-local Exclusionで消さない。
+Budget不足はCoverage削減でなくPAPER/NO-BET。
+結果はFrozen Predictionを書き換えない。
+
+## Family
+JRAは現External Runtimeへ接続。
+LOCAL/BANはFamily Runtime Contract経由。物理Endpoint/adapter/hash未確認時はFORMAL-FULLをFail-Closedし、JRA資産を流用しない。
