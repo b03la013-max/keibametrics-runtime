@@ -144,6 +144,7 @@ jobs:
           # Operational failover: when Railway base-index service is deployment-drifted,
           # execute the exact same canonical Production mapping inside GitHub Actions.
           # Prediction rules/weights/values are unchanged; only runtime binding changes.
+          runners=req["runners"]
           calc_runners=[]
           for r in req["runners"]:
               items=[]
