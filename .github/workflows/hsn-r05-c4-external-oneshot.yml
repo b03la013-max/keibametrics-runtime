@@ -1,0 +1,109 @@
+name: HSN R05 C4 External One-Shot
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/hsn-r05-c4-external-oneshot.yml"
+      - "runtime/requests/KM-JRA-HSN-20260921-R05.json"
+      - "runtime/jra_index_provenance_builder.py"
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Materialize frozen 200-of-200 request
+        run: |
+          python - <<'PY'
+          import json,sys
+          sys.path.insert(0,"runtime")
+          from jra_index_provenance_builder import materialize_index_provenance
+          p="runtime/requests/KM-JRA-HSN-20260921-R05.json"
+          req=json.load(open(p,encoding="utf-8"))
+          req=materialize_index_provenance(req)
+          required=len(req["runners"])*20
+          calculated=sum(len(r["canonical_components"]) for r in req["runners"])
+          assert required==200 and calculated==200
+          json.dump(req,open("/tmp/km_req.json","w",encoding="utf-8"),ensure_ascii=False)
+          print("MATERIALIZED",required,calculated,req["race_id"],req["prediction_id"])
+          PY
+      - name: PRE KRS - KRS 5000 - FINAL with receipt verification
+        env:
+          KM_RUNTIME: https://quorumprobe-production.up.railway.app
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error,hashlib,sys
+          req=json.load(open("/tmp/km_req.json",encoding="utf-8"))
+          base="https://quorumprobe-production.up.railway.app"
+
+          def post(path,obj,timeout=45):
+              data=json.dumps(obj,ensure_ascii=False,separators=(",",":")).encode()
+              q=urllib.request.Request(base+path,data=data,headers={"Content-Type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(q,timeout=timeout) as r:
+                      raw=r.read().decode()
+                      print("HTTP",path,r.status,raw)
+                      return r.status,json.loads(raw)
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode()
+                  print("HTTPERR",path,e.code,raw)
+                  return e.code,raw
+
+          def verify(signed):
+              code,out=post("/verify",signed,15)
+              if code//100!=2 or not isinstance(out,dict) or not out.get("valid"):
+                  raise SystemExit("RECEIPT_VERIFY_FAILED")
+              return out
+
+          code,pre=post("/pre-krs",req,20)
+          if code//100!=2 or not isinstance(pre,dict):
+              raise SystemExit("PRE_KRS_FAILED")
+          vpre=verify(pre)
+
+          candidates=[
+            req,
+            {
+              "race_id":req["race_id"],"prediction_id":req["prediction_id"],
+              "input_class":"C4-SHADOW-FULL-NUMERICAL",
+              "input_data":req["krs_input_data"],"run_count":req["run_count"],
+              "seed":req["seed"],"mode":req["mode"]
+            },
+            {
+              "race_id":req["race_id"],"prediction_id":req["prediction_id"],
+              "input_class":"C4-SHADOW-FULL-NUMERICAL",
+              "krs_input_data":req["krs_input_data"],"run_count":req["run_count"],
+              "seed":req["seed"],"mode":req["mode"]
+            }
+          ]
+          kres=None
+          for body in candidates:
+              code,out=post("/krs/execute",body,60)
+              if code//100==2 and isinstance(out,dict):
+                  kres=out; break
+          if kres is None:
+              raise SystemExit("KRS_FAILED")
+          signed_krs=kres.get("run_receipt",kres)
+          vkrs=verify(signed_krs)
+
+          final_body=dict(req)
+          final_body["krs_run_receipt"]=signed_krs
+          final_body["krs_execution_status"]="EXECUTED-VERIFIED"
+          code,fin=post("/final",final_body,20)
+          if code//100!=2 or not isinstance(fin,dict):
+              raise SystemExit("FINAL_FAILED")
+          vfin=verify(fin)
+
+          out={"pre":pre,"pre_verify":vpre,"krs":kres,"krs_verify":vkrs,"final":fin,"final_verify":vfin}
+          open("/tmp/km_external_receipts.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,indent=2))
+          print("KM_C4_EXTERNAL_E2E_PASS")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hsn-r05-c4-external-receipts
+          path: /tmp/km_external_receipts.json
