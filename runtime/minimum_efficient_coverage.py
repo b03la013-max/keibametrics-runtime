@@ -2,7 +2,7 @@ from __future__ import annotations
 import copy, json, hashlib
 from collections import defaultdict
 
-MEC_PROFILE="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R1"
+MEC_PROFILE="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R2"
 BUDGET_MARKERS=("BUDGET","FIXED_CAPITAL","CAPITAL_LIMIT","LOWER_MATERIALITY_UNDER_FIXED_CAPITAL")
 PROCEDURAL_MARKERS=("CORRECTNESS_REPAIR","TERMINALIZATION_CORRECTNESS","EXPECTED_PAIR_TERMINALIZATION")
 ROLE_ACTIVE={"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
@@ -237,6 +237,9 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
       "minimum_unit_stake":min_stake,
       "ticket_count":n,
       "minimum_required_capital":capital,
+      "head_width":len({str(x["head"]) for x in pairs}),
+      "pair_width":len(pair_keys),
+      "third_width":len({(str(x["head"]),str(x["second"]),str(x["third"])) for x in third_rows}),
       "diagnostic_width_band":band,
       "coverage_unit_count":len(coverage),
       "coverage_units":list(coverage.values()),
