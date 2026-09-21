@@ -9,8 +9,15 @@ class EvidenceCompilerError(ValueError):
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
-def _canonical_rule_id(feature):
-    return "KM-JRA-"+str(feature).upper().replace("_","-")+"-v1"
+RULE_REGISTRY_PATH="mapping/jra_evidence_feature_rule_registry_v1.0_20260921.json"
+
+def _load_rule_registry(path=RULE_REGISTRY_PATH):
+    with open(path,encoding="utf-8") as f:
+        x=json.load(f)
+    rules=x.get("feature_rules")
+    if not isinstance(rules,dict) or not rules:
+        raise EvidenceCompilerError("FEATURE_RULE_REGISTRY_INVALID")
+    return x
 
 def _allowed_features(mapping):
     out=set()
@@ -22,18 +29,21 @@ def _allowed_features(mapping):
         if spec.get("newcomer_fallback_feature"): out.add(spec["newcomer_fallback_feature"])
     return out
 
-def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, mapping):
+def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, mapping, rule_registry=None):
     if not race_id:
         raise EvidenceCompilerError("RACE_ID_MISSING")
     if not source_snapshot_sha256:
         raise EvidenceCompilerError("SOURCE_SNAPSHOT_SHA_MISSING")
     cats=set((mapping.get("category_scale") or {}).keys())
     allowed=_allowed_features(mapping)
+    rr=rule_registry or _load_rule_registry()
+    feature_rules=rr["feature_rules"]
     out={
       "profile":PROFILE,
       "race_id":str(race_id),
       "source_snapshot_sha256":str(source_snapshot_sha256),
       "mapping_id":mapping.get("mapping_id"),
+      "rule_registry_id":rr.get("registry_id"),
       "classification_authority":"RULE_BOUND_CATEGORY",
       "freehand_numeric_score_allowed":False,
       "runners":{}
@@ -56,13 +66,15 @@ def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, ma
             refs=x.get("evidence_refs")
             fact=str(x.get("source_fact") or "").strip()
             rule=str(x.get("rule_id") or "").strip()
-            expected=_canonical_rule_id(feature)
+            allowed_rules=set(map(str,feature_rules.get(feature) or []))
+            if not allowed_rules:
+                raise EvidenceCompilerError(f"FEATURE_RULES_UNREGISTERED:{rid}:{feature}")
             if not isinstance(refs,list) or not refs or any(not str(z).strip() for z in refs):
                 raise EvidenceCompilerError(f"EVIDENCE_REFS_MISSING:{rid}:{feature}")
             if not fact:
                 raise EvidenceCompilerError(f"SOURCE_FACT_MISSING:{rid}:{feature}")
-            if rule!=expected:
-                raise EvidenceCompilerError(f"NONCANONICAL_RULE_ID:{rid}:{feature}:{rule}!={expected}")
+            if rule not in allowed_rules:
+                raise EvidenceCompilerError(f"UNREGISTERED_RULE_ID:{rid}:{feature}:{rule}")
             if x.get("result_derived") is True:
                 raise EvidenceCompilerError(f"RESULT_DERIVED_FEATURE_FORBIDDEN:{rid}:{feature}")
             norm[feature]={
