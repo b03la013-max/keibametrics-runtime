@@ -2,9 +2,10 @@ from __future__ import annotations
 import copy, json, hashlib
 from collections import defaultdict
 
-MEC_PROFILE="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R2"
+MEC_PROFILE="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
 BUDGET_MARKERS=("BUDGET","FIXED_CAPITAL","CAPITAL_LIMIT","LOWER_MATERIALITY_UNDER_FIXED_CAPITAL")
 PROCEDURAL_MARKERS=("CORRECTNESS_REPAIR","TERMINALIZATION_CORRECTNESS","EXPECTED_PAIR_TERMINALIZATION")
+HARD_SEMANTIC_EXCLUSION_MARKERS=("STRUCTURAL","NOT_APPLICABLE","IMPOSSIBLE","SCRATCH","WITHDRAWN","ROLE_INELIGIBLE","UNIVERSE_MISMATCH","FORMAL_OUT_OF_SCOPE")
 ROLE_ACTIVE={"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
 
 class MECError(ValueError):
@@ -19,6 +20,10 @@ def _budget_only(reason:str)->bool:
 def _procedural_only(reason:str)->bool:
     u=str(reason or "").upper()
     return any(x in u for x in PROCEDURAL_MARKERS)
+
+def _hard_semantic_exclusion(reason:str)->bool:
+    u=str(reason or "").upper()
+    return any(x in u for x in HARD_SEMANTIC_EXCLUSION_MARKERS)
 
 def _active_roles(req):
     out=defaultdict(set)
@@ -38,15 +43,51 @@ def _semantic_pairs(req):
             rows.append({**copy.deepcopy(x),"mec_tier":"PROTECTION"})
     return rows
 
-def _semantic_thirds(req):
-    rows=[]
+def _semantic_third_universe(req, roles, pair_keys):
+    """Build the pre-compression third universe.
+
+    Global active P3 is semantic evidence. Pair-local PURCHASE/PROTECT decides
+    exact/protection strength, but a soft EXCLUDE (for example LOWER_*_MATERIALITY)
+    cannot erase the global P3 semantic state before capital optimization.
+    Such cases become TAIL set-protection. Only hard structural exclusions may
+    remove them before MEC.
+    """
+    by_key={}
     for x in req.get("third_dispositions") or []:
-        st=str(x.get("status") or "")
-        if st=="PURCHASE":
-            rows.append({**copy.deepcopy(x),"mec_tier":"CORE"})
-        elif st=="PROTECT":
-            rows.append({**copy.deepcopy(x),"mec_tier":"PROTECTION"})
-    return rows
+        key=(_s(x.get("head")),_s(x.get("second")),_s(x.get("third")))
+        by_key[key]=copy.deepcopy(x)
+
+    active_p3={r for r,cols in roles.items() if "P3" in cols}
+    rows=[]
+    soft_overrides=[]
+    hard_exclusions=[]
+    synthesized=[]
+    for h,s in sorted(pair_keys):
+        for t in sorted(active_p3,key=lambda z:int(z) if z.isdigit() else z):
+            if t in {h,s}:
+                continue
+            key=(h,s,t)
+            x=by_key.get(key)
+            if x is None:
+                y={"head":h,"second":s,"third":t,"status":"SYNTHETIC_TAIL",
+                   "reason":"GLOBAL_P3_PRECOMPRESSION_TAIL_FLOOR",
+                   "mec_tier":"TAIL","semantic_source":"GLOBAL_P3"}
+                rows.append(y); synthesized.append(copy.deepcopy(y))
+                continue
+            st=str(x.get("status") or "")
+            reason=str(x.get("reason") or "")
+            if st=="PURCHASE":
+                rows.append({**x,"mec_tier":"CORE","semantic_source":"PAIR_LOCAL"})
+            elif st=="PROTECT":
+                rows.append({**x,"mec_tier":"PROTECTION","semantic_source":"PAIR_LOCAL"})
+            elif st=="EXCLUDE":
+                if _hard_semantic_exclusion(reason):
+                    hard_exclusions.append({**x,"mec_action":"HARD_EXCLUSION_RETAINED"})
+                else:
+                    y={**x,"mec_tier":"TAIL","semantic_source":"GLOBAL_P3",
+                       "mec_action":"SOFT_EXCLUSION_OVERRIDDEN_TO_TAIL"}
+                    rows.append(y); soft_overrides.append(copy.deepcopy(y))
+    return rows,soft_overrides,hard_exclusions,synthesized
 
 def _semantic_orientation_exclusions(req):
     out=set()
@@ -97,7 +138,6 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
     roles=_active_roles(req)
     active_w={h for h,r in roles.items() if "W" in r}
     pairs=_semantic_pairs(req)
-    thirds=_semantic_thirds(req)
     orient_excl,ignored_budget_orient=_semantic_orientation_exclusions(req)
 
     pair_keys={(str(x["head"]),str(x["second"])) for x in pairs}
@@ -108,15 +148,10 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
         detail={h:str(budget_head_reasons.get(h) or budget_head_reasons.get(int(h)) if h.isdigit() else budget_head_reasons.get(h) or "") for h in uncovered_heads}
         raise MECError("ACTIVE_W_WITHOUT_MATERIAL_PAIR_CLOSURE:"+json.dumps(detail,ensure_ascii=False,sort_keys=True))
 
-    # Only thirds attached to a material ordered pair can enter the executable MEC universe.
-    third_rows=[]
+    # Pre-compression third universe: every globally active P3 must survive
+    # under every material ordered pair unless a hard structural exclusion exists.
+    third_rows,soft_third_overrides,hard_third_exclusions,synthesized_tail_thirds = _semantic_third_universe(req,roles,pair_keys)
     orphan_thirds=[]
-    for x in thirds:
-        k=(str(x["head"]),str(x["second"]))
-        if k in pair_keys:
-            third_rows.append(x)
-        else:
-            orphan_thirds.append(copy.deepcopy(x))
 
     coverage={}
     candidates=[]
@@ -153,11 +188,11 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
               "mec_reason":"MATERIAL_EXACT_THIRD_SKELETON",
             })
         else:
-            # PROTECT third is set-protection, not forced exact expansion.
+            # PROTECTION/TAIL third is set-protection, not forced exact expansion.
             ss=tuple(sorted((h,s,t),key=lambda z:int(z) if z.isdigit() else z))
             uid="TAIL_SET:"+">".join(ss)
             if uid not in coverage:
-                coverage[uid]=_coverage_unit("TAIL_SET",*ss,tier="PROTECTION",source=x.get("reason"))
+                coverage[uid]=_coverage_unit("TAIL_SET",*ss,tier=("PROTECTION" if tier=="PROTECTION" else "TAIL"),source=x.get("reason"))
             # A single trio can cover several pair-local protection statements sharing the same 3-horse set.
             found=None
             for c in candidates:
@@ -168,8 +203,8 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
                   "bet_type":"TRIO",
                   "selection":[int(z) if z.isdigit() else z for z in ss],
                   "stake":min_stake,
-                  "mec_tier":"PROTECTION","coverage_ids":[uid],
-                  "mec_reason":"PAIR_LOCAL_TAIL_SET_PROTECTION",
+                  "mec_tier":("PROTECTION" if tier=="PROTECTION" else "TAIL"),"coverage_ids":[uid],
+                  "mec_reason":("PAIR_LOCAL_TAIL_SET_PROTECTION" if tier=="PROTECTION" else "GLOBAL_P3_PRECOMPRESSION_TAIL_PROTECTION"),
                 })
             elif uid not in found["coverage_ids"]:
                 found["coverage_ids"].append(uid)
@@ -251,6 +286,11 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
       "semantic_pair_count":len(pairs),
       "semantic_third_count":len(third_rows),
       "orphan_thirds":orphan_thirds,
+      "semantic_tail_floor_count":len([x for x in third_rows if x.get("mec_tier")=="TAIL"]),
+      "soft_third_exclusions_overridden":soft_third_overrides,
+      "hard_third_exclusions_retained":hard_third_exclusions,
+      "synthesized_global_p3_tail_thirds":synthesized_tail_thirds,
+      "precompression_semantic_universe":True,
       "uncovered_active_w_heads":uncovered_heads,
       "budget_only_orientation_exclusions_ignored":ignored_budget_orient,
       "krs_shadow_noncapitalized":krs_shadow,
