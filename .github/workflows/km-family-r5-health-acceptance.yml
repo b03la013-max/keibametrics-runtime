@@ -1,0 +1,95 @@
+name: KeibaMetrics Family R5 Health Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/minimum_efficient_coverage.py"
+      - "runtime/evidence_feature_compiler.py"
+      - "runtime/capital_policy.py"
+      - "runtime/post_result_learning.py"
+      - "runtime/krs_oos_promotion_gate.py"
+      - "runtime/family_runtime_contract.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
+      - ".github/workflows/km-family-non-jra-formal-runner.yml"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R5.json"
+      - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R3.json"
+      - "profiles/venue_chat_routes_20260921_R5.json"
+      - "profiles/family_runtime_contracts_20260921_R1.json"
+      - "tests/test_minimum_efficient_coverage.py"
+      - "tests/test_mec_r3_precompression_tail_floor.py"
+      - "tests/test_evidence_feature_compiler.py"
+      - "tests/test_capital_policy.py"
+      - "tests/test_krs_oos_promotion_gate.py"
+      - "tests/test_family_runtime_contract.py"
+      - ".github/workflows/km-family-r5-health-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Family R5 health contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pyyaml
+          python tests/test_minimum_efficient_coverage.py
+          python tests/test_mec_r3_precompression_tail_floor.py
+          python tests/test_evidence_feature_compiler.py
+          python tests/test_capital_policy.py
+          python tests/test_krs_oos_promotion_gate.py
+          python tests/test_family_runtime_contract.py
+          python - <<'PY'
+          import json,sys,yaml,re
+          sys.path.insert(0,"runtime")
+          from post_result_learning import build_post_result_review, build_learning_state
+          from minimum_efficient_coverage import MEC_PROFILE
+
+          assert MEC_PROFILE=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          ep=json.load(open("profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R5.json",encoding="utf-8"))
+          assert ep["mec_profile"]==MEC_PROFILE
+          assert ep["invariants"]["precompression_semantic_coverage_required"] is True
+          assert ep["invariants"]["krs_shadow_direct_capital_authority"] is False
+          assert ep["invariants"]["no_cross_family_parameter_map"] is True
+          assert ep["invariants"]["no_invented_bankroll"] is True
+
+          route=json.load(open("profiles/venue_chat_routes_20260921_R5.json",encoding="utf-8"))
+          assert route["parent_profile"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260921-R5"
+          assert route["mec_profile"]==MEC_PROFILE
+          assert route["family_routes"]["JRA"]["runtime_status"]=="EXECUTABLE"
+          assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["LOCAL"]["runtime_status"]
+          assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["BAN"]["runtime_status"]
+
+          result=json.load(open("runtime/results/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          final=json.load(open("runtime/final_artifacts/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          review=build_post_result_review(result,final)
+          learning=build_learning_state(review)
+          assert review["failure_localization"]["first_material_failure"]=="THIRD_SET_COVERAGE"
+          assert learning["production_change_authorized"] is False
+
+          for path in [".github/workflows/km-formal-request-runner.yml",".github/workflows/km-formal-result-runner.yml",".github/workflows/km-family-non-jra-formal-runner.yml"]:
+              obj=yaml.safe_load(open(path,encoding="utf-8"))
+              assert isinstance(obj,dict) and "jobs" in obj,path
+
+          text=open(".github/workflows/km-formal-request-runner.yml",encoding="utf-8").read()
+          for token in [
+              "EVIDENCE_FEATURE_COMPILER_VERIFIED",
+              "KRS_PREDICTION_UTILITY_CAPTURED",
+              "MATERIAL_COVERAGE_UNIVERSE_VERIFIED",
+              "MINIMUM_EFFICIENT_COVERAGE_VERIFIED",
+              "CAPITAL_POLICY_VERIFIED",
+              "FINAL_VERIFIED",
+              "runtime/final_artifacts",
+          ]:
+              assert token in text,token
+
+          rtext=open(".github/workflows/km-formal-result-runner.yml",encoding="utf-8").read()
+          for token in ["build_post_result_review","build_learning_state","build_oos_measurement","evaluate_r30"]:
+              assert token in rtext,token
+
+          print("KM_FAMILY_R5_HEALTH_ACCEPTANCE_PASS")
+          PY
