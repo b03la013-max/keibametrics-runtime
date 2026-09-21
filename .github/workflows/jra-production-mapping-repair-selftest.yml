@@ -1,0 +1,62 @@
+name: JRA Production Base Mapping Repair Selftest
+on:
+  push:
+    branches:
+      - repair/jra-production-mapping-20260921-r1
+    paths:
+      - "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"
+      - "runtime/jra_evidence_to_base_production.py"
+      - "runtime/jra_evidence_feature_normalizer_production.py"
+      - "runtime/jra_index_provenance_builder.py"
+      - "runtime/base-index-service/server.mjs"
+      - "tests/test_jra_production_mapping_selftest.py"
+      - ".github/workflows/jra-production-mapping-repair-selftest.yml"
+  workflow_dispatch:
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python tests/test_jra_production_mapping_selftest.py
+      - name: Start production base-index service and verify 60/60
+        shell: bash
+        run: |
+          node runtime/base-index-service/server.mjs >/tmp/km-jra-prod-base.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:3000/health >/tmp/health.json && break
+            sleep 0.5
+          done
+          cat /tmp/health.json
+          python - <<'PY'
+          import json, urllib.request
+          M=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"))
+          keys=set()
+          for p in M["index_profiles"].values():
+              for w in p.values(): keys.update(w)
+          for d in M["dcr"].values():
+              if d.get("feature"): keys.add(d["feature"])
+              if d.get("newcomer_fallback_feature"): keys.add(d["newcomer_fallback_feature"])
+          def feats(tag,cat):
+              return {k:{"category":cat,"evidence_refs":[f"{tag}:{k}"],"source_fact":f"pre-race {k}","rule_id":f"TEST-{k}-v1"} for k in keys}
+          runners=[
+            {"runner_id":"1","name":"EST","career_starts":12,"evidence_features":feats("E","STRONG"),"dcr_inputs":{"official_recent":{"points":23,"evidence_refs":["E:r"],"source_fact":"12 starts","rule_id":"DCR-E-R"},"same_course_distance":{"points":18,"evidence_refs":["E:c"],"source_fact":"course history","rule_id":"DCR-E-C"}}},
+            {"runner_id":"2","name":"LOW","career_starts":2,"evidence_features":feats("L","POSITIVE"),"dcr_inputs":{"official_recent":{"points":15,"evidence_refs":["L:r"],"source_fact":"2 starts","rule_id":"DCR-L-R"},"same_course_distance":{"points":8,"evidence_refs":["L:c"],"source_fact":"limited course history","rule_id":"DCR-L-C"}}},
+            {"runner_id":"3","name":"NEW","career_starts":0,"newcomer":True,"evidence_features":feats("N","NEUTRAL")}
+          ]
+          req=urllib.request.Request("http://127.0.0.1:3000/calculate-jra-base",data=json.dumps({"race_id":"KM-JRA-PROD-REPAIR-SELFTEST","runners":runners}).encode(),headers={"content-type":"application/json"},method="POST")
+          with urllib.request.urlopen(req,timeout=10) as r: x=json.load(r)
+          print(json.dumps(x,ensure_ascii=False))
+          assert x["status"]=="PASS"
+          assert x["required_count"]==60
+          assert x["calculated_count"]==60
+          assert x["ruled_hold_count"]==0
+          assert x["not_applicable_count"]==0
+          assert x["unresolved_count"]==0
+          print("JRA_PRODUCTION_MAPPING_RUNTIME_60_60_PASS")
+          PY
