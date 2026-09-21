@@ -1,4 +1,6 @@
-from runtime.krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
+import sys
+sys.path.insert(0,"runtime")
+from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
 
 req={
  "race_id":"TEST",
