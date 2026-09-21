@@ -43,10 +43,15 @@ for fam in ["JRA","LOCAL","BAN"]:
     assert p["profile"]==MEC_PROFILE
     assert p["fixed_ticket_cap"] is None
     assert p["material_coverage_ratio"]==1.0
-    assert p["minimum_required_capital"]==400
-    assert p["ticket_count"]==4
+    assert p["ticket_count"]>=4
+    assert p["minimum_required_capital"]==100*p["ticket_count"]
+    assert p["precompression_semantic_universe"] is True
+    assert p["semantic_tail_floor_count"]>=1
     assert any(t["bet_type"]=="TRIFECTA" and t["selection"]==[1,2,3] for t in p["tickets"])
     assert any(t["bet_type"]=="TRIO" and set(t["selection"])=={1,2,4} for t in p["tickets"])
+    # Global P3 must survive under the protected 1>3 pair even though no pair-local
+    # third row was supplied: R3 synthesizes a TAIL set rather than silently dropping it.
+    assert any(t["bet_type"]=="TRIO" and set(t["selection"])=={1,2,3} for t in p["tickets"])
     assert any(x["mec_action"]=="IGNORED_BUDGET_ONLY" for x in p["budget_only_orientation_exclusions_ignored"])
     assert v["mec_verified"] is True
 
