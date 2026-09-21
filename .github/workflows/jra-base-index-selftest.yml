@@ -10,6 +10,9 @@ on:
       - "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"
       - "mapping/jra_base_index_mapping_registry_v1.0_20260921.json"
       - "tests/test_jra_production_mapping_selftest.py"
+      - "tests/test_jra_production_fullnumerical_to_krs.py"
+      - "runtime/jra_krs_input_builder_production.py"
+      - "mapping/jra_krs_hsv_bridge_v1.0_production_20260921.json"
       - ".github/workflows/jra-base-index-selftest.yml"
   workflow_dispatch:
 jobs:
@@ -22,7 +25,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Python production mapping selftest
-        run: python tests/test_jra_production_mapping_selftest.py
+        run: |
+          python tests/test_jra_production_mapping_selftest.py
+          python tests/test_jra_production_fullnumerical_to_krs.py
       - uses: oven-sh/setup-bun@v2
       - name: Start calculator and verify mixed runner profiles
         shell: bash
