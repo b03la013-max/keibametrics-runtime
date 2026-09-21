@@ -6,7 +6,7 @@ req={
  "race_id":"TEST",
  "runners":[
    {"runner_id":"1","name":"A","static_roles":["W","P2","P3"]},
-   {"runner_id":"2","name":"B","static_roles":[]},
+   {"runner_id":"2","name":"B","static_roles":["P3"]},
    {"runner_id":"3","name":"C","static_roles":["P3"]},
  ],
  "pair_dispositions":[{"head":"1","second":"2","status":"PROTECT"}],
