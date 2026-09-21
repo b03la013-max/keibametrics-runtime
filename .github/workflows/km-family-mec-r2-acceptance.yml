@@ -1,0 +1,45 @@
+name: KeibaMetrics Family MEC R2 Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/minimum_efficient_coverage.py"
+      - "tests/test_minimum_efficient_coverage.py"
+      - "governance/KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R2.md"
+      - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R2.json"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R4.json"
+      - "profiles/venue_chat_routes_20260921_R3.json"
+      - ".github/workflows/km-family-mec-r2-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify MEC R2 for all families
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/test_minimum_efficient_coverage.py
+          python - <<'PY'
+          import json,sys
+          sys.path.insert(0,"runtime")
+          from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
+          assert MEC_PROFILE=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R2"
+          profile=json.load(open("profiles/KM_FAMILY_MEC_PROFILE_20260921_R2.json",encoding="utf-8"))
+          assert profile["fixed_ticket_cap"] is None
+          assert profile["family_scope"]==["JRA","LOCAL","BAN","ALL_VENUES"]
+          assert profile["mandatory"] is True
+          assert profile["no_legacy_width_fallback"] is True
+          route=json.load(open("profiles/venue_chat_routes_20260921_R3.json",encoding="utf-8"))
+          assert route["mec_profile"]==MEC_PROFILE
+          assert route["fixed_ticket_cap"] is None
+          assert route["no_legacy_width_fallback"] is True
+          for fam in ["JRA","LOCAL","BAN"]:
+              assert route["family_routes"][fam]["mec_profile"]==MEC_PROFILE
+              assert route["family_routes"][fam]["fixed_ticket_cap"] is None
+          print("MEC_R2_FAMILY_SCOPE_PASS")
+          PY
