@@ -1,0 +1,431 @@
+{
+  "mapping_id": "JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+  "status": "PRODUCTION / JRA-WIDE / NUMERICAL / RULE-BASED / UNCALIBRATED / HUMAN-AUTHORIZED-20260921 / PREQUENTIAL-MEASUREMENT-REQUIRED",
+  "family": "JRA",
+  "scope": "Pre-result evidence features -> 13 JRA base indices; derived indices remain index_formula_registry JRA v1.0",
+  "effective_at": "2026-09-21T14:00:00+09:00",
+  "design_principles": [
+    "No freehand 0-100 index entry.",
+    "Every feature must carry category, evidence_refs, source_fact and rule_id.",
+    "Missing features are omitted and remaining weights renormalized only when profile/index minimum coverage is met.",
+    "UNKNOWN is not WEAK and is never converted to ability 50.",
+    "Newcomers use a dedicated profile; lack of realized race evidence lowers DCR instead of forcing weak ability.",
+    "No probability, EV or Kelly interpretation."
+  ],
+  "category_scale": {
+    "EXCEPTIONAL": 94,
+    "VERY_STRONG": 88,
+    "STRONG": 82,
+    "POSITIVE": 74,
+    "NEUTRAL": 64,
+    "MIXED": 54,
+    "CAUTION": 44,
+    "WEAK": 34,
+    "VERY_WEAK": 24
+  },
+  "profiles": {
+    "ESTABLISHED": {
+      "career_starts_min": 4,
+      "minimum_index_coverage_weight": 0.42
+    },
+    "LOW_CAREER": {
+      "career_starts_min": 1,
+      "career_starts_max": 3,
+      "minimum_index_coverage_weight": 0.38
+    },
+    "NEWCOMER": {
+      "career_starts_max": 0,
+      "minimum_index_coverage_weight": 0.34
+    }
+  },
+  "index_profiles": {
+    "ESTABLISHED": {
+      "HPI": {
+        "recent_performance": 0.24,
+        "recent_speed": 0.2,
+        "class_performance": 0.16,
+        "opponent_strength": 0.12,
+        "finish_margin": 0.1,
+        "pace_resilience": 0.08,
+        "workout_capability": 0.05,
+        "physical_readiness": 0.05
+      },
+      "SSI": {
+        "recent_speed": 0.28,
+        "speed_reliability": 0.18,
+        "closing_quality": 0.14,
+        "dash_quality": 0.12,
+        "pace_resilience": 0.1,
+        "workout_speed": 0.1,
+        "gate_quality": 0.08
+      },
+      "CFI": {
+        "same_course_fit": 0.2,
+        "same_distance_fit": 0.2,
+        "similar_geometry_fit": 0.12,
+        "surface_fit": 0.16,
+        "turn_direction_fit": 0.08,
+        "draw_course_fit": 0.08,
+        "course_geometry_fit": 0.1,
+        "going_fit": 0.06
+      },
+      "RFI": {
+        "recent_consistency": 0.26,
+        "rotation_fit": 0.16,
+        "position_reproducibility": 0.18,
+        "preparation_continuity": 0.12,
+        "layoff_readiness": 0.1,
+        "workout_consistency": 0.1,
+        "physical_readiness": 0.08
+      },
+      "BVI": {
+        "pedigree_surface": 0.3,
+        "pedigree_distance": 0.24,
+        "pedigree_class": 0.16,
+        "physical_pedigree_fit": 0.12,
+        "maternal_class_signal": 0.1,
+        "sire_track_signal": 0.08
+      },
+      "JTI": {
+        "jockey_quality": 0.36,
+        "jockey_venue_fit": 0.22,
+        "jockey_style_fit": 0.22,
+        "jockey_horse_fit": 0.2
+      },
+      "CSI": {
+        "stable_readiness": 0.28,
+        "trainer_quality": 0.18,
+        "target_intent": 0.18,
+        "preparation_continuity": 0.14,
+        "stable_comment_state": 0.12,
+        "layoff_readiness": 0.1
+      },
+      "TRI": {
+        "workout_capability": 0.28,
+        "workout_speed": 0.22,
+        "workout_partner_level": 0.14,
+        "workout_finish": 0.14,
+        "workout_consistency": 0.12,
+        "workout_load": 0.1
+      },
+      "BWI": {
+        "bodyweight_range_fit": 0.24,
+        "bodyweight_delta_fit": 0.18,
+        "weight_load_fit": 0.2,
+        "physical_readiness": 0.2,
+        "equipment_effect": 0.1,
+        "body_condition_comment": 0.08
+      },
+      "GCI": {
+        "going_fit": 0.26,
+        "surface_fit": 0.2,
+        "same_day_track_fit": 0.24,
+        "physical_pedigree_fit": 0.1,
+        "track_bias_fit": 0.12,
+        "weather_fit": 0.08
+      },
+      "PRI": {
+        "gate_quality": 0.16,
+        "dash_quality": 0.18,
+        "position_quality": 0.16,
+        "position_reproducibility": 0.12,
+        "draw_course_fit": 0.1,
+        "pressure_resilience": 0.12,
+        "progression_ability": 0.1,
+        "forward_speed_comment": 0.06
+      },
+      "KGI": {
+        "class_performance": 0.28,
+        "opponent_strength": 0.22,
+        "hidden_class": 0.16,
+        "recent_performance": 0.12,
+        "pedigree_class": 0.08,
+        "trainer_quality": 0.06,
+        "jockey_quality": 0.04,
+        "workout_partner_level": 0.04
+      },
+      "VMI": {
+        "market_rank": 0.34,
+        "market_stability": 0.24,
+        "expert_support": 0.18,
+        "external_index_support": 0.14,
+        "market_mismatch": 0.1
+      }
+    },
+    "LOW_CAREER": {
+      "HPI": {
+        "recent_performance": 0.18,
+        "recent_speed": 0.14,
+        "class_performance": 0.1,
+        "opponent_strength": 0.08,
+        "workout_capability": 0.16,
+        "pedigree_class": 0.1,
+        "gate_quality": 0.08,
+        "dash_quality": 0.06,
+        "stable_readiness": 0.05,
+        "physical_readiness": 0.05
+      },
+      "SSI": {
+        "recent_speed": 0.18,
+        "dash_quality": 0.18,
+        "gate_quality": 0.12,
+        "workout_speed": 0.2,
+        "sprint_pedigree": 0.12,
+        "forward_speed_comment": 0.1,
+        "speed_reliability": 0.1
+      },
+      "CFI": {
+        "same_course_fit": 0.12,
+        "same_distance_fit": 0.14,
+        "similar_geometry_fit": 0.1,
+        "surface_fit": 0.2,
+        "pedigree_surface": 0.1,
+        "pedigree_distance": 0.1,
+        "turn_direction_fit": 0.07,
+        "course_geometry_fit": 0.1,
+        "draw_course_fit": 0.07
+      },
+      "RFI": {
+        "recent_consistency": 0.18,
+        "preparation_continuity": 0.18,
+        "workout_consistency": 0.18,
+        "stable_readiness": 0.14,
+        "rotation_fit": 0.1,
+        "layoff_readiness": 0.1,
+        "gate_quality": 0.06,
+        "physical_readiness": 0.06
+      },
+      "BVI": {
+        "pedigree_surface": 0.32,
+        "pedigree_distance": 0.26,
+        "pedigree_class": 0.16,
+        "sire_track_signal": 0.1,
+        "maternal_class_signal": 0.1,
+        "physical_pedigree_fit": 0.06
+      },
+      "JTI": {
+        "jockey_quality": 0.4,
+        "jockey_venue_fit": 0.22,
+        "jockey_style_fit": 0.22,
+        "jockey_horse_fit": 0.16
+      },
+      "CSI": {
+        "stable_readiness": 0.3,
+        "trainer_quality": 0.2,
+        "target_intent": 0.2,
+        "preparation_continuity": 0.16,
+        "stable_comment_state": 0.14
+      },
+      "TRI": {
+        "workout_capability": 0.3,
+        "workout_speed": 0.24,
+        "workout_partner_level": 0.14,
+        "workout_finish": 0.14,
+        "workout_consistency": 0.1,
+        "workout_load": 0.08
+      },
+      "BWI": {
+        "bodyweight_range_fit": 0.18,
+        "bodyweight_delta_fit": 0.18,
+        "weight_load_fit": 0.2,
+        "physical_readiness": 0.24,
+        "equipment_effect": 0.1,
+        "body_condition_comment": 0.1
+      },
+      "GCI": {
+        "going_fit": 0.24,
+        "surface_fit": 0.2,
+        "same_day_track_fit": 0.24,
+        "pedigree_surface": 0.1,
+        "physical_pedigree_fit": 0.1,
+        "track_bias_fit": 0.12
+      },
+      "PRI": {
+        "gate_quality": 0.22,
+        "dash_quality": 0.2,
+        "position_quality": 0.1,
+        "draw_course_fit": 0.12,
+        "pressure_resilience": 0.1,
+        "progression_ability": 0.08,
+        "forward_speed_comment": 0.1,
+        "jockey_style_fit": 0.08
+      },
+      "KGI": {
+        "class_performance": 0.18,
+        "opponent_strength": 0.14,
+        "pedigree_class": 0.22,
+        "workout_partner_level": 0.16,
+        "stable_trainer_class": 0.1,
+        "jockey_quality": 0.08,
+        "maternal_class_signal": 0.12
+      },
+      "VMI": {
+        "market_rank": 0.36,
+        "market_stability": 0.24,
+        "expert_support": 0.18,
+        "external_index_support": 0.14,
+        "market_mismatch": 0.08
+      }
+    },
+    "NEWCOMER": {
+      "HPI": {
+        "workout_capability": 0.28,
+        "pedigree_class": 0.18,
+        "gate_quality": 0.14,
+        "dash_quality": 0.1,
+        "stable_readiness": 0.1,
+        "jockey_quality": 0.08,
+        "physical_readiness": 0.12
+      },
+      "SSI": {
+        "dash_quality": 0.24,
+        "gate_quality": 0.16,
+        "workout_speed": 0.28,
+        "sprint_pedigree": 0.14,
+        "forward_speed_comment": 0.1,
+        "workout_finish": 0.08
+      },
+      "CFI": {
+        "surface_fit": 0.24,
+        "pedigree_surface": 0.14,
+        "pedigree_distance": 0.14,
+        "distance_fit": 0.16,
+        "turn_direction_fit": 0.08,
+        "course_geometry_fit": 0.1,
+        "draw_course_fit": 0.06,
+        "physical_readiness": 0.08
+      },
+      "RFI": {
+        "workout_consistency": 0.3,
+        "preparation_continuity": 0.24,
+        "stable_readiness": 0.18,
+        "gate_quality": 0.1,
+        "physical_readiness": 0.1,
+        "stable_comment_state": 0.08
+      },
+      "BVI": {
+        "pedigree_surface": 0.34,
+        "pedigree_distance": 0.26,
+        "pedigree_class": 0.16,
+        "sire_newcomer_signal": 0.1,
+        "maternal_class_signal": 0.1,
+        "physical_pedigree_fit": 0.04
+      },
+      "JTI": {
+        "jockey_quality": 0.44,
+        "jockey_venue_fit": 0.24,
+        "jockey_style_fit": 0.22,
+        "trainer_jockey_fit": 0.1
+      },
+      "CSI": {
+        "stable_readiness": 0.34,
+        "trainer_quality": 0.22,
+        "target_intent": 0.2,
+        "preparation_continuity": 0.14,
+        "stable_comment_state": 0.1
+      },
+      "TRI": {
+        "workout_capability": 0.32,
+        "workout_speed": 0.26,
+        "workout_partner_level": 0.14,
+        "workout_finish": 0.14,
+        "workout_consistency": 0.1,
+        "workout_load": 0.04
+      },
+      "BWI": {
+        "bodyweight_delta_fit": 0.2,
+        "weight_load_fit": 0.2,
+        "physical_readiness": 0.3,
+        "equipment_effect": 0.1,
+        "body_condition_comment": 0.2
+      },
+      "GCI": {
+        "surface_fit": 0.24,
+        "pedigree_surface": 0.18,
+        "going_fit": 0.18,
+        "same_day_track_fit": 0.24,
+        "physical_pedigree_fit": 0.08,
+        "track_bias_fit": 0.08
+      },
+      "PRI": {
+        "gate_quality": 0.26,
+        "dash_quality": 0.24,
+        "forward_speed_comment": 0.16,
+        "draw_course_fit": 0.1,
+        "pressure_resilience": 0.08,
+        "jockey_style_fit": 0.08,
+        "course_geometry_fit": 0.08
+      },
+      "KGI": {
+        "pedigree_class": 0.26,
+        "workout_partner_level": 0.22,
+        "stable_trainer_class": 0.14,
+        "jockey_quality": 0.12,
+        "maternal_class_signal": 0.16,
+        "workout_capability": 0.1
+      },
+      "VMI": {
+        "market_rank": 0.38,
+        "market_stability": 0.24,
+        "expert_support": 0.2,
+        "external_index_support": 0.18
+      }
+    }
+  },
+  "dcr": {
+    "official_recent": {
+      "max_points": 25,
+      "source": "explicit_points_or_feature",
+      "feature": "official_recent_quality",
+      "newcomer_default_points": 0
+    },
+    "same_course_distance": {
+      "max_points": 20,
+      "source": "explicit_points_or_feature",
+      "feature": "same_course_distance_quality",
+      "newcomer_default_points": 0
+    },
+    "training_comments": {
+      "max_points": 15,
+      "feature": "training_comments_quality"
+    },
+    "bodyweight_range": {
+      "max_points": 15,
+      "feature": "bodyweight_history_quality",
+      "newcomer_fallback_feature": "physical_readiness"
+    },
+    "same_day_gci": {
+      "max_points": 15,
+      "feature": "same_day_track_fit"
+    },
+    "late_market_changes": {
+      "max_points": 10,
+      "feature": "market_stability"
+    }
+  },
+  "scenario_fit": {
+    "PRI": 0.35,
+    "CFI": 0.25,
+    "GCI": 0.2,
+    "SSI": 0.12,
+    "RFI": 0.08
+  },
+  "weak_penalty_major_indices": [
+    "HPI",
+    "SSI",
+    "CFI",
+    "RFI",
+    "TRI",
+    "PRI"
+  ],
+  "calibration_status": "UNCALIBRATED_RULE_BASED_BASE_INDEX_MAPPING",
+  "probability_authority": false,
+  "prohibited": [
+    "freehand base-index number without feature ledger",
+    "result-derived feature classification",
+    "neutral transport 50 as ability score",
+    "UNKNOWN->WEAK",
+    "probability or EV interpretation",
+    "post-result rewrite of pre-race features"
+  ]
+}
