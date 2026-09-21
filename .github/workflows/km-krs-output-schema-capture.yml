@@ -1,0 +1,47 @@
+name: KeibaMetrics KRS Output Schema Capture
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-krs-output-schema-capture.yml"
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture KRS structured response from frozen R12
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, urllib.request, sys
+          sys.path.insert(0,"runtime")
+          from jra_evidence_to_base_production import load_mapping, attach_production_ledger_to_request
+          from jra_index_provenance_builder import materialize_index_provenance
+          from jra_krs_input_builder_production import build_krs_input
+          req=json.load(open("runtime/requests/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
+          mp=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          req=attach_production_ledger_to_request(req,mp)
+          req=materialize_index_provenance(req)
+          req=build_krs_input(req)
+          kinput=req["krs_input_data"]
+          kinput.setdefault("simulation",{})["run_count"]=5000
+          kinput["simulation"]["master_seed"]=int(req["seed"])
+          payload={"race_id":req["race_id"],"input_data":kinput,"mode":req.get("mode","SIM-STD"),"seed":int(req["seed"]),"input_class":"SHADOW-SCHEMA-CAPTURE"}
+          data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+          rq=urllib.request.Request("https://quorumprobe-production.up.railway.app/krs/execute",data=data,headers={"content-type":"application/json"},method="POST")
+          with urllib.request.urlopen(rq,timeout=360) as x:
+              body=json.loads(x.read().decode())
+          print("KRS_SCHEMA_KEYS="+json.dumps(sorted(body.keys()),ensure_ascii=False))
+          def shape(v,depth=0):
+              if depth>4:return type(v).__name__
+              if isinstance(v,dict):return {k:shape(x,depth+1) for k,x in list(v.items())[:50]}
+              if isinstance(v,list):return {"type":"list","len":len(v),"sample":[shape(x,depth+1) for x in v[:2]]}
+              return type(v).__name__
+          print("KRS_RESPONSE_SHAPE="+json.dumps(shape(body),ensure_ascii=False,separators=(",",":")))
+          print("KRS_RESPONSE_FULL="+json.dumps(body,ensure_ascii=False,separators=(",",":")))
+          PY
