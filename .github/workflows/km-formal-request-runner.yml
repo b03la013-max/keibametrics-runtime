@@ -47,6 +47,8 @@ jobs:
           from jra_krs_input_builder_production import build_krs_input
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
+          from evidence_feature_compiler import compile_evidence_feature_ledger
+          from capital_policy import resolve_capital_policy
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
@@ -59,8 +61,13 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+          prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          source_snapshot_declared=str(req.get("source_snapshot_sha256") or (req.get("explicit_engine_hsv_provenance") or {}).get("source_snapshot_sha256") or "")
+          evidence_compiler=compile_evidence_feature_ledger(
+              req.get("race_id"),source_snapshot_declared,req.get("runners") or [],prod_map
+          )
+          req["evidence_feature_compiler_attestation"]=evidence_compiler
           if not isinstance(req.get("index_provenance_ledger"),dict) or not req.get("index_provenance_ledger"):
-              prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
               req=attach_production_ledger_to_request(req,prod_map)
           req=materialize_index_provenance(req)
           if not isinstance(req.get("krs_input_data"),dict) or not req.get("krs_input_data"):
@@ -80,6 +87,13 @@ jobs:
           stage_manifest={}
           def stage(name, **evidence):
               stage_manifest[name]={"status":"PASS", **evidence}
+
+          stage("EVIDENCE_FEATURE_COMPILER_VERIFIED",
+                profile=evidence_compiler.get("profile"),
+                mapping_id=evidence_compiler.get("mapping_id"),
+                runner_count=evidence_compiler.get("runner_count"),
+                ledger_sha256=evidence_compiler.get("sha256"),
+                freehand_numeric_score_allowed=False)
 
           def call(base,path,payload=None,method="POST",timeout=300):
               data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
@@ -287,16 +301,16 @@ jobs:
           if mec_required:
               mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
               mec_check=validate_mec_plan(mec)
-              tickets=mec["tickets"]
-              expected_total=int(mec["minimum_required_capital"])
-              final_bet_type_dispositions=mec["bet_type_dispositions"]
+              capital_decision=resolve_capital_policy(req,mec)
               final_freeze_timestamp=datetime.now(timezone.utc).isoformat()
               if temporal_mode=="FORMAL-PRE-RACE":
                   assert dt(final_freeze_timestamp).astimezone(timezone.utc) < post_utc, f"MEC_FINAL_FREEZE_POST_START:{final_freeze_timestamp}>={scheduled_post}"
               stage("MATERIAL_COVERAGE_UNIVERSE_VERIFIED",
                     coverage_unit_count=mec["coverage_unit_count"],
                     semantic_pair_count=mec["semantic_pair_count"],
-                    semantic_third_count=mec["semantic_third_count"])
+                    semantic_third_count=mec["semantic_third_count"],
+                    semantic_tail_floor_count=mec.get("semantic_tail_floor_count"),
+                    precompression_semantic_universe=mec.get("precompression_semantic_universe"))
               stage("MINIMUM_EFFICIENT_COVERAGE_VERIFIED",
                     mec_sha256=mec["sha256"],
                     ticket_count=mec["ticket_count"],
@@ -304,15 +318,38 @@ jobs:
                     material_coverage_ratio=mec["material_coverage_ratio"],
                     diagnostic_width_band=mec["diagnostic_width_band"],
                     fixed_ticket_cap=None)
-              stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=True, source="MEC")
-              stage("TICKET_CANONICAL_VERIFIED", ticket_count=len(tickets), source="MEC")
+              stage("CAPITAL_POLICY_VERIFIED",
+                    profile=capital_decision["profile"],
+                    mode=capital_decision["mode"],
+                    compatibility=capital_decision["compatibility"],
+                    decision=capital_decision["decision"],
+                    required_capital=capital_decision["required_capital"],
+                    capital_limit=capital_decision["capital_limit"])
+              final_no_bet=bool(capital_decision["no_bet"])
+              if final_no_bet:
+                  tickets=[]
+                  expected_total=0
+                  final_bet_type_dispositions=[
+                    {"bet_type":str(bt).upper(),"status":"NO-BET","reason":capital_decision["reason"]}
+                    for bt in req["available_bet_types"]
+                  ]
+              else:
+                  tickets=mec["tickets"]
+                  expected_total=int(mec["minimum_required_capital"])
+                  final_bet_type_dispositions=mec["bet_type_dispositions"]
+              stage("BET_TYPE_DISPOSITIONS_VERIFIED", verified=True, source="MEC_CAPITAL_POLICY")
+              stage("TICKET_CANONICAL_VERIFIED", ticket_count=len(tickets), source="MEC_CAPITAL_POLICY")
               stage("CAPITAL_COMPATIBILITY_VERIFIED",
-                    policy="MINIMUM_REQUIRED_CAPITAL_ONLY_NO_EXTERNAL_BANKROLL_CAP",
-                    minimum_required_capital=expected_total)
+                    compatibility=capital_decision["compatibility"],
+                    decision=capital_decision["decision"],
+                    minimum_required_capital=mec["minimum_required_capital"],
+                    executable_investment=expected_total)
               stage("FINAL_TICKET_FREEZE", final_freeze_timestamp=final_freeze_timestamp)
           else:
               mec=None
               mec_check=None
+              capital_decision={"profile":"LEGACY","mode":"LEGACY","compatibility":"LEGACY","decision":"EXECUTE_FULL_MEC","no_bet":False,"sha256":None}
+              final_no_bet=False
               tickets=req["tickets"]
               expected_total=int(req["total_investment"])
               final_bet_type_dispositions=req["bet_type_dispositions"]
@@ -320,6 +357,8 @@ jobs:
 
           final_package=dict(req["final_prediction_package"])
           final_package["jra_adapter_identity"]=adapter_identity
+          final_package["evidence_feature_compiler_attestation"]=evidence_compiler
+          final_package["capital_policy_decision"]=capital_decision
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
           final_package["prediction_utility_metrics"]={k:conformance.get(k) for k in ["runner_count","ranking_complete","active_w_count","active_p2_count","active_p3_count","purchased_head_count","noncapitalized_active_w","expected_pair_count","pair_purchase_count","pair_protect_count","pair_exclude_count","pair_purchase_density","expected_third_count","third_purchase_count","third_protect_count","third_exclude_count","third_purchase_density","head_stake","max_head","max_head_stake","head_capital_concentration","bet_type_stake","total_investment"]}
@@ -375,7 +414,7 @@ jobs:
 
           final_payload={
             "race_id":race_id,
-            "no_bet":False,
+            "no_bet":final_no_bet,
             "krs_required":True,
             "krs_executable":True,
             "krs_run_receipt":run,
@@ -384,7 +423,7 @@ jobs:
             "final_ticket":{
               "finalized":True,
               "frozen_at":final_freeze_timestamp,
-              "no_bet":False,
+              "no_bet":final_no_bet,
               "total_investment":expected_total,
               "tickets":tickets,
               "available_bet_types":req["available_bet_types"],
@@ -429,6 +468,8 @@ jobs:
             "orientation_exclusions":req.get("orientation_exclusions"),
             "krs_prediction_utility":utility,
             "minimum_efficient_coverage":mec,
+            "capital_policy_decision":capital_decision,
+            "evidence_feature_compiler_attestation":evidence_compiler,
             "final_prediction_package":final_package,
             "final_ticket":final_payload["final_ticket"],
             "pre_krs_receipt":p,
@@ -476,6 +517,9 @@ jobs:
             "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"]},
             "ticket_count":len(tickets),
             "total_investment":expected_total,
+            "no_bet":final_no_bet,
+            "capital_policy_decision":capital_decision["decision"],
+            "evidence_feature_compiler_sha256":evidence_compiler["sha256"],
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
             "base44_orchestration":conformance["base44_execution_session_id"],
             "bet_type_dispositions_verified":True if mec_required else conformance["bet_type_dispositions_verified"],
