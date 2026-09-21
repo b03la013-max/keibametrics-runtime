@@ -39,7 +39,7 @@ jobs:
           import json, os, urllib.request, urllib.error, sys
           sys.path.insert(0,"runtime")
           from post_result_learning import build_post_result_review, build_learning_state
-          from krs_oos_promotion_gate import build_oos_measurement
+          from krs_oos_promotion_gate import build_oos_measurement, evaluate_r30
           BASE="https://quorumprobe-production.up.railway.app"
           with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
               p=json.load(f)
@@ -88,6 +88,15 @@ jobs:
           with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
               json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
+          measurements=[]
+          for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
+              if not fn.endswith(".json"): continue
+              with open(os.path.join("runtime","krs_oos_measurements",fn),encoding="utf-8") as fh:
+                  measurements.append(json.load(fh))
+          r30=evaluate_r30(measurements)
+          with open(os.path.join("runtime","krs_oos_status.json"),"w",encoding="utf-8") as fh:
+              json.dump(r30,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           summary={
             "race_id":p["race_id"],
             "status":"RESULT_E2E_PASS",
@@ -104,7 +113,9 @@ jobs:
             "pfs":review.get("capital",{}).get("pfs"),
             "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification"),
             "krs_oos_eligible":oos.get("eligible"),
-            "krs_oos_measurement_sha256":oos.get("sha256")
+            "krs_oos_measurement_sha256":oos.get("sha256"),
+            "krs_r30_status":r30.get("status"),
+            "krs_r30_eligible_races":r30.get("eligible_races")
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -115,7 +126,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json
+          git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
             git pull --rebase origin main
