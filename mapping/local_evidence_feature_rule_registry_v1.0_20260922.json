@@ -1,0 +1,98 @@
+{
+  "registry_id": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
+  "status": "ACTIVE / PRODUCTION-EXECUTION-CONFORMANCE / NON-NUMERICAL / FAIL-CLOSED",
+  "purpose": "Require rule_id, evidence refs, source fact, timestamp and finite score for every LOCAL numerical component; prevent freehand score injection.",
+  "score_semantics": "0..100 component score as defined by LOCAL canon/venue rule; component weights remain those of v4.12 Rev.3.",
+  "common_component_sets": {
+    "HPI-L": {
+      "recent_finish": 20,
+      "finish_margin": 15,
+      "passing_position_content": 20,
+      "class_level": 15,
+      "opponent_strength": 15,
+      "repeatability": 15
+    },
+    "CFIg-L": {
+      "same_venue": 25,
+      "same_distance": 20,
+      "similar_distance": 15,
+      "course_geometry": 15,
+      "turn_direction": 10,
+      "draw_style_fit": 10,
+      "going_fit": 5
+    },
+    "RFIg-L": {
+      "running_style_repro": 15,
+      "position_acquisition": 15,
+      "position_maintenance": 15,
+      "third_corner_progression": 15,
+      "leadership_stalk_acceptance": 10,
+      "kickback_traffic_tolerance": 10,
+      "going_adaptation": 10,
+      "jockey_reproducibility": 10
+    },
+    "BVIg-L": {
+      "sire_fit": 30,
+      "damsire_fit": 20,
+      "distance_sustain": 15,
+      "distance_trait": 10,
+      "surface_sand_fit": 15,
+      "venue_stat": 5,
+      "physical_style_fit": 5
+    },
+    "JTI-L": {
+      "venue_recent": 25,
+      "distance_record": 15,
+      "stable_combo": 15,
+      "position_acquisition_skill": 15,
+      "progression_timing_skill": 10,
+      "favorite_reliability": 10,
+      "longshot_record": 10
+    },
+    "CSI-L": {
+      "stable_venue_class_distance": 25,
+      "transfer_preparation": 15,
+      "layoff_preparation": 15,
+      "jockey_use_continuity": 10,
+      "cci_specificity": 15,
+      "tri_vertical_comparison": 15,
+      "rotation_management": 5
+    },
+    "BWI-L": {
+      "good_weight_range": 25,
+      "weight_change_reason_rate": 15,
+      "carried_weight": 15,
+      "age_growth": 10,
+      "interval": 10,
+      "fatigue_rebound": 10,
+      "transport_season": 5,
+      "paddock": 10
+    },
+    "DCR": {
+      "official_recent_coverage": 25,
+      "same_venue_distance_comparability": 20,
+      "training_comment_trial": 15,
+      "bodyweight_range_coverage": 15,
+      "same_day_gci_coverage": 15,
+      "late_odds_changes_coverage": 10
+    },
+    "NCI": {
+      "current_class": 20,
+      "previous_class": 15,
+      "recent_opponent_class": 20,
+      "race_set_level": 15,
+      "class_change_pressure": 10,
+      "transfer_class": 10,
+      "class_relative_time": 10
+    }
+  },
+  "required_fields": [
+    "score",
+    "rule_id",
+    "evidence_refs",
+    "source_fact",
+    "source_timestamp"
+  ],
+  "wildcard_rules_allowed": false,
+  "missing_policy": "Missing components are not silently zero. Any neutral/missing score must carry an explicit current canonical/venue missing rule_id and its DCR consequence."
+}

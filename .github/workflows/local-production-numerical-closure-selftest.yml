@@ -1,0 +1,33 @@
+name: LOCAL Production Numerical Closure Selftest
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/local_*.py"
+      - "mapping/local_*.json"
+      - "governance/KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260922-R1.json"
+      - "tests/test_local_production_numerical_closure.py"
+      - ".github/workflows/local-production-numerical-closure-selftest.yml"
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run LOCAL numerical closure tests
+        run: python -m unittest -v tests.test_local_production_numerical_closure
+      - name: Verify registry declarations
+        run: |
+          python - <<'PY'
+          import json
+          for p in [
+            "mapping/local_base_index_mapping_registry_v1.0_20260922.json",
+            "mapping/local_evidence_feature_rule_registry_v1.0_20260922.json",
+            "governance/KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260922-R1.json",
+          ]:
+              x=json.load(open(p,encoding="utf-8"))
+              print(p, x.get("registry_id") or x.get("profile_id"), x.get("status"))
+          print("LOCAL_NUMERICAL_CLOSURE_SELFTEST_PASS")
+          PY
