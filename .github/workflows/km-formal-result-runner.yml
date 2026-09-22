@@ -40,6 +40,7 @@ jobs:
           sys.path.insert(0,"runtime")
           from post_result_learning import build_post_result_review, build_learning_state
           from krs_oos_promotion_gate import build_oos_measurement, evaluate_r30
+          from mec_r4_shadow import settle_mec_r4_shadow
           BASE="https://quorumprobe-production.up.railway.app"
           with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
               p=json.load(f)
@@ -75,6 +76,20 @@ jobs:
           assert os.path.exists(final_path), f"IMMUTABLE_FINAL_ARTIFACT_MISSING:{final_path}"
           with open(final_path,encoding="utf-8") as fh:
               final_artifact=json.load(fh)
+
+          # Settle the separately frozen pre-result MEC R4 SHADOW, if available.
+          # Never mutate the shadow artifact or Production FINAL.
+          shadow_settlement=None
+          shadow_path=os.path.join("runtime","mec_shadow_artifacts",p["race_id"]+".json")
+          if os.path.exists(shadow_path):
+              with open(shadow_path,encoding="utf-8") as fh:
+                  shadow=json.load(fh)
+              assert shadow.get("source_immutable_final_sha256")==final_artifact.get("sha256"), "MEC_R4_SHADOW_FINAL_LINEAGE_MISMATCH"
+              shadow_settlement=settle_mec_r4_shadow(shadow,p)
+              os.makedirs(os.path.join("runtime","mec_shadow_results"),exist_ok=True)
+              with open(os.path.join("runtime","mec_shadow_results",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                  json.dump(shadow_settlement,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           review=build_post_result_review(p,final_artifact)
           learning=build_learning_state(review)
           oos=build_oos_measurement(review,final_artifact)
@@ -115,7 +130,8 @@ jobs:
             "krs_oos_eligible":oos.get("eligible"),
             "krs_oos_measurement_sha256":oos.get("sha256"),
             "krs_r30_status":r30.get("status"),
-            "krs_r30_eligible_races":r30.get("eligible_races")
+            "krs_r30_eligible_races":r30.get("eligible_races"),
+            "mec_r4_shadow_settlement_sha256":shadow_settlement.get("sha256") if shadow_settlement else None
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -127,6 +143,7 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json
+          if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json; fi
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
             git pull --rebase origin main
