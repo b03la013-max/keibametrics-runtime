@@ -5,8 +5,10 @@ from fastapi import FastAPI, HTTPException
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 from post_result_learning import build_post_result_review, build_learning_state
+from minimum_efficient_coverage import validate_mec_plan, MEC_PROFILE
+from capital_policy import PROFILE as CAPITAL_PROFILE
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.2-20260923"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.3-20260923"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -146,11 +148,78 @@ def final(p:Dict[str,Any]):
     run=p.get("krs_run_receipt")
     if not isinstance(run,dict) or not verify_envelope(run): errs.append("KRS_RUN_RECEIPT_INVALID")
     elif (run.get("receipt") or {}).get("status")!="EXECUTED": errs.append("KRS_NOT_EXECUTED")
-    if not isinstance(p.get("final_prediction_package"),dict): errs.append("FINAL_PREDICTION_PACKAGE_MISSING")
+    fpp=p.get("final_prediction_package")
+    if not isinstance(fpp,dict): errs.append("FINAL_PREDICTION_PACKAGE_MISSING")
     ft=p.get("final_ticket")
     if not isinstance(ft,dict): errs.append("FINAL_TICKET_MISSING")
     if not p.get("final_freeze_timestamp"): errs.append("FINAL_FREEZE_TIMESTAMP_MISSING")
-    artifact={"final_prediction_package":p.get("final_prediction_package"),"final_ticket":ft,
+
+    mec=p.get("minimum_efficient_coverage")
+    if not isinstance(mec,dict):
+        errs.append("MEC_MISSING")
+        mec_check=None
+    else:
+        try:
+            mec_check=validate_mec_plan(mec)
+            if mec.get("profile")!=MEC_PROFILE: errs.append("MEC_PROFILE_MISMATCH")
+            if mec.get("precompression_semantic_universe") is not True: errs.append("MEC_PRECOMPRESSION_UNIVERSE_REQUIRED")
+        except Exception as e:
+            mec_check=None
+            errs.append("MEC_INVALID:"+str(e))
+
+    capital=p.get("capital_policy_decision")
+    if not isinstance(capital,dict):
+        errs.append("CAPITAL_DECISION_MISSING")
+    else:
+        if str(capital.get("profile") or "")!=CAPITAL_PROFILE: errs.append("CAPITAL_PROFILE_MISMATCH")
+        if isinstance(mec,dict) and str(capital.get("mec_sha256") or "")!=str(mec.get("sha256") or ""):
+            errs.append("CAPITAL_MEC_HASH_MISMATCH")
+        if float(capital.get("material_coverage_ratio",0) or 0)!=1.0:
+            errs.append("CAPITAL_MATERIAL_COVERAGE_INCOMPLETE")
+
+    trace=p.get("ticket_transport_trace")
+    if not isinstance(trace,dict):
+        errs.append("TICKET_TRANSPORT_TRACE_MISSING")
+    else:
+        for k in ("fpp_sha256","mec_sha256","candidate_count","selected_count","capital_decision_sha256"):
+            if k not in trace: errs.append("TICKET_TRANSPORT_TRACE_FIELD_MISSING:"+k)
+        if isinstance(mec,dict) and str(trace.get("mec_sha256") or "")!=str(mec.get("sha256") or ""):
+            errs.append("TRACE_MEC_HASH_MISMATCH")
+        if isinstance(capital,dict) and str(trace.get("capital_decision_sha256") or "")!=str(capital.get("sha256") or ""):
+            errs.append("TRACE_CAPITAL_HASH_MISMATCH")
+
+    stage_manifest=p.get("execution_stage_manifest")
+    required_stages=["SOURCE_FREEZE","RUNNER_UNIVERSE","NUMERICAL_MATERIALIZATION","INDEX_PROVENANCE","STATIC_FREEZE","PRE_KRS","KRS","KRS_UTILITY","MEC","CAPITAL","FINAL_TICKET_FREEZE"]
+    if not isinstance(stage_manifest,list):
+        errs.append("EXECUTION_STAGE_MANIFEST_MISSING")
+    else:
+        names={str(x.get("stage")) for x in stage_manifest if isinstance(x,dict)}
+        missing=[x for x in required_stages if x not in names]
+        if missing: errs.append("EXECUTION_STAGE_MISSING:"+",".join(missing))
+
+    if isinstance(ft,dict):
+        ts=ft.get("tickets")
+        if not isinstance(ts,list): errs.append("FINAL_TICKET_LIST_MISSING")
+        total=ft.get("total_investment")
+        if isinstance(ts,list):
+            stake_sum=sum(int(x.get("stake",0)) for x in ts if isinstance(x,dict))
+            if total is None or int(total)!=stake_sum: errs.append("FINAL_TICKET_STAKE_MISMATCH")
+        if isinstance(capital,dict) and isinstance(mec,dict):
+            no_bet=bool(capital.get("no_bet"))
+            if no_bet and ts: errs.append("NO_BET_WITH_TICKETS")
+            if not no_bet:
+                if int(ft.get("total_investment") or -1)!=int(mec.get("minimum_required_capital") or -2):
+                    errs.append("FINAL_CAPITAL_MEC_MISMATCH")
+                if int(trace.get("selected_count",-1) if isinstance(trace,dict) else -1)!=len(ts or []):
+                    errs.append("TRACE_SELECTED_COUNT_MISMATCH")
+
+    if isinstance(run,dict) and str((run.get("receipt") or {}).get("race_id") or "")!=rid:
+        errs.append("KRS_RUN_RACE_ID_MISMATCH")
+
+    artifact={"final_prediction_package":fpp,"final_ticket":ft,
+      "minimum_efficient_coverage":mec,"mec_verification":mec_check,
+      "capital_policy_decision":capital,"ticket_transport_trace":trace,
+      "execution_stage_manifest":stage_manifest,
       "final_freeze_timestamp":p.get("final_freeze_timestamp"),"ticket_sha256":sha_obj(ft or {}),
       "krs_receipt_sha256":(run or {}).get("receipt_sha256")}
     return signed_receipt("FINAL",rid,"PASS" if not errs else "FAIL",artifact,errs)
@@ -170,6 +239,10 @@ def formal(p:Dict[str,Any]):
     fin=final({"family_id":FAMILY,"race_id":rid,"krs_run_receipt":run,
                "final_prediction_package":p.get("final_prediction_package"),
                "final_ticket":p.get("final_ticket"),
+               "minimum_efficient_coverage":p.get("minimum_efficient_coverage"),
+               "capital_policy_decision":p.get("capital_policy_decision"),
+               "ticket_transport_trace":p.get("ticket_transport_trace"),
+               "execution_stage_manifest":p.get("execution_stage_manifest"),
                "final_freeze_timestamp":p.get("final_freeze_timestamp")})
     if fin["receipt"]["status"]!="PASS":
         return signed_receipt("FORMAL",rid,"FAIL",
