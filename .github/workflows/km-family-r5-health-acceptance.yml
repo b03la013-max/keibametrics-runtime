@@ -61,7 +61,7 @@ jobs:
           assert route["parent_profile"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260921-R5"
           assert route["mec_profile"]==MEC_PROFILE
           assert route["family_routes"]["JRA"]["runtime_status"]=="EXECUTABLE"
-          assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["LOCAL"]["runtime_status"]
+          assert route["family_routes"]["LOCAL"]["runtime_status"]=="EXECUTABLE"
           assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["BAN"]["runtime_status"]
 
           result=json.load(open("runtime/results/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
