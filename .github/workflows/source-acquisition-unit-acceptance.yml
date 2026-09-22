@@ -1,0 +1,36 @@
+name: Source Acquisition Unit Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'tests/test_source_acquisition.py'
+      - 'governance/KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1.md'
+      - '.github/workflows/source-acquisition-unit-acceptance.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'tests/test_source_acquisition.py'
+      - 'governance/KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1.md'
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compile source acquisition modules
+        run: |
+          python -m py_compile runtime/local_physical/source_acquisition.py
+          python -m py_compile runtime/local_physical/app_v15.py
+      - name: Run source acquisition integrity tests
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest -q tests/test_source_acquisition.py
