@@ -1,0 +1,60 @@
+{
+  "registry_id": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
+  "family": "LOCAL",
+  "status": "ACTIVE / PRODUCTION-EXECUTION / FORMULA-PRESERVING / PARTIAL-NUMERICAL-CLOSURE / FAIL-CLOSED",
+  "effective_at": "2026-09-22T22:45:00+09:00",
+  "source_authority": "ケイバメトリクス地方版 v4.12 Rev.3",
+  "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "materializer": "runtime/local_evidence_to_base_production.py",
+  "evidence_contract": "runtime/local_evidence_feature_normalizer_production.py",
+  "provenance_builder": "runtime/local_index_provenance_builder.py",
+  "exact_common_indices": [
+    "HPI-L",
+    "CFIg-L",
+    "RFIg-L",
+    "BVIg-L",
+    "JTI-L",
+    "CSI-L",
+    "BWI-L",
+    "DCR",
+    "NCI",
+    "TPI-L"
+  ],
+  "externally_rule_bound_indices": [
+    "EVI/CEV",
+    "CCI",
+    "TRI",
+    "PRI",
+    "OPI-V",
+    "DRS",
+    "URP",
+    "HCS",
+    "ZAI-WIN",
+    "ZAI-PLACE",
+    "SRI-L",
+    "T3I-L",
+    "F3S-L",
+    "WCI",
+    "W-AKI",
+    "P2-AKI",
+    "P3-AKI",
+    "ASI",
+    "RSI"
+  ],
+  "exact_derived_formulas": {
+    "TPI-L": "0.18*HPI-L+0.16*CFIg-L+0.14*RFIg-L+0.08*BVIg-L+0.08*JTI-L+0.08*CSI-L+0.08*BWI-L+0.10*NCI+0.10*EVI, then min-major penalty",
+    "F3S-L": "0.25*SRI-L+0.20*TPI-L+0.18*EVI+0.14*RFIg-L+0.12*CFIg-L+0.06*NCI+0.05*T3I-L"
+  },
+  "formal_full_requirement": {
+    "required_manifest_resolved": true,
+    "every_required_numeric_index_has_value_and_provenance": true,
+    "formula_unresolved_zero": true,
+    "unresolved_zero": true
+  },
+  "calibration_status": "UNCALIBRATED_RULE_BASED_LOCAL_INDEX_SYSTEM",
+  "notes": [
+    "This registry operationalizes existing formulas; it does not create new predictive weights.",
+    "Indices without a complete common numeric formula require a venue/canonical registered rule artifact and cannot be freehand-scored.",
+    "50-55 missing handling is allowed only when the current canon/venue rule explicitly binds the chosen value and DCR impact."
+  ]
+}
