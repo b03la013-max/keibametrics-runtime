@@ -6,8 +6,9 @@ import app as legacy
 from fastapi import FastAPI, HTTPException
 
 from source_acquisition import SOURCE_PROFILE, acquire_sources, verify_source_artifact
+from nar_source_manifest import PROFILE as NAR_MANIFEST_PROFILE, build_local_nar_manifest
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-20260923-SOURCE-ACQUISITION"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.1-20260923-NAR-SOURCE-ADAPTER"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -46,12 +47,26 @@ def health():
             caps.insert(0, c)
     h["capabilities"] = caps
     h["source_acquisition_sha256"] = legacy.sha_file("/opt/km/source_acquisition.py")
+    h["nar_source_manifest_profile"] = NAR_MANIFEST_PROFILE
+    h["nar_source_manifest_sha256"] = legacy.sha_file("/opt/km/nar_source_manifest.py")
+    if "SOURCE_MANIFEST_LOCAL_NAR" not in caps:
+        caps.insert(0, "SOURCE_MANIFEST_LOCAL_NAR")
+    h["capabilities"] = caps
     return h
 
 
 @app.post("/verify")
 def verify(payload: Dict[str, Any]):
     return legacy.verify(payload)
+
+
+@app.post("/source/manifest/local")
+def source_manifest_local(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    try:
+        return build_local_nar_manifest(payload)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @app.post("/source/acquire")
