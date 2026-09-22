@@ -14,7 +14,23 @@ def resolve_family_runtime(request, contracts):
     if not cfg:
         raise FamilyRuntimeError(f"UNKNOWN_FAMILY:{fam}")
     if fam=="JRA":
-        return {"family":fam,"executable":True,"contract":cfg,"source":"CANONICAL_CONTRACT"}
+        return {"family":fam,"executable":True,"contract":cfg,"external_endpoint":cfg.get("external_endpoint"),"source":"CANONICAL_CONTRACT"}
+
+    if fam=="LOCAL":
+        endpoint=str(cfg.get("external_endpoint") or "").rstrip("/")
+        required=["engine_sha256","parameter_map_sha256","signed_receipt_authority","runtime"]
+        missing=[k for k in required if not str(cfg.get(k) or "").strip()]
+        if not endpoint.startswith("https://"):
+            raise FamilyRuntimeError("LOCAL_CANONICAL_EXTERNAL_ENDPOINT_INVALID")
+        if missing:
+            raise FamilyRuntimeError(f"LOCAL_CANONICAL_CONTRACT_INCOMPLETE:{missing}")
+        return {
+          "family":fam,
+          "executable":True,
+          "contract":cfg,
+          "external_endpoint":endpoint,
+          "source":"CANONICAL_VERIFIED_LOCAL_CONTRACT"
+        }
 
     att=request.get("family_runtime_attestation")
     if not isinstance(att,dict):
