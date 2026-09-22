@@ -1,0 +1,126 @@
+name: LOCAL NAR Runner Universe Live Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'governance/KM-LOCAL-NAR-RUNNER-UNIVERSE-ACTIVATION-20260923-R1.json'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify official universe extraction and PRE_KRS hard gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          RID="KM-LOCAL-NAR-RUNNER-UNIVERSE-ACCEPT-20260923-T01"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def call(path,payload=None,method="POST",timeout=300):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(BASE+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          hc,h=call("/health",None,"GET",60)
+          assert hc==200 and h["status"]=="READY",h
+          assert h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE",h
+          assert h["nar_runner_universe_profile"]=="KM-LOCAL-NAR-RUNNER-UNIVERSE-v1.0-20260923"
+          assert "SOURCE_RUNNER_UNIVERSE" in h["capabilities"]
+
+          mc,m=call("/source/manifest/local",{
+            "family_id":"LOCAL","race_id":RID,"venue_id":"KCH","race_date":"2026-09-13","race_no":3,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":False,"include_odds":False
+          },timeout=60)
+          assert mc==200,m
+          sc,source=call("/source/acquire",m,timeout=180)
+          assert sc==200 and (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",source
+          art=source["artifact"]
+          u=art["official_runner_universe"]
+          assert u["runner_count"]==12,u
+          expected={
+            "1":"タマモアマルフィ","2":"パウラメロディーア","3":"ラブペイトー",
+            "4":"サンライズジャッジ","5":"オリヴィオリヴィ","6":"キンデアポチャン",
+            "7":"マジックステラ","8":"サンシャインビーチ","9":"コスモタキシード",
+            "10":"クレインヴォイス","11":"ベアエクスプレス","12":"タスクディライト"
+          }
+          got={str(x["runner_id"]):x["name"] for x in u["runners"]}
+          assert got==expected,(got,expected)
+          weights={str(x["runner_id"]):(x["body_weight"],x["body_weight_change"]) for x in u["runners"]}
+          assert weights["1"]==(488,-1),weights
+          assert weights["2"]==(506,11),weights
+          assert weights["3"]==(427,-16),weights
+
+          def horse(no,name,base=60):
+              return {
+                "horse_no":no,"name":name,
+                "hsv":{k:base+((i%5)-2) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%3)-1) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":3},
+                "static_roles":[]
+              }
+
+          common={
+            "race":{"race_id":RID,"prediction_id":RID+"-P1","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+            "environment":{"course_family":"LOCAL-KCH","surface":"dirt","distance":1400,"going":"good","field_size":12,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+            "simulation":{"run_count":5000,"master_seed":20260923,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500}
+          }
+
+          # Negative control: incomplete universe must be rejected by external PRE_KRS.
+          bad={**common,"horses":[horse(i,expected[str(i)],60+i) for i in (1,2,3)]}
+          bc,bout=call("/pre-krs",{
+            "family_id":"LOCAL","race_id":RID,"source_receipt":source,
+            "required_index_unresolved":0,"full_numerical_calculation":True,
+            "static_prediction_frozen":True,"krs_input_data":bad
+          },timeout=60)
+          assert bc==422 and "SOURCE_RUNNER_UNIVERSE_MISMATCH" in str(bout), (bc,bout)
+
+          # Positive control: complete official 12-runner universe passes PRE_KRS.
+          good={**common,"horses":[horse(i,expected[str(i)],55+i) for i in range(1,13)]}
+          pc,pre=call("/pre-krs",{
+            "family_id":"LOCAL","race_id":RID,"source_receipt":source,
+            "required_index_unresolved":0,"full_numerical_calculation":True,
+            "static_prediction_frozen":True,"krs_input_data":good
+          },timeout=120)
+          assert pc==200 and (pre.get("receipt") or {}).get("status")=="PASS",(pc,pre)
+          vc,v=call("/verify",pre,timeout=60)
+          assert vc==200 and v["valid"] is True,v
+
+          kc,run=call("/krs/execute",{
+            "family_id":"LOCAL","race_id":RID,"krs_input_data":good,"run_count":5000,"seed":20260923
+          },timeout=900)
+          assert kc==200 and (run.get("receipt") or {}).get("status")=="EXECUTED",(kc,run)
+          assert int(run["artifact"]["actual_run_count"])==5000,run
+          rc,rv=call("/verify",run,timeout=60)
+          assert rc==200 and rv["valid"] is True,rv
+
+          print("LOCAL_NAR_RUNNER_UNIVERSE_ACCEPTANCE_PASS="+json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "runner_universe_profile":h["nar_runner_universe_profile"],
+            "runner_count":u["runner_count"],
+            "runner_universe_sha256":art["official_runner_universe_sha256"],
+            "source_receipt":source["receipt_sha256"],
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "bodyweight_sample":{"1":weights["1"],"2":weights["2"],"3":weights["3"]},
+            "negative_incomplete_universe_gate":"PASS",
+            "pre_krs_receipt":pre["receipt_sha256"],
+            "krs_receipt":run["receipt_sha256"],
+            "actual_run_count":run["artifact"]["actual_run_count"]
+          },ensure_ascii=False,separators=(",",":")))
+          PY
