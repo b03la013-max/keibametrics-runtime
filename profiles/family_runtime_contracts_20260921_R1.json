@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R4",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-PHYSICAL-RUNTIME-VERIFIED",
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R5",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-FULL-LIFECYCLE-RUNTIME-VERIFIED",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,11 +12,11 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "EXECUTABLE / PHYSICAL-KRS-RUNTIME-VERIFIED / SYNTHETIC-E2E-PASS / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
+      "execution_status": "EXECUTABLE / PHYSICAL-RUNTIME-VERIFIED / FULL-LIFECYCLE-SIGNED-E2E-PASS / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "地方版 v4.12 Rev.3",
       "krs": "v1.6-KRS Rev.3",
-      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.0-20260922",
+      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922",
       "formal_guard": "FCG-LOCAL v1.1.0",
       "engine": "KRS-Engine v1.1.0",
       "parameter_map": "v0.1-provisional / PROVISIONAL_UNCALIBRATED",
@@ -29,7 +29,7 @@
         "signed_receipt_authority",
         "runtime_version"
       ],
-      "note": "Dedicated Railway LOCAL runtime is physically verified and signed synthetic FORMAL E2E acceptance passed. Production real-race FORMAL-FULL remains fail-closed until the first pre-race frozen LOCAL race completes full numerical/provenance closure and signed PRE_KRS/KRS/FINAL before post.",
+      "note": "Dedicated Railway LOCAL runtime is physically verified through complete signed lifecycle PRE_KRS -> KRS5000 -> FINAL -> FORMAL -> RESULT -> VERIFY. Settlement-safe PFS and learning-event closure are implemented. First real pre-race LOCAL race remains a separate production acceptance gate; no JRA/BAN fallback.",
       "numerical_mapping_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
       "evidence_rule_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
       "numerical_materializer": "runtime/local_evidence_to_base_production.py",
@@ -44,7 +44,7 @@
       "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
       "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
       "signed_receipt_authority": "KM-LOCAL-RUNTIME-ED25519-20260922",
-      "runtime_app_sha256": "e785a2e87bf38c849c1b9e2543d65acbc3cb7c9ca2b7d1185ca1bbf8ffb99e3d",
+      "runtime_app_sha256": "d5872a4f9054d06b4e9e05fd70c5904c50e4cca5dbaed13492a55df4784f144e",
       "acceptance": {
         "github_actions_run_id": 35743549103,
         "conclusion": "success",
@@ -55,6 +55,32 @@
         "krs_receipt": "9366170ff24c32065a13da44a385ffae304d755fdce8f15c9d866fd5fc11afa5",
         "final_receipt": "9f73df0cf32e9628775f8e1192b5abfcc47709b14ff01b7d85f3ddf21da01190",
         "formal_receipt": "265e4b4f8c5fdb964f37d8fc0bd1e0651c7516456f00ee95b4898331aa93ae5"
+      },
+      "result_endpoint": "/result",
+      "capabilities": [
+        "PRE_KRS",
+        "KRS_EXECUTE",
+        "FINAL",
+        "FORMAL",
+        "RESULT",
+        "VERIFY"
+      ],
+      "lifecycle_acceptance": {
+        "github_actions_run_id": 35746524666,
+        "conclusion": "success",
+        "acceptance_git_revision": "4556ceddb70aac6e08a7fb04f403311d367eca12",
+        "runtime_git_revision": "eab4838144d0fbd685deae8f18b8b4e5fe2d8318",
+        "requested_run_count": 5000,
+        "actual_run_count": 5000,
+        "pre_krs_receipt": "6e33ed02ea03fd89acfc49d42bd4f5d674af9c464a178f64cdabfe40151edbbb",
+        "krs_receipt": "7fddb6540a5fa0aa397a4fbbd619caa57972a1421b11856b768712fb7a932954",
+        "final_receipt": "760ab9cb94d4314e5bfac8f81e9855919b8b26d2c909bb187ceea627f5dbe75f",
+        "formal_receipt": "7329aea6f635ccb5d0d5fbd4bd20e579efef5888d5b16fd0469ea2a1a4bf7a67",
+        "result_receipt": "aee76430e7816e4b28ec622f90b090c48033b78119f15d8873a2c79f7008298a",
+        "settlement_safe_pending_zero_guard": "PASS",
+        "sample_investment": 300,
+        "sample_return": 1830,
+        "sample_pfs": 610
       }
     },
     "BAN": {
