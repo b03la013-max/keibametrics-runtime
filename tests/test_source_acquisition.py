@@ -121,3 +121,22 @@ def test_non_https_and_unapproved_hosts_are_rejected_before_fetch():
         raise AssertionError("loopback host must be rejected")
     except ValueError as e:
         assert "SOURCE_HOST_NOT_ALLOWED" in str(e)
+
+
+def test_optional_http_failure_is_recorded_but_not_formal_blocking():
+    spec={
+        "source_id":"optional-result",
+        "url":"https://www.keiba.go.jp/",
+        "source_class":"OFFICIAL_SAME_DAY_RACE_RESULT_PASSING_ORDER",
+        "authority":"NAR",
+        "official":True,
+        "required":False,
+    }
+    snap,errs=snapshot_from_bytes(
+        spec,b"not found",final_url=spec["url"],status_code=404,
+        headers={"content-type":"text/plain"},
+        fetched_at="2026-09-23T02:00:00+09:00",
+        prediction_cutoff="2026-09-23T03:00:00+09:00",
+    )
+    assert snap["http_status"]==404
+    assert errs==[]
