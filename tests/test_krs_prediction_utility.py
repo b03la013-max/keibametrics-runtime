@@ -36,3 +36,35 @@ assert u["pair_third_proposals"]==[], "third proposal only arises when pair is a
 e=evaluate_against_result(u,[1,2,3])
 assert "P2_ROLE_RESCUE" in e["rescues"]
 print("PASS",u["utility_class"],e["classification"])
+
+
+# Formal request binding regression: Production roles live in role_registry/static_prediction,
+# not under runners[].static_roles. Existing roles must be confirmations, never false rescues.
+req_formal={
+ "race_id":"TEST-FORMAL",
+ "runners":[
+   {"runner_id":"1","name":"A"},
+   {"runner_id":"2","name":"B"},
+   {"runner_id":"3","name":"C"},
+ ],
+ "static_prediction":{"roles":{"1":["W","P2","P3"],"2":["P3"],"3":["P3"]}},
+ "role_registry":[
+   {"runner_id":"1","column":"W","status":"CORE"},
+   {"runner_id":"1","column":"P2","status":"CORE"},
+   {"runner_id":"1","column":"P3","status":"CORE"},
+   {"runner_id":"2","column":"P3","status":"PROTECTED"},
+   {"runner_id":"3","column":"P3","status":"PROTECTED"},
+ ],
+ "pair_dispositions":[{"head":"1","second":"2","status":"PROTECT"}],
+ "third_dispositions":[{"head":"1","second":"2","third":"3","status":"EXCLUDE"}],
+}
+u2=build_krs_prediction_utility(req_formal,out)
+assert not any(x["horse_no"]==1 and x["proposal"]=="ADD_W_SHADOW" for x in u2["role_proposals"])
+assert any(x["horse_no"]==1 and x["role"]=="W" for x in u2["static_role_confirmations"])
+assert not any(x["horse_no"]==3 and x["proposal"]=="ADD_P3_SHADOW" for x in u2["role_proposals"])
+assert any(x["horse_no"]==3 and x["role"]=="P3" for x in u2["static_role_confirmations"])
+e2=evaluate_against_result(u2,[1,2,3])
+assert "WINNER_ROLE_CONFIRMED" in e2["supports"]
+assert "P3_ROLE_CONFIRMED" in e2["supports"]
+assert "P3_ROLE_RESCUE" not in e2["rescues"]
+print("PASS_FORMAL_BINDING",e2["classification"])
