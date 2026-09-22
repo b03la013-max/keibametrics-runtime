@@ -1,0 +1,793 @@
+{
+  "race_id": "KM-JRA-NKY-20260922-R06",
+  "family_id": "JRA",
+  "venue_id": "NKY",
+  "prediction_id": "KM-JRA-NKY-20260922-R06-PRED-R1",
+  "temporal_mode": "FORMAL-PRE-RACE",
+  "scheduled_post_at": "2026-09-22T12:40:00+09:00",
+  "external_dispatch_deadline_at": "2026-09-22T12:39:00+09:00",
+  "prediction_cutoff": "2026-09-22T12:10:00+09:00",
+  "static_freeze_timestamp": "2026-09-22T12:16:30+09:00",
+  "source_snapshot": {
+    "snapshot_id": "KM-JRA-NKY-20260922-R06-SOURCE-R1",
+    "source_class": "FORMAL-PRE-RACE-LIVE",
+    "authority": "User-provided Keibabook 12:10 + TSL 12:09 + NKY Production Canon",
+    "available_at": "2026-09-22T12:10:00+09:00",
+    "ingested_at": "2026-09-22T12:16:30+09:00",
+    "cutoff_relation": "PRE-RACE",
+    "race_identity": {
+      "venue": "中山",
+      "meeting": "4回中山7日",
+      "race_no": 6,
+      "race_name": "2歳新馬",
+      "scheduled_post_at": "2026-09-22T12:40:00+09:00",
+      "surface": "芝",
+      "distance": 2000,
+      "course": "C・右内",
+      "going": "重",
+      "weather": "晴",
+      "class": "2歳新馬",
+      "sex_condition": "混合",
+      "weight_condition": "馬齢",
+      "field_size": 8
+    },
+    "runner_manifest": [
+      {
+        "runner_id": "1",
+        "name": "ネオロマーネ"
+      },
+      {
+        "runner_id": "2",
+        "name": "シンヒダカムーン"
+      },
+      {
+        "runner_id": "3",
+        "name": "ヤマメゴリュウ"
+      },
+      {
+        "runner_id": "4",
+        "name": "パッションノーヴァ"
+      },
+      {
+        "runner_id": "5",
+        "name": "テンポアニマート"
+      },
+      {
+        "runner_id": "6",
+        "name": "メダルボーイ"
+      },
+      {
+        "runner_id": "7",
+        "name": "ゴクラクチョウカ"
+      },
+      {
+        "runner_id": "8",
+        "name": "スリーボンド"
+      }
+    ],
+    "source_refs": [
+      "KEIBABOOK_R06_SYUTUBA_1210",
+      "KEIBABOOK_R06_TRAINING",
+      "KEIBABOOK_R06_STABLE",
+      "KEIBABOOK_R06_PEDIGREE",
+      "TSL_R06_1209",
+      "NKY_V1.2_PRODUCTION_CANON"
+    ]
+  },
+  "source_snapshot_sha256": "PREFLIGHT-SNAPSHOT-SHA-PENDING-BECAUSE-EVIDENCE-COMPILER-FIRST-GATE",
+  "orchestration_ref": {
+    "authority": "BASE44",
+    "execution_session_id": "6ab1f2fd42a183fc115d5201",
+    "session_nonce": "KM-BASE44-ORCH-NKY-R06-20260922-R1",
+    "created_at": "2026-09-22T03:16:13.080679Z"
+  },
+  "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+  "jra_adapter_mode": "EXPLICIT_ENGINE_HSV",
+  "numeric_calculation_requirement": "FULL_REQUIRED",
+  "mec_profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "run_count": 5000,
+  "seed": 2026092206,
+  "mode": "SIM-STD",
+  "runners": [
+    {
+      "runner_id": "1",
+      "name": "ネオロマーネ",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H1:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。ネオロマーネの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H1:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。ネオロマーネの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H1:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重470kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H1:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H1:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H1:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 10.05% を使用。"
+        },
+        "surface_fit": {
+          "category": "NEUTRAL",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H1:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H1:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H1:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "2",
+      "name": "シンヒダカムーン",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H2:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。シンヒダカムーンの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H2:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。シンヒダカムーンの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H2:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重476kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H2:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H2:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H2:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 5.64% を使用。"
+        },
+        "surface_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H2:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H2:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H2:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "3",
+      "name": "ヤマメゴリュウ",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H3:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。ヤマメゴリュウの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H3:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。ヤマメゴリュウの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H3:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重490kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H3:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H3:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H3:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 12.65% を使用。"
+        },
+        "surface_fit": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H3:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H3:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H3:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "4",
+      "name": "パッションノーヴァ",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H4:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。パッションノーヴァの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H4:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。パッションノーヴァの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H4:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重488kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H4:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H4:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H4:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 3.68% を使用。"
+        },
+        "surface_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H4:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H4:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H4:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "5",
+      "name": "テンポアニマート",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H5:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。テンポアニマートの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H5:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。テンポアニマートの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H5:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重498kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H5:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H5:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H5:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 32.67% を使用。"
+        },
+        "surface_fit": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H5:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H5:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H5:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "6",
+      "name": "メダルボーイ",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H6:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。メダルボーイの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H6:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。メダルボーイの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H6:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重520kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H6:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H6:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "VERY_STRONG",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H6:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 23.76% を使用。"
+        },
+        "surface_fit": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H6:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H6:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H6:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "7",
+      "name": "ゴクラクチョウカ",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "CAUTION",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H7:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。ゴクラクチョウカの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H7:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。ゴクラクチョウカの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H7:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重444kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "CAUTION",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H7:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "CAUTION",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H7:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "WEAK",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H7:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 1.73% を使用。"
+        },
+        "surface_fit": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H7:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H7:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "MIXED",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H7:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    },
+    {
+      "runner_id": "8",
+      "name": "スリーボンド",
+      "career_starts": 0,
+      "newcomer": true,
+      "evidence_features": {
+        "workout_capability": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-WORKOUT-CAPABILITY-v1",
+          "evidence_refs": [
+            "KB:R06:H8:TRAINING"
+          ],
+          "source_fact": "競馬ブック調教結果前資料。スリーボンドの追い切り内容・併せ馬・短評を使用。"
+        },
+        "stable_readiness": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-STABLE-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H8:STABLE"
+          ],
+          "source_fact": "競馬ブック厩舎コメント結果前資料。スリーボンドの仕上がり・適性コメントを使用。"
+        },
+        "physical_readiness": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PHYSICAL-READINESS-v1",
+          "evidence_refs": [
+            "KB:R06:H8:BODY"
+          ],
+          "source_fact": "12:10出馬表馬体重508kgおよび結果前短評を使用。"
+        },
+        "jockey_quality": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-JOCKEY-QUALITY-v1",
+          "evidence_refs": [
+            "KB:R06:H8:JOCKEY"
+          ],
+          "source_fact": "結果前出馬表の騎手情報を使用。"
+        },
+        "expert_support": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-EXPERT-SUPPORT-v1",
+          "evidence_refs": [
+            "KB:R06:H8:EXPERT"
+          ],
+          "source_fact": "結果前TM/CPU印および短評を使用。"
+        },
+        "market_rank": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-MARKET-RANK-v1",
+          "evidence_refs": [
+            "TSL:R06:H8:1209"
+          ],
+          "source_fact": "TSL 12:09結果前単勝得票率 9.80% を使用。"
+        },
+        "surface_fit": {
+          "category": "POSITIVE",
+          "rule_id": "KM-JRA-SURFACE-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H8:PEDIGREE_SURFACE"
+          ],
+          "source_fact": "結果前血統・芝中距離適性資料を使用。"
+        },
+        "going_fit": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-GOING-FIT-v1",
+          "evidence_refs": [
+            "KB:R06:H8:HEAVY"
+          ],
+          "source_fact": "結果前血統資料の重馬場適性および当日重馬場を使用。"
+        },
+        "pedigree_class": {
+          "category": "STRONG",
+          "rule_id": "KM-JRA-PEDIGREE-CLASS-v1",
+          "evidence_refs": [
+            "KB:R06:H8:PEDIGREE_CLASS"
+          ],
+          "source_fact": "結果前血統表・近親実績・父産駒新馬成績を使用。"
+        }
+      }
+    }
+  ],
+  "static_prediction": {
+    "ranking": [
+      6,
+      5,
+      8,
+      4,
+      1,
+      2,
+      3,
+      7
+    ],
+    "marks": {
+      "1": "△",
+      "2": "△",
+      "3": "△",
+      "4": "☆",
+      "5": "○",
+      "6": "◎",
+      "8": "▲"
+    },
+    "roles": {
+      "1": [
+        "P3"
+      ],
+      "2": [
+        "P2",
+        "P3"
+      ],
+      "3": [
+        "P3"
+      ],
+      "4": [
+        "W",
+        "P2",
+        "P3"
+      ],
+      "5": [
+        "W",
+        "P2",
+        "P3"
+      ],
+      "6": [
+        "W",
+        "P2",
+        "P3"
+      ],
+      "7": [],
+      "8": [
+        "W",
+        "P2",
+        "P3"
+      ]
+    },
+    "status": "DIAGNOSTIC-PRE-KRS-NOT-FORMAL-FROZEN",
+    "rationale": "Newcomer heavy Nakayama T2000 diagnostic ranking from user-provided pre-race training/stable/pedigree/market evidence; not Production-authorized until Rule-Bound Full Numerical passes."
+  },
+  "execution_intent": {
+    "status": "FORMAL-PRE-RACE",
+    "purpose": "Actual current-authority formal execution attempt. Fail closed at first mandatory gate; no unregistered rule bypass."
+  }
+}
