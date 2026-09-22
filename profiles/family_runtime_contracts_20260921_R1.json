@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260921-R1",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED",
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R2",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-NUMERICAL-LAYER-IMPLEMENTED",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,7 +12,7 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
+      "execution_status": "NUMERICAL-MATERIALIZER-READY / PHYSICAL-KRS-RUNTIME-BLOCKED",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "地方版 v4.12 Rev.3",
       "krs": "v1.6-KRS Rev.3",
@@ -29,7 +29,18 @@
         "signed_receipt_authority",
         "runtime_version"
       ],
-      "note": "Current Production documents explicitly describe full-pipeline automation as partial."
+      "note": "LOCAL numerical execution mechanism is now implemented and self-tested. FORMAL-FULL external KRS remains blocked until LOCAL parameter_map bytes/fingerprint, external endpoint, signer authority and runtime attestation are physically verified. Indices whose common numerical formulas are not fully specified require explicit venue/canonical rule artifacts; no freehand coefficients.",
+      "numerical_mapping_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
+      "evidence_rule_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
+      "numerical_materializer": "runtime/local_evidence_to_base_production.py",
+      "provenance_builder": "runtime/local_index_provenance_builder.py",
+      "krs_input_builder": "runtime/local_krs_input_builder_production.py",
+      "all_stage_overlay": "KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260922-R1",
+      "selftest": {
+        "github_actions_run_id": 35736700661,
+        "conclusion": "success",
+        "git_revision": "f2d7095f70a16d4dacdad6fb237a9093a566e6f9"
+      }
     },
     "BAN": {
       "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
@@ -53,5 +64,5 @@
       "note": "Current v3.7-BAN Rev.2 build records Engine execution status NOT-RUN; selftests may not be represented as real execution."
     }
   },
-  "rule": "Never route one Family through another Family's parameter_map/adapter. Missing physical runtime means FORMAL-FULL blocked, not silent fallback."
+  "rule": "Never route one Family through another Family's parameter_map/adapter. LOCAL numerical materialization may run when its rule-bound evidence and venue formula registry close; missing physical LOCAL KRS runtime means external FORMAL-FULL remains blocked, never silent JRA fallback."
 }
