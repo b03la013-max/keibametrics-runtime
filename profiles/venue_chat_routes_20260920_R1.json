@@ -1,5 +1,5 @@
 {
-  "profile_id": "KM-VENUE-CHAT-FORMAL-ROUTING-20260920-R1",
+  "profile_id": "KM-VENUE-CHAT-FORMAL-ROUTING-20260923-R2",
   "parent_profile": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260920-R2",
   "trigger_terms": [
     "ケイバメトリクス調査願います",
@@ -12,7 +12,9 @@
     "SOURCE_SNAPSHOT",
     "FULL_RUNNER_UNIVERSE",
     "REQUIRED_INDEX_MANIFEST",
-    "BASE_INDEX_TERMINALIZATION",
+    "LOCAL_NUMERICAL_MATERIALIZATION",
+    "INDEX_PROVENANCE",
+    "STATIC_FREEZE",
     "PRE_KRS_VERIFIED",
     "KRS_EXECUTED_VERIFIED",
     "PREDICTION",
@@ -86,85 +88,85 @@
       "venue_id": "OHI",
       "name": "大井",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "KAW",
       "name": "川崎",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "FNB",
       "name": "船橋",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "URW",
       "name": "浦和",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "SON",
       "name": "園田",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "HIM",
       "name": "姫路",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "NGY",
       "name": "名古屋",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "KSM",
       "name": "笠松",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "KNZ",
       "name": "金沢",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "KCH",
       "name": "高知",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "SAG",
       "name": "佐賀",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "MOR",
       "name": "盛岡",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "MIZ",
       "name": "水沢",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "MON",
       "name": "門別",
       "family": "LOCAL",
-      "route_status": "ACTIVE-GOVERNANCE/RUNTIME-VERIFY-REQUIRED"
+      "route_status": "ACTIVE / FULL-LIFECYCLE-RUNTIME-VERIFIED / REAL-RACE-ACCEPTANCE-PENDING"
     },
     {
       "venue_id": "OBI",
@@ -180,14 +182,29 @@
       "readiness": "VERIFIED-HSN-R05"
     },
     "LOCAL": {
-      "base_index_registry": "CURRENT-LOCAL-CANONICAL",
-      "formal_runtime": "FAMILY-RUNTIME-RESOLVE",
-      "readiness": "VERIFY-BEFORE-FORMAL-FULL"
+      "base_index_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
+      "formal_runtime": "https://witnessstrictimage-production.up.railway.app",
+      "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922",
+      "readiness": "FULL-LIFECYCLE-SIGNED-E2E-VERIFIED / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
+      "pre_race_endpoint": "/formal",
+      "post_race_endpoint": "/result",
+      "verify_endpoint": "/verify",
+      "signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922"
     },
     "BAN": {
       "base_index_registry": "CURRENT-BAN-CANONICAL",
       "formal_runtime": "FAMILY-RUNTIME-RESOLVE",
       "readiness": "VERIFY-BEFORE-FORMAL-FULL"
     }
-  }
+  },
+  "post_race_path": [
+    "OFFICIAL_RESULT_FREEZE",
+    "FROZEN_FINAL_REFERENCE_VERIFY",
+    "SETTLEMENT",
+    "PFS",
+    "FAILURE_LOCALIZATION",
+    "LEARNING_EVENT",
+    "RESULT_VERIFIED",
+    "NEXT_RACE_LEARNING_STATE"
+  ]
 }
