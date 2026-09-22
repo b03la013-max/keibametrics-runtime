@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R2",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-NUMERICAL-LAYER-IMPLEMENTED",
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R3",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-PHYSICAL-RUNTIME-ACTIVE",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,15 +12,15 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "NUMERICAL-MATERIALIZER-READY / PHYSICAL-KRS-RUNTIME-BLOCKED",
+      "execution_status": "EXECUTABLE / PHYSICAL-KRS-RUNTIME-VERIFIED-PENDING-E2E-ACCEPTANCE",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "地方版 v4.12 Rev.3",
       "krs": "v1.6-KRS Rev.3",
-      "runtime": "KRS-LOCAL Runtime Package v1.2.0",
+      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.0-20260922",
       "formal_guard": "FCG-LOCAL v1.1.0",
       "engine": "KRS-Engine v1.1.0",
       "parameter_map": "v0.1-provisional / PROVISIONAL_UNCALIBRATED",
-      "external_endpoint": null,
+      "external_endpoint": "https://witnessstrictimage-production.up.railway.app",
       "required_attestation": [
         "adapter_sha256",
         "engine_sha256",
@@ -29,7 +29,7 @@
         "signed_receipt_authority",
         "runtime_version"
       ],
-      "note": "LOCAL numerical execution mechanism is now implemented and self-tested. FORMAL-FULL external KRS remains blocked until LOCAL parameter_map bytes/fingerprint, external endpoint, signer authority and runtime attestation are physically verified. Indices whose common numerical formulas are not fully specified require explicit venue/canonical rule artifacts; no freehand coefficients.",
+      "note": "LOCAL numerical layer and dedicated Railway physical runtime are deployed. Formal-FULL requires successful signed E2E acceptance and per-race complete numerical/provenance closure. No JRA/BAN adapter or parameter map fallback.",
       "numerical_mapping_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
       "evidence_rule_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
       "numerical_materializer": "runtime/local_evidence_to_base_production.py",
@@ -40,7 +40,11 @@
         "github_actions_run_id": 35736700661,
         "conclusion": "success",
         "git_revision": "f2d7095f70a16d4dacdad6fb237a9093a566e6f9"
-      }
+      },
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+      "signed_receipt_authority": "KM-LOCAL-RUNTIME-ED25519-20260922",
+      "runtime_app_sha256": "e785a2e87bf38c849c1b9e2543d65acbc3cb7c9ca2b7d1185ca1bbf8ffb99e3d"
     },
     "BAN": {
       "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
