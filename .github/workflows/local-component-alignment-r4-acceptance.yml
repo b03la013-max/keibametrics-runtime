@@ -1,0 +1,46 @@
+name: LOCAL Component Alignment R4 Acceptance
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R4.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R2.json'
+      - 'profiles/local_information_source_registry_v1.5_20260923.json'
+      - 'profiles/local_regression_fixture_pack_v1.4_20260923.json'
+      - 'governance/KM-LOCAL-COMMON-CANON-v4.13-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-KRS-v1.7-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-KRS-ENGINE-OPS-v1.7-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-REFLECTION-v1.4-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-KMS-v1.4-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-CSL-v1.1-REV.1-20260923.md'
+      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.2-20260923.md'
+      - 'governance/KM-LOCAL-LEGACY-COMPONENT-RETIREMENT-20260923-R1.json'
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate component authority closure
+        run: |
+          python - <<'PY'
+          import json
+          fam=json.load(open('profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R4.json'))
+          suite=json.load(open('profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R2.json'))
+          src=json.load(open('profiles/local_information_source_registry_v1.5_20260923.json'))
+          reg=json.load(open('profiles/local_regression_fixture_pack_v1.4_20260923.json'))
+          ret=json.load(open('governance/KM-LOCAL-LEGACY-COMPONENT-RETIREMENT-20260923-R1.json'))
+          L=fam['family_scoped_authority']['LOCAL']
+          assert L['krs']=='v1.7-KRS Rev.1'
+          assert L['krs_ops']=='v1.7 Rev.1'
+          assert L['reflection']=='v1.4 Rev.1'
+          assert L['kms']=='v1.4-KMS Rev.1'
+          assert L['csl']=='v1.1-CSL Rev.1'
+          assert suite['production_numeric_suite']['status']=='FROZEN'
+          assert suite['krs']['engine']=='KRS-Engine v1.1.0'
+          assert suite['decision_execution']['mec']=='KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3'
+          assert len(reg['fixtures'])==28
+          assert src['execution_evidence_priority'][0]=='VERIFIED_SIGNED_RECEIPT'
+          assert any(x['component']=='FCG-LOCAL v1.1.0' and 'NO FINAL AUTHORITY' in x['new_status'] for x in ret['retirements'])
+          print('LOCAL_COMPONENT_ALIGNMENT_R4_ACCEPTANCE_PASS')
+          PY
