@@ -5,10 +5,15 @@ from typing import Any, Dict
 import app as legacy
 from fastapi import FastAPI, HTTPException
 
-from source_acquisition import SOURCE_PROFILE, acquire_sources, verify_source_artifact
+from source_acquisition import SOURCE_PROFILE, acquire_sources, verify_source_artifact, sha_obj
 from nar_source_manifest import PROFILE as NAR_MANIFEST_PROFILE, build_local_nar_manifest
+from nar_runner_universe import (
+    PROFILE as NAR_RUNNER_UNIVERSE_PROFILE,
+    enrich_source_artifact,
+    validate_krs_horses,
+)
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.1-20260923-NAR-SOURCE-ADAPTER"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -49,8 +54,11 @@ def health():
     h["source_acquisition_sha256"] = legacy.sha_file("/opt/km/source_acquisition.py")
     h["nar_source_manifest_profile"] = NAR_MANIFEST_PROFILE
     h["nar_source_manifest_sha256"] = legacy.sha_file("/opt/km/nar_source_manifest.py")
-    if "SOURCE_MANIFEST_LOCAL_NAR" not in caps:
-        caps.insert(0, "SOURCE_MANIFEST_LOCAL_NAR")
+    h["nar_runner_universe_profile"] = NAR_RUNNER_UNIVERSE_PROFILE
+    h["nar_runner_universe_sha256"] = legacy.sha_file("/opt/km/nar_runner_universe.py")
+    for c in ("SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
+        if c not in caps:
+            caps.insert(0, c)
     h["capabilities"] = caps
     return h
 
@@ -76,8 +84,19 @@ def source_acquire(payload: Dict[str, Any]):
     if not race_id:
         raise HTTPException(422, "RACE_ID_REQUIRED")
     artifact, errors = acquire_sources(payload)
-    status = "SOURCE_FROZEN" if not errors and artifact.get("formal_ready") is True else "FAIL"
-    return legacy.signed_receipt("SOURCE", race_id, status, artifact, errors)
+    artifact["source_manifest_profile"] = payload.get("manifest_profile")
+    if payload.get("manifest_profile") == NAR_MANIFEST_PROFILE:
+        try:
+            artifact = enrich_source_artifact(artifact)
+        except Exception as e:
+            errors = list(errors) + ["OFFICIAL_RUNNER_UNIVERSE_EXTRACTION_FAILED:" + str(e)]
+            artifact["formal_ready"] = False
+    artifact["errors"] = list(dict.fromkeys(errors))
+    artifact["source_snapshot_sha256"] = sha_obj(
+        {k: v for k, v in artifact.items() if k != "source_snapshot_sha256"}
+    )
+    status = "SOURCE_FROZEN" if not artifact["errors"] and artifact.get("formal_ready") is True else "FAIL"
+    return legacy.signed_receipt("SOURCE", race_id, status, artifact, artifact["errors"])
 
 
 @app.post("/source/verify")
@@ -108,6 +127,16 @@ def pre_krs(payload: Dict[str, Any]):
     legacy.validate_family(payload)
     race_id = str(payload.get("race_id") or "")
     source = _require_source_receipt(payload, race_id)
+    source_artifact = source.get("artifact") or {}
+    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+        valid_universe, universe_errors = validate_krs_horses(
+            source_artifact, payload.get("krs_input_data")
+        )
+        if not valid_universe:
+            raise HTTPException(
+                422,
+                "SOURCE_RUNNER_UNIVERSE_MISMATCH:" + ",".join(universe_errors),
+            )
     out = legacy.pre_krs(payload)
     if (out.get("receipt") or {}).get("status") == "PASS":
         art = dict(out.get("artifact") or {})
