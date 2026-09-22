@@ -1,0 +1,162 @@
+name: LOCAL v1.4 Frozen-Lineage Result Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/local-v14-frozen-result-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify frozen FINAL MEC lineage and settlement-safe RESULT
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error,datetime,sys,hashlib
+          sys.path.insert(0,"runtime")
+          from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
+          from capital_policy import resolve_capital_policy
+
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def sha(x):
+              return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          def call(path,payload=None,method="POST",timeout=600):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              h={"content-type":"application/json"} if payload is not None else {}
+              rq=urllib.request.Request(BASE+path,data=data,headers=h,method=method)
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode(); return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+
+          hc,h=call("/health",None,"GET",60)
+          print("LOCAL_V14_HEALTH",hc,json.dumps(h,ensure_ascii=False))
+          assert hc==200 and h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.4-20260923"
+
+          rid="KM-LOCAL-V14-FROZEN-LINEAGE-ACCEPT-20260923-T01"
+          semantic={
+            "family_id":"LOCAL","race_id":rid,
+            "role_registry":[
+              {"runner_id":"1","column":"W","status":"CORE"},
+              {"runner_id":"2","column":"P2","status":"CORE"},
+              {"runner_id":"3","column":"P3","status":"CORE"}
+            ],
+            "pair_dispositions":[{"head":"1","second":"2","status":"PURCHASE","reason":"ACCEPTANCE_MATERIAL_PAIR"}],
+            "third_dispositions":[{"head":"1","second":"2","third":"3","status":"PURCHASE","reason":"ACCEPTANCE_MATERIAL_THIRD"}],
+            "orientation_exclusions":[],
+            "available_bet_types":["WIN","PLACE","QUINELLA","WIDE","EXACTA","TRIO","TRIFECTA"],
+            "capital_policy":{"mode":"RECOMMENDATION_ONLY"}
+          }
+          mec=build_mec_plan(semantic,None,strict_head_closure=True,min_stake=100)
+          validate_mec_plan(mec)
+          capital=resolve_capital_policy(semantic,mec)
+          assert mec["precompression_semantic_universe"] is True
+          assert mec["material_coverage_ratio"]==1.0
+          tickets=mec["tickets"]
+          total=mec["minimum_required_capital"]
+
+          def horse(no,base):
+              return {
+                "horse_no":no,"name":f"V14-{no}","gate_no":no,
+                "hsv":{k:base+((i%7)-3) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%5)-2) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":1},
+                "static_roles":["W"] if no==1 else (["P2"] if no==2 else ["P3"])
+              }
+          krs_input={
+            "race":{"race_id":rid,"prediction_id":"V14-FROZEN","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+            "environment":{"course_family":"LOCAL-SYNTHETIC","surface":"dirt","distance":1400,"going":"good","field_size":3,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+            "simulation":{"run_count":5000,"master_seed":20260923,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500},
+            "horses":[horse(1,72),horse(2,64),horse(3,58)]
+          }
+          fpp={"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]},"source":"V14_FROZEN_LINEAGE_ACCEPTANCE","minimum_efficient_coverage":mec}
+          trace={
+            "fpp_sha256":sha(fpp),"mec_sha256":mec["sha256"],
+            "candidate_count":mec["ticket_count"],"selected_count":len(tickets),
+            "capital_decision_sha256":capital["sha256"]
+          }
+          stages=[{"stage":x,"timestamp":"2026-09-23T00:00:00+09:00"} for x in [
+            "SOURCE_FREEZE","RUNNER_UNIVERSE","NUMERICAL_MATERIALIZATION","INDEX_PROVENANCE","STATIC_FREEZE",
+            "PRE_KRS","KRS","KRS_UTILITY","MEC","CAPITAL","FINAL_TICKET_FREEZE"
+          ]]
+          freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          formal_req={
+            "family_id":"LOCAL","race_id":rid,
+            "required_index_unresolved":0,"full_numerical_calculation":True,"static_prediction_frozen":True,
+            "krs_input_data":krs_input,"run_count":5000,"seed":20260923,
+            "final_prediction_package":fpp,
+            "final_ticket":{"finalized":True,"no_bet":False,"total_investment":total,"tickets":tickets,"frozen_at":freeze},
+            "minimum_efficient_coverage":mec,
+            "capital_policy_decision":capital,
+            "ticket_transport_trace":trace,
+            "execution_stage_manifest":stages,
+            "final_freeze_timestamp":freeze
+          }
+          fc,formal=call("/formal",formal_req)
+          print("LOCAL_V14_FORMAL",fc,formal.get("receipt",{}).get("status"),formal.get("receipt_sha256"))
+          assert fc==200 and formal["receipt"]["status"]=="FULL_FORMAL_E2E_PASS"
+          final_env=formal["artifact"]["final_receipt"]
+          vc,v=call("/verify",final_env,timeout=60)
+          assert vc==200 and v.get("valid") is True
+
+          now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          complete_req={
+            "family_id":"LOCAL","race_id":rid,"final_receipt":final_env,
+            "official_result":{"finish_order":[1,2,3],"result_available_at":now},
+            "result_available_at":now,
+            "settlement":{"status":"COMPLETE","investment":total,"settled_investment":total,"return":800},
+            "pfs_authority":"FROZEN-RECOMMENDATION-PFS"
+          }
+          rc,res=call("/result",complete_req,timeout=120)
+          print("LOCAL_V14_RESULT",rc,res.get("receipt",{}).get("status"),res.get("receipt_sha256"))
+          assert rc==200 and res["receipt"]["status"]=="PASS"
+          art=res["artifact"]
+          assert art["automatic_post_result_review"]["mec"]["available"] is True
+          assert art["automatic_post_result_review"]["mec"]["precompression_semantic_universe"] is True
+          assert "MEC_PRECOMPRESSION_SEMANTIC_UNIVERSE_REQUIRED" not in art["automatic_next_race_learning_state"]["immediate_correctness"]
+          assert art["learning_event"]["automatic"] is True
+          assert art["settlement"]["pfs"]==round(800/total*100.0,6)
+          vc,v=call("/verify",res,timeout=60)
+          assert vc==200 and v.get("valid") is True
+
+          pending_req={
+            "family_id":"LOCAL","race_id":rid,"final_receipt":final_env,
+            "official_result":{"finish_order":[1,2,3],"result_available_at":now},
+            "result_available_at":now,
+            "settlement":{"status":"PENDING","investment":total},
+            "pfs_authority":"FROZEN-RECOMMENDATION-PFS"
+          }
+          pc,pres=call("/result",pending_req,timeout=120)
+          print("LOCAL_V14_PENDING",pc,pres.get("receipt",{}).get("status"),json.dumps(pres.get("artifact",{}).get("settlement"),ensure_ascii=False))
+          assert pc==200 and pres["receipt"]["status"]=="PASS"
+          pst=pres["artifact"]["settlement"]
+          assert pst["return"] is None and pst["pfs"] is None and pst["settled_investment"] is None and pst["settlement_completeness_pct"] is None
+          vc,v=call("/verify",pres,timeout=60)
+          assert vc==200 and v.get("valid") is True
+
+          print("LOCAL_V14_FROZEN_LINEAGE_ACCEPTANCE_PASS",json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "runtime_app_sha256":h["runtime_app_sha256"],
+            "mec_sha256":mec["sha256"],
+            "material_coverage_ratio":mec["material_coverage_ratio"],
+            "formal_receipt":formal["receipt_sha256"],
+            "final_receipt":final_env["receipt_sha256"],
+            "result_receipt":res["receipt_sha256"],
+            "pending_result_receipt":pres["receipt_sha256"],
+            "frozen_mec_review":True,
+            "automatic_learning":True,
+            "pending_unsettled_safe":True
+          },ensure_ascii=False))
+          PY
