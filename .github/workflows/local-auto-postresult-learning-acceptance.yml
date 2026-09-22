@@ -1,0 +1,106 @@
+name: LOCAL Automatic Post-Result Learning Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/local-auto-postresult-learning-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  auto-learning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify automatic failure localization and next-race learning
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error,datetime
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def call(path,payload=None,method="POST",timeout=600):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              h={"content-type":"application/json"} if payload is not None else {}
+              rq=urllib.request.Request(BASE+path,data=data,headers=h,method=method)
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode(); return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+
+          hc,h=call("/health",None,"GET",60)
+          print("LOCAL_AUTO_LEARN_HEALTH",hc,json.dumps(h,ensure_ascii=False))
+          assert hc==200 and h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.2-20260923"
+
+          def horse(no,base):
+              return {"horse_no":no,"name":f"AUTOLEARN-{no}","gate_no":no,
+                "hsv":{k:base+((i%7)-3) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%5)-2) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":1},
+                "static_roles":["W"] if no==1 else (["P2"] if no==2 else ["P3"])}
+
+          rid="KM-LOCAL-AUTO-LEARN-ACCEPT-20260923-T01"
+          freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          formal_req={
+            "family_id":"LOCAL","race_id":rid,
+            "required_index_unresolved":0,"full_numerical_calculation":True,"static_prediction_frozen":True,
+            "krs_input_data":{
+              "race":{"race_id":rid,"prediction_id":"AUTOLEARN","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+              "environment":{"course_family":"LOCAL-SYNTHETIC","surface":"dirt","distance":1400,"going":"good","field_size":3,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+              "simulation":{"run_count":5000,"master_seed":20260923,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500},
+              "horses":[horse(1,72),horse(2,64),horse(3,58)]
+            },
+            "run_count":5000,"seed":20260923,
+            "final_prediction_package":{"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]},"source":"AUTO_POSTRESULT_LEARNING_ACCEPTANCE"},
+            "final_ticket":{"finalized":True,"total_investment":300,"tickets":[
+              {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
+              {"bet_type":"TRIO","selection":[1,2,3],"stake":100},
+              {"bet_type":"TRIFECTA","selection":[1,2,3],"orientation":"1>2>3","stake":100}
+            ]},
+            "final_freeze_timestamp":freeze
+          }
+          fc,formal=call("/formal",formal_req)
+          assert fc==200 and formal["receipt"]["status"]=="FULL_FORMAL_E2E_PASS"
+
+          now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          # Intentionally omit failure_localization and learning_event.
+          result_req={
+            "family_id":"LOCAL","race_id":rid,
+            "final_receipt":formal["artifact"]["final_receipt"],
+            "official_result":{"finish_order":[1,2,3],"result_available_at":now},
+            "result_available_at":now,
+            "settlement":{"status":"COMPLETE","investment":300,"settled_investment":300,"return":900},
+            "pfs_authority":"FROZEN-RECOMMENDATION-PFS"
+          }
+          rc,res=call("/result",result_req,timeout=120)
+          print("LOCAL_AUTO_LEARN_RESULT",rc,res.get("receipt",{}).get("status"),res.get("receipt_sha256"))
+          print("LOCAL_AUTO_FAILURE",json.dumps(res.get("artifact",{}).get("failure_localization"),ensure_ascii=False))
+          print("LOCAL_AUTO_LEARNING",json.dumps(res.get("artifact",{}).get("learning_event"),ensure_ascii=False))
+          assert rc==200 and res["receipt"]["status"]=="PASS"
+          art=res["artifact"]
+          assert art["failure_localization"]["automatic"] is True
+          assert art["learning_event"]["automatic"] is True
+          assert art["automatic_post_result_review"]["profile"]=="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
+          assert art["automatic_next_race_learning_state"]["status"]=="PREQUENTIAL-NEXT-RACE-ONLY"
+          assert art["caller_supplied_failure_localization"] is None
+          assert art["caller_supplied_learning_event"] is None
+          assert art["settlement"]["pfs"]==300.0
+          vc,v=call("/verify",res,timeout=60)
+          assert vc==200 and v.get("valid") is True
+          print("LOCAL_AUTO_POSTRESULT_LEARNING_PASS",json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "runtime_app_sha256":h["runtime_app_sha256"],
+            "result_receipt":res["receipt_sha256"],
+            "auto_review_sha256":art["automatic_post_result_review"]["sha256"],
+            "learning_state_id":art["automatic_next_race_learning_state"]["state_id"],
+            "primary_failure":art["failure_localization"]["primary_failure"],
+            "production_change_authorized":art["automatic_next_race_learning_state"]["production_change_authorized"],
+            "verified":True
+          },ensure_ascii=False))
+          PY
