@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R3",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-PHYSICAL-RUNTIME-ACTIVE",
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R4",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-PHYSICAL-RUNTIME-VERIFIED",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,7 +12,7 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "EXECUTABLE / PHYSICAL-KRS-RUNTIME-VERIFIED-PENDING-E2E-ACCEPTANCE",
+      "execution_status": "EXECUTABLE / PHYSICAL-KRS-RUNTIME-VERIFIED / SYNTHETIC-E2E-PASS / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "地方版 v4.12 Rev.3",
       "krs": "v1.6-KRS Rev.3",
@@ -29,7 +29,7 @@
         "signed_receipt_authority",
         "runtime_version"
       ],
-      "note": "LOCAL numerical layer and dedicated Railway physical runtime are deployed. Formal-FULL requires successful signed E2E acceptance and per-race complete numerical/provenance closure. No JRA/BAN adapter or parameter map fallback.",
+      "note": "Dedicated Railway LOCAL runtime is physically verified and signed synthetic FORMAL E2E acceptance passed. Production real-race FORMAL-FULL remains fail-closed until the first pre-race frozen LOCAL race completes full numerical/provenance closure and signed PRE_KRS/KRS/FINAL before post.",
       "numerical_mapping_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
       "evidence_rule_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
       "numerical_materializer": "runtime/local_evidence_to_base_production.py",
@@ -44,7 +44,18 @@
       "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
       "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
       "signed_receipt_authority": "KM-LOCAL-RUNTIME-ED25519-20260922",
-      "runtime_app_sha256": "e785a2e87bf38c849c1b9e2543d65acbc3cb7c9ca2b7d1185ca1bbf8ffb99e3d"
+      "runtime_app_sha256": "e785a2e87bf38c849c1b9e2543d65acbc3cb7c9ca2b7d1185ca1bbf8ffb99e3d",
+      "acceptance": {
+        "github_actions_run_id": 35743549103,
+        "conclusion": "success",
+        "github_revision": "ccc03448b30c6b9b4a9dbb71ba9132ade9059060",
+        "requested_run_count": 5000,
+        "actual_run_count": 5000,
+        "pre_krs_receipt": "9e4be2cd32d665ef523bbb6b1616c1300654a3efee350b3795eaf4fb0aec5052",
+        "krs_receipt": "9366170ff24c32065a13da44a385ffae304d755fdce8f15c9d866fd5fc11afa5",
+        "final_receipt": "9f73df0cf32e9628775f8e1192b5abfcc47709b14ff01b7d85f3ddf21da01190",
+        "formal_receipt": "265e4b4f8c5fdb964f37d8fc0bd1e0651c7516456f00ee95b4898331aa93ae5"
+      }
     },
     "BAN": {
       "execution_status": "BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED",
