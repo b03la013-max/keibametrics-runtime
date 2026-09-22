@@ -2,6 +2,7 @@ from __future__ import annotations
 import json, os, hashlib
 from collections import defaultdict
 from datetime import datetime, timezone
+from mec_r4_shadow import settle_ticket_list
 
 PROFILE="KM-FAMILY-MEC-R4-FORWARD-OOS-TRACKER-v1.0-20260922"
 CANDIDATE_PROFILE="KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1"
@@ -12,6 +13,7 @@ EXPECTED_ARMS=[
     "CORE_ONLY","CORE_PROTECTION","CPSS_ALL",
     "CPSS_TOP3","CPSS_TOP4","CPSS_TOP5","CPSS_TOP6","CPSS_TOP7","CPSS_TOP8"
 ]
+ALL_ARMS=["PRODUCTION_BASELINE_R3"]+EXPECTED_ARMS
 
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -32,11 +34,41 @@ def _max_drawdown(rows):
         max_dd=max(max_dd,peak-equity)
     return round(max_dd,2)
 
+def _aggregate_bet_type(rows):
+    out={}
+    for bt in ("EXACTA","TRIO","TRIFECTA"):
+        inv=ret=0.0
+        n=0
+        hits=0
+        for x in rows:
+            b=(x.get("by_bet_type") or {}).get(bt) or {}
+            if b.get("investment") is None or b.get("return") is None:
+                continue
+            n+=1
+            inv+=float(b.get("investment") or 0)
+            ret+=float(b.get("return") or 0)
+            hits+=bool(b.get("hit"))
+        out[bt]={
+            "race_observation_count":n,
+            "investment":round(inv,2),
+            "return":round(ret,2),
+            "profit_loss":round(ret-inv,2),
+            "pfs":round(ret/inv*100.0,9) if inv else None,
+            "hit_races":hits,
+        }
+    return out
+
 def _aggregate_arm(rows):
     inv=sum(float(x.get("investment") or 0) for x in rows)
     ret=sum(float(x.get("return") or 0) for x in rows)
     hits=sum(float(x.get("return") or 0)>0 for x in rows)
     hbl=sum((float(x.get("return") or 0)>0 and float(x.get("return") or 0)<float(x.get("investment") or 0)) for x in rows)
+    ordered=sorted(rows,key=lambda x:float(x.get("return") or 0),reverse=True)
+    largest=float(ordered[0].get("return") or 0) if ordered else 0.0
+    total_return=ret
+    ex=ordered[1:] if len(ordered)>1 else []
+    ex_inv=sum(float(x.get("investment") or 0) for x in ex)
+    ex_ret=sum(float(x.get("return") or 0) for x in ex)
     return {
         "eligible_races":len(rows),
         "investment":round(inv,2),
@@ -49,6 +81,10 @@ def _aggregate_arm(rows):
         "hit_but_loss_rate":round(hbl/len(rows)*100.0,6) if rows else None,
         "ticket_count_total":sum(int(x.get("ticket_count") or 0) for x in rows),
         "max_drawdown":_max_drawdown(rows),
+        "largest_return":round(largest,2) if ordered else None,
+        "largest_return_share_pct":round(largest/total_return*100.0,6) if total_return else None,
+        "excluding_largest_return_pfs":round(ex_ret/ex_inv*100.0,9) if ex_inv else None,
+        "bet_type":_aggregate_bet_type(rows),
     }
 
 def build_status():
@@ -91,22 +127,48 @@ def build_status():
                     continue
                 if any(str((arms[a] or {}).get("status"))!="SETTLED" for a in EXPECTED_ARMS):
                     continue
+
+                result_path=os.path.join("runtime","results",rid+".json")
+                if not os.path.exists(result_path):
+                    errors.append({"race_id":rid,"reason":"PRODUCTION_RESULT_MISSING"})
+                    continue
+                production_result=_load(result_path)
+                production_settlement=production_result.get("settlement") or {}
+                if str(production_settlement.get("status") or "").upper()!="SETTLED":
+                    continue
+                p_inv=float(production_settlement.get("total_investment") or 0)
+                p_ret=float(production_settlement.get("total_payout") or 0)
+                p_tickets=(final.get("final_ticket") or {}).get("tickets") or []
+                p_detail=settle_ticket_list(p_tickets,production_result)
+                production_arm={
+                    "investment":p_inv,
+                    "return":p_ret,
+                    "profit_loss":p_ret-p_inv,
+                    "pfs":(p_ret/p_inv*100.0) if p_inv else None,
+                    "ticket_count":len(p_tickets),
+                    "hit":p_ret>0,
+                    "by_bet_type":p_detail.get("by_bet_type") or {},
+                }
+
+                entry_arms={"PRODUCTION_BASELINE_R3":production_arm}
+                for a in EXPECTED_ARMS:
+                    entry_arms[a]={
+                        "investment":arms[a].get("investment"),
+                        "return":arms[a].get("return"),
+                        "profit_loss":arms[a].get("profit_loss"),
+                        "pfs":arms[a].get("pfs"),
+                        "ticket_count":arms[a].get("ticket_count"),
+                        "hit":float(arms[a].get("return") or 0)>0,
+                        "by_bet_type":arms[a].get("by_bet_type") or {},
+                    }
                 entries.append({
                     "race_id":rid,
                     "generated_at":shadow.get("generated_at"),
                     "source_shadow_sha256":shadow.get("sha256"),
                     "source_final_sha256":final.get("sha256"),
                     "settlement_sha256":result.get("sha256"),
-                    "arms":{
-                        a:{
-                            "investment":arms[a].get("investment"),
-                            "return":arms[a].get("return"),
-                            "profit_loss":arms[a].get("profit_loss"),
-                            "pfs":arms[a].get("pfs"),
-                            "ticket_count":arms[a].get("ticket_count"),
-                            "hit":float(arms[a].get("return") or 0)>0,
-                        } for a in EXPECTED_ARMS
-                    }
+                    "production_result_path":result_path,
+                    "arms":entry_arms,
                 })
     entries.sort(key=lambda x:(x["generated_at"],x["race_id"]))
     if len(entries)>TARGET:
@@ -115,7 +177,24 @@ def build_status():
     for e in entries:
         for a,x in e["arms"].items():
             arm_rows[a].append(x)
-    aggregates={a:_aggregate_arm(arm_rows[a]) for a in EXPECTED_ARMS}
+    aggregates={a:_aggregate_arm(arm_rows[a]) for a in ALL_ARMS}
+    baseline=aggregates["PRODUCTION_BASELINE_R3"]
+    comparison={}
+    for a in EXPECTED_ARMS:
+        x=aggregates[a]
+        b_inv=float(baseline.get("investment") or 0)
+        x_inv=float(x.get("investment") or 0)
+        b_pfs=baseline.get("investment_weighted_pfs")
+        x_pfs=x.get("investment_weighted_pfs")
+        comparison[a]={
+            "investment_delta":round(x_inv-b_inv,2),
+            "investment_reduction_pct":round((b_inv-x_inv)/b_inv*100.0,6) if b_inv else None,
+            "return_delta":round(float(x.get("return") or 0)-float(baseline.get("return") or 0),2),
+            "profit_loss_delta":round(float(x.get("profit_loss") or 0)-float(baseline.get("profit_loss") or 0),2),
+            "pfs_points":round(float(x_pfs)-float(b_pfs),9) if x_pfs is not None and b_pfs is not None else None,
+            "hit_race_delta":int(x.get("hit_races") or 0)-int(baseline.get("hit_races") or 0),
+            "max_drawdown_delta":round(float(x.get("max_drawdown") or 0)-float(baseline.get("max_drawdown") or 0),2),
+        }
     status="COMPLETE_30_HUMAN_REVIEW_REQUIRED" if len(entries)>=TARGET else "WAITING_30"
     out={
         "profile":PROFILE,
@@ -133,6 +212,7 @@ def build_status():
         "rule_change_during_window":"FORBIDDEN except correctness repair",
         "entries":entries,
         "aggregates":aggregates,
+        "comparison_vs_production":comparison,
         "errors":errors,
     }
     out["sha256"]=_sha(out)
