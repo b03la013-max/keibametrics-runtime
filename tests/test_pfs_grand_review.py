@@ -63,3 +63,30 @@ def test_post_start_is_not_formal_pre_race(tmp_path, monkeypatch):
     r=pfs_grand_review.build_report()
     assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["race_count"]==1
     assert r["cohorts"]["FORMAL_PRE_RACE"]["race_count"]==0
+
+
+def test_auto_review_capital_authority_counts_as_frozen_recommendation(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results"]:
+        Path(d).mkdir(parents=True,exist_ok=True)
+
+    x={
+      "race_id":"20260921-HSN-R11",
+      "formal_grade":"POST-START-REPLAY",
+      "capital":{
+        "authority":"FROZEN-RECOMMENDATION-PFS",
+        "investment":1400,
+        "return":1420,
+        "pfs":101.428571429
+      }
+    }
+    Path("runtime/reviews_auto/x.json").write_text(json.dumps(x),encoding="utf-8")
+
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import importlib, pfs_grand_review
+    importlib.reload(pfs_grand_review)
+    r=pfs_grand_review.build_report()
+    assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["race_count"]==1
+    assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["investment"]==1400
+    assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["return"]==1420

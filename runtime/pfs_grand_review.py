@@ -75,7 +75,7 @@ def _extract(path,obj):
         if ret is None: ret=_num(capital.get("return") or capital.get("provisional_return"))
         pfs=_num(measurement.get("pfs"))
         if pfs is None: pfs=_num(capital.get("pfs") or capital.get("provisional_pfs"))
-        authority=measurement.get("pfs_authority") or capital.get("pfs_authority")
+        authority=measurement.get("pfs_authority") or capital.get("pfs_authority") or capital.get("authority")
         grade=grade or (obj.get("formal_eligibility") or {}).get("formal_grade") or (obj.get("frozen_artifact") or {}).get("formal_grade")
         model_elig=model_elig or (obj.get("formal_eligibility") or {}).get("model_comparison_eligibility")
         bt=(obj.get("settlement") or {}).get("by_bet_type") or capital.get("ticket_type_settlement") or {}
