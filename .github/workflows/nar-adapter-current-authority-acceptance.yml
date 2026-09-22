@@ -1,0 +1,97 @@
+name: NAR Adapter Current Authority Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.4-20260923.md'
+      - 'profiles/local_information_source_registry_v1.7_20260923.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R4.json'
+      - 'profiles/venue_chat_routes_20260923_R8.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R6.json'
+      - '.github/workflows/nar-adapter-current-authority-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate component preservation and NAR adapter authority
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          P=pathlib.Path("profiles")
+          auth=json.loads((P/"KM_FAMILY_CURRENT_AUTHORITY_20260923_R6.json").read_text())
+          suite=json.loads((P/"KM_LOCAL_SUITE_MANIFEST_20260923_R4.json").read_text())
+          reg=json.loads((P/"local_information_source_registry_v1.7_20260923.json").read_text())
+          route=json.loads((P/"venue_chat_routes_20260923_R8.json").read_text())
+
+          RUNTIME="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.1-20260923-NAR-SOURCE-ADAPTER"
+          MANIFEST="KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+          SOURCE="KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1"
+
+          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R6"
+          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R5"
+          assert auth["common_family_components"]["execution_architecture"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6"
+          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260923-R8"
+          assert auth["common_family_components"]["source_acquisition"]==SOURCE
+
+          la=auth["family_scoped_authority"]["LOCAL"]
+          # Fifth-HQ component alignment must not regress.
+          assert la["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
+          assert la["production_numeric_status"].startswith("FROZEN")
+          assert la["common_canon"]=="ケイバメトリクス地方版 v4.13 Rev.1"
+          assert la["krs"]=="v1.7-KRS Rev.1"
+          assert la["krs_ops"]=="v1.7 Rev.1"
+          assert la["reflection"]=="v1.4 Rev.1"
+          assert la["kms"]=="v1.4-KMS Rev.1"
+          assert la["csl"]=="v1.1-CSL Rev.1"
+          assert la["runtime"]==RUNTIME
+          assert la["nar_source_manifest"]==MANIFEST
+          assert la["source_acquisition"]==SOURCE
+
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260923-R4"
+          assert suite["production_numeric_suite"]["status"]=="FROZEN"
+          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert suite["krs"]["spec"]=="v1.7-KRS Rev.1"
+          assert suite["krs"]["ops"]=="v1.7 Rev.1"
+          assert suite["measurement_learning"]["reflection"]["version"]=="v1.4 Rev.1"
+          assert suite["measurement_learning"]["kms"]["version"]=="v1.4-KMS Rev.1"
+          assert suite["measurement_learning"]["csl"]["version"]=="v1.1-CSL Rev.1"
+          assert suite["runtime"]["runtime"]==RUNTIME
+          assert suite["nar_source_manifest"]["profile"]==MANIFEST
+          assert "SOURCE_MANIFEST_LOCAL_NAR" in suite["runtime"]["capabilities"]
+
+          assert reg["profile_id"]=="KM-LOCAL-INFORMATION-SOURCE-REGISTRY-v1.7-20260923"
+          assert reg["input_source_ops"]=="KM-LOCAL-INPUT-SOURCE-OPS-v1.4-20260923"
+          assert reg["nar_source_manifest"]["profile"]==MANIFEST
+          assert reg["nar_source_manifest"]["ban_isolated"] is True
+          assert "OBI" not in reg["nar_source_manifest"]["local_venues"]
+
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260923-R8"
+          lr=route["family_routes"]["LOCAL"]
+          assert lr["runtime_revision"]==RUNTIME
+          assert lr["source_manifest_adapter"]==MANIFEST
+          assert lr["automatic_source_manifest_from_race_metadata"] is True
+          assert "/source/manifest/local" in lr["pre_race_endpoints"]
+          assert route["formal_path"].index("SOURCE_MANIFEST_RESOLVE") < route["formal_path"].index("EXTERNAL_SOURCE_ACQUISITION")
+          assert route["formal_path"].index("SOURCE_FREEZE_VERIFIED") < route["formal_path"].index("PRE_KRS_VERIFIED")
+
+          ev=auth["local_acceptance_evidence"]
+          assert ev["nar_adapter_live_run"]==35767750170
+          assert ev["nar_adapter_actual_run_count"]==5000
+          for key in [
+              "nar_adapter_race_card_raw_sha256",
+              "nar_adapter_source_receipt",
+              "nar_adapter_source_snapshot_sha256",
+              "nar_adapter_pre_krs_receipt",
+              "nar_adapter_krs_receipt",
+              "nar_adapter_final_receipt",
+              "nar_adapter_formal_receipt",
+          ]:
+              value=ev[key]
+              assert isinstance(value,str) and len(value)==64
+              assert all(c in "0123456789abcdef" for c in value)
+
+          print("NAR_ADAPTER_CURRENT_AUTHORITY_ACCEPTANCE_PASS")
+          PY
