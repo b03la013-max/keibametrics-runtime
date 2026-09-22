@@ -3,14 +3,23 @@ sys.path.insert(0,"runtime")
 from family_runtime_contract import load_contracts, resolve_family_runtime, FamilyRuntimeError
 
 c=load_contracts()
-assert resolve_family_runtime({"family_id":"JRA"},c)["executable"] is True
+jra=resolve_family_runtime({"family_id":"JRA"},c)
+assert jra["executable"] is True
+assert str(jra["external_endpoint"]).startswith("https://")
 
-for fam in ["LOCAL","BAN"]:
-    try:
-        resolve_family_runtime({"family_id":fam},c)
-        raise AssertionError("missing attestation must fail")
-    except FamilyRuntimeError as e:
-        assert "ATTESTATION_MISSING" in str(e)
+# LOCAL now has a canonical, physically verified dedicated runtime.
+local=resolve_family_runtime({"family_id":"LOCAL"},c)
+assert local["executable"] is True
+assert local["source"]=="CANONICAL_VERIFIED_LOCAL_CONTRACT"
+assert local["external_endpoint"]=="https://witnessstrictimage-production.up.railway.app"
+assert local["contract"]["execution_status"].startswith("EXECUTABLE")
+
+# BAN remains isolated and requires its own attestation.
+try:
+    resolve_family_runtime({"family_id":"BAN"},c)
+    raise AssertionError("BAN missing attestation must fail")
+except FamilyRuntimeError as e:
+    assert "ATTESTATION_MISSING" in str(e)
 
 ban={
  "family_id":"BAN",
