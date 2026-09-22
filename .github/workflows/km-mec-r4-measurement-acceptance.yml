@@ -43,6 +43,8 @@ jobs:
           assert s["automatic_promotion"] is False
           assert s["production_effect"]=="NONE"
           assert "FORBIDDEN" in s["rule_change_during_window"]
+          assert "PRODUCTION_BASELINE_R3" in s["aggregates"]
+          assert "comparison_vs_production" in s
           p=json.load(open("runtime/pfs_grand_review/current.json",encoding="utf-8"))
           assert p["production_effect"]=="NONE"
           assert "FORMAL_PRE_RACE" in p["cohorts"]
