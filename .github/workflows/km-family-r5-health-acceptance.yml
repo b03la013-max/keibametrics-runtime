@@ -15,7 +15,7 @@ on:
       - ".github/workflows/km-family-non-jra-formal-runner.yml"
       - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R5.json"
       - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R3.json"
-      - "profiles/venue_chat_routes_20260921_R5.json"
+      - "profiles/venue_chat_routes_20260923_R6_Rev1.json"
       - "profiles/family_runtime_contracts_20260921_R1.json"
       - "tests/test_minimum_efficient_coverage.py"
       - "tests/test_mec_r3_precompression_tail_floor.py"
@@ -57,11 +57,11 @@ jobs:
           assert ep["invariants"]["no_cross_family_parameter_map"] is True
           assert ep["invariants"]["no_invented_bankroll"] is True
 
-          route=json.load(open("profiles/venue_chat_routes_20260921_R5.json",encoding="utf-8"))
+          route=json.load(open("profiles/venue_chat_routes_20260923_R6_Rev1.json",encoding="utf-8"))
           assert route["parent_profile"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260921-R5"
           assert route["mec_profile"]==MEC_PROFILE
           assert route["family_routes"]["JRA"]["runtime_status"]=="EXECUTABLE"
-          assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["LOCAL"]["runtime_status"]
+          assert route["family_routes"]["LOCAL"]["runtime_status"]=="EXECUTABLE"
           assert "PHYSICAL_ENDPOINT_REQUIRED" in route["family_routes"]["BAN"]["runtime_status"]
 
           result=json.load(open("runtime/results/KM-JRA-HSN-20260921-R12.json",encoding="utf-8"))
