@@ -153,6 +153,60 @@ class _TextExtractor(HTMLParser):
         return " ".join(self.parts)
 
 
+class _TableExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tables: List[List[List[str]]] = []
+        self._table: List[List[str]] | None = None
+        self._row: List[str] | None = None
+        self._cell: List[str] | None = None
+        self._nested_table_depth = 0
+
+    def handle_starttag(self, tag: str, attrs):
+        t = tag.lower()
+        if t == "table":
+            if self._table is None:
+                self._table = []
+                self._nested_table_depth = 0
+            else:
+                self._nested_table_depth += 1
+        elif self._table is not None and self._nested_table_depth == 0 and t == "tr":
+            self._row = []
+        elif self._row is not None and t in {"td", "th"}:
+            self._cell = []
+        elif self._cell is not None and t in {"br", "p", "div"}:
+            self._cell.append(" ")
+
+    def handle_data(self, data: str):
+        if self._cell is not None and data:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str):
+        t = tag.lower()
+        if t in {"td", "th"} and self._cell is not None:
+            value = re.sub(r"\s+", " ", "".join(self._cell)).strip()
+            if self._row is not None:
+                self._row.append(value)
+            self._cell = None
+        elif t == "tr" and self._row is not None and self._nested_table_depth == 0:
+            if any(x for x in self._row):
+                self._table.append(self._row)
+            self._row = None
+        elif t == "table" and self._table is not None:
+            if self._nested_table_depth > 0:
+                self._nested_table_depth -= 1
+            else:
+                if self._table:
+                    self.tables.append(self._table)
+                self._table = None
+
+
+def _html_tables(decoded: str) -> List[List[List[str]]]:
+    parser = _TableExtractor()
+    parser.feed(decoded)
+    return parser.tables
+
+
 def _decode(raw: bytes, content_type: str) -> str:
     charset = "utf-8"
     m = re.search(r"charset\s*=\s*['\"]?([^;\s'\"]+)", content_type or "", re.I)
@@ -245,6 +299,18 @@ def _extract(raw: bytes, content_type: str, rules: List[Dict[str, Any]]) -> Tupl
                 if json_obj is None:
                     json_obj = json.loads(_decode(raw, content_type))
                 value = _json_path(json_obj, str(rule.get("path") or ""))
+            elif typ == "html_text":
+                if decoded is None:
+                    decoded = _decode(raw, content_type)
+                value = _html_text(decoded)
+                if rule.get("required") and not value:
+                    raise ValueError("HTML_TEXT_EMPTY")
+            elif typ == "html_tables":
+                if decoded is None:
+                    decoded = _decode(raw, content_type)
+                value = _html_tables(decoded)
+                if rule.get("required") and not value:
+                    raise ValueError("HTML_TABLES_EMPTY")
             elif typ == "meta":
                 name = str(rule.get("name") or "")
                 if name == "raw_sha256":
