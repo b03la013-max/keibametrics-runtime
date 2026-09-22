@@ -10,6 +10,27 @@ def _rank(rows,key):
 def _role_set(r):
     return set(str(x) for x in (r.get("static_roles") or []))
 
+def _request_static_roles(request):
+    """Resolve Production roles from the formal request authority fields.
+
+    Formal requests store roles in role_registry/static_prediction.roles, while
+    older unit fixtures may embed static_roles under runners. Treat all as
+    equivalent inputs and union active Production roles. This is a binding
+    repair only; it never changes Production roles.
+    """
+    active={"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
+    out={}
+    for r in request.get("runners") or []:
+        no=int(r["runner_id"])
+        out.setdefault(no,set()).update(_role_set(r))
+    sp=request.get("static_prediction") or {}
+    for no,roles in (sp.get("roles") or {}).items():
+        out.setdefault(int(no),set()).update(str(x) for x in (roles or []))
+    for r in request.get("role_registry") or []:
+        if str(r.get("status")) in active:
+            out.setdefault(int(r["runner_id"]),set()).add(str(r["column"]))
+    return out
+
 def _pair_status_map(request):
     return {(int(x["head"]),int(x["second"])):str(x.get("status") or "") for x in (request.get("pair_dispositions") or [])}
 
@@ -79,7 +100,13 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
         raise ValueError("KRS_ROLE_ZONES_MISSING")
 
     by_no={int(x["horse_no"]):x for x in summary}
-    static_by_no={int(r["runner_id"]):r for r in request.get("runners") or []}
+    resolved_roles=_request_static_roles(request)
+    static_by_no={}
+    for r in request.get("runners") or []:
+        no=int(r["runner_id"])
+        rr=copy.deepcopy(r)
+        rr["static_roles"]=sorted(resolved_roles.get(no,set()))
+        static_by_no[no]=rr
     if set(by_no)!=set(static_by_no):
         raise ValueError("KRS_RUNNER_UNIVERSE_MISMATCH")
 
