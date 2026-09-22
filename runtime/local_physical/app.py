@@ -82,7 +82,7 @@ def health():
       "parameter_map_version":"0.1-provisional","parameter_map_sha256":ps,
       "expected_parameter_map_sha256":PARAM_SHA,"calibration_status":"PROVISIONAL_UNCALIBRATED",
       "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":public_b64(),
-      "github_revision":GIT_REV,"capabilities":["PRE_KRS","KRS_EXECUTE","FINAL","FORMAL","VERIFY"]}
+      "github_revision":GIT_REV,"runtime_app_sha256":sha_file(__file__),"capabilities":["PRE_KRS","KRS_EXECUTE","FINAL","FORMAL","VERIFY"]}
 
 @app.post("/verify")
 def verify(payload:Dict[str,Any]):
