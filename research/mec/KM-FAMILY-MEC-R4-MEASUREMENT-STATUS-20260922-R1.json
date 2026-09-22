@@ -1,0 +1,45 @@
+{
+  "profile": "KM-FAMILY-MEC-R4-MEASUREMENT-STATUS-20260922-R1",
+  "status": "ACTIVE-SHADOW-MEASUREMENT / PRODUCTION-R3-UNCHANGED / FORWARD-OOS-0-OF-30",
+  "production_mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "shadow_candidate": "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+  "forward_oos_grid": "KM-FAMILY-MEC-R4-FORWARD-OOS-GRID-20260922-R2",
+  "pfs_baseline": "KM-PFS-GRAND-REVIEW-BASELINE-20260922-R2",
+  "measurement_acceptance": {
+    "status": "PASS",
+    "workflow_run_id": "35730018392",
+    "source_sha": "d2920c167f87d9937ac3d08802dffde8256f313e",
+    "checks": [
+      "PYTHON_SYNTAX",
+      "MEC_R4_SHADOW_TEST",
+      "MEC_R4_OOS_TRACKER_TEST",
+      "PFS_GRAND_REVIEW_TEST",
+      "OOS_GOVERNANCE_ASSERTIONS"
+    ]
+  },
+  "forward_oos": {
+    "activation_at": "2026-09-22T21:08:00+09:00",
+    "target": 30,
+    "eligible": 0,
+    "remaining": 30,
+    "status": "WAITING_30",
+    "tracker_sha256": "5c5e7995b44b25e2305cded86e6950f5f3318d3157840631814780a49f8e01d3"
+  },
+  "invariants": [
+    "Production MEC-R3 unchanged",
+    "MEC-R4 remains SHADOW",
+    "No arm selection or threshold tuning during 30-race window",
+    "Production Prediction unchanged",
+    "Result-derived ticket creation forbidden",
+    "Automatic promotion forbidden",
+    "Correctness repair only exception and no retroactive mutation of frozen shadows"
+  ],
+  "current_measurement_findings": {
+    "formal_pre_race_pfs": 67.348777349,
+    "eligible_pfs": 72.204379562,
+    "core_pfs": 116.021798365,
+    "protection_pfs": 63.807692308,
+    "tail_pfs": 5.851703407,
+    "note": "Tier evidence is partial structured history only; it supports the research hypothesis but is not promotion evidence."
+  }
+}
