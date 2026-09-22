@@ -1,0 +1,50 @@
+name: KeibaMetrics MEC R4 Measurement Acceptance
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/mec_r4_shadow.py"
+      - "runtime/mec_r4_oos_tracker.py"
+      - "runtime/pfs_grand_review.py"
+      - "tests/test_mec_r4_shadow.py"
+      - "tests/test_mec_r4_oos_tracker.py"
+      - "tests/test_pfs_grand_review.py"
+      - "research/mec/KM-FAMILY-MEC-R4-FORWARD-OOS-GRID-20260922-R1.json"
+      - ".github/workflows/km-mec-r4-measurement-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax
+        run: |
+          python -m py_compile runtime/mec_r4_shadow.py runtime/mec_r4_oos_tracker.py runtime/pfs_grand_review.py
+      - name: Measurement tests
+        run: |
+          python -m pytest -q tests/test_mec_r4_shadow.py tests/test_mec_r4_oos_tracker.py tests/test_pfs_grand_review.py
+      - name: Generate current measurement artifacts
+        run: |
+          python runtime/pfs_grand_review.py
+          python runtime/mec_r4_oos_tracker.py
+      - name: Assert frozen OOS governance
+        run: |
+          python - <<'PY'
+          import json
+          s=json.load(open("runtime/mec_r4_oos_status.json",encoding="utf-8"))
+          assert s["candidate_id"]=="MEC-R4-CPSS-SHADOW-v0.1"
+          assert s["target_eligible_races"]==30
+          assert s["automatic_promotion"] is False
+          assert s["production_effect"]=="NONE"
+          assert "FORBIDDEN" in s["rule_change_during_window"]
+          p=json.load(open("runtime/pfs_grand_review/current.json",encoding="utf-8"))
+          assert p["production_effect"]=="NONE"
+          assert "FORMAL_PRE_RACE" in p["cohorts"]
+          print("MEC_R4_MEASUREMENT_ACCEPTANCE=PASS")
+          PY
