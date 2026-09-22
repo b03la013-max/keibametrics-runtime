@@ -1,0 +1,160 @@
+name: LOCAL Full Lifecycle Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/local-full-lifecycle-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Verify LOCAL pre-race to RESULT signed lifecycle
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error, datetime
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def req(path,payload=None,method="POST",timeout=300):
+              data=None if payload is None else json.dumps(payload,separators=(",",":")).encode()
+              h={"content-type":"application/json"} if payload is not None else {}
+              r=urllib.request.Request(BASE+path,data=data,headers=h,method=method)
+              try:
+                  with urllib.request.urlopen(r,timeout=timeout) as x:
+                      raw=x.read().decode(); return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+
+          hc,h=req("/health",None,"GET",60)
+          print("LOCAL_LIFECYCLE_HEALTH",hc,json.dumps(h,ensure_ascii=False))
+          assert hc==200 and h["status"]=="READY" and h["family"]=="LOCAL"
+          assert h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922"
+          assert "RESULT" in h["capabilities"]
+
+          def horse(no,base):
+              hsv={k:base+((i%7)-3) for i,k in enumerate(HSV)}
+              static={k:base+((i%5)-2) for i,k in enumerate(STATIC)}
+              return {"horse_no":no,"name":f"LOCAL-LIFECYCLE-{no}","gate_no":no,"hsv":hsv,"static":static,
+                      "pzr":{"aggressive":1,"standard":2,"conservative":1},"static_roles":["W"] if no==1 else ["P2"]}
+
+          rid="KM-LOCAL-FULL-LIFECYCLE-ACCEPT-20260922-T01"
+          krs_input={
+            "race":{"race_id":rid,"prediction_id":"LOCAL-LIFECYCLE-T01","revision_no":1,
+                    "engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+            "environment":{"course_family":"LOCAL-SYNTHETIC","surface":"dirt","distance":1400,"going":"good",
+                           "field_size":3,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+            "simulation":{"run_count":5000,"master_seed":20260922,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500},
+            "horses":[horse(1,72),horse(2,64),horse(3,58)]
+          }
+          freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          formal_payload={
+            "family_id":"LOCAL","race_id":rid,
+            "required_index_unresolved":0,"full_numerical_calculation":True,"static_prediction_frozen":True,
+            "krs_input_data":krs_input,"run_count":5000,"seed":20260922,
+            "final_prediction_package":{"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]},"source":"LOCAL_FULL_LIFECYCLE_ACCEPTANCE"},
+            "final_ticket":{"finalized":True,"total_investment":300,"tickets":[
+              {"bet_type":"WIN","selection":[1],"stake":100},
+              {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
+              {"bet_type":"TRIFECTA","selection":[1,2,3],"orientation":"1>2>3","stake":100}
+            ]},
+            "final_freeze_timestamp":freeze
+          }
+
+          fc,formal=req("/formal",formal_payload,"POST",600)
+          print("LOCAL_LIFECYCLE_FORMAL",fc,formal.get("receipt",{}).get("status"),formal.get("receipt_sha256"))
+          assert fc==200 and formal.get("receipt",{}).get("status")=="FULL_FORMAL_E2E_PASS"
+          final_env=formal["artifact"]["final_receipt"]
+
+          result_available=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          result_payload={
+            "family_id":"LOCAL","race_id":rid,
+            "final_receipt":final_env,
+            "official_result":{
+              "finish_order":[1,2,3],
+              "race_time":"1:27.0",
+              "passing_positions":{"1":"1-1","2":"2-2","3":"3-3"},
+              "official_payouts":{"WIN:1":180,"EXACTA:1>2":450,"TRIFECTA:1>2>3":1200},
+              "result_available_at":result_available
+            },
+            "result_available_at":result_available,
+            "settlement":{
+              "status":"COMPLETE",
+              "investment":300,
+              "settled_investment":300,
+              "return":1830
+            },
+            "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+            "failure_localization":{
+              "primary_failure":"NONE",
+              "secondary_failure":"NONE",
+              "materiality":"NON-MATERIAL",
+              "prediction":"PASS",
+              "conversion":"PASS",
+              "capital":"PASS",
+              "execution":"PASS"
+            },
+            "learning_event":{
+              "prediction_error_class":"NONE",
+              "conversion_error_class":"NONE",
+              "capital_efficiency_update":{"pfs":610.0,"hit_but_loss":False},
+              "krs_trust_update":{"classification":"SUPPORTIVE","action":"OBSERVE-NO-PARAMETER-CHANGE"},
+              "next_race_learning_state":{"scope":"SYNTHETIC-ACCEPTANCE","production_rule_change":False}
+            }
+          }
+          rc,res=req("/result",result_payload,"POST",120)
+          print("LOCAL_RESULT_HTTP",rc)
+          print("LOCAL_RESULT_STATUS",res.get("receipt",{}).get("status"))
+          print("LOCAL_RESULT_RECEIPT",res.get("receipt_sha256"))
+          print("LOCAL_RESULT_SETTLEMENT",json.dumps(res.get("artifact",{}).get("settlement"),ensure_ascii=False))
+          assert rc==200 and res.get("receipt",{}).get("status")=="PASS"
+          st=res["artifact"]["settlement"]
+          assert st["investment"]==300 and st["return"]==1830 and st["profit_loss"]==1530
+          assert abs(st["pfs"]-610.0)<1e-9 and st["settlement_completeness_pct"]==100.0
+          vc,v=req("/verify",res,"POST",60)
+          print("LOCAL_RESULT_VERIFY",vc,json.dumps(v,ensure_ascii=False))
+          assert vc==200 and v.get("valid") is True
+
+          # Settlement-safety negative test: PENDING must never be coerced to zero-return defeat.
+          bad=dict(result_payload)
+          bad["settlement"]={"status":"PENDING","investment":300,"return":0}
+          bc,bres=req("/result",bad,"POST",120)
+          print("LOCAL_PENDING_ZERO_STATUS",bc,bres.get("receipt",{}).get("status"),json.dumps(bres.get("receipt",{}).get("errors"),ensure_ascii=False))
+          assert bc==200 and bres.get("receipt",{}).get("status")=="FAIL"
+          assert "PENDING_UNKNOWN_RETURN_ZERO_FORBIDDEN" in bres.get("receipt",{}).get("errors",[])
+
+          pre=formal["artifact"]["pre_krs_receipt"]
+          run=formal["artifact"]["krs_run_receipt"]
+          fin=formal["artifact"]["final_receipt"]
+          for label,env in [("PRE_KRS",pre),("KRS_RUN",run),("FINAL",fin),("FORMAL",formal),("RESULT",res)]:
+              vc,v=req("/verify",env,"POST",60)
+              assert vc==200 and v.get("valid") is True
+              print("LOCAL_LIFECYCLE_VERIFY",label,v.get("valid"))
+
+          print("LOCAL_FULL_LIFECYCLE_ACCEPTANCE_PASS",json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "runtime_app_sha256":h["runtime_app_sha256"],
+            "engine_sha256":h["engine_sha256"],
+            "parameter_map_sha256":h["parameter_map_sha256"],
+            "signer":h["receipt_signer_key_id"],
+            "requested_run_count":run["artifact"]["requested_run_count"],
+            "actual_run_count":run["artifact"]["actual_run_count"],
+            "pre_krs_receipt":pre["receipt_sha256"],
+            "krs_receipt":run["receipt_sha256"],
+            "final_receipt":fin["receipt_sha256"],
+            "formal_receipt":formal["receipt_sha256"],
+            "result_receipt":res["receipt_sha256"],
+            "investment":st["investment"],
+            "return":st["return"],
+            "pfs":st["pfs"],
+            "pending_zero_guard":"PASS"
+          },ensure_ascii=False))
+          PY
