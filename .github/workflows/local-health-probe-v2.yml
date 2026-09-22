@@ -1,0 +1,19 @@
+name: LOCAL Namespace Health Probe V2
+on:
+  push:
+    branches: [ main ]
+    paths: [".github/workflows/local-health-probe-v2.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          python - <<'PY'
+          import urllib.request
+          u="https://quorumprobe-production.up.railway.app/local/health"
+          with urllib.request.urlopen(u,timeout=30) as r:
+              body=r.read().decode()
+              print("HTTP",r.status)
+              print(body)
+              assert r.status==200
+          PY
