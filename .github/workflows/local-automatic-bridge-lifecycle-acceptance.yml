@@ -1,0 +1,115 @@
+name: LOCAL Automatic Bridge Lifecycle Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/local-automatic-bridge-lifecycle-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify canonical LOCAL runtime resolution and phase routing
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,sys,urllib.request,urllib.error,datetime
+          sys.path.insert(0,"runtime")
+          from family_runtime_contract import load_contracts, resolve_family_runtime
+
+          BASE_REQ={"family_id":"LOCAL","race_id":"KM-LOCAL-AUTO-BRIDGE-ACCEPT-20260923-T01"}
+          resolved=resolve_family_runtime(BASE_REQ,load_contracts())
+          print("LOCAL_AUTO_RESOLVE",json.dumps({
+            "source":resolved["source"],
+            "endpoint":resolved["external_endpoint"],
+            "executable":resolved["executable"]
+          },ensure_ascii=False))
+          assert resolved["source"]=="CANONICAL_VERIFIED_LOCAL_CONTRACT"
+          endpoint=resolved["external_endpoint"]
+
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def call(path,payload,timeout=600):
+              data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              rq=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode(); return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except: body={"raw":raw}
+                  return e.code,body
+
+          def horse(no,base):
+              return {
+                "horse_no":no,"name":f"AUTO-{no}","gate_no":no,
+                "hsv":{k:base+((i%7)-3) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%5)-2) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":1},
+                "static_roles":["W"] if no==1 else ["P2"]
+              }
+
+          rid=BASE_REQ["race_id"]
+          freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          req={
+            "family_id":"LOCAL","race_id":rid,"execution_phase":"FORMAL",
+            "required_index_unresolved":0,"full_numerical_calculation":True,"static_prediction_frozen":True,
+            "krs_input_data":{
+              "race":{"race_id":rid,"prediction_id":"AUTO-BRIDGE","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+              "environment":{"course_family":"LOCAL-SYNTHETIC","surface":"dirt","distance":1400,"going":"good","field_size":3,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+              "simulation":{"run_count":5000,"master_seed":20260923,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500},
+              "horses":[horse(1,72),horse(2,64),horse(3,58)]
+            },
+            "run_count":5000,"seed":20260923,
+            "final_prediction_package":{"ranking":[1,2,3],"roles":{"1":["W"],"2":["P2"],"3":["P3"]},"source":"AUTO_BRIDGE_ACCEPTANCE"},
+            "final_ticket":{"finalized":True,"total_investment":300,"tickets":[
+              {"bet_type":"WIN","selection":[1],"stake":100},
+              {"bet_type":"EXACTA","selection":[1,2],"orientation":"1>2","stake":100},
+              {"bet_type":"TRIFECTA","selection":[1,2,3],"orientation":"1>2>3","stake":100}
+            ]},
+            "final_freeze_timestamp":freeze
+          }
+          fc,formal=call("/formal",req)
+          print("LOCAL_AUTO_FORMAL",fc,formal.get("receipt",{}).get("status"),formal.get("receipt_sha256"))
+          assert fc==200 and formal["receipt"]["status"]=="FULL_FORMAL_E2E_PASS"
+          vc,v=call("/verify",formal,60)
+          assert vc==200 and v.get("valid") is True
+
+          result_req={
+            "family_id":"LOCAL","race_id":rid,"execution_phase":"RESULT",
+            "final_receipt":formal["artifact"]["final_receipt"],
+            "official_result":{"finish_order":[1,2,3],"result_available_at":datetime.datetime.now(datetime.timezone.utc).isoformat()},
+            "result_available_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "settlement":{"status":"COMPLETE","investment":300,"settled_investment":300,"return":900},
+            "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+            "failure_localization":{"primary_failure":"NONE","secondary_failure":"NONE","materiality":"NON-MATERIAL"},
+            "learning_event":{
+              "prediction_error_class":"NONE",
+              "conversion_error_class":"NONE",
+              "capital_efficiency_update":{"pfs":300.0},
+              "krs_trust_update":{"classification":"SUPPORTIVE"},
+              "next_race_learning_state":{"production_rule_change":False}
+            }
+          }
+          rc,res=call("/result",result_req,120)
+          print("LOCAL_AUTO_RESULT",rc,res.get("receipt",{}).get("status"),res.get("receipt_sha256"))
+          assert rc==200 and res["receipt"]["status"]=="PASS"
+          vc,v=call("/verify",res,60)
+          assert vc==200 and v.get("valid") is True
+          assert res["artifact"]["settlement"]["pfs"]==300.0
+
+          print("LOCAL_AUTOMATIC_BRIDGE_LIFECYCLE_PASS",json.dumps({
+            "canonical_contract_source":resolved["source"],
+            "endpoint":endpoint,
+            "formal_receipt":formal["receipt_sha256"],
+            "result_receipt":res["receipt_sha256"],
+            "formal_verified":True,
+            "result_verified":True
+          },ensure_ascii=False))
+          PY
