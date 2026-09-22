@@ -486,14 +486,21 @@ jobs:
           with open(os.path.join("runtime","final_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
               json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-          # Pre-result MEC R4 research shadow. Production MEC-R3, FINAL ticket,
-          # capital decision and signed receipts remain unchanged.
-          shadow=build_mec_r4_shadow(immutable_final_artifact)
-          if temporal_mode=="FORMAL-PRE-RACE":
-              assert dt(shadow["generated_at"]).astimezone(timezone.utc) < post_utc, "MEC_R4_SHADOW_POST_START"
-          os.makedirs(os.path.join("runtime","mec_shadow_artifacts"),exist_ok=True)
-          with open(os.path.join("runtime","mec_shadow_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
-              json.dump(shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          # Pre-result MEC R4 research shadow. Production noninterference is absolute:
+          # shadow generation failure/latency can never invalidate or delay the signed Production FINAL.
+          shadow=None
+          shadow_error=None
+          try:
+              candidate_shadow=build_mec_r4_shadow(immutable_final_artifact)
+              if temporal_mode=="FORMAL-PRE-RACE" and dt(candidate_shadow["generated_at"]).astimezone(timezone.utc) >= post_utc:
+                  shadow_error="MEC_R4_SHADOW_NOT_PRE_RESULT"
+              else:
+                  shadow=candidate_shadow
+                  os.makedirs(os.path.join("runtime","mec_shadow_artifacts"),exist_ok=True)
+                  with open(os.path.join("runtime","mec_shadow_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
+                      json.dump(shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          except Exception as exc:
+              shadow_error="MEC_R4_SHADOW_NONBLOCKING_ERROR:"+type(exc).__name__+":"+str(exc)
 
           summary={
             "race_id":race_id,
@@ -536,7 +543,11 @@ jobs:
             "execution_stage_manifest":stage_manifest,
             "execution_stage_manifest_sha256":final_package["execution_stage_manifest_sha256"],
             "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values()),
-            "mec_r4_shadow":{"profile":shadow["profile"],"candidate_id":shadow["candidate_id"],"sha256":shadow["sha256"],"production_effect":"NONE"}
+            "mec_r4_shadow":(
+              {"status":"FROZEN","profile":shadow["profile"],"candidate_id":shadow["candidate_id"],"sha256":shadow["sha256"],"production_effect":"NONE"}
+              if shadow else
+              {"status":"NOT_FROZEN","reason":shadow_error,"production_effect":"NONE"}
+            )
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
