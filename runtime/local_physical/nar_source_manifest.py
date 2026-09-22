@@ -96,6 +96,7 @@ def _odds_source(venue_id: str, baba: str, race_date: str, race_no: int) -> Dict
 
 
 def _result_source(venue_id: str, baba: str, race_date: str, race_no: int) -> Dict[str, Any]:
+    scope = f"same_day_r{race_no:02d}"
     return {
         "source_id": f"NAR-{venue_id}-{race_date.replace('/','')}-R{race_no:02d}-RESULT",
         "source_class": "OFFICIAL_SAME_DAY_RACE_RESULT_PASSING_ORDER",
@@ -106,9 +107,9 @@ def _result_source(venue_id: str, baba: str, race_date: str, race_no: int) -> Di
         "url": _url("RaceMarkTable", baba, race_date, race_no),
         "max_bytes": 750000,
         "extract": [
-            {"field":"result_tables","type":"html_tables","required":False},
-            {"field":"weather","type":"regex","scope":"html_text","pattern":r"天候[:：]\s*([^\s]+)","group":1,"cast":"str","required":False},
-            {"field":"track_condition","type":"regex","scope":"html_text","pattern":r"馬場[:：]\s*([^\s]+)","group":1,"cast":"str","required":False},
+            {"field":f"{scope}_result_tables","type":"html_tables","required":False},
+            {"field":f"{scope}_weather","type":"regex","scope":"html_text","pattern":r"天候[:：]\s*([^\s]+)","group":1,"cast":"str","required":False},
+            {"field":f"{scope}_track_condition","type":"regex","scope":"html_text","pattern":r"馬場[:：]\s*([^\s]+)","group":1,"cast":"str","required":False},
         ],
     }
 

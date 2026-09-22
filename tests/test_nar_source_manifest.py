@@ -60,3 +60,23 @@ def test_invalid_or_ban_venue_is_rejected():
         raise AssertionError("BAN venue must not use LOCAL adapter")
     except ValueError as e:
         assert "LOCAL_NAR_VENUE_ID_UNSUPPORTED" in str(e)
+
+
+def test_same_day_result_fields_are_race_scoped():
+    m=build_local_nar_manifest({
+        "family_id":"LOCAL",
+        "race_id":"KCH-20260913-R03",
+        "venue_id":"KCH",
+        "race_date":"2026-09-13",
+        "race_no":3,
+        "prediction_cutoff":"2026-09-13T15:30:00+09:00",
+        "include_same_day_results":True,
+        "include_odds":False,
+    })
+    r1=next(x for x in m["sources"] if "R01-RESULT" in x["source_id"])
+    r2=next(x for x in m["sources"] if "R02-RESULT" in x["source_id"])
+    f1={x["field"] for x in r1["extract"]}
+    f2={x["field"] for x in r2["extract"]}
+    assert "same_day_r01_result_tables" in f1
+    assert "same_day_r02_result_tables" in f2
+    assert f1.isdisjoint(f2)
