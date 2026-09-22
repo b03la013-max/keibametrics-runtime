@@ -121,6 +121,22 @@ jobs:
                 "prediction_cutoff":req.get("prediction_cutoff"),
                 "sources":copy.deepcopy(req["required_source_manifest"])
               }
+          if not isinstance(source_req,dict):
+              race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+              venue_id=req.get("venue_id") or race_meta.get("venue_id")
+              race_date=req.get("race_date") or race_meta.get("race_date") or race_meta.get("date")
+              race_no=req.get("race_no") or race_meta.get("race_no")
+              cutoff=req.get("prediction_cutoff") or race_meta.get("prediction_cutoff")
+              if venue_id and race_date and race_no and cutoff:
+                  mc,manifest=call("/source/manifest/local",{
+                    "family_id":"LOCAL","race_id":rid,
+                    "venue_id":venue_id,"race_date":race_date,"race_no":race_no,
+                    "prediction_cutoff":cutoff,
+                    "include_same_day_results":True,
+                    "include_odds":bool(req.get("collect_official_odds",False))
+                  },60)
+                  assert mc<300,(mc,manifest)
+                  source_req=manifest
           assert isinstance(source_req,dict),"SOURCE_ACQUISITION_REQUEST_REQUIRED"
           source_req=copy.deepcopy(source_req)
           source_req["family_id"]="LOCAL"
