@@ -49,6 +49,7 @@ jobs:
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
           from evidence_feature_compiler import compile_evidence_feature_ledger
           from capital_policy import resolve_capital_policy
+          from mec_r4_shadow import build_mec_r4_shadow
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
@@ -485,6 +486,15 @@ jobs:
           with open(os.path.join("runtime","final_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
               json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
+          # Pre-result MEC R4 research shadow. Production MEC-R3, FINAL ticket,
+          # capital decision and signed receipts remain unchanged.
+          shadow=build_mec_r4_shadow(immutable_final_artifact)
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert dt(shadow["generated_at"]).astimezone(timezone.utc) < post_utc, "MEC_R4_SHADOW_POST_START"
+          os.makedirs(os.path.join("runtime","mec_shadow_artifacts"),exist_ok=True)
+          with open(os.path.join("runtime","mec_shadow_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
+              json.dump(shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           summary={
             "race_id":race_id,
             "family_id":family,
@@ -525,7 +535,8 @@ jobs:
             "bet_type_dispositions_verified":True if mec_required else conformance["bet_type_dispositions_verified"],
             "execution_stage_manifest":stage_manifest,
             "execution_stage_manifest_sha256":final_package["execution_stage_manifest_sha256"],
-            "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values())
+            "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values()),
+            "mec_r4_shadow":{"profile":shadow["profile"],"candidate_id":shadow["candidate_id"],"sha256":shadow["sha256"],"production_effect":"NONE"}
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -538,6 +549,7 @@ jobs:
             git config user.name "keibametrics-runtime"
             git config user.email "actions@users.noreply.github.com"
             git add runtime/final_artifacts/*.json
+            if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json; fi
             if ! git diff --cached --quiet; then
               git commit -m "runtime: persist immutable FINAL artifact [skip ci]"
               git pull --rebase origin main
