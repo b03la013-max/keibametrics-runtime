@@ -1,0 +1,207 @@
+name: LOCAL Source Acquisition Runtime Acceptance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'governance/KM-LOCAL-SOURCE-ACQUISITION-ACTIVATION-20260923-R1.json'
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify live SOURCE -> PRE_KRS -> KRS -> FINAL signed lifecycle
+        shell: bash
+        run: |
+          python - <<'PY'
+          import copy, datetime, hashlib, json, sys, urllib.error, urllib.request
+          sys.path.insert(0,"runtime")
+          from minimum_efficient_coverage import build_mec_plan, validate_mec_plan
+          from capital_policy import resolve_capital_policy
+
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          RID="KM-LOCAL-SOURCE-ACCEPT-20260923-T01"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def call(path,payload=None,method="POST",timeout=600):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(BASE+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          def sha(x):
+              return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+
+          hc,h=call("/health",None,"GET",60)
+          print("HEALTH",hc,json.dumps(h,ensure_ascii=False))
+          assert hc==200 and h["status"]=="READY"
+          assert h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-20260923-SOURCE-ACQUISITION"
+          assert h["source_acquisition_required"] is True
+          assert "SOURCE_ACQUIRE" in h["capabilities"]
+
+          source_req={
+            "family_id":"LOCAL",
+            "race_id":RID,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "sources":[{
+              "source_id":"NAR-OFFICIAL-HOME",
+              "source_class":"OFFICIAL_RACE_CARD",
+              "authority":"NAR",
+              "priority":100,
+              "official":True,
+              "required":True,
+              "url":"https://www.keiba.go.jp/",
+              "extract":[{
+                "field":"official_page_title",
+                "type":"regex",
+                "pattern":r"<title[^>]*>\s*(.*?)\s*</title>",
+                "group":1,
+                "cast":"str",
+                "required":True
+              }]
+            }]
+          }
+          sc,source=call("/source/acquire",source_req,timeout=120)
+          print("SOURCE",sc,(source.get("receipt") or {}).get("status"),source.get("receipt_sha256"))
+          assert sc==200 and (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",source
+          art=source["artifact"]
+          assert art["formal_ready"] is True
+          assert art["missing_required_sources"]==[]
+          assert art["post_cutoff_sources"]==[]
+          assert art["sources"][0]["raw_sha256"]
+          assert art["sources"][0]["raw_gzip_b64"]
+          assert art["normalized_evidence"]["official_page_title"]["source_id"]=="NAR-OFFICIAL-HOME"
+
+          vc,v=call("/source/verify",source,timeout=60)
+          assert vc==200 and v["valid"] is True,v
+          gc,g=call("/verify",source,timeout=60)
+          assert gc==200 and g["valid"] is True,g
+
+          # Missing SOURCE receipt must fail closed before PRE_KRS.
+          nc,neg=call("/pre-krs",{"family_id":"LOCAL","race_id":RID},timeout=60)
+          assert nc==422 and "SOURCE_RECEIPT_REQUIRED" in str(neg),neg
+
+          # Tampered source artifact must fail verification.
+          tampered=copy.deepcopy(source)
+          tampered["artifact"]["normalized_evidence"]["official_page_title"]["value"]="TAMPERED"
+          tc,tv=call("/source/verify",tampered,timeout=60)
+          assert tc==200 and tv["valid"] is False,tv
+
+          # Post-cutoff collection must never become SOURCE_FROZEN.
+          post=copy.deepcopy(source_req)
+          post["race_id"]=RID+"-POST"
+          post["prediction_cutoff"]="2000-01-01T00:00:00+00:00"
+          pc,pout=call("/source/acquire",post,timeout=120)
+          assert pc==200 and (pout.get("receipt") or {}).get("status")=="FAIL",pout
+          assert any("SOURCE_POST_CUTOFF" in x for x in (pout.get("receipt") or {}).get("errors",[])),pout
+
+          def horse(no,base):
+              return {
+                "horse_no":no,"name":f"SOURCE-ACCEPT-{no}","gate_no":no,
+                "hsv":{k:base+((i%5)-2) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%3)-1) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":3},
+                "static_roles":["W"] if no==1 else (["P2"] if no==2 else ["P3"])
+              }
+
+          krs_input={
+            "race":{"race_id":RID,"prediction_id":RID+"-P1","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+            "environment":{"course_family":"LOCAL-SYNTHETIC","surface":"dirt","distance":1400,"going":"good","field_size":3,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+            "simulation":{"run_count":5000,"master_seed":20260923,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500},
+            "horses":[horse(1,72),horse(2,64),horse(3,58)]
+          }
+
+          sem={
+            "race_id":RID,"family_id":"LOCAL",
+            "available_bet_types":["EXACTA","TRIO","TRIFECTA"],
+            "role_registry":[
+              {"runner_id":"1","column":"W","status":"CORE"},
+              {"runner_id":"2","column":"P2","status":"CORE"},
+              {"runner_id":"3","column":"P3","status":"CORE"}
+            ],
+            "pair_dispositions":[{"head":"1","second":"2","status":"PURCHASE","reason":"SOURCE_ACCEPT_PRIMARY_PAIR"}],
+            "third_dispositions":[{"head":"1","second":"2","third":"3","status":"PURCHASE","reason":"SOURCE_ACCEPT_PRIMARY_THIRD"}],
+            "orientation_exclusions":[],
+            "head_nonselection_reasons":{},
+            "capital_policy":{"mode":"RECOMMENDATION_ONLY"}
+          }
+          mec=build_mec_plan(sem,strict_head_closure=True,min_stake=100)
+          assert validate_mec_plan(mec)["mec_verified"] is True
+          capital=resolve_capital_policy(sem,mec)
+          tickets=copy.deepcopy(mec["tickets"])
+          total=mec["minimum_required_capital"]
+          freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          fpp={
+            "ranking":[1,2,3],
+            "roles":{"1":["W"],"2":["P2"],"3":["P3"]},
+            "source":"SOURCE_ACQUISITION_LIVE_ACCEPTANCE",
+            "source_snapshot_sha256":art["source_snapshot_sha256"]
+          }
+          trace={
+            "fpp_sha256":sha(fpp),
+            "mec_sha256":mec["sha256"],
+            "candidate_count":mec["ticket_count"],
+            "selected_count":len(tickets),
+            "capital_decision_sha256":capital["sha256"]
+          }
+          stages=[{"stage":x,"timestamp":freeze} for x in [
+            "SOURCE_FREEZE","RUNNER_UNIVERSE","NUMERICAL_MATERIALIZATION","INDEX_PROVENANCE",
+            "STATIC_FREEZE","PRE_KRS","KRS","KRS_UTILITY","MEC","CAPITAL","FINAL_TICKET_FREEZE"
+          ]]
+          formal={
+            "family_id":"LOCAL","race_id":RID,
+            "source_receipt":source,
+            "required_index_unresolved":0,
+            "full_numerical_calculation":True,
+            "static_prediction_frozen":True,
+            "krs_input_data":krs_input,
+            "run_count":5000,"seed":20260923,
+            "final_prediction_package":fpp,
+            "final_ticket":{"finalized":True,"no_bet":False,"total_investment":total,"tickets":tickets,"frozen_at":freeze},
+            "minimum_efficient_coverage":mec,
+            "capital_policy_decision":capital,
+            "ticket_transport_trace":trace,
+            "execution_stage_manifest":stages,
+            "final_freeze_timestamp":freeze
+          }
+          fc,fout=call("/formal",formal,timeout=900)
+          print("FORMAL",fc,(fout.get("receipt") or {}).get("status"),fout.get("receipt_sha256"))
+          assert fc==200 and (fout.get("receipt") or {}).get("status")=="FULL_FORMAL_E2E_PASS",fout
+          assert fout["artifact"]["source_receipt_sha256"]==source["receipt_sha256"]
+          assert fout["artifact"]["source_snapshot_sha256"]==art["source_snapshot_sha256"]
+          assert fout["artifact"]["actual_run_count"]==5000
+          for label,env in [
+            ("SOURCE",source),
+            ("PRE_KRS",fout["artifact"]["pre_krs_receipt"]),
+            ("KRS_RUN",fout["artifact"]["krs_run_receipt"]),
+            ("FINAL",fout["artifact"]["final_receipt"]),
+            ("FORMAL",fout)
+          ]:
+              xcode,xout=call("/verify",env,timeout=60)
+              assert xcode==200 and xout["valid"] is True,(label,xcode,xout)
+
+          print("LOCAL_SOURCE_ACQUISITION_ACCEPTANCE_PASS="+json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "source_profile":h["source_acquisition_profile"],
+            "source_receipt":source["receipt_sha256"],
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "raw_source_sha256":art["sources"][0]["raw_sha256"],
+            "pre_krs_receipt":fout["artifact"]["pre_krs_receipt"]["receipt_sha256"],
+            "krs_receipt":fout["artifact"]["krs_run_receipt"]["receipt_sha256"],
+            "final_receipt":fout["artifact"]["final_receipt"]["receipt_sha256"],
+            "formal_receipt":fout["receipt_sha256"],
+            "actual_run_count":fout["artifact"]["actual_run_count"]
+          },ensure_ascii=False,separators=(",",":")))
+          PY
