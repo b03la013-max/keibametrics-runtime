@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0,"runtime")
-from mec_r4_shadow import build_mec_r4_shadow, settle_mec_r4_shadow, PROFILE
+from mec_r4_shadow import build_mec_r4_shadow, settle_mec_r4_shadow, settle_ticket_list, PROFILE
 
 final={
  "race_id":"TEST-RACE",
@@ -46,3 +46,20 @@ assert settled["arms"]["CPSS_ALL"]["status"]=="SETTLED"
 assert settled["arms"]["CPSS_ALL"]["return"]>=3600
 assert settled["production_effect"]=="NONE"
 print("PASS_MEC_R4_SHADOW",shadow["sha256"],settled["sha256"])
+
+
+# Current RESULT schemas may expose flat payouts_per_100_yen keys.
+flat_result={"official_result":{"status":"OFFICIAL","top3":[1,2,3],"payouts_per_100_yen":{
+ "EXACTA_1_2":500,"TRIO_1_2_3":900,"TRIFECTA_1_2_3":2200
+}}}
+flat=settle_ticket_list([
+ {"bet_type":"EXACTA","selection":[1,2],"stake":100},
+ {"bet_type":"TRIO","selection":[1,2,3],"stake":100},
+ {"bet_type":"TRIFECTA","selection":[1,2,3],"stake":100},
+],flat_result)
+assert flat["status"]=="SETTLED"
+assert flat["investment"]==300
+assert flat["return"]==3600
+assert flat["by_bet_type"]["EXACTA"]["pfs"]==500
+assert flat["by_bet_type"]["TRIO"]["pfs"]==900
+assert flat["by_bet_type"]["TRIFECTA"]["pfs"]==2200
