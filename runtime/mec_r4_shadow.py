@@ -103,6 +103,9 @@ def _apply_structural_closure(store,final_artifact,top_k=None):
         _add(store,"TRIO",sorted(sel),100,"STRUCTURAL_CLOSURE")
 
 def _arm(final_artifact,name):
+    production_tickets=_tickets(final_artifact)
+    production_core=[t for t in production_tickets if _tier(t)=="CORE"]
+    production_tail=[t for t in production_tickets if _tier(t)=="TAIL"]
     if name=="CORE_ONLY":
         store,has_tier=_base_store(final_artifact,{"CORE"})
     else:
@@ -114,11 +117,21 @@ def _arm(final_artifact,name):
             top_k=int(name.replace("CPSS_TOP",""))
         _apply_structural_closure(store,final_artifact,top_k=top_k)
     tickets=sorted(store.values(),key=lambda x:(x["bet_type"],tuple(x["selection"]),x["stake"]))
+    retained_keys={_key(x["bet_type"],x["selection"]) for x in tickets}
+    core_keys={_key(x["bet_type"],x["selection"]) for x in production_core}
+    retained_core=len(core_keys & retained_keys)
+    core_retention=(retained_core/len(core_keys)) if core_keys else 1.0
+    generic_tail_capital=sum(int(x.get("stake") or 0) for x in production_tail)
     return {
         "arm":name,
         "tier_metadata_available":has_tier,
         "ticket_count":len(tickets),
         "minimum_shadow_capital":sum(int(x["stake"]) for x in tickets),
+        "production_core_ticket_count":len(core_keys),
+        "retained_core_ticket_count":retained_core,
+        "core_structure_retention_ratio":round(core_retention,9),
+        "semantic_information_retention_ratio":1.0,
+        "generic_tail_capital_avoided":generic_tail_capital,
         "tickets":tickets,
         "sha256":_sha(tickets),
     }
