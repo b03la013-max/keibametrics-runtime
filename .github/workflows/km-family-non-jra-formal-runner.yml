@@ -13,9 +13,11 @@ on:
 jobs:
   formal-bridge:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Resolve and execute family-isolated external runtime
         shell: bash
         run: |
@@ -26,17 +28,26 @@ jobs:
           fi
           test -n "$REQ"
           REQUEST_FILE="$REQ" python - <<'PY'
-          import json,os,sys,urllib.request,urllib.error
+          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy
           sys.path.insert(0,"runtime")
           from family_runtime_contract import load_contracts, resolve_family_runtime
+
+          def sha_obj(x):
+              return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+
+          def parse_dt(s):
+              return datetime.datetime.fromisoformat(str(s).replace("Z","+00:00"))
+
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+
           fam=str(req.get("family_id") or "").upper()
           assert fam in {"LOCAL","BAN"}, f"NON_JRA_BRIDGE_FAMILY_INVALID:{fam}"
           resolved=resolve_family_runtime(req,load_contracts())
           assert resolved["executable"] is True
           endpoint=resolved["external_endpoint"]
-          def call(path,payload,timeout=360):
+
+          def call(path,payload,timeout=600):
               data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
               rq=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
               try:
@@ -48,27 +59,225 @@ jobs:
                   try: body=json.loads(raw)
                   except Exception: body={"raw":raw}
                   return e.code,body
+
+          def verify_envelope(env,label):
+              vc,v=call("/verify",env,60)
+              assert vc<300 and v.get("valid") is True,(label,vc,v)
+              return env.get("receipt_sha256")
+
           phase=str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper()
+
+          # Post-race path: RESULT endpoint performs settlement-safe PFS,
+          # automatic failure localization, and next-race learning state.
           if phase in {"RESULT","POST_RACE","POST-RACE","SETTLEMENT"}:
-              path="/result"
-              expected={"PASS"}
-              output_status="RESULT_PASS"
-          else:
-              path="/formal"
-              expected={"PASS","FULL_FORMAL_E2E_PASS"}
-              output_status="FULL_FORMAL_E2E_PASS"
-          code,res=call(path,req)
-          assert code<300,(code,res)
-          receipt=res.get("receipt") or {}
-          assert receipt.get("status") in expected,res
-          vcode,v=call("/verify",res,60)
-          assert vcode<300 and v.get("valid") is True,(vcode,v)
+              code,res=call("/result",req,180)
+              assert code<300,(code,res)
+              assert (res.get("receipt") or {}).get("status")=="PASS",res
+              verify_envelope(res,"RESULT")
+              print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
+                "race_id":req.get("race_id"),"family_id":fam,
+                "execution_phase":"RESULT","status":"RESULT_PASS",
+                "external_endpoint":endpoint,
+                "receipt_sha256":res.get("receipt_sha256"),
+                "verified":True,
+                "pfs":((res.get("artifact") or {}).get("settlement") or {}).get("pfs"),
+                "learning_state_id":((res.get("artifact") or {}).get("learning_event") or {}).get("state_id"),
+              },separators=(",",":"),ensure_ascii=False))
+              raise SystemExit(0)
+
+          # BAN retains its current isolated formal contract.
+          if fam=="BAN":
+              code,res=call("/formal",req)
+              assert code<300,(code,res)
+              receipt=res.get("receipt") or {}
+              assert receipt.get("status") in {"PASS","FULL_FORMAL_E2E_PASS"},res
+              verify_envelope(res,"BAN_FORMAL")
+              print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
+                "race_id":req.get("race_id"),"family_id":fam,
+                "execution_phase":"FORMAL","status":"FULL_FORMAL_E2E_PASS",
+                "external_endpoint":endpoint,
+                "receipt_sha256":res.get("receipt_sha256"),
+                "verified":True
+              },separators=(",",":"),ensure_ascii=False))
+              raise SystemExit(0)
+
+          # LOCAL staged full-pipeline execution.
+          from local_evidence_to_base_production import materialize_request
+          from local_index_provenance_builder import build as build_local_provenance
+          from local_krs_input_builder_production import build as build_local_krs
+          from krs_prediction_utility import build_krs_prediction_utility
+          from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MEC_PROFILE
+          from capital_policy import resolve_capital_policy
+
+          rid=str(req.get("race_id") or "")
+          assert rid,"RACE_ID_REQUIRED"
+          assert str(req.get("source_snapshot_sha256") or ""),"SOURCE_SNAPSHOT_SHA_REQUIRED"
+          runners=req.get("runners")
+          assert isinstance(runners,list) and len(runners)>=2,"FULL_RUNNER_UNIVERSE_REQUIRED"
+          ids=[str(x.get("runner_id")) for x in runners]
+          assert len(ids)==len(set(ids)),"RUNNER_UNIVERSE_DUPLICATE_ID"
+          assert isinstance(req.get("static_prediction"),dict),"STATIC_PREDICTION_REQUIRED"
+          assert req.get("static_prediction_frozen") is True,"STATIC_PREDICTION_FREEZE_REQUIRED"
+
+          temporal_mode=str(req.get("temporal_mode") or "FORMAL-PRE-RACE").upper()
+          scheduled=req.get("scheduled_post_at")
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert scheduled,"SCHEDULED_POST_AT_REQUIRED"
+              assert datetime.datetime.now(datetime.timezone.utc) < parse_dt(scheduled).astimezone(datetime.timezone.utc),"POST_START_BEFORE_EXECUTION"
+
+          stage_manifest=[]
+          def stage(name,**kw):
+              stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
+
+          stage("SOURCE_FREEZE",source_snapshot_sha256=req["source_snapshot_sha256"])
+          stage("RUNNER_UNIVERSE",runner_count=len(runners))
+
+          req_indices=req.get("required_indices") or req.get("required_index_names")
+          assert isinstance(req_indices,list) and req_indices,"LOCAL_REQUIRED_INDICES_REQUIRED"
+          if req_indices and isinstance(req_indices[0],dict):
+              req_indices=[str(x.get("index") or x.get("index_name") or x.get("name") or "") for x in req_indices]
+          req_indices=[str(x) for x in req_indices if str(x)]
+          assert req_indices,"LOCAL_REQUIRED_INDEX_NAMES_EMPTY"
+
+          req=materialize_request(req,req_indices)
+          cov=req["numeric_coverage"]
+          assert req.get("full_numerical_calculation") is True,("LOCAL_NUMERICAL_CALCULATION_INCOMPLETE",cov)
+          assert int(cov.get("unresolved_count",0))==0,cov
+          stage("NUMERICAL_MATERIALIZATION",
+                required_count=cov["required_count"],calculated_count=cov["calculated_count"],unresolved_count=cov["unresolved_count"],
+                mapping_registry=req.get("local_mapping_registry"))
+
+          req=build_local_provenance(req)
+          assert req.get("index_provenance_hash"),"LOCAL_INDEX_PROVENANCE_HASH_MISSING"
+          stage("INDEX_PROVENANCE",index_provenance_hash=req["index_provenance_hash"],
+                row_count=len((req.get("index_provenance_ledger") or {}).get("rows") or []))
+
+          req=build_local_krs(req)
+          assert isinstance(req.get("krs_input_data"),dict),"LOCAL_KRS_INPUT_MISSING"
+          stage("STATIC_FREEZE",static_prediction_sha256=sha_obj(req["static_prediction"]))
+          stage("LOCAL_KRS_INPUT",local_krs_input_sha256=req.get("local_krs_input_sha256"),
+                bridge_id=req.get("local_krs_bridge_id"))
+
+          pre_payload={
+            "family_id":"LOCAL","race_id":rid,
+            "required_index_unresolved":0,
+            "full_numerical_calculation":True,
+            "static_prediction_frozen":True,
+            "krs_input_data":req["krs_input_data"]
+          }
+          pc,pre=call("/pre-krs",pre_payload,120)
+          assert pc<300 and (pre.get("receipt") or {}).get("status")=="PASS",(pc,pre)
+          pre_sha=verify_envelope(pre,"PRE_KRS")
+          stage("PRE_KRS",receipt_sha256=pre_sha)
+
+          run_count=int(req.get("run_count") or 5000)
+          seed=int(req.get("seed") or 1)
+          kc,run=call("/krs/execute",{
+            "family_id":"LOCAL","race_id":rid,
+            "krs_input_data":req["krs_input_data"],
+            "run_count":run_count,"seed":seed
+          },600)
+          assert kc<300 and (run.get("receipt") or {}).get("status")=="EXECUTED",(kc,run)
+          assert int((run.get("artifact") or {}).get("actual_run_count",0))>=run_count,run
+          run_sha=verify_envelope(run,"KRS_RUN")
+          stage("KRS",receipt_sha256=run_sha,requested_run_count=run_count,
+                actual_run_count=(run.get("artifact") or {}).get("actual_run_count"),
+                input_sha256=(run.get("artifact") or {}).get("input_sha256"),
+                output_sha256=(run.get("artifact") or {}).get("output_sha256"))
+
+          utility=build_krs_prediction_utility(req,{
+            "status":"EXECUTED",
+            "output":copy.deepcopy((run.get("artifact") or {}).get("raw_output") or {})
+          })
+          stage("KRS_UTILITY",utility_class=utility.get("utility_class"),utility_sha256=utility.get("sha256"),
+                production_effect="NONE")
+
+          mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
+          mec_check=validate_mec_plan(mec)
+          assert mec_check["mec_verified"] is True
+          assert mec["profile"]==MEC_PROFILE
+          stage("MEC",mec_sha256=mec["sha256"],ticket_count=mec["ticket_count"],
+                minimum_required_capital=mec["minimum_required_capital"],
+                material_coverage_ratio=mec["material_coverage_ratio"],
+                precompression_semantic_universe=mec.get("precompression_semantic_universe"))
+
+          capital=resolve_capital_policy(req,mec)
+          stage("CAPITAL",capital_decision_sha256=capital["sha256"],mode=capital["mode"],
+                compatibility=capital["compatibility"],decision=capital["decision"],
+                required_capital=capital["required_capital"],capital_limit=capital["capital_limit"])
+
+          no_bet=bool(capital["no_bet"])
+          tickets=[] if no_bet else copy.deepcopy(mec["tickets"])
+          total=0 if no_bet else int(mec["minimum_required_capital"])
+          final_freeze=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          if temporal_mode=="FORMAL-PRE-RACE":
+              assert datetime.datetime.now(datetime.timezone.utc) < parse_dt(scheduled).astimezone(datetime.timezone.utc),"POST_START_BEFORE_FINAL"
+          stage("FINAL_TICKET_FREEZE",final_freeze_timestamp=final_freeze,ticket_count=len(tickets),total_investment=total)
+
+          final_package=copy.deepcopy(req.get("final_prediction_package") or {})
+          assert final_package,"FINAL_PREDICTION_PACKAGE_REQUIRED"
+          final_package.update({
+            "source_snapshot_sha256":req["source_snapshot_sha256"],
+            "local_mapping_registry":req.get("local_mapping_registry"),
+            "index_provenance_hash":req.get("index_provenance_hash"),
+            "local_krs_bridge_id":req.get("local_krs_bridge_id"),
+            "local_krs_input_sha256":req.get("local_krs_input_sha256"),
+            "actual_numerical_calculation":copy.deepcopy(cov),
+            "krs_prediction_utility_shadow":copy.deepcopy(utility),
+            "minimum_efficient_coverage":copy.deepcopy(mec),
+            "capital_policy_decision":copy.deepcopy(capital)
+          })
+
+          trace={
+            "fpp_sha256":sha_obj(final_package),
+            "mec_sha256":mec["sha256"],
+            "candidate_count":int(mec["ticket_count"]),
+            "selected_count":len(tickets),
+            "capital_decision_sha256":capital["sha256"],
+            "no_bet":no_bet,
+            "candidate_source":"MEC_R3_PRECOMPRESSION_MATERIAL_COVERAGE",
+            "selection_source":"CAPITAL_COMPATIBILITY_POLICY",
+            "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
+          }
+
+          final_payload={
+            "family_id":"LOCAL","race_id":rid,
+            "krs_run_receipt":run,
+            "final_prediction_package":final_package,
+            "final_ticket":{
+              "finalized":True,
+              "no_bet":no_bet,
+              "total_investment":total,
+              "tickets":tickets,
+              "frozen_at":final_freeze
+            },
+            "minimum_efficient_coverage":mec,
+            "capital_policy_decision":capital,
+            "ticket_transport_trace":trace,
+            "execution_stage_manifest":stage_manifest,
+            "final_freeze_timestamp":final_freeze
+          }
+          fc,fin=call("/final",final_payload,180)
+          assert fc<300 and (fin.get("receipt") or {}).get("status")=="PASS",(fc,fin)
+          final_sha=verify_envelope(fin,"FINAL")
+
           print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
-            "race_id":req.get("race_id"),"family_id":fam,
-            "execution_phase":phase,
-            "status":output_status,
+            "race_id":rid,"family_id":"LOCAL","execution_phase":"FORMAL",
+            "status":"FULL_FORMAL_E2E_PASS",
             "external_endpoint":endpoint,
-            "receipt_sha256":res.get("receipt_sha256"),
+            "pre_krs_receipt":pre_sha,
+            "krs_receipt":run_sha,
+            "final_receipt":final_sha,
+            "actual_run_count":(run.get("artifact") or {}).get("actual_run_count"),
+            "numeric_coverage":cov,
+            "krs_utility_class":utility.get("utility_class"),
+            "mec_profile":mec.get("profile"),
+            "mec_sha256":mec.get("sha256"),
+            "material_coverage_ratio":mec.get("material_coverage_ratio"),
+            "minimum_required_capital":mec.get("minimum_required_capital"),
+            "capital_decision":capital.get("decision"),
+            "ticket_count":len(tickets),
+            "total_investment":total,
             "verified":True
           },separators=(",",":"),ensure_ascii=False))
           PY
