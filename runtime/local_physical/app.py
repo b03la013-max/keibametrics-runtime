@@ -4,8 +4,9 @@ from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
+from post_result_learning import build_post_result_review, build_learning_state
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.2-20260923"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -296,23 +297,78 @@ def result(p:Dict[str,Any]):
         profit_loss=ret-investment
         settlement_completeness=100.0
 
-    learning=p.get("learning_event")
-    if not isinstance(learning,dict):
-        errs.append("LEARNING_EVENT_MISSING")
-        learning={}
-    required_learning=["prediction_error_class","conversion_error_class","capital_efficiency_update","krs_trust_update"]
-    missing_learning=[k for k in required_learning if k not in learning]
-    if missing_learning:
-        errs.append("LEARNING_EVENT_INCOMPLETE:"+",".join(missing_learning))
+    auto_review=None
+    auto_learning=None
+    try:
+        finish_order=official.get("finish_order") or []
+        if len(finish_order)>=3 and isinstance(fin,dict):
+            final_artifact={
+                "race_id":rid,
+                "sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+                "final_receipt_sha256":fin.get("receipt_sha256"),
+                "final_prediction_package":((fin.get("artifact") or {}).get("final_prediction_package") or {}),
+                "final_ticket":((fin.get("artifact") or {}).get("final_ticket") or {}),
+                "krs_prediction_utility":p.get("krs_prediction_utility") or {},
+                "minimum_efficient_coverage":p.get("minimum_efficient_coverage") or {},
+            }
+            learning_result={
+                "race_id":rid,
+                "official_result":{"top3":[int(x) for x in finish_order[:3]]},
+                "frozen_prediction_ref":{
+                    "final_receipt_sha256":fin.get("receipt_sha256"),
+                    "final_status":(fin.get("receipt") or {}).get("status")
+                },
+                "settlement":{
+                    "status":settlement_status,
+                    "investment":investment,
+                    "total_investment":investment,
+                    "settled_investment":settled_investment,
+                    "return":ret,
+                    "total_payout":ret,
+                    "pfs_authority":p.get("pfs_authority"),
+                    "winning_tickets":settlement.get("winning_tickets") or []
+                }
+            }
+            auto_review=build_post_result_review(learning_result,final_artifact)
+            auto_learning=build_learning_state(auto_review)
+    except Exception as e:
+        errs.append("AUTO_POSTRESULT_LEARNING_FAILED:"+str(e))
 
-    failure=p.get("failure_localization")
-    if not isinstance(failure,dict):
-        errs.append("FAILURE_LOCALIZATION_MISSING")
+    caller_learning=p.get("learning_event") if isinstance(p.get("learning_event"),dict) else None
+    caller_failure=p.get("failure_localization") if isinstance(p.get("failure_localization"),dict) else None
+
+    if auto_review is not None:
+        failure={
+            "primary_failure":(auto_review.get("failure_localization") or {}).get("first_material_failure"),
+            "secondary_failure":"NONE",
+            "materiality":"MATERIAL" if (auto_review.get("failure_localization") or {}).get("first_material_failure")!="NONE" else "NON-MATERIAL",
+            "automatic":True,
+            "review_sha256":auto_review.get("sha256")
+        }
+    elif caller_failure is not None:
+        failure=caller_failure
+    else:
         failure={}
-    if "primary_failure" not in failure:
-        errs.append("PRIMARY_FAILURE_MISSING")
-    if "materiality" not in failure:
-        errs.append("FAILURE_MATERIALITY_MISSING")
+        errs.append("FAILURE_LOCALIZATION_MISSING")
+
+    if auto_learning is not None:
+        learning={
+            "automatic":True,
+            "profile":auto_learning.get("profile"),
+            "state_id":auto_learning.get("state_id"),
+            "status":auto_learning.get("status"),
+            "source_review_sha256":auto_learning.get("source_review_sha256"),
+            "immediate_correctness":auto_learning.get("immediate_correctness"),
+            "shadow_candidates":auto_learning.get("shadow_candidates"),
+            "reference_metrics":auto_learning.get("reference_metrics"),
+            "forbidden":auto_learning.get("forbidden"),
+            "production_change_authorized":auto_learning.get("production_change_authorized")
+        }
+    elif caller_learning is not None:
+        learning=caller_learning
+    else:
+        learning={}
+        errs.append("LEARNING_EVENT_MISSING")
 
     frozen_refs={
         "final_receipt_sha256":(fin or {}).get("receipt_sha256"),
@@ -333,6 +389,10 @@ def result(p:Dict[str,Any]):
         },
         "failure_localization":failure,
         "learning_event":learning,
+        "automatic_post_result_review":auto_review,
+        "automatic_next_race_learning_state":auto_learning,
+        "caller_supplied_failure_localization":caller_failure,
+        "caller_supplied_learning_event":caller_learning,
         "frozen_refs":frozen_refs,
         "result_available_at":p.get("result_available_at") or official.get("result_available_at"),
         "review_completed_at":utcnow()

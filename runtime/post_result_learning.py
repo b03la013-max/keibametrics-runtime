@@ -110,11 +110,31 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         krs_eval={"classification":"NOT_AVAILABLE","rescues":[],"supports":[],"misses":[]}
 
     settlement=result.get("settlement") or {}
-    inv=int(settlement.get("total_investment") or coverage["investment"] or 0)
-    ret=int(settlement.get("total_payout") or 0)
-    pfs=(ret/inv*100.0) if inv>0 else None
+    settlement_status=str(settlement.get("status") or "COMPLETE").upper()
+    inv_raw=settlement.get("total_investment",settlement.get("investment",coverage["investment"]))
+    inv=int(inv_raw) if inv_raw is not None else int(coverage["investment"] or 0)
+    ret_raw=settlement.get("total_payout",settlement.get("return"))
+    settled_inv_raw=settlement.get("settled_investment")
+    if settlement_status in {"PENDING","UNKNOWN"}:
+        ret=None
+        settled_inv=None
+        pfs=None
+        profit_loss=None
+        settlement_completeness=None
+    elif settlement_status=="PARTIAL":
+        ret=int(ret_raw) if ret_raw is not None else None
+        settled_inv=int(settled_inv_raw) if settled_inv_raw is not None else None
+        pfs=(ret/settled_inv*100.0) if ret is not None and settled_inv not in (None,0) else None
+        profit_loss=(ret-settled_inv) if ret is not None and settled_inv is not None else None
+        settlement_completeness=(settled_inv/inv*100.0) if settled_inv is not None and inv>0 else None
+    else:
+        ret=int(ret_raw) if ret_raw is not None else None
+        settled_inv=inv
+        pfs=(ret/inv*100.0) if ret is not None and inv>0 else None
+        profit_loss=(ret-inv) if ret is not None else None
+        settlement_completeness=100.0 if ret is not None else None
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
-    hit_but_loss=bool(hit and inv>0 and ret<inv)
+    hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
 
     if not role_eval["winner_w"]:
         first_failure="PREDICTION_ROLE_W"
@@ -135,7 +155,7 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
 
     prediction_status=("PASS" if all(role_eval.values()) else "PARTIAL")
     conversion_status=("PASS" if coverage["ordered_pair_ticket_coverage"] and coverage["top3_set_ticket_coverage"] else "PARTIAL")
-    capital_status=("PASS" if pfs is not None and pfs>=100.0 else "PARTIAL")
+    capital_status=("HOLD" if settlement_status in {"PENDING","UNKNOWN"} else ("PASS" if pfs is not None and pfs>=100.0 else "PARTIAL"))
 
     review={
       "profile":LEARNING_PROFILE,
@@ -161,10 +181,13 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "capital":{
         "status":capital_status,
         "authority":settlement.get("pfs_authority"),
+        "settlement_status":settlement_status,
         "investment":inv,
+        "settled_investment":settled_inv,
         "return":ret,
-        "profit_loss":ret-inv,
+        "profit_loss":profit_loss,
         "pfs":round(pfs,9) if pfs is not None else None,
+        "settlement_completeness_pct":round(settlement_completeness,9) if settlement_completeness is not None else None,
         "hit":hit,
         "hit_but_loss":hit_but_loss,
       },
