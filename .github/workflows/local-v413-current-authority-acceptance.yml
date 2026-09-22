@@ -1,0 +1,40 @@
+name: LOCAL v4.13 Current Authority Acceptance
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R3.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R1.json'
+      - 'profiles/local_information_source_registry_v1.4_20260923.json'
+      - 'profiles/venue_chat_routes_20260923_R6_Rev2.json'
+      - 'governance/KM-LOCAL-COMMON-CANON-v4.13-20260923-R1.md'
+      - 'governance/KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260923-R2.json'
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate LOCAL v4.13 authority closure
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          fam=json.load(open('profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R3.json'))
+          suite=json.load(open('profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R1.json'))
+          src=json.load(open('profiles/local_information_source_registry_v1.4_20260923.json'))
+          route=json.load(open('profiles/venue_chat_routes_20260923_R6_Rev2.json'))
+          corr=json.load(open('governance/KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260923-R2.json'))
+          assert fam['family_scoped_authority']['LOCAL']['common_canon']=='ケイバメトリクス地方版 v4.13'
+          assert fam['family_scoped_authority']['LOCAL']['status'].startswith('EXECUTABLE')
+          assert suite['common_canon']['profile']=='KM-LOCAL-COMMON-CANON-v4.13-20260923-R1'
+          assert suite['production_numeric_suite']['status']=='FROZEN'
+          assert route['family_routes']['LOCAL']['runtime_status']=='EXECUTABLE'
+          assert route['family_routes']['LOCAL']['common_canon']=='ケイバメトリクス地方版 v4.13'
+          assert corr['predictive_model_changed'] is False
+          assert corr['numerical_model_changed'] is False
+          assert 'RESULT_GATE' in corr['mandatory_post_race_stages']
+          assert src['execution_evidence_priority'][0]=='VERIFIED_SIGNED_RECEIPT'
+          assert suite['runtime']['runtime']=='KM-LOCAL-PHYSICAL-RUNTIME-v1.4-20260923'
+          assert suite['decision_execution']['mec']=='KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3'
+          print('LOCAL_V413_CURRENT_AUTHORITY_ACCEPTANCE_PASS')
+          PY
