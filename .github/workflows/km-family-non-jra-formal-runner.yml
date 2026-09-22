@@ -111,7 +111,33 @@ jobs:
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
-          assert str(req.get("source_snapshot_sha256") or ""),"SOURCE_SNAPSHOT_SHA_REQUIRED"
+
+          # Source Acquisition is now an external signed execution phase.
+          source_req=req.get("source_acquisition_request")
+          if not isinstance(source_req,dict) and isinstance(req.get("required_source_manifest"),list):
+              source_req={
+                "family_id":"LOCAL",
+                "race_id":rid,
+                "prediction_cutoff":req.get("prediction_cutoff"),
+                "sources":copy.deepcopy(req["required_source_manifest"])
+              }
+          assert isinstance(source_req,dict),"SOURCE_ACQUISITION_REQUEST_REQUIRED"
+          source_req=copy.deepcopy(source_req)
+          source_req["family_id"]="LOCAL"
+          source_req["race_id"]=rid
+          source_req.setdefault("prediction_cutoff",req.get("prediction_cutoff"))
+          assert isinstance(source_req.get("sources"),list) and source_req["sources"],"REQUIRED_SOURCE_MANIFEST_REQUIRED"
+          sc,source=call("/source/acquire",source_req,180)
+          assert sc<300 and (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",(sc,source)
+          svc,sv=call("/source/verify",source,60)
+          assert svc<300 and sv.get("valid") is True,(svc,sv)
+          source_receipt_sha=source.get("receipt_sha256")
+          source_artifact=source.get("artifact") or {}
+          assert source_artifact.get("formal_ready") is True,source_artifact
+          req["source_receipt"]=source
+          req["source_snapshot_sha256"]=source_artifact.get("source_snapshot_sha256")
+          assert req["source_snapshot_sha256"],"SOURCE_SNAPSHOT_SHA_REQUIRED"
+
           runners=req.get("runners")
           assert isinstance(runners,list) and len(runners)>=2,"FULL_RUNNER_UNIVERSE_REQUIRED"
           ids=[str(x.get("runner_id")) for x in runners]
@@ -129,7 +155,13 @@ jobs:
           def stage(name,**kw):
               stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
 
-          stage("SOURCE_FREEZE",source_snapshot_sha256=req["source_snapshot_sha256"])
+          stage("SOURCE_FREEZE",
+                source_receipt_sha256=source_receipt_sha,
+                source_snapshot_sha256=req["source_snapshot_sha256"],
+                required_source_manifest_sha256=source_artifact.get("required_source_manifest_sha256"),
+                raw_source_bundle_sha256=source_artifact.get("raw_source_bundle_sha256"),
+                normalized_evidence_sha256=source_artifact.get("normalized_evidence_sha256"),
+                source_freeze_at=source_artifact.get("source_freeze_at"))
           stage("RUNNER_UNIVERSE",runner_count=len(runners))
 
           req_indices=req.get("required_indices") or req.get("required_index_names")
@@ -160,6 +192,7 @@ jobs:
 
           pre_payload={
             "family_id":"LOCAL","race_id":rid,
+            "source_receipt":source,
             "required_index_unresolved":0,
             "full_numerical_calculation":True,
             "static_prediction_frozen":True,
@@ -242,6 +275,7 @@ jobs:
 
           final_payload={
             "family_id":"LOCAL","race_id":rid,
+            "source_receipt":source,
             "krs_run_receipt":run,
             "final_prediction_package":final_package,
             "final_ticket":{
@@ -265,6 +299,8 @@ jobs:
             "race_id":rid,"family_id":"LOCAL","execution_phase":"FORMAL",
             "status":"FULL_FORMAL_E2E_PASS",
             "external_endpoint":endpoint,
+            "source_receipt":source_receipt_sha,
+            "source_snapshot_sha256":req["source_snapshot_sha256"],
             "pre_krs_receipt":pre_sha,
             "krs_receipt":run_sha,
             "final_receipt":final_sha,
