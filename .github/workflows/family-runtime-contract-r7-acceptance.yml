@@ -1,0 +1,72 @@
+name: Family Runtime Contract R7 Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'profiles/family_runtime_contracts_20260923_R7.json'
+      - 'runtime/family_runtime_contract.py'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R5.json'
+      - 'profiles/venue_chat_routes_20260923_R9.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R7.json'
+      - '.github/workflows/family-runtime-contract-r7-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate R7 contract and resolver
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          sys.path.insert(0,"runtime")
+          import family_runtime_contract as frc
+
+          contract=frc.load_contracts()
+          assert contract["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+          assert contract["predecessor"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R6-REV.1"
+
+          j=contract["families"]["JRA"]
+          assert j["engine"]=="KRS-Engine v1.1.0"
+          assert j["external_endpoint"]=="https://quorumprobe-production.up.railway.app"
+
+          b=contract["families"]["BAN"]
+          assert b["execution_status"]=="BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED"
+          assert b["parameter_numeric_fingerprint_sha256"]=="94a47a3715f67f465d28a918c9cead17b6559f09f199b56f8cba38e8e906a871"
+
+          l=contract["families"]["LOCAL"]
+          assert l["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
+          assert l["common_canon"]=="ケイバメトリクス地方版 v4.13 Rev.1"
+          assert l["krs"]=="v1.7-KRS Rev.1"
+          assert l["krs_ops"]=="v1.7 Rev.1"
+          assert l["runtime"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.1-20260923-NAR-SOURCE-ADAPTER"
+          assert l["source_acquisition"]=="KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1"
+          assert l["nar_source_manifest"]=="KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+          assert "SOURCE_MANIFEST_LOCAL_NAR" in l["capabilities"]
+          assert l["nar_adapter_acceptance"]["github_actions_run_id"]==35767750170
+          assert l["nar_adapter_acceptance"]["actual_run_count"]==5000
+          assert l["nar_adapter_acceptance"]["verified"] is True
+
+          resolved=frc.resolve_family_runtime({"family_id":"LOCAL"},contract)
+          assert resolved["executable"] is True
+          assert resolved["external_endpoint"]=="https://witnessstrictimage-production.up.railway.app"
+          assert resolved["contract"]["runtime"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.1-20260923-NAR-SOURCE-ADAPTER"
+
+          P=pathlib.Path("profiles")
+          suite=json.loads((P/"KM_LOCAL_SUITE_MANIFEST_20260923_R5.json").read_text())
+          route=json.loads((P/"venue_chat_routes_20260923_R9.json").read_text())
+          auth=json.loads((P/"KM_FAMILY_CURRENT_AUTHORITY_20260923_R7.json").read_text())
+          assert suite["runtime"]["contract"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+          assert route["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+          assert route["family_routes"]["LOCAL"]["runtime_contract"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+          assert auth["common_family_components"]["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+          assert auth["family_scoped_authority"]["LOCAL"]["runtime_contract"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+
+          # Ensure no Production numerical authority changed.
+          assert suite["production_numeric_suite"]["status"]=="FROZEN"
+          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert auth["family_scoped_authority"]["LOCAL"]["production_numeric_status"].startswith("FROZEN")
+
+          print("FAMILY_RUNTIME_CONTRACT_R7_ACCEPTANCE_PASS")
+          PY
