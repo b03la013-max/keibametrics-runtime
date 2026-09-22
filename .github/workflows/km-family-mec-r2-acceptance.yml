@@ -5,7 +5,9 @@ on:
     branches: [ main ]
     paths:
       - "runtime/minimum_efficient_coverage.py"
+      - "runtime/mec_r4_shadow.py"
       - "tests/test_minimum_efficient_coverage.py"
+      - "tests/test_mec_r4_shadow.py"
       - "governance/KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3.md"
       - "profiles/KM_FAMILY_MEC_PROFILE_20260921_R3.json"
       - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260921_R5.json"
@@ -24,6 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           python tests/test_minimum_efficient_coverage.py
+          python tests/test_mec_r4_shadow.py
           python - <<'PY'
           import json,sys
           sys.path.insert(0,"runtime")
