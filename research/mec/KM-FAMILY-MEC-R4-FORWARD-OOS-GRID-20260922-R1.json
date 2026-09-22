@@ -1,0 +1,56 @@
+{
+  "profile": "KM-FAMILY-MEC-R4-FORWARD-OOS-GRID-20260922-R1",
+  "status": "PREREGISTERED / SHADOW / NON-PRODUCTION / NO-AUTO-PROMOTION",
+  "baseline": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "source_candidate": "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+  "start_rule": "First future FORMAL-PRE-RACE race whose immutable FINAL is generated after this preregistration and contains the required frozen MEC/role/pair/third fields.",
+  "target_eligible_races": 30,
+  "arms": [
+    "PRODUCTION_BASELINE_R3",
+    "CORE_ONLY",
+    "CORE_PROTECTION",
+    "CPSS_ALL",
+    "CPSS_TOP3",
+    "CPSS_TOP4",
+    "CPSS_TOP5",
+    "CPSS_TOP6",
+    "CPSS_TOP7",
+    "CPSS_TOP8"
+  ],
+  "arm_rules": {
+    "CORE_ONLY": "Purchase frozen CORE tickets only; semantics outside CORE remain informational.",
+    "CORE_PROTECTION": "Purchase frozen CORE and PROTECTION only; generic TAIL not purchased.",
+    "CPSS_ALL": "CORE+PROTECTION + all retained trifecta structural exacta/trio closure + soft Global-P3 pair-local exclusion restoration.",
+    "CPSS_TOPK": "CORE+PROTECTION + soft restoration + structural trio closure only when all three runners are within frozen Static Top-K; K fixed per arm before result."
+  },
+  "invariants": [
+    "Frozen Production Prediction unchanged",
+    "Semantic Universe retained as information",
+    "Hard structural exclusions preserved",
+    "No result-derived ticket creation",
+    "No probability or EV fabrication",
+    "KRS remains SHADOW",
+    "Production MEC-R3 unchanged",
+    "Actual purchase not assumed"
+  ],
+  "metrics": [
+    "investment_weighted_PFS",
+    "profit_loss",
+    "capital_required",
+    "ticket_count",
+    "hit_race_rate",
+    "hit_but_loss_rate",
+    "bet_type_PFS",
+    "tail_capital_avoided",
+    "core_structure_retention",
+    "semantic_information_retention",
+    "max_drawdown"
+  ],
+  "selection_protocol": {
+    "during_window": "NO ARM SELECTION / NO THRESHOLD TUNING",
+    "after_30": "Human review required; compare baseline and all preregistered arms.",
+    "automatic_production_promotion": false,
+    "correctness_repair_exception": true
+  },
+  "production_effect": "NONE"
+}
