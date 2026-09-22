@@ -158,6 +158,19 @@ jobs:
           assert isinstance(runners,list) and len(runners)>=2,"FULL_RUNNER_UNIVERSE_REQUIRED"
           ids=[str(x.get("runner_id")) for x in runners]
           assert len(ids)==len(set(ids)),"RUNNER_UNIVERSE_DUPLICATE_ID"
+
+          official_universe=source_artifact.get("official_runner_universe")
+          if source_artifact.get("source_manifest_profile")=="KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923":
+              assert isinstance(official_universe,dict),"OFFICIAL_RUNNER_UNIVERSE_REQUIRED"
+              off_rows=official_universe.get("runners")
+              assert isinstance(off_rows,list) and off_rows,"OFFICIAL_RUNNER_UNIVERSE_EMPTY"
+              import unicodedata,re
+              norm=lambda s:re.sub(r"\\s+","",unicodedata.normalize("NFKC",str(s or ""))).strip()
+              off={str(x.get("runner_id") or x.get("horse_no")):norm(x.get("name")) for x in off_rows}
+              got={str(x.get("runner_id")):norm(x.get("name")) for x in runners}
+              assert set(off)==set(got),("RUNNER_UNIVERSE_ID_MISMATCH",sorted(off),sorted(got))
+              bad={rid:(got[rid],off[rid]) for rid in off if got[rid]!=off[rid]}
+              assert not bad,("RUNNER_UNIVERSE_NAME_MISMATCH",bad)
           assert isinstance(req.get("static_prediction"),dict),"STATIC_PREDICTION_REQUIRED"
           assert req.get("static_prediction_frozen") is True,"STATIC_PREDICTION_FREEZE_REQUIRED"
 
@@ -177,6 +190,8 @@ jobs:
                 required_source_manifest_sha256=source_artifact.get("required_source_manifest_sha256"),
                 raw_source_bundle_sha256=source_artifact.get("raw_source_bundle_sha256"),
                 normalized_evidence_sha256=source_artifact.get("normalized_evidence_sha256"),
+                official_runner_universe_sha256=source_artifact.get("official_runner_universe_sha256"),
+                official_runner_count=((official_universe or {}).get("runner_count") if isinstance(official_universe,dict) else None),
                 source_freeze_at=source_artifact.get("source_freeze_at"))
           stage("RUNNER_UNIVERSE",runner_count=len(runners))
 
