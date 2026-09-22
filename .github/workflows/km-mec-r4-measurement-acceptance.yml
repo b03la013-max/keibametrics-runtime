@@ -1,7 +1,7 @@
 name: KeibaMetrics MEC R4 Measurement Acceptance
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
@@ -50,3 +50,38 @@ jobs:
           assert "FORMAL_PRE_RACE" in p["cohorts"]
           print("MEC_R4_MEASUREMENT_ACCEPTANCE=PASS")
           PY
+
+      - name: Persist acceptance PASS marker
+        if: success()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          p={
+            "profile":"KM-MEC-R4-MEASUREMENT-ACCEPTANCE-v1.0",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "checks":[
+              "PYTHON_SYNTAX",
+              "MEC_R4_SHADOW_TEST",
+              "MEC_R4_OOS_TRACKER_TEST",
+              "PFS_GRAND_REVIEW_TEST",
+              "OOS_GOVERNANCE_ASSERTIONS"
+            ]
+          }
+          os.makedirs("runtime",exist_ok=True)
+          json.dump(p,open("runtime/mec_r4_measurement_acceptance_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/mec_r4_measurement_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist MEC R4 measurement acceptance PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
