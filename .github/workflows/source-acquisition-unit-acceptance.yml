@@ -6,8 +6,10 @@ on:
       - 'runtime/local_physical/source_acquisition.py'
       - 'runtime/local_physical/app_v15.py'
       - 'runtime/local_physical/nar_source_manifest.py'
+      - 'runtime/local_physical/nar_runner_universe.py'
       - 'tests/test_source_acquisition.py'
       - 'tests/test_nar_source_manifest.py'
+      - 'tests/test_nar_runner_universe.py'
       - 'governance/KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1.md'
       - '.github/workflows/source-acquisition-unit-acceptance.yml'
   push:
@@ -33,7 +35,8 @@ jobs:
           python -m py_compile runtime/local_physical/source_acquisition.py
           python -m py_compile runtime/local_physical/app_v15.py
           python -m py_compile runtime/local_physical/nar_source_manifest.py
+          python -m py_compile runtime/local_physical/nar_runner_universe.py
       - name: Run source acquisition integrity tests
         run: |
           python -m pip install --quiet pytest
-          python -m pytest -q tests/test_source_acquisition.py tests/test_nar_source_manifest.py
+          python -m pytest -q tests/test_source_acquisition.py tests/test_nar_source_manifest.py tests/test_nar_runner_universe.py
