@@ -1,0 +1,162 @@
+{
+  "profile": "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+  "candidate_id": "MEC-R4-CPSS-SHADOW-v0.1",
+  "status": "SHADOW / NON-PRODUCTION / PFS-RESEARCH / NO-AUTO-PROMOTION",
+  "created_at": "2026-09-22",
+  "raison_d_etre": "Preserve frozen prediction semantics while reducing redundant capital exposure and improving long-run PFS. Semantic preservation and ticket purchase are separated.",
+  "baseline": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "production_unchanged": true,
+  "deterministic_policy": {
+    "semantic_universe": "UNCHANGED / 100% retained as information",
+    "purchased_tiers": [
+      "CORE",
+      "PROTECTION"
+    ],
+    "generic_tail_purchase": "OFF",
+    "generic_tail_semantic_retention": "ON",
+    "core_structural_closure": {
+      "enabled": true,
+      "rule": "For every retained TRIFECTA A>B>C, ensure EXACTA A>B and unordered TRIO {A,B,C} at shadow stake floor if absent."
+    },
+    "soft_exclusion_restore": {
+      "enabled": true,
+      "rule": "If pair-conditioned Third is EXCLUDE only for soft/materiality reason and the horse remains globally active P3, restore TRIFECTA A>B>C and unordered TRIO {A,B,C} in SHADOW. Hard structural exclusions remain excluded."
+    },
+    "hard_exclusion": "PRESERVED",
+    "role_expansion": "FORBIDDEN",
+    "prediction_recalculation": "FORBIDDEN",
+    "result_derived_selection": "FORBIDDEN",
+    "krs_authority_change": "FORBIDDEN",
+    "stake_floor_yen": 100
+  },
+  "exact_replay_cohort": {
+    "primary_races": [
+      "20260922-NKY-R06",
+      "20260922-NKY-R10",
+      "20260922-NKY-R11",
+      "20260922-NKY-R12",
+      "KM-JRA-HSN-20260921-R10",
+      "KM-JRA-HSN-20260921-R12"
+    ],
+    "note": "4 current MEC-tier-native signed Nakayama races + 2 historical formal Hanshin bootstrap races. Hanshin bootstrap artifacts lack MEC tier metadata, so their existing frozen tickets are retained before structural/soft restoration.",
+    "baseline": {
+      "investment": 138400,
+      "return": 98920,
+      "profit_loss": -39480,
+      "pfs": 71.4739884393,
+      "hit_races": 5,
+      "races": 6
+    },
+    "candidate": {
+      "investment": 108000,
+      "return": 137710,
+      "profit_loss": 29710,
+      "pfs": 127.5092592593,
+      "hit_races": 5,
+      "races": 6
+    },
+    "delta": {
+      "investment": -30400,
+      "return": 38790,
+      "profit_loss": 69190,
+      "pfs_points": 56.03527082,
+      "capital_reduction_pct": 21.9653179191
+    },
+    "leave_one_out": {
+      "minimum_pfs": 102.5719769674,
+      "maximum_pfs": 149.7921760391
+    },
+    "tier_native_subset_nky_4": {
+      "baseline": {
+        "investment": 135600,
+        "return": 97680,
+        "profit_loss": -37920,
+        "pfs": 72.0353982301
+      },
+      "candidate": {
+        "investment": 102200,
+        "return": 106880,
+        "profit_loss": 4680,
+        "pfs": 104.5792563601
+      },
+      "delta": {
+        "investment": -33400,
+        "return": 9200,
+        "profit_loss": 42600,
+        "pfs_points": 32.54385813
+      }
+    },
+    "interpretation": "PROMISING-IN-SAMPLE / NOT PROMOTION EVIDENCE"
+  },
+  "comparator_arms": {
+    "BASELINE_R3": {
+      "investment": 138400,
+      "return": 98920,
+      "pfs": 71.4739884393
+    },
+    "CORE_ONLY": {
+      "investment": 69000,
+      "return": 80930,
+      "pfs": 117.2898550725,
+      "hit_races": 3
+    },
+    "CORE_PROTECTION": {
+      "investment": 93400,
+      "return": 97520,
+      "pfs": 104.4111349036,
+      "hit_races": 5
+    },
+    "CORE_STRUCTURAL_CLOSURE": {
+      "investment": 80900,
+      "return": 91530,
+      "pfs": 113.1396786156,
+      "hit_races": 4
+    },
+    "CORE_PROTECTION_CLOSURE": {
+      "investment": 105000,
+      "return": 108120,
+      "pfs": 102.9714285714,
+      "hit_races": 5
+    },
+    "GLOBAL_P3_PAIR_CLOSURE": {
+      "investment": 176100,
+      "return": 136300,
+      "pfs": 77.3992049972,
+      "hit_races": 5
+    },
+    "CORE_PROTECTION_STRUCTURAL_SOFT": {
+      "investment": 108000,
+      "return": 137710,
+      "pfs": 127.5092592593,
+      "hit_races": 5
+    }
+  },
+  "negative_finding": "Full Global-P3 pair expansion increased capital beyond baseline and remained low-PFS; broad restoration is rejected as current leading direction.",
+  "forward_measurement": {
+    "window": "Next 30 FORMAL-PRE-RACE eligible races",
+    "run_mode": "Parallel SHADOW against unchanged Production MEC-R3",
+    "metrics": [
+      "investment-weighted PFS",
+      "profit/loss",
+      "capital required",
+      "ticket count",
+      "hit-race count",
+      "hit-but-loss rate",
+      "CORE structure retention",
+      "semantic coverage retained",
+      "tail capital avoided",
+      "bet-type PFS",
+      "max drawdown"
+    ],
+    "automatic_promotion": false,
+    "human_review_required": true,
+    "rule_change_during_window": "FORBIDDEN except correctness repair"
+  },
+  "architecture_policy": "REPLACE/SMPLIFY existing purchase selection only; no new validator/gate/layer required.",
+  "caveats": [
+    "Replay cohort is small and partly historical-bootstrap.",
+    "In-sample payout optimization is not OOS evidence.",
+    "Current promising result can be dominated by a few high-return races; forward shadow is mandatory.",
+    "Actual purchase is generally unverified; comparisons use frozen-recommendation settlement."
+  ]
+}
