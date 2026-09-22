@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.0-20260922"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -82,7 +82,7 @@ def health():
       "parameter_map_version":"0.1-provisional","parameter_map_sha256":ps,
       "expected_parameter_map_sha256":PARAM_SHA,"calibration_status":"PROVISIONAL_UNCALIBRATED",
       "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":public_b64(),
-      "github_revision":GIT_REV,"runtime_app_sha256":sha_file(__file__),"capabilities":["PRE_KRS","KRS_EXECUTE","FINAL","FORMAL","VERIFY"]}
+      "github_revision":GIT_REV,"runtime_app_sha256":sha_file(__file__),"capabilities":["PRE_KRS","KRS_EXECUTE","FINAL","FORMAL","RESULT","VERIFY"]}
 
 @app.post("/verify")
 def verify(payload:Dict[str,Any]):
@@ -179,3 +179,162 @@ def formal(p:Dict[str,Any]):
       "input_sha256":run["artifact"]["input_sha256"],"output_sha256":run["artifact"]["output_sha256"],
       "final_ticket_sha256":fin["artifact"]["ticket_sha256"]}
     return signed_receipt("FORMAL",rid,"FULL_FORMAL_E2E_PASS",artifact,[])
+
+
+def _money_int(v,name):
+    if isinstance(v,bool):
+        raise HTTPException(422,f"{name}_INVALID")
+    try:
+        x=int(v)
+    except Exception:
+        raise HTTPException(422,f"{name}_INVALID")
+    if x<0:
+        raise HTTPException(422,f"{name}_NEGATIVE")
+    return x
+
+def _ticket_investment(final_ticket):
+    if not isinstance(final_ticket,dict):
+        return None
+    if final_ticket.get("total_investment") is not None:
+        return _money_int(final_ticket.get("total_investment"),"FINAL_TICKET_INVESTMENT")
+    ts=final_ticket.get("tickets")
+    if not isinstance(ts,list):
+        return None
+    return sum(_money_int(x.get("stake",0),"TICKET_STAKE") for x in ts if isinstance(x,dict))
+
+@app.post("/result")
+def result(p:Dict[str,Any]):
+    validate_family(p)
+    rid=str(p.get("race_id") or "")
+    if not rid:
+        raise HTTPException(422,"RACE_ID_REQUIRED")
+    errs=[]
+
+    fin=p.get("final_receipt")
+    if not isinstance(fin,dict) or not verify_envelope(fin):
+        errs.append("FINAL_RECEIPT_INVALID")
+    elif (fin.get("receipt") or {}).get("status")!="PASS":
+        errs.append("FINAL_RECEIPT_NOT_PASS")
+    elif str((fin.get("receipt") or {}).get("race_id") or "")!=rid:
+        errs.append("FINAL_RECEIPT_RACE_ID_MISMATCH")
+
+    official=p.get("official_result")
+    if not isinstance(official,dict):
+        errs.append("OFFICIAL_RESULT_MISSING")
+        official={}
+    else:
+        order=official.get("finish_order")
+        if not isinstance(order,list) or not order:
+            errs.append("OFFICIAL_FINISH_ORDER_MISSING")
+        if not p.get("result_available_at") and not official.get("result_available_at"):
+            errs.append("RESULT_AVAILABLE_AT_MISSING")
+
+    settlement=p.get("settlement")
+    if not isinstance(settlement,dict):
+        errs.append("SETTLEMENT_MISSING")
+        settlement={}
+    settlement_status=str(settlement.get("status") or "").upper()
+    allowed={"COMPLETE","PARTIAL","PENDING","UNKNOWN","VOID","REFUND"}
+    if settlement_status not in allowed:
+        errs.append("SETTLEMENT_STATUS_INVALID")
+
+    final_ticket=((fin or {}).get("artifact") or {}).get("final_ticket")
+    frozen_investment=_ticket_investment(final_ticket) if isinstance(final_ticket,dict) else None
+    supplied_investment=settlement.get("investment")
+    investment=None
+    if supplied_investment is not None:
+        try: investment=_money_int(supplied_investment,"SETTLEMENT_INVESTMENT")
+        except HTTPException as e:
+            errs.append(str(e.detail))
+    if frozen_investment is not None and investment is not None and frozen_investment!=investment:
+        errs.append("SETTLEMENT_INVESTMENT_MISMATCH_FROZEN_TICKET")
+    if investment is None:
+        investment=frozen_investment
+
+    ret=None
+    if settlement.get("return") is not None:
+        try: ret=_money_int(settlement.get("return"),"SETTLEMENT_RETURN")
+        except HTTPException as e:
+            errs.append(str(e.detail))
+
+    settled_investment=None
+    if settlement.get("settled_investment") is not None:
+        try: settled_investment=_money_int(settlement.get("settled_investment"),"SETTLED_INVESTMENT")
+        except HTTPException as e:
+            errs.append(str(e.detail))
+
+    if settlement_status=="COMPLETE":
+        if investment is None: errs.append("INVESTMENT_REQUIRED_FOR_COMPLETE_SETTLEMENT")
+        if ret is None: errs.append("RETURN_REQUIRED_FOR_COMPLETE_SETTLEMENT")
+        if settled_investment is not None and investment is not None and settled_investment!=investment:
+            errs.append("COMPLETE_SETTLEMENT_AMOUNT_MISMATCH")
+    elif settlement_status=="PARTIAL":
+        if settled_investment is None or ret is None:
+            errs.append("PARTIAL_SETTLEMENT_REQUIRES_SETTLED_INVESTMENT_AND_RETURN")
+        elif investment is not None and settled_investment>investment:
+            errs.append("SETTLED_INVESTMENT_EXCEEDS_TOTAL")
+    elif settlement_status in {"PENDING","UNKNOWN"}:
+        if ret==0:
+            errs.append("PENDING_UNKNOWN_RETURN_ZERO_FORBIDDEN")
+    elif settlement_status in {"VOID","REFUND"}:
+        if ret is None:
+            errs.append("VOID_REFUND_RETURN_REQUIRED")
+
+    pfs=None
+    profit_loss=None
+    settlement_completeness=None
+    if settlement_status=="COMPLETE" and investment is not None and ret is not None:
+        pfs=None if investment==0 else round(ret/investment*100.0,6)
+        profit_loss=ret-investment
+        settlement_completeness=100.0
+    elif settlement_status=="PARTIAL" and settled_investment is not None and ret is not None:
+        pfs=None if settled_investment==0 else round(ret/settled_investment*100.0,6)
+        profit_loss=ret-settled_investment
+        settlement_completeness=(None if investment in (None,0) else round(settled_investment/investment*100.0,6))
+    elif settlement_status in {"VOID","REFUND"} and investment is not None and ret is not None:
+        pfs=None if investment==0 else round(ret/investment*100.0,6)
+        profit_loss=ret-investment
+        settlement_completeness=100.0
+
+    learning=p.get("learning_event")
+    if not isinstance(learning,dict):
+        errs.append("LEARNING_EVENT_MISSING")
+        learning={}
+    required_learning=["prediction_error_class","conversion_error_class","capital_efficiency_update","krs_trust_update"]
+    missing_learning=[k for k in required_learning if k not in learning]
+    if missing_learning:
+        errs.append("LEARNING_EVENT_INCOMPLETE:"+",".join(missing_learning))
+
+    failure=p.get("failure_localization")
+    if not isinstance(failure,dict):
+        errs.append("FAILURE_LOCALIZATION_MISSING")
+        failure={}
+    if "primary_failure" not in failure:
+        errs.append("PRIMARY_FAILURE_MISSING")
+    if "materiality" not in failure:
+        errs.append("FAILURE_MATERIALITY_MISSING")
+
+    frozen_refs={
+        "final_receipt_sha256":(fin or {}).get("receipt_sha256"),
+        "final_ticket_sha256":sha_obj(final_ticket or {}),
+        "final_freeze_timestamp":((fin or {}).get("artifact") or {}).get("final_freeze_timestamp")
+    }
+    artifact={
+        "official_result":official,
+        "settlement":{
+            "status":settlement_status,
+            "investment":investment,
+            "settled_investment":settled_investment if settled_investment is not None else investment,
+            "return":ret,
+            "profit_loss":profit_loss,
+            "pfs":pfs,
+            "pfs_authority":p.get("pfs_authority"),
+            "settlement_completeness_pct":settlement_completeness
+        },
+        "failure_localization":failure,
+        "learning_event":learning,
+        "frozen_refs":frozen_refs,
+        "result_available_at":p.get("result_available_at") or official.get("result_available_at"),
+        "review_completed_at":utcnow()
+    }
+    return signed_receipt("RESULT",rid,"PASS" if not errs else "FAIL",artifact,errs)

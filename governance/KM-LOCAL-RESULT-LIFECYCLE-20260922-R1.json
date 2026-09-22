@@ -1,0 +1,39 @@
+{
+  "profile_id": "KM-LOCAL-RESULT-LIFECYCLE-20260922-R1",
+  "status": "ACTIVE-CANDIDATE / CORRECTNESS-EXECUTION / NON-PREDICTIVE / DEPLOYMENT-PENDING",
+  "parent": "KM-LOCAL-FULLPIPELINE-CORRECTNESS-HARDENING-20260922-R1",
+  "endpoint": "/result",
+  "required_inputs": [
+    "family_id=LOCAL",
+    "race_id",
+    "verified FINAL receipt for same race",
+    "official_result.finish_order",
+    "result_available_at",
+    "settlement.status",
+    "failure_localization.primary_failure",
+    "failure_localization.materiality",
+    "learning_event.prediction_error_class",
+    "learning_event.conversion_error_class",
+    "learning_event.capital_efficiency_update",
+    "learning_event.krs_trust_update",
+    "pfs_authority"
+  ],
+  "settlement_states": [
+    "COMPLETE",
+    "PARTIAL",
+    "PENDING",
+    "UNKNOWN",
+    "VOID",
+    "REFUND"
+  ],
+  "rules": [
+    "COMPLETE requires investment and return and freezes full PFS",
+    "PARTIAL requires settled_investment and return and produces settled-only PFS plus completeness",
+    "PENDING/UNKNOWN must not convert missing return to zero",
+    "Frozen final-ticket investment must match settlement investment when both exist",
+    "VOID/REFUND requires explicit return",
+    "RESULT receipt is Ed25519 signed and independently verifiable",
+    "RESULT never mutates frozen prediction/final ticket"
+  ],
+  "output": "KM-LOCAL-SIGNED-RECEIPT-v1 phase=RESULT"
+}
