@@ -150,66 +150,129 @@ def build_mec_r4_shadow(final_artifact,generated_at=None):
     out["sha256"]=_sha(out)
     return out
 
+def _top3_ids(result):
+    raw=((result.get("official_result") or {}).get("top3") or [])
+    out=[]
+    for x in raw:
+        if isinstance(x,dict):
+            x=x.get("horse_no") or x.get("runner_id")
+        out.append(int(x))
+    return out
+
+def _dict_number(d,*keys):
+    if not isinstance(d,dict):
+        return None
+    for k in keys:
+        if k in d and isinstance(d[k],(int,float)):
+            return float(d[k])
+    return None
+
 def _payout(result,bet_type,top3):
-    payouts=((result.get("official_result") or {}).get("payouts") or {})
+    official=result.get("official_result") or {}
+    roots=[
+        official.get("payouts") or {},
+        official.get("payouts_per_100_yen") or {},
+        official.get("payouts_per_100") or {},
+        official.get("payout") or {},
+    ]
     w,s,t=[int(x) for x in top3]
     bt=str(bet_type).upper()
     if bt=="EXACTA":
-        obj=payouts.get("exacta")
-        if isinstance(obj,(int,float)): return float(obj)
-        if isinstance(obj,dict):
-            for k in (f"{w}>{s}",f"{w}-{s}",f"{w},{s}"):
-                if k in obj: return float(obj[k])
+        labels=(f"{w}>{s}",f"{w}-{s}",f"{w},{s}")
+        flat=(f"exacta_{w}_{s}",f"EXACTA_{w}_{s}")
+        nested=("exacta","EXACTA")
     elif bt=="TRIO":
-        obj=payouts.get("trio")
-        if isinstance(obj,(int,float)): return float(obj)
-        if isinstance(obj,dict):
-            k="-".join(str(x) for x in sorted([w,s,t]))
-            if k in obj: return float(obj[k])
+        ss=sorted([w,s,t])
+        labels=("-".join(str(x) for x in ss), ",".join(str(x) for x in ss))
+        flat=(f"trio_{ss[0]}_{ss[1]}_{ss[2]}",f"TRIO_{ss[0]}_{ss[1]}_{ss[2]}")
+        nested=("trio","TRIO")
     elif bt=="TRIFECTA":
-        obj=payouts.get("trifecta")
-        if isinstance(obj,(int,float)): return float(obj)
-        if isinstance(obj,dict):
-            k=f"{w}>{s}>{t}"
-            if k in obj: return float(obj[k])
+        labels=(f"{w}>{s}>{t}",f"{w}-{s}-{t}",f"{w},{s},{t}")
+        flat=(f"trifecta_{w}_{s}_{t}",f"TRIFECTA_{w}_{s}_{t}")
+        nested=("trifecta","TRIFECTA")
+    else:
+        return None
+
+    for root in roots:
+        v=_dict_number(root,*flat)
+        if v is not None:
+            return v
+        for nk in nested:
+            obj=root.get(nk) if isinstance(root,dict) else None
+            if isinstance(obj,(int,float)):
+                return float(obj)
+            v=_dict_number(obj,*labels)
+            if v is not None:
+                return v
     return None
 
+def settle_ticket_list(tickets,result):
+    """Settle exacta/trio/trifecta tickets with one canonical implementation.
+
+    This helper is shared by MEC-R4 Shadow and the Production-R3 comparator.
+    It does not infer Actual Purchase; it settles a frozen recommendation list.
+    """
+    top3=_top3_ids(result)
+    if len(top3)!=3:
+        raise AssertionError("SHADOW_RESULT_TOP3_MISSING")
+    targets={
+        "EXACTA":top3[:2],
+        "TRIO":sorted(top3),
+        "TRIFECTA":top3,
+    }
+    by_type={}
+    unresolved=[]
+    total_inv=0
+    total_ret=0.0
+    hit_types=[]
+    for bt in ("EXACTA","TRIO","TRIFECTA"):
+        rows=[x for x in tickets if str(x.get("bet_type") or "").upper()==bt]
+        inv=sum(int(x.get("stake") or 0) for x in rows)
+        ret=0.0
+        hit=False
+        matching=[x for x in rows if _key(bt,x.get("selection") or [])==_key(bt,targets[bt])]
+        if matching:
+            pay=_payout(result,bt,top3)
+            if pay is None:
+                unresolved.append(bt)
+            else:
+                for x in matching:
+                    ret += pay*(int(x.get("stake") or 0)/100.0)
+                hit=ret>0
+                if hit:
+                    hit_types.append(bt)
+        total_inv += inv
+        total_ret += ret
+        by_type[bt]={
+            "investment":inv,
+            "return":ret if bt not in unresolved else None,
+            "profit_loss":(ret-inv) if bt not in unresolved else None,
+            "pfs":(ret/inv*100.0) if (inv and bt not in unresolved) else (None if bt in unresolved else None),
+            "hit":hit if bt not in unresolved else None,
+            "ticket_count":len(rows),
+        }
+    status="SETTLED" if not unresolved else "PARTIAL_PAYOUT_MISSING"
+    return {
+        "status":status,
+        "investment":total_inv,
+        "return":total_ret if not unresolved else None,
+        "profit_loss":(total_ret-total_inv) if not unresolved else None,
+        "pfs":(total_ret/total_inv*100.0) if (total_inv and not unresolved) else None,
+        "hit_types":sorted(set(hit_types)),
+        "unresolved_payout_types":sorted(set(unresolved)),
+        "ticket_count":len(tickets),
+        "by_bet_type":by_type,
+        "top3":top3,
+    }
+
 def settle_mec_r4_shadow(shadow_artifact,result):
-    top3=[int(x) for x in ((result.get("official_result") or {}).get("top3") or [])]
+    top3=_top3_ids(result)
     if len(top3)!=3:
         raise AssertionError("SHADOW_RESULT_TOP3_MISSING")
     arms={}
     for name,arm in shadow_artifact["arms"].items():
-        inv=sum(int(t["stake"]) for t in arm["tickets"])
-        ret=0.0
-        hit_types=[]
-        unresolved=[]
-        targets={
-            "EXACTA":top3[:2],
-            "TRIO":sorted(top3),
-            "TRIFECTA":top3,
-        }
-        for t in arm["tickets"]:
-            bt=t["bet_type"]
-            if bt not in targets or _key(bt,t["selection"])!=_key(bt,targets[bt]):
-                continue
-            pay=_payout(result,bt,top3)
-            if pay is None:
-                unresolved.append(bt)
-                continue
-            ret += pay*(int(t["stake"])/100.0)
-            hit_types.append(bt)
-        status="SETTLED" if not unresolved else "PARTIAL_PAYOUT_MISSING"
-        arms[name]={
-            "status":status,
-            "investment":inv,
-            "return":ret if not unresolved else None,
-            "profit_loss":(ret-inv) if not unresolved else None,
-            "pfs":(ret/inv*100.0) if (inv and not unresolved) else None,
-            "hit_types":sorted(set(hit_types)),
-            "unresolved_payout_types":sorted(set(unresolved)),
-            "ticket_count":arm["ticket_count"],
-        }
+        settled=settle_ticket_list(arm["tickets"],result)
+        arms[name]=settled
     out={
         "artifact_type":"KM_MEC_SHADOW_POST_RESULT_SETTLEMENT",
         "profile":PROFILE,
