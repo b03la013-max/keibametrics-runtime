@@ -191,6 +191,9 @@ def build_status():
                     "production_result_path":result_path,
                     "arms":entry_arms,
                 })
+            except Exception as exc:
+                errors.append({"race_id":locals().get("rid"),"reason":"TRACKER_EXCEPTION","error":type(exc).__name__+":"+str(exc)})
+                continue
     entries.sort(key=lambda x:(x["generated_at"],x["race_id"]))
     if len(entries)>TARGET:
         entries=entries[:TARGET]
