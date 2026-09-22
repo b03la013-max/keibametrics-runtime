@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, json
 
-PROFILE="KM-JRA-EVIDENCE-FEATURE-COMPILER-v1.0-20260921"
+PROFILE="KM-JRA-EVIDENCE-FEATURE-COMPILER-v1.1-20260922"
 
 class EvidenceCompilerError(ValueError):
     pass
@@ -9,7 +9,7 @@ class EvidenceCompilerError(ValueError):
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
-RULE_REGISTRY_PATH="mapping/jra_evidence_feature_rule_registry_v1.0_20260921.json"
+RULE_REGISTRY_PATH="mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json"
 
 def _load_rule_registry(path=RULE_REGISTRY_PATH):
     with open(path,encoding="utf-8") as f:
@@ -29,6 +29,19 @@ def _allowed_features(mapping):
         if spec.get("newcomer_fallback_feature"): out.add(spec["newcomer_fallback_feature"])
     return out
 
+def _assert_registry_closure(mapping, rule_registry):
+    required=_allowed_features(mapping)
+    registered=set((rule_registry.get("feature_rules") or {}).keys())
+    missing=sorted(required-registered)
+    if missing:
+        raise EvidenceCompilerError("FEATURE_RULE_REGISTRY_MAPPING_GAP:"+",".join(missing))
+    contract=rule_registry.get("mapping_contract") or {}
+    expected=contract.get("mapping_id")
+    actual=mapping.get("mapping_id")
+    if expected and expected!=actual:
+        raise EvidenceCompilerError(f"FEATURE_RULE_REGISTRY_MAPPING_ID_MISMATCH:{expected}!={actual}")
+    return {"required_count":len(required),"registered_count":len(registered),"missing":[]}
+
 def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, mapping, rule_registry=None):
     if not race_id:
         raise EvidenceCompilerError("RACE_ID_MISSING")
@@ -38,6 +51,7 @@ def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, ma
     allowed=_allowed_features(mapping)
     rr=rule_registry or _load_rule_registry()
     feature_rules=rr["feature_rules"]
+    closure=_assert_registry_closure(mapping,rr)
     out={
       "profile":PROFILE,
       "race_id":str(race_id),
@@ -45,6 +59,7 @@ def compile_evidence_feature_ledger(race_id, source_snapshot_sha256, runners, ma
       "mapping_id":mapping.get("mapping_id"),
       "rule_registry_id":rr.get("registry_id"),
       "classification_authority":"RULE_BOUND_CATEGORY",
+      "registry_mapping_closure":closure,
       "freehand_numeric_score_allowed":False,
       "runners":{}
     }
