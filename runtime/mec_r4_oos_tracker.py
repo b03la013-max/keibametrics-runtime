@@ -81,6 +81,9 @@ def _aggregate_arm(rows):
         "hit_but_loss_rate":round(hbl/len(rows)*100.0,6) if rows else None,
         "ticket_count_total":sum(int(x.get("ticket_count") or 0) for x in rows),
         "max_drawdown":_max_drawdown(rows),
+        "core_structure_retention_min":min((float(x.get("core_structure_retention_ratio",1.0)) for x in rows),default=None),
+        "semantic_information_retention_min":min((float(x.get("semantic_information_retention_ratio",1.0)) for x in rows),default=None),
+        "generic_tail_capital_avoided_total":round(sum(float(x.get("generic_tail_capital_avoided") or 0) for x in rows),2),
         "largest_return":round(largest,2) if ordered else None,
         "largest_return_share_pct":round(largest/total_return*100.0,6) if total_return else None,
         "excluding_largest_return_pfs":round(ex_ret/ex_inv*100.0,9) if ex_inv else None,
@@ -140,6 +143,17 @@ def build_status():
                 p_ret=float(production_settlement.get("total_payout") or 0)
                 p_tickets=(final.get("final_ticket") or {}).get("tickets") or []
                 p_detail=settle_ticket_list(p_tickets,production_result)
+                if p_detail.get("status")!="SETTLED":
+                    errors.append({"race_id":rid,"reason":"PRODUCTION_TICKET_SETTLEMENT_INCOMPLETE","detail":p_detail.get("unresolved_payout_types")})
+                    continue
+                if abs(float(p_detail.get("investment") or 0)-p_inv)>0.001 or abs(float(p_detail.get("return") or 0)-p_ret)>0.001:
+                    errors.append({
+                        "race_id":rid,
+                        "reason":"PRODUCTION_SETTLEMENT_REPLAY_MISMATCH",
+                        "official":{"investment":p_inv,"return":p_ret},
+                        "replayed":{"investment":p_detail.get("investment"),"return":p_detail.get("return")}
+                    })
+                    continue
                 production_arm={
                     "investment":p_inv,
                     "return":p_ret,
@@ -148,10 +162,14 @@ def build_status():
                     "ticket_count":len(p_tickets),
                     "hit":p_ret>0,
                     "by_bet_type":p_detail.get("by_bet_type") or {},
+                    "core_structure_retention_ratio":1.0,
+                    "semantic_information_retention_ratio":1.0,
+                    "generic_tail_capital_avoided":0,
                 }
 
                 entry_arms={"PRODUCTION_BASELINE_R3":production_arm}
                 for a in EXPECTED_ARMS:
+                    frozen_arm=(shadow.get("arms") or {}).get(a) or {}
                     entry_arms[a]={
                         "investment":arms[a].get("investment"),
                         "return":arms[a].get("return"),
@@ -160,6 +178,9 @@ def build_status():
                         "ticket_count":arms[a].get("ticket_count"),
                         "hit":float(arms[a].get("return") or 0)>0,
                         "by_bet_type":arms[a].get("by_bet_type") or {},
+                        "core_structure_retention_ratio":frozen_arm.get("core_structure_retention_ratio"),
+                        "semantic_information_retention_ratio":frozen_arm.get("semantic_information_retention_ratio"),
+                        "generic_tail_capital_avoided":frozen_arm.get("generic_tail_capital_avoided"),
                     }
                 entries.append({
                     "race_id":rid,
