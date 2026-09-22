@@ -48,15 +48,25 @@ jobs:
                   try: body=json.loads(raw)
                   except Exception: body={"raw":raw}
                   return e.code,body
-          code,res=call("/formal",req)
+          phase=str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper()
+          if phase in {"RESULT","POST_RACE","POST-RACE","SETTLEMENT"}:
+              path="/result"
+              expected={"PASS"}
+              output_status="RESULT_PASS"
+          else:
+              path="/formal"
+              expected={"PASS","FULL_FORMAL_E2E_PASS"}
+              output_status="FULL_FORMAL_E2E_PASS"
+          code,res=call(path,req)
           assert code<300,(code,res)
           receipt=res.get("receipt") or {}
-          assert receipt.get("status") in {"PASS","FULL_FORMAL_E2E_PASS"},res
+          assert receipt.get("status") in expected,res
           vcode,v=call("/verify",res,60)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
           print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
             "race_id":req.get("race_id"),"family_id":fam,
-            "status":"FULL_FORMAL_E2E_PASS",
+            "execution_phase":phase,
+            "status":output_status,
             "external_endpoint":endpoint,
             "receipt_sha256":res.get("receipt_sha256"),
             "verified":True
