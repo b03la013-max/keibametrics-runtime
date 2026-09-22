@@ -393,7 +393,7 @@ def snapshot_from_bytes(
     }
     snapshot["snapshot_sha256"] = sha_obj({k: v for k, v in snapshot.items() if k != "snapshot_sha256"})
     errors = list(extraction_errors)
-    if status_code < 200 or status_code >= 300:
+    if (status_code < 200 or status_code >= 300) and spec.get("required"):
         errors.append("SOURCE_HTTP_STATUS:" + str(status_code))
     if stale and spec.get("required"):
         errors.append("SOURCE_STALE:" + snapshot["source_id"])
