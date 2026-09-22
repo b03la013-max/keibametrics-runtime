@@ -1,0 +1,76 @@
+{
+  "profile": "KM-FAMILY-MEC-R4-FORWARD-OOS-GRID-20260922-R2",
+  "predecessor": "KM-FAMILY-MEC-R4-FORWARD-OOS-GRID-20260922-R1",
+  "status": "ACTIVE / SHADOW / FORWARD-OOS / NON-PRODUCTION / 0-OF-30 / NO-AUTO-PROMOTION",
+  "activated_at": "2026-09-22T21:08:00+09:00",
+  "baseline": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "source_candidate": "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+  "tracker": "KM-FAMILY-MEC-R4-FORWARD-OOS-TRACKER-v1.0-20260922",
+  "tracker_path": "runtime/mec_r4_oos_tracker.py",
+  "status_path": "runtime/mec_r4_oos_status.json",
+  "historical_pfs_baseline": "research/pfs/KM-PFS-GRAND-REVIEW-BASELINE-20260922-R1.json",
+  "start_rule": "Only shadows generated at or after 2026-09-22T21:08:00+09:00, with temporal_mode FORMAL-PRE-RACE, generated_at before scheduled_post_at, immutable FINAL lineage, complete fixed arm set, and post-result SETTLED shadow result are eligible.",
+  "target_eligible_races": 30,
+  "arms": [
+    "PRODUCTION_BASELINE_R3",
+    "CORE_ONLY",
+    "CORE_PROTECTION",
+    "CPSS_ALL",
+    "CPSS_TOP3",
+    "CPSS_TOP4",
+    "CPSS_TOP5",
+    "CPSS_TOP6",
+    "CPSS_TOP7",
+    "CPSS_TOP8"
+  ],
+  "shadow_arm_set": [
+    "CORE_ONLY",
+    "CORE_PROTECTION",
+    "CPSS_ALL",
+    "CPSS_TOP3",
+    "CPSS_TOP4",
+    "CPSS_TOP5",
+    "CPSS_TOP6",
+    "CPSS_TOP7",
+    "CPSS_TOP8"
+  ],
+  "arm_rules": {
+    "CORE_ONLY": "Purchase frozen CORE tickets only; semantics outside CORE remain informational.",
+    "CORE_PROTECTION": "Purchase frozen CORE and PROTECTION only; generic TAIL not purchased.",
+    "CPSS_ALL": "CORE+PROTECTION + soft restoration + structural closure with no Top-K restriction.",
+    "CPSS_TOPK": "CORE+PROTECTION + soft restoration + structural trio closure only when all three runners are within frozen Static Top-K; K fixed by arm before result."
+  },
+  "invariants": [
+    "Frozen Production Prediction unchanged",
+    "Production MEC-R3 unchanged",
+    "Semantic Universe retained as information",
+    "Generic TAIL purchase OFF in R4 shadow arms",
+    "Hard structural exclusions preserved",
+    "No result-derived ticket creation",
+    "No probability or EV fabrication",
+    "KRS remains SHADOW",
+    "Actual purchase not assumed",
+    "No arm selection or threshold tuning during 30-race window",
+    "Correctness repair only exception; any repair must be versioned and cannot retroactively alter earlier shadow artifacts"
+  ],
+  "metrics": [
+    "investment_weighted_PFS",
+    "profit_loss",
+    "capital_required",
+    "ticket_count",
+    "hit_race_rate",
+    "hit_but_loss_rate",
+    "bet_type_PFS",
+    "tail_capital_avoided",
+    "core_structure_retention",
+    "semantic_information_retention",
+    "max_drawdown",
+    "largest_return_dependency"
+  ],
+  "selection_protocol": {
+    "during_window": "NO ARM SELECTION / NO THRESHOLD TUNING",
+    "after_30": "Human review required; compare Production R3 and every preregistered arm. Promotion is not automatic.",
+    "automatic_production_promotion": false
+  },
+  "production_effect": "NONE"
+}
