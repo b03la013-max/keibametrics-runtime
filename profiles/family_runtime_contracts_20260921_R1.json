@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260922-R5",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-FULL-LIFECYCLE-RUNTIME-VERIFIED",
+  "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260923-R6",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-STAGED-FULL-PIPELINE-VERIFIED",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,11 +12,11 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "EXECUTABLE / PHYSICAL-RUNTIME-VERIFIED / FULL-LIFECYCLE-SIGNED-E2E-PASS / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
+      "execution_status": "EXECUTABLE / STAGED-FULL-PIPELINE-VERIFIED / FULL-LIFECYCLE-SIGNED-E2E-PASS / AUTO-POSTRESULT-LEARNING-VERIFIED / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "地方版 v4.12 Rev.3",
       "krs": "v1.6-KRS Rev.3",
-      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.1-20260922",
+      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.3-20260923",
       "formal_guard": "FCG-LOCAL v1.1.0",
       "engine": "KRS-Engine v1.1.0",
       "parameter_map": "v0.1-provisional / PROVISIONAL_UNCALIBRATED",
@@ -29,7 +29,7 @@
         "signed_receipt_authority",
         "runtime_version"
       ],
-      "note": "Dedicated Railway LOCAL runtime is physically verified through complete signed lifecycle PRE_KRS -> KRS5000 -> FINAL -> FORMAL -> RESULT -> VERIFY. Settlement-safe PFS and learning-event closure are implemented. First real pre-race LOCAL race remains a separate production acceptance gate; no JRA/BAN fallback.",
+      "note": "LOCAL is mechanically executable across rule-bound evidence -> numerical materialization -> provenance -> KRS input -> signed PRE_KRS -> KRS5000 -> KRS utility SHADOW -> MEC R3 -> capital -> ticket transport trace -> signed FINAL -> official result -> settlement/PFS -> automatic failure localization/learning -> signed RESULT. First real pre-race LOCAL race remains empirical acceptance evidence only.",
       "numerical_mapping_registry": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
       "evidence_rule_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.0-20260922",
       "numerical_materializer": "runtime/local_evidence_to_base_production.py",
@@ -44,7 +44,7 @@
       "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
       "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
       "signed_receipt_authority": "KM-LOCAL-RUNTIME-ED25519-20260922",
-      "runtime_app_sha256": "d5872a4f9054d06b4e9e05fd70c5904c50e4cca5dbaed13492a55df4784f144e",
+      "runtime_app_sha256": "dea257a351b85917fd72cc1cda0ef54a38489787b8bc3ea545a0ace5773ac078",
       "acceptance": {
         "github_actions_run_id": 35743549103,
         "conclusion": "success",
@@ -81,6 +81,29 @@
         "sample_investment": 300,
         "sample_return": 1830,
         "sample_pfs": 610
+      },
+      "mec_profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+      "capital_profile": "KM-FAMILY-CAPITAL-COMPATIBILITY-v1.0-20260921",
+      "formal_runner": ".github/workflows/km-family-non-jra-formal-runner.yml",
+      "staged_formal_acceptance": {
+        "github_actions_run_id": 35748684823,
+        "required_count": 87,
+        "calculated_count": 87,
+        "unresolved_count": 0,
+        "actual_run_count": 5000,
+        "pre_krs_receipt": "4d5e276c0005b5d351f23c8f85892d89f02eb7eb2999063272afa962659fcb11",
+        "krs_receipt": "42e93d7f770ebfc9d4c69c74ff97c1b3a0baeb518489ed68ae1065162f644fe3",
+        "final_receipt": "61e7184d8c8e7d1d8c52c5932b3f25d84adf6bd0c9496d3810663fd025cd521b",
+        "mec_sha256": "6ab41ec75956456568548743d6f14a70bacb58e8deefeb65f83b53c18fabddd5",
+        "material_coverage_ratio": 1,
+        "minimum_required_capital": 200,
+        "ticket_count": 2,
+        "verified": true
+      },
+      "auto_postresult_learning_acceptance": {
+        "github_actions_run_id": 35747771175,
+        "result_receipt": "ecd490c2379cd83f0ac0626f5e4adc2fd9eea501b148189cb766c0b3f3de4e1d",
+        "verified": true
       }
     },
     "BAN": {
