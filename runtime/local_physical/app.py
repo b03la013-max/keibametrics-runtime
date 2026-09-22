@@ -8,7 +8,7 @@ from post_result_learning import build_post_result_review, build_learning_state
 from minimum_efficient_coverage import validate_mec_plan, MEC_PROFILE
 from capital_policy import PROFILE as CAPITAL_PROFILE
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.3-20260923"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.4-20260923"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -375,14 +375,26 @@ def result(p:Dict[str,Any]):
     try:
         finish_order=official.get("finish_order") or []
         if len(finish_order)>=3 and isinstance(fin,dict):
+            frozen_final_artifact=(fin.get("artifact") or {})
+            frozen_fpp=(frozen_final_artifact.get("final_prediction_package") or {})
             final_artifact={
                 "race_id":rid,
                 "sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
                 "final_receipt_sha256":fin.get("receipt_sha256"),
-                "final_prediction_package":((fin.get("artifact") or {}).get("final_prediction_package") or {}),
-                "final_ticket":((fin.get("artifact") or {}).get("final_ticket") or {}),
-                "krs_prediction_utility":p.get("krs_prediction_utility") or {},
-                "minimum_efficient_coverage":p.get("minimum_efficient_coverage") or {},
+                "final_prediction_package":frozen_fpp,
+                "final_ticket":(frozen_final_artifact.get("final_ticket") or {}),
+                "krs_prediction_utility":(
+                    frozen_fpp.get("krs_prediction_utility_shadow")
+                    or frozen_final_artifact.get("krs_prediction_utility")
+                    or p.get("krs_prediction_utility")
+                    or {}
+                ),
+                "minimum_efficient_coverage":(
+                    frozen_final_artifact.get("minimum_efficient_coverage")
+                    or frozen_fpp.get("minimum_efficient_coverage")
+                    or p.get("minimum_efficient_coverage")
+                    or {}
+                ),
             }
             learning_result={
                 "race_id":rid,
@@ -453,7 +465,11 @@ def result(p:Dict[str,Any]):
         "settlement":{
             "status":settlement_status,
             "investment":investment,
-            "settled_investment":settled_investment if settled_investment is not None else investment,
+            "settled_investment":(
+                settled_investment
+                if settled_investment is not None
+                else (investment if settlement_status in {"COMPLETE","VOID","REFUND"} else None)
+            ),
             "return":ret,
             "profit_loss":profit_loss,
             "pfs":pfs,
