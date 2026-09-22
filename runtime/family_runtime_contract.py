@@ -4,7 +4,7 @@ import json
 class FamilyRuntimeError(ValueError):
     pass
 
-def load_contracts(path="profiles/family_runtime_contracts_20260921_R1.json"):
+def load_contracts(path="profiles/family_runtime_contracts_20260923_R7.json"):
     with open(path,encoding="utf-8") as f:
         return json.load(f)
 
