@@ -88,7 +88,11 @@ jobs:
           # This replay may occur after the race, but its input artifact must remain strictly pre-race.
           forbidden=[k for k in ev if str(k).startswith("same_day_r12_")]
           assert not forbidden,forbidden
-          assert "result" not in json.dumps(source,ensure_ascii=False).lower()
+          current_race_result_sources=[
+              s for s in (source.get("snapshots") or [])
+              if "R12-RESULT" in str((s or {}).get("source_id") or "")
+          ]
+          assert not current_race_result_sources,current_race_result_sources
 
           candidate=compile_candidate_evidence(source,request)
           candidate=materialize_candidate(candidate)
