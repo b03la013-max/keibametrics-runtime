@@ -85,28 +85,7 @@ def extract_runner_universe_from_tables(tables: Any) -> List[Dict[str, Any]]:
             if not cname or cname in {"枠番", "馬番", "競走馬", "馬名"}:
                 continue
 
-            # NAR race cards keep cancelled/excluded horses visible in the card.
-            # Build the local presentation block for this horse and remove a
-            # runner only when an explicit official cancellation/exclusion marker
-            # exists in that block. This is Runner-Universe correctness, not a
-            # prediction-policy change.
-            block_rows=[row]
-            for j in range(i + 1, len(rows)):
-                nxt=rows[j]
-                if nxt and re.fullmatch(r"\d{1,2}", (nxt[0] or "").strip()):
-                    # Stop at the next apparent primary runner row.
-                    if (
-                        (len(nxt)>=3 and re.fullmatch(r"\d{1,2}", (nxt[1] or "").strip()) and canonical_name(nxt[2]))
-                        or (len(nxt)>=2 and canonical_name(nxt[1]) and not re.fullmatch(r"\d{1,2}", (nxt[1] or "").strip()))
-                    ):
-                        break
-                block_rows.append(nxt)
-                if len(block_rows)>=5:
-                    break
-            block_text=canonical_name(" ".join(cell for rr in block_rows for cell in rr))
-            if any(marker in block_text for marker in ("出走取消","競走除外","取消馬","除外馬")):
-                continue
-
+            # Declared universe preserves every officially listed horse, including later scratches.
             bw, bw_change = _bodyweight_from_following_rows(rows, i)
             rec = {
                 "runner_id": str(runner_id),
@@ -163,46 +142,104 @@ def _explicit_excluded_ids_from_tables(tables: Any) -> set[int]:
     return excluded
 
 
+def _official_odds_active_ids(tables: Any, declared: List[Dict[str, Any]]) -> set[int]:
+    if not isinstance(tables, list) or not declared:
+        return set()
+    text = canonical_name(" ".join(
+        str(cell or "")
+        for table in tables if isinstance(table, list)
+        for row in table if isinstance(row, list)
+        for cell in row
+    ))
+    active=set()
+    for r in declared:
+        name=canonical_name(r.get("name"))
+        if name and name in text:
+            active.add(int(r.get("horse_no") or r.get("runner_id")))
+    # Fail-safe: only trust odds-as-active-set when it looks like the same race,
+    # allowing at most two inactive/scratched declarations.
+    if len(active) >= max(2, len(declared)-2):
+        return active
+    return set()
+
+
 def enrich_source_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
     ev = artifact.get("normalized_evidence") or {}
     rc = ev.get("race_card_tables")
     if not isinstance(rc, dict) or "value" not in rc:
         raise ValueError("NAR_RACE_CARD_EVIDENCE_MISSING")
-    runners = extract_runner_universe_from_tables(rc["value"])
-    # Current NAR odds table carries the explicit change-information column.
-    # Use it to remove officially cancelled/excluded horses from the active
-    # runner universe while preserving their presence in the raw race card.
+
+    declared = extract_runner_universe_from_tables(rc["value"])
+    race_card_excluded = _explicit_excluded_ids_from_tables(rc["value"])
+
     odds = ev.get("odds_tables")
     odds_value=(odds or {}).get("value") if isinstance(odds, dict) else None
-    excluded_ids = _explicit_excluded_ids_from_tables(odds_value)
-    if excluded_ids:
-        runners = [r for r in runners if int(r.get("horse_no") or r.get("runner_id")) not in excluded_ids]
+    odds_excluded = _explicit_excluded_ids_from_tables(odds_value)
+    odds_active = _official_odds_active_ids(odds_value, declared)
 
-    # Some NAR odds views remove a cancelled runner entirely instead of
-    # rendering an explicit cancellation row. When the optional official odds
-    # source contains nearly the full race-card name set, treat the names
-    # actually present there as the active betting universe and remove only the
-    # small absent subset. This is source-state reconciliation, not prediction.
-    if isinstance(odds_value, list) and runners:
-        odds_text=canonical_name(" ".join(
-            str(cell or "")
-            for table in odds_value if isinstance(table,list)
-            for row in table if isinstance(row,list)
-            for cell in row
-        ))
-        active_by_name=[r for r in runners if canonical_name(r.get("name")) and canonical_name(r.get("name")) in odds_text]
-        if len(active_by_name) >= max(2, len(runners)-2) and len(active_by_name) < len(runners):
-            runners=active_by_name
-    universe = {
-        "profile": PROFILE,
-        "source_id": rc.get("source_id"),
-        "source_snapshot_sha256": rc.get("snapshot_sha256"),
-        "runner_count": len(runners),
-        "runners": runners,
+    statuses=[]
+    active=[]
+    for r in declared:
+        rid=int(r.get("horse_no") or r.get("runner_id"))
+        evidence=[str(rc.get("source_id") or "NAR_RACE_CARD")]
+        if rid in race_card_excluded:
+            status="CANCELLED"
+            reason="EXPLICIT_RACE_CARD_CANCELLATION"
+        elif rid in odds_excluded:
+            status="CANCELLED"
+            reason="EXPLICIT_OFFICIAL_ODDS_CANCELLATION"
+            evidence.append(str((odds or {}).get("source_id") or "NAR_ODDS"))
+        elif odds_active:
+            evidence.append(str((odds or {}).get("source_id") or "NAR_ODDS"))
+            if rid in odds_active:
+                status="ACTIVE"
+                reason="PRESENT_IN_OFFICIAL_ACTIVE_BETTING_UNIVERSE"
+            else:
+                status="INACTIVE"
+                reason="ABSENT_FROM_OFFICIAL_ACTIVE_BETTING_UNIVERSE"
+        else:
+            status="ACTIVE_DECLARED"
+            reason="NO_RELIABLE_OFFICIAL_ODDS_ACTIVE_SET"
+        statuses.append({
+            "runner_id":str(rid),
+            "name":r.get("name"),
+            "status":status,
+            "reason":reason,
+            "evidence_sources":evidence,
+        })
+        if status in {"ACTIVE","ACTIVE_DECLARED"}:
+            active.append(r)
+
+    declared_universe={
+        "profile":PROFILE,
+        "universe_type":"DECLARED",
+        "source_id":rc.get("source_id"),
+        "source_snapshot_sha256":rc.get("snapshot_sha256"),
+        "runner_count":len(declared),
+        "runners":declared,
     }
-    universe["runner_universe_sha256"] = _sha(universe)
-    artifact["official_runner_universe"] = universe
-    artifact["official_runner_universe_sha256"] = universe["runner_universe_sha256"]
+    declared_universe["runner_universe_sha256"]=_sha(declared_universe)
+
+    active_universe={
+        "profile":PROFILE,
+        "universe_type":"ACTIVE",
+        "source_id":rc.get("source_id"),
+        "source_snapshot_sha256":rc.get("snapshot_sha256"),
+        "runner_count":len(active),
+        "runners":active,
+        "status_registry_sha256":_sha(statuses),
+    }
+    active_universe["runner_universe_sha256"]=_sha(active_universe)
+
+    artifact["declared_runner_universe"]=declared_universe
+    artifact["active_runner_universe"]=active_universe
+    artifact["runner_status_registry"]=statuses
+    artifact["runner_status_registry_sha256"]=_sha(statuses)
+
+    # Backward-compatible formal authority: official_runner_universe means ACTIVE.
+    artifact["official_runner_universe"]=active_universe
+    artifact["official_runner_universe_sha256"]=active_universe["runner_universe_sha256"]
+    artifact["official_declared_runner_universe_sha256"]=declared_universe["runner_universe_sha256"]
     return artifact
 
 
