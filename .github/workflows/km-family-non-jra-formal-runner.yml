@@ -168,6 +168,7 @@ jobs:
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MEC_PROFILE
           from capital_policy import resolve_capital_policy
+          from local_numerical_authority_gate import assess as assess_numerical_authority
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
@@ -337,6 +338,12 @@ jobs:
                 source_freeze_at=source_artifact.get("source_freeze_at"))
           stage("RUNNER_UNIVERSE",runner_count=len(runners))
 
+          numerical_authority=assess_numerical_authority()
+          persist("numerical_authority_preflight.json",numerical_authority)
+          req["numerical_authority_preflight"]=numerical_authority
+          if req.get("require_full_numerical_authority") is True and numerical_authority.get("full_numerical_authority") is not True:
+              fail_closed("FULL_NUMERICAL_AUTHORITY_NOT_READY",numerical_authority)
+
           req_indices=req.get("required_indices") or req.get("required_index_names")
           assert isinstance(req_indices,list) and req_indices,"LOCAL_REQUIRED_INDICES_REQUIRED"
           if req_indices and isinstance(req_indices[0],dict):
@@ -346,8 +353,20 @@ jobs:
 
           req=materialize_request(req,req_indices)
           cov=req["numeric_coverage"]
-          assert req.get("full_terminalization") is True,("LOCAL_INDEX_TERMINALIZATION_INCOMPLETE",cov)
-          assert int(cov.get("unresolved_count",0))==0,cov
+          persist("numerical_materialization_summary.json",{
+              "numeric_coverage":cov,
+              "full_terminalization":req.get("full_terminalization"),
+              "full_numerical_calculation":req.get("full_numerical_calculation"),
+              "mapping_registry":req.get("local_mapping_registry"),
+              "numerical_authority_preflight":numerical_authority,
+          })
+          if req.get("full_terminalization") is not True or int(cov.get("unresolved_count",0))!=0:
+              fail_closed("LOCAL_INDEX_TERMINALIZATION_INCOMPLETE",cov)
+          if req.get("full_numerical_calculation") is True and numerical_authority.get("full_numerical_authority") is not True and req.get("numerical_authority_test_override") is not True:
+              fail_closed("UNAUTHORIZED_FULL_NUMERICAL_CLAIM",{
+                  "numerical_authority":numerical_authority,
+                  "numeric_coverage":cov,
+              })
           stage("NUMERICAL_MATERIALIZATION",
                 required_count=cov["required_count"],calculated_count=cov["calculated_count"],
                 ruled_neutral_count=cov.get("ruled_neutral_count",0),ruled_hold_count=cov.get("ruled_hold_count",0),
