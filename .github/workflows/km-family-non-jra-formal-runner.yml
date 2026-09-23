@@ -332,11 +332,16 @@ jobs:
           assert fc<300 and (fin.get("receipt") or {}).get("status")=="PASS",(fc,fin)
           final_sha=verify_envelope(fin,"FINAL")
 
+          full_numeric=bool(req.get("full_numerical_calculation"))
+          if temporal_mode=="FORMAL-PRE-RACE":
+              final_status="FULL_FORMAL_E2E_PASS" if full_numeric else "EXECUTION_VERIFIED_NUMERICAL_DEGRADED"
+          else:
+              final_status="POST_START_REPLAY_E2E_PASS" if full_numeric else "POST_START_REPLAY_E2E_PASS_NUMERICAL_DEGRADED"
           print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
             "race_id":rid,"family_id":"LOCAL","execution_phase":"FORMAL",
             "temporal_mode":temporal_mode,
-            "status":("FULL_FORMAL_E2E_PASS" if temporal_mode=="FORMAL-PRE-RACE" else "POST_START_REPLAY_E2E_PASS"),
-            "full_numerical_calculation":bool(req.get("full_numerical_calculation")),
+            "status":final_status,
+            "full_numerical_calculation":full_numeric,
             "external_endpoint":endpoint,
             "source_receipt":source_receipt_sha,
             "source_snapshot_sha256":req["source_snapshot_sha256"],
