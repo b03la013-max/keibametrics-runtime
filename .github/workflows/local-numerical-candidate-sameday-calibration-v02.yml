@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -188,6 +188,41 @@ jobs:
           assert mp["calibration_metadata"]["oos_eligible"] is False
           print("SAFETY_ASSERTIONS_PASS")
           PY
+
+      - name: Freeze calibrated candidate files in repository
+        run: |
+          mkdir -p mapping runtime/calibration
+          cp calibration_out/v02/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json              mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json
+          cp calibration_out/v02/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json              mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json
+          python - <<'PY'
+          import json
+          r=json.load(open("calibration_out/v02/calibration_report.json",encoding="utf-8"))
+          ins=json.load(open("calibration_out/in_sample_comparison.json",encoding="utf-8"))
+          loo=json.load(open("calibration_out/loo_comparison.json",encoding="utf-8"))
+          out={
+            "profile":r["profile"],"status":r["status"],"sha256":r["sha256"],
+            "race_labels":r["race_labels"],"race_count":r["race_count"],
+            "largest_component_changes":r["largest_component_changes"][:20],
+            "role_profiles":r["role_profiles"],
+            "safety":r["safety"],
+            "in_sample":ins["summary"],
+            "leave_one_race_out":loo["summary"],
+            "evidence_class":"RETROSPECTIVE_SAME_DAY_CALIBRATION / NOT_GENUINE_OOS",
+            "production_authority":False,
+            "automatic_promotion":False,
+            "next_gate":"DUAL PRE-RESULT SHADOW v0.1 vs v0.2; R30 then human review"
+          }
+          json.dump(out,open("runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add             mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json             mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json             runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json
+          if git diff --cached --quiet; then
+            echo "CALIBRATION_FILES_ALREADY_FROZEN"
+          else
+            git commit -m "Freeze LOCAL v0.2 same-day calibrated candidate [skip ci]"
+            git push
+          fi
 
       - name: Persist calibration artifacts
         uses: actions/upload-artifact@v4
