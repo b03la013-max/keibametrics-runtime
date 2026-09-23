@@ -140,9 +140,12 @@ def materialize_runner(runner, venue_rule_registry=None, required_indices=None, 
     for name in sorted(RULE_BOUND_INDICES | (required & RULE_BOUND_INDICES)):
         canonical[name]=_external_index(name,ext.get(name),allowed.get(name),venue_rule_registry)
 
-    # TPI-L is exact only when EVI/CEV has a usable rule-bound numeric terminal.
+    # TPI-L is exact only when EVI/CEV and every weighted base dependency
+    # have usable numeric terminals. A partial numeric dependency set must HOLD,
+    # never crash or silently substitute transport values.
     evi=canonical.get("EVI/CEV")
-    if _has_value(evi):
+    tpi_base_dependencies_numeric=all(_has_value(canonical.get(k)) for k in WEIGHTS)
+    if _has_value(evi) and tpi_base_dependencies_numeric:
         v={k:canonical[k]["value"] for k in WEIGHTS}
         ev=evi["value"]
         linear=0.18*v["HPI-L"]+0.16*v["CFIg-L"]+0.14*v["RFIg-L"]+0.08*v["BVIg-L"]+0.08*v["JTI-L"]+0.08*v["CSI-L"]+0.08*v["BWI-L"]+0.10*v["NCI"]+0.10*ev
@@ -157,7 +160,14 @@ def materialize_runner(runner, venue_rule_registry=None, required_indices=None, 
           "source_fact":f"TPI_linear={linear:.6f};min_major={min_major:.6f};penalty={penalty:.6f}",
         }
     else:
-        canonical["TPI-L"]=_hold("TPI-L","TPI-L exact formula is known, but EVI/CEV lacks a registered usable numeric terminal; numeric claim held.",(evi or {}).get("evidence_refs") or ["LOCAL-CANON:EVI/CEV"])
+        refs=list((evi or {}).get("evidence_refs") or ["LOCAL-CANON:EVI/CEV"])
+        for k in WEIGHTS:
+            refs.extend((canonical.get(k) or {}).get("evidence_refs") or [])
+        canonical["TPI-L"]=_hold(
+          "TPI-L",
+          "TPI-L exact formula is known, but EVI/CEV or one or more weighted base dependencies lack registered usable numeric terminals; numeric claim held.",
+          refs
+        )
 
     # Exact F3S-L formula is preserved; it is calculated only when every dependency is numeric.
     deps=["SRI-L","TPI-L","EVI/CEV","RFIg-L","CFIg-L","NCI","T3I-L"]
