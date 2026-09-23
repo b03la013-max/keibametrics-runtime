@@ -332,6 +332,63 @@ jobs:
           assert fc<300 and (fin.get("receipt") or {}).get("status")=="PASS",(fc,fin)
           final_sha=verify_envelope(fin,"FINAL")
 
+          result_summary=None
+          post_result=req.get("post_result_after_final")
+          if isinstance(post_result,dict):
+              order=[int(x) for x in (post_result.get("finish_order") or [])]
+              assert len(order)>=3,"POST_RESULT_FINISH_ORDER_REQUIRED"
+              top3=order[:3]
+              payouts={str(k).upper():int(v) for k,v in (post_result.get("payouts") or {}).items()}
+              winning=[]
+              total_return=0
+              for t in tickets:
+                  bt=str(t.get("bet_type") or "").upper()
+                  sel=[int(x) for x in (t.get("selection") or [])]
+                  hit=False
+                  if bt=="EXACTA" and sel==top3[:2]:
+                      hit=True
+                  elif bt=="TRIO" and set(sel)==set(top3):
+                      hit=True
+                  elif bt=="TRIFECTA" and sel==top3:
+                      hit=True
+                  if hit and bt in payouts:
+                      stake=int(t.get("stake") or 0)
+                      payout100=int(payouts[bt])
+                      ticket_return=(stake*payout100)//100
+                      total_return+=ticket_return
+                      winning.append({"bet_type":bt,"selection":sel,"stake":stake,"payout_per_100":payout100,"return":ticket_return})
+              result_payload={
+                "family_id":"LOCAL","race_id":rid,
+                "final_receipt":fin,
+                "official_result":{
+                  "finish_order":order,
+                  "result_available_at":post_result.get("result_available_at"),
+                  "source":post_result.get("source") or "USER_SUPPLIED_RESULT_WITH_OFFICIAL_CROSSCHECK",
+                  "payouts":payouts
+                },
+                "result_available_at":post_result.get("result_available_at"),
+                "settlement":{
+                  "status":"COMPLETE",
+                  "investment":total,
+                  "settled_investment":total,
+                  "return":total_return,
+                  "winning_tickets":winning
+                },
+                "pfs_authority":post_result.get("pfs_authority") or "RECON"
+              }
+              rc,rres=call("/result",result_payload,180)
+              assert rc<300 and (rres.get("receipt") or {}).get("status")=="PASS",(rc,rres)
+              result_sha=verify_envelope(rres,"RESULT")
+              result_art=rres.get("artifact") or {}
+              result_summary={
+                "result_receipt":result_sha,
+                "settlement":result_art.get("settlement"),
+                "failure_localization":result_art.get("failure_localization"),
+                "learning_event":result_art.get("learning_event"),
+                "automatic_post_result_review":result_art.get("automatic_post_result_review"),
+                "winning_tickets":winning
+              }
+
           full_numeric=bool(req.get("full_numerical_calculation"))
           if temporal_mode=="FORMAL-PRE-RACE":
               final_status="FULL_FORMAL_E2E_PASS" if full_numeric else "EXECUTION_VERIFIED_NUMERICAL_DEGRADED"
@@ -358,6 +415,7 @@ jobs:
             "capital_decision":capital.get("decision"),
             "ticket_count":len(tickets),
             "total_investment":total,
+            "post_result":result_summary,
             "verified":True
           },separators=(",",":"),ensure_ascii=False))
           PY
