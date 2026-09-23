@@ -24,7 +24,7 @@ class URWTerminalRegistryRepairTest(unittest.TestCase):
             "runner_id":"1","name":"Fixture","evidence_features":feats,
             "canonical_external_indices":{
               "EVI/CEV":{
-                "terminal_status":"RULED-NEUTRAL","transport_value":52,
+                "terminal_status":"RULED-NEUTRAL","value":52,
                 "rule_id":"URW-v1.6-EVI-CEV-NEUTRAL-MISSING-v1",
                 "evidence_refs":["EVI-MISSING"],"source_fact":"missing EVI -> canon neutral with DCR consequence",
                 "venue_formula_registry":"URW-VENUE-FORMULA-TERMINAL-REGISTRY-v1.0-20260923"
