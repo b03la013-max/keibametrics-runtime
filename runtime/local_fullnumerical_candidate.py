@@ -389,4 +389,7 @@ def materialize_candidate(request: Dict[str, Any],
     out["candidate_index_terminalization_sha256"]=_sha(rows)
     out["candidate_index_provenance_sha256"]=_sha([r["canonical_components"] for r in runners])
     out["candidate_full_numerical_summary"]["sha256"]=_sha(out["candidate_full_numerical_summary"])
+    if mapping.get("candidate_role_weights"):
+        out["candidate_role_weight_profile"]=copy.deepcopy(mapping["candidate_role_weights"])
+        out["candidate_role_weight_profile_sha256"]=_sha(out["candidate_role_weight_profile"])
     return out
