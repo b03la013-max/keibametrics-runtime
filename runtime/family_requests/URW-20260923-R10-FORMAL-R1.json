@@ -3,7 +3,7 @@
   "execution_phase": "FORMAL",
   "temporal_mode": "FORMAL-PRE-RACE",
   "race_id": "URW-20260923-R10-FORMAL-R1",
-  "prediction_cutoff": "2026-09-23T17:55:13+09:00",
+  "prediction_cutoff": "2026-09-23T17:56:43+09:00",
   "frozen_prediction_cutoff": "2026-09-23T17:55:13+09:00",
   "scheduled_post_at": "2026-09-23T18:15:00+09:00",
   "venue_id": "URW",
@@ -279,7 +279,7 @@
     "distance": 1400,
     "going": "heavy",
     "class": "JPN3_OPEN_3UP",
-    "prediction_cutoff": "2026-09-23T17:55:13+09:00"
+    "prediction_cutoff": "2026-09-23T17:56:43+09:00"
   },
   "environment": {
     "course_family": "URW-D1400",
@@ -4580,12 +4580,17 @@
       }
     }
   },
-  "execution_attempt": 1,
+  "execution_attempt": 2,
   "runtime_expected_revision": "73ebfe5ee4ccbf989bdb53b7a356b5c959bd197a",
   "runner_universe_correctness_repair": "KM-LOCAL-RUNTIME-RELEASE-v1.5-REV.4-20260923-R1",
-  "source_cutoff_note": "Static prediction frozen at 17:55:13 JST from pre-race public evidence. Runtime SOURCE freeze may occur after this timestamp but before release deadline; SOURCE cannot mutate the frozen Static ranking.",
+  "source_cutoff_note": "Static/FPP remain immutable at 17:55:13 JST. SOURCE acquisition cutoff is 17:56:43 JST solely to freeze official runner/odds/same-day evidence after Static Freeze and before the 18:13 release deadline.",
   "release_deadline_at": "2026-09-23T18:13:00+09:00",
   "deadline_state": "ACTIVE_PRE_RACE_RELEASE_DEADLINE_18:13_JST",
   "release_buffer_seconds": 120,
-  "require_full_numerical_authority": false
+  "require_full_numerical_authority": false,
+  "temporal_separation": {
+    "static_prediction_freeze_at": "2026-09-23T17:55:13+09:00",
+    "source_acquisition_cutoff_at": "2026-09-23T17:56:43+09:00",
+    "rule": "SOURCE_AFTER_STATIC_MAY_VERIFY_IDENTITY/UNIVERSE/BODYWEIGHT/ODDS_BUT_MUST_NOT_MUTATE_FROZEN_STATIC"
+  }
 }
