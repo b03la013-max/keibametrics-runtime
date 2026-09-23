@@ -294,11 +294,15 @@ def validate_orchestration_ref(req):
         "orchestration_authority":"BASE44",
     }
 
+TERMINAL_INDEX_STATES={"CALCULATED","RULED-NEUTRAL","RULED-HOLD","NOT-APPLICABLE"}
+
 def validate_canonical_index_components(req, runner_ids):
     mode=str(req.get("numeric_calculation_requirement","ALLOW_RULED_HOLD"))
-    if mode!="FULL_REQUIRED":
+    if mode not in {"FULL_REQUIRED","FULL_TERMINAL_REQUIRED"}:
         return {"numeric_calculation_requirement":mode,"canonical_component_count":0}
     total=0
+    formal_numeric=0
+    terminal_non_numeric=0
     for r in req.get("runners",[]):
         no=str(r.get("runner_id"))
         cc=r.get("canonical_components")
@@ -311,7 +315,18 @@ def validate_canonical_index_components(req, runner_ids):
             c=cc[idx]
             if not isinstance(c,dict):
                 raise FormalValidationError(f"CANONICAL_COMPONENT_BAD:{no}:{idx}")
-            _finite_0_100(c.get("value"),f"CANONICAL:{no}:{idx}")
+            terminal=str(c.get("terminal_status") or "CALCULATED").upper()
+            if terminal not in TERMINAL_INDEX_STATES:
+                raise FormalValidationError(f"CANONICAL_TERMINAL_STATUS_BAD:{no}:{idx}:{terminal}")
+            if mode=="FULL_REQUIRED" and terminal!="CALCULATED":
+                raise FormalValidationError(f"CANONICAL_NOT_NUMERICALLY_CALCULATED:{no}:{idx}:{terminal}")
+            if terminal in {"CALCULATED","RULED-NEUTRAL"}:
+                _finite_0_100(c.get("value"),f"CANONICAL:{no}:{idx}")
+                formal_numeric+=1
+            else:
+                if "value" in c and c.get("value") is not None:
+                    raise FormalValidationError(f"CANONICAL_HELD_VALUE_MUST_BE_ABSENT:{no}:{idx}:{terminal}")
+                terminal_non_numeric+=1
             if not str(c.get("rule_id") or "").strip():
                 raise FormalValidationError(f"CANONICAL_RULE_ID_MISSING:{no}:{idx}")
             if not str(c.get("mapping_version") or "").strip():
@@ -326,9 +341,12 @@ def validate_canonical_index_components(req, runner_ids):
     if total!=expected:
         raise FormalValidationError(f"CANONICAL_COMPONENT_COUNT_MISMATCH:{total}!={expected}")
     return {
-        "numeric_calculation_requirement":"FULL_REQUIRED",
+        "numeric_calculation_requirement":mode,
         "canonical_component_count":total,
         "canonical_component_expected":expected,
+        "canonical_formal_numeric_count":formal_numeric,
+        "canonical_terminal_non_numeric_count":terminal_non_numeric,
+        "canonical_terminal_resolution_verified":True,
     }
 
 def validate_bet_type_dispositions(req):

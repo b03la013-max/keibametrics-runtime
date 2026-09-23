@@ -1,0 +1,26 @@
+name: URW Terminal Repair CI
+on:
+  push:
+    branches:
+      - repair/urw-terminal-registry-20260923
+  pull_request:
+    paths:
+      - "runtime/formal_request_validator.py"
+      - "runtime/local_evidence_to_base_production.py"
+      - "runtime/local_terminal_compat.py"
+      - "mapping/urw_venue_formula_terminal_registry_v1.0_20260923.json"
+      - "tests/test_urw_terminal_registry_repair.py"
+      - ".github/workflows/km-family-non-jra-formal-runner.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m unittest tests.test_urw_terminal_registry_repair tests.test_local_production_numerical_closure
+      - run: python -m py_compile runtime/formal_request_validator.py runtime/local_evidence_to_base_production.py
+      - run: python -m json.tool mapping/urw_venue_formula_terminal_registry_v1.0_20260923.json >/dev/null

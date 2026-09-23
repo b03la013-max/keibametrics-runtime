@@ -37,16 +37,23 @@ class LocalProductionClosureTest(unittest.TestCase):
         self.assertTrue(cc["HPI-L"]["rule_id"])
         self.assertTrue(cc["HPI-L"]["evidence_refs"])
 
-    def test_unspecified_formula_fails_full_coverage(self):
+    def test_unspecified_formula_terminalizes_without_fake_value(self):
         req=materialize_request(self.base_request(),["HPI-L","TPI-L","ZAI-WIN"])
         self.assertFalse(req["full_numerical_calculation"])
-        self.assertEqual(req["numeric_coverage"]["unresolved_count"],1)
-        self.assertEqual(req["numeric_coverage"]["unresolved"][0]["reason"],"FORMULA-UNRESOLVED")
+        self.assertTrue(req["full_terminalization"])
+        self.assertEqual(req["numeric_coverage"]["unresolved_count"],0)
+        self.assertEqual(req["numeric_coverage"]["ruled_hold_count"],1)
+        z=req["runners"][0]["canonical_components"]["ZAI-WIN"]
+        self.assertEqual(z["terminal_status"],"RULED-HOLD")
+        self.assertNotIn("value",z)
 
     def test_local_krs_bridge_is_explicit_and_provenanced(self):
         r=self.runner()
         prov={k:{"rule_id":"LOCAL-HSV-SELFTEST-v1","evidence_refs":["K1"]} for k in HSV_KEYS+STATIC_KEYS}
-        bridge={"bridge_id":"LOCAL-KRS-BRIDGE-SELFTEST-v1","family":"LOCAL","runners":{"1":{
+        bridge={"bridge_id":"LOCAL-KRS-BRIDGE-SELFTEST-v1","family":"LOCAL",
+          "technical_proxy_mode":True,
+          "proxy_reason":"fixture explicitly exercises terminal-complete technical proxy transport",
+          "runners":{"1":{
           "hsv":{k:60 for k in HSV_KEYS},"static":{k:60 for k in STATIC_KEYS},
           "provenance":prov,"uncertainty_scale":50
         }}}
