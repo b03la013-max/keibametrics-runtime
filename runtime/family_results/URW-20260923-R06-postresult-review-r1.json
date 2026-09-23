@@ -1,0 +1,181 @@
+{
+  "profile": "KM-LOCAL-POSTRESULT-REVIEW-REV7",
+  "race_id": "URW-20260923-R06-FORMAL-R1",
+  "review_timestamp": "2026-09-23T16:17:02+09:00",
+  "result_input": {
+    "status": "PROVISIONAL_USER_SUPPLIED_KEIBABOOK速報",
+    "top3": [
+      6,
+      9,
+      11
+    ],
+    "payouts": {
+      "EXACTA": 610,
+      "TRIO": 4090,
+      "TRIFECTA": 8790
+    },
+    "official_nar_result_freeze": "PENDING_WEB_INDEX_AT_REVIEW_TIME"
+  },
+  "frozen_pre_race_authority": {
+    "temporal_formality": "FORMAL-PRE-RACE",
+    "prediction_freeze_at": "2026-09-23T15:56:20+09:00",
+    "source_receipt_sha256": "6dd154870c60310c02a09a3216c279a28c28024d69a433485d1c443debadb847",
+    "pre_krs_receipt_sha256": "d22685d977ffe72bbbad735e974c3d744d6e79dc8468df913c2fd10fc87b0c73",
+    "krs_receipt_sha256": "b46061b04e98dd5ca3cfbfa1bd877e3e2346dfcef8cfd0abf3ce63ee2a8868fd",
+    "final_receipt_sha256": "ee8ee8eec2669ff941510b97be63ff357e07abe593912507f21d4f9e7c3004d7",
+    "final_before_post": true,
+    "github_actions_run_id": "35829202918",
+    "ticket_count": 32,
+    "investment": 3200,
+    "final_receipt_envelope_persisted": false
+  },
+  "prediction_comparison": {
+    "static_ranking": [
+      6,
+      9,
+      7,
+      2,
+      4,
+      1,
+      8,
+      11,
+      5,
+      13,
+      3,
+      12,
+      10
+    ],
+    "winner": {
+      "runner": 6,
+      "rank": 1,
+      "W": true,
+      "capture": "PASS"
+    },
+    "second": {
+      "runner": 9,
+      "rank": 2,
+      "P2": true,
+      "capture": "PASS"
+    },
+    "third": {
+      "runner": 11,
+      "rank": 8,
+      "P3": false,
+      "capture": "FAIL"
+    },
+    "top3_set": "FAIL",
+    "top3_mean_rank": 3.666667,
+    "ordered_pair_6_9": "PASS",
+    "pair_conditioned_third_6_9_11": "FAIL",
+    "ordered_exact_6_9_11": "FAIL",
+    "discrimination": "PARTIAL"
+  },
+  "frozen_recommendation_settlement": {
+    "pfs_authority": "FROZEN-RECOMMENDATION",
+    "actual_purchase_verified": false,
+    "exacta": {
+      "investment": 800,
+      "return": 610,
+      "profit_loss": -190,
+      "pfs": 76.25,
+      "hit": true,
+      "winning_selection": [
+        6,
+        9
+      ]
+    },
+    "trio": {
+      "investment": 1100,
+      "return": 0,
+      "profit_loss": -1100,
+      "pfs": 0,
+      "hit": false,
+      "winning_selection": [
+        6,
+        9,
+        11
+      ]
+    },
+    "trifecta": {
+      "investment": 1300,
+      "return": 0,
+      "profit_loss": -1300,
+      "pfs": 0,
+      "hit": false,
+      "winning_selection": [
+        6,
+        9,
+        11
+      ]
+    },
+    "total": {
+      "investment": 3200,
+      "return": 610,
+      "profit_loss": -2590,
+      "pfs": 19.0625,
+      "hit": true,
+      "hit_but_loss": true
+    }
+  },
+  "failure_localization": {
+    "first_material_failure": "W_P2_P3_FAILURE:P3_ROLE_DISCOVERY",
+    "primary_failure": "P3_CAPTURE_FAILURE_RUNNER_11",
+    "secondary_failures": [
+      "STATIC_DISCRIMINATION_CONTRIBUTORY:RUNNER_11_RANK_8",
+      "PAIR_CONDITIONED_THIRD_FAILURE:6>9>11_NOT_REPRESENTABLE",
+      "TRIO_AND_TRIFECTA_CONVERSION_MISS_DOWNSTREAM_OF_P3"
+    ],
+    "non_failures": [
+      "WINNER_CAPTURE_PASS",
+      "P2_CAPTURE_PASS",
+      "ORDERED_PAIR_6>9_PASS",
+      "EXACTA_TICKET_CONVERSION_PASS"
+    ],
+    "evidence_class": "OBSERVED_FROM_FROZEN_PRE_RACE_REQUEST_AND_DISPLAYED_FINAL_TICKET"
+  },
+  "numerical_review": {
+    "required": 377,
+    "terminalized": 377,
+    "calculated": 0,
+    "ruled_neutral": 13,
+    "ruled_hold": 364,
+    "unresolved": 0,
+    "mapping_discrimination": "UNKNOWN"
+  },
+  "krs_review": {
+    "execution_verified": true,
+    "actual_run_count": 5000,
+    "authority": "SHADOW",
+    "pre_race_utility_class": "MATERIAL-ACTIONABLE-SHADOW-DELTA",
+    "structured_output_for_runner_11_retrospective_inspection": "NOT_PERSISTED_IN_REVIEW_ARTIFACT",
+    "utility_for_third_11": "UNASSESSABLE_WITHOUT_PERSISTED_STRUCTURED_OUTPUT",
+    "oos_eligibility": "HOLD_UNTIL_OFFICIAL_RESULT_FREEZE_AND_RESULT_LINEAGE_COMPLETE"
+  },
+  "execution_integrity": {
+    "source": "VERIFIED",
+    "pre_krs": "VERIFIED",
+    "krs": "VERIFIED",
+    "final": "VERIFIED_PRE_RACE",
+    "result_receipt": "PENDING",
+    "blocker": "PRE_RACE_FINAL_ENVELOPE_NOT_PERSISTED_FOR_RESULT_GATE_REUSE",
+    "classification": "CORRECTNESS_PERSISTENCE_GAP; DOES_NOT ALTER PRE_RACE PREDICTION"
+  },
+  "learning_state_next": {
+    "state_id": "URW-20260923-R06-LEARNING-NEXT",
+    "status": "PREQUENTIAL-NEXT-RACE-ONLY",
+    "immediate": [
+      "Preserve same-day evidence that 6/9 head-order discrimination worked.",
+      "Do not rewrite R6 Prediction."
+    ],
+    "shadow_candidates": [
+      "P3_ROLE_FLOOR_FOR_STATIC_RANK_7_8_ON_HEAVY_URW_1400",
+      "TEST_WIDE/P3_RETENTION_OF_LOW-PRICE-INSENSITIVE_THIRD_WITHOUT_GLOBAL_TICKET_EXPANSION"
+    ],
+    "production_change_authorized": false,
+    "forbidden": [
+      "NO_RETROACTIVE_ADD_11_TO_R6_P3",
+      "NO_PERMANENT_VENUE_RULE_FROM_SINGLE_RACE",
+      "NO_KRS_PRODUCTION_PROMOTION_FROM_THIS_RACE_ALONE"
+    ]
+  }
+}
