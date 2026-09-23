@@ -1,0 +1,116 @@
+{
+  "profile": "KM-LOCAL-FULL-NUMERICAL-CANDIDATE-v0.1-IMPLEMENTATION-STATUS-20260923",
+  "status": "IMPLEMENTATION-COMPLETE / NON-PRODUCTION / UNCALIBRATED / PRE-RESULT-SHADOW-ARMED / OOS-R30-PENDING",
+  "family": "LOCAL",
+  "production_mutated": false,
+  "production_numerical_authority": "NOT_READY",
+  "candidate": {
+    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.1-CANDIDATE-20260923",
+    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+    "evidence_compiler": "runtime/local_nar_evidence_candidate.py",
+    "numerical_materializer": "runtime/local_fullnumerical_candidate.py",
+    "krs_bridge": "runtime/local_krs_bridge_candidate.py",
+    "postresult_scorer": "runtime/local_candidate_postresult.py",
+    "walkforward": "runtime/local_candidate_walkforward.py",
+    "component_rules": {
+      "required": 63,
+      "bound": 63
+    },
+    "required_indices": 29,
+    "krs_transport": {
+      "hsv": 30,
+      "static": 11
+    },
+    "result_derived_features_allowed": false,
+    "market_in_ability_indices": false,
+    "missing_semantics": "CANONICAL_NEUTRAL_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+    "automatic_production_promotion": false
+  },
+  "integration": {
+    "production_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "mode": "ISOLATED_PRE_RESULT_SHADOW",
+    "source": "SIGNED_SOURCE_ARTIFACT",
+    "candidate_prediction_frozen_before_candidate_krs": true,
+    "candidate_krs_after_signed_production_final": true,
+    "candidate_krs_deadline_guard_seconds": 15,
+    "candidate_krs_max_run_count": 5000,
+    "failure_blocks_production": false,
+    "production_decision_mutation": false
+  },
+  "verification": {
+    "regression": {
+      "workflow": "LOCAL Full Numerical Candidate Regression",
+      "latest_verified_run_id": 35857542231,
+      "conclusion": "success",
+      "verified_commit": "dc97b533ed967d8ef8d809a702996a07bece223e"
+    },
+    "r12_frozen_source_replay": {
+      "workflow": "LOCAL Numerical Candidate Frozen Source Replay",
+      "run_id": 35857609581,
+      "conclusion": "success",
+      "artifact_id": 10748138208,
+      "artifact_digest": "sha256:904c247d4a2fb3c14c5fdf13b285851a0eab649fe603125d0d377125eab11b7e",
+      "source_receipt_sha256": "acd050d280726dfa33233f5649e9ff1de7a37e4e00c6b69abeb5d52f3bf142ae",
+      "candidate_summary_sha256": "2d3e68e6e4d2e9d86ffb7dde59131cd422eb45c5fa55def57634d848ce91d272",
+      "required_indices_total": 348,
+      "calculated": 348,
+      "unresolved": 0,
+      "mean_real_component_coverage": 0.705027,
+      "neutral_missing_component_count": 223,
+      "candidate_ranking": [
+        "11",
+        "1",
+        "6",
+        "5",
+        "4",
+        "2",
+        "8",
+        "3",
+        "10",
+        "12",
+        "9",
+        "7"
+      ],
+      "actual_top3_reference_only": [
+        1,
+        5,
+        6
+      ],
+      "winner_rank_reference_only": 2,
+      "krs_receipt_sha256": "0d07001b23cd158ba1de26d95b8bacbdf84978fd1763a1b09a8a12e39f39b790",
+      "krs_actual_run_count": 5000,
+      "krs_result_reference_classification": "UNIQUE-RESCUE",
+      "oos_evidence": false
+    },
+    "current_retrospective_benchmark": {
+      "workflow": "LOCAL Numerical Candidate Retrospective Pre-Result Benchmark",
+      "run_id": 35858192313,
+      "conclusion": "success",
+      "artifact_id": 10748346806,
+      "artifact_digest": "sha256:41910856c96ce5c5a1a9f513779ec35b69c8feae9703ef996ea296bd64a6d9b6",
+      "event_count": 3,
+      "winner_capture_rate": 0.6666666666666666,
+      "p2_capture_rate": 1,
+      "p3_capture_rate": 1,
+      "top3_set_capture_rate": 1,
+      "mean_winner_rank": 3,
+      "mean_top3_mean_rank": 3.8888888888888893,
+      "oos_eligible": false,
+      "promotion_evidence": false,
+      "status": "WAITING_R30"
+    }
+  },
+  "known_limitations": [
+    "Pedigree population fit, stable-wide statistics, training, comment and paddock data are not present in the current automatic official source bundle and therefore remain explicit canonical-neutral/missing where applicable.",
+    "Several rule-bound indices use equal-factor candidate aggregations because LOCAL canon defines semantics but not calibrated fixed coefficients.",
+    "Role widths are unvalidated candidate policy and are intentionally broad pending OOS calibration.",
+    "Retrospective frozen-source benchmarks protect against feature leakage but are not genuine unknown-future OOS evidence.",
+    "Production numerical registry remains unchanged and non-numerical until explicit human promotion after OOS evidence."
+  ],
+  "next_gate": {
+    "requirement": "FIRST GENUINE UNKNOWN-FUTURE PRE-RACE CANDIDATE SHADOW EVENTS",
+    "minimum_review_count": 30,
+    "automatic_promotion": false,
+    "human_review_required": true
+  }
+}
