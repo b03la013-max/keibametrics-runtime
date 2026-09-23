@@ -10,8 +10,9 @@ def test_formal_dual_shadow_enforces_sim_std_and_truthful_pairing():
     assert 'cand_runs=max(5000,min(20000,int(req.get("candidate_shadow_run_count") or 5000)))' in text
     assert '"paired_run_count_seed":paired_ok' in text
     assert '"paired_run_count_seed":True' not in text
-    assert 'candidate_krs_v01_receipt_envelope.json' in text
-    assert 'candidate_krs_v02_receipt_envelope.json' in text
+    assert 'persist("candidate_krs_"+label.lower()+"_receipt_envelope.json",crun)' in text
+    assert 'run_candidate_krs_arm("V01"' in text
+    assert 'run_candidate_krs_arm("V02"' in text
     assert "path: runtime_out/*.json" in text
 
 
