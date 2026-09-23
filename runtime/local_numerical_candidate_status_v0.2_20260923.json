@@ -1,0 +1,151 @@
+{
+  "profile": "KM-LOCAL-NUMERICAL-CANDIDATE-v0.2-URW-SAME-DAY-CALIBRATION-STATUS-20260923",
+  "status": "CALIBRATED-CANDIDATE / NON-PRODUCTION / NON-OOS / DUAL-SHADOW-ARMED / R30-PENDING",
+  "production": {
+    "numerical_authority": "NOT_READY",
+    "mutated": false,
+    "automatic_promotion": false
+  },
+  "calibration_dataset": {
+    "included": [
+      "URW-20260923-R07",
+      "URW-20260923-R10",
+      "URW-20260923-R11",
+      "URW-20260923-R12"
+    ],
+    "excluded": {
+      "URW-20260923-R06": "immutable pre-result Signed SOURCE artifact not persisted; post-result reacquisition forbidden for calibration",
+      "URW-20260923-R05": "post-start/replay lineage; not admitted",
+      "URW-20260923-R08": "acceptance/non-genuine unknown-future evidence; not admitted"
+    },
+    "race_count": 4,
+    "evidence_class": "RETROSPECTIVE_SAME_DAY_CALIBRATION_NOT_GENUINE_OOS"
+  },
+  "candidate_v01": {
+    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.1-CANDIDATE-20260923",
+    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+    "role_weights": "EQUAL_BASELINE"
+  },
+  "candidate_v02": {
+    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
+    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
+    "freeze_commit": "552e04f71bb33cf4b5488576ce2b55af58b8702c",
+    "calibration_report_sha256": "6c16b00b8f097567ddd7504ce9b81a2191362dc6acabc0e63811d43b3c919033",
+    "method": "within-race standardized top3-vs-nontop3 separation with relevance 1.00/0.65/0.45 and R30 shrinkage prior",
+    "direct_changes_forbidden": [
+      "TPI/F3S canon coefficients",
+      "recency 30/25/20/15/10",
+      "UNKNOWN neutral semantics",
+      "market-to-ability leakage"
+    ]
+  },
+  "calibration_effect": {
+    "in_sample": {
+      "v01": {
+        "winner_capture": 0.5,
+        "mean_winner_rank": 4.25,
+        "p2_capture": 1,
+        "p3_capture": 1,
+        "top3_set_capture": 1,
+        "mean_top3_mean_rank": 4
+      },
+      "v02": {
+        "winner_capture": 0.75,
+        "mean_winner_rank": 4,
+        "p2_capture": 1,
+        "p3_capture": 1,
+        "top3_set_capture": 1,
+        "mean_top3_mean_rank": 3.9166666667
+      }
+    },
+    "leave_one_race_out": {
+      "v01": {
+        "winner_capture": 0.5,
+        "mean_winner_rank": 4.25,
+        "p2_capture": 1,
+        "p3_capture": 1,
+        "top3_set_capture": 1,
+        "mean_top3_mean_rank": 4
+      },
+      "v02": {
+        "winner_capture": 0.5,
+        "mean_winner_rank": 4.25,
+        "p2_capture": 1,
+        "p3_capture": 1,
+        "top3_set_capture": 1,
+        "mean_top3_mean_rank": 4
+      }
+    },
+    "interpretation": "same-day in-sample improvement observed, but no LOO generalization gain; v0.2 must not be described as superior"
+  },
+  "largest_component_changes": [
+    {
+      "component": "CSI-L.rotation_management",
+      "change_pct": 2.03182
+    },
+    {
+      "component": "CSI-L.transfer_preparation",
+      "change_pct": -1.831573
+    },
+    {
+      "component": "HPI-L.repeatability",
+      "change_pct": -1.7448
+    },
+    {
+      "component": "DCR.same_venue_distance_comparability",
+      "change_pct": -1.246565
+    },
+    {
+      "component": "HPI-L.finish_margin",
+      "change_pct": 1.187813
+    },
+    {
+      "component": "JTI-L.distance_record",
+      "change_pct": 1.179427
+    },
+    {
+      "component": "HPI-L.recent_finish",
+      "change_pct": 0.973555
+    },
+    {
+      "component": "HPI-L.passing_position_content",
+      "change_pct": 0.877005
+    }
+  ],
+  "dual_shadow": {
+    "formal_workflow_commit": "eece697d3f2e8777ffe434576d188154801dfb20",
+    "acceptance_workflow_commit": "84ec977c913ba9b835800eb97ab83b52abbb2205",
+    "acceptance_run_id": 35871931443,
+    "acceptance_status": "PASS",
+    "acceptance_artifact_id": 10754768395,
+    "acceptance_artifact_digest": "sha256:f95566615f0db617e4afb33060167b40c75865fbd088db8450f61f510df418e5",
+    "acceptance_sha256": "fe70d4a7f2ec8402242d72ebfdbe3d6fb08af0841e41818169e13647c959d8b9",
+    "same_signed_source": true,
+    "same_runner_universe": true,
+    "paired_krs_run_count": 5000,
+    "paired_krs_seed": 2026999912,
+    "v01_krs_receipt": "35da62b7feb0b1a899a88974a9e8b6190af53dc6737887febd494021c147f055",
+    "v02_krs_receipt": "0c2a904586659f49828751fb72a8a785bc424b53cf5f28650dc25fef0e64f45a",
+    "production_mutation": false
+  },
+  "regression": {
+    "v02_separation_regression_run": 35871176348,
+    "status": "PASS",
+    "latest_watch_regression_run": 35871407570,
+    "latest_watch_status": "PASS"
+  },
+  "next_gate": {
+    "mode": "PRE-RESULT DUAL SHADOW",
+    "compare": [
+      "winner rank/capture",
+      "P2/P3 capture",
+      "top3 set",
+      "KRS unique rescue/harm",
+      "ordered-pair/exact rescue",
+      "additional capital/PFS when constructable"
+    ],
+    "target_count": 30,
+    "automatic_promotion": false,
+    "human_review_required": true
+  }
+}
