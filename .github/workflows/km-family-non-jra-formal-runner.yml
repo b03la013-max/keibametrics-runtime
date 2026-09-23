@@ -173,6 +173,7 @@ jobs:
           from local_nar_evidence_candidate import compile_candidate_evidence
           from local_fullnumerical_candidate import materialize_candidate
           from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
+          from local_candidate_postresult import evaluate_dual
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
@@ -778,13 +779,26 @@ jobs:
               assert rc<300 and (rres.get("receipt") or {}).get("status")=="PASS",(rc,rres)
               result_sha=verify_envelope(rres,"RESULT")
               result_art=rres.get("artifact") or {}
+              candidate_dual_postresult=None
+              if isinstance(candidate_shadow_summary,dict) and candidate_shadow_summary.get("status")=="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_DUAL_SHADOW":
+                  cal_path=pathlib.Path("runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json")
+                  cal=json.loads(cal_path.read_text(encoding="utf-8")) if cal_path.exists() else {}
+                  candidate_dual_postresult=evaluate_dual(
+                      candidate_shadow_summary,order,
+                      result_available_at=post_result.get("result_available_at"),
+                      race_id=rid,
+                      dual_krs_summary={"v0.1":candidate_krs_summary,"v0.2":candidate_krs_v02_summary},
+                      calibration_training_race_ids=cal.get("training_race_ids") or []
+                  )
+                  persist("candidate_dual_shadow_postresult.json",candidate_dual_postresult)
               result_summary={
                 "result_receipt":result_sha,
                 "settlement":result_art.get("settlement"),
                 "failure_localization":result_art.get("failure_localization"),
                 "learning_event":result_art.get("learning_event"),
                 "automatic_post_result_review":result_art.get("automatic_post_result_review"),
-                "winning_tickets":winning
+                "winning_tickets":winning,
+                "candidate_dual_shadow_postresult":candidate_dual_postresult
               }
 
           full_numeric=bool(req.get("full_numerical_calculation"))
