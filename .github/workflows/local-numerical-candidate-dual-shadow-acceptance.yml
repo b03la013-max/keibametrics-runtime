@@ -76,7 +76,7 @@ jobs:
           resolved=resolve_family_runtime(req,load_contracts())
           endpoint=resolved["external_endpoint"]
           seed=2026999912
-          runs=1000
+          runs=5000
           def call(path,payload,timeout=600):
               body=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
               rq=urllib.request.Request(endpoint+path,data=body,headers={"content-type":"application/json"},method="POST")
