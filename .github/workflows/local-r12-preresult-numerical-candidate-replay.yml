@@ -50,8 +50,8 @@ jobs:
           # Result data is never loaded in this stage.
           q=compile_candidate_evidence(source,req)
           q=materialize_candidate(q)
-          q=build_candidate_krs(q)
           q=build_candidate_prediction(q)
+          q=build_candidate_krs(q)
 
           auth=assess()
           assert auth["implementation_ready"] is True
