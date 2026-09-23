@@ -334,7 +334,9 @@ jobs:
 
           print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
             "race_id":rid,"family_id":"LOCAL","execution_phase":"FORMAL",
-            "status":"FULL_FORMAL_E2E_PASS",
+            "temporal_mode":temporal_mode,
+            "status":("FULL_FORMAL_E2E_PASS" if temporal_mode=="FORMAL-PRE-RACE" else "POST_START_REPLAY_E2E_PASS"),
+            "full_numerical_calculation":bool(req.get("full_numerical_calculation")),
             "external_endpoint":endpoint,
             "source_receipt":source_receipt_sha,
             "source_snapshot_sha256":req["source_snapshot_sha256"],
