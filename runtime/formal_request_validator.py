@@ -318,15 +318,15 @@ def validate_canonical_index_components(req, runner_ids):
             terminal=str(c.get("terminal_status") or "CALCULATED").upper()
             if terminal not in TERMINAL_INDEX_STATES:
                 raise FormalValidationError(f"CANONICAL_TERMINAL_STATUS_BAD:{no}:{idx}:{terminal}")
-            _finite_0_100(c.get("value"),f"CANONICAL_TRANSPORT:{no}:{idx}")
             if mode=="FULL_REQUIRED" and terminal!="CALCULATED":
                 raise FormalValidationError(f"CANONICAL_NOT_NUMERICALLY_CALCULATED:{no}:{idx}:{terminal}")
-            if terminal in {"RULED-HOLD","NOT-APPLICABLE"}:
-                if c.get("formal_value") is not None:
-                    raise FormalValidationError(f"CANONICAL_FORMAL_VALUE_MUST_BE_NULL:{no}:{idx}:{terminal}")
-                terminal_non_numeric+=1
-            else:
+            if terminal in {"CALCULATED","RULED-NEUTRAL"}:
+                _finite_0_100(c.get("value"),f"CANONICAL:{no}:{idx}")
                 formal_numeric+=1
+            else:
+                if "value" in c and c.get("value") is not None:
+                    raise FormalValidationError(f"CANONICAL_HELD_VALUE_MUST_BE_ABSENT:{no}:{idx}:{terminal}")
+                terminal_non_numeric+=1
             if not str(c.get("rule_id") or "").strip():
                 raise FormalValidationError(f"CANONICAL_RULE_ID_MISSING:{no}:{idx}")
             if not str(c.get("mapping_version") or "").strip():
