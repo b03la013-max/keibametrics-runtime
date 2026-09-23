@@ -82,7 +82,7 @@ def _race_card_source(venue_id: str, baba: str, race_date: str, race_no: int) ->
 def _odds_source(venue_id: str, baba: str, race_date: str, race_no: int, required: bool=False) -> Dict[str, Any]:
     return {
         "source_id": f"NAR-{venue_id}-{race_date.replace('/','')}-R{race_no:02d}-ODDS-TANFUKU",
-        "source_class": "OFFICIAL_TIMESTAMPED_ODDS",
+        "source_class": "OFFICIAL_ACTIVE_BETTING_UNIVERSE",
         "authority": "NAR_OFFICIAL",
         "priority": 100,
         "official": True,
