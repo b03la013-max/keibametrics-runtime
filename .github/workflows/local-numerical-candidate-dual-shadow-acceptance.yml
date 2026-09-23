@@ -71,7 +71,7 @@ jobs:
 
           assert arms["v0.1"]["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923"
           assert arms["v0.2"]["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED"
-          assert arms["v0.1"]["source_snapshot_sha256"]==arms["v0.2"]["source_snapshot_sha256"]==source["source_snapshot_sha256"]
+          assert arms["v0.1"]["candidate_evidence_compiler"]["source_snapshot_sha256"]==arms["v0.2"]["candidate_evidence_compiler"]["source_snapshot_sha256"]==source["source_snapshot_sha256"]
 
           resolved=resolve_family_runtime(req,load_contracts())
           endpoint=resolved["external_endpoint"]
