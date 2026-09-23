@@ -701,6 +701,22 @@ def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[st
         )
         c["candidate_evidence_sha256"] = _sha(c["evidence_features"])
 
+    front_candidates=sum(
+        1 for c in compiled
+        if not c["evidence_features"]["position_acquisition"].get("missing")
+        and float(c["evidence_features"]["position_acquisition"]["score"]) >= 70.0
+    )
+    request["candidate_environment"] = {
+        "front_candidate_count": front_candidates,
+        "field_size": len(compiled),
+        "front_density_ratio": round(front_candidates/max(1,len(compiled)),6),
+        "derivation_rule": "count runners with source-derived position_acquisition >= 70",
+        "official_going": str(((source_artifact.get("normalized_evidence") or {}).get("track_condition") or {}).get("value") or ""),
+        "official_weather": str(((source_artifact.get("normalized_evidence") or {}).get("weather") or {}).get("value") or ""),
+        "source_snapshot_sha256": source_artifact.get("source_snapshot_sha256"),
+        "candidate_only": True,
+    }
+
     request.pop("_candidate_raw_field", None)
     request["runners"] = compiled
     request["candidate_current_state"] = {
