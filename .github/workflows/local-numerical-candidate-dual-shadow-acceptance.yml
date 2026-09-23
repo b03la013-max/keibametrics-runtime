@@ -1,0 +1,161 @@
+name: LOCAL Numerical Candidate Dual-Shadow Integration Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-numerical-candidate-dual-shadow-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dual-shadow-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download immutable Urawa R12 pre-result Signed SOURCE
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/10743349134/zip" -o frozen.zip
+          mkdir -p frozen dual_out
+          unzip -q frozen.zip -d frozen
+          test -s frozen/source_receipt_envelope.json
+
+      - name: Execute paired v0.1 and v0.2 from the same Signed SOURCE
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import copy,hashlib,json,pathlib,urllib.request,urllib.error
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_prediction,build_candidate_krs
+          from family_runtime_contract import load_contracts,resolve_family_runtime
+
+          env=json.load(open("frozen/source_receipt_envelope.json",encoding="utf-8"))
+          source=env["artifact"]
+          req=json.load(open("runtime/family_requests/URW-20260923-R12-FORMAL-R1.json",encoding="utf-8"))
+          assert source["formal_ready"] is True
+          assert env["receipt"]["phase"]=="SOURCE"
+          assert env["receipt"]["race_id"]==req["race_id"]
+          assert not [k for k in (source.get("normalized_evidence") or {}) if str(k).startswith("same_day_r12_")]
+
+          evidence=compile_candidate_evidence(source,req)
+          arms={}
+          specs={
+            "v0.1":(None,None),
+            "v0.2":(
+              "mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
+              "mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json"
+            )
+          }
+          for label,(rp,mp) in specs.items():
+              q=materialize_candidate(copy.deepcopy(evidence)) if rp is None else materialize_candidate(copy.deepcopy(evidence),rp,mp)
+              q=build_candidate_prediction(q)
+              q=build_candidate_krs(q)
+              s=q["candidate_full_numerical_summary"]
+              assert s["required_count"]==348
+              assert s["calculated_count"]==348
+              assert s["unresolved_count"]==0
+              assert s["full_numerical_complete"] is True
+              assert s["production_authority"] is False
+              assert len(q["candidate_krs_input_data"]["horses"])==12
+              assert all(len(h["hsv"])==30 and len(h["static"])==11 for h in q["candidate_krs_input_data"]["horses"])
+              arms[label]=q
+
+          assert arms["v0.1"]["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923"
+          assert arms["v0.2"]["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED"
+          assert arms["v0.1"]["source_snapshot_sha256"]==arms["v0.2"]["source_snapshot_sha256"]==source["source_snapshot_sha256"]
+
+          resolved=resolve_family_runtime(req,load_contracts())
+          endpoint=resolved["external_endpoint"]
+          seed=2026999912
+          runs=1000
+          def call(path,payload,timeout=600):
+              body=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              rq=urllib.request.Request(endpoint+path,data=body,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: obj=json.loads(raw)
+                  except Exception: obj={"raw":raw}
+                  return e.code,obj
+
+          receipts={}
+          for label,q in arms.items():
+              inp=copy.deepcopy(q["candidate_krs_input_data"])
+              rid=req["race_id"]+"-DUAL-ACCEPT-"+label.upper()
+              inp["race"]["race_id"]=rid
+              inp.setdefault("simulation",{})["run_count"]=runs
+              inp["simulation"]["master_seed"]=seed
+              code,res=call("/krs/execute",{
+                "family_id":"LOCAL","race_id":rid,
+                "krs_input_data":inp,"run_count":runs,"seed":seed
+              })
+              assert code<300,(label,code,res)
+              assert (res.get("receipt") or {}).get("status")=="EXECUTED",(label,res)
+              art=res.get("artifact") or {}
+              assert int(art.get("actual_run_count") or 0)==runs
+              vc,v=call("/verify",res,60)
+              assert vc<300 and v.get("valid") is True,(label,vc,v)
+              receipts[label]={
+                "receipt_sha256":res.get("receipt_sha256"),
+                "output_sha256":art.get("output_sha256"),
+                "actual_run_count":art.get("actual_run_count"),
+                "input_sha256":art.get("input_sha256"),
+                "verified":True
+              }
+              pathlib.Path(f"dual_out/{label}_krs_receipt.json").write_text(json.dumps(res,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+
+          p1=arms["v0.1"]["candidate_static_prediction"]
+          p2=arms["v0.2"]["candidate_static_prediction"]
+          summary={
+            "profile":"KM-LOCAL-NUMERICAL-DUAL-SHADOW-INTEGRATION-ACCEPTANCE-20260923-R1",
+            "status":"PASS",
+            "evidence_class":"RETROSPECTIVE_WIRING_ACCEPTANCE_NOT_OOS",
+            "race_id":req["race_id"],
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+            "official_runner_universe_sha256":source.get("official_runner_universe_sha256"),
+            "same_signed_source":True,
+            "same_runner_universe":True,
+            "same_krs_run_count":runs,
+            "same_krs_seed":seed,
+            "v0.1":{
+              "mapping_id":arms["v0.1"]["candidate_full_numerical_summary"]["mapping_id"],
+              "required":348,"calculated":348,
+              "prediction_sha256":p1["sha256"],"ranking":p1["ranking"],
+              "W":p1["W"],"P2":p1["P2"],"P3":p1["P3"],
+              "krs":receipts["v0.1"]
+            },
+            "v0.2":{
+              "mapping_id":arms["v0.2"]["candidate_full_numerical_summary"]["mapping_id"],
+              "required":348,"calculated":348,
+              "prediction_sha256":p2["sha256"],"ranking":p2["ranking"],
+              "W":p2["W"],"P2":p2["P2"],"P3":p2["P3"],
+              "krs":receipts["v0.2"]
+            },
+            "production_mutation":False,
+            "production_authority":False,
+            "automatic_promotion":False
+          }
+          summary["sha256"]=hashlib.sha256(json.dumps(summary,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          pathlib.Path("dual_out/dual_shadow_acceptance.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          print("DUAL_SHADOW_ACCEPTANCE="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: km-local-numerical-dual-shadow-acceptance-${{ github.sha }}
+          path: dual_out/
+          if-no-files-found: error
+          retention-days: 90
