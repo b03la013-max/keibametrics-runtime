@@ -36,6 +36,8 @@ jobs:
           test -n "$REQ"
           python - "$REQ" <<'PY'
           import json,os,subprocess,sys,urllib.request
+          sys.path.insert(0,"runtime")
+          from local_candidate_postresult import evaluate_dual
           req=json.load(open(sys.argv[1],encoding="utf-8"))
           run_id=int(req["source_run_id"])
           artifact_name=req["artifact_name"]
@@ -100,6 +102,24 @@ jobs:
           art=res.get("artifact") or {}
           os.makedirs("runtime_out",exist_ok=True)
           json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          candidate_dual_postresult=None
+          dual_path=os.path.join("runtime_result_in","candidate_numerical_dual_shadow_summary.json")
+          dual_krs_path=os.path.join("runtime_result_in","candidate_krs_dual_shadow_summary.json")
+          calibration_path="runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json"
+          if os.path.exists(dual_path):
+              dual=json.load(open(dual_path,encoding="utf-8"))
+              dual_krs=json.load(open(dual_krs_path,encoding="utf-8")) if os.path.exists(dual_krs_path) else {}
+              cal=json.load(open(calibration_path,encoding="utf-8")) if os.path.exists(calibration_path) else {}
+              candidate_dual_postresult=evaluate_dual(
+                  dual,[int(x) for x in req["finish_order"]],
+                  result_available_at=req["result_available_at"],race_id=rid,
+                  dual_krs_summary=dual_krs,
+                  calibration_training_race_ids=cal.get("training_race_ids") or []
+              )
+              json.dump(candidate_dual_postresult,open("runtime_out/candidate_dual_shadow_postresult.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
           summary={
             "race_id":rid,
             "result_receipt":res.get("receipt_sha256"),
@@ -112,7 +132,8 @@ jobs:
             "by_type":by_type,
             "failure_localization":art.get("failure_localization"),
             "automatic_post_result_review":art.get("automatic_post_result_review"),
-            "learning_event":art.get("learning_event")
+            "learning_event":art.get("learning_event"),
+            "candidate_dual_shadow_postresult":candidate_dual_postresult
           }
           json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
           print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
