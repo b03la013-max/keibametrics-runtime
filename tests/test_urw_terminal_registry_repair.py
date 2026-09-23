@@ -41,7 +41,7 @@ class URWTerminalRegistryRepairTest(unittest.TestCase):
 
     def test_materializer_distinguishes_formal_and_transport(self):
         out=materialize_request(self.base(),["HPI-L","TPI-L","EVI/CEV","SRI-L"])
-        self.assertTrue(out["full_terminal_resolution"])
+        self.assertTrue(out["full_terminalization"])
         self.assertFalse(out["full_numerical_calculation"])
         sri=out["runners"][0]["canonical_components"]["SRI-L"]
         self.assertEqual(sri["terminal_status"],"RULED-HOLD")
