@@ -4,6 +4,8 @@ import hashlib
 import json
 from typing import Any, Dict, List, Set
 
+from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
+
 PROFILE="KM-LOCAL-NUMERICAL-CANDIDATE-POSTRESULT-v0.2-DUAL-20260923"
 
 
@@ -84,10 +86,58 @@ def evaluate(candidate_summary: Dict[str,Any], actual_finish_order: List[int],
     return out
 
 
+def evaluate_candidate_krs_envelope(candidate_summary: Dict[str,Any], envelope: Dict[str,Any],
+                                    actual_finish_order: List[int], *, race_id: str,
+                                    arm_label: str) -> Dict[str,Any]:
+    candidate_summary=candidate_summary or {}
+    pred=candidate_summary.get("candidate_static_prediction") or {}
+    ranking=[str(x) for x in (pred.get("ranking") or [])]
+    roles=pred.get("roles") or {}
+    scores={str(x.get("runner_id")):x for x in (pred.get("runner_scores") or []) if isinstance(x,dict)}
+    if not ranking:
+        raise ValueError("CANDIDATE_RANKING_REQUIRED_FOR_KRS_POSTRESULT")
+    art=(envelope or {}).get("artifact") or {}
+    raw=art.get("raw_output")
+    if not isinstance(raw,dict):
+        raise ValueError("CANDIDATE_KRS_RAW_OUTPUT_MISSING")
+    runners=[]
+    for rid in ranking:
+        row=scores.get(rid) or {}
+        runners.append({
+          "runner_id":rid,
+          "name":row.get("name") or "",
+          "static_roles":[str(x) for x in (roles.get(rid) or roles.get(str(rid)) or [])],
+        })
+    req={
+      "race_id":race_id+"-"+arm_label+"-KRS-POSTRESULT",
+      "runners":runners,
+      "static_prediction":{"roles":{str(k):[str(x) for x in v] for k,v in roles.items()}},
+      "role_registry":[],
+      "pair_dispositions":[],
+      "third_dispositions":[],
+    }
+    utility=build_krs_prediction_utility(req,{"status":"EXECUTED","output":raw})
+    evaluation=evaluate_against_result(utility,[int(x) for x in actual_finish_order[:3]])
+    out={
+      "arm_label":arm_label,
+      "candidate_krs_receipt_sha256":(envelope or {}).get("receipt_sha256"),
+      "candidate_krs_output_sha256":art.get("output_sha256"),
+      "candidate_krs_actual_run_count":art.get("actual_run_count"),
+      "utility_sha256":utility.get("sha256"),
+      "utility_class":utility.get("utility_class"),
+      "post_result_evaluation":evaluation,
+      "production_effect":"NONE",
+      "candidate_ticket_activation":"NOT_IMPLEMENTED",
+      "note":"KRS rescue/support is measured against frozen candidate static roles only; no candidate ticket PFS is inferred."
+    }
+    out["sha256"]=_sha(out)
+    return out
+
 def evaluate_dual(dual_summary: Dict[str,Any], actual_finish_order: List[int],
                   *, result_available_at: str, race_id: str,
                   dual_krs_summary: Dict[str,Any]|None=None,
-                  calibration_training_race_ids: Set[str]|List[str]|None=None) -> Dict[str,Any]:
+                  calibration_training_race_ids: Set[str]|List[str]|None=None,
+                  dual_krs_envelopes: Dict[str,Any]|None=None) -> Dict[str,Any]:
     dual_summary=dual_summary or {}
     if dual_summary.get("status")!="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_DUAL_SHADOW":
         raise ValueError("FROZEN_DUAL_SHADOW_REQUIRED")
@@ -109,6 +159,23 @@ def evaluate_dual(dual_summary: Dict[str,Any], actual_finish_order: List[int],
             race_id=race_id,arm_label="v0.2-URW-DAY-CALIBRATED",frozen_pre_result=True,
             calibration_training_race_ids=calibration_training_race_ids
         )
+    krs_post={"v0.1":None,"v0.2":None}
+    envs=dual_krs_envelopes or {}
+    try:
+        if isinstance(envs.get("v0.1"),dict):
+            krs_post["v0.1"]=evaluate_candidate_krs_envelope(
+                arms["v0.1"],envs["v0.1"],actual_finish_order,race_id=race_id,arm_label="V01"
+            )
+    except Exception as e:
+        krs_post["v0.1"]={"status":"POSTRESULT_KRS_EVAL_FAIL","error_type":type(e).__name__,"error":str(e),"production_effect":"NONE"}
+    try:
+        if v02 is not None and isinstance(envs.get("v0.2"),dict):
+            krs_post["v0.2"]=evaluate_candidate_krs_envelope(
+                arms["v0.2"],envs["v0.2"],actual_finish_order,race_id=race_id,arm_label="V02"
+            )
+    except Exception as e:
+        krs_post["v0.2"]={"status":"POSTRESULT_KRS_EVAL_FAIL","error_type":type(e).__name__,"error":str(e),"production_effect":"NONE"}
+
     comparison={
       "v0.2_available":v02 is not None,
       "same_source":bool(v02 and v01.get("race_source_snapshot_sha256")==v02.get("race_source_snapshot_sha256")),
@@ -143,6 +210,7 @@ def evaluate_dual(dual_summary: Dict[str,Any], actual_finish_order: List[int],
       "actual_top3":[str(x) for x in actual_finish_order[:3]],
       "dual_shadow_sha256":dual_summary.get("sha256"),
       "arms":{"v0.1":v01,"v0.2":v02},
+      "candidate_krs_postresult":krs_post,
       "comparison":comparison,
       "oos_policy":{
         "v0.1_baseline_event_eligible":v01.get("candidate_oos_event_eligible"),
