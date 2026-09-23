@@ -157,7 +157,7 @@ def build_candidate_krs(request: Dict[str,Any]) -> Dict[str,Any]:
         horses.append({
           "horse_no":int(rid),"name":str(r.get("name") or ""),
           "hsv":copy.deepcopy(b["hsv"]),"static":copy.deepcopy(b["static"]),
-          "static_roles":copy.deepcopy(r.get("static_roles") or []),
+          "static_roles":copy.deepcopy(r.get("candidate_static_roles") or []),
           "uncertainty_scale":b["uncertainty_scale"],
           "evidence":copy.deepcopy(b["evidence"]),
         })
@@ -209,12 +209,22 @@ def build_candidate_prediction(request: Dict[str,Any]) -> Dict[str,Any]:
     import math as _math
     nw=max(2,_math.ceil(n*0.40)); np2=max(nw,_math.ceil(n*0.67)); np3=max(np2,_math.ceil(n*0.85))
     W=ranking[:nw]; P2=ranking[:np2]; P3=ranking[:np3]
+    role_map={}
+    for rid in ranking:
+        rr=[]
+        if rid in W: rr.append("W")
+        if rid in P2: rr.append("P2")
+        if rid in P3: rr.append("P3")
+        role_map[rid]=rr
+    for r in q.get("runners") or []:
+        r["candidate_static_roles"]=role_map.get(str(r.get("runner_id")),[])
     q["candidate_static_prediction"]={
       "profile":"KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.1-CANDIDATE-20260923",
       "production_authority":False,
       "ranking":ranking,"W":W,"P2":P2,"P3":P3,
       "role_width_policy":{"W":"top 40%","P2":"top 67%","P3":"top 85%","status":"UNVALIDATED_CANDIDATE"},
       "runner_scores":rows,
+      "roles":role_map,
       "note":"Role widths and equal role-score aggregation require walk-forward OOS calibration; never overwrite Production prediction."
     }
     q["candidate_static_prediction"]["sha256"]=_sha(q["candidate_static_prediction"])
