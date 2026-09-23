@@ -1,7 +1,7 @@
 from __future__ import annotations
 import copy, json, hashlib
 
-UTILITY_REVISION="KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.2-SHADOW-20260921"
+UTILITY_REVISION="KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.3-SHADOW-20260923-PRODUCTION-PRESENCE-AWARE"
 
 def _rank(rows,key):
     ordered=sorted(rows,key=lambda r:(-(float(r.get(key,0.0))), int(r.get("horse_no",9999))))
@@ -30,6 +30,8 @@ def _request_static_roles(request):
         if str(r.get("status")) in active:
             out.setdefault(int(r["runner_id"]),set()).add(str(r["column"]))
     return out
+
+ACTIVE_PRODUCTION_STATUSES={"PURCHASE","PROTECT"}
 
 def _pair_status_map(request):
     return {(int(x["head"]),int(x["second"])):str(x.get("status") or "") for x in (request.get("pair_dispositions") or [])}
@@ -170,7 +172,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
     for ordinal,x in enumerate(_top_pairs(output),start=1):
         h,s=int(x["W"]),int(x["P2"])
         status=pair_map.get((h,s))
-        if status!="PURCHASE":
+        if status not in ACTIVE_PRODUCTION_STATUSES:
             pair_proposals.append({
               "proposal":"ADD_ORDERED_PAIR_SHADOW","head":h,"second":s,
               "engine_occurrence_rank":ordinal,"count":int(x.get("count",0)),
@@ -182,7 +184,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
     # supported in at least one Engine scenario or the overall occurrence table.
     actionable_pairs=[]
     for (h,s),support in pair_support.items():
-        if pair_map.get((h,s))=="PURCHASE":
+        if pair_map.get((h,s)) in ACTIVE_PRODUCTION_STATUSES:
             continue
         if "W" not in shadow_roles.get(h,set()) or "P2" not in shadow_roles.get(s,set()):
             continue
@@ -202,7 +204,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
         h,s,t=int(x["W"]),int(x["P2"]),int(x["P3"])
         pair_status=pair_map.get((h,s))
         third_status=third_map.get((h,s,t))
-        if pair_status=="PURCHASE" and third_status!="PURCHASE":
+        if pair_status in ACTIVE_PRODUCTION_STATUSES and third_status not in ACTIVE_PRODUCTION_STATUSES:
             third_proposals.append({
               "proposal":"ADD_PAIR_THIRD_SHADOW","head":h,"second":s,"third":t,
               "engine_occurrence_rank":ordinal,"count":int(x.get("count",0)),
@@ -213,10 +215,10 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
     actionable_pair_keys={(x["head"],x["second"]) for x in actionable_pairs}
     actionable_thirds=[]
     for (h,s,t),support in triple_support.items():
-        pair_is_active=(pair_map.get((h,s))=="PURCHASE" or (h,s) in actionable_pair_keys)
+        pair_is_active=(pair_map.get((h,s)) in ACTIVE_PRODUCTION_STATUSES or (h,s) in actionable_pair_keys)
         if not pair_is_active or "P3" not in shadow_roles.get(t,set()):
             continue
-        if third_map.get((h,s,t))=="PURCHASE":
+        if third_map.get((h,s,t)) in ACTIVE_PRODUCTION_STATUSES:
             continue
         actionable_thirds.append({
           "proposal":"ADD_PAIR_THIRD_SHADOW","head":h,"second":s,"third":t,
@@ -259,6 +261,8 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
       "actionable_pair_third_proposals":actionable_thirds,
       "shadow_role_registry":{str(no):sorted(roles) for no,roles in sorted(shadow_roles.items())},
       "static_role_confirmations":confirmations,
+      "production_ordered_pair_status":{f"{h}>{s}":status for (h,s),status in sorted(pair_map.items())},
+      "production_pair_third_status":{f"{h}>{s}>{t}":status for (h,s,t),status in sorted(third_map.items())},
       "sim_xdi":xdi,
       "role_audit_triggers":audits,
       "scenario_worlds":sorted(scenario.keys()),
