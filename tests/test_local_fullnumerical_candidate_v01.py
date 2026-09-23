@@ -110,6 +110,9 @@ def test_end_to_end_source_to_29_to_30hsv_11static_is_deterministic():
     assert a["evidence_features"]["sire_fit"]["score"]==52
     assert a["evidence_features"]["sire_fit"]["missing"] is True
     assert a["evidence_features"]["training_comment_trial"]["score"]==0
+    assert a["evidence_features"]["jockey_reproducibility"]["missing"] is False
+    assert a["evidence_features"]["venue_recent"]["missing"] is False
+    assert a["evidence_features"]["position_acquisition_skill"]["missing"] is False
 
     n=materialize_candidate(c1)
     s=n["candidate_full_numerical_summary"]
