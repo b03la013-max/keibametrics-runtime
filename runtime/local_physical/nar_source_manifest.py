@@ -79,14 +79,14 @@ def _race_card_source(venue_id: str, baba: str, race_date: str, race_no: int) ->
     }
 
 
-def _odds_source(venue_id: str, baba: str, race_date: str, race_no: int) -> Dict[str, Any]:
+def _odds_source(venue_id: str, baba: str, race_date: str, race_no: int, required: bool=False) -> Dict[str, Any]:
     return {
         "source_id": f"NAR-{venue_id}-{race_date.replace('/','')}-R{race_no:02d}-ODDS-TANFUKU",
         "source_class": "OFFICIAL_TIMESTAMPED_ODDS",
         "authority": "NAR_OFFICIAL",
         "priority": 100,
         "official": True,
-        "required": False,
+        "required": bool(required),
         "url": _url("OddsTanFuku", baba, race_date, race_no),
         "max_bytes": 600000,
         "extract": [
@@ -129,8 +129,10 @@ def build_local_nar_manifest(payload: Dict[str, Any]) -> Dict[str, Any]:
     baba = LOCAL_BABA_CODES[venue_id]
     sources: List[Dict[str, Any]] = [_race_card_source(venue_id, baba, race_date, race_no)]
 
-    if bool(payload.get("include_odds", False)):
-        sources.append(_odds_source(venue_id, baba, race_date, race_no))
+    require_active=bool(payload.get("require_active_runner_universe", False))
+    include_odds=bool(payload.get("include_odds", False)) or require_active
+    if include_odds:
+        sources.append(_odds_source(venue_id, baba, race_date, race_no, required=require_active))
 
     if bool(payload.get("include_same_day_results", True)):
         start = max(1, int(payload.get("same_day_result_start_race") or 1))
@@ -151,7 +153,8 @@ def build_local_nar_manifest(payload: Dict[str, Any]) -> Dict[str, Any]:
         "source_policy": {
             "race_card_required": True,
             "same_day_results": "OPTIONAL_AVAILABLE_PREVIOUS_RACES",
-            "odds": "OPTIONAL_UNLESS_REQUESTED_BY_CALLER",
+            "odds": "REQUIRED_FOR_ACTIVE_RUNNER_UNIVERSE" if require_active else "OPTIONAL_UNLESS_REQUESTED_BY_CALLER",
+            "runner_universe_model": "DECLARED_RACE_CARD_PLUS_ACTIVE_OFFICIAL_BETTING_UNIVERSE",
             "body_weight_and_change_info": "CAPTURED_IN_RACE_CARD_RAW_AND_TABLES",
             "track_weather_current_state": "CAPTURED_FROM_RACE_CARD_WHEN_PUBLISHED",
         },
