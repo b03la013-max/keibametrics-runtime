@@ -28,7 +28,8 @@ jobs:
           fi
           test -n "$REQ"
           REQUEST_FILE="$REQ" python - <<'PY'
-          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy
+          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy,pathlib
+          from zoneinfo import ZoneInfo
           sys.path.insert(0,"runtime")
           from family_runtime_contract import load_contracts, resolve_family_runtime
 
@@ -46,6 +47,65 @@ jobs:
           resolved=resolve_family_runtime(req,load_contracts())
           assert resolved["executable"] is True
           endpoint=resolved["external_endpoint"]
+
+          os.makedirs("runtime_out",exist_ok=True)
+          def persist(name,obj):
+              with open(os.path.join("runtime_out",name),"w",encoding="utf-8") as wf:
+                  json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          def fail_closed(code,details=None):
+              payload={
+                "status":"FAIL_CLOSED",
+                "code":code,
+                "details":details,
+                "request_file":os.environ.get("REQUEST_FILE"),
+                "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              }
+              persist("failure_diagnostic.json",payload)
+              raise AssertionError((code,details))
+
+          def get_json(path,timeout=60):
+              rq=urllib.request.Request(endpoint+path,headers={"accept":"application/json"},method="GET")
+              with urllib.request.urlopen(rq,timeout=timeout) as x:
+                  raw=x.read().decode()
+                  return x.status,json.loads(raw) if raw else {}
+
+          # Formal runtime revision/hash preflight. Canonical contract outranks
+          # a request-local stale expectation.
+          if fam=="LOCAL":
+              contract=resolved.get("contract") or {}
+              canonical_expected=str(contract.get("runtime_git_revision") or "").strip()
+              request_expected=str(req.get("runtime_expected_revision") or "").strip()
+              if not canonical_expected:
+                  fail_closed("CANONICAL_RUNTIME_REVISION_MISSING")
+              if request_expected and request_expected!=canonical_expected:
+                  fail_closed("REQUEST_RUNTIME_REVISION_STALE",{
+                    "request_expected":request_expected,
+                    "canonical_expected":canonical_expected,
+                  })
+              hc,health=get_json("/health",60)
+              if hc>=300 or health.get("status")!="READY":
+                  fail_closed("RUNTIME_HEALTH_NOT_READY",{"http":hc,"health":health})
+              local_hashes={
+                "runtime_app_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/app_v15.py").read_bytes()).hexdigest(),
+                "legacy_runtime_app_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/app.py").read_bytes()).hexdigest(),
+                "source_acquisition_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/source_acquisition.py").read_bytes()).hexdigest(),
+                "nar_source_manifest_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/nar_source_manifest.py").read_bytes()).hexdigest(),
+                "nar_runner_universe_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/nar_runner_universe.py").read_bytes()).hexdigest(),
+              }
+              preflight={
+                "canonical_expected_revision":canonical_expected,
+                "runtime_github_revision":health.get("github_revision"),
+                "health_runtime_revision":health.get("runtime_revision"),
+                "health_hashes":{k:health.get(k) for k in local_hashes},
+                "repository_hashes":local_hashes,
+              }
+              persist("runtime_preflight.json",preflight)
+              if str(health.get("github_revision") or "")!=canonical_expected:
+                  fail_closed("RUNTIME_REVISION_MISMATCH",preflight)
+              mismatches={k:(local_hashes[k],health.get(k)) for k in local_hashes if health.get(k)!=local_hashes[k]}
+              if mismatches:
+                  fail_closed("RUNTIME_BUNDLE_HASH_MISMATCH",mismatches)
 
           def call(path,payload,timeout=600):
               data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
@@ -111,6 +171,29 @@ jobs:
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
+
+          temporal_mode=str(req.get("temporal_mode") or "FORMAL-PRE-RACE").upper()
+          scheduled=req.get("scheduled_post_at")
+          release_deadline=req.get("release_deadline_at")
+          if temporal_mode=="FORMAL-PRE-RACE":
+              if not scheduled:
+                  fail_closed("SCHEDULED_POST_AT_REQUIRED")
+              post_dt=parse_dt(scheduled).astimezone(datetime.timezone.utc)
+              if release_deadline:
+                  deadline_dt=parse_dt(release_deadline).astimezone(datetime.timezone.utc)
+              else:
+                  deadline_dt=post_dt-datetime.timedelta(seconds=int(req.get("release_buffer_seconds") or 120))
+              now=datetime.datetime.now(datetime.timezone.utc)
+              persist("deadline_preflight.json",{
+                  "checked_at":now.isoformat(),
+                  "scheduled_post_at":scheduled,
+                  "release_deadline_at":deadline_dt.isoformat(),
+                  "release_buffer_seconds":int((post_dt-deadline_dt).total_seconds()),
+              })
+              if now>=deadline_dt:
+                  fail_closed("DEADLINE_INSUFFICIENT_AT_EXECUTION_START",{
+                      "now":now.isoformat(),"release_deadline":deadline_dt.isoformat()
+                  })
 
           # Source Acquisition is now an external signed execution phase.
           source_req=req.get("source_acquisition_request")
