@@ -379,7 +379,7 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     distance = int(race.get("distance") or 0)
     going = str(((source.get("normalized_evidence") or {}).get("track_condition") or {}).get("value")
                 or race.get("going") or "")
-    direction = "LEFT" if venue.upper() in {"URW", "FNB", "KAW", "OHI", "MOR", "NGY"} else "RIGHT"
+    direction = "LEFT" if venue.upper() in {"URW", "FNB", "KAW", "MOR"} else "RIGHT"
     surface = str(race.get("surface") or "dirt").upper()
     race_date_s = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
     try:
@@ -703,6 +703,12 @@ def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[st
 
     request.pop("_candidate_raw_field", None)
     request["runners"] = compiled
+    request["candidate_current_state"] = {
+        "official_going": str(((source_artifact.get("normalized_evidence") or {}).get("track_condition") or {}).get("value") or ""),
+        "official_weather": str(((source_artifact.get("normalized_evidence") or {}).get("weather") or {}).get("value") or ""),
+        "source_freeze_at": source_artifact.get("source_freeze_at"),
+        "source_snapshot_sha256": source_artifact.get("source_snapshot_sha256"),
+    }
     request["candidate_evidence_compiler"] = {
         "profile": PROFILE,
         "registry_id": reg["registry_id"],
