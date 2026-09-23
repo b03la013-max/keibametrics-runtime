@@ -47,6 +47,41 @@ class LocalProductionClosureTest(unittest.TestCase):
         self.assertEqual(z["terminal_status"],"RULED-HOLD")
         self.assertNotIn("value",z)
 
+    def test_explicit_degraded_base_hold_terminalizes_without_fake_scores(self):
+        req={
+          "race_id":"LOCAL-DEGRADED-R1",
+          "allow_base_index_rule_hold":True,
+          "runners":[{"runner_id":"1","name":"Real-race degraded fixture"}]
+        }
+        out=materialize_request(req,["HPI-L","CFIg-L"])
+        self.assertTrue(out["full_terminalization"])
+        self.assertFalse(out["full_numerical_calculation"])
+        self.assertEqual(out["numeric_coverage"]["calculated_count"],0)
+        self.assertEqual(out["numeric_coverage"]["ruled_hold_count"],2)
+        self.assertEqual(out["numeric_coverage"]["unresolved_count"],0)
+
+    def test_degraded_tpi_holds_when_base_dependencies_are_nonnumeric(self):
+        req={
+          "race_id":"LOCAL-DEGRADED-TPI-R1",
+          "allow_base_index_rule_hold":True,
+          "venue_formula_registry":{
+            "registry_id":"LOCAL-DEGRADED-VENUE-RULES-v1",
+            "allowed_rule_ids":{"EVI/CEV":[]},
+            "default_terminals":{
+              "EVI/CEV":{
+                "terminal_status":"RULED-NEUTRAL","value":52,
+                "rule_id":"LOCAL-EVI-NEUTRAL-TEST-v1",
+                "evidence_refs":["EVI-MISSING"],"source_fact":"test neutral EVI"
+              }
+            }
+          },
+          "runners":[{"runner_id":"1","name":"Real-race degraded fixture"}]
+        }
+        out=materialize_request(req,["HPI-L","EVI/CEV","TPI-L"])
+        self.assertTrue(out["full_terminalization"])
+        self.assertFalse(out["full_numerical_calculation"])
+        self.assertEqual(out["runners"][0]["canonical_components"]["TPI-L"]["terminal_status"],"RULED-HOLD")
+
     def test_local_krs_bridge_is_explicit_and_provenanced(self):
         r=self.runner()
         prov={k:{"rule_id":"LOCAL-HSV-SELFTEST-v1","evidence_refs":["K1"]} for k in HSV_KEYS+STATIC_KEYS}
