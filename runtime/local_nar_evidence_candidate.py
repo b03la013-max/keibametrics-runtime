@@ -171,7 +171,7 @@ def _ride(text: str) -> Dict[str, Any]:
         return {"raw": t, "parsed": False}
     g = m.groupdict()
     return {"raw": t, "parsed": True, "popularity": int(g["pop"]), "body_weight": int(g["bw"]),
-            "jockey": _norm(g["jockey"]).replace("☆", "").replace("▲", "").replace("△", ""),
+            "jockey": _jockey_name(g["jockey"]),
             "carried_weight": float(g["load"])}
 
 
@@ -251,7 +251,7 @@ def parse_race_card(source_artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]
         contents = [_run_content(x) for x in content[-5:]]
         margins = [_margin(x) for x in marginrow[-5:]]
 
-        current_jockey = _norm(p[off]).replace("☆", "").replace("▲", "").replace("△", "")
+        current_jockey = _jockey_name(p[off])
         odds_m = re.search(r"(\d+(?:\.\d+)?)\s*\((\d+)人気\)", str(p[off + 1]))
         odds = float(odds_m.group(1)) if odds_m else None
         pop = int(odds_m.group(2)) if odds_m else None
@@ -499,8 +499,8 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     wet_rows = [r.get("finish_score") for r in starts if _same_going(r.get("going", ""), going)]
     put("RFIg-L", "going_adaptation", _mean(wet_rows), f"position/performance current-going group={wet_rows}",
         coverage=min(1, len(wet_rows) / 3), raw_metric=wet_rows)
-    curj = _norm(raw.get("current_jockey"))
-    jockey_runs = [r for r in starts if _norm(r.get("ride_jockey")) == curj]
+    curj = _jockey_name(raw.get("current_jockey"))
+    jockey_runs = [r for r in starts if _jockey_name(r.get("ride_jockey")) == curj]
     put("RFIg-L", "jockey_reproducibility", _mean([r.get("finish_score") for r in jockey_runs]),
         f"current jockey={curj} same-horse recent runs={len(jockey_runs)}",
         coverage=min(1, len(jockey_runs) / 3), raw_metric=[r.get("finish_score") for r in jockey_runs])
