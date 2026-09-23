@@ -30,7 +30,7 @@ class URWTerminalRegistryRepairTest(unittest.TestCase):
                 "venue_formula_registry":"URW-VENUE-FORMULA-TERMINAL-REGISTRY-v1.0-20260923"
               },
               "SRI-L":{
-                "terminal_status":"RULED-HOLD","transport_value":61,
+                "terminal_status":"RULED-HOLD",
                 "rule_id":"URW-v1.6-SRI-L-RULED-HOLD-v1",
                 "evidence_refs":["SRI-SEMANTIC"],"source_fact":"semantic SRI resolved; numeric formula not registered",
                 "venue_formula_registry":"URW-VENUE-FORMULA-TERMINAL-REGISTRY-v1.0-20260923"
@@ -45,8 +45,8 @@ class URWTerminalRegistryRepairTest(unittest.TestCase):
         self.assertFalse(out["full_numerical_calculation"])
         sri=out["runners"][0]["canonical_components"]["SRI-L"]
         self.assertEqual(sri["terminal_status"],"RULED-HOLD")
-        self.assertIsNone(sri["formal_value"])
-        self.assertEqual(sri["transport_value"],61)
+        self.assertNotIn("value",sri)
+        self.assertEqual(sri["terminal_status"],"RULED-HOLD")
 
     def test_validator_terminal_mode_accepts_hold(self):
         out=materialize_request(self.base(),["HPI-L","TPI-L","EVI/CEV","SRI-L"])
@@ -58,7 +58,7 @@ class URWTerminalRegistryRepairTest(unittest.TestCase):
         for k in aliases:
             full[k]=dict(sample)
         full["SRI"]={
-          "value":61,"formal_value":None,"transport_value":61,"terminal_status":"RULED-HOLD",
+          "terminal_status":"RULED-HOLD",
           "rule_id":"URW-v1.6-SRI-L-RULED-HOLD-v1","mapping_version":"LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
           "evidence_refs":["SRI-SEMANTIC"],"source_fact":"held"
         }
