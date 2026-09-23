@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           mkdir -p candidate_out
           python - <<'PY'
-          import datetime, hashlib, json, os, sys
+          import copy, datetime, hashlib, json, os, sys, urllib.request, urllib.error
           from pathlib import Path
           sys.path.insert(0,"runtime")
           from local_nar_evidence_candidate import compile_candidate_evidence
@@ -62,6 +62,8 @@ jobs:
           from local_krs_bridge_candidate import build_candidate_krs, build_candidate_prediction
           from local_candidate_numerical_authority import assess as assess_candidate
           from local_numerical_authority_gate import assess as assess_production
+          from family_runtime_contract import load_contracts, resolve_family_runtime
+          from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
 
           replay=json.load(open(os.environ["REPLAY_REQUEST"],encoding="utf-8"))
           request=json.load(open(replay["formal_request_path"],encoding="utf-8"))
@@ -116,6 +118,72 @@ jobs:
           assert len(horses)==len(request["runners"])
           assert all(len(h["hsv"])==30 and len(h["static"])==11 for h in horses)
 
+          # Execute the numerical candidate in the real external KRS runtime.
+          # This is post-race replay using an immutable pre-race source artifact, never OOS evidence.
+          resolved=resolve_family_runtime(request,load_contracts())
+          endpoint=resolved["external_endpoint"]
+          candidate_race_id=str(request["race_id"])+"-NUM-CAND-REPLAY"
+          candidate_input=copy.deepcopy(candidate["candidate_krs_input_data"])
+          candidate_input.setdefault("race",{})["race_id"]=candidate_race_id
+          candidate_runs=5000
+          candidate_seed=int(request.get("seed") or 1)+900001
+          candidate_input.setdefault("simulation",{})["run_count"]=candidate_runs
+          candidate_input["simulation"]["master_seed"]=candidate_seed
+
+          def call(path,payload,timeout=600):
+              body=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              rq=urllib.request.Request(endpoint+path,data=body,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: out=json.loads(raw)
+                  except Exception: out={"raw":raw}
+                  return e.code,out
+
+          kc,krun=call("/krs/execute",{
+              "family_id":"LOCAL","race_id":candidate_race_id,
+              "krs_input_data":candidate_input,
+              "run_count":candidate_runs,"seed":candidate_seed,
+          })
+          assert kc<300,(kc,krun)
+          assert (krun.get("receipt") or {}).get("status")=="EXECUTED",krun
+          kart=krun.get("artifact") or {}
+          assert int(kart.get("actual_run_count") or 0)==candidate_runs,kart
+          vc,vbody=call("/verify",krun,60)
+          assert vc<300 and vbody.get("valid") is True,(vc,vbody)
+          Path("candidate_out/candidate_krs_receipt_envelope.json").write_text(json.dumps(krun,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+
+          # KRS Utility is resolved against Candidate roles, not the Production roles.
+          util_req=copy.deepcopy(candidate)
+          cpred=candidate["candidate_static_prediction"]
+          role_map={}
+          for rid in cpred["ranking"]:
+              roles=[]
+              if rid in cpred["W"]: roles.append("W")
+              if rid in cpred["P2"]: roles.append("P2")
+              if rid in cpred["P3"]: roles.append("P3")
+              role_map[str(rid)]=roles
+          for rr in util_req["runners"]:
+              rr["static_roles"]=role_map[str(rr["runner_id"])]
+          util_req["static_prediction"]={"roles":role_map}
+          util_req["role_registry"]=[]
+          util_req["pair_dispositions"]=[]
+          util_req["third_dispositions"]=[]
+          utility=build_krs_prediction_utility(util_req,{
+              "status":"EXECUTED",
+              "output":copy.deepcopy(kart.get("raw_output") or {})
+          })
+          Path("candidate_out/candidate_krs_utility.json").write_text(json.dumps(utility,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+
+          result_eval=None
+          actual_top3=replay.get("actual_top3")
+          if actual_top3:
+              result_eval=evaluate_against_result(utility,[int(x) for x in actual_top3])
+              Path("candidate_out/candidate_postresult_utility.json").write_text(json.dumps(result_eval,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+
           rows={}
           for r in candidate["runners"]:
               rows[str(r["runner_id"])]={
@@ -140,6 +208,12 @@ jobs:
             "full_numerical_summary":cs,
             "candidate_prediction":pred,
             "candidate_krs_input_sha256":candidate["candidate_krs_input_sha256"],
+            "candidate_krs_replay_receipt_sha256":krun.get("receipt_sha256"),
+            "candidate_krs_replay_verified":True,
+            "candidate_krs_replay_actual_run_count":kart.get("actual_run_count"),
+            "candidate_krs_replay_output_sha256":kart.get("output_sha256"),
+            "candidate_krs_utility_sha256":utility.get("sha256"),
+            "candidate_postresult_utility":result_eval,
             "runner_summary":rows,
             "result_derived_features":0,
             "result_used":False,
@@ -162,6 +236,10 @@ jobs:
             "mean_real_component_coverage":cs["mean_real_component_coverage"],
             "candidate_sha256":summary["sha256"],
             "production_ready":False,
+            "krs_receipt_sha256":krun.get("receipt_sha256"),
+            "krs_actual_run_count":kart.get("actual_run_count"),
+            "krs_utility_class":utility.get("utility_class"),
+            "postresult_krs_classification":(result_eval or {}).get("classification"),
           },ensure_ascii=False,separators=(",",":")))
           PY
 
