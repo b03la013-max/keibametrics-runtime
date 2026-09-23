@@ -138,12 +138,44 @@ def extract_runner_universe_from_tables(tables: Any) -> List[Dict[str, Any]]:
     return [found[i] for i in ids]
 
 
+def _explicit_excluded_ids_from_tables(tables: Any) -> set[int]:
+    excluded: set[int] = set()
+    if not isinstance(tables, list):
+        return excluded
+    for table in tables:
+        if not isinstance(table, list):
+            continue
+        for row in table:
+            if not isinstance(row, list):
+                continue
+            cells=[unicodedata.normalize("NFKC", str(x or "")).strip() for x in row]
+            joined=" ".join(cells)
+            if not any(m in joined for m in ("出走取消","競走除外","取消馬","除外馬")):
+                continue
+            nums=[]
+            for cell in cells[:4]:
+                if re.fullmatch(r"\d{1,2}", cell):
+                    nums.append(int(cell))
+            if len(nums)>=2:
+                excluded.add(nums[1])
+            elif len(nums)==1:
+                excluded.add(nums[0])
+    return excluded
+
+
 def enrich_source_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
     ev = artifact.get("normalized_evidence") or {}
     rc = ev.get("race_card_tables")
     if not isinstance(rc, dict) or "value" not in rc:
         raise ValueError("NAR_RACE_CARD_EVIDENCE_MISSING")
     runners = extract_runner_universe_from_tables(rc["value"])
+    # Current NAR odds table carries the explicit change-information column.
+    # Use it to remove officially cancelled/excluded horses from the active
+    # runner universe while preserving their presence in the raw race card.
+    odds = ev.get("odds_tables")
+    excluded_ids = _explicit_excluded_ids_from_tables((odds or {}).get("value") if isinstance(odds, dict) else None)
+    if excluded_ids:
+        runners = [r for r in runners if int(r.get("horse_no") or r.get("runner_id")) not in excluded_ids]
     universe = {
         "profile": PROFILE,
         "source_id": rc.get("source_id"),
