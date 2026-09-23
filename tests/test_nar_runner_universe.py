@@ -110,3 +110,113 @@ def test_krs_horse_universe_uses_horse_no():
     })
     assert ok is True
     assert errors==[]
+
+
+def sample_odds_tables_without_runner_2():
+    return [[
+        ["馬番","馬名","単勝"],
+        ["1","タマモアマルフィ","4.5"],
+        ["3","ラブペイトー","57.1"],
+    ]]
+
+
+def sample_tables_with_explicit_cancel_2():
+    rows=sample_tables()
+    rows[0].insert(8,["2","パウラメロディーア","出走取消"])
+    return rows
+
+
+def test_declared_and_active_universe_are_separate_when_odds_omits_cancelled_runner():
+    art={
+      "normalized_evidence":{
+        "race_card_tables":{
+          "value":sample_tables(),
+          "source_id":"NAR-KCH-R03-RACE-CARD",
+          "snapshot_sha256":"abc"
+        },
+        "odds_tables":{
+          "value":sample_odds_tables_without_runner_2(),
+          "source_id":"NAR-KCH-R03-ODDS-TANFUKU",
+          "snapshot_sha256":"def"
+        }
+      }
+    }
+    enrich_source_artifact(art)
+    declared=art["declared_runner_universe"]
+    active=art["active_runner_universe"]
+    assert [x["runner_id"] for x in declared["runners"]]==["1","2","3"]
+    assert [x["runner_id"] for x in active["runners"]]==["1","3"]
+    assert art["official_runner_universe"]["universe_type"]=="ACTIVE"
+    st={x["runner_id"]:x for x in art["runner_status_registry"]}
+    assert st["1"]["status"]=="ACTIVE"
+    assert st["2"]["status"]=="INACTIVE"
+    assert st["2"]["reason"]=="ABSENT_FROM_OFFICIAL_ACTIVE_BETTING_UNIVERSE"
+    assert st["3"]["status"]=="ACTIVE"
+
+
+def test_explicit_cancellation_is_declared_but_not_active_without_odds():
+    art={
+      "normalized_evidence":{
+        "race_card_tables":{
+          "value":sample_tables_with_explicit_cancel_2(),
+          "source_id":"NAR-KCH-R03-RACE-CARD",
+          "snapshot_sha256":"abc"
+        }
+      }
+    }
+    enrich_source_artifact(art)
+    assert [x["runner_id"] for x in art["declared_runner_universe"]["runners"]]==["1","2","3"]
+    assert [x["runner_id"] for x in art["active_runner_universe"]["runners"]]==["1","3"]
+    st={x["runner_id"]:x for x in art["runner_status_registry"]}
+    assert st["2"]["status"]=="CANCELLED"
+    assert st["2"]["reason"]=="EXPLICIT_RACE_CARD_CANCELLATION"
+
+
+def test_request_validation_uses_active_not_declared_universe():
+    art={
+      "normalized_evidence":{
+        "race_card_tables":{
+          "value":sample_tables(),
+          "source_id":"NAR-KCH-R03-RACE-CARD",
+          "snapshot_sha256":"abc"
+        },
+        "odds_tables":{
+          "value":sample_odds_tables_without_runner_2(),
+          "source_id":"NAR-KCH-R03-ODDS-TANFUKU",
+          "snapshot_sha256":"def"
+        }
+      }
+    }
+    enrich_source_artifact(art)
+    ok,errors=validate_request_runners(art,[
+      {"runner_id":"1","name":"タマモアマルフィ"},
+      {"runner_id":"3","name":"ラブペイトー"},
+    ])
+    assert ok is True
+    assert errors==[]
+    ok2,errors2=validate_request_runners(art,[
+      {"runner_id":"1","name":"タマモアマルフィ"},
+      {"runner_id":"2","name":"パウラメロディーア"},
+      {"runner_id":"3","name":"ラブペイトー"},
+    ])
+    assert ok2 is False
+    assert any(x.startswith("REQUEST_RUNNERS_NOT_OFFICIAL:2") for x in errors2)
+
+
+def test_noncontiguous_active_numbers_are_preserved_after_scratch():
+    art={
+      "normalized_evidence":{
+        "race_card_tables":{
+          "value":sample_tables(),
+          "source_id":"NAR-KCH-R03-RACE-CARD",
+          "snapshot_sha256":"abc"
+        },
+        "odds_tables":{
+          "value":sample_odds_tables_without_runner_2(),
+          "source_id":"NAR-KCH-R03-ODDS-TANFUKU",
+          "snapshot_sha256":"def"
+        }
+      }
+    }
+    enrich_source_artifact(art)
+    assert [x["horse_no"] for x in art["active_runner_universe"]["runners"]]==[1,3]
