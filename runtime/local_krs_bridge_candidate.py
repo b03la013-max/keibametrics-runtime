@@ -195,14 +195,30 @@ def build_candidate_prediction(request: Dict[str,Any]) -> Dict[str,Any]:
     if not runners:
         raise LocalCandidateBridgeError("RUNNERS_REQUIRED")
     rows=[]
+    role_profile=q.get("candidate_role_weight_profile") or {}
+    def role_score(cc,role,baseline):
+        prof=role_profile.get(role) if isinstance(role_profile,dict) else None
+        weights=(prof or {}).get("weights") if isinstance(prof,dict) else None
+        if not isinstance(weights,dict) or not weights:
+            return _mean(*baseline), {"mode":"EQUAL_BASELINE","weights":None}
+        def factor_value(name):
+            if str(name).startswith("INV:"):
+                return 100-float(cc[str(name)[4:]]["value"])
+            return float(cc[str(name)]["value"])
+        denom=sum(float(x) for x in weights.values())
+        if denom<=0:
+            return _mean(*baseline), {"mode":"EQUAL_BASELINE_BAD_PROFILE","weights":weights}
+        val=sum(factor_value(name)*float(weight) for name,weight in weights.items())/denom
+        return val, {"mode":"CALIBRATED_ROLE_WEIGHTS","weights":weights}
     for r in runners:
         cc=r.get("canonical_components") or {}
         def v(n): return float(cc[n]["value"])
-        w=_mean(v("ZAI-WIN"),v("SRI-L"),v("WCI"),v("ASI"),100-v("W-AKI"))
-        p2=_mean(v("ZAI-PLACE"),v("SRI-L"),v("F3S-L"),v("ASI"),100-v("P2-AKI"))
-        p3=_mean(v("T3I-L"),v("F3S-L"),v("ZAI-PLACE"),v("ASI"),100-v("P3-AKI"))
+        w,wmeta=role_score(cc,"W",[v("ZAI-WIN"),v("SRI-L"),v("WCI"),v("ASI"),100-v("W-AKI")])
+        p2,p2meta=role_score(cc,"P2",[v("ZAI-PLACE"),v("SRI-L"),v("F3S-L"),v("ASI"),100-v("P2-AKI")])
+        p3,p3meta=role_score(cc,"P3",[v("T3I-L"),v("F3S-L"),v("ZAI-PLACE"),v("ASI"),100-v("P3-AKI")])
         overall=_mean(w,p2,p3)
-        rows.append({"runner_id":str(r["runner_id"]),"name":r.get("name"),"w_score":w,"p2_score":p2,"p3_score":p3,"overall":overall})
+        rows.append({"runner_id":str(r["runner_id"]),"name":r.get("name"),"w_score":w,"p2_score":p2,"p3_score":p3,"overall":overall,
+                     "role_weight_modes":{"W":wmeta,"P2":p2meta,"P3":p3meta}})
     ranking=[x["runner_id"] for x in sorted(rows,key=lambda x:(-x["overall"],int(x["runner_id"])))]
     n=len(rows)
     # Widths are candidate-only and deliberately broad until OOS calibration.
@@ -219,13 +235,14 @@ def build_candidate_prediction(request: Dict[str,Any]) -> Dict[str,Any]:
     for r in q.get("runners") or []:
         r["candidate_static_roles"]=role_map.get(str(r.get("runner_id")),[])
     q["candidate_static_prediction"]={
-      "profile":"KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.1-CANDIDATE-20260923",
+      "profile":"KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.2-CALIBRATED" if role_profile else "KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.1-CANDIDATE-20260923",
       "production_authority":False,
       "ranking":ranking,"W":W,"P2":P2,"P3":P3,
       "role_width_policy":{"W":"top 40%","P2":"top 67%","P3":"top 85%","status":"UNVALIDATED_CANDIDATE"},
       "runner_scores":rows,
       "roles":role_map,
-      "note":"Role widths and equal role-score aggregation require walk-forward OOS calibration; never overwrite Production prediction."
+      "role_weight_profile_sha256":q.get("candidate_role_weight_profile_sha256"),
+      "note":"Role widths remain unvalidated. Calibrated role weights, when present, are retrospective non-OOS and never overwrite Production prediction."
     }
     q["candidate_static_prediction"]["sha256"]=_sha(q["candidate_static_prediction"])
     return q
