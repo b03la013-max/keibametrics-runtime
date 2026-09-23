@@ -174,7 +174,7 @@ def build_candidate_krs(request: Dict[str,Any]) -> Dict[str,Any]:
     q["candidate_local_krs_bridge"]["sha256"]=_sha(q["candidate_local_krs_bridge"])
     q["candidate_krs_input_data"]={
       "race":race,
-      "environment":copy.deepcopy(q.get("environment") or {}),
+      "environment":copy.deepcopy(q.get("candidate_environment") or {}),
       "horses":horses,
       "simulation":{"run_count":int(q.get("run_count",5000)),"master_seed":int(q.get("seed",1))},
       "keibametrics_input_authority":{
