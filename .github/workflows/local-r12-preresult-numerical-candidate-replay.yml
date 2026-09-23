@@ -1,0 +1,126 @@
+name: LOCAL R12 Pre-Result Source Numerical Candidate Replay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-r12-preresult-numerical-candidate-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download immutable pre-race signed envelopes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p frozen
+          curl -fL             -H "Authorization: Bearer $GH_TOKEN"             -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/10743349134/zip"             -o frozen.zip
+          unzip -q frozen.zip -d frozen
+          test -s frozen/source_receipt_envelope.json
+          test -s frozen/final_receipt_envelope.json
+
+      - name: Materialize candidate numerical pipeline from pre-result Signed SOURCE only
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate, REQUIRED
+          from local_krs_bridge_candidate import build_candidate_krs, build_candidate_prediction, HSV_KEYS, STATIC_KEYS
+          from local_candidate_numerical_authority import assess
+
+          source_env=json.load(open("frozen/source_receipt_envelope.json",encoding="utf-8"))
+          assert (source_env.get("receipt") or {}).get("phase")=="SOURCE"
+          assert (source_env.get("receipt") or {}).get("status")=="SOURCE_FROZEN"
+          source=source_env["artifact"]
+          req=json.load(open("runtime/family_requests/URW-20260923-R12-FORMAL-R1.json",encoding="utf-8"))
+
+          # Result data is never loaded in this stage.
+          q=compile_candidate_evidence(source,req)
+          q=materialize_candidate(q)
+          q=build_candidate_krs(q)
+          q=build_candidate_prediction(q)
+
+          auth=assess()
+          assert auth["implementation_ready"] is True
+          assert auth["production_ready"] is False
+          s=q["candidate_full_numerical_summary"]
+          assert s["required_count"]==12*29
+          assert s["calculated_count"]==12*29
+          assert s["unresolved_count"]==0
+          for h in q["candidate_krs_input_data"]["horses"]:
+              assert len(h["hsv"])==30 and set(h["hsv"])==set(HSV_KEYS)
+              assert len(h["static"])==11 and set(h["static"])==set(STATIC_KEYS)
+
+          out=pathlib.Path("candidate_out"); out.mkdir()
+          full={
+            "acceptance_class":"POST-RACE REPLAY OF IMMUTABLE PRE-RESULT SOURCE / NOT OOS / NOT PRODUCTION",
+            "source_receipt_sha256":source_env.get("receipt_sha256"),
+            "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+            "source_freeze_at":source.get("source_freeze_at"),
+            "candidate_authority":auth,
+            "candidate_current_state":q.get("candidate_current_state"),
+            "candidate_summary":s,
+            "candidate_static_prediction":q["candidate_static_prediction"],
+            "candidate_krs_input_sha256":q["candidate_krs_input_sha256"],
+            "runner_indices":{
+              str(r["runner_id"]):{k:v["value"] for k,v in r["canonical_components"].items()}
+              for r in q["runners"]
+            },
+            "runner_component_coverage":{
+              str(r["runner_id"]):{
+                "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                "missing_component_count":r.get("candidate_missing_count"),
+                "missing_components":r.get("candidate_missing_components"),
+              } for r in q["runners"]
+            }
+          }
+          json.dump(full,open(out/"r12_candidate_summary.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          json.dump(q["candidate_krs_input_data"],open(out/"candidate_krs_input.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          print("CANDIDATE_29_INDEX_PASS",s["calculated_count"],"/",s["required_count"])
+          print("CANDIDATE_PREDICTION",json.dumps(q["candidate_static_prediction"],ensure_ascii=False))
+          PY
+
+      - name: Execute candidate KRS shadow on external runtime
+        run: |
+          python - <<'PY'
+          import json,urllib.request,pathlib
+          data=json.load(open("candidate_out/candidate_krs_input.json",encoding="utf-8"))
+          payload={
+            "family_id":"LOCAL",
+            "race_id":"URW-20260923-R12-NUMERICAL-CANDIDATE-REPLAY-R1",
+            "krs_input_data":data,
+            "run_count":5000,
+            "seed":202609231299,
+          }
+          req=urllib.request.Request(
+            "https://witnessstrictimage-production.up.railway.app/krs/execute",
+            data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode(),
+            headers={"content-type":"application/json"},method="POST")
+          with urllib.request.urlopen(req,timeout=600) as r:
+              out=json.loads(r.read().decode())
+          assert (out.get("receipt") or {}).get("status")=="EXECUTED",out
+          assert int((out.get("artifact") or {}).get("actual_run_count",0))==5000,out
+          json.dump(out,open("candidate_out/candidate_krs_receipt_envelope.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          print("CANDIDATE_KRS_PASS",out.get("receipt_sha256"),(out.get("artifact") or {}).get("actual_run_count"))
+          PY
+
+      - name: Persist candidate replay evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-r12-numerical-candidate-replay-${{ github.sha }}
+          path: candidate_out/*.json
+          if-no-files-found: error
+          retention-days: 90
