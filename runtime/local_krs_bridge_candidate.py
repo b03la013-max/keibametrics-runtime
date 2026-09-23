@@ -162,6 +162,11 @@ def build_candidate_krs(request: Dict[str,Any]) -> Dict[str,Any]:
           "evidence":copy.deepcopy(b["evidence"]),
         })
     race=copy.deepcopy(q.get("race") or {})
+    current_state=q.get("candidate_current_state") or {}
+    if current_state.get("official_going"):
+        race["going"]=current_state["official_going"]
+    if current_state.get("official_weather"):
+        race["weather"]=current_state["official_weather"]
     q["candidate_local_krs_bridge"]={
       "profile":PROFILE,"family":"LOCAL","production_authority":False,
       "candidate_only":True,"runners":bridge_runners,
