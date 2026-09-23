@@ -173,9 +173,26 @@ def enrich_source_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
     # Use it to remove officially cancelled/excluded horses from the active
     # runner universe while preserving their presence in the raw race card.
     odds = ev.get("odds_tables")
-    excluded_ids = _explicit_excluded_ids_from_tables((odds or {}).get("value") if isinstance(odds, dict) else None)
+    odds_value=(odds or {}).get("value") if isinstance(odds, dict) else None
+    excluded_ids = _explicit_excluded_ids_from_tables(odds_value)
     if excluded_ids:
         runners = [r for r in runners if int(r.get("horse_no") or r.get("runner_id")) not in excluded_ids]
+
+    # Some NAR odds views remove a cancelled runner entirely instead of
+    # rendering an explicit cancellation row. When the optional official odds
+    # source contains nearly the full race-card name set, treat the names
+    # actually present there as the active betting universe and remove only the
+    # small absent subset. This is source-state reconciliation, not prediction.
+    if isinstance(odds_value, list) and runners:
+        odds_text=canonical_name(" ".join(
+            str(cell or "")
+            for table in odds_value if isinstance(table,list)
+            for row in table if isinstance(row,list)
+            for cell in row
+        ))
+        active_by_name=[r for r in runners if canonical_name(r.get("name")) and canonical_name(r.get("name")) in odds_text]
+        if len(active_by_name) >= max(2, len(runners)-2) and len(active_by_name) < len(runners):
+            runners=active_by_name
     universe = {
         "profile": PROFILE,
         "source_id": rc.get("source_id"),
