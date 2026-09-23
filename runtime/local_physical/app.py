@@ -259,7 +259,8 @@ def formal(p:Dict[str,Any]):
       "actual_run_count":run["artifact"]["actual_run_count"],
       "input_sha256":run["artifact"]["input_sha256"],"output_sha256":run["artifact"]["output_sha256"],
       "final_ticket_sha256":fin["artifact"]["ticket_sha256"]}
-    formal_status="FULL_FORMAL_E2E_PASS" if (pre.get("artifact") or {}).get("full_numerical_calculation") is True else "FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS"\n    return signed_receipt("FORMAL",rid,formal_status,artifact,[])
+    formal_status="FULL_FORMAL_E2E_PASS" if (pre.get("artifact") or {}).get("full_numerical_calculation") is True else "FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS"
+    return signed_receipt("FORMAL",rid,formal_status,artifact,[])
 
 
 def _money_int(v,name):
