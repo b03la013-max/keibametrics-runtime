@@ -1,6 +1,6 @@
 {
   "profile_id": "KM-FAMILY-RUNTIME-CONTRACTS-20260923-R8",
-  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-v1.5-REV.2-OFFICIAL-RUNNER-UNIVERSE-VERIFIED",
+  "status": "ACTIVE / FAMILY-WIDE / FAIL-CLOSED / LOCAL-v1.5-REV.4-RUNTIME-SYNC-ACTIVE-UNIVERSE",
   "families": {
     "JRA": {
       "execution_status": "EXECUTABLE",
@@ -12,11 +12,11 @@
       "formal_runner": ".github/workflows/km-formal-request-runner.yml"
     },
     "LOCAL": {
-      "execution_status": "EXECUTABLE / OFFICIAL-RUNNER-UNIVERSE-FULL-FORMAL-VERIFIED / AUTOMATIC-NAR-SOURCE-MANIFEST-VERIFIED / FULL-LIFECYCLE-SIGNED-E2E-PASS / REAL-RACE-PRE-RACE-ACCEPTANCE-PENDING",
+      "execution_status": "EXECUTABLE / RUNTIME-REVISION-HASH-PREFLIGHT / DECLARED-ACTIVE-RUNNER-UNIVERSE / SCRATCH-FAIL-CLOSED / NUMERICAL-AUTHORITY-DEGRADED-WHEN-NONCALCULATED",
       "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
       "common_canon": "ケイバメトリクス地方版 v4.13 Rev.1",
       "krs": "v1.7-KRS Rev.1",
-      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE",
+      "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE",
       "formal_guard": "FCG-LOCAL v1.1.0",
       "engine": "KRS-Engine v1.1.0",
       "parameter_map": "v0.1-provisional / PROVISIONAL_UNCALIBRATED",
@@ -126,7 +126,7 @@
         "verified": true
       },
       "krs_ops": "v1.7 Rev.1",
-      "runtime_version": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE",
+      "runtime_version": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE",
       "source_acquisition": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
       "source_acquisition_sha256": "5555f2d259e504d0fefabf6a21c7ac4039b5094e049ca112908a8d757e4d0840",
       "nar_source_manifest": "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923",
@@ -179,6 +179,23 @@
         },
         "actual_run_count": 5000,
         "verified": true
+      },
+      "runtime_git_revision": "73ebfe5ee4ccbf989bdb53b7a356b5c959bd197a",
+      "runtime_sync_policy": "CANONICAL_GIT_REVISION_AND_RUNTIME_BUNDLE_HASH_MUST_MATCH_BEFORE_SOURCE_ACQUISITION",
+      "runner_universe_model": "DECLARED_PLUS_ACTIVE_STATUS_LINEAGE",
+      "active_runner_universe_source": "NAR_OFFICIAL_ACTIVE_BETTING_UNIVERSE",
+      "failure_artifact_policy": "PERSIST_SOURCE_UNIVERSE_AND_PREFLIGHT_DIAGNOSTICS_ON_FAIL_CLOSED",
+      "deadline_preflight_policy": "FORMAL_PRE_RACE_RELEASE_DEADLINE_REQUIRED_OR_DERIVED_T_MINUS_120_SECONDS",
+      "correctness_regression": {
+        "github_actions_run_id": 35836613609,
+        "conclusion": "success",
+        "release_git_revision": "73ebfe5ee4ccbf989bdb53b7a356b5c959bd197a",
+        "scope": [
+          "NAR_SOURCE_MANIFEST",
+          "DECLARED_ACTIVE_RUNNER_UNIVERSE",
+          "SCRATCH_REGRESSION",
+          "PY_COMPILE"
+        ]
       }
     },
     "BAN": {
@@ -204,5 +221,5 @@
     }
   },
   "rule": "Never route one Family through another Family's parameter_map/adapter. LOCAL may auto-resolve NAR official source manifests only for LOCAL venue IDs; BAN/JRA source adapters remain family-isolated. Verified signed receipts outrank self-declaration.",
-  "predecessor": "KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
+  "predecessor": "KM-FAMILY-RUNTIME-CONTRACTS-20260923-R8-PRE-REV4"
 }
