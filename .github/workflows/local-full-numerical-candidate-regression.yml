@@ -13,9 +13,11 @@ on:
       - 'runtime/local_krs_bridge_candidate.py'
       - 'runtime/local_candidate_numerical_authority.py'
       - 'runtime/local_candidate_walkforward.py'
+      - 'runtime/local_candidate_postresult.py'
       - 'runtime/local_candidate_weight_calibrator.py'
       - 'runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json'
       - 'tests/test_local_fullnumerical_candidate_v01.py'
+      - 'tests/test_local_candidate_postresult_dual.py'
       - '.github/workflows/local-full-numerical-candidate-regression.yml'
   workflow_dispatch:
 
@@ -45,6 +47,7 @@ jobs:
           python -m pip install --disable-pip-version-check -q pytest
           python -m pytest -q \
             tests/test_local_fullnumerical_candidate_v01.py \
+            tests/test_local_candidate_postresult_dual.py \
             tests/test_local_numerical_authority_gate.py \
             tests/test_local_production_numerical_closure.py
       - name: Print candidate authority
