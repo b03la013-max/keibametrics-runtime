@@ -199,9 +199,16 @@ jobs:
           r=json.load(open("calibration_out/v02/calibration_report.json",encoding="utf-8"))
           ins=json.load(open("calibration_out/in_sample_comparison.json",encoding="utf-8"))
           loo=json.load(open("calibration_out/loo_comparison.json",encoding="utf-8"))
+          lineage=json.load(open("calibration_out/lineage.json",encoding="utf-8"))
+          training_race_ids=[lineage[k]["race_id"] for k in r["race_labels"]]
           out={
             "profile":r["profile"],"status":r["status"],"sha256":r["sha256"],
             "race_labels":r["race_labels"],"race_count":r["race_count"],
+            "training_race_ids":training_race_ids,
+            "training_data_policy":"These races define v0.2 weights and therefore are never v0.2 OOS evaluation events. Future races frozen after this calibration may be OOS candidates.",
+            "r06_exclusion":"Excluded: immutable pre-result Signed SOURCE artifact was not persisted; post-result reacquisition is forbidden for calibration.",
+            "r05_exclusion":"Excluded: POST-START replay / not unknown-future calibration evidence.",
+            "r08_exclusion":"Excluded: correctness/acceptance fixture rather than clean empirical calibration race.",
             "largest_component_changes":r["largest_component_changes"][:20],
             "role_profiles":r["role_profiles"],
             "safety":r["safety"],
