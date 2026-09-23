@@ -204,10 +204,14 @@ jobs:
 
           req=materialize_request(req,req_indices)
           cov=req["numeric_coverage"]
-          assert req.get("full_numerical_calculation") is True,("LOCAL_NUMERICAL_CALCULATION_INCOMPLETE",cov)
+          assert req.get("full_terminalization") is True,("LOCAL_INDEX_TERMINALIZATION_INCOMPLETE",cov)
           assert int(cov.get("unresolved_count",0))==0,cov
           stage("NUMERICAL_MATERIALIZATION",
-                required_count=cov["required_count"],calculated_count=cov["calculated_count"],unresolved_count=cov["unresolved_count"],
+                required_count=cov["required_count"],calculated_count=cov["calculated_count"],
+                ruled_neutral_count=cov.get("ruled_neutral_count",0),ruled_hold_count=cov.get("ruled_hold_count",0),
+                not_applicable_count=cov.get("not_applicable_count",0),unresolved_count=cov["unresolved_count"],
+                full_numerical_calculation=bool(req.get("full_numerical_calculation")),
+                full_terminalization=bool(req.get("full_terminalization")),
                 mapping_registry=req.get("local_mapping_registry"))
 
           req=build_local_provenance(req)
@@ -225,7 +229,9 @@ jobs:
             "family_id":"LOCAL","race_id":rid,
             "source_receipt":source,
             "required_index_unresolved":0,
-            "full_numerical_calculation":True,
+            "full_terminalization":bool(req.get("full_terminalization")),
+            "full_numerical_calculation":bool(req.get("full_numerical_calculation")),
+            "krs_input_mode":req.get("krs_input_mode"),
             "static_prediction_frozen":True,
             "krs_input_data":req["krs_input_data"]
           }
