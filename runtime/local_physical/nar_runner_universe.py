@@ -85,6 +85,28 @@ def extract_runner_universe_from_tables(tables: Any) -> List[Dict[str, Any]]:
             if not cname or cname in {"枠番", "馬番", "競走馬", "馬名"}:
                 continue
 
+            # NAR race cards keep cancelled/excluded horses visible in the card.
+            # Build the local presentation block for this horse and remove a
+            # runner only when an explicit official cancellation/exclusion marker
+            # exists in that block. This is Runner-Universe correctness, not a
+            # prediction-policy change.
+            block_rows=[row]
+            for j in range(i + 1, len(rows)):
+                nxt=rows[j]
+                if nxt and re.fullmatch(r"\d{1,2}", (nxt[0] or "").strip()):
+                    # Stop at the next apparent primary runner row.
+                    if (
+                        (len(nxt)>=3 and re.fullmatch(r"\d{1,2}", (nxt[1] or "").strip()) and canonical_name(nxt[2]))
+                        or (len(nxt)>=2 and canonical_name(nxt[1]) and not re.fullmatch(r"\d{1,2}", (nxt[1] or "").strip()))
+                    ):
+                        break
+                block_rows.append(nxt)
+                if len(block_rows)>=5:
+                    break
+            block_text=canonical_name(" ".join(cell for rr in block_rows for cell in rr))
+            if any(marker in block_text for marker in ("出走取消","競走除外","取消馬","除外馬")):
+                continue
+
             bw, bw_change = _bodyweight_from_following_rows(rows, i)
             rec = {
                 "runner_id": str(runner_id),
