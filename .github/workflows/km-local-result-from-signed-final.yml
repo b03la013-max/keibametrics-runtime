@@ -13,7 +13,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -38,6 +38,7 @@ jobs:
           import json,os,subprocess,sys,urllib.request
           sys.path.insert(0,"runtime")
           from local_candidate_postresult import evaluate_dual
+          from local_candidate_dual_oos_tracker import build_measurement, write_status
           req=json.load(open(sys.argv[1],encoding="utf-8"))
           run_id=int(req["source_run_id"])
           artifact_name=req["artifact_name"]
@@ -111,13 +112,36 @@ jobs:
               dual=json.load(open(dual_path,encoding="utf-8"))
               dual_krs=json.load(open(dual_krs_path,encoding="utf-8")) if os.path.exists(dual_krs_path) else {}
               cal=json.load(open(calibration_path,encoding="utf-8")) if os.path.exists(calibration_path) else {}
+              envs={}
+              for arm,fn in (("v0.1","candidate_krs_v01_receipt_envelope.json"),("v0.2","candidate_krs_v02_receipt_envelope.json")):
+                  pth=os.path.join("runtime_result_in",fn)
+                  if os.path.exists(pth):
+                      envs[arm]=json.load(open(pth,encoding="utf-8"))
               candidate_dual_postresult=evaluate_dual(
                   dual,[int(x) for x in req["finish_order"]],
                   result_available_at=req["result_available_at"],race_id=rid,
                   dual_krs_summary=dual_krs,
-                  calibration_training_race_ids=cal.get("training_race_ids") or []
+                  calibration_training_race_ids=cal.get("training_race_ids") or [],
+                  dual_krs_envelopes=envs
               )
               json.dump(candidate_dual_postresult,open("runtime_out/candidate_dual_shadow_postresult.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          candidate_oos_measurement=None
+          candidate_oos_status=None
+          if candidate_dual_postresult is not None:
+              candidate_oos_measurement=build_measurement(candidate_dual_postresult,req)
+              mdir=os.path.join("runtime","local_candidate_dual_oos_measurements")
+              os.makedirs(mdir,exist_ok=True)
+              mpath=os.path.join(mdir,rid+".json")
+              json.dump(candidate_oos_measurement,open(mpath,"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              candidate_oos_status=write_status(
+                  mdir,os.path.join("runtime","local_candidate_dual_oos_status.json")
+              )
+              json.dump(candidate_oos_measurement,open("runtime_out/candidate_dual_oos_measurement.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(candidate_oos_status,open("runtime_out/candidate_dual_oos_status.json","w",encoding="utf-8"),
                         ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
           summary={
@@ -133,11 +157,27 @@ jobs:
             "failure_localization":art.get("failure_localization"),
             "automatic_post_result_review":art.get("automatic_post_result_review"),
             "learning_event":art.get("learning_event"),
-            "candidate_dual_shadow_postresult":candidate_dual_postresult
+            "candidate_dual_shadow_postresult":candidate_dual_postresult,
+            "candidate_dual_oos_measurement":candidate_oos_measurement,
+            "candidate_dual_oos_status":candidate_oos_status
           }
           json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
           print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
           PY
+
+      - name: Persist dual-candidate OOS measurement ledger
+        if: hashFiles('runtime/local_candidate_dual_oos_measurements/*.json') != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "measurement: persist LOCAL dual-candidate OOS state [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Persist signed RESULT envelope
         uses: actions/upload-artifact@v4
