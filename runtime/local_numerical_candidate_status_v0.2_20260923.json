@@ -1,151 +1,214 @@
 {
-  "profile": "KM-LOCAL-NUMERICAL-CANDIDATE-v0.2-URW-SAME-DAY-CALIBRATION-STATUS-20260923",
-  "status": "CALIBRATED-CANDIDATE / NON-PRODUCTION / NON-OOS / DUAL-SHADOW-ARMED / R30-PENDING",
+  "profile": "KM-LOCAL-FULL-NUMERICAL-CANDIDATE-v0.2-WEIGHT-CALIBRATION-STATUS-20260923",
+  "status": "IMPLEMENTED / RETROSPECTIVE-CALIBRATED / NON-PRODUCTION / NON-OOS-TRAINING / DUAL-SHADOW-ACTIVE / FUTURE-OOS-R30-PENDING",
   "production": {
     "numerical_authority": "NOT_READY",
-    "mutated": false,
-    "automatic_promotion": false
+    "mapping_changed": false,
+    "prediction_policy_changed": false,
+    "automatic_promotion": false,
+    "production_mutation": false
   },
-  "calibration_dataset": {
-    "included": [
-      "URW-20260923-R07",
-      "URW-20260923-R10",
-      "URW-20260923-R11",
-      "URW-20260923-R12"
+  "calibration": {
+    "profile": "KM-LOCAL-WEIGHT-CALIBRATION-v0.2-CANDIDATE-20260923-URW-DAY1",
+    "training_race_ids": [
+      "URW-20260923-R07-FORMAL-R1",
+      "URW-20260923-R10-FORMAL-R1",
+      "URW-20260923-R11-FORMAL-R1",
+      "URW-20260923-R12-FORMAL-R1"
     ],
     "excluded": {
-      "URW-20260923-R06": "immutable pre-result Signed SOURCE artifact not persisted; post-result reacquisition forbidden for calibration",
-      "URW-20260923-R05": "post-start/replay lineage; not admitted",
-      "URW-20260923-R08": "acceptance/non-genuine unknown-future evidence; not admitted"
+      "URW-20260923-R05": "POST_START_REPLAY",
+      "URW-20260923-R06": "IMMUTABLE_PRE_RESULT_SIGNED_SOURCE_NOT_PERSISTED",
+      "URW-20260923-R08": "CORRECTNESS_ACCEPTANCE_FIXTURE"
     },
-    "race_count": 4,
-    "evidence_class": "RETROSPECTIVE_SAME_DAY_CALIBRATION_NOT_GENUINE_OOS"
+    "method": "within-race top3-vs-nontop3 standardized separation; position relevance 1.00/0.65/0.45; 26-race prior + 4 observed races shrinkage",
+    "reliability": 0.133333,
+    "exact_canon_formula_change": false,
+    "recency_weight_change": false,
+    "unknown_semantics_change": false,
+    "market_into_ability": false,
+    "result_derived_feature_values": false,
+    "result_derived_weight_definition": true,
+    "largest_component_changes": [
+      {
+        "index": "CSI-L",
+        "component": "rotation_management",
+        "from": 5,
+        "to": 5.101591,
+        "pct": 2.03182
+      },
+      {
+        "index": "CSI-L",
+        "component": "transfer_preparation",
+        "from": 15,
+        "to": 14.725264,
+        "pct": -1.831573
+      },
+      {
+        "index": "HPI-L",
+        "component": "repeatability",
+        "from": 15,
+        "to": 14.73828,
+        "pct": -1.7448
+      },
+      {
+        "index": "DCR",
+        "component": "same_venue_distance_comparability",
+        "from": 20,
+        "to": 19.750687,
+        "pct": -1.246565
+      },
+      {
+        "index": "HPI-L",
+        "component": "finish_margin",
+        "from": 15,
+        "to": 15.178172,
+        "pct": 1.187813
+      },
+      {
+        "index": "JTI-L",
+        "component": "distance_record",
+        "from": 15,
+        "to": 15.176914,
+        "pct": 1.179427
+      },
+      {
+        "index": "HPI-L",
+        "component": "recent_finish",
+        "from": 20,
+        "to": 20.194711,
+        "pct": 0.973555
+      },
+      {
+        "index": "HPI-L",
+        "component": "passing_position_content",
+        "from": 20,
+        "to": 20.175401,
+        "pct": 0.877005
+      }
+    ],
+    "role_weights": {
+      "W": {
+        "ZAI-WIN": 0.20252408,
+        "SRI-L": 0.20294028,
+        "WCI": 0.20228484,
+        "ASI": 0.19355742,
+        "INV:W-AKI": 0.19869337
+      },
+      "P2": {
+        "ZAI-PLACE": 0.20140279,
+        "SRI-L": 0.20188339,
+        "F3S-L": 0.20182677,
+        "ASI": 0.1981493,
+        "INV:P2-AKI": 0.19673775
+      },
+      "P3": {
+        "T3I-L": 0.20099439,
+        "F3S-L": 0.20076176,
+        "ZAI-PLACE": 0.20074287,
+        "ASI": 0.19747708,
+        "INV:P3-AKI": 0.20002389
+      }
+    }
   },
-  "candidate_v01": {
-    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.1-CANDIDATE-20260923",
-    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
-    "role_weights": "EQUAL_BASELINE"
-  },
-  "candidate_v02": {
-    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
-    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
-    "freeze_commit": "552e04f71bb33cf4b5488576ce2b55af58b8702c",
-    "calibration_report_sha256": "6c16b00b8f097567ddd7504ce9b81a2191362dc6acabc0e63811d43b3c919033",
-    "method": "within-race standardized top3-vs-nontop3 separation with relevance 1.00/0.65/0.45 and R30 shrinkage prior",
-    "direct_changes_forbidden": [
-      "TPI/F3S canon coefficients",
-      "recency 30/25/20/15/10",
-      "UNKNOWN neutral semantics",
-      "market-to-ability leakage"
-    ]
-  },
-  "calibration_effect": {
+  "retrospective_measurement": {
     "in_sample": {
       "v01": {
         "winner_capture": 0.5,
-        "mean_winner_rank": 4.25,
+        "winner_rank": 4.25,
         "p2_capture": 1,
         "p3_capture": 1,
         "top3_set_capture": 1,
-        "mean_top3_mean_rank": 4
+        "top3_mean_rank": 4
       },
       "v02": {
         "winner_capture": 0.75,
-        "mean_winner_rank": 4,
+        "winner_rank": 4,
         "p2_capture": 1,
         "p3_capture": 1,
         "top3_set_capture": 1,
-        "mean_top3_mean_rank": 3.9166666667
-      }
+        "top3_mean_rank": 3.9166666667
+      },
+      "interpretation": "SMALL_IN_SAMPLE_IMPROVEMENT"
     },
     "leave_one_race_out": {
       "v01": {
         "winner_capture": 0.5,
-        "mean_winner_rank": 4.25,
+        "winner_rank": 4.25,
         "p2_capture": 1,
         "p3_capture": 1,
         "top3_set_capture": 1,
-        "mean_top3_mean_rank": 4
+        "top3_mean_rank": 4
       },
       "v02": {
         "winner_capture": 0.5,
-        "mean_winner_rank": 4.25,
+        "winner_rank": 4.25,
         "p2_capture": 1,
         "p3_capture": 1,
         "top3_set_capture": 1,
-        "mean_top3_mean_rank": 4
-      }
+        "top3_mean_rank": 4
+      },
+      "interpretation": "NO_GENERALIZATION_GAIN_DETECTED"
     },
-    "interpretation": "same-day in-sample improvement observed, but no LOO generalization gain; v0.2 must not be described as superior"
+    "promotion_evidence": false,
+    "evidence_class": "RETROSPECTIVE_SAME_DAY_CALIBRATION_NOT_GENUINE_OOS"
   },
-  "largest_component_changes": [
-    {
-      "component": "CSI-L.rotation_management",
-      "change_pct": 2.03182
-    },
-    {
-      "component": "CSI-L.transfer_preparation",
-      "change_pct": -1.831573
-    },
-    {
-      "component": "HPI-L.repeatability",
-      "change_pct": -1.7448
-    },
-    {
-      "component": "DCR.same_venue_distance_comparability",
-      "change_pct": -1.246565
-    },
-    {
-      "component": "HPI-L.finish_margin",
-      "change_pct": 1.187813
-    },
-    {
-      "component": "JTI-L.distance_record",
-      "change_pct": 1.179427
-    },
-    {
-      "component": "HPI-L.recent_finish",
-      "change_pct": 0.973555
-    },
-    {
-      "component": "HPI-L.passing_position_content",
-      "change_pct": 0.877005
-    }
-  ],
   "dual_shadow": {
-    "formal_workflow_commit": "eece697d3f2e8777ffe434576d188154801dfb20",
-    "acceptance_workflow_commit": "84ec977c913ba9b835800eb97ab83b52abbb2205",
-    "acceptance_run_id": 35871931443,
-    "acceptance_status": "PASS",
-    "acceptance_artifact_id": 10754768395,
-    "acceptance_artifact_digest": "sha256:f95566615f0db617e4afb33060167b40c75865fbd088db8450f61f510df418e5",
-    "acceptance_sha256": "fe70d4a7f2ec8402242d72ebfdbe3d6fb08af0841e41818169e13647c959d8b9",
+    "baseline_mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+    "calibrated_mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
     "same_signed_source": true,
     "same_runner_universe": true,
     "paired_krs_run_count": 5000,
-    "paired_krs_seed": 2026999912,
-    "v01_krs_receipt": "35da62b7feb0b1a899a88974a9e8b6190af53dc6737887febd494021c147f055",
-    "v02_krs_receipt": "0c2a904586659f49828751fb72a8a785bc424b53cf5f28650dc25fef0e64f45a",
-    "production_mutation": false
+    "paired_krs_seed": true,
+    "production_effect": "NONE",
+    "pre_result_freeze": true,
+    "post_result_auto_score": true,
+    "future_unknown_race_oos_measurement": true,
+    "training_races_excluded_from_v02_oos": true
   },
-  "regression": {
-    "v02_separation_regression_run": 35871176348,
-    "status": "PASS",
-    "latest_watch_regression_run": 35871407570,
-    "latest_watch_status": "PASS"
+  "verification": {
+    "calibration_workflow_run_id": 35870275174,
+    "calibration_artifact_id": 10754323593,
+    "calibration_artifact_digest": "sha256:7c1f5de62b8809bf493e57e243668e85cab99ef9d6d0e3d48883b1a7509a6682",
+    "calibration_report_sha256": "6c16b00b8f097567ddd7504ce9b81a2191362dc6acabc0e63811d43b3c919033",
+    "dual_shadow_acceptance_run_id": 35871931443,
+    "dual_shadow_acceptance_artifact_id": 10754768395,
+    "dual_shadow_acceptance_artifact_digest": "sha256:f95566615f0db617e4afb33060167b40c75865fbd088db8450f61f510df418e5",
+    "dual_shadow_acceptance_status": "PASS",
+    "v01_acceptance_krs_receipt": "35da62b7feb0b1a899a88974a9e8b6190af53dc6737887febd494021c147f055",
+    "v02_acceptance_krs_receipt": "0c2a904586659f49828751fb72a8a785bc424b53cf5f28650dc25fef0e64f45a",
+    "dual_postresult_regression_run_id": 35872702323,
+    "dual_postresult_regression_status": "SUCCESS",
+    "family_health_run_id": 35872796945,
+    "family_health_status": "SUCCESS"
+  },
+  "implementation": {
+    "calibrator": "runtime/local_candidate_weight_calibrator.py",
+    "v02_registry": "mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
+    "v02_mapping": "mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json",
+    "dual_postresult": "runtime/local_candidate_postresult.py",
+    "production_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "result_workflow": ".github/workflows/km-local-result-from-signed-final.yml",
+    "calibration_summary": "runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json"
   },
   "next_gate": {
-    "mode": "PRE-RESULT DUAL SHADOW",
+    "mode": "FUTURE_UNKNOWN_RACE_PRE_RESULT_DUAL_SHADOW",
+    "minimum_v02_oos_events": 30,
     "compare": [
-      "winner rank/capture",
-      "P2/P3 capture",
-      "top3 set",
-      "KRS unique rescue/harm",
-      "ordered-pair/exact rescue",
-      "additional capital/PFS when constructable"
+      "winner_rank_gain",
+      "winner_capture",
+      "p2_rank_gain",
+      "p2_capture",
+      "p3_rank_gain",
+      "p3_capture",
+      "top3_mean_rank_gain",
+      "top3_set_capture",
+      "candidate_krs_rescue_harm",
+      "additional_capital_if_ticketed",
+      "PFS_if_preregistered"
     ],
-    "target_count": 30,
     "automatic_promotion": false,
     "human_review_required": true
-  }
+  },
+  "decision": "KEEP_v0.1_AS_BASELINE_AND_RUN_v0.2_AS_NON_PRODUCTION_DUAL_SHADOW; DO_NOT_PROMOTE_OR_DELETE_YET"
 }
