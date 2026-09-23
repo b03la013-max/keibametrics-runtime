@@ -22,11 +22,12 @@ def test_result_closed_loop_loads_both_candidate_krs_envelopes_and_persists_oos(
     assert 'candidate_dual_oos_measurement.json' in text
     assert 'candidate_dual_oos_status.json' in text
     assert 'runtime/local_candidate_dual_oos_measurements/*.json' in text
-    assert 'automatic_promotion' not in text or True  # workflow delegates policy to tracker
 
 
 def test_result_ledger_is_serializable_by_repository_commit():
     text=RESULT.read_text(encoding="utf-8")
+    assert "group: km-local-result-oos-ledger" in text
+    assert "cancel-in-progress: false" in text
     assert 'git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json' in text
     assert 'git pull --rebase origin main' in text
     assert 'git push origin HEAD:main' in text
