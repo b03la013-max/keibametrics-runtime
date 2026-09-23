@@ -175,6 +175,7 @@ jobs:
           temporal_mode=str(req.get("temporal_mode") or "FORMAL-PRE-RACE").upper()
           scheduled=req.get("scheduled_post_at")
           release_deadline=req.get("release_deadline_at")
+          formal_release_deadline_utc=None
           if temporal_mode=="FORMAL-PRE-RACE":
               if not scheduled:
                   fail_closed("SCHEDULED_POST_AT_REQUIRED")
@@ -190,10 +191,20 @@ jobs:
                   "release_deadline_at":deadline_dt.isoformat(),
                   "release_buffer_seconds":int((post_dt-deadline_dt).total_seconds()),
               })
+              formal_release_deadline_utc=deadline_dt
               if now>=deadline_dt:
                   fail_closed("DEADLINE_INSUFFICIENT_AT_EXECUTION_START",{
                       "now":now.isoformat(),"release_deadline":deadline_dt.isoformat()
                   })
+
+          def deadline_guard(stage_name):
+              if temporal_mode=="FORMAL-PRE-RACE" and formal_release_deadline_utc is not None:
+                  now=datetime.datetime.now(datetime.timezone.utc)
+                  if now>=formal_release_deadline_utc:
+                      fail_closed("DEADLINE_INSUFFICIENT:"+stage_name,{
+                          "now":now.isoformat(),
+                          "release_deadline":formal_release_deadline_utc.isoformat(),
+                      })
 
           # Source Acquisition is now an external signed execution phase.
           source_req=req.get("source_acquisition_request")
@@ -366,8 +377,11 @@ jobs:
             "static_prediction_frozen":True,
             "krs_input_data":req["krs_input_data"]
           }
+          deadline_guard("BEFORE_PRE_KRS")
           pc,pre=call("/pre-krs",pre_payload,120)
-          assert pc<300 and (pre.get("receipt") or {}).get("status")=="PASS",(pc,pre)
+          persist("pre_krs_receipt_envelope.json",pre)
+          if pc>=300 or (pre.get("receipt") or {}).get("status")!="PASS":
+              fail_closed("PRE_KRS_NOT_PASS",{"http":pc,"pre_krs":pre})
           pre_sha=verify_envelope(pre,"PRE_KRS")
           stage("PRE_KRS",receipt_sha256=pre_sha)
 
@@ -378,8 +392,14 @@ jobs:
             "krs_input_data":req["krs_input_data"],
             "run_count":run_count,"seed":seed
           },600)
-          assert kc<300 and (run.get("receipt") or {}).get("status")=="EXECUTED",(kc,run)
-          assert int((run.get("artifact") or {}).get("actual_run_count",0))>=run_count,run
+          persist("krs_receipt_envelope.json",run)
+          if kc>=300 or (run.get("receipt") or {}).get("status")!="EXECUTED":
+              fail_closed("KRS_NOT_EXECUTED",{"http":kc,"krs":run})
+          if int((run.get("artifact") or {}).get("actual_run_count",0))<run_count:
+              fail_closed("KRS_ACTUAL_RUN_COUNT_SHORT",{
+                  "requested":run_count,
+                  "actual":(run.get("artifact") or {}).get("actual_run_count")
+              })
           run_sha=verify_envelope(run,"KRS_RUN")
           stage("KRS",receipt_sha256=run_sha,requested_run_count=run_count,
                 actual_run_count=(run.get("artifact") or {}).get("actual_run_count"),
@@ -390,19 +410,24 @@ jobs:
             "status":"EXECUTED",
             "output":copy.deepcopy((run.get("artifact") or {}).get("raw_output") or {})
           })
+          persist("krs_prediction_utility.json",utility)
           stage("KRS_UTILITY",utility_class=utility.get("utility_class"),utility_sha256=utility.get("sha256"),
                 production_effect="NONE")
 
+          deadline_guard("AFTER_KRS")
           mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
           mec_check=validate_mec_plan(mec)
-          assert mec_check["mec_verified"] is True
-          assert mec["profile"]==MEC_PROFILE
+          persist("mec_plan.json",mec)
+          persist("mec_verification.json",mec_check)
+          if mec_check["mec_verified"] is not True or mec["profile"]!=MEC_PROFILE:
+              fail_closed("MEC_VERIFY_FAILED",{"mec":mec,"check":mec_check})
           stage("MEC",mec_sha256=mec["sha256"],ticket_count=mec["ticket_count"],
                 minimum_required_capital=mec["minimum_required_capital"],
                 material_coverage_ratio=mec["material_coverage_ratio"],
                 precompression_semantic_universe=mec.get("precompression_semantic_universe"))
 
           capital=resolve_capital_policy(req,mec)
+          persist("capital_decision.json",capital)
           stage("CAPITAL",capital_decision_sha256=capital["sha256"],mode=capital["mode"],
                 compatibility=capital["compatibility"],decision=capital["decision"],
                 required_capital=capital["required_capital"],capital_limit=capital["capital_limit"])
@@ -459,9 +484,13 @@ jobs:
             "execution_stage_manifest":stage_manifest,
             "final_freeze_timestamp":final_freeze
           }
+          deadline_guard("BEFORE_FINAL")
           fc,fin=call("/final",final_payload,180)
-          assert fc<300 and (fin.get("receipt") or {}).get("status")=="PASS",(fc,fin)
+          persist("final_receipt_envelope.json",fin)
+          if fc>=300 or (fin.get("receipt") or {}).get("status")!="PASS":
+              fail_closed("FINAL_NOT_PASS",{"http":fc,"final":fin})
           final_sha=verify_envelope(fin,"FINAL")
+          deadline_guard("AFTER_FINAL")
 
           # Persist complete signed envelopes for immutable post-race RESULT linkage.
           os.makedirs("runtime_out",exist_ok=True)
