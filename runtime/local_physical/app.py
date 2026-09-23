@@ -8,7 +8,7 @@ from post_result_learning import build_post_result_review, build_learning_state
 from minimum_efficient_coverage import validate_mec_plan, MEC_PROFILE
 from capital_policy import PROFILE as CAPITAL_PROFILE
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.4-20260923"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.3-20260923-TERMINAL-INTEGRITY"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -102,10 +102,17 @@ def pre_krs(p:Dict[str,Any]):
     try: validate_krs_input(krs or {})
     except HTTPException as e: errs.append(str(e.detail))
     if p.get("required_index_unresolved",0): errs.append("REQUIRED_INDEX_UNRESOLVED")
-    if p.get("full_numerical_calculation") is not True: errs.append("FULL_NUMERICAL_CALCULATION_REQUIRED")
+    if p.get("full_terminalization") is not True: errs.append("FULL_INDEX_TERMINALIZATION_REQUIRED")
+    full_numeric=(p.get("full_numerical_calculation") is True)
+    input_mode=str(p.get("krs_input_mode") or ((krs or {}).get("keibametrics_input_authority") or {}).get("input_mode") or "")
+    if not full_numeric and input_mode!="TECHNICAL_PROXY_DIAGNOSTIC":
+        errs.append("NON_NUMERICAL_KRS_MUST_BE_TECHNICAL_PROXY_DIAGNOSTIC")
     if not p.get("static_prediction_frozen"): errs.append("STATIC_PREDICTION_FREEZE_REQUIRED")
     art={"input_sha256":sha_obj(krs or {}),"runner_count":len((krs or {}).get("horses") or []),
-         "full_numerical_calculation":p.get("full_numerical_calculation"),
+         "full_terminalization":bool(p.get("full_terminalization")),
+         "full_numerical_calculation":full_numeric,
+         "krs_input_mode":input_mode,
+         "numerical_authority":"FULL_NUMERICAL" if full_numeric else "TERMINAL_COMPLETE_PROXY_KRS",
          "static_prediction_frozen":bool(p.get("static_prediction_frozen"))}
     return signed_receipt("PRE_KRS",rid,"PASS" if not errs else "FAIL",art,errs)
 
@@ -252,7 +259,7 @@ def formal(p:Dict[str,Any]):
       "actual_run_count":run["artifact"]["actual_run_count"],
       "input_sha256":run["artifact"]["input_sha256"],"output_sha256":run["artifact"]["output_sha256"],
       "final_ticket_sha256":fin["artifact"]["ticket_sha256"]}
-    return signed_receipt("FORMAL",rid,"FULL_FORMAL_E2E_PASS",artifact,[])
+    formal_status="FULL_FORMAL_E2E_PASS" if (pre.get("artifact") or {}).get("full_numerical_calculation") is True else "FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS"\n    return signed_receipt("FORMAL",rid,formal_status,artifact,[])
 
 
 def _money_int(v,name):
