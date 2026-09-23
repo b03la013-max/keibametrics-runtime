@@ -30,6 +30,14 @@ def build(req):
         raise LocalKRSBridgeError("LOCAL_KRS_BRIDGE_ARTIFACT_REQUIRED")
     if str(bridge.get("family") or "").upper()!="LOCAL":
         raise LocalKRSBridgeError("LOCAL_KRS_BRIDGE_FAMILY_MISMATCH")
+
+    full_numeric=bool(q.get("full_numerical_calculation"))
+    proxy_mode=bool(bridge.get("technical_proxy_mode"))
+    if not full_numeric and not proxy_mode:
+        raise LocalKRSBridgeError("KRS_TECHNICAL_PROXY_MODE_REQUIRED_WHEN_FORMAL_INDICES_HELD")
+    if proxy_mode and not str(bridge.get("proxy_reason") or "").strip():
+        raise LocalKRSBridgeError("KRS_TECHNICAL_PROXY_REASON_REQUIRED")
+
     runners=q.get("runners") or []
     horses=[]
     for r in runners:
@@ -51,12 +59,21 @@ def build(req):
           "uncertainty_scale":_valid(per.get("uncertainty_scale",50),"uncertainty_scale")/50.0,
           "evidence":copy.deepcopy(per.get("evidence") or {})
         })
+    input_mode="FORMAL_NUMERICAL" if full_numeric and not proxy_mode else "TECHNICAL_PROXY_DIAGNOSTIC"
     q["krs_input_data"]={
       "race":copy.deepcopy(q.get("race") or q.get("race_identity") or {}),
       "environment":copy.deepcopy(q.get("environment") or {}),
       "horses":horses,
-      "simulation":{"run_count":int(q.get("run_count",5000)),"master_seed":int(q.get("seed",1))}
+      "simulation":{"run_count":int(q.get("run_count",5000)),"master_seed":int(q.get("seed",1))},
+      "keibametrics_input_authority":{
+        "input_mode":input_mode,
+        "full_numerical_calculation":full_numeric,
+        "full_terminalization":bool(q.get("full_terminalization")),
+        "bridge_id":bridge["bridge_id"],
+        "proxy_reason":str(bridge.get("proxy_reason") or "") if proxy_mode else None
+      }
     }
     q["local_krs_bridge_id"]=bridge["bridge_id"]
+    q["krs_input_mode"]=input_mode
     q["local_krs_input_sha256"]=_sha(q["krs_input_data"])
     return q
