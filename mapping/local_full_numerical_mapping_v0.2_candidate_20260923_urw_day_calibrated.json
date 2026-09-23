@@ -1,0 +1,276 @@
+{
+  "calibration_metadata": {
+    "automatic_production_promotion": false,
+    "exact_canon_formulas_changed": false,
+    "market_ability_separation_changed": false,
+    "max_role_amplitude": 0.25,
+    "method": "role-target vs non-top3 within-race standardized separation with R30 shrinkage",
+    "neutral_missing_semantics_changed": false,
+    "oos_eligible": false,
+    "prior_races": 26,
+    "profile": "KM-LOCAL-WEIGHT-CALIBRATION-v0.2-CANDIDATE-20260923-URW-DAY1",
+    "race_count": 4,
+    "race_labels": [
+      "R07",
+      "R10",
+      "R11",
+      "R12"
+    ],
+    "recency_weights_changed": false,
+    "result_derived_weight_definition": true
+  },
+  "candidate_only_aggregations": {
+    "ASI": "100 - mean(W-AKI, uncertainty risk, front-friction risk)",
+    "CCI": "CCI specificity component; canonical neutral 52 when official comment source absent",
+    "DRS": "NCI class-change-pressure component",
+    "EVI/CEV": "equal mean of position acquisition, maintenance, progression, leadership/stalk, traffic tolerance, going adaptation, course geometry, going fit",
+    "HCS": "mean(HPI class-level, HPI opponent-strength, HPI recent-finish)",
+    "OPI-V": "50 + 50*(market-rank-percentile - candidate-ability-rank-percentile)",
+    "P2-AKI": "equal-risk aggregation of uncertainty, role competition, market divergence, URP",
+    "P3-AKI": "equal-risk aggregation of uncertainty, tail competition, market divergence, URP",
+    "PRI": "100 - normalized absolute difference between candidate ability rank and official market rank",
+    "RSI": "mean(role-score dispersion risk, market/internal divergence, uncertainty risk)",
+    "T3I-L": "equal mean(OPI-V,same-distance,third-corner-progression,position-maintenance,TRI,DRS,good-weight-range)",
+    "TRI": "TRI vertical-comparison component; canonical neutral 52 when official training source absent",
+    "URP": "100-DRS, blended with front-density pressure",
+    "W-AKI": "equal-risk aggregation of uncertainty, promotion pressure, front pressure, market/internal divergence, path narrowness",
+    "WCI": "mean(ZAI-WIN,SRI-L,ASI,100-W-AKI)",
+    "ZAI-PLACE": "mean(TPI-L,SRI-L,EVI/CEV,CFIg-L,RFIg-L,DCR)",
+    "ZAI-WIN": "mean(TPI-L,SRI-L,EVI/CEV,CFIg-L,NCI,DCR) after SRI first-pass"
+  },
+  "candidate_role_weights": {
+    "P2": {
+      "baseline": "equal weights",
+      "calibration_status": "RETROSPECTIVE_DAY_CALIBRATED_NON_OOS",
+      "factors": [
+        "ZAI-PLACE",
+        "SRI-L",
+        "F3S-L",
+        "ASI",
+        "INV:P2-AKI"
+      ],
+      "signals": {
+        "ASI": {
+          "mean_separation_z": 0.091278,
+          "race_count": 4,
+          "raw_weight": 1.00303419,
+          "reliability": 0.133333
+        },
+        "F3S-L": {
+          "mean_separation_z": 0.774412,
+          "race_count": 4,
+          "raw_weight": 1.02164959,
+          "reliability": 0.133333
+        },
+        "INV:P2-AKI": {
+          "mean_separation_z": -0.123964,
+          "race_count": 4,
+          "raw_weight": 0.99588889,
+          "reliability": 0.133333
+        },
+        "SRI-L": {
+          "mean_separation_z": 0.789428,
+          "race_count": 4,
+          "raw_weight": 1.02193617,
+          "reliability": 0.133333
+        },
+        "ZAI-PLACE": {
+          "mean_separation_z": 0.670186,
+          "race_count": 4,
+          "raw_weight": 1.01950341,
+          "reliability": 0.133333
+        }
+      },
+      "weights": {
+        "ASI": 0.1981493,
+        "F3S-L": 0.20182677,
+        "INV:P2-AKI": 0.19673775,
+        "SRI-L": 0.20188339,
+        "ZAI-PLACE": 0.20140279
+      }
+    },
+    "P3": {
+      "baseline": "equal weights",
+      "calibration_status": "RETROSPECTIVE_DAY_CALIBRATED_NON_OOS",
+      "factors": [
+        "T3I-L",
+        "F3S-L",
+        "ZAI-PLACE",
+        "ASI",
+        "INV:P3-AKI"
+      ],
+      "signals": {
+        "ASI": {
+          "mean_separation_z": 0.231055,
+          "race_count": 4,
+          "raw_weight": 1.00756765,
+          "reliability": 0.133333
+        },
+        "F3S-L": {
+          "mean_separation_z": 0.928303,
+          "race_count": 4,
+          "raw_weight": 1.02432672,
+          "reliability": 0.133333
+        },
+        "INV:P3-AKI": {
+          "mean_separation_z": 0.719918,
+          "race_count": 4,
+          "raw_weight": 1.02056195,
+          "reliability": 0.133333
+        },
+        "T3I-L": {
+          "mean_separation_z": 1.009149,
+          "race_count": 4,
+          "raw_weight": 1.02551367,
+          "reliability": 0.133333
+        },
+        "ZAI-PLACE": {
+          "mean_separation_z": 0.922145,
+          "race_count": 4,
+          "raw_weight": 1.02423035,
+          "reliability": 0.133333
+        }
+      },
+      "weights": {
+        "ASI": 0.19747708,
+        "F3S-L": 0.20076176,
+        "INV:P3-AKI": 0.20002389,
+        "T3I-L": 0.20099439,
+        "ZAI-PLACE": 0.20074287
+      }
+    },
+    "W": {
+      "baseline": "equal weights",
+      "calibration_status": "RETROSPECTIVE_DAY_CALIBRATED_NON_OOS",
+      "factors": [
+        "ZAI-WIN",
+        "SRI-L",
+        "WCI",
+        "ASI",
+        "INV:W-AKI"
+      ],
+      "signals": {
+        "ASI": {
+          "mean_separation_z": -0.774194,
+          "race_count": 4,
+          "raw_weight": 0.97835462,
+          "reliability": 0.133333
+        },
+        "INV:W-AKI": {
+          "mean_separation_z": 0.130174,
+          "race_count": 4,
+          "raw_weight": 1.00431477,
+          "reliability": 0.133333
+        },
+        "SRI-L": {
+          "mean_separation_z": 1.02882,
+          "race_count": 4,
+          "raw_weight": 1.02578115,
+          "reliability": 0.133333
+        },
+        "WCI": {
+          "mean_separation_z": 0.818121,
+          "race_count": 4,
+          "raw_weight": 1.0224682,
+          "reliability": 0.133333
+        },
+        "ZAI-WIN": {
+          "mean_separation_z": 0.887838,
+          "race_count": 4,
+          "raw_weight": 1.02367747,
+          "reliability": 0.133333
+        }
+      },
+      "weights": {
+        "ASI": 0.19355742,
+        "INV:W-AKI": 0.19869337,
+        "SRI-L": 0.20294028,
+        "WCI": 0.20228484,
+        "ZAI-WIN": 0.20252408
+      }
+    }
+  },
+  "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
+  "exact_canon_formulas": {
+    "F3S-L": "0.25*SRI-L+0.20*TPI-L+0.18*EVI/CEV+0.14*RFIg-L+0.12*CFIg-L+0.06*NCI+0.05*T3I-L",
+    "SRI-L": "0.20*TPI-L+0.18*RFIg-L+0.18*EVI/CEV+0.15*CFIg-L+0.12*NCI+0.10*BWI-L+0.05*JTI-L+0.02*CSI-L-risk/uncertainty penalty",
+    "TPI-L": "0.18*HPI-L+0.16*CFIg-L+0.14*RFIg-L+0.08*BVIg-L+0.08*JTI-L+0.08*CSI-L+0.08*BWI-L+0.10*NCI+0.10*EVI/CEV; then min-major penalty"
+  },
+  "family": "LOCAL",
+  "mapping_id": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
+  "market_separation": {
+    "ability_indices_market_free": [
+      "HPI-L",
+      "CFIg-L",
+      "RFIg-L",
+      "BVIg-L",
+      "JTI-L",
+      "CSI-L",
+      "BWI-L",
+      "NCI",
+      "TPI-L",
+      "EVI/CEV",
+      "SRI-L",
+      "F3S-L"
+    ],
+    "market_diagnostic_only": [
+      "PRI",
+      "OPI-V",
+      "W-AKI",
+      "P2-AKI",
+      "P3-AKI",
+      "ASI",
+      "RSI",
+      "WCI"
+    ]
+  },
+  "missing_semantics": {
+    "dcr_carries_missingness": true,
+    "interpretation": "UNKNOWN / INCOMPARABLE, never WEAK",
+    "neutral_score": 52
+  },
+  "predecessor": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+  "production_predecessor": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
+  "promotion": {
+    "automatic": false,
+    "production_authority": false,
+    "required": [
+      "deterministic regression",
+      "walk-forward OOS",
+      "venue/profile calibration",
+      "human review"
+    ]
+  },
+  "required_indices": [
+    "HPI-L",
+    "CFIg-L",
+    "RFIg-L",
+    "BVIg-L",
+    "JTI-L",
+    "CSI-L",
+    "BWI-L",
+    "DCR",
+    "NCI",
+    "TPI-L",
+    "EVI/CEV",
+    "CCI",
+    "TRI",
+    "PRI",
+    "OPI-V",
+    "DRS",
+    "URP",
+    "HCS",
+    "ZAI-WIN",
+    "ZAI-PLACE",
+    "SRI-L",
+    "T3I-L",
+    "F3S-L",
+    "WCI",
+    "W-AKI",
+    "P2-AKI",
+    "P3-AKI",
+    "ASI",
+    "RSI"
+  ],
+  "status": "CANDIDATE / RETROSPECTIVE-DAY-CALIBRATED / NON-PRODUCTION / NON-OOS / OOS-REQUIRED"
+}
