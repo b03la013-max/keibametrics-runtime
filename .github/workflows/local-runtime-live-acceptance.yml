@@ -1,0 +1,99 @@
+name: LOCAL Runtime Live Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/live_acceptance_requests/*.json'
+      - '.github/workflows/local-runtime-live-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify deployed runtime revision and hashes
+        run: |
+          python - <<'PY'
+          import hashlib,json,pathlib,urllib.request
+          endpoint="https://witnessstrictimage-production.up.railway.app"
+          contract=json.load(open("profiles/family_runtime_contracts_20260923_R8.json",encoding="utf-8"))["families"]["LOCAL"]
+          expected=contract["runtime_git_revision"]
+          with urllib.request.urlopen(endpoint+"/health",timeout=60) as r:
+              h=json.loads(r.read().decode())
+          assert h["status"]=="READY",h
+          assert h["github_revision"]==expected,(h["github_revision"],expected)
+          paths={
+            "runtime_app_sha256":"runtime/local_physical/app_v15.py",
+            "legacy_runtime_app_sha256":"runtime/local_physical/app.py",
+            "source_acquisition_sha256":"runtime/local_physical/source_acquisition.py",
+            "nar_source_manifest_sha256":"runtime/local_physical/nar_source_manifest.py",
+            "nar_runner_universe_sha256":"runtime/local_physical/nar_runner_universe.py",
+          }
+          checked={}
+          for key,path in paths.items():
+              actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+              checked[key]={"repo":actual,"runtime":h.get(key)}
+              assert h.get(key)==actual,(key,actual,h.get(key))
+          pathlib.Path("runtime_out").mkdir(exist_ok=True)
+          json.dump({"health":h,"checked_hashes":checked},open("runtime_out/runtime_health_acceptance.json","w"),ensure_ascii=False,sort_keys=True)
+          print("RUNTIME_SYNC_PASS",expected)
+          PY
+
+      - name: Verify real Urawa R8 declared-active universe and scratch state
+        run: |
+          python - <<'PY'
+          import json,pathlib,urllib.request
+          endpoint="https://witnessstrictimage-production.up.railway.app"
+          def post(path,payload):
+              data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              q=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(q,timeout=180) as r:
+                  return json.loads(r.read().decode())
+          manifest=post("/source/manifest/local",{
+              "family_id":"LOCAL",
+              "race_id":"URW-20260923-R08-ACTIVE-UNIVERSE-LIVE-ACCEPTANCE",
+              "venue_id":"URW","race_date":"2026-09-23","race_no":8,
+              "prediction_cutoff":"2099-01-01T00:00:00+09:00",
+              "include_same_day_results":False,
+              "include_odds":True,
+              "require_active_runner_universe":True
+          })
+          source=post("/source/acquire",manifest)
+          assert (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",source
+          art=source["artifact"]
+          dec=art["declared_runner_universe"]
+          act=art["active_runner_universe"]
+          statuses={str(x["runner_id"]):x for x in art["runner_status_registry"]}
+          declared_ids=[str(x["runner_id"]) for x in dec["runners"]]
+          active_ids=[str(x["runner_id"]) for x in act["runners"]]
+          assert "7" in declared_ids,(declared_ids,statuses)
+          assert "7" not in active_ids,(active_ids,statuses)
+          assert statuses["7"]["status"] in {"CANCELLED","INACTIVE"},statuses["7"]
+          assert len(declared_ids)==12,(declared_ids,statuses)
+          assert len(active_ids)==11,(active_ids,statuses)
+          out={
+            "declared_count":len(declared_ids),"active_count":len(active_ids),
+            "declared_ids":declared_ids,"active_ids":active_ids,
+            "runner7":statuses["7"],
+            "declared_sha256":art["official_declared_runner_universe_sha256"],
+            "active_sha256":art["official_runner_universe_sha256"],
+            "source_receipt_sha256":source["receipt_sha256"],
+          }
+          pathlib.Path("runtime_out").mkdir(exist_ok=True)
+          json.dump(out,open("runtime_out/urw_r8_active_universe_acceptance.json","w"),ensure_ascii=False,sort_keys=True)
+          print("URW_R8_ACTIVE_UNIVERSE_PASS",json.dumps(out,ensure_ascii=False))
+          PY
+
+      - name: Persist acceptance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-runtime-live-acceptance-${{ github.sha }}
+          path: runtime_out/*.json
+          if-no-files-found: error
+          retention-days: 90
