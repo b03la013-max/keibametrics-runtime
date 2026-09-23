@@ -215,4 +215,5 @@ def test_v02_calibration_summary_is_non_oos_and_no_auto_promotion():
     assert summary["race_count"]==4
     assert summary["safety"]["production_mutation"] is False
     assert summary["safety"]["same_race_prediction_rewrite"] is False
-    assert summary["leave_one_race_out"]["winner_rank"]==4.25
+    assert summary["leave_one_race_out"]["v01"]["winner_rank"]==4.25
+    assert summary["leave_one_race_out"]["v02_loo"]["winner_rank"]==4.25
