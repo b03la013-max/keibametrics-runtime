@@ -119,6 +119,7 @@ def test_end_to_end_source_to_29_to_30hsv_11static_is_deterministic():
     assert s["full_numerical_complete"] is True
     assert all(set(r["canonical_components"])==set(REQUIRED) for r in n["runners"])
 
+    n=build_candidate_prediction(n)
     b=build_candidate_krs(n)
     assert len(b["candidate_krs_input_data"]["horses"])==3
     for h in b["candidate_krs_input_data"]["horses"]:
