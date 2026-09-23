@@ -216,7 +216,8 @@ jobs:
                     "venue_id":venue_id,"race_date":race_date,"race_no":race_no,
                     "prediction_cutoff":cutoff,
                     "include_same_day_results":True,
-                    "include_odds":bool(req.get("collect_official_odds",False))
+                    "include_odds":True,
+                    "require_active_runner_universe":True
                   },60)
                   assert mc<300,(mc,manifest)
                   source_req=manifest
@@ -227,12 +228,48 @@ jobs:
           source_req.setdefault("prediction_cutoff",req.get("prediction_cutoff"))
           assert isinstance(source_req.get("sources"),list) and source_req["sources"],"REQUIRED_SOURCE_MANIFEST_REQUIRED"
           sc,source=call("/source/acquire",source_req,180)
-          assert sc<300 and (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",(sc,source)
+          persist("source_receipt_envelope.json",source)
+          if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
+              fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
           svc,sv=call("/source/verify",source,60)
-          assert svc<300 and sv.get("valid") is True,(svc,sv)
+          if svc>=300 or sv.get("valid") is not True:
+              fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
           source_receipt_sha=source.get("receipt_sha256")
           source_artifact=source.get("artifact") or {}
-          assert source_artifact.get("formal_ready") is True,source_artifact
+          if source_artifact.get("formal_ready") is not True:
+              fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
+
+          # Official start time is authoritative for temporal identity.
+          ev=source_artifact.get("normalized_evidence") or {}
+          official_start=((ev.get("start_time") or {}).get("value") if isinstance(ev.get("start_time"),dict) else None)
+          if temporal_mode=="FORMAL-PRE-RACE" and official_start:
+              race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+              race_date=str(req.get("race_date") or race_meta.get("race_date") or race_meta.get("date") or "")
+              if race_date:
+                  hh,mm=[int(x) for x in str(official_start).split(":")[:2]]
+                  local_date=datetime.date.fromisoformat(race_date.replace("/","-"))
+                  official_post_local=datetime.datetime.combine(local_date,datetime.time(hh,mm),tzinfo=ZoneInfo("Asia/Tokyo"))
+                  request_post=parse_dt(scheduled).astimezone(ZoneInfo("Asia/Tokyo"))
+                  delta=abs((official_post_local-request_post).total_seconds())
+                  persist("race_identity_preflight.json",{
+                      "official_start_time":official_start,
+                      "official_post_at":official_post_local.isoformat(),
+                      "request_scheduled_post_at":request_post.isoformat(),
+                      "delta_seconds":delta,
+                  })
+                  if delta>30:
+                      fail_closed("OFFICIAL_POST_TIME_MISMATCH",{
+                          "official_post_at":official_post_local.isoformat(),
+                          "request_scheduled_post_at":request_post.isoformat(),
+                          "delta_seconds":delta,
+                      })
+                  official_deadline=official_post_local.astimezone(datetime.timezone.utc)-datetime.timedelta(seconds=int(req.get("release_buffer_seconds") or 120))
+                  now=datetime.datetime.now(datetime.timezone.utc)
+                  if now>=official_deadline:
+                      fail_closed("DEADLINE_INSUFFICIENT_AFTER_OFFICIAL_SOURCE",{
+                          "now":now.isoformat(),
+                          "official_release_deadline":official_deadline.isoformat(),
+                      })
           req["source_receipt"]=source
           req["source_snapshot_sha256"]=source_artifact.get("source_snapshot_sha256")
           assert req["source_snapshot_sha256"],"SOURCE_SNAPSHOT_SHA_REQUIRED"
@@ -251,9 +288,20 @@ jobs:
               norm=lambda s:re.sub(r"\\s+","",unicodedata.normalize("NFKC",str(s or ""))).strip()
               off={str(x.get("runner_id") or x.get("horse_no")):norm(x.get("name")) for x in off_rows}
               got={str(x.get("runner_id")):norm(x.get("name")) for x in runners}
-              assert set(off)==set(got),("RUNNER_UNIVERSE_ID_MISMATCH",sorted(off),sorted(got))
-              bad={rid:(got[rid],off[rid]) for rid in off if got[rid]!=off[rid]}
-              assert not bad,("RUNNER_UNIVERSE_NAME_MISMATCH",bad)
+              universe_diag={
+                  "declared_runner_universe":source_artifact.get("declared_runner_universe"),
+                  "active_runner_universe":source_artifact.get("active_runner_universe"),
+                  "runner_status_registry":source_artifact.get("runner_status_registry"),
+                  "request_runners":runners,
+                  "official_active_ids":sorted(off),
+                  "request_ids":sorted(got),
+              }
+              persist("runner_universe_diagnostic.json",universe_diag)
+              if set(off)!=set(got):
+                  fail_closed("RUNNER_UNIVERSE_ID_MISMATCH",universe_diag)
+              bad={rr:(got[rr],off[rr]) for rr in off if got[rr]!=off[rr]}
+              if bad:
+                  fail_closed("RUNNER_UNIVERSE_NAME_MISMATCH",{"bad":bad,**universe_diag})
           assert isinstance(req.get("static_prediction"),dict),"STATIC_PREDICTION_REQUIRED"
           assert req.get("static_prediction_frozen") is True,"STATIC_PREDICTION_FREEZE_REQUIRED"
 
