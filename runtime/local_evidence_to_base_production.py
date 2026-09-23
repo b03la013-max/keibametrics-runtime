@@ -109,12 +109,28 @@ def _hold(name, reason, evidence_refs):
 def _has_value(spec):
     return isinstance(spec,dict) and spec.get("terminal_status") in {"CALCULATED","RULED-NEUTRAL"} and isinstance(spec.get("value"),(int,float)) and not isinstance(spec.get("value"),bool)
 
-def materialize_runner(runner, venue_rule_registry=None, required_indices=None):
+def materialize_runner(runner, venue_rule_registry=None, required_indices=None, allow_base_index_rule_hold=False):
     out=copy.deepcopy(runner)
     feats=out.get("evidence_features") or {}
     canonical={}
     for idx in WEIGHTS:
-        canonical[idx]=_weighted(idx,feats)
+        try:
+            canonical[idx]=_weighted(idx,feats)
+        except LocalMappingError as e:
+            if not allow_base_index_rule_hold or not str(e).startswith("REQUIRED_COMPONENT_MISSING:"):
+                raise
+            missing=[fname for fname in WEIGHTS[idx] if fname not in feats]
+            canonical[idx]={
+              "terminal_status":"RULED-HOLD",
+              "rule_id":f"LOCAL-{idx.replace('/','_')}-EVIDENCE-MISSING-HOLD-v1",
+              "mapping_version":REGISTRY_ID,
+              "evidence_refs":[f"LOCAL-CANON:{idx}"],
+              "source_fact":(
+                f"{idx}: required evidence component(s) missing ({','.join(missing)}); "
+                "formal numeric claim held. Downstream execution may continue only through "
+                "an explicitly technical-proxy diagnostic bridge."
+              ),
+            }
 
     ext=out.get("canonical_external_indices") or {}
     allowed=(venue_rule_registry or {}).get("allowed_rule_ids") or {}
@@ -183,7 +199,8 @@ def materialize_request(req, required_indices):
     if not isinstance(runners,list) or not runners:
         raise LocalMappingError("RUNNERS_REQUIRED")
     required=[str(x) for x in required_indices]
-    q["runners"]=[materialize_runner(r,vr,required) for r in runners]
+    allow_base_hold=bool(q.get("allow_base_index_rule_hold",False))
+    q["runners"]=[materialize_runner(r,vr,required,allow_base_index_rule_hold=allow_base_hold) for r in runners]
 
     rows=[]; unresolved=[]
     counts={k:0 for k in TERMINAL_STATUSES}
