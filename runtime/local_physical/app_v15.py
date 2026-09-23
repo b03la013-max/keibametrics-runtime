@@ -13,7 +13,7 @@ from nar_runner_universe import (
     validate_krs_horses,
 )
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -44,6 +44,7 @@ def health():
     h = dict(legacy.health())
     h["runtime_revision"] = APP_VERSION
     h["runtime_app_sha256"] = legacy.sha_file(__file__)
+    h["legacy_runtime_app_sha256"] = legacy.sha_file("/opt/km/app.py")
     h["source_acquisition_profile"] = SOURCE_PROFILE
     h["source_acquisition_required"] = SOURCE_REQUIRED
     caps = list(h.get("capabilities") or [])
@@ -261,7 +262,9 @@ def formal(payload: Dict[str, Any]):
         "output_sha256": run["artifact"]["output_sha256"],
         "final_ticket_sha256": fin["artifact"]["ticket_sha256"],
     }
-    return legacy.signed_receipt("FORMAL", race_id, "FULL_FORMAL_E2E_PASS", artifact, [])
+    full_numeric=bool((pre.get("artifact") or {}).get("full_numerical_calculation"))
+    status="FULL_FORMAL_E2E_PASS" if full_numeric else "FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS"
+    return legacy.signed_receipt("FORMAL", race_id, status, artifact, [])
 
 
 @app.post("/result")
