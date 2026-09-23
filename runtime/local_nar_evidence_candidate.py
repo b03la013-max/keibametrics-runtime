@@ -34,6 +34,12 @@ def _norm(s: Any) -> str:
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s or ""))).strip()
 
 
+def _jockey_name(s: Any) -> str:
+    t = _norm(s)
+    t = re.sub(r"[（(].*$", "", t)
+    return t.replace("☆", "").replace("▲", "").replace("△", "").strip()
+
+
 def _load(path: str | Path) -> Dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
