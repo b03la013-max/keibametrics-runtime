@@ -31,10 +31,12 @@ out={
 }
 u=build_krs_prediction_utility(req,out)
 assert any(x["horse_no"]==2 and x["proposal"]=="ADD_P2_SHADOW" for x in u["role_proposals"])
-assert any(x["head"]==1 and x["second"]==2 for x in u["ordered_pair_proposals"])
-assert u["pair_third_proposals"]==[], "third proposal only arises when pair is already PURCHASE"
+assert not any(x["head"]==1 and x["second"]==2 for x in u["ordered_pair_proposals"]), "PROTECT pair already exists in Production and must not be called a KRS rescue"
+assert any(x["head"]==1 and x["second"]==2 and x["third"]==3 for x in u["pair_third_proposals"]), "EXCLUDE third under an active Production pair remains eligible for shadow rescue"
 e=evaluate_against_result(u,[1,2,3])
 assert "P2_ROLE_RESCUE" in e["rescues"]
+assert "ORDERED_PAIR_CONFIRMED" in e["supports"]
+assert "ORDERED_PAIR_RESCUE" not in e["rescues"]
 print("PASS",u["utility_class"],e["classification"])
 
 
@@ -67,4 +69,6 @@ e2=evaluate_against_result(u2,[1,2,3])
 assert "WINNER_ROLE_CONFIRMED" in e2["supports"]
 assert "P3_ROLE_CONFIRMED" in e2["supports"]
 assert "P3_ROLE_RESCUE" not in e2["rescues"]
+assert "ORDERED_PAIR_CONFIRMED" in e2["supports"]
+assert "ORDERED_PAIR_RESCUE" not in e2["rescues"]
 print("PASS_FORMAL_BINDING",e2["classification"])
