@@ -169,6 +169,10 @@ jobs:
           from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MEC_PROFILE
           from capital_policy import resolve_capital_policy
           from local_numerical_authority_gate import assess as assess_numerical_authority
+          from local_candidate_numerical_authority import assess as assess_candidate_numerical
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
@@ -364,6 +368,60 @@ jobs:
                 source_freeze_at=source_artifact.get("source_freeze_at"))
           stage("RUNNER_UNIVERSE",runner_count=len(runners))
 
+          # Always-on LOCAL numerical candidate SHADOW. It is deliberately isolated from
+          # Production decisions: failure cannot modify or block the Production route.
+          candidate_shadow_q=None
+          candidate_shadow_summary=None
+          try:
+              cq=compile_candidate_evidence(source_artifact,req)
+              cq=materialize_candidate(cq)
+              cq=build_candidate_prediction(cq)
+              cq=build_candidate_krs(cq)
+              ca=assess_candidate_numerical()
+              candidate_shadow_q=cq
+              candidate_shadow_summary={
+                  "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_SHADOW",
+                  "production_authority":False,
+                  "candidate_authority":ca,
+                  "source_receipt_sha256":source_receipt_sha,
+                  "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                  "candidate_current_state":cq.get("candidate_current_state"),
+                  "candidate_environment":cq.get("candidate_environment"),
+                  "candidate_full_numerical_summary":cq.get("candidate_full_numerical_summary"),
+                  "candidate_static_prediction":cq.get("candidate_static_prediction"),
+                  "candidate_krs_input_sha256":cq.get("candidate_krs_input_sha256"),
+                  "runner_indices":{
+                      str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
+                      for r in (cq.get("runners") or [])
+                  },
+                  "runner_component_coverage":{
+                      str(r.get("runner_id")):{
+                          "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                          "missing_component_count":r.get("candidate_missing_count"),
+                          "missing_components":r.get("candidate_missing_components"),
+                      } for r in (cq.get("runners") or [])
+                  },
+              }
+              candidate_shadow_summary["sha256"]=sha_obj(candidate_shadow_summary)
+              persist("candidate_numerical_shadow_summary.json",candidate_shadow_summary)
+              persist("candidate_krs_input_preresult.json",cq.get("candidate_krs_input_data"))
+              stage("NUMERICAL_CANDIDATE_SHADOW",
+                    status="PASS",production_authority=False,
+                    calculated_count=(cq.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
+                    required_count=(cq.get("candidate_full_numerical_summary") or {}).get("required_count"),
+                    candidate_prediction_sha256=(cq.get("candidate_static_prediction") or {}).get("sha256"))
+          except Exception as e:
+              candidate_shadow_summary={
+                  "status":"SHADOW_FAIL",
+                  "production_authority":False,
+                  "error_type":type(e).__name__,
+                  "error":str(e),
+                  "source_receipt_sha256":source_receipt_sha,
+                  "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+              }
+              persist("candidate_numerical_shadow_failure.json",candidate_shadow_summary)
+              stage("NUMERICAL_CANDIDATE_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
+
           numerical_authority=assess_numerical_authority()
           persist("numerical_authority_preflight.json",numerical_authority)
           req["numerical_authority_preflight"]=numerical_authority
@@ -537,6 +595,57 @@ jobs:
           final_sha=verify_envelope(fin,"FINAL")
           deadline_guard("AFTER_FINAL")
 
+          # Candidate KRS is executed only after Production FINAL is already signed, so it
+          # can never delay or mutate the Production decision. It remains OOS-eligible
+          # only when it completes before the official scheduled post.
+          candidate_krs_summary=None
+          if candidate_shadow_q is not None:
+              try:
+                  now=datetime.datetime.now(datetime.timezone.utc)
+                  scheduled_utc=parse_dt(scheduled).astimezone(datetime.timezone.utc) if scheduled else None
+                  slack=(scheduled_utc-now).total_seconds() if scheduled_utc else -1
+                  if temporal_mode=="FORMAL-PRE-RACE" and slack>=15:
+                      candidate_rid=rid+"-NUM-CAND-SHADOW"
+                      cand_input=copy.deepcopy(candidate_shadow_q.get("candidate_krs_input_data") or {})
+                      if isinstance(cand_input.get("race"),dict):
+                          cand_input["race"]["race_id"]=candidate_rid
+                      cand_runs=max(1000,min(5000,int(req.get("candidate_shadow_run_count") or 5000)))
+                      cand_seed=int(req.get("seed") or 1)+900001
+                      cand_input.setdefault("simulation",{})["run_count"]=cand_runs
+                      cand_input["simulation"]["master_seed"]=cand_seed
+                      cc,crun=call("/krs/execute",{
+                          "family_id":"LOCAL","race_id":candidate_rid,
+                          "krs_input_data":cand_input,"run_count":cand_runs,"seed":cand_seed
+                      },600)
+                      persist("candidate_krs_receipt_envelope.json",crun)
+                      if cc<300 and (crun.get("receipt") or {}).get("status")=="EXECUTED":
+                          csha=verify_envelope(crun,"CANDIDATE_KRS_SHADOW")
+                          complete_at=datetime.datetime.now(datetime.timezone.utc)
+                          temporal_ok=bool(scheduled_utc and complete_at<scheduled_utc)
+                          candidate_krs_summary={
+                              "status":"EXECUTED","receipt_sha256":csha,
+                              "actual_run_count":(crun.get("artifact") or {}).get("actual_run_count"),
+                              "completed_at":complete_at.isoformat(),
+                              "pre_post_complete":temporal_ok,
+                              "production_authority":False,
+                              "oos_temporal_eligible":temporal_ok,
+                              "candidate_input_sha256":sha_obj(cand_input),
+                          }
+                      else:
+                          candidate_krs_summary={"status":"FAILED_NON_BLOCKING","http":cc,"production_authority":False}
+                  else:
+                      candidate_krs_summary={
+                          "status":"SKIPPED_DEADLINE_GUARD","slack_seconds":slack,
+                          "production_authority":False,"oos_temporal_eligible":False
+                      }
+              except Exception as e:
+                  candidate_krs_summary={
+                      "status":"FAILED_NON_BLOCKING","error_type":type(e).__name__,
+                      "error":str(e),"production_authority":False,"oos_temporal_eligible":False
+                  }
+              persist("candidate_krs_shadow_summary.json",candidate_krs_summary)
+              stage("CANDIDATE_KRS_SHADOW",**candidate_krs_summary)
+
           # Persist complete signed envelopes for immutable post-race RESULT linkage.
           os.makedirs("runtime_out",exist_ok=True)
           for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelope.json",pre),
@@ -628,6 +737,8 @@ jobs:
             "ticket_count":len(tickets),
             "total_investment":total,
             "post_result":result_summary,
+            "numerical_candidate_shadow":candidate_shadow_summary,
+            "candidate_krs_shadow":candidate_krs_summary,
             "verified":True
           },separators=(",",":"),ensure_ascii=False))
           PY
