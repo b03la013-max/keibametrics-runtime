@@ -1,0 +1,202 @@
+name: LOCAL Numerical Candidate Same-Day Calibration v0.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-numerical-candidate-sameday-calibration-v02.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download immutable pre-result Signed SOURCE artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p frozen/r07 frozen/r10 frozen/r11 frozen/r12
+          for pair in "10737960551:r07" "10740514941:r10" "10742778746:r11" "10743349134:r12"; do
+            aid="${pair%%:*}"; dir="${pair##*:}"
+            curl -fL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${aid}/zip" -o "${dir}.zip"
+            unzip -q "${dir}.zip" -d "frozen/${dir}"
+            test -s "frozen/${dir}/source_receipt_envelope.json"
+          done
+
+      - name: Freeze v0.1 candidate matrices before outcomes are loaded
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import json,pathlib,copy
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_prediction
+
+          specs=[
+            ("R07","frozen/r07/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R07-FORMAL-R1.json"),
+            ("R10","frozen/r10/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R10-FORMAL-R1.json"),
+            ("R11","frozen/r11/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R11-FORMAL-R1.json"),
+            ("R12","frozen/r12/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R12-FORMAL-R1.json"),
+          ]
+          out=pathlib.Path("calibration_out"); out.mkdir()
+          evidence={}; v01={}; lineage={}
+          for label,sp,rp in specs:
+              env=json.load(open(sp,encoding="utf-8")); source=env["artifact"]
+              req=json.load(open(rp,encoding="utf-8"))
+              e=compile_candidate_evidence(source,req)
+              q=materialize_candidate(copy.deepcopy(e))
+              q=build_candidate_prediction(q)
+              evidence[label]=e
+              v01[label]=q
+              lineage[label]={
+                "race_id":req["race_id"],
+                "source_receipt_sha256":env.get("receipt_sha256"),
+                "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+                "source_freeze_at":source.get("source_freeze_at"),
+                "artifact_source":"IMMUTABLE_PRE_RESULT_SIGNED_SOURCE",
+              }
+          json.dump(evidence,open(out/"evidence_only_preresult.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          json.dump(v01,open(out/"v01_full_preresult.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          json.dump(lineage,open(out/"lineage.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          print("PRE_RESULT_FREEZE_COMPLETE",json.dumps({k:v["candidate_static_prediction"]["ranking"] for k,v in v01.items()},ensure_ascii=False))
+          PY
+
+      - name: Load outcomes only after candidate matrices are frozen
+        run: |
+          cat > calibration_out/outcomes.json <<'JSON'
+          {
+            "R07":{"top3":[1,5,13],"result_available_at":"2026-09-23T16:49:31+09:00"},
+            "R10":{"top3":[4,3,7],"result_available_at":"2026-09-23T18:30:00+09:00"},
+            "R11":{"top3":[4,5,2],"result_available_at":"2026-09-23T19:00:00+09:00"},
+            "R12":{"top3":[1,5,6],"result_available_at":"2026-09-23T19:50:00+09:00"}
+          }
+          JSON
+
+      - name: Calibrate shrunk v0.2 weights
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python runtime/local_candidate_weight_calibrator.py             calibration_out/v01_full_preresult.json             calibration_out/outcomes.json             --out-dir calibration_out/v02
+
+      - name: Compare v0.1 vs v0.2 in-sample and leave-one-race-out
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import copy,json,pathlib,tempfile
+          from local_candidate_weight_calibrator import calibrate
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_prediction
+
+          out=pathlib.Path("calibration_out")
+          evidence=json.load(open(out/"evidence_only_preresult.json",encoding="utf-8"))
+          v01=json.load(open(out/"v01_full_preresult.json",encoding="utf-8"))
+          outcomes=json.load(open(out/"outcomes.json",encoding="utf-8"))
+          reg02=out/"v02/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json"
+          map02=out/"v02/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json"
+
+          def score(pred,top3):
+              ranking=list(map(str,pred["ranking"])); W=set(map(str,pred["W"])); P2=set(map(str,pred["P2"])); P3=set(map(str,pred["P3"]))
+              top3=list(map(str,top3))
+              ranks=[ranking.index(x)+1 for x in top3]
+              return {
+                "winner_rank":ranks[0],"second_rank":ranks[1],"third_rank":ranks[2],
+                "top3_mean_rank":sum(ranks)/3,
+                "winner_capture":top3[0] in W,"p2_capture":top3[1] in P2,"p3_capture":top3[2] in P3,
+                "top3_set_capture":all(x in P3 for x in top3)
+              }
+
+          in_sample={}
+          v02_full={}
+          for label,e in evidence.items():
+              q=materialize_candidate(copy.deepcopy(e),reg02,map02)
+              q=build_candidate_prediction(q)
+              v02_full[label]=q
+              in_sample[label]={
+                "v01":score(v01[label]["candidate_static_prediction"],outcomes[label]["top3"]),
+                "v02":score(q["candidate_static_prediction"],outcomes[label]["top3"]),
+                "v01_ranking":v01[label]["candidate_static_prediction"]["ranking"],
+                "v02_ranking":q["candidate_static_prediction"]["ranking"],
+              }
+
+          loo={}
+          labels=sorted(evidence)
+          for held in labels:
+              train=[x for x in labels if x!=held]
+              cal=calibrate({x:v01[x] for x in train},{x:outcomes[x] for x in train})
+              with tempfile.TemporaryDirectory() as td:
+                  rp=pathlib.Path(td)/"r.json"; mp=pathlib.Path(td)/"m.json"
+                  json.dump(cal["calibrated_registry"],open(rp,"w"),ensure_ascii=False,indent=2)
+                  json.dump(cal["calibrated_mapping"],open(mp,"w"),ensure_ascii=False,indent=2)
+                  q=materialize_candidate(copy.deepcopy(evidence[held]),rp,mp)
+                  q=build_candidate_prediction(q)
+              loo[held]={
+                "train_races":train,
+                "v01":score(v01[held]["candidate_static_prediction"],outcomes[held]["top3"]),
+                "v02_loo":score(q["candidate_static_prediction"],outcomes[held]["top3"]),
+                "v01_ranking":v01[held]["candidate_static_prediction"]["ranking"],
+                "v02_loo_ranking":q["candidate_static_prediction"]["ranking"],
+              }
+
+          def aggregate(rows,key):
+              vals=[x[key] for x in rows]
+              if isinstance(vals[0],bool): return sum(vals)/len(vals)
+              return sum(vals)/len(vals)
+          metrics=["winner_rank","second_rank","third_rank","top3_mean_rank","winner_capture","p2_capture","p3_capture","top3_set_capture"]
+          summary={"in_sample":{},"loo":{}}
+          for name,pairs in [("in_sample",in_sample),("loo",loo)]:
+              left="v01"; right="v02" if name=="in_sample" else "v02_loo"
+              summary[name]["v01"]={m:aggregate([x[left] for x in pairs.values()],m) for m in metrics}
+              summary[name][right]={m:aggregate([x[right] for x in pairs.values()],m) for m in metrics}
+          summary["evidence_class"]="RETROSPECTIVE_SAME_DAY_CALIBRATION / NOT_GENUINE_OOS"
+          summary["production_promotion_evidence"]=False
+          summary["automatic_promotion"]=False
+          json.dump(v02_full,open(out/"v02_full_retrospective.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          json.dump({"per_race":in_sample,"summary":summary["in_sample"]},open(out/"in_sample_comparison.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          json.dump({"per_race":loo,"summary":summary["loo"],"evidence_class":summary["evidence_class"],"production_promotion_evidence":False},open(out/"loo_comparison.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          print("CALIBRATION_COMPARISON",json.dumps(summary,ensure_ascii=False,sort_keys=True))
+          PY
+
+      - name: Safety assertions
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import json
+          report=json.load(open("calibration_out/v02/calibration_report.json",encoding="utf-8"))
+          reg=json.load(open("calibration_out/v02/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",encoding="utf-8"))
+          mp=json.load(open("calibration_out/v02/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json",encoding="utf-8"))
+          assert report["safety"]["production_mutation"] is False
+          assert report["safety"]["exact_canon_formula_change"] is False
+          assert report["safety"]["recency_weight_change"] is False
+          assert report["safety"]["market_into_ability"] is False
+          assert report["safety"]["unknown_semantics_change"] is False
+          assert report["safety"]["automatic_promotion"] is False
+          assert "NON-PRODUCTION" in reg["status"]
+          assert "NON-PRODUCTION" in mp["status"]
+          assert reg["calibration_metadata"]["oos_eligible"] is False
+          assert mp["calibration_metadata"]["oos_eligible"] is False
+          print("SAFETY_ASSERTIONS_PASS")
+          PY
+
+      - name: Persist calibration artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-numerical-candidate-sameday-calibration-v02-${{ github.sha }}
+          path: |
+            calibration_out/v02/*.json
+            calibration_out/in_sample_comparison.json
+            calibration_out/loo_comparison.json
+            calibration_out/lineage.json
+          if-no-files-found: error
+          retention-days: 90
