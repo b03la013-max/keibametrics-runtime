@@ -192,7 +192,7 @@ def materialize_candidate(request: Dict[str, Any],
                            rule_id="LOCAL-NUM-CAND-v0.1-DRS-CLASS-CHANGE",
                            missing_fraction=1.0 if drs_f.get("missing") else 0.0)
 
-        front_count = float((request.get("environment") or {}).get("front_candidate_count") or 0)
+        front_count = float((request.get("candidate_environment") or {}).get("front_candidate_count") or 0)
         field_size = len(runners)
         front_pressure = _clamp(100*front_count/max(1, field_size))
         urp_val = _mean(100-_get(cc, "DRS"), front_pressure)
@@ -276,7 +276,7 @@ def materialize_candidate(request: Dict[str, Any],
 
         uncertainty=100-_get(cc,"DCR")
         divergence=100-pri
-        front_count=float((request.get("environment") or {}).get("front_candidate_count") or 0)
+        front_count=float((request.get("candidate_environment") or {}).get("front_candidate_count") or 0)
         front_pressure=_clamp(100*front_count/max(1,n))
         style_repro=float(_feature(r,"running_style_repro")["score"])
         path_narrowness=100-style_repro
