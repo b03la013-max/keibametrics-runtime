@@ -254,8 +254,34 @@ jobs:
           # Official start time is authoritative for temporal identity.
           ev=source_artifact.get("normalized_evidence") or {}
           official_start=((ev.get("start_time") or {}).get("value") if isinstance(ev.get("start_time"),dict) else None)
+          race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+          if temporal_mode=="FORMAL-PRE-RACE":
+              official_going=((ev.get("track_condition") or {}).get("value") if isinstance(ev.get("track_condition"),dict) else None)
+              request_going=race_meta.get("going") or ((req.get("environment") or {}).get("going") if isinstance(req.get("environment"),dict) else None)
+              going_map={
+                  "good":"良","firm":"良","良":"良",
+                  "muddy":"稍重","slightly_heavy":"稍重","稍重":"稍重",
+                  "heavy":"重","重":"重",
+                  "sloppy":"不良","very_heavy":"不良","不良":"不良",
+              }
+              og=going_map.get(str(official_going).strip().lower(),str(official_going).strip()) if official_going else None
+              rg=going_map.get(str(request_going).strip().lower(),str(request_going).strip()) if request_going else None
+              persist("official_current_state_preflight.json",{
+                  "official_track_condition":official_going,
+                  "normalized_official_track_condition":og,
+                  "request_track_condition":request_going,
+                  "normalized_request_track_condition":rg,
+                  "source_receipt_sha256":source_receipt_sha,
+              })
+              if og and rg and og!=rg:
+                  fail_closed("OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED",{
+                      "official_track_condition":official_going,
+                      "request_track_condition":request_going,
+                      "normalized_official":og,
+                      "normalized_request":rg,
+                      "source_receipt_sha256":source_receipt_sha,
+                  })
           if temporal_mode=="FORMAL-PRE-RACE" and official_start:
-              race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
               race_date=str(req.get("race_date") or race_meta.get("race_date") or race_meta.get("date") or "")
               if race_date:
                   hh,mm=[int(x) for x in str(official_start).split(":")[:2]]
