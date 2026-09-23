@@ -1,0 +1,168 @@
+name: LOCAL Numerical Candidate Frozen Source Replay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/candidate_replay_requests/*.json'
+      - '.github/workflows/local-numerical-candidate-frozen-source-replay.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  frozen-source-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Select replay request
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/candidate_replay_requests/*.json' | tail -1)"
+          if [ -z "$REQ" ]; then
+            REQ="$(find runtime/candidate_replay_requests -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
+          fi
+          test -n "$REQ"
+          echo "request=$REQ" >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable pre-race artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPLAY_REQUEST: ${{ steps.request.outputs.request }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACT_ID="$(python -c 'import json,os; print(json.load(open(os.environ["REPLAY_REQUEST"]))["source_artifact_id"])')"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > frozen.zip
+          mkdir -p frozen
+          unzip -q frozen.zip -d frozen
+          test -f frozen/source_receipt_envelope.json
+
+      - name: Execute source to 63 components to 29 indices to KRS candidate
+        env:
+          REPLAY_REQUEST: ${{ steps.request.outputs.request }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p candidate_out
+          python - <<'PY'
+          import datetime, hashlib, json, os, sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_krs, build_candidate_prediction
+          from local_candidate_numerical_authority import assess as assess_candidate
+          from local_numerical_authority_gate import assess as assess_production
+
+          replay=json.load(open(os.environ["REPLAY_REQUEST"],encoding="utf-8"))
+          request=json.load(open(replay["formal_request_path"],encoding="utf-8"))
+          source_env=json.load(open("frozen/source_receipt_envelope.json",encoding="utf-8"))
+          source=source_env.get("artifact") or {}
+          receipt=source_env.get("receipt") or {}
+
+          def dtparse(s):
+              return datetime.datetime.fromisoformat(str(s).replace("Z","+00:00")).astimezone(datetime.timezone.utc)
+
+          assert receipt.get("phase")=="SOURCE",receipt
+          assert receipt.get("status")=="SOURCE_FROZEN",receipt
+          assert str(receipt.get("race_id"))==str(request.get("race_id")),(receipt.get("race_id"),request.get("race_id"))
+          assert source.get("formal_ready") is True
+          assert source.get("official_runner_universe_sha256")
+          assert source.get("source_snapshot_sha256")
+          assert source_env.get("receipt_sha256")
+
+          scheduled=dtparse(request["scheduled_post_at"])
+          source_time=dtparse(receipt["timestamp"])
+          assert source_time < scheduled,(source_time,scheduled)
+
+          ev=source.get("normalized_evidence") or {}
+          # This replay may occur after the race, but its input artifact must remain strictly pre-race.
+          forbidden=[k for k in ev if str(k).startswith("same_day_r12_")]
+          assert not forbidden,forbidden
+          assert "result" not in json.dumps(source,ensure_ascii=False).lower()
+
+          candidate=compile_candidate_evidence(source,request)
+          candidate=materialize_candidate(candidate)
+          candidate=build_candidate_prediction(candidate)
+          candidate=build_candidate_krs(candidate)
+
+          ca=assess_candidate()
+          pa=assess_production()
+          cs=candidate["candidate_full_numerical_summary"]
+          pred=candidate["candidate_static_prediction"]
+          horses=candidate["candidate_krs_input_data"]["horses"]
+
+          assert ca["implementation_ready"] is True
+          assert ca["production_ready"] is False
+          assert pa["full_numerical_authority"] is False
+          assert cs["required_count"]==len(request["runners"])*29
+          assert cs["calculated_count"]==cs["required_count"]
+          assert cs["unresolved_count"]==0
+          assert cs["full_numerical_complete"] is True
+          assert cs["result_derived_features"]==0
+          assert len(horses)==len(request["runners"])
+          assert all(len(h["hsv"])==30 and len(h["static"])==11 for h in horses)
+
+          rows={}
+          for r in candidate["runners"]:
+              rows[str(r["runner_id"])]={
+                "name":r.get("name"),
+                "component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                "missing_component_count":r.get("candidate_missing_count"),
+                "indices":{k:v["value"] for k,v in r["canonical_components"].items()},
+              }
+
+          summary={
+            "profile":"KM-LOCAL-NUMERICAL-CANDIDATE-FROZEN-SOURCE-REPLAY-v0.1-20260923",
+            "temporal_class":"POST-RACE-FROZEN-PRE-RACE-SOURCE-REPLAY",
+            "race_id":request["race_id"],
+            "source_receipt_sha256":source_env["receipt_sha256"],
+            "source_receipt_timestamp":receipt["timestamp"],
+            "scheduled_post_at":request["scheduled_post_at"],
+            "source_before_post":True,
+            "source_snapshot_sha256":source["source_snapshot_sha256"],
+            "official_runner_universe_sha256":source["official_runner_universe_sha256"],
+            "candidate_authority":ca,
+            "production_authority":pa,
+            "full_numerical_summary":cs,
+            "candidate_prediction":pred,
+            "candidate_krs_input_sha256":candidate["candidate_krs_input_sha256"],
+            "runner_summary":rows,
+            "result_derived_features":0,
+            "result_used":False,
+            "production_mutated":False,
+          }
+          summary["sha256"]=hashlib.sha256(json.dumps(summary,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+
+          Path("candidate_out/candidate_replay_summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          Path("candidate_out/candidate_evidence.json").write_text(json.dumps(candidate["runners"],ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          Path("candidate_out/candidate_krs_input.json").write_text(json.dumps(candidate["candidate_krs_input_data"],ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+
+          print("KM_LOCAL_CANDIDATE_REPLAY="+json.dumps({
+            "race_id":summary["race_id"],
+            "source_receipt_sha256":summary["source_receipt_sha256"],
+            "required":cs["required_count"],
+            "calculated":cs["calculated_count"],
+            "unresolved":cs["unresolved_count"],
+            "ranking":pred["ranking"],
+            "W":pred["W"],"P2":pred["P2"],"P3":pred["P3"],
+            "mean_real_component_coverage":cs["mean_real_component_coverage"],
+            "candidate_sha256":summary["sha256"],
+            "production_ready":False,
+          },ensure_ascii=False,separators=(",",":")))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-numerical-candidate-frozen-source-replay
+          path: candidate_out/
+          retention-days: 90
