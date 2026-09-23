@@ -102,5 +102,14 @@ class LocalProductionClosureTest(unittest.TestCase):
         with self.assertRaises(LocalKRSBridgeError):
             build_krs({"race_id":"X","runners":[self.runner()],"local_krs_bridge":{"bridge_id":"BAD","family":"JRA","runners":{}}})
 
+
+
+    def test_materializer_registry_id_matches_current_authority_mapping_registry(self):
+        import json
+        from pathlib import Path
+        from runtime import local_evidence_to_base_production as m
+        reg=json.loads(Path("mapping/local_base_index_mapping_registry_v1.0_20260922.json").read_text(encoding="utf-8"))
+        self.assertEqual(m.REGISTRY_ID, reg["registry_id"])
+
 if __name__=="__main__":
     unittest.main()
