@@ -332,6 +332,13 @@ jobs:
           assert fc<300 and (fin.get("receipt") or {}).get("status")=="PASS",(fc,fin)
           final_sha=verify_envelope(fin,"FINAL")
 
+          # Persist complete signed envelopes for immutable post-race RESULT linkage.
+          os.makedirs("runtime_out",exist_ok=True)
+          for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelope.json",pre),
+                         ("krs_receipt_envelope.json",run),("final_receipt_envelope.json",fin)):
+              with open(os.path.join("runtime_out",nm),"w",encoding="utf-8") as wf:
+                  json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
           result_summary=None
           post_result=req.get("post_result_after_final")
           if isinstance(post_result,dict):
@@ -419,3 +426,13 @@ jobs:
             "verified":True
           },separators=(",",":"),ensure_ascii=False))
           PY
+
+      - name: Persist signed LOCAL execution envelopes
+        if: always() && hashFiles('runtime_out/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-signed-envelopes-${{ github.sha }}
+          path: runtime_out/*.json
+          if-no-files-found: error
+          retention-days: 90
+
