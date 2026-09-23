@@ -1,0 +1,118 @@
+name: LOCAL Numerical Candidate Retrospective Pre-Result Benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-numerical-candidate-retrospective-benchmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download immutable pre-result source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p frozen/r10 frozen/r11 frozen/r12
+          for pair in "10740514941:r10" "10742778746:r11" "10743349134:r12"; do
+            aid="${pair%%:*}"; dir="${pair##*:}"
+            curl -fL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${aid}/zip" -o "${dir}.zip"
+            unzip -q "${dir}.zip" -d "frozen/${dir}"
+            test -s "frozen/${dir}/source_receipt_envelope.json"
+          done
+
+      - name: Compute candidate predictions before loading outcomes
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_krs,build_candidate_prediction
+
+          specs=[
+            ("R10","frozen/r10/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R10-FORMAL-R1.json"),
+            ("R11","frozen/r11/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R11-FORMAL-R1.json"),
+            ("R12","frozen/r12/source_receipt_envelope.json","runtime/family_requests/URW-20260923-R12-FORMAL-R1.json"),
+          ]
+          out=pathlib.Path("benchmark_out");out.mkdir()
+          preds={}
+          for label,sp,rp in specs:
+              env=json.load(open(sp,encoding="utf-8"))
+              source=env["artifact"]
+              req=json.load(open(rp,encoding="utf-8"))
+              q=compile_candidate_evidence(source,req)
+              q=materialize_candidate(q)
+              q=build_candidate_krs(q)
+              q=build_candidate_prediction(q)
+              assert q["candidate_full_numerical_summary"]["full_numerical_complete"] is True
+              preds[label]={
+                "race_id":req["race_id"],
+                "prediction_frozen_at":source["source_freeze_at"],
+                "source_receipt_sha256":env.get("receipt_sha256"),
+                "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+                "candidate_mapping_id":q["candidate_full_numerical_summary"]["mapping_id"],
+                "candidate_prediction":q["candidate_static_prediction"],
+                "candidate_summary":q["candidate_full_numerical_summary"],
+                "candidate_krs_input_sha256":q["candidate_krs_input_sha256"],
+                "result_derived_feature_count":0,
+              }
+          json.dump(preds,open(out/"candidate_predictions_preresult_only.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          for k,v in preds.items():
+              print(k,v["candidate_prediction"]["ranking"],v["candidate_prediction"]["W"])
+          PY
+
+      - name: Score retrospective benchmark after predictions are frozen
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import json
+          from local_candidate_walkforward import evaluate
+          preds=json.load(open("benchmark_out/candidate_predictions_preresult_only.json",encoding="utf-8"))
+          outcomes={
+            "R10":{"top3":[4,3,7],"result_available_at":"2026-09-23T18:30:00+09:00"},
+            "R11":{"top3":[4,5,2],"result_available_at":"2026-09-23T19:00:00+09:00"},
+            "R12":{"top3":[1,5,6],"result_available_at":"2026-09-23T19:50:00+09:00"},
+          }
+          events=[]
+          for k in ["R10","R11","R12"]:
+              p=preds[k]; o=outcomes[k]
+              events.append({
+                "race_id":p["race_id"],
+                "prediction_frozen_at":p["prediction_frozen_at"],
+                "result_available_at":o["result_available_at"],
+                "candidate_prediction":p["candidate_prediction"],
+                "actual_top3":o["top3"],
+                "candidate_mapping_id":p["candidate_mapping_id"],
+                "source_snapshot_sha256":p["source_snapshot_sha256"],
+                "result_derived_feature_count":0,
+              })
+          score=evaluate(events)
+          score["evidence_class"]="RETROSPECTIVE_PRE_RESULT_ARTIFACT_BENCHMARK"
+          score["oos_eligible"]=False
+          score["promotion_evidence"]=False
+          score["reason"]="Candidate rules were authored after these race outcomes existed; immutable pre-result sources prevent feature leakage but do not make this true OOS."
+          json.dump(score,open("benchmark_out/retrospective_score.json","w"),ensure_ascii=False,indent=2,sort_keys=True)
+          print("RETROSPECTIVE_SCORE",json.dumps({k:score[k] for k in ["event_count","winner_capture_rate","p2_capture_rate","p3_capture_rate","top3_set_capture_rate","mean_winner_rank","mean_top3_mean_rank"]},ensure_ascii=False))
+          PY
+
+      - name: Persist retrospective benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-numerical-candidate-retrospective-benchmark-${{ github.sha }}
+          path: benchmark_out/*.json
+          if-no-files-found: error
+          retention-days: 90
