@@ -8,7 +8,7 @@ from post_result_learning import build_post_result_review, build_learning_state
 from minimum_efficient_coverage import validate_mec_plan, MEC_PROFILE
 from capital_policy import PROFILE as CAPITAL_PROFILE
 
-APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.3-20260923-TERMINAL-INTEGRITY"
+APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
 ENGINE_PATH=os.environ.get("KM_LOCAL_ENGINE_PATH","/opt/km/KRS-Engine_v1.1.0_PORTABLE.py")
 PARAM_PATH=os.environ.get("KM_LOCAL_PARAM_PATH","/opt/km/parameter_map_v0.1-provisional.json")
@@ -42,12 +42,20 @@ def public_b64():
     return base64.b64encode(b).decode()
 
 def signed_receipt(phase:str,race_id:str,status:str,artifact:Dict[str,Any],errors=None):
+    runtime_hashes={
+       "legacy_runtime_app_sha256":sha_file(__file__),
+       "runtime_wrapper_sha256":sha_file("/opt/km/app_v15.py") if pathlib.Path("/opt/km/app_v15.py").exists() else None,
+       "source_acquisition_sha256":sha_file("/opt/km/source_acquisition.py") if pathlib.Path("/opt/km/source_acquisition.py").exists() else None,
+       "nar_source_manifest_sha256":sha_file("/opt/km/nar_source_manifest.py") if pathlib.Path("/opt/km/nar_source_manifest.py").exists() else None,
+       "nar_runner_universe_sha256":sha_file("/opt/km/nar_runner_universe.py") if pathlib.Path("/opt/km/nar_runner_universe.py").exists() else None,
+    }
     r={"schema":RECEIPT_SCHEMA,"runtime_revision":APP_VERSION,"family":FAMILY,
        "phase":phase,"race_id":race_id,"status":status,"errors":errors or [],
        "artifact_sha256":sha_obj(artifact),"timestamp":utcnow(),
        "engine_version":"1.1.0","engine_sha256":ENGINE_SHA,
        "parameter_map_version":"0.1-provisional","parameter_map_sha256":PARAM_SHA,
-       "calibration_status":"PROVISIONAL_UNCALIBRATED","github_revision":GIT_REV}
+       "calibration_status":"PROVISIONAL_UNCALIBRATED","github_revision":GIT_REV,
+       "runtime_hashes":runtime_hashes}
     rb=jdump(r)
     return {"receipt":r,"receipt_sha256":hashlib.sha256(rb).hexdigest(),
             "signature":base64.b64encode(private_key().sign(rb)).decode(),
