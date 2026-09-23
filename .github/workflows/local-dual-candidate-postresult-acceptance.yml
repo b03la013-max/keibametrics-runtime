@@ -1,0 +1,200 @@
+name: LOCAL Dual Candidate Post-Result Closed-Loop Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/local-dual-candidate-postresult-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Download immutable R12 pre-result Signed SOURCE
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json"             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/10743349134/zip" -o frozen.zip
+          mkdir -p frozen acceptance_out
+          unzip -q frozen.zip -d frozen
+          test -s frozen/source_receipt_envelope.json
+
+      - name: Execute dual candidate and post-result closed-loop acceptance
+        env:
+          PYTHONPATH: runtime
+        run: |
+          python - <<'PY'
+          import copy,hashlib,json,pathlib,urllib.request,urllib.error
+          from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_fullnumerical_candidate import materialize_candidate
+          from local_krs_bridge_candidate import build_candidate_prediction,build_candidate_krs
+          from local_candidate_postresult import evaluate_dual
+          from local_candidate_dual_oos_tracker import build_measurement,evaluate_measurements
+          from family_runtime_contract import load_contracts,resolve_family_runtime
+
+          env=json.load(open("frozen/source_receipt_envelope.json",encoding="utf-8"))
+          source=env["artifact"]
+          req=json.load(open("runtime/family_requests/URW-20260923-R12-FORMAL-R1.json",encoding="utf-8"))
+          cal=json.load(open("runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json",encoding="utf-8"))
+          rid=req["race_id"]
+          assert rid in set(cal["training_race_ids"])
+          assert env["receipt"]["phase"]=="SOURCE"
+          assert env["receipt"]["race_id"]==rid
+
+          evidence=compile_candidate_evidence(source,req)
+          arms={}
+          specs={
+            "v0.1":(None,None),
+            "v0.2":(
+              "mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
+              "mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json"
+            )
+          }
+          def compact(label,q):
+              return {
+                "label":label,
+                "production_authority":False,
+                "source_receipt_sha256":env.get("receipt_sha256"),
+                "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+                "candidate_full_numerical_summary":q.get("candidate_full_numerical_summary"),
+                "candidate_static_prediction":q.get("candidate_static_prediction"),
+                "candidate_krs_input_sha256":q.get("candidate_krs_input_sha256"),
+              }
+
+          full={}
+          for label,(rp,mp) in specs.items():
+              q=materialize_candidate(copy.deepcopy(evidence)) if rp is None else materialize_candidate(copy.deepcopy(evidence),rp,mp)
+              q=build_candidate_prediction(q)
+              q=build_candidate_krs(q)
+              assert q["candidate_full_numerical_summary"]["required_count"]==348
+              assert q["candidate_full_numerical_summary"]["calculated_count"]==348
+              assert q["candidate_full_numerical_summary"]["unresolved_count"]==0
+              full[label]=q
+              arms[label]=compact(label,q)
+
+          dual={
+            "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_DUAL_SHADOW",
+            "production_authority":False,
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":source.get("source_snapshot_sha256"),
+            "arms":arms,
+            "comparison":{
+              "same_source":True,"same_runner_universe":True,"same_result_information":"NONE_PRE_RESULT",
+              "v0.1_ranking":arms["v0.1"]["candidate_static_prediction"]["ranking"],
+              "v0.2_ranking":arms["v0.2"]["candidate_static_prediction"]["ranking"],
+            },
+            "policy":{"production_mutation":False,"automatic_promotion":False}
+          }
+          dual["sha256"]=hashlib.sha256(json.dumps(dual,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+
+          resolved=resolve_family_runtime(req,load_contracts())
+          endpoint=resolved["external_endpoint"]
+          seed=2026999912
+          runs=5000
+          def call(path,payload,timeout=600):
+              data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              rq=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          summaries={}
+          envelopes={}
+          for label,q in full.items():
+              inp=copy.deepcopy(q["candidate_krs_input_data"])
+              krid=rid+"-POSTRESULT-ACCEPT-"+label.upper()
+              inp["race"]["race_id"]=krid
+              inp["simulation"]["run_count"]=runs
+              inp["simulation"]["master_seed"]=seed
+              code,res=call("/krs/execute",{"family_id":"LOCAL","race_id":krid,"krs_input_data":inp,"run_count":runs,"seed":seed})
+              assert code<300,(label,code,res)
+              assert (res.get("receipt") or {}).get("status")=="EXECUTED"
+              vc,v=call("/verify",res,60)
+              assert vc<300 and v.get("valid") is True
+              envelopes[label]=res
+              summaries[label]={
+                "status":"EXECUTED","receipt_sha256":res.get("receipt_sha256"),
+                "actual_run_count":(res.get("artifact") or {}).get("actual_run_count"),
+                "pre_post_complete":True,
+                "oos_temporal_eligible":True,
+                "paired_seed":seed,
+                "production_authority":False
+              }
+          dual_krs={"v0.1":summaries["v0.1"],"v0.2":summaries["v0.2"],"paired_run_count_seed":True}
+
+          post=evaluate_dual(
+            dual,[1,5,6],
+            result_available_at="2026-09-23T19:50:00+09:00",
+            race_id=rid,dual_krs_summary=dual_krs,
+            calibration_training_race_ids=cal["training_race_ids"],
+            dual_krs_envelopes=envelopes
+          )
+          assert post["arms"]["v0.2"]["candidate_is_calibration_training_race"] is True
+          assert post["arms"]["v0.2"]["candidate_oos_event_eligible"] is False
+          assert post["candidate_krs_postresult"]["v0.1"] is not None
+          assert post["candidate_krs_postresult"]["v0.2"] is not None
+
+          result_req={
+            "race_id":rid,
+            "source":"USER_PROVIDED_KEIBABOOK",
+            "official_result_verified":False,
+            "official_result_verification_ref":None
+          }
+          m=build_measurement(post,result_req)
+          s=evaluate_measurements([m])
+          assert m["promotion_measurement_admissible"] is False
+          assert s["promotion_admissible_races"]==0
+          assert s["remaining_to_r30"]==30
+          assert s["automatic_promotion"] is False
+
+          out={
+            "profile":"KM-LOCAL-DUAL-CANDIDATE-POSTRESULT-CLOSED-LOOP-ACCEPTANCE-20260924-R1",
+            "status":"PASS",
+            "evidence_class":"RETROSPECTIVE_WIRING_ACCEPTANCE_NOT_OOS",
+            "race_id":rid,
+            "training_race_exclusion_verified":True,
+            "result_authority_hold_verified":True,
+            "dual_krs_5000_each_verified":True,
+            "candidate_krs_postresult_verified":True,
+            "r30_admission":0,
+            "remaining_to_r30":30,
+            "automatic_promotion":False,
+            "production_effect":"NONE",
+            "measurement":m,
+            "tracker_status":s
+          }
+          out["sha256"]=hashlib.sha256(json.dumps(out,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          pathlib.Path("acceptance_out/closed_loop_acceptance.json").write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          pathlib.Path("acceptance_out/v01_krs_envelope.json").write_text(json.dumps(envelopes["v0.1"],ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          pathlib.Path("acceptance_out/v02_krs_envelope.json").write_text(json.dumps(envelopes["v0.2"],ensure_ascii=False,indent=2,sort_keys=True),encoding="utf-8")
+          print("CLOSED_LOOP_ACCEPTANCE="+json.dumps({
+            "status":out["status"],"sha256":out["sha256"],"r30_admission":0,
+            "v01_krs":summaries["v0.1"]["receipt_sha256"],
+            "v02_krs":summaries["v0.2"]["receipt_sha256"]
+          },ensure_ascii=False,separators=(",",":")))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: km-local-dual-candidate-postresult-closed-loop-${{ github.sha }}
+          path: acceptance_out/
+          if-no-files-found: error
+          retention-days: 90
