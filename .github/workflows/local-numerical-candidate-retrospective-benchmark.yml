@@ -55,8 +55,8 @@ jobs:
               req=json.load(open(rp,encoding="utf-8"))
               q=compile_candidate_evidence(source,req)
               q=materialize_candidate(q)
-              q=build_candidate_krs(q)
               q=build_candidate_prediction(q)
+              q=build_candidate_krs(q)
               assert q["candidate_full_numerical_summary"]["full_numerical_complete"] is True
               preds[label]={
                 "race_id":req["race_id"],
