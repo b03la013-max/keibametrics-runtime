@@ -1,0 +1,127 @@
+name: KM LOCAL Result From Signed Final
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/family_result_requests/*.json'
+  workflow_dispatch:
+    inputs:
+      request_path:
+        description: 'Result request JSON path'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  result-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve signed FINAL and execute RESULT gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REQ="${{ inputs.request_path }}"
+          if [ -z "$REQ" ]; then
+            REQ="$(git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" | grep '^runtime/family_result_requests/.*\.json$' | tail -1)"
+          fi
+          test -n "$REQ"
+          python - "$REQ" <<'PY'
+          import json,os,subprocess,sys,urllib.request
+          req=json.load(open(sys.argv[1],encoding="utf-8"))
+          run_id=int(req["source_run_id"])
+          artifact_name=req["artifact_name"]
+          os.makedirs("runtime_result_in",exist_ok=True)
+          subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
+          fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
+          fin=json.load(open(fin_path,encoding="utf-8"))
+          rid=req["race_id"]
+          endpoint=req.get("external_endpoint") or "https://witnessstrictimage-production.up.railway.app"
+
+          tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
+          top3=[int(x) for x in req["finish_order"][:3]]
+          payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
+          total_investment=sum(int(t.get("stake") or 0) for t in tickets)
+          total_return=0
+          winning=[]
+          by_type={}
+          for t in tickets:
+              bt=str(t.get("bet_type") or "").upper()
+              sel=[int(x) for x in (t.get("selection") or [])]
+              st=int(t.get("stake") or 0)
+              b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
+              b["investment"]+=st
+              hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
+              if hit and bt in payouts:
+                  r=st*payouts[bt]//100
+                  total_return+=r; b["return"]+=r
+                  win={"bet_type":bt,"selection":sel,"stake":st,"payout_per_100":payouts[bt],"return":r}
+                  winning.append(win); b["wins"].append(win)
+
+          result_payload={
+            "family_id":"LOCAL","race_id":rid,
+            "final_receipt":fin,
+            "official_result":{
+              "finish_order":[int(x) for x in req["finish_order"]],
+              "result_available_at":req["result_available_at"],
+              "source":req.get("source") or "USER_SUPPLIED_RESULT",
+              "payouts":payouts
+            },
+            "result_available_at":req["result_available_at"],
+            "settlement":{
+              "status":"COMPLETE",
+              "investment":total_investment,
+              "settled_investment":total_investment,
+              "return":total_return,
+              "winning_tickets":winning
+            },
+            "pfs_authority":req.get("pfs_authority") or "FROZEN-RECOMMENDATION"
+          }
+          def post(path,payload):
+              data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              rq=urllib.request.Request(endpoint+path,data=data,headers={"Content-Type":"application/json"},method="POST")
+              with urllib.request.urlopen(rq,timeout=180) as resp:
+                  return json.loads(resp.read().decode())
+          res=post("/result",result_payload)
+          if (res.get("receipt") or {}).get("status")!="PASS":
+              raise SystemExit("RESULT_NOT_PASS:"+json.dumps(res,ensure_ascii=False))
+          ver=post("/verify",res)
+          if not ver.get("verified"):
+              raise SystemExit("RESULT_SIGNATURE_VERIFY_FAILED")
+
+          art=res.get("artifact") or {}
+          os.makedirs("runtime_out",exist_ok=True)
+          json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+          summary={
+            "race_id":rid,
+            "result_receipt":res.get("receipt_sha256"),
+            "verified":True,
+            "investment":total_investment,
+            "return":total_return,
+            "profit_loss":total_return-total_investment,
+            "pfs":(None if total_investment==0 else round(total_return/total_investment*100,6)),
+            "winning_tickets":winning,
+            "by_type":by_type,
+            "failure_localization":art.get("failure_localization"),
+            "automatic_post_result_review":art.get("automatic_post_result_review"),
+            "learning_event":art.get("learning_event")
+          }
+          json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+          print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
+          PY
+
+      - name: Persist signed RESULT envelope
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-result-${{ github.sha }}
+          path: runtime_out/*.json
+          if-no-files-found: error
+          retention-days: 90
