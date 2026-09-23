@@ -9,6 +9,8 @@ on:
       - 'runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json'
       - 'tests/test_local_candidate_postresult_dual.py'
       - 'tests/test_local_candidate_dual_oos_tracker.py'
+      - 'tests/test_local_dual_shadow_workflow_contract.py'
+      - '.github/workflows/km-family-non-jra-formal-runner.yml'
       - '.github/workflows/km-local-result-from-signed-final.yml'
       - '.github/workflows/local-dual-candidate-oos-regression.yml'
   workflow_dispatch:
@@ -30,4 +32,5 @@ jobs:
       - name: Run dual-candidate post-result and OOS regression
         run: |
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q             tests/test_local_candidate_postresult_dual.py             tests/test_local_candidate_dual_oos_tracker.py
+          python -m pytest -q             tests/test_local_candidate_postresult_dual.py             tests/test_local_candidate_dual_oos_tracker.py \
+            tests/test_local_dual_shadow_workflow_contract.py
