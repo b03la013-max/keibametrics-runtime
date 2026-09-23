@@ -17,7 +17,7 @@ WEIGHTS={
 "DCR":{"official_recent_coverage":25,"same_venue_distance_comparability":20,"training_comment_trial":15,"bodyweight_range_coverage":15,"same_day_gci_coverage":15,"late_odds_changes_coverage":10},
 "NCI":{"current_class":20,"previous_class":15,"recent_opponent_class":20,"race_set_level":15,"class_change_pressure":10,"transfer_class":10,"class_relative_time":10},
 }
-REGISTRY_ID="LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.1-20260923"
+REGISTRY_ID="LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922"
 TERMINAL_STATUSES={"CALCULATED","RULED-NEUTRAL","RULED-HOLD","NOT-APPLICABLE"}
 RULE_BOUND_INDICES={
 "EVI/CEV","CCI","TRI","PRI","OPI-V","DRS","URP","HCS","ZAI-WIN","ZAI-PLACE",
