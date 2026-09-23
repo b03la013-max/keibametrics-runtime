@@ -96,6 +96,6 @@ def test_formal_active_runner_universe_requires_official_odds_source():
     })
     odds=next(x for x in m["sources"] if "ODDS-TANFUKU" in x["source_id"])
     assert odds["required"] is True
-    assert odds["source_class"]=="OFFICIAL_TIMESTAMPED_ODDS"
+    assert odds["source_class"]=="OFFICIAL_ACTIVE_BETTING_UNIVERSE"
     assert m["source_policy"]["odds"]=="REQUIRED_FOR_ACTIVE_RUNNER_UNIVERSE"
     assert m["source_policy"]["runner_universe_model"]=="DECLARED_RACE_CARD_PLUS_ACTIVE_OFFICIAL_BETTING_UNIVERSE"
