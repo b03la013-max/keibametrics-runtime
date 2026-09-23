@@ -168,3 +168,51 @@ def test_walkforward_enforces_temporal_order_and_never_auto_promotes():
     assert out["promotion_review_ready"] is False
     assert out["automatic_promotion"] is False
     assert out["status"]=="WAITING_R30"
+
+
+def test_v02_calibrated_arm_is_separate_from_v01_and_nonproduction():
+    source,request=fixture()
+    e=compile_candidate_evidence(source,request)
+
+    n1=materialize_candidate(copy.deepcopy(e))
+    p1=build_candidate_prediction(n1)
+    n2=materialize_candidate(
+        copy.deepcopy(e),
+        ROOT/"mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
+        ROOT/"mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json",
+    )
+    p2=build_candidate_prediction(n2)
+
+    assert n1["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923"
+    assert n2["candidate_full_numerical_summary"]["mapping_id"]=="LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED"
+    assert "candidate_role_weight_profile" not in n1
+    assert isinstance(n2.get("candidate_role_weight_profile"),dict)
+
+    assert all(
+        row["role_weight_modes"]["W"]["mode"]=="EQUAL_BASELINE"
+        for row in p1["candidate_static_prediction"]["runner_scores"]
+    )
+    assert all(
+        row["role_weight_modes"]["W"]["mode"]=="CALIBRATED_ROLE_WEIGHTS"
+        for row in p2["candidate_static_prediction"]["runner_scores"]
+    )
+    assert p1["candidate_static_prediction"]["production_authority"] is False
+    assert p2["candidate_static_prediction"]["production_authority"] is False
+
+    b1=build_candidate_krs(p1)
+    b2=build_candidate_krs(p2)
+    assert len(b1["candidate_krs_input_data"]["horses"])==len(b2["candidate_krs_input_data"]["horses"])==3
+    assert b1["candidate_krs_input_data"]["keibametrics_input_authority"]["production_authority"] is False
+    assert b2["candidate_krs_input_data"]["keibametrics_input_authority"]["production_authority"] is False
+    assert b1["candidate_krs_input_sha256"]!=b2["candidate_krs_input_sha256"]
+
+
+def test_v02_calibration_summary_is_non_oos_and_no_auto_promotion():
+    summary=json.load(open(ROOT/"runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json",encoding="utf-8"))
+    assert summary["production_authority"] is False
+    assert summary["automatic_promotion"] is False
+    assert "NOT_GENUINE_OOS" in summary["evidence_class"]
+    assert summary["race_count"]==4
+    assert summary["safety"]["production_mutation"] is False
+    assert summary["safety"]["same_race_prediction_rewrite"] is False
+    assert summary["leave_one_race_out"]["winner_rank"]==4.25
