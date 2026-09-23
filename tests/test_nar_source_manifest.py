@@ -80,3 +80,22 @@ def test_same_day_result_fields_are_race_scoped():
     assert "same_day_r01_result_tables" in f1
     assert "same_day_r02_result_tables" in f2
     assert f1.isdisjoint(f2)
+
+
+def test_formal_active_runner_universe_requires_official_odds_source():
+    m=build_local_nar_manifest({
+        "family_id":"LOCAL",
+        "race_id":"URW-20260923-R08",
+        "venue_id":"URW",
+        "race_date":"2026-09-23",
+        "race_no":8,
+        "prediction_cutoff":"2026-09-23T17:03:00+09:00",
+        "include_same_day_results":True,
+        "include_odds":True,
+        "require_active_runner_universe":True,
+    })
+    odds=next(x for x in m["sources"] if "ODDS-TANFUKU" in x["source_id"])
+    assert odds["required"] is True
+    assert odds["source_class"]=="OFFICIAL_TIMESTAMPED_ODDS"
+    assert m["source_policy"]["odds"]=="REQUIRED_FOR_ACTIVE_RUNNER_UNIVERSE"
+    assert m["source_policy"]["runner_universe_model"]=="DECLARED_RACE_CARD_PLUS_ACTIVE_OFFICIAL_BETTING_UNIVERSE"
