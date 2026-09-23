@@ -676,7 +676,7 @@ jobs:
                   cand_input=copy.deepcopy(q.get("candidate_krs_input_data") or {})
                   if isinstance(cand_input.get("race"),dict):
                       cand_input["race"]["race_id"]=candidate_rid
-                  cand_runs=max(1000,min(5000,int(req.get("candidate_shadow_run_count") or 5000)))
+                  cand_runs=max(5000,min(20000,int(req.get("candidate_shadow_run_count") or 5000)))
                   cand_seed=int(req.get("seed") or 1)+900001
                   cand_input.setdefault("simulation",{})["run_count"]=cand_runs
                   cand_input["simulation"]["master_seed"]=cand_seed
@@ -716,11 +716,18 @@ jobs:
               persist("candidate_krs_v02_shadow_summary.json",candidate_krs_v02_summary)
               stage("CANDIDATE_KRS_SHADOW_V02",**candidate_krs_v02_summary)
           if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None:
+              paired_ok=bool(
+                  isinstance(candidate_krs_summary,dict) and isinstance(candidate_krs_v02_summary,dict)
+                  and candidate_krs_summary.get("status")=="EXECUTED"
+                  and candidate_krs_v02_summary.get("status")=="EXECUTED"
+                  and candidate_krs_summary.get("actual_run_count")==candidate_krs_v02_summary.get("actual_run_count")
+                  and candidate_krs_summary.get("paired_seed")==candidate_krs_v02_summary.get("paired_seed")
+              )
               persist("candidate_krs_dual_shadow_summary.json",{
                   "production_authority":False,
                   "v0.1":candidate_krs_summary,
                   "v0.2":candidate_krs_v02_summary,
-                  "paired_run_count_seed":True,
+                  "paired_run_count_seed":paired_ok,
                   "automatic_promotion":False,
               })
 
