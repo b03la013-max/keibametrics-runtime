@@ -3,7 +3,7 @@
   "review_revision": "DAILY_FORMAL_REVIEW_REV6",
   "date": "2026-09-24",
   "venue": "URW",
-  "generated_at": "2026-09-24T22:04:26+09:00",
+  "generated_at": "2026-09-24T22:24:51+09:00",
   "scope": {
     "keibametrics_activations": 4,
     "activation_artifacts": [
@@ -32,7 +32,7 @@
         "empirical_prediction_pfs_inclusion": true
       }
     ],
-    "note": "R4/R5 are correctness/bridge acceptance artifacts and are excluded from Prediction/PFS outcome denominators. R10/R12 are the settled unknown-future empirical sample."
+    "note": "R4 is a real pre-race Formal Bridge Acceptance and is reviewed/settled operationally, but remains excluded from the ordinary unknown-future Production Prediction/PFS denominator. R10/R12 are the ordinary settled unknown-future empirical sample. R5 is SOURCE_ONLY."
   },
   "review_time_current_authority": {
     "family_current": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R10",
@@ -56,29 +56,29 @@
   "dynamic_measurement_state": {
     "r4": {
       "profile": "KM-FAMILY-MEC-R4-FORWARD-OOS-TRACKER-v1.0-20260922",
-      "eligible": 2,
+      "eligible": 3,
       "target": 30,
-      "remaining": 28,
+      "remaining": 27,
       "promotion": "LOCAL REJECTED",
       "automatic_promotion": false,
-      "sha256": "be364cae68584647984de25c4ac08399c595d01a802a8313b658d5a4ea97b6e6"
+      "sha256": "95559a425550a48795bbba65880adb920c0ea8a5c4e55b73c1b378d0ba288365"
     },
     "r5": {
       "profile": "KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924",
-      "eligible": 2,
+      "eligible": 3,
       "target": 30,
-      "remaining": 28,
+      "remaining": 27,
       "automatic_promotion": false,
-      "sha256": "acec77be8de407c7d785da0f71c47099ab90f35bebb7ca545d8b1aef74964017"
+      "sha256": "95559a425550a48795bbba65880adb920c0ea8a5c4e55b73c1b378d0ba288365"
     },
     "numerical_candidate": {
       "profile": "KM-LOCAL-NUMERICAL-CANDIDATE-DUAL-OOS-TRACKER-v0.1-20260923",
-      "promotion_admissible": 2,
+      "promotion_admissible": 3,
       "held": 0,
       "target": 30,
-      "remaining": 28,
+      "remaining": 27,
       "automatic_promotion": false,
-      "sha256": "1e976bcf64a93f2a401bfbc48d3bc70093489e877d0df36d08d6add6f07c27d5"
+      "sha256": "5fc676772bf169e6907dacae68b14154d901c26929e666cf8886ed58da611418"
     },
     "precedence_note": "Dynamic tracker artifacts override static current-authority snapshot counts."
   },
@@ -109,8 +109,26 @@
     "source_handoff_failure_count": 0,
     "runner_universe_failure_count": 0,
     "krs_failure_count": 0,
-    "settlement_pending_formal_artifacts": 1,
-    "settlement_pending_note": "R4 bridge acceptance has no Result settlement; R5 is SOURCE_ONLY and not a settlement-pending Formal prediction."
+    "settlement_pending_formal_artifacts": 0,
+    "settlement_pending_note": "No pending settlement among R4/R10/R12. R4 is settled as acceptance-class and is not credited into ordinary empirical Prediction/PFS.",
+    "acceptance_class_R04_settlement": {
+      "investment": 2700,
+      "return": 2480,
+      "profit_loss": -220,
+      "pfs": 91.851852,
+      "hit": true,
+      "hit_but_loss": true,
+      "result_receipt": "7ff0d6bc801fa0c15c6586b34257498737ec51c1042214cf943ed6f6ec5a99f4",
+      "empirical_prediction_pfs_credit": false
+    },
+    "operational_all_full_formal_settlement": {
+      "races": 3,
+      "investment": 13300,
+      "return": 2480,
+      "profit_loss": -10820,
+      "pfs": 18.646616541,
+      "note": "Operational diagnostic only; do not substitute for empirical Production PFS because R4 is Acceptance-class."
+    }
   },
   "source_runner_result": {
     "source_first_full_completion": "2/2 explicit full SOURCE-first empirical races (R10,R12)",
@@ -152,10 +170,11 @@
     "formal_pre_race_completion_rate_pct": 100,
     "deadline_failures": 0,
     "post_start_replays": 0,
-    "result_receipts": "R10/R12 verified after NAR-official Result Authority R2; R4 no result settlement.",
+    "result_receipts": "R4/R10/R12 official-result settlement complete; R10/R12 ordinary empirical, R4 acceptance-class.",
     "official_result_authority_update": {
+      "R04": "NAR official result verified; Result R1 SUCCESS, run 36004226533.",
       "R10": "NAR official result verified; Result R2 SUCCESS, run 36003078391.",
-      "R12": "NAR official result verified; first R2 run hit post-result ledger git conflict only; retry SUCCESS, run 36003213969."
+      "R12": "NAR official result verified; candidate/result authority is VERIFIED in current measurement state; prior concurrent persistence conflict was measurement-workflow-only."
     }
   },
   "bet_type_result": {
@@ -250,72 +269,132 @@
       "pfs": 0
     },
     "r4": {
-      "eligible": 2,
-      "remaining": 28,
-      "production_baseline_pfs": 0,
+      "eligible": 3,
+      "remaining": 27,
+      "production_baseline": {
+        "investment": 13300,
+        "return": 2480,
+        "pfs": 18.646616541
+      },
       "core_only": {
-        "investment": 5000,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 52.830189
+        "investment": 5800,
+        "return": 1420,
+        "pfs": 24.482758621,
+        "capital_reduction_pct": 56.390977
+      },
+      "core_protection": {
+        "investment": 6300,
+        "return": 1420,
+        "pfs": 22.53968254,
+        "capital_reduction_pct": 52.631579
       },
       "cpss_top3": {
-        "investment": 5200,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 50.943396
+        "investment": 6600,
+        "return": 1420,
+        "pfs": 21.515151515,
+        "capital_reduction_pct": 50.37594
       },
       "cpss_all": {
-        "investment": 5800,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 45.283019
+        "investment": 7200,
+        "return": 1420,
+        "pfs": 19.722222222,
+        "capital_reduction_pct": 45.864662
       },
-      "conclusion": "All arms missed. Lower capital only reduced absolute loss; it did not recover the missing outcome structure."
+      "largest_win_dependency": "100% of positive return comes from R04 acceptance-class result; excluding R04 return=0.",
+      "conclusion": "Three tracker-admitted races. Capital reduction changes loss size/PFS but does not establish prediction improvement; LOCAL R4 Promotion remains REJECTED."
     },
     "r5": {
-      "eligible": 2,
-      "remaining": 28,
-      "production_baseline_pfs": 0,
+      "eligible": 3,
+      "remaining": 27,
+      "production_baseline": {
+        "investment": 13300,
+        "return": 2480,
+        "pfs": 18.646616541,
+        "max_drawdown": 10820
+      },
       "set_only": {
-        "investment": 5600,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 47.169811
+        "investment": 7000,
+        "return": 1060,
+        "pfs": 15.142857143,
+        "max_drawdown": 5940,
+        "capital_reduction_pct": 47.368421
       },
       "set_pair": {
-        "investment": 8200,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 22.641509
+        "investment": 10500,
+        "return": 2480,
+        "pfs": 23.619047619,
+        "max_drawdown": 8200,
+        "capital_reduction_pct": 21.052632
       },
       "exact_top3": {
-        "investment": 9200,
-        "return": 0,
-        "pfs": 0,
-        "capital_reduction_pct": 13.207547
+        "investment": 12100,
+        "return": 2480,
+        "pfs": 20.495867769,
+        "max_drawdown": 9620,
+        "capital_reduction_pct": 9.022556
       },
-      "conclusion": "All arms missed, including wider exact arms. Ticket width/compression alone does not solve today's winner-role/order failure."
+      "exact_top4": {
+        "investment": 15300,
+        "return": 10230,
+        "pfs": 66.862745098,
+        "max_drawdown": 11200,
+        "capital_reduction_pct": -15.037594
+      },
+      "exact_top5": {
+        "investment": 19500,
+        "return": 10230,
+        "pfs": 52.461538462,
+        "max_drawdown": 14500,
+        "capital_reduction_pct": -46.616541
+      },
+      "exact_top6": {
+        "investment": 24100,
+        "return": 10230,
+        "pfs": 42.44813278,
+        "max_drawdown": 18200,
+        "capital_reduction_pct": -81.203008
+      },
+      "exact_top7": {
+        "investment": 27100,
+        "return": 10230,
+        "pfs": 37.749077491,
+        "max_drawdown": 21200,
+        "capital_reduction_pct": -103.759398
+      },
+      "exact_top8": {
+        "investment": 29700,
+        "return": 10230,
+        "pfs": 34.444444444,
+        "max_drawdown": 23800,
+        "capital_reduction_pct": -123.308271
+      },
+      "largest_win_dependency": "100% of every positive R5-arm return comes from R04 acceptance-class result; R10/R12 all arms returned 0.",
+      "conclusion": "3/30 only. The apparent Top4+ PFS gain is single-race dependent and is not promotion evidence. Automatic promotion remains FALSE."
     },
     "semantic_status_correctness": {
-      "issue": "TAIL_PROTECTED appears in R10/R12 role_registry but is not a canonical active status in current MEC/validator role sets.",
-      "observed_effect": "Some globally declared P3 roles were not recognized by the MEC active-role parser.",
-      "pfs_materiality": "UNKNOWN / NOT PROVEN for the actual R10/R12 Top3, because the corresponding correct material ordered pair was independently soft-excluded upstream (R10 10>3; R12 6>2).",
-      "action_class": "CORRECTNESS / IMPLEMENTATION REPAIR before next Formal race",
+      "issue": "R12 froze Global P3 runners with legacy status TAIL_PROTECTED, which current MEC active-role parsing did not recognize.",
+      "observed_effect": "Global P3 semantic transport could silently omit those runners before Tail-set preservation.",
+      "pfs_materiality": "Secondary material correctness defect; same-race success is not credited retroactively.",
+      "action_class": "CORRECTNESS / IMPLEMENTATION REPAIR",
+      "repair": {
+        "code_commit": "8852c6403c28ec833697a712628691ad73720711",
+        "test_commit": "215c134dfac0563949bc79255ddbb7e04fa0bb84",
+        "acceptance": "PASS"
+      },
       "nonretroactive": true
     }
   },
   "numerical_candidate_result": {
-    "tracker_admissible": 2,
+    "tracker_admissible": 3,
     "held": 0,
-    "remaining_to_r30": 28,
+    "remaining_to_r30": 27,
     "v01": {
       "winner_capture_rate": 0,
       "p2_capture_rate": 1,
       "p3_capture_rate": 1,
       "top3_set_capture_rate": 1,
-      "mean_winner_rank": 11,
-      "mean_top3_mean_rank": 7.333333333333334,
+      "mean_winner_rank": 8.666666667,
+      "mean_top3_mean_rank": 6,
       "krs_unique_rescue_rate": 0
     },
     "v02": {
@@ -323,8 +402,8 @@
       "p2_capture_rate": 1,
       "p3_capture_rate": 1,
       "top3_set_capture_rate": 1,
-      "mean_winner_rank": 11,
-      "mean_top3_mean_rank": 7.333333333333334,
+      "mean_winner_rank": 8.666666667,
+      "mean_top3_mean_rank": 6,
       "krs_unique_rescue_rate": 0
     },
     "delta_v02_minus_v01": "ZERO on all measured prediction metrics",
@@ -333,17 +412,24 @@
   },
   "race_scorecards": {
     "R04": {
-      "class": "ACCEPTANCE",
+      "class": "ACCEPTANCE / FORMAL-PRE-RACE",
+      "result": [
+        5,
+        1,
+        2
+      ],
       "source": "PASS",
       "numerical": "DEGRADED",
-      "prediction": "N/A for empirical ledger",
-      "krs": "EXECUTED",
-      "semantic_mec": "PASS mechanical",
-      "conversion": "N/A outcome",
-      "capital": "2700 recommendation",
+      "prediction": "PASS",
+      "krs": "SUPPORTIVE / NO UNIQUE RESCUE",
+      "semantic_mec": "PASS",
+      "conversion": "PASS for Exacta/Trio; Ordered Exact absent",
+      "capital": "PARTIAL / HIT-BUT-LOSS",
       "execution": "PASS",
-      "pfs": "N/A",
-      "first_failure": "NO EMPIRICAL OUTCOME REVIEW"
+      "pfs": 91.851852,
+      "pfs_class": "ACCEPTANCE FROZEN-RECOMMENDATION / NOT EMPIRICAL PRODUCTION CREDIT",
+      "first_failure": "EXACT_ORIENTATION",
+      "additional_failure": "CAPITAL EFFICIENCY"
     },
     "R05": {
       "class": "SOURCE_ONLY",
@@ -498,12 +584,67 @@
     "numerical_state": "DEGRADED",
     "prediction_state": "DEGRADE",
     "krs_state": "INCONCLUSIVE / POSITIVE SHADOW SIGNAL",
-    "semantic_mec_state": "DEGRADE / CORRECTNESS GAP EXPOSED",
-    "ticket_conversion_state": "INCONCLUSIVE / UPSTREAM STRUCTURE MISSING",
+    "semantic_mec_state": "DEGRADE / CORRECTNESS REPAIRED FOR NEXT RACE",
+    "ticket_conversion_state": "INCONCLUSIVE / UPSTREAM STRUCTURE MISSING + R12 TRANSPORT REPAIR",
     "capital_state": "DEGRADE",
-    "external_execution_state": "IMPROVE",
-    "next_unknown_race_difference": "Source/result authority and signed execution remain intact; before the next race, role-status transport must be canonicalized and Alternative-W with strong direct Urawa evidence must receive an explicit W1R persistence audit. No Production numeric or MEC policy is changed."
+    "external_execution_state": "IMPROVE / RESULT-LEDGER CONCURRENCY REPROOF PENDING",
+    "next_unknown_race_difference": "SOURCE-first remains mandatory after its effective time; legacy TAIL_PROTECTED is normalized to canonical active semantics before MEC; R4/R5 OOS admission requires official-result verification; Alternative-W with strong direct Urawa evidence receives explicit W1R persistence audit. Production numerical rules, MEC-R3 policy, capital policy, KRS authority and parameter_map are unchanged."
   },
   "final_verdict": "FAILURE",
-  "final_reason": "The settled unknown-future sample was 0/2 hits and 0% Frozen Recommendation PFS. Both winners were discovered as Alternative-W but missed Production W, so the dominant failure was role/order discrimination rather than source, runtime, KRS execution, MEC width, or deadline. Execution improved materially, but prediction utility and long-run PFS did not."
+  "final_reason": "Ordinary settled unknown-future empirical Production performance remains 0/2 hits and 0% Frozen Recommendation PFS for R10/R12. R4 Acceptance settled at 91.85% but is not credited into that empirical denominator. The dominant predictive failure is Alternative-W -> Production-W role conversion, with R12 exposing an additional common semantic transport correctness defect. Source/runtime execution improved, but strict numerical authority remains NOT_READY.",
+  "bet_type_result_operational_all_full_formal": {
+    "EXACTA": {
+      "investment": 3500,
+      "return": 1420,
+      "profit_loss": -2080,
+      "pfs": 40.571428571,
+      "hit_count": 1
+    },
+    "TRIO": {
+      "investment": 7000,
+      "return": 1060,
+      "profit_loss": -5940,
+      "pfs": 15.142857143,
+      "hit_count": 1
+    },
+    "TRIFECTA": {
+      "investment": 2800,
+      "return": 0,
+      "profit_loss": -2800,
+      "pfs": 0,
+      "hit_count": 0
+    }
+  },
+  "correctness_repairs": {
+    "source_first_handoff": {
+      "profile": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260924-R1",
+      "effective_at": "2026-09-24T14:48:10+09:00",
+      "status": "ACTIVE"
+    },
+    "tail_protected_normalization": {
+      "commit": "8852c6403c28ec833697a712628691ad73720711",
+      "test_commit": "215c134dfac0563949bc79255ddbb7e04fa0bb84",
+      "acceptance_runs": [
+        36004415917,
+        36004443801
+      ],
+      "status": "PASS"
+    },
+    "result_workflow_latest_base_sync": {
+      "commit": "909d27289b22057d3ebbe4f60e93b4c3ae8f2dba",
+      "related_regression_run": 36004523665,
+      "status": "IMPLEMENTED / CONCURRENCY E2E REPROOF PENDING"
+    },
+    "r4_result_authority_gate": {
+      "code_commit": "a47a561f0a8d16ea3fa68c857044a13c34da410c",
+      "test_commit": "957529b5d25d3245e2a11cb025c3a0ba1f4c0dd4",
+      "acceptance_run": 36005151890,
+      "status": "PASS"
+    },
+    "r5_result_authority_gate": {
+      "code_commit": "78820cde30bfe8a6fb179a67219d9f09ce33cca5",
+      "test_commit": "6d5aba1cf0205cac31aed9b0f8467cf84d93504c",
+      "status": "IMPLEMENTED / DEDICATED WORKFLOW_DISPATCH NOT RUN"
+    }
+  }
 }
