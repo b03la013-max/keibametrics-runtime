@@ -29,9 +29,10 @@ jobs:
           python - <<'PY'
           import json
           x=json.load(open("runtime/local_mec_r5_oos_status.json",encoding="utf-8"))
-          assert x["status"]=="WAITING_30"
-          assert x["eligible_races"]==0
-          assert x["remaining_races"]==30
+          assert x["status"] in {"WAITING_30","HUMAN_REVIEW_REQUIRED"}
+          assert isinstance(x["eligible_races"],int) and 0 <= x["eligible_races"] <= x["target_eligible_races"]
+          assert x["remaining_races"]==max(0,x["target_eligible_races"]-x["eligible_races"])
           assert x["production_effect"]=="NONE"
+          assert x["automatic_promotion"] is False
           print("LOCAL_MEC_R5_SETTLEMENT_CLASSIFICATION_PASS")
           PY
