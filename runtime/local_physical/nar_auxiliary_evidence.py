@@ -240,14 +240,14 @@ def parse_person_profile(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             if len(row) == 2 and row[0] in {"所属", "所属厩舎", "生年月日", "初騎乗日", "初出走日", "初勝利日"}:
                 profile["identity"][row[0]] = row[1]
             if len(row) == 1:
-                ym = re.search(r"(20\\d{2})年", row[0])
+                ym = re.search(r"(20\d{2})年", row[0])
                 section_year = ym.group(1) if ym else section_year
                 continue
             stat = _stat_row(row)
             if not stat:
                 continue
             profile["performance_rows"].append(stat)
-            direct_year = re.fullmatch(r"(20\\d{2})年", stat["label"])
+            direct_year = re.fullmatch(r"(20\d{2})年", stat["label"])
             if direct_year:
                 profile["yearly_totals"][direct_year.group(1)] = stat
             elif section_year and stat["label"] == "合計":
