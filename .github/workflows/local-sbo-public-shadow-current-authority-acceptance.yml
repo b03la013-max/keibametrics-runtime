@@ -1,0 +1,111 @@
+name: LOCAL SBO Public Shadow Current Authority Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R11.json'
+      - 'profiles/family_runtime_contracts_20260924_R10.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json'
+      - 'profiles/local_information_source_registry_v1.10_20260924.json'
+      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.7-20260924.md'
+      - 'governance/KM-LOCAL-SBO-PUBLIC-SHADOW-SOURCE-ACTIVATION-20260924-R1.json'
+      - '.github/workflows/local-sbo-public-shadow-current-authority-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authority graph and production boundary
+        run: |
+          python - <<'PY'
+          import json,urllib.request
+          from pathlib import Path
+
+          def j(path):
+              return json.loads(Path(path).read_text(encoding="utf-8"))
+
+          a=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R11.json")
+          c=j("profiles/family_runtime_contracts_20260924_R10.json")
+          s=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json")
+          r=j("profiles/local_information_source_registry_v1.10_20260924.json")
+          x=j("governance/KM-LOCAL-SBO-PUBLIC-SHADOW-SOURCE-ACTIVATION-20260924-R1.json")
+          r4=j("runtime/mec_r4_oos_status.json")
+          r5=j("runtime/local_mec_r5_oos_status.json")
+
+          assert a["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R11"
+          assert a["common_family_components"]["family_runtime_contracts"]==c["profile_id"]
+          assert a["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          L=a["family_scoped_authority"]["LOCAL"]
+          assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
+          assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
+          assert "NOT_READY" in L["numerical_authority_status"]
+          assert L["suite_manifest"]==s["manifest_id"]
+          assert L["information_source_registry"]==r["profile_id"]
+          assert L["runtime_contract"]==c["profile_id"]
+          assert L["runtime"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE"
+          assert L["sbo_public_shadow_authority"].startswith("THIRD_PARTY_PUBLIC_SHADOW")
+
+          assert s["family_current_authority"]==a["manifest_id"]
+          assert s["information_source_registry"]["profile"]==r["profile_id"]
+          assert s["input_source_ops"]["profile"]=="KM-LOCAL-INPUT-SOURCE-OPS-v1.7-20260924"
+          assert s["runtime"]["contract"]==c["profile_id"]
+          assert "SOURCE_SBO_PUBLIC_SHADOW" in s["runtime"]["capabilities"]
+          assert s["source_enrichment_v3"]["sbo_public_shadow"]["production_authority"] is False
+          assert s["source_enrichment_v3"]["sbo_public_shadow"]["prediction_authority"] is False
+
+          LC=c["families"]["LOCAL"]
+          assert LC["runtime_version"]==L["runtime"]
+          assert LC["information_source_registry"]==r["profile_id"]
+          assert LC["suite_manifest"]==s["manifest_id"]
+          assert LC["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          assert LC["sbo_public_shadow"]["production_authority"] is False
+          assert LC["sbo_public_shadow"]["prediction_authority"] is False
+
+          assert r["sbo_public_shadow"]["production_authority"] is False
+          assert r["sbo_public_shadow"]["prediction_authority"] is False
+          assert r["sbo_public_shadow"]["source_priority"].startswith("BELOW_NAR_OFFICIAL")
+          assert r["sbo_public_shadow"]["storage_policy"].startswith("NORMALIZED_EXTRACTED_DATA")
+          assert r["sbo_public_shadow"]["acceptance"]["tamper_rejected"] is True
+
+          assert x["production_authority"] is False
+          assert x["prediction_authority"] is False
+          assert x["numerical_change"] is False
+          assert x["production_suite_change"] is False
+          assert x["krs_change"] is False
+          assert x["mec_change"] is False
+          assert x["capital_change"] is False
+          assert x["acceptance"]["production_runtime_conclusion"]=="SUCCESS"
+
+          assert r4["eligible_races"]==3 and r4["target_eligible_races"]==30
+          assert r5["eligible_races"]==3 and r5["target_eligible_races"]==30
+          assert L["mec_measurement"]["r4_local"]["current_local_oos_count"]==3
+          assert L["mec_measurement"]["r5_local"]["current_oos_count"]==3
+
+          with urllib.request.urlopen("https://witnessstrictimage-production.up.railway.app/health",timeout=30) as resp:
+              h=json.load(resp)
+          assert h["status"]=="READY",h
+          assert h["runtime_revision"]==L["runtime"],h
+          assert h["github_revision"]=="d753d0cbca00f790351a56ff9f5c923290830d4f",h
+          assert h["sbo_public_shadow_profile"]=="KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",h
+          assert h["sbo_public_shadow_sha256"]=="998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53",h
+          assert "SOURCE_SBO_PUBLIC_SHADOW" in h["capabilities"],h
+
+          print("LOCAL_SBO_PUBLIC_SHADOW_AUTHORITY_PASS="+json.dumps({
+              "current_authority":a["manifest_id"],
+              "runtime_contract":c["profile_id"],
+              "suite_manifest":s["manifest_id"],
+              "information_registry":r["profile_id"],
+              "runtime":h["runtime_revision"],
+              "runtime_git_revision":h["github_revision"],
+              "sbo_profile":h["sbo_public_shadow_profile"],
+              "sbo_sha256":h["sbo_public_shadow_sha256"],
+              "production_authority":False,
+              "numerical_authority":L["numerical_authority_status"],
+              "production_suite":L["production_suite"],
+              "r4_oos":r4["eligible_races"],
+              "r5_oos":r5["eligible_races"],
+          },ensure_ascii=False,separators=(",",":")))
+          PY
