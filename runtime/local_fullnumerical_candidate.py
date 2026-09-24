@@ -42,6 +42,19 @@ def _mean(*xs: float) -> float:
     return sum(vals) / len(vals)
 
 
+def _observed_only(mapping: Dict[str, Any]) -> bool:
+    return str(((mapping.get("missing_semantics") or {}).get("policy") or "")).upper() == "OBSERVED_ONLY_RENORMALIZE"
+
+
+def _mean_features(runner: Dict[str, Any], names: Iterable[str], mapping: Dict[str, Any]) -> tuple[float, float]:
+    feats=[_feature(runner,n) for n in names]
+    if not _observed_only(mapping):
+        return _mean(*[float(x["score"]) for x in feats]), sum(bool(x.get("missing")) for x in feats)/max(1,len(feats))
+    known=[float(x["score"]) for x in feats if not x.get("missing")]
+    missing_fraction=sum(bool(x.get("missing")) for x in feats)/max(1,len(feats))
+    return ((52.0 if not known else sum(known)/len(known)), missing_fraction)
+
+
 def _feature(runner: Dict[str, Any], name: str) -> Dict[str, Any]:
     x = (runner.get("evidence_features") or {}).get(name)
     if not isinstance(x, dict):
@@ -75,36 +88,51 @@ def _index(mapping_id: str, name: str, value: float, refs: Iterable[str], fact: 
     }
 
 
-def _weighted_base(runner: Dict[str, Any], idx: str, weights: Dict[str, float], mapping_id: str) -> Dict[str, Any]:
+def _weighted_base(runner: Dict[str, Any], idx: str, weights: Dict[str, float], mapping_id: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
     total = 0.0
     denom = 0.0
+    total_weight = 0.0
     refs: List[str] = []
     facts: List[str] = []
     comps: List[Dict[str, Any]] = []
     missing_weight = 0.0
+    observed_only = _observed_only(mapping)
     for comp, w in weights.items():
         f = _feature(runner, comp)
         score = float(f["score"])
         w = float(w)
-        total += score * w
-        denom += w
+        total_weight += w
         refs.extend(f["evidence_refs"])
-        facts.append(f"{comp}={score:.3f}" + ("[UNKNOWN]" if f.get("missing") else ""))
-        if f.get("missing"):
+        is_missing=bool(f.get("missing"))
+        facts.append(f"{comp}={score:.3f}" + ("[UNKNOWN-EXCLUDED]" if is_missing and observed_only else ("[UNKNOWN]" if is_missing else "")))
+        if is_missing:
             missing_weight += w
+        if not (observed_only and is_missing):
+            total += score * w
+            denom += w
         comps.append({
             "component": comp, "weight": w, "score": score,
-            "missing": bool(f.get("missing")), "coverage": f.get("coverage"),
+            "missing": is_missing, "coverage": f.get("coverage"),
             "rule_id": f.get("rule_id"), "evidence_refs": f.get("evidence_refs"),
+            "included_in_numeric_denominator": not (observed_only and is_missing),
         })
-    if denom <= 0:
+    if total_weight <= 0:
         raise LocalCandidateNumericalError(f"BAD_WEIGHT_SUM:{idx}")
-    return _index(
-        mapping_id, idx, total/denom, refs,
+    all_missing=denom<=0
+    value=52.0 if all_missing else total/denom
+    out=_index(
+        mapping_id, idx, value, refs,
         "weighted candidate component ledger: " + " | ".join(facts),
-        rule_id=f"LOCAL-NUM-CAND-v0.1-{idx.replace('/','_')}-WEIGHTED",
-        components=comps, missing_fraction=missing_weight/denom
+        rule_id=(f"LOCAL-NUM-CAND-v0.3-{idx.replace('/','_')}-OBSERVED-ONLY-WEIGHTED" if observed_only
+                 else f"LOCAL-NUM-CAND-v0.1-{idx.replace('/','_')}-WEIGHTED"),
+        components=comps, missing_fraction=missing_weight/total_weight
     )
+    out["missing_policy"]="OBSERVED_ONLY_RENORMALIZE" if observed_only else "LEGACY_NEUTRAL_INCLUDED"
+    out["observed_weight_fraction"]=round(0.0 if total_weight<=0 else denom/total_weight,6)
+    out["all_components_unknown"]=bool(all_missing)
+    if all_missing:
+        out["source_fact"] += " | all components UNKNOWN; 52 retained as transport-only value with confidence zero."
+    return out
 
 
 def _get(cc: Dict[str, Dict[str, Any]], name: str) -> float:
@@ -124,6 +152,29 @@ def _refs(cc: Dict[str, Dict[str, Any]], names: Iterable[str]) -> List[str]:
 def _missing(cc: Dict[str, Dict[str, Any]], names: Iterable[str]) -> float:
     vals = [float((cc.get(n) or {}).get("missingness_fraction", 0)) for n in names]
     return 0.0 if not vals else sum(vals)/len(vals)
+
+
+def _weighted_indices(cc: Dict[str, Dict[str, Any]], pairs: Iterable[tuple[str,float]], mapping: Dict[str,Any]) -> tuple[float,float]:
+    rows=[(str(n),float(w)) for n,w in pairs]
+    if not _observed_only(mapping):
+        return sum(_get(cc,n)*w for n,w in rows), _missing(cc,[n for n,_ in rows])
+    usable=[(n,w) for n,w in rows if float((cc.get(n) or {}).get("missingness_fraction",0.0)) < 1.0]
+    if not usable:
+        return 52.0,1.0
+    den=sum(w for _,w in usable)
+    if den<=0:
+        return 52.0,1.0
+    return sum(_get(cc,n)*w for n,w in usable)/den, _missing(cc,[n for n,_ in rows])
+
+
+def _mean_indices(cc: Dict[str, Dict[str, Any]], names: Iterable[str], mapping: Dict[str,Any]) -> tuple[float,float]:
+    ns=[str(n) for n in names]
+    if not _observed_only(mapping):
+        return _mean(*[_get(cc,n) for n in ns]), _missing(cc,ns)
+    usable=[n for n in ns if float((cc.get(n) or {}).get("missingness_fraction",0.0)) < 1.0]
+    if not usable:
+        return 52.0,1.0
+    return _mean(*[_get(cc,n) for n in usable]), _missing(cc,ns)
 
 
 def _rank_desc(rows: List[Dict[str, Any]], getter) -> Dict[str, int]:
@@ -158,20 +209,21 @@ def materialize_candidate(request: Dict[str, Any],
     for r in runners:
         cc: Dict[str, Dict[str, Any]] = {}
         for idx in base_names:
-            cc[idx] = _weighted_base(r, idx, weights[idx], mapping_id)
+            cc[idx] = _weighted_base(r, idx, weights[idx], mapping_id, mapping)
 
         evi_components = ["position_acquisition","position_maintenance","third_corner_progression",
                           "leadership_stalk_acceptance","kickback_traffic_tolerance",
                           "going_adaptation","course_geometry","going_fit"]
         evi_feats = [_feature(r, x) for x in evi_components]
+        evi_value,evi_missing = _mean_features(r,evi_components,mapping)
         cc["EVI/CEV"] = _index(
-            mapping_id, "EVI/CEV", _mean(*[x["score"] for x in evi_feats]),
+            mapping_id, "EVI/CEV", evi_value,
             [z for x in evi_feats for z in x["evidence_refs"]],
             "equal-mean candidate EVI factors: " + ",".join(evi_components),
             rule_id="LOCAL-NUM-CAND-v0.1-EVI-CEV-EQUAL-FACTOR",
             components=[{"component":n,"score":float(x["score"]),"missing":bool(x.get("missing"))}
                         for n,x in zip(evi_components,evi_feats)],
-            missing_fraction=sum(bool(x.get("missing")) for x in evi_feats)/len(evi_feats)
+            missing_fraction=evi_missing
         )
 
         # CCI/TRI remain numerical neutral when their actual official sources are absent.
@@ -203,41 +255,49 @@ def materialize_candidate(request: Dict[str, Any],
 
         hpi_parts = ["class_level","opponent_strength","recent_finish"]
         hf = [_feature(r,x) for x in hpi_parts]
-        cc["HCS"] = _index(mapping_id, "HCS", _mean(*[x["score"] for x in hf]),
+        hcs_value,hcs_missing = _mean_features(r,hpi_parts,mapping)
+        cc["HCS"] = _index(mapping_id, "HCS", hcs_value,
                            [z for x in hf for z in x["evidence_refs"]],
                            "candidate hidden-class support from class/opponent/recent-content factors.",
-                           rule_id="LOCAL-NUM-CAND-v0.1-HCS-EQUAL",
-                           missing_fraction=sum(bool(x.get("missing")) for x in hf)/len(hf))
+                           rule_id=("LOCAL-NUM-CAND-v0.3-HCS-OBSERVED-ONLY" if _observed_only(mapping) else "LOCAL-NUM-CAND-v0.1-HCS-EQUAL"),
+                           missing_fraction=hcs_missing)
 
         # Exact TPI-L formula from LOCAL canon; only the min-major penalty magnitude is inherited from
         # the existing production materializer and is not re-tuned here.
         hpi=_get(cc,"HPI-L"); cfi=_get(cc,"CFIg-L"); rfi=_get(cc,"RFIg-L")
         bvi=_get(cc,"BVIg-L"); jti=_get(cc,"JTI-L"); csi=_get(cc,"CSI-L")
         bwi=_get(cc,"BWI-L"); nci=_get(cc,"NCI"); evi=_get(cc,"EVI/CEV")
-        linear=0.18*hpi+0.16*cfi+0.14*rfi+0.08*bvi+0.08*jti+0.08*csi+0.08*bwi+0.10*nci+0.10*evi
-        min_major=min(hpi,cfi,rfi,nci,evi,bwi)
+        linear,tpi_missing=_weighted_indices(cc,[
+            ("HPI-L",0.18),("CFIg-L",0.16),("RFIg-L",0.14),("BVIg-L",0.08),
+            ("JTI-L",0.08),("CSI-L",0.08),("BWI-L",0.08),("NCI",0.10),("EVI/CEV",0.10)
+        ],mapping)
+        major_names=["HPI-L","CFIg-L","RFIg-L","NCI","EVI/CEV","BWI-L"]
+        major_values=[_get(cc,nm) for nm in major_names if (not _observed_only(mapping) or float((cc.get(nm) or {}).get("missingness_fraction",0))<1.0)]
+        min_major=min(major_values) if major_values else 52.0
         penalty=max(0.0,(60.0-min_major)*0.5)
         cc["TPI-L"] = _index(
             mapping_id, "TPI-L", linear-penalty,
             _refs(cc, ["HPI-L","CFIg-L","RFIg-L","BVIg-L","JTI-L","CSI-L","BWI-L","NCI","EVI/CEV"]),
             f"LOCAL canon TPI linear={linear:.6f};min_major={min_major:.6f};penalty={penalty:.6f}",
             rule_id="LOCAL-TPI-L-v4.13R1-CANDIDATE-BINDING",
-            missing_fraction=_missing(cc, ["HPI-L","CFIg-L","RFIg-L","BVIg-L","JTI-L","CSI-L","BWI-L","NCI","EVI/CEV"]),
-            exact_canon_formula=True
+            missing_fraction=tpi_missing,
+            exact_canon_formula=not _observed_only(mapping)
         )
 
         # SRI exact coefficient structure; uncertainty penalty remains explicitly candidate-only because
         # the canon defines the penalty concept but not a fixed coefficient.
         dcr=_get(cc,"DCR")
-        sri_linear=(0.20*_get(cc,"TPI-L")+0.18*rfi+0.18*evi+0.15*cfi+0.12*nci+
-                    0.10*bwi+0.05*jti+0.02*csi)
+        sri_linear,sri_missing=_weighted_indices(cc,[
+            ("TPI-L",0.20),("RFIg-L",0.18),("EVI/CEV",0.18),("CFIg-L",0.15),
+            ("NCI",0.12),("BWI-L",0.10),("JTI-L",0.05),("CSI-L",0.02)
+        ],mapping)
         sri_penalty=max(0.0,(60.0-dcr)*0.25)
         cc["SRI-L"] = _index(
             mapping_id, "SRI-L", sri_linear-sri_penalty,
             _refs(cc, ["TPI-L","RFIg-L","EVI/CEV","CFIg-L","NCI","BWI-L","JTI-L","CSI-L","DCR"]),
             f"LOCAL SRI coefficient structure; linear={sri_linear:.6f}; candidate uncertainty penalty={sri_penalty:.6f}",
             rule_id="LOCAL-NUM-CAND-v0.1-SRI-CANON-COEFFICIENTS-CANDIDATE-PENALTY",
-            missing_fraction=_missing(cc, ["TPI-L","RFIg-L","EVI/CEV","CFIg-L","NCI","BWI-L","JTI-L","CSI-L","DCR"])
+            missing_fraction=max(sri_missing,_missing(cc, ["DCR"]))
         )
 
         r["candidate_indices"] = cc
@@ -323,24 +383,26 @@ def materialize_candidate(request: Dict[str, Any],
                                 _missing(cc,["TRI","DRS"])*2)/7)
 
         # Exact F3S coefficient formula from LOCAL canon.
-        f3s=(0.25*_get(cc,"SRI-L")+0.20*_get(cc,"TPI-L")+0.18*_get(cc,"EVI/CEV")+
-             0.14*_get(cc,"RFIg-L")+0.12*_get(cc,"CFIg-L")+0.06*_get(cc,"NCI")+0.05*_get(cc,"T3I-L"))
+        f3s,f3s_missing=_weighted_indices(cc,[
+            ("SRI-L",0.25),("TPI-L",0.20),("EVI/CEV",0.18),("RFIg-L",0.14),
+            ("CFIg-L",0.12),("NCI",0.06),("T3I-L",0.05)
+        ],mapping)
         cc["F3S-L"]=_index(mapping_id,"F3S-L",f3s,
                             _refs(cc,["SRI-L","TPI-L","EVI/CEV","RFIg-L","CFIg-L","NCI","T3I-L"]),
                             "LOCAL canon exact F3S coefficient formula.",
                             rule_id="LOCAL-F3S-L-v4.13R1-CANDIDATE-BINDING",
-                            missing_fraction=_missing(cc,["SRI-L","TPI-L","EVI/CEV","RFIg-L","CFIg-L","NCI","T3I-L"]),
-                            exact_canon_formula=True)
+                            missing_fraction=f3s_missing,
+                            exact_canon_formula=not _observed_only(mapping))
 
         # Pre-probability role suitability scores. These are scores only, never probabilities.
-        zai_win=_mean(_get(cc,"TPI-L"),_get(cc,"SRI-L"),_get(cc,"EVI/CEV"),_get(cc,"CFIg-L"),_get(cc,"NCI"),_get(cc,"DCR"))
-        zai_place=_mean(_get(cc,"TPI-L"),_get(cc,"SRI-L"),_get(cc,"EVI/CEV"),_get(cc,"CFIg-L"),_get(cc,"RFIg-L"),_get(cc,"DCR"))
+        zai_win,zai_win_missing=_mean_indices(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","NCI","DCR"],mapping)
+        zai_place,zai_place_missing=_mean_indices(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","RFIg-L","DCR"],mapping)
         cc["ZAI-WIN"]=_index(mapping_id,"ZAI-WIN",zai_win,_refs(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","NCI","DCR"]),
                               "candidate pre-probability winner suitability score; never probability.",
-                              rule_id="LOCAL-NUM-CAND-v0.1-ZAI-WIN-EQUAL",missing_fraction=_missing(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","NCI","DCR"]))
+                              rule_id=("LOCAL-NUM-CAND-v0.3-ZAI-WIN-OBSERVED-ONLY" if _observed_only(mapping) else "LOCAL-NUM-CAND-v0.1-ZAI-WIN-EQUAL"),missing_fraction=zai_win_missing)
         cc["ZAI-PLACE"]=_index(mapping_id,"ZAI-PLACE",zai_place,_refs(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","RFIg-L","DCR"]),
                                 "candidate pre-probability place suitability score; never probability.",
-                                rule_id="LOCAL-NUM-CAND-v0.1-ZAI-PLACE-EQUAL",missing_fraction=_missing(cc,["TPI-L","SRI-L","EVI/CEV","CFIg-L","RFIg-L","DCR"]))
+                                rule_id=("LOCAL-NUM-CAND-v0.3-ZAI-PLACE-OBSERVED-ONLY" if _observed_only(mapping) else "LOCAL-NUM-CAND-v0.1-ZAI-PLACE-EQUAL"),missing_fraction=zai_place_missing)
 
         role_spread=max(zai_win,zai_place,t3i)-min(zai_win,zai_place,t3i)
         role_dispersion_risk=_clamp(role_spread*2.5)
@@ -359,6 +421,7 @@ def materialize_candidate(request: Dict[str, Any],
         if missing:
             raise LocalCandidateNumericalError(f"INDEX_CLOSURE_MISSING:{rid}:{missing}")
         r["canonical_components"]={name:cc[name] for name in REQUIRED}
+        r["candidate_missing_policy"]=((mapping.get("missing_semantics") or {}).get("policy") or "LEGACY_NEUTRAL_INCLUDED")
         r["candidate_index_sha256"]=_sha(r["canonical_components"])
 
     out=copy.deepcopy(request)
@@ -385,6 +448,9 @@ def materialize_candidate(request: Dict[str, Any],
         "result_derived_features":0,
         "candidate_neutral_missing_component_count":sum(int(r.get("candidate_missing_count",0)) for r in runners),
         "mean_real_component_coverage":round(sum(float(r.get("candidate_feature_coverage_ratio",0)) for r in runners)/len(runners),6),
+        "missing_policy":((mapping.get("missing_semantics") or {}).get("policy") or "LEGACY_NEUTRAL_INCLUDED"),
+        "evidence_routing_change":bool(mapping.get("evidence_routing_change",False)),
+        "weight_change_from_v01":mapping.get("weight_change_from_v01"),
     }
     out["candidate_index_terminalization_sha256"]=_sha(rows)
     out["candidate_index_provenance_sha256"]=_sha([r["canonical_components"] for r in runners])
