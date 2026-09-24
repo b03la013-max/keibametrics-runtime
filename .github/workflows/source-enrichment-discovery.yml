@@ -64,5 +64,16 @@ jobs:
                   if m:
                       s=re.sub(r"\\s+"," ",doc[max(0,m.start()-500):m.start()+3500])
                       print(label+"_SNIPPET",term,s[:4000])
+          # Print parsed table shapes using production HTML table extractor.
+          import sys
+          sys.path.insert(0,"runtime/local_physical")
+          from source_acquisition import _html_tables
+          for label,needle in (("HORSE","HorseMarkInfo"),("RIDER","RiderMark"),("TRAINER","TrainerMark")):
+              u=next(x for x in abslinks if needle in x)
+              doc=get(u)
+              tabs=_html_tables(doc)
+              print(label+"_TABLE_COUNT",len(tabs))
+              for ti,t in enumerate(tabs[:12]):
+                  print(label+"_TABLE",ti,"ROWS",len(t),"HEAD",repr(t[:6])[:5000])
           print("DISCOVERY_PASS")
           PY
