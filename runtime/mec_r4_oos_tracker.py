@@ -24,6 +24,26 @@ def _dt(s):
 def _load(path):
     with open(path,encoding="utf-8") as f: return json.load(f)
 
+def _official_result_authority(race_id):
+    root="runtime/family_result_requests"
+    refs=[]
+    if os.path.isdir(root):
+        for fn in sorted(os.listdir(root)):
+            if not fn.endswith(".json"): continue
+            try:
+                req=_load(os.path.join(root,fn))
+            except Exception:
+                continue
+            if str(req.get("race_id") or "")!=str(race_id):
+                continue
+            if req.get("official_result_verified") is True:
+                refs.append({
+                    "request_file":fn,
+                    "source":req.get("source"),
+                    "verification_ref":req.get("official_result_verification_ref"),
+                })
+    return {"verified":bool(refs),"refs":refs}
+
 def _max_drawdown(rows):
     equity=0.0
     peak=0.0
@@ -93,6 +113,7 @@ def _aggregate_arm(rows):
 def build_status():
     activation=_dt(ACTIVATION_AT)
     entries=[]
+    held=[]
     errors=[]
     root="runtime/mec_shadow_results"
     if os.path.isdir(root):
@@ -102,6 +123,10 @@ def build_status():
             try:
                 result=_load(path)
                 rid=str(result.get("race_id") or "")
+                result_authority=_official_result_authority(rid)
+                if result_authority.get("verified") is not True:
+                    held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
+                    continue
                 shadow_path=os.path.join("runtime","mec_shadow_artifacts",rid+".json")
                 if not os.path.exists(shadow_path):
                     errors.append({"race_id":rid,"reason":"SHADOW_ARTIFACT_MISSING"})
@@ -262,6 +287,8 @@ def build_status():
         "activation_at":ACTIVATION_AT,
         "target_eligible_races":TARGET,
         "eligible_races":len(entries),
+        "held_races":len(held),
+        "held":held,
         "remaining_races":max(0,TARGET-len(entries)),
         "production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
         "production_effect":"NONE",
