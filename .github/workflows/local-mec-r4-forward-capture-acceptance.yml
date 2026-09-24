@@ -1,0 +1,122 @@
+name: LOCAL MEC-R4 Forward Capture Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_mec_r4_bridge.py'
+      - 'runtime/mec_r4_oos_tracker.py'
+      - 'runtime/mec_r4_shadow.py'
+      - 'tests/test_local_mec_r4_bridge.py'
+      - 'tests/test_mec_r4_oos_tracker.py'
+      - '.github/workflows/km-family-non-jra-formal-runner.yml'
+      - '.github/workflows/km-local-result-from-signed-final.yml'
+      - '.github/workflows/local-mec-r4-forward-capture-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Unit and regression
+        run: |
+          python -m py_compile runtime/local_mec_r4_bridge.py runtime/mec_r4_oos_tracker.py runtime/mec_r4_shadow.py
+          pytest -q tests/test_local_mec_r4_bridge.py tests/test_mec_r4_oos_tracker.py tests/test_mec_r4_shadow.py
+          grep -q 'MEC_R4_SHADOW_PRE_RESULT_FREEZE' .github/workflows/km-family-non-jra-formal-runner.yml
+          grep -q 'LOCAL_SIGNED_FINAL_BOUND' .github/workflows/km-local-result-from-signed-final.yml
+
+  retrospective:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Replay preregistered MEC-R4 on 2026-09-23 Urawa signed finals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from local_mec_r4_bridge import build_replay_shadow, settle_replay
+          from mec_r4_shadow import settle_ticket_list
+
+          races=["R07","R10","R11","R12"]
+          rows=[]
+          per_race={}
+          arms=["PRODUCTION_BASELINE_R3","CORE_ONLY","CORE_PROTECTION","CPSS_ALL","CPSS_TOP3","CPSS_TOP4","CPSS_TOP5","CPSS_TOP6","CPSS_TOP7","CPSS_TOP8"]
+          agg={a:{"investment":0,"return":0,"races":0,"hit_races":0,"ticket_count":0} for a in arms}
+
+          for code in races:
+              req_path=Path(f"runtime/family_requests/URW-20260923-{code}-FORMAL-R1.json")
+              res_path=Path(f"runtime/family_result_requests/URW-20260923-{code}-RESULT-R1.json")
+              req=json.load(open(req_path,encoding="utf-8"))
+              rr=json.load(open(res_path,encoding="utf-8"))
+              d=Path("tmp_replay")/code
+              d.mkdir(parents=True,exist_ok=True)
+              subprocess.run(["gh","run","download",str(rr["source_run_id"]),"-n",rr["artifact_name"],"-D",str(d)],check=True)
+              fin=json.load(open(d/"final_receipt_envelope.json",encoding="utf-8"))
+
+              shadow,basis=build_replay_shadow(req,fin,"2026-09-24T11:00:00+09:00")
+              settled=settle_replay(shadow,rr)
+              result={"official_result":{"status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL","top3":rr["finish_order"][:3],"payouts_per_100_yen":rr["payouts"]}}
+              prod=settle_ticket_list(((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or [],result)
+              assert prod["status"]=="SETTLED"
+              row={"race_id":req["race_id"],"result_top3":rr["finish_order"][:3],"basis_sha256":basis["sha256"],"replay_shadow_sha256":shadow["sha256"],"oos_eligible":False,"arms":{}}
+              row["arms"]["PRODUCTION_BASELINE_R3"]=prod
+              for a,x in settled["arms"].items():
+                  row["arms"][a]=x
+              per_race[code]=row
+
+              for a in arms:
+                  x=row["arms"][a]
+                  agg[a]["investment"]+=int(x.get("investment") or 0)
+                  agg[a]["return"]+=int(x.get("return") or 0)
+                  agg[a]["races"]+=1
+                  agg[a]["hit_races"]+=1 if int(x.get("return") or 0)>0 else 0
+                  agg[a]["ticket_count"]+=int(x.get("ticket_count") or 0)
+
+          for a,x in agg.items():
+              x["profit_loss"]=x["return"]-x["investment"]
+              x["pfs"]=round(x["return"]/x["investment"]*100,6) if x["investment"] else None
+
+          base=agg["PRODUCTION_BASELINE_R3"]
+          comparison={}
+          for a in arms[1:]:
+              x=agg[a]
+              comparison[a]={
+                "investment_delta":x["investment"]-base["investment"],
+                "return_delta":x["return"]-base["return"],
+                "profit_loss_delta":x["profit_loss"]-base["profit_loss"],
+                "pfs_points":round(x["pfs"]-base["pfs"],6) if x["pfs"] is not None and base["pfs"] is not None else None,
+                "capital_reduction_pct":round((base["investment"]-x["investment"])/base["investment"]*100,6) if base["investment"] else None,
+                "hit_race_delta":x["hit_races"]-base["hit_races"],
+              }
+
+          report={
+            "profile":"KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1",
+            "status":"POST-RESULT-POLICY-FROZEN-REPLAY / NOT-OOS / PRODUCTION-UNCHANGED",
+            "candidate_profile":"KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+            "candidate_preregistered_before_races":True,
+            "concrete_shadow_tickets_frozen_before_result":False,
+            "forward_oos_eligible":False,
+            "included_races":["URW-20260923-R07-FORMAL-R1","URW-20260923-R10-FORMAL-R1","URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"],
+            "excluded":{"URW-20260923-R06-FORMAL-R1":"NO_EQUIVALENT_SIGNED_FINAL_ARTIFACT_LINK_IN_RESULT_REQUEST","URW-20260923-R08-FORMAL-R1":"NO_SETTLED_FAMILY_RESULT_REQUEST"},
+            "aggregates":agg,
+            "comparison_vs_production":comparison,
+            "per_race":per_race,
+            "production_effect":"NONE",
+          }
+          print("LOCAL_MEC_R4_20260923_REPLAY="+json.dumps(report,ensure_ascii=False,separators=(",",":")))
+          PY
