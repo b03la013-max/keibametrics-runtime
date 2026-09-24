@@ -654,6 +654,14 @@ def verify_source_artifact(artifact: Dict[str, Any]) -> Tuple[bool, List[str]]:
             errors.append("SOURCE_RAW_DECODE_FAILED:" + str(s.get("source_id")))
     if sha_obj(artifact.get("normalized_evidence") or {}) != artifact.get("normalized_evidence_sha256"):
         errors.append("SOURCE_NORMALIZED_EVIDENCE_HASH_MISMATCH")
+    optional_hashes = [
+        ("discovered_auxiliary_source_manifest", "discovered_auxiliary_source_manifest_sha256", "SOURCE_AUXILIARY_MANIFEST_HASH_MISMATCH"),
+        ("nar_entity_registry", "nar_entity_registry_sha256", "SOURCE_ENTITY_REGISTRY_HASH_MISMATCH"),
+        ("auxiliary_evidence", "auxiliary_evidence_sha256", "SOURCE_AUXILIARY_EVIDENCE_HASH_MISMATCH"),
+    ]
+    for field, hash_field, err in optional_hashes:
+        if field in artifact and sha_obj(artifact.get(field)) != artifact.get(hash_field):
+            errors.append(err)
     expected_artifact = sha_obj({k: v for k, v in artifact.items() if k != "source_snapshot_sha256"})
     if expected_artifact != artifact.get("source_snapshot_sha256"):
         errors.append("SOURCE_ARTIFACT_HASH_MISMATCH")
