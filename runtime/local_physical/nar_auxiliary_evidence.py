@@ -240,13 +240,19 @@ def parse_person_profile(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     return profile
 
 
-def parse_horse_profile(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+def parse_horse_profile(snapshot: Dict[str, Any], race_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
     history_rows: List[Dict[str, Any]] = []
+    filtered_target_or_future = 0
+    race_context = race_context or {}
+    target_date = str(race_context.get("race_date") or "").replace("-", "/")
     for table in _tables_from_snapshot(snapshot):
         if not table or "年月日" not in table[0] or "競馬場" not in table[0]:
             continue
         for row in table[1:]:
             if len(row) >= 23 and re.fullmatch(r"\d{4}/\d{2}/\d{2}", row[0]):
+                if target_date and row[0] >= target_date:
+                    filtered_target_or_future += 1
+                    continue
                 history_rows.append({
                     "date": row[0], "venue": row[1], "race_no": _as_int(row[2]), "race_name": row[3],
                     "class": row[4], "distance": _as_int(row[5]), "weather": row[6], "going": row[7],
@@ -256,7 +262,15 @@ def parse_horse_profile(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                     "carried_weight": _as_float(row[19]), "trainer": row[20], "earnings": _as_int(row[21]),
                     "reference_horse": row[22],
                 })
-    return {"source_id": snapshot.get("source_id"), "source_snapshot_sha256": snapshot.get("snapshot_sha256"), "history_count": len(history_rows), "history": history_rows, "history_sha256": sha_obj(history_rows)}
+    return {
+        "source_id": snapshot.get("source_id"),
+        "source_snapshot_sha256": snapshot.get("snapshot_sha256"),
+        "history_count": len(history_rows),
+        "history": history_rows,
+        "history_sha256": sha_obj(history_rows),
+        "filtered_target_or_future_rows": filtered_target_or_future,
+        "temporal_filter": "STRICTLY_BEFORE_TARGET_RACE_DATE" if target_date else "SOURCE_CUTOFF_ONLY",
+    }
 
 
 def _positions(value: str) -> List[int]:
@@ -372,13 +386,18 @@ def build_pedigree_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def build_profile_summaries(snapshots: List[Dict[str, Any]], registry: List[Dict[str, Any]]) -> Dict[str, Any]:
-    by_source = {str(s.get("source_id")): s for s in snapshots if isinstance(s, dict)}
+def build_profile_summaries(snapshots: List[Dict[str, Any]], registry: List[Dict[str, Any]], race_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    by_source = {
+        str(s.get("source_id")): s for s in snapshots
+        if isinstance(s, dict)
+        and s.get("cutoff_relation") != "POST_CUTOFF"
+        and s.get("raw_gzip_b64")
+    }
     horses: Dict[str, Any] = {}; riders: Dict[str, Any] = {}; trainers: Dict[str, Any] = {}
     for rec in registry:
         rid = rec["runner_id"]
         hs = by_source.get(f"NAR-HORSE-{rec.get('horse_lineage_login_code') or rid}")
-        if hs and hs.get("raw_gzip_b64"): horses[rid] = parse_horse_profile(hs)
+        if hs and hs.get("raw_gzip_b64"): horses[rid] = parse_horse_profile(hs, race_context)
         rider_id = str(rec.get("rider_license_no") or rid)
         rs = by_source.get(f"NAR-RIDER-{rider_id}")
         if rs and rs.get("raw_gzip_b64") and rider_id not in riders: riders[rider_id] = parse_person_profile(rs)
@@ -399,6 +418,7 @@ def enrich_with_auxiliary_evidence(artifact: Dict[str, Any], prediction_cutoff: 
     specs = _profile_specs(registry)
     snapshots, warnings = _fetch_profiles(specs, prediction_cutoff)
     successful = [s for s in snapshots if s.get("raw_gzip_b64") and 200 <= int(s.get("http_status") or 0) < 300]
+    temporal_eligible = [s for s in successful if s.get("cutoff_relation") != "POST_CUTOFF"]
     required_errors: List[str] = []
     if require_profiles and len(successful) != len(specs):
         missing = sorted(set(s["source_id"] for s in specs) - set(str(s.get("source_id")) for s in successful))
@@ -414,8 +434,9 @@ def enrich_with_auxiliary_evidence(artifact: Dict[str, Any], prediction_cutoff: 
         "profile": PROFILE, "production_authority": False,
         "mode": "OFFICIAL-SOURCE / AUXILIARY-SHADOW / NO-PRODUCTION-NUMERICAL-CHANGE",
         "profile_source_count": len(specs), "profile_source_success_count": len(successful),
+        "profile_source_temporal_eligible_count": len(temporal_eligible),
         "profile_source_warning_count": len(warnings), "profile_warnings": warnings,
-        "profiles": build_profile_summaries(snapshots, registry),
+        "profiles": build_profile_summaries(snapshots, registry, artifact.get("source_race_context") or {}),
         "same_day_position_bias": build_same_day_bias(artifact),
         "pedigree_population_seed": build_pedigree_seed(artifact),
         "population_pedigree_status": "SEED-HISTORY-CAPTURED / POPULATION-AGGREGATION-NOT-YET-PRODUCTION",
@@ -426,6 +447,12 @@ def enrich_with_auxiliary_evidence(artifact: Dict[str, Any], prediction_cutoff: 
     artifact["auxiliary_evidence_sha256"] = sha_obj(auxiliary)
     raw_bundle = [{"source_id": s.get("source_id"), "raw_sha256": s.get("raw_sha256"), "snapshot_sha256": s.get("snapshot_sha256"), "fetched_at": s.get("fetched_at"), "final_url": s.get("final_url")} for s in artifact["sources"]]
     artifact["raw_source_bundle_sha256"] = sha_obj(raw_bundle)
+    artifact["post_cutoff_sources"] = [
+        s.get("source_id") for s in artifact["sources"] if s.get("cutoff_relation") == "POST_CUTOFF"
+    ]
+    artifact["stale_sources"] = [
+        s.get("source_id") for s in artifact["sources"] if s.get("stale")
+    ]
     artifact["auxiliary_source_profile"] = PROFILE
     artifact["auxiliary_source_required"] = bool(require_profiles)
     artifact["errors"] = list(dict.fromkeys(list(artifact.get("errors") or []) + required_errors))
