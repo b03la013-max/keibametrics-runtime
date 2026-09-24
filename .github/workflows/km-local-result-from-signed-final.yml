@@ -193,7 +193,9 @@ jobs:
           if os.path.exists(local_mec_r5_shadow_path):
               r5_shadow=json.load(open(local_mec_r5_shadow_path,encoding="utf-8"))
               local_mec_r5_binding=verify_local_mec_r5_signed_final_binding(fin,r5_shadow)
-              local_mec_r5_shadow_settlement=settle_local_mec_r5_shadow(r5_shadow,req)
+              local_mec_r5_shadow_settlement=settle_local_mec_r5_shadow(
+                  r5_shadow,req,signed_final_binding_valid=True
+              )
 
               shadow_result={
                   "official_result":{
