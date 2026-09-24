@@ -1,0 +1,90 @@
+name: LOCAL Official Source Enrichment Live Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/nar_source_manifest.py'
+      - 'runtime/local_physical/nar_runner_universe.py'
+      - 'runtime/local_physical/nar_auxiliary_evidence.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'tests/test_nar_auxiliary_evidence.py'
+      - '.github/workflows/local-source-enrichment-live-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fetch official NAR fixture and verify auxiliary enrichment
+        run: |
+          python - <<'PY'
+          import copy, json, sys
+          sys.path.insert(0,"runtime/local_physical")
+          from nar_source_manifest import build_local_nar_manifest
+          from source_acquisition import acquire_sources, sha_obj, verify_source_artifact
+          from nar_runner_universe import enrich_source_artifact
+          from nar_auxiliary_evidence import PROFILE, enrich_with_auxiliary_evidence
+
+          payload={
+            "family_id":"LOCAL",
+            "race_id":"KCH-20260913-R03-AUX-LIVE",
+            "venue_id":"KCH",
+            "race_date":"2026-09-13",
+            "race_no":3,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":True,
+            "include_odds":True,
+          }
+          manifest=build_local_nar_manifest(payload)
+          art,errors=acquire_sources(manifest)
+          assert errors==[], errors
+          art=enrich_source_artifact(art)
+          art,aux_errors=enrich_with_auxiliary_evidence(art,manifest["prediction_cutoff"],require_profiles=True)
+          assert aux_errors==[], aux_errors
+          art["source_snapshot_sha256"]=sha_obj({k:v for k,v in art.items() if k!="source_snapshot_sha256"})
+
+          ok,verify_errors=verify_source_artifact(art)
+          assert ok, verify_errors
+          aux=art["auxiliary_evidence"]
+          reg=art["nar_entity_registry"]
+          profiles=aux["profiles"]
+          bias=aux["same_day_position_bias"]
+
+          assert aux["profile"]==PROFILE
+          assert aux["production_authority"] is False
+          assert len(reg)==12
+          assert len(profiles["horses"])==12
+          assert len(profiles["riders"])>=8
+          assert len(profiles["trainers"])>=5
+          assert aux["profile_source_success_count"]==aux["profile_source_count"]
+          assert bias["production_authority"] is False
+          assert bias["races_observed"]==2
+          assert bias["top3_observations"]>=6
+          assert all(x["history_count"]>=1 for x in profiles["horses"].values())
+
+          tampered=copy.deepcopy(art)
+          tampered["auxiliary_evidence"]["same_day_position_bias"]["races_observed"]=999
+          ok2,errs2=verify_source_artifact(tampered)
+          assert not ok2
+          assert "SOURCE_AUXILIARY_EVIDENCE_HASH_MISMATCH" in errs2
+
+          print("LOCAL_OFFICIAL_SOURCE_ENRICHMENT_LIVE_PASS="+json.dumps({
+            "profile":PROFILE,
+            "runner_entity_count":len(reg),
+            "horse_profiles":len(profiles["horses"]),
+            "rider_profiles":len(profiles["riders"]),
+            "trainer_profiles":len(profiles["trainers"]),
+            "profile_source_count":aux["profile_source_count"],
+            "same_day_races":bias["races_observed"],
+            "front_top3_rate":bias["front_at_last_corner_top3_rate"],
+            "leader_win_rate":bias["leader_at_last_corner_win_rate"],
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "auxiliary_evidence_sha256":art["auxiliary_evidence_sha256"],
+          },ensure_ascii=False,separators=(",",":")))
+          PY
