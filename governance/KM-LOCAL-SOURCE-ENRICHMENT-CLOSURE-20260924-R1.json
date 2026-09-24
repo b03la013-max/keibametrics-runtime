@@ -1,0 +1,93 @@
+{
+  "profile_id": "KM-LOCAL-SOURCE-ENRICHMENT-CLOSURE-20260924-R1",
+  "status": "ACTIVE / IMPLEMENTATION-CLOSED / PRODUCTION-RUNTIME-LIVE-VERIFIED / SOURCE-EVIDENCE-ONLY / NUMERICAL-POLICY-UNCHANGED",
+  "effective_at": "2026-09-24T10:15:00+09:00",
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R9",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9",
+  "suite_manifest": "KM-LOCAL-SUITE-MANIFEST-20260924-R7",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11",
+  "information_source_registry": "KM-LOCAL-INFORMATION-SOURCE-REGISTRY-v1.9-20260924",
+  "input_source_ops": "KM-LOCAL-INPUT-SOURCE-OPS-v1.6-20260924",
+  "runtime": {
+    "revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE",
+    "git_revision": "7769ce32943423c507a762b46f1bb38bc8d50cc5",
+    "endpoint": "https://witnessstrictimage-production.up.railway.app",
+    "railway_deployment_id": "41f2f3c9-c3ab-427b-bbca-b51b897ee716",
+    "deployment_status": "SUCCESS",
+    "wrapper_sha256": "06a2566fc2437338bef7aaaaff5414d03eb8a6534943e28741b2f33ddc3a05b9",
+    "legacy_app_sha256": "d6f11f40bd858578e5c28759100317a261a2e88fa39e2bc30454010fd2a80050"
+  },
+  "implementations": {
+    "source_acquisition": {
+      "sha256": "cd78e5dbf98f7879a1fd5598177a42581cdea1c9a279da58b863e8ee8249ea8f"
+    },
+    "nar_source_manifest": {
+      "sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc"
+    },
+    "nar_runner_universe": {
+      "sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb"
+    },
+    "nar_auxiliary_evidence": {
+      "profile": "KM-LOCAL-NAR-AUXILIARY-EVIDENCE-v1.0-20260924",
+      "sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c"
+    },
+    "jma_weather_evidence": {
+      "profile": "KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",
+      "sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1"
+    },
+    "point_in_time_population_ledger": {
+      "profile": "KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924",
+      "sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850"
+    }
+  },
+  "production_runtime_acceptance": {
+    "run_id": 35941926027,
+    "status": "SUCCESS",
+    "source_receipt": "5db18fcd0263346f363e9acb29037a1ae9a42569dfcb1946fab76c526c4330a1",
+    "source_snapshot_sha256": "1207dec74dcf3a467bcb3ba945d907a2d1e960aaada399bb7d1c19227fc53876",
+    "official_runner_count": 12,
+    "horse_profiles": 12,
+    "rider_profiles": 12,
+    "trainer_profiles": 9,
+    "same_day_races": 2,
+    "jma": {
+      "station_id": "74182",
+      "station_name": "高知",
+      "distance_km": 4.356,
+      "evidence_sha256": "9bbbb7d3e2d9351359a47c82b215c8b0f0a4c8348abf636607f4fe4234ccf7f9"
+    },
+    "population": {
+      "observation_count": 138,
+      "sire_cohorts": 64,
+      "damsire_cohorts": 70,
+      "evidence_sha256": "f7fd7d4cec447222a09dde81b00b517b5cc87d8c995977748b67b43058921776"
+    },
+    "pre_krs_receipt": "75c6aa918fd19e25da729f78f0f62c5a64714218a48e1383ba575048a1cd4fdd",
+    "krs_receipt": "fe1434dc1eb0d71595ba0fd6849bcd72377561a9e8b4f9dc55898e6689178b8c",
+    "actual_run_count": 5000,
+    "signed_source_verify": "PASS",
+    "jma_tamper_reject": "PASS",
+    "population_tamper_reject": "PASS"
+  },
+  "production_numeric_authority": {
+    "suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+    "status": "FROZEN",
+    "numerical_change": false,
+    "numerical_authority_status": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY",
+    "engine_changed": false,
+    "parameter_map_changed": false,
+    "probability_authority_changed": false,
+    "ev_authority_changed": false,
+    "kelly_authority_changed": false
+  },
+  "boundaries": {
+    "universal_training_source": "NOT_CONNECTED",
+    "universal_trainer_comment_source": "NOT_CONNECTED",
+    "universal_paddock_source": "NOT_CONNECTED",
+    "point_in_time_population": "SELECTION_BIASED_CURRENT_FIELD_SEED / SHADOW",
+    "jma_weather": "OFFICIAL CONTEXT SOURCE / SHADOW / NAR TRACK-GOING REMAINS AUTHORITATIVE",
+    "unknown_future_real_race_empirical_acceptance": "PENDING"
+  },
+  "declaration": "LOCAL automatic source enrichment is externally implemented and live-verified. New information is signed and tamper-checked at SOURCE level, but it is not promoted into Production predictive weights without frozen OOS evidence."
+}
