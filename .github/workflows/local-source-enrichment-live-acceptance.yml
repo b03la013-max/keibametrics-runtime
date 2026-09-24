@@ -45,6 +45,7 @@ jobs:
           art,errors=acquire_sources(manifest)
           assert errors==[], errors
           art=enrich_source_artifact(art)
+          art["source_race_context"]={"venue_id":"KCH","race_date":"2026-09-13","race_no":3}
           art,aux_errors=enrich_with_auxiliary_evidence(art,manifest["prediction_cutoff"],require_profiles=True)
           assert aux_errors==[], aux_errors
           art["source_snapshot_sha256"]=sha_obj({k:v for k,v in art.items() if k!="source_snapshot_sha256"})
@@ -66,7 +67,9 @@ jobs:
           assert bias["production_authority"] is False
           assert bias["races_observed"]==2
           assert bias["top3_observations"]>=6
-          assert all(x["history_count"]>=1 for x in profiles["horses"].values())
+          assert sum(x["history_count"] for x in profiles["horses"].values())>=12
+          assert all(all(h["date"] < "2026/09/13" for h in x["history"]) for x in profiles["horses"].values())
+          assert sum(x["filtered_target_or_future_rows"] for x in profiles["horses"].values())>=1
 
           tampered=copy.deepcopy(art)
           tampered["auxiliary_evidence"]["same_day_position_bias"]["races_observed"]=999
