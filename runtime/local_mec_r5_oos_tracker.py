@@ -20,6 +20,26 @@ def _dt(s):
 def _load(p):
     with open(p,encoding="utf-8") as f:return json.load(f)
 
+def _official_result_authority(race_id):
+    root="runtime/family_result_requests"
+    refs=[]
+    if os.path.isdir(root):
+        for fn in sorted(os.listdir(root)):
+            if not fn.endswith(".json"): continue
+            try:
+                req=_load(os.path.join(root,fn))
+            except Exception:
+                continue
+            if str(req.get("race_id") or "")!=str(race_id):
+                continue
+            if req.get("official_result_verified") is True:
+                refs.append({
+                    "request_file":fn,
+                    "source":req.get("source"),
+                    "verification_ref":req.get("official_result_verification_ref"),
+                })
+    return {"verified":bool(refs),"refs":refs}
+
 def _max_drawdown(rows):
     eq=peak=dd=0.0
     for x in rows:
@@ -45,7 +65,7 @@ def _aggregate(rows):
 
 def build_status():
     activation=_dt(ACTIVATION_AT)
-    entries=[]; errors=[]
+    entries=[]; held=[]; errors=[]
     root="runtime/local_mec_r5_shadow_results"
     if os.path.isdir(root):
         for fn in sorted(os.listdir(root)):
@@ -53,6 +73,10 @@ def build_status():
             rid=fn[:-5]
             try:
                 result=_load(os.path.join(root,fn))
+                result_authority=_official_result_authority(rid)
+                if result_authority.get("verified") is not True:
+                    held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
+                    continue
                 sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
                 lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
                 if not os.path.exists(sp) or not os.path.exists(lp):
@@ -132,6 +156,7 @@ def build_status():
       "profile":PROFILE,"candidate_profile":CANDIDATE_PROFILE,"candidate_id":CANDIDATE_ID,
       "status":"COMPLETE_30_HUMAN_REVIEW_REQUIRED" if len(entries)>=TARGET else "WAITING_30",
       "activation_at":ACTIVATION_AT,"target_eligible_races":TARGET,"eligible_races":len(entries),
+      "held_races":len(held),"held":held,
       "remaining_races":max(0,TARGET-len(entries)),
       "training_exclusion":["URW-20260923-R07-FORMAL-R1","URW-20260923-R10-FORMAL-R1","URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"],
       "production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
