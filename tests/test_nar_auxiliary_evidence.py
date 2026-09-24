@@ -8,6 +8,7 @@ from source_acquisition import snapshot_from_bytes
 from nar_auxiliary_evidence import (
     PROFILE,
     build_same_day_bias,
+    build_pedigree_seed,
     discover_entity_registry,
     parse_horse_profile,
     parse_person_profile,
@@ -125,3 +126,25 @@ def test_same_day_bias_uses_prior_result_tables_only():
 
 def test_profile_constant_is_auxiliary_not_production():
     assert PROFILE=="KM-LOCAL-NAR-AUXILIARY-EVIDENCE-v1.0-20260924"
+
+
+def test_pedigree_seed_captures_all_primary_runner_groups():
+    table=[
+      ["枠","馬番","競走馬"],
+      ["1","1","Horse A"], ["牝3"], ["Sire A","Trainer A"], ["Dam A"], ["（DamSire A）"],
+      ["2","2","Horse B"], ["牡4"], ["Sire B","Trainer B"], ["Dam B"], ["(DamSire B)"],
+    ]
+    art={"normalized_evidence":{"race_card_tables":{
+      "value":[table],
+      "source_id":"RACE",
+      "snapshot_sha256":"abc",
+    }}}
+    out=build_pedigree_seed(art)
+    assert out["production_authority"] is False
+    assert out["population_fit_ready"] is False
+    assert out["runner_count"]==2
+    assert out["seeds"][0]["runner_id"]=="1"
+    assert out["seeds"][0]["sire"]=="Sire A"
+    assert out["seeds"][0]["dam"]=="Dam A"
+    assert out["seeds"][0]["damsire"]=="DamSire A"
+    assert out["seeds"][1]["runner_id"]=="2"
