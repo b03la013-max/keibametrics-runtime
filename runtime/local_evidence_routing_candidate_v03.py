@@ -108,6 +108,7 @@ def _set_feature(
     raw_metric: Any,
     missing: bool | None = None,
     source_window: str,
+    source_timestamp: str | None = None,
 ) -> None:
     feats = runner["evidence_features"]
     old = copy.deepcopy(feats.get(component) or {})
@@ -119,7 +120,7 @@ def _set_feature(
         "rule_id": _feature_rule_id(index, component),
         "evidence_refs": sorted(set(str(x) for x in refs if x)),
         "source_fact": fact,
-        "source_timestamp": old.get("source_timestamp"),
+        "source_timestamp": str(source_timestamp or old.get("source_timestamp") or ""),
         "missing": miss,
         "coverage": round(max(0.0, min(1.0, float(coverage))), 6),
         "candidate_only": True,
@@ -129,6 +130,25 @@ def _set_feature(
         "evidence_window": source_window,
         "routing_profile": PROFILE,
     }
+
+
+def _source_fetched_at(source: Dict[str, Any], source_id: Any, fallback: Any = None) -> str:
+    """Resolve the timestamp of the concrete source snapshot used by a routed feature.
+
+    Feature provenance must point to the source that actually supplied the fact.
+    Falling back to SOURCE freeze is allowed for deterministic derived ledgers, but
+    a horse/rider profile must not inherit the race-card fetch time by accident.
+    """
+    sid = str(source_id or "")
+    if sid:
+        for row in source.get("sources") or []:
+            if str((row or {}).get("source_id") or "") == sid:
+                ts = (row or {}).get("fetched_at")
+                if ts:
+                    return str(ts)
+    if fallback:
+        return str(fallback)
+    return str(source.get("source_freeze_at") or "")
 
 
 def _profile_maps(source: Dict[str, Any]):
@@ -278,6 +298,7 @@ def compile_candidate_evidence_v03(
     pop_sha = source_artifact.get("point_in_time_population_ledger_sha256")
     jma_sha = source_artifact.get("jma_weather_evidence_sha256")
     sbo_sha = source_artifact.get("sbo_public_shadow_evidence_sha256")
+    source_freeze_ts = str(source_artifact.get("source_freeze_at") or "")
 
     for runner in out.get("runners") or []:
         rid = str(runner.get("runner_id"))
@@ -285,22 +306,27 @@ def compile_candidate_evidence_v03(
         hp = horses.get(rid) or {}
         hist = list(hp.get("history") or [])
         h_refs = [hp.get("source_id"), hp.get("source_snapshot_sha256"), aux_sha]
+        horse_source_ts = _source_fetched_at(source_artifact, hp.get("source_id"), source_freeze_ts)
         entity = entities.get(rid) or {}
         rider_profile = riders.get(str(entity.get("rider_license_no") or "")) or {}
         trainer_profile = trainers.get(str(entity.get("trainer_license_no") or "")) or {}
+        rider_source_ts = _source_fetched_at(source_artifact, rider_profile.get("source_id"), source_freeze_ts)
+        trainer_source_ts = _source_fetched_at(source_artifact, trainer_profile.get("source_id"), source_freeze_ts)
 
         # CFI: full pre-target horse history, not the race-card last-five window.
         same_venue, cov, n = _history_perf(hist, lambda r: _venue_eq(r.get("venue"), venue))
         _set_feature(runner, "same_venue", index="CFIg-L", score=same_venue,
                      fact=f"full pre-target NAR horse history same venue={venue}; matched={n}/{len(hist)}",
                      refs=h_refs, coverage=cov, raw_metric={"matched": n, "history": len(hist)},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         same_dist, cov, n = _history_perf(hist, lambda r: int(r.get("distance") or -1) == distance)
         _set_feature(runner, "same_distance", index="CFIg-L", score=same_dist,
                      fact=f"full pre-target NAR horse history same distance={distance}; matched={n}/{len(hist)}",
                      refs=h_refs, coverage=cov, raw_metric={"matched": n, "history": len(hist)},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         similar, cov, n = _history_perf(
             hist,
@@ -309,21 +335,24 @@ def compile_candidate_evidence_v03(
         _set_feature(runner, "similar_distance", index="CFIg-L", score=similar,
                      fact=f"full pre-target similar-distance window around {distance}m; matched={n}/{len(hist)}",
                      refs=h_refs, coverage=cov, raw_metric={"matched": n, "history": len(hist)},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         wet, cov, n = _history_perf(hist, lambda r: _going_group(r.get("going")) == _going_group(going))
         _set_feature(runner, "going_fit", index="CFIg-L", score=wet,
                      fact=f"full pre-target going-group match={_going_group(going)}; matched={n}/{len(hist)}",
-                     refs=h_refs + [jma_sha], coverage=cov, raw_metric={"matched": n, "history": len(hist)},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY_PLUS_CURRENT_OFFICIAL_GOING")
+                     refs=h_refs, coverage=cov, raw_metric={"matched": n, "history": len(hist)},
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY_PLUS_CURRENT_NAR_OFFICIAL_GOING",
+                     source_timestamp=horse_source_ts)
 
         # RFI: only the going-adaptation component can be extended safely from
         # profile history because NAR horse profile history does not expose all
         # corner positions. Position components retain their observed last-five inputs.
         _set_feature(runner, "going_adaptation", index="RFIg-L", score=wet,
                      fact=f"full pre-target performance under current going-group={_going_group(going)}; no invented corner positions",
-                     refs=h_refs + [jma_sha], coverage=cov, raw_metric={"matched": n, "history": len(hist)},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     refs=h_refs, coverage=cov, raw_metric={"matched": n, "history": len(hist)},
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         # BVI: point-in-time population ledger is selection-biased shadow. Use only
         # cohorts with >=20 starts and >=3 distinct horses; otherwise remain UNKNOWN.
@@ -336,13 +365,15 @@ def compile_candidate_evidence_v03(
                      fact=("point-in-time sire cohort descriptive top3 rate; minimum sample passed"
                            if sire_row else "point-in-time sire cohort insufficient/selection-biased; remain UNKNOWN"),
                      refs=[pop_sha], coverage=(min(1.0, int(sire_row.get("starts") or 0) / 60.0) if sire_row else 0),
-                     raw_metric=sire_row, source_window="POINT_IN_TIME_PRE_TARGET_POPULATION_LEDGER")
+                     raw_metric=sire_row, source_window="POINT_IN_TIME_PRE_TARGET_POPULATION_LEDGER",
+                     source_timestamp=source_freeze_ts)
         _set_feature(runner, "damsire_fit", index="BVIg-L",
                      score=(100.0 * float(damsire_row["top3_rate"]) if damsire_row and damsire_row.get("top3_rate") is not None else None),
                      fact=("point-in-time damsire cohort descriptive top3 rate; minimum sample passed"
                            if damsire_row else "point-in-time damsire cohort insufficient/selection-biased; remain UNKNOWN"),
                      refs=[pop_sha], coverage=(min(1.0, int(damsire_row.get("starts") or 0) / 60.0) if damsire_row else 0),
-                     raw_metric=damsire_row, source_window="POINT_IN_TIME_PRE_TARGET_POPULATION_LEDGER")
+                     raw_metric=damsire_row, source_window="POINT_IN_TIME_PRE_TARGET_POPULATION_LEDGER",
+                     source_timestamp=source_freeze_ts)
 
         # JTI: retain horse/rider pair-specific evidence where appropriate, but use
         # official rider popularity bands for favorite/longshot reliability.
@@ -352,17 +383,20 @@ def compile_candidate_evidence_v03(
         _set_feature(runner, "favorite_reliability", index="JTI-L", score=fav_score,
                      fact=f"NAR rider profile popularity-band top3 rate for popularity<=3; starts={fav_n}",
                      refs=rider_refs, coverage=min(1.0, fav_n / 50.0), raw_metric={"starts": fav_n},
-                     source_window="NAR_RIDER_PROFILE_PRE_CUTOFF")
+                     source_window="NAR_RIDER_PROFILE_PRE_CUTOFF",
+                     source_timestamp=rider_source_ts)
         _set_feature(runner, "longshot_record", index="JTI-L", score=lng_score,
                      fact=f"NAR rider profile popularity-band top3 rate for popularity>=6; starts={lng_n}",
                      refs=rider_refs, coverage=min(1.0, lng_n / 50.0), raw_metric={"starts": lng_n},
-                     source_window="NAR_RIDER_PROFILE_PRE_CUTOFF")
+                     source_window="NAR_RIDER_PROFILE_PRE_CUTOFF",
+                     source_timestamp=rider_source_ts)
 
         # CSI: trainer profile is preserved as context and never mislabeled as
         # venue/class/distance specificity. Layoff/transfer remain horse-history based.
         runner["candidate_trainer_profile_context_v03"] = {
             "source_id": trainer_profile.get("source_id"),
             "source_snapshot_sha256": trainer_profile.get("source_snapshot_sha256"),
+            "source_timestamp": trainer_source_ts,
             "latest_year": copy.deepcopy(trainer_profile.get("latest_year")),
             "lifetime_local": copy.deepcopy(trainer_profile.get("lifetime_local")),
             "production_authority": False,
@@ -383,13 +417,15 @@ def compile_candidate_evidence_v03(
         _set_feature(runner, "good_weight_range", index="BWI-L", score=gwr,
                      fact=f"full pre-target bodyweight history; current={current_bw}; good-range samples={len(good)}",
                      refs=h_refs, coverage=min(1.0, len(good) / 6.0), raw_metric={"good_weights": good},
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         bw_cov = min(1.0, (int(isinstance(current_bw, int)) + len(bw_rows)) / 10.0)
         _set_feature(runner, "bodyweight_range_coverage", index="DCR", score=100.0 * bw_cov,
                      fact=f"full pre-target bodyweight observations={int(isinstance(current_bw,int))+len(bw_rows)}/10 target",
                      refs=h_refs, coverage=1.0, raw_metric=bw_cov,
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         comparable = sum(
             1 for r in hist if _venue_eq(r.get("venue"), venue) and int(r.get("distance") or -1) == distance
@@ -398,7 +434,8 @@ def compile_candidate_evidence_v03(
         _set_feature(runner, "same_venue_distance_comparability", index="DCR", score=100.0 * comp_cov,
                      fact=f"full pre-target same venue+distance comparable runs={comparable}",
                      refs=h_refs, coverage=1.0, raw_metric=comparable,
-                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY")
+                     source_window="FULL_PRE_TARGET_NAR_HORSE_HISTORY",
+                     source_timestamp=horse_source_ts)
 
         races_observed = int(same_day.get("races_observed") or 0)
         race_no = int(request.get("race_no") or race.get("race_no") or 1)
@@ -406,7 +443,8 @@ def compile_candidate_evidence_v03(
         _set_feature(runner, "same_day_gci_coverage", index="DCR", score=100.0 * same_day_cov,
                      fact=f"same-day official result coverage races={races_observed}/{max(0,race_no-1)}",
                      refs=[aux_sha, same_day.get("sha256")], coverage=1.0, raw_metric=same_day_cov,
-                     source_window="SAME_DAY_PRE_TARGET_OFFICIAL_RESULTS")
+                     source_window="SAME_DAY_PRE_TARGET_OFFICIAL_RESULTS",
+                     source_timestamp=source_freeze_ts)
 
         runner["candidate_context_features_v03"] = _context_shadow(source_artifact, rid)
         runner["candidate_context_features_v03"]["rider_profile_latest_year"] = copy.deepcopy(rider_profile.get("latest_year"))
@@ -451,6 +489,7 @@ def compile_candidate_evidence_v03(
         "design_freeze_date": DESIGN_FREEZE_DATE,
         "missing_policy": "OBSERVED_ONLY_RENORMALIZE",
         "sbo_ability_index_weight": 0,
+        "provenance_policy": "FEATURE_TIMESTAMP_MUST_MATCH_CONCRETE_SOURCE_SNAPSHOT; JMA/SBO CONTEXT SHA MUST NOT APPEAR IN ABILITY FEATURE REFS UNLESS RULE-BOUND",
     }
     out["candidate_evidence_compiler"]["sha256"] = _sha(out["candidate_evidence_compiler"])
     out["candidate_v03_policy"] = {
