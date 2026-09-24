@@ -75,5 +75,12 @@ jobs:
               print(label+"_TABLE_COUNT",len(tabs))
               for ti,t in enumerate(tabs[:12]):
                   print(label+"_TABLE",ti,"ROWS",len(t),"HEAD",repr(t[:6])[:5000])
+          # Emit complete rider/trainer performance table rows for source capability audit.
+          for label,needle in (("RIDER","RiderMark"),("TRAINER","TrainerMark")):
+              u=next(x for x in abslinks if needle in x)
+              tabs=_html_tables(get(u))
+              for ti,t in enumerate(tabs):
+                  if t and any("着別回数" in str(cell) for cell in t[0]):
+                      print(label+"_PERFORMANCE_ROWS",repr(t)[:16000])
           print("DISCOVERY_PASS")
           PY
