@@ -46,5 +46,23 @@ jobs:
               if m:
                   s=re.sub(r"\s+"," ",result[max(0,m.start()-500):m.start()+1500])
                   print("RESULT_SNIPPET",term,s[:2000])
+          # Inspect one horse/rider/trainer profile from actual race-card links.
+          base="https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/"
+          abslinks=[]
+          for h in hrefs:
+              if h.startswith("../"):
+                  abslinks.append("https://www.keiba.go.jp/KeibaWeb/"+h[3:])
+              elif h.startswith("/"):
+                  abslinks.append("https://www.keiba.go.jp"+h)
+          for label,needle in (("HORSE","HorseMarkInfo"),("RIDER","RiderMark"),("TRAINER","TrainerMark")):
+              u=next(x for x in abslinks if needle in x)
+              doc=get(u)
+              print(label+"_URL",u)
+              print(label+"_BYTES",len(doc.encode()))
+              for term in (("馬情報" if label=="HORSE" else "生涯成績"),"地方競馬年別成績","着別回数","年月日"):
+                  m=re.search(term,doc)
+                  if m:
+                      s=re.sub(r"\\s+"," ",doc[max(0,m.start()-500):m.start()+3500])
+                      print(label+"_SNIPPET",term,s[:4000])
           print("DISCOVERY_PASS")
           PY
