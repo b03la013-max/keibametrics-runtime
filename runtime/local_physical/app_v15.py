@@ -24,8 +24,12 @@ from local_population_ledger import (
     PROFILE as LOCAL_POPULATION_LEDGER_PROFILE,
     enrich_with_population_seed,
 )
+from sbo_public_shadow_evidence import (
+    PROFILE as SBO_PUBLIC_SHADOW_PROFILE,
+    build_sbo_shadow_evidence,
+)
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -75,7 +79,9 @@ def health():
     h["jma_weather_evidence_sha256"] = legacy.sha_file("/opt/km/jma_weather_evidence.py")
     h["point_in_time_population_profile"] = LOCAL_POPULATION_LEDGER_PROFILE
     h["point_in_time_population_sha256"] = legacy.sha_file("/opt/km/local_population_ledger.py")
-    for c in ("SOURCE_JMA_WEATHER", "SOURCE_POINT_IN_TIME_POPULATION_SEED", "SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
+    h["sbo_public_shadow_profile"] = SBO_PUBLIC_SHADOW_PROFILE
+    h["sbo_public_shadow_sha256"] = legacy.sha_file("/opt/km/sbo_public_shadow_evidence.py")
+    for c in ("SOURCE_SBO_PUBLIC_SHADOW", "SOURCE_JMA_WEATHER", "SOURCE_POINT_IN_TIME_POPULATION_SEED", "SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
         if c not in caps:
             caps.insert(0, c)
     h["capabilities"] = caps
@@ -147,6 +153,20 @@ def source_acquire(payload: Dict[str, Any]):
                 artifact["jma_weather_profile"] = JMA_WEATHER_EVIDENCE_PROFILE
                 if bool(payload.get("require_jma_weather", False)):
                     errors = list(errors) + ["JMA_REQUIRED_WEATHER_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
+        if bool(payload.get("include_sbo_shadow", True)):
+            try:
+                artifact, sbo_errors = build_sbo_shadow_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_sbo=bool(payload.get("require_sbo_shadow", False)),
+                )
+                errors = list(errors) + list(sbo_errors)
+            except Exception as e:
+                artifact["sbo_public_shadow_error"] = str(e)
+                artifact["sbo_public_shadow_profile"] = SBO_PUBLIC_SHADOW_PROFILE
+                if bool(payload.get("require_sbo_shadow", False)):
+                    errors = list(errors) + ["SBO_PUBLIC_SHADOW_REQUIRED_FAILED:" + str(e)]
                     artifact["formal_ready"] = False
     artifact["errors"] = list(dict.fromkeys(errors))
     artifact["source_snapshot_sha256"] = sha_obj(

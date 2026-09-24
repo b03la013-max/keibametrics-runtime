@@ -1,0 +1,68 @@
+name: LOCAL SBO Public Shadow Live Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_physical/sbo_public_shadow_evidence.py'
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'tests/test_sbo_public_shadow_evidence.py'
+      - '.github/workflows/local-sbo-public-shadow-live-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Unit tests
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_sbo_public_shadow_evidence.py
+      - name: Verify live public SBO page extraction and storage boundary
+        run: |
+          python - <<'PY'
+          import json,sys
+          sys.path.insert(0,"runtime/local_physical")
+          from sbo_public_shadow_evidence import PROFILE, build_sbo_shadow_evidence
+
+          art={
+            "source_race_context":{"venue_id":"URW","race_date":"2025-07-21","race_no":1},
+            "normalized_evidence":{"start_time":{"value":"13:10"}},
+          }
+          art,errors=build_sbo_shadow_evidence(
+              art,
+              "2099-01-01T00:00:00+00:00",
+              require_sbo=True,
+          )
+          assert errors==[],errors
+          ev=art["sbo_public_shadow_evidence"]
+          assert ev["profile"]==PROFILE,ev
+          assert ev["production_authority"] is False,ev
+          assert ev["prediction_authority"] is False,ev
+          assert ev["source_class"]=="THIRD_PARTY_PUBLIC_SHADOW",ev
+          assert ev["raw_sha256"],ev
+          assert ev["raw_byte_count"] > 1000,ev
+          assert len(ev["runners"]) >= 5,ev
+          assert any(x.get("average_index",{}).get("value") is not None for x in ev["runners"]),ev
+          assert "raw_gzip_b64" not in ev and "raw_html" not in ev,ev
+          assert ev["start_relation"]=="POST_START",ev
+          assert ev["oos_eligible"] is False,ev
+          assert ev["status"]=="CAPTURED_NOT_OOS_ELIGIBLE",ev
+          print("LOCAL_SBO_PUBLIC_SHADOW_LIVE_PASS="+json.dumps({
+              "profile":ev["profile"],
+              "url":ev["requested_url"],
+              "robots_status":ev.get("robots_status"),
+              "runner_count":len(ev["runners"]),
+              "top_average_index":ev["average_index_ranking"][:3],
+              "recommendation_groups":ev["recommendation_groups"],
+              "raw_sha256":ev["raw_sha256"],
+              "shadow_sha256":art["sbo_public_shadow_evidence_sha256"],
+              "storage_policy":ev["storage_policy"],
+              "oos_eligible":ev["oos_eligible"],
+          },ensure_ascii=False,separators=(",",":")))
+          PY
