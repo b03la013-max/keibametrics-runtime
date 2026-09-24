@@ -49,6 +49,11 @@ jobs:
           sys.path.insert(0,"runtime")
           from local_candidate_postresult import evaluate_dual
           from local_candidate_dual_oos_tracker import build_measurement, write_status
+          from local_candidate_v03_postresult import evaluate_v03
+          from local_candidate_v03_oos_tracker import (
+              build_measurement as build_v03_measurement,
+              write_status as write_v03_status,
+          )
           from local_mec_r4_bridge import verify_signed_final_binding
           from mec_r4_shadow import settle_mec_r4_shadow, settle_ticket_list
           from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
@@ -280,6 +285,48 @@ jobs:
               json.dump(candidate_dual_postresult,open("runtime_out/candidate_dual_shadow_postresult.json","w",encoding="utf-8"),
                         ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
+          candidate_v03_postresult=None
+          candidate_v03_summary=None
+          candidate_krs_v03_summary=None
+          candidate_v03_binding_valid=False
+          v03_path=os.path.join("runtime_result_in","candidate_numerical_v03_shadow_summary.json")
+          v03_krs_summary_path=os.path.join("runtime_result_in","candidate_krs_v03_shadow_summary.json")
+          v03_krs_envelope_path=os.path.join("runtime_result_in","candidate_krs_v03_receipt_envelope.json")
+          if os.path.exists(v03_path):
+              candidate_v03_summary=json.load(open(v03_path,encoding="utf-8"))
+              candidate_krs_v03_summary=(
+                  json.load(open(v03_krs_summary_path,encoding="utf-8"))
+                  if os.path.exists(v03_krs_summary_path) else {}
+              )
+              v03_env=(
+                  json.load(open(v03_krs_envelope_path,encoding="utf-8"))
+                  if os.path.exists(v03_krs_envelope_path) else None
+              )
+              trace=((fin.get("artifact") or {}).get("ticket_transport_trace") or {})
+              bound=(trace.get("numerical_candidate_v03_shadow") or {})
+              candidate_v03_binding_valid=bool(
+                  bound.get("frozen_pre_result") is True
+                  and str(bound.get("shadow_sha256") or "")==str(candidate_v03_summary.get("sha256") or "")
+                  and str(bound.get("source_snapshot_sha256") or "")==str(candidate_v03_summary.get("source_snapshot_sha256") or "")
+              )
+              candidate_v03_postresult=evaluate_v03(
+                  candidate_v03_summary,[int(x) for x in req["finish_order"]],
+                  result_available_at=req["result_available_at"],race_id=rid,
+                  krs_summary=candidate_krs_v03_summary,
+                  krs_envelope=v03_env,
+                  signed_final_binding_valid=candidate_v03_binding_valid,
+              )
+              json.dump(candidate_v03_postresult,open("runtime_out/candidate_v03_shadow_postresult.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump({
+                  "race_id":rid,
+                  "binding_valid":candidate_v03_binding_valid,
+                  "signed_final_bound":bound,
+                  "shadow_sha256":candidate_v03_summary.get("sha256"),
+                  "production_effect":"NONE",
+              },open("runtime_out/candidate_v03_signed_final_binding.json","w",encoding="utf-8"),
+                ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
           candidate_oos_measurement=None
           candidate_oos_status=None
           if candidate_dual_postresult is not None:
@@ -295,6 +342,24 @@ jobs:
               json.dump(candidate_oos_measurement,open("runtime_out/candidate_dual_oos_measurement.json","w",encoding="utf-8"),
                         ensure_ascii=False,sort_keys=True,separators=(",",":"))
               json.dump(candidate_oos_status,open("runtime_out/candidate_dual_oos_status.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          candidate_v03_oos_measurement=None
+          candidate_v03_oos_status=None
+          if candidate_v03_postresult is not None:
+              candidate_v03_oos_measurement=build_v03_measurement(
+                  candidate_v03_postresult,req,baseline_measurement=candidate_oos_measurement
+              )
+              v03dir=os.path.join("runtime","local_candidate_v03_oos_measurements")
+              os.makedirs(v03dir,exist_ok=True)
+              json.dump(candidate_v03_oos_measurement,open(os.path.join(v03dir,rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              candidate_v03_oos_status=write_v03_status(
+                  v03dir,os.path.join("runtime","local_candidate_v03_oos_status.json")
+              )
+              json.dump(candidate_v03_oos_measurement,open("runtime_out/candidate_v03_oos_measurement.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(candidate_v03_oos_status,open("runtime_out/candidate_v03_oos_status.json","w",encoding="utf-8"),
                         ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
           summary={
@@ -313,6 +378,10 @@ jobs:
             "candidate_dual_shadow_postresult":candidate_dual_postresult,
             "candidate_dual_oos_measurement":candidate_oos_measurement,
             "candidate_dual_oos_status":candidate_oos_status,
+            "candidate_v03_shadow_postresult":candidate_v03_postresult,
+            "candidate_v03_signed_final_binding_valid":candidate_v03_binding_valid,
+            "candidate_v03_oos_measurement":candidate_v03_oos_measurement,
+            "candidate_v03_oos_status":candidate_v03_oos_status,
             "mec_r4_shadow_settlement_sha256":(mec_r4_shadow_settlement or {}).get("sha256"),
             "mec_r4_signed_final_binding":mec_r4_binding,
             "mec_r4_oos_status":mec_r4_oos_status,
@@ -332,6 +401,7 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
+          if [ -d runtime/local_candidate_v03_oos_measurements ]; then git add runtime/local_candidate_v03_oos_measurements/*.json runtime/local_candidate_v03_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_lineage ]; then git add runtime/mec_shadow_lineage/*.json 2>/dev/null || true; fi
