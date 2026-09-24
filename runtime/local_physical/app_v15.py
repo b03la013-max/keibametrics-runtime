@@ -16,8 +16,16 @@ from nar_auxiliary_evidence import (
     PROFILE as NAR_AUXILIARY_EVIDENCE_PROFILE,
     enrich_with_auxiliary_evidence,
 )
+from jma_weather_evidence import (
+    PROFILE as JMA_WEATHER_EVIDENCE_PROFILE,
+    build_jma_weather_evidence,
+)
+from local_population_ledger import (
+    PROFILE as LOCAL_POPULATION_LEDGER_PROFILE,
+    enrich_with_population_seed,
+)
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.5-20260924-OFFICIAL-AUXILIARY-EVIDENCE"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -63,7 +71,11 @@ def health():
     h["nar_runner_universe_sha256"] = legacy.sha_file("/opt/km/nar_runner_universe.py")
     h["nar_auxiliary_evidence_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
     h["nar_auxiliary_evidence_sha256"] = legacy.sha_file("/opt/km/nar_auxiliary_evidence.py")
-    for c in ("SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
+    h["jma_weather_evidence_profile"] = JMA_WEATHER_EVIDENCE_PROFILE
+    h["jma_weather_evidence_sha256"] = legacy.sha_file("/opt/km/jma_weather_evidence.py")
+    h["point_in_time_population_profile"] = LOCAL_POPULATION_LEDGER_PROFILE
+    h["point_in_time_population_sha256"] = legacy.sha_file("/opt/km/local_population_ledger.py")
+    for c in ("SOURCE_JMA_WEATHER", "SOURCE_POINT_IN_TIME_POPULATION_SEED", "SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
         if c not in caps:
             caps.insert(0, c)
     h["capabilities"] = caps
@@ -116,6 +128,25 @@ def source_acquire(payload: Dict[str, Any]):
                 artifact["auxiliary_source_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
                 if bool(payload.get("require_auxiliary_profiles", False)):
                     errors = list(errors) + ["AUXILIARY_EVIDENCE_REQUIRED_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
+        if bool(payload.get("include_population_seed", True)) and artifact.get("auxiliary_evidence"):
+            try:
+                artifact = enrich_with_population_seed(artifact)
+            except Exception as e:
+                artifact["point_in_time_population_error"] = str(e)
+        if bool(payload.get("include_jma_weather", True)):
+            try:
+                artifact, jma_errors = build_jma_weather_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_weather=bool(payload.get("require_jma_weather", False)),
+                )
+                errors = list(errors) + list(jma_errors)
+            except Exception as e:
+                artifact["jma_weather_error"] = str(e)
+                artifact["jma_weather_profile"] = JMA_WEATHER_EVIDENCE_PROFILE
+                if bool(payload.get("require_jma_weather", False)):
+                    errors = list(errors) + ["JMA_REQUIRED_WEATHER_FAILED:" + str(e)]
                     artifact["formal_ready"] = False
     artifact["errors"] = list(dict.fromkeys(errors))
     artifact["source_snapshot_sha256"] = sha_obj(
