@@ -174,6 +174,7 @@ jobs:
           from local_fullnumerical_candidate import materialize_candidate
           from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
           from local_candidate_postresult import evaluate_dual
+          from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
@@ -632,6 +633,43 @@ jobs:
             "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
           }
 
+          # Forward MEC-R4 measurement is frozen BEFORE the signed FINAL and its
+          # digest is embedded in the signed FINAL transport trace. It has zero
+          # Production ticket/capital authority and must never delay a valid FINAL.
+          mec_r4_shadow=None
+          mec_r4_basis=None
+          mec_r4_shadow_error=None
+          if temporal_mode=="FORMAL-PRE-RACE":
+              try:
+                  shadow_ticket={
+                    "finalized":True,
+                    "no_bet":no_bet,
+                    "total_investment":total,
+                    "tickets":copy.deepcopy(tickets),
+                    "frozen_at":final_freeze
+                  }
+                  mec_r4_shadow,mec_r4_basis=build_pre_result_shadow(
+                      req,shadow_ticket,mec,final_package,
+                      generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
+                  )
+                  trace=bind_shadow_to_trace(trace,mec_r4_shadow,mec_r4_basis)
+                  persist("mec_r4_shadow_pre_result.json",mec_r4_shadow)
+                  persist("mec_r4_shadow_basis.json",mec_r4_basis)
+                  stage("MEC_R4_SHADOW_PRE_RESULT_FREEZE",
+                        profile=mec_r4_shadow.get("profile"),
+                        candidate_id=mec_r4_shadow.get("candidate_id"),
+                        shadow_sha256=mec_r4_shadow.get("sha256"),
+                        basis_sha256=mec_r4_basis.get("sha256"),
+                        production_effect="NONE")
+              except Exception as e:
+                  mec_r4_shadow_error=type(e).__name__+":"+str(e)
+                  persist("mec_r4_shadow_error.json",{
+                      "status":"NON_BLOCKING_SHADOW_FAILURE",
+                      "error":mec_r4_shadow_error,
+                      "production_effect":"NONE",
+                      "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+                  })
+
           final_payload={
             "family_id":"LOCAL","race_id":rid,
             "source_receipt":source,
@@ -657,6 +695,20 @@ jobs:
               fail_closed("FINAL_NOT_PASS",{"http":fc,"final":fin})
           final_sha=verify_envelope(fin,"FINAL")
           deadline_guard("AFTER_FINAL")
+
+          mec_r4_binding=None
+          if mec_r4_shadow is not None:
+              try:
+                  mec_r4_binding=verify_signed_final_binding(fin,mec_r4_shadow)
+                  persist("mec_r4_shadow_binding_attestation.json",mec_r4_binding)
+              except Exception as e:
+                  mec_r4_shadow_error=type(e).__name__+":"+str(e)
+                  persist("mec_r4_shadow_binding_error.json",{
+                      "status":"INVALID_FOR_OOS_NON_BLOCKING",
+                      "error":mec_r4_shadow_error,
+                      "production_effect":"NONE",
+                      "final_receipt_sha256":final_sha
+                  })
 
           # Candidate KRS arms run only after Production FINAL is signed. Both use the
           # same run count and seed for paired comparison. Deadline guards are per arm.
@@ -837,6 +889,13 @@ jobs:
             "post_result":result_summary,
             "numerical_candidate_shadow":candidate_shadow_summary,
             "candidate_krs_shadow":candidate_krs_summary,
+            "mec_r4_shadow":{
+              "status":("SIGNED_FINAL_BOUND_PRE_RESULT" if mec_r4_binding else ("NOT_ELIGIBLE" if mec_r4_shadow_error else "NOT_GENERATED")),
+              "shadow_sha256":(mec_r4_shadow or {}).get("sha256"),
+              "binding":mec_r4_binding,
+              "error":mec_r4_shadow_error,
+              "production_effect":"NONE"
+            },
             "verified":True
           },separators=(",",":"),ensure_ascii=False))
           PY
