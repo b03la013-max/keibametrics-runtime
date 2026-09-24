@@ -177,7 +177,6 @@ def _fetch_profiles(specs: List[Dict[str, Any]], cutoff: str) -> Tuple[List[Dict
     def one(spec: Dict[str, Any]):
         try:
             snap, errs = fetch_source(spec, cutoff)
-            snap["entity_key"] = spec.get("entity_key")
             return snap, errs
         except Exception as e:
             return {
@@ -190,7 +189,6 @@ def _fetch_profiles(specs: List[Dict[str, Any]], cutoff: str) -> Tuple[List[Dict
                 "status": "FETCH_FAILED",
                 "error": str(e),
                 "fetched_at": utcnow(),
-                "entity_key": spec.get("entity_key"),
             }, []
 
     workers = max(1, min(MAX_PROFILE_WORKERS, len(specs) or 1))
