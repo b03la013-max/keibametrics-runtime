@@ -1,5 +1,6 @@
 from __future__ import annotations
 import copy, hashlib, json
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 from mec_r4_shadow import settle_ticket_list
 
@@ -97,12 +98,15 @@ def build_arm(req:Dict[str,Any], final_envelope:Dict[str,Any], name:str)->Dict[s
       "tickets":rows,"sha256":_sha(rows)
     }
 
-def build_shadow(req,final_envelope):
+def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
+    generated_at=generated_at or datetime.now(timezone.utc).isoformat()
     arms={a:build_arm(req,final_envelope,a) for a in ARM_ORDER}
     out={
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
       "status":"SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-REQUIRED",
       "race_id":req.get("race_id"),"production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+      "generated_at":generated_at,"scheduled_post_at":req.get("scheduled_post_at"),
+      "temporal_mode":req.get("temporal_mode"),"source_basis_sha256":basis_sha256,
       "design_boundary":"2026-09-23 LOCAL results may inform this candidate; those races are TRAINING/REPLAY ONLY and never OOS.",
       "production_effect":"NONE","arms":arms
     }
@@ -119,3 +123,39 @@ def settle_shadow(shadow,result_request):
          "status":"RETROSPECTIVE-TRAINING-SETTLEMENT / NOT-OOS","production_effect":"NONE","arms":arms}
     out["sha256"]=_sha(out)
     return out
+
+
+def bind_shadow_to_trace(trace,shadow,basis_sha256):
+    out=copy.deepcopy(trace or {})
+    out["local_mec_r5_shadow_binding"]={
+      "profile":PROFILE,"candidate_id":CANDIDATE_ID,
+      "shadow_sha256":shadow.get("sha256"),"basis_sha256":basis_sha256,
+      "generated_at":shadow.get("generated_at"),"scheduled_post_at":shadow.get("scheduled_post_at"),
+      "temporal_mode":shadow.get("temporal_mode"),"production_effect":"NONE"
+    }
+    return out
+
+def verify_signed_final_binding(final_envelope,shadow):
+    art=final_envelope.get("artifact") or {}
+    rec=final_envelope.get("receipt") or {}
+    if rec.get("phase")!="FINAL" or rec.get("status")!="PASS":
+        raise AssertionError("LOCAL_MEC_R5_FINAL_NOT_PASS")
+    b=(art.get("ticket_transport_trace") or {}).get("local_mec_r5_shadow_binding") or {}
+    if b.get("shadow_sha256")!=shadow.get("sha256"):
+        raise AssertionError("LOCAL_MEC_R5_SHADOW_SHA_NOT_BOUND")
+    if b.get("basis_sha256")!=shadow.get("source_basis_sha256"):
+        raise AssertionError("LOCAL_MEC_R5_BASIS_SHA_NOT_BOUND")
+    if str(b.get("production_effect"))!="NONE":
+        raise AssertionError("LOCAL_MEC_R5_PRODUCTION_EFFECT_FORBIDDEN")
+    if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
+        raise AssertionError("LOCAL_MEC_R5_NOT_FORMAL_PRE_RACE")
+    gen=datetime.fromisoformat(str(shadow.get("generated_at")).replace("Z","+00:00"))
+    post=datetime.fromisoformat(str(shadow.get("scheduled_post_at")).replace("Z","+00:00"))
+    if not gen<post:
+        raise AssertionError("LOCAL_MEC_R5_NOT_PRE_RESULT")
+    return {
+      "valid":True,"profile":PROFILE,"candidate_id":CANDIDATE_ID,
+      "shadow_sha256":shadow.get("sha256"),"basis_sha256":shadow.get("source_basis_sha256"),
+      "final_receipt_sha256":final_envelope.get("receipt_sha256"),
+      "final_artifact_sha256":rec.get("artifact_sha256"),"production_effect":"NONE"
+    }
