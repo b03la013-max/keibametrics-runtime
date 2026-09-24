@@ -1,0 +1,111 @@
+name: LOCAL Source Enrichment v2 Live Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_physical/jma_weather_evidence.py'
+      - 'runtime/local_physical/local_population_ledger.py'
+      - 'runtime/local_physical/nar_auxiliary_evidence.py'
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'tests/test_jma_weather_evidence.py'
+      - 'tests/test_local_population_ledger.py'
+      - '.github/workflows/local-source-enrichment-v2-live-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify NAR + JMA + point-in-time population source enrichment
+        run: |
+          python - <<'PY'
+          import copy, json, sys
+          sys.path.insert(0,"runtime/local_physical")
+
+          from nar_source_manifest import build_local_nar_manifest
+          from source_acquisition import acquire_sources, sha_obj, verify_source_artifact
+          from nar_runner_universe import enrich_source_artifact
+          from nar_auxiliary_evidence import enrich_with_auxiliary_evidence
+          from jma_weather_evidence import PROFILE as JMA_PROFILE, build_jma_weather_evidence
+          from local_population_ledger import PROFILE as POP_PROFILE, enrich_with_population_seed
+
+          payload={
+            "family_id":"LOCAL",
+            "race_id":"KCH-20260913-R03-SOURCE-V2-LIVE",
+            "venue_id":"KCH",
+            "race_date":"2026-09-13",
+            "race_no":3,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":True,
+            "include_odds":True,
+          }
+          manifest=build_local_nar_manifest(payload)
+          art,errors=acquire_sources(manifest)
+          assert errors==[], errors
+          art=enrich_source_artifact(art)
+          art["source_race_context"]={"venue_id":"KCH","race_date":"2026-09-13","race_no":3}
+
+          art,aux_errors=enrich_with_auxiliary_evidence(
+              art,manifest["prediction_cutoff"],require_profiles=True
+          )
+          assert aux_errors==[], aux_errors
+          art=enrich_with_population_seed(art)
+          art,jma_errors=build_jma_weather_evidence(
+              art,manifest["prediction_cutoff"],require_weather=True
+          )
+          assert jma_errors==[], jma_errors
+
+          # Recompute signed-source artifact hash after all enrichments.
+          art["source_snapshot_sha256"]=sha_obj(
+              {k:v for k,v in art.items() if k!="source_snapshot_sha256"}
+          )
+          ok,verify_errors=verify_source_artifact(art)
+          assert ok, verify_errors
+
+          weather=art["jma_weather_evidence"]
+          pop=art["point_in_time_population_ledger"]
+          aux=art["auxiliary_evidence"]
+
+          assert weather["profile"]==JMA_PROFILE
+          assert weather["production_authority"] is False
+          assert weather["status"]=="CAPTURED"
+          assert weather["station"]["distance_km"] < 80
+          assert weather["observation"]["observed_at_jst"]
+          assert pop["profile"]==POP_PROFILE
+          assert pop["production_authority"] is False
+          assert pop["observation_count"] > 0
+          assert len(pop["sire_cohorts"]) > 0
+          assert all(x["sample_status"] in {"INSUFFICIENT","DESCRIPTIVE_ONLY"} for x in pop["sire_cohorts"])
+          assert aux["production_authority"] is False
+
+          tampered=copy.deepcopy(art)
+          tampered["jma_weather_evidence"]["status"]="TAMPERED"
+          ok2,errs2=verify_source_artifact(tampered)
+          assert not ok2
+          assert "SOURCE_JMA_WEATHER_HASH_MISMATCH" in errs2
+
+          tampered2=copy.deepcopy(art)
+          tampered2["point_in_time_population_ledger"]["observation_count"]=999999
+          ok3,errs3=verify_source_artifact(tampered2)
+          assert not ok3
+          assert "SOURCE_POPULATION_LEDGER_HASH_MISMATCH" in errs3
+
+          print("LOCAL_SOURCE_ENRICHMENT_V2_LIVE_PASS="+json.dumps({
+            "jma_profile":JMA_PROFILE,
+            "station":weather["station"],
+            "observation":weather["observation"],
+            "population_profile":POP_PROFILE,
+            "population_observation_count":pop["observation_count"],
+            "sire_cohort_count":len(pop["sire_cohorts"]),
+            "damsire_cohort_count":len(pop["damsire_cohorts"]),
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "jma_weather_evidence_sha256":art["jma_weather_evidence_sha256"],
+            "point_in_time_population_ledger_sha256":art["point_in_time_population_ledger_sha256"],
+          },ensure_ascii=False,separators=(",",":")))
+          PY

@@ -658,6 +658,8 @@ def verify_source_artifact(artifact: Dict[str, Any]) -> Tuple[bool, List[str]]:
         ("discovered_auxiliary_source_manifest", "discovered_auxiliary_source_manifest_sha256", "SOURCE_AUXILIARY_MANIFEST_HASH_MISMATCH"),
         ("nar_entity_registry", "nar_entity_registry_sha256", "SOURCE_ENTITY_REGISTRY_HASH_MISMATCH"),
         ("auxiliary_evidence", "auxiliary_evidence_sha256", "SOURCE_AUXILIARY_EVIDENCE_HASH_MISMATCH"),
+        ("jma_weather_evidence", "jma_weather_evidence_sha256", "SOURCE_JMA_WEATHER_HASH_MISMATCH"),
+        ("point_in_time_population_ledger", "point_in_time_population_ledger_sha256", "SOURCE_POPULATION_LEDGER_HASH_MISMATCH"),
     ]
     for field, hash_field, err in optional_hashes:
         if field in artifact and sha_obj(artifact.get(field)) != artifact.get(hash_field):
