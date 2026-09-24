@@ -1,0 +1,90 @@
+name: LOCAL Source Enrichment Current Authority Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'profiles/family_runtime_contracts_20260924_R9.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R7.json'
+      - 'profiles/venue_chat_routes_20260924_R11.json'
+      - 'profiles/local_information_source_registry_v1.9_20260924.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R9.json'
+      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.6-20260924.md'
+      - 'governance/KM-LOCAL-SOURCE-ENRICHMENT-CLOSURE-20260924-R1.json'
+      - 'runtime/family_runtime_contract.py'
+      - '.github/workflows/local-source-enrichment-current-authority-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R9 authority graph and live runtime
+        run: |
+          python - <<'PY'
+          import json, pathlib, urllib.request
+          def j(p): return json.load(open(p,encoding="utf-8"))
+          auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R9.json")
+          suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R7.json")
+          route=j("profiles/venue_chat_routes_20260924_R11.json")
+          contract=j("profiles/family_runtime_contracts_20260924_R9.json")
+          reg=j("profiles/local_information_source_registry_v1.9_20260924.json")
+          closure=j("governance/KM-LOCAL-SOURCE-ENRICHMENT-CLOSURE-20260924-R1.json")
+          loader=pathlib.Path("runtime/family_runtime_contract.py").read_text(encoding="utf-8")
+
+          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
+          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R8"
+          assert auth["common_family_components"]["execution_architecture"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6"
+          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
+          assert auth["common_family_components"]["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9"
+
+          local=auth["family_scoped_authority"]["LOCAL"]
+          assert local["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
+          assert local["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
+          assert "NOT_READY" in local["numerical_authority_status"]
+          assert local["runtime"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE"
+          assert local["jma_weather_evidence"]=="KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924"
+          assert local["point_in_time_population_ledger"]=="KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924"
+
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R7"
+          assert suite["production_numeric_suite"]["status"]=="FROZEN"
+          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert suite["source_enrichment_v2"]["jma_weather"]["production_authority"] is False
+          assert suite["source_enrichment_v2"]["point_in_time_population"]["production_authority"] is False
+
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
+          for x in ["NAR_AUXILIARY_EVIDENCE_CAPTURE","JMA_WEATHER_EVIDENCE_CAPTURE","POINT_IN_TIME_POPULATION_SEED_CAPTURE","SOURCE_FREEZE_VERIFIED"]:
+              assert x in route["formal_path"]
+          assert route["formal_path"].index("JMA_WEATHER_EVIDENCE_CAPTURE") < route["formal_path"].index("SOURCE_FREEZE_VERIFIED")
+          assert route["family_routes"]["BAN"]["runtime_status"]=="FAMILY_CONTRACT_READY_PHYSICAL_ENDPOINT_REQUIRED"
+
+          assert contract["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9"
+          lc=contract["families"]["LOCAL"]
+          assert lc["runtime"]==local["runtime"]
+          assert lc["source_enrichment_v2_acceptance"]["github_actions_run_id"]==35941926027
+          assert lc["source_enrichment_v2_acceptance"]["actual_run_count"]==5000
+          assert lc["jma_weather_evidence"]["production_authority"] is False
+          assert lc["point_in_time_population_ledger"]["production_authority"] is False
+          assert contract["families"]["BAN"]["execution_status"]=="BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED"
+          assert contract["families"]["JRA"]["execution_status"]=="EXECUTABLE"
+
+          assert reg["profile_id"]=="KM-LOCAL-INFORMATION-SOURCE-REGISTRY-v1.9-20260924"
+          unsupported=reg["source_enrichment_v2"]["unsupported_universal_auto_sources"]
+          assert unsupported==["TRAINING","TRAINER_COMMENTS","PADDOCK"]
+
+          assert closure["profile_id"]=="KM-LOCAL-SOURCE-ENRICHMENT-CLOSURE-20260924-R1"
+          assert closure["production_runtime_acceptance"]["run_id"]==35941926027
+          assert closure["production_runtime_acceptance"]["actual_run_count"]==5000
+          assert closure["production_numeric_authority"]["numerical_change"] is False
+          assert closure["boundaries"]["unknown_future_real_race_empirical_acceptance"]=="PENDING"
+          assert "family_runtime_contracts_20260924_R9.json" in loader
+
+          with urllib.request.urlopen("https://witnessstrictimage-production.up.railway.app/health",timeout=60) as r:
+              h=json.loads(r.read().decode())
+          assert h["status"]=="READY",h
+          assert h["runtime_revision"]==local["runtime"],h
+          assert h["jma_weather_evidence_profile"]==local["jma_weather_evidence"],h
+          assert h["point_in_time_population_profile"]==local["point_in_time_population_ledger"],h
+          print("LOCAL_SOURCE_ENRICHMENT_CURRENT_AUTHORITY_PASS")
+          PY
