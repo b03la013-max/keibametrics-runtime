@@ -284,6 +284,21 @@ def _add_v03_enrichment(source, request):
         },
     }
     source["auxiliary_evidence_sha256"]="AUX-SHA"
+    source["source_freeze_at"]="2026-09-25T00:10:00+00:00"
+    source["sources"]=[
+        *[
+            {"source_id":f"NAR-HORSE-{rid}","fetched_at":f"2026-09-25T00:0{rid}:01+00:00"}
+            for rid in ("1","2","3")
+        ],
+        *[
+            {"source_id":f"NAR-RIDER-R{rid}","fetched_at":f"2026-09-25T00:0{rid}:02+00:00"}
+            for rid in ("1","2","3")
+        ],
+        *[
+            {"source_id":f"NAR-TRAINER-T{rid}","fetched_at":f"2026-09-25T00:0{rid}:03+00:00"}
+            for rid in ("1","2","3")
+        ],
+    ]
     source["jma_weather_evidence"]={
         "profile":"KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",
         "status":"CAPTURED","production_authority":False,
@@ -373,3 +388,24 @@ def test_v03_sbo_is_diagnostic_only_and_cannot_change_ability_indices():
     for x,y in zip(n1["runners"],n2["runners"]):
         for idx in ["HPI-L","CFIg-L","RFIg-L","BVIg-L","JTI-L","CSI-L","BWI-L","NCI","TPI-L"]:
             assert x["canonical_components"][idx]["value"]==y["canonical_components"][idx]["value"]
+
+
+def test_v03_provenance_uses_concrete_profile_timestamp_and_keeps_jma_context_only():
+    source,request=fixture()
+    source=_add_v03_enrichment(source,request)
+    out=compile_candidate_evidence_v03(
+        source,request,
+        ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
+    )
+    r1=next(r for r in out["runners"] if r["runner_id"]=="1")
+    same_distance=r1["evidence_features"]["same_distance"]
+    favorite=r1["evidence_features"]["favorite_reliability"]
+    going_fit=r1["evidence_features"]["going_fit"]
+    going_adaptation=r1["evidence_features"]["going_adaptation"]
+
+    assert same_distance["source_timestamp"]=="2026-09-25T00:01:01+00:00"
+    assert favorite["source_timestamp"]=="2026-09-25T00:01:02+00:00"
+    assert "JMA-SHA" not in going_fit["evidence_refs"]
+    assert "JMA-SHA" not in going_adaptation["evidence_refs"]
+    assert r1["candidate_context_features_v03"]["jma_weather"]["profile"]=="KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924"
+    assert out["candidate_evidence_compiler"]["provenance_policy"].startswith("FEATURE_TIMESTAMP_MUST_MATCH")
