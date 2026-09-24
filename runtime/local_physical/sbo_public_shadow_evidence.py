@@ -389,7 +389,6 @@ def build_sbo_shadow_evidence(
             errors.append("SBO_PUBLIC_SHADOW_REQUIRED_FAILED:" + str(e))
 
     base["warnings"] = list(dict.fromkeys(warnings))
-    base["artifact_sha256"] = sha_obj({k: v for k, v in base.items() if k != "artifact_sha256"})
     artifact["sbo_public_shadow_evidence"] = base
-    artifact["sbo_public_shadow_evidence_sha256"] = base["artifact_sha256"]
+    artifact["sbo_public_shadow_evidence_sha256"] = sha_obj(base)
     return artifact, errors
