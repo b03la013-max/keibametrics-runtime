@@ -32,3 +32,25 @@ def test_result_ledger_is_serializable_by_repository_commit():
     assert 'git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json' in text
     assert 'git pull --rebase origin main' in text
     assert 'git push origin HEAD:main' in text
+
+
+def test_formal_v03_shadow_is_pre_result_frozen_final_bound_and_krs_executed():
+    text=FORMAL.read_text(encoding="utf-8")
+    assert "compile_candidate_evidence_v03" in text
+    assert 'candidate_numerical_v03_shadow_summary.json' in text
+    assert 'trace["numerical_candidate_v03_shadow"]' in text
+    assert 'run_candidate_krs_arm("V03"' in text
+    assert 'candidate_krs_triple_shadow_summary.json' in text
+    assert '"sbo_ability_index_weight":0' in text
+    assert '"automatic_promotion":False' in text
+
+
+def test_result_v03_requires_signed_final_binding_and_persists_separate_tracker():
+    text=RESULT.read_text(encoding="utf-8")
+    assert 'candidate_numerical_v03_shadow_summary.json' in text
+    assert 'candidate_krs_v03_receipt_envelope.json' in text
+    assert 'candidate_v03_binding_valid=bool(' in text
+    assert 'signed_final_binding_valid=candidate_v03_binding_valid' in text
+    assert 'candidate_v03_oos_measurement.json' in text
+    assert 'candidate_v03_oos_status.json' in text
+    assert 'runtime/local_candidate_v03_oos_measurements/*.json runtime/local_candidate_v03_oos_status.json' in text
