@@ -8,6 +8,12 @@ def _write(path,obj):
 def _arm(inv=100,ret=120):
     return {"status":"SETTLED","investment":inv,"return":ret,"profit_loss":ret-inv,"pfs":ret/inv*100,"ticket_count":1}
 
+def _official(rid):
+    _write(f"runtime/family_result_requests/{rid}-RESULT.json",{
+      "race_id":rid,"official_result_verified":True,
+      "source":"TEST_OFFICIAL_RESULT","official_result_verification_ref":"TEST:OFFICIAL"
+    })
+
 def test_mec_r4_oos_counts_only_preregistered_formal_pre_race(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     import sys
@@ -20,6 +26,7 @@ def test_mec_r4_oos_counts_only_preregistered_formal_pre_race(tmp_path, monkeypa
 
     # Eligible.
     rid="20260923-NKY-R01"
+    _official(rid)
     final={"sha256":"FINAL1","final_ticket":{"tickets":[{"bet_type":"EXACTA","selection":[1,2],"stake":100}]}}
     shadow={
       "profile":m.CANDIDATE_PROFILE,"candidate_id":m.CANDIDATE_ID,
@@ -69,6 +76,7 @@ def test_arm_set_mismatch_is_rejected(tmp_path, monkeypatch):
     importlib.reload(m)
 
     rid="20260923-NKY-R04"
+    _official(rid)
     _write(f"runtime/final_artifacts/{rid}.json",{"sha256":"F","final_ticket":{"tickets":[]}})
     _write(f"runtime/mec_shadow_artifacts/{rid}.json",{
       "profile":m.CANDIDATE_PROFILE,"candidate_id":m.CANDIDATE_ID,"production_effect":"NONE",
@@ -91,6 +99,7 @@ def test_local_signed_final_bound_lineage_is_eligible(tmp_path, monkeypatch):
     importlib.reload(m)
 
     rid="URW-20260924-R01-FORMAL-R1"
+    _official(rid)
     shadow={
       "profile":m.CANDIDATE_PROFILE,"candidate_id":m.CANDIDATE_ID,
       "production_effect":"NONE","source_immutable_final_sha256":"BASIS1",
@@ -127,6 +136,7 @@ def test_local_unbound_shadow_is_rejected(tmp_path, monkeypatch):
     importlib.reload(m)
 
     rid="URW-20260924-R02-FORMAL-R1"
+    _official(rid)
     shadow={
       "profile":m.CANDIDATE_PROFILE,"candidate_id":m.CANDIDATE_ID,
       "production_effect":"NONE","source_immutable_final_sha256":"BASIS2",
@@ -143,3 +153,29 @@ def test_local_unbound_shadow_is_rejected(tmp_path, monkeypatch):
     out=m.build_status()
     assert out["eligible_races"]==0
     assert any(x["reason"]=="LOCAL_SIGNED_FINAL_BINDING_INVALID" for x in out["errors"])
+
+def test_result_authority_is_required_for_oos_admission(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import importlib, mec_r4_oos_tracker as m
+    importlib.reload(m)
+    rid="URW-20260924-R99-FORMAL-R1"
+    shadow={
+      "profile":m.CANDIDATE_PROFILE,"candidate_id":m.CANDIDATE_ID,
+      "production_effect":"NONE","source_immutable_final_sha256":"B99",
+      "generated_at":"2026-09-24T12:00:00+09:00",
+      "temporal_mode":"FORMAL-PRE-RACE","scheduled_post_at":"2026-09-24T12:10:00+09:00",
+      "sha256":"S99","arms":{a:{"core_structure_retention_ratio":1.0,"semantic_information_retention_ratio":1.0,"generic_tail_capital_avoided":0} for a in m.EXPECTED_ARMS}
+    }
+    _write(f"runtime/mec_shadow_artifacts/{rid}.json",shadow)
+    _write(f"runtime/mec_shadow_results/{rid}.json",{"race_id":rid,"sha256":"SET99","arms":{a:_arm() for a in m.EXPECTED_ARMS}})
+    _write(f"runtime/mec_shadow_lineage/{rid}.json",{
+      "lineage_type":"LOCAL_SIGNED_FINAL_BOUND","binding_valid":True,
+      "shadow_sha256":"S99","basis_sha256":"B99","final_receipt_sha256":"FR99","final_artifact_sha256":"FA99",
+      "production_tickets":[],"production_result":{},"production_settlement":{"status":"SETTLED","total_investment":0,"total_payout":0}
+    })
+    out=m.build_status()
+    assert out["eligible_races"]==0
+    assert out["held_races"]==1
+    assert out["held"][0]["reason"]=="RESULT_AUTHORITY_NOT_VERIFIED"
