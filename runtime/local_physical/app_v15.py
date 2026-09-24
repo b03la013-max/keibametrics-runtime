@@ -12,8 +12,12 @@ from nar_runner_universe import (
     enrich_source_artifact,
     validate_krs_horses,
 )
+from nar_auxiliary_evidence import (
+    PROFILE as NAR_AUXILIARY_EVIDENCE_PROFILE,
+    enrich_with_auxiliary_evidence,
+)
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.5-20260924-OFFICIAL-AUXILIARY-EVIDENCE"
 SOURCE_REQUIRED = True
 legacy.APP_VERSION = APP_VERSION
 
@@ -57,7 +61,9 @@ def health():
     h["nar_source_manifest_sha256"] = legacy.sha_file("/opt/km/nar_source_manifest.py")
     h["nar_runner_universe_profile"] = NAR_RUNNER_UNIVERSE_PROFILE
     h["nar_runner_universe_sha256"] = legacy.sha_file("/opt/km/nar_runner_universe.py")
-    for c in ("SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
+    h["nar_auxiliary_evidence_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
+    h["nar_auxiliary_evidence_sha256"] = legacy.sha_file("/opt/km/nar_auxiliary_evidence.py")
+    for c in ("SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
         if c not in caps:
             caps.insert(0, c)
     h["capabilities"] = caps
@@ -92,6 +98,20 @@ def source_acquire(payload: Dict[str, Any]):
         except Exception as e:
             errors = list(errors) + ["OFFICIAL_RUNNER_UNIVERSE_EXTRACTION_FAILED:" + str(e)]
             artifact["formal_ready"] = False
+        if bool(payload.get("include_auxiliary_evidence", True)) and artifact.get("official_runner_universe"):
+            try:
+                artifact, auxiliary_errors = enrich_with_auxiliary_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_profiles=bool(payload.get("require_auxiliary_profiles", False)),
+                )
+                errors = list(errors) + list(auxiliary_errors)
+            except Exception as e:
+                artifact["auxiliary_evidence_error"] = str(e)
+                artifact["auxiliary_source_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
+                if bool(payload.get("require_auxiliary_profiles", False)):
+                    errors = list(errors) + ["AUXILIARY_EVIDENCE_REQUIRED_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
     artifact["errors"] = list(dict.fromkeys(errors))
     artifact["source_snapshot_sha256"] = sha_obj(
         {k: v for k, v in artifact.items() if k != "source_snapshot_sha256"}
