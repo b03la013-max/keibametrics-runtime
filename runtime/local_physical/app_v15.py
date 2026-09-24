@@ -92,6 +92,11 @@ def source_acquire(payload: Dict[str, Any]):
         raise HTTPException(422, "RACE_ID_REQUIRED")
     artifact, errors = acquire_sources(payload)
     artifact["source_manifest_profile"] = payload.get("manifest_profile")
+    artifact["source_race_context"] = {
+        "venue_id": payload.get("venue_id"),
+        "race_date": payload.get("race_date"),
+        "race_no": payload.get("race_no"),
+    }
     if payload.get("manifest_profile") == NAR_MANIFEST_PROFILE:
         try:
             artifact = enrich_source_artifact(artifact)
