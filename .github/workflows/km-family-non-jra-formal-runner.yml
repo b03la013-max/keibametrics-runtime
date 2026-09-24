@@ -127,6 +127,70 @@ jobs:
 
           phase=str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper()
 
+          # LOCAL two-phase intake: acquire and verify signed official SOURCE
+          # before Venue Static is built. This reuses the existing Formal Runner
+          # and External Runtime; it is not a new prediction or numerical layer.
+          if phase in {"SOURCE","SOURCE_ONLY","SOURCE-FREEZE","SOURCE_FREEZE"}:
+              if fam!="LOCAL":
+                  fail_closed("SOURCE_ONLY_LOCAL_REQUIRED",{"family_id":fam})
+              rid=str(req.get("race_id") or "")
+              assert rid,"RACE_ID_REQUIRED"
+              race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+              source_req=req.get("source_acquisition_request")
+              if not isinstance(source_req,dict) and isinstance(req.get("required_source_manifest"),list):
+                  source_req={
+                    "family_id":"LOCAL",
+                    "race_id":rid,
+                    "prediction_cutoff":req.get("prediction_cutoff"),
+                    "sources":copy.deepcopy(req["required_source_manifest"])
+                  }
+              if not isinstance(source_req,dict):
+                  venue_id=req.get("venue_id") or race_meta.get("venue_id")
+                  race_date=req.get("race_date") or race_meta.get("race_date") or race_meta.get("date")
+                  race_no=req.get("race_no") or race_meta.get("race_no")
+                  cutoff=req.get("prediction_cutoff") or race_meta.get("prediction_cutoff")
+                  if venue_id and race_date and race_no and cutoff:
+                      mc,manifest=call("/source/manifest/local",{
+                        "family_id":"LOCAL","race_id":rid,
+                        "venue_id":venue_id,"race_date":race_date,"race_no":race_no,
+                        "prediction_cutoff":cutoff,
+                        "include_same_day_results":True,
+                        "include_odds":True,
+                        "require_active_runner_universe":True
+                      },60)
+                      assert mc<300,(mc,manifest)
+                      source_req=manifest
+              assert isinstance(source_req,dict),"SOURCE_ACQUISITION_REQUEST_REQUIRED"
+              source_req=copy.deepcopy(source_req)
+              source_req["family_id"]="LOCAL"
+              source_req["race_id"]=rid
+              source_req.setdefault("prediction_cutoff",req.get("prediction_cutoff"))
+              assert isinstance(source_req.get("sources"),list) and source_req["sources"],"REQUIRED_SOURCE_MANIFEST_REQUIRED"
+              sc,source=call("/source/acquire",source_req,180)
+              persist("source_receipt_envelope.json",source)
+              if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
+                  fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
+              svc,sv=call("/source/verify",source,60)
+              persist("source_verification.json",sv)
+              if svc>=300 or sv.get("valid") is not True:
+                  fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
+              source_artifact=source.get("artifact") or {}
+              if source_artifact.get("formal_ready") is not True:
+                  fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
+              off=source_artifact.get("official_runner_universe") or {}
+              print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
+                "race_id":rid,"family_id":"LOCAL","execution_phase":"SOURCE",
+                "status":"SOURCE_VERIFIED","external_endpoint":endpoint,
+                "source_receipt":source.get("receipt_sha256"),
+                "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                "official_runner_universe_sha256":source_artifact.get("official_runner_universe_sha256"),
+                "official_runner_count":off.get("runner_count"),
+                "source_freeze_at":source_artifact.get("source_freeze_at"),
+                "verified":True
+              },separators=(",",":"),ensure_ascii=False))
+              raise SystemExit(0)
+
+
           # Post-race path: RESULT endpoint performs settlement-safe PFS,
           # automatic failure localization, and next-race learning state.
           if phase in {"RESULT","POST_RACE","POST-RACE","SETTLEMENT"}:
@@ -218,49 +282,81 @@ jobs:
                           "release_deadline":formal_release_deadline_utc.isoformat(),
                       })
 
-          # Source Acquisition is now an external signed execution phase.
-          source_req=req.get("source_acquisition_request")
-          if not isinstance(source_req,dict) and isinstance(req.get("required_source_manifest"),list):
-              source_req={
-                "family_id":"LOCAL",
-                "race_id":rid,
-                "prediction_cutoff":req.get("prediction_cutoff"),
-                "sources":copy.deepcopy(req["required_source_manifest"])
-              }
-          if not isinstance(source_req,dict):
-              race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
-              venue_id=req.get("venue_id") or race_meta.get("venue_id")
-              race_date=req.get("race_date") or race_meta.get("race_date") or race_meta.get("date")
-              race_no=req.get("race_no") or race_meta.get("race_no")
-              cutoff=req.get("prediction_cutoff") or race_meta.get("prediction_cutoff")
-              if venue_id and race_date and race_no and cutoff:
-                  mc,manifest=call("/source/manifest/local",{
-                    "family_id":"LOCAL","race_id":rid,
-                    "venue_id":venue_id,"race_date":race_date,"race_no":race_no,
-                    "prediction_cutoff":cutoff,
-                    "include_same_day_results":True,
-                    "include_odds":True,
-                    "require_active_runner_universe":True
-                  },60)
-                  assert mc<300,(mc,manifest)
-                  source_req=manifest
-          assert isinstance(source_req,dict),"SOURCE_ACQUISITION_REQUEST_REQUIRED"
-          source_req=copy.deepcopy(source_req)
-          source_req["family_id"]="LOCAL"
-          source_req["race_id"]=rid
-          source_req.setdefault("prediction_cutoff",req.get("prediction_cutoff"))
-          assert isinstance(source_req.get("sources"),list) and source_req["sources"],"REQUIRED_SOURCE_MANIFEST_REQUIRED"
-          sc,source=call("/source/acquire",source_req,180)
-          persist("source_receipt_envelope.json",source)
-          if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
-              fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
-          svc,sv=call("/source/verify",source,60)
-          if svc>=300 or sv.get("valid") is not True:
-              fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
+          # Source Acquisition is an external signed execution phase.
+          # Preferred route: SOURCE_ONLY first, then reuse the verified signed
+          # receipt after Static is frozen. Legacy one-pass acquisition remains
+          # supported for compatibility.
+          provided_source=req.get("source_receipt")
+          if isinstance(provided_source,dict):
+              source=copy.deepcopy(provided_source)
+              persist("source_receipt_envelope.json",source)
+              svc,sv=call("/source/verify",source,60)
+              persist("source_verification.json",sv)
+              if svc>=300 or sv.get("valid") is not True:
+                  fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
+              rec=source.get("receipt") or {}
+              if str(rec.get("race_id") or "")!=rid:
+                  fail_closed("SOURCE_RECEIPT_RACE_ID_MISMATCH",{
+                      "source_race_id":rec.get("race_id"),"request_race_id":rid
+                  })
+              source_artifact=source.get("artifact") or {}
+              if source_artifact.get("formal_ready") is not True:
+                  fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
+              static_freeze=((req.get("temporal_separation") or {}).get("static_prediction_freeze_at")
+                             if isinstance(req.get("temporal_separation"),dict) else None)
+              source_freeze=source_artifact.get("source_freeze_at")
+              if static_freeze and source_freeze and parse_dt(source_freeze)>parse_dt(static_freeze):
+                  fail_closed("PREDICTION_SOURCE_AFTER_STATIC_FREEZE",{
+                      "source_freeze_at":source_freeze,
+                      "static_prediction_freeze_at":static_freeze,
+                      "policy":"SIGNED_PREDICTION_SOURCE_MUST_PRECEDE_STATIC_FREEZE"
+                  })
+          else:
+              source_req=req.get("source_acquisition_request")
+              if not isinstance(source_req,dict) and isinstance(req.get("required_source_manifest"),list):
+                  source_req={
+                    "family_id":"LOCAL",
+                    "race_id":rid,
+                    "prediction_cutoff":req.get("prediction_cutoff"),
+                    "sources":copy.deepcopy(req["required_source_manifest"])
+                  }
+              if not isinstance(source_req,dict):
+                  race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+                  venue_id=req.get("venue_id") or race_meta.get("venue_id")
+                  race_date=req.get("race_date") or race_meta.get("race_date") or race_meta.get("date")
+                  race_no=req.get("race_no") or race_meta.get("race_no")
+                  cutoff=req.get("prediction_cutoff") or race_meta.get("prediction_cutoff")
+                  if venue_id and race_date and race_no and cutoff:
+                      mc,manifest=call("/source/manifest/local",{
+                        "family_id":"LOCAL","race_id":rid,
+                        "venue_id":venue_id,"race_date":race_date,"race_no":race_no,
+                        "prediction_cutoff":cutoff,
+                        "include_same_day_results":True,
+                        "include_odds":True,
+                        "require_active_runner_universe":True
+                      },60)
+                      assert mc<300,(mc,manifest)
+                      source_req=manifest
+              assert isinstance(source_req,dict),"SOURCE_ACQUISITION_REQUEST_REQUIRED"
+              source_req=copy.deepcopy(source_req)
+              source_req["family_id"]="LOCAL"
+              source_req["race_id"]=rid
+              source_req.setdefault("prediction_cutoff",req.get("prediction_cutoff"))
+              assert isinstance(source_req.get("sources"),list) and source_req["sources"],"REQUIRED_SOURCE_MANIFEST_REQUIRED"
+              sc,source=call("/source/acquire",source_req,180)
+              persist("source_receipt_envelope.json",source)
+              if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
+                  fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
+              svc,sv=call("/source/verify",source,60)
+              persist("source_verification.json",sv)
+              if svc>=300 or sv.get("valid") is not True:
+                  fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
+              source_artifact=source.get("artifact") or {}
+              if source_artifact.get("formal_ready") is not True:
+                  fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
+
           source_receipt_sha=source.get("receipt_sha256")
           source_artifact=source.get("artifact") or {}
-          if source_artifact.get("formal_ready") is not True:
-              fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
 
           # Official start time is authoritative for temporal identity.
           ev=source_artifact.get("normalized_evidence") or {}
