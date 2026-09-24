@@ -375,9 +375,9 @@ def build_pedigree_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
     seeds = []
     if rows:
         def primary(row):
-            if len(row) < 2 or not re.fullmatch(r"\\d{1,2}", str(row[0]).strip()):
+            if len(row) < 2 or not re.fullmatch(r"\d{1,2}", str(row[0]).strip()):
                 return False
-            if len(row) >= 3 and re.fullmatch(r"\\d{1,2}", str(row[1]).strip()):
+            if len(row) >= 3 and re.fullmatch(r"\d{1,2}", str(row[1]).strip()):
                 return _norm(row[2]) not in {"", "競走馬", "馬名"}
             return _norm(row[1]) not in {"", "競走馬", "馬名", "前走回"}
         indices=[i for i,row in enumerate(rows) if isinstance(row,list) and primary(row)]
@@ -387,7 +387,7 @@ def build_pedigree_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
             if len(group)<5:
                 continue
             p,meta,blood,content,marginrow=group[:5]
-            if len(p)>=3 and re.fullmatch(r"\\d{1,2}",str(p[1]).strip()):
+            if len(p)>=3 and re.fullmatch(r"\d{1,2}",str(p[1]).strip()):
                 horse_no=int(p[1]); name=str(p[2]).strip()
             else:
                 horse_no=int(p[0]); name=str(p[1]).strip()
