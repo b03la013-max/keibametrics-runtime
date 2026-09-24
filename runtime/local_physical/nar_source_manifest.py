@@ -157,5 +157,8 @@ def build_local_nar_manifest(payload: Dict[str, Any]) -> Dict[str, Any]:
             "runner_universe_model": "DECLARED_RACE_CARD_PLUS_ACTIVE_OFFICIAL_BETTING_UNIVERSE",
             "body_weight_and_change_info": "CAPTURED_IN_RACE_CARD_RAW_AND_TABLES",
             "track_weather_current_state": "CAPTURED_FROM_RACE_CARD_WHEN_PUBLISHED",
+            "official_entity_profiles": "AUTO_OPTIONAL_HORSE_RIDER_TRAINER_DATAROOM",
+            "same_day_position_bias": "DERIVED_SHADOW_FROM_PREVIOUS_OFFICIAL_RESULTS",
+            "auxiliary_production_authority": False,
         },
     }
