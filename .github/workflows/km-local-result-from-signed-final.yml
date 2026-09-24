@@ -28,6 +28,12 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Synchronize latest measurement base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+
       - name: Resolve signed FINAL and execute RESULT gate
         env:
           GH_TOKEN: ${{ github.token }}
