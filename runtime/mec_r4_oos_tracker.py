@@ -103,26 +103,14 @@ def build_status():
                 result=_load(path)
                 rid=str(result.get("race_id") or "")
                 shadow_path=os.path.join("runtime","mec_shadow_artifacts",rid+".json")
-                final_path=os.path.join("runtime","final_artifacts",rid+".json")
-                if not (os.path.exists(shadow_path) and os.path.exists(final_path)):
-                    errors.append({"race_id":rid,"reason":"LINEAGE_ARTIFACT_MISSING"})
+                if not os.path.exists(shadow_path):
+                    errors.append({"race_id":rid,"reason":"SHADOW_ARTIFACT_MISSING"})
                     continue
-                shadow=_load(shadow_path); final=_load(final_path)
+                shadow=_load(shadow_path)
                 if shadow.get("profile")!=CANDIDATE_PROFILE or shadow.get("candidate_id")!=CANDIDATE_ID:
                     continue
                 if shadow.get("production_effect")!="NONE":
                     errors.append({"race_id":rid,"reason":"PRODUCTION_EFFECT_NOT_NONE"})
-                    continue
-                if shadow.get("source_immutable_final_sha256")!=final.get("sha256"):
-                    errors.append({"race_id":rid,"reason":"FINAL_LINEAGE_MISMATCH"})
-                    continue
-                gen=_dt(shadow.get("generated_at"))
-                if gen < activation:
-                    continue
-                if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
-                    continue
-                post=shadow.get("scheduled_post_at")
-                if not post or gen>=_dt(post):
                     continue
                 arms=result.get("arms") or {}
                 if sorted(arms)!=sorted(EXPECTED_ARMS):
@@ -131,17 +119,62 @@ def build_status():
                 if any(str((arms[a] or {}).get("status"))!="SETTLED" for a in EXPECTED_ARMS):
                     continue
 
-                result_path=os.path.join("runtime","results",rid+".json")
-                if not os.path.exists(result_path):
-                    errors.append({"race_id":rid,"reason":"PRODUCTION_RESULT_MISSING"})
+                # JRA lineage uses a Git-versioned immutable FINAL artifact.
+                # LOCAL lineage uses a pre-result Shadow digest cryptographically
+                # bound into the signed external FINAL and imported after result.
+                lineage_path=os.path.join("runtime","mec_shadow_lineage",rid+".json")
+                final_path=os.path.join("runtime","final_artifacts",rid+".json")
+                local_lineage=os.path.exists(lineage_path)
+                if local_lineage:
+                    lineage=_load(lineage_path)
+                    if lineage.get("lineage_type")!="LOCAL_SIGNED_FINAL_BOUND":
+                        errors.append({"race_id":rid,"reason":"LOCAL_LINEAGE_TYPE_INVALID"})
+                        continue
+                    if lineage.get("binding_valid") is not True:
+                        errors.append({"race_id":rid,"reason":"LOCAL_SIGNED_FINAL_BINDING_INVALID"})
+                        continue
+                    if lineage.get("shadow_sha256")!=shadow.get("sha256"):
+                        errors.append({"race_id":rid,"reason":"LOCAL_SHADOW_SHA_MISMATCH"})
+                        continue
+                    if lineage.get("basis_sha256")!=shadow.get("source_immutable_final_sha256"):
+                        errors.append({"race_id":rid,"reason":"LOCAL_BASIS_SHA_MISMATCH"})
+                        continue
+                    if not lineage.get("final_receipt_sha256") or not lineage.get("final_artifact_sha256"):
+                        errors.append({"race_id":rid,"reason":"LOCAL_SIGNED_FINAL_REFERENCE_MISSING"})
+                        continue
+                    source_final_sha=lineage.get("final_artifact_sha256")
+                    p_tickets=lineage.get("production_tickets") or []
+                    production_result=lineage.get("production_result") or {}
+                    production_settlement=lineage.get("production_settlement") or {}
+                    result_path=lineage_path
+                else:
+                    if not os.path.exists(final_path):
+                        errors.append({"race_id":rid,"reason":"LINEAGE_ARTIFACT_MISSING"})
+                        continue
+                    final=_load(final_path)
+                    if shadow.get("source_immutable_final_sha256")!=final.get("sha256"):
+                        errors.append({"race_id":rid,"reason":"FINAL_LINEAGE_MISMATCH"})
+                        continue
+                    source_final_sha=final.get("sha256")
+                    result_path=os.path.join("runtime","results",rid+".json")
+                    if not os.path.exists(result_path):
+                        errors.append({"race_id":rid,"reason":"PRODUCTION_RESULT_MISSING"})
+                        continue
+                    production_result=_load(result_path)
+                    production_settlement=production_result.get("settlement") or {}
+                    p_tickets=(final.get("final_ticket") or {}).get("tickets") or []
+                gen=_dt(shadow.get("generated_at"))
+                if gen < activation:
                     continue
-                production_result=_load(result_path)
-                production_settlement=production_result.get("settlement") or {}
+                if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
+                    continue
+                post=shadow.get("scheduled_post_at")
+                if not post or gen>=_dt(post):
+                    continue
                 if str(production_settlement.get("status") or "").upper()!="SETTLED":
                     continue
-                p_inv=float(production_settlement.get("total_investment") or 0)
-                p_ret=float(production_settlement.get("total_payout") or 0)
-                p_tickets=(final.get("final_ticket") or {}).get("tickets") or []
+                p_inv=float(production_settlement.get("total_investment") or production_settlement.get("investment") or 0)
+                p_ret=float(production_settlement.get("total_payout") or production_settlement.get("return") or 0)
                 p_detail=settle_ticket_list(p_tickets,production_result)
                 if p_detail.get("status")!="SETTLED":
                     errors.append({"race_id":rid,"reason":"PRODUCTION_TICKET_SETTLEMENT_INCOMPLETE","detail":p_detail.get("unresolved_payout_types")})
@@ -186,9 +219,10 @@ def build_status():
                     "race_id":rid,
                     "generated_at":shadow.get("generated_at"),
                     "source_shadow_sha256":shadow.get("sha256"),
-                    "source_final_sha256":final.get("sha256"),
+                    "source_final_sha256":source_final_sha,
                     "settlement_sha256":result.get("sha256"),
                     "production_result_path":result_path,
+                    "lineage_type":("LOCAL_SIGNED_FINAL_BOUND" if local_lineage else "GIT_IMMUTABLE_FINAL"),
                     "arms":entry_arms,
                 })
             except Exception as exc:

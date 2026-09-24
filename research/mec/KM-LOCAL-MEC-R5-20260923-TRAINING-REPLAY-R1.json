@@ -1,0 +1,139 @@
+{
+  "profile": "KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1",
+  "status": "RESULT-INFORMED-DESIGN / TRAINING-ONLY / NOT-OOS / NON-PRODUCTION / FORWARD-OOS-REQUIRED",
+  "designed_at": "2026-09-24",
+  "production_baseline": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "candidate_profile": "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1",
+  "candidate_id": "LOCAL-MEC-R5-SPO-SHADOW-v0.1",
+  "training_races": [
+    "URW-20260923-R07-FORMAL-R1",
+    "URW-20260923-R10-FORMAL-R1",
+    "URW-20260923-R11-FORMAL-R1",
+    "URW-20260923-R12-FORMAL-R1"
+  ],
+  "design_principles": [
+    "Preserve all Production TRIO semantic-set coverage, including TAIL.",
+    "SET_PAIR additionally preserves all Production EXACTA ordered-pair coverage.",
+    "Exact TRIFECTA restoration is a separate top-K orientation arm, restricted to material PURCHASE/PROTECT ordered pairs, active global P3 and no hard structural third exclusion.",
+    "Never use 2026-09-23 training races as R5 Forward OOS evidence.",
+    "No automatic promotion; 30 future signed-bound FORMAL-PRE-RACE races open human review only."
+  ],
+  "aggregates": {
+    "PRODUCTION_BASELINE_R3": {
+      "investment": 66800,
+      "return": 32750,
+      "profit_loss": -34050,
+      "pfs": 49.026946,
+      "hit_races": 4,
+      "ticket_count": 668
+    },
+    "SET_ONLY": {
+      "investment": 25500,
+      "return": 26120,
+      "profit_loss": 620,
+      "pfs": 102.431373,
+      "hit_races": 4,
+      "ticket_count": 255
+    },
+    "SET_PAIR": {
+      "investment": 35600,
+      "return": 32750,
+      "profit_loss": -2850,
+      "pfs": 91.994382,
+      "hit_races": 4,
+      "ticket_count": 356
+    },
+    "SET_PAIR_EXACT_TOP3": {
+      "investment": 38000,
+      "return": 32750,
+      "profit_loss": -5250,
+      "pfs": 86.184211,
+      "hit_races": 4,
+      "ticket_count": 380
+    },
+    "SET_PAIR_EXACT_TOP4": {
+      "investment": 44800,
+      "return": 32750,
+      "profit_loss": -12050,
+      "pfs": 73.102679,
+      "hit_races": 4,
+      "ticket_count": 448
+    },
+    "SET_PAIR_EXACT_TOP5": {
+      "investment": 56900,
+      "return": 82130,
+      "profit_loss": 25230,
+      "pfs": 144.340949,
+      "hit_races": 4,
+      "ticket_count": 569
+    },
+    "SET_PAIR_EXACT_TOP6": {
+      "investment": 69600,
+      "return": 82130,
+      "profit_loss": 12530,
+      "pfs": 118.002874,
+      "hit_races": 4,
+      "ticket_count": 696
+    },
+    "SET_PAIR_EXACT_TOP7": {
+      "investment": 82100,
+      "return": 82130,
+      "profit_loss": 30,
+      "pfs": 100.036541,
+      "hit_races": 4,
+      "ticket_count": 821
+    },
+    "SET_PAIR_EXACT_TOP8": {
+      "investment": 96200,
+      "return": 94310,
+      "profit_loss": -1890,
+      "pfs": 98.035343,
+      "hit_races": 4,
+      "ticket_count": 962
+    }
+  },
+  "comparison_highlights": {
+    "SET_ONLY": {
+      "capital_reduction_pct": 61.826347,
+      "pfs_points": 53.404427,
+      "profit_loss_delta": 34670,
+      "hit_race_delta": 0
+    },
+    "SET_PAIR": {
+      "capital_reduction_pct": 46.706587,
+      "pfs_points": 42.967436,
+      "profit_loss_delta": 31200,
+      "hit_race_delta": 0
+    },
+    "SET_PAIR_EXACT_TOP5": {
+      "capital_reduction_pct": 14.820359,
+      "pfs_points": 95.314003,
+      "profit_loss_delta": 59280,
+      "hit_race_delta": 0
+    }
+  },
+  "robustness_interpretation": {
+    "SET_ONLY": "Most stable across all four training races; each race retained a winning TRIO and aggregate PFS exceeded 100.",
+    "SET_PAIR": "Preserved all baseline return with materially lower capital; training aggregate still below 100 PFS.",
+    "SET_PAIR_EXACT_TOP5": "Highest training PFS but materially payout-concentrated in R12 trifecta 49,380 yen. Must not be selected as Production winner from this training set."
+  },
+  "forward_measurement": {
+    "tracker": "KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924",
+    "target_eligible_races": 30,
+    "arms": [
+      "SET_ONLY",
+      "SET_PAIR",
+      "SET_PAIR_EXACT_TOP3",
+      "SET_PAIR_EXACT_TOP4",
+      "SET_PAIR_EXACT_TOP5",
+      "SET_PAIR_EXACT_TOP6",
+      "SET_PAIR_EXACT_TOP7",
+      "SET_PAIR_EXACT_TOP8"
+    ],
+    "eligibility": "Concrete arm artifact must be generated before scheduled post and its SHA/basis SHA must be bound into the signed FINAL.",
+    "automatic_promotion": false,
+    "human_review_required": true,
+    "rule_change_during_window": "FORBIDDEN except correctness repair"
+  },
+  "production_effect": "NONE"
+}

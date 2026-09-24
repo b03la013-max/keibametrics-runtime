@@ -43,6 +43,14 @@ jobs:
           sys.path.insert(0,"runtime")
           from local_candidate_postresult import evaluate_dual
           from local_candidate_dual_oos_tracker import build_measurement, write_status
+          from local_mec_r4_bridge import verify_signed_final_binding
+          from mec_r4_shadow import settle_mec_r4_shadow, settle_ticket_list
+          from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
+          from local_mec_r5_shadow import (
+              verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
+              settle_shadow as settle_local_mec_r5_shadow,
+          )
+          from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
           req=json.load(open(sys.argv[1],encoding="utf-8"))
           run_id=int(req["source_run_id"])
           artifact_name=req["artifact_name"]
@@ -97,6 +105,10 @@ jobs:
               rq=urllib.request.Request(endpoint+path,data=data,headers={"Content-Type":"application/json"},method="POST")
               with urllib.request.urlopen(rq,timeout=180) as resp:
                   return json.loads(resp.read().decode())
+          final_ver=post("/verify",fin)
+          if not final_ver.get("verified") and not final_ver.get("valid"):
+              raise SystemExit("FINAL_SIGNATURE_VERIFY_FAILED_BEFORE_MEC_SHADOW")
+
           res=post("/result",result_payload)
           if (res.get("receipt") or {}).get("status")!="PASS":
               raise SystemExit("RESULT_NOT_PASS:"+json.dumps(res,ensure_ascii=False))
@@ -107,6 +119,135 @@ jobs:
           art=res.get("artifact") or {}
           os.makedirs("runtime_out",exist_ok=True)
           json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          # LOCAL MEC-R4 forward OOS: only a Shadow whose digest was bound into
+          # the signed pre-result FINAL may enter the preregistered tracker.
+          mec_r4_shadow_settlement=None
+          mec_r4_binding=None
+          mec_r4_oos_status=None
+          mec_r4_shadow_path=os.path.join("runtime_result_in","mec_r4_shadow_pre_result.json")
+          if os.path.exists(mec_r4_shadow_path):
+              shadow=json.load(open(mec_r4_shadow_path,encoding="utf-8"))
+              mec_r4_binding=verify_signed_final_binding(fin,shadow)
+              shadow_result={
+                  "official_result":{
+                      "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
+                      "top3":top3,
+                      "payouts_per_100_yen":payouts,
+                  }
+              }
+              mec_r4_shadow_settlement=settle_mec_r4_shadow(shadow,shadow_result)
+              prod_replay=settle_ticket_list(tickets,shadow_result)
+              if prod_replay.get("status")!="SETTLED":
+                  raise SystemExit("MEC_R4_PRODUCTION_REPLAY_NOT_SETTLED")
+              if int(prod_replay.get("investment") or 0)!=int(total_investment) or int(prod_replay.get("return") or 0)!=int(total_return):
+                  raise SystemExit("MEC_R4_PRODUCTION_REPLAY_MISMATCH")
+
+              for d in ("runtime/mec_shadow_artifacts","runtime/mec_shadow_results","runtime/mec_shadow_lineage"):
+                  os.makedirs(d,exist_ok=True)
+              json.dump(shadow,open(os.path.join("runtime","mec_shadow_artifacts",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              json.dump(mec_r4_shadow_settlement,open(os.path.join("runtime","mec_shadow_results",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              lineage={
+                  "lineage_type":"LOCAL_SIGNED_FINAL_BOUND",
+                  "race_id":rid,
+                  "binding_valid":True,
+                  "shadow_sha256":shadow.get("sha256"),
+                  "basis_sha256":shadow.get("source_immutable_final_sha256"),
+                  "final_receipt_sha256":fin.get("receipt_sha256"),
+                  "final_artifact_sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+                  "source_run_id":run_id,
+                  "source_artifact_name":artifact_name,
+                  "generated_at":shadow.get("generated_at"),
+                  "scheduled_post_at":shadow.get("scheduled_post_at"),
+                  "temporal_mode":shadow.get("temporal_mode"),
+                  "production_tickets":tickets,
+                  "production_result":shadow_result,
+                  "production_settlement":{
+                      "status":"SETTLED",
+                      "total_investment":total_investment,
+                      "total_payout":total_return,
+                  },
+                  "production_effect":"NONE",
+              }
+              lineage["sha256"]=__import__("hashlib").sha256(
+                  json.dumps(lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+              ).hexdigest()
+              json.dump(lineage,open(os.path.join("runtime","mec_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              mec_r4_oos_status=write_mec_r4_oos_status()
+              json.dump(mec_r4_shadow_settlement,open("runtime_out/mec_r4_shadow_settlement.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(mec_r4_binding,open("runtime_out/mec_r4_shadow_binding.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(mec_r4_oos_status,open("runtime_out/mec_r4_oos_status.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+          # LOCAL-specific MEC-R5 candidate was designed from 2026-09-23
+          # training races and is eligible only for future signed-bound shadows.
+          local_mec_r5_shadow_settlement=None
+          local_mec_r5_binding=None
+          local_mec_r5_oos_status=None
+          local_mec_r5_shadow_path=os.path.join("runtime_result_in","local_mec_r5_shadow_pre_result.json")
+          if os.path.exists(local_mec_r5_shadow_path):
+              r5_shadow=json.load(open(local_mec_r5_shadow_path,encoding="utf-8"))
+              local_mec_r5_binding=verify_local_mec_r5_signed_final_binding(fin,r5_shadow)
+              local_mec_r5_shadow_settlement=settle_local_mec_r5_shadow(r5_shadow,req)
+
+              shadow_result={
+                  "official_result":{
+                      "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
+                      "top3":top3,
+                      "payouts_per_100_yen":payouts,
+                  }
+              }
+              prod_replay_r5=settle_ticket_list(tickets,shadow_result)
+              if prod_replay_r5.get("status")!="SETTLED":
+                  raise SystemExit("LOCAL_MEC_R5_PRODUCTION_REPLAY_NOT_SETTLED")
+              if int(prod_replay_r5.get("investment") or 0)!=int(total_investment) or int(prod_replay_r5.get("return") or 0)!=int(total_return):
+                  raise SystemExit("LOCAL_MEC_R5_PRODUCTION_REPLAY_MISMATCH")
+
+              for d in ("runtime/local_mec_r5_shadow_artifacts","runtime/local_mec_r5_shadow_results","runtime/local_mec_r5_shadow_lineage"):
+                  os.makedirs(d,exist_ok=True)
+              json.dump(r5_shadow,open(os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              json.dump(local_mec_r5_shadow_settlement,open(os.path.join("runtime","local_mec_r5_shadow_results",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              r5_lineage={
+                  "lineage_type":"LOCAL_MEC_R5_SIGNED_FINAL_BOUND",
+                  "race_id":rid,
+                  "binding_valid":True,
+                  "shadow_sha256":r5_shadow.get("sha256"),
+                  "basis_sha256":r5_shadow.get("source_basis_sha256"),
+                  "final_receipt_sha256":fin.get("receipt_sha256"),
+                  "final_artifact_sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+                  "source_run_id":run_id,
+                  "source_artifact_name":artifact_name,
+                  "generated_at":r5_shadow.get("generated_at"),
+                  "scheduled_post_at":r5_shadow.get("scheduled_post_at"),
+                  "temporal_mode":r5_shadow.get("temporal_mode"),
+                  "production_tickets":tickets,
+                  "production_result":shadow_result,
+                  "production_settlement":{
+                      "status":"SETTLED",
+                      "total_investment":total_investment,
+                      "total_payout":total_return,
+                  },
+                  "production_effect":"NONE",
+              }
+              r5_lineage["sha256"]=__import__("hashlib").sha256(
+                  json.dumps(r5_lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+              ).hexdigest()
+              json.dump(r5_lineage,open(os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,indent=2)
+              local_mec_r5_oos_status=write_local_mec_r5_oos_status()
+              json.dump(local_mec_r5_shadow_settlement,open("runtime_out/local_mec_r5_shadow_settlement.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(local_mec_r5_binding,open("runtime_out/local_mec_r5_shadow_binding.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
+              json.dump(local_mec_r5_oos_status,open("runtime_out/local_mec_r5_oos_status.json","w",encoding="utf-8"),
+                        ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
           candidate_dual_postresult=None
           dual_path=os.path.join("runtime_result_in","candidate_numerical_dual_shadow_summary.json")
@@ -163,22 +304,36 @@ jobs:
             "learning_event":art.get("learning_event"),
             "candidate_dual_shadow_postresult":candidate_dual_postresult,
             "candidate_dual_oos_measurement":candidate_oos_measurement,
-            "candidate_dual_oos_status":candidate_oos_status
+            "candidate_dual_oos_status":candidate_oos_status,
+            "mec_r4_shadow_settlement_sha256":(mec_r4_shadow_settlement or {}).get("sha256"),
+            "mec_r4_signed_final_binding":mec_r4_binding,
+            "mec_r4_oos_status":mec_r4_oos_status,
+            "local_mec_r5_shadow_settlement_sha256":(local_mec_r5_shadow_settlement or {}).get("sha256"),
+            "local_mec_r5_signed_final_binding":local_mec_r5_binding,
+            "local_mec_r5_oos_status":local_mec_r5_oos_status
           }
           json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
           print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
           PY
 
-      - name: Persist dual-candidate OOS measurement ledger
-        if: hashFiles('runtime/local_candidate_dual_oos_measurements/*.json') != ''
+      - name: Persist LOCAL forward measurement ledgers
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json
+          if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
+          if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json 2>/dev/null || true; fi
+          if [ -d runtime/mec_shadow_lineage ]; then git add runtime/mec_shadow_lineage/*.json 2>/dev/null || true; fi
+          if [ -f runtime/mec_r4_oos_status.json ]; then git add runtime/mec_r4_oos_status.json; fi
+          if [ -d runtime/local_mec_r5_shadow_artifacts ]; then git add runtime/local_mec_r5_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/local_mec_r5_shadow_results ]; then git add runtime/local_mec_r5_shadow_results/*.json 2>/dev/null || true; fi
+          if [ -d runtime/local_mec_r5_shadow_lineage ]; then git add runtime/local_mec_r5_shadow_lineage/*.json 2>/dev/null || true; fi
+          if [ -f runtime/local_mec_r5_oos_status.json ]; then git add runtime/local_mec_r5_oos_status.json; fi
           if ! git diff --cached --quiet; then
-            git commit -m "measurement: persist LOCAL dual-candidate OOS state [skip ci]"
+            git commit -m "measurement: persist LOCAL forward OOS state [skip ci]"
             git pull --rebase origin main
             git push origin HEAD:main
           fi

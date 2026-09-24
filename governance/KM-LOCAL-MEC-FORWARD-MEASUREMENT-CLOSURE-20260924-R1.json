@@ -1,0 +1,49 @@
+{
+  "profile_id": "KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1",
+  "status": "ACTIVE / IMPLEMENTATION-CLOSED / R3-PRODUCTION-UNCHANGED / R4-LOCAL-PROMOTION-REJECTED / R5-FORWARD-OOS-ACTIVE",
+  "effective_at": "2026-09-24",
+  "current_authority_parent": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R9",
+  "production_mec": {
+    "profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+    "status": "ACTIVE / PRODUCTION",
+    "changed": false
+  },
+  "r4": {
+    "candidate": "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+    "local_replay": "research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json",
+    "local_promotion": "REJECT",
+    "forward_capture_bridge": "KM-LOCAL-MEC-R4-SIGNED-FINAL-BRIDGE-v1.0-20260924",
+    "tracker": "KM-FAMILY-MEC-R4-FORWARD-OOS-TRACKER-v1.0-20260922",
+    "local_signed_final_lineage": "ENABLED",
+    "pre_result_sha_binding": "ENABLED"
+  },
+  "r5": {
+    "candidate": "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1",
+    "training_replay": "research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json",
+    "tracker": "KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924",
+    "status": "SHADOW / NON-PRODUCTION / FUTURE-OOS",
+    "target": 30,
+    "automatic_promotion": false,
+    "pre_result_sha_binding": "ENABLED",
+    "signed_final_binding": "REQUIRED"
+  },
+  "implementation": {
+    "local_formal_runner": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "local_result_runner": ".github/workflows/km-local-result-from-signed-final.yml",
+    "r4_bridge": "runtime/local_mec_r4_bridge.py",
+    "r4_tracker": "runtime/mec_r4_oos_tracker.py",
+    "r5_candidate": "runtime/local_mec_r5_shadow.py",
+    "r5_tracker": "runtime/local_mec_r5_oos_tracker.py"
+  },
+  "integrity_rules": [
+    "2026-09-23 R7/R10/R11/R12 are R5 TRAINING and never R5 OOS.",
+    "2026-09-23 R4 replay is not R4 OOS because concrete arm tickets were not frozen before result.",
+    "Only pre-result candidate SHA and basis SHA embedded inside signed FINAL are Forward OOS eligible.",
+    "Production FINAL, MEC-R3 tickets and Capital are not mutated by shadow generation or settlement.",
+    "Shadow generation failure is non-blocking for Production FINAL; failed/unbound shadow is simply ineligible for OOS.",
+    "30-race completion opens human review only; no automatic promotion."
+  ],
+  "railway_redeploy_required": false,
+  "railway_reason": "MEC candidate generation and OOS ledgers are GitHub orchestration/research layers. External /final and /verify semantics are unchanged.",
+  "production_effect": "NONE"
+}

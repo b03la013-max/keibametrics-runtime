@@ -1,0 +1,102 @@
+name: LOCAL MEC Forward Measurement Current Authority Acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R10.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R8.json'
+      - 'profiles/venue_chat_routes_20260924_R12.json'
+      - 'research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json'
+      - 'research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json'
+      - 'governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json'
+      - 'runtime/local_mec_r4_bridge.py'
+      - 'runtime/local_mec_r5_shadow.py'
+      - 'runtime/local_mec_r5_oos_tracker.py'
+      - '.github/workflows/local-mec-forward-current-authority-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify MEC authority graph and noninterference
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          def j(p): return json.load(open(p,encoding="utf-8"))
+
+          auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R10.json")
+          suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R8.json")
+          route=j("profiles/venue_chat_routes_20260924_R12.json")
+          r4=j("research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json")
+          r5=j("research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json")
+          closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
+
+          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R10"
+          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
+          assert auth["common_family_components"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          L=auth["family_scoped_authority"]["LOCAL"]
+          assert L["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert L["mec_status"]=="ACTIVE / PRODUCTION / UNCHANGED"
+          assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
+          assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
+          assert L["suite_manifest"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R8"
+          assert L["mec_measurement"]["r4_local"]["result"]=="LOCAL_PROMOTION_REJECTED"
+          assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
+          assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
+
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R8"
+          assert suite["predecessor"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R7"
+          assert suite["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert suite["production_numeric_suite"]["status"]=="FROZEN"
+          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert suite["decision_execution"]["mec_forward_measurement"]["signed_final_binding_required"] is True
+
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          assert route["predecessor"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
+          lr=route["family_routes"]["LOCAL"]
+          assert lr["mec_profile"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          pm=lr["parallel_mec_measurement"]
+          assert pm["production_effect"]=="NONE"
+          assert pm["nonblocking"] is True
+          assert pm["signed_final_digest_binding_required"] is True
+          assert pm["r5"]["target_eligible_races"]==30
+          assert route["family_routes"]["BAN"]["runtime_status"]=="FAMILY_CONTRACT_READY_PHYSICAL_ENDPOINT_REQUIRED"
+
+          assert r4["temporal_classification"]["forward_oos_eligible"] is False
+          assert r4["conclusion"]["local_promotion"]=="REJECT"
+          assert r4["aggregates"]["PRODUCTION_BASELINE_R3"]["pfs"]==49.026946
+          assert r4["aggregates"]["CORE_PROTECTION"]["pfs"]==34.989474
+
+          assert r5["status"].startswith("RESULT-INFORMED-DESIGN")
+          assert r5["aggregates"]["SET_ONLY"]["pfs"]==102.431373
+          assert r5["aggregates"]["SET_ONLY"]["hit_races"]==4
+          assert r5["aggregates"]["SET_PAIR_EXACT_TOP5"]["pfs"]==144.340949
+          assert r5["forward_measurement"]["automatic_promotion"] is False
+          assert r5["forward_measurement"]["target_eligible_races"]==30
+
+          assert closure["production_mec"]["profile"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert closure["production_mec"]["changed"] is False
+          assert closure["r4"]["local_promotion"]=="REJECT"
+          assert closure["r5"]["status"].startswith("SHADOW")
+          assert closure["r5"]["automatic_promotion"] is False
+          assert closure["railway_redeploy_required"] is False
+
+          formal=pathlib.Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
+          result=pathlib.Path(".github/workflows/km-local-result-from-signed-final.yml").read_text(encoding="utf-8")
+          assert "MEC_R4_SHADOW_PRE_RESULT_FREEZE" in formal
+          assert "LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE" in formal
+          assert "mec_r4_shadow_binding" in formal
+          assert "local_mec_r5_shadow_binding" in formal
+          assert "LOCAL_SIGNED_FINAL_BOUND" in result
+          assert "LOCAL_MEC_R5_SIGNED_FINAL_BOUND" in result
+
+          print("LOCAL_MEC_FORWARD_CURRENT_AUTHORITY_PASS")
+          PY
