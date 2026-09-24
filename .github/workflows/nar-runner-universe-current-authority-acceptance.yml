@@ -3,12 +3,12 @@ name: NAR Runner Universe Current Authority Acceptance
 on:
   pull_request:
     paths:
-      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.5-20260923.md'
-      - 'profiles/local_information_source_registry_v1.8_20260923.json'
-      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260923_R6.json'
-      - 'profiles/venue_chat_routes_20260923_R10.json'
-      - 'profiles/family_runtime_contracts_20260923_R8.json'
-      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260923_R8.json'
+      - 'governance/KM-LOCAL-INPUT-SOURCE-OPS-v1.6-20260924.md'
+      - 'profiles/local_information_source_registry_v1.9_20260924.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R7.json'
+      - 'profiles/venue_chat_routes_20260924_R11.json'
+      - 'profiles/family_runtime_contracts_20260924_R9.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R9.json'
       - 'runtime/family_runtime_contract.py'
       - '.github/workflows/nar-runner-universe-current-authority-acceptance.yml'
   workflow_dispatch:
@@ -31,16 +31,16 @@ jobs:
           reg=json.loads((P/"local_information_source_registry_v1.8_20260923.json").read_text())
           contract=frc.load_contracts()
 
-          RUNTIME="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.2-20260923-NAR-RUNNER-UNIVERSE-GATE"
+          RUNTIME="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE"
           UNIVERSE="KM-LOCAL-NAR-RUNNER-UNIVERSE-v1.0-20260923"
-          CONTRACT="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R8"
+          CONTRACT="KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9"
 
           assert contract["profile_id"]==CONTRACT
-          assert contract["predecessor"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R7"
-          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R8"
-          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R7"
+          assert contract["predecessor"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260923-R8"
+          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
+          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R8"
           assert auth["common_family_components"]["family_runtime_contracts"]==CONTRACT
-          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260923-R10"
+          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
 
           la=auth["family_scoped_authority"]["LOCAL"]
           # Preserve Fifth-HQ-aligned numerical/measurement stack.
@@ -55,7 +55,7 @@ jobs:
           assert la["runtime"]==RUNTIME
           assert la["nar_runner_universe"]==UNIVERSE
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260923-R6"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R7"
           assert suite["production_numeric_suite"]["status"]=="FROZEN"
           assert suite["production_numeric_suite"]["numerical_change"] is False
           assert suite["runtime"]["contract"]==CONTRACT
@@ -63,13 +63,13 @@ jobs:
           assert suite["runner_universe"]["profile"]==UNIVERSE
           assert suite["runner_universe"]["external_pre_krs_hard_gate"] is True
 
-          assert reg["profile_id"]=="KM-LOCAL-INFORMATION-SOURCE-REGISTRY-v1.8-20260923"
-          assert reg["input_source_ops"]=="KM-LOCAL-INPUT-SOURCE-OPS-v1.5-20260923"
+          assert reg["profile_id"]=="KM-LOCAL-INFORMATION-SOURCE-REGISTRY-v1.9-20260924"
+          assert reg["input_source_ops"]=="KM-LOCAL-INPUT-SOURCE-OPS-v1.6-20260924"
           assert reg["runner_universe"]["profile"]==UNIVERSE
           assert reg["runner_universe"]["request_match_required"] is True
           assert reg["runner_universe"]["external_pre_krs_match_required"] is True
 
-          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260923-R10"
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
           lr=route["family_routes"]["LOCAL"]
           assert lr["runtime_contract"]==CONTRACT
           assert lr["runtime_revision"]==RUNTIME
