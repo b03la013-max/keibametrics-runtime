@@ -1,0 +1,108 @@
+name: LOCAL SBO Public Shadow Production Runtime Acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/local_physical/sbo_public_shadow_evidence.py'
+      - 'runtime/local_physical/source_acquisition.py'
+      - 'runtime/local_physical/app_v15.py'
+      - 'runtime/local_physical/app.py'
+      - '.github/workflows/local-sbo-public-shadow-production-runtime-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  production-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for Rev.7 and verify automatic SBO capture in signed SOURCE
+        run: |
+          python - <<'PY'
+          import copy,json,time,urllib.request,urllib.error
+
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          EXPECTED="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE"
+          RID="KM-LOCAL-SBO-PUBLIC-SHADOW-PROD-ACCEPT-20250921-URW-R01"
+
+          def call(path,payload=None,method="POST",timeout=180):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(BASE+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          health=None
+          for _ in range(90):
+              try:
+                  hc,h=call("/health",None,"GET",30)
+                  if hc==200 and h.get("runtime_revision")==EXPECTED and h.get("status")=="READY":
+                      health=h
+                      break
+              except Exception:
+                  pass
+              time.sleep(5)
+          assert health is not None,"Rev.7 production runtime did not become READY"
+          assert health["sbo_public_shadow_profile"]=="KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",health
+          assert "SOURCE_SBO_PUBLIC_SHADOW" in health["capabilities"],health
+
+          mc,m=call("/source/manifest/local",{
+            "family_id":"LOCAL","race_id":RID,"venue_id":"URW","race_date":"2025-07-21","race_no":1,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":False,"include_odds":False
+          },timeout=60)
+          assert mc==200,m
+          m["include_auxiliary_evidence"]=False
+          m["include_population_seed"]=False
+          m["include_jma_weather"]=False
+          m["include_sbo_shadow"]=True
+          m["require_sbo_shadow"]=True
+
+          sc,source=call("/source/acquire",m,timeout=300)
+          assert sc==200,(sc,source)
+          assert (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",source
+          art=source["artifact"]
+          ev=art["sbo_public_shadow_evidence"]
+          assert ev["production_authority"] is False,ev
+          assert ev["prediction_authority"] is False,ev
+          assert ev["runner_universe_match"]["status"]=="MATCHED",ev["runner_universe_match"]
+          assert ev["status"]=="CAPTURED_NOT_OOS_ELIGIBLE",ev
+          assert ev["start_relation"]=="POST_START",ev
+          assert len(ev["runners"])==art["official_runner_universe"]["runner_count"],(len(ev["runners"]),art["official_runner_universe"])
+          assert "raw_gzip_b64" not in ev and "raw_html" not in ev,ev
+
+          vc,v=call("/source/verify",source,timeout=60)
+          assert vc==200 and v["valid"] is True,v
+
+          tampered=copy.deepcopy(source)
+          tampered["artifact"]["sbo_public_shadow_evidence"]["runners"][0]["average_index"]["value"]=999999
+          tc,tv=call("/source/verify",tampered,timeout=60)
+          assert tc==200 and tv["valid"] is False,tv
+          assert "SOURCE_SBO_PUBLIC_SHADOW_HASH_MISMATCH" in tv["errors"],tv
+
+          print("LOCAL_SBO_PUBLIC_SHADOW_PROD_RUNTIME_PASS="+json.dumps({
+            "runtime_revision":health["runtime_revision"],
+            "github_revision":health.get("github_revision"),
+            "sbo_profile":health["sbo_public_shadow_profile"],
+            "sbo_module_sha256":health["sbo_public_shadow_sha256"],
+            "source_receipt":source["receipt_sha256"],
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "official_runner_count":art["official_runner_universe"]["runner_count"],
+            "sbo_runner_count":len(ev["runners"]),
+            "sbo_runner_match":ev["runner_universe_match"]["status"],
+            "sbo_raw_sha256":ev["raw_sha256"],
+            "sbo_shadow_sha256":art["sbo_public_shadow_evidence_sha256"],
+            "storage_policy":ev["storage_policy"],
+            "production_authority":ev["production_authority"],
+            "oos_eligible":ev["oos_eligible"],
+            "tamper_rejected":True,
+          },ensure_ascii=False,separators=(",",":")))
+          PY
