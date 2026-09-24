@@ -1,0 +1,509 @@
+{
+  "profile": "KM-LOCAL-URW-DAILY-FORMAL-REVIEW-REV6-20260924-R1",
+  "review_revision": "DAILY_FORMAL_REVIEW_REV6",
+  "date": "2026-09-24",
+  "venue": "URW",
+  "generated_at": "2026-09-24T22:04:26+09:00",
+  "scope": {
+    "keibametrics_activations": 4,
+    "activation_artifacts": [
+      {
+        "race_id": "URW-20260924-R04-FORMAL-R1",
+        "class": "PRODUCTION_FORMAL_BRIDGE_ACCEPTANCE",
+        "temporal": "FORMAL-PRE-RACE",
+        "empirical_prediction_pfs_inclusion": false
+      },
+      {
+        "race_id": "URW-20260924-R05-FORMAL-R1",
+        "class": "SOURCE_ONLY_ACCEPTANCE",
+        "temporal": "SOURCE_ONLY",
+        "empirical_prediction_pfs_inclusion": false
+      },
+      {
+        "race_id": "URW-20260924-R10-FORMAL-R1",
+        "class": "FORMAL_UNKNOWN_FUTURE_SETTLED",
+        "temporal": "FORMAL-PRE-RACE",
+        "empirical_prediction_pfs_inclusion": true
+      },
+      {
+        "race_id": "URW-20260924-R12-FORMAL-R1",
+        "class": "FORMAL_UNKNOWN_FUTURE_SETTLED",
+        "temporal": "FORMAL-PRE-RACE",
+        "empirical_prediction_pfs_inclusion": true
+      }
+    ],
+    "note": "R4/R5 are correctness/bridge acceptance artifacts and are excluded from Prediction/PFS outcome denominators. R10/R12 are the settled unknown-future empirical sample."
+  },
+  "review_time_current_authority": {
+    "family_current": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R10",
+    "effective_at": "2026-09-24T11:30:00+09:00",
+    "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6",
+    "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12",
+    "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9",
+    "local_common_canon": "KM-LOCAL-COMMON-CANON-v4.13-REV.1-20260923",
+    "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+    "production_mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+    "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE",
+    "numerical_authority": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY",
+    "empirical_acceptance": "PENDING"
+  },
+  "race_time_differences": {
+    "R04": "R10 authority active; SOURCE-first repair not yet active at final freeze. Production formal bridge acceptance.",
+    "R05": "SOURCE_ONLY acceptance used to verify source-first handoff; no Static/KRS/FINAL.",
+    "R10": "R10 authority + SOURCE-first repair active.",
+    "R12": "R10 authority + SOURCE-first repair active."
+  },
+  "dynamic_measurement_state": {
+    "r4": {
+      "profile": "KM-FAMILY-MEC-R4-FORWARD-OOS-TRACKER-v1.0-20260922",
+      "eligible": 2,
+      "target": 30,
+      "remaining": 28,
+      "promotion": "LOCAL REJECTED",
+      "automatic_promotion": false,
+      "sha256": "be364cae68584647984de25c4ac08399c595d01a802a8313b658d5a4ea97b6e6"
+    },
+    "r5": {
+      "profile": "KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924",
+      "eligible": 2,
+      "target": 30,
+      "remaining": 28,
+      "automatic_promotion": false,
+      "sha256": "acec77be8de407c7d785da0f71c47099ab90f35bebb7ca545d8b1aef74964017"
+    },
+    "numerical_candidate": {
+      "profile": "KM-LOCAL-NUMERICAL-CANDIDATE-DUAL-OOS-TRACKER-v0.1-20260923",
+      "promotion_admissible": 2,
+      "held": 0,
+      "target": 30,
+      "remaining": 28,
+      "automatic_promotion": false,
+      "sha256": "1e976bcf64a93f2a401bfbc48d3bc70093489e877d0df36d08d6add6f07c27d5"
+    },
+    "precedence_note": "Dynamic tracker artifacts override static current-authority snapshot counts."
+  },
+  "day_result": {
+    "activation_count": 4,
+    "formal_full_pre_race_count": 3,
+    "source_only_count": 1,
+    "source_first_end_to_end_count": 2,
+    "empirical_settled_formal_count": 2,
+    "external_krs_completed_full_formal": 3,
+    "strict_full_numerical_count": 0,
+    "execution_verified_numerical_degraded_count": 3,
+    "actual_purchase_verified_races": 0,
+    "frozen_recommendation_settled_races": 2,
+    "no_bet_count": 0,
+    "hit_races": 0,
+    "hit_rate_empirical": 0,
+    "frozen_recommendation_investment": 10600,
+    "frozen_recommendation_return": 0,
+    "profit_loss": -10600,
+    "frozen_recommendation_pfs": 0,
+    "actual_pfs": "NOT VERIFIED",
+    "largest_return": 0,
+    "pfs_excluding_largest_return": 0,
+    "hit_but_loss_count": 0,
+    "deadline_failure_count": 0,
+    "post_start_replay_count": 0,
+    "source_handoff_failure_count": 0,
+    "runner_universe_failure_count": 0,
+    "krs_failure_count": 0,
+    "settlement_pending_formal_artifacts": 1,
+    "settlement_pending_note": "R4 bridge acceptance has no Result settlement; R5 is SOURCE_ONLY and not a settlement-pending Formal prediction."
+  },
+  "source_runner_result": {
+    "source_first_full_completion": "2/2 explicit full SOURCE-first empirical races (R10,R12)",
+    "source_only_acceptance": "R5 PASS",
+    "formal_bridge": "R4 PASS before source-first repair activation",
+    "temporal_failure": 0,
+    "official_runner_universe_failures": 0,
+    "request_krs_universe_failures": 0,
+    "source_enrichment": "R10/R12 captured NAR auxiliary/JMA/population shadow evidence; production authority remains FALSE."
+  },
+  "numerical_result": {
+    "full_formal_races": 3,
+    "required": 870,
+    "terminalized": 870,
+    "calculated": 0,
+    "ruled_hold": 840,
+    "ruled_neutral": 30,
+    "not_applicable": 0,
+    "unresolved": 0,
+    "formula_authority_unbound_component_rules": 63,
+    "calculation_coverage_pct": 0,
+    "terminalization_coverage_pct": 100,
+    "provenance": "Terminal/provenance lineage present; strict calculated-value provenance not available because Calculated=0.",
+    "empirical_subset": {
+      "required": 696,
+      "terminalized": 696,
+      "calculated": 0,
+      "ruled_hold": 672,
+      "ruled_neutral": 24,
+      "unresolved": 0
+    }
+  },
+  "execution_result": {
+    "pre_krs": "3/3 full formal PASS",
+    "krs": "3/3 full formal completed",
+    "actual_krs_runs_total": 15000,
+    "final": "3/3 full formal Signed FINAL before post",
+    "final_before_post_rate_pct": 100,
+    "formal_pre_race_completion_rate_pct": 100,
+    "deadline_failures": 0,
+    "post_start_replays": 0,
+    "result_receipts": "R10/R12 verified after NAR-official Result Authority R2; R4 no result settlement.",
+    "official_result_authority_update": {
+      "R10": "NAR official result verified; Result R2 SUCCESS, run 36003078391.",
+      "R12": "NAR official result verified; first R2 run hit post-result ledger git conflict only; retry SUCCESS, run 36003213969."
+    }
+  },
+  "bet_type_result": {
+    "EXACTA": {
+      "investment": 2600,
+      "return": 0,
+      "profit_loss": -2600,
+      "pfs": 0,
+      "hit_count": 0
+    },
+    "TRIO": {
+      "investment": 5600,
+      "return": 0,
+      "profit_loss": -5600,
+      "pfs": 0,
+      "hit_count": 0
+    },
+    "TRIFECTA": {
+      "investment": 2400,
+      "return": 0,
+      "profit_loss": -2400,
+      "pfs": 0,
+      "hit_count": 0
+    }
+  },
+  "prediction_result": {
+    "empirical_races": 2,
+    "winner_w_capture": {
+      "count": 0,
+      "total": 2,
+      "rate": 0
+    },
+    "actual_winner_alternative_w_capture": {
+      "count": 2,
+      "total": 2,
+      "rate": 1
+    },
+    "p2_capture": {
+      "count": 1,
+      "total": 2,
+      "rate": 0.5
+    },
+    "p3_capture": {
+      "count": 2,
+      "total": 2,
+      "rate": 1
+    },
+    "global_top3_role_set_capture": {
+      "count": 2,
+      "total": 2,
+      "rate": 1
+    },
+    "ordered_pair_capture": {
+      "count": 0,
+      "total": 2,
+      "rate": 0
+    },
+    "ordered_exact_capture": {
+      "count": 0,
+      "total": 2,
+      "rate": 0
+    },
+    "mean_actual_winner_static_rank": 7.5,
+    "mean_top3_static_rank": 6.5,
+    "discrimination": "FAIL / LOW",
+    "interpretation": "Discovery was materially better than role/order discrimination: both winners existed as Alternative-W, but neither became Production W."
+  },
+  "krs_result": {
+    "strict_full_numerical_stratum": {
+      "races": 0,
+      "status": "NO SAMPLE"
+    },
+    "degraded_numerical_stratum": {
+      "settled_races": 2,
+      "unique_rescue": 1,
+      "supportive": 1,
+      "unique_harm": 0,
+      "harm": 0,
+      "unique_rescue_rate": 0.5,
+      "note": "R10 KRS rescued winner-W only; R12 supported P2/P3 but did not rescue winner. Neither produced the full correct ordered outcome."
+    },
+    "authority": "SHADOW",
+    "production_promotion": "PROHIBITED / WAITING R30 / separate degraded-input stratum"
+  },
+  "semantic_mec_result": {
+    "production_mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+    "empirical_production_baseline": {
+      "races": 2,
+      "ticket_count": 106,
+      "investment": 10600,
+      "return": 0,
+      "pfs": 0
+    },
+    "r4": {
+      "eligible": 2,
+      "remaining": 28,
+      "production_baseline_pfs": 0,
+      "core_only": {
+        "investment": 5000,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 52.830189
+      },
+      "cpss_top3": {
+        "investment": 5200,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 50.943396
+      },
+      "cpss_all": {
+        "investment": 5800,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 45.283019
+      },
+      "conclusion": "All arms missed. Lower capital only reduced absolute loss; it did not recover the missing outcome structure."
+    },
+    "r5": {
+      "eligible": 2,
+      "remaining": 28,
+      "production_baseline_pfs": 0,
+      "set_only": {
+        "investment": 5600,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 47.169811
+      },
+      "set_pair": {
+        "investment": 8200,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 22.641509
+      },
+      "exact_top3": {
+        "investment": 9200,
+        "return": 0,
+        "pfs": 0,
+        "capital_reduction_pct": 13.207547
+      },
+      "conclusion": "All arms missed, including wider exact arms. Ticket width/compression alone does not solve today's winner-role/order failure."
+    },
+    "semantic_status_correctness": {
+      "issue": "TAIL_PROTECTED appears in R10/R12 role_registry but is not a canonical active status in current MEC/validator role sets.",
+      "observed_effect": "Some globally declared P3 roles were not recognized by the MEC active-role parser.",
+      "pfs_materiality": "UNKNOWN / NOT PROVEN for the actual R10/R12 Top3, because the corresponding correct material ordered pair was independently soft-excluded upstream (R10 10>3; R12 6>2).",
+      "action_class": "CORRECTNESS / IMPLEMENTATION REPAIR before next Formal race",
+      "nonretroactive": true
+    }
+  },
+  "numerical_candidate_result": {
+    "tracker_admissible": 2,
+    "held": 0,
+    "remaining_to_r30": 28,
+    "v01": {
+      "winner_capture_rate": 0,
+      "p2_capture_rate": 1,
+      "p3_capture_rate": 1,
+      "top3_set_capture_rate": 1,
+      "mean_winner_rank": 11,
+      "mean_top3_mean_rank": 7.333333333333334,
+      "krs_unique_rescue_rate": 0
+    },
+    "v02": {
+      "winner_capture_rate": 0,
+      "p2_capture_rate": 1,
+      "p3_capture_rate": 1,
+      "top3_set_capture_rate": 1,
+      "mean_winner_rank": 11,
+      "mean_top3_mean_rank": 7.333333333333334,
+      "krs_unique_rescue_rate": 0
+    },
+    "delta_v02_minus_v01": "ZERO on all measured prediction metrics",
+    "candidate_ticket_pfs": "NOT AVAILABLE",
+    "promotion": "NO AUTOMATIC PROMOTION"
+  },
+  "race_scorecards": {
+    "R04": {
+      "class": "ACCEPTANCE",
+      "source": "PASS",
+      "numerical": "DEGRADED",
+      "prediction": "N/A for empirical ledger",
+      "krs": "EXECUTED",
+      "semantic_mec": "PASS mechanical",
+      "conversion": "N/A outcome",
+      "capital": "2700 recommendation",
+      "execution": "PASS",
+      "pfs": "N/A",
+      "first_failure": "NO EMPIRICAL OUTCOME REVIEW"
+    },
+    "R05": {
+      "class": "SOURCE_ONLY",
+      "source": "PASS",
+      "numerical": "N/A",
+      "prediction": "N/A",
+      "krs": "N/A",
+      "semantic_mec": "N/A",
+      "conversion": "N/A",
+      "capital": "N/A",
+      "execution": "SOURCE VERIFIED",
+      "pfs": "N/A",
+      "first_failure": "NO MATERIAL FAILURE / PHASE COMPLETE"
+    },
+    "R10": {
+      "result": [
+        3,
+        7,
+        10
+      ],
+      "source": "PASS",
+      "numerical": "DEGRADED",
+      "prediction": "FAIL/PARTIAL",
+      "krs": "UNIQUE-RESCUE winner only",
+      "semantic_mec": "PASS mechanical / correct outcome absent upstream",
+      "conversion": "MISS",
+      "capital": "0% PFS",
+      "execution": "PASS",
+      "pfs": 0,
+      "first_failure": "PREDICTION_ROLE_W",
+      "additional_failure": "P2/ORDERED_PAIR"
+    },
+    "R12": {
+      "result": [
+        10,
+        2,
+        6
+      ],
+      "source": "PASS",
+      "numerical": "DEGRADED",
+      "prediction": "FAIL/PARTIAL",
+      "krs": "SUPPORTIVE",
+      "semantic_mec": "PARTIAL / role-status correctness defect observed",
+      "conversion": "MISS",
+      "capital": "0% PFS",
+      "execution": "PASS",
+      "pfs": 0,
+      "first_failure": "PREDICTION_ROLE_W",
+      "additional_failure": "Role-status semantic transport defect; causal PFS materiality unproven"
+    }
+  },
+  "top_failures": [
+    {
+      "rank": 1,
+      "failure": "ALTERNATIVE-W -> PRODUCTION-W DISCRIMINATION",
+      "evidence": "R10 winner #3 and R12 winner #10 were both discovered as Alternative-W but Production W capture was 0/2.",
+      "materiality": "VERY HIGH"
+    },
+    {
+      "rank": 2,
+      "failure": "ORDER / P2 DISCRIMINATION",
+      "evidence": "R10 second #7 was P3 only; correct 3>7 pair absent. R12 correct 10>2 pair absent because winner head was not W.",
+      "materiality": "HIGH"
+    },
+    {
+      "rank": 3,
+      "failure": "NUMERICAL AUTHORITY NOT READY",
+      "evidence": "870/870 terminalized but 0 calculated across full Formal executions; 63 component score rules remain unbound.",
+      "materiality": "SYSTEMIC / PREDICTIVE EFFECT UNASSESSABLE"
+    },
+    {
+      "rank": 4,
+      "failure": "ROLE-STATUS SEMANTIC TRANSPORT CORRECTNESS",
+      "evidence": "TAIL_PROTECTED is non-canonical to MEC active-role parsing in R10/R12.",
+      "materiality": "CORRECTNESS-HIGH / OUTCOME-CAUSALITY UNKNOWN"
+    },
+    {
+      "rank": 5,
+      "failure": "CAPITAL DEPLOYED INTO WRONG OUTCOME UNIVERSE",
+      "evidence": "106 tickets / 10,600 yen across settled Production R3 returned 0.",
+      "materiality": "CONTRIBUTORY, NOT FIRST FAILURE"
+    }
+  ],
+  "top_successes": [
+    {
+      "rank": 1,
+      "success": "SOURCE / RUNNER / SIGNED EXECUTION",
+      "evidence": "R10/R12 SOURCE-first, universe match, PRE_KRS/KRS/FINAL before post, Signed RESULT verified."
+    },
+    {
+      "rank": 2,
+      "success": "ALTERNATIVE WINNER DISCOVERY",
+      "evidence": "Both actual winners were retained as Alternative-W before results."
+    },
+    {
+      "rank": 3,
+      "success": "GLOBAL TOP3 DISCOVERY",
+      "evidence": "All actual Top3 in both empirical races were present in global W/P2/P3 role universe, despite poor order discrimination."
+    },
+    {
+      "rank": 4,
+      "success": "KRS MATERIAL WINNER SIGNAL ON R10",
+      "evidence": "KRS Shadow upgraded R10 winner #3 to W before result; not enough to recover second/order."
+    },
+    {
+      "rank": 5,
+      "success": "OFFICIAL RESULT AUTHORITY CLOSURE",
+      "evidence": "Daily review independently verified NAR R10/R12 results and reran Result R2, clearing Numerical Candidate result-authority holds."
+    }
+  ],
+  "next_race_learning_update": {
+    "immediate": [
+      "Normalize/forbid non-canonical TAIL_PROTECTED before MEC; canonical P3 tail roles must arrive as an active recognized status without changing predictive policy.",
+      "Retain SOURCE-first handoff; no source/runtime regression was observed.",
+      "Keep NAR official result authority verification in measurement intake."
+    ],
+    "reference_only": [
+      "URW direct same-course/distance evidence that created Alternative-W in both winners should receive explicit W1R audit before a final W downgrade.",
+      "Do not treat recent-form weakness alone as proof that an independently identified Urawa win path is immaterial.",
+      "KRS winner rescue is a positive degraded-input shadow signal, not Production authority."
+    ],
+    "shadow_candidates": [
+      "URW Alternative-W -> Production-W persistence under strong direct course/distance evidence.",
+      "Recent Evidence Reach versus Direct-Distance Residual Winner conflict.",
+      "Historical same-course P2 residual floor when recent races are shorter/different or after layoff.",
+      "Canonical role-status transport regression test for Global P3 semantic preservation."
+    ]
+  },
+  "do_not_change": [
+    "Production Mapping weights/formulas",
+    "Probability/EV/Kelly mapping",
+    "KRS Production authority",
+    "parameter_map",
+    "Production MEC-R3",
+    "Permanent Capital rule",
+    "Permanent Urawa numerical correction",
+    "Source Enrichment predictive weights"
+  ],
+  "canon_revision": {
+    "required": true,
+    "level": "CANDIDATE / SHADOW ONLY; Production v1.6-URW unchanged",
+    "target": "Alternative-W/W1R conversion and Direct-Distance Evidence persistence",
+    "observation": "Across current Urawa regressions, including both 2026-09-24 settled races, winners were discovered but repeatedly stopped below Production W.",
+    "mechanism": "Venue-specific direct same-course/distance residual win path may be over-suppressed by recent-reach downgrade.",
+    "expected_benefit": "Improve winner-role discrimination without widening all W candidates.",
+    "risk": "Over-promoting stale historical specialists and increasing pair/exact capital width.",
+    "numerical_change": false,
+    "frozen_oos_requirement": "YES"
+  },
+  "sequential_learning_verdict": {
+    "source_state": "IMPROVE",
+    "numerical_state": "DEGRADED",
+    "prediction_state": "DEGRADE",
+    "krs_state": "INCONCLUSIVE / POSITIVE SHADOW SIGNAL",
+    "semantic_mec_state": "DEGRADE / CORRECTNESS GAP EXPOSED",
+    "ticket_conversion_state": "INCONCLUSIVE / UPSTREAM STRUCTURE MISSING",
+    "capital_state": "DEGRADE",
+    "external_execution_state": "IMPROVE",
+    "next_unknown_race_difference": "Source/result authority and signed execution remain intact; before the next race, role-status transport must be canonicalized and Alternative-W with strong direct Urawa evidence must receive an explicit W1R persistence audit. No Production numeric or MEC policy is changed."
+  },
+  "final_verdict": "FAILURE",
+  "final_reason": "The settled unknown-future sample was 0/2 hits and 0% Frozen Recommendation PFS. Both winners were discovered as Alternative-W but missed Production W, so the dominant failure was role/order discrimination rather than source, runtime, KRS execution, MEC width, or deadline. Execution improved materially, but prediction utility and long-run PFS did not."
+}
