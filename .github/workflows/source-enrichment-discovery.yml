@@ -1,0 +1,50 @@
+name: LOCAL Source Enrichment Discovery
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/source-enrichment-discovery.yml'
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect official NAR HTML link and table shapes
+        run: |
+          python - <<'PY'
+          import re, urllib.request
+          from html.parser import HTMLParser
+
+          URL="https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/DebaTable?k_babaCode=31&k_raceDate=2026%2F09%2F13&k_raceNo=3"
+          RURL="https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=31&k_raceDate=2026%2F09%2F13&k_raceNo=1"
+          def get(url):
+              req=urllib.request.Request(url,headers={"User-Agent":"KeibaMetrics-Discovery/1.0"})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  b=r.read()
+                  ct=r.headers.get("content-type","")
+              for enc in ("utf-8","cp932","shift_jis","euc_jp"):
+                  try:return b.decode(enc)
+                  except:pass
+              return b.decode("utf-8","replace")
+          html=get(URL)
+          print("RACE_CARD_BYTES",len(html.encode()))
+          hrefs=re.findall(r'href=["\']([^"\']+)["\']',html,re.I)
+          for h in sorted(set(hrefs)):
+              if "DataRoom" in h or "Horse" in h or "Rider" in h or "Trainer" in h:
+                  print("DATAROOM_HREF",h)
+          for key in ("k_lineageLoginCode","k_riderLicenseNo","k_trainerLicenseNo","HorseMark","RiderMark","TrainerMark"):
+              print("COUNT",key,html.count(key))
+
+          result=get(RURL)
+          print("RESULT_BYTES",len(result.encode()))
+          # print compact snippets around passing-order terms
+          for term in ("通過順位","着順","馬番","馬名"):
+              m=re.search(term,result)
+              if m:
+                  s=re.sub(r"\s+"," ",result[max(0,m.start()-500):m.start()+1500])
+                  print("RESULT_SNIPPET",term,s[:2000])
+          print("DISCOVERY_PASS")
+          PY
