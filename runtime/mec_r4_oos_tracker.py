@@ -112,6 +112,12 @@ def build_status():
                 if shadow.get("production_effect")!="NONE":
                     errors.append({"race_id":rid,"reason":"PRODUCTION_EFFECT_NOT_NONE"})
                     continue
+                arms=result.get("arms") or {}
+                if sorted(arms)!=sorted(EXPECTED_ARMS):
+                    errors.append({"race_id":rid,"reason":"ARM_SET_MISMATCH","arms":sorted(arms)})
+                    continue
+                if any(str((arms[a] or {}).get("status"))!="SETTLED" for a in EXPECTED_ARMS):
+                    continue
 
                 # JRA lineage uses a Git-versioned immutable FINAL artifact.
                 # LOCAL lineage uses a pre-result Shadow digest cryptographically
@@ -165,13 +171,6 @@ def build_status():
                 post=shadow.get("scheduled_post_at")
                 if not post or gen>=_dt(post):
                     continue
-                arms=result.get("arms") or {}
-                if sorted(arms)!=sorted(EXPECTED_ARMS):
-                    errors.append({"race_id":rid,"reason":"ARM_SET_MISMATCH","arms":sorted(arms)})
-                    continue
-                if any(str((arms[a] or {}).get("status"))!="SETTLED" for a in EXPECTED_ARMS):
-                    continue
-
                 if str(production_settlement.get("status") or "").upper()!="SETTLED":
                     continue
                 p_inv=float(production_settlement.get("total_investment") or production_settlement.get("investment") or 0)
