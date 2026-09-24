@@ -316,6 +316,62 @@ def build_same_day_bias(artifact: Dict[str, Any]) -> Dict[str, Any]:
     return summary
 
 
+def build_pedigree_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
+    """Capture pre-race pedigree identities as a population-ledger seed.
+
+    This is deliberately not a BVI score. It preserves sire/dam/damsire lineage
+    so a point-in-time population database can be accumulated without inventing
+    a pedigree fit statistic from the current field alone.
+    """
+    ev = artifact.get("normalized_evidence") or {}
+    rc = ev.get("race_card_tables") or {}
+    tables = rc.get("value") if isinstance(rc, dict) else None
+    rows = None
+    if isinstance(tables, list):
+        for table in tables:
+            if isinstance(table, list) and any(isinstance(r, list) and "競走馬" in r for r in table):
+                if rows is None or len(table) > len(rows):
+                    rows = table
+    seeds = []
+    if rows:
+        def primary(row):
+            if len(row) < 2 or not re.fullmatch(r"\\d{1,2}", str(row[0]).strip()):
+                return False
+            if len(row) >= 3 and re.fullmatch(r"\\d{1,2}", str(row[1]).strip()):
+                return _norm(row[2]) not in {"", "競走馬", "馬名"}
+            return _norm(row[1]) not in {"", "競走馬", "馬名", "前走回"}
+        indices=[i for i,row in enumerate(rows) if isinstance(row,list) and primary(row)]
+        for n,i in enumerate(indices):
+            stop=indices[n+1] if n+1<len(indices) else len(rows)
+            group=rows[i:stop]
+            if len(group)<5:
+                continue
+            p,meta,blood,content,marginrow=group[:5]
+            if len(p)>=3 and re.fullmatch(r"\\d{1,2}",str(p[1]).strip()):
+                horse_no=int(p[1]); name=str(p[2]).strip()
+            else:
+                horse_no=int(p[0]); name=str(p[1]).strip()
+            seeds.append({
+                "runner_id":str(horse_no),
+                "horse_name":name,
+                "sire":str(blood[0]).strip() if blood else "",
+                "dam":str(content[0]).strip() if content else "",
+                "damsire":re.sub(r"^[（(]|[）)]$","",str(marginrow[0]).strip()) if marginrow else "",
+                "race_card_source_id":rc.get("source_id"),
+                "race_card_snapshot_sha256":rc.get("snapshot_sha256"),
+            })
+    out={
+        "profile":"KM-LOCAL-PEDIGREE-POPULATION-SEED-v1.0-20260924",
+        "production_authority":False,
+        "population_fit_ready":False,
+        "runner_count":len(seeds),
+        "seeds":sorted(seeds,key=lambda x:int(x["runner_id"])),
+        "rule":"Identity/history seed only. Do not convert current-field lineage frequencies into BVI population fit.",
+    }
+    out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
+    return out
+
+
 def build_profile_summaries(snapshots: List[Dict[str, Any]], registry: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_source = {str(s.get("source_id")): s for s in snapshots if isinstance(s, dict)}
     horses: Dict[str, Any] = {}; riders: Dict[str, Any] = {}; trainers: Dict[str, Any] = {}
@@ -361,6 +417,7 @@ def enrich_with_auxiliary_evidence(artifact: Dict[str, Any], prediction_cutoff: 
         "profile_source_warning_count": len(warnings), "profile_warnings": warnings,
         "profiles": build_profile_summaries(snapshots, registry),
         "same_day_position_bias": build_same_day_bias(artifact),
+        "pedigree_population_seed": build_pedigree_seed(artifact),
         "population_pedigree_status": "SEED-HISTORY-CAPTURED / POPULATION-AGGREGATION-NOT-YET-PRODUCTION",
         "training_comment_paddock_status": "NO-UNIVERSAL-NAR-OFFICIAL-SOURCE-CONNECTED",
         "jma_weather_status": "NOT-ACTIVATED-UNTIL-VENUE-STATION-LINEAGE-VERIFIED",
