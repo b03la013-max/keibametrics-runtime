@@ -22,6 +22,7 @@ def evaluate_v03(
     race_id: str,
     krs_summary: Dict[str,Any]|None=None,
     krs_envelope: Dict[str,Any]|None=None,
+    signed_final_binding_valid: bool=False,
 ) -> Dict[str,Any]:
     s=summary or {}
     if s.get("status")!="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW":
@@ -42,8 +43,13 @@ def evaluate_v03(
     )
     # The generic evaluator knows temporal/KRS eligibility. v0.3 additionally
     # rejects pre-design historical replays from Forward OOS admission.
-    base["candidate_oos_event_eligible"]=bool(base.get("candidate_oos_event_eligible") and future_eligible)
+    base["candidate_oos_event_eligible"]=bool(
+        base.get("candidate_oos_event_eligible")
+        and future_eligible
+        and signed_final_binding_valid is True
+    )
     base["candidate_is_pre_design_replay"]=not future_eligible
+    base["signed_final_binding_valid"]=bool(signed_final_binding_valid)
     krs_post=None
     if isinstance(krs_envelope,dict):
         try:
@@ -63,6 +69,7 @@ def evaluate_v03(
         "candidate_krs_postresult":krs_post,
         "design_freeze_date":DESIGN_FREEZE_DATE,
         "future_oos_candidate":future_eligible,
+        "signed_final_binding_valid":bool(signed_final_binding_valid),
         "production_effect":"NONE",
         "automatic_promotion":False,
         "note":"v0.3 was designed after 2026-09-24 outcomes. Any replay dated before 2026-09-25 is diagnostic only and can never enter its Forward OOS tracker."
