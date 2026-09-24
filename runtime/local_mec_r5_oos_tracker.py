@@ -70,6 +70,8 @@ def build_status():
                 if gen<activation: continue
                 if str(sh.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE": continue
                 if not sh.get("scheduled_post_at") or gen>=_dt(sh["scheduled_post_at"]): continue
+                if result.get("oos_eligible") is not True or str(result.get("status") or "")!="FORWARD-OOS-SETTLEMENT / SIGNED-FINAL-BOUND":
+                    errors.append({"race_id":rid,"reason":"R5_SETTLEMENT_NOT_FORWARD_OOS","status":result.get("status"),"oos_eligible":result.get("oos_eligible")}); continue
                 arms=result.get("arms") or {}
                 if sorted(arms)!=sorted(ARM_ORDER):
                     errors.append({"race_id":rid,"reason":"R5_ARM_SET_MISMATCH","arms":sorted(arms)}); continue

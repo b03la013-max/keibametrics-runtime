@@ -40,3 +40,30 @@ try:
     raise AssertionError("tampered R5 binding must fail")
 except AssertionError as e:
     assert "SHADOW_SHA_NOT_BOUND" in str(e)
+
+
+# Forward settlement must say OOS only after signed-FINAL binding is verified.
+future_req={
+ "race_id":"URW-20260924-R09-FORMAL-R1",
+ "scheduled_post_at":"2026-09-24T14:10:00+09:00",
+ "temporal_mode":"FORMAL-PRE-RACE",
+ "static_prediction":req["static_prediction"],
+ "pair_dispositions":req["pair_dispositions"],
+ "third_dispositions":[],
+}
+future=build_shadow(future_req,env,generated_at="2026-09-24T05:00:00+00:00",basis_sha256="FB")
+assert future["forward_oos_candidate"] is True
+assert future["training_excluded"] is False
+unbound=settle_shadow(future,{"finish_order":[1,2,4],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200}})
+assert unbound["oos_eligible"] is False
+assert unbound["status"]=="FORWARD-CANDIDATE-UNBOUND / NOT-OOS"
+bound=settle_shadow(future,{"finish_order":[1,2,4],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200}},signed_final_binding_valid=True)
+assert bound["oos_eligible"] is True
+assert bound["status"]=="FORWARD-OOS-SETTLEMENT / SIGNED-FINAL-BOUND"
+
+training_req=dict(future_req,race_id="URW-20260923-R12-FORMAL-R1")
+training=build_shadow(training_req,env,generated_at="2026-09-23T10:00:00+00:00",basis_sha256="TB")
+assert training["training_excluded"] is True
+training_settle=settle_shadow(training,{"finish_order":[1,2,4],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200}},signed_final_binding_valid=True)
+assert training_settle["oos_eligible"] is False
+assert training_settle["status"]=="RETROSPECTIVE-TRAINING-SETTLEMENT / NOT-OOS"
