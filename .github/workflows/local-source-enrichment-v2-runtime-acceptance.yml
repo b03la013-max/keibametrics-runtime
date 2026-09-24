@@ -110,7 +110,8 @@ jobs:
           good={**common,"horses":[horse(i,expected[str(i)],55+i) for i in range(1,13)]}
           pc,pre=call("/pre-krs",{
             "family_id":"LOCAL","race_id":RID,"source_receipt":source,
-            "required_index_unresolved":0,"full_numerical_calculation":True,
+            "required_index_unresolved":0,"full_terminalization":True,
+            "full_numerical_calculation":True,"krs_input_mode":"FULL-NUMERICAL",
             "static_prediction_frozen":True,"krs_input_data":good
           },timeout=120)
           assert pc==200 and (pre.get("receipt") or {}).get("status")=="PASS",(pc,pre)
