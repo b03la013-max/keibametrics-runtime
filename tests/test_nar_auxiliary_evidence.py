@@ -88,7 +88,9 @@ def test_parse_rider_trainer_performance_rows():
       <tr><th>着別回数</th><th>1着</th><th>2着</th><th>3着</th><th>4着</th><th>5着</th><th>着外</th><th>合計</th><th>勝率</th><th>連対率</th></tr>
       <tr><td>生涯成績</td></tr>
       <tr><td>地方競馬</td><td>81</td><td>73</td><td>90</td><td>90</td><td>101</td><td>570</td><td>1005</td><td>8.1%</td><td>15.3%</td></tr>
-      <tr><td>2026年</td><td>10</td><td>12</td><td>8</td><td>7</td><td>5</td><td>58</td><td>100</td><td>10.0%</td><td>22.0%</td></tr>
+      <tr><td>2026年 地方競馬成績</td></tr>
+      <tr><td>1番人気</td><td>4</td><td>2</td><td>1</td><td>0</td><td>0</td><td>1</td><td>8</td><td>50.0%</td><td>75.0%</td></tr>
+      <tr><td>合計</td><td>10</td><td>12</td><td>8</td><td>7</td><td>5</td><td>58</td><td>100</td><td>10.0%</td><td>22.0%</td></tr>
     </table>
     """
     out=parse_person_profile(_snap("NAR-RIDER-R001","OFFICIAL_RIDER_PROFILE",html))
@@ -96,6 +98,8 @@ def test_parse_rider_trainer_performance_rows():
     assert out["lifetime_local"]["total"]==1005
     assert out["lifetime_local"]["win_rate_pct"]==8.1
     assert out["latest_year"]["total"]==100
+    assert out["latest_year_key"]=="2026"
+    assert out["yearly_popularity_bands"]["2026"][0]["label"]=="1番人気"
 
 
 def test_same_day_bias_uses_prior_result_tables_only():
