@@ -55,6 +55,17 @@ for fam in ["JRA","LOCAL","BAN"]:
     assert any(x["mec_action"]=="IGNORED_BUDGET_ONLY" for x in p["budget_only_orientation_exclusions_ignored"])
     assert v["mec_verified"] is True
 
+
+# Legacy venue transport sometimes serialized a global P3 tail as TAIL_PROTECTED.
+# MEC-R3 must treat that as the existing RESIDUAL semantic role, not silently drop it.
+alias_req=base_req("LOCAL")
+for row in alias_req["role_registry"]:
+    if row["runner_id"]=="4" and row["column"]=="P3":
+        row["status"]="TAIL_PROTECTED"
+alias_plan=build_mec_plan(alias_req,strict_head_closure=True)
+assert any(t["bet_type"]=="TRIO" and set(t["selection"])=={1,2,4} for t in alias_plan["tickets"])
+assert alias_plan["material_coverage_ratio"]==1.0
+
 bad=base_req("JRA")
 bad["role_registry"].append({"runner_id":"5","column":"W","status":"CORE"})
 bad["role_registry"].append({"runner_id":"5","column":"P2","status":"PROTECTED"})
