@@ -1,0 +1,107 @@
+{
+  "profile": "KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925-R1",
+  "status": "CANDIDATE / NON-PRODUCTION / EVIDENCE-ROUTING-WINDOW / OBSERVED-ONLY-MISSINGNESS / PRE-RESULT-SHADOW / FORWARD-OOS-R30-PENDING / AUTOMATIC-PROMOTION-FALSE",
+  "effective_for_shadow": "2026-09-25",
+  "raison_d_etre": "Improve the conversion of already-captured pre-race evidence into LOCAL base/derived numerical candidate features without changing Production weights, Production formulas, Production roles, MEC-R3, Capital, KRS authority, or Production numerical authority.",
+  "current_authority_parent": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R11",
+  "venue_routing_parent": "KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12",
+  "runtime_contract_parent": "KM-FAMILY-RUNTIME-CONTRACTS-20260924-R10",
+  "local_suite_manifest_parent": "KM-LOCAL-SUITE-MANIFEST-20260924-R9",
+  "production": {
+    "suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+    "numerical_authority": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY",
+    "changed": false,
+    "production_mapping_changed": false,
+    "production_weight_changed": false,
+    "production_prediction_policy_changed": false,
+    "production_krs_authority_changed": false,
+    "production_mec_r3_changed": false,
+    "capital_policy_changed": false
+  },
+  "predecessor_candidates": {
+    "baseline": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+    "calibrated_companion": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED"
+  },
+  "artifacts": {
+    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.3-CANDIDATE-20260925-EVIDENCE-ROUTING",
+    "numerical_mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v0.3-CANDIDATE-20260925-EVIDENCE-ROUTING",
+    "evidence_compiler": "runtime/local_evidence_routing_candidate_v03.py",
+    "numerical_materializer": "runtime/local_fullnumerical_candidate.py",
+    "krs_bridge": "runtime/local_krs_bridge_candidate.py",
+    "postresult": "runtime/local_candidate_v03_postresult.py",
+    "oos_tracker": "KM-LOCAL-NUMERICAL-V03-FORWARD-OOS-TRACKER-v1.0-20260925"
+  },
+  "design": {
+    "weight_change_from_v01": false,
+    "primary_change": "Evidence routing, evidence window, and missingness arithmetic.",
+    "HPI_L": "Race-card recent form remains recent-window oriented.",
+    "CFIg_L": "Full pre-target NAR horse history for venue/distance/similar-distance/going evidence.",
+    "RFIg_L": "Observed race-card position components retained; full pre-target history extends going adaptation without inventing corner positions.",
+    "BVIg_L": "Point-in-time population ledger only when minimum descriptive sample gate passes; otherwise UNKNOWN. Still Shadow/selection-biased.",
+    "JTI_L": "NAR rider profile popularity-band context plus existing same-horse rider evidence.",
+    "CSI_L": "NAR trainer profile preserved as context; no false venue/class/distance score attribution without direct source.",
+    "BWI_L": "Full pre-target bodyweight history for weight-range evidence.",
+    "DCR": "Source coverage and missingness, including same-day official-result coverage and full-history comparability.",
+    "NCI": "Existing candidate class logic retained pending a dedicated full-history class translator.",
+    "JMA": "Context-only; NAR official going remains race fact.",
+    "SBO": "Third-party public Shadow diagnostic only; ability-index weight fixed at zero."
+  },
+  "missingness": {
+    "old_candidate_behavior": "UNKNOWN component transported as 52 and participated in partial weighted means.",
+    "v03_behavior": "UNKNOWN component is excluded from the numeric denominator when at least one component is observed.",
+    "all_components_unknown": "52 remains transport-only with confidence/observed weight zero.",
+    "semantic_rule": "UNKNOWN != WEAK; UNKNOWN != STRONG; UNKNOWN != AVERAGE.",
+    "dcr_carries_missingness": true
+  },
+  "temporal_integrity": {
+    "design_freeze_date": "2026-09-25",
+    "pre_result_shadow_required": true,
+    "signed_final_digest_binding_required": true,
+    "krs_pre_post_completion_required_for_krs_oos": true,
+    "official_result_authority_required": true,
+    "races_on_or_before_2026_09_24": "DIAGNOSTIC / RETROSPECTIVE ONLY / NEVER V0.3 FORWARD-OOS",
+    "future_oos_tracker_start": "0/30",
+    "minimum_future_events_before_human_review": 30,
+    "automatic_promotion": false
+  },
+  "source_authority_boundary": {
+    "NAR_OFFICIAL": "Allowed as pre-cutoff candidate feature input.",
+    "JMA_OFFICIAL": "Context only unless specifically rule-bound; never overrides official NAR going.",
+    "POINT_IN_TIME_POPULATION_LEDGER": "Selection-biased Shadow descriptive cohort; minimum sample required and no Production authority.",
+    "SBO_PUBLIC_NON_OFFICIAL": "Diagnostic/Shadow context only; no direct base-index weight, probability, EV, or Production authority."
+  },
+  "comparison_plan": {
+    "same_signed_source": true,
+    "same_runner_universe": true,
+    "arms": [
+      "v0.1 baseline",
+      "v0.2 calibrated companion",
+      "v0.3 evidence-routing"
+    ],
+    "metrics": [
+      "winner rank",
+      "winner capture",
+      "P2 rank/capture",
+      "P3 rank/capture",
+      "top3 mean rank",
+      "top3 set capture",
+      "KRS rescue/harm",
+      "component coverage"
+    ],
+    "candidate_ticket_pfs": "NOT AVAILABLE until a separately preregistered candidate ticket/capital arm exists"
+  },
+  "scientific_reset": {
+    "conformance_pass_is_prediction_improvement": false,
+    "source_capture_is_prediction_authority": false,
+    "production_status_is_scientific_truth": false,
+    "known_fixture_improvement_is_unknown_future_improvement": false
+  },
+  "promotion": {
+    "status": "HOLD",
+    "automatic": false,
+    "current_count": 0,
+    "target": 30,
+    "human_review_required": true,
+    "production_effect": "NONE"
+  }
+}

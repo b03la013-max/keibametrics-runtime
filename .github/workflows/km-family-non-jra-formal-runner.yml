@@ -235,9 +235,11 @@ jobs:
           from local_numerical_authority_gate import assess as assess_numerical_authority
           from local_candidate_numerical_authority import assess as assess_candidate_numerical
           from local_nar_evidence_candidate import compile_candidate_evidence
+          from local_evidence_routing_candidate_v03 import compile_candidate_evidence_v03
           from local_fullnumerical_candidate import materialize_candidate
           from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
           from local_candidate_postresult import evaluate_dual
+          from local_candidate_v03_postresult import evaluate_v03
           from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding, build_basis as build_mec_shadow_basis
           from local_mec_r5_shadow import (
               build_shadow as build_local_mec_r5_shadow,
@@ -476,7 +478,9 @@ jobs:
           # non-OOS arm. Both are computed from the same Signed SOURCE before result.
           candidate_shadow_q=None
           candidate_shadow_q_v02=None
+          candidate_shadow_q_v03=None
           candidate_shadow_summary=None
+          candidate_v03_summary=None
           try:
               ce=compile_candidate_evidence(source_artifact,req)
 
@@ -586,6 +590,99 @@ jobs:
               }
               persist("candidate_numerical_shadow_failure.json",candidate_shadow_summary)
               stage("NUMERICAL_CANDIDATE_DUAL_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
+
+          # v0.3 Evidence-Routing / Evidence-Window candidate is an independent,
+          # non-Production Shadow designed on 2026-09-25. Historical races before
+          # that date may be diagnostic replays only and can never enter v0.3 OOS.
+          try:
+              ce3=compile_candidate_evidence_v03(
+                  source_artifact,req,
+                  "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
+              )
+              cq3=materialize_candidate(
+                  copy.deepcopy(ce3),
+                  "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
+                  "mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json"
+              )
+              cq3=build_candidate_prediction(cq3)
+              cq3=build_candidate_krs(cq3)
+              candidate_shadow_q_v03=cq3
+              race_date_v03=str(req.get("race_date") or (req.get("race") or {}).get("race_date") or "")
+              v03_arm={
+                  "label":"v0.3-EVIDENCE-ROUTING",
+                  "production_authority":False,
+                  "source_receipt_sha256":source_receipt_sha,
+                  "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                  "candidate_current_state":cq3.get("candidate_current_state"),
+                  "candidate_environment":cq3.get("candidate_environment"),
+                  "candidate_full_numerical_summary":cq3.get("candidate_full_numerical_summary"),
+                  "candidate_static_prediction":cq3.get("candidate_static_prediction"),
+                  "candidate_krs_input_sha256":cq3.get("candidate_krs_input_sha256"),
+                  "candidate_evidence_compiler":cq3.get("candidate_evidence_compiler"),
+                  "candidate_v03_policy":cq3.get("candidate_v03_policy"),
+                  "runner_indices":{
+                      str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
+                      for r in (cq3.get("runners") or [])
+                  },
+                  "runner_component_coverage":{
+                      str(r.get("runner_id")):{
+                          "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                          "missing_component_count":r.get("candidate_missing_count"),
+                          "missing_components":r.get("candidate_missing_components"),
+                          "missing_policy":r.get("candidate_missing_policy"),
+                      } for r in (cq3.get("runners") or [])
+                  },
+                  "runner_context_sha256":{
+                      str(r.get("runner_id")):sha_obj(r.get("candidate_context_features_v03") or {})
+                      for r in (cq3.get("runners") or [])
+                  },
+              }
+              candidate_v03_summary={
+                  "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW",
+                  "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
+                  "production_authority":False,
+                  "design_freeze_date":"2026-09-25",
+                  "race_id":rid,
+                  "race_date":race_date_v03,
+                  "retrospective_replay":bool(race_date_v03 and race_date_v03<"2026-09-25"),
+                  "source_receipt_sha256":source_receipt_sha,
+                  "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                  "arm":v03_arm,
+                  "baseline_v01_prediction_sha256":((candidate_shadow_q or {}).get("candidate_static_prediction") or {}).get("sha256"),
+                  "policy":{
+                      "production_mutation":False,
+                      "weight_change_from_v01":False,
+                      "evidence_routing_change":True,
+                      "unknown_policy":"OBSERVED_ONLY_RENORMALIZE",
+                      "sbo_ability_index_weight":0,
+                      "future_oos_tracker":"KM-LOCAL-NUMERICAL-V03-FORWARD-OOS-TRACKER-v1.0-20260925",
+                      "automatic_promotion":False,
+                  },
+              }
+              candidate_v03_summary["sha256"]=sha_obj(candidate_v03_summary)
+              persist("candidate_numerical_v03_shadow_summary.json",candidate_v03_summary)
+              persist("candidate_krs_input_preresult_v03.json",cq3.get("candidate_krs_input_data"))
+              stage("NUMERICAL_CANDIDATE_V03_SHADOW",
+                    status="PASS",production_authority=False,
+                    shadow_sha256=candidate_v03_summary.get("sha256"),
+                    calculated_count=(cq3.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
+                    prediction_sha256=(cq3.get("candidate_static_prediction") or {}).get("sha256"),
+                    missing_policy=(cq3.get("candidate_full_numerical_summary") or {}).get("missing_policy"),
+                    future_oos_eligible_design=not candidate_v03_summary.get("retrospective_replay"))
+          except Exception as e:
+              candidate_shadow_q_v03=None
+              candidate_v03_summary={
+                  "status":"V03_SHADOW_FAIL_NON_BLOCKING",
+                  "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
+                  "production_authority":False,
+                  "error_type":type(e).__name__,
+                  "error":str(e),
+                  "source_receipt_sha256":source_receipt_sha,
+                  "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                  "automatic_promotion":False,
+              }
+              persist("candidate_numerical_v03_shadow_failure.json",candidate_v03_summary)
+              stage("NUMERICAL_CANDIDATE_V03_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
 
           numerical_authority=assess_numerical_authority()
           persist("numerical_authority_preflight.json",numerical_authority)
@@ -734,6 +831,21 @@ jobs:
             "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
           }
 
+          if isinstance(candidate_v03_summary,dict) and candidate_v03_summary.get("status")=="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW":
+              trace["numerical_candidate_v03_shadow"]={
+                  "profile":candidate_v03_summary.get("profile"),
+                  "shadow_sha256":candidate_v03_summary.get("sha256"),
+                  "source_snapshot_sha256":candidate_v03_summary.get("source_snapshot_sha256"),
+                  "prediction_sha256":((candidate_v03_summary.get("arm") or {}).get("candidate_static_prediction") or {}).get("sha256"),
+                  "mapping_id":((candidate_v03_summary.get("arm") or {}).get("candidate_full_numerical_summary") or {}).get("mapping_id"),
+                  "design_freeze_date":candidate_v03_summary.get("design_freeze_date"),
+                  "production_effect":"NONE",
+                  "frozen_pre_result":True,
+              }
+              stage("NUMERICAL_CANDIDATE_V03_FINAL_BIND",
+                    shadow_sha256=candidate_v03_summary.get("sha256"),
+                    production_effect="NONE")
+
           # Forward MEC measurements are frozen BEFORE the signed FINAL and their
           # digests are embedded in the signed FINAL transport trace. They have
           # zero Production ticket/capital authority and must never delay FINAL.
@@ -864,6 +976,7 @@ jobs:
           # same run count and seed for paired comparison. Deadline guards are per arm.
           candidate_krs_summary=None
           candidate_krs_v02_summary=None
+          candidate_krs_v03_summary=None
           def run_candidate_krs_arm(label,q,legacy=False):
               if q is None:
                   return {"status":"NOT_AVAILABLE","label":label,"production_authority":False,"oos_temporal_eligible":False}
@@ -917,6 +1030,10 @@ jobs:
               candidate_krs_v02_summary=run_candidate_krs_arm("V02",candidate_shadow_q_v02,legacy=False)
               persist("candidate_krs_v02_shadow_summary.json",candidate_krs_v02_summary)
               stage("CANDIDATE_KRS_SHADOW_V02",**candidate_krs_v02_summary)
+          if candidate_shadow_q_v03 is not None:
+              candidate_krs_v03_summary=run_candidate_krs_arm("V03",candidate_shadow_q_v03,legacy=False)
+              persist("candidate_krs_v03_shadow_summary.json",candidate_krs_v03_summary)
+              stage("CANDIDATE_KRS_SHADOW_V03",**candidate_krs_v03_summary)
           if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None:
               paired_ok=bool(
                   isinstance(candidate_krs_summary,dict) and isinstance(candidate_krs_v02_summary,dict)
@@ -930,6 +1047,25 @@ jobs:
                   "v0.1":candidate_krs_summary,
                   "v0.2":candidate_krs_v02_summary,
                   "paired_run_count_seed":paired_ok,
+                  "automatic_promotion":False,
+              })
+          if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None or candidate_shadow_q_v03 is not None:
+              triple_paired_ok=bool(
+                  isinstance(candidate_krs_summary,dict)
+                  and isinstance(candidate_krs_v02_summary,dict)
+                  and isinstance(candidate_krs_v03_summary,dict)
+                  and candidate_krs_summary.get("status")=="EXECUTED"
+                  and candidate_krs_v02_summary.get("status")=="EXECUTED"
+                  and candidate_krs_v03_summary.get("status")=="EXECUTED"
+                  and len({candidate_krs_summary.get("actual_run_count"),candidate_krs_v02_summary.get("actual_run_count"),candidate_krs_v03_summary.get("actual_run_count")})==1
+                  and len({candidate_krs_summary.get("paired_seed"),candidate_krs_v02_summary.get("paired_seed"),candidate_krs_v03_summary.get("paired_seed")})==1
+              )
+              persist("candidate_krs_triple_shadow_summary.json",{
+                  "production_authority":False,
+                  "v0.1":candidate_krs_summary,
+                  "v0.2":candidate_krs_v02_summary,
+                  "v0.3":candidate_krs_v03_summary,
+                  "paired_run_count_seed":triple_paired_ok,
                   "automatic_promotion":False,
               })
 
@@ -1000,6 +1136,15 @@ jobs:
                       calibration_training_race_ids=cal.get("training_race_ids") or []
                   )
                   persist("candidate_dual_shadow_postresult.json",candidate_dual_postresult)
+              candidate_v03_postresult=None
+              if isinstance(candidate_v03_summary,dict) and candidate_v03_summary.get("status")=="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW":
+                  candidate_v03_postresult=evaluate_v03(
+                      candidate_v03_summary,order,
+                      result_available_at=post_result.get("result_available_at"),
+                      race_id=rid,
+                      krs_summary=candidate_krs_v03_summary,
+                  )
+                  persist("candidate_v03_shadow_postresult.json",candidate_v03_postresult)
               result_summary={
                 "result_receipt":result_sha,
                 "settlement":result_art.get("settlement"),
@@ -1007,7 +1152,8 @@ jobs:
                 "learning_event":result_art.get("learning_event"),
                 "automatic_post_result_review":result_art.get("automatic_post_result_review"),
                 "winning_tickets":winning,
-                "candidate_dual_shadow_postresult":candidate_dual_postresult
+                "candidate_dual_shadow_postresult":candidate_dual_postresult,
+                "candidate_v03_shadow_postresult":candidate_v03_postresult
               }
 
           full_numeric=bool(req.get("full_numerical_calculation"))
@@ -1038,7 +1184,9 @@ jobs:
             "total_investment":total,
             "post_result":result_summary,
             "numerical_candidate_shadow":candidate_shadow_summary,
+            "numerical_candidate_v03_shadow":candidate_v03_summary,
             "candidate_krs_shadow":candidate_krs_summary,
+            "candidate_krs_v03_shadow":candidate_krs_v03_summary,
             "mec_r4_shadow":{
               "status":("SIGNED_FINAL_BOUND_PRE_RESULT" if mec_r4_binding else ("NOT_ELIGIBLE" if mec_r4_shadow_error else "NOT_GENERATED")),
               "shadow_sha256":(mec_r4_shadow or {}).get("sha256"),

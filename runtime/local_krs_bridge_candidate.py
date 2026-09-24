@@ -73,10 +73,21 @@ def _prov(rule_id: str, sources: List[Dict[str,Any]], fact: str) -> Dict[str,Any
 
 def build_runner_bridge(runner: Dict[str,Any]) -> Dict[str,Any]:
     cc=runner.get("canonical_components") or {}
+    observed_only=str(runner.get("candidate_missing_policy") or "").upper()=="OBSERVED_ONLY_RENORMALIZE"
     def v(name): return float(_idx(runner,name)["value"])
     def f(name): return float(_feat(runner,name)["score"])
     def isrc(*names): return [_idx(runner,n) for n in names]
     def fsrc(*names): return [_feat(runner,n) for n in names]
+    def mean_idx(*names):
+        if not observed_only:
+            return _mean(*[v(n) for n in names])
+        vals=[v(n) for n in names if float(_idx(runner,n).get("missingness_fraction",0.0)) < 1.0]
+        return 52.0 if not vals else _mean(*vals)
+    def mean_feat(*names):
+        if not observed_only:
+            return _mean(*[f(n) for n in names])
+        vals=[f(n) for n in names if not bool(_feat(runner,n).get("missing"))]
+        return 52.0 if not vals else _mean(*vals)
 
     values={}
     provenance={}
@@ -87,29 +98,29 @@ def build_runner_bridge(runner: Dict[str,Any]) -> Dict[str,Any]:
 
     put("base_competitive_ability",v("HPI-L"),isrc("HPI-L"),"HPI-L")
     put("class_strength",v("NCI"),isrc("NCI"),"NCI")
-    put("condition_fit",_mean(v("CSI-L"),v("CCI"),v("TRI"),v("BWI-L")),isrc("CSI-L","CCI","TRI","BWI-L"),"mean CSI/CCI/TRI/BWI")
+    put("condition_fit",mean_idx("CSI-L","CCI","TRI","BWI-L"),isrc("CSI-L","CCI","TRI","BWI-L"),"mean CSI/CCI/TRI/BWI")
     put("distance_fit",v("CFIg-L"),isrc("CFIg-L"),"CFIg-L")
-    put("surface_fit",_mean(v("CFIg-L"),v("EVI/CEV")),isrc("CFIg-L","EVI/CEV"),"mean CFI/EVI")
-    put("gate_reliability",_mean(v("RFIg-L"),v("DCR")),isrc("RFIg-L","DCR"),"mean RFI/DCR")
+    put("surface_fit",mean_idx("CFIg-L","EVI/CEV"),isrc("CFIg-L","EVI/CEV"),"mean CFI/EVI")
+    put("gate_reliability",mean_idx("RFIg-L","DCR"),isrc("RFIg-L","DCR"),"mean RFI/DCR")
     put("initial_acceleration",f("position_acquisition"),fsrc("position_acquisition"),"position acquisition component")
-    put("position_intent",_mean(f("position_acquisition"),f("leadership_stalk_acceptance")),fsrc("position_acquisition","leadership_stalk_acceptance"),"mean acquisition/leadership")
-    put("inside_cut_ability",_mean(f("draw_style_fit"),f("position_acquisition")),fsrc("draw_style_fit","position_acquisition"),"draw-style + acquisition")
-    put("outside_press_ability",_mean(f("third_corner_progression"),f("position_maintenance")),fsrc("third_corner_progression","position_maintenance"),"progression + maintenance")
+    put("position_intent",mean_feat("position_acquisition","leadership_stalk_acceptance"),fsrc("position_acquisition","leadership_stalk_acceptance"),"mean acquisition/leadership")
+    put("inside_cut_ability",mean_feat("draw_style_fit","position_acquisition"),fsrc("draw_style_fit","position_acquisition"),"draw-style + acquisition")
+    put("outside_press_ability",mean_feat("third_corner_progression","position_maintenance"),fsrc("third_corner_progression","position_maintenance"),"progression + maintenance")
     put("leader_need",f("leadership_stalk_acceptance"),fsrc("leadership_stalk_acceptance"),"leadership/stalk component")
     put("stalk_acceptance",f("leadership_stalk_acceptance"),fsrc("leadership_stalk_acceptance"),"leadership/stalk component")
     put("crowd_tolerance",f("kickback_traffic_tolerance"),fsrc("kickback_traffic_tolerance"),"traffic tolerance component")
     put("early_position_hold",f("position_maintenance"),fsrc("position_maintenance"),"position maintenance component")
-    put("midrace_hold",_mean(v("RFIg-L"),f("position_maintenance")),isrc("RFIg-L")+fsrc("position_maintenance"),"mean RFI/maintenance")
-    put("progression_ceiling",_mean(v("HPI-L"),v("RFIg-L")),isrc("HPI-L","RFIg-L"),"mean HPI/RFI")
-    put("progression_timing",_mean(v("JTI-L"),f("third_corner_progression")),isrc("JTI-L")+fsrc("third_corner_progression"),"JTI + progression")
+    put("midrace_hold",_mean(mean_idx("RFIg-L"),mean_feat("position_maintenance")),isrc("RFIg-L")+fsrc("position_maintenance"),"mean RFI/maintenance")
+    put("progression_ceiling",mean_idx("HPI-L","RFIg-L"),isrc("HPI-L","RFIg-L"),"mean HPI/RFI")
+    put("progression_timing",_mean(mean_idx("JTI-L"),mean_feat("third_corner_progression")),isrc("JTI-L")+fsrc("third_corner_progression"),"JTI + progression")
     put("corner_acceleration",f("third_corner_progression"),fsrc("third_corner_progression"),"third-corner progression")
-    put("traffic_escape",_mean(f("kickback_traffic_tolerance"),f("third_corner_progression")),fsrc("kickback_traffic_tolerance","third_corner_progression"),"traffic + progression")
-    put("sustained_speed",_mean(v("HPI-L"),v("RFIg-L"),v("CFIg-L")),isrc("HPI-L","RFIg-L","CFIg-L"),"mean HPI/RFI/CFI")
-    put("pressure_tolerance",_mean(v("RFIg-L"),v("NCI")),isrc("RFIg-L","NCI"),"mean RFI/NCI")
-    put("front_friction_tolerance",_mean(v("RFIg-L"),v("EVI/CEV")),isrc("RFIg-L","EVI/CEV"),"mean RFI/EVI")
-    put("long_move_tolerance",_mean(v("RFIg-L"),v("HPI-L"),v("CFIg-L")),isrc("RFIg-L","HPI-L","CFIg-L"),"mean RFI/HPI/CFI")
-    put("final_reserve",_mean(v("HPI-L"),v("TRI"),v("RFIg-L")),isrc("HPI-L","TRI","RFIg-L"),"mean HPI/TRI/RFI")
-    put("deceleration_risk",100-_mean(v("RFIg-L"),v("EVI/CEV"),v("BWI-L")),isrc("RFIg-L","EVI/CEV","BWI-L"),"100-mean RFI/EVI/BWI; risk polarity")
+    put("traffic_escape",mean_feat("kickback_traffic_tolerance","third_corner_progression"),fsrc("kickback_traffic_tolerance","third_corner_progression"),"traffic + progression")
+    put("sustained_speed",mean_idx("HPI-L","RFIg-L","CFIg-L"),isrc("HPI-L","RFIg-L","CFIg-L"),"mean HPI/RFI/CFI")
+    put("pressure_tolerance",mean_idx("RFIg-L","NCI"),isrc("RFIg-L","NCI"),"mean RFI/NCI")
+    put("front_friction_tolerance",mean_idx("RFIg-L","EVI/CEV"),isrc("RFIg-L","EVI/CEV"),"mean RFI/EVI")
+    put("long_move_tolerance",mean_idx("RFIg-L","HPI-L","CFIg-L"),isrc("RFIg-L","HPI-L","CFIg-L"),"mean RFI/HPI/CFI")
+    put("final_reserve",mean_idx("HPI-L","TRI","RFIg-L"),isrc("HPI-L","TRI","RFIg-L"),"mean HPI/TRI/RFI")
+    put("deceleration_risk",100-mean_idx("RFIg-L","EVI/CEV","BWI-L"),isrc("RFIg-L","EVI/CEV","BWI-L"),"100-mean RFI/EVI/BWI; risk polarity")
     put("training_state",v("TRI"),isrc("TRI"),"TRI")
     put("bodyweight_state",v("BWI-L"),isrc("BWI-L"),"BWI-L")
     put("layoff_uncertainty",100-v("DCR"),isrc("DCR"),"100-DCR")
@@ -234,8 +245,15 @@ def build_candidate_prediction(request: Dict[str,Any]) -> Dict[str,Any]:
         role_map[rid]=rr
     for r in q.get("runners") or []:
         r["candidate_static_roles"]=role_map.get(str(r.get("runner_id")),[])
+    mapping_id=str((q.get("candidate_full_numerical_summary") or {}).get("mapping_id") or "")
+    if "v0.3" in mapping_id:
+        prediction_profile="KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.3-EVIDENCE-ROUTING-20260925"
+    elif role_profile:
+        prediction_profile="KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.2-CALIBRATED"
+    else:
+        prediction_profile="KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.1-CANDIDATE-20260923"
     q["candidate_static_prediction"]={
-      "profile":"KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.2-CALIBRATED" if role_profile else "KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.1-CANDIDATE-20260923",
+      "profile":prediction_profile,
       "production_authority":False,
       "ranking":ranking,"W":W,"P2":P2,"P3":P3,
       "role_width_policy":{"W":"top 40%","P2":"top 67%","P3":"top 85%","status":"UNVALIDATED_CANDIDATE"},

@@ -9,6 +9,7 @@ sys.path.insert(0,str(ROOT/"runtime"))
 from local_candidate_numerical_authority import assess as assess_candidate
 from local_numerical_authority_gate import assess as assess_production
 from local_nar_evidence_candidate import compile_candidate_evidence
+from local_evidence_routing_candidate_v03 import compile_candidate_evidence_v03
 from local_fullnumerical_candidate import materialize_candidate, REQUIRED
 from local_krs_bridge_candidate import build_candidate_krs, build_candidate_prediction, HSV_KEYS, STATIC_KEYS
 from local_candidate_walkforward import evaluate as walkforward
@@ -217,3 +218,158 @@ def test_v02_calibration_summary_is_non_oos_and_no_auto_promotion():
     assert summary["safety"]["same_race_prediction_rewrite"] is False
     assert summary["leave_one_race_out"]["v01"]["winner_rank"]==4.25
     assert summary["leave_one_race_out"]["v02_loo"]["winner_rank"]==4.25
+
+
+def _add_v03_enrichment(source, request):
+    source=copy.deepcopy(source)
+    # Full NAR pre-target histories include older same-venue/distance races that
+    # the race-card last-five window cannot see.
+    horses={}
+    registry=[]
+    riders={}
+    trainers={}
+    for rid,name,sire,damsire in [
+        ("1","候補A","父A","母父A"),
+        ("2","候補B","父B","母父B"),
+        ("3","候補C","父C","母父C"),
+    ]:
+        hist=[]
+        # Six older same-course/distance high-performance rows deliberately sit
+        # outside the race-card last-five evidence window.
+        for j in range(6):
+            hist.append({
+                "date":f"2026/0{max(1,4-j)}/01",
+                "venue":"浦和","distance":1400,"going":"重","field_size":12,
+                "finish":1 if rid=="1" else (2 if rid=="2" else 6),
+                "body_weight":470+int(rid)+j,
+            })
+        horses[rid]={
+            "source_id":f"NAR-HORSE-{rid}",
+            "source_snapshot_sha256":f"HORSE-SHA-{rid}",
+            "history":hist,
+        }
+        registry.append({
+            "runner_id":rid,
+            "rider_license_no":f"R{rid}",
+            "trainer_license_no":f"T{rid}",
+        })
+        riders[f"R{rid}"]={
+            "source_id":f"NAR-RIDER-R{rid}",
+            "source_snapshot_sha256":f"RIDER-SHA-{rid}",
+            "yearly_popularity_bands":{
+                "2026":[
+                    {"label":"1人気","first":10,"second":4,"third":3,"total":20},
+                    {"label":"7人気","first":2,"second":3,"third":4,"total":30},
+                ]
+            },
+            "latest_year":{"first":12,"second":8,"third":7,"total":60},
+        }
+        trainers[f"T{rid}"]={
+            "source_id":f"NAR-TRAINER-T{rid}",
+            "source_snapshot_sha256":f"TRAINER-SHA-{rid}",
+            "latest_year":{"first":8,"second":6,"third":5,"total":50},
+            "lifetime_local":{"first":40,"second":35,"third":30,"total":300},
+        }
+    source["auxiliary_evidence"]={
+        "profiles":{
+            "horses":horses,"riders":riders,"trainers":trainers,
+            "runner_entity_registry":registry,
+        },
+        "same_day_position_bias":{
+            "profile":"KM-LOCAL-SAME-DAY-POSITION-BIAS-v1.0-20260924-SHADOW",
+            "races_observed":1,"top3_observations":3,
+            "front_at_last_corner_top3_rate":0.666667,
+            "leader_at_last_corner_win_rate":1.0,
+            "sha256":"BIAS-SHA",
+        },
+    }
+    source["auxiliary_evidence_sha256"]="AUX-SHA"
+    source["jma_weather_evidence"]={
+        "profile":"KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",
+        "status":"CAPTURED","production_authority":False,
+        "observation":{"precipitation_1h_mm":1.0},
+    }
+    source["jma_weather_evidence_sha256"]="JMA-SHA"
+    source["sbo_public_shadow_evidence"]={
+        "profile":"KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",
+        "status":"CAPTURED_PRE_RACE_SHADOW","production_authority":False,
+        "prediction_authority":False,"oos_eligible":True,
+        "runners":[
+            {"horse_no":1,"average_index":{"value":999,"sample_count":99},"average_index_rank":1},
+            {"horse_no":2,"average_index":{"value":1,"sample_count":99},"average_index_rank":3},
+            {"horse_no":3,"average_index":{"value":2,"sample_count":99},"average_index_rank":2},
+        ],
+    }
+    source["sbo_public_shadow_evidence_sha256"]="SBO-SHA"
+    obs=[]
+    sire_rows=[]
+    damsire_rows=[]
+    for rid,sire,damsire in [("1","父A","母父A"),("2","父B","母父B"),("3","父C","母父C")]:
+        for j in range(24):
+            obs.append({
+                "runner_id":str((j%3)+1),"sire":sire,"damsire":damsire,
+                "venue":"URW","distance_bucket":"1400","going_group":"WET",
+                "top3":rid=="1","win":False,
+            })
+        sire_rows.append({"sire":sire,"venue":"URW","distance_bucket":"1400","going_group":"WET",
+                          "starts":24,"wins":2,"top3":18 if rid=="1" else 6,
+                          "win_rate":2/24,"top3_rate":0.75 if rid=="1" else 0.25})
+        damsire_rows.append({"damsire":damsire,"venue":"URW","distance_bucket":"1400","going_group":"WET",
+                             "starts":24,"wins":2,"top3":15 if rid=="1" else 6,
+                             "win_rate":2/24,"top3_rate":0.625 if rid=="1" else 0.25})
+    source["point_in_time_population_ledger"]={
+        "profile":"KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924",
+        "status":"FIELD-CONDITIONED-SEED / POINT-IN-TIME / SELECTION-BIASED / SHADOW",
+        "observations":obs,"sire_cohorts":sire_rows,"damsire_cohorts":damsire_rows,
+    }
+    source["point_in_time_population_ledger_sha256"]="POP-SHA"
+    return source
+
+
+def test_v03_reroutes_full_history_and_excludes_unknown_from_partial_denominator():
+    source,request=fixture()
+    source=_add_v03_enrichment(source,request)
+    v01=compile_candidate_evidence(source,request)
+    v03=compile_candidate_evidence_v03(
+        source,request,
+        ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
+    )
+    a1=next(r for r in v01["runners"] if r["runner_id"]=="1")
+    a3=next(r for r in v03["runners"] if r["runner_id"]=="1")
+    assert a3["evidence_features"]["same_distance"]["evidence_window"]=="FULL_PRE_TARGET_NAR_HORSE_HISTORY"
+    assert a3["evidence_features"]["same_distance"]["raw_metric"]["matched"]==6
+    assert a3["evidence_features"]["sire_fit"]["missing"] is False
+    assert a3["candidate_context_features_v03"]["sbo_public_shadow"]["ability_index_weight"]==0
+    assert a3["candidate_context_features_v03"]["sbo_public_shadow"]["runner"]["average_index"]["value"]==999
+
+    n1=materialize_candidate(copy.deepcopy(v01))
+    n3=materialize_candidate(
+        copy.deepcopy(v03),
+        ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
+        ROOT/"mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json",
+    )
+    r1=next(r for r in n1["runners"] if r["runner_id"]=="1")
+    r3=next(r for r in n3["runners"] if r["runner_id"]=="1")
+    assert n3["candidate_full_numerical_summary"]["missing_policy"]=="OBSERVED_ONLY_RENORMALIZE"
+    assert n3["candidate_full_numerical_summary"]["weight_change_from_v01"] is False
+    assert r3["candidate_missing_policy"]=="OBSERVED_ONLY_RENORMALIZE"
+    assert r3["canonical_components"]["CFIg-L"]["value"]!=r1["canonical_components"]["CFIg-L"]["value"]
+    # CSI contains both observed and unknown components. In v0.3 the unknown
+    # neutral transport values do not enter the partial numeric denominator.
+    assert r3["canonical_components"]["CSI-L"]["observed_weight_fraction"] < 1.0
+    assert r3["canonical_components"]["CSI-L"]["missing_policy"]=="OBSERVED_ONLY_RENORMALIZE"
+
+
+def test_v03_sbo_is_diagnostic_only_and_cannot_change_ability_indices():
+    source,request=fixture()
+    source=_add_v03_enrichment(source,request)
+    a=compile_candidate_evidence_v03(source,request,ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json")
+    n1=materialize_candidate(copy.deepcopy(a),ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",ROOT/"mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json")
+    source2=copy.deepcopy(source)
+    source2["sbo_public_shadow_evidence"]["runners"][0]["average_index"]["value"]=-99999
+    source2["sbo_public_shadow_evidence"]["runners"][1]["average_index"]["value"]=99999
+    b=compile_candidate_evidence_v03(source2,request,ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json")
+    n2=materialize_candidate(copy.deepcopy(b),ROOT/"mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",ROOT/"mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json")
+    for x,y in zip(n1["runners"],n2["runners"]):
+        for idx in ["HPI-L","CFIg-L","RFIg-L","BVIg-L","JTI-L","CSI-L","BWI-L","NCI","TPI-L"]:
+            assert x["canonical_components"][idx]["value"]==y["canonical_components"][idx]["value"]
