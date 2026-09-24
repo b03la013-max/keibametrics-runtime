@@ -1,0 +1,111 @@
+{
+  "profile_id": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260924-R1",
+  "status": "ACTIVE / LOCAL-WIDE / CORRECTNESS-OPERATIONAL-REPAIR / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / SOURCE-FIRST-HANDOFF-VERIFIED",
+  "effective_at": "2026-09-24T14:48:10+09:00",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260924-R10",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260924-R9",
+  "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "production_mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "capital_policy": "KM-FAMILY-CAPITAL-COMPATIBILITY-v1.0-20260921",
+  "numerical_authority": {
+    "status": "NOT_READY",
+    "required_component_score_rules": 63,
+    "bound_component_score_rules": 0,
+    "execution_grade": "DEGRADED-EXECUTION-ONLY",
+    "changed_by_this_repair": false
+  },
+  "problem": {
+    "first_failure_owner": "VENUE_CHAT_TO_FORMAL_RUNNER_HANDOFF / TEMPORAL SOURCE CUTOFF",
+    "observed_failure": "SOURCE_ACQUISITION_NOT_FROZEN",
+    "failed_run_id": 35960927158,
+    "failed_commit": "cc6ceeceab0d544a7ce161f79563af1fc4075b2c",
+    "cause": "The request froze prediction_cutoff before GitHub Actions acquired the required official sources, so the Runtime correctly classified the required NAR race card and odds as SOURCE_POST_CUTOFF.",
+    "runtime_fault": false
+  },
+  "repair": {
+    "existing_runner_only": true,
+    "new_execution_layer_added": false,
+    "workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "workflow_repair_commit": "9d465c7baf18305b06112c586707d403845151cd",
+    "changes": [
+      "Add SOURCE/SOURCE_ONLY/SOURCE-FREEZE execution phase to the existing Non-JRA Formal Runner.",
+      "Acquire and verify a signed LOCAL SOURCE receipt before Venue Static when using the preferred two-phase route.",
+      "Allow the existing Formal phase to reuse a verified signed SOURCE receipt.",
+      "When a provided SOURCE receipt is reused, fail closed if source_freeze_at is later than static_prediction_freeze_at.",
+      "Retain the legacy one-pass source acquisition path for backward compatibility.",
+      "Do not mutate Production numerical rules, Prediction rules, MEC-R3, Capital policy, KRS engine, parameter_map or Runtime deployment."
+    ],
+    "preferred_future_route": [
+      "SOURCE_ONLY",
+      "SIGNED_SOURCE_VERIFY",
+      "VENUE_EVIDENCE_INTERPRETATION",
+      "STATIC_FREEZE",
+      "FORMAL_WITH_VERIFIED_SOURCE_RECEIPT",
+      "OFFICIAL_RUNNER_UNIVERSE_MATCH",
+      "NUMERICAL_AUTHORITY_GATE",
+      "TERMINALIZATION_OR_AUTHORIZED_NUMERICAL_CALCULATION",
+      "PRE_KRS",
+      "EXTERNAL_KRS",
+      "KRS_UTILITY_SHADOW",
+      "PRODUCTION_MEC_R3",
+      "CAPITAL",
+      "FINAL_TICKET_FREEZE",
+      "R4_R5_SHADOW_BINDING",
+      "SIGNED_FINAL_VERIFY",
+      "RESULT_SETTLEMENT_LEARNING"
+    ]
+  },
+  "acceptance": {
+    "production_formal_bridge": {
+      "race_id": "URW-20260924-R04-FORMAL-R1",
+      "run_id": 35961138259,
+      "request_fix_commit": "e8c7c24bfaf7ee58e942fa3fa605bb38d640f5aa",
+      "conclusion": "SUCCESS",
+      "formal_status": "EXECUTION_VERIFIED_NUMERICAL_DEGRADED",
+      "source_receipt_sha256": "60744c00c1c17da4f50b2f18b17b74dfa4e9e38657a54c0ff31bf06076952a2c",
+      "source_snapshot_sha256": "ad22f3d99e4e30e8c88908a4d626bab193f672f8652f412841a300f9bba39d89",
+      "official_runner_universe_sha256": "a71d2222a3fb87722f4e7f031081a39ecbeb2d420dbe4278419eb171a0054d69",
+      "pre_krs_receipt_sha256": "4ac3f7323b2575c47979f60860f6000ede5ffea9db744412a25448d833b8fc52",
+      "krs_receipt_sha256": "6b954a156761697fd4eaa90d40c9c409c3aef9a766de7fd398f1377c1542ae7c",
+      "actual_run_count": 5000,
+      "final_receipt_sha256": "20e17dd874ee210db3b0bb0311a11323a911de304b88818d5df1535e4777f73b",
+      "final_freeze_at": "2026-09-24T14:42:47.649330+09:00",
+      "scheduled_post_at": "2026-09-24T15:00:00+09:00",
+      "numerical_coverage": {
+        "required": 174,
+        "terminalized": 174,
+        "calculated": 0,
+        "ruled_neutral": 6,
+        "ruled_hold": 168,
+        "unresolved": 0
+      },
+      "production_mec_sha256": "bc042a56aa970b93b2e615d7591a6b67773d2aa767b67639a582234d0e7909fc",
+      "material_coverage_ratio": 1,
+      "minimum_required_capital": 2700,
+      "r4_shadow_binding_valid": true,
+      "r5_shadow_binding_valid": true,
+      "r5_shadow_sha256": "397b97c2b7bef65e3834cbce152d6ea18c7547221dfc8ca368990a4a1448d399",
+      "production_effect_of_shadows": "NONE"
+    },
+    "source_first_handoff": {
+      "race_id": "URW-20260924-R05-FORMAL-R1",
+      "run_id": 35961536893,
+      "request_commit": "b71569e42a76368992af7059b0386e1a7911ee7f",
+      "conclusion": "SUCCESS",
+      "status": "SOURCE_VERIFIED",
+      "source_receipt_sha256": "97e8c1afdff3c8af3eea3abbea352d9ca4874f2620faf7a45a0bd1425a3e3e29",
+      "source_snapshot_sha256": "df49bab611b4edcda3bc5b3addb5359a2869b14016c7a32ac69ce44bb4dcce60",
+      "official_runner_universe_sha256": "32199586a688fccaecd21c75c32276c71d35d93a0e06c879251d3795098514b3",
+      "official_runner_count": 12,
+      "source_freeze_at": "2026-09-24T14:48:03.223754+09:00"
+    }
+  },
+  "empirical_scope": {
+    "proves_execution_handoff_repair": true,
+    "proves_prediction_accuracy": false,
+    "proves_strict_production_full_numerical_authority": false,
+    "unknown_future_empirical_acceptance": "PENDING"
+  }
+}
