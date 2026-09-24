@@ -174,7 +174,12 @@ jobs:
           from local_fullnumerical_candidate import materialize_candidate
           from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
           from local_candidate_postresult import evaluate_dual
-          from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding
+          from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding, build_basis as build_mec_shadow_basis
+          from local_mec_r5_shadow import (
+              build_shadow as build_local_mec_r5_shadow,
+              bind_shadow_to_trace as bind_local_mec_r5_shadow_to_trace,
+              verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
+          )
 
           rid=str(req.get("race_id") or "")
           assert rid,"RACE_ID_REQUIRED"
@@ -633,21 +638,26 @@ jobs:
             "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
           }
 
-          # Forward MEC-R4 measurement is frozen BEFORE the signed FINAL and its
-          # digest is embedded in the signed FINAL transport trace. It has zero
-          # Production ticket/capital authority and must never delay a valid FINAL.
+          # Forward MEC measurements are frozen BEFORE the signed FINAL and their
+          # digests are embedded in the signed FINAL transport trace. They have
+          # zero Production ticket/capital authority and must never delay FINAL.
           mec_r4_shadow=None
           mec_r4_basis=None
           mec_r4_shadow_error=None
+          local_mec_r5_shadow=None
+          local_mec_r5_shadow_error=None
+          common_mec_shadow_basis=None
+          shadow_ticket=None
           if temporal_mode=="FORMAL-PRE-RACE":
+              shadow_ticket={
+                  "finalized":True,
+                  "no_bet":no_bet,
+                  "total_investment":total,
+                  "tickets":copy.deepcopy(tickets),
+                  "frozen_at":final_freeze
+              }
+              common_mec_shadow_basis=build_mec_shadow_basis(req,shadow_ticket,mec,final_package)
               try:
-                  shadow_ticket={
-                    "finalized":True,
-                    "no_bet":no_bet,
-                    "total_investment":total,
-                    "tickets":copy.deepcopy(tickets),
-                    "frozen_at":final_freeze
-                  }
                   mec_r4_shadow,mec_r4_basis=build_pre_result_shadow(
                       req,shadow_ticket,mec,final_package,
                       generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -666,6 +676,36 @@ jobs:
                   persist("mec_r4_shadow_error.json",{
                       "status":"NON_BLOCKING_SHADOW_FAILURE",
                       "error":mec_r4_shadow_error,
+                      "production_effect":"NONE",
+                      "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+                  })
+
+              try:
+                  local_mec_r5_shadow=build_local_mec_r5_shadow(
+                      req,
+                      {"artifact":{
+                          "final_ticket":shadow_ticket,
+                          "minimum_efficient_coverage":copy.deepcopy(mec),
+                          "final_prediction_package":copy.deepcopy(final_package),
+                      }},
+                      generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      basis_sha256=common_mec_shadow_basis["sha256"],
+                  )
+                  trace=bind_local_mec_r5_shadow_to_trace(
+                      trace,local_mec_r5_shadow,common_mec_shadow_basis["sha256"]
+                  )
+                  persist("local_mec_r5_shadow_pre_result.json",local_mec_r5_shadow)
+                  stage("LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE",
+                        profile=local_mec_r5_shadow.get("profile"),
+                        candidate_id=local_mec_r5_shadow.get("candidate_id"),
+                        shadow_sha256=local_mec_r5_shadow.get("sha256"),
+                        basis_sha256=common_mec_shadow_basis.get("sha256"),
+                        production_effect="NONE")
+              except Exception as e:
+                  local_mec_r5_shadow_error=type(e).__name__+":"+str(e)
+                  persist("local_mec_r5_shadow_error.json",{
+                      "status":"NON_BLOCKING_SHADOW_FAILURE",
+                      "error":local_mec_r5_shadow_error,
                       "production_effect":"NONE",
                       "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
                   })
@@ -706,6 +746,20 @@ jobs:
                   persist("mec_r4_shadow_binding_error.json",{
                       "status":"INVALID_FOR_OOS_NON_BLOCKING",
                       "error":mec_r4_shadow_error,
+                      "production_effect":"NONE",
+                      "final_receipt_sha256":final_sha
+                  })
+
+          local_mec_r5_binding=None
+          if local_mec_r5_shadow is not None:
+              try:
+                  local_mec_r5_binding=verify_local_mec_r5_signed_final_binding(fin,local_mec_r5_shadow)
+                  persist("local_mec_r5_shadow_binding_attestation.json",local_mec_r5_binding)
+              except Exception as e:
+                  local_mec_r5_shadow_error=type(e).__name__+":"+str(e)
+                  persist("local_mec_r5_shadow_binding_error.json",{
+                      "status":"INVALID_FOR_OOS_NON_BLOCKING",
+                      "error":local_mec_r5_shadow_error,
                       "production_effect":"NONE",
                       "final_receipt_sha256":final_sha
                   })
@@ -894,6 +948,13 @@ jobs:
               "shadow_sha256":(mec_r4_shadow or {}).get("sha256"),
               "binding":mec_r4_binding,
               "error":mec_r4_shadow_error,
+              "production_effect":"NONE"
+            },
+            "local_mec_r5_shadow":{
+              "status":("SIGNED_FINAL_BOUND_PRE_RESULT" if local_mec_r5_binding else ("NOT_ELIGIBLE" if local_mec_r5_shadow_error else "NOT_GENERATED")),
+              "shadow_sha256":(local_mec_r5_shadow or {}).get("sha256"),
+              "binding":local_mec_r5_binding,
+              "error":local_mec_r5_shadow_error,
               "production_effect":"NONE"
             },
             "verified":True
