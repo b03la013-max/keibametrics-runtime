@@ -226,19 +226,45 @@ def _stat_row(row: List[str]) -> Dict[str, Any] | None:
 
 
 def parse_person_profile(snapshot: Dict[str, Any]) -> Dict[str, Any]:
-    profile: Dict[str, Any] = {"source_id": snapshot.get("source_id"), "source_snapshot_sha256": snapshot.get("snapshot_sha256"), "identity": {}, "performance_rows": []}
+    profile: Dict[str, Any] = {
+        "source_id": snapshot.get("source_id"),
+        "source_snapshot_sha256": snapshot.get("snapshot_sha256"),
+        "identity": {},
+        "performance_rows": [],
+        "yearly_totals": {},
+        "yearly_popularity_bands": {},
+    }
     for table in _tables_from_snapshot(snapshot):
+        section_year = None
         for row in table:
             if len(row) == 2 and row[0] in {"所属", "所属厩舎", "生年月日", "初騎乗日", "初出走日", "初勝利日"}:
                 profile["identity"][row[0]] = row[1]
+            if len(row) == 1:
+                ym = re.search(r"(20\\d{2})年", row[0])
+                section_year = ym.group(1) if ym else section_year
+                continue
             stat = _stat_row(row)
-            if stat:
-                profile["performance_rows"].append(stat)
+            if not stat:
+                continue
+            profile["performance_rows"].append(stat)
+            direct_year = re.fullmatch(r"(20\\d{2})年", stat["label"])
+            if direct_year:
+                profile["yearly_totals"][direct_year.group(1)] = stat
+            elif section_year and stat["label"] == "合計":
+                profile["yearly_totals"][section_year] = stat
+            elif section_year and "人気" in stat["label"]:
+                profile["yearly_popularity_bands"].setdefault(section_year, []).append(stat)
     profile["lifetime_local"] = next((x for x in profile["performance_rows"] if x["label"] == "地方競馬"), None)
-    profile["latest_year"] = next((x for x in profile["performance_rows"] if re.fullmatch(r"20\d{2}年", x["label"])), None)
-    profile["summary_sha256"] = sha_obj({"identity": profile["identity"], "performance_rows": profile["performance_rows"]})
+    latest_year_key = max(profile["yearly_totals"], default=None)
+    profile["latest_year"] = profile["yearly_totals"].get(latest_year_key) if latest_year_key else None
+    profile["latest_year_key"] = latest_year_key
+    profile["summary_sha256"] = sha_obj({
+        "identity": profile["identity"],
+        "performance_rows": profile["performance_rows"],
+        "yearly_totals": profile["yearly_totals"],
+        "yearly_popularity_bands": profile["yearly_popularity_bands"],
+    })
     return profile
-
 
 def parse_horse_profile(snapshot: Dict[str, Any], race_context: Dict[str, Any] | None = None) -> Dict[str, Any]:
     history_rows: List[Dict[str, Any]] = []
