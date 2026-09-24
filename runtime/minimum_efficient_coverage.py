@@ -7,6 +7,7 @@ BUDGET_MARKERS=("BUDGET","FIXED_CAPITAL","CAPITAL_LIMIT","LOWER_MATERIALITY_UNDE
 PROCEDURAL_MARKERS=("CORRECTNESS_REPAIR","TERMINALIZATION_CORRECTNESS","EXPECTED_PAIR_TERMINALIZATION")
 HARD_SEMANTIC_EXCLUSION_MARKERS=("STRUCTURAL","NOT_APPLICABLE","IMPOSSIBLE","SCRATCH","WITHDRAWN","ROLE_INELIGIBLE","UNIVERSE_MISMATCH","FORMAL_OUT_OF_SCOPE")
 ROLE_ACTIVE={"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
+ROLE_STATUS_ALIASES={"TAIL_PROTECTED":"RESIDUAL"}
 
 class MECError(ValueError):
     pass
@@ -28,7 +29,8 @@ def _hard_semantic_exclusion(reason:str)->bool:
 def _active_roles(req):
     out=defaultdict(set)
     for x in req.get("role_registry") or []:
-        if str(x.get("status")) in ROLE_ACTIVE:
+        status=ROLE_STATUS_ALIASES.get(str(x.get("status")),str(x.get("status")))
+        if status in ROLE_ACTIVE:
             out[_s(x.get("runner_id"))].add(str(x.get("column")))
     return out
 
