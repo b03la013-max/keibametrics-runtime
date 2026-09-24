@@ -36,9 +36,12 @@ def build_measurement(post: Dict[str,Any], result_request: Dict[str,Any], *, bas
     admissible=bool(official and temporal)
     base=baseline_measurement or {}
     v01=((base.get("arms") or {}).get("v0.1") or {})
-    def gain(key):
-        a=v01.get(key); b=arm.get(key)
+    v02=((base.get("arms") or {}).get("v0.2") or {})
+    def gain_against(ref,key):
+        a=ref.get(key); b=arm.get(key)
         return None if not isinstance(a,(int,float)) or not isinstance(b,(int,float)) else round(float(a)-float(b),6)
+    def capture_delta(ref,key):
+        return None if key not in ref else int(bool(arm.get(key)))-int(bool(ref.get(key)))
     m={
       "profile":PROFILE,
       "race_id":rid,
@@ -67,16 +70,33 @@ def build_measurement(post: Dict[str,Any], result_request: Dict[str,Any], *, bas
         "p3_capture":arm.get("p3_capture"),
         "top3_set_capture":arm.get("top3_set_capture"),
         "krs_status":arm.get("candidate_krs_status"),
+        "krs_utility_class":arm.get("candidate_krs_utility_class"),
+        "krs_rescue_count":arm.get("candidate_krs_rescue_count"),
+        "krs_support_count":arm.get("candidate_krs_support_count"),
+        "krs_miss_count":arm.get("candidate_krs_miss_count"),
+        "mean_component_coverage_ratio":arm.get("mean_component_coverage_ratio"),
+        "mean_missing_component_count":arm.get("mean_missing_component_count"),
+        "component_coverage_runner_count":arm.get("component_coverage_runner_count"),
       },
       "vs_v01":{
         "baseline_available":bool(v01),
-        "winner_rank_gain":gain("winner_rank"),
-        "second_rank_gain":gain("second_rank"),
-        "third_rank_gain":gain("third_rank"),
-        "top3_mean_rank_gain":gain("top3_mean_rank"),
-        "winner_capture_delta":None if "winner_capture" not in v01 else int(bool(arm.get("winner_capture")))-int(bool(v01.get("winner_capture"))),
-        "p2_capture_delta":None if "p2_capture" not in v01 else int(bool(arm.get("p2_capture")))-int(bool(v01.get("p2_capture"))),
-        "p3_capture_delta":None if "p3_capture" not in v01 else int(bool(arm.get("p3_capture")))-int(bool(v01.get("p3_capture"))),
+        "winner_rank_gain":gain_against(v01,"winner_rank"),
+        "second_rank_gain":gain_against(v01,"second_rank"),
+        "third_rank_gain":gain_against(v01,"third_rank"),
+        "top3_mean_rank_gain":gain_against(v01,"top3_mean_rank"),
+        "winner_capture_delta":capture_delta(v01,"winner_capture"),
+        "p2_capture_delta":capture_delta(v01,"p2_capture"),
+        "p3_capture_delta":capture_delta(v01,"p3_capture"),
+      },
+      "vs_v02":{
+        "baseline_available":bool(v02),
+        "winner_rank_gain":gain_against(v02,"winner_rank"),
+        "second_rank_gain":gain_against(v02,"second_rank"),
+        "third_rank_gain":gain_against(v02,"third_rank"),
+        "top3_mean_rank_gain":gain_against(v02,"top3_mean_rank"),
+        "winner_capture_delta":capture_delta(v02,"winner_capture"),
+        "p2_capture_delta":capture_delta(v02,"p2_capture"),
+        "p3_capture_delta":capture_delta(v02,"p3_capture"),
       },
       "candidate_krs_postresult":d.get("candidate_krs_postresult"),
       "candidate_ticket_pfs":{"status":"NOT_AVAILABLE","reason":"v0.3 freezes numerical roles/KRS only; no candidate capital authority."},
@@ -114,6 +134,12 @@ def evaluate_measurements(rows: List[Dict[str,Any]]) -> Dict[str,Any]:
         "top3_set_capture_rate":_avg(admitted,"top3_set_capture"),
         "mean_winner_rank":_avg(admitted,"winner_rank"),
         "mean_top3_mean_rank":_avg(admitted,"top3_mean_rank"),
+        "mean_component_coverage_ratio":_avg(admitted,"mean_component_coverage_ratio"),
+        "mean_missing_component_count":_avg(admitted,"mean_missing_component_count"),
+        "krs_unique_rescue_count":sum(1 for x in admitted if ((x.get("arm") or {}).get("krs_utility_class")=="UNIQUE-RESCUE")),
+        "krs_supportive_count":sum(1 for x in admitted if ((x.get("arm") or {}).get("krs_utility_class")=="SUPPORTIVE")),
+        "krs_mixed_count":sum(1 for x in admitted if ((x.get("arm") or {}).get("krs_utility_class")=="MIXED")),
+        "krs_no_observed_rescue_count":sum(1 for x in admitted if ((x.get("arm") or {}).get("krs_utility_class")=="NO-OBSERVED-RESCUE")),
       },
       "vs_v01":{
         "mean_winner_rank_gain":None if not admitted else sum(
@@ -125,10 +151,21 @@ def evaluate_measurements(rows: List[Dict[str,Any]]) -> Dict[str,Any]:
             for x in admitted if isinstance((x.get("vs_v01") or {}).get("top3_mean_rank_gain"),(int,float))
         ) / max(1,sum(isinstance((x.get("vs_v01") or {}).get("top3_mean_rank_gain"),(int,float)) for x in admitted)),
       },
+      "vs_v02":{
+        "available_races":sum(1 for x in admitted if (x.get("vs_v02") or {}).get("baseline_available") is True),
+        "mean_winner_rank_gain":None if not admitted else sum(
+            float((x.get("vs_v02") or {}).get("winner_rank_gain"))
+            for x in admitted if isinstance((x.get("vs_v02") or {}).get("winner_rank_gain"),(int,float))
+        ) / max(1,sum(isinstance((x.get("vs_v02") or {}).get("winner_rank_gain"),(int,float)) for x in admitted)),
+        "mean_top3_rank_gain":None if not admitted else sum(
+            float((x.get("vs_v02") or {}).get("top3_mean_rank_gain"))
+            for x in admitted if isinstance((x.get("vs_v02") or {}).get("top3_mean_rank_gain"),(int,float))
+        ) / max(1,sum(isinstance((x.get("vs_v02") or {}).get("top3_mean_rank_gain"),(int,float)) for x in admitted)),
+      },
       "held":[{"race_id":x.get("race_id"),"hold_reason":x.get("hold_reason")} for x in held],
       "automatic_promotion":False,
       "production_effect":"NONE",
-      "decision_policy":"R30 opens human review only. No automatic Production numerical promotion, weight change, or ticket activation."
+      "decision_policy":"R30 opens human review only. Compare v0.3 against both v0.1 baseline and v0.2 calibrated companion; no automatic Production numerical promotion, weight change, or ticket activation."
     }
     status["sha256"]=_sha(status)
     return status

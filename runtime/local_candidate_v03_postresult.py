@@ -50,6 +50,21 @@ def evaluate_v03(
     )
     base["candidate_is_pre_design_replay"]=not future_eligible
     base["signed_final_binding_valid"]=bool(signed_final_binding_valid)
+    coverage_rows=(s.get("arm") or {}).get("runner_component_coverage") or {}
+    coverage_values=[
+        float((row or {}).get("real_component_coverage_ratio"))
+        for row in coverage_rows.values()
+        if isinstance((row or {}).get("real_component_coverage_ratio"),(int,float))
+    ]
+    missing_counts=[
+        int((row or {}).get("missing_component_count"))
+        for row in coverage_rows.values()
+        if isinstance((row or {}).get("missing_component_count"),int)
+    ]
+    base["mean_component_coverage_ratio"]=(None if not coverage_values else sum(coverage_values)/len(coverage_values))
+    base["mean_missing_component_count"]=(None if not missing_counts else sum(missing_counts)/len(missing_counts))
+    base["component_coverage_runner_count"]=len(coverage_values)
+
     krs_post=None
     if isinstance(krs_envelope,dict):
         try:
@@ -58,6 +73,13 @@ def evaluate_v03(
             )
         except Exception as e:
             krs_post={"status":"POSTRESULT_KRS_EVAL_FAIL","error_type":type(e).__name__,"error":str(e),"production_effect":"NONE"}
+    if isinstance(krs_post,dict):
+        ev=krs_post.get("post_result_evaluation") or {}
+        base["candidate_krs_utility_class"]=ev.get("classification") or krs_post.get("utility_class")
+        base["candidate_krs_rescue_count"]=ev.get("rescue_count")
+        base["candidate_krs_support_count"]=ev.get("support_count")
+        base["candidate_krs_miss_count"]=len(ev.get("misses") or []) if isinstance(ev.get("misses"),list) else None
+
     out={
         "profile":PROFILE,
         "race_id":race_id,
