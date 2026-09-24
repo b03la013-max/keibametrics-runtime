@@ -48,6 +48,10 @@ def signed_receipt(phase:str,race_id:str,status:str,artifact:Dict[str,Any],error
        "source_acquisition_sha256":sha_file("/opt/km/source_acquisition.py") if pathlib.Path("/opt/km/source_acquisition.py").exists() else None,
        "nar_source_manifest_sha256":sha_file("/opt/km/nar_source_manifest.py") if pathlib.Path("/opt/km/nar_source_manifest.py").exists() else None,
        "nar_runner_universe_sha256":sha_file("/opt/km/nar_runner_universe.py") if pathlib.Path("/opt/km/nar_runner_universe.py").exists() else None,
+       "nar_auxiliary_evidence_sha256":sha_file("/opt/km/nar_auxiliary_evidence.py") if pathlib.Path("/opt/km/nar_auxiliary_evidence.py").exists() else None,
+       "jma_weather_evidence_sha256":sha_file("/opt/km/jma_weather_evidence.py") if pathlib.Path("/opt/km/jma_weather_evidence.py").exists() else None,
+       "point_in_time_population_sha256":sha_file("/opt/km/local_population_ledger.py") if pathlib.Path("/opt/km/local_population_ledger.py").exists() else None,
+       "sbo_public_shadow_evidence_sha256":sha_file("/opt/km/sbo_public_shadow_evidence.py") if pathlib.Path("/opt/km/sbo_public_shadow_evidence.py").exists() else None,
     }
     r={"schema":RECEIPT_SCHEMA,"runtime_revision":APP_VERSION,"family":FAMILY,
        "phase":phase,"race_id":race_id,"status":status,"errors":errors or [],
