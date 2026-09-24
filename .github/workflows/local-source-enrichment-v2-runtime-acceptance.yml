@@ -1,0 +1,149 @@
+name: LOCAL Source Enrichment v2 Production Runtime Acceptance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-source-enrichment-v2-runtime-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Production SOURCE enrichment -> PRE_KRS -> KRS
+        run: |
+          python - <<'PY'
+          import copy, json, urllib.request, urllib.error
+
+          BASE="https://witnessstrictimage-production.up.railway.app"
+          RID="KM-LOCAL-SOURCE-ENRICHMENT-V2-RUNTIME-ACCEPT-20260924-T01"
+          HSV=["base_competitive_ability","class_strength","condition_fit","distance_fit","surface_fit","gate_reliability","initial_acceleration","position_intent","inside_cut_ability","outside_press_ability","leader_need","stalk_acceptance","crowd_tolerance","early_position_hold","midrace_hold","progression_ceiling","progression_timing","corner_acceleration","traffic_escape","sustained_speed","pressure_tolerance","front_friction_tolerance","long_move_tolerance","final_reserve","deceleration_risk","training_state","bodyweight_state","layoff_uncertainty","comment_state","data_confidence"]
+          STATIC=["tpi","zai_win","zai_place","sri","t3i","f3s","w_aki","p2_aki","p3_aki","asi","rsi"]
+
+          def call(path,payload=None,method="POST",timeout=900):
+              data=None if payload is None else json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              headers={"content-type":"application/json"} if payload is not None else {}
+              req=urllib.request.Request(BASE+path,data=data,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as x:
+                      raw=x.read().decode()
+                      return x.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          hc,h=call("/health",None,"GET",60)
+          assert hc==200 and h["status"]=="READY",h
+          assert h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE",h
+          assert h["jma_weather_evidence_profile"]=="KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",h
+          assert h["point_in_time_population_profile"]=="KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924",h
+          assert "SOURCE_JMA_WEATHER" in h["capabilities"],h
+          assert "SOURCE_POINT_IN_TIME_POPULATION_SEED" in h["capabilities"],h
+
+          mc,m=call("/source/manifest/local",{
+            "family_id":"LOCAL","race_id":RID,"venue_id":"KCH","race_date":"2026-09-13","race_no":3,
+            "prediction_cutoff":"2099-01-01T00:00:00+00:00",
+            "include_same_day_results":True,"include_odds":True
+          },timeout=60)
+          assert mc==200,m
+          m["include_auxiliary_evidence"]=True
+          m["require_auxiliary_profiles"]=True
+          m["include_population_seed"]=True
+          m["include_jma_weather"]=True
+          m["require_jma_weather"]=True
+
+          sc,source=call("/source/acquire",m,timeout=300)
+          assert sc==200 and (source.get("receipt") or {}).get("status")=="SOURCE_FROZEN",(sc,source)
+          art=source["artifact"]
+          assert art["official_runner_universe"]["runner_count"]==12,art.get("official_runner_universe")
+          aux=art["auxiliary_evidence"]
+          assert len(aux["profiles"]["horses"])==12,aux
+          assert len(aux["profiles"]["riders"])>=8,aux
+          assert len(aux["profiles"]["trainers"])>=5,aux
+          assert aux["same_day_position_bias"]["races_observed"]==2,aux["same_day_position_bias"]
+          weather=art["jma_weather_evidence"]
+          assert weather["status"]=="CAPTURED",weather
+          assert weather["production_authority"] is False,weather
+          assert float(weather["station"]["distance_km"]) < 80,weather
+          pop=art["point_in_time_population_ledger"]
+          assert pop["production_authority"] is False,pop
+          assert pop["observation_count"] > 0,pop
+          assert len(pop["sire_cohorts"]) > 0,pop
+          assert len(pop["damsire_cohorts"]) > 0,pop
+
+          vc,v=call("/source/verify",source,timeout=60)
+          assert vc==200 and v["valid"] is True,v
+          gc,g=call("/verify",source,timeout=60)
+          assert gc==200 and g["valid"] is True,g
+
+          # External tamper controls for both new signed sub-artifacts.
+          t1=copy.deepcopy(source)
+          t1["artifact"]["jma_weather_evidence"]["status"]="TAMPERED"
+          tc,tv=call("/source/verify",t1,timeout=60)
+          assert tc==200 and tv["valid"] is False,tv
+          assert "SOURCE_JMA_WEATHER_HASH_MISMATCH" in tv["errors"],tv
+
+          t2=copy.deepcopy(source)
+          t2["artifact"]["point_in_time_population_ledger"]["observation_count"]=999999
+          tc2,tv2=call("/source/verify",t2,timeout=60)
+          assert tc2==200 and tv2["valid"] is False,tv2
+          assert "SOURCE_POPULATION_LEDGER_HASH_MISMATCH" in tv2["errors"],tv2
+
+          expected={str(x["runner_id"]):x["name"] for x in art["official_runner_universe"]["runners"]}
+          def horse(no,name,base):
+              return {
+                "horse_no":no,"name":name,
+                "hsv":{k:base+((i%5)-2) for i,k in enumerate(HSV)},
+                "static":{k:base+((i%3)-1) for i,k in enumerate(STATIC)},
+                "pzr":{"aggressive":1,"standard":2,"conservative":3},
+                "static_roles":[]
+              }
+          common={
+            "race":{"race_id":RID,"prediction_id":RID+"-P1","revision_no":1,"engine_version":"1.1.0","parameter_map_version":"0.1-provisional"},
+            "environment":{"course_family":"LOCAL-KCH","surface":"dirt","distance":1400,"going":"good","field_size":12,"gci_confidence":80,"similar_condition_confidence":80,"freshness_confidence":100},
+            "simulation":{"run_count":5000,"master_seed":20260924,"seed_replicates":1,"seed_stability_runs":500,"scenario_runs":500}
+          }
+          good={**common,"horses":[horse(i,expected[str(i)],55+i) for i in range(1,13)]}
+          pc,pre=call("/pre-krs",{
+            "family_id":"LOCAL","race_id":RID,"source_receipt":source,
+            "required_index_unresolved":0,"full_numerical_calculation":True,
+            "static_prediction_frozen":True,"krs_input_data":good
+          },timeout=120)
+          assert pc==200 and (pre.get("receipt") or {}).get("status")=="PASS",(pc,pre)
+          pvc,pvv=call("/verify",pre,timeout=60)
+          assert pvc==200 and pvv["valid"] is True,pvv
+
+          kc,run=call("/krs/execute",{
+            "family_id":"LOCAL","race_id":RID,"krs_input_data":good,
+            "run_count":5000,"seed":20260924
+          },timeout=900)
+          assert kc==200 and (run.get("receipt") or {}).get("status")=="EXECUTED",(kc,run)
+          assert int(run["artifact"]["actual_run_count"])==5000,run
+          kvc,kvv=call("/verify",run,timeout=60)
+          assert kvc==200 and kvv["valid"] is True,kvv
+
+          print("LOCAL_SOURCE_ENRICHMENT_V2_RUNTIME_PASS="+json.dumps({
+            "runtime_revision":h["runtime_revision"],
+            "source_receipt":source["receipt_sha256"],
+            "source_snapshot_sha256":art["source_snapshot_sha256"],
+            "official_runner_count":art["official_runner_universe"]["runner_count"],
+            "horse_profiles":len(aux["profiles"]["horses"]),
+            "rider_profiles":len(aux["profiles"]["riders"]),
+            "trainer_profiles":len(aux["profiles"]["trainers"]),
+            "same_day_races":aux["same_day_position_bias"]["races_observed"],
+            "jma_station":weather["station"],
+            "jma_observation":weather["observation"],
+            "population_observation_count":pop["observation_count"],
+            "sire_cohort_count":len(pop["sire_cohorts"]),
+            "damsire_cohort_count":len(pop["damsire_cohorts"]),
+            "jma_weather_evidence_sha256":art["jma_weather_evidence_sha256"],
+            "point_in_time_population_ledger_sha256":art["point_in_time_population_ledger_sha256"],
+            "pre_krs_receipt":pre["receipt_sha256"],
+            "krs_receipt":run["receipt_sha256"],
+            "actual_run_count":run["artifact"]["actual_run_count"]
+          },ensure_ascii=False,separators=(",",":")))
+          PY
