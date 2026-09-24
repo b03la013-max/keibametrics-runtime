@@ -9,6 +9,13 @@ CANDIDATE_ID="LOCAL-MEC-R5-SPO-SHADOW-v0.1"
 ARM_ORDER=["SET_ONLY","SET_PAIR"]+[f"SET_PAIR_EXACT_TOP{k}" for k in range(3,9)]
 HARD_MARKERS=("STRUCTURAL","NOT_APPLICABLE","IMPOSSIBLE","SCRATCH","WITHDRAWN",
               "ROLE_INELIGIBLE","UNIVERSE_MISMATCH","FORMAL_OUT_OF_SCOPE")
+TRAINING_EXCLUSION={
+    "URW-20260923-R07-FORMAL-R1","URW-20260923-R10-FORMAL-R1",
+    "URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"
+}
+
+def _dt(s):
+    return datetime.fromisoformat(str(s).replace("Z","+00:00"))
 
 def _canon(x): return json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 def _sha(x): return hashlib.sha256(_canon(x).encode()).hexdigest()
@@ -101,26 +108,62 @@ def build_arm(req:Dict[str,Any], final_envelope:Dict[str,Any], name:str)->Dict[s
 def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
     generated_at=generated_at or datetime.now(timezone.utc).isoformat()
     arms={a:build_arm(req,final_envelope,a) for a in ARM_ORDER}
+    rid=str(req.get("race_id") or "")
+    temporal_mode=str(req.get("temporal_mode") or "").upper()
+    scheduled=req.get("scheduled_post_at")
+    pre_result=bool(
+        temporal_mode=="FORMAL-PRE-RACE" and scheduled
+        and _dt(generated_at) < _dt(scheduled)
+    )
+    training_excluded=rid in TRAINING_EXCLUSION
+    forward_oos_candidate=bool(pre_result and not training_excluded)
+    if training_excluded:
+        temporal_class="TRAINING-REPLAY-ONLY"
+    elif forward_oos_candidate:
+        temporal_class="FORWARD-OOS-PRE-RESULT-CANDIDATE"
+    else:
+        temporal_class="NON-FORWARD / NOT-OOS"
     out={
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
-      "status":"SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-REQUIRED",
-      "race_id":req.get("race_id"),"production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
-      "generated_at":generated_at,"scheduled_post_at":req.get("scheduled_post_at"),
+      "status":"SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-MEASUREMENT",
+      "race_id":rid,"production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+      "generated_at":generated_at,"scheduled_post_at":scheduled,
       "temporal_mode":req.get("temporal_mode"),"source_basis_sha256":basis_sha256,
+      "temporal_class":temporal_class,
+      "training_excluded":training_excluded,
+      "forward_oos_candidate":forward_oos_candidate,
       "design_boundary":"2026-09-23 LOCAL results may inform this candidate; those races are TRAINING/REPLAY ONLY and never OOS.",
       "production_effect":"NONE","arms":arms
     }
     out["sha256"]=_sha(out)
     return out
 
-def settle_shadow(shadow,result_request):
+def settle_shadow(shadow,result_request,signed_final_binding_valid=False):
     result={"official_result":{"top3":[int(x) for x in (result_request.get("finish_order") or [])[:3]],
                                "payouts_per_100_yen":{str(k).upper():int(v) for k,v in (result_request.get("payouts") or {}).items()}}}
     arms={}
     for a,x in shadow["arms"].items():
         arms[a]=settle_ticket_list(x["tickets"],result)
+
+    forward_candidate=bool(shadow.get("forward_oos_candidate"))
+    training_excluded=bool(shadow.get("training_excluded")) or str(shadow.get("race_id") or "") in TRAINING_EXCLUSION
+    if training_excluded:
+        settlement_class="RETROSPECTIVE-TRAINING-SETTLEMENT / NOT-OOS"
+        oos_eligible=False
+    elif forward_candidate and signed_final_binding_valid:
+        settlement_class="FORWARD-OOS-SETTLEMENT / SIGNED-FINAL-BOUND"
+        oos_eligible=True
+    elif forward_candidate:
+        settlement_class="FORWARD-CANDIDATE-UNBOUND / NOT-OOS"
+        oos_eligible=False
+    else:
+        settlement_class="NON-FORWARD-SETTLEMENT / NOT-OOS"
+        oos_eligible=False
+
     out={"profile":PROFILE,"candidate_id":CANDIDATE_ID,"race_id":shadow.get("race_id"),
-         "status":"RETROSPECTIVE-TRAINING-SETTLEMENT / NOT-OOS","production_effect":"NONE","arms":arms}
+         "status":settlement_class,"oos_eligible":oos_eligible,
+         "signed_final_binding_valid":bool(signed_final_binding_valid),
+         "production_effect":"NONE","arms":arms}
     out["sha256"]=_sha(out)
     return out
 
