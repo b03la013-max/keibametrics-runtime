@@ -12,6 +12,7 @@ on:
       - 'runtime/local_mec_r4_bridge.py'
       - 'runtime/local_mec_r5_shadow.py'
       - 'runtime/local_mec_r5_oos_tracker.py'
+      - 'runtime/local_mec_r5_oos_status.json'
       - '.github/workflows/local-mec-forward-current-authority-acceptance.yml'
   workflow_dispatch:
 
@@ -36,6 +37,7 @@ jobs:
           r4=j("research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json")
           r5=j("research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json")
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
+          r5status=j("runtime/local_mec_r5_oos_status.json")
 
           assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R10"
           assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
@@ -88,6 +90,17 @@ jobs:
           assert closure["r5"]["status"].startswith("SHADOW")
           assert closure["r5"]["automatic_promotion"] is False
           assert closure["railway_redeploy_required"] is False
+
+          assert r5status["profile"]=="KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924"
+          assert r5status["status"]=="WAITING_30"
+          assert r5status["eligible_races"]==0
+          assert r5status["remaining_races"]==30
+          assert r5status["production_effect"]=="NONE"
+          assert r5status["automatic_promotion"] is False
+          assert set(r5status["training_exclusion"])=={
+              "URW-20260923-R07-FORMAL-R1","URW-20260923-R10-FORMAL-R1",
+              "URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"
+          }
 
           formal=pathlib.Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
           result=pathlib.Path(".github/workflows/km-local-result-from-signed-final.yml").read_text(encoding="utf-8")
