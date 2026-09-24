@@ -1,0 +1,118 @@
+{
+  "mapping_id": "LOCAL-FULL-NUMERICAL-MAPPING-v0.3-CANDIDATE-20260925-EVIDENCE-ROUTING",
+  "status": "CANDIDATE / FULL-29-INDEX-NUMERICAL / EVIDENCE-ROUTING-WINDOW / OBSERVED-ONLY-RENORMALIZATION / NON-PRODUCTION / UNCALIBRATED / FROZEN-OOS-R30-REQUIRED",
+  "family": "LOCAL",
+  "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.3-CANDIDATE-20260925-EVIDENCE-ROUTING",
+  "production_predecessor": "LOCAL-BASE-INDEX-MAPPING-REGISTRY-v1.0-20260922",
+  "required_indices": [
+    "HPI-L",
+    "CFIg-L",
+    "RFIg-L",
+    "BVIg-L",
+    "JTI-L",
+    "CSI-L",
+    "BWI-L",
+    "DCR",
+    "NCI",
+    "TPI-L",
+    "EVI/CEV",
+    "CCI",
+    "TRI",
+    "PRI",
+    "OPI-V",
+    "DRS",
+    "URP",
+    "HCS",
+    "ZAI-WIN",
+    "ZAI-PLACE",
+    "SRI-L",
+    "T3I-L",
+    "F3S-L",
+    "WCI",
+    "W-AKI",
+    "P2-AKI",
+    "P3-AKI",
+    "ASI",
+    "RSI"
+  ],
+  "exact_canon_formulas": {
+    "TPI-L": "0.18*HPI-L+0.16*CFIg-L+0.14*RFIg-L+0.08*BVIg-L+0.08*JTI-L+0.08*CSI-L+0.08*BWI-L+0.10*NCI+0.10*EVI/CEV; then min-major penalty",
+    "SRI-L": "0.20*TPI-L+0.18*RFIg-L+0.18*EVI/CEV+0.15*CFIg-L+0.12*NCI+0.10*BWI-L+0.05*JTI-L+0.02*CSI-L-risk/uncertainty penalty",
+    "F3S-L": "0.25*SRI-L+0.20*TPI-L+0.18*EVI/CEV+0.14*RFIg-L+0.12*CFIg-L+0.06*NCI+0.05*T3I-L"
+  },
+  "candidate_only_aggregations": {
+    "EVI/CEV": "equal mean of position acquisition, maintenance, progression, leadership/stalk, traffic tolerance, going adaptation, course geometry, going fit",
+    "CCI": "CCI specificity component; canonical neutral 52 when official comment source absent",
+    "TRI": "TRI vertical-comparison component; canonical neutral 52 when official training source absent",
+    "PRI": "100 - normalized absolute difference between candidate ability rank and official market rank",
+    "OPI-V": "50 + 50*(market-rank-percentile - candidate-ability-rank-percentile)",
+    "DRS": "NCI class-change-pressure component",
+    "URP": "100-DRS, blended with front-density pressure",
+    "HCS": "mean(HPI class-level, HPI opponent-strength, HPI recent-finish)",
+    "ZAI-WIN": "mean(TPI-L,SRI-L,EVI/CEV,CFIg-L,NCI,DCR) after SRI first-pass",
+    "ZAI-PLACE": "mean(TPI-L,SRI-L,EVI/CEV,CFIg-L,RFIg-L,DCR)",
+    "T3I-L": "equal mean(OPI-V,same-distance,third-corner-progression,position-maintenance,TRI,DRS,good-weight-range)",
+    "W-AKI": "equal-risk aggregation of uncertainty, promotion pressure, front pressure, market/internal divergence, path narrowness",
+    "P2-AKI": "equal-risk aggregation of uncertainty, role competition, market divergence, URP",
+    "P3-AKI": "equal-risk aggregation of uncertainty, tail competition, market divergence, URP",
+    "ASI": "100 - mean(W-AKI, uncertainty risk, front-friction risk)",
+    "RSI": "mean(role-score dispersion risk, market/internal divergence, uncertainty risk)",
+    "WCI": "mean(ZAI-WIN,SRI-L,ASI,100-W-AKI)"
+  },
+  "missing_semantics": {
+    "policy": "OBSERVED_ONLY_RENORMALIZE",
+    "neutral_transport_value": 52,
+    "use_unknown_in_partial_weighted_average": false,
+    "all_missing_index_terminal": "CALCULATED_CANDIDATE_WITH_UNKNOWN_TRANSPORT_52_AND_CONFIDENCE_ZERO",
+    "dcr_carries_missingness": true
+  },
+  "market_separation": {
+    "ability_indices_market_free": [
+      "HPI-L",
+      "CFIg-L",
+      "RFIg-L",
+      "BVIg-L",
+      "JTI-L",
+      "CSI-L",
+      "BWI-L",
+      "NCI",
+      "TPI-L",
+      "EVI/CEV",
+      "SRI-L",
+      "F3S-L"
+    ],
+    "market_diagnostic_only": [
+      "PRI",
+      "OPI-V",
+      "W-AKI",
+      "P2-AKI",
+      "P3-AKI",
+      "ASI",
+      "RSI",
+      "WCI"
+    ]
+  },
+  "promotion": {
+    "production_authority": false,
+    "automatic": false,
+    "minimum_future_oos_events": 30,
+    "required": [
+      "pre-result v0.3 freeze",
+      "same signed source",
+      "result authority verified",
+      "deterministic regression",
+      "human review"
+    ]
+  },
+  "predecessor": "LOCAL-FULL-NUMERICAL-MAPPING-v0.1-CANDIDATE-20260923",
+  "comparison_companion": "LOCAL-FULL-NUMERICAL-MAPPING-v0.2-CANDIDATE-20260923-URW-DAY-CALIBRATED",
+  "design_freeze_date": "2026-09-25",
+  "weight_change_from_v01": false,
+  "evidence_routing_change": true,
+  "source_authority_boundary": {
+    "NAR_OFFICIAL": "CANDIDATE_FEATURE_INPUT_ALLOWED_PRE_CUTOFF",
+    "JMA_OFFICIAL": "CONTEXT_ONLY_UNLESS_RULE_BOUND",
+    "SBO_PUBLIC_NON_OFFICIAL": "DIAGNOSTIC_ONLY_NO_ABILITY_INDEX_WEIGHT",
+    "POINT_IN_TIME_POPULATION_LEDGER": "SHADOW_COHORT_ONLY_MIN_SAMPLE_REQUIRED"
+  }
+}
