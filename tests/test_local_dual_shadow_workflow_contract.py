@@ -1,8 +1,8 @@
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-FORMAL=ROOT/".github/workflows/km-family-non-jra-formal-runner.yml"
-RESULT=ROOT/".github/workflows/km-local-result-from-signed-final.yml"
+FORMAL=ROOT/"runtime/non_jra_formal_runner.py"
+RESULT=ROOT/"runtime/local_result_from_signed_final.py"
 
 
 def test_formal_dual_shadow_enforces_sim_std_and_truthful_pairing():
