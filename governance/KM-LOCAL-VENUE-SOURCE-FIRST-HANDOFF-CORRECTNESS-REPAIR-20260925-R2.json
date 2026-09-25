@@ -1,0 +1,58 @@
+{
+  "profile_id": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260925-R2",
+  "status": "ACTIVE / LOCAL-WIDE / CORRECTNESS-OPERATIONAL-REPAIR / CHAT-TO-GITHUB-FORMAL-HANDOFF / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE",
+  "effective_at": "2026-09-25T19:05:47+09:00",
+  "predecessor": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260924-R1",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R12",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R13",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260924-R10",
+  "local_suite": "KM-LOCAL-SUITE-MANIFEST-20260924-R9",
+  "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE",
+  "external_endpoint": "https://witnessstrictimage-production.up.railway.app",
+  "problem": {
+    "first_failure_owner": "CHAT_EXECUTION_ORCHESTRATION / HANDOFF_SELECTION",
+    "observed_failure": "Venue prediction stopped after Static because the chat surface lacked a direct Runtime POST action even though the canonical GitHub push-trigger Non-JRA Formal Bridge was available.",
+    "runtime_fault": false,
+    "prediction_fault": false,
+    "numerical_policy_fault": false
+  },
+  "repair": {
+    "existing_runner_only": true,
+    "new_execution_layer_added": false,
+    "canonical_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "canonical_workflow_blob_sha": "8d750e51ac5c5e1a796d689be89d869b58c049ee",
+    "trigger_path": "runtime/family_requests/*.json",
+    "trigger_branch": "main",
+    "changes": [
+      "Make GitHub request-file push the mandatory fallback when direct External Runtime POST is unavailable from the chat surface.",
+      "Require SOURCE_ONLY first for LOCAL Venue Chat formal execution unless a verified signed SOURCE envelope from the same race/cutoff is already available.",
+      "After SOURCE verification, build Venue Static/Role/Pair/Third from that frozen evidence and submit the Full Formal request through the same existing workflow.",
+      "Treat GitHub commit as trigger only; require workflow completion and signed SOURCE/PRE_KRS/KRS/FINAL verification before claiming execution.",
+      "Use the same family request trigger for RESULT so settlement, automatic review and learning remain connected to the immutable FINAL.",
+      "If the pre-race deadline is missed, preserve the frozen pre-result work but do not relabel it FORMAL-PRE-RACE."
+    ],
+    "direct_http_absence_behavior": "FAILOVER_TO_GITHUB_TRIGGER_NOT_EXECUTION_ABORT",
+    "production_effect": "NONE"
+  },
+  "numerical_authority": {
+    "status": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY",
+    "changed_by_this_repair": false
+  },
+  "acceptance": {
+    "repository_structure_verified": true,
+    "workflow_push_trigger_verified": true,
+    "source_only_phase_verified_in_workflow": true,
+    "local_full_formal_phase_verified_in_workflow": true,
+    "result_phase_verified_in_workflow": true,
+    "prior_source_first_acceptance_inherited_from_r1": true,
+    "current_change_requires_no_runtime_redeploy": true
+  },
+  "empirical_scope": {
+    "proves_chat_handoff_availability": true,
+    "proves_prediction_accuracy": false,
+    "proves_strict_production_full_numerical_authority": false,
+    "unknown_future_empirical_acceptance": "PENDING"
+  }
+}
