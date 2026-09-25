@@ -25,6 +25,7 @@ jobs:
           import fitz
           from tsl_public_shadow_evidence import discover_tsl_race_url,parse_tsl_html,_fetch
           from jma_weather_evidence import _fetch_station_table,choose_nearest_station
+          from jra_race_card_detail import _discover_and_fetch,parse_race_card_detail
           venue="NKY"; date="2026-09-22"; race_no=10
           tsl_url,key,disc=discover_tsl_race_url(venue,date,race_no)
           raw,h,robots,final=_fetch(tsl_url)
@@ -51,6 +52,14 @@ jobs:
               "raw_sha256":hashlib.sha256(pdf).hexdigest(),
               "tsl_count":len(tsl["runners"]),"name_matches":len(matched),"matched_ids":matched
           },ensure_ascii=False))
+          # Live mechanical verification of the official detailed race-card adapter.
+          detail_date="2026-09-26"; detail_key="0620260408"; detail_race_no=8
+          draw,dh,dfinal,dtokens=_discover_and_fetch(detail_date,detail_key,detail_race_no)
+          detail=parse_race_card_detail(draw,dh.get("content-type",""))
+          assert detail["runner_count"]>=2
+          assert all(x.get("career_record") is not None for x in detail["runners"])
+          assert any(len(x.get("recent_runs") or [])>=1 for x in detail["runners"])
+          assert any(x.get("win_odds") is not None for x in detail["runners"])
           station_snap,stations=_fetch_station_table("2099-01-01T00:00:00+09:00")
           station=choose_nearest_station(stations,venue)
           out={
@@ -67,10 +76,20 @@ jobs:
             "official_pdf_runner_ids_confirmed":matched,
             "jma_station_id":station.get("station_id"),"jma_station_name":station.get("station_name"),
             "jma_station_distance_km":station.get("distance_km"),
+            "jra_detail_profile":detail.get("profile"),
+            "jra_detail_date":detail_date,
+            "jra_detail_race_no":detail_race_no,
+            "jra_detail_runner_count":detail.get("runner_count"),
+            "jra_detail_raw_sha256":hashlib.sha256(draw).hexdigest(),
+            "jra_detail_recent_run_runner_count":sum(1 for x in detail["runners"] if x.get("recent_runs")),
+            "jra_detail_market_runner_count":sum(1 for x in detail["runners"] if x.get("win_odds") is not None),
             "errors":[]
           }
           assert out["tsl_runner_count"]>=2
           assert out["official_pdf_runner_name_matches"]==out["tsl_runner_count"], out
+          assert out["jra_detail_runner_count"]>=2
+          assert out["jra_detail_recent_run_runner_count"]>=1
+          assert out["jra_detail_market_runner_count"]>=1
           open("../../runtime/jra_source_runtime/live_acceptance_status.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2))
           print("JRA_SOURCE_LIVE_ACCEPTANCE="+json.dumps(out,ensure_ascii=False,separators=(",",":")))
           PY
