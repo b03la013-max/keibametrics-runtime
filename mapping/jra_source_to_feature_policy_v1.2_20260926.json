@@ -1,0 +1,65 @@
+{
+  "policy_id": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.2-20260926",
+  "predecessor": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.1-20260926",
+  "status": "ACTIVE / EXECUTION-CORRECTNESS / OFFICIAL-DETAIL-RULE-INPUTS / 71-FEATURE-SOURCE-CONTRACT-CLOSED / NON-NUMERICAL / FAIL-CLOSED",
+  "family_id": "JRA",
+  "compiler": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.2-20260926",
+  "source_layers": {
+    "official_runner_universe": "JRA_OFFICIAL_RACE_CARD_PDF / REQUIRED",
+    "official_race_card_detail": "JRA_OFFICIAL_JRADB_DETAIL / PRODUCTION-FACT-AUTHORITY",
+    "jma": "OFFICIAL_CONTEXT_SHADOW",
+    "tsl": "THIRD_PARTY_PUBLIC_SHADOW / https://jra.k-ba.net/ / NEVER OVERRIDES JRA"
+  },
+  "data_flow": [
+    "SIGNED_SOURCE",
+    "OFFICIAL_FACT_NORMALIZATION",
+    "RULE_EVALUATOR_INPUTS",
+    "REGISTERED_EVIDENCE_FEATURE_CATEGORY",
+    "PRODUCTION_BASE_INDEX_MAPPING",
+    "DERIVED_INDEX_FORMULAS"
+  ],
+  "official_detail_inputs": [
+    "career record / career starts",
+    "win odds and popularity snapshot",
+    "trainer identity",
+    "sire / dam / damsire identity",
+    "sex / age / assigned weight / jockey identity",
+    "up to four recent runs: date, venue, class text, finish, field size, popularity, assigned weight, distance, surface, time, going, bodyweight, passing-position raw, final3F, margin"
+  ],
+  "automatic_factual_updates": [
+    "career_starts",
+    "newcomer status when official career starts are known",
+    "rule evaluator input ledgers"
+  ],
+  "production_category_autofill": {
+    "current_safe": [
+      "weight_load_fit=NEUTRAL only when all active official assigned weights are equal, using JRA-WEIGHT-EQUAL-CONDITION-v1"
+    ],
+    "prohibited": [
+      "No raw finish/odds/bodyweight/pedigree value is converted to STRONG/WEAK without an explicitly registered evaluator semantics.",
+      "No TSL signal becomes a Production Evidence Feature.",
+      "No JMA current-state observation becomes horse-specific fit without an authorized history-based evaluator.",
+      "No missing feature is synthesized as neutral 50 or WEAK."
+    ]
+  },
+  "readiness": {
+    "source_only": "Measured per runner and per index before any request-supplied evidence is merged.",
+    "merged": "Measured after preserving existing authorized request features and adding safe generated facts.",
+    "zero_touch_claim": "Allowed only if every runner has source_only_formal_base_ready=true and downstream FULL_REQUIRED numerical materialization passes."
+  },
+  "remaining_adapter_or_evaluator_gaps": [
+    "registered evaluator thresholds/semantics for raw recent-history metrics not yet encoded as executable rules",
+    "historical pedigree population rates",
+    "jockey/trainer quantitative statistics",
+    "training/workout source",
+    "stable/comment source",
+    "official market time-series beyond current race-card snapshot",
+    "venue pace/style binding where no deterministic registered evaluator exists"
+  ],
+  "production_model_change": false,
+  "numerical_weight_change": false,
+  "krs_change": false,
+  "mec_change": false,
+  "capital_change": false,
+  "probability_ev_kelly_change": false
+}
