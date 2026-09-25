@@ -536,7 +536,6 @@ jobs:
 
           # Persist an immutable, Git-versioned FINAL artifact for the post-result
           # closed loop. This is the authoritative bridge RESULT -> Learning.
-          os.makedirs("runtime/final_artifacts",exist_ok=True)
           immutable_final_artifact={
             "artifact_type":"KM_IMMUTABLE_FINAL",
             "race_id":race_id,
@@ -572,24 +571,56 @@ jobs:
           immutable_final_artifact["sha256"]=hashlib.sha256(
               json.dumps(immutable_final_artifact,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
           ).hexdigest()
-          with open(os.path.join("runtime","final_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
-              json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-          # Pre-result MEC R4 research shadow. Production noninterference is absolute:
-          # shadow generation failure/latency can never invalidate or delay the signed Production FINAL.
+          acceptance_only=bool(req.get("acceptance_only"))
+          canonical_final_allowed=(temporal_mode=="FORMAL-PRE-RACE" and not acceptance_only)
+          if canonical_final_allowed:
+              os.makedirs(os.path.join("runtime","final_artifacts"),exist_ok=True)
+              final_path=os.path.join("runtime","final_artifacts",race_id+".json")
+              if os.path.exists(final_path):
+                  with open(final_path,encoding="utf-8") as efh:
+                      existing_final=json.load(efh)
+                  assert existing_final.get("sha256")==immutable_final_artifact["sha256"], (
+                      "IMMUTABLE_FINAL_ALREADY_EXISTS_DIFFERENT:"
+                      +str(existing_final.get("sha256"))+"!="+str(immutable_final_artifact["sha256"])
+                  )
+              else:
+                  with open(final_path,"w",encoding="utf-8") as fh:
+                      json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          else:
+              os.makedirs(os.path.join("runtime","acceptance_artifacts"),exist_ok=True)
+              acceptance_id=str(req.get("prediction_id") or race_id).replace("/","_").replace("\\","_")
+              acceptance_path=os.path.join("runtime","acceptance_artifacts",acceptance_id+".json")
+              with open(acceptance_path,"w",encoding="utf-8") as fh:
+                  json.dump(immutable_final_artifact,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
+          # MEC R4 forward shadow is pre-race research only. Replays/acceptance runs
+          # must never create or overwrite the canonical pre-result shadow.
           shadow=None
           shadow_error=None
-          try:
-              candidate_shadow=build_mec_r4_shadow(immutable_final_artifact)
-              if temporal_mode=="FORMAL-PRE-RACE" and dt(candidate_shadow["generated_at"]).astimezone(timezone.utc) >= post_utc:
-                  shadow_error="MEC_R4_SHADOW_NOT_PRE_RESULT"
-              else:
-                  shadow=candidate_shadow
-                  os.makedirs(os.path.join("runtime","mec_shadow_artifacts"),exist_ok=True)
-                  with open(os.path.join("runtime","mec_shadow_artifacts",race_id+".json"),"w",encoding="utf-8") as fh:
-                      json.dump(shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
-          except Exception as exc:
-              shadow_error="MEC_R4_SHADOW_NONBLOCKING_ERROR:"+type(exc).__name__+":"+str(exc)
+          if temporal_mode=="FORMAL-PRE-RACE" and not acceptance_only:
+              try:
+                  candidate_shadow=build_mec_r4_shadow(immutable_final_artifact)
+                  if dt(candidate_shadow["generated_at"]).astimezone(timezone.utc) >= post_utc:
+                      shadow_error="MEC_R4_SHADOW_NOT_PRE_RESULT"
+                  else:
+                      os.makedirs(os.path.join("runtime","mec_shadow_artifacts"),exist_ok=True)
+                      shadow_path=os.path.join("runtime","mec_shadow_artifacts",race_id+".json")
+                      if os.path.exists(shadow_path):
+                          with open(shadow_path,encoding="utf-8") as sfh:
+                              existing_shadow=json.load(sfh)
+                          if existing_shadow.get("sha256")!=candidate_shadow.get("sha256"):
+                              shadow_error="MEC_R4_SHADOW_ALREADY_EXISTS_DIFFERENT"
+                          else:
+                              shadow=candidate_shadow
+                      else:
+                          shadow=candidate_shadow
+                          with open(shadow_path,"w",encoding="utf-8") as fh:
+                              json.dump(shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              except Exception as exc:
+                  shadow_error="MEC_R4_SHADOW_NONBLOCKING_ERROR:"+type(exc).__name__+":"+str(exc)
+          else:
+              shadow_error="NON_PRE_RACE_OR_ACCEPTANCE_NO_SHADOW"
 
           summary={
             "race_id":race_id,
@@ -641,20 +672,19 @@ jobs:
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 
-      - name: Persist immutable FINAL artifact
+      - name: Persist immutable FINAL or acceptance artifact
         shell: bash
         run: |
           set -euo pipefail
-          if [ -d runtime/final_artifacts ] && find runtime/final_artifacts -type f -name '*.json' | grep -q .; then
-            git config user.name "keibametrics-runtime"
-            git config user.email "actions@users.noreply.github.com"
-            git add runtime/final_artifacts/*.json
-            if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json; fi
-            if ! git diff --cached --quiet; then
-              git commit -m "runtime: persist immutable FINAL artifact [skip ci]"
-              git pull --rebase origin main
-              git push origin HEAD:main
-            fi
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/final_artifacts ]; then git add runtime/final_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/acceptance_artifacts ]; then git add runtime/acceptance_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "runtime: persist immutable FINAL/acceptance artifact [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
 
       - name: Upload KRS structured output and utility delta
