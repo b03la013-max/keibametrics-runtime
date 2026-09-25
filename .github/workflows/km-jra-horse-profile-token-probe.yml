@@ -1,0 +1,47 @@
+name: JRA Horse Profile Token Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-horse-profile-token-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Probe accessU tokens
+        run: |
+          python - <<'PY'
+          import sys,re,json,hashlib,urllib.parse
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_race_card_detail import _discover_and_fetch
+          from source_acquisition import _decode
+          raw,headers,url,tokens=_discover_and_fetch("2026-09-26","0620260408",8)
+          s=_decode(raw,headers.get("content-type",""))
+          patterns=[
+            r"doAction\(\s*['\"]\/JRADB\/accessU\.html['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)",
+            r"accessU\.html\?CNAME=([^\"'&<>\s]+)",
+            r"(pw01dud[0-9A-Za-z_/%-]+)",
+          ]
+          hits=[]
+          for pat in patterns:
+            hits += re.findall(pat,s,re.I)
+          clean=[]
+          for h in hits:
+            h=urllib.parse.unquote(str(h))
+            if h not in clean:clean.append(h)
+          names=[]
+          for m in re.finditer(r"(pw01dud[0-9A-Za-z_/%-]+)",s,re.I):
+            a=max(0,m.start()-300); b=min(len(s),m.end()+300)
+            ctx=re.sub(r"\s+"," ",s[a:b])
+            names.append({"token":urllib.parse.unquote(m.group(1)),"context_sha256":hashlib.sha256(ctx.encode()).hexdigest(),"context":ctx[:500]})
+          out={"count":len(clean),"tokens":clean[:30],"contexts":names[:10],"detail_url":url}
+          open("/tmp/probe.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,indent=2))
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          assert len(clean)>=1, "NO_ACCESSU_TOKEN_FOUND"
+          PY
