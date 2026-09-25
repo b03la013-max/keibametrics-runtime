@@ -17,7 +17,7 @@ def test_formal_dual_shadow_enforces_sim_std_and_truthful_pairing():
     assert 'run_candidate_krs_arm("V01"' in impl
     assert 'run_candidate_krs_arm("V02"' in impl
     assert "path: runtime_out/*.json" in workflow
-    assert "python runtime/non_jra_formal_runner.py" in workflow
+    assert "python -m runtime.non_jra_formal_runner" in workflow
 
 
 def test_result_closed_loop_loads_both_candidate_krs_envelopes_and_persists_oos():
@@ -28,7 +28,7 @@ def test_result_closed_loop_loads_both_candidate_krs_envelopes_and_persists_oos(
     assert 'candidate_dual_oos_measurement.json' in impl
     assert 'candidate_dual_oos_status.json' in impl
     assert 'runtime/local_candidate_dual_oos_measurements/*.json' in workflow
-    assert "python runtime/local_result_from_signed_final.py" in workflow
+    assert "python -m runtime.local_result_from_signed_final" in workflow
 
 
 def test_result_ledger_is_serializable_by_repository_commit():
