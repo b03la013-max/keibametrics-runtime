@@ -65,10 +65,10 @@ def build_jra_manifest(payload: Dict[str,Any])->Dict[str,Any]:
     if not card and meeting_key:
         card=race_card_url_from_meeting_key(meeting_key,race_date,race_no)
     if card:
-        sources.append(_spec("JRA-RACE-CARD","OFFICIAL_JRA_RACE_CARD",card,required=True,extract=[
-            {"field":"race_card_tables","type":"html_tables","required":True},
-            {"field":"race_card_text","type":"html_text","required":True},
-        ],priority=120))
+        sources.append(_spec("JRA-RACE-CARD-HTML-AUX","OFFICIAL_JRA_RACE_CARD_HTML_AUX",card,required=False,extract=[
+            {"field":"race_card_tables","type":"html_tables","required":False},
+            {"field":"race_card_text","type":"html_text","required":False},
+        ],priority=115))
     for r in range(1,race_no):
         u=(payload.get("same_day_result_urls") or {}).get(str(r)) if isinstance(payload.get("same_day_result_urls"),dict) else None
         if not u and meeting_key:
@@ -82,6 +82,7 @@ def build_jra_manifest(payload: Dict[str,Any])->Dict[str,Any]:
         "jra_venue_code":JRA_VENUE_CODES[venue],"race_date":race_date,"race_no":race_no,
         "automatic_tsl_discovery":True,"sources":sources,
         "official_runner_universe_required_for_formal_full":True,
+        "required_official_runner_adapter":"JRA_OFFICIAL_RACE_PDF",
     }
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out

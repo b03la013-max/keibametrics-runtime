@@ -56,3 +56,60 @@ def test_jra_point_in_time_population_seed():
     assert x["population_fit_ready"] is False
     assert x["production_authority"] is False
     assert x["sire_field_counts"]==[{"sire":"S1","field_count":2}]
+
+
+def test_jra_official_pdf_url_and_runner_parser():
+    from jra_official_pdf import official_pdf_url, parse_runner_universe_from_pages
+    assert official_pdf_url("2026-09-22","NKY","0620260407")=="https://www.jra.go.jp/keiba/rpdf/pdf/20260922-04nakayama07.pdf"
+    page="""2026年4中山7
+2006 MEMORIAL DEEP IMPACT CUP
+1，600
+（3頭）
+（芝Turf・右・外）
+2006メモリアルディープインパクトカップ
+10R
+負担重量は、3歳56
+白
+1
+牡6
+H6
+黒鹿58
+（2008年）9，000，000
+フミサウンド
+三浦
+皇成39，834，000
+1
+Kosei Miura
+Fumi Sound（JPN）
+黒
+2
+牡5
+H5
+芦58
+（2011年）9，000，000
+レッドレナート
+横山
+和生37，109，000
+2
+Kazuo Yokoyama
+Red Renato（JPN）
+赤
+3
+牝4
+F4
+栗56
+（2019年）9，000，000
+エ
+リ
+ム
+原田
+和真16，379，000
+4
+Kazuma Harada
+Elim（JPN）
+コース
+レコード
+"""
+    u=parse_runner_universe_from_pages([page],10)
+    assert u["runner_count"]==3
+    assert [(x["horse_no"],x["name"]) for x in u["runners"]]==[(1,"フミサウンド"),(2,"レッドレナート"),(3,"エリム")]

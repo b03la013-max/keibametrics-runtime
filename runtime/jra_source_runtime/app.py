@@ -12,8 +12,9 @@ from tsl_public_shadow_evidence import build_tsl_shadow_evidence,discover_tsl_ra
 from jma_weather_evidence import build_jma_weather_evidence
 from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
+from jra_official_pdf import fetch_and_enrich_official_pdf
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.1-20260926"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.2-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -51,6 +52,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jma_weather_evidence_sha256":_sha_file("jma_weather_evidence.py"),
         "jra_auxiliary_evidence_sha256":_sha_file("jra_auxiliary_evidence.py"),
         "jra_population_seed_sha256":_sha_file("jra_population_seed.py"),
+        "jra_official_pdf_sha256":_sha_file("jra_official_pdf.py"),
       }
     }
     rb=_jdump(receipt)
@@ -101,7 +103,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -131,11 +133,19 @@ def source_acquire(p:Dict[str,Any]):
     artifact["jra_meeting_key_discovered"]=meeting_key or None
     if tsl_discovery_error: artifact.setdefault("warnings",[]).append("TSL_MEETING_DISCOVERY:"+tsl_discovery_error)
 
-    # Official JRA runner universe is mandatory for Formal-Full source closure.
+    # Official JRA PDF is the mandatory independent Runner Universe source.
+    # JRADB HTML is retained only as auxiliary evidence because the public page
+    # may render without server-side tables.
     try:
-        artifact=enrich_source_artifact(artifact)
+        if not meeting_key:
+            raise ValueError("JRA_MEETING_KEY_REQUIRED_FOR_OFFICIAL_PDF")
+        artifact=fetch_and_enrich_official_pdf(
+            artifact,cutoff,
+            race_date=ctx["race_date"],venue_id=ctx["venue_id"],
+            race_no=ctx["race_no"],meeting_key=meeting_key
+        )
     except Exception as e:
-        errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
+        errors.append("JRA_OFFICIAL_PDF_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])
