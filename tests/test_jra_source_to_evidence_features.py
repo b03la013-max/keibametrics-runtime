@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"runtime"))
 
-from jra_source_to_evidence_features import compile_source_to_features,attach_source_features_to_request
+from jra_source_to_evidence_features import compile_source_to_features,attach_source_features_to_request,validate_feature_contract
 
 def _mapping():
     return json.load(open(ROOT/"mapping"/"jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
@@ -56,3 +56,30 @@ def test_source_compiler_never_silently_overwrites_existing_feature():
     conflicts=out["source_to_evidence_feature_runner_coverage"]["1"]["merge_conflicts"]
     assert conflicts and conflicts[0]["resolution"].startswith("EXISTING_PRESERVED")
     assert out["runners"][0]["source_shadow_observations"][0]["production_authority"] is False
+
+
+def test_all_71_mapping_features_have_source_family_and_registry_binding():
+    m=_mapping()
+    rr=json.load(open(ROOT/"mapping"/"jra_evidence_feature_rule_registry_v1.1_20260922.json",encoding="utf-8"))
+    c=validate_feature_contract(m,rr)
+    assert c["mapping_feature_count"]==71
+    assert c["source_family_mapped_count"]==71
+    assert c["rule_registry_bound_count"]==71
+    assert c["missing_source_map"]==[]
+
+def test_source_only_readiness_and_gap_are_explicit():
+    runners=[{"runner_id":"1","name":"A","career_starts":8,"evidence_features":{}},
+             {"runner_id":"2","name":"B","career_starts":8,"evidence_features":{}}]
+    r=compile_source_to_features(_artifact(),runners,_mapping())
+    assert r["source_only_formal_base_ready"] is False
+    assert r["runners"]["1"]["source_only_formal_base_ready"] is False
+    assert r["runners"]["1"]["automation_gap"]["missing_source_family_count"]>0
+
+def test_tsl_stays_shadow_and_never_autofills_external_index_support():
+    runners=[{"runner_id":"1","name":"A","career_starts":8,"evidence_features":{}},
+             {"runner_id":"2","name":"B","career_starts":8,"evidence_features":{}}]
+    r=compile_source_to_features(_artifact(),runners,_mapping())
+    for rr in r["runners"].values():
+        assert "external_index_support" not in rr["generated_production_features"]
+        assert rr["shadow_observation_count"]==1
+        assert rr["shadow_observations"][0]["authority"]=="TSL_PUBLIC_NON_OFFICIAL"

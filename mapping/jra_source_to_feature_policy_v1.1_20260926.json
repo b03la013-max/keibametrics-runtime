@@ -1,0 +1,44 @@
+{
+  "policy_id": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.1-20260926",
+  "predecessor": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.0-20260926",
+  "status": "ACTIVE / EXECUTION-CORRECTNESS / 71-FEATURE-SOURCE-CONTRACT-CLOSED / NON-NUMERICAL / NO-NEW-PREDICTION-WEIGHT / FAIL-CLOSED",
+  "family_id": "JRA",
+  "compiler": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.1-20260926",
+  "principles": [
+    "Fetcher never predicts.",
+    "All 71 Production mapping features must have a source-family contract.",
+    "Only deterministic rule-bound facts from Production-authorized sources may auto-fill Production evidence_features.",
+    "TSL, JMA current-state shadow, same-day derived shadow and point-in-time population seed remain isolated from Production features unless separately promoted.",
+    "Existing request feature classifications are never silently overwritten.",
+    "Missing evidence remains missing. UNKNOWN is not WEAK and is not neutral 50.",
+    "Source-only readiness and request+source merged readiness are measured separately.",
+    "Per-index coverage and DCR resolvability are measured before Production base-index materialization."
+  ],
+  "production_autofill_rules": {
+    "weight_load_fit": {
+      "condition": "All active official JRA runners have the same assigned_weight.",
+      "category": "NEUTRAL",
+      "rule_id": "JRA-WEIGHT-EQUAL-CONDITION-v1",
+      "source": "JRA_OFFICIAL_RACE_CARD_PDF",
+      "rationale": "Deterministic equal-load fact; no relative burden advantage is asserted."
+    }
+  },
+  "contract": {
+    "mapping_feature_count": 71,
+    "source_family_mapping_required": true,
+    "rule_registry_mapping_required": true,
+    "source_only_readiness_required_for_zero_touch_claim": true,
+    "after_merge_readiness_required_for_formal_materialization": true,
+    "unsupported_source_behavior": "EXPLICIT_GAP / NO_SYNTHESIS / NO_NEUTRAL_50"
+  },
+  "shadow_sources": {
+    "TSL": "THIRD_PARTY_PUBLIC_SHADOW / RAW SIGNAL ONLY / NEVER AUTO-FILLS PRODUCTION",
+    "JMA": "OFFICIAL_CONTEXT_SHADOW / NO HORSE-SPECIFIC FIT WITHOUT HISTORY",
+    "SAME_DAY_DERIVED": "SHADOW UNTIL HORSE-STYLE MATCH RULE IS OOS-VALIDATED",
+    "POINT_IN_TIME_POPULATION": "SHADOW / NO HISTORICAL RATE AUTHORITY"
+  },
+  "zero_touch_claim_rule": "ZERO-TOUCH SOURCE->20-INDEX may be claimed only when source_only_formal_base_ready=true for every runner and downstream FULL_REQUIRED materialization passes.",
+  "production_model_change": false,
+  "numerical_weight_change": false,
+  "probability_ev_kelly_change": false
+}
