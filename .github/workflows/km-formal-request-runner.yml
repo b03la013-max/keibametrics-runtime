@@ -42,6 +42,7 @@ jobs:
           python - <<'PY'
           import json, urllib.request, urllib.error, sys, hashlib, os
           sys.path.insert(0,"runtime")
+          sys.path.insert(0,os.path.join("runtime","jra_source_runtime"))
           from prekrs_terminal_compat import adapt_calculator_output
           from formal_request_validator import validate_request, validate_pre_krs_request
           from jra_index_provenance_builder import materialize_index_provenance
