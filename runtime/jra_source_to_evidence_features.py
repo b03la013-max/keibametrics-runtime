@@ -532,6 +532,17 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
 def attach_source_features_to_request(request: Dict[str, Any], source_artifact: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
     req = copy.deepcopy(request)
     report = compile_source_to_features(source_artifact, req.get("runners") or [], mapping)
+    try:
+        from jra_source_objective_evaluator import build_source_objective_candidate
+        objective_candidate = build_source_objective_candidate(source_artifact, req.get("runners") or [], mapping)
+    except Exception as exc:
+        objective_candidate = {
+            "profile":"KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.1-20260926",
+            "status":"SHADOW / NON-PRODUCTION / CAPTURE-ERROR",
+            "available":False,
+            "error":type(exc).__name__+":"+str(exc),
+            "production_effect":"NONE",
+        }
     by_id = {str(r.get("runner_id") or r.get("horse_no") or ""):r for r in req.get("runners") or []}
     for rid,rr in report["runners"].items():
         if by_id[rid].get("career_starts") is None and rr["factual_runner_updates"].get("career_starts") is not None:
@@ -557,4 +568,5 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
         } for rid,rr in report["runners"].items()
     }
     req["source_to_evidence_feature_sha256"] = report["sha256"]
+    req["source_objective_candidate_shadow"] = objective_candidate
     return req

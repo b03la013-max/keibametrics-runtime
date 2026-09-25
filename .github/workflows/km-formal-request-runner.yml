@@ -448,6 +448,15 @@ jobs:
           final_package["evidence_feature_compiler_attestation"]=evidence_compiler
           final_package["source_to_evidence_feature_compiler"]=req.get("source_to_evidence_feature_compiler")
           final_package["source_to_evidence_feature_runner_coverage"]=req.get("source_to_evidence_feature_runner_coverage")
+          final_package["source_objective_candidate_shadow"]=req.get("source_objective_candidate_shadow")
+          if isinstance(req.get("source_objective_candidate_shadow"),dict):
+              oc=req["source_objective_candidate_shadow"]
+              stage("SOURCE_OBJECTIVE_CANDIDATE_CAPTURED",
+                    profile=oc.get("profile"),
+                    available=oc.get("available"),
+                    runner_count=oc.get("runner_count"),
+                    production_effect="NONE",
+                    sha256=oc.get("sha256"))
           final_package["capital_policy_decision"]=capital_decision
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance

@@ -134,6 +134,18 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
         nums=re.sub(r"\D","",between)
         if nums: pos=nums
     out["passing_positions_raw"]=pos
+    # Preserve unambiguous call positions as a structured list. Values >=10 are
+    # kept when separators survived the HTML table normalization.
+    calls=[]
+    if mg and mf:
+        between=s[mg.end():mf.start()]
+        calls=[int(z) for z in re.findall(r"(?<!\\d)(\\d{1,2})(?!\\d)",between)]
+        if not calls and pos and str(pos).isdigit() and len(str(pos))<=8:
+            calls=[int(ch) for ch in str(pos)]
+    out["passing_positions"]=calls
+    # Recent rider is the text between popularity and assigned weight.
+    jm=re.search(r"番人気\\s+(.+?)\\s+\\d{2}(?:\\.\\d+)?\\s*kg",s)
+    out["jockey"]=jm.group(1).strip() if jm else None
     # class text between venue and finish, retained for future registered evaluator.
     if m:=re.search(r"\d{1,2}日\s+[^\s]+\s+(.*?)\s+\d+\s*着",s):
         out["race_class_text"]=m.group(1).strip()
@@ -169,7 +181,14 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             if x:recent.append(x)
         runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,**ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
-    out={"profile":PROFILE,"official":True,"production_fact_authority":True,"runner_count":len(runners),"runners":runners}
+    weather=None; going=None; going_surface=None
+    mw=re.search(r"天候\\s*([^\\s<]+)",decoded)
+    if mw: weather=mw.group(1)
+    mgc=re.search(r"(芝|ダート|ダ)\\s*(良|稍重|重|不良)",decoded)
+    if mgc:
+        going_surface=mgc.group(1); going=mgc.group(2)
+    out={"profile":PROFILE,"official":True,"production_fact_authority":True,"runner_count":len(runners),"runners":runners,
+         "race_environment":{"weather":weather,"going":going,"going_surface":going_surface}}
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 

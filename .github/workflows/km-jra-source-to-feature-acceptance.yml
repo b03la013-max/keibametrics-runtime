@@ -8,6 +8,7 @@ on:
     branches: [ main ]
     paths:
       - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_source_objective_evaluator.py"
       - "mapping/jra_source_to_feature_policy_v1.0_20260926.json"
       - "mapping/jra_source_to_feature_policy_v1.1_20260926.json"
       - "mapping/jra_source_to_feature_policy_v1.2_20260926.json"
@@ -17,6 +18,7 @@ on:
       - "runtime/jra_source_runtime/tsl_public_shadow_evidence.py"
       - "runtime/jra_source_runtime/app.py"
       - "tests/test_jra_source_to_evidence_features.py"
+      - "tests/test_jra_source_objective_evaluator.py"
       - "tests/test_jra_source_runtime.py"
       - ".github/workflows/km-formal-request-runner.yml"
       - ".github/workflows/km-jra-source-to-feature-acceptance.yml"
@@ -29,8 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
-      - run: python -m py_compile runtime/jra_source_to_evidence_features.py runtime/jra_source_runtime/*.py
-      - run: python -m pytest -q tests/test_jra_source_to_evidence_features.py tests/test_jra_source_runtime.py
+      - run: python -m py_compile runtime/jra_source_to_evidence_features.py runtime/jra_source_objective_evaluator.py runtime/jra_source_runtime/*.py
+      - run: python -m pytest -q tests/test_jra_source_to_evidence_features.py tests/test_jra_source_objective_evaluator.py tests/test_jra_source_runtime.py
       - name: Verify Formal wiring and shadow isolation
         run: |
           python - <<'PY'
@@ -38,6 +40,7 @@ jobs:
           f=Path(".github/workflows/km-formal-request-runner.yml").read_text()
           assert "attach_source_features_to_request" in f
           assert "SOURCE_TO_EVIDENCE_FEATURES_VERIFIED" in f
+          assert "SOURCE_OBJECTIVE_CANDIDATE_CAPTURED" in f
           c=Path("runtime/jra_source_to_evidence_features.py").read_text()
           assert "NO_TSL_OR_JMA_SHADOW_INJECTION" in c
           assert "TSL_PUBLIC_NON_OFFICIAL" in c
@@ -54,12 +57,12 @@ jobs:
           import json,os
           from datetime import datetime,timezone
           p={
-            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.2-20260926",
+            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.3-20260926",
             "status":"PASS",
             "workflow_run_id":os.environ["RUN_ID"],
             "source_sha":os.environ["SOURCE_SHA"],
             "verified_at":datetime.now(timezone.utc).isoformat(),
-            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS","OFFICIAL_DETAIL_PARSER","RULE_EVALUATOR_INPUTS","CAREER_STARTS_AUTOFILL"]
+            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS","OFFICIAL_DETAIL_PARSER","RULE_EVALUATOR_INPUTS","CAREER_STARTS_AUTOFILL","OBJECTIVE_71_FEATURE_SHADOW","OBJECTIVE_20_INDEX_DIAGNOSTIC","FORMAL_SHADOW_BINDING"]
           }
           open("runtime/jra_source_runtime/source_to_feature_acceptance_status.json","w",encoding="utf-8").write(json.dumps(p,ensure_ascii=False,sort_keys=True,indent=2))
           PY
