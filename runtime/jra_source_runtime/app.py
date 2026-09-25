@@ -15,9 +15,10 @@ from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
 from jra_race_context import enrich_with_race_context
 from jra_horse_history import enrich_with_horse_histories
+from jra_person_stats import enrich_with_person_stats
 from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.5-20260926"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -58,6 +59,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_official_pdf_sha256":_sha_file("jra_official_pdf.py"),
         "jra_race_context_sha256":_sha_file("jra_race_context.py"),
         "jra_horse_history_sha256":_sha_file("jra_horse_history.py"),
+        "jra_person_stats_sha256":_sha_file("jra_person_stats.py"),
         "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
       }
     }
@@ -115,7 +117,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_JRA_OFFICIAL_RACE_CARD_DETAIL","SOURCE_JRA_OFFICIAL_HORSE_HISTORY","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_JRA_OFFICIAL_RACE_CARD_DETAIL","SOURCE_JRA_OFFICIAL_HORSE_HISTORY","SOURCE_JRA_OFFICIAL_PERSON_STATS","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -218,6 +220,14 @@ def source_acquire(p:Dict[str,Any]):
     except Exception as e:
         if q.get("require_jra_horse_history"): errors.append("JRA_HORSE_HISTORY_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
         else: artifact.setdefault("warnings",[]).append("JRA_HORSE_HISTORY_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+
+    try:
+        artifact,perrs=enrich_with_person_stats(artifact,cutoff,require_person_stats=bool(q.get("require_jra_person_stats",False)))
+        if q.get("require_jra_person_stats"): errors.extend(perrs)
+        elif perrs: artifact.setdefault("warnings",[]).extend(perrs)
+    except Exception as e:
+        if q.get("require_jra_person_stats"): errors.append("JRA_PERSON_STATS_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
+        else: artifact.setdefault("warnings",[]).append("JRA_PERSON_STATS_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])

@@ -185,3 +185,17 @@ def test_detail_runner_universe_fallback():
     assert active["runner_count"]==1
     assert active["runners"][0]["name"]=="A"
     assert active["runners"][0]["source"]=="JRA_OFFICIAL_JRADB_DETAIL"
+
+
+def test_person_profile_parser_current_year_stats():
+    import sys
+    sys.path.insert(0,str(ROOT/"runtime"/"jra_source_runtime"))
+    from jra_person_stats import parse_person_profile
+    html="""<html><body><div>調教師情報 西田 雄一郎 （ニシダ）</div><table>
+    <tr><th></th><th>1着</th><th>2着</th><th>3着</th><th>4着</th><th>5着</th><th>着外</th><th>出走回数</th><th>勝率</th><th>連対率</th><th>3着内率</th></tr>
+    <tr><td>平地</td><td>11</td><td>7</td><td>11</td><td>11</td><td>15</td><td>126</td><td>181</td><td>0.061</td><td>0.099</td><td>0.160</td></tr>
+    </table></body></html>""".encode("utf-8")
+    r=parse_person_profile(html,"text/html; charset=utf-8","trainer","T")
+    assert r["name"]=="西田 雄一郎"
+    assert r["current_year_flat"]["starts"]==181
+    assert r["current_year_flat"]["top3_rate"]==0.160

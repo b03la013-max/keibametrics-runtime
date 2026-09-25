@@ -36,6 +36,21 @@ def _course(v):
     surface={"ダ":"ダ","芝":"芝","芝ダ":"芝ダ","障":"障"}.get(m.group(1),m.group(1))
     return surface,int(m.group(2))
 
+def _person_tokens(decoded:str)->Dict[str,List[str]]:
+    out={"jockey":[],"trainer":[]}
+    for kind,page in (("jockey","accessK"),("trainer","accessC")):
+        vals=[]
+        pats=[
+          r"""href=["'][^"']*"""+page+r"""\.html[^"']*CNAME=([^"'&<>\s]+)""",
+          r"""doAction\(\s*["'][^"']*"""+page+r"""\.html["']\s*,\s*["']([^"']+)["']\s*\)""",
+        ]
+        for pat in pats:
+            for z in re.findall(pat,decoded,re.I|re.S):
+                token=urllib.parse.unquote(str(z))
+                if token not in vals: vals.append(token)
+        out[kind]=vals
+    return out
+
 def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
     tables=_html_tables(decoded)
@@ -78,7 +93,7 @@ def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
         })
     if not runs:
         raise ValueError("JRA_HORSE_HISTORY_RUNS_EMPTY")
-    out={"profile":PROFILE,"official":True,"production_fact_authority":True,"run_count":len(runs),"runs":runs}
+    out={"profile":PROFILE,"official":True,"production_fact_authority":True,"run_count":len(runs),"runs":runs,"person_profile_tokens":_person_tokens(decoded)}
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
