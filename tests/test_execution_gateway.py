@@ -1,4 +1,3 @@
-# Execution Gateway canary verification marker; no behavior change.
 import pathlib
 
 import pytest
