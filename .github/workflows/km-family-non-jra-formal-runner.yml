@@ -2,6 +2,7 @@ name: KeibaMetrics Non-JRA Family Formal Bridge
 
 permissions:
   contents: read
+  actions: read
 
 on:
   push:
@@ -20,6 +21,8 @@ jobs:
           fetch-depth: 2
       - name: Resolve and execute family-isolated external runtime
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/family_requests/*.json' | tail -1)"
@@ -28,7 +31,7 @@ jobs:
           fi
           test -n "$REQ"
           REQUEST_FILE="$REQ" python - <<'PY'
-          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy,pathlib
+          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy,pathlib,io,zipfile
           from zoneinfo import ZoneInfo
           sys.path.insert(0,"runtime")
           from family_runtime_contract import load_contracts, resolve_family_runtime
@@ -286,9 +289,67 @@ jobs:
 
           # Source Acquisition is an external signed execution phase.
           # Preferred route: SOURCE_ONLY first, then reuse the verified signed
-          # receipt after Static is frozen. Legacy one-pass acquisition remains
-          # supported for compatibility.
+          # receipt after Static is frozen. The Chat/GitHub handoff may reference
+          # the SOURCE_ONLY Actions artifact by id so the signed envelope does not
+          # need to be copied into the next request JSON.
           provided_source=req.get("source_receipt")
+          source_receipt_artifact_id=req.get("source_receipt_artifact_id")
+          if not isinstance(provided_source,dict) and source_receipt_artifact_id:
+              try:
+                  artifact_id=int(source_receipt_artifact_id)
+              except Exception:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_ID_INVALID",source_receipt_artifact_id)
+              repo=os.environ.get("GITHUB_REPOSITORY") or ""
+              token=os.environ.get("GITHUB_TOKEN") or ""
+              if not repo or not token:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_DOWNLOAD_CONTEXT_MISSING",{
+                      "repository_present":bool(repo),"token_present":bool(token)
+                  })
+              url=f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+              rq=urllib.request.Request(url,headers={
+                  "accept":"application/vnd.github+json",
+                  "authorization":f"Bearer {token}",
+                  "x-github-api-version":"2022-11-28",
+                  "user-agent":"keibametrics-non-jra-formal-bridge",
+              },method="GET")
+              try:
+                  with urllib.request.urlopen(rq,timeout=120) as x:
+                      raw_zip=x.read()
+              except urllib.error.HTTPError as e:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_DOWNLOAD_FAILED",{
+                      "artifact_id":artifact_id,"http":e.code,
+                      "body":e.read().decode(errors="replace")[:2000],
+                  })
+              try:
+                  with zipfile.ZipFile(io.BytesIO(raw_zip)) as zf:
+                      names=[n for n in zf.namelist() if n.endswith("source_receipt_envelope.json")]
+                      if not names:
+                          fail_closed("SOURCE_RECEIPT_ENVELOPE_NOT_FOUND_IN_ARTIFACT",{
+                              "artifact_id":artifact_id,"entries":zf.namelist()[:100]
+                          })
+                      selected=sorted(names,key=lambda n:(n.count("/"),len(n)))[0]
+                      provided_source=json.loads(zf.read(selected).decode("utf-8"))
+              except AssertionError:
+                  raise
+              except Exception as e:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_INVALID",{
+                      "artifact_id":artifact_id,"error":str(e)
+                  })
+              expected_source_sha=str(req.get("source_receipt_sha256") or "").strip()
+              actual_source_sha=str(provided_source.get("receipt_sha256") or "").strip()
+              if expected_source_sha and actual_source_sha!=expected_source_sha:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_SHA_MISMATCH",{
+                      "artifact_id":artifact_id,
+                      "expected":expected_source_sha,
+                      "actual":actual_source_sha,
+                  })
+              persist("source_handoff_reference.json",{
+                  "mode":"GITHUB_ACTIONS_ARTIFACT_REFERENCE",
+                  "artifact_id":artifact_id,
+                  "entry":selected,
+                  "receipt_sha256":actual_source_sha,
+                  "request_file":os.environ.get("REQUEST_FILE"),
+              })
           if isinstance(provided_source,dict):
               source=copy.deepcopy(provided_source)
               persist("source_receipt_envelope.json",source)
