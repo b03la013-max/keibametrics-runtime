@@ -62,6 +62,53 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+
+          # JRA SOURCE-first handoff. New formal requests may reference an immutable
+          # signed SOURCE phase produced by the dedicated external JRA source runtime.
+          # Historical requests without source_execution_id remain compatibility-readable.
+          source_execution_id=str(req.get("source_execution_id") or "").strip()
+          if source_execution_id:
+              from execution_store import materialize_phase
+              source_dir=os.path.join("runtime_out","jra_source_materialized")
+              resolved=materialize_phase(source_execution_id,"SOURCE",source_dir)
+              assert resolved is not None, f"JRA_SIGNED_SOURCE_PHASE_NOT_FOUND:{source_execution_id}"
+              envelope_path=os.path.join(source_dir,"source_receipt_envelope.json")
+              assert os.path.exists(envelope_path), "JRA_SIGNED_SOURCE_ENVELOPE_MISSING"
+              with open(envelope_path,encoding="utf-8") as sf:
+                  source_env=json.load(sf)
+              with open("profiles/jra_source_runtime_20260925_R1.json",encoding="utf-8") as pf:
+                  source_profile=json.load(pf)
+              source_base=str(source_profile["external_endpoint"]).rstrip("/")
+              data=json.dumps(source_env,separators=(",",":"),ensure_ascii=False).encode()
+              vr=urllib.request.Request(source_base+"/source/verify",data=data,headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(vr,timeout=30) as vx:
+                  source_verify=json.loads(vx.read().decode())
+              assert source_verify.get("valid") is True, f"JRA_SIGNED_SOURCE_VERIFY_FAIL:{source_verify}"
+              source_artifact=source_env.get("artifact") or {}
+              assert source_artifact.get("family_id")=="JRA", "JRA_SOURCE_FAMILY_MISMATCH"
+              assert source_artifact.get("race_id")==req.get("race_id"), "JRA_SOURCE_RACE_ID_MISMATCH"
+              assert source_artifact.get("formal_ready") is True, f"JRA_SOURCE_NOT_FORMAL_READY:{source_artifact.get('errors')}"
+              source_sha=str(source_artifact.get("source_snapshot_sha256") or "")
+              assert source_sha, "JRA_SOURCE_SNAPSHOT_SHA_MISSING"
+              declared=str(req.get("source_snapshot_sha256") or "")
+              if declared:
+                  assert declared==source_sha, f"JRA_SOURCE_SNAPSHOT_DECLARATION_MISMATCH:{declared}!={source_sha}"
+              req["source_snapshot_sha256"]=source_sha
+              official=((source_artifact.get("jra_official_runner_universe") or {}).get("runners") or [])
+              expected={str(x.get("runner_id") or x.get("horse_no")):str(x.get("canonical_name") or x.get("name") or "") for x in official}
+              actual={str(x.get("runner_id")):str(x.get("name") or "") for x in (req.get("runners") or [])}
+              assert set(actual)==set(expected), f"JRA_SOURCE_RUNNER_ID_SET_MISMATCH:{sorted(actual)}!={sorted(expected)}"
+              req["verified_source_lineage"]={
+                  "execution_id":source_execution_id,
+                  "receipt_sha256":source_env.get("receipt_sha256"),
+                  "source_snapshot_sha256":source_sha,
+                  "official_runner_universe_sha256":source_artifact.get("jra_official_runner_universe_sha256"),
+                  "tsl_public_shadow_evidence_sha256":source_artifact.get("tsl_public_shadow_evidence_sha256"),
+                  "jma_weather_evidence_sha256":source_artifact.get("jma_weather_evidence_sha256"),
+                  "production_authority":"JRA_OFFICIAL_AND_REGISTERED_COMMON_ONLY",
+                  "tsl_authority":"THIRD_PARTY_PUBLIC_SHADOW_NON_PRODUCTION"
+              }
+
           prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
           source_snapshot_declared=str(req.get("source_snapshot_sha256") or (req.get("explicit_engine_hsv_provenance") or {}).get("source_snapshot_sha256") or "")
           evidence_compiler=compile_evidence_feature_ledger(
@@ -88,6 +135,16 @@ jobs:
           stage_manifest={}
           def stage(name, **evidence):
               stage_manifest[name]={"status":"PASS", **evidence}
+
+          if req.get("verified_source_lineage"):
+              stage("SIGNED_SOURCE_RECEIPT_VERIFIED", **req["verified_source_lineage"])
+              stage("JRA_OFFICIAL_RUNNER_UNIVERSE_VERIFIED",
+                    sha256=req["verified_source_lineage"].get("official_runner_universe_sha256"))
+              if req["verified_source_lineage"].get("tsl_public_shadow_evidence_sha256"):
+                  stage("TSL_PUBLIC_SHADOW_CAPTURED",
+                        sha256=req["verified_source_lineage"].get("tsl_public_shadow_evidence_sha256"),
+                        production_authority=False,
+                        prediction_authority=False)
 
           stage("EVIDENCE_FEATURE_COMPILER_VERIFIED",
                 profile=evidence_compiler.get("profile"),

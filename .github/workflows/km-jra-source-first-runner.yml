@@ -1,0 +1,120 @@
+name: KeibaMetrics JRA SOURCE First Runner
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_requests/*.json"
+  workflow_dispatch:
+    inputs:
+      request_path:
+        description: "JRA SOURCE request JSON path"
+        required: false
+        type: string
+
+jobs:
+  source-first:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve SOURCE request
+        id: req
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQ="${{ inputs.request_path }}"
+          if [ -z "$REQ" ]; then
+            mapfile -t REQS < <(git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" | grep '^runtime/jra_source_requests/.*\.json$' || true)
+            if [ "${#REQS[@]}" -ne 1 ]; then
+              echo "Expected exactly one JRA source request; found ${#REQS[@]}" >&2
+              exit 2
+            fi
+            REQ="${REQS[0]}"
+          fi
+          test -f "$REQ"
+          echo "request=$REQ" >> "$GITHUB_OUTPUT"
+
+      - name: Acquire and verify signed JRA SOURCE
+        env:
+          REQUEST_FILE: ${{ steps.req.outputs.request }}
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python - <<'PY'
+          import json,os,urllib.request,urllib.error,pathlib
+          req=json.load(open(os.environ["REQUEST_FILE"],encoding="utf-8"))
+          assert str(req.get("family_id") or "JRA").upper()=="JRA"
+          race_id=str(req.get("race_id") or "")
+          assert race_id
+          execution_id=str(req.get("execution_id") or race_id)
+          profile=json.load(open("profiles/jra_source_runtime_20260925_R1.json",encoding="utf-8"))
+          endpoint=str(profile["external_endpoint"]).rstrip("/")
+          def post(path,payload):
+              b=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+              r=urllib.request.Request(endpoint+path,data=b,headers={"content-type":"application/json"},method="POST")
+              with urllib.request.urlopen(r,timeout=180) as x:
+                  return x.status,json.loads(x.read().decode())
+          payload=dict(req)
+          payload["family_id"]="JRA"
+          code,env=post("/source/acquire",payload)
+          assert code<300,code
+          assert env.get("receipt",{}).get("status")=="PASS",env.get("receipt")
+          vcode,ver=post("/source/verify",env)
+          assert vcode<300 and ver.get("valid") is True,(vcode,ver)
+          art=env.get("artifact") or {}
+          assert art.get("formal_ready") is True,art.get("errors")
+          assert art.get("race_id")==race_id
+          pathlib.Path("runtime_out/source_receipt_envelope.json").write_text(json.dumps(env,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          pathlib.Path("runtime_out/source_verification.json").write_text(json.dumps(ver,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          summary={
+            "execution_id":execution_id,"race_id":race_id,"family_id":"JRA",
+            "source_runtime_profile":profile["runtime_profile"],
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":art.get("source_snapshot_sha256"),
+            "official_runner_universe_sha256":art.get("jra_official_runner_universe_sha256"),
+            "official_runner_count":(art.get("jra_official_runner_universe") or {}).get("runner_count"),
+            "tsl_public_shadow_status":(art.get("tsl_public_shadow_evidence") or {}).get("status"),
+            "tsl_public_shadow_sha256":art.get("tsl_public_shadow_evidence_sha256"),
+            "jma_weather_evidence_sha256":art.get("jma_weather_evidence_sha256"),
+            "verified":True
+          }
+          pathlib.Path("runtime_out/source_summary.json").write_text(json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          pathlib.Path("runtime_out/execution_id.txt").write_text(execution_id,encoding="utf-8")
+          print("KM_JRA_SOURCE="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
+          PY
+          echo "execution_id=$(cat runtime_out/execution_id.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Persist canonical SOURCE phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXECUTION_ID="$(cat runtime_out/execution_id.txt)"
+          rm runtime_out/execution_id.txt
+          python runtime/execution_store.py persist --execution-id "$EXECUTION_ID" --phase SOURCE --run-id "${{ github.run_id }}" --source-dir runtime_out --github-sha "${{ github.sha }}"
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "runtime/executions/$EXECUTION_ID/SOURCE"
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: persist JRA $EXECUTION_ID SOURCE [skip ci]"
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt*2))
+            done
+            exit 1
+          fi
+
+      - name: Upload signed SOURCE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-jra-source-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: error
+          retention-days: 90
