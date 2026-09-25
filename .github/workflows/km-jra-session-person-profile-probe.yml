@@ -1,0 +1,70 @@
+name: JRA Session Person Profile Probe
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-session-person-profile-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Probe session-aware person profiles
+        run: |
+          python - <<'PY'
+          import sys,re,json,urllib.request,urllib.parse,http.cookiejar
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          BASE="https://www.jra.go.jp"
+          CAL=BASE+"/keiba/calendar2026/2026/9/0926.html"
+          key="0620260408"; date="20260926"; race_no=8
+          jar=http.cookiejar.CookieJar()
+          op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          def fetch(url,data=None,ref=None):
+            h={"User-Agent":"KeibaMetrics-JRA-Session-Person-Probe/1.0","Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4"}
+            if ref:h["Referer"]=ref
+            req=urllib.request.Request(url,data=data,headers=h)
+            with op.open(req,timeout=30) as r:
+              raw=r.read(4000000); return str(r.geturl()),raw,{str(k).lower():str(v) for k,v in r.headers.items()}
+          def post(path,token,ref):
+            return fetch(BASE+path,urllib.parse.urlencode({"cname":token}).encode(),ref)
+          u0,r0,h0=fetch(CAL); s0=_decode(r0,h0.get("content-type",""))
+          entry=re.search(r"doAction\('/JRADB/accessD\.html'\s*,\s*'([^']+)'\)",s0).group(1)
+          u1,r1,h1=post("/JRADB/accessD.html",entry,u0); s1=_decode(r1,h1.get("content-type",""))
+          day=re.search(r"(pw01drl00"+key+date+r"/[0-9A-Fa-f]{2})",s1).group(1)
+          u2,r2,h2=post("/JRADB/accessD.html",day,u1); s2=_decode(r2,h2.get("content-type",""))
+          race=re.search(r"(pw01dde01"+key+f"{race_no:02d}"+date+r"/[0-9A-Fa-f]{2})",s2).group(1)
+          u3,r3,h3=post("/JRADB/accessD.html",race,u2); s3=_decode(r3,h3.get("content-type",""))
+          hm=re.search(r'href=["\']/JRADB/accessU\.html\?CNAME=([^"\']+)["\']',s3,re.I)
+          assert hm,"HORSE_TOKEN_MISSING"
+          horse=urllib.parse.unquote(hm.group(1))
+          # Open horse through the same session using POST and GET variants; POST is canonical first.
+          u4,r4,h4=post("/JRADB/accessU.html",horse,u3); s4=_decode(r4,h4.get("content-type",""))
+          if "パラメータエラー" in _html_text(s4)[:200]:
+            u4,r4,h4=fetch(BASE+"/JRADB/accessU.html?"+urllib.parse.urlencode({"CNAME":horse}),ref=u3); s4=_decode(r4,h4.get("content-type",""))
+          person={}
+          for kind,page in [("jockey","accessK"),("trainer","accessC")]:
+            toks=[]
+            for pat in [
+              r"""href=["'][^"']*"""+page+r"""\.html[^"']*CNAME=([^"'&<>\s]+)""",
+              r"""doAction\(\s*["'][^"']*"""+page+r"""\.html["']\s*,\s*["']([^"']+)["']\s*\)"""
+            ]:
+              toks += [urllib.parse.unquote(x) for x in re.findall(pat,s4,re.I|re.S)]
+            toks=list(dict.fromkeys(toks))
+            rows=[]
+            for tok in toks[:2]:
+              up,rp,hp=post("/JRADB/"+page+".html",tok,u4)
+              sp=_decode(rp,hp.get("content-type",""))
+              txt=_html_text(sp)
+              tables=_html_tables(sp)
+              rows.append({"token":tok,"url":up,"parameter_error":"パラメータエラー" in txt[:300],"text_head":txt[:2500],"tables":[t[:6] for t in tables[:15] if t]})
+            person[kind]=rows
+          print(json.dumps({"horse_token":horse,"horse_error":"パラメータエラー" in _html_text(s4)[:300],"person":person},ensure_ascii=False,indent=2))
+          assert person["jockey"] or person["trainer"],"NO_PERSON_TOKENS"
+          assert any(not x["parameter_error"] for k in person.values() for x in k),"SESSION_PERSON_ACCESS_FAILED"
+          PY
