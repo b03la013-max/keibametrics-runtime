@@ -1,0 +1,17 @@
+name: JRA RaceCard Navigation Probe
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/jra_source_runtime/jra_race_card_navigation_probe.py"
+      - ".github/workflows/km-jra-racecard-navigation-probe.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python runtime/jra_source_runtime/jra_race_card_navigation_probe.py
