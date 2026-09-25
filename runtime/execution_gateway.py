@@ -8,6 +8,8 @@ import json
 import pathlib
 import re
 import urllib.request
+import urllib.error
+import time
 from typing import Any, Dict, Tuple
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -266,10 +268,64 @@ def record_phase(state: Dict[str, Any], phase: str, status: str, references: Dic
     return out
 
 
+RETRYABLE_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
+
+def request_json(
+    url: str,
+    *,
+    method: str = "GET",
+    payload: Dict[str, Any] | None = None,
+    headers: Dict[str, str] | None = None,
+    timeout: int = 60,
+    attempts: int = 4,
+) -> Tuple[int, Dict[str, Any]]:
+    """Bounded retry transport for operational control-plane calls.
+
+    Retries only transient network failures and explicitly retryable HTTP
+    statuses. Non-retryable 4xx responses are returned immediately so policy
+    or contract failures remain fail-closed instead of being masked.
+    """
+    body = None if payload is None else json.dumps(
+        payload, ensure_ascii=False, separators=(",", ":")
+    ).encode()
+    hdrs = {"accept": "application/json", **(headers or {})}
+    if payload is not None:
+        hdrs.setdefault("content-type", "application/json")
+    last_error: Exception | None = None
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode()
+                return resp.status, json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode(errors="replace")
+            try:
+                parsed = json.loads(raw) if raw else {}
+            except Exception:
+                parsed = {"raw": raw}
+            if exc.code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
+                return exc.code, parsed
+            last_error = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt >= attempts:
+                raise
+        time.sleep(min(2 ** (attempt - 1), 8))
+    raise ExecutionGatewayError(f"HTTP_RETRY_EXHAUSTED:{last_error}")
+
+
 def fetch_health(endpoint: str, timeout: int = 30) -> Dict[str, Any]:
-    rq = urllib.request.Request(str(endpoint).rstrip("/") + "/health", headers={"accept": "application/json"})
-    with urllib.request.urlopen(rq, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    status, payload = request_json(
+        str(endpoint).rstrip("/") + "/health",
+        method="GET",
+        timeout=timeout,
+        attempts=4,
+    )
+    if status >= 300:
+        raise ExecutionGatewayError(f"RUNTIME_HEALTH_HTTP_FAILED:{status}:{payload}")
+    return payload
 
 
 def _cli() -> int:
