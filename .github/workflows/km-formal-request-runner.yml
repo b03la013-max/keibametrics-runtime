@@ -37,6 +37,7 @@ jobs:
         shell: bash
         env:
           REQUEST_FILE: ${{ steps.request.outputs.request }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
           import json, urllib.request, urllib.error, sys, hashlib, os
