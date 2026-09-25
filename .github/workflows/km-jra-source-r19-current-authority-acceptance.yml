@@ -1,0 +1,73 @@
+name: JRA R19 Current Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_runtime/app.py"
+      - "profiles/jra_information_source_registry_v1.3_20260926.json"
+      - "profiles/jra_source_runtime_20260926_R5.json"
+      - "profiles/family_runtime_contracts_20260926_R14.json"
+      - "profiles/venue_chat_routes_20260926_R18.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R19.json"
+      - ".github/workflows/km-jra-source-r19-current-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - run: python -m py_compile runtime/jra_source_runtime/*.py runtime/jra_source_to_evidence_features.py runtime/jra_source_objective_evaluator.py
+      - run: python -m pytest -q tests/test_jra_source_runtime.py tests/test_jra_source_to_evidence_features.py tests/test_jra_source_objective_evaluator.py
+      - name: Verify R19 binding
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R19.json"))
+          j=ca["family_scoped_authority"]["JRA"]
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R19"
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.5-20260926"
+          assert j["official_horse_history"]=="KM-JRA-OFFICIAL-HORSE-HISTORY-v1.0-20260926"
+          assert j["source_to_feature_acceptance_status"]=="PASS"
+          assert j["official_horse_history_live_status"].startswith("PASS")
+          app=Path("runtime/jra_source_runtime/app.py").read_text()
+          assert 'APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.5-20260926"' in app
+          assert "SOURCE_JRA_OFFICIAL_HORSE_HISTORY" in app
+          assert "nar.k-ba.net" not in Path("runtime/jra_source_runtime/source_acquisition.py").read_text()
+          print("R19 binding PASS")
+          PY
+      - name: Persist acceptance marker
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          p={
+            "profile":"KM-JRA-SOURCE-R19-CURRENT-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "checks":["R19_BINDING","SOURCE_RUNTIME_V15","OFFICIAL_DETAIL","OFFICIAL_FULL_HORSE_HISTORY","71_FEATURE_CONTRACT","OBJECTIVE_20_INDEX_SHADOW","TSL_SHADOW","SBO_FORBIDDEN","NUMERICAL_AUTHORITY_UNCHANGED"]
+          }
+          open("runtime/jra_source_runtime/current_authority_acceptance_status.json","w",encoding="utf-8").write(json.dumps(p,ensure_ascii=False,sort_keys=True,indent=2))
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/current_authority_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R19 Current Authority PASS [skip ci]"
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              git rebase --abort || true
+              git fetch origin main
+              sleep $((attempt * 2))
+            done
+            exit 1
+          fi
