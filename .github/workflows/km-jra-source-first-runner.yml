@@ -2,6 +2,9 @@ name: KeibaMetrics JRA SOURCE First Runner
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 on:
   push:
@@ -41,41 +44,59 @@ jobs:
           test -f "$REQ"
           echo "request=$REQ" >> "$GITHUB_OUTPUT"
 
-      - name: Acquire and verify signed JRA SOURCE
+      - name: Install JRA SOURCE runtime dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+
+      - name: Acquire and self-verify JRA SOURCE in external GitHub runner
         env:
           REQUEST_FILE: ${{ steps.req.outputs.request }}
+          KM_JRA_SOURCE_GITHUB_REV: ${{ github.sha }}
+          GITHUB_RUN_ID_VALUE: ${{ github.run_id }}
+          GITHUB_REPOSITORY_VALUE: ${{ github.repository }}
         run: |
           set -euo pipefail
           mkdir -p runtime_out
           python - <<'PY'
-          import json,os,urllib.request,urllib.error,pathlib
+          import base64,json,os,pathlib,sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization
+
           req=json.load(open(os.environ["REQUEST_FILE"],encoding="utf-8"))
           assert str(req.get("family_id") or "JRA").upper()=="JRA"
           race_id=str(req.get("race_id") or "")
           assert race_id
           execution_id=str(req.get("execution_id") or race_id)
-          profile=json.load(open("profiles/jra_source_runtime_20260925_R1.json",encoding="utf-8"))
-          endpoint=str(profile["external_endpoint"]).rstrip("/")
-          def post(path,payload):
-              b=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
-              r=urllib.request.Request(endpoint+path,data=b,headers={"content-type":"application/json"},method="POST")
-              with urllib.request.urlopen(r,timeout=180) as x:
-                  return x.status,json.loads(x.read().decode())
+
+          key=Ed25519PrivateKey.generate()
+          raw=key.private_bytes(serialization.Encoding.Raw,serialization.PrivateFormat.Raw,serialization.NoEncryption())
+          os.environ["KM_JRA_SOURCE_PRIVATE_KEY_B64"]=base64.b64encode(raw).decode()
+          os.environ["KM_JRA_SOURCE_SIGNER_KEY_ID"]="KM-JRA-SOURCE-GHA-EPHEMERAL-"+os.environ["GITHUB_RUN_ID_VALUE"]
+          sys.path.insert(0,str(pathlib.Path("runtime/jra_source_runtime").resolve()))
+          import app as japp
+
           payload=dict(req)
           payload["family_id"]="JRA"
-          code,env=post("/source/acquire",payload)
-          assert code<300,code
+          env=japp.source_acquire(payload)
           assert env.get("receipt",{}).get("status")=="PASS",env.get("receipt")
-          vcode,ver=post("/source/verify",env)
-          assert vcode<300 and ver.get("valid") is True,(vcode,ver)
+          assert japp.verify_envelope(env) is True
           art=env.get("artifact") or {}
           assert art.get("formal_ready") is True,art.get("errors")
           assert art.get("race_id")==race_id
-          pathlib.Path("runtime_out/source_receipt_envelope.json").write_text(json.dumps(env,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
-          pathlib.Path("runtime_out/source_verification.json").write_text(json.dumps(ver,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+
+          # The ephemeral Ed25519 signature protects receipt/artifact integrity inside
+          # the envelope. Trust in the external execution is supplied by GitHub OIDC
+          # artifact attestation created in the next step.
+          env["receipt_public_key_b64"]=japp._public_b64()
+          env["signer_trust_class"]="GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION"
+          env["github_repository"]=os.environ["GITHUB_REPOSITORY_VALUE"]
+          env["github_sha"]=os.environ["KM_JRA_SOURCE_GITHUB_REV"]
+          env["github_run_id"]=os.environ["GITHUB_RUN_ID_VALUE"]
+
+          pathlib.Path("runtime_out/source_receipt_envelope.json").write_text(
+              json.dumps(env,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
           summary={
             "execution_id":execution_id,"race_id":race_id,"family_id":"JRA",
-            "source_runtime_profile":profile["runtime_profile"],
+            "source_runtime_profile":japp.APP_VERSION,
             "source_receipt_sha256":env.get("receipt_sha256"),
             "source_snapshot_sha256":art.get("source_snapshot_sha256"),
             "official_runner_universe_sha256":art.get("jra_official_runner_universe_sha256"),
@@ -83,13 +104,42 @@ jobs:
             "tsl_public_shadow_status":(art.get("tsl_public_shadow_evidence") or {}).get("status"),
             "tsl_public_shadow_sha256":art.get("tsl_public_shadow_evidence_sha256"),
             "jma_weather_evidence_sha256":art.get("jma_weather_evidence_sha256"),
+            "execution_trust":"GITHUB_OIDC_ATTESTED_EXTERNAL_EXECUTION",
             "verified":True
           }
-          pathlib.Path("runtime_out/source_summary.json").write_text(json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          pathlib.Path("runtime_out/source_summary.json").write_text(
+              json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
           pathlib.Path("runtime_out/execution_id.txt").write_text(execution_id,encoding="utf-8")
           print("KM_JRA_SOURCE="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
           PY
-          echo "execution_id=$(cat runtime_out/execution_id.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify envelope integrity before attestation
+        run: |
+          python runtime/jra_source_runtime/verify_source_envelope.py runtime_out/source_receipt_envelope.json > runtime_out/source_verification.json
+
+      - name: Attest JRA SOURCE envelope with GitHub OIDC
+        id: attest
+        uses: actions/attest@v4
+        with:
+          subject-path: runtime_out/source_receipt_envelope.json
+
+      - name: Verify GitHub attestation before persistence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify runtime_out/source_receipt_envelope.json --repo "${{ github.repository }}"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path("runtime_out/source_attestation.json")
+          p.write_text(json.dumps({
+            "status":"PASS",
+            "trust":"GITHUB_OIDC_SIGSTORE",
+            "repository":os.environ["GITHUB_REPOSITORY"],
+            "sha":os.environ["GITHUB_SHA"],
+            "run_id":os.environ["GITHUB_RUN_ID"]
+          },sort_keys=True,indent=2),encoding="utf-8")
+          PY
 
       - name: Persist canonical SOURCE phase
         shell: bash

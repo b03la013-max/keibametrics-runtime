@@ -1,9 +1,9 @@
 {
   "profile_id": "KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.0-20260925",
-  "status": "DEPLOYMENT-PENDING / CODE-ACCEPTANCE-PASS / LIVE-SOURCE-ACCEPTANCE-PASS / NOT-CURRENT-AUTHORITY-UNTIL-PERSISTENT-RUNTIME-VERIFIED",
+  "status": "ACTIVE-CANDIDATE / GITHUB-OIDC-ATTESTED-EXTERNAL-SOURCE-EXECUTION / CODE-ACCEPTANCE-PASS / LIVE-SOURCE-ACCEPTANCE-PASS / CURRENT-AUTHORITY-PENDING-E2E",
   "family_id": "JRA",
   "runtime_profile": "KM-JRA-SOURCE-RUNTIME-v1.0-20260925",
-  "external_endpoint": "https://witnessv061-production.up.railway.app",
+  "external_endpoint": null,
   "signer_key_id": "KM-JRA-SOURCE-ED25519-20260925",
   "source_manifest_profile": "KM-JRA-SOURCE-MANIFEST-v1.0-20260925",
   "source_acquisition_profile": "KM-JRA-EXTERNAL-SOURCE-ACQUISITION-v1.0-20260925",
@@ -37,5 +37,13 @@
   "production_prediction_change": false,
   "production_numerical_change": false,
   "production_mec_change": false,
-  "krs_authority_change": false
+  "krs_authority_change": false,
+  "execution_mode": "GITHUB_ACTIONS_OIDC_ATTESTED_EXTERNAL_EXECUTION",
+  "persistent_http_runtime_status": "BLOCKED_BY_PROVIDER_SERVICE_LIMITS / NOT REQUIRED FOR SOURCE-FIRST FALLBACK",
+  "attestation": {
+    "provider": "GitHub Actions OIDC / Sigstore",
+    "workflow": ".github/workflows/km-jra-source-first-runner.yml",
+    "subject": "source_receipt_envelope.json",
+    "formal_reverification": "gh attestation verify + Ed25519 envelope verification"
+  }
 }

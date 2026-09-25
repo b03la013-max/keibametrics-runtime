@@ -2,6 +2,7 @@ name: KeibaMetrics Formal Request Runner
 
 permissions:
   contents: write
+  attestations: read
 
 on:
   push:
@@ -76,13 +77,17 @@ jobs:
               assert os.path.exists(envelope_path), "JRA_SIGNED_SOURCE_ENVELOPE_MISSING"
               with open(envelope_path,encoding="utf-8") as sf:
                   source_env=json.load(sf)
-              with open("profiles/jra_source_runtime_20260925_R1.json",encoding="utf-8") as pf:
-                  source_profile=json.load(pf)
-              source_base=str(source_profile["external_endpoint"]).rstrip("/")
-              data=json.dumps(source_env,separators=(",",":"),ensure_ascii=False).encode()
-              vr=urllib.request.Request(source_base+"/source/verify",data=data,headers={"content-type":"application/json"},method="POST")
-              with urllib.request.urlopen(vr,timeout=30) as vx:
-                  source_verify=json.loads(vx.read().decode())
+              # SOURCE trust is externally rooted in the GitHub Actions OIDC
+              # attestation and internally protected by the envelope's ephemeral
+              # Ed25519 receipt signature. No live SOURCE HTTP service is required.
+              import subprocess
+              att=subprocess.run(
+                  ["gh","attestation","verify",envelope_path,"--repo","b03la013-max/keibametrics-runtime"],
+                  check=False,capture_output=True,text=True
+              )
+              assert att.returncode==0, "JRA_SOURCE_GITHUB_ATTESTATION_VERIFY_FAIL:"+att.stderr[-1200:]
+              from verify_source_envelope import verify as verify_source_envelope
+              source_verify=verify_source_envelope(envelope_path)
               assert source_verify.get("valid") is True, f"JRA_SIGNED_SOURCE_VERIFY_FAIL:{source_verify}"
               source_artifact=source_env.get("artifact") or {}
               assert source_artifact.get("family_id")=="JRA", "JRA_SOURCE_FAMILY_MISMATCH"
