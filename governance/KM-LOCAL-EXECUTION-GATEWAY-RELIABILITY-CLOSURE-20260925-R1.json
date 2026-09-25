@@ -1,0 +1,174 @@
+{
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-RELIABILITY-CLOSURE-20260925-R1",
+  "status": "ACTIVE / LOCAL-WIDE / CORRECTNESS-OPERATIONAL-REPAIR / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / DURABLE-HANDOFF-VERIFIED / TRANSIENT-RETRY-VERIFIED / REDEPLOY-VERIFIED",
+  "effective_date": "2026-09-25",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260925-R11",
+  "execution_gateway": "KM-LOCAL-EXECUTION-GATEWAY-v1.1-20260925",
+  "purpose": "Eliminate recurring manual LOCAL external-execution handoff repair while preserving existing Production prediction, numerical, KRS, MEC-R3 and capital authorities.",
+  "repairs": {
+    "deterministic_request_resolution": {
+      "status": "IMPLEMENTED",
+      "rule": "workflow_dispatch request_path OR exactly one request JSON changed in triggering commit",
+      "removed_fragility": [
+        "HEAD^ request discovery",
+        "latest-file fallback ambiguity"
+      ]
+    },
+    "durable_phase_store": {
+      "status": "IMPLEMENTED_AND_ACCEPTED",
+      "schema": "KM-EXECUTION-STORE-v1",
+      "root": "runtime/executions",
+      "key": "execution_id/phase/run_id",
+      "latest_pointer": "execution_id/phase/LATEST.json",
+      "resolution_order": [
+        "CANONICAL_EXECUTION_STORE",
+        "ACTIONS_ARTIFACT_COMPATIBILITY_FALLBACK"
+      ],
+      "integrity": "per-file SHA256 + manifest hash + immutable run history"
+    },
+    "transient_transport_retry": {
+      "status": "IMPLEMENTED",
+      "attempts": 4,
+      "retryable_http_status": [
+        408,
+        425,
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "backoff_seconds": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "non_retryable_4xx": "FAIL_CLOSED"
+    },
+    "static_source_binding": {
+      "status": "IMPLEMENTED_AND_ACCEPTED",
+      "required_equalities": [
+        "static_prediction.source_basis_receipt_sha256 == actual signed SOURCE receipt",
+        "static_prediction.source_basis_snapshot_sha256 == actual SOURCE snapshot"
+      ],
+      "mismatch_codes": [
+        "STATIC_SOURCE_BASIS_RECEIPT_MISMATCH",
+        "STATIC_SOURCE_BASIS_SNAPSHOT_MISMATCH"
+      ]
+    },
+    "result_resolution": {
+      "status": "IMPLEMENTED_AND_ACCEPTED",
+      "rule": "RESULT resolves immutable FORMAL from canonical execution store by execution_id; Actions artifact is fallback only"
+    },
+    "acceptance_isolation": {
+      "status": "IMPLEMENTED_AND_ACCEPTED",
+      "rule": "acceptance-only RESULT phase may be canonically persisted, but must not update Forward OOS ledgers"
+    },
+    "daily_canary": {
+      "status": "ACTIVE",
+      "schedule": "10:30 JST daily",
+      "checks": [
+        "actionlint",
+        "py_compile",
+        "pytest execution gateway/store/workflow contracts",
+        "live runtime bundle health",
+        "family runtime pointer resolve"
+      ]
+    }
+  },
+  "implementation_commits": [
+    "f0254115dcdc25a658c637080327b517abf1f980",
+    "762bf67b417c9a17f8b16fca675f969ba00646a7",
+    "943e2eb627294818b684f89b8babc31eccbabe98",
+    "fb650ec072e576483e80080bc6593f8c9e17210e",
+    "0a5af13d841556736f2ddbf517e8dc5c77e5aa1d",
+    "ee2572325ba563ce09e358bb61ef3332f3e65450",
+    "185f66f135c3e40b760d533a4d44bc1e5e6a3578",
+    "6b53923414835773d06668b16d8f3fa1fd4b2ed3",
+    "75ec3e05d37c5e0616505b3059c78ec0c8d04883",
+    "a06309b15c827fe4afdbda8de527a6847cb5d36d",
+    "69cfd631e93e4b950dc296d4348aff4e63d5e34a",
+    "8e05a9a822489e6cad39da1edf3b7ddb727d47ef",
+    "7fcfa491eaea290be5a8aa4d44c1aaf548c371bb"
+  ],
+  "mechanical_acceptance": {
+    "execution_id": "LOCAL-GATEWAY-DURABLE-SMOKE-20260925-R1",
+    "class": "POST-START HISTORICAL MECHANICAL ACCEPTANCE / NOT OOS / NO PRODUCTION MUTATION",
+    "source": {
+      "github_actions_run_id": "36131015302",
+      "store_manifest_sha256": "c2900de598c121069b00b516c80a8e2b6ee63ae38164d6c01712c3a609776538",
+      "receipt_sha256": "0988cc623345bbdac5fac0461132f1a6ee0545e670ed27c8805a3c1a1a0c4ecf",
+      "source_snapshot_sha256": "9767aed349c3a6deab0d25a3030edf6f973f41af80e217cf619c7f167038dbb8",
+      "official_runner_count": 12,
+      "verified": true
+    },
+    "formal": {
+      "github_actions_run_id": "36131272839",
+      "store_manifest_sha256": "8306dad57b6cc559ac900f42225666d3d0c3ca41da050c64990b519b6d7e15a0",
+      "source_binding": "PASS",
+      "required_index_count": 348,
+      "terminalized_count": 348,
+      "calculated_count": 0,
+      "ruled_neutral_count": 12,
+      "ruled_hold_count": 336,
+      "unresolved_count": 0,
+      "numerical_grade": "EXECUTION-VERIFIED-NUMERICAL-DEGRADED",
+      "pre_krs_receipt_sha256": "9120cf8a2bd83fe84049888167b2c74ffe2b1917f56e1c032144c89f604a96e2",
+      "krs_receipt_sha256": "b5964fd9013c4544ef7176a57f06c17b79f1a102ee0ff8f1c79124ca21f067e7",
+      "krs_requested_runs": 5000,
+      "krs_actual_runs": 5000,
+      "krs_input_sha256": "3811104cc97bcd2e0c1d636f2f1a1cfef34aa403f8c0816361b5b779418729f8",
+      "krs_output_sha256": "aac26ca083b7ccd5952f10e97647ab3b2c850822731a890244fa608336aaccc5",
+      "mec_profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+      "mec_sha256": "f4efefc4c97171f75a7c326ff5f8a1aeb745d9bcf27b20d0f00c404d313e04fb",
+      "mec_coverage_ratio": 1,
+      "ticket_count": 107,
+      "minimum_required_capital": 10700,
+      "capital_mode": "RECOMMENDATION_ONLY",
+      "final_receipt_sha256": "0337cabb3844b239c5ec0e296f392df42a152c0195d4633c4703d0d99702c7f7",
+      "final_artifact_sha256": "2d6ba73278c196677fab5ca480770486d7b2305b40b72eecfffedb0120b7eb6b",
+      "verified": true
+    },
+    "result": {
+      "github_actions_run_id": "36131389099",
+      "store_manifest_sha256": "695317ebf18b826ab9c23f991d2624310ce710c29e26f15a5cce23778f830eb3",
+      "resolution_mode": "CANONICAL_EXECUTION_STORE",
+      "result_receipt_sha256": "da91c365f01c8a41a4a7ded89009879260b4c791e3621778ba30c956d1dea28e",
+      "verified": true,
+      "acceptance_only": true,
+      "oos_tracker_mutation": false
+    }
+  },
+  "runtime_redeploy_acceptance": {
+    "railway_project_id": "b83c61e2-1555-4944-8f3f-68f269931185",
+    "railway_service_id": "c0c4d3df-1d7b-476b-bc05-1870d19ca871",
+    "railway_environment_id": "8af4a037-975f-4c15-8005-7bcde494022b",
+    "deployment_id": "2a2144e3-36f9-4ae3-b05e-176eb0aade12",
+    "status": "SUCCESS",
+    "healthcheck_http": 200,
+    "runtime_app_sha256": "be44b5fa7012ae05c23192a1324195cf1d8e8c91cf2b8bf8ccd572589a489876",
+    "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+    "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5"
+  },
+  "measurement_integrity": {
+    "mec_r4_forward_oos_eligible_races": 3,
+    "mec_r5_forward_oos_eligible_races": 3,
+    "acceptance_execution_added_to_oos": false
+  },
+  "authority_truthfulness": {
+    "mechanical_source_runtime_readiness": "YES",
+    "degraded_execution_readiness": "YES",
+    "production_numerical_authority": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND",
+    "strict_production_formal_full_numerical_readiness": "NO",
+    "unknown_future_real_race_empirical_acceptance": "PENDING",
+    "production_prediction_policy_changed": false,
+    "production_numerical_policy_changed": false,
+    "krs_engine_changed": false,
+    "parameter_map_changed": false,
+    "production_mec_r3_changed": false,
+    "capital_policy_changed": false
+  }
+}
