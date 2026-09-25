@@ -8,7 +8,7 @@ import math
 import statistics
 from typing import Any, Dict, List
 
-PROFILE = "KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.1-20260926"
+PROFILE = "KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.2-20260926"
 STATUS = "SHADOW / NON-PRODUCTION / OBJECTIVE-SOURCE-DIAGNOSTIC / NO-AUTO-PROMOTION"
 BASE = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 DERIVED = ["DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
@@ -138,6 +138,10 @@ def _history_map(source):
     d=source.get("jra_official_horse_history") or {}
     return {str(k):v for k,v in (d.get("runners") or {}).items()}
 
+def _person_map(source):
+    d=source.get("jra_official_person_stats") or {}
+    return {str(k):v for k,v in (d.get("runners") or {}).items()}
+
 def _current_going(source):
     d=source.get("jra_official_race_card_detail") or {}
     env=d.get("race_environment") or {}
@@ -209,7 +213,7 @@ def _rank_score(value,values,*,lower_better=False):
 def _missing(feature,mapping,reason):
     return _feature(None,feature,[],reason,mapping,coverage=0.0,missing=True,raw=None,authority="MISSING_SOURCE")
 
-def _build_runner_features(rid,x,metrics,source,mapping,field_context):
+def _build_runner_features(rid,x,metrics,source,mapping,field_context,person=None):
     ref=source.get("jra_official_race_card_detail_sha256")
     uref=source.get("jra_official_runner_universe_sha256")
     refs=[ref,uref,f"JRA:DETAIL:{rid}"]
@@ -294,8 +298,22 @@ def _build_runner_features(rid,x,metrics,source,mapping,field_context):
     hfinish=[_finish_score(r.get("finish"),r.get("field_size")) for r in hrows]
     jrows=[(r,hfinish[i]) for i,r in enumerate(hrows) if curj and str(r.get("jockey") or "")==curj]
     put("jockey_horse_fit",_mean([v for _,v in jrows]),f"same jockey recent runs={len(jrows)}",min(1,len(jrows)/3),[v for _,v in jrows])
-    # Current official detail contains identities but not population statistics.
-    # All such features remain explicit missingness.
+    # Official person profile statistics. SHADOW only: field-relative rank is used
+    # as an objective diagnostic, never as a Production category mapping.
+    person=person or {}
+    js=((person.get("jockey") or {}).get("current_year_flat") or {})
+    ts=((person.get("trainer") or {}).get("current_year_flat") or {})
+    jtop=js.get("top3_rate"); ttop=ts.get("top3_rate")
+    put("jockey_quality",_rank_score(jtop,field_context.get("jockey_top3_rates") or []),
+        f"official current-year jockey flat top3_rate={jtop}",1 if jtop is not None else 0,jtop)
+    put("trainer_quality",_rank_score(ttop,field_context.get("trainer_top3_rates") or []),
+        f"official current-year trainer flat top3_rate={ttop}",1 if ttop is not None else 0,ttop)
+    if "trainer_quality" in features and not features["trainer_quality"]["missing"]:
+        features["stable_trainer_class"]=copy.deepcopy(features["trainer_quality"])
+        features["stable_trainer_class"]["feature"]="stable_trainer_class"
+        features["stable_trainer_class"]["candidate_rule_id"]="KM-JRA-SOURCE-OBJECTIVE-STABLE-TRAINER-CLASS-v0.2"
+        features["stable_trainer_class"]["source_fact"]="Official current-year trainer top3 rate, field-relative SHADOW diagnostic."
+    # Remaining identity/stat features without a dedicated signed evaluator stay missing.
     all_features=_all_mapping_features(mapping)
     unresolved_reasons={
       "recent_speed":"No normalized speed figure is published in the official detail source.",
@@ -308,12 +326,12 @@ def _build_runner_features(rid,x,metrics,source,mapping,field_context):
       "sire_track_signal":"Sire identity exists but no historical track-rate table is source-verified.",
       "sire_newcomer_signal":"Sire identity exists but no historical newcomer-rate table is source-verified.",
       "sprint_pedigree":"Pedigree identity exists but no sprint-rate table is source-verified.",
-      "jockey_quality":"Jockey identity exists but no signed quantitative jockey-stat adapter is bound.",
+      "jockey_quality":"Official person stats unavailable or current jockey identity did not match a signed profile.",
       "jockey_venue_fit":"No signed jockey-by-venue quantitative adapter is bound.",
       "jockey_style_fit":"No registered jockey-style quantitative adapter is bound.",
       "trainer_jockey_fit":"No signed trainer-jockey quantitative adapter is bound.",
-      "trainer_quality":"Trainer identity exists but no signed quantitative trainer-stat adapter is bound.",
-      "stable_trainer_class":"Trainer identity exists but no signed quantitative trainer-stat adapter is bound.",
+      "trainer_quality":"Official person stats unavailable or current trainer identity did not match a signed profile.",
+      "stable_trainer_class":"Official person stats unavailable or current trainer identity did not match a signed profile.",
       "stable_readiness":"No authorized stable-comment source is bound.",
       "target_intent":"No authorized stable-comment source is bound.",
       "stable_comment_state":"No authorized stable-comment source is bound.",
@@ -387,6 +405,7 @@ def _derived(base,features,mapping):
 def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runners:List[Dict[str,Any]],mapping:Dict[str,Any])->Dict[str,Any]:
     detail=_detail_map(source_artifact)
     history=_history_map(source_artifact)
+    person=_person_map(source_artifact)
     if not detail:
         return {"profile":PROFILE,"status":STATUS,"available":False,"reason":"JRA_OFFICIAL_RACE_CARD_DETAIL_MISSING","production_effect":"NONE"}
     runners=[r for r in request_runners or []]
@@ -395,7 +414,10 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
     closing_means=[_mean([z.get("final3f") for z in m["runs"] if z.get("final3f") is not None]) for m in metrics.values()]
     weights=[x.get("assigned_weight") for x in detail.values()]
     pops=[x.get("popularity_rank") for x in detail.values()]
-    field_context={"field_size":len(detail),"closing_means":closing_means,"weights":weights,"popularities":pops}
+    jockey_top3=[(((person.get(rid) or {}).get("jockey") or {}).get("current_year_flat") or {}).get("top3_rate") for rid in detail]
+    trainer_top3=[(((person.get(rid) or {}).get("trainer") or {}).get("current_year_flat") or {}).get("top3_rate") for rid in detail]
+    field_context={"field_size":len(detail),"closing_means":closing_means,"weights":weights,"popularities":pops,
+                   "jockey_top3_rates":jockey_top3,"trainer_top3_rates":trainer_top3}
     out={}
     for rid,x in detail.items():
         r=byid.get(rid,{})
@@ -405,7 +427,7 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
         if p is None:
             out[rid]={"runner_name":x.get("horse_name"),"error":"CAREER_STARTS_UNKNOWN"}
             continue
-        feats=_build_runner_features(rid,x,metrics[rid],source_artifact,mapping,field_context)
+        feats=_build_runner_features(rid,x,metrics[rid],source_artifact,mapping,field_context,person.get(rid))
         base=_candidate_indices(feats,p,mapping)
         drv=_derived(base,feats,mapping)
         observed=sum(1 for z in feats.values() if not z["missing"])
@@ -432,6 +454,8 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
       "official_detail_sha256":source_artifact.get("jra_official_race_card_detail_sha256"),
       "official_horse_history_sha256":source_artifact.get("jra_official_horse_history_sha256"),
       "official_horse_history_runner_count":len(history),
+      "official_person_stats_sha256":source_artifact.get("jra_official_person_stats_sha256"),
+      "official_person_stats_runner_count":len(person),
       "mapping_id":mapping.get("mapping_id"),
       "runner_count":len(out),"runners":out,
       "candidate_ranking":[{"rank":i+1,"runner_id":rid,"zai_win_diagnostic":round(float(v),6)} for i,(rid,v) in enumerate(rank)],
@@ -439,7 +463,8 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
       "limitations":[
         "Diagnostic neutralized values fill missing components only for SHADOW comparability; they are never Production evidence.",
         "Observed coverage is reported separately and retains UNKNOWN as missing.",
-        "Pedigree population, jockey/trainer statistics, workout, comments and market time-series require separate signed adapters.",
+        "Jockey/trainer aggregate current-year flat statistics are used only when the signed official person adapter matched current identities; venue/style/pair statistics remain missing.",
+        "Pedigree population, workout, comments and market time-series still require separate signed adapters.",
         "TSL is excluded from this objective candidate and remains a separate third-party shadow."
       ],
     }
