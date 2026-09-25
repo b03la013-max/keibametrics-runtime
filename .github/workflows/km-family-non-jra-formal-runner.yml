@@ -1369,12 +1369,21 @@ jobs:
           },separators=(",",":"),ensure_ascii=False))
           PY
 
-      - name: Persist signed LOCAL execution envelopes
-        if: always() && hashFiles('runtime_out/*.json') != ''
+      - name: Persist successful signed LOCAL execution envelopes
+        if: success() && hashFiles('runtime_out/*.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.execution_meta.outputs.artifact_name }}
           path: runtime_out/*.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Persist LOCAL execution failure diagnostics
+        if: failure() && hashFiles('runtime_out/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-execution-failure-${{ steps.execution_meta.outputs.execution_id }}-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 30
 
