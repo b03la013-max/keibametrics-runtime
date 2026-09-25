@@ -5,8 +5,8 @@ import hashlib
 import json
 from typing import Any, Dict, List, Tuple
 
-PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.0-20260926"
-POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.0-20260926"
+PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.1-20260926"
+POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.1-20260926"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
 class SourceToFeatureError(ValueError):
@@ -180,6 +180,97 @@ FEATURE_SOURCE_FAMILY = {
     "hidden_class":"JRA_HORSE_HISTORY",
 }
 
+
+AUTOMATION_CLASS = {
+    "JRA_OFFICIAL_RACE_CARD":"ADAPTER_READY_OR_REQUEST_PROVIDED",
+    "JRA_CURRENT_BODYWEIGHT":"ADAPTER_REQUIRED",
+    "JRA_HORSE_HISTORY":"ADAPTER_REQUIRED",
+    "JRA_HORSE_HISTORY_DETAIL":"ADAPTER_REQUIRED",
+    "JRA_PEDIGREE_HISTORY":"ADAPTER_REQUIRED",
+    "JRA_JOCKEY_STATS":"ADAPTER_REQUIRED",
+    "JRA_JOCKEY_STYLE":"ADAPTER_REQUIRED",
+    "JRA_TRAINER_JOCKEY_STATS":"ADAPTER_REQUIRED",
+    "JRA_TRAINER_STATS":"ADAPTER_REQUIRED",
+    "TRAINER_COMMENT_OR_AUTHORIZED_SOURCE":"ADAPTER_REQUIRED",
+    "TRAINING_OR_STABLE_HISTORY":"ADAPTER_REQUIRED",
+    "JRA_TRAINING":"ADAPTER_REQUIRED",
+    "JRA_TRAINING_OR_COMMENT":"ADAPTER_REQUIRED",
+    "JRA_BODYWEIGHT_TRAINING_OR_PADDOCK":"ADAPTER_REQUIRED",
+    "PADDOCK_OR_AUTHORIZED_COMMENT":"ADAPTER_REQUIRED",
+    "JRA_EQUIPMENT_HISTORY":"ADAPTER_REQUIRED",
+    "JRA_SAME_DAY_RESULTS_PLUS_STYLE":"SHADOW_OR_ADAPTER_REQUIRED",
+    "JMA_PLUS_HORSE_WEATHER_HISTORY":"SHADOW_OR_ADAPTER_REQUIRED",
+    "PACE_MAP_OR_HISTORY":"ADAPTER_REQUIRED",
+    "AUTHORIZED_COMMENT_OR_PACE_MAP":"ADAPTER_REQUIRED",
+    "JRA_OFFICIAL_MARKET":"ADAPTER_REQUIRED",
+    "JRA_OFFICIAL_MARKET_TIME_SERIES":"ADAPTER_REQUIRED",
+    "JRA_OFFICIAL_MARKET_PLUS_MODEL":"ADAPTER_REQUIRED",
+    "AUTHORIZED_EXPERT_SOURCE":"ADAPTER_REQUIRED",
+    "REGISTERED_EXTERNAL_SHADOW":"SHADOW_ONLY",
+    "VENUE_CANON":"VENUE_BINDING_REQUIRED",
+    "VENUE_CANON_PLUS_HISTORY":"VENUE_BINDING_PLUS_HISTORY_REQUIRED",
+    "VENUE_CANON_PLUS_DRAW":"VENUE_BINDING_REQUIRED",
+    "JRA_HORSE_HISTORY_OR_PEDIGREE":"ADAPTER_REQUIRED",
+}
+
+def validate_feature_contract(mapping: Dict[str, Any], rule_registry: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    allowed = _allowed_features(mapping)
+    mapped = set(FEATURE_SOURCE_FAMILY)
+    missing_source_map = sorted(allowed - mapped)
+    if missing_source_map:
+        raise SourceToFeatureError("FEATURE_SOURCE_FAMILY_INCOMPLETE:"+",".join(missing_source_map))
+    unclassified = sorted({FEATURE_SOURCE_FAMILY[f] for f in allowed if FEATURE_SOURCE_FAMILY[f] not in AUTOMATION_CLASS})
+    if unclassified:
+        raise SourceToFeatureError("SOURCE_FAMILY_AUTOMATION_CLASS_MISSING:"+",".join(unclassified))
+    unregistered = []
+    if rule_registry is not None:
+        rules = rule_registry.get("feature_rules") or {}
+        unregistered = sorted(allowed - set(rules))
+        if unregistered:
+            raise SourceToFeatureError("FEATURE_RULE_REGISTRY_INCOMPLETE:"+",".join(unregistered))
+    return {
+        "mapping_feature_count": len(allowed),
+        "source_family_mapped_count": len(allowed),
+        "rule_registry_bound_count": len(allowed)-len(unregistered) if rule_registry is not None else None,
+        "missing_source_map": missing_source_map,
+        "source_families": sorted({FEATURE_SOURCE_FAMILY[f] for f in allowed}),
+    }
+
+def _source_only_runner(runner: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
+    x = copy.deepcopy(runner)
+    x["evidence_features"] = copy.deepcopy(generated)
+    return x
+
+def _automation_gap(coverage: Dict[str, Any]) -> Dict[str, Any]:
+    by_source: Dict[str, List[Dict[str, Any]]] = {}
+    seen = set()
+    for data in (coverage.get("indices") or {}).values():
+        for m in data.get("missing_features") or []:
+            key=(m.get("feature"),m.get("source_family"))
+            if key in seen:
+                continue
+            seen.add(key)
+            fam=str(m.get("source_family") or "UNMAPPED_SOURCE_FAMILY")
+            by_source.setdefault(fam,[]).append({
+                "feature":m.get("feature"),
+                "weight":m.get("weight"),
+                "automation_class":AUTOMATION_CLASS.get(fam,"UNCLASSIFIED"),
+            })
+    for m in coverage.get("dcr_missing") or []:
+        f=m.get("feature"); fam=str(m.get("source_family") or "EXPLICIT_DCR_INPUT")
+        if f and (f,fam) not in seen:
+            by_source.setdefault(fam,[]).append({
+                "feature":f,
+                "weight":None,
+                "automation_class":AUTOMATION_CLASS.get(fam,"UNCLASSIFIED"),
+                "dcr_component":m.get("component"),
+            })
+    return {
+        "missing_source_family_count":len(by_source),
+        "missing_source_families":sorted(by_source),
+        "by_source_family":{k:sorted(v,key=lambda z:str(z.get("feature"))) for k,v in sorted(by_source.items())},
+    }
+
 def _allowed_features(mapping: Dict[str, Any]) -> set[str]:
     out = set()
     for prof in (mapping.get("index_profiles") or {}).values():
@@ -280,6 +371,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     official = _official_runner_map(source_artifact)
     tsl = _tsl_runner_map(source_artifact)
     allowed = _allowed_features(mapping)
+    contract = validate_feature_contract(mapping)
     runners_out = {}
     all_missing_sources = set()
     all_ready = True
@@ -296,9 +388,11 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         generated = {k:v for k,v in generated.items() if k in allowed}
         merged, conflicts = _merge_generated(r.get("evidence_features") or {}, generated)
         shadow = _tsl_shadow(rid,tsl,source_artifact)
+        source_only_coverage = _coverage_for_runner(_source_only_runner(r, generated),mapping)
         tmp = copy.deepcopy(r)
         tmp["evidence_features"] = merged
         coverage = _coverage_for_runner(tmp,mapping)
+        gap = _automation_gap(source_only_coverage)
         all_ready = all_ready and bool(coverage.get("formal_base_ready"))
         all_missing_sources.update(coverage.get("missing_source_families") or [])
         runners_out[rid] = {
@@ -309,6 +403,9 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             "shadow_observation_count": len(shadow),
             "merge_conflicts": conflicts,
             "merged_feature_count": len(merged),
+            "source_only_coverage": source_only_coverage,
+            "source_only_formal_base_ready": bool(source_only_coverage.get("formal_base_ready")),
+            "automation_gap": gap,
             "coverage": coverage,
             "merged_evidence_features": merged,
         }
@@ -319,6 +416,8 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         "source_snapshot_sha256": source_sha,
         "official_runner_universe_sha256": source_artifact.get("jra_official_runner_universe_sha256") or source_artifact.get("official_runner_universe_sha256"),
         "mapping_id": mapping.get("mapping_id"),
+        "feature_contract": contract,
+        "source_only_formal_base_ready": all(bool(x.get("source_only_formal_base_ready")) for x in runners_out.values()) if runners_out else False,
         "production_feature_principle": "ONLY_DETERMINISTIC_RULE_BOUND_FACTS_FROM_PRODUCTION_AUTHORIZED_SOURCES; NO_TSL_OR_JMA_SHADOW_INJECTION",
         "shadow_isolation": True,
         "runner_count": len(runners_out),
@@ -350,6 +449,9 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
             "generated_production_feature_count":rr["generated_production_feature_count"],
             "shadow_observation_count":rr["shadow_observation_count"],
             "merge_conflicts":rr["merge_conflicts"],
+            "source_only_formal_base_ready":rr["source_only_formal_base_ready"],
+            "source_only_coverage":rr["source_only_coverage"],
+            "automation_gap":rr["automation_gap"],
             "coverage":rr["coverage"],
         } for rid,rr in report["runners"].items()
     }
