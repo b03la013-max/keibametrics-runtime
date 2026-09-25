@@ -1,0 +1,54 @@
+name: KeibaMetrics JRA Source Runtime Acceptance
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_source_runtime/**'
+      - 'tests/test_jra_source_runtime.py'
+      - '.github/workflows/km-jra-source-runtime-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - name: Python compile
+        run: |
+          python -m py_compile runtime/jra_source_runtime/*.py
+      - name: Unit acceptance
+        run: python -m pytest -q tests/test_jra_source_runtime.py
+      - name: Persist acceptance marker
+        if: success()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          p={
+            "profile":"KM-JRA-SOURCE-RUNTIME-ACCEPTANCE-v1.0-20260925",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "checks":["PYTHON_COMPILE","JRA_SOURCE_MANIFEST","JRA_RUNNER_UNIVERSE","TSL_PARSER","SOURCE_HOST_ALLOWLIST"]
+          }
+          os.makedirs("runtime/jra_source_runtime",exist_ok=True)
+          json.dump(p,open("runtime/jra_source_runtime/acceptance_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA source runtime acceptance PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
