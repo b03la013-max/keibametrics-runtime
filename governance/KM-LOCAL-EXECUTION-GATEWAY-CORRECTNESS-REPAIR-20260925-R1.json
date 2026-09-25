@@ -1,0 +1,36 @@
+{
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-CORRECTNESS-REPAIR-20260925-R1",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / CONNECTION-CHURN-REMOVAL",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
+  "problem": [
+    "Request-local runtime_expected_revision duplicated Current Runtime state.",
+    "Railway KM_LOCAL_GITHUB_REV duplicated Current Runtime state.",
+    "Formal SOURCE-to-FORMAL handoff required manual GitHub Actions artifact ids.",
+    "RESULT handoff required manual run id plus artifact name.",
+    "Non-runtime GitHub changes could create false runtime revision mismatches even when executable bundle hashes were compatible."
+  ],
+  "repair": {
+    "single_pointer": "profiles/current_execution_gateway.json",
+    "gateway_implementation": "runtime/execution_gateway.py",
+    "runtime_compatibility": "BUNDLE_FINGERPRINT_PRIMARY",
+    "git_revision_policy": "DIAGNOSTIC_ONLY_IF_BUNDLE_MATCHES",
+    "request_runtime_revision_policy": "NON-AUTHORITATIVE_DIAGNOSTIC_ONLY",
+    "source_handoff": "EXECUTION_ID_AND_PHASE_ARTIFACT_AUTO_RESOLUTION",
+    "result_handoff": "EXECUTION_ID_AND_PHASE_ARTIFACT_AUTO_RESOLUTION",
+    "railway_bootstrap_revision_source": "CURRENT_EXECUTION_GATEWAY_POINTER",
+    "daily_canary": ".github/workflows/km-local-execution-canary.yml"
+  },
+  "invariants": {
+    "production_prediction_changed": false,
+    "production_numerical_policy_changed": false,
+    "krs_policy_changed": false,
+    "production_mec_r3_changed": false,
+    "capital_policy_changed": false,
+    "venue_canon_changed": false,
+    "signed_receipt_verification_retained": true,
+    "official_runner_universe_gate_retained": true,
+    "numerical_authority_not_ready_retained": true
+  },
+  "purpose": "Eliminate repeated connection repair work without weakening execution proof."
+}
