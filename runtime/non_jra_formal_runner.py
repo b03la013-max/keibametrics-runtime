@@ -484,6 +484,35 @@ else:
 source_receipt_sha=source.get("receipt_sha256")
 source_artifact=source.get("artifact") or {}
 
+# Static must be bound to the exact signed SOURCE used by FORMAL.
+# Temporal order alone is insufficient: a different earlier SOURCE may not
+# be substituted after Venue interpretation has been frozen.
+static_pred=req.get("static_prediction") if isinstance(req.get("static_prediction"),dict) else {}
+declared_source_receipt=str(static_pred.get("source_basis_receipt_sha256") or req.get("source_receipt_sha256") or "").strip()
+declared_source_snapshot=str(static_pred.get("source_basis_snapshot_sha256") or req.get("source_snapshot_sha256") or "").strip()
+actual_source_receipt=str(source_receipt_sha or "").strip()
+actual_source_snapshot=str(source_artifact.get("source_snapshot_sha256") or "").strip()
+if declared_source_receipt and declared_source_receipt!=actual_source_receipt:
+    fail_closed("STATIC_SOURCE_BASIS_RECEIPT_MISMATCH",{
+        "declared_source_basis_receipt_sha256":declared_source_receipt,
+        "actual_source_receipt_sha256":actual_source_receipt,
+        "execution_id":execution_id,
+    })
+if declared_source_snapshot and declared_source_snapshot!=actual_source_snapshot:
+    fail_closed("STATIC_SOURCE_BASIS_SNAPSHOT_MISMATCH",{
+        "declared_source_basis_snapshot_sha256":declared_source_snapshot,
+        "actual_source_snapshot_sha256":actual_source_snapshot,
+        "execution_id":execution_id,
+    })
+persist("static_source_basis_binding.json",{
+    "status":"PASS",
+    "execution_id":execution_id,
+    "source_receipt_sha256":actual_source_receipt,
+    "source_snapshot_sha256":actual_source_snapshot,
+    "declared_receipt_bound":bool(declared_source_receipt),
+    "declared_snapshot_bound":bool(declared_source_snapshot),
+})
+
 # Official start time is authoritative for temporal identity.
 ev=source_artifact.get("normalized_evidence") or {}
 official_start=((ev.get("start_time") or {}).get("value") if isinstance(ev.get("start_time"),dict) else None)
