@@ -1,0 +1,74 @@
+{
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.0-20260925",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER / BUNDLE-FINGERPRINT-GATE / EXECUTION-ID-HANDOFF",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260925_R11.json",
+  "policy": {
+    "request_runtime_revision_is_authority": false,
+    "request_external_endpoint_is_authority": false,
+    "canonical_runtime_pointer_wins": true,
+    "git_commit_equality_required_for_runtime_compatibility": false,
+    "runtime_bundle_fingerprint_required": true,
+    "signed_receipt_verification_required": true,
+    "source_before_static_required": true,
+    "production_prediction_policy_changed": false,
+    "production_numerical_policy_changed": false,
+    "production_mec_policy_changed": false,
+    "capital_policy_changed": false
+  },
+  "families": {
+    "LOCAL": {
+      "external_endpoint": "https://witnessstrictimage-production.up.railway.app",
+      "runtime_profile": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE",
+      "runtime_git_revision": "d753d0cbca00f790351a56ff9f5c923290830d4f",
+      "receipt_signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+      "required_capabilities": [
+        "SOURCE_MANIFEST_LOCAL_NAR",
+        "SOURCE_ACQUIRE",
+        "SOURCE_VERIFY",
+        "SOURCE_RUNNER_UNIVERSE",
+        "PRE_KRS",
+        "KRS_EXECUTE",
+        "FINAL",
+        "RESULT",
+        "VERIFY"
+      ],
+      "bundle_files": {
+        "runtime_app_sha256": "runtime/local_physical/app_v15.py",
+        "legacy_runtime_app_sha256": "runtime/local_physical/app.py",
+        "source_acquisition_sha256": "runtime/local_physical/source_acquisition.py",
+        "nar_source_manifest_sha256": "runtime/local_physical/nar_source_manifest.py",
+        "nar_runner_universe_sha256": "runtime/local_physical/nar_runner_universe.py",
+        "nar_auxiliary_evidence_sha256": "runtime/local_physical/nar_auxiliary_evidence.py",
+        "jma_weather_evidence_sha256": "runtime/local_physical/jma_weather_evidence.py",
+        "point_in_time_population_sha256": "runtime/local_physical/local_population_ledger.py",
+        "sbo_public_shadow_sha256": "runtime/local_physical/sbo_public_shadow_evidence.py"
+      },
+      "formal_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+      "result_workflow": ".github/workflows/km-local-result-from-signed-final.yml",
+      "execution_state_root": "runtime/executions",
+      "artifact_prefix": "km-local-execution",
+      "source_artifact_resolution": "EXECUTION_ID_AND_PHASE",
+      "final_artifact_resolution": "EXECUTION_ID_AND_PHASE",
+      "compatibility_rule": "RUNTIME_PROFILE_AND_BUNDLE_FINGERPRINT_MUST_MATCH; GITHUB_REVISION_IS_DIAGNOSTIC_ONLY"
+    }
+  },
+  "railway_bootstrap": {
+    "project_id": "b83c61e2-1555-4944-8f3f-68f269931185",
+    "environment_id": "8af4a037-975f-4c15-8005-7bcde494022b",
+    "service_id": "c0c4d3df-1d7b-476b-bc05-1870d19ca871",
+    "service_name": "witnessstrictimage",
+    "pointer_url": "https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/main/profiles/current_execution_gateway.json",
+    "revision_source": "POINTER_FILE",
+    "legacy_revision_env_is_authority": false
+  },
+  "canary": {
+    "workflow": ".github/workflows/km-local-execution-canary.yml",
+    "daily_jst": "10:30",
+    "purpose": "Detect runtime or bundle incompatibility before race-time execution.",
+    "prediction_authority": false
+  }
+}
