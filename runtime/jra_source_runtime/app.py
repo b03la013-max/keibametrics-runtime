@@ -14,6 +14,7 @@ from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
 from jra_race_context import enrich_with_race_context
+from jra_race_card_detail import fetch_and_enrich_race_card_detail
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -55,6 +56,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_population_seed_sha256":_sha_file("jra_population_seed.py"),
         "jra_official_pdf_sha256":_sha_file("jra_official_pdf.py"),
         "jra_race_context_sha256":_sha_file("jra_race_context.py"),
+        "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
       }
     }
     rb=_jdump(receipt)
@@ -111,7 +113,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_JRA_OFFICIAL_RACE_CARD_DETAIL","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -158,6 +160,20 @@ def source_acquire(p:Dict[str,Any]):
         )
     except Exception as e:
         errors.append("JRA_OFFICIAL_PDF_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
+
+    # Official JRA detailed race card contains current market snapshot, pedigree,
+    # trainer/rider identity and up to four recent runs. It is Production-authorized
+    # source material, but downstream feature categories still require registered evaluators.
+    try:
+        if not meeting_key:
+            raise ValueError("JRA_MEETING_KEY_REQUIRED_FOR_RACE_CARD_DETAIL")
+        artifact=fetch_and_enrich_race_card_detail(
+            artifact,cutoff,race_date=ctx["race_date"],meeting_key=meeting_key,race_no=ctx["race_no"]
+        )
+    except Exception as e:
+        artifact.setdefault("warnings",[]).append("JRA_RACE_CARD_DETAIL_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+        if q.get("require_jra_race_card_detail"):
+            errors.append("JRA_RACE_CARD_DETAIL_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])
