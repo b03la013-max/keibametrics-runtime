@@ -1,0 +1,87 @@
+name: KeibaMetrics JRA Source Current Authority Acceptance
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R15.json"
+      - "profiles/venue_chat_routes_20260926_R16.json"
+      - "profiles/family_runtime_contracts_20260926_R12.json"
+      - "profiles/jra_source_runtime_20260926_R2.json"
+      - "profiles/jra_information_source_registry_v1.0_20260926.json"
+      - ".github/workflows/km-jra-source-current-authority-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify JRA source Current Authority binding
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R15.json",encoding="utf-8"))
+          rt=json.load(open("profiles/venue_chat_routes_20260926_R16.json",encoding="utf-8"))
+          fc=json.load(open("profiles/family_runtime_contracts_20260926_R12.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R2.json",encoding="utf-8"))
+          reg=json.load(open("profiles/jra_information_source_registry_v1.0_20260926.json",encoding="utf-8"))
+          acc=json.load(open("runtime/jra_source_runtime/acceptance_status.json",encoding="utf-8"))
+          live=json.load(open("runtime/jra_source_runtime/live_acceptance_status.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R15"
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.1-20260926"
+          assert j["tsl_base_url"]=="https://jra.k-ba.net/"
+          assert j["local_sbo_reuse_forbidden"] is True
+          assert rt["jra_source_first"]["status"]=="ACTIVE"
+          assert rt["jra_source_first"]["tsl_public_shadow"]["base_url"]=="https://jra.k-ba.net/"
+          assert fc["JRA"]["source_reverify_required"] is True
+          assert sr["local_sbo_reuse_forbidden"] is True
+          assert reg["local_sbo"]["allowed_for_jra"] is False
+          assert acc["status"]=="PASS"
+          assert live["status"]=="PASS"
+          formal=pathlib.Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "source_execution_id" in formal
+          assert "gh attestation verify" in formal
+          assert "JRA_SOURCE_RUNNER_ID_SET_MISMATCH" in formal
+          assert "TSL_PUBLIC_SHADOW_CAPTURED" in formal
+          print("JRA_SOURCE_CURRENT_AUTHORITY_ACCEPTANCE=PASS")
+          PY
+      - name: Persist PASS marker
+        if: success()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          p={
+            "profile":"KM-JRA-SOURCE-CURRENT-AUTHORITY-ACCEPTANCE-v1.0-20260926",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "checks":[
+              "CURRENT_AUTHORITY_BINDING",
+              "JRA_SOURCE_RUNTIME_BINDING",
+              "TSL_REPLACES_LOCAL_SBO",
+              "SIGNED_SOURCE_REVERIFY",
+              "OFFICIAL_RUNNER_UNIVERSE_REVERIFY",
+              "SOURCE_RUNTIME_ACCEPTANCE_PASS",
+              "HISTORICAL_LIVE_SOURCE_ACCEPTANCE_PASS"
+            ]
+          }
+          json.dump(p,open("runtime/jra_source_runtime/current_authority_acceptance_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/current_authority_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA source Current Authority acceptance PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
