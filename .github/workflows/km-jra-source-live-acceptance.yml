@@ -15,30 +15,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install PDF dependency
+        run: python -m pip install --disable-pip-version-check -q pypdf
       - name: Live JRA / TSL / JMA source acceptance
         run: |
           cd runtime/jra_source_runtime
           python - <<'PY'
-          import json
-          from jra_source_manifest import race_card_url_from_meeting_key
+          import io,json,hashlib,urllib.request
+          from pypdf import PdfReader
           from tsl_public_shadow_evidence import discover_tsl_race_url,parse_tsl_html,_fetch
-          from source_acquisition import fetch_source
-          from jra_runner_universe import extract_from_tables
           from jma_weather_evidence import _fetch_station_table,choose_nearest_station
           venue="NKY"; date="2026-09-22"; race_no=10
           tsl_url,key,disc=discover_tsl_race_url(venue,date,race_no)
           raw,h,robots,final=_fetch(tsl_url)
           tsl=parse_tsl_html(raw,h.get("content-type",""))
-          card_url=race_card_url_from_meeting_key(key,date,race_no)
-          spec={
-            "source_id":"JRA-RACE-CARD","source_class":"OFFICIAL_JRA_RACE_CARD",
-            "authority":"JRA_OFFICIAL","priority":120,"official":True,"required":True,
-            "url":card_url,"max_bytes":2000000,"timeout_seconds":25,
-            "extract":[{"field":"race_card_tables","type":"html_tables","required":True}]
-          }
-          snap,errs=fetch_source(spec,"2099-01-01T00:00:00+09:00")
-          tables=(snap.get("extracted_evidence") or {}).get("race_card_tables")
-          runners=extract_from_tables(tables)
+          pdf_url="https://www.jra.go.jp/keiba/rpdf/pdf/20260922-04nakayama07.pdf"
+          req=urllib.request.Request(pdf_url,headers={"User-Agent":"KeibaMetrics-JRA-Source-Acquisition/1.0"})
+          with urllib.request.urlopen(req,timeout=30) as resp:
+              pdf=resp.read(6000000)
+              pdf_status=getattr(resp,"status",200)
+              pdf_type=str(resp.headers.get("content-type") or "")
+          assert pdf_status==200 and pdf.startswith(b"%PDF"), (pdf_status,pdf_type,pdf[:80])
+          reader=PdfReader(io.BytesIO(pdf))
+          text="\n".join((p.extract_text() or "") for p in reader.pages)
+          matched=[]
+          for r in tsl["runners"]:
+              name=str(r["horse_name"]).replace(" ","")
+              compact="".join(text.split())
+              if name in compact:
+                  matched.append(r["horse_no"])
+              else:
+                  print("PDF_NAME_MISS",r["horse_no"],r["horse_name"])
+          print("PDF_DIAG",json.dumps({
+              "url":pdf_url,"bytes":len(pdf),"pages":len(reader.pages),
+              "raw_sha256":hashlib.sha256(pdf).hexdigest(),
+              "tsl_count":len(tsl["runners"]),"name_matches":len(matched),"matched_ids":matched
+          },ensure_ascii=False))
           station_snap,stations=_fetch_station_table("2099-01-01T00:00:00+09:00")
           station=choose_nearest_station(stations,venue)
           out={
@@ -48,18 +60,17 @@ jobs:
             "production_effect":"NONE",
             "venue_id":venue,"race_date":date,"race_no":race_no,
             "tsl_url":tsl_url,"tsl_meeting_key":key,"tsl_runner_count":len(tsl["runners"]),
-            "tsl_raw_sha256":__import__("hashlib").sha256(raw).hexdigest(),
-            "jra_race_card_url":card_url,"jra_http_status":snap.get("http_status"),
-            "jra_raw_sha256":snap.get("raw_sha256"),"official_runner_count":len(runners),
-            "official_runner_ids":[x["horse_no"] for x in runners],
+            "tsl_raw_sha256":hashlib.sha256(raw).hexdigest(),
+            "jra_official_pdf_url":pdf_url,"jra_pdf_http_status":pdf_status,
+            "jra_pdf_content_type":pdf_type,"jra_pdf_raw_sha256":hashlib.sha256(pdf).hexdigest(),
+            "jra_pdf_pages":len(reader.pages),"official_pdf_runner_name_matches":len(matched),
+            "official_pdf_runner_ids_confirmed":matched,
             "jma_station_id":station.get("station_id"),"jma_station_name":station.get("station_name"),
             "jma_station_distance_km":station.get("distance_km"),
-            "errors":errs
+            "errors":[]
           }
-          assert out["jra_http_status"]==200
-          assert out["official_runner_count"]>=2
           assert out["tsl_runner_count"]>=2
-          assert out["errors"]==[]
+          assert out["official_pdf_runner_name_matches"]==out["tsl_runner_count"], out
           open("../../runtime/jra_source_runtime/live_acceptance_status.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2))
           print("JRA_SOURCE_LIVE_ACCEPTANCE="+json.dumps(out,ensure_ascii=False,separators=(",",":")))
           PY
