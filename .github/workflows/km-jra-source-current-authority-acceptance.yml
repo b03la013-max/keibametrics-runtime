@@ -45,7 +45,7 @@ jobs:
           assert live["status"]=="PASS"
           formal=pathlib.Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
           assert "source_execution_id" in formal
-          assert "gh attestation verify" in formal
+          assert '"gh","attestation","verify"' in formal
           assert "JRA_SOURCE_RUNNER_ID_SET_MISMATCH" in formal
           assert "TSL_PUBLIC_SHADOW_CAPTURED" in formal
           print("JRA_SOURCE_CURRENT_AUTHORITY_ACCEPTANCE=PASS")
