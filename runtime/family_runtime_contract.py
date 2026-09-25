@@ -1,10 +1,17 @@
 from __future__ import annotations
 import json
+from pathlib import Path
 
 class FamilyRuntimeError(ValueError):
     pass
 
-def load_contracts(path="profiles/family_runtime_contracts_20260925_R11.json"):
+def load_contracts(path=None):
+    if path is None:
+        try:
+            from execution_gateway import contract_path
+            path = contract_path()
+        except Exception:
+            path = Path("profiles/family_runtime_contracts_20260925_R11.json")
     with open(path,encoding="utf-8") as f:
         return json.load(f)
 

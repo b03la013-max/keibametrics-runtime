@@ -34,9 +34,9 @@ jobs:
           set -euo pipefail
           git pull --ff-only origin main
 
-      - name: Resolve signed FINAL and execute RESULT gate
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Resolve RESULT execution metadata
+        id: execution_meta
+        shell: bash
         run: |
           set -euo pipefail
           REQ="${{ inputs.request_path }}"
@@ -44,8 +44,30 @@ jobs:
             REQ="$(git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" | grep '^runtime/family_result_requests/.*\.json$' | tail -1)"
           fi
           test -n "$REQ"
+          REQUEST_FILE="$REQ" python - <<'PY'
+          import json,os,sys
+          sys.path.insert(0,"runtime")
+          from execution_gateway import load_gateway, normalize_request, artifact_name
+          raw=json.load(open(os.environ["REQUEST_FILE"],encoding="utf-8"))
+          gateway=load_gateway()
+          req,ctx=normalize_request(raw,gateway)
+          art=artifact_name(ctx["execution_id"],"RESULT",gateway,"LOCAL")
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
+              out.write(f"request_file={os.environ['REQUEST_FILE']}\n")
+              out.write(f"execution_id={ctx['execution_id']}\n")
+              out.write(f"artifact_name={art}\n")
+          print(json.dumps({"request_file":os.environ["REQUEST_FILE"],"execution_id":ctx["execution_id"],"artifact_name":art},ensure_ascii=False))
+          PY
+
+      - name: Resolve signed FINAL and execute RESULT gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REQ="${{ steps.execution_meta.outputs.request_file }}"
+          test -n "$REQ"
           python - "$REQ" <<'PY'
-          import json,os,subprocess,sys,urllib.request
+          import json,os,subprocess,sys,urllib.request,urllib.parse
           sys.path.insert(0,"runtime")
           from local_candidate_postresult import evaluate_dual
           from local_candidate_dual_oos_tracker import build_measurement, write_status
@@ -62,16 +84,72 @@ jobs:
               settle_shadow as settle_local_mec_r5_shadow,
           )
           from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
-          req=json.load(open(sys.argv[1],encoding="utf-8"))
+          from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name
+
+          raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
+          gateway=load_gateway()
+          req,execution_context=normalize_request(raw_req,gateway)
+          execution_id=str(execution_context["execution_id"])
           acceptance_only=bool(req.get("acceptance_only"))
-          run_id=int(req["source_run_id"])
-          artifact_name=req["artifact_name"]
           os.makedirs("runtime_result_in",exist_ok=True)
+          os.makedirs("runtime_out",exist_ok=True)
+
+          # Explicit run/artifact references remain backward compatible. New
+          # executions resolve the immutable FORMAL artifact from execution_id.
+          run_id=req.get("source_run_id")
+          artifact_name=req.get("artifact_name")
+          resolution_mode="EXPLICIT_BACKWARD_COMPAT"
+          chosen=None
+          if run_id is None or not artifact_name:
+              target_name=gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")
+              repo=os.environ.get("GITHUB_REPOSITORY") or ""
+              token=os.environ.get("GH_TOKEN") or ""
+              if not repo or not token:
+                  raise SystemExit("FINAL_ARTIFACT_AUTO_RESOLUTION_CONTEXT_MISSING")
+              url=(
+                  f"https://api.github.com/repos/{repo}/actions/artifacts"
+                  f"?name={urllib.parse.quote(target_name)}&per_page=100"
+              )
+              rq=urllib.request.Request(url,headers={
+                  "accept":"application/vnd.github+json",
+                  "authorization":f"Bearer {token}",
+                  "x-github-api-version":"2022-11-28",
+                  "user-agent":"keibametrics-execution-gateway",
+              })
+              with urllib.request.urlopen(rq,timeout=60) as resp:
+                  listing=json.loads(resp.read().decode())
+              candidates=[
+                  a for a in (listing.get("artifacts") or [])
+                  if not a.get("expired") and str(a.get("name") or "")==target_name
+              ]
+              if not candidates:
+                  raise SystemExit("FORMAL_ARTIFACT_NOT_FOUND_FOR_EXECUTION_ID:"+execution_id)
+              candidates.sort(key=lambda a:str(a.get("created_at") or ""),reverse=True)
+              chosen=candidates[0]
+              artifact_name=target_name
+              run_id=((chosen.get("workflow_run") or {}).get("id"))
+              if not run_id:
+                  raise SystemExit("FORMAL_ARTIFACT_WORKFLOW_RUN_ID_MISSING")
+              resolution_mode="EXECUTION_ID_AUTO_RESOLVE"
+
+          run_id=int(run_id)
+          json.dump({
+              "mode":resolution_mode,
+              "execution_id":execution_id,
+              "formal_artifact_name":artifact_name,
+              "workflow_run_id":run_id,
+              "artifact_id":(chosen or {}).get("id"),
+              "created_at":(chosen or {}).get("created_at"),
+          },open("runtime_out/artifact_resolution.json","w",encoding="utf-8"),
+            ensure_ascii=False,sort_keys=True,indent=2)
+
           subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
           fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
           fin=json.load(open(fin_path,encoding="utf-8"))
           rid=req["race_id"]
-          endpoint=req.get("external_endpoint") or "https://witnessstrictimage-production.up.railway.app"
+          endpoint=str(family_config("LOCAL",gateway).get("external_endpoint") or "").rstrip("/")
+          if not endpoint.startswith("https://"):
+              raise SystemExit("CANONICAL_LOCAL_EXTERNAL_ENDPOINT_INVALID")
 
           tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
           top3=[int(x) for x in req["finish_order"][:3]]
@@ -368,6 +446,7 @@ jobs:
 
           summary={
             "race_id":rid,
+            "execution_id":execution_id,
             "acceptance_only":acceptance_only,
             "result_receipt":res.get("receipt_sha256"),
             "verified":True,
@@ -425,10 +504,20 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Persist signed RESULT envelope
+      - name: Persist successful signed RESULT envelope
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: km-local-result-${{ github.sha }}
+          name: ${{ steps.execution_meta.outputs.artifact_name }}
           path: runtime_out/*.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Persist RESULT failure diagnostics
+        if: failure() && hashFiles('runtime_out/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-result-failure-${{ steps.execution_meta.outputs.execution_id }}-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 30
