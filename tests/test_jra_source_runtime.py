@@ -120,3 +120,22 @@ Elim（JPN）
     u=parse_runner_universe_from_pages([page],10)
     assert u["runner_count"]==3
     assert [(x["horse_no"],x["name"]) for x in u["runners"]]==[(1,"フミサウンド"),(2,"レッドレナート"),(3,"エリム")]
+    assert u["runners"][0]["frame_no"]==1
+    assert u["runners"][0]["sex"]=="牡" and u["runners"][0]["age"]==6
+    assert u["runners"][0]["assigned_weight"]==58.0
+    assert u["runners"][0]["jockey"]=="三浦皇成"
+    assert u["runners"][2]["frame_no"]==3
+    assert u["runners"][2]["assigned_weight"]==56.0
+
+
+def test_jra_official_race_context_parser():
+    from jra_race_context import parse_race_context
+    txt="2026年9月22日 4回中山7日 9 レース 鋸山特別 3歳以上2勝クラス 1,800 （ダ）（牝）定量 14時10分 10 レース 2006メモリアル ディープインパクトカップ 3歳以上2勝クラス 1,600 （芝・外）定量 14時50分 11 レース JRAアニバーサリーステークス 3歳以上3勝クラス 1,800 （ダ）ハンデ 15時30分 12 レース 3歳以上1勝クラス 1,200 （ダ）定量 16時10分 表示モード"
+    x=parse_race_context(txt,"NKY","2026-09-22",10)
+    assert x["distance_m"]==1600
+    assert x["surface"]=="芝"
+    assert x["course_variant"]=="外"
+    assert x["weight_rule"]=="定量"
+    assert x["race_class"]=="2勝クラス"
+    assert x["start_time"]=="14:50"
+    assert x["scheduled_post_at"].startswith("2026-09-22T14:50:00")

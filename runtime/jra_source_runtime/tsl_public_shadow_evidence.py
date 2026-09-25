@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from source_acquisition import _decode,_html_tables,_html_text,_parse_dt,sha_obj,utcnow,validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue, date_compact
 
-PROFILE="KM-JRA-TSL-PUBLIC-SHADOW-EVIDENCE-v1.0-20260925"
+PROFILE="KM-JRA-TSL-PUBLIC-SHADOW-EVIDENCE-v1.1-20260926"
 SOURCE_CLASS="THIRD_PARTY_PUBLIC_SHADOW"
 SOURCE_AUTHORITY="TSL_PUBLIC_NON_OFFICIAL"
 BASE="https://jra.k-ba.net"
@@ -172,12 +172,31 @@ def build_tsl_shadow_evidence(artifact:Dict[str,Any],prediction_cutoff:str,*,req
         base["runner_universe_match"]=_runner_match(parsed,artifact)
         fd=_parse_dt(fetched); cd=_parse_dt(prediction_cutoff)
         base["cutoff_relation"]="PRE_CUTOFF" if fd and cd and fd<=cd else "POST_CUTOFF"
-        start=((parsed.get("race_meta") or {}).get("start_time"))
+        parsed_meta=dict(parsed.get("race_meta") or {})
+        official_ctx=artifact.get("jra_race_context") or {}
         post=None
-        if start:
-            d=str(ctx.get("race_date") or "").replace("/","-")
-            try: post=datetime.datetime.fromisoformat(f"{d}T{start}:00").replace(tzinfo=ZoneInfo("Asia/Tokyo")).astimezone(datetime.timezone.utc)
-            except Exception: post=None
+        if official_ctx:
+            base["tsl_parsed_race_meta"]=parsed_meta
+            base["race_meta"]={
+                "race_no":int(ctx.get("race_no") or 0),
+                "start_time":official_ctx.get("start_time"),
+                "distance_m":official_ctx.get("distance_m"),
+                "surface":official_ctx.get("surface"),
+            }
+            base["race_meta_source"]="JRA_OFFICIAL_CONTEXT"
+            post=_parse_dt(official_ctx.get("scheduled_post_at"))
+            if parsed_meta and int(parsed_meta.get("race_no") or 0)!=int(ctx.get("race_no") or 0):
+                warnings.append("TSL_EMBEDDED_RACE_META_MISMATCH_OVERRIDDEN_BY_JRA_OFFICIAL")
+        else:
+            start=parsed_meta.get("start_time")
+            if start and int(parsed_meta.get("race_no") or 0)==int(ctx.get("race_no") or 0):
+                d=str(ctx.get("race_date") or "").replace("/","-")
+                try:
+                    post=datetime.datetime.fromisoformat(f"{d}T{start}:00").replace(tzinfo=ZoneInfo("Asia/Tokyo")).astimezone(datetime.timezone.utc)
+                except Exception:
+                    post=None
+            elif parsed_meta:
+                warnings.append("TSL_EMBEDDED_RACE_META_MISMATCH_NO_OFFICIAL_CONTEXT")
         base["scheduled_post_at"]=post.isoformat() if post else None
         base["start_relation"]="PRE_START" if fd and post and fd<post else ("POST_START" if fd and post else "UNKNOWN")
         match=base["runner_universe_match"]["status"]

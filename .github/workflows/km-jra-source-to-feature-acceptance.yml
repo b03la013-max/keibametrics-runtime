@@ -1,0 +1,68 @@
+name: JRA Source-to-Evidence Feature Acceptance
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/jra_source_to_evidence_features.py"
+      - "mapping/jra_source_to_feature_policy_v1.0_20260926.json"
+      - "runtime/jra_source_runtime/jra_race_context.py"
+      - "runtime/jra_source_runtime/jra_official_pdf.py"
+      - "runtime/jra_source_runtime/tsl_public_shadow_evidence.py"
+      - "runtime/jra_source_runtime/app.py"
+      - "tests/test_jra_source_to_evidence_features.py"
+      - "tests/test_jra_source_runtime.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-jra-source-to-feature-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - run: python -m py_compile runtime/jra_source_to_evidence_features.py runtime/jra_source_runtime/*.py
+      - run: python -m pytest -q tests/test_jra_source_to_evidence_features.py tests/test_jra_source_runtime.py
+      - name: Verify Formal wiring and shadow isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          f=Path(".github/workflows/km-formal-request-runner.yml").read_text()
+          assert "attach_source_features_to_request" in f
+          assert "SOURCE_TO_EVIDENCE_FEATURES_VERIFIED" in f
+          c=Path("runtime/jra_source_to_evidence_features.py").read_text()
+          assert "NO_TSL_OR_JMA_SHADOW_INJECTION" in c
+          assert "TSL_PUBLIC_NON_OFFICIAL" in c
+          print("wiring PASS")
+          PY
+      - name: Persist acceptance marker
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          p={
+            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.0-20260926",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION"]
+          }
+          open("runtime/jra_source_runtime/source_to_feature_acceptance_status.json","w",encoding="utf-8").write(json.dumps(p,ensure_ascii=False,sort_keys=True,indent=2))
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/source_to_feature_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA source-to-feature acceptance PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi

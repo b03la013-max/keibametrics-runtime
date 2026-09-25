@@ -7,12 +7,13 @@ from source_acquisition import (
     _SafeRedirect, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 )
 
-PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.0-20260926"
+PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.1-20260926"
 SLUGS={
     "SPP":"sapporo","HKD":"hakodate","FKS":"fukushima","NGT":"niigata","TKY":"tokyo",
     "NKY":"nakayama","CHK":"chukyo","KYO":"kyoto","HSN":"hanshin","KKR":"kokura",
 }
 ALIASES={"SAP":"SPP","HAK":"HKD","NII":"NGT","TOK":"TKY","CHU":"CHK","KOK":"KKR"}
+FRAME_COLOR={"白":1,"黒":2,"赤":3,"青":4,"黄":5,"緑":6,"橙":7,"桃":8}
 
 def _venue(v:Any)->str:
     x=str(v or "").upper().strip()
@@ -77,22 +78,56 @@ def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any
     runners=[]
     for no,mi in enumerate(markers[:count],1):
         stop=markers[no] if no<count and no<len(markers) else len(block)
-        name_parts=[]
-        for x in block[mi+1:stop]:
+        pre=block[max(0,mi-10):mi]
+        sex=None; age=None; assigned_weight=None; frame_no=None
+        for x in reversed(pre):
+            s=re.sub(r"\s+","",_clean_line(x))
+            if not s:
+                continue
+            if frame_no is None and s in FRAME_COLOR:
+                frame_no=FRAME_COLOR[s]
+            if sex is None:
+                sm=re.fullmatch(r"(牡|牝|騸|せん)(\d{1,2})",s)
+                if sm:
+                    sex=sm.group(1); age=int(sm.group(2))
+            if assigned_weight is None:
+                wm=re.search(r"(?:白|黒|赤|青|黄|緑|橙|桃|鹿|栗|芦|栃|粕).*?(\d{2}(?:\.\d+)?)$",s)
+                if wm:
+                    assigned_weight=float(wm.group(1))
+        segment=block[mi+1:stop]
+        name_parts=[]; name_end=None
+        for j,x in enumerate(segment):
             s=re.sub(r"\s+","",_clean_line(x))
             if not s:
                 continue
             if _kana_name(s):
-                name_parts.append(s)
+                name_parts.append(s); name_end=j
                 continue
             if name_parts:
                 break
         name="".join(name_parts)
         if not name:
             raise ValueError(f"JRA_OFFICIAL_PDF_HORSE_NAME_MISSING:{no}")
+        jockey_parts=[]
+        if name_end is not None:
+            for x in segment[name_end+1:name_end+7]:
+                s=re.sub(r"\s+","",_clean_line(x))
+                if not s:
+                    continue
+                if re.fullmatch(r"\d+",s) or re.search(r"[A-Za-z]",s):
+                    if jockey_parts:
+                        break
+                    continue
+                clean=re.sub(r"[0-9０-９,，.．].*$","",s)
+                if clean and re.fullmatch(r"[一-龯々ヶぁ-んァ-ヶー・]+",clean):
+                    jockey_parts.append(clean)
+                    if len(jockey_parts)>=2:
+                        break
         runners.append({
-            "runner_id":str(no),"horse_no":no,"frame_no":None,
+            "runner_id":str(no),"horse_no":no,"frame_no":frame_no,
             "name":name,"canonical_name":name,"status":"ACTIVE",
+            "sex":sex,"age":age,"assigned_weight":assigned_weight,
+            "jockey":"".join(jockey_parts[:2]) if jockey_parts else None,
             "body_weight":None,"body_weight_change":None,
             "source":"JRA_OFFICIAL_RACE_PDF",
         })
@@ -131,7 +166,7 @@ def fetch_and_enrich_official_pdf(
     }
     opener=urllib.request.build_opener(_SafeRedirect())
     req=urllib.request.Request(url,headers={
-        "User-Agent":"KeibaMetrics-JRA-Source-Acquisition/1.1",
+        "User-Agent":"KeibaMetrics-JRA-Source-Acquisition/1.2",
         "Accept":"application/pdf,*/*;q=0.1",
         "Accept-Language":"ja,en;q=0.5",
     })

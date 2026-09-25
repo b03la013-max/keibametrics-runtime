@@ -1,0 +1,45 @@
+{
+  "profile_id": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-IMPLEMENTATION-20260926-R1",
+  "status": "IMPLEMENTED / ACCEPTANCE-PENDING / JRA-WIDE / SOURCE-FIRST / NON-NUMERICAL-WEIGHT-CHANGE / FAIL-CLOSED",
+  "family_id": "JRA",
+  "objective": "Close the mechanical handoff from signed JRA SOURCE artifacts into existing Production Evidence Feature / Base Index infrastructure without inventing missing evidence.",
+  "components": {
+    "compiler": "runtime/jra_source_to_evidence_features.py",
+    "policy": "mapping/jra_source_to_feature_policy_v1.0_20260926.json",
+    "race_context": "runtime/jra_source_runtime/jra_race_context.py",
+    "official_pdf": "runtime/jra_source_runtime/jra_official_pdf.py",
+    "formal_runner": ".github/workflows/km-formal-request-runner.yml",
+    "acceptance": ".github/workflows/km-jra-source-to-feature-acceptance.yml"
+  },
+  "behavior": {
+    "production_feature_autofill": "ONLY deterministic, rule-bound, Production-authorized facts",
+    "current_safe_autofill": [
+      "weight_load_fit when all active official assigned weights are equal"
+    ],
+    "existing_feature_precedence": "PRESERVE / NO SILENT OVERWRITE",
+    "missingness": "EXPLICIT / UNKNOWN NEVER WEAK / NO TRANSPORT 50",
+    "coverage_planner": "13 base indices + DCR",
+    "shadow_isolation": [
+      "TSL",
+      "JMA current state",
+      "same-day derived bias",
+      "point-in-time population seed"
+    ]
+  },
+  "source_gaps_explicit": [
+    "JRA horse history/detail adapter",
+    "current official bodyweight adapter when source does not publish it in parsed form",
+    "pedigree historical population adapter",
+    "jockey/trainer statistics adapter",
+    "training/workout adapter",
+    "stable/comment adapter",
+    "official market/time-series adapter",
+    "venue-style/pace-map binding"
+  ],
+  "production_model_change": false,
+  "numerical_weight_change": false,
+  "krs_change": false,
+  "mec_change": false,
+  "capital_change": false,
+  "probability_ev_kelly_change": false
+}

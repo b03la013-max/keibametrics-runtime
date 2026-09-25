@@ -13,8 +13,9 @@ from jma_weather_evidence import build_jma_weather_evidence
 from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
+from jra_race_context import enrich_with_race_context
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.2-20260926"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.3-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -53,6 +54,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_auxiliary_evidence_sha256":_sha_file("jra_auxiliary_evidence.py"),
         "jra_population_seed_sha256":_sha_file("jra_population_seed.py"),
         "jra_official_pdf_sha256":_sha_file("jra_official_pdf.py"),
+        "jra_race_context_sha256":_sha_file("jra_race_context.py"),
       }
     }
     rb=_jdump(receipt)
@@ -103,7 +105,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -132,6 +134,10 @@ def source_acquire(p:Dict[str,Any]):
     artifact,errors=acquire_sources(q); artifact["source_race_context"]=ctx
     artifact["jra_meeting_key_discovered"]=meeting_key or None
     if tsl_discovery_error: artifact.setdefault("warnings",[]).append("TSL_MEETING_DISCOVERY:"+tsl_discovery_error)
+    try:
+        artifact=enrich_with_race_context(artifact)
+    except Exception as e:
+        artifact.setdefault("warnings",[]).append("JRA_RACE_CONTEXT_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     # Official JRA PDF is the mandatory independent Runner Universe source.
     # JRADB HTML is retained only as auxiliary evidence because the public page

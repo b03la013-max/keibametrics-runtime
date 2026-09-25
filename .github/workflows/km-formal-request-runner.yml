@@ -49,6 +49,7 @@ jobs:
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
           from evidence_feature_compiler import compile_evidence_feature_ledger
+          from jra_source_to_evidence_features import attach_source_features_to_request
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
 
@@ -67,6 +68,7 @@ jobs:
           # JRA SOURCE-first handoff. New formal requests may reference an immutable
           # signed SOURCE phase produced by the dedicated external JRA source runtime.
           # Historical requests without source_execution_id remain compatibility-readable.
+          source_artifact=None
           source_execution_id=str(req.get("source_execution_id") or "").strip()
           if source_execution_id:
               from execution_store import materialize_phase
@@ -115,6 +117,8 @@ jobs:
               }
 
           prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          if source_artifact is not None:
+              req=attach_source_features_to_request(req,source_artifact,prod_map)
           source_snapshot_declared=str(req.get("source_snapshot_sha256") or (req.get("explicit_engine_hsv_provenance") or {}).get("source_snapshot_sha256") or "")
           evidence_compiler=compile_evidence_feature_ledger(
               req.get("race_id"),source_snapshot_declared,req.get("runners") or [],prod_map
@@ -151,6 +155,15 @@ jobs:
                         production_authority=False,
                         prediction_authority=False)
 
+          if req.get("source_to_evidence_feature_compiler"):
+              sf=req["source_to_evidence_feature_compiler"]
+              stage("SOURCE_TO_EVIDENCE_FEATURES_VERIFIED",
+                    profile=sf.get("profile"),
+                    compiler_sha256=req.get("source_to_evidence_feature_sha256"),
+                    formal_base_ready_after_merge=sf.get("formal_base_ready_after_merge"),
+                    missing_source_families=sf.get("missing_source_families"),
+                    shadow_isolation=sf.get("shadow_isolation"),
+                    production_feature_principle=sf.get("production_feature_principle"))
           stage("EVIDENCE_FEATURE_COMPILER_VERIFIED",
                 profile=evidence_compiler.get("profile"),
                 mapping_id=evidence_compiler.get("mapping_id"),
@@ -421,6 +434,8 @@ jobs:
           final_package=dict(req["final_prediction_package"])
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["evidence_feature_compiler_attestation"]=evidence_compiler
+          final_package["source_to_evidence_feature_compiler"]=req.get("source_to_evidence_feature_compiler")
+          final_package["source_to_evidence_feature_runner_coverage"]=req.get("source_to_evidence_feature_runner_coverage")
           final_package["capital_policy_decision"]=capital_decision
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
