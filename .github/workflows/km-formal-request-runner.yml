@@ -52,6 +52,7 @@ jobs:
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
           from evidence_feature_compiler import compile_evidence_feature_ledger
           from jra_source_to_evidence_features import attach_source_features_to_request
+          from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
 
@@ -130,6 +131,10 @@ jobs:
 
           prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
           if source_artifact is not None:
+              zero_touch=build_zero_touch_source_index_report(source_artifact,prod_map)
+              req["zero_touch_source_index_report"]={k:v for k,v in zero_touch.items() if k not in {"objective_shadow","production_ledger","runner_stubs"}}
+              if bool(req.get("require_zero_touch_source_indices")):
+                  assert zero_touch.get("production_source_only_formal_base_ready") is True, "ZERO_TOUCH_PRODUCTION_INDEX_NOT_READY:"+json.dumps(zero_touch.get("missing_source_families"),ensure_ascii=False)
               req=attach_source_features_to_request(req,source_artifact,prod_map)
           source_snapshot_declared=str(req.get("source_snapshot_sha256") or (req.get("explicit_engine_hsv_provenance") or {}).get("source_snapshot_sha256") or "")
           evidence_compiler=compile_evidence_feature_ledger(
@@ -167,6 +172,17 @@ jobs:
                         production_authority=False,
                         prediction_authority=False)
 
+          if req.get("zero_touch_source_index_report"):
+              zt=req["zero_touch_source_index_report"]
+              stage("ZERO_TOUCH_SOURCE_INDEX_DIAGNOSTIC_CAPTURED",
+                    profile=zt.get("profile"),
+                    sha256=zt.get("sha256"),
+                    production_source_only_formal_base_ready=zt.get("production_source_only_formal_base_ready"),
+                    production_status=zt.get("production_status"),
+                    shadow_has_all_71_feature_states=zt.get("shadow_has_all_71_feature_states"),
+                    shadow_has_20_index_diagnostic=zt.get("shadow_has_20_index_diagnostic"),
+                    missing_source_families=zt.get("missing_source_families"),
+                    production_effect="NONE_UNLESS_EXPLICIT_READY_AND_REQUIRED")
           if req.get("source_to_evidence_feature_compiler"):
               sf=req["source_to_evidence_feature_compiler"]
               stage("SOURCE_TO_EVIDENCE_FEATURES_VERIFIED",
@@ -447,6 +463,7 @@ jobs:
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["evidence_feature_compiler_attestation"]=evidence_compiler
           final_package["source_to_evidence_feature_compiler"]=req.get("source_to_evidence_feature_compiler")
+          final_package["zero_touch_source_index_report"]=req.get("zero_touch_source_index_report")
           final_package["source_to_evidence_feature_runner_coverage"]=req.get("source_to_evidence_feature_runner_coverage")
           final_package["source_objective_candidate_shadow"]=req.get("source_objective_candidate_shadow")
           if isinstance(req.get("source_objective_candidate_shadow"),dict):
