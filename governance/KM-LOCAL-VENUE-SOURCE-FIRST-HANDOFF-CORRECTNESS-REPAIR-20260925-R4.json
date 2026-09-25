@@ -1,0 +1,113 @@
+{
+  "profile_id": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260925-R4",
+  "status": "ACTIVE / LOCAL-WIDE / CORRECTNESS-OPERATIONAL-REPAIR / CHAT-TO-GITHUB-FULL-LIFECYCLE / SIGNED-SOURCE-ARTIFACT-HANDOFF / RUNTIME-CONTRACT-BINDING-CORRECTED / ACCEPTANCE-ISOLATED-RESULT-CLOSED-LOOP / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE",
+  "effective_at": "2026-09-25T19:25:50+09:00",
+  "predecessor": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260925-R3",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260925-R11",
+  "production_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "runtime": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE",
+  "problem_and_repairs": [
+    {
+      "failure": "CHAT_SURFACE_DIRECT_POST_UNAVAILABLE",
+      "owner": "CHAT_EXECUTION_ORCHESTRATION",
+      "repair": "Fail over to existing GitHub family request push trigger instead of aborting execution.",
+      "production_effect": "NONE"
+    },
+    {
+      "failure": "LOCAL_RUNTIME_CONTRACT_STALE_REVISION_BINDING",
+      "evidence_run_id": 36122298489,
+      "old_expected_revision": "7769ce32943423c507a762b46f1bb38bc8d50cc5",
+      "deployed_revision": "d753d0cbca00f790351a56ff9f5c923290830d4f",
+      "repair": "Runtime Contract R11 plus default resolver update; fail-closed hash/revision gate retained.",
+      "production_effect": "NONE"
+    },
+    {
+      "failure": "SOURCE_ONLY_TO_FORMAL_ENVELOPE_TRANSFER_NOT_CHAT_OPERABLE",
+      "repair": "Existing Formal Bridge accepts source_receipt_artifact_id + source_receipt_sha256 and retrieves the signed SOURCE envelope from the prior Actions artifact, then re-verifies it.",
+      "workflow_commits": [
+        "f23eda1d620cca5fb8fe02fbfd8d4b47868e6d06",
+        "abb43c7454332fdae3d3be22fc157951b7da3057"
+      ],
+      "production_effect": "NONE"
+    },
+    {
+      "failure": "MECHANICAL_RESULT_ACCEPTANCE_COULD_MUTATE_FORWARD_MEASUREMENT_LEDGER",
+      "repair": "acceptance_only RESULT executes Signed RESULT/Settlement/Review/Learning but skips all Production/OOS ledger persistence.",
+      "workflow_commit": "0ae3db9206118fabd3fb14e432fcda4af507f3f4",
+      "production_effect": "NONE"
+    }
+  ],
+  "acceptance": {
+    "live_pre_race_source_handoff": {
+      "race_id": "URW-20260925-R12-HANDOFF-ACCEPT-R2",
+      "run_id": 36122603188,
+      "status": "SUCCESS / LIVE PRE-RACE SOURCE-ONLY",
+      "source_receipt_sha256": "31d88694ce9f12408f8619cb9a11e2f50f1983067ce71dfde298a298118d7750",
+      "source_snapshot_sha256": "388346fab14c94e770086e6358561c470faa17b16301e61201df306e4cab08e3",
+      "official_runner_universe_sha256": "b6f50e9215e4092c6f26ff896b369eba661bd5646b8f4b79109a42ba03009fff",
+      "official_runner_count": 12,
+      "source_freeze_at": "2026-09-25T10:11:29.324408+00:00",
+      "signed_source_verified": true
+    },
+    "all_stage_post_start_mechanical_replay": {
+      "race_id": "URW-20260924-R12-FORMAL-R1",
+      "run_id": 36123564762,
+      "status": "SUCCESS / POST-START-REPLAY / E2E NUMERICAL-DEGRADED / NOT-OOS",
+      "source_receipt_sha256": "15a83c2854ae10a51723b26775e86d2baaab263abc6e0ec66420c666da171331",
+      "source_snapshot_sha256": "7ef30e7263e6bc032eca18e0a65274d5a220b08bd8b2cacae4707c675cdb28ee",
+      "pre_krs_receipt_sha256": "13cb361d3a229301cb180026588235f4bf35b226c3e6d832a76a677f14ff3944",
+      "krs_receipt_sha256": "dbe36abf0bb7382453808c6e61b0c61d21f8535237f25860aa48a9a7a908222a",
+      "final_receipt_sha256": "a6b23dc03d9c1c0630d9091baa5d4b77c75d90bee53c72a60bb3da3efcb63aab",
+      "actual_run_count": 5000,
+      "numeric_coverage": {
+        "required": 348,
+        "terminalized": 348,
+        "calculated": 0,
+        "ruled_neutral": 12,
+        "ruled_hold": 336,
+        "unresolved": 0
+      },
+      "mec_profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+      "material_coverage_ratio": 1,
+      "minimum_required_capital": 10700,
+      "ticket_count": 107,
+      "total_investment": 10700,
+      "shadow_oos_effect": "NONE / shadows not generated in replay due deadline guard"
+    },
+    "result_closed_loop_acceptance": {
+      "run_id": 36123885960,
+      "status": "SUCCESS / ACCEPTANCE-ONLY / NO-OOS-LEDGER-MUTATION",
+      "result_receipt_sha256": "e5f7b28861f6f85b2ce2d33ce94620eeb2e854cb284e92b5da8cab985c4fdc6c",
+      "final_receipt_sha256": "a6b23dc03d9c1c0630d9091baa5d4b77c75d90bee53c72a60bb3da3efcb63aab",
+      "automatic_review_sha256": "eda3a81df430172778f2ac5d15fc223015cdbdfcca572d3815a5895b1debaf07",
+      "learning_state_id": "URW-20260924-R12-FORMAL-R1-LEARNING-NEXT",
+      "signed_result_verified": true,
+      "oos_ledgers_mutated": false
+    }
+  },
+  "readiness_after_repair": {
+    "chat_to_github_trigger": "READY",
+    "source_manifest_and_acquisition": "READY",
+    "signed_source_handoff": "READY",
+    "official_runner_universe": "READY",
+    "pre_krs": "READY",
+    "krs_external": "READY",
+    "mec_r3": "READY",
+    "capital": "READY",
+    "signed_final": "READY",
+    "result_closed_loop": "READY",
+    "degraded_execution": "YES",
+    "strict_full_numerical": "NO",
+    "numerical_authority": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND",
+    "unknown_future_empirical_acceptance": "PENDING"
+  },
+  "non_claims": [
+    "Does not prove Production Full Numerical Calculation.",
+    "Does not convert replay into Forward OOS.",
+    "Does not promote KRS Shadow or MEC Shadow.",
+    "Does not retroactively make 2026-09-25 Urawa 11R FORMAL-PRE-RACE.",
+    "Does not change Venue prediction policy."
+  ]
+}
