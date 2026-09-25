@@ -23,12 +23,13 @@ concurrency:
 jobs:
   result-gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Synchronize latest measurement base
+      - name: Synchronize latest measurement and execution base
         shell: bash
         run: |
           set -euo pipefail
@@ -48,22 +49,39 @@ jobs:
           set -euo pipefail
           REQ="${{ inputs.request_path }}"
           if [ -z "$REQ" ]; then
-            REQ="$(git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" | grep '^runtime/family_result_requests/.*\.json$' | tail -1)"
+            mapfile -t REQS < <(
+              git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
+              grep '^runtime/family_result_requests/.*\.json$' || true
+            )
+            if [ "${#REQS[@]}" -ne 1 ]; then
+              echo "Expected exactly one changed RESULT request; found ${#REQS[@]}" >&2
+              printf '%s\n' "${REQS[@]}" >&2
+              exit 2
+            fi
+            REQ="${REQS[0]}"
           fi
-          test -n "$REQ"
+          case "$REQ" in
+            runtime/family_result_requests/*.json) ;;
+            *) echo "Invalid RESULT request path: $REQ" >&2; exit 2 ;;
+          esac
+          test -f "$REQ"
           REQUEST_FILE="$REQ" python - <<'PY'
           import json,os,sys
           sys.path.insert(0,"runtime")
           from execution_gateway import load_gateway, normalize_request, artifact_name
           raw=json.load(open(os.environ["REQUEST_FILE"],encoding="utf-8"))
           gateway=load_gateway()
-          req,ctx=normalize_request(raw,gateway)
+          _,ctx=normalize_request(raw,gateway)
           art=artifact_name(ctx["execution_id"],"RESULT",gateway,"LOCAL")
           with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
               out.write(f"request_file={os.environ['REQUEST_FILE']}\n")
               out.write(f"execution_id={ctx['execution_id']}\n")
               out.write(f"artifact_name={art}\n")
-          print(json.dumps({"request_file":os.environ["REQUEST_FILE"],"execution_id":ctx["execution_id"],"artifact_name":art},ensure_ascii=False))
+          print(json.dumps({
+              "request_file":os.environ["REQUEST_FILE"],
+              "execution_id":ctx["execution_id"],
+              "artifact_name":art
+          },ensure_ascii=False))
           PY
 
       - name: Resolve signed FINAL and execute RESULT gate
@@ -75,13 +93,18 @@ jobs:
           test -n "$REQ"
           python -m runtime.local_result_from_signed_final "$REQ"
 
-      - name: Stage canonical RESULT execution phase
-        if: success() && hashFiles('runtime_out/*.json') != ''
+      - name: Persist canonical RESULT and forward measurement ledgers
+        if: success()
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
         run: |
           set -euo pipefail
+          if [ -f runtime_out/acceptance_only.flag ]; then
+            echo "Acceptance-only RESULT: skip canonical Production/OOS persistence"
+            exit 0
+          fi
+
           python runtime/execution_store.py persist \
             --execution-id "$EXECUTION_ID" \
             --phase RESULT \
@@ -89,20 +112,9 @@ jobs:
             --source-dir runtime_out \
             --github-sha "${{ github.sha }}"
 
-      - name: Persist LOCAL forward measurement ledgers and RESULT lineage
-        if: always()
-        shell: bash
-        env:
-          EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
-        run: |
-          set -euo pipefail
-          if [ -f runtime_out/acceptance_only.flag ]; then
-            echo "Acceptance-only RESULT: skip Production/OOS ledger persistence"
-            exit 0
-          fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          if [ -n "$EXECUTION_ID" ] && [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/RESULT"; fi
+          git add "runtime/executions/$EXECUTION_ID/RESULT"
           if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/local_candidate_v03_oos_measurements ]; then git add runtime/local_candidate_v03_oos_measurements/*.json runtime/local_candidate_v03_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
@@ -113,18 +125,20 @@ jobs:
           if [ -d runtime/local_mec_r5_shadow_results ]; then git add runtime/local_mec_r5_shadow_results/*.json 2>/dev/null || true; fi
           if [ -d runtime/local_mec_r5_shadow_lineage ]; then git add runtime/local_mec_r5_shadow_lineage/*.json 2>/dev/null || true; fi
           if [ -f runtime/local_mec_r5_oos_status.json ]; then git add runtime/local_mec_r5_oos_status.json; fi
-          if ! git diff --cached --quiet; then
-            git commit -m "measurement: persist LOCAL RESULT and forward OOS state [skip ci]"
-            for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push origin HEAD:main; then
-                exit 0
-              fi
-              git rebase --abort 2>/dev/null || true
-              sleep $((attempt * 2))
-            done
-            echo "Unable to persist RESULT/measurement state after retries" >&2
-            exit 1
+
+          if git diff --cached --quiet; then
+            exit 0
           fi
+          git commit -m "measurement: persist LOCAL RESULT and forward OOS state [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo "Unable to persist RESULT/measurement state after retries" >&2
+          exit 1
 
       - name: Persist successful signed RESULT envelope
         if: success()
