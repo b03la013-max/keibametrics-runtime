@@ -73,6 +73,42 @@ def test_request_runtime_revision_is_diagnostic_only(tmp_path):
     assert ctx["request_diagnostics"]["runtime_expected_revision"] == "stale-request-value"
 
 
+def test_stale_handoff_ids_are_diagnostic_only_by_default(tmp_path):
+    gateway = _gateway(tmp_path)
+    req = {
+        "family_id": "LOCAL",
+        "race_id": "URW-20260926-R01",
+        "source_receipt_artifact_id": 123,
+        "source_run_id": 456,
+        "artifact_name": "stale-artifact",
+    }
+    normalized, ctx = normalize_request(req, gateway)
+    assert "source_receipt_artifact_id" not in normalized
+    assert "source_run_id" not in normalized
+    assert "artifact_name" not in normalized
+    assert ctx["request_diagnostics"]["request_source_receipt_artifact_id"] == 123
+    assert ctx["request_diagnostics"]["request_source_run_id"] == 456
+    assert ctx["request_diagnostics"]["request_artifact_name"] == "stale-artifact"
+    assert ctx["legacy_handoff_override"] is False
+
+
+def test_legacy_handoff_override_preserves_explicit_references(tmp_path):
+    gateway = _gateway(tmp_path)
+    req = {
+        "family_id": "LOCAL",
+        "race_id": "URW-20260926-R01",
+        "legacy_handoff_override": True,
+        "source_receipt_artifact_id": 123,
+        "source_run_id": 456,
+        "artifact_name": "historical-artifact",
+    }
+    normalized, ctx = normalize_request(req, gateway)
+    assert normalized["source_receipt_artifact_id"] == 123
+    assert normalized["source_run_id"] == 456
+    assert normalized["artifact_name"] == "historical-artifact"
+    assert ctx["legacy_handoff_override"] is True
+
+
 def test_git_revision_mismatch_is_not_fatal_when_bundle_matches(tmp_path):
     gateway = _gateway(tmp_path)
     health = _health(gateway, tmp_path, revision="different-commit-same-bundle")
