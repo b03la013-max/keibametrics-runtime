@@ -14,6 +14,8 @@ on:
       - 'tests/test_mec_r4_oos_tracker.py'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
       - '.github/workflows/km-local-result-from-signed-final.yml'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/local_result_from_signed_final.py'
       - '.github/workflows/local-mec-r4-forward-capture-acceptance.yml'
   workflow_dispatch:
 
@@ -35,10 +37,10 @@ jobs:
           python -m pip install -q pytest
           python -m py_compile runtime/local_mec_r4_bridge.py runtime/mec_r4_oos_tracker.py runtime/mec_r4_shadow.py runtime/local_mec_r5_shadow.py runtime/local_mec_r5_oos_tracker.py
           pytest -q tests/test_local_mec_r4_bridge.py tests/test_mec_r4_oos_tracker.py tests/test_mec_r4_shadow.py tests/test_local_mec_r5_shadow.py tests/test_local_mec_r5_oos_tracker.py
-          grep -q 'MEC_R4_SHADOW_PRE_RESULT_FREEZE' .github/workflows/km-family-non-jra-formal-runner.yml
-          grep -q 'LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE' .github/workflows/km-family-non-jra-formal-runner.yml
-          grep -q 'LOCAL_SIGNED_FINAL_BOUND' .github/workflows/km-local-result-from-signed-final.yml
-          grep -q 'LOCAL_MEC_R5_SIGNED_FINAL_BOUND' .github/workflows/km-local-result-from-signed-final.yml
+          grep -q 'MEC_R4_SHADOW_PRE_RESULT_FREEZE' runtime/non_jra_formal_runner.py
+          grep -q 'LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE' runtime/non_jra_formal_runner.py
+          grep -q 'LOCAL_SIGNED_FINAL_BOUND' runtime/local_result_from_signed_final.py
+          grep -q 'LOCAL_MEC_R5_SIGNED_FINAL_BOUND' runtime/local_result_from_signed_final.py
 
   retrospective:
     runs-on: ubuntu-latest
