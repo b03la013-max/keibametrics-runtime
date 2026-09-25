@@ -48,7 +48,7 @@ def test_formal_gateway_contract_is_in_extracted_runner():
     assert 'gateway_artifact_name(execution_id,"SOURCE",gateway,"LOCAL")' in runner
     assert "REQUEST_RUNTIME_REVISION_STALE" not in runner
     assert 'fail_closed("RUNTIME_REVISION_MISMATCH"' not in runner
-    assert "python runtime/non_jra_formal_runner.py" in workflow
+    assert "python -m runtime.non_jra_formal_runner" in workflow
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-execution-failure-" in workflow
     assert len(workflow) < 21000
@@ -60,7 +60,7 @@ def test_result_gateway_contract_is_in_extracted_runner():
     assert 'gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")' in runner
     assert 'family_config("LOCAL",gateway)' in runner
     assert 'endpoint=req.get("external_endpoint")' not in runner
-    assert "python runtime/local_result_from_signed_final.py" in workflow
+    assert "python -m runtime.local_result_from_signed_final" in workflow
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-result-failure-" in workflow
     assert len(workflow) < 21000
