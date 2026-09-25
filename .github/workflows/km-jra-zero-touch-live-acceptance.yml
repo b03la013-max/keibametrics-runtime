@@ -1,0 +1,64 @@
+name: JRA Zero-Touch Live Historical Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-zero-touch-live-acceptance.yml"
+      - "runtime/jra_zero_touch_source_index_orchestrator.py"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - name: Build zero-touch report from signed historical source
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
+          src=Path("runtime/executions/KM-JRA-SOURCE-V14-HISTORY-LIVE-ACCEPT-NKY-20260926-R08-R2/SOURCE/runs/36165777646/source_receipt_envelope.json")
+          env=json.load(open(src,encoding="utf-8"))
+          art=env["artifact"]
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          report=build_zero_touch_source_index_report(art,mapping)
+          report["acceptance_class"]="HISTORICAL_MECHANICAL / NOT_OOS / NO_PRODUCTION_EFFECT"
+          report["source_execution_id"]="KM-JRA-SOURCE-V14-HISTORY-LIVE-ACCEPT-NKY-20260926-R08-R2"
+          report["source_run_id"]=36165777646
+          Path("runtime/jra_source_runtime/zero_touch_live_acceptance.json").write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps({
+            "runner_count":report["runner_count"],
+            "production_ready":report["production_source_only_formal_base_ready"],
+            "production_status":report["production_status"],
+            "shadow_71":report["shadow_has_all_71_feature_states"],
+            "shadow_20":report["shadow_has_20_index_diagnostic"],
+            "observed_min":report["shadow_observed_feature_count_min"],
+            "observed_max":report["shadow_observed_feature_count_max"],
+            "missing_source_families":report["missing_source_families"],
+          },ensure_ascii=False,indent=2))
+          assert report["runner_count"]==16
+          assert report["shadow_has_all_71_feature_states"] is True
+          assert report["shadow_has_20_index_diagnostic"] is True
+          assert report["claims"]["tsl_never_production"] is True
+          PY
+      - name: Persist historical acceptance artifact
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/zero_touch_live_acceptance.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA zero-touch historical acceptance [skip ci]"
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              git rebase --abort || true
+              git fetch origin main
+              sleep $((attempt * 2))
+            done
+            exit 1
+          fi
