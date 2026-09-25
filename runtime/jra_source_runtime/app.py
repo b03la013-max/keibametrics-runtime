@@ -17,6 +17,7 @@ from jra_race_context import enrich_with_race_context
 from jra_horse_history import enrich_with_horse_histories
 from jra_person_stats import enrich_with_person_stats
 from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
+from jra_market_observation import enrich_with_market_observation
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -61,6 +62,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_horse_history_sha256":_sha_file("jra_horse_history.py"),
         "jra_person_stats_sha256":_sha_file("jra_person_stats.py"),
         "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
+        "jra_market_observation_sha256":_sha_file("jra_market_observation.py"),
       }
     }
     rb=_jdump(receipt)
@@ -211,6 +213,11 @@ def source_acquire(p:Dict[str,Any]):
             errors.append("JRA_OFFICIAL_RUNNER_RECONCILIATION_FAILED:"+type(e).__name__+":"+str(e))
     if not artifact.get("jra_official_runner_universe"):
         errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_UNAVAILABLE:"+(pdf_runner_error or "PDF_NOT_AVAILABLE")+";DETAIL_FALLBACK_NOT_AVAILABLE")
+
+    try:
+        artifact=enrich_with_market_observation(artifact)
+    except Exception as e:
+        artifact.setdefault("warnings",[]).append("JRA_MARKET_OBSERVATION_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     try:
         artifact,herrs=enrich_with_horse_histories(artifact,cutoff,require_history=bool(q.get("require_jra_horse_history",False)))
