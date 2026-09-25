@@ -1,0 +1,56 @@
+{
+  "profile_id": "KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.1-20260926",
+  "predecessor": "KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.0-20260925",
+  "status": "ACTIVE-CANDIDATE / GITHUB-OIDC-ATTESTED-EXTERNAL-SOURCE-EXECUTION / CODE-ACCEPTANCE-PENDING-R1 / LIVE-SOURCE-ACCEPTANCE-INHERITED / CURRENT-AUTHORITY-PENDING-E2E",
+  "family_id": "JRA",
+  "runtime_profile": "KM-JRA-SOURCE-RUNTIME-v1.1-20260926",
+  "source_acquisition_profile": "KM-JRA-EXTERNAL-SOURCE-ACQUISITION-v1.1-20260926",
+  "official_runner_universe_profile": "KM-JRA-OFFICIAL-RUNNER-UNIVERSE-v1.0-20260925",
+  "jra_auxiliary_evidence_profile": "KM-JRA-AUXILIARY-EVIDENCE-v1.0-20260925",
+  "jma_weather_evidence_profile": "KM-JRA-JMA-WEATHER-EVIDENCE-v1.0-20260925",
+  "point_in_time_population_seed_profile": "KM-JRA-POINT-IN-TIME-POPULATION-SEED-v1.0-20260926",
+  "tsl_public_shadow_profile": "KM-JRA-TSL-PUBLIC-SHADOW-EVIDENCE-v1.0-20260925",
+  "tsl_base_url": "https://jra.k-ba.net/",
+  "tsl_name": "統計ショッカーリミテッド",
+  "tsl_authority": "THIRD_PARTY_PUBLIC_SHADOW / NON-OFFICIAL / NON-PRODUCTION / NON-PREDICTION-AUTHORITY",
+  "local_sbo_reuse_forbidden": true,
+  "local_sbo_host": "nar.k-ba.net",
+  "source_priority": [
+    "JRA_OFFICIAL",
+    "JMA_OFFICIAL",
+    "REGISTERED_JRA_COMMON",
+    "TSL_PUBLIC_NON_OFFICIAL"
+  ],
+  "endpoints": [
+    "/health",
+    "/source/manifest/jra",
+    "/source/acquire",
+    "/source/verify",
+    "/verify"
+  ],
+  "source_first_workflow": ".github/workflows/km-jra-source-first-runner.yml",
+  "source_request_root": "runtime/jra_source_requests",
+  "canonical_execution_store": "runtime/executions/<execution_id>/SOURCE",
+  "formal_handoff": {
+    "request_field": "source_execution_id",
+    "signed_source_reverify_required": true,
+    "github_oidc_attestation_required": true,
+    "ed25519_envelope_verification_required": true,
+    "source_snapshot_sha_match_required": true,
+    "official_runner_universe_match_required": true
+  },
+  "source_enrichment": {
+    "jra_official_runner_universe": "REQUIRED_FOR_FORMAL_FULL",
+    "same_day_official_results": "OPTIONAL_PRE_CUTOFF",
+    "jma_weather": "OFFICIAL_CONTEXT_SHADOW",
+    "jra_auxiliary": "DERIVED_FROM_OFFICIAL_SOURCE_SHADOW",
+    "point_in_time_population_seed": "FIELD_SEED_ONLY / SHADOW / NO_POPULATION_RATE_AUTHORITY",
+    "tsl": "OPTIONAL_PUBLIC_SHADOW / NEVER_OVERRIDES_JRA_OFFICIAL"
+  },
+  "production_prediction_change": false,
+  "production_numerical_change": false,
+  "production_mec_change": false,
+  "krs_authority_change": false,
+  "probability_ev_kelly_change": false,
+  "execution_mode": "GITHUB_ACTIONS_OIDC_ATTESTED_EXTERNAL_EXECUTION"
+}

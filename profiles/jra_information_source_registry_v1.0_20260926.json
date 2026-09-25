@@ -1,0 +1,46 @@
+{
+  "profile_id": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.0-20260926",
+  "status": "CANDIDATE-ACTIVATION / JRA-WIDE / SOURCE-ENRICHMENT / SIGNED-SOURCE / TSL-PUBLIC-SHADOW",
+  "family_id": "JRA",
+  "rule": "JRA official facts have precedence. TSL is public third-party shadow only and can never override JRA official race facts.",
+  "source_classes": [
+    "OFFICIAL_JRA_CALENDAR",
+    "OFFICIAL_JRA_RACE_CARD",
+    "OFFICIAL_JRA_SAME_DAY_RESULT",
+    "OFFICIAL_JRA_RUNNER_UNIVERSE",
+    "OFFICIAL_JMA_AMEDAS_STATION_METADATA",
+    "OFFICIAL_JMA_AMEDAS_OBSERVATION",
+    "DERIVED_JRA_SAME_DAY_POSITION_BIAS_SHADOW",
+    "DERIVED_JRA_RACE_CARD_IDENTITY_SEED",
+    "DERIVED_JRA_POINT_IN_TIME_POPULATION_SEED_SHADOW",
+    "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "SIGNED_SOURCE_RECEIPT"
+  ],
+  "source_priority": [
+    "JRA_OFFICIAL",
+    "JMA_OFFICIAL",
+    "REGISTERED_JRA_COMMON",
+    "TSL_PUBLIC_NON_OFFICIAL"
+  ],
+  "source_runtime": "KM-JRA-SOURCE-RUNTIME-v1.1-20260926",
+  "tsl": {
+    "name": "統計ショッカーリミテッド",
+    "host": "jra.k-ba.net",
+    "base_url": "https://jra.k-ba.net/",
+    "source_class": "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "authority": "TSL_PUBLIC_NON_OFFICIAL",
+    "official": false,
+    "production_authority": false,
+    "prediction_authority": false,
+    "default_requirement": "OPTIONAL_SHADOW_CAPTURE",
+    "source_priority": "BELOW_JRA_OFFICIAL / NEVER_OVERRIDES_OFFICIAL_RACE_FACTS",
+    "storage_policy": "NORMALIZED_EXTRACTED_DATA_PLUS_RAW_SHA_ONLY / NO_RAW_HTML_REPUBLICATION",
+    "oos_eligibility": "PRE_CUTOFF + PRE_START + OFFICIAL_RUNNER_UNIVERSE_MATCH"
+  },
+  "local_sbo": {
+    "name": "水分ボンバーオンライン",
+    "host": "nar.k-ba.net",
+    "allowed_for_jra": false,
+    "reason": "LOCAL/NAR only; JRA uses TSL."
+  }
+}

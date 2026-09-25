@@ -36,3 +36,23 @@ def test_source_allowlist_contains_tsl():
     import source_acquisition as s
     assert s._host_allowed("jra.k-ba.net")
     assert not s._host_allowed("example.invalid")
+
+
+def test_jra_point_in_time_population_seed():
+    from jra_population_seed import build_population_seed
+    artifact={
+      "jra_auxiliary_evidence_sha256":"AUXSHA",
+      "jra_auxiliary_evidence":{
+        "race_card_population_seed":{
+          "seeds":[
+            {"runner_id":"1","horse_no":1,"horse_name":"A","sire":"S1","dam":"D1","damsire":"DS1","body_weight":480,"body_weight_change":2},
+            {"runner_id":"2","horse_no":2,"horse_name":"B","sire":"S1","dam":"D2","damsire":"DS2","body_weight":470,"body_weight_change":-4}
+          ]
+        }
+      }
+    }
+    x=build_population_seed(artifact)
+    assert x["runner_count"]==2
+    assert x["population_fit_ready"] is False
+    assert x["production_authority"] is False
+    assert x["sire_field_counts"]==[{"sire":"S1","field_count":2}]

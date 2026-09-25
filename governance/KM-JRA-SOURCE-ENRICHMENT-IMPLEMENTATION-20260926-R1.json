@@ -1,0 +1,34 @@
+{
+  "profile_id": "KM-JRA-SOURCE-ENRICHMENT-IMPLEMENTATION-20260926-R1",
+  "status": "IMPLEMENTED / ACCEPTANCE-PENDING / NON-NUMERICAL / PRODUCTION-POLICY-UNCHANGED",
+  "family_id": "JRA",
+  "objective": "Bring JRA external source acquisition to LOCAL source-enrichment parity while preserving family isolation.",
+  "implemented": [
+    "JRA official source manifest and runner universe",
+    "Signed SOURCE receipt and GitHub OIDC attestation",
+    "JMA official weather context",
+    "JRA same-day auxiliary evidence",
+    "JRA point-in-time field population seed",
+    "TSL public shadow adapter at https://jra.k-ba.net/",
+    "Formal source_execution_id handoff with attestation/signature/snapshot/runner re-verification"
+  ],
+  "boundaries": {
+    "tsl": "NON-OFFICIAL / SHADOW / NO PRODUCTION OR PREDICTION AUTHORITY",
+    "population_seed": "CURRENT FIELD ONLY / NO HISTORICAL RATE AUTHORITY",
+    "training": "NOT UNIVERSALLY CONNECTED",
+    "trainer_comments": "NOT UNIVERSALLY CONNECTED",
+    "paddock": "NOT UNIVERSALLY CONNECTED",
+    "numerical_policy_change": false,
+    "prediction_policy_change": false,
+    "mec_change": false,
+    "krs_change": false
+  },
+  "acceptance_required": [
+    "JRA source runtime unit acceptance PASS",
+    "TSL parser and allowlist PASS",
+    "population seed test PASS",
+    "historical live source acceptance remains PASS",
+    "source-first signed execution PASS",
+    "formal handoff E2E PASS before Current Authority activation"
+  ]
+}

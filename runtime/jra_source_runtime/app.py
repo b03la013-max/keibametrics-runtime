@@ -11,8 +11,9 @@ from jra_runner_universe import enrich_source_artifact,validate_request_runners
 from tsl_public_shadow_evidence import build_tsl_shadow_evidence,discover_tsl_race_url
 from jma_weather_evidence import build_jma_weather_evidence
 from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
+from jra_population_seed import enrich_with_population_seed
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.0-20260925"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.1-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -49,6 +50,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "tsl_public_shadow_evidence_sha256":_sha_file("tsl_public_shadow_evidence.py"),
         "jma_weather_evidence_sha256":_sha_file("jma_weather_evidence.py"),
         "jra_auxiliary_evidence_sha256":_sha_file("jra_auxiliary_evidence.py"),
+        "jra_population_seed_sha256":_sha_file("jra_population_seed.py"),
       }
     }
     rb=_jdump(receipt)
@@ -99,7 +101,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -156,6 +158,9 @@ def source_acquire(p:Dict[str,Any]):
 
     try: artifact=enrich_with_auxiliary_evidence(artifact)
     except Exception as e: artifact.setdefault("warnings",[]).append("JRA_AUXILIARY_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+
+    try: artifact=enrich_with_population_seed(artifact)
+    except Exception as e: artifact.setdefault("warnings",[]).append("JRA_POPULATION_SEED_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     artifact["errors"]=list(dict.fromkeys(errors))
     artifact["formal_ready"]=bool(not artifact["errors"] and artifact.get("jra_official_runner_universe"))
