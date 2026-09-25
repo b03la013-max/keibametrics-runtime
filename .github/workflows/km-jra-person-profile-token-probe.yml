@@ -1,0 +1,40 @@
+name: JRA Person Profile Token Probe
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-person-profile-token-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Probe JRA profile tokens
+        run: |
+          python - <<'PY'
+          import sys,re,json,urllib.parse
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_race_card_detail import _discover_and_fetch
+          from source_acquisition import _decode
+          raw,h,u,t=_discover_and_fetch("2026-09-26","0620260408",8)
+          s=_decode(raw,h.get("content-type",""))
+          out={}
+          for key,page in [("horse","accessU"),("jockey","accessK"),("trainer","accessC")]:
+            vals=[]
+            for m in re.finditer(r'href=["\\']/JRADB/'+page+r'\.html\?CNAME=([^"\\']+)["\\'][^>]*>(.*?)</a>',s,re.I|re.S):
+              token=urllib.parse.unquote(m.group(1))
+              label=re.sub(r"<[^>]+>","",m.group(2))
+              label=re.sub(r"\s+"," ",label).strip()
+              x={"token":token,"label":label}
+              if x not in vals:vals.append(x)
+            out[key]=vals
+          print(json.dumps({k:{"count":len(v),"sample":v[:5]} for k,v in out.items()},ensure_ascii=False,indent=2))
+          assert len(out["horse"])>=1
+          assert len(out["jockey"])>=1
+          assert len(out["trainer"])>=1
+          PY
