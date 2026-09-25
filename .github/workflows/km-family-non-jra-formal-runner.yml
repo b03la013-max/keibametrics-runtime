@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           REQ="${{ steps.execution_meta.outputs.request_file }}"
           test -n "$REQ"
-          REQUEST_FILE="$REQ" python runtime/non_jra_formal_runner.py
+          REQUEST_FILE="$REQ" python -m runtime.non_jra_formal_runner
 
       - name: Persist successful signed LOCAL execution envelopes
         if: success() && hashFiles('runtime_out/*.json') != ''
