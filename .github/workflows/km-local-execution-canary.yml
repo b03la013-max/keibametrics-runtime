@@ -26,11 +26,13 @@ on:
       - 'profiles/current_execution_gateway.json'
       - 'profiles/family_runtime_contracts_*.json'
       - 'runtime/execution_gateway.py'
+      - 'runtime/execution_store.py'
       - 'runtime/family_runtime_contract.py'
       - 'runtime/non_jra_formal_runner.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
+      - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
@@ -42,28 +44,43 @@ permissions:
 jobs:
   canary:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
+
       - name: Lint execution workflows
         shell: bash
         run: |
           set -euo pipefail
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          ./actionlint -color .github/workflows/km-family-non-jra-formal-runner.yml .github/workflows/km-local-result-from-signed-final.yml .github/workflows/km-local-execution-canary.yml
+          ./actionlint -color \
+            .github/workflows/km-family-non-jra-formal-runner.yml \
+            .github/workflows/km-local-result-from-signed-final.yml \
+            .github/workflows/km-local-execution-canary.yml
+
       - name: Compile and unit-test execution gateway
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile runtime/execution_gateway.py runtime/execution_store.py runtime/family_runtime_contract.py runtime/non_jra_formal_runner.py runtime/local_result_from_signed_final.py
+          python -m py_compile \
+            runtime/execution_gateway.py \
+            runtime/execution_store.py \
+            runtime/family_runtime_contract.py \
+            runtime/non_jra_formal_runner.py \
+            runtime/local_result_from_signed_final.py
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_execution_gateway.py tests/test_execution_store.py tests/test_execution_workflow_contract.py
+          python -m pytest -q \
+            tests/test_execution_gateway.py \
+            tests/test_execution_store.py \
+            tests/test_execution_workflow_contract.py
+
       - name: Validate gateway pointer and external runtime bundle
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p runtime_out
           python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_canary.json
+
       - name: Verify family runtime contract resolves through pointer
         shell: bash
         run: |
@@ -78,6 +95,7 @@ jobs:
           assert r["external_endpoint"]=="https://witnessstrictimage-production.up.railway.app"
           print("KM_LOCAL_GATEWAY_CONTRACT_RESOLVE=PASS")
           PY
+
       - name: Persist canary evidence
         if: always()
         uses: actions/upload-artifact@v4
