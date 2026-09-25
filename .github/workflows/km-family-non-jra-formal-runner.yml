@@ -19,10 +19,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Resolve and execute family-isolated external runtime
+      - name: Resolve execution metadata
+        id: execution_meta
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/family_requests/*.json' | tail -1)"
@@ -31,10 +30,45 @@ jobs:
           fi
           test -n "$REQ"
           REQUEST_FILE="$REQ" python - <<'PY'
-          import json,os,sys,urllib.request,urllib.error,hashlib,datetime,copy,pathlib,io,zipfile
+          import json,os,sys,re
+          sys.path.insert(0,"runtime")
+          from execution_gateway import load_gateway, normalize_request, execution_phase, artifact_name, derive_execution_id
+          req=json.load(open(os.environ["REQUEST_FILE"],encoding="utf-8"))
+          fam=str(req.get("family_id") or "").upper()
+          if fam=="LOCAL":
+              gateway=load_gateway()
+              normalized,ctx=normalize_request(req,gateway)
+              execution_id=ctx["execution_id"]
+              phase=ctx["phase"]
+              art=artifact_name(execution_id,phase,gateway,"LOCAL")
+          else:
+              execution_id=derive_execution_id(req)
+              phase=execution_phase(req)
+              art=re.sub(r"[^A-Za-z0-9._-]+","-",f"km-ban-execution-{execution_id}-{phase}")
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
+              out.write(f"request_file={os.environ['REQUEST_FILE']}\n")
+              out.write(f"execution_id={execution_id}\n")
+              out.write(f"phase={phase}\n")
+              out.write(f"artifact_name={art}\n")
+          print(json.dumps({"request_file":os.environ["REQUEST_FILE"],"execution_id":execution_id,"phase":phase,"artifact_name":art},ensure_ascii=False))
+          PY
+      - name: Resolve and execute family-isolated external runtime
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REQ="${{ steps.execution_meta.outputs.request_file }}"
+          test -n "$REQ"
+          REQUEST_FILE="$REQ" python - <<'PY'
+          import json,os,sys,urllib.request,urllib.error,urllib.parse,hashlib,datetime,copy,pathlib,io,zipfile
           from zoneinfo import ZoneInfo
           sys.path.insert(0,"runtime")
           from family_runtime_contract import load_contracts, resolve_family_runtime
+          from execution_gateway import (
+              load_gateway, normalize_request, family_config, assess_runtime_health,
+              artifact_name as gateway_artifact_name, derive_execution_id,
+          )
 
           def sha_obj(x):
               return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -43,10 +77,23 @@ jobs:
               return datetime.datetime.fromisoformat(str(s).replace("Z","+00:00"))
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
-              req=json.load(f)
+              raw_req=json.load(f)
 
-          fam=str(req.get("family_id") or "").upper()
+          fam=str(raw_req.get("family_id") or "").upper()
           assert fam in {"LOCAL","BAN"}, f"NON_JRA_BRIDGE_FAMILY_INVALID:{fam}"
+          gateway=None
+          execution_context=None
+          if fam=="LOCAL":
+              gateway=load_gateway()
+              req,execution_context=normalize_request(raw_req,gateway)
+          else:
+              req=raw_req
+              execution_context={
+                  "execution_id":derive_execution_id(req),
+                  "family_id":fam,
+                  "phase":str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper(),
+              }
+          execution_id=str(execution_context["execution_id"])
           resolved=resolve_family_runtime(req,load_contracts())
           assert resolved["executable"] is True
           endpoint=resolved["external_endpoint"]
@@ -73,42 +120,29 @@ jobs:
                   raw=x.read().decode()
                   return x.status,json.loads(raw) if raw else {}
 
-          # Formal runtime revision/hash preflight. Canonical contract outranks
-          # a request-local stale expectation.
+          # Current execution gateway is the single operational pointer.
+          # Git commit equality is diagnostic only when the executable bundle
+          # fingerprint and runtime profile are compatible.
           if fam=="LOCAL":
-              contract=resolved.get("contract") or {}
-              canonical_expected=str(contract.get("runtime_git_revision") or "").strip()
-              request_expected=str(req.get("runtime_expected_revision") or "").strip()
-              if not canonical_expected:
-                  fail_closed("CANONICAL_RUNTIME_REVISION_MISSING")
-              if request_expected and request_expected!=canonical_expected:
-                  fail_closed("REQUEST_RUNTIME_REVISION_STALE",{
-                    "request_expected":request_expected,
-                    "canonical_expected":canonical_expected,
+              cfg=family_config("LOCAL",gateway)
+              if str(cfg.get("external_endpoint") or "").rstrip("/") != str(endpoint).rstrip("/"):
+                  fail_closed("GATEWAY_CONTRACT_ENDPOINT_MISMATCH",{
+                      "gateway_endpoint":cfg.get("external_endpoint"),
+                      "contract_endpoint":endpoint,
                   })
               hc,health=get_json("/health",60)
-              if hc>=300 or health.get("status")!="READY":
-                  fail_closed("RUNTIME_HEALTH_NOT_READY",{"http":hc,"health":health})
-              local_hashes={
-                "runtime_app_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/app_v15.py").read_bytes()).hexdigest(),
-                "legacy_runtime_app_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/app.py").read_bytes()).hexdigest(),
-                "source_acquisition_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/source_acquisition.py").read_bytes()).hexdigest(),
-                "nar_source_manifest_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/nar_source_manifest.py").read_bytes()).hexdigest(),
-                "nar_runner_universe_sha256":hashlib.sha256(pathlib.Path("runtime/local_physical/nar_runner_universe.py").read_bytes()).hexdigest(),
-              }
-              preflight={
-                "canonical_expected_revision":canonical_expected,
-                "runtime_github_revision":health.get("github_revision"),
-                "health_runtime_revision":health.get("runtime_revision"),
-                "health_hashes":{k:health.get(k) for k in local_hashes},
-                "repository_hashes":local_hashes,
-              }
-              persist("runtime_preflight.json",preflight)
-              if str(health.get("github_revision") or "")!=canonical_expected:
-                  fail_closed("RUNTIME_REVISION_MISMATCH",preflight)
-              mismatches={k:(local_hashes[k],health.get(k)) for k in local_hashes if health.get(k)!=local_hashes[k]}
-              if mismatches:
-                  fail_closed("RUNTIME_BUNDLE_HASH_MISMATCH",mismatches)
+              if hc>=300:
+                  fail_closed("RUNTIME_HEALTH_HTTP_FAILED",{"http":hc,"health":health})
+              assessment=assess_runtime_health(health,"LOCAL",gateway,pathlib.Path("."))
+              persist("execution_context.json",execution_context)
+              persist("runtime_preflight.json",{
+                  "execution_id":execution_id,
+                  "request_diagnostics":execution_context.get("request_diagnostics"),
+                  "health":health,
+                  "assessment":assessment,
+              })
+              if assessment.get("status")!="PASS":
+                  fail_closed("RUNTIME_GATEWAY_COMPATIBILITY_FAILED",assessment)
 
           def call(path,payload,timeout=600):
               data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
@@ -182,7 +216,7 @@ jobs:
                   fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
               off=source_artifact.get("official_runner_universe") or {}
               print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
-                "race_id":rid,"family_id":"LOCAL","execution_phase":"SOURCE",
+                "race_id":rid,"family_id":"LOCAL","execution_id":execution_id,"execution_phase":"SOURCE",
                 "status":"SOURCE_VERIFIED","external_endpoint":endpoint,
                 "source_receipt":source.get("receipt_sha256"),
                 "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
@@ -294,6 +328,55 @@ jobs:
           # need to be copied into the next request JSON.
           provided_source=req.get("source_receipt")
           source_receipt_artifact_id=req.get("source_receipt_artifact_id")
+
+          # Preferred handoff: resolve the deterministic SOURCE artifact from
+          # the lifecycle execution_id. Explicit artifact ids remain supported
+          # only for backward compatibility.
+          if not isinstance(provided_source,dict) and not source_receipt_artifact_id:
+              repo=os.environ.get("GITHUB_REPOSITORY") or ""
+              token=os.environ.get("GITHUB_TOKEN") or ""
+              if not repo or not token:
+                  fail_closed("SOURCE_ARTIFACT_AUTO_RESOLUTION_CONTEXT_MISSING",{
+                      "repository_present":bool(repo),"token_present":bool(token)
+                  })
+              source_artifact_name=gateway_artifact_name(execution_id,"SOURCE",gateway,"LOCAL")
+              list_url=(
+                  f"https://api.github.com/repos/{repo}/actions/artifacts"
+                  f"?name={urllib.parse.quote(source_artifact_name)}&per_page=100"
+              )
+              list_req=urllib.request.Request(list_url,headers={
+                  "accept":"application/vnd.github+json",
+                  "authorization":f"Bearer {token}",
+                  "x-github-api-version":"2022-11-28",
+                  "user-agent":"keibametrics-execution-gateway",
+              })
+              try:
+                  with urllib.request.urlopen(list_req,timeout=60) as x:
+                      artifact_listing=json.loads(x.read().decode())
+              except Exception as e:
+                  fail_closed("SOURCE_ARTIFACT_AUTO_RESOLUTION_FAILED",{
+                      "artifact_name":source_artifact_name,"error":str(e)
+                  })
+              candidates=[
+                  a for a in (artifact_listing.get("artifacts") or [])
+                  if not a.get("expired") and str(a.get("name") or "")==source_artifact_name
+              ]
+              if not candidates:
+                  fail_closed("SOURCE_ARTIFACT_NOT_FOUND_FOR_EXECUTION_ID",{
+                      "execution_id":execution_id,"artifact_name":source_artifact_name
+                  })
+              candidates.sort(key=lambda a:str(a.get("created_at") or ""),reverse=True)
+              chosen=candidates[0]
+              source_receipt_artifact_id=chosen.get("id")
+              persist("source_artifact_resolution.json",{
+                  "mode":"EXECUTION_ID_AUTO_RESOLVE",
+                  "execution_id":execution_id,
+                  "artifact_name":source_artifact_name,
+                  "artifact_id":source_receipt_artifact_id,
+                  "workflow_run_id":((chosen.get("workflow_run") or {}).get("id")),
+                  "created_at":chosen.get("created_at"),
+              })
+
           if not isinstance(provided_source,dict) and source_receipt_artifact_id:
               try:
                   artifact_id=int(source_receipt_artifact_id)
@@ -1243,7 +1326,7 @@ jobs:
           else:
               final_status="POST_START_REPLAY_E2E_PASS" if full_numeric else "POST_START_REPLAY_E2E_PASS_NUMERICAL_DEGRADED"
           print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
-            "race_id":rid,"family_id":"LOCAL","execution_phase":"FORMAL",
+            "race_id":rid,"family_id":"LOCAL","execution_id":execution_id,"execution_phase":"FORMAL",
             "temporal_mode":temporal_mode,
             "status":final_status,
             "full_numerical_calculation":full_numeric,
@@ -1290,7 +1373,7 @@ jobs:
         if: always() && hashFiles('runtime_out/*.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: km-local-signed-envelopes-${{ github.sha }}
+          name: ${{ steps.execution_meta.outputs.artifact_name }}
           path: runtime_out/*.json
           if-no-files-found: error
           retention-days: 90
