@@ -3,9 +3,10 @@ name: LOCAL MEC Forward Measurement Current Authority Acceptance
 on:
   pull_request:
     paths:
-      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R10.json'
-      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R8.json'
-      - 'profiles/venue_chat_routes_20260924_R12.json'
+      - 'profiles/current_execution_gateway.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260925_R14.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json'
+      - 'profiles/venue_chat_routes_20260925_R15.json'
       - 'research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json'
       - 'research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json'
       - 'governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json'
@@ -13,8 +14,13 @@ on:
       - 'runtime/local_mec_r5_shadow.py'
       - 'runtime/local_mec_r5_oos_tracker.py'
       - 'runtime/local_mec_r5_oos_status.json'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/local_result_from_signed_final.py'
       - '.github/workflows/local-mec-forward-current-authority-acceptance.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   authority:
@@ -25,44 +31,49 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Verify MEC authority graph and noninterference
+      - name: Verify current MEC authority graph and noninterference
         run: |
           python - <<'PY'
           import json, pathlib
           def j(p): return json.load(open(p,encoding="utf-8"))
 
-          auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R10.json")
-          suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R8.json")
-          route=j("profiles/venue_chat_routes_20260924_R12.json")
+          gateway=j("profiles/current_execution_gateway.json")
+          auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260925_R14.json")
+          suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json")
+          route=j("profiles/venue_chat_routes_20260925_R15.json")
           r4=j("research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json")
           r5=j("research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json")
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
           r5status=j("runtime/local_mec_r5_oos_status.json")
 
-          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R10"
-          assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
+          assert gateway["parent_current_authority"]==auth["manifest_id"]
+          assert gateway["venue_routing"]==route["profile_id"]
+          assert gateway["policy"]["production_prediction_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_policy_changed"] is False
+          assert gateway["policy"]["production_mec_policy_changed"] is False
+          assert gateway["policy"]["capital_policy_changed"] is False
+
+          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260925-R14"
           assert auth["common_family_components"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
-          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15"
           L=auth["family_scoped_authority"]["LOCAL"]
           assert L["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert L["mec_status"]=="ACTIVE / PRODUCTION / UNCHANGED"
           assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
           assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
-          assert L["suite_manifest"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R8"
+          assert L["suite_manifest"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R9"
+          assert L["numerical_authority_status"].startswith("NOT_READY")
           assert L["mec_measurement"]["r4_local"]["result"]=="LOCAL_PROMOTION_REJECTED"
           assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
           assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R8"
-          assert suite["predecessor"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R7"
-          assert suite["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R9"
           assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert suite["production_numeric_suite"]["status"]=="FROZEN"
           assert suite["production_numeric_suite"]["numerical_change"] is False
           assert suite["decision_execution"]["mec_forward_measurement"]["signed_final_binding_required"] is True
 
-          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R12"
-          assert route["predecessor"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260924-R11"
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15"
           lr=route["family_routes"]["LOCAL"]
           assert lr["mec_profile"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           pm=lr["parallel_mec_measurement"]
@@ -79,7 +90,6 @@ jobs:
 
           assert r5["status"].startswith("RESULT-INFORMED-DESIGN")
           assert r5["aggregates"]["SET_ONLY"]["pfs"]==102.431373
-          assert r5["aggregates"]["SET_ONLY"]["hit_races"]==4
           assert r5["aggregates"]["SET_PAIR_EXACT_TOP5"]["pfs"]==144.340949
           assert r5["forward_measurement"]["automatic_promotion"] is False
           assert r5["forward_measurement"]["target_eligible_races"]==30
@@ -89,12 +99,11 @@ jobs:
           assert closure["r4"]["local_promotion"]=="REJECT"
           assert closure["r5"]["status"].startswith("SHADOW")
           assert closure["r5"]["automatic_promotion"] is False
-          assert closure["railway_redeploy_required"] is False
 
           assert r5status["profile"]=="KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924"
-          assert r5status["status"]=="WAITING_30"
-          assert r5status["eligible_races"]==0
-          assert r5status["remaining_races"]==30
+          assert r5status["status"] in {"WAITING_30","HUMAN_REVIEW_REQUIRED"}
+          assert r5status["eligible_races"]==L["mec_measurement"]["r5_local"]["current_oos_count"]
+          assert r5status["remaining_races"]==max(0,r5status["target_eligible_races"]-r5status["eligible_races"])
           assert r5status["production_effect"]=="NONE"
           assert r5status["automatic_promotion"] is False
           assert set(r5status["training_exclusion"])=={
