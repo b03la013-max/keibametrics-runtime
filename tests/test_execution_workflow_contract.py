@@ -6,6 +6,8 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FORMAL = ROOT / ".github/workflows/km-family-non-jra-formal-runner.yml"
 RESULT = ROOT / ".github/workflows/km-local-result-from-signed-final.yml"
+FORMAL_RUNNER = ROOT / "runtime/non_jra_formal_runner.py"
+RESULT_RUNNER = ROOT / "runtime/local_result_from_signed_final.py"
 
 
 def _extract_python_heredocs(text: str):
@@ -31,12 +33,14 @@ def _extract_python_heredocs(text: str):
     return blocks
 
 
-def test_embedded_python_compiles():
+def test_embedded_python_and_extracted_runners_compile():
     for path in (FORMAL, RESULT):
         blocks = _extract_python_heredocs(path.read_text(encoding="utf-8"))
-        assert blocks, f"no embedded Python found in {path}"
+        assert blocks, f"no metadata Python heredoc found in {path}"
         for n, block in enumerate(blocks, 1):
             compile(block, f"{path.name}:heredoc:{n}", "exec")
+    for path in (FORMAL_RUNNER, RESULT_RUNNER):
+        compile(path.read_text(encoding="utf-8"), str(path), "exec")
 
 
 def test_formal_uses_gateway_bundle_compatibility_and_execution_id_handoff():
@@ -48,6 +52,8 @@ def test_formal_uses_gateway_bundle_compatibility_and_execution_id_handoff():
     assert 'fail_closed("RUNTIME_REVISION_MISMATCH"' not in text
     assert "steps.execution_meta.outputs.artifact_name" in text
     assert "km-local-execution-failure-" in text
+    assert "python runtime/non_jra_formal_runner.py" in text
+    assert len(text) < 21000
 
 
 def test_result_prefers_execution_id_and_canonical_endpoint():
@@ -57,3 +63,5 @@ def test_result_prefers_execution_id_and_canonical_endpoint():
     assert 'endpoint=req.get("external_endpoint")' not in text
     assert "steps.execution_meta.outputs.artifact_name" in text
     assert "km-local-result-failure-" in text
+    assert "python runtime/local_result_from_signed_final.py" in text
+    assert len(text) < 21000
