@@ -1,0 +1,38 @@
+name: JRA Current Jockey Link Context Probe
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-current-jockey-link-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import sys,json,re
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          import jra_race_card_detail as d
+          from source_acquisition import _decode
+          raw,h,url,tok=d._discover_and_fetch("2026-09-26","0620260408",8)
+          dec=_decode(raw,h.get("content-type",""))
+          parsed=d.parse_race_card_detail(raw,h.get("content-type",""))
+          out=[]
+          for r in parsed["runners"][:8]:
+            name=str(r.get("jockey") or "").strip()
+            if not name: continue
+            variants=[name,re.sub(r"[▲△◇☆★\s]","",name)]
+            idx=-1
+            for v in variants:
+              if v:
+                idx=dec.find(v)
+                if idx>=0: break
+            out.append({"runner_id":r.get("runner_id"),"jockey":name,"context":dec[max(0,idx-600):idx+900] if idx>=0 else None})
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
