@@ -63,6 +63,7 @@ jobs:
           )
           from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
           req=json.load(open(sys.argv[1],encoding="utf-8"))
+          acceptance_only=bool(req.get("acceptance_only"))
           run_id=int(req["source_run_id"])
           artifact_name=req["artifact_name"]
           os.makedirs("runtime_result_in",exist_ok=True)
@@ -137,7 +138,7 @@ jobs:
           mec_r4_binding=None
           mec_r4_oos_status=None
           mec_r4_shadow_path=os.path.join("runtime_result_in","mec_r4_shadow_pre_result.json")
-          if os.path.exists(mec_r4_shadow_path):
+          if (not acceptance_only) and os.path.exists(mec_r4_shadow_path):
               shadow=json.load(open(mec_r4_shadow_path,encoding="utf-8"))
               mec_r4_binding=verify_signed_final_binding(fin,shadow)
               shadow_result={
@@ -201,7 +202,7 @@ jobs:
           local_mec_r5_binding=None
           local_mec_r5_oos_status=None
           local_mec_r5_shadow_path=os.path.join("runtime_result_in","local_mec_r5_shadow_pre_result.json")
-          if os.path.exists(local_mec_r5_shadow_path):
+          if (not acceptance_only) and os.path.exists(local_mec_r5_shadow_path):
               r5_shadow=json.load(open(local_mec_r5_shadow_path,encoding="utf-8"))
               local_mec_r5_binding=verify_local_mec_r5_signed_final_binding(fin,r5_shadow)
               local_mec_r5_shadow_settlement=settle_local_mec_r5_shadow(
@@ -266,7 +267,7 @@ jobs:
           dual_path=os.path.join("runtime_result_in","candidate_numerical_dual_shadow_summary.json")
           dual_krs_path=os.path.join("runtime_result_in","candidate_krs_dual_shadow_summary.json")
           calibration_path="runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json"
-          if os.path.exists(dual_path):
+          if (not acceptance_only) and os.path.exists(dual_path):
               dual=json.load(open(dual_path,encoding="utf-8"))
               dual_krs=json.load(open(dual_krs_path,encoding="utf-8")) if os.path.exists(dual_krs_path) else {}
               cal=json.load(open(calibration_path,encoding="utf-8")) if os.path.exists(calibration_path) else {}
@@ -292,7 +293,7 @@ jobs:
           v03_path=os.path.join("runtime_result_in","candidate_numerical_v03_shadow_summary.json")
           v03_krs_summary_path=os.path.join("runtime_result_in","candidate_krs_v03_shadow_summary.json")
           v03_krs_envelope_path=os.path.join("runtime_result_in","candidate_krs_v03_receipt_envelope.json")
-          if os.path.exists(v03_path):
+          if (not acceptance_only) and os.path.exists(v03_path):
               candidate_v03_summary=json.load(open(v03_path,encoding="utf-8"))
               candidate_krs_v03_summary=(
                   json.load(open(v03_krs_summary_path,encoding="utf-8"))
@@ -362,8 +363,12 @@ jobs:
               json.dump(candidate_v03_oos_status,open("runtime_out/candidate_v03_oos_status.json","w",encoding="utf-8"),
                         ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
+          if acceptance_only:
+              open("runtime_out/acceptance_only.flag","w",encoding="utf-8").write("true\n")
+
           summary={
             "race_id":rid,
+            "acceptance_only":acceptance_only,
             "result_receipt":res.get("receipt_sha256"),
             "verified":True,
             "investment":total_investment,
@@ -398,6 +403,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -f runtime_out/acceptance_only.flag ]; then
+            echo "Acceptance-only RESULT: skip Production/OOS ledger persistence"
+            exit 0
+          fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
