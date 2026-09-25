@@ -39,6 +39,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Lint execution workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color .github/workflows/km-family-non-jra-formal-runner.yml .github/workflows/km-local-result-from-signed-final.yml .github/workflows/km-local-execution-canary.yml
       - name: Compile and unit-test execution gateway
         shell: bash
         run: |
