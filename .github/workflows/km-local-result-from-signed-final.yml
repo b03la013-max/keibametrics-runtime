@@ -34,6 +34,13 @@ jobs:
           set -euo pipefail
           git pull --ff-only origin main
 
+      - name: Verify canonical gateway and runtime before RESULT
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_result_preflight.json
+
       - name: Resolve RESULT execution metadata
         id: execution_meta
         shell: bash
@@ -68,9 +75,25 @@ jobs:
           test -n "$REQ"
           python -m runtime.local_result_from_signed_final "$REQ"
 
-      - name: Persist LOCAL forward measurement ledgers
+      - name: Stage canonical RESULT execution phase
+        if: success() && hashFiles('runtime_out/*.json') != ''
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          python runtime/execution_store.py persist \
+            --execution-id "$EXECUTION_ID" \
+            --phase RESULT \
+            --run-id "${{ github.run_id }}" \
+            --source-dir runtime_out \
+            --github-sha "${{ github.sha }}"
+
+      - name: Persist LOCAL forward measurement ledgers and RESULT lineage
         if: always()
         shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
         run: |
           set -euo pipefail
           if [ -f runtime_out/acceptance_only.flag ]; then
@@ -79,6 +102,7 @@ jobs:
           fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ -n "$EXECUTION_ID" ] && [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/RESULT"; fi
           if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/local_candidate_v03_oos_measurements ]; then git add runtime/local_candidate_v03_oos_measurements/*.json runtime/local_candidate_v03_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
@@ -90,9 +114,16 @@ jobs:
           if [ -d runtime/local_mec_r5_shadow_lineage ]; then git add runtime/local_mec_r5_shadow_lineage/*.json 2>/dev/null || true; fi
           if [ -f runtime/local_mec_r5_oos_status.json ]; then git add runtime/local_mec_r5_oos_status.json; fi
           if ! git diff --cached --quiet; then
-            git commit -m "measurement: persist LOCAL forward OOS state [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            git commit -m "measurement: persist LOCAL RESULT and forward OOS state [skip ci]"
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                exit 0
+              fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt * 2))
+            done
+            echo "Unable to persist RESULT/measurement state after retries" >&2
+            exit 1
           fi
 
       - name: Persist successful signed RESULT envelope
