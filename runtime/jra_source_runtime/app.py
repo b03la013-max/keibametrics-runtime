@@ -14,7 +14,7 @@ from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
 from jra_race_context import enrich_with_race_context
-from jra_race_card_detail import fetch_and_enrich_race_card_detail
+from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -150,6 +150,7 @@ def source_acquire(p:Dict[str,Any]):
     # Official JRA PDF is the mandatory independent Runner Universe source.
     # JRADB HTML is retained only as auxiliary evidence because the public page
     # may render without server-side tables.
+    pdf_runner_error=None
     try:
         if not meeting_key:
             raise ValueError("JRA_MEETING_KEY_REQUIRED_FOR_OFFICIAL_PDF")
@@ -159,7 +160,8 @@ def source_acquire(p:Dict[str,Any]):
             race_no=ctx["race_no"],meeting_key=meeting_key
         )
     except Exception as e:
-        errors.append("JRA_OFFICIAL_PDF_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
+        pdf_runner_error=type(e).__name__+":"+str(e)
+        artifact.setdefault("warnings",[]).append("JRA_OFFICIAL_PDF_RUNNER_UNIVERSE_UNAVAILABLE:"+pdf_runner_error)
 
     # Official JRA detailed race card contains current market snapshot, pedigree,
     # trainer/rider identity and up to four recent runs. It is Production-authorized
@@ -174,6 +176,37 @@ def source_acquire(p:Dict[str,Any]):
         artifact.setdefault("warnings",[]).append("JRA_RACE_CARD_DETAIL_UNAVAILABLE:"+type(e).__name__+":"+str(e))
         if q.get("require_jra_race_card_detail"):
             errors.append("JRA_RACE_CARD_DETAIL_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
+
+    # Runner Universe policy: official PDF is preferred once published. Before the
+    # PDF is available, the server-rendered official JRADB detailed card is a
+    # same-authority JRA fallback. When both exist, their runner ID/name sets must agree.
+    detail_u=artifact.get("jra_official_race_card_detail")
+    if not artifact.get("jra_official_runner_universe") and detail_u:
+        try:
+            declared_u,active_u=runner_universes_from_detail(detail_u)
+            artifact["jra_declared_runner_universe"]=declared_u
+            artifact["jra_official_runner_universe"]=active_u
+            artifact["jra_official_runner_universe_sha256"]=sha_obj(active_u)
+            artifact["official_runner_universe"]=active_u
+            artifact["official_runner_universe_sha256"]=active_u["runner_universe_sha256"]
+            artifact["official_runner_source"]="JRA_OFFICIAL_JRADB_DETAIL_FALLBACK"
+        except Exception as e:
+            errors.append("JRA_DETAIL_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
+    elif artifact.get("jra_official_runner_universe") and detail_u:
+        try:
+            _,detail_active=runner_universes_from_detail(detail_u)
+            p={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (artifact["jra_official_runner_universe"].get("runners") or [])}
+            h={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (detail_active.get("runners") or [])}
+            mismatch=(p!=h)
+            artifact["official_runner_universe_reconciliation"]={"status":"PASS" if not mismatch else "MISMATCH","pdf_count":len(p),"detail_count":len(h)}
+            if mismatch:
+                errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH")
+            else:
+                artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
+        except Exception as e:
+            errors.append("JRA_OFFICIAL_RUNNER_RECONCILIATION_FAILED:"+type(e).__name__+":"+str(e))
+    if not artifact.get("jra_official_runner_universe"):
+        errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_UNAVAILABLE:"+(pdf_runner_error or "PDF_NOT_AVAILABLE")+";DETAIL_FALLBACK_NOT_AVAILABLE")
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])

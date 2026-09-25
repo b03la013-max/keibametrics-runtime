@@ -172,3 +172,16 @@ def test_jra_race_card_detail_parser():
     assert a["recent_runs"][0]["body_weight"]==438
     assert a["recent_runs"][0]["final3f"]==36.4
     assert a["recent_runs"][0]["margin"]==0.5
+
+
+def test_detail_runner_universe_fallback():
+    from jra_race_card_detail import runner_universes_from_detail
+    d={"source_snapshot_sha256":"D","runners":[
+      {"runner_id":"1","horse_no":1,"frame_no":1,"status":"ACTIVE","horse_name":"A","sex":"牝","age":3,"assigned_weight":54.0,"jockey":"J","current_body_weight":470,"current_body_weight_change":2},
+      {"runner_id":"2","horse_no":2,"frame_no":2,"status":"CANCELLED","horse_name":"B","sex":"牡","age":4,"assigned_weight":57.0,"jockey":"K","current_body_weight":480,"current_body_weight_change":0}
+    ]}
+    declared,active=runner_universes_from_detail(d)
+    assert declared["runner_count"]==2
+    assert active["runner_count"]==1
+    assert active["runners"][0]["name"]=="A"
+    assert active["runners"][0]["source"]=="JRA_OFFICIAL_JRADB_DETAIL"

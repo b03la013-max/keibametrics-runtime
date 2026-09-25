@@ -160,11 +160,14 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         if no is None or no<1 or no>18:continue
         ident=_parse_identity(row[identity_i] if identity_i<len(row) else "")
         person=_parse_current_person(row[person_i] if person_i<len(row) else "")
+        frame_no=_num(row[0]) if len(row)>0 else None
+        joined=" ".join(str(z or "") for z in row)
+        status="CANCELLED" if ("出走取消" in joined or "競走除外" in joined) else "ACTIVE"
         recent=[]
         for i in run_indices:
             x=_parse_recent(row[i] if i<len(row) else "")
             if x:recent.append(x)
-        runners.append({"runner_id":str(no),"horse_no":no,**ident,**person,"recent_runs":recent})
+        runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,**ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     out={"profile":PROFILE,"official":True,"production_fact_authority":True,"runner_count":len(runners),"runners":runners}
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
@@ -183,3 +186,40 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     artifact["jra_official_race_card_detail"]=detail
     artifact["jra_official_race_card_detail_sha256"]=sha_obj(detail)
     return artifact
+
+
+def runner_universes_from_detail(detail:Dict[str,Any])->Tuple[Dict[str,Any],Dict[str,Any]]:
+    runners=[]
+    for x in detail.get("runners") or []:
+        name=str(x.get("horse_name") or "").strip()
+        if not name: continue
+        runners.append({
+            "runner_id":str(x.get("runner_id") or x.get("horse_no")),
+            "horse_no":int(x.get("horse_no")),
+            "frame_no":x.get("frame_no"),
+            "name":name,
+            "canonical_name":re.sub(r"\s+","",name),
+            "status":str(x.get("status") or "ACTIVE"),
+            "sex":x.get("sex"),
+            "age":x.get("age"),
+            "assigned_weight":x.get("assigned_weight"),
+            "jockey":x.get("jockey"),
+            "body_weight":x.get("current_body_weight"),
+            "body_weight_change":x.get("current_body_weight_change"),
+            "source":"JRA_OFFICIAL_JRADB_DETAIL",
+        })
+    if not runners:
+        raise ValueError("JRA_DETAIL_RUNNER_UNIVERSE_EMPTY")
+    declared={
+        "profile":"KM-JRA-OFFICIAL-DETAIL-RUNNER-UNIVERSE-v1.0-20260926",
+        "source_id":"JRA-OFFICIAL-RACE-CARD-DETAIL",
+        "source_snapshot_sha256":detail.get("source_snapshot_sha256"),
+        "universe_type":"DECLARED",
+        "runner_count":len(runners),
+        "runners":runners,
+    }
+    declared["runner_universe_sha256"]=sha_obj(declared)
+    active=[x for x in runners if x.get("status")=="ACTIVE"]
+    active_u={**declared,"universe_type":"ACTIVE","runner_count":len(active),"runners":active}
+    active_u["runner_universe_sha256"]=sha_obj(active_u)
+    return declared,active_u
