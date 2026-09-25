@@ -15,7 +15,8 @@ from local_mec_r5_shadow import (
     settle_shadow as settle_local_mec_r5_shadow,
 )
 from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
-from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name
+from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json
+from execution_store import materialize_phase
 
 raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
 gateway=load_gateway()
@@ -26,44 +27,59 @@ os.makedirs("runtime_result_in",exist_ok=True)
 os.makedirs("runtime_out",exist_ok=True)
 
 # Explicit run/artifact references remain backward compatible. New
-# executions resolve the immutable FORMAL artifact from execution_id.
+# executions first resolve the immutable FORMAL phase from the canonical
+# execution store. Actions artifacts are only a compatibility fallback.
 run_id=req.get("source_run_id")
 artifact_name=req.get("artifact_name")
 resolution_mode="EXPLICIT_BACKWARD_COMPAT"
 chosen=None
+canonical=None
 if run_id is None or not artifact_name:
-    target_name=gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")
-    repo=os.environ.get("GITHUB_REPOSITORY") or ""
-    token=os.environ.get("GH_TOKEN") or ""
-    if not repo or not token:
-        raise SystemExit("FINAL_ARTIFACT_AUTO_RESOLUTION_CONTEXT_MISSING")
-    url=(
-        f"https://api.github.com/repos/{repo}/actions/artifacts"
-        f"?name={urllib.parse.quote(target_name)}&per_page=100"
-    )
-    rq=urllib.request.Request(url,headers={
-        "accept":"application/vnd.github+json",
-        "authorization":f"Bearer {token}",
-        "x-github-api-version":"2022-11-28",
-        "user-agent":"keibametrics-execution-gateway",
-    })
-    with urllib.request.urlopen(rq,timeout=60) as resp:
-        listing=json.loads(resp.read().decode())
-    candidates=[
-        a for a in (listing.get("artifacts") or [])
-        if not a.get("expired") and str(a.get("name") or "")==target_name
-    ]
-    if not candidates:
-        raise SystemExit("FORMAL_ARTIFACT_NOT_FOUND_FOR_EXECUTION_ID:"+execution_id)
-    candidates.sort(key=lambda a:str(a.get("created_at") or ""),reverse=True)
-    chosen=candidates[0]
-    artifact_name=target_name
-    run_id=((chosen.get("workflow_run") or {}).get("id"))
-    if not run_id:
-        raise SystemExit("FORMAL_ARTIFACT_WORKFLOW_RUN_ID_MISSING")
-    resolution_mode="EXECUTION_ID_AUTO_RESOLVE"
+    canonical=materialize_phase(execution_id,"FORMAL","runtime_result_in")
+    if canonical is not None:
+        run_id=(canonical.get("manifest") or {}).get("run_id")
+        artifact_name=gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")
+        resolution_mode="CANONICAL_EXECUTION_STORE"
+    else:
+        target_name=gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")
+        repo=os.environ.get("GITHUB_REPOSITORY") or ""
+        token=os.environ.get("GH_TOKEN") or ""
+        if not repo or not token:
+            raise SystemExit("FINAL_ARTIFACT_AUTO_RESOLUTION_CONTEXT_MISSING")
+        url=(
+            f"https://api.github.com/repos/{repo}/actions/artifacts"
+            f"?name={urllib.parse.quote(target_name)}&per_page=100"
+        )
+        status,listing=request_json(
+            url,
+            method="GET",
+            headers={
+                "accept":"application/vnd.github+json",
+                "authorization":f"Bearer {token}",
+                "x-github-api-version":"2022-11-28",
+                "user-agent":"keibametrics-execution-gateway",
+            },
+            timeout=60,
+            attempts=4,
+        )
+        if status>=300:
+            raise SystemExit("FORMAL_ARTIFACT_LIST_FAILED:"+str(status))
+        candidates=[
+            a for a in (listing.get("artifacts") or [])
+            if not a.get("expired") and str(a.get("name") or "")==target_name
+        ]
+        if not candidates:
+            raise SystemExit("FORMAL_ARTIFACT_NOT_FOUND_FOR_EXECUTION_ID:"+execution_id)
+        candidates.sort(key=lambda a:str(a.get("created_at") or ""),reverse=True)
+        chosen=candidates[0]
+        artifact_name=target_name
+        run_id=((chosen.get("workflow_run") or {}).get("id"))
+        if not run_id:
+            raise SystemExit("FORMAL_ARTIFACT_WORKFLOW_RUN_ID_MISSING")
+        resolution_mode="EXECUTION_ID_AUTO_RESOLVE"
 
-run_id=int(run_id)
+if run_id is not None:
+    run_id=int(run_id)
 json.dump({
     "mode":resolution_mode,
     "execution_id":execution_id,
@@ -71,10 +87,12 @@ json.dump({
     "workflow_run_id":run_id,
     "artifact_id":(chosen or {}).get("id"),
     "created_at":(chosen or {}).get("created_at"),
+    "execution_store_manifest_sha256":((canonical or {}).get("latest") or {}).get("manifest_sha256"),
 },open("runtime_out/artifact_resolution.json","w",encoding="utf-8"),
   ensure_ascii=False,sort_keys=True,indent=2)
 
-subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
+if resolution_mode!="CANONICAL_EXECUTION_STORE":
+    subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
 fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
 fin=json.load(open(fin_path,encoding="utf-8"))
 rid=req["race_id"]
@@ -122,10 +140,16 @@ result_payload={
   "pfs_authority":req.get("pfs_authority") or "FROZEN-RECOMMENDATION"
 }
 def post(path,payload):
-    data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
-    rq=urllib.request.Request(endpoint+path,data=data,headers={"Content-Type":"application/json"},method="POST")
-    with urllib.request.urlopen(rq,timeout=180) as resp:
-        return json.loads(resp.read().decode())
+    status,body=request_json(
+        endpoint+path,
+        method="POST",
+        payload=payload,
+        timeout=180,
+        attempts=4,
+    )
+    if status>=300:
+        raise SystemExit(f"RUNTIME_POST_FAILED:{path}:{status}:{json.dumps(body,ensure_ascii=False)}")
+    return body
 final_ver=post("/verify",fin)
 if not final_ver.get("verified") and not final_ver.get("valid"):
     raise SystemExit("FINAL_SIGNATURE_VERIFY_FAILED_BEFORE_MEC_SHADOW")
