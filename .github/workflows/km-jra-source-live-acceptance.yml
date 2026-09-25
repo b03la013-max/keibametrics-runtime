@@ -1,0 +1,76 @@
+name: KeibaMetrics JRA Source Live Acceptance
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/km-jra-source-live-acceptance.yml'
+  workflow_dispatch:
+
+jobs:
+  live-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Live JRA / TSL / JMA source acceptance
+        run: |
+          cd runtime/jra_source_runtime
+          python - <<'PY'
+          import json
+          from jra_source_manifest import race_card_url_from_meeting_key
+          from tsl_public_shadow_evidence import discover_tsl_race_url,parse_tsl_html,_fetch
+          from source_acquisition import fetch_source
+          from jra_runner_universe import extract_from_tables
+          from jma_weather_evidence import _fetch_station_table,choose_nearest_station
+          venue="NKY"; date="2026-09-22"; race_no=10
+          tsl_url,key,disc=discover_tsl_race_url(venue,date,race_no)
+          raw,h,robots,final=_fetch(tsl_url)
+          tsl=parse_tsl_html(raw,h.get("content-type",""))
+          card_url=race_card_url_from_meeting_key(key,date,race_no)
+          spec={
+            "source_id":"JRA-RACE-CARD","source_class":"OFFICIAL_JRA_RACE_CARD",
+            "authority":"JRA_OFFICIAL","priority":120,"official":True,"required":True,
+            "url":card_url,"max_bytes":2000000,"timeout_seconds":25,
+            "extract":[{"field":"race_card_tables","type":"html_tables","required":True}]
+          }
+          snap,errs=fetch_source(spec,"2099-01-01T00:00:00+09:00")
+          tables=(snap.get("extracted_evidence") or {}).get("race_card_tables")
+          runners=extract_from_tables(tables)
+          station_snap,stations=_fetch_station_table("2099-01-01T00:00:00+09:00")
+          station=choose_nearest_station(stations,venue)
+          out={
+            "profile":"KM-JRA-SOURCE-LIVE-ACCEPTANCE-v1.0-20260925",
+            "status":"PASS",
+            "historical_replay_only":True,
+            "production_effect":"NONE",
+            "venue_id":venue,"race_date":date,"race_no":race_no,
+            "tsl_url":tsl_url,"tsl_meeting_key":key,"tsl_runner_count":len(tsl["runners"]),
+            "tsl_raw_sha256":__import__("hashlib").sha256(raw).hexdigest(),
+            "jra_race_card_url":card_url,"jra_http_status":snap.get("http_status"),
+            "jra_raw_sha256":snap.get("raw_sha256"),"official_runner_count":len(runners),
+            "official_runner_ids":[x["horse_no"] for x in runners],
+            "jma_station_id":station.get("station_id"),"jma_station_name":station.get("station_name"),
+            "jma_station_distance_km":station.get("distance_km"),
+            "errors":errs
+          }
+          assert out["jra_http_status"]==200
+          assert out["official_runner_count"]>=2
+          assert out["tsl_runner_count"]>=2
+          assert out["errors"]==[]
+          open("../../runtime/jra_source_runtime/live_acceptance_status.json","w",encoding="utf-8").write(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2))
+          print("JRA_SOURCE_LIVE_ACCEPTANCE="+json.dumps(out,ensure_ascii=False,separators=(",",":")))
+          PY
+      - name: Persist live acceptance
+        if: success()
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/live_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA source live acceptance PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
