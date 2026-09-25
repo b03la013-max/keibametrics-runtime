@@ -67,17 +67,20 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
               out.write(f"request_file={os.environ['REQUEST_FILE']}\n")
               out.write(f"execution_id={execution_id}\n")
+              out.write(f"family_id={fam}\n")
               out.write(f"phase={phase}\n")
               out.write(f"artifact_name={art}\n")
           print(json.dumps({
               "request_file":os.environ["REQUEST_FILE"],
               "execution_id":execution_id,
+              "family_id":fam,
               "phase":phase,
               "artifact_name":art
           },ensure_ascii=False))
           PY
 
       - name: Verify canonical gateway and runtime before race execution
+        if: steps.execution_meta.outputs.family_id == 'LOCAL'
         shell: bash
         run: |
           set -euo pipefail
