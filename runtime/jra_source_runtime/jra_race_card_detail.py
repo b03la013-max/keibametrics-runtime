@@ -184,7 +184,10 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         for i in run_indices:
             x=_parse_recent(row[i] if i<len(row) else "")
             if x:recent.append(x)
-        runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,**ident,**person,"recent_runs":recent})
+        cname=re.sub(r"\s+","",str(ident.get("horse_name") or "")).strip()
+        runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,
+                        "horse_profile_token":token_by_name.get(cname),
+                        **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     weather=None; going=None; going_surface=None
     mw=re.search(r"天候\\s*([^\\s<]+)",decoded)
