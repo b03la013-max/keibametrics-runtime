@@ -8,6 +8,7 @@ on:
       - 'tests/test_local_mec_r5_shadow.py'
       - 'tests/test_local_mec_r5_oos_tracker.py'
       - '.github/workflows/km-local-result-from-signed-final.yml'
+      - 'runtime/local_result_from_signed_final.py'
       - '.github/workflows/local-mec-r5-settlement-classification-acceptance.yml'
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ jobs:
           python -m pip install -q pytest
           python -m py_compile runtime/local_mec_r5_shadow.py runtime/local_mec_r5_oos_tracker.py
           pytest -q tests/test_local_mec_r5_shadow.py tests/test_local_mec_r5_oos_tracker.py
-          grep -q 'signed_final_binding_valid=True' .github/workflows/km-local-result-from-signed-final.yml
+          grep -q 'signed_final_binding_valid=True' runtime/local_result_from_signed_final.py
           python - <<'PY'
           import json
           x=json.load(open("runtime/local_mec_r5_oos_status.json",encoding="utf-8"))
