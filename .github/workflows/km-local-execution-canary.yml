@@ -1,0 +1,55 @@
+name: KM LOCAL Execution Gateway Canary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 1 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'profiles/current_execution_gateway.json'
+      - 'profiles/family_runtime_contracts_*.json'
+      - 'runtime/execution_gateway.py'
+      - 'runtime/family_runtime_contract.py'
+      - 'runtime/local_physical/**'
+      - '.github/workflows/km-local-execution-canary.yml'
+      - '.github/workflows/km-family-non-jra-formal-runner.yml'
+      - '.github/workflows/km-local-result-from-signed-final.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate gateway pointer and external runtime bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_canary.json
+      - name: Verify family runtime contract resolves through pointer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "runtime")
+          from family_runtime_contract import load_contracts, resolve_family_runtime
+          c=load_contracts()
+          r=resolve_family_runtime({"family_id":"LOCAL"},c)
+          assert r["executable"] is True
+          assert r["external_endpoint"]=="https://witnessstrictimage-production.up.railway.app"
+          print("KM_LOCAL_GATEWAY_CONTRACT_RESOLVE=PASS")
+          PY
+      - name: Persist canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-execution-gateway-canary-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 30
