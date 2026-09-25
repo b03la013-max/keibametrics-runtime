@@ -9,11 +9,13 @@ on:
       - 'profiles/current_execution_gateway.json'
       - 'profiles/family_runtime_contracts_*.json'
       - 'runtime/execution_gateway.py'
+      - 'runtime/execution_store.py'
       - 'runtime/family_runtime_contract.py'
       - 'runtime/non_jra_formal_runner.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
+      - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
@@ -53,9 +55,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile runtime/execution_gateway.py runtime/family_runtime_contract.py runtime/non_jra_formal_runner.py runtime/local_result_from_signed_final.py
+          python -m py_compile runtime/execution_gateway.py runtime/execution_store.py runtime/family_runtime_contract.py runtime/non_jra_formal_runner.py runtime/local_result_from_signed_final.py
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_execution_gateway.py tests/test_execution_workflow_contract.py
+          python -m pytest -q tests/test_execution_gateway.py tests/test_execution_store.py tests/test_execution_workflow_contract.py
       - name: Validate gateway pointer and external runtime bundle
         shell: bash
         run: |
