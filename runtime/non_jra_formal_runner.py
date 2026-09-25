@@ -4,8 +4,9 @@ sys.path.insert(0,"runtime")
 from family_runtime_contract import load_contracts, resolve_family_runtime
 from execution_gateway import (
     load_gateway, normalize_request, family_config, assess_runtime_health,
-    artifact_name as gateway_artifact_name, derive_execution_id,
+    artifact_name as gateway_artifact_name, derive_execution_id, request_json,
 )
+from execution_store import materialize_phase
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -52,10 +53,12 @@ def fail_closed(code,details=None):
     raise AssertionError((code,details))
 
 def get_json(path,timeout=60):
-    rq=urllib.request.Request(endpoint+path,headers={"accept":"application/json"},method="GET")
-    with urllib.request.urlopen(rq,timeout=timeout) as x:
-        raw=x.read().decode()
-        return x.status,json.loads(raw) if raw else {}
+    return request_json(
+        endpoint+path,
+        method="GET",
+        timeout=timeout,
+        attempts=4,
+    )
 
 # Current execution gateway is the single operational pointer.
 # Git commit equality is diagnostic only when the executable bundle
@@ -82,17 +85,13 @@ if fam=="LOCAL":
         fail_closed("RUNTIME_GATEWAY_COMPATIBILITY_FAILED",assessment)
 
 def call(path,payload,timeout=600):
-    data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
-    rq=urllib.request.Request(endpoint+path,data=data,headers={"content-type":"application/json"},method="POST")
-    try:
-        with urllib.request.urlopen(rq,timeout=timeout) as x:
-            raw=x.read().decode()
-            return x.status,json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as e:
-        raw=e.read().decode(errors="replace")
-        try: body=json.loads(raw)
-        except Exception: body={"raw":raw}
-        return e.code,body
+    return request_json(
+        endpoint+path,
+        method="POST",
+        payload=payload,
+        timeout=timeout,
+        attempts=4,
+    )
 
 def verify_envelope(env,label):
     vc,v=call("/verify",env,60)
@@ -265,6 +264,30 @@ def deadline_guard(stage_name):
 # need to be copied into the next request JSON.
 provided_source=req.get("source_receipt")
 source_receipt_artifact_id=req.get("source_receipt_artifact_id")
+
+# Durable handoff: prefer the canonical execution store committed by the
+# successful SOURCE phase. Actions artifacts remain a compatibility fallback.
+if not isinstance(provided_source,dict) and not source_receipt_artifact_id:
+    try:
+        resolved_source=materialize_phase(execution_id,"SOURCE","runtime_source_in")
+    except Exception as e:
+        fail_closed("SOURCE_EXECUTION_STORE_CORRUPT",{
+            "execution_id":execution_id,"error":str(e)
+        })
+    if resolved_source is not None:
+        stored_source_path=os.path.join("runtime_source_in","source_receipt_envelope.json")
+        if not os.path.exists(stored_source_path):
+            fail_closed("SOURCE_EXECUTION_STORE_ENVELOPE_MISSING",{
+                "execution_id":execution_id,
+                "run_id":(resolved_source.get("manifest") or {}).get("run_id"),
+            })
+        provided_source=json.load(open(stored_source_path,encoding="utf-8"))
+        persist("source_artifact_resolution.json",{
+            "mode":"CANONICAL_EXECUTION_STORE",
+            "execution_id":execution_id,
+            "run_id":(resolved_source.get("manifest") or {}).get("run_id"),
+            "manifest_sha256":(resolved_source.get("latest") or {}).get("manifest_sha256"),
+        })
 
 # Preferred handoff: resolve the deterministic SOURCE artifact from
 # the lifecycle execution_id. Explicit artifact ids remain supported
