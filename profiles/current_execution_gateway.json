@@ -1,6 +1,6 @@
 {
-  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.0-20260925",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER / BUNDLE-FINGERPRINT-GATE / EXECUTION-ID-HANDOFF",
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.1-20260925",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER / BUNDLE-FINGERPRINT-GATE / EXECUTION-ID-HANDOFF / DURABLE-PHASE-STORE / TRANSIENT-RETRY",
   "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
   "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
   "family_runtime_contracts": "profiles/family_runtime_contracts_20260925_R11.json",
@@ -15,7 +15,12 @@
     "production_prediction_policy_changed": false,
     "production_numerical_policy_changed": false,
     "production_mec_policy_changed": false,
-    "capital_policy_changed": false
+    "capital_policy_changed": false,
+    "durable_execution_phase_store_required": true,
+    "actions_artifact_is_compatibility_fallback": true,
+    "transient_http_retry_enabled": true,
+    "transient_http_retry_attempts": 4,
+    "request_path_resolution_must_be_explicit_or_single_commit_request": true
   },
   "families": {
     "LOCAL": {
@@ -84,5 +89,39 @@
     "daily_jst": "10:30",
     "purpose": "Detect runtime or bundle incompatibility before race-time execution.",
     "prediction_authority": false
+  },
+  "execution_store": {
+    "schema": "KM-EXECUTION-STORE-v1",
+    "root": "runtime/executions",
+    "key": "execution_id/phase/run_id",
+    "latest_pointer": "execution_id/phase/LATEST.json",
+    "source_resolution_order": [
+      "CANONICAL_EXECUTION_STORE",
+      "ACTIONS_ARTIFACT_COMPATIBILITY_FALLBACK"
+    ],
+    "final_resolution_order": [
+      "CANONICAL_EXECUTION_STORE",
+      "ACTIONS_ARTIFACT_COMPATIBILITY_FALLBACK"
+    ],
+    "immutable_history": true
+  },
+  "transport_reliability": {
+    "retryable_http_status": [
+      408,
+      425,
+      429,
+      500,
+      502,
+      503,
+      504
+    ],
+    "max_attempts": 4,
+    "backoff_seconds": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "non_retryable_4xx_fail_closed": true
   }
 }
