@@ -662,7 +662,10 @@ def verify_source_artifact(artifact: Dict[str, Any]) -> Tuple[bool, List[str]]:
         ("auxiliary_evidence", "auxiliary_evidence_sha256", "SOURCE_AUXILIARY_EVIDENCE_HASH_MISMATCH"),
         ("jma_weather_evidence", "jma_weather_evidence_sha256", "SOURCE_JMA_WEATHER_HASH_MISMATCH"),
         ("point_in_time_population_ledger", "point_in_time_population_ledger_sha256", "SOURCE_POPULATION_LEDGER_HASH_MISMATCH"),
-        ("sbo_public_shadow_evidence", "sbo_public_shadow_evidence_sha256", "SOURCE_SBO_PUBLIC_SHADOW_HASH_MISMATCH"),\n        ("tsl_public_shadow_evidence", "tsl_public_shadow_evidence_sha256", "SOURCE_TSL_PUBLIC_SHADOW_HASH_MISMATCH"),\n        ("jra_official_runner_universe", "jra_official_runner_universe_sha256", "SOURCE_JRA_RUNNER_UNIVERSE_HASH_MISMATCH"),\n        ("jra_auxiliary_evidence", "jra_auxiliary_evidence_sha256", "SOURCE_JRA_AUXILIARY_EVIDENCE_HASH_MISMATCH"),
+        ("sbo_public_shadow_evidence", "sbo_public_shadow_evidence_sha256", "SOURCE_SBO_PUBLIC_SHADOW_HASH_MISMATCH"),
+        ("tsl_public_shadow_evidence", "tsl_public_shadow_evidence_sha256", "SOURCE_TSL_PUBLIC_SHADOW_HASH_MISMATCH"),
+        ("jra_official_runner_universe", "jra_official_runner_universe_sha256", "SOURCE_JRA_RUNNER_UNIVERSE_HASH_MISMATCH"),
+        ("jra_auxiliary_evidence", "jra_auxiliary_evidence_sha256", "SOURCE_JRA_AUXILIARY_EVIDENCE_HASH_MISMATCH"),
     ]
     for field, hash_field, err in optional_hashes:
         if field in artifact and sha_obj(artifact.get(field)) != artifact.get(hash_field):
