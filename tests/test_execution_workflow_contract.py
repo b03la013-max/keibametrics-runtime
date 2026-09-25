@@ -15,7 +15,7 @@ def _extract_python_heredocs(text: str):
     blocks = []
     i = 0
     while i < len(lines):
-        if re.search(r"python(?:\\s+-[^\\s]+|\\s+[^<]+)?\\s+<<'PY'\\s*$", lines[i]):
+        if re.search(r"python(?:\s+-[^\s]+|\s+[^<]+)?\s+<<'PY'\s*$", lines[i]):
             base_indent = len(lines[i]) - len(lines[i].lstrip())
             i += 1
             body = []
@@ -25,7 +25,7 @@ def _extract_python_heredocs(text: str):
                     break
                 body.append(line[base_indent:] if len(line) >= base_indent else line)
                 i += 1
-            blocks.append("\\n".join(body) + "\\n")
+            blocks.append("\n".join(body) + "\n")
         i += 1
     return blocks
 
