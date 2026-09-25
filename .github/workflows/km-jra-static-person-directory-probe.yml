@@ -1,0 +1,33 @@
+name: JRA Static Person Directory Probe
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-static-person-directory-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import urllib.request,re,json,sys
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode
+          for kind,url in [("jockey","https://www.jra.go.jp/datafile/meikan/jockey.html"),("trainer","https://www.jra.go.jp/datafile/meikan/trainer.html")]:
+            req=urllib.request.Request(url,headers={"User-Agent":"KeibaMetrics-JRA-Person-Directory-Probe/1.0","Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4"})
+            with urllib.request.urlopen(req,timeout=30) as r:
+              raw=r.read(3000000); h={str(k).lower():str(v) for k,v in r.headers.items()}
+            s=_decode(raw,h.get("content-type",""))
+            hits=[]
+            for m in re.finditer(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',s,re.I|re.S):
+              href=m.group(1); label=re.sub(r"<[^>]+>","",m.group(2)); label=re.sub(r"\s+"," ",label).strip()
+              if any(z in href.lower() for z in ("meikan","accessk","accessc")) and label:
+                hits.append({"href":href,"label":label})
+            print(kind,json.dumps(hits[:200],ensure_ascii=False))
+          PY
