@@ -46,6 +46,10 @@ def _detail_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     d = artifact.get("jra_official_race_card_detail") or {}
     return {str(x.get("runner_id") or x.get("horse_no")): x for x in (d.get("runners") or []) if x.get("horse_no") is not None}
 
+def _history_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    d=artifact.get("jra_official_horse_history") or {}
+    return {str(k):v for k,v in (d.get("runners") or {}).items()}
+
 def _mean(vals: List[float]) -> float | None:
     xs=[float(x) for x in vals if x is not None]
     return round(sum(xs)/len(xs),6) if xs else None
@@ -54,7 +58,9 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
     x=detail.get(rid)
     if not x:
         return {"available":False,"source_family_inputs":{},"feature_inputs":{}}
-    runs=list(x.get("recent_runs") or [])
+    recent_runs=list(x.get("recent_runs") or [])
+    history=_history_runner_map(artifact).get(rid) or {}
+    runs=list(history.get("runs") or recent_runs)
     ctx=artifact.get("jra_race_context") or {}
     venue_name=str(ctx.get("venue_name") or "")
     target_distance=ctx.get("distance_m")
@@ -106,8 +112,8 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
         "position_quality":{"passing_positions_raw":[r.get("passing_positions_raw") for r in runs if r.get("passing_positions_raw")]},
     }
     source_inputs={
-        "JRA_HORSE_HISTORY":{"available":bool(runs),"recent_run_count":len(runs)},
-        "JRA_HORSE_HISTORY_DETAIL":{"available":bool(runs),"recent_run_count":len(runs)},
+        "JRA_HORSE_HISTORY":{"available":bool(runs),"run_count":len(runs),"official_full_history":bool(history)},
+        "JRA_HORSE_HISTORY_DETAIL":{"available":bool(recent_runs),"recent_run_count":len(recent_runs)},
         "JRA_CURRENT_BODYWEIGHT":{"available":x.get("current_body_weight") is not None},
         "JRA_OFFICIAL_MARKET":{"available":x.get("popularity_rank") is not None or x.get("win_odds") is not None},
         "JRA_PEDIGREE_HISTORY":{"available":False,"identity_seed_available":bool(x.get("sire") or x.get("damsire")),"reason":"identity_only_no_historical_population_rates"},

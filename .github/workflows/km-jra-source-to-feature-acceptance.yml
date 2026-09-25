@@ -14,12 +14,14 @@ on:
       - "mapping/jra_source_to_feature_policy_v1.2_20260926.json"
       - "runtime/jra_source_runtime/jra_race_context.py"
       - "runtime/jra_source_runtime/jra_race_card_detail.py"
+      - "runtime/jra_source_runtime/jra_horse_history.py"
       - "runtime/jra_source_runtime/jra_official_pdf.py"
       - "runtime/jra_source_runtime/tsl_public_shadow_evidence.py"
       - "runtime/jra_source_runtime/app.py"
       - "tests/test_jra_source_to_evidence_features.py"
       - "tests/test_jra_source_objective_evaluator.py"
-      - "tests/test_jra_source_runtime.py"
+      - "tests/test_jra_source_runtime.py tests/test_jra_horse_history.py"
+      - "tests/test_jra_horse_history.py"
       - ".github/workflows/km-formal-request-runner.yml"
       - ".github/workflows/km-jra-source-to-feature-acceptance.yml"
   workflow_dispatch:
@@ -62,7 +64,7 @@ jobs:
             "workflow_run_id":os.environ["RUN_ID"],
             "source_sha":os.environ["SOURCE_SHA"],
             "verified_at":datetime.now(timezone.utc).isoformat(),
-            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS","OFFICIAL_DETAIL_PARSER","RULE_EVALUATOR_INPUTS","CAREER_STARTS_AUTOFILL","OBJECTIVE_71_FEATURE_SHADOW","OBJECTIVE_20_INDEX_DIAGNOSTIC","FORMAL_SHADOW_BINDING"]
+            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS","OFFICIAL_DETAIL_PARSER","RULE_EVALUATOR_INPUTS","CAREER_STARTS_AUTOFILL","OBJECTIVE_71_FEATURE_SHADOW","OBJECTIVE_20_INDEX_DIAGNOSTIC","FORMAL_SHADOW_BINDING","OFFICIAL_HORSE_HISTORY_ADAPTER"]
           }
           open("runtime/jra_source_runtime/source_to_feature_acceptance_status.json","w",encoding="utf-8").write(json.dumps(p,ensure_ascii=False,sort_keys=True,indent=2))
           PY

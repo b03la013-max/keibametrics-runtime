@@ -134,6 +134,10 @@ def _detail_map(source):
     d=source.get("jra_official_race_card_detail") or {}
     return {str(x.get("runner_id") or x.get("horse_no")):x for x in d.get("runners") or []}
 
+def _history_map(source):
+    d=source.get("jra_official_horse_history") or {}
+    return {str(k):v for k,v in (d.get("runners") or {}).items()}
+
 def _current_going(source):
     d=source.get("jra_official_race_card_detail") or {}
     env=d.get("race_environment") or {}
@@ -144,8 +148,10 @@ def _current_going(source):
         if isinstance(v,dict) and v.get("value"):return v.get("value")
     return None
 
-def _recent_metrics(x,source):
+def _recent_metrics(x,source,history=None):
     runs=list(x.get("recent_runs") or [])
+    history_runs=list((history or {}).get("runs") or [])
+    all_runs=history_runs if history_runs else runs
     ctx=source.get("jra_race_context") or {}
     venue=str(ctx.get("venue_name") or "")
     distance=ctx.get("distance_m")
@@ -171,18 +177,19 @@ def _recent_metrics(x,source):
             else:nonfront_perf.append(fs)
         else:
             first_scores.append(None); last_scores.append(None); progression.append(None)
-    same_course=[(r,finish_scores[i]) for i,r in enumerate(runs) if venue and str(r.get("venue") or "")==venue]
-    same_distance=[(r,finish_scores[i]) for i,r in enumerate(runs) if distance is not None and r.get("distance_m")==distance]
-    same_surface=[(r,finish_scores[i]) for i,r in enumerate(runs) if surface and str(r.get("surface") or "")==str(surface)]
-    same_going_rows=[(r,finish_scores[i]) for i,r in enumerate(runs) if going and _same_going(r.get("going"),going)]
+    all_finish=[_finish_score(r.get("finish"),r.get("field_size")) for r in all_runs]
+    same_course=[(r,all_finish[i]) for i,r in enumerate(all_runs) if venue and str(r.get("venue") or "")==venue]
+    same_distance=[(r,all_finish[i]) for i,r in enumerate(all_runs) if distance is not None and r.get("distance_m")==distance]
+    same_surface=[(r,all_finish[i]) for i,r in enumerate(all_runs) if surface and str(r.get("surface") or "")==str(surface)]
+    same_going_rows=[(r,all_finish[i]) for i,r in enumerate(all_runs) if going and _same_going(r.get("going"),going)]
     race_date=str((source.get("source_race_context") or {}).get("race_date") or "")
     rotation=None
     if runs and runs[0].get("date") and race_date:
         try:rotation=(dt.date.fromisoformat(race_date)-dt.date.fromisoformat(str(runs[0]["date"]))).days
         except Exception:rotation=None
-    bws=[r.get("body_weight") for r in runs if r.get("body_weight") is not None]
+    bws=[r.get("body_weight") for r in all_runs if r.get("body_weight") is not None]
     return {
-      "runs":runs,"finish_scores":finish_scores,"class_scores":class_scores,"margin_scores":margin_scores,
+      "runs":runs,"history_runs":all_runs,"finish_scores":finish_scores,"class_scores":class_scores,"margin_scores":margin_scores,
       "first_scores":first_scores,"last_scores":last_scores,"progression":progression,
       "front_perf":front_perf,"nonfront_perf":nonfront_perf,
       "same_course":same_course,"same_distance":same_distance,"same_surface":same_surface,"same_going":same_going_rows,
@@ -283,7 +290,9 @@ def _build_runner_features(rid,x,metrics,source,mapping,field_context):
     put("draw_course_fit",draw,f"candidate draw/style interaction early={early}, horse_no={no}/{n}",0.5 if draw is not None else 0,{"early":early,"horse_no":no})
     # Horse-jockey continuity can be evaluated only when recent jockey was parsed.
     curj=str(x.get("jockey") or "")
-    jrows=[(r,fs[i]) for i,r in enumerate(runs) if curj and str(r.get("jockey") or "")==curj]
+    hrows=metrics.get("history_runs") or runs
+    hfinish=[_finish_score(r.get("finish"),r.get("field_size")) for r in hrows]
+    jrows=[(r,hfinish[i]) for i,r in enumerate(hrows) if curj and str(r.get("jockey") or "")==curj]
     put("jockey_horse_fit",_mean([v for _,v in jrows]),f"same jockey recent runs={len(jrows)}",min(1,len(jrows)/3),[v for _,v in jrows])
     # Current official detail contains identities but not population statistics.
     # All such features remain explicit missingness.
@@ -377,11 +386,12 @@ def _derived(base,features,mapping):
 
 def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runners:List[Dict[str,Any]],mapping:Dict[str,Any])->Dict[str,Any]:
     detail=_detail_map(source_artifact)
+    history=_history_map(source_artifact)
     if not detail:
         return {"profile":PROFILE,"status":STATUS,"available":False,"reason":"JRA_OFFICIAL_RACE_CARD_DETAIL_MISSING","production_effect":"NONE"}
     runners=[r for r in request_runners or []]
     byid={str(r.get("runner_id") or r.get("horse_no")):r for r in runners}
-    metrics={rid:_recent_metrics(x,source_artifact) for rid,x in detail.items()}
+    metrics={rid:_recent_metrics(x,source_artifact,history.get(rid)) for rid,x in detail.items()}
     closing_means=[_mean([z.get("final3f") for z in m["runs"] if z.get("final3f") is not None]) for m in metrics.values()]
     weights=[x.get("assigned_weight") for x in detail.values()]
     pops=[x.get("popularity_rank") for x in detail.values()]
@@ -420,6 +430,8 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
       "profile":PROFILE,"status":STATUS,"available":True,
       "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
       "official_detail_sha256":source_artifact.get("jra_official_race_card_detail_sha256"),
+      "official_horse_history_sha256":source_artifact.get("jra_official_horse_history_sha256"),
+      "official_horse_history_runner_count":len(history),
       "mapping_id":mapping.get("mapping_id"),
       "runner_count":len(out),"runners":out,
       "candidate_ranking":[{"rank":i+1,"runner_id":rid,"zai_win_diagnostic":round(float(v),6)} for i,(rid,v) in enumerate(rank)],
