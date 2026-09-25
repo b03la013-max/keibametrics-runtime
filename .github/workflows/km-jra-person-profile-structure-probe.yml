@@ -1,0 +1,41 @@
+name: JRA Person Profile Structure Probe
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-person-profile-structure-probe.yml"
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Probe JRA person profile tables
+        run: |
+          python - <<'PY'
+          import sys,json,urllib.request,urllib.parse
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          samples={
+            "jockey":("https://www.jra.go.jp/JRADB/accessK.html","pw04kmk005586/E4"),
+            "trainer":("https://www.jra.go.jp/JRADB/accessC.html","pw05cmk001187/E7"),
+          }
+          out={}
+          for kind,(base,token) in samples.items():
+            url=base+"?"+urllib.parse.urlencode({"CNAME":token})
+            req=urllib.request.Request(url,headers={"User-Agent":"KeibaMetrics-JRA-Person-Profile-Probe/1.0","Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4"})
+            with urllib.request.urlopen(req,timeout=30) as r:
+              raw=r.read(3000000); h={str(k).lower():str(v) for k,v in r.headers.items()}
+            s=_decode(raw,h.get("content-type",""))
+            tables=_html_tables(s)
+            out[kind]={
+              "url":url,
+              "text_head":_html_text(s)[:5000],
+              "tables":[{"i":i,"rows":len(t),"head":t[:8]} for i,t in enumerate(tables[:25]) if t]
+            }
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
