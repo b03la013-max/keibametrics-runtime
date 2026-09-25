@@ -51,6 +51,10 @@ def test_formal_gateway_contract_is_in_extracted_runner():
     assert "python -m runtime.non_jra_formal_runner" in workflow
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-execution-failure-" in workflow
+    assert "execution_store.py persist" in workflow
+    assert "git diff --name-only HEAD^ HEAD" not in workflow
+    assert "STATIC_SOURCE_BASIS_RECEIPT_MISMATCH" in runner
+    assert "CANONICAL_EXECUTION_STORE" in runner
     assert len(workflow) < 21000
 
 
@@ -63,4 +67,7 @@ def test_result_gateway_contract_is_in_extracted_runner():
     assert "python -m runtime.local_result_from_signed_final" in workflow
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-result-failure-" in workflow
+    assert "execution_store.py persist" in workflow
+    assert "CANONICAL_EXECUTION_STORE" in runner
+    assert "runtime/executions/$EXECUTION_ID/RESULT" in workflow
     assert len(workflow) < 21000
