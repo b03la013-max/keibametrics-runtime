@@ -100,6 +100,16 @@ jobs:
               declared=str(req.get("source_snapshot_sha256") or "")
               if declared:
                   assert declared==source_sha, f"JRA_SOURCE_SNAPSHOT_DECLARATION_MISMATCH:{declared}!={source_sha}"
+              hsv_prov=req.get("explicit_engine_hsv_provenance")
+              if isinstance(hsv_prov,dict):
+                  hsv_declared=str(hsv_prov.get("source_snapshot_sha256") or "")
+                  if hsv_declared:
+                      assert hsv_declared==source_sha, f"JRA_EXPLICIT_HSV_SOURCE_MISMATCH:{hsv_declared}!={source_sha}"
+                  hsv_prov["source_snapshot_sha256"]=source_sha
+              # Signed SOURCE is the canonical source snapshot. Bind the exact
+              # projection that SOURCE runtime hashed (artifact minus self-hash),
+              # not merely the digest, so Formal Validator independently replays it.
+              req["source_snapshot"]={k:v for k,v in source_artifact.items() if k!="source_snapshot_sha256"}
               req["source_snapshot_sha256"]=source_sha
               official=((source_artifact.get("jra_official_runner_universe") or {}).get("runners") or [])
               expected={str(x.get("runner_id") or x.get("horse_no")):str(x.get("canonical_name") or x.get("name") or "") for x in official}
