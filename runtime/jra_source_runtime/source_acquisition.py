@@ -22,33 +22,13 @@ SOURCE_SCHEMA = "KM-SOURCE-SNAPSHOT-v1"
 DEFAULT_MAX_BYTES = int(os.environ.get("KM_SOURCE_MAX_BYTES", "2000000"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("KM_SOURCE_TIMEOUT_SECONDS", "20"))
 DEFAULT_ALLOWED_HOSTS = [
-    "keiba.go.jp",
-    "*.keiba.go.jp",
+    # JRA official sources (race calendar, JRADB auxiliary HTML, official race-card PDF).
     "jra.go.jp",
     "*.jra.go.jp",
+    # JMA official weather context.
     "jma.go.jp",
     "*.jma.go.jp",
-    "tokyocitykeiba.com",
-    "*.tokyocitykeiba.com",
-    "kawasaki-keiba.jp",
-    "*.kawasaki-keiba.jp",
-    "f-keiba.com",
-    "*.f-keiba.com",
-    "sonoda-himeji.jp",
-    "*.sonoda-himeji.jp",
-    "nagoyakeiba.com",
-    "*.nagoyakeiba.com",
-    "kasamatsu-keiba.com",
-    "*.kasamatsu-keiba.com",
-    "iwatekeiba.or.jp",
-    "*.iwatekeiba.or.jp",
-    "hokkaidokeiba.net",
-    "*.hokkaidokeiba.net",
-    "sagakeiba.net",
-    "*.sagakeiba.net",
-    "keiba.or.jp",
-    "*.keiba.or.jp",
-    "nar.k-ba.net",
+    # JRA-only third-party public shadow source: 統計ショッカーリミテッド (TSL).
     "jra.k-ba.net",
 ]
 

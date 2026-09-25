@@ -33,9 +33,15 @@ def test_tsl_parser():
     assert x["runners"][0]["horse_no"]==1
     assert x["runners"][0]["win_vote"]["value"]==20.1
 
-def test_source_allowlist_contains_tsl():
+def test_source_allowlist_is_jra_family_isolated_and_contains_tsl():
     import source_acquisition as s
+    assert s._host_allowed("www.jra.go.jp")
+    assert s._host_allowed("www.jma.go.jp")
     assert s._host_allowed("jra.k-ba.net")
+    # LOCAL/NAR and SBO hosts are forbidden in the JRA source runtime.
+    assert not s._host_allowed("nar.k-ba.net")
+    assert not s._host_allowed("www.keiba.go.jp")
+    assert not s._host_allowed("www.tokyocitykeiba.com")
     assert not s._host_allowed("example.invalid")
 
 
