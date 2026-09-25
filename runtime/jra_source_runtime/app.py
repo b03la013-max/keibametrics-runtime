@@ -15,7 +15,7 @@ from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
 from jra_race_context import enrich_with_race_context
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.3-20260926"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -90,6 +90,12 @@ def _append_jra_card_specs(p:Dict[str,Any],meeting_key:str)->Dict[str,Any]:
     q["sources"]=existing+[x for x in m["sources"] if str(x.get("source_id")) not in ids]
     return q
 
+def _bind_source_identity(artifact:Dict[str,Any], race_id:str, ctx:Dict[str,Any])->Dict[str,Any]:
+    artifact["family_id"]="JRA"
+    artifact["race_id"]=str(race_id)
+    artifact["source_race_context"]=dict(ctx)
+    return artifact
+
 def _rehash(artifact:Dict[str,Any]):
     raw_bundle=[{"source_id":s.get("source_id"),"raw_sha256":s.get("raw_sha256"),
                  "snapshot_sha256":s.get("snapshot_sha256"),"fetched_at":s.get("fetched_at"),
@@ -131,7 +137,7 @@ def source_acquire(p:Dict[str,Any]):
             q=_append_jra_card_specs(q,meeting_key)
         except Exception as e:
             tsl_discovery_error=type(e).__name__+":"+str(e)
-    artifact,errors=acquire_sources(q); artifact["source_race_context"]=ctx
+    artifact,errors=acquire_sources(q); artifact=_bind_source_identity(artifact,rid,ctx)
     artifact["jra_meeting_key_discovered"]=meeting_key or None
     if tsl_discovery_error: artifact.setdefault("warnings",[]).append("TSL_MEETING_DISCOVERY:"+tsl_discovery_error)
     try:
@@ -162,7 +168,7 @@ def source_acquire(p:Dict[str,Any]):
         artifact,terr=build_tsl_shadow_evidence(artifact,cutoff,require_tsl=bool(q.get("require_tsl_shadow",False)))
         errors.extend(terr)
     except Exception as e:
-        artifact["tsl_public_shadow_evidence"]={"profile":"KM-JRA-TSL-PUBLIC-SHADOW-EVIDENCE-v1.0-20260925","status":"UNAVAILABLE","production_authority":False,"prediction_authority":False,"error":str(e)}
+        artifact["tsl_public_shadow_evidence"]={"profile":"KM-JRA-TSL-PUBLIC-SHADOW-EVIDENCE-v1.1-20260926","status":"UNAVAILABLE","production_authority":False,"prediction_authority":False,"error":str(e)}
         artifact["tsl_public_shadow_evidence_sha256"]=sha_obj(artifact["tsl_public_shadow_evidence"])
         if q.get("require_tsl_shadow"): errors.append("TSL_REQUIRED_FAILED:"+str(e))
 

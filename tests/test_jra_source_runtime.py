@@ -139,3 +139,13 @@ def test_jra_official_race_context_parser():
     assert x["race_class"]=="2勝クラス"
     assert x["start_time"]=="14:50"
     assert x["scheduled_post_at"].startswith("2026-09-22T14:50:00")
+
+
+def test_jra_source_identity_binding():
+    from app import _bind_source_identity
+    a={"profile":"X"}
+    ctx={"family_id":"JRA","venue_id":"NKY","race_date":"2026-09-22","race_no":10}
+    x=_bind_source_identity(a,"20260922-NKY-R10",ctx)
+    assert x["family_id"]=="JRA"
+    assert x["race_id"]=="20260922-NKY-R10"
+    assert x["source_race_context"]["venue_id"]=="NKY"
