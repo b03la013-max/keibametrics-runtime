@@ -8,7 +8,8 @@ def test_jra_manifest_and_url():
     m=build_jra_manifest({"venue_id":"NKY","race_date":"2026-09-22","race_no":10,"jra_meeting_key":"0620260407"})
     assert m["family_id"]=="JRA"
     assert m["jra_venue_code"]=="06"
-    assert any(x["source_id"]=="JRA-RACE-CARD" and x["required"] for x in m["sources"])
+    assert m["required_official_runner_adapter"]=="JRA_OFFICIAL_RACE_PDF"
+    assert any(x["source_id"]=="JRA-RACE-CARD-HTML-AUX" and not x["required"] for x in m["sources"])
     assert "pw01dde0106202604071020260922" in race_card_url_from_meeting_key("0620260407","2026-09-22",10)
 
 def test_runner_parser():
