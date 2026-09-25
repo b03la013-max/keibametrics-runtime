@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime, hashlib, http.cookiejar, re, urllib.parse, urllib.request
+import datetime, hashlib, http.cookiejar, html, re, urllib.parse, urllib.request
 from typing import Any, Dict, List, Tuple
 
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
@@ -153,6 +153,11 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
 
 def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
+    token_by_name={}
+    for token,label in re.findall(r'<a[^>]+href=["\']/JRADB/accessU\.html\?CNAME=([^"\']+)["\'][^>]*>(.*?)</a>',decoded,re.I|re.S):
+        name=re.sub(r"<[^>]+>","",html.unescape(label))
+        name=re.sub(r"\s+","",name).strip()
+        if name:token_by_name[name]=urllib.parse.unquote(token)
     table=None
     for t in _html_tables(decoded):
         if not t: continue

@@ -14,6 +14,7 @@ from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
 from jra_official_pdf import fetch_and_enrich_official_pdf
 from jra_race_context import enrich_with_race_context
+from jra_horse_history import enrich_with_horse_histories
 from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
@@ -56,6 +57,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_population_seed_sha256":_sha_file("jra_population_seed.py"),
         "jra_official_pdf_sha256":_sha_file("jra_official_pdf.py"),
         "jra_race_context_sha256":_sha_file("jra_race_context.py"),
+        "jra_horse_history_sha256":_sha_file("jra_horse_history.py"),
         "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
       }
     }
@@ -207,6 +209,15 @@ def source_acquire(p:Dict[str,Any]):
             errors.append("JRA_OFFICIAL_RUNNER_RECONCILIATION_FAILED:"+type(e).__name__+":"+str(e))
     if not artifact.get("jra_official_runner_universe"):
         errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_UNAVAILABLE:"+(pdf_runner_error or "PDF_NOT_AVAILABLE")+";DETAIL_FALLBACK_NOT_AVAILABLE")
+
+    try:
+        artifact,herrs=enrich_with_horse_histories(artifact,cutoff,require_history=bool(q.get("require_jra_horse_history",False)))
+        errors.extend(herrs if q.get("require_jra_horse_history") else [])
+        if herrs and not q.get("require_jra_horse_history"):
+            artifact.setdefault("warnings",[]).extend(herrs)
+    except Exception as e:
+        if q.get("require_jra_horse_history"): errors.append("JRA_HORSE_HISTORY_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
+        else: artifact.setdefault("warnings",[]).append("JRA_HORSE_HISTORY_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])
