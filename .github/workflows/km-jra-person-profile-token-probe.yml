@@ -26,7 +26,8 @@ jobs:
           out={}
           for key,page in [("horse","accessU"),("jockey","accessK"),("trainer","accessC")]:
             vals=[]
-            for m in re.finditer(r'href=["\\']/JRADB/'+page+r'\.html\?CNAME=([^"\\']+)["\\'][^>]*>(.*?)</a>',s,re.I|re.S):
+            pat=r"""href=["']/JRADB/"""+page+r"""\.html\?CNAME=([^"']+)["'][^>]*>(.*?)</a>"""
+            for m in re.finditer(pat,s,re.I|re.S):
               token=urllib.parse.unquote(m.group(1))
               label=re.sub(r"<[^>]+>","",m.group(2))
               label=re.sub(r"\s+"," ",label).strip()
