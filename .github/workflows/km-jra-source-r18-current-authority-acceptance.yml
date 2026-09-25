@@ -1,0 +1,91 @@
+name: KeibaMetrics JRA Source R18 Current Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R18.json"
+      - "profiles/jra_source_runtime_20260926_R4.json"
+      - "profiles/jra_information_source_registry_v1.2_20260926.json"
+      - "runtime/jra_source_objective_evaluator.py"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_source_runtime/source_to_feature_acceptance_status.json"
+      - ".github/workflows/km-jra-source-r18-current-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R18 source authority
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R18.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R4.json",encoding="utf-8"))
+          reg=json.load(open("profiles/jra_information_source_registry_v1.2_20260926.json",encoding="utf-8"))
+          stf=json.load(open("runtime/jra_source_runtime/source_to_feature_acceptance_status.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R18"
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
+          assert j["source_to_evidence_feature_compiler"]=="KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.2-20260926"
+          assert j["source_objective_evaluator"]=="KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.1-20260926"
+          assert j["source_objective_status"].startswith("SHADOW")
+          assert j["local_sbo_reuse_forbidden"] is True
+          assert reg["local_sbo"]["allowed_for_jra"] is False
+          assert reg["tsl"]["base_url"]=="https://jra.k-ba.net/"
+          assert reg["official_detail"]["production_fact_authority"] is True
+          assert sr["runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.4-20260926"
+          assert sr["objective_shadow"]=="KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.1-20260926"
+          assert stf["status"]=="PASS"
+          assert "OBJECTIVE_71_FEATURE_SHADOW" in stf["checks"]
+          assert "OBJECTIVE_20_INDEX_DIAGNOSTIC" in stf["checks"]
+          root=pathlib.Path("runtime/executions/KM-JRA-SOURCE-V12-DETAIL-LIVE-ACCEPT-NKY-20260926-R08-R2/SOURCE/runs/36162844957")
+          summary=json.load(open(root/"source_summary.json",encoding="utf-8"))
+          verify=json.load(open(root/"source_verification.json",encoding="utf-8"))
+          assert summary["verified"] is True
+          assert verify["valid"] is True
+          print("JRA_SOURCE_R18_CURRENT_AUTHORITY_ACCEPTANCE=PASS")
+          PY
+      - name: Persist PASS marker
+        if: success()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          p={
+            "profile":"KM-JRA-SOURCE-R18-CURRENT-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "workflow_run_id":os.environ["RUN_ID"],
+            "source_sha":os.environ["SOURCE_SHA"],
+            "verified_at":datetime.now(timezone.utc).isoformat(),
+            "live_detail_source_execution_id":"KM-JRA-SOURCE-V12-DETAIL-LIVE-ACCEPT-NKY-20260926-R08-R2",
+            "live_detail_source_run_id":"36162844957",
+            "checks":[
+              "R18_BINDING","SIGNED_SOURCE","OFFICIAL_DETAIL_FACTS","71_FEATURE_CONTRACT",
+              "OBJECTIVE_71_FEATURE_SHADOW","OBJECTIVE_20_INDEX_DIAGNOSTIC",
+              "TSL_SHADOW","SBO_FORBIDDEN","NUMERICAL_AUTHORITY_UNCHANGED"
+            ]
+          }
+          json.dump(p,open("runtime/jra_source_runtime/current_authority_acceptance_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,indent=2)
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_source_runtime/current_authority_acceptance_status.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R18 Current Authority PASS [skip ci]"
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                exit 0
+              fi
+              git rebase --abort || true
+              git fetch origin main
+              sleep $((attempt * 2))
+            done
+            exit 1
+          fi
