@@ -9,7 +9,10 @@ on:
     paths:
       - "runtime/jra_source_to_evidence_features.py"
       - "mapping/jra_source_to_feature_policy_v1.0_20260926.json"
+      - "mapping/jra_source_to_feature_policy_v1.1_20260926.json"
+      - "mapping/jra_source_to_feature_policy_v1.2_20260926.json"
       - "runtime/jra_source_runtime/jra_race_context.py"
+      - "runtime/jra_source_runtime/jra_race_card_detail.py"
       - "runtime/jra_source_runtime/jra_official_pdf.py"
       - "runtime/jra_source_runtime/tsl_public_shadow_evidence.py"
       - "runtime/jra_source_runtime/app.py"
@@ -51,12 +54,12 @@ jobs:
           import json,os
           from datetime import datetime,timezone
           p={
-            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.1-20260926",
+            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.2-20260926",
             "status":"PASS",
             "workflow_run_id":os.environ["RUN_ID"],
             "source_sha":os.environ["SOURCE_SHA"],
             "verified_at":datetime.now(timezone.utc).isoformat(),
-            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS"]
+            "checks":["PYTHON_COMPILE","SOURCE_TO_FEATURE_UNIT","JRA_SOURCE_RUNTIME_UNIT","FORMAL_WIRING","SHADOW_ISOLATION","71_FEATURE_SOURCE_CONTRACT","SOURCE_ONLY_READINESS","NO_SYNTHESIS","OFFICIAL_DETAIL_PARSER","RULE_EVALUATOR_INPUTS","CAREER_STARTS_AUTOFILL"]
           }
           open("runtime/jra_source_runtime/source_to_feature_acceptance_status.json","w",encoding="utf-8").write(json.dumps(p,ensure_ascii=False,sort_keys=True,indent=2))
           PY

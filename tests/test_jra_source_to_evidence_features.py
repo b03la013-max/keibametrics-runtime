@@ -83,3 +83,36 @@ def test_tsl_stays_shadow_and_never_autofills_external_index_support():
         assert "external_index_support" not in rr["generated_production_features"]
         assert rr["shadow_observation_count"]==1
         assert rr["shadow_observations"][0]["authority"]=="TSL_PUBLIC_NON_OFFICIAL"
+
+
+def test_official_detail_autofills_career_starts_and_rule_inputs():
+    a=_artifact()
+    a["jra_race_context"]={"venue_name":"中山","distance_m":1200,"surface":"ダ"}
+    a["source_race_context"]={"race_date":"2026-09-26"}
+    a["jra_official_race_card_detail_sha256"]="DETAIL"
+    a["jra_official_race_card_detail"]={"runners":[
+      {"runner_id":"1","horse_no":1,"horse_name":"A","career_record":{"wins":1,"seconds":1,"thirds":1,"others":3,"starts":6},
+       "win_odds":5.7,"popularity_rank":2,"assigned_weight":56.0,"jockey":"J1","trainer":"T1","trainer_base":"美浦",
+       "sire":"S1","dam":"D1","damsire":"DS1","current_body_weight":470,"current_body_weight_change":2,
+       "recent_runs":[
+         {"date":"2026-09-05","venue":"中山","finish":3,"field_size":16,"popularity_rank":8,"assigned_weight":54.0,"distance_m":1200,"surface":"ダ","going":"重","body_weight":438,"final3f":36.4,"margin":0.5,"passing_positions_raw":"22"},
+         {"date":"2026-07-26","venue":"新潟","finish":9,"field_size":15,"popularity_rank":9,"assigned_weight":53.0,"distance_m":1000,"surface":"芝","going":"不良","body_weight":440,"final3f":35.6,"margin":1.0,"passing_positions_raw":None}
+       ]},
+      {"runner_id":"2","horse_no":2,"horse_name":"B","career_record":{"wins":0,"seconds":0,"thirds":0,"others":0,"starts":0},
+       "win_odds":11.4,"popularity_rank":5,"assigned_weight":56.0,"jockey":"J2","trainer":"T2","trainer_base":"美浦",
+       "sire":"S2","dam":"D2","damsire":"DS2","current_body_weight":480,"current_body_weight_change":0,"recent_runs":[]}
+    ]}
+    req={"race_id":"T","runners":[{"runner_id":"1","name":"A","evidence_features":{}},{"runner_id":"2","name":"B","evidence_features":{}}]}
+    out=attach_source_features_to_request(req,a,_mapping())
+    assert out["runners"][0]["career_starts"]==6
+    assert out["runners"][0]["newcomer"] is False
+    assert out["runners"][1]["career_starts"]==0
+    assert out["runners"][1]["newcomer"] is True
+    ri=out["runners"][0]["source_rule_evaluator_inputs"]
+    assert ri["feature_inputs"]["recent_consistency"]["top3_rate"]==0.5
+    assert ri["feature_inputs"]["same_course_fit"]["sample_count"]==1
+    assert ri["feature_inputs"]["same_distance_fit"]["sample_count"]==1
+    assert ri["feature_inputs"]["market_rank"]["popularity_rank"]==2
+    assert ri["source_family_inputs"]["JRA_HORSE_HISTORY"]["available"] is True
+    # Raw official inputs are not silently turned into Production categories.
+    assert "recent_performance" not in out["runners"][0]["evidence_features"]

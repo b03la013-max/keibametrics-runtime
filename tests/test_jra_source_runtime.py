@@ -149,3 +149,26 @@ def test_jra_source_identity_binding():
     assert x["family_id"]=="JRA"
     assert x["race_id"]=="20260922-NKY-R10"
     assert x["source_race_context"]["venue_id"]=="NKY"
+
+
+def test_jra_race_card_detail_parser():
+    from jra_race_card_detail import parse_race_card_detail
+    raw="""<html><body><table>
+    <tr><th>枠</th><th>馬番</th><th>馬名 / 単勝オッズ(人気) 戦績 / 総賞金 / 馬体重 馬主名 / 生産者名 / 調教師名 / 血統</th><th>性齢/毛色 負担重量 騎手名</th><th>前走</th><th>前々走</th><th>3走前</th><th>4走前</th></tr>
+    <tr><td>1</td><td>1</td><td>コウジハラ 5.7(2番人気) (1.1.1.3) 1,070万円 由井 健太郎 ヒダカフアーム 西田 雄一郎(美浦) 父：マテラスカイ 母：ローザビアンカ(母の父：ワイルドラッシュ)</td><td>牝3/栗 54.0kg M.ミシェル</td><td>2026年9月5日 中山 牝1勝クラス 3着 16頭5番8番人気 M.ミシェル 54.0kg 1200ダ 1:10.2 重 438kg 22 3F 36.4 マサノピンクレディ(0.5)</td><td>2026年7月26日 新潟 1勝クラス 9着 15頭9番9番人気 木幡 初也 53.0kg 1000芝 58.3 不良 440kg 3F 35.6 パレスドフィーヌ(1.0)</td><td></td><td></td></tr>
+    <tr><td>2</td><td>2</td><td>ビアフォーナウ 11.4(5番人気) (1.0.1.17) 990万円 小林 由明 北洋牧場 池上 昌和(美浦) 父：バトルプラン 母：カリストーガ(母の父：ダノンシャンティ)</td><td>牝5/鹿 54.0kg 小林 美駒</td><td>2026年9月5日 中山 牝1勝クラス 13着 16頭11番12番人気 丸田 恭介 56.0kg 1200ダ 1:11.8 重 466kg 1515 3F 36.4 マサノピンクレディ(2.1)</td><td></td><td></td><td></td></tr>
+    </table></body></html>""".encode("utf-8")
+    x=parse_race_card_detail(raw,"text/html; charset=utf-8")
+    assert x["runner_count"]==2
+    a=x["runners"][0]
+    assert a["horse_name"]=="コウジハラ"
+    assert a["win_odds"]==5.7 and a["popularity_rank"]==2
+    assert a["career_record"]["starts"]==6
+    assert a["sire"]=="マテラスカイ" and a["damsire"]=="ワイルドラッシュ"
+    assert a["assigned_weight"]==54.0 and a["jockey"]=="M.ミシェル"
+    assert a["recent_runs"][0]["finish"]==3
+    assert a["recent_runs"][0]["distance_m"]==1200
+    assert a["recent_runs"][0]["surface"]=="ダ"
+    assert a["recent_runs"][0]["body_weight"]==438
+    assert a["recent_runs"][0]["final3f"]==36.4
+    assert a["recent_runs"][0]["margin"]==0.5
