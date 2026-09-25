@@ -97,7 +97,15 @@ def normalize_request(request: Dict[str, Any], gateway: Dict[str, Any] | None = 
     diagnostics = {
         "request_runtime_expected_revision": out.get("runtime_expected_revision"),
         "request_external_endpoint": out.get("external_endpoint"),
+        "request_source_receipt_artifact_id": out.get("source_receipt_artifact_id"),
+        "request_source_run_id": out.get("source_run_id"),
+        "request_artifact_name": out.get("artifact_name"),
     }
+    legacy_override = bool(out.get("legacy_handoff_override"))
+    if not legacy_override:
+        out.pop("source_receipt_artifact_id", None)
+        out.pop("source_run_id", None)
+        out.pop("artifact_name", None)
     out["execution_id"] = eid
     out["execution_gateway_profile"] = g["profile_id"]
     out["resolved_runtime_profile"] = cfg.get("runtime_profile")
@@ -114,6 +122,7 @@ def normalize_request(request: Dict[str, Any], gateway: Dict[str, Any] | None = 
         "runtime_git_revision_pointer": cfg.get("runtime_git_revision"),
         "external_endpoint": cfg.get("external_endpoint"),
         "request_diagnostics": diagnostics,
+        "legacy_handoff_override": legacy_override,
     }
     return out, ctx
 

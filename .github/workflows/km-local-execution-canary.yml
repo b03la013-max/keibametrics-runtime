@@ -4,6 +4,18 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '30 1 * * *'
+  pull_request:
+    paths:
+      - 'profiles/current_execution_gateway.json'
+      - 'profiles/family_runtime_contracts_*.json'
+      - 'runtime/execution_gateway.py'
+      - 'runtime/family_runtime_contract.py'
+      - 'runtime/local_physical/**'
+      - 'tests/test_execution_gateway.py'
+      - 'tests/test_execution_gateway.py'
+      - '.github/workflows/km-local-execution-canary.yml'
+      - '.github/workflows/km-family-non-jra-formal-runner.yml'
+      - '.github/workflows/km-local-result-from-signed-final.yml'
   push:
     branches: [main]
     paths:
