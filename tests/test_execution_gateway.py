@@ -70,7 +70,7 @@ def test_request_runtime_revision_is_diagnostic_only(tmp_path):
     assert "external_endpoint" not in normalized
     assert normalized["resolved_runtime_profile"] == "RUNTIME-V1"
     assert normalized["resolved_external_endpoint"] == "https://example.invalid"
-    assert ctx["request_diagnostics"]["runtime_expected_revision"] == "stale-request-value"
+    assert ctx["request_diagnostics"]["request_runtime_expected_revision"] == "stale-request-value"
 
 
 def test_stale_handoff_ids_are_diagnostic_only_by_default(tmp_path):
