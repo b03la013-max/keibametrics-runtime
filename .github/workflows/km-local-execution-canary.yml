@@ -39,7 +39,7 @@ on:
       - '.github/workflows/km-local-result-from-signed-final.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   canary:
@@ -95,6 +95,58 @@ jobs:
           assert r["external_endpoint"]=="https://witnessstrictimage-production.up.railway.app"
           print("KM_LOCAL_GATEWAY_CONTRACT_RESOLVE=PASS")
           PY
+
+      - name: Persist latest successful canary status to canonical repo
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA_VALUE: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime,json,os
+          pre=json.load(open("runtime_out/execution_gateway_canary.json",encoding="utf-8"))
+          gw=json.load(open("profiles/current_execution_gateway.json",encoding="utf-8"))
+          a=pre.get("assessment") or {}
+          h=pre.get("health") or {}
+          out={
+            "schema":"KM-LOCAL-EXECUTION-GATEWAY-CANARY-STATUS-v1",
+            "status":"PASS",
+            "checked_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "github_actions_run_id":os.environ["RUN_ID"],
+            "github_sha":os.environ["GITHUB_SHA_VALUE"],
+            "gateway_profile":gw.get("profile_id"),
+            "active_correctness_closure":gw.get("active_correctness_closure"),
+            "runtime_profile":h.get("runtime_revision"),
+            "runtime_git_revision":h.get("github_revision"),
+            "runtime_app_sha256":h.get("runtime_app_sha256"),
+            "engine_sha256":h.get("engine_sha256"),
+            "parameter_map_sha256":h.get("parameter_map_sha256"),
+            "receipt_signer_key_id":h.get("receipt_signer_key_id"),
+            "bundle_fingerprint_expected":a.get("bundle_fingerprint_expected"),
+            "bundle_fingerprint_actual":a.get("bundle_fingerprint_actual"),
+            "bundle_mismatches":a.get("bundle_mismatches"),
+            "missing_capabilities":a.get("missing_capabilities"),
+            "assessment_status":a.get("status"),
+            "production_numerical_authority":"NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND",
+            "strict_formal_full_numerical_readiness":"NO"
+          }
+          json.dump(out,open("runtime/execution_gateway_canary_status.json","w",encoding="utf-8"),
+                    ensure_ascii=False,sort_keys=True,indent=2)
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/execution_gateway_canary_status.json
+          git commit -m "canary: persist latest LOCAL execution gateway PASS [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo "Unable to persist canary status" >&2
+          exit 1
 
       - name: Persist canary evidence
         if: always()
