@@ -6,6 +6,8 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FORMAL = ROOT / ".github/workflows/km-family-non-jra-formal-runner.yml"
 RESULT = ROOT / ".github/workflows/km-local-result-from-signed-final.yml"
+FORMAL_RUNNER = ROOT / "runtime/non_jra_formal_runner.py"
+RESULT_RUNNER = ROOT / "runtime/local_result_from_signed_final.py"
 
 
 def _extract_python_heredocs(text: str):
@@ -21,39 +23,44 @@ def _extract_python_heredocs(text: str):
                 line = lines[i]
                 if line.strip() == "PY" and (len(line) - len(line.lstrip())) == base_indent:
                     break
-                if len(line) >= base_indent:
-                    body.append(line[base_indent:])
-                else:
-                    body.append(line)
+                body.append(line[base_indent:] if len(line) >= base_indent else line)
                 i += 1
             blocks.append("\n".join(body) + "\n")
         i += 1
     return blocks
 
 
-def test_embedded_python_compiles():
+def test_metadata_heredocs_and_extracted_runners_compile():
     for path in (FORMAL, RESULT):
         blocks = _extract_python_heredocs(path.read_text(encoding="utf-8"))
-        assert blocks, f"no embedded Python found in {path}"
+        assert blocks, f"no metadata Python heredoc found in {path}"
         for n, block in enumerate(blocks, 1):
             compile(block, f"{path.name}:heredoc:{n}", "exec")
+    for path in (FORMAL_RUNNER, RESULT_RUNNER):
+        compile(path.read_text(encoding="utf-8"), str(path), "exec")
 
 
-def test_formal_uses_gateway_bundle_compatibility_and_execution_id_handoff():
-    text = FORMAL.read_text(encoding="utf-8")
-    assert "assess_runtime_health" in text
-    assert "RUNTIME_GATEWAY_COMPATIBILITY_FAILED" in text
-    assert 'gateway_artifact_name(execution_id,"SOURCE",gateway,"LOCAL")' in text
-    assert "REQUEST_RUNTIME_REVISION_STALE" not in text
-    assert 'fail_closed("RUNTIME_REVISION_MISMATCH"' not in text
-    assert "steps.execution_meta.outputs.artifact_name" in text
-    assert "km-local-execution-failure-" in text
+def test_formal_gateway_contract_is_in_extracted_runner():
+    workflow = FORMAL.read_text(encoding="utf-8")
+    runner = FORMAL_RUNNER.read_text(encoding="utf-8")
+    assert "assess_runtime_health" in runner
+    assert "RUNTIME_GATEWAY_COMPATIBILITY_FAILED" in runner
+    assert 'gateway_artifact_name(execution_id,"SOURCE",gateway,"LOCAL")' in runner
+    assert "REQUEST_RUNTIME_REVISION_STALE" not in runner
+    assert 'fail_closed("RUNTIME_REVISION_MISMATCH"' not in runner
+    assert "python runtime/non_jra_formal_runner.py" in workflow
+    assert "steps.execution_meta.outputs.artifact_name" in workflow
+    assert "km-local-execution-failure-" in workflow
+    assert len(workflow) < 21000
 
 
-def test_result_prefers_execution_id_and_canonical_endpoint():
-    text = RESULT.read_text(encoding="utf-8")
-    assert 'gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")' in text
-    assert 'family_config("LOCAL",gateway)' in text
-    assert 'endpoint=req.get("external_endpoint")' not in text
-    assert "steps.execution_meta.outputs.artifact_name" in text
-    assert "km-local-result-failure-" in text
+def test_result_gateway_contract_is_in_extracted_runner():
+    workflow = RESULT.read_text(encoding="utf-8")
+    runner = RESULT_RUNNER.read_text(encoding="utf-8")
+    assert 'gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")' in runner
+    assert 'family_config("LOCAL",gateway)' in runner
+    assert 'endpoint=req.get("external_endpoint")' not in runner
+    assert "python runtime/local_result_from_signed_final.py" in workflow
+    assert "steps.execution_meta.outputs.artifact_name" in workflow
+    assert "km-local-result-failure-" in workflow
+    assert len(workflow) < 21000

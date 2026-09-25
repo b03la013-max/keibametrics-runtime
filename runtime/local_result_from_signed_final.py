@@ -1,0 +1,408 @@
+import json,os,subprocess,sys,urllib.request,urllib.parse
+sys.path.insert(0,"runtime")
+from local_candidate_postresult import evaluate_dual
+from local_candidate_dual_oos_tracker import build_measurement, write_status
+from local_candidate_v03_postresult import evaluate_v03
+from local_candidate_v03_oos_tracker import (
+    build_measurement as build_v03_measurement,
+    write_status as write_v03_status,
+)
+from local_mec_r4_bridge import verify_signed_final_binding
+from mec_r4_shadow import settle_mec_r4_shadow, settle_ticket_list
+from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
+from local_mec_r5_shadow import (
+    verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
+    settle_shadow as settle_local_mec_r5_shadow,
+)
+from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
+from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name
+
+raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
+gateway=load_gateway()
+req,execution_context=normalize_request(raw_req,gateway)
+execution_id=str(execution_context["execution_id"])
+acceptance_only=bool(req.get("acceptance_only"))
+os.makedirs("runtime_result_in",exist_ok=True)
+os.makedirs("runtime_out",exist_ok=True)
+
+# Explicit run/artifact references remain backward compatible. New
+# executions resolve the immutable FORMAL artifact from execution_id.
+run_id=req.get("source_run_id")
+artifact_name=req.get("artifact_name")
+resolution_mode="EXPLICIT_BACKWARD_COMPAT"
+chosen=None
+if run_id is None or not artifact_name:
+    target_name=gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")
+    repo=os.environ.get("GITHUB_REPOSITORY") or ""
+    token=os.environ.get("GH_TOKEN") or ""
+    if not repo or not token:
+        raise SystemExit("FINAL_ARTIFACT_AUTO_RESOLUTION_CONTEXT_MISSING")
+    url=(
+        f"https://api.github.com/repos/{repo}/actions/artifacts"
+        f"?name={urllib.parse.quote(target_name)}&per_page=100"
+    )
+    rq=urllib.request.Request(url,headers={
+        "accept":"application/vnd.github+json",
+        "authorization":f"Bearer {token}",
+        "x-github-api-version":"2022-11-28",
+        "user-agent":"keibametrics-execution-gateway",
+    })
+    with urllib.request.urlopen(rq,timeout=60) as resp:
+        listing=json.loads(resp.read().decode())
+    candidates=[
+        a for a in (listing.get("artifacts") or [])
+        if not a.get("expired") and str(a.get("name") or "")==target_name
+    ]
+    if not candidates:
+        raise SystemExit("FORMAL_ARTIFACT_NOT_FOUND_FOR_EXECUTION_ID:"+execution_id)
+    candidates.sort(key=lambda a:str(a.get("created_at") or ""),reverse=True)
+    chosen=candidates[0]
+    artifact_name=target_name
+    run_id=((chosen.get("workflow_run") or {}).get("id"))
+    if not run_id:
+        raise SystemExit("FORMAL_ARTIFACT_WORKFLOW_RUN_ID_MISSING")
+    resolution_mode="EXECUTION_ID_AUTO_RESOLVE"
+
+run_id=int(run_id)
+json.dump({
+    "mode":resolution_mode,
+    "execution_id":execution_id,
+    "formal_artifact_name":artifact_name,
+    "workflow_run_id":run_id,
+    "artifact_id":(chosen or {}).get("id"),
+    "created_at":(chosen or {}).get("created_at"),
+},open("runtime_out/artifact_resolution.json","w",encoding="utf-8"),
+  ensure_ascii=False,sort_keys=True,indent=2)
+
+subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
+fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
+fin=json.load(open(fin_path,encoding="utf-8"))
+rid=req["race_id"]
+endpoint=str(family_config("LOCAL",gateway).get("external_endpoint") or "").rstrip("/")
+if not endpoint.startswith("https://"):
+    raise SystemExit("CANONICAL_LOCAL_EXTERNAL_ENDPOINT_INVALID")
+
+tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
+top3=[int(x) for x in req["finish_order"][:3]]
+payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
+total_investment=sum(int(t.get("stake") or 0) for t in tickets)
+total_return=0
+winning=[]
+by_type={}
+for t in tickets:
+    bt=str(t.get("bet_type") or "").upper()
+    sel=[int(x) for x in (t.get("selection") or [])]
+    st=int(t.get("stake") or 0)
+    b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
+    b["investment"]+=st
+    hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
+    if hit and bt in payouts:
+        r=st*payouts[bt]//100
+        total_return+=r; b["return"]+=r
+        win={"bet_type":bt,"selection":sel,"stake":st,"payout_per_100":payouts[bt],"return":r}
+        winning.append(win); b["wins"].append(win)
+
+result_payload={
+  "family_id":"LOCAL","race_id":rid,
+  "final_receipt":fin,
+  "official_result":{
+    "finish_order":[int(x) for x in req["finish_order"]],
+    "result_available_at":req["result_available_at"],
+    "source":req.get("source") or "USER_SUPPLIED_RESULT",
+    "payouts":payouts
+  },
+  "result_available_at":req["result_available_at"],
+  "settlement":{
+    "status":"COMPLETE",
+    "investment":total_investment,
+    "settled_investment":total_investment,
+    "return":total_return,
+    "winning_tickets":winning
+  },
+  "pfs_authority":req.get("pfs_authority") or "FROZEN-RECOMMENDATION"
+}
+def post(path,payload):
+    data=json.dumps(payload,ensure_ascii=False,separators=(",",":")).encode()
+    rq=urllib.request.Request(endpoint+path,data=data,headers={"Content-Type":"application/json"},method="POST")
+    with urllib.request.urlopen(rq,timeout=180) as resp:
+        return json.loads(resp.read().decode())
+final_ver=post("/verify",fin)
+if not final_ver.get("verified") and not final_ver.get("valid"):
+    raise SystemExit("FINAL_SIGNATURE_VERIFY_FAILED_BEFORE_MEC_SHADOW")
+
+res=post("/result",result_payload)
+if (res.get("receipt") or {}).get("status")!="PASS":
+    raise SystemExit("RESULT_NOT_PASS:"+json.dumps(res,ensure_ascii=False))
+ver=post("/verify",res)
+if not ver.get("verified"):
+    raise SystemExit("RESULT_SIGNATURE_VERIFY_FAILED")
+
+art=res.get("artifact") or {}
+os.makedirs("runtime_out",exist_ok=True)
+json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+# LOCAL MEC-R4 forward OOS: only a Shadow whose digest was bound into
+# the signed pre-result FINAL may enter the preregistered tracker.
+mec_r4_shadow_settlement=None
+mec_r4_binding=None
+mec_r4_oos_status=None
+mec_r4_shadow_path=os.path.join("runtime_result_in","mec_r4_shadow_pre_result.json")
+if (not acceptance_only) and os.path.exists(mec_r4_shadow_path):
+    shadow=json.load(open(mec_r4_shadow_path,encoding="utf-8"))
+    mec_r4_binding=verify_signed_final_binding(fin,shadow)
+    shadow_result={
+        "official_result":{
+            "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
+            "top3":top3,
+            "payouts_per_100_yen":payouts,
+        }
+    }
+    mec_r4_shadow_settlement=settle_mec_r4_shadow(shadow,shadow_result)
+    prod_replay=settle_ticket_list(tickets,shadow_result)
+    if prod_replay.get("status")!="SETTLED":
+        raise SystemExit("MEC_R4_PRODUCTION_REPLAY_NOT_SETTLED")
+    if int(prod_replay.get("investment") or 0)!=int(total_investment) or int(prod_replay.get("return") or 0)!=int(total_return):
+        raise SystemExit("MEC_R4_PRODUCTION_REPLAY_MISMATCH")
+
+    for d in ("runtime/mec_shadow_artifacts","runtime/mec_shadow_results","runtime/mec_shadow_lineage"):
+        os.makedirs(d,exist_ok=True)
+    json.dump(shadow,open(os.path.join("runtime","mec_shadow_artifacts",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    json.dump(mec_r4_shadow_settlement,open(os.path.join("runtime","mec_shadow_results",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    lineage={
+        "lineage_type":"LOCAL_SIGNED_FINAL_BOUND",
+        "race_id":rid,
+        "binding_valid":True,
+        "shadow_sha256":shadow.get("sha256"),
+        "basis_sha256":shadow.get("source_immutable_final_sha256"),
+        "final_receipt_sha256":fin.get("receipt_sha256"),
+        "final_artifact_sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+        "source_run_id":run_id,
+        "source_artifact_name":artifact_name,
+        "generated_at":shadow.get("generated_at"),
+        "scheduled_post_at":shadow.get("scheduled_post_at"),
+        "temporal_mode":shadow.get("temporal_mode"),
+        "production_tickets":tickets,
+        "production_result":shadow_result,
+        "production_settlement":{
+            "status":"SETTLED",
+            "total_investment":total_investment,
+            "total_payout":total_return,
+        },
+        "production_effect":"NONE",
+    }
+    lineage["sha256"]=__import__("hashlib").sha256(
+        json.dumps(lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    json.dump(lineage,open(os.path.join("runtime","mec_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    mec_r4_oos_status=write_mec_r4_oos_status()
+    json.dump(mec_r4_shadow_settlement,open("runtime_out/mec_r4_shadow_settlement.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(mec_r4_binding,open("runtime_out/mec_r4_shadow_binding.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(mec_r4_oos_status,open("runtime_out/mec_r4_oos_status.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+# LOCAL-specific MEC-R5 candidate was designed from 2026-09-23
+# training races and is eligible only for future signed-bound shadows.
+local_mec_r5_shadow_settlement=None
+local_mec_r5_binding=None
+local_mec_r5_oos_status=None
+local_mec_r5_shadow_path=os.path.join("runtime_result_in","local_mec_r5_shadow_pre_result.json")
+if (not acceptance_only) and os.path.exists(local_mec_r5_shadow_path):
+    r5_shadow=json.load(open(local_mec_r5_shadow_path,encoding="utf-8"))
+    local_mec_r5_binding=verify_local_mec_r5_signed_final_binding(fin,r5_shadow)
+    local_mec_r5_shadow_settlement=settle_local_mec_r5_shadow(
+        r5_shadow,req,signed_final_binding_valid=True
+    )
+
+    shadow_result={
+        "official_result":{
+            "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
+            "top3":top3,
+            "payouts_per_100_yen":payouts,
+        }
+    }
+    prod_replay_r5=settle_ticket_list(tickets,shadow_result)
+    if prod_replay_r5.get("status")!="SETTLED":
+        raise SystemExit("LOCAL_MEC_R5_PRODUCTION_REPLAY_NOT_SETTLED")
+    if int(prod_replay_r5.get("investment") or 0)!=int(total_investment) or int(prod_replay_r5.get("return") or 0)!=int(total_return):
+        raise SystemExit("LOCAL_MEC_R5_PRODUCTION_REPLAY_MISMATCH")
+
+    for d in ("runtime/local_mec_r5_shadow_artifacts","runtime/local_mec_r5_shadow_results","runtime/local_mec_r5_shadow_lineage"):
+        os.makedirs(d,exist_ok=True)
+    json.dump(r5_shadow,open(os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    json.dump(local_mec_r5_shadow_settlement,open(os.path.join("runtime","local_mec_r5_shadow_results",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    r5_lineage={
+        "lineage_type":"LOCAL_MEC_R5_SIGNED_FINAL_BOUND",
+        "race_id":rid,
+        "binding_valid":True,
+        "shadow_sha256":r5_shadow.get("sha256"),
+        "basis_sha256":r5_shadow.get("source_basis_sha256"),
+        "final_receipt_sha256":fin.get("receipt_sha256"),
+        "final_artifact_sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+        "source_run_id":run_id,
+        "source_artifact_name":artifact_name,
+        "generated_at":r5_shadow.get("generated_at"),
+        "scheduled_post_at":r5_shadow.get("scheduled_post_at"),
+        "temporal_mode":r5_shadow.get("temporal_mode"),
+        "production_tickets":tickets,
+        "production_result":shadow_result,
+        "production_settlement":{
+            "status":"SETTLED",
+            "total_investment":total_investment,
+            "total_payout":total_return,
+        },
+        "production_effect":"NONE",
+    }
+    r5_lineage["sha256"]=__import__("hashlib").sha256(
+        json.dumps(r5_lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    json.dump(r5_lineage,open(os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    local_mec_r5_oos_status=write_local_mec_r5_oos_status()
+    json.dump(local_mec_r5_shadow_settlement,open("runtime_out/local_mec_r5_shadow_settlement.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(local_mec_r5_binding,open("runtime_out/local_mec_r5_shadow_binding.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(local_mec_r5_oos_status,open("runtime_out/local_mec_r5_oos_status.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+candidate_dual_postresult=None
+dual_path=os.path.join("runtime_result_in","candidate_numerical_dual_shadow_summary.json")
+dual_krs_path=os.path.join("runtime_result_in","candidate_krs_dual_shadow_summary.json")
+calibration_path="runtime/calibration/local_weight_calibration_v0.2_20260923_urw_day_summary.json"
+if (not acceptance_only) and os.path.exists(dual_path):
+    dual=json.load(open(dual_path,encoding="utf-8"))
+    dual_krs=json.load(open(dual_krs_path,encoding="utf-8")) if os.path.exists(dual_krs_path) else {}
+    cal=json.load(open(calibration_path,encoding="utf-8")) if os.path.exists(calibration_path) else {}
+    envs={}
+    for arm,fn in (("v0.1","candidate_krs_v01_receipt_envelope.json"),("v0.2","candidate_krs_v02_receipt_envelope.json")):
+        pth=os.path.join("runtime_result_in",fn)
+        if os.path.exists(pth):
+            envs[arm]=json.load(open(pth,encoding="utf-8"))
+    candidate_dual_postresult=evaluate_dual(
+        dual,[int(x) for x in req["finish_order"]],
+        result_available_at=req["result_available_at"],race_id=rid,
+        dual_krs_summary=dual_krs,
+        calibration_training_race_ids=cal.get("training_race_ids") or [],
+        dual_krs_envelopes=envs
+    )
+    json.dump(candidate_dual_postresult,open("runtime_out/candidate_dual_shadow_postresult.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+candidate_v03_postresult=None
+candidate_v03_summary=None
+candidate_krs_v03_summary=None
+candidate_v03_binding_valid=False
+v03_path=os.path.join("runtime_result_in","candidate_numerical_v03_shadow_summary.json")
+v03_krs_summary_path=os.path.join("runtime_result_in","candidate_krs_v03_shadow_summary.json")
+v03_krs_envelope_path=os.path.join("runtime_result_in","candidate_krs_v03_receipt_envelope.json")
+if (not acceptance_only) and os.path.exists(v03_path):
+    candidate_v03_summary=json.load(open(v03_path,encoding="utf-8"))
+    candidate_krs_v03_summary=(
+        json.load(open(v03_krs_summary_path,encoding="utf-8"))
+        if os.path.exists(v03_krs_summary_path) else {}
+    )
+    v03_env=(
+        json.load(open(v03_krs_envelope_path,encoding="utf-8"))
+        if os.path.exists(v03_krs_envelope_path) else None
+    )
+    trace=((fin.get("artifact") or {}).get("ticket_transport_trace") or {})
+    bound=(trace.get("numerical_candidate_v03_shadow") or {})
+    candidate_v03_binding_valid=bool(
+        bound.get("frozen_pre_result") is True
+        and str(bound.get("shadow_sha256") or "")==str(candidate_v03_summary.get("sha256") or "")
+        and str(bound.get("source_snapshot_sha256") or "")==str(candidate_v03_summary.get("source_snapshot_sha256") or "")
+    )
+    candidate_v03_postresult=evaluate_v03(
+        candidate_v03_summary,[int(x) for x in req["finish_order"]],
+        result_available_at=req["result_available_at"],race_id=rid,
+        krs_summary=candidate_krs_v03_summary,
+        krs_envelope=v03_env,
+        signed_final_binding_valid=candidate_v03_binding_valid,
+    )
+    json.dump(candidate_v03_postresult,open("runtime_out/candidate_v03_shadow_postresult.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump({
+        "race_id":rid,
+        "binding_valid":candidate_v03_binding_valid,
+        "signed_final_bound":bound,
+        "shadow_sha256":candidate_v03_summary.get("sha256"),
+        "production_effect":"NONE",
+    },open("runtime_out/candidate_v03_signed_final_binding.json","w",encoding="utf-8"),
+      ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+candidate_oos_measurement=None
+candidate_oos_status=None
+if candidate_dual_postresult is not None:
+    candidate_oos_measurement=build_measurement(candidate_dual_postresult,req)
+    mdir=os.path.join("runtime","local_candidate_dual_oos_measurements")
+    os.makedirs(mdir,exist_ok=True)
+    mpath=os.path.join(mdir,rid+".json")
+    json.dump(candidate_oos_measurement,open(mpath,"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    candidate_oos_status=write_status(
+        mdir,os.path.join("runtime","local_candidate_dual_oos_status.json")
+    )
+    json.dump(candidate_oos_measurement,open("runtime_out/candidate_dual_oos_measurement.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(candidate_oos_status,open("runtime_out/candidate_dual_oos_status.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+candidate_v03_oos_measurement=None
+candidate_v03_oos_status=None
+if candidate_v03_postresult is not None:
+    candidate_v03_oos_measurement=build_v03_measurement(
+        candidate_v03_postresult,req,baseline_measurement=candidate_oos_measurement
+    )
+    v03dir=os.path.join("runtime","local_candidate_v03_oos_measurements")
+    os.makedirs(v03dir,exist_ok=True)
+    json.dump(candidate_v03_oos_measurement,open(os.path.join(v03dir,rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    candidate_v03_oos_status=write_v03_status(
+        v03dir,os.path.join("runtime","local_candidate_v03_oos_status.json")
+    )
+    json.dump(candidate_v03_oos_measurement,open("runtime_out/candidate_v03_oos_measurement.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(candidate_v03_oos_status,open("runtime_out/candidate_v03_oos_status.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+if acceptance_only:
+    open("runtime_out/acceptance_only.flag","w",encoding="utf-8").write("true\n")
+
+summary={
+  "race_id":rid,
+  "execution_id":execution_id,
+  "acceptance_only":acceptance_only,
+  "result_receipt":res.get("receipt_sha256"),
+  "verified":True,
+  "investment":total_investment,
+  "return":total_return,
+  "profit_loss":total_return-total_investment,
+  "pfs":(None if total_investment==0 else round(total_return/total_investment*100,6)),
+  "winning_tickets":winning,
+  "by_type":by_type,
+  "failure_localization":art.get("failure_localization"),
+  "automatic_post_result_review":art.get("automatic_post_result_review"),
+  "learning_event":art.get("learning_event"),
+  "candidate_dual_shadow_postresult":candidate_dual_postresult,
+  "candidate_dual_oos_measurement":candidate_oos_measurement,
+  "candidate_dual_oos_status":candidate_oos_status,
+  "candidate_v03_shadow_postresult":candidate_v03_postresult,
+  "candidate_v03_signed_final_binding_valid":candidate_v03_binding_valid,
+  "candidate_v03_oos_measurement":candidate_v03_oos_measurement,
+  "candidate_v03_oos_status":candidate_v03_oos_status,
+  "mec_r4_shadow_settlement_sha256":(mec_r4_shadow_settlement or {}).get("sha256"),
+  "mec_r4_signed_final_binding":mec_r4_binding,
+  "mec_r4_oos_status":mec_r4_oos_status,
+  "local_mec_r5_shadow_settlement_sha256":(local_mec_r5_shadow_settlement or {}).get("sha256"),
+  "local_mec_r5_signed_final_binding":local_mec_r5_binding,
+  "local_mec_r5_oos_status":local_mec_r5_oos_status
+}
+json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
