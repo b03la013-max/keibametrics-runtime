@@ -312,13 +312,33 @@ jobs:
                   "x-github-api-version":"2022-11-28",
                   "user-agent":"keibametrics-non-jra-formal-bridge",
               },method="GET")
+              class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self,req,fp,code,msg,headers,newurl):
+                      return None
               try:
-                  with urllib.request.urlopen(rq,timeout=120) as x:
-                      raw_zip=x.read()
+                  opener=urllib.request.build_opener(_NoRedirect)
+                  try:
+                      with opener.open(rq,timeout=120) as x:
+                          raw_zip=x.read()
+                  except urllib.error.HTTPError as e:
+                      if e.code not in {301,302,303,307,308}:
+                          raise
+                      location=e.headers.get("Location")
+                      if not location:
+                          raise
+                      blob_req=urllib.request.Request(location,headers={
+                          "user-agent":"keibametrics-non-jra-formal-bridge"
+                      },method="GET")
+                      with urllib.request.urlopen(blob_req,timeout=120) as x:
+                          raw_zip=x.read()
               except urllib.error.HTTPError as e:
                   fail_closed("SOURCE_RECEIPT_ARTIFACT_DOWNLOAD_FAILED",{
                       "artifact_id":artifact_id,"http":e.code,
                       "body":e.read().decode(errors="replace")[:2000],
+                  })
+              except Exception as e:
+                  fail_closed("SOURCE_RECEIPT_ARTIFACT_DOWNLOAD_FAILED",{
+                      "artifact_id":artifact_id,"error":str(e),
                   })
               try:
                   with zipfile.ZipFile(io.BytesIO(raw_zip)) as zf:
