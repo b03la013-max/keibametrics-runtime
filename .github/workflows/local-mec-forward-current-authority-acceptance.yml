@@ -102,8 +102,8 @@ jobs:
               "URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"
           }
 
-          formal=pathlib.Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
-          result=pathlib.Path(".github/workflows/km-local-result-from-signed-final.yml").read_text(encoding="utf-8")
+          formal=pathlib.Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
+          result=pathlib.Path("runtime/local_result_from_signed_final.py").read_text(encoding="utf-8")
           assert "MEC_R4_SHADOW_PRE_RESULT_FREEZE" in formal
           assert "LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE" in formal
           assert "mec_r4_shadow_binding" in formal
