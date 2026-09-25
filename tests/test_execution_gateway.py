@@ -1,4 +1,5 @@
-# Execution Gateway canary verification marker; no behavior change.\nimport pathlib
+# Execution Gateway canary verification marker; no behavior change.
+import pathlib
 
 import pytest
 
