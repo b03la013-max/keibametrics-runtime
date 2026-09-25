@@ -36,8 +36,8 @@ jobs:
               pdf_status=getattr(resp,"status",200)
               pdf_type=str(resp.headers.get("content-type") or "")
           assert pdf_status==200 and pdf.startswith(b"%PDF"), (pdf_status,pdf_type,pdf[:80])
-          reader=PdfReader(io.BytesIO(pdf))
-          text="\n".join((p.extract_text() or "") for p in reader.pages)
+          doc=fitz.open(stream=pdf,filetype="pdf")
+          text="\n".join(p.get_text("text") for p in doc)
           matched=[]
           for r in tsl["runners"]:
               name=str(r["horse_name"]).replace(" ","")
