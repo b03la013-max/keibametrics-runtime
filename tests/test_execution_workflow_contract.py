@@ -64,3 +64,13 @@ def test_result_gateway_contract_is_in_extracted_runner():
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-result-failure-" in workflow
     assert len(workflow) < 21000
+
+
+def test_result_canonical_store_precedes_acceptance_only_oos_skip():
+    workflow = RESULT.read_text(encoding="utf-8")
+    canonical = workflow.index("Persist canonical RESULT execution phase")
+    measurement = workflow.index("Persist LOCAL forward measurement ledgers")
+    acceptance_skip = workflow.index("canonical execution state persisted; skip Production/OOS ledger persistence")
+    assert canonical < measurement < acceptance_skip
+    assert 'git add "runtime/executions/$EXECUTION_ID/RESULT"' in workflow
+    assert 'python runtime/execution_store.py persist' in workflow
