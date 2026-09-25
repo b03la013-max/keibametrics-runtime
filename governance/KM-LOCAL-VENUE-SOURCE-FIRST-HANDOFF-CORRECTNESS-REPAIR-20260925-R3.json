@@ -1,0 +1,27 @@
+{
+  "profile_id": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260925-R3",
+  "status": "ACTIVE / LOCAL-WIDE / CORRECTNESS-OPERATIONAL-REPAIR / CHAT-TO-GITHUB-FORMAL-HANDOFF / RUNTIME-CONTRACT-BINDING-CORRECTED / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE",
+  "effective_at": "2026-09-25T19:09:38+09:00",
+  "predecessor": "KM-LOCAL-VENUE-SOURCE-FIRST-HANDOFF-CORRECTNESS-REPAIR-20260925-R2",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R13",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R14",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260925-R11",
+  "live_failure": {
+    "run_id": 36122298489,
+    "code": "RUNTIME_REVISION_MISMATCH",
+    "stale_expected": "7769ce32943423c507a762b46f1bb38bc8d50cc5",
+    "actual": "d753d0cbca00f790351a56ff9f5c923290830d4f",
+    "bundle_hash_match": true
+  },
+  "repair": {
+    "changes": [
+      "Advance canonical LOCAL Runtime Contract to Rev.11 and bind it to the already-deployed Rev.7 runtime revision d753d0cb....",
+      "Change runtime/family_runtime_contract.py default resolver from historical R9 to Current Runtime Contract R11.",
+      "Retain fail-closed runtime hash/revision verification; do not weaken the gate.",
+      "Retain Chat-to-GitHub family_request trigger fallback from R2.",
+      "Do not alter Prediction, Numerical policy, KRS engine/parameter_map, MEC-R3, Capital, or Venue Canon."
+    ],
+    "production_effect": "NONE"
+  },
+  "numerical_authority": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY"
+}
