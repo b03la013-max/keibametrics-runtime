@@ -16,13 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install PDF dependency
-        run: python -m pip install --disable-pip-version-check -q pypdf
+        run: python -m pip install --disable-pip-version-check -q pymupdf
       - name: Live JRA / TSL / JMA source acceptance
         run: |
           cd runtime/jra_source_runtime
           python - <<'PY'
           import io,json,hashlib,urllib.request
-          from pypdf import PdfReader
+          import fitz
           from tsl_public_shadow_evidence import discover_tsl_race_url,parse_tsl_html,_fetch
           from jma_weather_evidence import _fetch_station_table,choose_nearest_station
           venue="NKY"; date="2026-09-22"; race_no=10
@@ -47,7 +47,7 @@ jobs:
               else:
                   print("PDF_NAME_MISS",r["horse_no"],r["horse_name"])
           print("PDF_DIAG",json.dumps({
-              "url":pdf_url,"bytes":len(pdf),"pages":len(reader.pages),
+              "url":pdf_url,"bytes":len(pdf),"pages":len(doc),
               "raw_sha256":hashlib.sha256(pdf).hexdigest(),
               "tsl_count":len(tsl["runners"]),"name_matches":len(matched),"matched_ids":matched
           },ensure_ascii=False))
@@ -63,7 +63,7 @@ jobs:
             "tsl_raw_sha256":hashlib.sha256(raw).hexdigest(),
             "jra_official_pdf_url":pdf_url,"jra_pdf_http_status":pdf_status,
             "jra_pdf_content_type":pdf_type,"jra_pdf_raw_sha256":hashlib.sha256(pdf).hexdigest(),
-            "jra_pdf_pages":len(reader.pages),"official_pdf_runner_name_matches":len(matched),
+            "jra_pdf_pages":len(doc),"official_pdf_runner_name_matches":len(matched),
             "official_pdf_runner_ids_confirmed":matched,
             "jma_station_id":station.get("station_id"),"jma_station_name":station.get("station_name"),
             "jma_station_distance_km":station.get("distance_km"),
