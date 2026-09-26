@@ -5,6 +5,8 @@ import hashlib
 import json
 from typing import Any, Dict, List, Tuple
 
+from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band
+
 PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.2-20260926"
 POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.2-20260926"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
@@ -160,28 +162,6 @@ def _registered_common_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[st
     w=(rc.get("workout") or {}).get("runners") or []
     return {str(x.get("runner_id") or x.get("horse_no")):x for x in w if x.get("horse_no") is not None}
 
-def _workout_capability_category(rating: Any) -> str | None:
-    # Deterministic transport of the provider's native A-D ordinal. No new
-    # numerical weight is introduced; Production category_scale is unchanged.
-    return {"A":"VERY_STRONG","B":"STRONG","C":"NEUTRAL","D":"CAUTION"}.get(str(rating or "").upper())
-
-def _workout_speed_category(course: Any, final1f: Any) -> str | None:
-    try: x=float(final1f)
-    except Exception: return None
-    c=str(course or "")
-    if "坂" in c:
-        if x<=12.4:return "VERY_STRONG"
-        if x<=12.7:return "STRONG"
-        if x<=12.9:return "POSITIVE"
-        return "NEUTRAL"
-    # CW/Wood examples in frozen Production artifacts already use these
-    # JRA-WORKOUT-FINAL1F-BAND-v1 boundaries.
-    if x<=11.5:return "EXCEPTIONAL"
-    if x<=11.8:return "VERY_STRONG"
-    if x<=12.2:return "STRONG"
-    if x<=12.6:return "POSITIVE"
-    return "NEUTRAL"
-
 def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     x=_registered_common_runner_map(artifact).get(rid)
     if not x:return {}
@@ -190,18 +170,16 @@ def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> D
     ref=str(w.get("source_snapshot_sha256") or artifact.get("jra_registered_common_sha256") or "")
     refs=[ref,f"REGISTERED_JRA_COMMON:WORKOUT:{rid}"]
     out={}
-    cat=_workout_capability_category(x.get("rating"))
-    if cat:
-        fact=f"Registered pre-race workout provider rating={x.get('rating')}; assessment={x.get('assessment')}; course={x.get('course')}; gait={x.get('gait')}."
-        out["workout_capability"]=_feature(cat,"KM-JRA-WORKOUT-CAPABILITY-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
-        # Stable readiness uses the same signed observation and retains explicit
-        # shared lineage; downstream can audit correlation rather than double-count
-        # an invented independent source.
-        out["stable_readiness"]=_feature(cat,"KM-JRA-STABLE-READINESS-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
-    scat=_workout_speed_category(x.get("course"),x.get("final1f"))
-    if scat:
+    assessment=str(x.get("assessment") or "")
+    if assessment:
+        cat=comment_band(assessment)
+        fact=f"Registered pre-race workout assessment={assessment}; provider rating={x.get('rating')}; course={x.get('course')}; gait={x.get('gait')}."
+        out["workout_capability"]=_feature(cat,"JRA-WORKOUT-CAPABILITY-COMMENT-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
+        out["stable_readiness"]=_feature(cat,"JRA-STABLE-COMMENT-BAND-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
+    if x.get("final1f") is not None:
+        cat=workout_final_1f_band(x.get("final1f"),x.get("course"))
         fact=f"Registered pre-race workout final1F={x.get('final1f')} sec on {x.get('course')}; raw={x.get('workout_time_raw')}."
-        out["workout_speed"]=_feature(scat,"JRA-WORKOUT-FINAL1F-BAND-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
+        out["workout_speed"]=_feature(cat,"JRA-WORKOUT-FINAL1F-BAND-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
     return out
 
 def _equal_weight_feature(rid: str, runner: Dict[str, Any], official: Dict[str, Dict[str, Any]], artifact: Dict[str, Any]):
