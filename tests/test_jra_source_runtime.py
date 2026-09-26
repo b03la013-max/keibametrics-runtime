@@ -38,6 +38,7 @@ def test_source_allowlist_is_jra_family_isolated_and_contains_tsl():
     assert s._host_allowed("www.jra.go.jp")
     assert s._host_allowed("www.jma.go.jp")
     assert s._host_allowed("jra.k-ba.net")
+    assert s._host_allowed("race.netkeiba.com")
     # LOCAL/NAR and SBO hosts are forbidden in the JRA source runtime.
     assert not s._host_allowed("nar.k-ba.net")
     assert not s._host_allowed("www.keiba.go.jp")
