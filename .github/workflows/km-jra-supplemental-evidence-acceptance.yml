@@ -18,7 +18,7 @@ jobs:
       - run: python -m pip install --disable-pip-version-check -q pytest
       - name: Unit and full numerical closure
         run: |
-          pytest -q tests/test_jra_supplemental_evidence_pack.py tests/test_jra_supplemental_full_numerical_closure.py
+          python tests/test_jra_supplemental_evidence_pack.py\n          python tests/test_jra_supplemental_full_numerical_closure.py
       - name: Formal runner integration assertions
         run: |
           python - <<'PY'
