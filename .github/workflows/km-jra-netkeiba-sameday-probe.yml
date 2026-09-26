@@ -1,0 +1,40 @@
+name: JRA Netkeiba Same-Day Result Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-sameday-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,sys,re
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          out={}
+          for rn in [1,5,10,11]:
+            rid=f"2026090408{rn:02d}"
+            url=f"https://race.netkeiba.com/race/result.html?race_id={rid}"
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                raw=r.read(3000000);ct=r.headers.get("content-type","")
+              dec=_decode(raw,ct);tabs=_html_tables(dec);txt=_html_text(dec)
+              out[str(rn)]={"bytes":len(raw),"table_count":len(tabs),"tables":tabs[:5],"text_head":txt[:2500]}
+            except Exception as e: out[str(rn)]={"error":type(e).__name__+":"+str(e)}
+          p=Path("runtime/diagnostics/netkeiba_sameday_result_probe.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_sameday_result_probe.json
+          git commit -m "diagnostic: same-day result parser probe [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
