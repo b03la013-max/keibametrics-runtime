@@ -1,0 +1,102 @@
+name: JRA R29 Candidate Full-Lifecycle Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R29.json"
+      - "profiles/family_runtime_contracts_20260926_R22.json"
+      - "profiles/venue_chat_routes_20260926_R27.json"
+      - "profiles/jra_source_runtime_20260926_R12.json"
+      - "runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json"
+      - "runtime/source_candidate_oos_status.json"
+      - "runtime/formal_request_validator.py"
+      - ".github/workflows/km-jra-r29-candidate-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R29 authority and isolation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R29.json",encoding="utf-8"))
+          fr=json.load(open("profiles/family_runtime_contracts_20260926_R22.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R27.json",encoding="utf-8"))
+          sc=json.load(open("profiles/jra_source_runtime_20260926_R12.json",encoding="utf-8"))
+          e2e=json.load(open("runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json",encoding="utf-8"))
+          tracker=json.load(open("runtime/source_candidate_oos_status.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R29"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R28"
+          assert ca["common_family_components"]["family_runtime_contracts"]==fr["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_contract"]==sc["profile_id"]=="KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.11-20260926"
+          assert j["source_objective_evaluator"]=="KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.3-20260926"
+          assert j["source_derived_candidate_full_lifecycle"]=="KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1"
+          assert j["source_derived_candidate_acceptance"]["run_id"]==36236275087
+          assert j["source_derived_candidate_acceptance"]["required_count"]==320
+          assert j["source_derived_candidate_acceptance"]["calculated_count"]==320
+          assert j["source_derived_candidate_acceptance"]["krs_actual_run_count"]==5000
+          assert j["source_derived_candidate_acceptance"]["mec_coverage"]==1.0
+          assert j["source_derived_candidate_acceptance"]["production_effect"]=="NONE"
+          assert e2e["status"]=="PASS" and e2e["all_candidate_stages_pass"] is True
+          assert e2e["required_count"]==e2e["calculated_count"]==320
+          assert e2e["candidate_oos_eligible"] is False
+          assert tracker["eligible_race_count"]==0
+          assert tracker["target_eligible_races"]==30
+          assert tracker["automatic_promotion"] is False
+          assert j["production_authority_firewall"]["status"]=="ACTIVE / FAIL-CLOSED"
+          guard=Path("runtime/formal_request_validator.py").read_text(encoding="utf-8")
+          formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          forward=Path(".github/workflows/km-jra-source-candidate-forward-oos.yml").read_text(encoding="utf-8")
+          result=Path(".github/workflows/km-formal-result-runner.yml").read_text(encoding="utf-8")
+          assert "def validate_production_authority" in guard
+          assert "validate_production_authority(req)" in formal
+          assert "candidate_final_verified" in forward
+          assert "source_candidate_oos_status.json" in result
+          assert ca["supersession_declaration"]["production_source_only_full_numerical_ready"] is False
+          assert ca["supersession_declaration"]["candidate_mechanical_full_lifecycle_verified"] is True
+          assert ca["supersession_declaration"]["automatic_promotion"] is False
+          out={
+            "profile":"KM-JRA-R29-CANDIDATE-FULL-LIFECYCLE-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "family_runtime":fr["profile_id"],
+            "venue_routing":vr["profile_id"],
+            "source_contract":sc["profile_id"],
+            "candidate_e2e_run":36236275087,
+            "candidate_required_count":320,
+            "candidate_calculated_count":320,
+            "candidate_krs_actual_run_count":5000,
+            "candidate_mec_coverage":1.0,
+            "candidate_final_receipt_sha256":e2e["final_receipt_sha256"],
+            "production_firewall":True,
+            "production_source_only_full_numerical_ready":False,
+            "candidate_mechanical_full_lifecycle_verified":True,
+            "candidate_oos_eligible_races":0,
+            "candidate_oos_target":30,
+            "unknown_future_empirical_acceptance":"PENDING",
+            "production_effect":"NONE"
+          }
+          p=Path("runtime/acceptance/jra_r29_candidate_authority.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r29_candidate_authority.json
+          git commit -m "ci: persist JRA R29 Candidate authority PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
