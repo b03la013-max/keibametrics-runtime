@@ -147,3 +147,44 @@ def test_registered_common_workout_does_not_infer_stable_readiness():
     assert f1["workout_capability"]["rule_id"]=="JRA-WORKOUT-CAPABILITY-COMMENT-v1"
     assert "stable_readiness" not in f1
     assert "workout_speed" not in f1
+
+
+def test_fact_availability_is_separate_from_missing_feature_family():
+    a=_artifact()
+    a["jra_race_context"]={"venue_name":"阪神","distance_m":1200,"surface":"ダ"}
+    a["source_race_context"]={"race_date":"2026-09-26"}
+    a["jra_official_race_card_detail_sha256"]="DETAIL"
+    a["jra_official_race_card_detail"]={"runners":[
+      {"runner_id":"1","horse_no":1,"horse_name":"A","career_record":{"wins":1,"seconds":0,"thirds":0,"others":4,"starts":5},
+       "win_odds":8.0,"popularity_rank":3,"assigned_weight":58.0,"jockey":"J1","trainer":"T1",
+       "current_body_weight":500,"current_body_weight_change":2,"recent_runs":[{"date":"2026-09-01","venue":"阪神","finish":4,"distance_m":1200,"surface":"ダ"}]},
+      {"runner_id":"2","horse_no":2,"horse_name":"B","career_record":{"wins":1,"seconds":0,"thirds":0,"others":4,"starts":5},
+       "win_odds":9.0,"popularity_rank":4,"assigned_weight":56.0,"jockey":"J2","trainer":"T2",
+       "current_body_weight":480,"current_body_weight_change":0,"recent_runs":[{"date":"2026-09-01","venue":"阪神","finish":5,"distance_m":1200,"surface":"ダ"}]}
+    ]}
+    a["jra_official_horse_history"]={"runners":{
+      "1":{"runs":[{"date":"2026-09-01","venue":"阪神","finish":4,"distance_m":1200,"surface":"ダ"}]},
+      "2":{"runs":[{"date":"2026-09-01","venue":"阪神","finish":5,"distance_m":1200,"surface":"ダ"}]}
+    }}
+    a["jra_official_person_stats"]={"runners":{
+      "1":{"jockey":{"current_year_flat":{"starts":100,"win_rate":0.10}},"trainer":{"current_year_flat":{"starts":100,"win_rate":0.08}}},
+      "2":{"jockey":{"current_year_flat":{"starts":100,"win_rate":0.09}},"trainer":{"current_year_flat":{"starts":100,"win_rate":0.07}}}
+    }}
+    a["jra_registered_common"]={"workout":{"runners":[
+      {"runner_id":"1","horse_no":1,"assessment":"出来は良","final1f":None},
+      {"runner_id":"2","horse_no":2,"assessment":"順調","final1f":None}
+    ]}}
+    a["jra_official_same_day_results"]={"race_count":3,"races":{"1":{},"2":{},"3":{}}}
+    a["jma_weather_evidence"]={"status":"PASS","weather":"晴"}
+    runners=[{"runner_id":"1","name":"A","career_starts":5,"evidence_features":{}},
+             {"runner_id":"2","name":"B","career_starts":5,"evidence_features":{}}]
+    rep=compile_source_to_features(a,runners,_mapping())
+    fa=rep["runners"]["1"]["source_fact_availability"]
+    assert fa["JRA_HORSE_HISTORY"]["fact_available"] is True
+    assert fa["JRA_JOCKEY_STATS"]["fact_available"] is True
+    assert fa["JRA_TRAINER_STATS"]["fact_available"] is True
+    assert fa["JRA_TRAINING"]["fact_available"] is True
+    assert fa["JRA_SAME_DAY_RESULTS_PLUS_STYLE"]["fact_available"] is True
+    assert fa["JRA_SAME_DAY_RESULTS_PLUS_STYLE"]["style_binding_available"] is False
+    assert "JRA_HORSE_HISTORY" in rep["missing_feature_source_families"]
+    assert rep["missing_source_families_semantics"].startswith("LEGACY ALIAS")
