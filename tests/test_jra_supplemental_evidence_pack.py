@@ -11,7 +11,7 @@ pack={
  "profile":"KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0-20260926",
  "family_id":"JRA","race_id":"TEST-JRA-1","captured_at":"2026-09-26T15:20:00+09:00",
  "sources":[{
-   "source_id":"S1","source_class":"AUTHORIZED_PRE_RACE_FACT","authority":"TEST_AUTHORITY",
+   "source_id":"S1","source_class":"AUTHORIZED_PRE_RACE_FACT","authority":"USER_PROVIDED_PRE_RACE",
    "origin":"https://example.invalid/pre-race","available_at":"2026-09-26T15:10:00+09:00",
    "ingested_at":"2026-09-26T15:20:00+09:00","content_sha256":"a"*64,
    "production_use":"FACT_ONLY","result_derived":False
