@@ -1,0 +1,75 @@
+name: JRA HSN11 Zero-Touch Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn11-zero-touch-diagnostic.yml"
+  workflow_dispatch:
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - name: Measure current production source coverage
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
+          src=Path("runtime/executions/KM-JRA-HSN-20260926-R11-LIVE-R1/SOURCE/runs/36222746737/source_receipt_envelope.json")
+          env=json.load(open(src,encoding="utf-8"))
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          report=build_zero_touch_source_index_report(env["artifact"],mapping)
+          compact={
+            "profile":report["profile"],
+            "race_id":report["race_id"],
+            "source_snapshot_sha256":report["source_snapshot_sha256"],
+            "runner_count":report["runner_count"],
+            "production_source_only_formal_base_ready":report["production_source_only_formal_base_ready"],
+            "production_status":report["production_status"],
+            "production_error":report["production_error"],
+            "missing_source_families":report["missing_source_families"],
+            "shadow_observed_feature_count_min":report["shadow_observed_feature_count_min"],
+            "shadow_observed_feature_count_max":report["shadow_observed_feature_count_max"],
+            "shadow_missing_feature_count_min":report["shadow_missing_feature_count_min"],
+            "shadow_missing_feature_count_max":report["shadow_missing_feature_count_max"],
+            "shadow_has_all_71_feature_states":report["shadow_has_all_71_feature_states"],
+            "shadow_has_20_index_diagnostic":report["shadow_has_20_index_diagnostic"],
+            "per_runner_coverage":report["per_runner_coverage"],
+            "objective_candidate_ranking":(report.get("objective_shadow") or {}).get("candidate_ranking"),
+            "objective_runner_summary":{
+              rid:{
+                "runner_name":rr.get("runner_name"),
+                "profile":rr.get("profile"),
+                "observed_feature_count":rr.get("observed_feature_count"),
+                "missing_feature_count":rr.get("missing_feature_count"),
+                "base_coverage":{k:{
+                  "observed_weight":v.get("observed_weight"),
+                  "minimum_required_weight":v.get("minimum_required_weight"),
+                  "coverage_pass":v.get("coverage_pass"),
+                  "observed_score":v.get("observed_score")
+                } for k,v in (rr.get("base_indices") or {}).items()}
+              } for rid,rr in ((report.get("objective_shadow") or {}).get("runners") or {}).items()
+            }
+          }
+          out=Path("runtime/diagnostics/hsn11_zero_touch_current.json")
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(compact,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(compact,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist diagnostic
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn11_zero_touch_current.json
+          if ! git diff --cached --quiet; then
+            git commit -m "diagnostic: persist HSN11 current zero-touch coverage [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
