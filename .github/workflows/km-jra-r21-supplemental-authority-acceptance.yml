@@ -1,0 +1,67 @@
+name: JRA R21 Supplemental Closure Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R21.json"
+      - "profiles/family_runtime_contracts_20260926_R16.json"
+      - "profiles/venue_chat_routes_20260926_R20.json"
+      - "runtime/jra_supplemental_evidence_pack.py"
+      - ".github/workflows/km-jra-r21-supplemental-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R21 authority alignment
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R21.json",encoding="utf-8"))
+          rt=json.load(open("profiles/family_runtime_contracts_20260926_R16.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R20.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R21"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R20"
+          assert ca["common_family_components"]["family_runtime_contracts"]==rt["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert j["supplemental_evidence_closure"]=="KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1"
+          assert j["supplemental_evidence_acceptance_status"]=="PASS"
+          assert rt["families"]["JRA"]["supplemental_formal_runner_support"] is True
+          assert vr["jra_source_first"]["supplemental_evidence_closure"]==j["supplemental_evidence_closure"]
+          assert ca["supersession_declaration"]["predictive_model_change"] is False
+          assert ca["supersession_declaration"]["numerical_policy_change"] is False
+          assert ca["supersession_declaration"]["krs_authority_change"] is False
+          assert ca["supersession_declaration"]["capital_policy_change"] is False
+          assert "apply_supplemental_evidence_pack" in Path(".github/workflows/km-formal-request-runner.yml").read_text()
+          out={
+            "profile":"KM-JRA-R21-SUPPLEMENTAL-CLOSURE-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "runtime_contract":rt["profile_id"],
+            "venue_routing":vr["profile_id"],
+            "supplemental_closure":j["supplemental_evidence_closure"],
+            "full_required_preserved":True,
+            "prediction_policy_change":False,
+            "numerical_policy_change":False
+          }
+          p=Path("runtime/acceptance/jra_r21_supplemental_authority.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r21_supplemental_authority.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R21 supplemental authority PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
