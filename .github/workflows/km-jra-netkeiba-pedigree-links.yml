@@ -1,0 +1,38 @@
+name: JRA Netkeiba Pedigree Link Semantics
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-pedigree-links.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,sys,re,html
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode
+          url="https://race.netkeiba.com/race/surf_summary.html?race_id=202609040812&range=4&key1=KettoNumF"
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+          with urllib.request.urlopen(req,timeout=25) as r:
+            raw=r.read(3000000);ct=r.headers.get("content-type","")
+          dec=_decode(raw,ct)
+          links=[]
+          for href,body in re.findall(r'<a[^>]+href=["\']([^"\']*surf_summary[^"\']*)["\'][^>]*>(.*?)</a>',dec,re.I|re.S):
+            label=html.unescape(re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",body))).strip()
+            if "KettoNumF" in href or "range=" in href:links.append({"href":html.unescape(href),"label":label})
+          p=Path("runtime/diagnostics/netkeiba_pedigree_links.json")
+          p.write_text(json.dumps({"links":links},ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"links":links},ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_pedigree_links.json
+          git commit -m "diagnostic: pedigree link semantics [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
