@@ -1,0 +1,92 @@
+name: JRA R28 Fact Feature Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R28.json"
+      - "profiles/family_runtime_contracts_20260926_R21.json"
+      - "profiles/venue_chat_routes_20260926_R26.json"
+      - "profiles/jra_source_runtime_20260926_R11.json"
+      - "profiles/jra_information_source_registry_v1.8_20260926.json"
+      - "governance/KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R5.json"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/diagnostics/hsn12_v17_frozen_adapter_coverage.json"
+      - ".github/workflows/km-jra-r28-fact-feature-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R28 fact-feature authority
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R28.json",encoding="utf-8"))
+          fr=json.load(open("profiles/family_runtime_contracts_20260926_R21.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R26.json",encoding="utf-8"))
+          sc=json.load(open("profiles/jra_source_runtime_20260926_R11.json",encoding="utf-8"))
+          reg=json.load(open("profiles/jra_information_source_registry_v1.8_20260926.json",encoding="utf-8"))
+          clo=json.load(open("governance/KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R5.json",encoding="utf-8"))
+          diag=json.load(open("runtime/diagnostics/hsn12_v17_frozen_adapter_coverage.json",encoding="utf-8"))
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R28"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R27"
+          assert ca["common_family_components"]["family_runtime_contracts"]==fr["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_contract"]==sc["profile_id"]
+          assert j["information_source_registry"]==reg["profile_id"]
+          assert j["source_to_feature_closure"]==clo["profile_id"]
+          assert j["source_to_evidence_feature_compiler"]=="KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"
+          assert j["source_to_feature_policy"]=="KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
+          assert j["source_to_feature_acceptance_run"]==36235628525
+          assert "LEGACY" in j["coverage_reporting"]["missing_source_families"]
+          assert diag["missing_source_families_semantics"].startswith("LEGACY ALIAS")
+          facts=diag["source_fact_available_runner_counts"]
+          for fam in ["JRA_OFFICIAL_RACE_CARD","JRA_HORSE_HISTORY","JRA_HORSE_HISTORY_DETAIL","JRA_CURRENT_BODYWEIGHT","JRA_OFFICIAL_MARKET","JRA_TRAINER_STATS","JRA_TRAINING"]:
+              assert facts[fam]==16,(fam,facts[fam])
+          assert diag["generated_feature_counts"] and set(diag["generated_feature_counts"].values())=={3}
+          assert diag["production_compiler_formal_base_ready_after_merge"] is False
+          assert ca["supersession_declaration"]["new_production_category_evaluator"] is False
+          assert ca["supersession_declaration"]["production_feature_materialization_change"] is False
+          assert ca["supersession_declaration"]["source_only_full_numerical_ready"] is False
+          assert ca["supersession_declaration"]["unknown_future_empirical_acceptance"]=="PENDING"
+
+          src=Path("runtime/jra_source_to_evidence_features.py").read_text(encoding="utf-8")
+          assert 'PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"' in src
+          assert "missing_feature_source_families" in src
+          assert "source_fact_availability" in src
+
+          out={
+            "profile":"KM-JRA-R28-FACT-FEATURE-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "compiler":j["source_to_evidence_feature_compiler"],
+            "closure":j["source_to_feature_closure"],
+            "fact_feature_separation":True,
+            "hsn12_fact_counts":facts,
+            "generated_features_per_runner":3,
+            "source_only_full_numerical_ready":False,
+            "unknown_future_empirical_acceptance":"PENDING",
+            "new_production_evaluator":False
+          }
+          p=Path("runtime/acceptance/jra_r28_fact_feature_authority.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r28_fact_feature_authority.json
+          git commit -m "ci: persist JRA R28 fact-feature authority PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
