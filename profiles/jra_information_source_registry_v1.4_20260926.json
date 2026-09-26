@@ -1,0 +1,117 @@
+{
+  "profile_id": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926",
+  "status": "ACTIVE / JRA-WIDE / OFFICIAL-PDF-RUNNER / OFFICIAL-DETAIL-FACTS / OFFICIAL-FULL-HORSE-HISTORY / OFFICIAL-PERSON-STATS / OFFICIAL-MARKET-OBSERVATION / TSL-PUBLIC-SHADOW",
+  "family_id": "JRA",
+  "rule": "Official JRA PDF is mandatory for Runner Universe. JRADB HTML is auxiliary. JRA official facts always outrank JMA context and TSL public shadow; TSL never overrides official race facts.",
+  "source_classes": [
+    "OFFICIAL_JRA_CALENDAR",
+    "OFFICIAL_JRA_RACE_CARD",
+    "OFFICIAL_JRA_RACE_CARD_DETAIL",
+    "OFFICIAL_JRA_SAME_DAY_RESULT",
+    "OFFICIAL_JRA_HORSE_HISTORY",
+    "OFFICIAL_JRA_RUNNER_UNIVERSE",
+    "OFFICIAL_JMA_AMEDAS_STATION_METADATA",
+    "OFFICIAL_JMA_AMEDAS_OBSERVATION",
+    "DERIVED_JRA_SAME_DAY_POSITION_BIAS_SHADOW",
+    "DERIVED_JRA_RACE_CARD_IDENTITY_SEED",
+    "DERIVED_JRA_POINT_IN_TIME_POPULATION_SEED_SHADOW",
+    "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "SIGNED_SOURCE_RECEIPT",
+    "OFFICIAL_JRA_RACE_CARD_PDF",
+    "OFFICIAL_JRA_PERSON_STATS",
+    "OFFICIAL_JRA_MARKET_OBSERVATION"
+  ],
+  "source_priority": [
+    "JRA_OFFICIAL",
+    "JMA_OFFICIAL",
+    "REGISTERED_JRA_COMMON",
+    "TSL_PUBLIC_NON_OFFICIAL"
+  ],
+  "source_runtime": "KM-JRA-SOURCE-RUNTIME-v1.6-20260926",
+  "tsl": {
+    "name": "統計ショッカーリミテッド",
+    "host": "jra.k-ba.net",
+    "base_url": "https://jra.k-ba.net/",
+    "source_class": "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "authority": "TSL_PUBLIC_NON_OFFICIAL",
+    "official": false,
+    "production_authority": false,
+    "prediction_authority": false,
+    "default_requirement": "OPTIONAL_SHADOW_CAPTURE",
+    "source_priority": "BELOW_JRA_OFFICIAL / NEVER_OVERRIDES_OFFICIAL_RACE_FACTS",
+    "storage_policy": "NORMALIZED_EXTRACTED_DATA_PLUS_RAW_SHA_ONLY / NO_RAW_HTML_REPUBLICATION",
+    "oos_eligibility": "PRE_CUTOFF + PRE_START + OFFICIAL_RUNNER_UNIVERSE_MATCH"
+  },
+  "local_sbo": {
+    "name": "水分ボンバーオンライン",
+    "host": "nar.k-ba.net",
+    "allowed_for_jra": false,
+    "reason": "LOCAL/NAR only; JRA uses TSL."
+  },
+  "predecessor": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.3-20260926",
+  "required_formal_sources": {
+    "official_runner_universe": "OFFICIAL_JRA_RACE_CARD_PDF",
+    "jradb_html": "OPTIONAL_AUXILIARY",
+    "tsl": "OPTIONAL_OR_REQUEST_REQUIRED_SHADOW_ONLY",
+    "jma": "OPTIONAL_OR_REQUEST_REQUIRED_CONTEXT",
+    "official_race_card_detail": "OPTIONAL_FOR_RUNNER_UNIVERSE / PRODUCTION-FACT-AUTHORITY WHEN CAPTURED"
+  },
+  "official_detail": {
+    "name": "JRA detailed race-card JRADB",
+    "source_class": "OFFICIAL_JRA_RACE_CARD_DETAIL",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "parsed_fields": [
+      "career record and starts",
+      "current win odds and popularity",
+      "current bodyweight and change",
+      "assigned weight",
+      "jockey/trainer identities",
+      "sire/dam/damsire identities",
+      "up to four recent runs: finish/field/popularity/distance/surface/time/going/bodyweight/passing calls/final3F/margin/class/rider"
+    ],
+    "prediction_rule_authority": "FACTS ONLY / CATEGORY EVALUATORS SEPARATE"
+  },
+  "official_horse_history": {
+    "name": "JRA official horse history JRADB",
+    "source_class": "OFFICIAL_JRA_HORSE_HISTORY",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-HORSE-HISTORY-v1.0-20260926",
+    "fields": [
+      "date",
+      "venue",
+      "race_name",
+      "surface",
+      "distance_m",
+      "going",
+      "field_size",
+      "popularity_rank",
+      "finish",
+      "jockey",
+      "assigned_weight",
+      "body_weight",
+      "time",
+      "rating",
+      "winner_or_second"
+    ],
+    "rule": "Official facts only. Feature-category semantics remain separately governed."
+  },
+  "official_person_stats": {
+    "name": "JRA official jockey/trainer current-year flat statistics",
+    "source_class": "OFFICIAL_JRA_PERSON_STATS",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-PERSON-STATS-v1.0-20260926",
+    "prediction_rule_authority": "FACTS ONLY / CATEGORY EVALUATORS SEPARATE"
+  },
+  "official_market_observation": {
+    "name": "JRA official current market observation",
+    "source_class": "OFFICIAL_JRA_MARKET_OBSERVATION",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-MARKET-OBSERVATION-v1.0-20260926",
+    "rule": "Single observation is current-market fact only; market_stability requires >=2 temporally ordered Signed SOURCE observations.",
+    "prediction_rule_authority": "FACTS ONLY / CATEGORY EVALUATORS SEPARATE"
+  }
+}
