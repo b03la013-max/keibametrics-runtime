@@ -112,10 +112,15 @@ def parse_person_profile(raw:bytes,content_type:str,kind:str,token:str)->Dict[st
             name=m.group(1).strip()
             break
     if not name:
-        # Narrow fallback: require the duplicated profile label seen in JRA body
-        # rather than the first title/navigation occurrence.
-        m=re.search(re.escape(label)+r"\s+"+re.escape(label)+r"\s+(.+?)\s*[（(]",text)
-        if m:name=m.group(1).strip()
+        # Fallback for simplified/unit fixtures and future markup changes:
+        # accept only short name-like captures, never navigation-sized text.
+        candidates=[]
+        for m in re.finditer(re.escape(label)+r"\s+(.+?)\s*[（(]",text):
+            cand=re.sub(r"\s+"," ",m.group(1)).strip()
+            if 1<=len(cand)<=32 and not any(x in cand for x in ["JRA","ニュース","メニュー","検索","ホーム",">"]):
+                candidates.append(cand)
+        if candidates:
+            name=candidates[-1]
     rows=[]
     for table in _html_tables(decoded):
         x=_flat_row(table,kind)
