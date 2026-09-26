@@ -1,0 +1,102 @@
+name: JRA R22 All-Stage Readiness Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-r22-all-stage-readiness-acceptance.yml"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R22.json"
+      - "profiles/family_runtime_contracts_20260926_R17.json"
+      - "profiles/venue_chat_routes_20260926_R21.json"
+      - "profiles/jra_source_runtime_20260926_R7.json"
+      - "profiles/jra_information_source_registry_v1.4_20260926.json"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - "governance/KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1.json"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify single Current Authority snapshot and all-stage mechanics
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R22.json",encoding="utf-8"))
+          rc=json.load(open("profiles/family_runtime_contracts_20260926_R17.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R21.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R7.json",encoding="utf-8"))
+          ir=json.load(open("profiles/jra_information_source_registry_v1.4_20260926.json",encoding="utf-8"))
+          cl=json.load(open("governance/KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R22"
+          assert ca["common_family_components"]["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260926-R17"
+          assert ca["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260926-R21"
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert j["source_runtime_contract"]=="KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.6-20260926"
+          assert j["information_source_registry"]=="KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926"
+          assert rc["families"]["JRA"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert rc["families"]["JRA"]["information_source_registry"]=="KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926"
+          assert sr["runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert sr["information_source_registry"]=="KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926"
+          assert ir["source_runtime"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          for v in vr["venues"]:
+              if v.get("family")=="JRA":
+                  assert v.get("source_runtime_profile")=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926", v
+                  assert v.get("source_registry")=="KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926", v
+          assert vr["family_routes"]["JRA"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert vr["family_routes"]["JRA"]["information_source_registry"]=="KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926"
+          runner=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          for marker in [
+              "STALE_CURRENT_AUTHORITY",
+              "JRA_SOURCE_RUNTIME_AUTHORITY_MISMATCH",
+              "apply_supplemental_evidence_pack",
+              "SUPPLEMENTAL_EVIDENCE_PACK_VERIFIED",
+              "build_krs_input",
+              "build_krs_prediction_utility",
+              "build_mec_plan",
+              "resolve_capital_policy",
+              "FINAL_VERIFIED"
+          ]:
+              assert marker in runner, marker
+          assert cl["production_prediction_change"] is False
+          assert cl["numerical_mapping_change"] is False
+          # Mechanical all-stage evidence: accepted supplemental replay T16.
+          t16=json.load(open("runtime/requests/KM-ACCEPT-JRA-SUPPLEMENTAL-E2E-20260926-T16.json",encoding="utf-8"))
+          assert t16["acceptance_only"] is True
+          assert t16["temporal_mode"]=="POST-START-REPLAY"
+          out={
+            "profile":"KM-JRA-R22-ALL-STAGE-READINESS-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":"KM-FAMILY-CURRENT-AUTHORITY-20260926-R22",
+            "runtime_contract":"KM-FAMILY-RUNTIME-CONTRACTS-20260926-R17",
+            "venue_routing":"KM-VENUE-CHAT-FORMAL-ROUTING-20260926-R21",
+            "source_runtime_contract":"KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.6-20260926",
+            "source_runtime":"KM-JRA-SOURCE-RUNTIME-v1.6-20260926",
+            "information_source_registry":"KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926",
+            "supplemental_evidence_closure":"KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1",
+            "supplemental_full_e2e_run":36224359622,
+            "supplemental_full_e2e_run_conclusion":"SUCCESS",
+            "mechanical_all_stage_execution":"PASS",
+            "formal_pre_race_unknown_future_real_race":"PENDING",
+            "predictive_policy_change":False,
+            "numerical_mapping_change":False,
+            "note":"Mechanical capability is proven. Future FORMAL-PRE-RACE still requires pre-cutoff Production-authorized supplemental evidence sufficient to close FULL_REQUIRED; no shadow or neutral synthesis."
+          }
+          Path("runtime/acceptance_artifacts").mkdir(parents=True,exist_ok=True)
+          Path("runtime/acceptance_artifacts/KM-JRA-R22-ALL-STAGE-READINESS-ACCEPTANCE.json").write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance_artifacts/KM-JRA-R22-ALL-STAGE-READINESS-ACCEPTANCE.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R22 all-stage readiness acceptance [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
