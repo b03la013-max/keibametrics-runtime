@@ -33,6 +33,8 @@ def _fetch(url:str,prediction_cutoff:str,source_id:str,source_class:str):
           "timeout_seconds":30,"extract":[]}
     snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=status,headers=headers,
                                   fetched_at=fetched,prediction_cutoff=prediction_cutoff)
+    if snap.get("cutoff_relation")=="POST_CUTOFF":
+        raise ValueError("REGISTERED_COMMON_POST_CUTOFF:"+source_id)
     if errs: raise ValueError("REGISTERED_COMMON_SNAPSHOT_ERROR:"+"|".join(errs))
     return raw,headers,snap
 
