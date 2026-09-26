@@ -79,3 +79,12 @@ def test_person_stats_feed_jti_csi_shadow():
     # A single observed person value cannot be field-ranked; it must not invent authority.
     assert f["jockey_quality"]["production_authority"] is False
     assert f["trainer_quality"]["production_authority"] is False
+
+
+def test_objective_formal_readiness_fails_closed_on_missing_dcr():
+    r=build_source_objective_candidate(source(),[{"runner_id":"1","career_starts":10},{"runner_id":"2","career_starts":10}],mapping())
+    for rr in r["runners"].values():
+        assert "dcr_readiness" in rr
+        assert rr["dcr_readiness"]["ready"] is False
+        assert rr["dcr_readiness"]["missing_components"]
+        assert rr["formal_production_ready"] is False
