@@ -1,0 +1,31 @@
+name: JRA Supplemental Evidence Closure Acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_supplemental_evidence_pack.py"
+      - "tests/test_jra_supplemental_evidence_pack.py"
+      - "tests/test_jra_supplemental_full_numerical_closure.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - "governance/KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1.json"
+      - ".github/workflows/km-jra-supplemental-evidence-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Unit and full numerical closure
+        run: |
+          pytest -q tests/test_jra_supplemental_evidence_pack.py tests/test_jra_supplemental_full_numerical_closure.py
+      - name: Formal runner integration assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path(".github/workflows/km-formal-request-runner.yml").read_text()
+          assert "apply_supplemental_evidence_pack" in p
+          assert "SUPPLEMENTAL_EVIDENCE_PACK_VERIFIED" in p
+          assert "supplemental_evidence_pack" in p
+          print("FORMAL_RUNNER_SUPPLEMENTAL_INTEGRATION_PASS")
+          PY
