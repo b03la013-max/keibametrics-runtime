@@ -52,10 +52,12 @@ jobs:
           assert "validate_feature_contract" in c
           assert "source_only_formal_base_ready" in c
           assert 'POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"' in c
-          p=Path("mapping/jra_source_to_feature_policy_v1.3_20260926.json").read_text()
-          assert "No stable_readiness may be inferred from workout assessment alone" in p
-          assert "person-quality categories until a separately governed evaluator is promoted" in p
-          assert "target result structurally excluded" in p
+          import json
+          p=json.loads(Path("mapping/jra_source_to_feature_policy_v1.3_20260926.json").read_text())
+          prohibited=p["production_category_autofill"]["prohibited"]
+          assert any("No stable_readiness may be inferred from workout assessment alone" in x for x in prohibited)
+          assert any("person-quality categories" in x and "evaluator is promoted" in x for x in prohibited)
+          assert p["source_fact_availability"]["official_same_day_result_detail_v1_0"]["target_race_excluded"] is True
           print("wiring PASS")
           PY
       - name: Persist acceptance marker
