@@ -167,17 +167,25 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         out={}
         pat=r'<a([^>]*)>(.*?)</a>'
         for attrs,label in re.findall(pat,decoded,re.I|re.S):
+            if page.lower() not in str(attrs).lower():
+                continue
             token=None
-            m=re.search(r"(?:/JRADB/)?"+re.escape(page)+r"\\.html[^\\\"']*CNAME=([^\\\"'&<>\\s]+)",attrs,re.I|re.S)
-            if m:
-                token=urllib.parse.unquote(m.group(1))
-            if token is None:
-                m=re.search(r"doAction\\(\\s*[\\\"'][^\\\"']*"+re.escape(page)+r"\\.html[\\\"']\\s*,\\s*[\\\"']([^\\\"']+)[\\\"']",attrs,re.I|re.S)
-                if m: token=urllib.parse.unquote(m.group(1))
-            if not token: continue
+            if "CNAME=" in attrs:
+                tail=attrs.split("CNAME=",1)[1]
+                token=re.split(r"[&\"'<>\\s]+",tail,1)[0]
+            if not token and "doAction" in attrs:
+                args=re.findall(r"""['"]([^'"]+)['"]""",attrs)
+                for i,arg in enumerate(args[:-1]):
+                    if page.lower()+".html" in arg.lower():
+                        token=args[i+1]
+                        break
+            if not token:
+                continue
+            token=urllib.parse.unquote(str(token))
             label_txt=re.sub(r"<[^>]+>","",html.unescape(label))
             key=re.sub(r"[▲△◇☆★\\s]+","",label_txt).strip()
-            if key and key not in out: out[key]=token
+            if key and key not in out:
+                out[key]=token
         return out
     jockey_token_by_name=_person_token_map("accessK")
     trainer_token_by_name=_person_token_map("accessC")
