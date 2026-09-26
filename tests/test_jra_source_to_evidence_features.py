@@ -124,3 +124,26 @@ def test_official_detail_autofills_career_starts_and_rule_inputs():
     assert "recent_performance" not in ef
     assert "jockey_quality" not in ef
     assert "trainer_quality" not in ef
+
+
+def test_registered_common_workout_does_not_infer_stable_readiness():
+    a=_artifact()
+    a["jra_registered_common_sha256"]="RC"
+    a["jra_registered_common"]={
+      "status":"PASS",
+      "workout":{
+        "source_snapshot_sha256":"W",
+        "runner_count":2,
+        "runners":[
+          {"runner_id":"1","horse_no":1,"horse_name":"A","assessment":"出来は良","rating":"B","course":"","workout_time_raw":"","final1f":None,"gait":""},
+          {"runner_id":"2","horse_no":2,"horse_name":"B","assessment":"気配上々","rating":"B","course":"","workout_time_raw":"","final1f":None,"gait":""}
+        ]
+      }
+    }
+    runners=[{"runner_id":"1","name":"A","career_starts":8,"evidence_features":{}},
+             {"runner_id":"2","name":"B","career_starts":6,"evidence_features":{}}]
+    out=compile_source_to_features(a,runners,_mapping())
+    f1=out["runners"]["1"]["generated_production_features"]
+    assert f1["workout_capability"]["rule_id"]=="JRA-WORKOUT-CAPABILITY-COMMENT-v1"
+    assert "stable_readiness" not in f1
+    assert "workout_speed" not in f1
