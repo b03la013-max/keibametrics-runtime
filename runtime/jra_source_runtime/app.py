@@ -92,8 +92,10 @@ def _canonical_manifest_input(p:Dict[str,Any])->Dict[str,Any]:
     }
 
 def _append_jra_card_specs(p:Dict[str,Any],meeting_key:str)->Dict[str,Any]:
+    # Compatibility name retained. Once meeting identity is known, append every
+    # missing meeting-scoped official spec, not only the target race card.
+    # This is required for pre-target same-day result acquisition.
     q=dict(p); existing=list(q.get("sources") or [])
-    if any(str(x.get("source_id"))=="JRA-RACE-CARD" for x in existing if isinstance(x,dict)): return q
     mi=_canonical_manifest_input(q); mi["jra_meeting_key"]=meeting_key
     m=build_jra_manifest(mi)
     ids={str(x.get("source_id")) for x in existing if isinstance(x,dict)}
