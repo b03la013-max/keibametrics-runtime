@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue
 
-PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.0-20260926"
+PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.1-20260926"
 AUTHORITY="REGISTERED_JRA_COMMON"
 UA="KeibaMetrics-JRA-Registered-Common/1.0"
 BASE="https://race.netkeiba.com"
@@ -38,8 +38,19 @@ def _fetch(url:str,prediction_cutoff:str,source_id:str,source_class:str):
     if errs: raise ValueError("REGISTERED_COMMON_SNAPSHOT_ERROR:"+"|".join(errs))
     return raw,headers,snap
 
-def _discover_race_id(venue_id:str,race_date:str,race_no:int,prediction_cutoff:str):
+def _discover_race_id(venue_id:str,race_date:str,race_no:int,prediction_cutoff:str,meeting_key:str=""):
     d=datetime.date.fromisoformat(str(race_date).replace("/","-")).strftime("%Y%m%d")
+    # Preferred identity path: JRA meeting key is already authority-bound and maps
+    # deterministically to netkeiba's YYYY+venue+meeting+day+race identifier.
+    key=re.sub(r"\D","",str(meeting_key or ""))
+    code=JRA_VENUE_CODES.get(canonical_venue(venue_id))
+    if re.fullmatch(r"\d{10}",key):
+        kcode,year,meeting,day=key[:2],key[2:6],key[6:8],key[8:10]
+        if code and kcode==code and year==d[:4]:
+            rid=f"{year}{kcode}{meeting}{day}{int(race_no):02d}"
+            # No discovery snapshot is synthesized. The actual workout/speed pages
+            # are still fetched, hashed, cutoff-checked and runner-reconciled.
+            return rid,None
     url=f"{BASE}/top/race_list.html?kaisai_date={d}"
     raw,headers,snap=_fetch(url,prediction_cutoff,"NETKEIBA-RACE-LIST","REGISTERED_COMMON_NETKEIBA_RACE_LIST")
     decoded=_decode(raw,headers.get("content-type",""))
@@ -134,8 +145,12 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
           "prediction_rule_authority":"FACTS ONLY / EXISTING REGISTERED RULE EVALUATORS ONLY",
           "result_derived":False,"status":"UNAVAILABLE"}
     try:
-        race_id,rsnap=_discover_race_id(ctx.get("venue_id"),ctx.get("race_date"),int(ctx.get("race_no") or 0),prediction_cutoff)
-        snaps.append(rsnap);base["netkeiba_race_id"]=race_id
+        race_id,rsnap=_discover_race_id(
+            ctx.get("venue_id"),ctx.get("race_date"),int(ctx.get("race_no") or 0),prediction_cutoff,
+            str(artifact.get("jra_meeting_key_discovered") or "")
+        )
+        if rsnap is not None: snaps.append(rsnap)
+        base["netkeiba_race_id"]=race_id
         raw,h,snap=_fetch(f"{BASE}/race/oikiri.html?race_id={race_id}&type=2",prediction_cutoff,
                           "NETKEIBA-WORKOUT","REGISTERED_COMMON_NETKEIBA_WORKOUT")
         workout=parse_workout(raw,h.get("content-type","")); workout["source_snapshot_sha256"]=snap["snapshot_sha256"]
