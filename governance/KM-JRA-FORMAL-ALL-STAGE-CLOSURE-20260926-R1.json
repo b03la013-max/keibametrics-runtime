@@ -1,0 +1,116 @@
+{
+  "profile_id": "KM-JRA-FORMAL-ALL-STAGE-CLOSURE-20260926-R1",
+  "status": "ACTIVE / JRA / EXECUTION-CORRECTNESS / NON-NUMERICAL / NO-PREDICTION-POLICY-CHANGE / FAIL-CLOSED",
+  "effective_at": "2026-09-26T15:49:40+09:00",
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260926-R23",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260926-R22",
+  "family_runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20260926-R17",
+  "source_runtime_contract": "KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.6-20260926",
+  "source_runtime_profile": "KM-JRA-SOURCE-RUNTIME-v1.6-20260926",
+  "information_source_registry": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.4-20260926",
+  "supplemental_evidence_closure": "KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1",
+  "evidence_feature_compiler": "KM-JRA-EVIDENCE-FEATURE-COMPILER-v1.1-20260922",
+  "evidence_rule_registry": "JRA-EVIDENCE-FEATURE-RULE-REGISTRY-v1.1-20260922",
+  "production_mapping": "JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+  "mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+  "capital": "KM-FAMILY-CAPITAL-COMPATIBILITY-v1.0-20260921",
+  "repairs": [
+    {
+      "id": "JRA-CLOSURE-001",
+      "issue": "Signed SOURCE runtime v1.6 was not bound by Current Authority v1.5.",
+      "repair": "Exact Current Authority resolution and Signed SOURCE runtime_revision equality gate."
+    },
+    {
+      "id": "JRA-CLOSURE-002",
+      "issue": "Source-only Production feature gaps caused immediate stop before registered supplemental evidence could be used.",
+      "repair": "Mandatory pre-cutoff Supplemental Evidence Closure using existing registered rule_id/category only, followed by Evidence Compiler and FULL_REQUIRED re-materialization."
+    },
+    {
+      "id": "JRA-CLOSURE-003",
+      "issue": "JRA venue route rows retained stale source runtime/registry identities.",
+      "repair": "All JRA Venue routes normalized to Source Runtime v1.6 and Information Source Registry v1.4."
+    },
+    {
+      "id": "JRA-CLOSURE-004",
+      "issue": "Synthetic acceptance supplemental evidence could pass the generic pack validator without an acceptance-only restriction.",
+      "repair": "Synthetic/mechanical sources are rejected for Production Formal execution and allowed only when acceptance_only=true."
+    },
+    {
+      "id": "JRA-CLOSURE-005",
+      "issue": "POST-START acceptance summary could label all mandatory stages as pre-race verified.",
+      "repair": "Separate all_mandatory_stages_verified from all_mandatory_pre_race_stages_verified and bind the latter to FORMAL-PRE-RACE/non-acceptance temporal status."
+    }
+  ],
+  "canonical_route": [
+    "VENUE_PROFILE_RESOLVE",
+    "SOURCE_MANIFEST_RESOLVE",
+    "EXTERNAL_SOURCE_ACQUISITION",
+    "RAW_SOURCE_SNAPSHOT",
+    "SOURCE_VALIDATION",
+    "NORMALIZED_EVIDENCE",
+    "SOURCE_FREEZE_VERIFIED",
+    "SIGNED_SOURCE_RECEIPT_VERIFIED",
+    "OFFICIAL_RUNNER_UNIVERSE_BUILD",
+    "REQUEST_RUNNER_UNIVERSE_MATCH",
+    "FULL_RUNNER_UNIVERSE",
+    "EVIDENCE_FEATURE_COMPILER_VERIFIED",
+    "SUPPLEMENTAL_EVIDENCE_CLOSURE_IF_REQUIRED",
+    "REQUIRED_INDEX_MANIFEST",
+    "FAMILY_NUMERICAL_MATERIALIZATION",
+    "INDEX_PROVENANCE",
+    "FULL_NUMERICAL_CALCULATION_VERIFIED",
+    "STATIC_FREEZE",
+    "ROLE_REGISTRY_VERIFIED",
+    "PAIR_DISPOSITIONS_VERIFIED",
+    "THIRD_DISPOSITIONS_VERIFIED",
+    "PRE_KRS_OFFICIAL_RUNNER_UNIVERSE_MATCH",
+    "PRE_KRS_VERIFIED",
+    "KRS_EXECUTED_VERIFIED",
+    "KRS_PREDICTION_UTILITY_CAPTURED",
+    "MATERIAL_COVERAGE_UNIVERSE",
+    "MINIMUM_EFFICIENT_COVERAGE",
+    "CAPITAL_COMPATIBILITY",
+    "TICKET_TRANSPORT_TRACE",
+    "FINAL_TICKET_FREEZE",
+    "FINAL_VERIFIED",
+    "IMMUTABLE_FINAL_SAVED"
+  ],
+  "mechanical_evidence": {
+    "r22_all_stage_readiness_run": 36224603096,
+    "r23_hsn11_poststart_full_e2e_run": 36224963541,
+    "r23_hsn11_required_count": 320,
+    "r23_hsn11_calculated_count": 320,
+    "r23_hsn11_unresolved_count": 0,
+    "r23_hsn11_krs_actual_run_count": 5000,
+    "r23_hsn11_mec_ticket_count": 27,
+    "r23_hsn11_mec_minimum_required_capital": 2700,
+    "r23_hsn11_material_coverage_ratio": 1,
+    "r23_hsn11_temporal_class": "POST-START-REPLAY / ACCEPTANCE-ONLY"
+  },
+  "production_input_policy": {
+    "allowed_supplemental_authorities": [
+      "JRA_OFFICIAL",
+      "REGISTERED_JRA_COMMON",
+      "USER_PROVIDED_PRE_RACE"
+    ],
+    "synthetic_or_mechanical": "ACCEPTANCE_ONLY / FORBIDDEN_IN_PRODUCTION",
+    "result_derived": false,
+    "freehand_numeric_index": false,
+    "shadow_auto_promotion": false,
+    "unknown_to_neutral": false
+  },
+  "production_effect": {
+    "predictive_rule_change": false,
+    "numerical_weight_change": false,
+    "mapping_change": false,
+    "krs_authority_change": false,
+    "mec_change": false,
+    "capital_change": false
+  },
+  "empirical_status": {
+    "mechanical_all_stage_execution": "PASS",
+    "real_unknown_future_formal_pre_race": "PENDING",
+    "predictive_superiority": "NOT CLAIMED"
+  }
+}
