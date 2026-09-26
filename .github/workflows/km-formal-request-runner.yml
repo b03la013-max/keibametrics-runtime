@@ -69,6 +69,41 @@ jobs:
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
 
+          # Resolve the latest ACTIVE Family Current Authority from canonical Git.
+          # FORMAL-PRE-RACE may not select an older manifest just because a request names it.
+          import glob
+          authority_candidates=[]
+          now_utc=datetime.now(timezone.utc)
+          for ap in glob.glob("profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+              try:
+                  with open(ap,encoding="utf-8") as afh:
+                      ax=json.load(afh)
+                  if "CURRENT-AUTHORITY" not in str(ax.get("status") or ""):
+                      continue
+                  eat=ax.get("effective_at")
+                  if not eat:
+                      continue
+                  eat_utc=dt(eat).astimezone(timezone.utc)
+                  if eat_utc<=now_utc:
+                      authority_candidates.append((eat_utc,str(ax.get("manifest_id") or ""),ap,ax))
+              except Exception:
+                  continue
+          assert authority_candidates, "CURRENT_AUTHORITY_RESOLUTION_EMPTY"
+          _,resolved_current_authority,resolved_authority_path,resolved_authority_obj=max(authority_candidates,key=lambda z:(z[0],z[1]))
+          temporal_mode_early=req.get("temporal_mode","FORMAL-PRE-RACE")
+          if temporal_mode_early=="FORMAL-PRE-RACE":
+              declared_authority=str(req.get("current_authority_manifest") or "")
+              assert declared_authority==resolved_current_authority, (
+                  "STALE_CURRENT_AUTHORITY:"+declared_authority+"!="+resolved_current_authority
+              )
+          expected_jra_source_runtime=str(
+              (((resolved_authority_obj.get("family_scoped_authority") or {}).get("JRA") or {}).get("source_runtime_profile") or "")
+          )
+          assert expected_jra_source_runtime, "CURRENT_AUTHORITY_JRA_SOURCE_RUNTIME_MISSING"
+          req["resolved_current_authority_manifest"]=resolved_current_authority
+          req["resolved_current_authority_profile_path"]=resolved_authority_path
+          req["resolved_jra_source_runtime_profile"]=expected_jra_source_runtime
+
           # JRA SOURCE-first handoff. New formal requests may reference an immutable
           # signed SOURCE phase produced by the dedicated external JRA source runtime.
           # Historical requests without source_execution_id remain compatibility-readable.
@@ -83,6 +118,12 @@ jobs:
               assert os.path.exists(envelope_path), "JRA_SIGNED_SOURCE_ENVELOPE_MISSING"
               with open(envelope_path,encoding="utf-8") as sf:
                   source_env=json.load(sf)
+              actual_source_runtime=str(((source_env.get("receipt") or {}).get("runtime_revision") or ""))
+              if temporal_mode_early=="FORMAL-PRE-RACE":
+                  assert actual_source_runtime==expected_jra_source_runtime, (
+                      "JRA_SOURCE_RUNTIME_AUTHORITY_MISMATCH:"
+                      +actual_source_runtime+"!="+expected_jra_source_runtime
+                  )
               # SOURCE trust is externally rooted in the GitHub Actions OIDC
               # attestation and internally protected by the envelope's ephemeral
               # Ed25519 receipt signature. No live SOURCE HTTP service is required.
@@ -121,6 +162,9 @@ jobs:
               assert set(actual)==set(expected), f"JRA_SOURCE_RUNNER_ID_SET_MISMATCH:{sorted(actual)}!={sorted(expected)}"
               req["verified_source_lineage"]={
                   "execution_id":source_execution_id,
+                  "source_runtime_profile":actual_source_runtime,
+                  "expected_source_runtime_profile":expected_jra_source_runtime,
+                  "current_authority_manifest":resolved_current_authority,
                   "receipt_sha256":source_env.get("receipt_sha256"),
                   "source_snapshot_sha256":source_sha,
                   "official_runner_universe_sha256":source_artifact.get("jra_official_runner_universe_sha256"),
