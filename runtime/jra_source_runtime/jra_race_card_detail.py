@@ -172,7 +172,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             if m:
                 token=urllib.parse.unquote(m.group(1))
             if token is None:
-                m=re.search(r'doAction\\(\\s*["\\'][^"\\']*'+re.escape(page)+r'\\.html["\\']\\s*,\\s*["\\']([^"\\']+)["\\']',attrs,re.I|re.S)
+                m=re.search(r"doAction\\(\\s*[\\\"'][^\\\"']*"+re.escape(page)+r"\\.html[\\\"']\\s*,\\s*[\\\"']([^\\\"']+)[\\\"']",attrs,re.I|re.S)
                 if m: token=urllib.parse.unquote(m.group(1))
             if not token: continue
             label_txt=re.sub(r"<[^>]+>","",html.unescape(label))
