@@ -46,7 +46,7 @@ jobs:
           frozen=json.load(open("runtime/source_candidate_oos/KM-JRA-HSN-20260927-R02/pre_result.json",encoding="utf-8"))
           byname={str(r["runner_id"]):r.get("name") for r in cand["runners"]}
           rows=[]
-          prod_runners={str(x["runner_id"]):x for x in prod["runners"]}
+          prod_runners={str(k):v for k,v in (prod["runners"] or {}).items()}
           for r in cand["runners"]:
             rid=str(r["runner_id"]); comps=r["canonical_components"]
             pobj=prod_runners.get(rid,{})
