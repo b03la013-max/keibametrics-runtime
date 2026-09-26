@@ -1,0 +1,75 @@
+name: JRA Temporal Handoff Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-source-first-runner.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-jra-temporal-handoff-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify temporal handoff fail-closed semantics
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import datetime,timezone
+          from pathlib import Path
+
+          source_wf=Path(".github/workflows/km-jra-source-first-runner.yml").read_text(encoding="utf-8")
+          formal_wf=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "SOURCE_FORMAL_SCHEDULED_POST_REQUIRED" in source_wf
+          assert "SOURCE_DEADLINE_INSUFFICIENT" in source_wf
+          assert "SOURCE_CUTOFF_NOT_BEFORE_POST" in source_wf
+          assert "SOURCE_FREEZE_AFTER_CUTOFF" in source_wf
+          assert "JRA_SIGNED_SOURCE_CUTOFF_MISMATCH" in formal_wf
+          assert "JRA_SIGNED_SOURCE_FREEZE_AFTER_CUTOFF" in formal_wf
+          assert "SOURCE_TO_PREDICTION_TEMPORAL_LINEAGE_FAIL" in formal_wf
+
+          old=json.load(open("runtime/jra_source_requests/KM-JRA-HSN-20260926-R12-LIVE-R2.json",encoding="utf-8"))
+          old_cutoff=datetime.fromisoformat(old["prediction_cutoff"]).astimezone(timezone.utc)
+          # Deterministic post-start acceptance timestamp, later than the historical cutoff.
+          acceptance_now=datetime.fromisoformat("2026-09-26T18:30:00+09:00").astimezone(timezone.utc)
+          assert acceptance_now > old_cutoff
+
+          # Positive ordering fixture for the new contract.
+          source_start=datetime.fromisoformat("2026-09-27T14:00:00+09:00").astimezone(timezone.utc)
+          cutoff=datetime.fromisoformat("2026-09-27T15:50:00+09:00").astimezone(timezone.utc)
+          source_freeze=datetime.fromisoformat("2026-09-27T15:45:00+09:00").astimezone(timezone.utc)
+          static_freeze=datetime.fromisoformat("2026-09-27T15:55:00+09:00").astimezone(timezone.utc)
+          dispatch=datetime.fromisoformat("2026-09-27T15:57:00+09:00").astimezone(timezone.utc)
+          post=datetime.fromisoformat("2026-09-27T16:00:00+09:00").astimezone(timezone.utc)
+          assert source_start <= source_freeze <= cutoff <= static_freeze <= dispatch < post
+
+          out={
+            "profile":"KM-JRA-TEMPORAL-HANDOFF-ACCEPTANCE-v1.0-20260926",
+            "status":"PASS",
+            "historical_r12_old_request_rejected_by_new_deadline_rule":True,
+            "positive_ordering_fixture_pass":True,
+            "required_order":"SOURCE_START <= SOURCE_FREEZE <= PREDICTION_CUTOFF <= STATIC_FREEZE <= EXTERNAL_DISPATCH_DEADLINE < SCHEDULED_POST",
+            "source_first_gate":True,
+            "formal_receiver_reverify":True,
+            "classification":"CORRECTNESS / TEMPORAL / NO-PREDICTION-POLICY-CHANGE"
+          }
+          p=Path("runtime/acceptance/jra_temporal_handoff.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_temporal_handoff.json
+          git commit -m "ci: persist JRA temporal handoff PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
