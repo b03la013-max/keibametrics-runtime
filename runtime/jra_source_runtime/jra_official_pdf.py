@@ -183,6 +183,8 @@ def fetch_and_enrich_official_pdf(
             spec,raw,final_url=final_url,status_code=int(getattr(resp,"status",200)),
             headers=headers,fetched_at=fetched_at,prediction_cutoff=prediction_cutoff
         )
+        if snapshot.get("cutoff_relation")=="POST_CUTOFF":
+            raise ValueError("JRA_OFFICIAL_PDF_POST_CUTOFF")
         if serr:
             raise ValueError("JRA_OFFICIAL_PDF_SNAPSHOT_ERROR:"+"|".join(serr))
     doc=fitz.open(stream=raw,filetype="pdf")
