@@ -158,6 +158,29 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         name=re.sub(r"<[^>]+>","",html.unescape(label))
         name=re.sub(r"\s+","",name).strip()
         if name:token_by_name[name]=urllib.parse.unquote(token)
+
+    # Capture current rider/trainer profile tokens directly from the current
+    # official JRA race-card HTML. Horse-history tokens are historical and can
+    # legitimately refer to a different rider/trainer; using them as the sole
+    # lookup source caused current-person stats to resolve 0/N on live cards.
+    def _person_token_map(page:str):
+        out={}
+        pat=r'<a([^>]*)>(.*?)</a>'
+        for attrs,label in re.findall(pat,decoded,re.I|re.S):
+            token=None
+            m=re.search(r'(?:/JRADB/)?'+re.escape(page)+r'\\.html[^"\\']*CNAME=([^"\\'&<>\\s]+)',attrs,re.I|re.S)
+            if m:
+                token=urllib.parse.unquote(m.group(1))
+            if token is None:
+                m=re.search(r'doAction\\(\\s*["\\'][^"\\']*'+re.escape(page)+r'\\.html["\\']\\s*,\\s*["\\']([^"\\']+)["\\']',attrs,re.I|re.S)
+                if m: token=urllib.parse.unquote(m.group(1))
+            if not token: continue
+            label_txt=re.sub(r"<[^>]+>","",html.unescape(label))
+            key=re.sub(r"[▲△◇☆★\\s]+","",label_txt).strip()
+            if key and key not in out: out[key]=token
+        return out
+    jockey_token_by_name=_person_token_map("accessK")
+    trainer_token_by_name=_person_token_map("accessC")
     table=None
     for t in _html_tables(decoded):
         if not t: continue
@@ -185,8 +208,12 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             x=_parse_recent(row[i] if i<len(row) else "")
             if x:recent.append(x)
         cname=re.sub(r"\s+","",str(ident.get("horse_name") or "")).strip()
+        jkey=re.sub(r"[▲△◇☆★\\s]+","",str(person.get("jockey") or "")).strip()
+        tkey=re.sub(r"[▲△◇☆★\\s]+","",str(ident.get("trainer") or "")).strip()
         runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,
                         "horse_profile_token":token_by_name.get(cname),
+                        "jockey_profile_token":jockey_token_by_name.get(jkey),
+                        "trainer_profile_token":trainer_token_by_name.get(tkey),
                         **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     weather=None; going=None; going_surface=None
