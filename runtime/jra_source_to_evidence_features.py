@@ -5,9 +5,9 @@ import hashlib
 import json
 from typing import Any, Dict, List, Tuple
 
-from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band
+from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
-PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.2-20260926"
+PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.3-20260926"
 POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.2-20260926"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
@@ -156,6 +156,35 @@ def _shadow_observation(kind: str, refs: List[str], fact: str, payload: Dict[str
     }
     x["sha256"] = _sha(x)
     return x
+
+def _official_detail_production_features(rid: str, artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    detail=_detail_runner_map(artifact)
+    x=detail.get(rid)
+    if not x:return {}
+    ref=str(artifact.get("jra_official_race_card_detail_sha256") or "")
+    refs=[ref,f"JRA_OFFICIAL_RACE_CARD_DETAIL:{rid}"]
+    out={}
+    delta=x.get("current_body_weight_change")
+    if delta is not None:
+        cat=bodyweight_delta_band(delta)
+        out["bodyweight_delta_fit"]=_feature(
+            cat,"JRA-BODYWEIGHT-DELTA-BAND-v1",refs,
+            f"Official current bodyweight={x.get('current_body_weight')} kg; delta={delta:+g} kg.",
+            authority="JRA_OFFICIAL"
+        )
+    rank=x.get("popularity_rank")
+    if rank is not None:
+        active=[z for z in detail.values() if str(z.get("status") or "ACTIVE")=="ACTIVE"]
+        n=len(active)
+        if n>=2:
+            cat=market_rank_band(rank,n)
+            out["market_rank"]=_feature(
+                cat,"JRA-MARKET-RANK-BAND-v1",refs,
+                f"Official current win odds={x.get('win_odds')}; popularity rank={int(rank)}/{n}.",
+                authority="JRA_OFFICIAL"
+            )
+    return out
+
 
 def _registered_common_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     rc=artifact.get("jra_registered_common") or {}
@@ -510,6 +539,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         w = _equal_weight_feature(rid,r,official,source_artifact)
         if w is not None:
             generated["weight_load_fit"] = w
+        generated.update(_official_detail_production_features(rid,source_artifact))
         generated.update(_registered_common_workout_features(rid,source_artifact))
         generated = {k:v for k,v in generated.items() if k in allowed}
         merged, conflicts = _merge_generated(r.get("evidence_features") or {}, generated)
