@@ -514,7 +514,9 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     contract = validate_feature_contract(mapping)
     runners_out = {}
     all_missing_sources = set()
-    all_ready = True
+    # Empty runner universes must fail closed. A vacuous all([])==True is not
+    # evidence that Production numerical closure is ready.
+    all_ready = bool(request_runners)
     for r in request_runners or []:
         rid = str(r.get("runner_id") or r.get("horse_no") or "")
         if not rid:
