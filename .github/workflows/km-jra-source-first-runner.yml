@@ -58,6 +58,7 @@ jobs:
           mkdir -p runtime_out
           python - <<'PY'
           import base64,json,os,pathlib,sys
+          from datetime import datetime,timezone
           from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
           from cryptography.hazmat.primitives import serialization
 
@@ -66,6 +67,23 @@ jobs:
           race_id=str(req.get("race_id") or "")
           assert race_id
           execution_id=str(req.get("execution_id") or race_id)
+
+          # Current formal SOURCE requests use prediction_cutoff as the latest
+          # permissible evidence timestamp. It is never the chat invocation time.
+          temporal_mode=str(req.get("temporal_mode") or "FORMAL-PRE-RACE")
+          if temporal_mode=="FORMAL-PRE-RACE":
+              cutoff_raw=str(req.get("prediction_cutoff") or "")
+              post_raw=str(req.get("scheduled_post_at") or "")
+              assert cutoff_raw, "SOURCE_FORMAL_PREDICTION_CUTOFF_REQUIRED"
+              assert post_raw, "SOURCE_FORMAL_SCHEDULED_POST_REQUIRED"
+              cutoff=datetime.fromisoformat(cutoff_raw.replace("Z","+00:00")).astimezone(timezone.utc)
+              post=datetime.fromisoformat(post_raw.replace("Z","+00:00")).astimezone(timezone.utc)
+              now=datetime.now(timezone.utc)
+              assert now <= cutoff, f"SOURCE_DEADLINE_INSUFFICIENT:{now.isoformat()}>{cutoff.isoformat()}"
+              assert cutoff < post, f"SOURCE_CUTOFF_NOT_BEFORE_POST:{cutoff.isoformat()}>={post.isoformat()}"
+              if req.get("external_dispatch_deadline_at"):
+                  dispatch=datetime.fromisoformat(str(req["external_dispatch_deadline_at"]).replace("Z","+00:00")).astimezone(timezone.utc)
+                  assert cutoff <= dispatch < post, f"SOURCE_DISPATCH_TEMPORAL_ORDER_FAIL:{cutoff.isoformat()}:{dispatch.isoformat()}:{post.isoformat()}"
 
           key=Ed25519PrivateKey.generate()
           raw=key.private_bytes(serialization.Encoding.Raw,serialization.PrivateFormat.Raw,serialization.NoEncryption())
@@ -82,6 +100,16 @@ jobs:
           art=env.get("artifact") or {}
           assert art.get("formal_ready") is True,art.get("errors")
           assert art.get("race_id")==race_id
+          if temporal_mode=="FORMAL-PRE-RACE":
+              signed_cutoff=str(art.get("prediction_cutoff") or "")
+              source_freeze=str(art.get("source_freeze_at") or "")
+              assert signed_cutoff==str(req.get("prediction_cutoff") or ""), (
+                  "SOURCE_SIGNED_CUTOFF_MISMATCH:"+signed_cutoff+"!="+str(req.get("prediction_cutoff") or "")
+              )
+              assert source_freeze, "SOURCE_FREEZE_AT_MISSING"
+              sf=datetime.fromisoformat(source_freeze.replace("Z","+00:00")).astimezone(timezone.utc)
+              cutoff=datetime.fromisoformat(signed_cutoff.replace("Z","+00:00")).astimezone(timezone.utc)
+              assert sf <= cutoff, f"SOURCE_FREEZE_AFTER_CUTOFF:{sf.isoformat()}>{cutoff.isoformat()}"
 
           # The ephemeral Ed25519 signature protects receipt/artifact integrity inside
           # the envelope. Trust in the external execution is supplied by GitHub OIDC
@@ -104,6 +132,11 @@ jobs:
             "tsl_public_shadow_status":(art.get("tsl_public_shadow_evidence") or {}).get("status"),
             "tsl_public_shadow_sha256":art.get("tsl_public_shadow_evidence_sha256"),
             "jma_weather_evidence_sha256":art.get("jma_weather_evidence_sha256"),
+            "prediction_cutoff":art.get("prediction_cutoff"),
+            "source_freeze_at":art.get("source_freeze_at"),
+            "scheduled_post_at":req.get("scheduled_post_at"),
+            "official_same_day_result_detail_sha256":art.get("jra_official_same_day_results_sha256"),
+            "official_same_day_result_detail_status":(art.get("jra_official_same_day_results") or {}).get("status"),
             "execution_trust":"GITHUB_OIDC_ATTESTED_EXTERNAL_EXECUTION",
             "verified":True
           }
