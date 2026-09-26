@@ -61,7 +61,7 @@ def test_tsl_is_not_used_by_objective_candidate():
 
 
 def test_person_stats_feed_jti_csi_shadow():
-    s=_source()
+    s=source()
     # add second runner if fixture only has one; preserve existing fixture structure
     runners=(s["jra_official_race_card_detail"]["runners"])
     rid=str(runners[0].get("runner_id") or runners[0].get("horse_no"))
@@ -74,7 +74,7 @@ def test_person_stats_feed_jti_csi_shadow():
       }
     }
     s["jra_official_person_stats_sha256"]="PS"
-    r=build_source_objective_candidate(s,[{"runner_id":rid,"career_starts":10}],_mapping())
+    r=build_source_objective_candidate(s,[{"runner_id":rid,"career_starts":10}],mapping())
     f=r["runners"][rid]["features"]
     # A single observed person value cannot be field-ranked; it must not invent authority.
     assert f["jockey_quality"]["production_authority"] is False
