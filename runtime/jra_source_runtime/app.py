@@ -20,7 +20,7 @@ from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_univer
 from jra_market_observation import enrich_with_market_observation
 from jra_registered_common import enrich_with_registered_common
 
-APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
 FAMILY="JRA"
 SIGNER=os.environ.get("KM_JRA_SOURCE_SIGNER_KEY_ID","KM-JRA-SOURCE-ED25519-20260925")
@@ -276,6 +276,16 @@ def source_acquire(p:Dict[str,Any]):
     try: artifact=enrich_with_population_seed(artifact)
     except Exception as e: artifact.setdefault("warnings",[]).append("JRA_POPULATION_SEED_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
+    artifact["prediction_cutoff"]=cutoff or None
+    artifact["source_freeze_at"]=utcnow()
+    if cutoff:
+        try:
+            def _iso(x):
+                return datetime.datetime.fromisoformat(str(x).replace("Z","+00:00"))
+            if _iso(artifact["source_freeze_at"]) > _iso(cutoff):
+                errors.append("SOURCE_FREEZE_AFTER_PREDICTION_CUTOFF")
+        except Exception as exc:
+            errors.append("SOURCE_TEMPORAL_PARSE_ERROR:"+type(exc).__name__+":"+str(exc))
     artifact["errors"]=list(dict.fromkeys(errors))
     artifact["formal_ready"]=bool(not artifact["errors"] and artifact.get("jra_official_runner_universe"))
     _rehash(artifact)
