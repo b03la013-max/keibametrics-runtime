@@ -240,6 +240,8 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     spec={"source_id":"JRA-OFFICIAL-RACE-CARD-DETAIL","source_class":"OFFICIAL_JRA_RACE_CARD_DETAIL","authority":"JRA_OFFICIAL",
           "priority":125,"official":True,"required":False,"url":BASE+"/JRADB/accessD.html","extract":[]}
     snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=200,headers=headers,fetched_at=utcnow(),prediction_cutoff=prediction_cutoff)
+    if snap.get("cutoff_relation")=="POST_CUTOFF":
+        raise ValueError("JRA_DETAIL_POST_CUTOFF")
     if errs: raise ValueError("JRA_DETAIL_SNAPSHOT_ERROR:"+"|".join(errs))
     detail=parse_race_card_detail(raw,headers.get("content-type",""))
     detail["navigation_tokens_sha256"]=hashlib.sha256(str(tokens).encode()).hexdigest()
