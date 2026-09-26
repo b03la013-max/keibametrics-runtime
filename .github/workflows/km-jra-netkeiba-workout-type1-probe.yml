@@ -1,0 +1,49 @@
+name: JRA Netkeiba Workout Type1 Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-workout-type1-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,sys,urllib.request
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables
+          out={}
+          for typ in ["","1","2"]:
+            suffix="" if not typ else f"&type={typ}"
+            url=f"https://race.netkeiba.com/race/oikiri.html?race_id=202609040812{suffix}"
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+            with urllib.request.urlopen(req,timeout=30) as r:
+              raw=r.read(8000000); ct=r.headers.get("content-type","")
+            dec=_decode(raw,ct); tabs=_html_tables(dec)
+            rows=[]
+            for t in tabs:
+              if t and any("馬" in str(x) and "番" in str(x) for x in t[0]):
+                rows=t[1:]
+                break
+            nos=[]
+            for x in rows:
+              if len(x)>1:
+                import re
+                m=re.search(r"\d+",str(x[1]))
+                if m:nos.append(int(m.group()))
+            out[typ or "default"]={"bytes":len(raw),"table_count":len(tabs),"row_count":len(rows),"horse_nos":nos}
+          p=Path("runtime/diagnostics/netkeiba_workout_type1_probe.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"; git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_workout_type1_probe.json
+          git commit -m "diagnostic: workout type1 coverage [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do git pull --rebase origin main && git push origin HEAD:main && exit 0; git rebase --abort 2>/dev/null || true; sleep $((i*2)); done
+          exit 1
