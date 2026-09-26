@@ -58,7 +58,18 @@ jobs:
             "direct_trainer_token_count":ps.get("direct_trainer_token_count"),
             "person_errors":perr,
             "production_compiler_formal_base_ready_after_merge":rep.get("formal_base_ready_after_merge"),
-            "production_compiler_missing_source_families":rep.get("missing_source_families"),
+            "production_compiler_missing_feature_source_families":rep.get("missing_feature_source_families"),
+            "production_compiler_missing_source_families_legacy":rep.get("missing_source_families"),
+            "missing_source_families_semantics":rep.get("missing_source_families_semantics"),
+            "source_fact_available_runner_counts":{
+              fam:sum(1 for r in rep["runners"].values()
+                      if ((r.get("source_fact_availability") or {}).get(fam) or {}).get("fact_available") is True)
+              for fam in [
+                "JRA_OFFICIAL_RACE_CARD","JRA_HORSE_HISTORY","JRA_HORSE_HISTORY_DETAIL",
+                "JRA_CURRENT_BODYWEIGHT","JRA_OFFICIAL_MARKET","JRA_JOCKEY_STATS",
+                "JRA_TRAINER_STATS","JRA_TRAINING","JRA_SAME_DAY_RESULTS_PLUS_STYLE"
+              ]
+            },
             "generated_feature_counts":{rid:r.get("generated_production_feature_count") for rid,r in rep["runners"].items()},
             "failed_indices":{rid:[k for k,v in (r.get("coverage",{}).get("indices") or {}).items() if not v.get("pass")] for rid,r in rep["runners"].items()},
             "source_only_failed_indices":{rid:[k for k,v in (r.get("source_only_coverage",{}).get("indices") or {}).items() if not v.get("pass")] for rid,r in rep["runners"].items()},
