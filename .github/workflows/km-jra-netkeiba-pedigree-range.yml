@@ -1,0 +1,42 @@
+name: JRA Netkeiba Pedigree Range Semantics
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-pedigree-range.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,sys,re
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          out={}
+          for rg in range(0,8):
+            url=f"https://race.netkeiba.com/race/surf_summary.html?race_id=202609040812&range={rg}&key1=KettoNumF"
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                raw=r.read(3000000);ct=r.headers.get("content-type","")
+              dec=_decode(raw,ct);txt=_html_text(dec);tabs=_html_tables(dec)
+              m=re.search(r"(阪神ダ1200m[^|]{0,120})",txt)
+              out[str(rg)]={"title_fragment":m.group(1) if m else txt[:500],
+                            "rows":tabs[0][:4] if tabs else []}
+            except Exception as e:
+              out[str(rg)]={"error":type(e).__name__+":"+str(e)}
+          p=Path("runtime/diagnostics/netkeiba_pedigree_range_semantics.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_pedigree_range_semantics.json
+          git commit -m "diagnostic: pedigree range semantics [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
