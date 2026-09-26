@@ -1,0 +1,40 @@
+name: Netkeiba Sire Link Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-netkeiba-sire-link-diagnostic.yml"
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,re,urllib.request,html
+          from pathlib import Path
+          u="https://race.netkeiba.com/race/bias.html?race_id=202609040812"
+          req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja,en;q=0.3"})
+          with urllib.request.urlopen(req,timeout=30) as r: raw=r.read(5000000);ct=r.headers.get("content-type","")
+          # netkeiba current page is UTF-8 in this environment.
+          s=raw.decode("utf-8","ignore")
+          names=["Kingman","クリソベリル","ディスクリートキャット","ビッグアーサー","コパノリッキー","アジアエクスプレス","ヘニーヒューズ","サンダースノー","リアルスティール","サトノアラジン","モズアスコット","ミッキーアイル","シニスターミニスター","パイロ","キズナ","ホッコータルマエ"]
+          out={}
+          for name in names:
+            pos=s.find(name)
+            chunk=s[max(0,pos-800):pos+800] if pos>=0 else ""
+            hrefs=re.findall(r'href=["\']([^"\']+)["\']',chunk,re.I)
+            out[name]={"found":pos>=0,"hrefs":hrefs[-8:],"snippet":re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",chunk)))[:500]}
+          p=Path("runtime/diagnostics/netkeiba_sire_links.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_sire_links.json
+          git commit -m "diagnostic: netkeiba sire links [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
