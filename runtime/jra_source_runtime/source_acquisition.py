@@ -30,6 +30,8 @@ DEFAULT_ALLOWED_HOSTS = [
     "*.jma.go.jp",
     # JRA-only third-party public shadow source: 統計ショッカーリミテッド (TSL).
     "jra.k-ba.net",
+    # Registered JRA common factual source (explicit paths validated by adapter).
+    "race.netkeiba.com",
 ]
 
 
