@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
 PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.3-20260926"
-POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.2-20260926"
+POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
 class SourceToFeatureError(ValueError):
