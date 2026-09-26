@@ -44,7 +44,7 @@ jobs:
           sys.path.insert(0,"runtime")
           sys.path.insert(0,os.path.join("runtime","jra_source_runtime"))
           from prekrs_terminal_compat import adapt_calculator_output
-          from formal_request_validator import validate_request, validate_pre_krs_request
+          from formal_request_validator import validate_request, validate_pre_krs_request, validate_production_authority
           from jra_index_provenance_builder import materialize_index_provenance
           from jra_evidence_to_base_production import load_mapping as load_production_mapping, attach_production_ledger_to_request
           from jra_krs_input_builder_production import build_krs_input
@@ -353,6 +353,10 @@ jobs:
           # Conversion / canonical / capital preflight before any external KRS run.
           # This now hard-verifies canonical Source Snapshot SHA, Base44 orchestration ref,
           # full numerical components when FORMAL-FULL requires them, and all bet-type dispositions.
+          production_authority_check=validate_production_authority(req)
+          stage("PRODUCTION_AUTHORITY_BOUNDARY_VERIFIED",
+                mapping_id=production_authority_check.get("mapping_id"),
+                candidate_leakage_detected=False)
           conformance=validate_pre_krs_request(req) if mec_required else validate_request(req)
           stage("SOURCE_SNAPSHOT_VERIFIED", sha256=conformance["source_snapshot_sha256"])
           stage("RUNNER_UNIVERSE_VERIFIED", runner_count=conformance["runner_count"])
