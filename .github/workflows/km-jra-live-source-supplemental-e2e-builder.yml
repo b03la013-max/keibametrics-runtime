@@ -1,0 +1,116 @@
+name: JRA Live Signed SOURCE Supplemental E2E Builder
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-live-source-supplemental-e2e-builder.yml"
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build acceptance-only request from live HSN11 Signed SOURCE
+        run: |
+          python - <<'PY'
+          import copy,hashlib,json
+          from pathlib import Path
+          src=Path("runtime/executions/KM-JRA-HSN-20260926-R11-LIVE-R1/SOURCE/runs/36222746737/source_receipt_envelope.json")
+          env=json.load(open(src,encoding="utf-8"))
+          art=env["artifact"]
+          template=json.load(open("runtime/requests/KM-ACCEPT-JRA-R5-E2E-20260921-T13.json",encoding="utf-8"))
+          registry=json.load(open("mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json",encoding="utf-8"))
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          # Source-derived runner stubs preserve factual career-start profiles.
+          import sys
+          sys.path.insert(0,"runtime")
+          from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+          runners=build_source_runner_stubs(art)
+          assert len(runners)==16
+          for r in runners:
+              r["evidence_features"]={}
+          req=copy.deepcopy(template)
+          req["race_id"]="KM-JRA-HSN-20260926-R11"
+          req["prediction_id"]="KM-ACCEPT-JRA-HSN-R11-SOURCE-SUPPLEMENTAL-E2E-20260926-T17"
+          req["current_authority_manifest"]="KM-FAMILY-CURRENT-AUTHORITY-20260926-R21"
+          req["source_execution_id"]="KM-JRA-HSN-20260926-R11-LIVE-R1"
+          req["acceptance_only"]=True
+          req["temporal_mode"]="FORMAL-PRE-RACE"
+          req["prediction_cutoff"]="2026-09-26T15:05:48+09:00"
+          req["scheduled_post_at"]="2026-09-26T15:45:00+09:00"
+          req["external_dispatch_deadline_at"]="2026-09-26T15:43:00+09:00"
+          req["runners"]=runners
+          req.pop("source_snapshot",None)
+          req.pop("source_snapshot_sha256",None)
+          req.pop("index_provenance_ledger",None)
+          req.pop("krs_input_data",None)
+          req.pop("explicit_engine_hsv_provenance",None)
+          req["orchestration_ref"]={
+            "authority":"BASE44",
+            "execution_session_id":"accept-hsn11-r21-t17",
+            "session_nonce":"KM-ACCEPT-HSN11-R21-T17",
+            "created_at":"2026-09-26T15:39:00+09:00"
+          }
+          ctx=art.get("jra_race_context") or {}
+          req["race"]={
+            "race_id":req["race_id"],
+            "venue":"阪神",
+            "surface":ctx.get("surface") or "ダ",
+            "distance":ctx.get("distance_m") or 2000,
+            "course":ctx.get("course") or "阪神ダ2000",
+            "going":ctx.get("going"),
+            "class":ctx.get("race_class") or "GIII"
+          }
+          req["environment"]={"track":req["race"]["surface"],"weather":"source-bound","source_cutoff":req["prediction_cutoff"]}
+          # Keep existing semantic fixture topology by runner id; IDs are 1..16.
+          req["static_prediction"]["ranking"]=[str(x) for x in req["static_prediction"]["ranking"]]
+          # Complete acceptance-only supplemental pack using only already-registered
+          # Production rule IDs/categories. This proves mechanics, not predictive merit.
+          allowed=set()
+          for profile in mapping["index_profiles"].values():
+              for weights in profile.values(): allowed.update(weights)
+          for spec in mapping["dcr"].values():
+              if spec.get("feature"): allowed.add(spec["feature"])
+              if spec.get("newcomer_fallback_feature"): allowed.add(spec["newcomer_fallback_feature"])
+          feats={}
+          for r in runners:
+              rid=str(r["runner_id"]); feats[rid]={}
+              for name in sorted(allowed):
+                  feats[rid][name]={
+                    "category":"NEUTRAL",
+                    "rule_id":registry["feature_rules"][name][0],
+                    "evidence_refs":[f"SUPP:SYNTH-T17:{rid}:{name}"],
+                    "source_fact":"Synthetic acceptance-only rule-bound fact for mechanical full-lifecycle verification; no empirical Production claim.",
+                    "result_derived":False
+                  }
+          pack={
+            "profile":"KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0-20260926",
+            "family_id":"JRA","race_id":req["race_id"],
+            "captured_at":"2026-09-26T15:04:00+09:00",
+            "sources":[{
+              "source_id":"SYNTH-T17","source_class":"SYNTHETIC_ACCEPTANCE_ONLY",
+              "authority":"MECHANICAL_TEST",
+              "origin":"repo:KM-ACCEPT-JRA-HSN-R11-SOURCE-SUPPLEMENTAL-E2E-20260926-T17",
+              "available_at":"2026-09-26T15:03:00+09:00",
+              "ingested_at":"2026-09-26T15:04:00+09:00",
+              "content_sha256":"d"*64,
+              "production_use":"FACT_ONLY","result_derived":False
+            }],
+            "runner_features":feats
+          }
+          pack["pack_sha256"]=hashlib.sha256(json.dumps(pack,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          req["supplemental_evidence_pack"]=pack
+          out=Path("runtime/requests/KM-ACCEPT-JRA-HSN-R11-SOURCE-SUPPLEMENTAL-E2E-20260926-T17.json")
+          out.write_text(json.dumps(req,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps({"request":str(out),"runner_count":len(runners),"supplemental_feature_count":len(allowed)*len(runners),"pack_sha256":pack["pack_sha256"]},ensure_ascii=False))
+          PY
+      - name: Commit acceptance request
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/requests/KM-ACCEPT-JRA-HSN-R11-SOURCE-SUPPLEMENTAL-E2E-20260926-T17.json
+          git commit -m "acceptance: signed SOURCE + supplemental full E2E T17"
+          git pull --rebase origin main
+          git push origin HEAD:main
