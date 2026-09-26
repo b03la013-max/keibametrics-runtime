@@ -4,6 +4,8 @@ import http.cookiejar
 import re
 import urllib.parse
 import urllib.request
+import urllib.error
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Tuple
 
@@ -37,29 +39,45 @@ def _fetch_horse_session(horse_token:str)->Tuple[Any,str]:
         r.read(3000000)
         return opener,str(r.geturl())
 
-def _post_profile(opener,kind:str,token:str,referer:str,prediction_cutoff:str):
+def _post_profile(opener,kind:str,token:str,referer:str,prediction_cutoff:str,*,max_attempts:int=4):
     page="accessK" if kind=="jockey" else "accessC"
     url=BASE+"/JRADB/"+page+".html"
     validate_public_url(url)
     data=urllib.parse.urlencode({"cname":token}).encode()
-    req=urllib.request.Request(url,data=data,headers={
-      "User-Agent":UA,"Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4","Referer":referer
-    })
-    fetched=utcnow()
-    with opener.open(req,timeout=30) as r:
-        raw=r.read(3000001)
-        if len(raw)>3000000: raise ValueError("JRA_PERSON_PROFILE_MAX_BYTES_EXCEEDED")
-        headers={str(k).lower():str(v) for k,v in r.headers.items()}
-        final=str(r.geturl()); validate_public_url(final)
-        status=int(getattr(r,"status",200))
-    decoded=_decode(raw,headers.get("content-type",""))
-    if "パラメータエラー" in _html_text(decoded)[:500]:
-        raise ValueError("JRA_PERSON_PROFILE_PARAMETER_ERROR")
-    spec={"source_id":"JRA-OFFICIAL-PERSON-STATS","source_class":"OFFICIAL_JRA_PERSON_STATS","authority":"JRA_OFFICIAL",
-          "priority":116,"official":True,"required":False,"url":url,"max_bytes":3000000,"timeout_seconds":30,"extract":[]}
-    snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=status,headers=headers,fetched_at=fetched,prediction_cutoff=prediction_cutoff)
-    if errs: raise ValueError("JRA_PERSON_PROFILE_SNAPSHOT_ERROR:"+"|".join(errs))
-    return snap,parse_person_profile(raw,headers.get("content-type",""),kind,token)
+    retryable={429,500,502,503,504}
+    last=None
+    for attempt in range(1,max(1,int(max_attempts))+1):
+        try:
+            req=urllib.request.Request(url,data=data,headers={
+              "User-Agent":UA,"Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4","Referer":referer
+            })
+            fetched=utcnow()
+            with opener.open(req,timeout=30) as r:
+                raw=r.read(3000001)
+                if len(raw)>3000000: raise ValueError("JRA_PERSON_PROFILE_MAX_BYTES_EXCEEDED")
+                headers={str(k).lower():str(v) for k,v in r.headers.items()}
+                final=str(r.geturl()); validate_public_url(final)
+                status=int(getattr(r,"status",200))
+            decoded=_decode(raw,headers.get("content-type",""))
+            if "パラメータエラー" in _html_text(decoded)[:500]:
+                raise ValueError("JRA_PERSON_PROFILE_PARAMETER_ERROR")
+            spec={"source_id":"JRA-OFFICIAL-PERSON-STATS","source_class":"OFFICIAL_JRA_PERSON_STATS","authority":"JRA_OFFICIAL",
+                  "priority":116,"official":True,"required":False,"url":url,"max_bytes":3000000,"timeout_seconds":30,"extract":[]}
+            snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=status,headers=headers,fetched_at=fetched,prediction_cutoff=prediction_cutoff)
+            if errs: raise ValueError("JRA_PERSON_PROFILE_SNAPSHOT_ERROR:"+"|".join(errs))
+            return snap,parse_person_profile(raw,headers.get("content-type",""),kind,token)
+        except urllib.error.HTTPError as exc:
+            last=exc
+            if int(getattr(exc,"code",0) or 0) not in retryable or attempt>=max_attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last=exc
+            if attempt>=max_attempts:
+                raise
+        # JRA intermittently returns 503 under short bursts. Retry deterministically,
+        # with a small linear backoff; no prediction semantics are changed.
+        time.sleep(0.6*attempt)
+    raise last if last else RuntimeError("JRA_PERSON_PROFILE_RETRY_EXHAUSTED")
 
 def _flat_row(table:List[List[str]],kind:str):
     if not table:return None
@@ -101,7 +119,7 @@ def _runner_identity(detail:Dict[str,Any],rid:str):
         if str(x.get("runner_id") or x.get("horse_no"))==rid:return x
     return {}
 
-def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,require_person_stats:bool=False,max_workers:int=4):
+def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,require_person_stats:bool=False,max_workers:int=2):
     history=((artifact.get("jra_official_horse_history") or {}).get("runners") or {})
     detail=artifact.get("jra_official_race_card_detail") or {}
     unique={}
@@ -113,17 +131,28 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
             for tok in ((hh.get("person_profile_tokens") or {}).get(kind) or []):
                 unique.setdefault((kind,str(tok)),ht)
     profiles={};snaps=[];errors=[]
+    failed=[]
     def job(kind,tok,ht):
         op,ref=_fetch_horse_session(ht)
         return _post_profile(op,kind,tok,ref,prediction_cutoff)
-    with ThreadPoolExecutor(max_workers=max(1,min(int(max_workers),6))) as ex:
-        fut={ex.submit(job,k,t,h):(k,t) for (k,t),h in unique.items()}
+    with ThreadPoolExecutor(max_workers=max(1,min(int(max_workers),3))) as ex:
+        fut={ex.submit(job,k,t,h):(k,t,h) for (k,t),h in unique.items()}
         for f in as_completed(fut):
-            k,t=fut[f]
+            k,t,h=fut[f]
             try:
                 snap,p=f.result();snaps.append(snap);profiles[(k,t)]=p
             except Exception as exc:
-                errors.append(f"JRA_PERSON_STATS_PROFILE_FAILED:{k}:{type(exc).__name__}:{exc}")
+                failed.append((k,t,h,exc))
+    # One sequential second pass avoids a transient burst failure turning an
+    # entire jockey class into 0/N. This changes acquisition reliability only.
+    for k,t,h,first_exc in failed:
+        try:
+            snap,p=job(k,t,h);snaps.append(snap);profiles[(k,t)]=p
+        except Exception as exc:
+            errors.append(
+              f"JRA_PERSON_STATS_PROFILE_FAILED:{k}:{type(exc).__name__}:{exc};"
+              f"FIRST={type(first_exc).__name__}:{first_exc}"
+            )
     by_runner={}
     for rid,hh in history.items():
         d=_runner_identity(detail,str(rid))
