@@ -200,3 +200,16 @@ def test_person_profile_parser_current_year_stats():
     assert r["name"]=="西田 雄一郎"
     assert r["current_year_flat"]["starts"]==181
     assert r["current_year_flat"]["top3_rate"]==0.160
+
+
+def test_registered_common_race_id_derives_from_jra_meeting_key():
+    import sys
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    p=str(root/"runtime"/"jra_source_runtime")
+    if p not in sys.path:
+        sys.path.insert(0,p)
+    from jra_registered_common import _discover_race_id
+    rid,snap=_discover_race_id("HSN","2026-09-26",12,"2026-09-26T16:20:00+09:00","0920260408")
+    assert rid=="202609040812"
+    assert snap is None
