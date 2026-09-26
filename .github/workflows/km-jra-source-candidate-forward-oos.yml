@@ -1,0 +1,330 @@
+name: JRA Source Candidate Forward OOS
+
+permissions:
+  contents: write
+  attestations: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/requests/*.json"
+  workflow_dispatch:
+
+jobs:
+  candidate-forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve request
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/requests/*.json' | tail -1)"
+          if [ -z "$REQ" ]; then
+            REQ="$(find runtime/requests -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
+          fi
+          test -n "$REQ"
+          echo "request=$REQ" >> "$GITHUB_OUTPUT"
+
+      - name: Freeze source-derived Candidate before result
+        env:
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+          GH_TOKEN: ${{ github.token }}
+          KRS_BASE: https://quorumprobe-production.up.railway.app
+        run: |
+          python - <<'PY'
+          import glob,hashlib,json,os,subprocess,sys,urllib.request,urllib.error
+          from datetime import datetime,timezone
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,os.path.join("runtime","jra_source_runtime"))
+
+          from execution_store import materialize_phase
+          from verify_source_envelope import verify as verify_source_envelope
+          from jra_evidence_to_base_production import load_mapping
+          from jra_source_candidate_numerical import materialize_source_candidate
+          from jra_source_candidate_semantics import build_candidate_semantics
+          from jra_source_candidate_oos import pre_result_record
+          from formal_request_validator import validate_pre_krs_request
+          from prekrs_terminal_compat import adapt_calculator_output
+          from krs_prediction_utility import build_krs_prediction_utility
+          from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
+          from capital_policy import resolve_capital_policy
+
+          ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+          BASE=os.environ["KRS_BASE"].rstrip("/")
+
+          def dt(v):
+              return datetime.fromisoformat(str(v).replace("Z","+00:00")).astimezone(timezone.utc)
+
+          with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
+              original=json.load(f)
+
+          # Explicitly ignore non-JRA, replay, diagnostic and acceptance requests.
+          if str(original.get("family_id") or "JRA")!="JRA":
+              print("CANDIDATE_FORWARD_SKIP=NON_JRA"); raise SystemExit(0)
+          if str(original.get("temporal_mode") or "FORMAL-PRE-RACE")!="FORMAL-PRE-RACE":
+              print("CANDIDATE_FORWARD_SKIP=NON_PRE_RACE"); raise SystemExit(0)
+          if bool(original.get("acceptance_only")):
+              print("CANDIDATE_FORWARD_SKIP=ACCEPTANCE_ONLY"); raise SystemExit(0)
+          source_execution_id=str(original.get("source_execution_id") or "").strip()
+          if not source_execution_id:
+              print("CANDIDATE_FORWARD_SKIP=NO_SIGNED_SOURCE_REFERENCE"); raise SystemExit(0)
+
+          scheduled_post=str(original.get("scheduled_post_at") or "")
+          cutoff=str(original.get("prediction_cutoff") or "")
+          assert scheduled_post and cutoff,"CANDIDATE_TEMPORAL_FIELDS_MISSING"
+          post_utc=dt(scheduled_post); cutoff_utc=dt(cutoff)
+          now=datetime.now(timezone.utc)
+          assert now < post_utc, f"CANDIDATE_DEADLINE_ALREADY_PASSED:{now.isoformat()}>={post_utc.isoformat()}"
+          if original.get("external_dispatch_deadline_at"):
+              assert now <= dt(original["external_dispatch_deadline_at"]), "CANDIDATE_DISPATCH_DEADLINE_PASSED"
+
+          # Resolve Current Authority. Forward OOS is only valid under current execution identity.
+          candidates=[]
+          for ap in glob.glob("profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+              try:
+                  ax=json.load(open(ap,encoding="utf-8"))
+                  if "CURRENT-AUTHORITY" not in str(ax.get("status") or ""): continue
+                  if not ax.get("effective_at"): continue
+                  eat=dt(ax["effective_at"])
+                  if eat<=now:candidates.append((eat,str(ax.get("manifest_id") or ""),ap,ax))
+              except Exception: pass
+          assert candidates,"CANDIDATE_CURRENT_AUTHORITY_EMPTY"
+          _,current_id,current_path,current=max(candidates,key=lambda x:(x[0],x[1]))
+          declared=str(original.get("current_authority_manifest") or "")
+          assert declared==current_id,f"CANDIDATE_STALE_CURRENT_AUTHORITY:{declared}!={current_id}"
+          jra=((current.get("family_scoped_authority") or {}).get("JRA") or {})
+          expected_source_runtime=str(jra.get("source_runtime_profile") or "")
+          assert expected_source_runtime,"CANDIDATE_SOURCE_RUNTIME_AUTHORITY_MISSING"
+
+          # Materialize and independently verify Signed SOURCE.
+          source_dir=os.path.join("runtime_out","candidate_source")
+          resolved=materialize_phase(source_execution_id,"SOURCE",source_dir)
+          assert resolved is not None,f"CANDIDATE_SIGNED_SOURCE_NOT_FOUND:{source_execution_id}"
+          envelope_path=os.path.join(source_dir,"source_receipt_envelope.json")
+          assert os.path.exists(envelope_path),"CANDIDATE_SIGNED_SOURCE_ENVELOPE_MISSING"
+          source_env=json.load(open(envelope_path,encoding="utf-8"))
+          att=subprocess.run(
+              ["gh","attestation","verify",envelope_path,"--repo","b03la013-max/keibametrics-runtime"],
+              check=False,capture_output=True,text=True
+          )
+          assert att.returncode==0,"CANDIDATE_SOURCE_OIDC_VERIFY_FAIL:"+att.stderr[-1000:]
+          sv=verify_source_envelope(envelope_path)
+          assert sv.get("valid") is True,f"CANDIDATE_SOURCE_SIGNATURE_INVALID:{sv}"
+          source=source_env.get("artifact") or {}
+          assert source.get("family_id")=="JRA","CANDIDATE_SOURCE_FAMILY_MISMATCH"
+          assert source.get("race_id")==original.get("race_id"),"CANDIDATE_SOURCE_RACE_MISMATCH"
+          assert source.get("formal_ready") is True,f"CANDIDATE_SOURCE_NOT_READY:{source.get('errors')}"
+          actual_source_runtime=str((source_env.get("receipt") or {}).get("runtime_revision") or "")
+          assert actual_source_runtime==expected_source_runtime,(
+              "CANDIDATE_SOURCE_RUNTIME_MISMATCH:"+actual_source_runtime+"!="+expected_source_runtime
+          )
+          assert str(source.get("prediction_cutoff") or "")==cutoff,"CANDIDATE_SOURCE_CUTOFF_MISMATCH"
+          assert dt(source.get("source_freeze_at"))<=cutoff_utc,"CANDIDATE_SOURCE_FREEZE_AFTER_CUTOFF"
+          source_sha=str(source.get("source_snapshot_sha256") or "")
+          source_projection={k:v for k,v in source.items() if k!="source_snapshot_sha256"}
+          actual_sha=hashlib.sha256(json.dumps(source_projection,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          assert source_sha==actual_sha,"CANDIDATE_SOURCE_SNAPSHOT_HASH_MISMATCH"
+
+          mapping=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          req={
+              "race_id":original["race_id"],
+              "prediction_id":str(original.get("prediction_id") or original["race_id"])+"-SOURCE-CANDIDATE",
+              "family_id":"JRA",
+              "venue_id":original.get("venue_id"),
+              "race":original.get("race") or original.get("race_identity") or {},
+              "environment":original.get("environment") or {},
+              "prediction_cutoff":cutoff,
+              "scheduled_post_at":scheduled_post,
+              "external_dispatch_deadline_at":original.get("external_dispatch_deadline_at"),
+              "temporal_mode":"FORMAL-PRE-RACE",
+              "run_count":int(original.get("run_count",5000)),
+              "seed":int(original.get("seed",1))+910000,
+              "capital_policy":{"mode":"RECOMMENDATION_ONLY"},
+              "acceptance_only":False,
+              "source_snapshot":source_projection,
+              "source_snapshot_sha256":source_sha,
+              "orchestration_ref":{
+                  "authority":"BASE44",
+                  "execution_session_id":"source-candidate-"+str(original.get("race_id")),
+                  "session_nonce":"SOURCE-CANDIDATE-"+str(original.get("prediction_id") or original.get("race_id")),
+                  "created_at":datetime.now(timezone.utc).isoformat(),
+              },
+              "resolved_current_authority_manifest":current_id,
+              "resolved_current_authority_profile_path":current_path,
+              "source_execution_id":source_execution_id,
+          }
+          req=materialize_source_candidate(req,source,mapping)
+          req=build_candidate_semantics(req)
+          req["source_snapshot"]=source_projection
+          req["source_snapshot_sha256"]=source_sha
+          req["candidate_frozen_at"]=datetime.now(timezone.utc).isoformat()
+          assert dt(req["candidate_frozen_at"])<post_utc,"CANDIDATE_SEMANTIC_FREEZE_POST_START"
+
+          preflight=validate_pre_krs_request(req)
+          expected=len(req["runners"])*20
+          assert preflight["canonical_component_count"]==expected
+          assert req["candidate_numerical_summary"]["calculated_count"]==expected
+          assert req["base_index_mapping_authority"]["production_authority"] is False
+
+          def call(path,payload,timeout=360):
+              data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+              rq=urllib.request.Request(BASE+path,data=data,headers={"content-type":"application/json"},method="POST")
+              try:
+                  with urllib.request.urlopen(rq,timeout=timeout) as rr:
+                      raw=rr.read().decode()
+                      return rr.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  raw=e.read().decode(errors="replace")
+                  try: body=json.loads(raw)
+                  except Exception: body={"raw":raw}
+                  return e.code,body
+
+          calc={"runners":[]}
+          for r in req["runners"]:
+              calc["runners"].append({"runner_id":r["runner_id"],"items":[{
+                  "index_name":idx,"terminal_status":"CALCULATED",
+                  "transport_value":comp["value"],"formal_value":comp["value"],
+                  "missing_flag":False,"calculation_rule_id":comp["rule_id"],
+                  "mapping_version":comp["mapping_version"]
+              } for idx,comp in r["canonical_components"].items()]})
+          required=adapt_calculator_output(calc)
+          assert len(required)==expected
+
+          universe=[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in req["runners"]]
+          pre_payload={
+              "race_id":req["race_id"],"runner_universe":universe,"required_indices":required,
+              "static_prediction":req["static_prediction"],"prediction_cutoff":cutoff,
+              "source_snapshot_sha256":source_sha,"index_provenance_hash":req["index_provenance_hash"],
+              "orchestration_ref":req["orchestration_ref"],"krs_required":True,"krs_executable":True
+          }
+          pcode,p=call("/pre-krs",pre_payload,60)
+          assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
+          pvcode,pv=call("/verify",p,30)
+          assert pvcode<300 and pv.get("valid") is True,(pvcode,pv)
+
+          kinput=req["krs_input_data"]
+          kinput["simulation"]["run_count"]=int(req["run_count"])
+          kinput["simulation"]["master_seed"]=int(req["seed"])
+          kpayload={
+              "race_id":req["race_id"],"input_data":kinput,"mode":"SIM-STD","seed":req["seed"],
+              "input_class":"FORWARD-OOS-CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
+          }
+          kcode,k=call("/krs/execute",kpayload,360)
+          run=k.get("run_receipt") or {}; rr=run.get("receipt") or {}
+          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
+          assert rr.get("engine_sha256")==ENGINE_SHA,rr
+          assert int(rr.get("actual_run_count") or 0)>=int(req["run_count"]),rr
+          kvcode,kv=call("/verify",run,30)
+          assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
+
+          utility=build_krs_prediction_utility(req,k)
+          mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
+          validate_mec_plan(mec)
+          capital=resolve_capital_policy(req,mec)
+          tickets=mec["tickets"] if not capital["no_bet"] else []
+          total=int(mec["minimum_required_capital"]) if not capital["no_bet"] else 0
+
+          final_package={
+              "authority":"KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1",
+              "candidate_only":True,"production_authority":False,"acceptance_only":False,
+              "temporal_mode":"FORMAL-PRE-RACE","source_snapshot_sha256":source_sha,
+              "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "candidate_semantic_freeze":req["candidate_semantic_freeze"],
+              "static_prediction":req["static_prediction"],
+              "role_registry":req["role_registry"],"pair_dispositions":req["pair_dispositions"],
+              "third_dispositions":req["third_dispositions"],
+              "krs_prediction_utility_shadow":utility,
+              "minimum_efficient_coverage":mec,"capital_policy_decision":capital,
+              "production_effect":"NONE","unknown_future_empirical_acceptance":"PENDING",
+          }
+          freeze=datetime.now(timezone.utc).isoformat()
+          assert dt(freeze)<post_utc,"CANDIDATE_FINAL_FREEZE_POST_START"
+          final_payload={
+              "race_id":req["race_id"],"no_bet":bool(capital["no_bet"]),
+              "krs_required":True,"krs_executable":True,"krs_run_receipt":run,
+              "final_prediction_package":final_package,"ticket_transport":tickets,
+              "final_ticket":{
+                  "finalized":True,"frozen_at":freeze,"no_bet":bool(capital["no_bet"]),
+                  "total_investment":total,"tickets":tickets,
+                  "available_bet_types":req["available_bet_types"],
+                  "bet_type_dispositions":mec["bet_type_dispositions"] if not capital["no_bet"] else [],
+                  "source_snapshot_sha256":source_sha,"orchestration_ref":req["orchestration_ref"],
+                  "candidate_only":True,"production_authority":False,
+              },
+              "final_freeze_timestamp":freeze
+          }
+          fcode,final=call("/final",final_payload,60)
+          assert fcode<300 and final.get("receipt",{}).get("status")=="PASS",(fcode,final)
+          fvcode,fv=call("/verify",final,30)
+          assert fvcode<300 and fv.get("valid") is True,(fvcode,fv)
+          final_ts=str((final.get("receipt") or {}).get("timestamp") or "")
+          assert final_ts and dt(final_ts)<post_utc,"CANDIDATE_FINAL_RECEIPT_POST_START"
+
+          req["candidate_final_receipt_sha256"]=final.get("receipt_sha256")
+          req["candidate_final_receipt_timestamp"]=final_ts
+          req["candidate_final_verified"]=True
+          record=pre_result_record(req)
+          assert record["oos_eligible"] is True,record
+
+          outdir=Path("runtime/source_candidate_oos")/str(req["race_id"])
+          outdir.mkdir(parents=True,exist_ok=True)
+          record["candidate_pre_krs_receipt_sha256"]=p.get("receipt_sha256")
+          record["candidate_krs_receipt_sha256"]=run.get("receipt_sha256")
+          record["candidate_krs_actual_run_count"]=rr.get("actual_run_count")
+          record["candidate_krs_utility_sha256"]=utility.get("sha256")
+          record["candidate_mec_sha256"]=mec.get("sha256")
+          record["candidate_mec_ticket_count"]=mec.get("ticket_count")
+          record["candidate_mec_required_capital"]=mec.get("minimum_required_capital")
+          record["candidate_mec_coverage"]=mec.get("material_coverage_ratio")
+          record["candidate_capital_decision"]=capital.get("decision")
+          record["current_authority_manifest"]=current_id
+          # Re-hash after full candidate execution metadata is bound.
+          record["sha256"]=hashlib.sha256(json.dumps({k:v for k,v in record.items() if k!="sha256"},ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          (outdir/"pre_result.json").write_text(json.dumps(record,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          final_art={
+              "profile":"KM-JRA-SOURCE-DERIVED-CANDIDATE-FORWARD-FINAL-v0.1-20260926",
+              "race_id":req["race_id"],"production_effect":"NONE","candidate_only":True,
+              "source_snapshot_sha256":source_sha,
+              "candidate_semantic_freeze":req["candidate_semantic_freeze"],
+              "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "pre_krs_receipt":p,"krs_run_receipt":run,"krs_utility":utility,
+              "mec":mec,"capital":capital,"final_receipt":final,
+              "oos_pre_result_record_sha256":record["sha256"],
+          }
+          final_art["sha256"]=hashlib.sha256(json.dumps(final_art,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          (outdir/"candidate_final.json").write_text(json.dumps(final_art,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print("KM_SOURCE_CANDIDATE_FORWARD="+json.dumps({
+              "race_id":req["race_id"],"status":"PASS","oos_eligible":True,
+              "required_count":expected,"calculated_count":expected,
+              "krs_actual_run_count":rr.get("actual_run_count"),
+              "mec_ticket_count":mec.get("ticket_count"),
+              "mec_required_capital":mec.get("minimum_required_capital"),
+              "final_receipt_sha256":final.get("receipt_sha256"),
+              "pre_result_sha256":record["sha256"],
+              "production_effect":"NONE"
+          },ensure_ascii=False,separators=(",",":")))
+          PY
+
+      - name: Persist forward OOS Candidate
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
+          if ! git diff --cached --quiet; then
+            git commit -m "oos: freeze source-derived Candidate before result [skip ci]"
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main && git push origin HEAD:main && exit 0
+              git rebase --abort 2>/dev/null || true
+              sleep $((i*2))
+            done
+            exit 1
+          fi
