@@ -119,47 +119,61 @@ def _runner_identity(detail:Dict[str,Any],rid:str):
         if str(x.get("runner_id") or x.get("horse_no"))==rid:return x
     return {}
 
-def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,require_person_stats:bool=False,max_workers:int=2):
+def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,require_person_stats:bool=False,max_workers:int=4):
     history=((artifact.get("jra_official_horse_history") or {}).get("runners") or {})
     detail=artifact.get("jra_official_race_card_detail") or {}
     unique={}
+    direct_tokens={}
+    for x in detail.get("runners") or []:
+        rid=str(x.get("runner_id") or x.get("horse_no") or "")
+        ht=str(x.get("horse_profile_token") or "")
+        direct_tokens[rid]={
+          "jockey":str(x.get("jockey_profile_token") or ""),
+          "trainer":str(x.get("trainer_profile_token") or ""),
+        }
+        if not ht: continue
+        for kind in ("jockey","trainer"):
+            tok=direct_tokens[rid].get(kind)
+            if tok: unique.setdefault((kind,tok),ht)
+    # Historical profile tokens remain a strict fallback only. They are useful
+    # when the current race-card did not expose a direct token, but are never
+    # allowed to override a current-name match.
     for rid,hh in history.items():
-        d=_runner_identity(detail,str(rid))
-        ht=str(d.get("horse_profile_token") or "")
+        d=_runner_identity(detail,str(rid)); ht=str(d.get("horse_profile_token") or "")
         if not ht: continue
         for kind in ("jockey","trainer"):
             for tok in ((hh.get("person_profile_tokens") or {}).get(kind) or []):
                 unique.setdefault((kind,str(tok)),ht)
     profiles={};snaps=[];errors=[]
-    failed=[]
     def job(kind,tok,ht):
         op,ref=_fetch_horse_session(ht)
         return _post_profile(op,kind,tok,ref,prediction_cutoff)
-    with ThreadPoolExecutor(max_workers=max(1,min(int(max_workers),3))) as ex:
-        fut={ex.submit(job,k,t,h):(k,t,h) for (k,t),h in unique.items()}
+    with ThreadPoolExecutor(max_workers=max(1,min(int(max_workers),6))) as ex:
+        fut={ex.submit(job,k,t,h):(k,t) for (k,t),h in unique.items()}
         for f in as_completed(fut):
-            k,t,h=fut[f]
+            k,t=fut[f]
             try:
                 snap,p=f.result();snaps.append(snap);profiles[(k,t)]=p
             except Exception as exc:
-                failed.append((k,t,h,exc))
-    # One sequential second pass avoids a transient burst failure turning an
-    # entire jockey class into 0/N. This changes acquisition reliability only.
-    for k,t,h,first_exc in failed:
-        try:
-            snap,p=job(k,t,h);snaps.append(snap);profiles[(k,t)]=p
-        except Exception as exc:
-            errors.append(
-              f"JRA_PERSON_STATS_PROFILE_FAILED:{k}:{type(exc).__name__}:{exc};"
-              f"FIRST={type(first_exc).__name__}:{first_exc}"
-            )
+                errors.append(f"JRA_PERSON_STATS_PROFILE_FAILED:{k}:{type(exc).__name__}:{exc}")
     by_runner={}
-    for rid,hh in history.items():
-        d=_runner_identity(detail,str(rid))
+    all_rids={str(x.get("runner_id") or x.get("horse_no") or "") for x in detail.get("runners") or []}
+    for rid in sorted(all_rids,key=lambda z:int(z) if z.isdigit() else z):
+        hh=history.get(rid) or {}
+        d=_runner_identity(detail,rid)
         current={"jockey":_norm(d.get("jockey")),"trainer":_norm(d.get("trainer"))}
         matched={}
+        # First try the token attached to the current race-card identity.
+        for kind in ("jockey","trainer"):
+            tok=(direct_tokens.get(rid) or {}).get(kind)
+            prof=profiles.get((kind,str(tok))) if tok else None
+            if prof and (not current[kind] or _norm(prof.get("name"))==current[kind]):
+                matched[kind]=prof
+        # Fallback to historical links, but require exact current-name identity
+        # unless there is only one candidate and no current name was parsed.
         p=hh.get("person_profile_tokens") or {}
         for kind in ("jockey","trainer"):
+            if kind in matched: continue
             candidates=[]
             for tok in p.get(kind) or []:
                 prof=profiles.get((kind,str(tok)))
@@ -167,10 +181,12 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
                 candidates.append(prof)
                 if current[kind] and _norm(prof.get("name"))==current[kind]:
                     matched[kind]=prof;break
-            if kind not in matched and len(candidates)==1:
+            if kind not in matched and not current[kind] and len(candidates)==1:
                 matched[kind]=candidates[0]
-        by_runner[str(rid)]={
+        by_runner[rid]={
           "current_jockey":d.get("jockey"),"current_trainer":d.get("trainer"),
+          "direct_jockey_token_available":bool((direct_tokens.get(rid) or {}).get("jockey")),
+          "direct_trainer_token_available":bool((direct_tokens.get(rid) or {}).get("trainer")),
           "jockey":matched.get("jockey"),"trainer":matched.get("trainer"),
           "jockey_matched":bool(matched.get("jockey")),"trainer_matched":bool(matched.get("trainer"))
         }
@@ -179,6 +195,8 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
       "profile":PROFILE,"status":"PASS" if by_runner else "UNAVAILABLE","official":True,"production_fact_authority":True,
       "runner_count":len(by_runner),"matched_jockey_count":sum(1 for x in by_runner.values() if x["jockey_matched"]),
       "matched_trainer_count":sum(1 for x in by_runner.values() if x["trainer_matched"]),
+      "direct_jockey_token_count":sum(1 for x in by_runner.values() if x["direct_jockey_token_available"]),
+      "direct_trainer_token_count":sum(1 for x in by_runner.values() if x["direct_trainer_token_available"]),
       "runners":by_runner,"errors":errors
     }
     payload["sha256"]=sha_obj({k:v for k,v in payload.items() if k!="sha256"})
