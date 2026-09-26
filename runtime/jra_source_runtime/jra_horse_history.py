@@ -112,6 +112,8 @@ def _fetch_one(token:str,prediction_cutoff:str)->Tuple[Dict[str,Any],Dict[str,An
         if len(raw)>3000000:raise ValueError("JRA_HORSE_HISTORY_MAX_BYTES_EXCEEDED")
         headers={str(k).lower():str(v) for k,v in resp.headers.items()}
         snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=int(getattr(resp,"status",200)),headers=headers,fetched_at=fetched,prediction_cutoff=prediction_cutoff)
+        if snap.get("cutoff_relation")=="POST_CUTOFF":
+            raise ValueError("JRA_HORSE_HISTORY_POST_CUTOFF")
         if errs:raise ValueError("JRA_HORSE_HISTORY_SNAPSHOT_ERROR:"+"|".join(errs))
     parsed=parse_horse_history(raw,headers.get("content-type",""))
     parsed["source_snapshot_sha256"]=snap["snapshot_sha256"]
