@@ -1,0 +1,60 @@
+name: JRA Official Result Navigation Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-official-result-nav-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,re,urllib.request,urllib.parse,http.cookiejar,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          from jra_race_card_detail import _calendar_url,_fetch,_post,_date8
+          race_date="2026-09-26";key="0920260408";race_no=11;d=_date8(race_date)
+          jar=http.cookiejar.CookieJar();opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          out={}
+          try:
+            u0,r0,h0=_fetch(opener,_calendar_url(race_date));s0=_decode(r0,h0.get("content-type",""))
+            entry_tokens=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",s0)
+            out["entry_tokens"]=entry_tokens
+            if not entry_tokens: raise RuntimeError("NO_ACCESS_S_ENTRY")
+            entry=entry_tokens[0]
+            u1,r1,h1=_post(opener,entry,u0);s1=_decode(r1,h1.get("content-type",""))
+            day_matches=re.findall(r"(pw01srl00"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
+            out["day_matches"]=day_matches
+            if not day_matches:
+              day_matches=re.findall(r"(pw01[^'\"<>\s]+"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
+              out["day_fallback"]=day_matches[:20]
+            if not day_matches: raise RuntimeError("NO_DAY_TOKEN")
+            day=day_matches[0]
+            u2,r2,h2=_post(opener,day,u1);s2=_decode(r2,h2.get("content-type",""))
+            prefix="pw01sde01"+key+f"{race_no:02d}"+d
+            race_matches=re.findall(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",s2)
+            out["race_matches"]=race_matches
+            if not race_matches:
+              race_matches=re.findall(r"(pw01[^'\"<>\s]+"+re.escape(key)+f"{race_no:02d}"+re.escape(d)+r"/[0-9A-Fa-f]{2})",s2)
+              out["race_fallback"]=race_matches[:20]
+            if not race_matches: raise RuntimeError("NO_RACE_TOKEN")
+            u3,r3,h3=_post(opener,race_matches[0],u2);s3=_decode(r3,h3.get("content-type",""))
+            out["final_url"]=u3;out["tables"]=_html_tables(s3)[:12];out["text_head"]=_html_text(s3)[:8000]
+            out["status"]="PASS"
+          except Exception as e:
+            out["status"]="FAIL";out["error"]=type(e).__name__+":"+str(e)
+          p=Path("runtime/diagnostics/jra_official_result_nav_probe.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/jra_official_result_nav_probe.json
+          git commit -m "diagnostic: official JRA result navigation [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
