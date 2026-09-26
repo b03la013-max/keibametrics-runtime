@@ -1,0 +1,33 @@
+name: JRA HSN12 Frozen SOURCE Same-Day Inspect
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn12-frozen-sameday-inspect.yml"
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json",encoding="utf-8"))
+          art=env["artifact"]
+          keys=sorted(k for k in (art.get("normalized_evidence") or {}) if "same_day" in k)
+          snaps=[{"source_id":s.get("source_id"),"http_status":s.get("http_status"),"final_url":s.get("final_url"),
+                  "evidence_keys":sorted((s.get("extracted_evidence") or {}).keys())}
+                 for s in art.get("sources") or [] if "SAME-DAY" in str(s.get("source_id"))]
+          out={"keys":keys,"snapshots":snaps,"values":{k:(art.get("normalized_evidence") or {}).get(k) for k in keys}}
+          p=Path("runtime/diagnostics/hsn12_frozen_sameday_inspect.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn12_frozen_sameday_inspect.json
+          git commit -m "diagnostic: inspect frozen HSN12 same-day source [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
