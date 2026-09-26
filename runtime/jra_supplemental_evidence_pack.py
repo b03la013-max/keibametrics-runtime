@@ -86,8 +86,20 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
                 raise SupplementalEvidenceError(f"SUPPLEMENTAL_SOURCE_POST_CUTOFF:{sid}:{tk}")
         if bool(s.get("result_derived")):
             raise SupplementalEvidenceError("SUPPLEMENTAL_RESULT_DERIVED_SOURCE_FORBIDDEN:"+sid)
-        if str(s.get("production_use") or "").upper() not in {"ALLOWED","FACT_ONLY"}:
+        production_use=str(s.get("production_use") or "").upper()
+        if production_use not in {"ALLOWED","FACT_ONLY"}:
             raise SupplementalEvidenceError("SUPPLEMENTAL_SOURCE_NOT_PRODUCTION_AUTHORIZED:"+sid)
+        acceptance_only=bool(req.get("acceptance_only"))
+        synthetic_or_mechanical=(
+            source_class.upper().startswith("SYNTHETIC")
+            or authority.upper() in {"MECHANICAL_TEST","SYNTHETIC_ACCEPTANCE"}
+        )
+        if synthetic_or_mechanical and not acceptance_only:
+            raise SupplementalEvidenceError("SUPPLEMENTAL_SYNTHETIC_SOURCE_FORBIDDEN_IN_PRODUCTION:"+sid)
+        if not acceptance_only and authority.upper() not in {
+            "JRA_OFFICIAL","REGISTERED_JRA_COMMON","USER_PROVIDED_PRE_RACE"
+        }:
+            raise SupplementalEvidenceError("SUPPLEMENTAL_SOURCE_AUTHORITY_NOT_ALLOWED_FOR_PRODUCTION:"+sid+":"+authority)
         source_ids[sid]=s
 
     runners=req.get("runners")
