@@ -414,6 +414,38 @@ def validate_request(req):
     }
 
 
+def validate_production_authority(req):
+    """Hard boundary: Production Formal Runner must never consume Candidate/Shadow numerics."""
+    auth=req.get("base_index_mapping_authority")
+    if not isinstance(auth,dict):
+        raise FormalValidationError("PRODUCTION_MAPPING_AUTHORITY_MISSING")
+    if auth.get("production_authority") is not True:
+        raise FormalValidationError("NON_PRODUCTION_NUMERICAL_AUTHORITY_FORBIDDEN")
+    status=str(auth.get("status") or "").upper()
+    if "CANDIDATE" in status or "SHADOW" in status or "NON-PRODUCTION" in status:
+        raise FormalValidationError("NON_PRODUCTION_MAPPING_STATUS_FORBIDDEN:"+status)
+    for r in req.get("runners") or []:
+        rid=str(r.get("runner_id") or "")
+        for idx,spec in (r.get("canonical_components") or {}).items():
+            if isinstance(spec,dict) and (spec.get("candidate_only") is True or spec.get("production_authority") is False):
+                raise FormalValidationError(f"CANDIDATE_CANONICAL_COMPONENT_FORBIDDEN:{rid}:{idx}")
+    hsv=req.get("explicit_engine_hsv_provenance") or {}
+    if isinstance(hsv,dict) and (hsv.get("candidate_only") is True or hsv.get("production_authority") is False):
+        raise FormalValidationError("CANDIDATE_HSV_PROVENANCE_FORBIDDEN")
+    sp=req.get("static_prediction") or {}
+    if isinstance(sp,dict) and sp.get("production_authority") is False:
+        raise FormalValidationError("NON_PRODUCTION_STATIC_PREDICTION_FORBIDDEN")
+    for key in ("role_registry","pair_dispositions","third_dispositions"):
+        for row in req.get(key) or []:
+            if isinstance(row,dict) and row.get("production_authority") is False:
+                raise FormalValidationError("NON_PRODUCTION_SEMANTIC_AUTHORITY_FORBIDDEN:"+key)
+    return {
+        "production_authority_verified":True,
+        "mapping_id":auth.get("mapping_id"),
+        "candidate_leakage_detected":False,
+    }
+
+
 def validate_pre_krs_request(req):
     """MEC-era pre-KRS validation.
 
