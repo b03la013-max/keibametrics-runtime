@@ -1,0 +1,61 @@
+name: JRA HSN12 Compact Diagnostic Snapshot
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn12-compact-snapshot.yml"
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json",encoding="utf-8"))
+          art=env["artifact"]
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          rep=build_zero_touch_source_index_report(art,mapping)
+          uni=art.get("jra_official_runner_universe") or {}
+          detail=art.get("jra_race_card_detail") or {}
+          market=art.get("jra_market_observation") or {}
+          def pick_runner(x):
+              return {k:x.get(k) for k in ("runner_id","horse_no","name","horse_name","frame_no","assigned_weight","jockey","trainer","body_weight","body_weight_change","odds","popularity_rank") if k in x}
+          runners=uni.get("runners") or detail.get("runners") or []
+          out={
+            "race_id":art.get("race_id"),
+            "source_snapshot_sha256":art.get("source_snapshot_sha256"),
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "race_context":art.get("jra_race_context"),
+            "runner_count":len(runners),
+            "runners":[pick_runner(x) for x in runners],
+            "market_observation":market,
+            "objective_candidate_ranking":(rep.get("objective_shadow") or {}).get("candidate_ranking"),
+            "objective_runner_scores":{
+              rid:{
+                "runner_name":rr.get("runner_name"),
+                "base_indices":{k:v.get("observed_score") for k,v in (rr.get("base_indices") or {}).items()},
+                "observed_feature_count":rr.get("observed_feature_count"),
+                "missing_feature_count":rr.get("missing_feature_count")
+              } for rid,rr in ((rep.get("objective_shadow") or {}).get("runners") or {}).items()
+            },
+            "production_source_only_formal_base_ready":rep.get("production_source_only_formal_base_ready"),
+            "production_status":rep.get("production_status")
+          }
+          p=Path("runtime/diagnostics/hsn12_compact_snapshot.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn12_compact_snapshot.json
+          git commit -m "diagnostic: persist HSN12 compact snapshot [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
