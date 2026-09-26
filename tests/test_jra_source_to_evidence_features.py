@@ -114,5 +114,13 @@ def test_official_detail_autofills_career_starts_and_rule_inputs():
     assert ri["feature_inputs"]["same_distance_fit"]["sample_count"]==1
     assert ri["feature_inputs"]["market_rank"]["popularity_rank"]==2
     assert ri["source_family_inputs"]["JRA_HORSE_HISTORY"]["available"] is True
-    # Raw official inputs are not silently turned into Production categories.
-    assert "recent_performance" not in out["runners"][0]["evidence_features"]
+    # Two deterministic Production evaluators are now bound to exact official facts.
+    ef=out["runners"][0]["evidence_features"]
+    assert ef["bodyweight_delta_fit"]["category"]=="STRONG"
+    assert ef["bodyweight_delta_fit"]["rule_id"]=="JRA-BODYWEIGHT-DELTA-BAND-v1"
+    assert ef["market_rank"]["category"]=="WEAK"
+    assert ef["market_rank"]["rule_id"]=="JRA-MARKET-RANK-BAND-v1"
+    # Other raw official inputs are not silently turned into Production categories.
+    assert "recent_performance" not in ef
+    assert "jockey_quality" not in ef
+    assert "trainer_quality" not in ef
