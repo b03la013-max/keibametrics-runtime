@@ -1,0 +1,238 @@
+{
+  "profile_id": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.8-20260926",
+  "status": "ACTIVE / JRA-WIDE / SOURCE-v1.7 / SOURCE-TO-FEATURE-COMPILER-v1.4 / CLOSURE-R5 / FACT-AVAILABILITY-SEPARATION / PERSON-STATS-v1.1 / TEMPORAL-FAIL-CLOSED / NO-NEW-EVALUATOR",
+  "family_id": "JRA",
+  "rule": "Official JRA PDF is mandatory for Runner Universe. JRADB HTML is auxiliary. JRA official facts always outrank JMA context and TSL public shadow; TSL never overrides official race facts.",
+  "source_classes": [
+    "OFFICIAL_JRA_CALENDAR",
+    "OFFICIAL_JRA_RACE_CARD",
+    "OFFICIAL_JRA_RACE_CARD_DETAIL",
+    "OFFICIAL_JRA_SAME_DAY_RESULT",
+    "OFFICIAL_JRA_HORSE_HISTORY",
+    "OFFICIAL_JRA_RUNNER_UNIVERSE",
+    "OFFICIAL_JMA_AMEDAS_STATION_METADATA",
+    "OFFICIAL_JMA_AMEDAS_OBSERVATION",
+    "DERIVED_JRA_SAME_DAY_POSITION_BIAS_SHADOW",
+    "DERIVED_JRA_RACE_CARD_IDENTITY_SEED",
+    "DERIVED_JRA_POINT_IN_TIME_POPULATION_SEED_SHADOW",
+    "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "SIGNED_SOURCE_RECEIPT",
+    "OFFICIAL_JRA_RACE_CARD_PDF",
+    "OFFICIAL_JRA_PERSON_STATS",
+    "OFFICIAL_JRA_MARKET_OBSERVATION",
+    "REGISTERED_COMMON_NETKEIBA_WORKOUT",
+    "REGISTERED_COMMON_NETKEIBA_SPEED",
+    "OFFICIAL_JRA_SAME_DAY_RESULT_DETAIL"
+  ],
+  "source_priority": [
+    "JRA_OFFICIAL",
+    "JMA_OFFICIAL",
+    "REGISTERED_JRA_COMMON",
+    "TSL_PUBLIC_NON_OFFICIAL"
+  ],
+  "source_runtime": "KM-JRA-SOURCE-RUNTIME-v1.7-20260926",
+  "tsl": {
+    "name": "統計ショッカーリミテッド",
+    "host": "jra.k-ba.net",
+    "base_url": "https://jra.k-ba.net/",
+    "source_class": "THIRD_PARTY_PUBLIC_SHADOW_TSL",
+    "authority": "TSL_PUBLIC_NON_OFFICIAL",
+    "official": false,
+    "production_authority": false,
+    "prediction_authority": false,
+    "default_requirement": "OPTIONAL_SHADOW_CAPTURE",
+    "source_priority": "BELOW_JRA_OFFICIAL / NEVER_OVERRIDES_OFFICIAL_RACE_FACTS",
+    "storage_policy": "NORMALIZED_EXTRACTED_DATA_PLUS_RAW_SHA_ONLY / NO_RAW_HTML_REPUBLICATION",
+    "oos_eligibility": "PRE_CUTOFF + PRE_START + OFFICIAL_RUNNER_UNIVERSE_MATCH"
+  },
+  "local_sbo": {
+    "name": "水分ボンバーオンライン",
+    "host": "nar.k-ba.net",
+    "allowed_for_jra": false,
+    "reason": "LOCAL/NAR only; JRA uses TSL."
+  },
+  "predecessor": "KM-JRA-INFORMATION-SOURCE-REGISTRY-v1.7-20260926",
+  "required_formal_sources": {
+    "official_runner_universe": "OFFICIAL_JRA_RACE_CARD_PDF",
+    "jradb_html": "OPTIONAL_AUXILIARY",
+    "tsl": "OPTIONAL_OR_REQUEST_REQUIRED_SHADOW_ONLY",
+    "jma": "OPTIONAL_OR_REQUEST_REQUIRED_CONTEXT",
+    "official_race_card_detail": "OPTIONAL_FOR_RUNNER_UNIVERSE / PRODUCTION-FACT-AUTHORITY WHEN CAPTURED",
+    "registered_common_workout": "REQUIRED_WHEN_SOURCE-ONLY TRI/CSI COVERAGE IS BELOW PRODUCTION FLOOR",
+    "official_same_day_result_detail": "REQUIRED_WHEN CURRENT VENUE GCI/DCR NEEDS SAME-DAY RESULT FACTS; ONLY COMPLETED PRIOR RACES; TARGET RACE STRUCTURALLY EXCLUDED"
+  },
+  "official_detail": {
+    "name": "JRA detailed race-card JRADB",
+    "source_class": "OFFICIAL_JRA_RACE_CARD_DETAIL",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "parsed_fields": [
+      "career record and starts",
+      "current win odds and popularity",
+      "current bodyweight and change",
+      "assigned weight",
+      "jockey/trainer identities",
+      "sire/dam/damsire identities",
+      "up to four recent runs: finish/field/popularity/distance/surface/time/going/bodyweight/passing calls/final3F/margin/class/rider"
+    ],
+    "prediction_rule_authority": "FACTS ONLY / CATEGORY EVALUATORS SEPARATE"
+  },
+  "official_horse_history": {
+    "name": "JRA official horse history JRADB",
+    "source_class": "OFFICIAL_JRA_HORSE_HISTORY",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-HORSE-HISTORY-v1.0-20260926",
+    "fields": [
+      "date",
+      "venue",
+      "race_name",
+      "surface",
+      "distance_m",
+      "going",
+      "field_size",
+      "popularity_rank",
+      "finish",
+      "jockey",
+      "assigned_weight",
+      "body_weight",
+      "time",
+      "rating",
+      "winner_or_second"
+    ],
+    "rule": "Official facts only. Feature-category semantics remain separately governed."
+  },
+  "official_person_stats": {
+    "name": "JRA official jockey/trainer current-year and career statistics",
+    "source_class": "OFFICIAL_JRA_PERSON_STATS",
+    "authority": "JRA_OFFICIAL",
+    "adapter": "KM-JRA-OFFICIAL-PERSON-STATS-v1.1-20260926",
+    "production_fact_authority": true,
+    "current_identity_source": "JRA official race-card doAction accessK/accessC token",
+    "mechanical_acceptance_run": 36234908562,
+    "mechanical_acceptance": "PASS / 16 jockey + 16 trainer / POST-START / NO-OOS",
+    "prediction_category_authority": "FACTS ONLY / PERSON-QUALITY EVALUATOR NOT PROMOTED"
+  },
+  "official_market_observation": {
+    "name": "JRA official current market observation",
+    "source_class": "OFFICIAL_JRA_MARKET_OBSERVATION",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-MARKET-OBSERVATION-v1.0-20260926",
+    "rule": "Single observation is current-market fact only; market_stability requires >=2 temporally ordered Signed SOURCE observations.",
+    "prediction_rule_authority": "FACTS ONLY / CATEGORY EVALUATORS SEPARATE"
+  },
+  "registered_jra_common": {
+    "name": "netkeiba public pre-race factual surfaces",
+    "authority": "REGISTERED_JRA_COMMON",
+    "official": false,
+    "production_fact_authority": true,
+    "prediction_rule_authority": "FACTS ONLY / EXISTING REGISTERED RULE IDS ONLY",
+    "hosts": [
+      "race.netkeiba.com"
+    ],
+    "allowed_surfaces": [
+      "race/oikiri.html?race_id=<RACE_ID>&type=2",
+      "race/speed.html?mode=past&race_id=<RACE_ID>&type=shutuba"
+    ],
+    "forbidden_surfaces": [
+      "result",
+      "払戻",
+      "race/result",
+      "post-result derived pages",
+      "db.netkeiba.com until separately registered"
+    ],
+    "required_controls": [
+      "fetched_at <= prediction_cutoff",
+      "raw SHA256 retained in source snapshot",
+      "official JRA runner-universe hard reconciliation",
+      "no overwrite of JRA official facts",
+      "no probability/EV/Kelly derivation",
+      "no unregistered rule_id",
+      "no freehand numeric score"
+    ],
+    "workout_adapter": "KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.0-20260926",
+    "workout_rules": [
+      "KM-JRA-WORKOUT-CAPABILITY-v1",
+      "JRA-WORKOUT-FINAL1F-BAND-v1",
+      "KM-JRA-STABLE-READINESS-v1"
+    ],
+    "speed_role": "FACT SOURCE / NO AUTOMATIC PRODUCTION FEATURE UNTIL AN EXISTING RULE EVALUATOR IS BOUND",
+    "profile": "KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.3-20260926",
+    "workout_policy": "PRE-RACE ONLY / FULL OFFICIAL RUNNER UNIVERSE MATCH REQUIRED / FIRST COMPLETE TABLE / COMPACT ASSESSMENT ALLOWED / NO SYNTHETIC COURSE OR TIME",
+    "production_feature_authority": [
+      "workout_capability through JRA-WORKOUT-CAPABILITY-COMMENT-v1",
+      "workout_speed only when actual course+final1F exist through JRA-WORKOUT-FINAL1F-BAND-v1"
+    ],
+    "prohibited_inference": [
+      "stable_readiness from workout assessment alone"
+    ]
+  },
+  "official_same_day_result_detail": {
+    "name": "JRA official prior-race same-day result detail",
+    "source_class": "OFFICIAL_JRA_SAME_DAY_RESULT_DETAIL",
+    "authority": "JRA_OFFICIAL",
+    "production_fact_authority": true,
+    "adapter": "KM-JRA-OFFICIAL-SAME-DAY-RESULT-DETAIL-v1.0-20260926",
+    "scope": "Only races with race_no < target race_no",
+    "fields": [
+      "finish",
+      "horse_no",
+      "horse_name",
+      "passing_positions",
+      "final3f",
+      "weather",
+      "surface",
+      "going",
+      "distance_m",
+      "lap_table",
+      "corner_table"
+    ],
+    "temporal_controls": [
+      "fetched_at <= prediction_cutoff",
+      "target race result structurally excluded",
+      "source freeze <= prediction_cutoff"
+    ],
+    "prediction_rule_authority": "FACTS ONLY / HORSE-SPECIFIC SAME-DAY GCI CATEGORY EVALUATOR SEPARATELY GOVERNED",
+    "result_leakage_rule": "Prior completed races may inform later races only; target-race result is forbidden."
+  },
+  "temporal_integrity": {
+    "rule": "Production-authorized facts must be captured no later than prediction_cutoff.",
+    "source_freeze_order": "source_freeze_at <= prediction_cutoff",
+    "post_cutoff_behavior": "FAIL_CLOSED / NO PRODUCTION USE",
+    "formal_handoff_receiver_reverify": true
+  },
+  "unregistered_host_policy": "DENY / diagnostics do not grant Production source authority",
+  "source_to_feature": {
+    "compiler": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926",
+    "policy": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926",
+    "closure": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R5",
+    "exact_production_autofill": [
+      "weight_load_fit(equal-weight only)",
+      "bodyweight_delta_fit",
+      "market_rank",
+      "workout_capability",
+      "workout_speed(actual detail only)"
+    ],
+    "person_stats": "SOURCE FACTS ONLY",
+    "same_day_results": "SOURCE FACTS ONLY UNTIL VENUE/STYLE EVALUATOR PROMOTION",
+    "fact_availability_semantics": "Separate factual source acquisition from feature-category coverage.",
+    "legacy_missing_source_families_semantics": "Compatibility alias for source families associated with missing FEATURES, not acquisition failures.",
+    "automation_gap_semantics": "Adapter-ready/evaluator-required is distinct from adapter-missing."
+  },
+  "hsn12_post_start_fact_availability_fixture": {
+    "classification": "POST-START / MECHANICAL / NO-OOS",
+    "current_bodyweight": "16/16",
+    "horse_history": "16/16",
+    "horse_history_detail": "16/16",
+    "official_market": "16/16",
+    "training": "16/16",
+    "trainer_stats": "16/16",
+    "frozen_old_source_jockey_stats": "11/16",
+    "fresh_current_token_person_stats": "16/16 jockey and 16/16 trainer via run 36234908562",
+    "same_day_results": "separate acceptance run 36232950644 captured R1-R11; not merged into frozen adapter coverage fixture"
+  },
+  "production_model_change": false,
+  "numerical_weight_change": false,
+  "krs_mec_capital_change": false
+}
