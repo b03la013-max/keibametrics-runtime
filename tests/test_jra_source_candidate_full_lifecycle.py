@@ -1,4 +1,4 @@
-import copy,json,sys
+import copy,hashlib,json,sys
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -15,8 +15,8 @@ from capital_policy import resolve_capital_policy
 MAPPING=ROOT/"mapping"/"jra_base_index_evidence_mapping_v1.0_20260921.json"
 
 def source():
-    return {
-      "family_id":"JRA","race_id":"TEST-CAND","source_snapshot_sha256":"a"*64,
+    x={
+      "family_id":"JRA","race_id":"TEST-CAND",
       "jra_race_context":{"venue_name":"阪神","distance_m":1200,"surface":"ダ","going":"良"},
       "source_race_context":{"race_date":"2026-09-26"},
       "jra_official_runner_universe_sha256":"b"*64,
@@ -40,6 +40,11 @@ def source():
         "4":{"runs":[{"date":"2026-09-01","venue":"阪神","finish":8,"field_size":12,"distance_m":1200,"surface":"ダ","going":"良","body_weight":512,"final3f":37.5,"margin":1.3,"passing_positions_raw":"8 8"}]},
       }}
     }
+    projection={k:v for k,v in x.items() if k!="source_snapshot_sha256"}
+    x["source_snapshot_sha256"]=hashlib.sha256(
+        json.dumps(projection,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    return x
 
 def test_candidate_full_numerical_transport_semantic_mec():
     mp=load_mapping(MAPPING)
