@@ -1,0 +1,49 @@
+name: JRA Person Profile Table Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-person-profile-table-diagnostic.yml"
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch representative jockey profile tables
+        run: |
+          python - <<'PY'
+          import base64,json,os,pathlib,sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization
+          sys.path.insert(0,str(pathlib.Path("runtime/jra_source_runtime").resolve()))
+          import jra_person_stats as ps
+          from source_acquisition import _html_tables,_decode
+          # Red Revendis current jockey 武豊 token is present in signed horse history.
+          horse_token="pw01dud002023067916/BB"
+          # Use the R12 history-discovered current/known jockey token first; inspect multiple if needed.
+          tokens=["pw04kmk000666/8B","pw04kmk001174/95","pw04kmk001126/96"]
+          out={}
+          for tok in tokens:
+            try:
+              op,ref=ps._fetch_horse_session(horse_token)
+              snap,prof=ps._post_profile(op,"jockey",tok,ref,"2026-09-26T16:10:13+09:00",max_attempts=5)
+              raw=base64.b64decode(snap["content_b64"])
+              dec=_decode(raw,(snap.get("headers") or {}).get("content-type",""))
+              tabs=_html_tables(dec)
+              out[tok]={"profile":prof,"table_count":len(tabs),"tables":tabs[:30]}
+            except Exception as e:
+              out[tok]={"error":type(e).__name__+":"+str(e)}
+          p=pathlib.Path("runtime/diagnostics/jra_person_profile_tables.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({k:{"error":v.get("error"),"table_count":v.get("table_count")} for k,v in out.items()},ensure_ascii=False))
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/jra_person_profile_tables.json
+          git commit -m "diagnostic: JRA person profile tables [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
