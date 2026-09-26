@@ -43,6 +43,8 @@ jobs:
           from mec_r4_shadow import settle_mec_r4_shadow
           from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
           from pfs_grand_review import write_report as write_pfs_grand_review
+          from jra_source_candidate_oos import evaluate_result as evaluate_source_candidate_result
+          from jra_source_candidate_promotion_gate import bind_result as bind_source_candidate_result, evaluate as evaluate_source_candidate_gate
           BASE="https://quorumprobe-production.up.railway.app"
           with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
               p=json.load(f)
@@ -95,6 +97,43 @@ jobs:
           review=build_post_result_review(p,final_artifact)
           learning=build_learning_state(review)
           oos=build_oos_measurement(review,final_artifact)
+
+          # Source-derived Candidate closed loop. Only an immutable pre-result
+          # sidecar can be evaluated; RESULT never reconstructs Candidate prediction.
+          source_candidate_result=None
+          source_candidate_gate=None
+          candidate_pre_path=os.path.join("runtime","source_candidate_oos",p["race_id"],"pre_result.json")
+          if os.path.exists(candidate_pre_path):
+              with open(candidate_pre_path,encoding="utf-8") as fh:
+                  candidate_pre=json.load(fh)
+              assert candidate_pre.get("race_id")==p["race_id"], "SOURCE_CANDIDATE_RACE_ID_MISMATCH"
+              top3=(p.get("official_result") or {}).get("top3")
+              if not isinstance(top3,list) or len(top3)<3:
+                  finish=(p.get("official_result") or {}).get("finish_order") or []
+                  top3=finish[:3]
+              assert isinstance(top3,list) and len(top3)>=3, "SOURCE_CANDIDATE_TOP3_MISSING"
+              candidate_eval=evaluate_source_candidate_result(candidate_pre,[int(x) for x in top3[:3]])
+              source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)
+              cdir=os.path.join("runtime","source_candidate_oos",p["race_id"])
+              os.makedirs(cdir,exist_ok=True)
+              with open(os.path.join(cdir,"result_evaluation.json"),"w",encoding="utf-8") as fh:
+                  json.dump(source_candidate_result,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
+              candidate_records=[]
+              root=os.path.join("runtime","source_candidate_oos")
+              if os.path.isdir(root):
+                  for d in sorted(os.listdir(root)):
+                      rp=os.path.join(root,d,"result_evaluation.json")
+                      if not os.path.exists(rp): continue
+                      try:
+                          with open(rp,encoding="utf-8") as fh:
+                              candidate_records.append(json.load(fh))
+                      except Exception:
+                          continue
+              source_candidate_gate=evaluate_source_candidate_gate(candidate_records)
+              with open(os.path.join("runtime","source_candidate_oos_status.json"),"w",encoding="utf-8") as fh:
+                  json.dump(source_candidate_gate,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           os.makedirs("runtime/reviews_auto",exist_ok=True)
           os.makedirs("runtime/learning_states",exist_ok=True)
           os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
@@ -143,7 +182,23 @@ jobs:
             "mec_r4_oos_eligible_races":mec_r4_oos.get("eligible_races"),
             "mec_r4_oos_remaining_races":mec_r4_oos.get("remaining_races"),
             "mec_r4_oos_sha256":mec_r4_oos.get("sha256"),
-            "pfs_grand_review_sha256":pfs_grand.get("sha256")
+            "pfs_grand_review_sha256":pfs_grand.get("sha256"),
+            "source_candidate_oos_evaluated":source_candidate_result is not None,
+            "source_candidate_oos_eligible":(
+                source_candidate_result.get("oos_eligible") if source_candidate_result else None
+            ),
+            "source_candidate_result_sha256":(
+                source_candidate_result.get("sha256") if source_candidate_result else None
+            ),
+            "source_candidate_r30_status":(
+                source_candidate_gate.get("status") if source_candidate_gate else None
+            ),
+            "source_candidate_r30_eligible_races":(
+                source_candidate_gate.get("eligible_race_count") if source_candidate_gate else None
+            ),
+            "source_candidate_r30_sha256":(
+                source_candidate_gate.get("sha256") if source_candidate_gate else None
+            )
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -155,6 +210,8 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json runtime/mec_r4_oos_status.json
+          if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
+          if [ -f runtime/source_candidate_oos_status.json ]; then git add runtime/source_candidate_oos_status.json; fi
           if [ -f runtime/pfs_grand_review/current.json ]; then git add runtime/pfs_grand_review/current.json; fi
           if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json; fi
           if ! git diff --cached --quiet; then
