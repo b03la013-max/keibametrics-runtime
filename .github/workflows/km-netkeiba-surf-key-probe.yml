@@ -1,0 +1,49 @@
+name: Netkeiba Surf Key Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-netkeiba-surf-key-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,re
+          from pathlib import Path
+          syskeys=[
+            "Jockey","JockeyF","JockeyCd","JockeyCode","JockeyCodeF","JockeyID","JockeyIDF",
+            "Trainer","TrainerF","TrainerCd","TrainerCode","TrainerCodeF",
+            "KettoNumF","SpeedIdxScore","Training","TrainingScore","Oikiri","OikiriEval",
+            "Baba","BabaF","TrackCondition","RaceInterval","Course","Distance"
+          ]
+          out={}
+          for key in syskeys:
+              url=f"https://race.netkeiba.com/race/surf_summary.html?key1={key}&race_id=202609040812&range=4"
+              try:
+                  req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja,en;q=0.3"})
+                  with urllib.request.urlopen(req,timeout=12) as r: raw=r.read(2000000)
+                  s=raw.decode("euc-jp","ignore")
+                  title=(re.search(r"<title>(.*?)</title>",s,re.I|re.S) or [None,""])[1]
+                  plain=re.sub(r"<[^>]+>"," ",s)
+                  out[key]={"status":"PASS","bytes":len(raw),"title":re.sub(r"\s+"," ",title).strip(),
+                            "has_騎手成績":"騎手の成績" in plain,"has_調教師成績":"調教師の成績" in plain,
+                            "has_種牡馬成績":"種牡馬の成績" in plain,"has_調教評価":"調教評価" in plain,
+                            "horse_matches":sum(1 for n in ["スターウェーブ","レッドレベンディス","タイセイディアマン","インディゴアスール"] if n in plain)}
+              except Exception as e:
+                  out[key]={"status":"FAIL","error":type(e).__name__+":"+str(e)}
+          p=Path("runtime/diagnostics/netkeiba_surf_key_probe.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_surf_key_probe.json
+          git commit -m "diagnostic: netkeiba surf key probe [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
