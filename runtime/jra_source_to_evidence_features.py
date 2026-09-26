@@ -204,7 +204,9 @@ def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> D
         cat=comment_band(assessment)
         fact=f"Registered pre-race workout assessment={assessment}; provider rating={x.get('rating')}; course={x.get('course')}; gait={x.get('gait')}."
         out["workout_capability"]=_feature(cat,"JRA-WORKOUT-CAPABILITY-COMMENT-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
-        out["stable_readiness"]=_feature(cat,"JRA-STABLE-COMMENT-BAND-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
+        # Do not infer stable_readiness from a workout assessment. That feature
+        # requires a trainer/stable comment or separately authorized readiness
+        # evaluator; workout evidence alone is not semantically equivalent.
     if x.get("final1f") is not None:
         cat=workout_final_1f_band(x.get("final1f"),x.get("course"))
         fact=f"Registered pre-race workout final1F={x.get('final1f')} sec on {x.get('course')}; raw={x.get('workout_time_raw')}."
