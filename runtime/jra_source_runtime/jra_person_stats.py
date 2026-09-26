@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
-PROFILE="KM-JRA-OFFICIAL-PERSON-STATS-v1.0-20260926"
+PROFILE="KM-JRA-OFFICIAL-PERSON-STATS-v1.1-20260926"
 BASE="https://www.jra.go.jp"
 UA="KeibaMetrics-JRA-Person-Stats/1.0"
 
@@ -100,8 +100,22 @@ def _flat_row(table:List[List[str]],kind:str):
 def parse_person_profile(raw:bytes,content_type:str,kind:str,token:str)->Dict[str,Any]:
     decoded=_decode(raw,content_type); text=_html_text(decoded)
     label="騎手情報" if kind=="jockey" else "調教師情報"
-    m=re.search(re.escape(label)+r"\s+(.+?)\s*[（(]",text)
-    name=m.group(1).strip() if m else ""
+    # JRA repeats the label in title/navigation before the actual profile heading.
+    # Parsing the flattened page text therefore captured the whole navigation bar
+    # as a "name". Resolve the canonical identity from short heading elements first.
+    name=""
+    for raw_h in re.findall(r"<h[1-4][^>]*>(.*?)</h[1-4]>",decoded,re.I|re.S):
+        h=re.sub(r"<[^>]+>","",raw_h)
+        h=re.sub(r"\s+"," ",h).strip()
+        m=re.match(re.escape(label)+r"\s*(.+?)\s*[（(]",h)
+        if m:
+            name=m.group(1).strip()
+            break
+    if not name:
+        # Narrow fallback: require the duplicated profile label seen in JRA body
+        # rather than the first title/navigation occurrence.
+        m=re.search(re.escape(label)+r"\s+"+re.escape(label)+r"\s+(.+?)\s*[（(]",text)
+        if m:name=m.group(1).strip()
     rows=[]
     for table in _html_tables(decoded):
         x=_flat_row(table,kind)
