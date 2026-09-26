@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue
 
-PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.2-20260926"
+PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.3-20260926"
 AUTHORITY="REGISTERED_JRA_COMMON"
 UA="KeibaMetrics-JRA-Registered-Common/1.0"
 BASE="https://race.netkeiba.com"
@@ -78,7 +78,15 @@ def _last_lap(v:Any):
 
 def parse_workout(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
-    h,rows=_find_table(decoded,["馬番","馬名","コース","調教タイム","評価"])
+    try:
+        h,rows=_find_table(decoded,["馬番","馬名","コース","調教タイム","評価"])
+        schema="DETAILED"
+    except ValueError:
+        # The public default table can be universe-complete while exposing only
+        # assessment/rating. Missing course/time stays missing; it is never
+        # synthesized from the compact table.
+        h,rows=_find_table(decoded,["馬番","馬名","評価"])
+        schema="COMPACT_ASSESSMENT"
     def idx(part):
         return next((i for i,x in enumerate(h) if part in x),None)
     ni,mi,ci,ti,gi,li,ei=[idx(x) for x in ["馬番","馬名","コース","調教タイム","脚色","評価","評価"]]
@@ -104,7 +112,7 @@ def parse_workout(raw:bytes,content_type:str="")->Dict[str,Any]:
                     "workout_time_raw":t,"final1f":_last_lap(t),"gait":gait,
                     "assessment":comment,"rating":rating})
     if not out: raise ValueError("NETKEIBA_WORKOUT_RUNNERS_EMPTY")
-    return {"runner_count":len(out),"runners":sorted(out,key=lambda x:x["horse_no"])}
+    return {"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
 
 def parse_speed(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
