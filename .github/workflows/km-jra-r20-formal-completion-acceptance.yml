@@ -1,0 +1,93 @@
+name: JRA R20 Formal Completion Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-r20-formal-completion-acceptance.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R20.json"
+      - "profiles/family_runtime_contracts_20260926_R15.json"
+      - "profiles/venue_chat_routes_20260926_R19.json"
+      - "profiles/jra_source_runtime_20260926_R6.json"
+      - "profiles/jra_information_source_registry_v1.4_20260926.json"
+      - "governance/KM-JRA-FORMAL-COMPLETION-CLOSURE-20260926-R1.json"
+      - "runtime/jra_supplemental_evidence_pack.py"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Authority and live SOURCE binding acceptance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R20.json",encoding="utf-8"))
+          rc=json.load(open("profiles/family_runtime_contracts_20260926_R15.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R19.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R6.json",encoding="utf-8"))
+          ir=json.load(open("profiles/jra_information_source_registry_v1.4_20260926.json",encoding="utf-8"))
+          cl=json.load(open("governance/KM-JRA-FORMAL-COMPLETION-CLOSURE-20260926-R1.json",encoding="utf-8"))
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R11-LIVE-R1/SOURCE/runs/36222746737/source_receipt_envelope.json",encoding="utf-8"))
+          old=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R19.json",encoding="utf-8"))
+          actual=env["receipt"]["runtime_revision"]
+          expected=ca["family_scoped_authority"]["JRA"]["source_runtime_profile"]
+          old_expected=old["family_scoped_authority"]["JRA"]["source_runtime_profile"]
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R20"
+          assert ca["common_family_components"]["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260926-R15"
+          assert ca["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260926-R19"
+          assert expected=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert actual==expected
+          assert old_expected=="KM-JRA-SOURCE-RUNTIME-v1.5-20260926"
+          assert actual!=old_expected
+          assert rc["families"]["JRA"]["source_runtime_profile"]==expected
+          assert vr["jra_source_first"]["source_runtime_profile"]==expected
+          assert sr["runtime_profile"]==expected
+          assert ir["source_runtime"]==expected
+          assert cl["predictive_model_change"] is False
+          assert cl["numerical_weight_change"] is False
+          assert cl["new_rule_created"] is False
+          assert cl["supplemental_pack"]=="KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0-20260926"
+          runner=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "STALE_CURRENT_AUTHORITY" in runner
+          assert "JRA_SOURCE_RUNTIME_AUTHORITY_MISMATCH" in runner
+          assert "apply_supplemental_evidence_pack" in runner
+          assert "SUPPLEMENTAL_EVIDENCE_PACK_VERIFIED" in runner
+          out={
+            "profile":"KM-JRA-R20-FORMAL-COMPLETION-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "source_runtime_expected":expected,
+            "source_runtime_live_observed":actual,
+            "old_r19_runtime":old_expected,
+            "old_r19_mismatch_reproduced":actual!=old_expected,
+            "hsn11_source_run":36222746737,
+            "hsn11_source_receipt_sha256":env.get("receipt_sha256"),
+            "formal_runner_exact_binding":"PASS",
+            "supplemental_evidence_closure_bound":"PASS",
+            "production_prediction_change":False,
+            "production_numerical_weight_change":False,
+            "unknown_oos_predictive_acceptance":"PENDING"
+          }
+          Path("runtime/acceptance_artifacts").mkdir(parents=True,exist_ok=True)
+          Path("runtime/acceptance_artifacts/KM-JRA-R20-FORMAL-COMPLETION-ACCEPTANCE.json").write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Validator regression
+        run: |
+          pytest -q tests/test_jra_source_to_evidence_features.py tests/test_evidence_feature_compiler.py tests/test_jra_production_mapping_selftest.py
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance_artifacts/KM-JRA-R20-FORMAL-COMPLETION-ACCEPTANCE.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R20 formal completion acceptance [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
