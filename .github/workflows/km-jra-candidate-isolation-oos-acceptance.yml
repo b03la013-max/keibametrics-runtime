@@ -1,0 +1,72 @@
+name: JRA Candidate Isolation and OOS Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_candidate_*.py"
+      - "runtime/formal_request_validator.py"
+      - "tests/test_jra_production_authority_boundary.py"
+      - "tests/test_jra_source_candidate_oos_gate.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
+      - ".github/workflows/km-jra-source-candidate-forward-oos.yml"
+      - ".github/workflows/km-jra-candidate-isolation-oos-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Production firewall and OOS semantics
+        run: |
+          python -m py_compile runtime/jra_source_candidate_*.py runtime/formal_request_validator.py
+          pytest -q tests/test_jra_production_authority_boundary.py tests/test_jra_source_candidate_oos_gate.py tests/test_jra_source_candidate_full_lifecycle.py
+      - name: Structural workflow isolation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          forward=Path(".github/workflows/km-jra-source-candidate-forward-oos.yml").read_text(encoding="utf-8")
+          result=Path(".github/workflows/km-formal-result-runner.yml").read_text(encoding="utf-8")
+          assert "validate_production_authority(req)" in formal
+          assert "PRODUCTION_AUTHORITY_BOUNDARY_VERIFIED" in formal
+          assert "CANDIDATE_CANONICAL_COMPONENT_FORBIDDEN" in Path("runtime/formal_request_validator.py").read_text(encoding="utf-8")
+          assert "candidate_final_verified" in forward
+          assert "oos_eligible" in forward
+          assert "CANDIDATE_FINAL_RECEIPT_POST_START" in forward
+          assert 'pre_result.json' in forward
+          assert 'pre_result.json' in result
+          assert "evaluate_source_candidate_result(candidate_pre" in result
+          assert "source_candidate_oos_status.json" in result
+          assert "build_source_objective_candidate" not in result
+          print("CANDIDATE_ISOLATION_WORKFLOW_STRUCTURE_PASS")
+          PY
+      - name: Initialize zero-OOS tracker
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from jra_source_candidate_promotion_gate import evaluate
+          out=evaluate([])
+          assert out["eligible_race_count"]==0
+          assert out["status"]=="WAITING_R30"
+          Path("runtime/source_candidate_oos_status.json").write_text(
+              json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/source_candidate_oos_status.json
+          git commit -m "ci: initialize JRA source Candidate OOS tracker 0/30 [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
