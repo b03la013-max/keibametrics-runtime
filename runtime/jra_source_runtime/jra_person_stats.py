@@ -64,6 +64,8 @@ def _post_profile(opener,kind:str,token:str,referer:str,prediction_cutoff:str,*,
             spec={"source_id":"JRA-OFFICIAL-PERSON-STATS","source_class":"OFFICIAL_JRA_PERSON_STATS","authority":"JRA_OFFICIAL",
                   "priority":116,"official":True,"required":False,"url":url,"max_bytes":3000000,"timeout_seconds":30,"extract":[]}
             snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=status,headers=headers,fetched_at=fetched,prediction_cutoff=prediction_cutoff)
+            if snap.get("cutoff_relation")=="POST_CUTOFF":
+                raise ValueError("JRA_PERSON_PROFILE_POST_CUTOFF")
             if errs: raise ValueError("JRA_PERSON_PROFILE_SNAPSHOT_ERROR:"+"|".join(errs))
             return snap,parse_person_profile(raw,headers.get("content-type",""),kind,token)
         except urllib.error.HTTPError as exc:
