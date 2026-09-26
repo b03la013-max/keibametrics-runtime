@@ -1,0 +1,120 @@
+name: JRA HSN R2 Morning Production-Coverage and Candidate Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn-r2-morning-diagnostic.yml"
+  workflow_dispatch:
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build morning diagnostic from signed SOURCE R3
+        run: |
+          python - <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+          from jra_source_to_evidence_features import compile_source_to_features
+          from jra_evidence_to_base_production import load_mapping
+          from jra_source_candidate_numerical import materialize_source_candidate
+          from jra_source_candidate_semantics import build_candidate_semantics
+
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260927-R02-LIVE-R3/SOURCE/runs/36268052477/source_receipt_envelope.json",encoding="utf-8"))
+          src=env["artifact"]
+          mapping=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          runners=build_source_runner_stubs(src)
+          prod=compile_source_to_features(src,runners,mapping)
+          req={
+            "race_id":"KM-JRA-HSN-20260927-R02-MORNING-DIAGNOSTIC",
+            "family_id":"JRA","venue_id":"HSN",
+            "race":{"venue":"阪神","surface":"芝","distance":1600,"course":"右外","going":"良","class":"2歳未勝利"},
+            "environment":{"track":"芝","weather":"rain/source-bound"},
+            "run_count":5000,"seed":2026092702,
+            "prediction_cutoff":"2026-09-27T05:15:00+09:00",
+            "temporal_mode":"FORMAL-PRE-RACE",
+            "scheduled_post_at":"2026-09-27T10:20:00+09:00",
+            "orchestration_ref":{"authority":"BASE44","execution_session_id":"hsn-r2-morning-diagnostic","session_nonce":"r1","created_at":"2026-09-27T05:02:00+09:00"}
+          }
+          cand=materialize_source_candidate(req,src,mapping)
+          cand=build_candidate_semantics(cand)
+          frozen=json.load(open("runtime/source_candidate_oos/KM-JRA-HSN-20260927-R02/pre_result.json",encoding="utf-8"))
+          byname={str(r["runner_id"]):r.get("name") for r in cand["runners"]}
+          rows=[]
+          prod_runners={str(x["runner_id"]):x for x in prod["runners"]}
+          for r in cand["runners"]:
+            rid=str(r["runner_id"]); comps=r["canonical_components"]
+            pobj=prod_runners.get(rid,{})
+            cov=pobj.get("coverage",{}).get("indices") or {}
+            rows.append({
+              "runner_id":rid,
+              "name":r.get("name"),
+              "career_starts":r.get("career_starts"),
+              "candidate_observed_feature_count":(r.get("candidate_source_objective_runner") or {}).get("observed_feature_count"),
+              "candidate_missing_feature_count":(r.get("candidate_source_objective_runner") or {}).get("missing_feature_count"),
+              "ZAI_WIN":comps["ZAI_WIN"]["value"],
+              "ZAI_PLACE":comps["ZAI_PLACE"]["value"],
+              "TPI":comps["TPI"]["value"],
+              "T3I":comps["T3I"]["value"],
+              "HPI":comps["HPI"]["value"],
+              "SSI":comps["SSI"]["value"],
+              "CFI":comps["CFI"]["value"],
+              "RFI":comps["RFI"]["value"],
+              "BVI":comps["BVI"]["value"],
+              "JTI":comps["JTI"]["value"],
+              "CSI":comps["CSI"]["value"],
+              "TRI":comps["TRI"]["value"],
+              "BWI":comps["BWI"]["value"],
+              "GCI":comps["GCI"]["value"],
+              "PRI":comps["PRI"]["value"],
+              "KGI":comps["KGI"]["value"],
+              "VMI":comps["VMI"]["value"],
+              "DCR":comps["DCR"]["value"],
+              "SRI":comps["SRI"]["value"],
+              "F3S":comps["F3S"]["value"],
+              "production_generated_feature_count":pobj.get("generated_production_feature_count"),
+              "production_failed_indices":[k for k,v in cov.items() if not v.get("pass")],
+              "production_source_only_failed_indices":[k for k,v in ((pobj.get("source_only_coverage") or {}).get("indices") or {}).items() if not v.get("pass")],
+            })
+          out={
+            "profile":"KM-JRA-HSN-R02-MORNING-DIAGNOSTIC-20260927-R1",
+            "classification":"PRE-RACE / DIAGNOSTIC / NON-PRODUCTION / DOES-NOT-OVERWRITE-OOS-FREEZE",
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":src.get("source_snapshot_sha256"),
+            "source_freeze_at":src.get("source_freeze_at"),
+            "runner_count":len(runners),
+            "production_formal_base_ready_after_merge":prod.get("formal_base_ready_after_merge"),
+            "production_missing_source_families":prod.get("missing_source_families"),
+            "frozen_oos_ranking":frozen.get("ranking"),
+            "morning_candidate_ranking":cand["static_prediction"]["ranking"],
+            "ranking_changed":frozen.get("ranking")!=cand["static_prediction"]["ranking"],
+            "morning_w_active":cand["candidate_semantic_freeze"]["w_active"],
+            "morning_p2_active":cand["candidate_semantic_freeze"]["p2_active"],
+            "morning_p3_active":cand["candidate_semantic_freeze"]["p3_active"],
+            "rows":rows,
+            "production_effect":"NONE",
+            "oos_effect":"NONE"
+          }
+          out["sha256"]=hashlib.sha256(json.dumps(out,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          p=Path("runtime/diagnostics/hsn_r02_morning_20260927.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist diagnostic
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn_r02_morning_20260927.json
+          git commit -m "diagnostic: persist HSN R2 morning coverage and candidate revision [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
