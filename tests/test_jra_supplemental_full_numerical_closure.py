@@ -16,7 +16,7 @@ for spec in mapping["dcr"].values():
 
 runners=[{"runner_id":"1","name":"A","career_starts":10,"evidence_features":{}},
          {"runner_id":"2","name":"B","career_starts":10,"evidence_features":{}}]
-req={"race_id":"TEST-JRA-FULL-NUM","prediction_cutoff":"2026-09-26T15:30:00+09:00","runners":runners}
+req={"race_id":"TEST-JRA-FULL-NUM","prediction_cutoff":"2026-09-26T15:30:00+09:00","acceptance_only":True,"runners":runners}
 features={}
 for rid in ("1","2"):
     features[rid]={}
