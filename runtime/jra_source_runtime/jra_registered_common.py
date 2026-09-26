@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue
 
-PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.1-20260926"
+PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.2-20260926"
 AUTHORITY="REGISTERED_JRA_COMMON"
 UA="KeibaMetrics-JRA-Registered-Common/1.0"
 BASE="https://race.netkeiba.com"
@@ -151,13 +151,39 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
         )
         if rsnap is not None: snaps.append(rsnap)
         base["netkeiba_race_id"]=race_id
-        raw,h,snap=_fetch(f"{BASE}/race/oikiri.html?race_id={race_id}&type=2",prediction_cutoff,
-                          "NETKEIBA-WORKOUT","REGISTERED_COMMON_NETKEIBA_WORKOUT")
-        workout=parse_workout(raw,h.get("content-type","")); workout["source_snapshot_sha256"]=snap["snapshot_sha256"]
-        workout["runner_universe_match"]=_reconcile(workout,artifact);snaps.append(snap)
-        if not workout["runner_universe_match"]["verified"]:
-            raise ValueError("NETKEIBA_WORKOUT_RUNNER_MISMATCH:"+str(workout["runner_universe_match"]["errors"]))
+        workout=None
+        workout_attempt_errors=[]
+        workout_urls=[
+            f"{BASE}/race/oikiri.html?race_id={race_id}",
+            f"{BASE}/race/oikiri.html?race_id={race_id}&type=1",
+            f"{BASE}/race/oikiri.html?race_id={race_id}&type=2",
+        ]
+        for wi,wurl in enumerate(workout_urls):
+            try:
+                raw,h,snap=_fetch(
+                    wurl,prediction_cutoff,
+                    f"NETKEIBA-WORKOUT-{wi}","REGISTERED_COMMON_NETKEIBA_WORKOUT"
+                )
+                snaps.append(snap)
+                candidate=parse_workout(raw,h.get("content-type",""))
+                candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
+                candidate["runner_universe_match"]=_reconcile(candidate,artifact)
+                if candidate["runner_universe_match"]["verified"]:
+                    workout=candidate
+                    break
+                workout_attempt_errors.append(
+                    "RUNNER_MISMATCH:"+str(candidate["runner_universe_match"]["errors"])
+                )
+            except Exception as exc:
+                workout_attempt_errors.append(type(exc).__name__+":"+str(exc))
+        if workout is None:
+            raise ValueError("NETKEIBA_WORKOUT_NO_COMPLETE_UNIVERSE:"+"|".join(workout_attempt_errors))
         base["workout"]=workout
+        base["workout_selection"]={
+            "strategy":"FIRST_COMPLETE_OFFICIAL-UNIVERSE-MATCH",
+            "attempt_count":len([x for x in snaps if str(x.get("source_id") or "").startswith("NETKEIBA-WORKOUT-")]),
+            "rejected_attempts":workout_attempt_errors,
+        }
         raw,h,snap=_fetch(f"{BASE}/race/speed.html?mode=past&race_id={race_id}&type=shutuba",prediction_cutoff,
                           "NETKEIBA-SPEED-PAST","REGISTERED_COMMON_NETKEIBA_SPEED")
         speed=parse_speed(raw,h.get("content-type","")); speed["source_snapshot_sha256"]=snap["snapshot_sha256"]
