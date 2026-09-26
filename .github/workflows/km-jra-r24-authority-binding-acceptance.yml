@@ -1,0 +1,102 @@
+name: JRA R24 Authority Binding Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R24.json"
+      - "profiles/family_runtime_contracts_20260926_R18.json"
+      - "profiles/venue_chat_routes_20260926_R23.json"
+      - "profiles/jra_source_runtime_20260926_R8.json"
+      - "runtime/jra_source_runtime/app.py"
+      - "runtime/jra_source_runtime/jra_same_day_results.py"
+      - "runtime/acceptance/jra_source_v17_correctness.json"
+      - ".github/workflows/km-jra-r24-authority-binding-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R24 authority alignment
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R24.json",encoding="utf-8"))
+          rt=json.load(open("profiles/family_runtime_contracts_20260926_R18.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R23.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R8.json",encoding="utf-8"))
+          acc=json.load(open("runtime/acceptance/jra_source_v17_correctness.json",encoding="utf-8"))
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R24"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R23"
+          assert ca["common_family_components"]["family_runtime_contracts"]==rt["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert j["source_runtime_contract"]=="KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.7-20260926"
+          assert rt["families"]["JRA"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert vr["jra_source_first"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert sr["runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert sr["official_same_day_result_detail"]["target_race_result_structurally_excluded"] is True
+
+          app=Path("runtime/jra_source_runtime/app.py").read_text(encoding="utf-8")
+          assert 'APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"' in app
+          assert "SOURCE_FREEZE_AFTER_PREDICTION_CUTOFF" in app
+          assert "enrich_with_same_day_results" in app
+          same=Path("runtime/jra_source_runtime/jra_same_day_results.py").read_text(encoding="utf-8")
+          assert "for rn in range(1,race_no)" in same
+          assert "JRA_SAME_DAY_RESULT_POST_CUTOFF" in same
+          for path in [
+            "runtime/jra_source_runtime/jra_official_pdf.py",
+            "runtime/jra_source_runtime/jra_race_card_detail.py",
+            "runtime/jra_source_runtime/jra_horse_history.py",
+            "runtime/jra_source_runtime/jra_person_stats.py",
+            "runtime/jra_source_runtime/jra_registered_common.py",
+          ]:
+            txt=Path(path).read_text(encoding="utf-8")
+            assert "POST_CUTOFF" in txt,path
+
+          assert acc["status"]=="PASS"
+          assert acc["target_race_excluded"] is True
+          assert acc["prior_race_count"]==11
+          assert ca["supersession_declaration"]["predictive_model_change"] is False
+          assert ca["supersession_declaration"]["numerical_policy_change"] is False
+          assert ca["supersession_declaration"]["krs_authority_change"] is False
+          assert ca["supersession_declaration"]["capital_policy_change"] is False
+
+          out={
+            "profile":"KM-JRA-R24-AUTHORITY-BINDING-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "runtime_contract":rt["profile_id"],
+            "venue_routing":vr["profile_id"],
+            "source_contract":sr["profile_id"],
+            "source_runtime_profile":j["source_runtime_profile"],
+            "source_v17_acceptance_run":j["source_v17_acceptance_run"],
+            "target_race_excluded":True,
+            "temporal_fail_closed":True,
+            "production_prediction_change":False,
+            "production_numerical_change":False,
+            "krs_mec_capital_change":False
+          }
+          p=Path("runtime/acceptance/jra_r24_authority_binding.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r24_authority_binding.json
+          git commit -m "ci: persist JRA R24 authority binding PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
