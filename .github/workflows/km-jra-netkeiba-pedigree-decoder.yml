@@ -1,0 +1,37 @@
+name: JRA Netkeiba Pedigree Decoder Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-pedigree-decoder.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,sys,re
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          url="https://race.netkeiba.com/race/surf_summary.html?race_id=202609040812&range=4&key1=KettoNumF"
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+            raw=r.read(5000000);ct=r.headers.get("content-type","")
+          dec=_decode(raw,ct);tabs=_html_tables(dec);txt=_html_text(dec)
+          out={"content_type":ct,"table_count":len(tabs),"tables":tabs[:6],"text_head":txt[:8000],
+               "range_links":sorted(set(re.findall(r'range=([0-9]+)',dec))),
+               "key_links":sorted(set(re.findall(r'key1=([A-Za-z0-9_]+)',dec)))}
+          p=Path("runtime/diagnostics/netkeiba_pedigree_decoder.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_pedigree_decoder.json
+          git commit -m "diagnostic: decode pedigree surface summary [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
