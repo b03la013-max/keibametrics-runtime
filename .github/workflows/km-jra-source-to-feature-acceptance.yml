@@ -56,7 +56,7 @@ jobs:
           p=json.loads(Path("mapping/jra_source_to_feature_policy_v1.3_20260926.json").read_text())
           prohibited=p["production_category_autofill"]["prohibited"]
           assert any("No stable_readiness may be inferred from workout assessment alone" in x for x in prohibited)
-          assert any("person-quality categories" in x and "evaluator is promoted" in x for x in prohibited)
+          assert any("jockey_quality" in x and "trainer_quality" in x and "evaluator" in x for x in prohibited)
           assert p["source_fact_availability"]["official_same_day_result_detail_v1_0"]["target_race_excluded"] is True
           print("wiring PASS")
           PY
