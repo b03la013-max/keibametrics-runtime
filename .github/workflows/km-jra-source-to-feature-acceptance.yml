@@ -51,7 +51,11 @@ jobs:
           assert "TSL_PUBLIC_NON_OFFICIAL" in c
           assert "validate_feature_contract" in c
           assert "source_only_formal_base_ready" in c
+          assert 'PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"' in c
           assert 'POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"' in c
+          assert "missing_feature_source_families" in c
+          assert "source_fact_availability" in c
+          assert "LEGACY ALIAS" in c
           import json
           p=json.loads(Path("mapping/jra_source_to_feature_policy_v1.3_20260926.json").read_text())
           prohibited=p["production_category_autofill"]["prohibited"]
@@ -69,7 +73,7 @@ jobs:
           import json,os
           from datetime import datetime,timezone
           p={
-            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.3-20260926",
+            "profile":"KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-ACCEPTANCE-v1.4-20260926",
             "status":"PASS",
             "workflow_run_id":os.environ["RUN_ID"],
             "source_sha":os.environ["SOURCE_SHA"],
