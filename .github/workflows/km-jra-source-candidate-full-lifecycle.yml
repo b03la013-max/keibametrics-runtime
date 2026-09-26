@@ -1,0 +1,249 @@
+name: JRA Source-Derived Candidate Full Lifecycle Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_candidate_numerical.py"
+      - "runtime/jra_source_candidate_semantics.py"
+      - "runtime/jra_source_candidate_oos.py"
+      - "tests/test_jra_source_candidate_full_lifecycle.py"
+      - "governance/KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1.json"
+      - ".github/workflows/km-jra-source-candidate-full-lifecycle.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: python -m pip install --disable-pip-version-check -q pytest cryptography
+      - name: Unit acceptance
+        run: |
+          python -m py_compile runtime/jra_source_candidate_numerical.py runtime/jra_source_candidate_semantics.py runtime/jra_source_candidate_oos.py
+          pytest -q tests/test_jra_source_candidate_full_lifecycle.py
+      - name: HSN12 signed-source external candidate E2E
+        env:
+          KRS_BASE: https://quorumprobe-production.up.railway.app
+        run: |
+          python - <<'PY'
+          import copy,hashlib,json,os,sys,urllib.request,urllib.error
+          from datetime import datetime,timezone
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from jra_evidence_to_base_production import load_mapping
+          from jra_source_candidate_numerical import materialize_source_candidate
+          from jra_source_candidate_semantics import build_candidate_semantics
+          from jra_source_candidate_oos import pre_result_record
+          from formal_request_validator import validate_pre_krs_request
+          from prekrs_terminal_compat import adapt_calculator_output
+          from krs_prediction_utility import build_krs_prediction_utility
+          from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
+          from capital_policy import resolve_capital_policy
+
+          ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+          base=os.environ["KRS_BASE"].rstrip("/")
+          env_path=Path("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json")
+          ver_path=Path("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_verification.json")
+          env=json.load(open(env_path,encoding="utf-8"))
+          ver=json.load(open(ver_path,encoding="utf-8"))
+          assert ver.get("valid") is True,ver
+          src=env["artifact"]
+          assert src.get("race_id")=="KM-JRA-HSN-20260926-R12"
+          source_sha=src["source_snapshot_sha256"]
+          source_projection={k:v for k,v in src.items() if k!="source_snapshot_sha256"}
+          actual=hashlib.sha256(json.dumps(source_projection,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          assert actual==source_sha,(actual,source_sha)
+
+          mapping=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          req={
+            "race_id":"KM-JRA-HSN-20260926-R12-CANDIDATE-E2E",
+            "prediction_id":"KM-JRA-HSN-20260926-R12-CANDIDATE-E2E-R1",
+            "family_id":"JRA","venue_id":"HSN",
+            "race":{"venue":"阪神","surface":"ダ","distance":1200,"course":"右","going":"良","class":"2勝"},
+            "environment":{"track":"ダ","weather":"source-bound","source_cutoff":src.get("prediction_cutoff")},
+            "temporal_mode":"POST-START-REPLAY",
+            "prediction_cutoff":src.get("prediction_cutoff") or "2026-09-26T16:10:13+09:00",
+            "scheduled_post_at":"2026-09-26T16:30:00+09:00",
+            "run_count":5000,"seed":2026092612,
+            "capital_policy":{"mode":"RECOMMENDATION_ONLY"},
+            "orchestration_ref":{
+              "authority":"BASE44",
+              "execution_session_id":"accept-hsn12-source-candidate-e2e",
+              "session_nonce":"KM-JRA-HSN12-CANDIDATE-E2E-R1",
+              "created_at":"2026-09-26T19:30:00+09:00"
+            },
+            "source_snapshot":source_projection,
+            "source_snapshot_sha256":source_sha,
+            "acceptance_only":True,
+            "candidate_frozen_at":"2026-09-26T19:30:00+09:00",
+          }
+          req=materialize_source_candidate(req,src,mapping)
+          req=build_candidate_semantics(req)
+          req["source_snapshot"]=source_projection
+          req["source_snapshot_sha256"]=source_sha
+          preflight=validate_pre_krs_request(req)
+          assert preflight["runner_count"]==16
+          assert preflight["canonical_component_count"]==320
+          assert req["candidate_numerical_summary"]["calculated_count"]==320
+          assert req["base_index_mapping_authority"]["production_authority"] is False
+
+          def call(path,payload,timeout=360):
+            data=json.dumps(payload,separators=(",",":"),ensure_ascii=False).encode()
+            rq=urllib.request.Request(base+path,data=data,headers={"content-type":"application/json"},method="POST")
+            try:
+              with urllib.request.urlopen(rq,timeout=timeout) as rr:
+                raw=rr.read().decode()
+                return rr.status,json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as e:
+              raw=e.read().decode(errors="replace")
+              try: body=json.loads(raw)
+              except Exception: body={"raw":raw}
+              return e.code,body
+
+          calc_runners=[]
+          for r in req["runners"]:
+            items=[]
+            for idx,comp in r["canonical_components"].items():
+              items.append({
+                "index_name":idx,"terminal_status":"CALCULATED",
+                "transport_value":comp["value"],"formal_value":comp["value"],
+                "missing_flag":False,"calculation_rule_id":comp["rule_id"],
+                "mapping_version":comp["mapping_version"]
+              })
+            calc_runners.append({"runner_id":r["runner_id"],"items":items})
+          calc={"runners":calc_runners}
+          required=adapt_calculator_output(calc)
+          assert len(required)==320
+
+          universe=[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in req["runners"]]
+          pre_payload={
+            "race_id":req["race_id"],"runner_universe":universe,"required_indices":required,
+            "static_prediction":req["static_prediction"],"prediction_cutoff":req["prediction_cutoff"],
+            "source_snapshot_sha256":source_sha,"index_provenance_hash":req["index_provenance_hash"],
+            "orchestration_ref":req["orchestration_ref"],"krs_required":True,"krs_executable":True
+          }
+          pcode,p=call("/pre-krs",pre_payload,90)
+          assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
+          vcode,v=call("/verify",p,30)
+          assert vcode<300 and v.get("valid") is True,(vcode,v)
+
+          kinput=req["krs_input_data"]
+          kinput["simulation"]["run_count"]=5000
+          kinput["simulation"]["master_seed"]=req["seed"]
+          kpayload={
+            "race_id":req["race_id"],"input_data":kinput,"mode":"SIM-STD","seed":req["seed"],
+            "input_class":"CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
+          }
+          kcode,k=call("/krs/execute",kpayload,420)
+          run=k.get("run_receipt") or {}
+          rr=run.get("receipt") or {}
+          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
+          assert rr.get("engine_sha256")==ENGINE_SHA,rr
+          assert int(rr.get("actual_run_count") or 0)>=5000,rr
+          kvcode,kv=call("/verify",run,30)
+          assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
+
+          utility=build_krs_prediction_utility(req,k)
+          assert utility["production_effect"]=="NONE"
+          mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
+          validate_mec_plan(mec)
+          capital=resolve_capital_policy(req,mec)
+          tickets=mec["tickets"] if not capital["no_bet"] else []
+          total=int(mec["minimum_required_capital"]) if not capital["no_bet"] else 0
+
+          stage_manifest={
+            "SIGNED_SOURCE_VERIFIED":{"status":"PASS","receipt_sha256":env.get("receipt_sha256"),"source_snapshot_sha256":source_sha},
+            "CANDIDATE_FULL_NUMERICAL":{"status":"PASS","required_count":320,"calculated_count":320,"production_authority":False},
+            "CANDIDATE_STATIC_SEMANTICS":{"status":"PASS","sha256":req["candidate_semantic_freeze"]["sha256"],"production_authority":False},
+            "PRE_KRS_VERIFIED":{"status":"PASS","receipt_sha256":p.get("receipt_sha256")},
+            "KRS_EXECUTED_VERIFIED":{"status":"PASS","actual_run_count":rr.get("actual_run_count"),"receipt_sha256":run.get("receipt_sha256")},
+            "KRS_UTILITY_CAPTURED":{"status":"PASS","sha256":utility.get("sha256"),"production_effect":"NONE"},
+            "MEC_VERIFIED":{"status":"PASS","sha256":mec.get("sha256"),"coverage":mec.get("material_coverage_ratio")},
+            "CAPITAL_VERIFIED":{"status":"PASS","decision":capital.get("decision"),"required_capital":capital.get("required_capital")},
+          }
+          final_package={
+            "authority":"KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1",
+            "candidate_only":True,"production_authority":False,"acceptance_only":True,
+            "temporal_mode":"POST-START-REPLAY",
+            "source_snapshot_sha256":source_sha,
+            "candidate_numerical_summary":req["candidate_numerical_summary"],
+            "candidate_semantic_freeze":req["candidate_semantic_freeze"],
+            "static_prediction":req["static_prediction"],
+            "role_registry":req["role_registry"],
+            "pair_dispositions":req["pair_dispositions"],
+            "third_dispositions":req["third_dispositions"],
+            "krs_prediction_utility_shadow":utility,
+            "minimum_efficient_coverage":mec,
+            "capital_policy_decision":capital,
+            "execution_stage_manifest":stage_manifest,
+            "unknown_future_empirical_acceptance":"PENDING",
+            "production_effect":"NONE",
+          }
+          final_payload={
+            "race_id":req["race_id"],"no_bet":bool(capital["no_bet"]),
+            "krs_required":True,"krs_executable":True,"krs_run_receipt":run,
+            "final_prediction_package":final_package,"ticket_transport":tickets,
+            "final_ticket":{
+              "finalized":True,"frozen_at":datetime.now(timezone.utc).isoformat(),
+              "no_bet":bool(capital["no_bet"]),"total_investment":total,"tickets":tickets,
+              "available_bet_types":req["available_bet_types"],
+              "bet_type_dispositions":mec["bet_type_dispositions"] if not capital["no_bet"] else [],
+              "source_snapshot_sha256":source_sha,"orchestration_ref":req["orchestration_ref"],
+              "candidate_only":True,"production_authority":False
+            },
+            "final_freeze_timestamp":datetime.now(timezone.utc).isoformat()
+          }
+          fcode,final=call("/final",final_payload,90)
+          assert fcode<300 and final.get("receipt",{}).get("status")=="PASS",(fcode,final)
+          fvcode,fv=call("/verify",final,30)
+          assert fvcode<300 and fv.get("valid") is True,(fvcode,fv)
+
+          oos=pre_result_record(req)
+          assert oos["oos_eligible"] is False
+          artifact={
+            "profile":"KM-JRA-SOURCE-DERIVED-CANDIDATE-E2E-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "classification":"POST-START / ACCEPTANCE-ONLY / NON-PRODUCTION / NO-OOS",
+            "race_id":req["race_id"],
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":source_sha,
+            "runner_count":16,
+            "required_count":320,"calculated_count":320,
+            "pre_krs_receipt_sha256":p.get("receipt_sha256"),
+            "krs_receipt_sha256":run.get("receipt_sha256"),
+            "krs_actual_run_count":rr.get("actual_run_count"),
+            "krs_engine_sha256":rr.get("engine_sha256"),
+            "krs_utility_sha256":utility.get("sha256"),
+            "mec_sha256":mec.get("sha256"),
+            "mec_ticket_count":mec.get("ticket_count"),
+            "mec_required_capital":mec.get("minimum_required_capital"),
+            "mec_coverage":mec.get("material_coverage_ratio"),
+            "capital_decision":capital.get("decision"),
+            "final_receipt_sha256":final.get("receipt_sha256"),
+            "candidate_oos_eligible":False,
+            "production_effect":"NONE",
+            "prediction_accuracy_claim":False,
+            "unknown_future_empirical_acceptance":"PENDING",
+            "all_candidate_stages_pass":all(x.get("status")=="PASS" for x in stage_manifest.values()),
+          }
+          artifact["sha256"]=hashlib.sha256(json.dumps(artifact,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          out=Path("runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json")
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(artifact,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(artifact,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance artifact
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json
+          git commit -m "ci: persist JRA source candidate full lifecycle PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
