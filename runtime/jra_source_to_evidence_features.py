@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
-PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.3-20260926"
+PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"
 POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
@@ -330,35 +330,35 @@ FEATURE_SOURCE_FAMILY = {
 
 
 AUTOMATION_CLASS = {
-    "JRA_OFFICIAL_RACE_CARD":"ADAPTER_READY_OR_REQUEST_PROVIDED",
-    "JRA_CURRENT_BODYWEIGHT":"ADAPTER_REQUIRED",
-    "JRA_HORSE_HISTORY":"ADAPTER_REQUIRED",
-    "JRA_HORSE_HISTORY_DETAIL":"ADAPTER_REQUIRED",
-    "JRA_PEDIGREE_HISTORY":"ADAPTER_REQUIRED",
-    "JRA_JOCKEY_STATS":"ADAPTER_REQUIRED",
-    "JRA_JOCKEY_STYLE":"ADAPTER_REQUIRED",
-    "JRA_TRAINER_JOCKEY_STATS":"ADAPTER_REQUIRED",
-    "JRA_TRAINER_STATS":"ADAPTER_REQUIRED",
-    "TRAINER_COMMENT_OR_AUTHORIZED_SOURCE":"ADAPTER_REQUIRED",
-    "TRAINING_OR_STABLE_HISTORY":"ADAPTER_REQUIRED",
-    "JRA_TRAINING":"ADAPTER_REQUIRED",
-    "JRA_TRAINING_OR_COMMENT":"ADAPTER_REQUIRED",
-    "JRA_BODYWEIGHT_TRAINING_OR_PADDOCK":"ADAPTER_REQUIRED",
-    "PADDOCK_OR_AUTHORIZED_COMMENT":"ADAPTER_REQUIRED",
+    "JRA_OFFICIAL_RACE_CARD":"ADAPTER_READY_EVALUATOR_PARTIAL",
+    "JRA_CURRENT_BODYWEIGHT":"ADAPTER_READY_EVALUATOR_PARTIAL",
+    "JRA_HORSE_HISTORY":"ADAPTER_READY_EVALUATOR_REQUIRED",
+    "JRA_HORSE_HISTORY_DETAIL":"ADAPTER_READY_EVALUATOR_REQUIRED",
+    "JRA_PEDIGREE_HISTORY":"POPULATION_ADAPTER_REQUIRED",
+    "JRA_JOCKEY_STATS":"ADAPTER_READY_EVALUATOR_REQUIRED",
+    "JRA_JOCKEY_STYLE":"STYLE_EVALUATOR_REQUIRED",
+    "JRA_TRAINER_JOCKEY_STATS":"PAIR_STATS_ADAPTER_REQUIRED",
+    "JRA_TRAINER_STATS":"ADAPTER_READY_EVALUATOR_REQUIRED",
+    "TRAINER_COMMENT_OR_AUTHORIZED_SOURCE":"COMMENT_ADAPTER_REQUIRED",
+    "TRAINING_OR_STABLE_HISTORY":"HISTORY_EVALUATOR_REQUIRED",
+    "JRA_TRAINING":"ADAPTER_READY_EVALUATOR_PARTIAL",
+    "JRA_TRAINING_OR_COMMENT":"TRAINING_ADAPTER_READY_COMMENT_OPTIONAL",
+    "JRA_BODYWEIGHT_TRAINING_OR_PADDOCK":"PARTIAL_FACTS_READY_PADDOCK_REQUIRED",
+    "PADDOCK_OR_AUTHORIZED_COMMENT":"PADDOCK_OR_COMMENT_REQUIRED",
     "JRA_EQUIPMENT_HISTORY":"ADAPTER_REQUIRED",
-    "JRA_SAME_DAY_RESULTS_PLUS_STYLE":"SHADOW_OR_ADAPTER_REQUIRED",
-    "JMA_PLUS_HORSE_WEATHER_HISTORY":"SHADOW_OR_ADAPTER_REQUIRED",
-    "PACE_MAP_OR_HISTORY":"ADAPTER_REQUIRED",
-    "AUTHORIZED_COMMENT_OR_PACE_MAP":"ADAPTER_REQUIRED",
-    "JRA_OFFICIAL_MARKET":"ADAPTER_REQUIRED",
-    "JRA_OFFICIAL_MARKET_TIME_SERIES":"ADAPTER_REQUIRED",
-    "JRA_OFFICIAL_MARKET_PLUS_MODEL":"ADAPTER_REQUIRED",
-    "AUTHORIZED_EXPERT_SOURCE":"ADAPTER_REQUIRED",
+    "JRA_SAME_DAY_RESULTS_PLUS_STYLE":"RESULT_FACT_ADAPTER_READY_STYLE_EVALUATOR_REQUIRED",
+    "JMA_PLUS_HORSE_WEATHER_HISTORY":"CURRENT_WEATHER_READY_HORSE_HISTORY_REQUIRED",
+    "PACE_MAP_OR_HISTORY":"PACE_STYLE_EVALUATOR_REQUIRED",
+    "AUTHORIZED_COMMENT_OR_PACE_MAP":"COMMENT_OR_PACE_REQUIRED",
+    "JRA_OFFICIAL_MARKET":"ADAPTER_READY_EVALUATOR_PARTIAL",
+    "JRA_OFFICIAL_MARKET_TIME_SERIES":"TIME_SERIES_ADAPTER_REQUIRED",
+    "JRA_OFFICIAL_MARKET_PLUS_MODEL":"MODEL_BINDING_REQUIRED",
+    "AUTHORIZED_EXPERT_SOURCE":"AUTHORIZED_SOURCE_REQUIRED",
     "REGISTERED_EXTERNAL_SHADOW":"SHADOW_ONLY",
     "VENUE_CANON":"VENUE_BINDING_REQUIRED",
     "VENUE_CANON_PLUS_HISTORY":"VENUE_BINDING_PLUS_HISTORY_REQUIRED",
     "VENUE_CANON_PLUS_DRAW":"VENUE_BINDING_REQUIRED",
-    "JRA_HORSE_HISTORY_OR_PEDIGREE":"ADAPTER_REQUIRED",
+    "JRA_HORSE_HISTORY_OR_PEDIGREE":"HISTORY_ADAPTER_READY_PEDIGREE_OPTIONAL_EVALUATOR_REQUIRED",
 }
 
 def validate_feature_contract(mapping: Dict[str, Any], rule_registry: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -383,6 +383,78 @@ def validate_feature_contract(mapping: Dict[str, Any], rule_registry: Dict[str, 
         "missing_source_map": missing_source_map,
         "source_families": sorted({FEATURE_SOURCE_FAMILY[f] for f in allowed}),
     }
+
+def _source_fact_availability(rid: str, detail_inputs: Dict[str, Any], artifact: Dict[str, Any]) -> Dict[str, Any]:
+    """Report factual source availability separately from feature-category coverage."""
+    base=copy.deepcopy(detail_inputs.get("source_family_inputs") or {})
+    detail=_detail_runner_map(artifact).get(rid) or {}
+    history=_history_runner_map(artifact).get(rid) or {}
+    person=((artifact.get("jra_official_person_stats") or {}).get("runners") or {}).get(rid) or {}
+    workout=_registered_common_runner_map(artifact).get(rid) or {}
+    same_day=artifact.get("jra_official_same_day_results") or {}
+    tsl=_tsl_runner_map(artifact).get(rid) or {}
+    jma=artifact.get("jma_weather_evidence") or {}
+
+    base["JRA_OFFICIAL_RACE_CARD"]={
+        "fact_available":bool(detail),
+        "evaluator_status":"PARTIAL_DETERMINISTIC_BINDINGS_PROMOTED"
+    }
+    base["JRA_HORSE_HISTORY"]={
+        "fact_available":bool((history.get("runs") or [])),
+        "run_count":len(history.get("runs") or []),
+        "evaluator_status":"FACTS_READY / MOST CATEGORY EVALUATORS NOT PROMOTED"
+    }
+    base["JRA_HORSE_HISTORY_DETAIL"]={
+        "fact_available":bool(detail.get("recent_runs")),
+        "recent_run_count":len(detail.get("recent_runs") or []),
+        "evaluator_status":"FACTS_READY / CATEGORY EVALUATORS NOT PROMOTED"
+    }
+    base["JRA_CURRENT_BODYWEIGHT"]={
+        "fact_available":detail.get("current_body_weight") is not None,
+        "delta_available":detail.get("current_body_weight_change") is not None,
+        "evaluator_status":"BODYWEIGHT_DELTA EVALUATOR PROMOTED"
+    }
+    base["JRA_OFFICIAL_MARKET"]={
+        "fact_available":detail.get("popularity_rank") is not None or detail.get("win_odds") is not None,
+        "evaluator_status":"MARKET_RANK EVALUATOR PROMOTED / TIME_SERIES NOT INCLUDED"
+    }
+    base["JRA_JOCKEY_STATS"]={
+        "fact_available":bool((person.get("jockey") or {}).get("current_year_flat")),
+        "evaluator_status":"FACTS_READY / PERSON-QUALITY EVALUATOR NOT PROMOTED"
+    }
+    base["JRA_TRAINER_STATS"]={
+        "fact_available":bool((person.get("trainer") or {}).get("current_year_flat")),
+        "evaluator_status":"FACTS_READY / PERSON-QUALITY EVALUATOR NOT PROMOTED"
+    }
+    base["JRA_TRAINING"]={
+        "fact_available":bool(workout),
+        "assessment_available":bool(workout.get("assessment")),
+        "final1f_available":workout.get("final1f") is not None,
+        "evaluator_status":"WORKOUT_CAPABILITY PROMOTED; WORKOUT_SPEED ONLY WITH ACTUAL DETAIL"
+    }
+    base["JRA_SAME_DAY_RESULTS_PLUS_STYLE"]={
+        "fact_available":bool(same_day.get("races")),
+        "prior_race_count":int(same_day.get("race_count") or 0),
+        "style_binding_available":False,
+        "evaluator_status":"RESULT FACTS READY / STYLE EVALUATOR NOT PROMOTED"
+    }
+    base["REGISTERED_EXTERNAL_SHADOW"]={
+        "fact_available":bool(tsl),
+        "production_authority":False,
+        "evaluator_status":"SHADOW ONLY"
+    }
+    base["JMA_PLUS_HORSE_WEATHER_HISTORY"]={
+        "current_weather_fact_available":bool(jma),
+        "horse_weather_history_available":False,
+        "evaluator_status":"CURRENT CONTEXT ONLY / HORSE-SPECIFIC EVALUATOR NOT PROMOTED"
+    }
+    base["JRA_HORSE_HISTORY_OR_PEDIGREE"]={
+        "history_fact_available":bool((history.get("runs") or [])),
+        "pedigree_population_rates_available":False,
+        "evaluator_status":"HISTORY FACTS READY / PEDIGREE POPULATION GAP"
+    }
+    return base
+
 
 def _source_only_runner(runner: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
     x = copy.deepcopy(runner)
@@ -560,6 +632,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
                 "newcomer":factual_runner.get("newcomer"),
             },
             "rule_evaluator_inputs":detail_inputs,
+            "source_fact_availability":_source_fact_availability(rid,detail_inputs,source_artifact),
             "generated_production_features": generated,
             "generated_production_feature_count": len(generated),
             "shadow_observations": shadow,
@@ -586,11 +659,13 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         "runner_count": len(runners_out),
         "runners": runners_out,
         "formal_base_ready_after_merge": all_ready,
+        "missing_feature_source_families": sorted(all_missing_sources),
         "missing_source_families": sorted(all_missing_sources),
+        "missing_source_families_semantics":"LEGACY ALIAS: source families of MISSING FEATURES, not proof that factual source acquisition failed.",
         "limitations": [
             "TSL/JMA/same-day derived shadow evidence is never injected into Production Evidence Features by this compiler.",
             "Missing evidence remains missing; UNKNOWN is never converted to WEAK or neutral 50.",
-            "Historical performance, pedigree population rates and person statistics require verified adapters; registered-common workout facts are accepted only through the explicit signed-source adapter.",
+            "Horse history, person statistics and registered-common workout facts may be fact-available while their downstream feature evaluators remain unpromoted; factual availability and feature coverage are reported separately.",
             "The compiler fills missing features only and never silently overwrites an existing valid feature classification.",
         ],
     }
