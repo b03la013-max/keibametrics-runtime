@@ -140,6 +140,21 @@ jobs:
               assert source_artifact.get("family_id")=="JRA", "JRA_SOURCE_FAMILY_MISMATCH"
               assert source_artifact.get("race_id")==req.get("race_id"), "JRA_SOURCE_RACE_ID_MISMATCH"
               assert source_artifact.get("formal_ready") is True, f"JRA_SOURCE_NOT_FORMAL_READY:{source_artifact.get('errors')}"
+              if temporal_mode_early=="FORMAL-PRE-RACE":
+                  signed_cutoff=str(source_artifact.get("prediction_cutoff") or "")
+                  request_cutoff=str(req.get("prediction_cutoff") or "")
+                  source_freeze_at=str(source_artifact.get("source_freeze_at") or "")
+                  assert signed_cutoff, "JRA_SIGNED_SOURCE_PREDICTION_CUTOFF_MISSING"
+                  assert source_freeze_at, "JRA_SIGNED_SOURCE_FREEZE_AT_MISSING"
+                  assert signed_cutoff==request_cutoff, (
+                      "JRA_SIGNED_SOURCE_CUTOFF_MISMATCH:"+signed_cutoff+"!="+request_cutoff
+                  )
+                  signed_cutoff_utc=dt(signed_cutoff).astimezone(timezone.utc)
+                  source_freeze_utc=dt(source_freeze_at).astimezone(timezone.utc)
+                  assert source_freeze_utc <= signed_cutoff_utc, (
+                      "JRA_SIGNED_SOURCE_FREEZE_AFTER_CUTOFF:"
+                      +source_freeze_utc.isoformat()+">"+signed_cutoff_utc.isoformat()
+                  )
               source_sha=str(source_artifact.get("source_snapshot_sha256") or "")
               assert source_sha, "JRA_SOURCE_SNAPSHOT_SHA_MISSING"
               declared=str(req.get("source_snapshot_sha256") or "")
@@ -167,6 +182,9 @@ jobs:
                   "current_authority_manifest":resolved_current_authority,
                   "receipt_sha256":source_env.get("receipt_sha256"),
                   "source_snapshot_sha256":source_sha,
+                  "prediction_cutoff":source_artifact.get("prediction_cutoff"),
+                  "source_freeze_at":source_artifact.get("source_freeze_at"),
+                  "official_same_day_result_detail_sha256":source_artifact.get("jra_official_same_day_results_sha256"),
                   "official_runner_universe_sha256":source_artifact.get("jra_official_runner_universe_sha256"),
                   "tsl_public_shadow_evidence_sha256":source_artifact.get("tsl_public_shadow_evidence_sha256"),
                   "jma_weather_evidence_sha256":source_artifact.get("jma_weather_evidence_sha256"),
@@ -284,11 +302,25 @@ jobs:
               static_freeze_value=req.get("static_freeze_timestamp") or req.get("final_freeze_timestamp")
               assert static_freeze_value, "STATIC_FREEZE_TIMESTAMP_MISSING"
               static_freeze_utc=dt(static_freeze_value).astimezone(timezone.utc)
+              if source_artifact is not None:
+                  signed_cutoff_utc=dt(source_artifact["prediction_cutoff"]).astimezone(timezone.utc)
+                  source_freeze_utc=dt(source_artifact["source_freeze_at"]).astimezone(timezone.utc)
+                  assert source_freeze_utc <= signed_cutoff_utc == cutoff_utc, (
+                      "SOURCE_TO_PREDICTION_TEMPORAL_LINEAGE_FAIL:"
+                      +source_freeze_utc.isoformat()+":"+signed_cutoff_utc.isoformat()+":"+cutoff_utc.isoformat()
+                  )
               assert cutoff_utc <= static_freeze_utc < post_utc, f"STATIC_FREEZE_TEMPORAL_ORDER_FAIL:{cutoff_utc.isoformat()}:{static_freeze_utc.isoformat()}:{post_utc.isoformat()}"
               assert deadline_utc < post_utc, f"DISPATCH_DEADLINE_NOT_BEFORE_POST:{dispatch_deadline}>={scheduled_post}"
               now=datetime.now(timezone.utc)
               assert now <= deadline_utc, f"DEADLINE_GUARD_FAIL:{now.isoformat()}>{dispatch_deadline}"
-              stage("TEMPORAL_INPUT_VERIFIED", prediction_cutoff=req["prediction_cutoff"], static_freeze_timestamp=static_freeze_value, scheduled_post_at=scheduled_post, external_dispatch_deadline_at=dispatch_deadline, mec_required=mec_required)
+              stage("TEMPORAL_INPUT_VERIFIED",
+                    prediction_cutoff=req["prediction_cutoff"],
+                    source_freeze_at=(source_artifact or {}).get("source_freeze_at"),
+                    signed_source_prediction_cutoff=(source_artifact or {}).get("prediction_cutoff"),
+                    static_freeze_timestamp=static_freeze_value,
+                    scheduled_post_at=scheduled_post,
+                    external_dispatch_deadline_at=dispatch_deadline,
+                    mec_required=mec_required)
           family=req.get("family_id","JRA")
           venue=req.get("venue_id","HSN")
           assert family=="JRA", "runner currently JRA-only"
