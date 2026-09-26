@@ -749,7 +749,14 @@ jobs:
             "bet_type_dispositions_verified":True if mec_required else conformance["bet_type_dispositions_verified"],
             "execution_stage_manifest":stage_manifest,
             "execution_stage_manifest_sha256":final_package["execution_stage_manifest_sha256"],
-            "all_mandatory_pre_race_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values()),
+            "all_mandatory_stages_verified":all(x.get("status")=="PASS" for x in stage_manifest.values()),
+            "all_mandatory_pre_race_stages_verified":(
+              temporal_mode=="FORMAL-PRE-RACE"
+              and not acceptance_only
+              and all(x.get("status")=="PASS" for x in stage_manifest.values())
+            ),
+            "temporal_formality":temporal_mode,
+            "acceptance_only":acceptance_only,
             "mec_r4_shadow":(
               {"status":"FROZEN","profile":shadow["profile"],"candidate_id":shadow["candidate_id"],"sha256":shadow["sha256"],"production_effect":"NONE"}
               if shadow else
