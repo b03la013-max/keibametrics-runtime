@@ -1,0 +1,45 @@
+name: JRA HSN12 Observed Feature Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn12-observed-features.yml"
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_source_objective_evaluator import build_source_objective_candidate
+          from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json",encoding="utf-8"))
+          art=env["artifact"]
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          runners=build_source_runner_stubs(art)
+          obj=build_source_objective_candidate(art,runners,mapping)
+          out={}
+          for rid,rr in (obj.get("runners") or {}).items():
+              out[rid]={
+                "name":rr.get("runner_name"),
+                "profile":rr.get("profile"),
+                "observed":[f for f,x in (rr.get("features") or {}).items() if not x.get("missing")],
+                "missing":[f for f,x in (rr.get("features") or {}).items() if x.get("missing")]
+              }
+          p=Path("runtime/diagnostics/hsn12_observed_features.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn12_observed_features.json
+          git commit -m "diagnostic: persist HSN12 observed features [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
