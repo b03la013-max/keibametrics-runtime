@@ -1,0 +1,58 @@
+name: Netkeiba Sire Resolution v2
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-netkeiba-sire-resolution-v2.yml"
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python - <<'PY'
+          import json,re,urllib.request,html,time
+          from pathlib import Path
+          UA={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja,en;q=0.3"}
+          u="https://race.netkeiba.com/race/shutuba.html?race_id=202609040812"
+          with urllib.request.urlopen(urllib.request.Request(u,headers=UA),timeout=30) as r: raw=r.read(5000000)
+          s=raw.decode("utf-8","ignore")
+          horses=[]
+          seen=set()
+          for m in re.finditer(r'href=["\']https?://db\.netkeiba\.com/horse/(\d{10})/?["\'][^>]*>(.*?)</a>',s,re.I|re.S):
+              hid=m.group(1); name=re.sub(r"<[^>]+>"," ",m.group(2)); name=re.sub(r"\s+","",html.unescape(name))
+              if hid in seen or not name: continue
+              seen.add(hid); horses.append((hid,name))
+          out=[]
+          for hid,name in horses[:16]:
+              row={"horse_id":hid,"horse_name":name}
+              pu=f"https://db.netkeiba.com/horse/ped/{hid}/"
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(pu,headers=UA),timeout=20) as r: pr=r.read(3000000)
+                  ps=pr.decode("euc-jp","ignore")
+                  # First pedigree horse anchor after the 5-generation heading is sire.
+                  pos=ps.find("5代血統表")
+                  body=ps[pos:] if pos>=0 else ps
+                  links=re.findall(r'href=["\'](?:https?://db\.netkeiba\.com)?/horse/([0-9a-zA-Z]+?)/?["\'][^>]*>(.*?)</a>',body,re.I|re.S)
+                  clean=[]
+                  for sid,txt in links:
+                      nm=re.sub(r"<[^>]+>"," ",txt); nm=re.sub(r"\s+","",html.unescape(nm))
+                      if nm: clean.append({"id":sid,"name":nm})
+                  row["pedigree_sha256"]=__import__("hashlib").sha256(pr).hexdigest()
+                  row["sire"]=clean[0] if clean else None
+                  row["pedigree_links"]=clean[:12]
+              except Exception as e: row["error"]=type(e).__name__+":"+str(e)
+              out.append(row); time.sleep(.1)
+          p=Path("runtime/diagnostics/netkeiba_sire_resolution_v2.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_sire_resolution_v2.json
+          git commit -m "diagnostic: resolve all R12 sire ids v2 [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
