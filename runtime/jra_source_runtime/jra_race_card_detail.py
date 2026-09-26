@@ -173,12 +173,13 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             if "CNAME=" in attrs:
                 tail=attrs.split("CNAME=",1)[1]
                 token=re.split(r"[&\"'<>\\s]+",tail,1)[0]
-            if not token and "doAction" in attrs:
-                args=re.findall(r"""['"]([^'"]+)['"]""",attrs)
-                for i,arg in enumerate(args[:-1]):
-                    if page.lower()+".html" in arg.lower():
-                        token=args[i+1]
-                        break
+            if not token and re.search(r"doAction",attrs,re.I):
+                m_action=re.search(
+                    r"""doAction\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)""",
+                    attrs,re.I
+                )
+                if m_action and page.lower()+".html" in m_action.group(1).lower():
+                    token=m_action.group(2)
             if not token:
                 continue
             token=urllib.parse.unquote(str(token))
