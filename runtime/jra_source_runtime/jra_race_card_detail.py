@@ -168,7 +168,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         pat=r'<a([^>]*)>(.*?)</a>'
         for attrs,label in re.findall(pat,decoded,re.I|re.S):
             token=None
-            m=re.search(r'(?:/JRADB/)?'+re.escape(page)+r'\\.html[^"\\']*CNAME=([^"\\'&<>\\s]+)',attrs,re.I|re.S)
+            m=re.search(r"(?:/JRADB/)?"+re.escape(page)+r"\\.html[^\\\"']*CNAME=([^\\\"'&<>\\s]+)",attrs,re.I|re.S)
             if m:
                 token=urllib.parse.unquote(m.group(1))
             if token is None:
