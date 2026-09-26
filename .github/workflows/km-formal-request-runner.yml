@@ -51,7 +51,7 @@ jobs:
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
           from evidence_feature_compiler import compile_evidence_feature_ledger
-          from jra_source_to_evidence_features import attach_source_features_to_request
+          from jra_source_to_evidence_features import attach_source_features_to_request\n          from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
           from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
@@ -130,6 +130,11 @@ jobs:
               }
 
           prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          supplemental_attestation=None
+          if isinstance(req.get("supplemental_evidence_pack"),dict):
+              req,supplemental_attestation=apply_supplemental_evidence_pack(
+                  req,req["supplemental_evidence_pack"],prod_map
+              )
           if source_artifact is not None:
               zero_touch=build_zero_touch_source_index_report(source_artifact,prod_map)
               req["zero_touch_source_index_report"]={k:v for k,v in zero_touch.items() if k not in {"objective_shadow","production_ledger","runner_stubs"}}
@@ -161,6 +166,17 @@ jobs:
           stage_manifest={}
           def stage(name, **evidence):
               stage_manifest[name]={"status":"PASS", **evidence}
+
+          if supplemental_attestation is not None:
+              stage("SUPPLEMENTAL_EVIDENCE_PACK_VERIFIED",
+                    profile=supplemental_attestation.get("profile"),
+                    pack_sha256=supplemental_attestation.get("pack_sha256"),
+                    source_count=supplemental_attestation.get("source_count"),
+                    feature_count=supplemental_attestation.get("feature_count"),
+                    runner_count_with_supplement=supplemental_attestation.get("runner_count_with_supplement"),
+                    rule_registry_id=supplemental_attestation.get("rule_registry_id"),
+                    mapping_id=supplemental_attestation.get("mapping_id"),
+                    production_effect=supplemental_attestation.get("production_effect"))
 
           if req.get("verified_source_lineage"):
               stage("SIGNED_SOURCE_RECEIPT_VERIFIED", **req["verified_source_lineage"])
