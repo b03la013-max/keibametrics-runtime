@@ -19,6 +19,7 @@ from jra_person_stats import enrich_with_person_stats
 from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
 from jra_market_observation import enrich_with_market_observation
 from jra_registered_common import enrich_with_registered_common
+from jra_same_day_results import enrich_with_same_day_results
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -65,6 +66,7 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
         "jra_market_observation_sha256":_sha_file("jra_market_observation.py"),
         "jra_registered_common_sha256":_sha_file("jra_registered_common.py"),
+        "jra_same_day_results_sha256":_sha_file("jra_same_day_results.py"),
       }
     }
     rb=_jdump(receipt)
@@ -123,7 +125,7 @@ def health():
     return {"status":status,"family":"JRA","runtime_revision":APP_VERSION,"github_revision":GIT_REV,
             "receipt_signer_key_id":SIGNER,"receipt_public_key_b64":pub,
             "capabilities":["SOURCE_MANIFEST_JRA","SOURCE_ACQUIRE","SOURCE_VERIFY","SOURCE_RUNNER_UNIVERSE",
-                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_JRA_OFFICIAL_RACE_CARD_DETAIL","SOURCE_JRA_OFFICIAL_HORSE_HISTORY","SOURCE_JRA_OFFICIAL_PERSON_STATS","SOURCE_REGISTERED_JRA_COMMON_WORKOUT","SOURCE_REGISTERED_JRA_COMMON_SPEED","SOURCE_TSL_PUBLIC_SHADOW"]}
+                            "SOURCE_JMA_WEATHER","SOURCE_JRA_AUXILIARY","SOURCE_JRA_POINT_IN_TIME_POPULATION_SEED","SOURCE_JRA_OFFICIAL_PDF_RUNNER_UNIVERSE","SOURCE_JRA_OFFICIAL_RACE_CONTEXT","SOURCE_JRA_OFFICIAL_RACE_CARD_DETAIL","SOURCE_JRA_OFFICIAL_HORSE_HISTORY","SOURCE_JRA_OFFICIAL_PERSON_STATS","SOURCE_REGISTERED_JRA_COMMON_WORKOUT","SOURCE_REGISTERED_JRA_COMMON_SPEED","SOURCE_JRA_OFFICIAL_SAME_DAY_RESULT_DETAIL","SOURCE_TSL_PUBLIC_SHADOW"]}
 
 @app.post("/source/manifest/jra")
 def source_manifest(p:Dict[str,Any]):
@@ -252,6 +254,19 @@ def source_acquire(p:Dict[str,Any]):
             errors.append("REGISTERED_COMMON_WORKOUT_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
         else:
             artifact.setdefault("warnings",[]).append("REGISTERED_COMMON_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+
+    try:
+        artifact,sderr=enrich_with_same_day_results(
+            artifact,cutoff,
+            require_same_day_results=bool(q.get("require_jra_same_day_results",False))
+        )
+        if q.get("require_jra_same_day_results"): errors.extend(sderr)
+        elif sderr: artifact.setdefault("warnings",[]).extend(sderr)
+    except Exception as e:
+        if q.get("require_jra_same_day_results"):
+            errors.append("JRA_SAME_DAY_RESULTS_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
+        else:
+            artifact.setdefault("warnings",[]).append("JRA_SAME_DAY_RESULTS_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     if isinstance(q.get("runners"),list) and artifact.get("jra_official_runner_universe"):
         ok,rerrs=validate_request_runners(artifact,q["runners"])
