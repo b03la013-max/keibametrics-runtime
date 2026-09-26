@@ -1,0 +1,41 @@
+{
+  "profile_id": "KM-JRA-FORMAL-COMPLETION-CLOSURE-20260926-R1",
+  "status": "ACTIVE / EXECUTION-CORRECTNESS / NON-NUMERICAL / NO-NEW-PREDICTION-RULE / FAIL-CLOSED",
+  "effective_at": "2026-09-26T15:34:01+09:00",
+  "family_id": "JRA",
+  "purpose": "Ensure Venue Chat does not stop at source-only coverage gaps when registered Production evidence can be closed through pre-race supplemental source acquisition, while preserving FULL_REQUIRED and no-synthesis rules.",
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260926-R20",
+  "source_runtime_contract": "KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.5-20260926",
+  "source_runtime_profile": "KM-JRA-SOURCE-RUNTIME-v1.6-20260926",
+  "evidence_compiler": "KM-JRA-EVIDENCE-FEATURE-COMPILER-v1.1-20260922",
+  "rule_registry": "JRA-EVIDENCE-FEATURE-RULE-REGISTRY-v1.1-20260922",
+  "production_mapping": "JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+  "supplemental_pack": "KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0-20260926",
+  "numerical_requirement": "FULL_REQUIRED",
+  "rule": [
+    "Run Signed SOURCE and source-to-feature compilation first.",
+    "If source-only Production coverage is insufficient, do not immediately terminate while pre-race time and registered Production-authorized sources remain available.",
+    "Resolve the minimum missing evidence needed to satisfy every Base Index coverage floor and all six DCR components.",
+    "Acquire only pre-cutoff Production-authorized supplemental sources; freeze source identity, origin, available_at, ingested_at and content SHA256.",
+    "Bind every supplemental feature to an already-registered rule_id and finite Production category; no freehand numeric score is allowed.",
+    "Re-run Evidence Feature Compiler and Production Evidence-to-Base materialization.",
+    "Proceed to Static Freeze/PRE_KRS/KRS/MEC/Capital/FINAL only when FULL_REQUIRED is actually satisfied.",
+    "If a required category semantics or source domain is not Production-authorized, fail closed; do not promote SHADOW objective rules or neutralize UNKNOWN."
+  ],
+  "minimum_closure_principle": "MINIMUM REGISTERED EVIDENCE REQUIRED TO SATISFY INDEX COVERAGE FLOORS + COMPLETE DCR; NOT MAXIMUM FEATURE COUNT",
+  "source_only_gap_is_not_final_block": true,
+  "final_block_condition": "After required supplemental closure attempt, any Base Index coverage below current profile floor, unresolved DCR component, unregistered rule, post-cutoff source, or missing provenance remains.",
+  "predictive_model_change": false,
+  "numerical_weight_change": false,
+  "category_threshold_change": false,
+  "new_rule_created": false,
+  "krs_change": false,
+  "mec_change": false,
+  "capital_change": false,
+  "shadow_promotion": false,
+  "known_limitations": [
+    "Some domains still lack Production-authorized executable evaluator semantics or source adapters.",
+    "This repair changes execution routing and evidence closure behavior only; it does not fabricate missing Production evidence.",
+    "Zero-touch source-only Formal-Full remains unclaimed until those domains are separately promoted with required OOS evidence."
+  ]
+}
