@@ -1,0 +1,78 @@
+name: JRA R20 Authority Binding Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R20.json"
+      - "profiles/family_runtime_contracts_20260926_R15.json"
+      - "profiles/venue_chat_routes_20260926_R19.json"
+      - "profiles/jra_source_runtime_20260926_R6.json"
+      - ".github/workflows/km-jra-r20-authority-binding-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify aligned v1.6 authority binding
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R20.json",encoding="utf-8"))
+          rt=json.load(open("profiles/family_runtime_contracts_20260926_R15.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R19.json",encoding="utf-8"))
+          sr=json.load(open("profiles/jra_source_runtime_20260926_R6.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R20"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R19"
+          assert ca["common_family_components"]["family_runtime_contracts"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260926-R15"
+          assert ca["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260926-R19"
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert j["source_runtime_contract"]=="KM-JRA-SOURCE-RUNTIME-CONTRACT-v1.5-20260926"
+          assert rt["families"]["JRA"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert vr["family_routes"]["JRA"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert vr["jra_source_first"]["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert sr["runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          # Live signed source evidence must agree with Current binding.
+          s10=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R10-LIVE-R1/SOURCE/runs/36222116852/source_summary.json",encoding="utf-8"))
+          s11=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R11-LIVE-R1/SOURCE/runs/36222746737/source_summary.json",encoding="utf-8"))
+          v10=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R10-LIVE-R1/SOURCE/runs/36222116852/source_verification.json",encoding="utf-8"))
+          v11=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R11-LIVE-R1/SOURCE/runs/36222746737/source_verification.json",encoding="utf-8"))
+          assert s10["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert s11["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.6-20260926"
+          assert v10["valid"] is True and v11["valid"] is True
+          # No predictive/numerical policy promotion.
+          assert ca["supersession_declaration"]["predictive_model_change"] is False
+          assert ca["supersession_declaration"]["numerical_policy_change"] is False
+          assert ca["supersession_declaration"]["krs_authority_change"] is False
+          assert ca["supersession_declaration"]["capital_policy_change"] is False
+          out={
+            "profile":"KM-JRA-R20-AUTHORITY-BINDING-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "runtime_contract":rt["profile_id"],
+            "venue_routing":vr["profile_id"],
+            "source_contract":sr["profile_id"],
+            "source_runtime_profile":"KM-JRA-SOURCE-RUNTIME-v1.6-20260926",
+            "live_runs":[36222116852,36222746737],
+            "production_prediction_change":False,
+            "production_numerical_change":False
+          }
+          p=Path("runtime/acceptance/jra_r20_authority_binding.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r20_authority_binding.json
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: persist JRA R20 authority binding PASS [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
