@@ -12,6 +12,8 @@ on:
       - "mapping/jra_source_to_feature_policy_v1.0_20260926.json"
       - "mapping/jra_source_to_feature_policy_v1.1_20260926.json"
       - "mapping/jra_source_to_feature_policy_v1.2_20260926.json"
+      - "mapping/jra_source_to_feature_policy_v1.3_20260926.json"
+      - "governance/KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R4.json"
       - "runtime/jra_source_runtime/jra_race_context.py"
       - "runtime/jra_source_runtime/jra_race_card_detail.py"
       - "runtime/jra_source_runtime/jra_horse_history.py"
@@ -49,6 +51,11 @@ jobs:
           assert "TSL_PUBLIC_NON_OFFICIAL" in c
           assert "validate_feature_contract" in c
           assert "source_only_formal_base_ready" in c
+          assert 'POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"' in c
+          p=Path("mapping/jra_source_to_feature_policy_v1.3_20260926.json").read_text()
+          assert "No stable_readiness may be inferred from workout assessment alone" in p
+          assert "person-quality categories until a separately governed evaluator is promoted" in p
+          assert "target result structurally excluded" in p
           print("wiring PASS")
           PY
       - name: Persist acceptance marker
