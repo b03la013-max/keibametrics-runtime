@@ -1,0 +1,54 @@
+name: JRA R12 Source Closure Diagnostics
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-r12-closure-diagnostics.yml"
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect netkeiba tables and JRA person token state
+        run: |
+          python - <<'PY'
+          import json,sys,urllib.request
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json",encoding="utf-8"))
+          art=env["artifact"]
+          out={"person":art.get("jra_official_person_stats"),"history_tokens":{},"netkeiba":{}}
+          for rid,h in ((art.get("jra_official_horse_history") or {}).get("runners") or {}).items():
+              out["history_tokens"][rid]={
+                "horse_name":h.get("horse_name"),
+                "person_profile_tokens":h.get("person_profile_tokens")
+              }
+          for key,url in {
+            "oikiri":"https://race.netkeiba.com/race/oikiri.html?race_id=202609040812",
+            "speed":"https://race.netkeiba.com/race/speed.html?mode=default&race_id=202609040812&type=shutuba"
+          }.items():
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja,en;q=0.3"})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  raw=r.read(8000000); ctype=r.headers.get("content-type","")
+              dec=_decode(raw,ctype)
+              tabs=_html_tables(dec)
+              out["netkeiba"][key]={
+                "sha256":__import__("hashlib").sha256(raw).hexdigest(),
+                "table_count":len(tabs),
+                "tables":tabs[:3]
+              }
+          p=Path("runtime/diagnostics/jra_r12_closure_diagnostics.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print("OK")
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/jra_r12_closure_diagnostics.json
+          git commit -m "diagnostic: persist R12 closure diagnostics [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
