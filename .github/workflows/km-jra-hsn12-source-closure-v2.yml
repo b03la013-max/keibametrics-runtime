@@ -1,0 +1,69 @@
+name: JRA HSN12 Source Closure Acceptance v2
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn12-source-closure-v2.yml"
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import base64,json,os,pathlib,sys
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization
+          sys.path.insert(0,"runtime");sys.path.insert(0,"runtime/jra_source_runtime")
+          key=Ed25519PrivateKey.generate()
+          raw=key.private_bytes(serialization.Encoding.Raw,serialization.PrivateFormat.Raw,serialization.NoEncryption())
+          os.environ["KM_JRA_SOURCE_PRIVATE_KEY_B64"]=base64.b64encode(raw).decode()
+          import app
+          from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+          from jra_source_to_evidence_features import compile_source_to_features
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          env=app.source_acquire({
+            "family_id":"JRA","race_id":"KM-ACCEPT-JRA-HSN-R12-SOURCE-CLOSURE-v2",
+            "venue_id":"HSN","race_date":"2026-09-26","race_no":12,
+            "prediction_cutoff":"2026-09-26T23:59:00+09:00",
+            "require_jra_race_card_detail":True,"require_jra_horse_history":True,
+            "require_jra_person_stats":False,"require_registered_common_workout":True,
+            "require_jma_weather":False,"require_tsl_shadow":False
+          })
+          art=env["artifact"]; runners=build_source_runner_stubs(art)
+          rep=compile_source_to_features(art,runners,mapping)
+          out={
+            "acceptance_only":True,"temporal_class":"POST-START / PARSER-CLOSURE-ONLY",
+            "source_status":env["receipt"]["status"],
+            "source_runtime":env["receipt"]["runtime_revision"],
+            "official_runner_count":(art.get("jra_official_runner_universe") or {}).get("runner_count"),
+            "registered_common_status":(art.get("jra_registered_common") or {}).get("status"),
+            "workout_runner_count":((art.get("jra_registered_common") or {}).get("workout") or {}).get("runner_count"),
+            "person_stats":{
+              k:(art.get("jra_official_person_stats") or {}).get(k)
+              for k in ["runner_count","direct_jockey_token_count","direct_trainer_token_count","matched_jockey_count","matched_trainer_count"]
+            },
+            "formal_base_ready_after_merge":rep.get("formal_base_ready_after_merge"),
+            "missing_source_families":rep.get("missing_source_families"),
+            "runner_coverage":{
+              rid:{
+                "name":rr.get("runner_name"),
+                "generated":sorted((rr.get("generated_production_features") or {}).keys()),
+                "indices":{k:{"covered":v["covered_weight"],"min":v["minimum_required_weight"],"pass":v["pass"]}
+                           for k,v in (rr.get("coverage") or {}).get("indices",{}).items()}
+              } for rid,rr in rep.get("runners",{}).items()
+            }
+          }
+          p=pathlib.Path("runtime/acceptance_artifacts/KM-ACCEPT-JRA-HSN-R12-SOURCE-CLOSURE-v2.json")
+          p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime"; git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance_artifacts/KM-ACCEPT-JRA-HSN-R12-SOURCE-CLOSURE-v2.json
+          git commit -m "acceptance: HSN12 source closure v2 [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do git pull --rebase origin main && git push origin HEAD:main && exit 0; git rebase --abort 2>/dev/null || true; sleep $((i*2)); done
+          exit 1
