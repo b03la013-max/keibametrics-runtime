@@ -57,6 +57,13 @@ jobs:
               } for rid,rr in rep.get("runners",{}).items()
             }
           }
+          assert out["source_status"]=="PASS", out
+          assert out["official_runner_count"]==16, out
+          assert len(out["runner_coverage"])==16, out
+          assert out["registered_common_status"]=="PASS", out
+          assert out["workout_runner_count"]==16, out
+          assert out["formal_base_ready_after_merge"] is True, out
+          assert not out["missing_source_families"], out
           p=pathlib.Path("runtime/acceptance_artifacts/KM-ACCEPT-JRA-HSN-R12-SOURCE-CLOSURE-v2.json")
           p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
           print(json.dumps(out,ensure_ascii=False))
@@ -71,3 +78,4 @@ jobs:
 # rerun after person-token regex fix
 
 # rerun after doAction regex fix R3
+# strict rerun: source PASS + 16 runners + registered common workout + formal base closure
