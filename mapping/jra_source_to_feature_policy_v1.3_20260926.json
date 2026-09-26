@@ -1,0 +1,103 @@
+{
+  "policy_id": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926",
+  "predecessor": "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.2-20260926",
+  "status": "ACTIVE / EXECUTION-CORRECTNESS / DETERMINISTIC-PRODUCTION-BINDINGS / PERSON-STATS-FACTS-ONLY / SAME-DAY-FACTS-ONLY / FAIL-CLOSED / NO-NUMERICAL-WEIGHT-CHANGE",
+  "family_id": "JRA",
+  "compiler": "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.3-20260926",
+  "source_layers": {
+    "official_runner_universe": "JRA_OFFICIAL_RACE_CARD_PDF / REQUIRED",
+    "official_race_card_detail": "JRA_OFFICIAL_JRADB_DETAIL / PRODUCTION-FACT-AUTHORITY",
+    "jma": "OFFICIAL_CONTEXT_SHADOW",
+    "tsl": "THIRD_PARTY_PUBLIC_SHADOW / https://jra.k-ba.net/ / NEVER OVERRIDES JRA",
+    "official_person_stats": "JRA_OFFICIAL / PRODUCTION-FACT-AUTHORITY / CATEGORY-EVALUATOR-NOT-PROMOTED",
+    "registered_common_workout": "race.netkeiba.com / REGISTERED_JRA_COMMON / PRE-RACE FACT AUTHORITY / FULL-UNIVERSE-MATCH REQUIRED",
+    "official_same_day_result_detail": "JRA_OFFICIAL / PRIOR COMPLETED RACES ONLY / TARGET RESULT STRUCTURALLY EXCLUDED / HORSE-SPECIFIC FIT EVALUATOR NOT PROMOTED"
+  },
+  "data_flow": [
+    "SIGNED_SOURCE",
+    "OFFICIAL_FACT_NORMALIZATION",
+    "RULE_EVALUATOR_INPUTS",
+    "REGISTERED_EVIDENCE_FEATURE_CATEGORY",
+    "PRODUCTION_BASE_INDEX_MAPPING",
+    "DERIVED_INDEX_FORMULAS"
+  ],
+  "official_detail_inputs": [
+    "career record / career starts",
+    "win odds and popularity snapshot",
+    "trainer identity",
+    "sire / dam / damsire identity",
+    "sex / age / assigned weight / jockey identity",
+    "up to four recent runs: date, venue, class text, finish, field size, popularity, assigned weight, distance, surface, time, going, bodyweight, passing-position raw, final3F, margin"
+  ],
+  "automatic_factual_updates": [
+    "career_starts",
+    "newcomer status when official career starts are known",
+    "rule evaluator input ledgers"
+  ],
+  "production_category_autofill": {
+    "current_safe": [
+      "weight_load_fit=NEUTRAL only when all active official assigned weights are equal, using JRA-WEIGHT-EQUAL-CONDITION-v1",
+      "bodyweight_delta_fit from official current bodyweight change using JRA-BODYWEIGHT-DELTA-BAND-v1 and the Production bodyweight_delta_band evaluator",
+      "market_rank from official current popularity rank and active field size using JRA-MARKET-RANK-BAND-v1 and the Production market_rank_band evaluator",
+      "workout_capability from a full-runner-universe-matched registered-common pre-race workout assessment using JRA-WORKOUT-CAPABILITY-COMMENT-v1 and the Production comment_band evaluator",
+      "workout_speed only when an actual detailed workout row provides both course and final1F, using JRA-WORKOUT-FINAL1F-BAND-v1 and the Production workout_final_1f_band evaluator"
+    ],
+    "prohibited": [
+      "No stable_readiness may be inferred from workout assessment alone; trainer/stable comment authority or a separately promoted readiness evaluator is required.",
+      "No official jockey/trainer statistic becomes jockey_quality, trainer_quality, jockey_venue_fit, stable_trainer_class or trainer_jockey_fit until a separately governed evaluator is promoted.",
+      "No prior same-day race result becomes horse-specific same_day_track_fit or track_bias_fit until a venue/style binding evaluator is promoted.",
+      "No raw recent-history or pedigree fact is converted to STRONG/WEAK without an explicitly governed evaluator semantics.",
+      "No TSL signal becomes a Production Evidence Feature.",
+      "No JMA current-state observation becomes horse-specific fit without an authorized history-based evaluator.",
+      "No missing feature is synthesized as neutral 50 or WEAK."
+    ]
+  },
+  "readiness": {
+    "source_only": "Measured per runner and per index before any request-supplied evidence is merged.",
+    "merged": "Measured after preserving existing authorized request features and adding only the current_safe deterministic generated categories.",
+    "zero_touch_claim": "Allowed only if every runner has source_only_formal_base_ready=true and downstream FULL_REQUIRED numerical materialization passes.",
+    "current_hsn12_post_start_fixture": "3 generated Production features per runner after semantic tightening; 13 base indices still fail source-only coverage; this is not OOS prediction evidence."
+  },
+  "remaining_adapter_or_evaluator_gaps": [
+    "registered evaluator thresholds/semantics for raw recent-history metrics not yet promoted",
+    "historical pedigree population rates",
+    "jockey/trainer quantitative statistics evaluator promotion",
+    "workout detail fields beyond compact assessment where provider does not expose full rows",
+    "stable/comment source and stable-readiness evaluator",
+    "official market time-series beyond current race-card snapshot",
+    "venue pace/style binding for same-day-result facts",
+    "equipment history and paddock/body-condition evidence"
+  ],
+  "production_model_change": false,
+  "numerical_weight_change": false,
+  "krs_change": false,
+  "mec_change": false,
+  "capital_change": false,
+  "probability_ev_kelly_change": false,
+  "source_fact_availability": {
+    "official_person_stats_v1_1": {
+      "status": "MECHANICALLY_AVAILABLE",
+      "post_start_acceptance_run": 36234908562,
+      "verified_runner_count": 16,
+      "direct_jockey_token_count": 16,
+      "direct_trainer_token_count": 16,
+      "matched_jockey_count": 16,
+      "matched_trainer_count": 16,
+      "production_category_effect": "NONE UNTIL EVALUATOR PROMOTION"
+    },
+    "registered_common_workout_v1_3": {
+      "status": "MECHANICALLY_AVAILABLE",
+      "hsn12_post_start_runner_count": 16,
+      "full_universe_match_required": true,
+      "compact_assessment_supported": true,
+      "missing_detail_behavior": "DO NOT SYNTHESIZE COURSE/TIME"
+    },
+    "official_same_day_result_detail_v1_0": {
+      "status": "MECHANICALLY_AVAILABLE",
+      "acceptance_run": 36232950644,
+      "prior_race_count": 11,
+      "target_race_excluded": true,
+      "production_category_effect": "NONE UNTIL VENUE/STYLE EVALUATOR PROMOTION"
+    }
+  }
+}
