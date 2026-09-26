@@ -1,0 +1,66 @@
+name: JRA R25 Temporal Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R25.json"
+      - "runtime/acceptance/jra_temporal_handoff.json"
+      - ".github/workflows/km-jra-source-first-runner.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-jra-r25-temporal-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R25 temporal authority
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R25.json",encoding="utf-8"))
+          acc=json.load(open("runtime/acceptance/jra_temporal_handoff.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R25"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R24"
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert j["temporal_handoff_acceptance_run"]==36233321806
+          assert j["formal_source_request_temporal_contract"]["scheduled_post_at_required"] is True
+          assert j["formal_source_request_temporal_contract"]["signed_source_receiver_reverify"] is True
+          assert acc["status"]=="PASS"
+          sw=Path(".github/workflows/km-jra-source-first-runner.yml").read_text(encoding="utf-8")
+          fw=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "SOURCE_FORMAL_SCHEDULED_POST_REQUIRED" in sw
+          assert "SOURCE_FREEZE_AFTER_CUTOFF" in sw
+          assert "JRA_SIGNED_SOURCE_CUTOFF_MISMATCH" in fw
+          assert "SOURCE_TO_PREDICTION_TEMPORAL_LINEAGE_FAIL" in fw
+          assert ca["supersession_declaration"]["predictive_model_change"] is False
+          assert ca["supersession_declaration"]["numerical_policy_change"] is False
+          out={
+            "profile":"KM-JRA-R25-TEMPORAL-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "temporal_handoff_acceptance_run":36233321806,
+            "prediction_policy_change":False,
+            "numerical_policy_change":False,
+            "krs_mec_capital_change":False
+          }
+          p=Path("runtime/acceptance/jra_r25_temporal_authority.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r25_temporal_authority.json
+          git commit -m "ci: persist JRA R25 temporal authority PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
