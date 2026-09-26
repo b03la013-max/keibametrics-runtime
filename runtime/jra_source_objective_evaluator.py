@@ -8,7 +8,7 @@ import math
 import statistics
 from typing import Any, Dict, List
 
-PROFILE = "KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.2-20260926"
+PROFILE = "KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.3-20260926"
 STATUS = "SHADOW / NON-PRODUCTION / OBJECTIVE-SOURCE-DIAGNOSTIC / NO-AUTO-PROMOTION"
 BASE = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 DERIVED = ["DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
@@ -402,6 +402,35 @@ def _derived(base,features,mapping):
     t3i=zp*.35+tpi*.20+vals["RFI"]*.15+vals["PRI"]*.10+vals["GCI"]*.08+vals["CFI"]*.07+vals["VMI"]*.05
     return {k:round(v,6) for k,v in {"DCR":dcr,"TPI":tpi,"ZAI_WIN":zw,"ZAI_PLACE":zp,"SRI":sri,"F3S":f3s,"T3I":t3i}.items()}
 
+def _dcr_readiness(features:Dict[str,Any],profile:str,mapping:Dict[str,Any])->Dict[str,Any]:
+    components={}
+    ready=True
+    for name,spec in (mapping.get("dcr") or {}).items():
+        feature=spec.get("feature")
+        fallback=spec.get("newcomer_fallback_feature")
+        source="MISSING"
+        ok=False
+        if feature and feature in features and not features[feature].get("missing",True):
+            ok=True; source="FEATURE:"+feature
+        elif profile=="NEWCOMER" and fallback and fallback in features and not features[fallback].get("missing",True):
+            ok=True; source="NEWCOMER_FALLBACK:"+fallback
+        elif profile=="NEWCOMER" and "newcomer_default_points" in spec:
+            ok=True; source="NEWCOMER_DEFAULT_POINTS"
+        components[name]={
+            "ready":ok,
+            "feature":feature,
+            "fallback_feature":fallback,
+            "source":source,
+            "max_points":spec.get("max_points"),
+        }
+        ready=ready and ok
+    return {
+        "ready":bool(ready and components),
+        "components":components,
+        "missing_components":[k for k,v in components.items() if not v["ready"]],
+    }
+
+
 def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runners:List[Dict[str,Any]],mapping:Dict[str,Any])->Dict[str,Any]:
     detail=_detail_map(source_artifact)
     history=_history_map(source_artifact)
@@ -431,6 +460,8 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
         base=_candidate_indices(feats,p,mapping)
         drv=_derived(base,feats,mapping)
         observed=sum(1 for z in feats.values() if not z["missing"])
+        dcr_ready=_dcr_readiness(feats,p,mapping)
+        base_ready=all(v["coverage_pass"] for v in base.values())
         out[rid]={
           "runner_name":x.get("horse_name"),
           "profile":p,
@@ -439,9 +470,11 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
           "missing_feature_count":len(feats)-observed,
           "features":feats,
           "base_indices":base,
+          "base_coverage_ready":base_ready,
+          "dcr_readiness":dcr_ready,
           "derived_indices":drv,
           "all_20_diagnostic_values":{**{k:v["diagnostic_neutralized_score"] for k,v in base.items()},**drv},
-          "formal_production_ready":all(v["coverage_pass"] for v in base.values()) and all(not feats[f]["missing"] for f in mapping["dcr"][k].get("feature",[]) for k in []),
+          "formal_production_ready":bool(base_ready and dcr_ready["ready"]),
         }
     # Candidate ranking is measurement-only and never alters Production roles.
     rank=sorted(
@@ -463,6 +496,7 @@ def build_source_objective_candidate(source_artifact:Dict[str,Any],request_runne
       "limitations":[
         "Diagnostic neutralized values fill missing components only for SHADOW comparability; they are never Production evidence.",
         "Observed coverage is reported separately and retains UNKNOWN as missing.",
+        "formal_production_ready requires BOTH all 13 base-index coverage gates and every DCR component to be source-ready; no vacuous DCR pass is allowed.",
         "Jockey/trainer aggregate current-year flat statistics are used only when the signed official person adapter matched current identities; venue/style/pair statistics remain missing.",
         "Pedigree population, workout, comments and market time-series still require separate signed adapters.",
         "TSL is excluded from this objective candidate and remains a separate third-party shadow."
