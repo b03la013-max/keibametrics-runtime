@@ -1,0 +1,22 @@
+{
+  "profile_id": "KM-JRA-SUPPLEMENTAL-EVIDENCE-CLOSURE-20260926-R1",
+  "status": "ACTIVE / CORRECTNESS-OPERATIONAL / NON-NUMERICAL / NO-NEW-PREDICTION-RULE / FAIL-CLOSED",
+  "family": "JRA",
+  "purpose": "Allow Venue Chat to freeze and hand off pre-race supplemental factual sources when official JRA source-only coverage is insufficient, while preserving the existing Production Evidence Rule Registry and Production Evidence-to-Base Mapping.",
+  "module": "runtime/jra_supplemental_evidence_pack.py",
+  "profile": "KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0-20260926",
+  "rules": [
+    "Supplemental sources must be captured before prediction_cutoff.",
+    "Each source must carry source_id, source_class, authority, origin, available_at, ingested_at and SHA256.",
+    "Result-derived sources/features are forbidden.",
+    "Only rule_id values already registered in JRA-EVIDENCE-FEATURE-RULE-REGISTRY-v1.1-20260922 are accepted.",
+    "Only categories already defined by JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921 are accepted.",
+    "The pack cannot create new numerical weights, mapping rules, KRS authority, MEC rules or Capital policy.",
+    "Official Signed SOURCE remains mandatory when required; supplemental evidence augments but never replaces it.",
+    "Full Numerical is claimed only after existing Production materializer closes FULL_REQUIRED."
+  ],
+  "failure_policy": "FAIL-CLOSED / NO SILENT NEUTRAL / NO UNKNOWN->WEAK / NO SHADOW AUTO-PROMOTION",
+  "production_prediction_change": false,
+  "numerical_mapping_change": false,
+  "oos_requirement": "NO NEW PREDICTIVE POLICY; OOS measurement continues on resulting frozen Production decisions."
+}
