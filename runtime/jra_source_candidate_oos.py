@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-OOS-TRACKER-v0.1-20260926"
@@ -9,7 +10,25 @@ PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-OOS-TRACKER-v0.1-20260926"
 def _sha(x:Any)->str:
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")).hexdigest()
 
+def _dt(v):
+    if not v:
+        return None
+    return datetime.fromisoformat(str(v).replace("Z","+00:00")).astimezone(timezone.utc)
+
 def pre_result_record(candidate:Dict[str,Any])->Dict[str,Any]:
+    mode=str(candidate.get("temporal_mode") or "")
+    frozen=_dt(candidate.get("candidate_frozen_at"))
+    post=_dt(candidate.get("scheduled_post_at"))
+    final_ts=_dt(candidate.get("candidate_final_receipt_timestamp"))
+    final_verified=candidate.get("candidate_final_verified") is True
+    acceptance=bool(candidate.get("acceptance_only"))
+    temporal_ok=bool(
+        mode=="FORMAL-PRE-RACE"
+        and not acceptance
+        and frozen is not None and post is not None and frozen < post
+        and final_ts is not None and final_ts < post
+        and final_verified
+    )
     x={
       "profile":PROFILE,
       "race_id":candidate.get("race_id"),
@@ -22,12 +41,17 @@ def pre_result_record(candidate:Dict[str,Any])->Dict[str,Any]:
       "roles":(candidate.get("static_prediction") or {}).get("roles"),
       "pair_dispositions":candidate.get("pair_dispositions"),
       "third_dispositions":candidate.get("third_dispositions"),
-      "temporal_mode":candidate.get("temporal_mode"),
+      "temporal_mode":mode,
       "scheduled_post_at":candidate.get("scheduled_post_at"),
       "frozen_at":candidate.get("candidate_frozen_at"),
+      "candidate_final_receipt_sha256":candidate.get("candidate_final_receipt_sha256"),
+      "candidate_final_receipt_timestamp":candidate.get("candidate_final_receipt_timestamp"),
+      "candidate_final_verified":final_verified,
+      "acceptance_only":acceptance,
       "production_effect":"NONE",
       "automatic_promotion":False,
-      "oos_eligible":bool(candidate.get("temporal_mode")=="FORMAL-PRE-RACE" and candidate.get("candidate_frozen_at") and candidate.get("scheduled_post_at")),
+      "oos_eligible":temporal_ok,
+      "oos_temporal_rule":"candidate_freeze < signed_candidate_final < scheduled_post; FORMAL-PRE-RACE; not acceptance-only",
     }
     x["sha256"]=_sha(x)
     return x
