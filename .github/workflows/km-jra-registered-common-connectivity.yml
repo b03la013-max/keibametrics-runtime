@@ -1,0 +1,58 @@
+name: JRA Registered Common Source Connectivity
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-registered-common-connectivity.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe registered common candidates
+        run: |
+          python - <<'PY'
+          import json,re,sys,urllib.request
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text,sha_obj
+          urls={
+            "NETKEIBA_OIKIRI":"https://race.netkeiba.com/race/oikiri.html?race_id=202609040812",
+            "NETKEIBA_SPEED":"https://race.netkeiba.com/race/speed.html?mode=default&race_id=202609040812&type=shutuba",
+            "DBKEIBA_JOCKEY":"https://db-keiba.com/jockey-new/?PageSpeed=noscript",
+            "DBKEIBA_TRAINER":"https://db-keiba.com/trainer-new/",
+            "DBKEIBA_DIRT_SIRE":"https://db-keiba.com/stallion-dirt-new/",
+            "DBKEIBA_HSN_D1200":"https://db-keiba.com/hanshin-dirt-1200/",
+          }
+          names=["スターウェーブ","レッドレベンディス","タイセイピューマ","ザウリ","ブルーノート","ゴールデンバランス","タイセイディアマン","インディゴアスール","シュバルツガイスト","ニホンピロカラット","キャッチアシーフ","アスゴッド","ランドスター","ヒットミー","ストロングボンド","ダズリングダンス"]
+          sires=["Kingman","クリソベリル","ディスクリートキャット","ビッグアーサー","コパノリッキー","アジアエクスプレス","ヘニーヒューズ","サンダースノー","リアルスティール","サトノアラジン","モズアスコット","ミッキーアイル","シニスターミニスター","パイロ","キズナ","ホッコータルマエ"]
+          out={}
+          for key,url in urls.items():
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja,en;q=0.3"})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      raw=r.read(8000000); ctype=r.headers.get("content-type","")
+                  dec=_decode(raw,ctype); txt=_html_text(dec); tabs=_html_tables(dec)
+                  out[key]={
+                    "status":"PASS","bytes":len(raw),"sha256":__import__("hashlib").sha256(raw).hexdigest(),
+                    "table_count":len(tabs),
+                    "runner_matches":[n for n in names if n in txt],
+                    "sire_matches":[n for n in sires if n in txt],
+                    "text_head":txt[:600]
+                  }
+              except Exception as e:
+                  out[key]={"status":"FAIL","error":type(e).__name__+":"+str(e)}
+          p=Path("runtime/diagnostics/jra_registered_common_connectivity.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/jra_registered_common_connectivity.json
+          git commit -m "diagnostic: registered common connectivity [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
