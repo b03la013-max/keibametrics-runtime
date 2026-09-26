@@ -1,0 +1,89 @@
+name: JRA Person Stats v1.1 Live Mechanical Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_runtime/jra_person_stats.py"
+      - "runtime/jra_source_runtime/jra_race_card_detail.py"
+      - ".github/workflows/km-jra-person-stats-v11-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Current-card token and person-stat mechanical acceptance
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_race_card_detail import _discover_and_fetch,parse_race_card_detail
+          from jra_person_stats import enrich_with_person_stats
+
+          raw,h,final,tokens=_discover_and_fetch("2026-09-26","0920260408",12)
+          detail=parse_race_card_detail(raw,h.get("content-type",""))
+          runners=detail["runners"]
+          assert len(runners)==16,len(runners)
+          direct_j=sum(1 for x in runners if x.get("jockey_profile_token"))
+          direct_t=sum(1 for x in runners if x.get("trainer_profile_token"))
+          horse_t=sum(1 for x in runners if x.get("horse_profile_token"))
+          assert direct_j==16,(direct_j,[x["runner_id"] for x in runners if not x.get("jockey_profile_token")])
+          assert direct_t==16,(direct_t,[x["runner_id"] for x in runners if not x.get("trainer_profile_token")])
+          assert horse_t==16,horse_t
+
+          art={
+            "family_id":"JRA",
+            "race_id":"KM-JRA-HSN-20260926-R12-PERSON-V11-POSTSTART",
+            "jra_official_race_card_detail":detail,
+            "jra_official_horse_history":{"runners":{}},
+            "sources":[]
+          }
+          art,errs=enrich_with_person_stats(
+            art,"2026-09-27T00:00:00+09:00",
+            require_person_stats=True,max_workers=2
+          )
+          p=art["jra_official_person_stats"]
+          assert not errs,errs
+          assert p["matched_jockey_count"]==16,p
+          assert p["matched_trainer_count"]==16,p
+          assert p["direct_jockey_token_count"]==16,p
+          assert p["direct_trainer_token_count"]==16,p
+          assert all((x.get("jockey") or {}).get("current_year_flat") for x in p["runners"].values()),p
+          assert all((x.get("trainer") or {}).get("current_year_flat") for x in p["runners"].values()),p
+
+          out={
+            "profile":"KM-JRA-OFFICIAL-PERSON-STATS-v1.1-LIVE-MECHANICAL-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "classification":"POST-START / MECHANICAL / NO-OOS / NO-PREDICTION-POLICY-CHANGE",
+            "target":"HSN-20260926-R12",
+            "runner_count":16,
+            "horse_token_count":horse_t,
+            "direct_jockey_token_count":direct_j,
+            "direct_trainer_token_count":direct_t,
+            "matched_jockey_count":p["matched_jockey_count"],
+            "matched_trainer_count":p["matched_trainer_count"],
+            "all_current_year_flat_stats":True,
+            "production_effect":"SOURCE FACT AVAILABILITY ONLY; CATEGORY EVALUATOR NOT PROMOTED HERE"
+          }
+          path=Path("runtime/acceptance/jra_person_stats_v11_live_mechanical.json")
+          path.parent.mkdir(parents=True,exist_ok=True)
+          path.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_person_stats_v11_live_mechanical.json
+          git commit -m "ci: persist JRA person stats v1.1 live mechanical PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
