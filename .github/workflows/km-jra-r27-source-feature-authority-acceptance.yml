@@ -1,0 +1,116 @@
+name: JRA R27 Source Feature Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R27.json"
+      - "profiles/family_runtime_contracts_20260926_R20.json"
+      - "profiles/venue_chat_routes_20260926_R25.json"
+      - "profiles/jra_source_runtime_20260926_R10.json"
+      - "profiles/jra_information_source_registry_v1.7_20260926.json"
+      - "mapping/jra_source_to_feature_policy_v1.3_20260926.json"
+      - "governance/KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R4.json"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_source_runtime/jra_person_stats.py"
+      - "runtime/jra_source_runtime/jra_race_card_detail.py"
+      - "runtime/acceptance/jra_person_stats_v11_live_mechanical.json"
+      - ".github/workflows/km-jra-r27-source-feature-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R27 source-feature authority alignment
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R27.json",encoding="utf-8"))
+          fr=json.load(open("profiles/family_runtime_contracts_20260926_R20.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R25.json",encoding="utf-8"))
+          sc=json.load(open("profiles/jra_source_runtime_20260926_R10.json",encoding="utf-8"))
+          reg=json.load(open("profiles/jra_information_source_registry_v1.7_20260926.json",encoding="utf-8"))
+          pol=json.load(open("mapping/jra_source_to_feature_policy_v1.3_20260926.json",encoding="utf-8"))
+          clo=json.load(open("governance/KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-CLOSURE-20260926-R4.json",encoding="utf-8"))
+          person=json.load(open("runtime/acceptance/jra_person_stats_v11_live_mechanical.json",encoding="utf-8"))
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R27"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R26"
+          assert ca["common_family_components"]["family_runtime_contracts"]==fr["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert j["source_runtime_contract"]==sc["profile_id"]
+          assert j["information_source_registry"]==reg["profile_id"]
+          assert j["source_to_feature_policy"]==pol["policy_id"]
+          assert j["source_to_feature_closure"]==clo["profile_id"]
+          assert j["source_to_evidence_feature_compiler"]=="KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.3-20260926"
+          assert j["source_to_feature_acceptance_run"]==36235275562
+          assert j["official_person_stats"]=="KM-JRA-OFFICIAL-PERSON-STATS-v1.1-20260926"
+          assert person["status"]=="PASS"
+          assert person["direct_jockey_token_count"]==16
+          assert person["direct_trainer_token_count"]==16
+          assert person["matched_jockey_count"]==16
+          assert person["matched_trainer_count"]==16
+
+          safe=j["current_safe_production_autofill"]
+          assert len(safe)==5,safe
+          non=j["explicit_nonpromotions"]
+          assert any("stable_readiness" in x for x in non)
+          assert any("jockey_quality" in x and "trainer_quality" in x for x in non)
+          assert any("same_day_track_fit" in x for x in non)
+
+          src=Path("runtime/jra_source_to_evidence_features.py").read_text(encoding="utf-8")
+          assert 'POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"' in src
+          assert 'out["stable_readiness"]' not in src
+          assert 'JRA-BODYWEIGHT-DELTA-BAND-v1' in src
+          assert 'JRA-MARKET-RANK-BAND-v1' in src
+          assert 'JRA-WORKOUT-CAPABILITY-COMMENT-v1' in src
+
+          assert ca["supersession_declaration"]["production_feature_materialization_change"] is True
+          assert ca["supersession_declaration"]["predictive_model_formula_change"] is False
+          assert ca["supersession_declaration"]["base_index_weight_change"] is False
+          assert ca["supersession_declaration"]["derived_index_formula_change"] is False
+          assert ca["supersession_declaration"]["krs_authority_change"] is False
+          assert ca["supersession_declaration"]["mec_policy_change"] is False
+          assert ca["supersession_declaration"]["capital_policy_change"] is False
+          assert ca["supersession_declaration"]["source_only_full_numerical_ready"] is False
+          assert ca["supersession_declaration"]["unknown_future_empirical_acceptance"]=="PENDING"
+
+          out={
+            "profile":"KM-JRA-R27-SOURCE-FEATURE-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "source_runtime":j["source_runtime_profile"],
+            "source_contract":sc["profile_id"],
+            "source_registry":reg["profile_id"],
+            "source_to_feature_policy":pol["policy_id"],
+            "source_to_feature_closure":clo["profile_id"],
+            "person_stats":"16/16 jockey + 16/16 trainer",
+            "safe_production_autofill_count":len(safe),
+            "source_only_full_numerical_ready":False,
+            "unknown_future_empirical_acceptance":"PENDING",
+            "prediction_formula_change":False,
+            "base_index_weight_change":False,
+            "krs_mec_capital_change":False
+          }
+          p=Path("runtime/acceptance/jra_r27_source_feature_authority.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r27_source_feature_authority.json
+          git commit -m "ci: persist JRA R27 source-feature authority PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
