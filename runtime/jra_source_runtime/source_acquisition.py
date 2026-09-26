@@ -32,7 +32,6 @@ DEFAULT_ALLOWED_HOSTS = [
     "jra.k-ba.net",
     # Registered JRA common factual source (explicit paths validated by adapter).
     "race.netkeiba.com",
-    "db.netkeiba.com",
 ]
 
 
