@@ -1,0 +1,77 @@
+name: JRA R26 Source Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R26.json"
+      - "profiles/family_runtime_contracts_20260926_R19.json"
+      - "profiles/venue_chat_routes_20260926_R24.json"
+      - "profiles/jra_source_runtime_20260926_R9.json"
+      - "profiles/jra_information_source_registry_v1.6_20260926.json"
+      - "runtime/jra_source_runtime/source_acquisition.py"
+      - ".github/workflows/km-jra-r26-source-authority-acceptance.yml"
+  workflow_dispatch:
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify R26 source authority normalization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R26.json",encoding="utf-8"))
+          fr=json.load(open("profiles/family_runtime_contracts_20260926_R19.json",encoding="utf-8"))
+          vr=json.load(open("profiles/venue_chat_routes_20260926_R24.json",encoding="utf-8"))
+          sc=json.load(open("profiles/jra_source_runtime_20260926_R9.json",encoding="utf-8"))
+          reg=json.load(open("profiles/jra_information_source_registry_v1.6_20260926.json",encoding="utf-8"))
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R26"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R25"
+          assert ca["common_family_components"]["family_runtime_contracts"]==fr["profile_id"]
+          assert ca["common_family_components"]["venue_routing"]==vr["profile_id"]
+          j=ca["family_scoped_authority"]["JRA"]
+          assert j["source_runtime_profile"]=="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
+          assert j["source_runtime_contract"]==sc["profile_id"]
+          assert j["information_source_registry"]==reg["profile_id"]
+          assert fr["families"]["JRA"]["source_runtime_contract"]==sc["profile_id"]
+          assert vr["jra_source_first"]["information_source_registry"]==reg["profile_id"]
+          assert sc["information_source_registry"]==reg["profile_id"]
+          assert reg["registered_jra_common"]["hosts"]==["race.netkeiba.com"]
+          assert reg["official_same_day_result_detail"]["authority"]=="JRA_OFFICIAL"
+          assert reg["official_same_day_result_detail"]["scope"]=="Only races with race_no < target race_no"
+          src=Path("runtime/jra_source_runtime/source_acquisition.py").read_text(encoding="utf-8")
+          assert '"race.netkeiba.com"' in src
+          assert '"db.netkeiba.com"' not in src
+          assert ca["supersession_declaration"]["predictive_model_change"] is False
+          assert ca["supersession_declaration"]["numerical_policy_change"] is False
+          out={
+            "profile":"KM-JRA-R26-SOURCE-AUTHORITY-ACCEPTANCE-20260926",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "source_runtime":j["source_runtime_profile"],
+            "source_contract":sc["profile_id"],
+            "source_registry":reg["profile_id"],
+            "registered_common_hosts":["race.netkeiba.com"],
+            "db_netkeiba_production_authority":False,
+            "prediction_policy_change":False,
+            "numerical_policy_change":False
+          }
+          p=Path("runtime/acceptance/jra_r26_source_authority.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_r26_source_authority.json
+          git commit -m "ci: persist JRA R26 source authority PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
