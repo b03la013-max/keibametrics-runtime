@@ -1,0 +1,64 @@
+name: JRA HSN12 Production Coverage Diagnostic
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn12-production-coverage.yml"
+  workflow_dispatch:
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Measure source-only production closure
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260926-R12-LIVE-R2/SOURCE/runs/36226047250/source_receipt_envelope.json",encoding="utf-8"))
+          mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+          report=build_zero_touch_source_index_report(env["artifact"],mapping)
+          out={
+            "race_id":report["race_id"],
+            "source_snapshot_sha256":report["source_snapshot_sha256"],
+            "runner_count":report["runner_count"],
+            "production_source_only_formal_base_ready":report["production_source_only_formal_base_ready"],
+            "production_status":report["production_status"],
+            "production_error":report["production_error"],
+            "missing_source_families":report["missing_source_families"],
+            "per_runner_coverage":report["per_runner_coverage"],
+            "objective_candidate_ranking":(report.get("objective_shadow") or {}).get("candidate_ranking"),
+            "objective_runner_summary":{
+              rid:{
+                "runner_name":rr.get("runner_name"),
+                "observed_feature_count":rr.get("observed_feature_count"),
+                "missing_feature_count":rr.get("missing_feature_count"),
+                "base_indices":{k:{
+                  "observed_weight":v.get("observed_weight"),
+                  "minimum_required_weight":v.get("minimum_required_weight"),
+                  "coverage_pass":v.get("coverage_pass"),
+                  "observed_score":v.get("observed_score")
+                } for k,v in (rr.get("base_indices") or {}).items()}
+              } for rid,rr in ((report.get("objective_shadow") or {}).get("runners") or {}).items()
+            }
+          }
+          p=Path("runtime/diagnostics/hsn12_production_coverage.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist diagnostic
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn12_production_coverage.json
+          if ! git diff --cached --quiet; then
+            git commit -m "diagnostic: HSN12 production source coverage [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
