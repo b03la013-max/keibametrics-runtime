@@ -1,0 +1,42 @@
+name: JRA Netkeiba DB Sire Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-netkeiba-db-sire-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - run: |
+          python - <<'PY'
+          import json,urllib.request,sys,re
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          urls={
+            "Kingman":"https://db.netkeiba.com/horse/sire/000a0124ab/",
+            "search":"https://db.netkeiba.com/?pid=horse_list&word=%A5%AD%A5%BA%A5%CA"
+          }
+          out={}
+          for k,url in urls.items():
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 KeibaMetrics/1.0","Accept-Language":"ja"})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                raw=r.read(5000000);ct=r.headers.get("content-type","")
+              dec=_decode(raw,ct);tabs=_html_tables(dec);txt=_html_text(dec)
+              out[k]={"status":"PASS","bytes":len(raw),"table_count":len(tabs),"tables":tabs[:12],"text_head":txt[:5000],"final_url":url}
+            except Exception as e: out[k]={"status":"FAIL","error":type(e).__name__+":"+str(e)}
+          p=Path("runtime/diagnostics/netkeiba_db_sire_probe.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - run: |
+          git config user.name "keibametrics-runtime";git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/netkeiba_db_sire_probe.json
+          git commit -m "diagnostic: db.netkeiba sire source [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
