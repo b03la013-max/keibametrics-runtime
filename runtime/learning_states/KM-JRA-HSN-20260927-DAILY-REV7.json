@@ -1,0 +1,111 @@
+{
+  "profile": "KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921",
+  "state_id": "KM-JRA-HSN-20260927-DAILY-REV7-LEARNING-NEXT",
+  "venue": "HSN",
+  "source_scope": "2026-09-27 R05-R12",
+  "status": "PREQUENTIAL-NEXT-RACE-ONLY / NO-PRODUCTION-RULE-CHANGE",
+  "source_review": "runtime/daily_reviews/KM-JRA-HSN-20260927-R05-R12-REV7.json",
+  "source_review_blob_sha": "f0b7c9f5d9f70be1b05b324a73a85f35d5c98a65",
+  "source_canon_audit": "runtime/venue_audits/KM-JRA-HSN-20260927-REV7-CANON-AUDIT.json",
+  "production_change_authorized": false,
+  "canon_revision_authorized": false,
+  "immediate_correctness": [
+    "KEEP candidate-only RESULT binding independent of Production FINAL when Candidate lineage is valid.",
+    "KEEP immutable OOS tracker rebuild from result_evaluation artifacts.",
+    "KEEP Source→Feature→Index→Static trace and separate Candidate PFS measurement."
+  ],
+  "next_race_measurement_priorities": [
+    "W / Role discrimination",
+    "Head-local P2 / Ordered Pair discrimination",
+    "P3 / Third discovery",
+    "KRS Unique Rescue versus Harm and proposal width",
+    "KRS rescue-to-ticket downstream continuity",
+    "CORE/PROTECTION/TAIL capital density and MEC-R4 counterfactual",
+    "Robust PFS, largest-win dependency and bet-type PFS"
+  ],
+  "shadow_candidates": [
+    {
+      "id": "HSN-SHADOW-KRS-ROBUST-A-DOWNSTREAM",
+      "owner": "COMMON KRS / ORDER-ROLE / TICKET",
+      "hypothesis": "A pre-result KRS Robust-A alternative winner may add material utility only if its head-local P2 and exact downstream path are frozen separately; it must not overwrite Static W.",
+      "primary_fixture": "KM-JRA-HSN-20260927-R07",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-BOUNDED-TOP3-SET",
+      "owner": "COMMON SEMANTIC / MEC",
+      "hypothesis": "When the semantic universe strongly contains the eventual Top3 but W discrimination is weak, a bounded set-oriented shadow may preserve useful unordered coverage without unbounded candidate expansion.",
+      "primary_fixtures": [
+        "KM-JRA-HSN-20260927-R05",
+        "KM-JRA-HSN-20260927-R08"
+      ],
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-NEWCOMER-UNCERTAINTY",
+      "owner": "COMMON PREDICTION / CAPITAL",
+      "hypothesis": "Newcomer races require explicit uncertainty measurement; compare normal role/order conversion against uncertainty-aware shadow without post-result widening.",
+      "primary_fixtures": [
+        "KM-JRA-HSN-20260927-R05",
+        "KM-JRA-HSN-20260927-R06"
+      ],
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-HEAD-LOCAL-P2",
+      "owner": "COMMON PREDICTION / ORDER-ROLE",
+      "hypothesis": "Second-place reachability must be evaluated per active winner head; continue the existing Rev.4 alternative-winner/head-local-P2 hypothesis instead of creating a new architecture.",
+      "primary_fixtures": [
+        "KM-JRA-HSN-20260927-R09",
+        "KM-JRA-HSN-20260927-R12"
+      ],
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-P3-TAIL-BORDER",
+      "owner": "VENUE HYPOTHESIS / COMMON THIRD",
+      "hypothesis": "Continue Hanshin P3/Tail OOS observation for third-place discovery using venue mechanisms already defined in Rev.4; do not add a fixed third count.",
+      "primary_fixture": "KM-JRA-HSN-20260927-R11",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-CURRENT-STATE-REFRESH",
+      "owner": "SOURCE / TEMPORAL EXECUTION",
+      "hypothesis": "Where material weather/going changes occur between early source freeze and post time, evaluate a bounded pre-post current-state refresh without rewriting historical evidence.",
+      "primary_fixture": "KM-JRA-HSN-20260927-R11",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "HSN-SHADOW-CAPITAL-BETTYPE",
+      "owner": "MEC / CAPITAL / PFS",
+      "hypothesis": "Compare existing preregistered MEC-R4 arms and bet-type economics; current single-day TRIFECTA=0 and TAIL=0 are research observations only.",
+      "primary_scope": "2026-09-27 HSN R05-R12",
+      "production_effect": "NONE"
+    }
+  ],
+  "forbidden": [
+    "RETROACTIVE_PREDICTION_REWRITE",
+    "AUTOMATIC_NUMERIC_WEIGHT_CHANGE",
+    "RESULT_DERIVED_FEATURE_REWRITE",
+    "IMMEDIATE_HANSIN_FIXED_BONUS",
+    "IMMEDIATE_TAIL_DELETION",
+    "IMMEDIATE_TRIFECTA_BAN",
+    "AUTOMATIC_KRS_RESCUE_PURCHASE",
+    "NEW_VENUE_VALIDATOR_FOR_COMMON_FAILURE"
+  ],
+  "reference_metrics": {
+    "winner_in_any_semantic_role_rate": 0.875,
+    "static_winner_capture_rate": 0.375,
+    "static_plus_krs_winner_capture_rate": 0.5,
+    "p2_capture_rate": 0.5,
+    "p3_capture_rate": 0.625,
+    "ordered_pair_capture_rate": 0.125,
+    "ordered_exact_capture_rate": 0,
+    "candidate_frozen_recommendation_pfs": 274.814814815,
+    "largest_win_excluded_pfs": 65.120481928,
+    "largest_return_share": 0.79187524,
+    "candidate_oos_count": 15,
+    "krs_oos_count": 4,
+    "mec_r4_oos_count": 3
+  }
+}
