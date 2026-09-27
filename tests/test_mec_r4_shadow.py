@@ -96,3 +96,18 @@ def test_source_candidate_final_can_freeze_same_r4_shadow_arms_without_productio
     assert sh["source_final_receipt_sha256"]=="CANDIDATERECEIPT"
     assert sh["arms"]["CORE_ONLY"]["ticket_count"]==2
     assert sh["arms"]["CORE_PROTECTION"]["generic_tail_capital_avoided"]==100
+
+
+def test_candidate_result_winning_ticket_payout_can_settle_frozen_subset():
+    candidate_result={
+      "official_result":{"status":"OFFICIAL","top3":[1,2,3]},
+      "settlement":{"status":"SETTLED","winning_tickets":[
+        {"bet_type":"TRIO","selection":[1,2,3],"stake":100,"payout_per_100":900,"payout":900}
+      ]}
+    }
+    s=settle_ticket_list([
+      {"bet_type":"TRIO","selection":[1,2,3],"stake":100}
+    ],candidate_result)
+    assert s["status"]=="SETTLED"
+    assert s["return"]==900
+    assert s["pfs"]==900
