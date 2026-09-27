@@ -1,0 +1,63 @@
+name: NKY 20260927 Candidate Result Bind
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-nky-20260927-candidate-result-bind.yml"
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bind official top3 to immutable pre-result Candidate OOS
+        run: |
+          python - <<'PY'
+          import json,os,sys
+          sys.path.insert(0,"runtime")
+          from jra_source_candidate_oos import evaluate_result
+          from jra_source_candidate_promotion_gate import bind_result,evaluate
+          actual={
+            "KM-JRA-NKY-20260927-R03":[4,1,3],
+            "KM-JRA-NKY-20260927-R05":[3,6,4],
+            "KM-JRA-NKY-20260927-R06":[11,5,3],
+            "KM-JRA-NKY-20260927-R07":[3,10,1],
+            "KM-JRA-NKY-20260927-R08":[11,15,2],
+            "KM-JRA-NKY-20260927-R09":[3,7,2],
+            "KM-JRA-NKY-20260927-R12":[7,4,2],
+          }
+          root="runtime/source_candidate_oos"
+          written=[]
+          for rid,top3 in actual.items():
+              p=os.path.join(root,rid,"pre_result.json")
+              if not os.path.exists(p):
+                  raise SystemExit("PRE_RESULT_MISSING:"+rid)
+              with open(p,encoding="utf-8") as f: pre=json.load(f)
+              ev=evaluate_result(pre,top3)
+              bound=bind_result(pre,ev)
+              out=os.path.join(root,rid,"result_evaluation.json")
+              with open(out,"w",encoding="utf-8") as f:
+                  json.dump(bound,f,ensure_ascii=False,sort_keys=True,indent=2)
+              written.append({"race_id":rid,"evaluation":ev})
+          records=[]
+          for d in sorted(os.listdir(root)):
+              rp=os.path.join(root,d,"result_evaluation.json")
+              if not os.path.exists(rp): continue
+              try:
+                  with open(rp,encoding="utf-8") as f: records.append(json.load(f))
+              except Exception: pass
+          status=evaluate(records)
+          with open("runtime/source_candidate_oos_status.json","w",encoding="utf-8") as f:
+              json.dump(status,f,ensure_ascii=False,sort_keys=True,indent=2)
+          print(json.dumps({"written":written,"status":status},ensure_ascii=False))
+          PY
+      - name: Persist measurement-only artifacts
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/source_candidate_oos/KM-JRA-NKY-20260927-R*/result_evaluation.json runtime/source_candidate_oos_status.json
+          git commit -m "measurement: bind NKY 20260927 Candidate OOS results [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
