@@ -11,6 +11,8 @@ on:
       - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R7.json"
       - "profiles/venue_chat_routes_20260928_R31.json"
       - "profiles/family_runtime_contracts_20260928_R23.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R10.json"
+      - "profiles/current_execution_gateway.json"
       - "profiles/family_scope_ownership_20260928_R1.json"
       - "profiles/family_formal_lifecycle_contract_20260928_R1.json"
       - "profiles/family_maturity_promotion_20260928_R1.json"
@@ -60,6 +62,8 @@ jobs:
           ep=load("profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R7.json")
           route=load("profiles/venue_chat_routes_20260928_R31.json")
           runtime=load("profiles/family_runtime_contracts_20260928_R23.json")
+          local_suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R10.json")
+          gateway=load("profiles/current_execution_gateway.json")
           scope=load("profiles/family_scope_ownership_20260928_R1.json")
           lifecycle=load("profiles/family_formal_lifecycle_contract_20260928_R1.json")
           promotion=load("profiles/family_maturity_promotion_20260928_R1.json")
@@ -85,6 +89,23 @@ jobs:
           assert runtime["formal_lifecycle_contract"]==lifecycle["profile_id"]
           assert runtime["maturity_promotion_contract"]==promotion["profile_id"]
           assert runtime["production_numerical_change"] is False
+          assert local_suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260928-R10"
+          assert local_suite["family_current_authority"]==ca["manifest_id"]
+          assert local_suite["execution_architecture"]==ep["profile_id"]
+          assert local_suite["venue_routing"]==route["profile_id"]
+          assert local_suite["runtime"]["contract"]==runtime["profile_id"]
+          assert local_suite["production_numeric_suite"]["numerical_change"] is False
+          assert gateway["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.2-20260928"
+          assert gateway["parent_current_authority"]==ca["manifest_id"]
+          assert gateway["venue_routing"]==route["profile_id"]
+          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260928_R23.json"
+          assert gateway["policy"]["family_authority_guard_required"] is True
+          assert gateway["policy"]["production_prediction_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_policy_changed"] is False
+          assert runtime["families"]["LOCAL"]["suite_manifest"]==local_suite["manifest_id"]
+          assert runtime["families"]["LOCAL"]["venue_routing"]==route["profile_id"]
+          assert cc["local_suite_manifest"]==local_suite["manifest_id"]
+          assert cc["local_execution_gateway"]==gateway["profile_id"]
 
           for name in scope["common_reserved_scopes"]:
               assert scope["scopes"][name]["owner"]=="COMMON_FAMILY", name
