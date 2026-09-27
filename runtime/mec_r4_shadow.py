@@ -244,7 +244,13 @@ def _payout(result,bet_type,top3):
     # recommendation's winning_tickets. Use it when the winning combination
     # is the same; never infer a payout for an unseen shadow-only winner.
     settlement=result.get("settlement") or {}
-    target=_key(bt,targets[bt])
+    if bt=="EXACTA":
+        target_selection=[w,s]
+    elif bt=="TRIO":
+        target_selection=sorted([w,s,t])
+    else:
+        target_selection=[w,s,t]
+    target=_key(bt,target_selection)
     for row in settlement.get("winning_tickets") or []:
         if str(row.get("bet_type") or "").upper()!=bt:
             continue
