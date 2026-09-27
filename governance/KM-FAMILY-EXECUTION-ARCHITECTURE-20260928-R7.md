@@ -23,6 +23,8 @@ R7はPrediction Model、指数式、Weight、KRS Engine physics、parameter_map�
 ```text
 CANON_RESOLVE
 → SCOPE_OWNERSHIP_RESOLVE
+→ RACE_IDENTITY_RESOLVE
+→ PREDICTION_CUTOFF_FREEZE
 → REQUIRED_SOURCE_MANIFEST
 → EXTERNAL_SOURCE_ACQUISITION
 → RAW_SOURCE_SNAPSHOT
@@ -31,6 +33,7 @@ CANON_RESOLVE
 → SOURCE_FREEZE
 → SIGNED_SOURCE_RECEIPT
 → FULL_RUNNER_UNIVERSE
+→ EVIDENCE_FEATURE_COMPILATION
 → EVIDENCE_FEATURE_LEDGER
 → REQUIRED_INDEX_MANIFEST
 → ACTUAL_NUMERICAL_MATERIALIZATION
@@ -39,14 +42,18 @@ CANON_RESOLVE
 → STATIC_PREDICTION_FREEZE
 → PRE_KRS
 → KRS_EXECUTE
+→ KRS_RECEIPT_VERIFY
 → KRS_UTILITY_CAPTURE
 → FINAL_ROLE_PAIR_THIRD
 → PRECOMPRESSION_SEMANTIC_UNIVERSE
 → MEC
+→ TICKET_CONSTRUCTION
 → CAPITAL_POLICY
 → CANONICAL_TICKET
+→ MANDATORY_STAGE_MANIFEST_VERIFY
 → FINAL_FREEZE
 → SIGNED_FINAL
+→ FINAL_BEFORE_POST_VERIFY
 → SIGNED_RESULT
 → SETTLEMENT
 → PREDICTION_UTILITY_MEASUREMENT
@@ -84,7 +91,7 @@ Schema/Interface/Receipt/Temporal/Measurement/Test HarnessはCommon化可能。
 
 ## 6. Formal-Full
 
-TerminalizedとNumerically Calculatedを分離する。FULL_REQUIREDではRequired Index Cellが全てCALCULATEDでなければFORMAL-FULLを名乗らない。
+TerminalizedとNumerically Calculatedを分離する。FULL_REQUIREDではRequired Index Cellが全てCALCULATEDでなければFORMAL-FULLを名乗らない。さらに Race Identity、Prediction Cutoff、KRS Receipt Verify、Ticket Construction、Mandatory Stage Manifest、FINAL-before-post Verifyを独立Stageとして完了し、暗黙包含で代用しない。
 
 Verified Signed Receipt > External Runtime Response > Immutable Ledger > Internal Log > Self Declaration。
 
