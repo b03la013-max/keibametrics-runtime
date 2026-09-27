@@ -31,6 +31,15 @@ SENSITIVE_KEY_TOKENS = (
     "numerical_materializer",
     "krs_input_adapter",
     "krs_input_builder",
+    "base_index_registry",
+    "numerical_mapping_registry",
+    "source_manifest_adapter",
+    "official_runner_adapter",
+    "mapping_id",
+    "adapter_identity",
+    "runtime_expected_revision",
+    "resolved_runtime_profile",
+    "runtime_profile",
 )
 
 PRODUCTION_AUTHORITY_KEY_TOKENS = (
@@ -43,6 +52,15 @@ PRODUCTION_AUTHORITY_KEY_TOKENS = (
     "numerical_materializer",
     "krs_input_adapter",
     "krs_input_builder",
+    "base_index_registry",
+    "numerical_mapping_registry",
+    "source_manifest_adapter",
+    "official_runner_adapter",
+    "mapping_id",
+    "adapter_identity",
+    "runtime_expected_revision",
+    "resolved_runtime_profile",
+    "runtime_profile",
 )
 
 NONPRODUCTION_MARKERS = ("CANDIDATE", "SHADOW", "NON-PRODUCTION", "NON_PRODUCTION")
@@ -106,6 +124,53 @@ def load_scope_contract(authority: Dict[str, Any]) -> Dict[str, Any]:
 
 def load_lifecycle_contract(authority: Dict[str, Any]) -> Dict[str, Any]:
     return _load_json(_contract_path(authority, "formal_lifecycle_profile"))
+
+
+def load_maturity_contract(authority: Dict[str, Any]) -> Dict[str, Any]:
+    return _load_json(_contract_path(authority, "maturity_promotion_profile"))
+
+
+def validate_contract_bindings(
+    authority: Dict[str, Any],
+    scope: Dict[str, Any],
+    lifecycle: Dict[str, Any],
+    maturity: Dict[str, Any],
+) -> None:
+    common = authority.get("common_family_components") or {}
+    expected = {
+        "scope_ownership_contract": scope.get("profile_id"),
+        "formal_lifecycle_contract": lifecycle.get("profile_id"),
+        "maturity_promotion_contract": maturity.get("profile_id"),
+    }
+    for key, actual_profile in expected.items():
+        declared = str(common.get(key) or "")
+        if not declared:
+            raise FamilyAuthorityError(f"CURRENT_AUTHORITY_CONTRACT_ID_MISSING:{key}")
+        if declared != str(actual_profile or ""):
+            raise FamilyAuthorityError(
+                f"CURRENT_AUTHORITY_CONTRACT_ID_MISMATCH:{key}:{declared}!={actual_profile}"
+            )
+
+
+def validate_maturity_contract(maturity: Dict[str, Any]) -> Dict[str, Any]:
+    if maturity.get("automatic_promotion") is not False:
+        raise FamilyAuthorityError("MATURITY_AUTOMATIC_PROMOTION_MUST_BE_FALSE")
+    classes = maturity.get("promotion_classes") or {}
+    for key in ("C0_SCHEMA_INTERFACE", "C1_EXECUTION_CORRECTNESS", "C2_DECISION_POLICY", "C3_NUMERICAL_MODEL"):
+        if key not in classes:
+            raise FamilyAuthorityError(f"MATURITY_PROMOTION_CLASS_MISSING:{key}")
+    if (classes["C2_DECISION_POLICY"] or {}).get("unknown_oos_required") is not True:
+        raise FamilyAuthorityError("MATURITY_C2_UNKNOWN_OOS_NOT_REQUIRED")
+    c3 = classes["C3_NUMERICAL_MODEL"] or {}
+    if c3.get("unknown_oos_required") is not True:
+        raise FamilyAuthorityError("MATURITY_C3_UNKNOWN_OOS_NOT_REQUIRED")
+    if c3.get("cross_family_direct_promotion_forbidden") is not True:
+        raise FamilyAuthorityError("MATURITY_C3_CROSS_FAMILY_DIRECT_PROMOTION_NOT_FORBIDDEN")
+    return {
+        "maturity_profile": maturity.get("profile_id"),
+        "promotion_class_count": len(classes),
+        "automatic_promotion": False,
+    }
 
 
 def validate_scope_contract(scope: Dict[str, Any]) -> Dict[str, Any]:
@@ -279,9 +344,12 @@ def validate_request_context(
     authority_file, authority = load_authority(authority_path)
     scope = load_scope_contract(authority)
     lifecycle = load_lifecycle_contract(authority)
+    maturity = load_maturity_contract(authority)
 
+    validate_contract_bindings(authority, scope, lifecycle, maturity)
     scope_check = validate_scope_contract(scope)
     lifecycle_check = validate_lifecycle_contract(lifecycle)
+    maturity_check = validate_maturity_contract(maturity)
 
     family = infer_family(req, request_path)
     temporal_mode = str(req.get("temporal_mode") or "FORMAL-PRE-RACE")
@@ -313,9 +381,11 @@ def validate_request_context(
         "current_authority_path": str(authority_file.relative_to(ROOT)),
         "scope_ownership_contract": scope.get("profile_id"),
         "formal_lifecycle_contract": lifecycle.get("profile_id"),
+        "maturity_promotion_contract": maturity.get("profile_id"),
         "explicit_scope_binding_count": binding_count,
         **scope_check,
         **lifecycle_check,
+        **maturity_check,
         **isolation,
     }
 
