@@ -147,6 +147,20 @@ jobs:
               with open(os.path.join(cdir,"result_evaluation.json"),"w",encoding="utf-8") as fh:
                   json.dump(source_candidate_result,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
+              candidate_shadow_path=os.path.join(cdir,"mec_r4_shadow_pre_result.json")
+              if os.path.exists(candidate_shadow_path):
+                  with open(candidate_shadow_path,encoding="utf-8") as fh:
+                      candidate_shadow=json.load(fh)
+                  candidate_final_path=os.path.join(cdir,"candidate_final.json")
+                  assert os.path.exists(candidate_final_path), "SOURCE_CANDIDATE_FINAL_MISSING_FOR_MEC_R4"
+                  with open(candidate_final_path,encoding="utf-8") as fh:
+                      candidate_final=json.load(fh)
+                  assert candidate_shadow.get("source_immutable_final_sha256")==candidate_final.get("sha256"), "SOURCE_CANDIDATE_MEC_R4_FINAL_LINEAGE_MISMATCH"
+                  candidate_shadow_result=settle_mec_r4_shadow(candidate_shadow,p)
+                  with open(os.path.join(cdir,"mec_r4_shadow_result.json"),"w",encoding="utf-8") as fh:
+                      json.dump(candidate_shadow_result,fh,ensure_ascii=False,sort_keys=True,indent=2)
+                  shadow_settlement=candidate_shadow_result
+
               candidate_records=[]
               root=os.path.join("runtime","source_candidate_oos")
               if os.path.isdir(root):
@@ -188,7 +202,9 @@ jobs:
           else:
               r30={}
               mec_r4_oos={}
-              pfs_grand={}
+              # Candidate OOS PFS is refreshed into a strictly separate block;
+              # Production/Formal PFS cohorts are not altered.
+              pfs_grand=write_pfs_grand_review()
 
           summary={
             "race_id":p["race_id"],
