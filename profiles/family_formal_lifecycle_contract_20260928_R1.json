@@ -4,7 +4,7 @@
   "effective_at": "2026-09-28T00:33:00+09:00",
   "predecessor": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6 lifecycle semantics",
   "purpose": "Define the minimum complete Family-wide Formal lifecycle while leaving source adapters, numerical mappings and venue predictive knowledge to their owning scopes.",
-  "temporal_invariant": "RACE_IDENTITY_RESOLVE <= PREDICTION_CUTOFF_FREEZE; SOURCE_START <= SOURCE_FREEZE <= PREDICTION_CUTOFF_FREEZE <= STATIC_PREDICTION_FREEZE <= PRE_KRS < FINAL_FREEZE < SCHEDULED_POST; FINAL_BEFORE_POST_VERIFY requires SIGNED_FINAL timestamp < scheduled_post_at",
+  "temporal_invariant": "CANON_RESOLVE <= SCOPE_OWNERSHIP_RESOLVE <= RACE_IDENTITY_RESOLVE <= PREDICTION_CUTOFF_FREEZE; SOURCE_START <= SOURCE_FREEZE <= PREDICTION_CUTOFF_FREEZE <= STATIC_PREDICTION_FREEZE <= PRE_KRS < FINAL_FREEZE < SCHEDULED_POST; FINAL_BEFORE_POST_VERIFY requires SIGNED_FINAL timestamp < scheduled_post_at",
   "execution_evidence_priority": [
     "VERIFIED_SIGNED_RECEIPT",
     "EXTERNAL_RUNTIME_RESPONSE",
@@ -20,6 +20,12 @@
       "signed_receipt_required": false
     },
     {
+      "stage_id": "SCOPE_OWNERSHIP_RESOLVE",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
       "stage_id": "RACE_IDENTITY_RESOLVE",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
@@ -27,12 +33,6 @@
     },
     {
       "stage_id": "PREDICTION_CUTOFF_FREEZE",
-      "owner_class": "COMMON_FAMILY",
-      "pre_race_required": true,
-      "signed_receipt_required": false
-    },
-    {
-      "stage_id": "SCOPE_OWNERSHIP_RESOLVE",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
       "signed_receipt_required": false
