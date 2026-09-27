@@ -63,10 +63,10 @@ def _race_header_priority(line:Any,race_no:int)->int|None:
     return None
 
 def _race_label_number(v:Any)->int|None:
-    s=re.sub(r"\\s+","",_clean_line(v)).upper()
-    m=re.fullmatch(r"R(\\d{1,2})",s)
+    s=re.sub(r"\s+","",_clean_line(v)).upper()
+    m=re.fullmatch(r"R(\d{1,2})",s)
     if m:return int(m.group(1))
-    m=re.fullmatch(r"(\\d{1,2})R",s)
+    m=re.fullmatch(r"(\d{1,2})R",s)
     if m:return int(m.group(1))
     return None
 
