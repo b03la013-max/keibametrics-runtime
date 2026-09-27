@@ -225,3 +225,82 @@ def test_registered_common_race_id_derives_from_jra_meeting_key():
     rid,snap=_discover_race_id("HSN","2026-09-26",12,"2026-09-26T16:20:00+09:00","0920260408")
     assert rid=="202609040812"
     assert snap is None
+
+
+def test_jra_official_pdf_parser_prefers_explicit_r_prefix_header():
+    from jra_official_pdf import parse_runner_universe_from_pages
+    page="""NEWCOMER YO2
+（3頭）
+（外・右・芝Turf）
+R4 メイクデビュー中山
+馬齢重量
+白
+1
+牝2
+F2
+鹿53
+（2023年）
+リゼスカーレット
+小林
+美駒
+Rize Scarlet（JPN）
+黒
+2
+牝2
+F2
+鹿54
+（2024年）
+アイファーティアラ
+長浜
+鴻緒
+Eifer Tiara（JPN）
+赤
+3
+牝2
+F2
+鹿55
+（1996年）
+マルジョレーヌ
+柴田
+大知
+Marjolaine（JPN）
+コース
+レコード
+"""
+    u=parse_runner_universe_from_pages([page],4)
+    assert [(x["horse_no"],x["name"]) for x in u["runners"]]==[
+        (1,"リゼスカーレット"),(2,"アイファーティアラ"),(3,"マルジョレーヌ")
+    ]
+
+
+def test_jra_horse_history_accepts_official_no_prior_runs():
+    from jra_horse_history import parse_horse_history
+    raw="""<html><body><h1>競走馬情報 リゼスカーレット</h1>
+    <div>出走レース</div><p>該当するデータがありません。</p>
+    </body></html>""".encode("utf-8")
+    x=parse_horse_history(raw,"text/html; charset=utf-8")
+    assert x["status"]=="NO_PRIOR_RUNS"
+    assert x["run_count"]==0
+    assert x["runs"]==[]
+
+
+def test_registered_common_workout_selects_official_universe_matching_table():
+    from jra_registered_common import parse_workout
+    raw="""<html><body>
+    <table>
+      <tr><th>馬番</th><th>馬名</th><th>評価</th></tr>
+      <tr><td>1</td><td>ドナチャージ</td><td>B</td></tr>
+      <tr><td>2</td><td>エコロブラン</td><td>C</td></tr>
+    </table>
+    <table>
+      <tr><th>馬番</th><th>馬名</th><th>評価</th></tr>
+      <tr><td>1</td><td>リゼスカーレット</td><td>B</td></tr>
+      <tr><td>2</td><td>アイファーティアラ</td><td>C</td></tr>
+    </table>
+    </body></html>""".encode("utf-8")
+    official={"runners":[
+      {"horse_no":1,"name":"リゼスカーレット"},
+      {"horse_no":2,"name":"アイファーティアラ"},
+    ]}
+    x=parse_workout(raw,"text/html; charset=utf-8",official)
+    assert [r["horse_name"] for r in x["runners"]]==["リゼスカーレット","アイファーティアラ"]
