@@ -9,6 +9,7 @@ from jra_evidence_feature_normalizer_production import comment_band, workout_fin
 
 PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"
 POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
+TRACE_SCHEMA = "KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927"
 BASE_INDICES = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI"]
 
 class SourceToFeatureError(ValueError):
@@ -503,6 +504,121 @@ def _allowed_features(mapping: Dict[str, Any]) -> set[str]:
             out.add(d["newcomer_fallback_feature"])
     return out
 
+def _feature_target_bindings(mapping: Dict[str, Any], profile: str | None) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    if profile:
+        for index, weights in ((mapping.get("index_profiles") or {}).get(profile) or {}).items():
+            for feature, weight in (weights or {}).items():
+                out.setdefault(str(feature), []).append({
+                    "kind": "BASE_INDEX",
+                    "index": str(index),
+                    "weight": float(weight),
+                })
+    for component, spec in (mapping.get("dcr") or {}).items():
+        feature = spec.get("feature")
+        if feature:
+            out.setdefault(str(feature), []).append({
+                "kind": "DCR_COMPONENT",
+                "component": str(component),
+                "max_points": float(spec.get("max_points") or 0.0),
+            })
+        fallback = spec.get("newcomer_fallback_feature")
+        if fallback:
+            out.setdefault(str(fallback), []).append({
+                "kind": "DCR_NEWCOMER_FALLBACK",
+                "component": str(component),
+                "max_points": float(spec.get("max_points") or 0.0),
+            })
+    return out
+
+def _fact_available(state: Any) -> bool | None:
+    if not isinstance(state, dict):
+        return None
+    for key in ("fact_available", "available", "current_weather_fact_available", "history_fact_available"):
+        if key in state:
+            return bool(state.get(key))
+    return None
+
+def _missing_reason(source_family: str, fact_state: Any) -> str:
+    automation = AUTOMATION_CLASS.get(source_family, "UNCLASSIFIED")
+    fact_available = _fact_available(fact_state)
+    if source_family == "REGISTERED_EXTERNAL_SHADOW" or automation == "SHADOW_ONLY":
+        return "SHADOW_ONLY_NON_PRODUCTION"
+    if fact_available is False:
+        return "SOURCE_FACT_NOT_AVAILABLE"
+    if fact_available is True:
+        if "EVALUATOR" in automation or automation.endswith("_REQUIRED") or "REQUIRED" in automation:
+            return "FACT_AVAILABLE_EVALUATOR_NOT_PROMOTED_OR_NOT_BOUND"
+        return "FACT_AVAILABLE_FEATURE_NOT_GENERATED"
+    if source_family.startswith("VENUE_"):
+        return "NON_SOURCE_VENUE_BINDING_REQUIRED"
+    return "SOURCE_FACT_STATUS_UNAVAILABLE_OR_EVALUATOR_REQUIRED"
+
+def _build_feature_trace(
+    runner: Dict[str, Any],
+    generated: Dict[str, Any],
+    merged: Dict[str, Any],
+    conflicts: List[Dict[str, Any]],
+    fact_availability: Dict[str, Any],
+    mapping: Dict[str, Any],
+) -> Dict[str, Any]:
+    profile = _runner_profile(runner)
+    targets = _feature_target_bindings(mapping, profile)
+    generated_names = set(generated)
+    existing_names = set((runner.get("evidence_features") or {}).keys())
+    conflict_names = {str(x.get("feature")) for x in conflicts}
+    rows: Dict[str, Dict[str, Any]] = {}
+    reason_counts: Dict[str, int] = {}
+    state_counts: Dict[str, int] = {}
+    for feature in sorted(_allowed_features(mapping)):
+        source_family = FEATURE_SOURCE_FAMILY.get(feature, "UNMAPPED_SOURCE_FAMILY")
+        fact_state = copy.deepcopy(fact_availability.get(source_family))
+        value = merged.get(feature) if isinstance(merged, dict) else None
+        if feature in generated_names:
+            state = "SOURCE_GENERATED_PRODUCTION_FEATURE"
+            missing_reason = None
+        elif feature in existing_names:
+            state = "PREEXISTING_AUTHORIZED_PRODUCTION_FEATURE"
+            missing_reason = None
+        else:
+            state = "MISSING"
+            missing_reason = _missing_reason(source_family, fact_state)
+        state_counts[state] = state_counts.get(state, 0) + 1
+        if missing_reason:
+            reason_counts[missing_reason] = reason_counts.get(missing_reason, 0) + 1
+        rows[feature] = {
+            "feature": feature,
+            "source_family": source_family,
+            "automation_class": AUTOMATION_CLASS.get(source_family, "UNCLASSIFIED"),
+            "fact_state": fact_state,
+            "fact_available": _fact_available(fact_state),
+            "production_feature_state": state,
+            "merge_conflict": feature in conflict_names,
+            "missing_reason": missing_reason,
+            "category": value.get("category") if isinstance(value, dict) else None,
+            "rule_id": value.get("rule_id") if isinstance(value, dict) else None,
+            "source_authority": value.get("source_authority") if isinstance(value, dict) else None,
+            "evidence_refs": copy.deepcopy(value.get("evidence_refs") or []) if isinstance(value, dict) else [],
+            "source_fact": value.get("source_fact") if isinstance(value, dict) else None,
+            "target_bindings": copy.deepcopy(targets.get(feature) or []),
+        }
+    summary = {
+        "trace_schema": TRACE_SCHEMA,
+        "runner_profile": profile,
+        "feature_count": len(rows),
+        "state_counts": state_counts,
+        "missing_reason_counts": reason_counts,
+        "generated_feature_count": len(generated_names),
+        "preexisting_authorized_feature_count": len(existing_names),
+        "missing_feature_count": sum(1 for x in rows.values() if x["production_feature_state"] == "MISSING"),
+        "fact_available_feature_count": sum(1 for x in rows.values() if x["fact_available"] is True),
+        "fact_unavailable_feature_count": sum(1 for x in rows.values() if x["fact_available"] is False),
+        "fact_status_unknown_feature_count": sum(1 for x in rows.values() if x["fact_available"] is None),
+    }
+    payload = {"schema": TRACE_SCHEMA, "summary": summary, "features": rows}
+    payload["sha256"] = _sha(payload)
+    return payload
+
 def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
     profile = _runner_profile(runner)
     feats = set((runner.get("evidence_features") or {}).keys())
@@ -616,8 +732,13 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         generated.update(_official_detail_production_features(rid,source_artifact))
         generated.update(_registered_common_workout_features(rid,source_artifact))
         generated = {k:v for k,v in generated.items() if k in allowed}
-        merged, conflicts = _merge_generated(r.get("evidence_features") or {}, generated)
+        existing_features = copy.deepcopy(r.get("evidence_features") or {})
+        merged, conflicts = _merge_generated(existing_features, generated)
         shadow = _tsl_shadow(rid,tsl,source_artifact)
+        source_fact_availability = _source_fact_availability(rid,detail_inputs,source_artifact)
+        source_feature_trace = _build_feature_trace(
+            factual_runner, generated, merged, conflicts, source_fact_availability, mapping
+        )
         source_only_coverage = _coverage_for_runner(_source_only_runner(factual_runner, generated),mapping)
         tmp = copy.deepcopy(factual_runner)
         tmp["evidence_features"] = merged
@@ -632,7 +753,9 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
                 "newcomer":factual_runner.get("newcomer"),
             },
             "rule_evaluator_inputs":detail_inputs,
-            "source_fact_availability":_source_fact_availability(rid,detail_inputs,source_artifact),
+            "source_fact_availability":source_fact_availability,
+            "source_feature_trace":source_feature_trace,
+            "source_feature_trace_summary":source_feature_trace["summary"],
             "generated_production_features": generated,
             "generated_production_feature_count": len(generated),
             "shadow_observations": shadow,
@@ -652,6 +775,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         "source_snapshot_sha256": source_sha,
         "official_runner_universe_sha256": source_artifact.get("jra_official_runner_universe_sha256") or source_artifact.get("official_runner_universe_sha256"),
         "mapping_id": mapping.get("mapping_id"),
+        "trace_schema": TRACE_SCHEMA,
         "feature_contract": contract,
         "source_only_formal_base_ready": all(bool(x.get("source_only_formal_base_ready")) for x in runners_out.values()) if runners_out else False,
         "production_feature_principle": "ONLY_DETERMINISTIC_RULE_BOUND_FACTS_FROM_PRODUCTION_AUTHORIZED_SOURCES; NO_TSL_OR_JMA_SHADOW_INJECTION",
@@ -708,6 +832,9 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
             "source_only_coverage":rr["source_only_coverage"],
             "automation_gap":rr["automation_gap"],
             "coverage":rr["coverage"],
+            "source_fact_availability":copy.deepcopy(rr["source_fact_availability"]),
+            "source_feature_trace":copy.deepcopy(rr["source_feature_trace"]),
+            "source_feature_trace_summary":copy.deepcopy(rr["source_feature_trace_summary"]),
         } for rid,rr in report["runners"].items()
     }
     req["source_to_evidence_feature_sha256"] = report["sha256"]
