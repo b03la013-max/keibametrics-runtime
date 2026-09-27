@@ -4,7 +4,7 @@
   "effective_at": "2026-09-28T00:33:00+09:00",
   "predecessor": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260923-R6 lifecycle semantics",
   "purpose": "Define the minimum complete Family-wide Formal lifecycle while leaving source adapters, numerical mappings and venue predictive knowledge to their owning scopes.",
-  "temporal_invariant": "SOURCE_START <= SOURCE_FREEZE <= PREDICTION_CUTOFF <= STATIC_FREEZE <= PRE_KRS_DISPATCH < FINAL_FREEZE < SCHEDULED_POST",
+  "temporal_invariant": "RACE_IDENTITY_RESOLVE <= PREDICTION_CUTOFF_FREEZE; SOURCE_START <= SOURCE_FREEZE <= PREDICTION_CUTOFF_FREEZE <= STATIC_PREDICTION_FREEZE <= PRE_KRS < FINAL_FREEZE < SCHEDULED_POST; FINAL_BEFORE_POST_VERIFY requires SIGNED_FINAL timestamp < scheduled_post_at",
   "execution_evidence_priority": [
     "VERIFIED_SIGNED_RECEIPT",
     "EXTERNAL_RUNTIME_RESPONSE",
@@ -15,6 +15,18 @@
   "stages": [
     {
       "stage_id": "CANON_RESOLVE",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
+      "stage_id": "RACE_IDENTITY_RESOLVE",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
+      "stage_id": "PREDICTION_CUTOFF_FREEZE",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
       "signed_receipt_required": false
@@ -74,6 +86,12 @@
       "signed_receipt_required": false
     },
     {
+      "stage_id": "EVIDENCE_FEATURE_COMPILATION",
+      "owner_class": "FAMILY_SPECIFIC",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
       "stage_id": "EVIDENCE_FEATURE_LEDGER",
       "owner_class": "FAMILY_SPECIFIC",
       "pre_race_required": true,
@@ -122,6 +140,12 @@
       "signed_receipt_required": true
     },
     {
+      "stage_id": "KRS_RECEIPT_VERIFY",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": true
+    },
+    {
       "stage_id": "KRS_UTILITY_CAPTURE",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
@@ -146,6 +170,12 @@
       "signed_receipt_required": false
     },
     {
+      "stage_id": "TICKET_CONSTRUCTION",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
       "stage_id": "CAPITAL_POLICY",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
@@ -158,6 +188,12 @@
       "signed_receipt_required": false
     },
     {
+      "stage_id": "MANDATORY_STAGE_MANIFEST_VERIFY",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": false
+    },
+    {
       "stage_id": "FINAL_FREEZE",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
@@ -165,6 +201,12 @@
     },
     {
       "stage_id": "SIGNED_FINAL",
+      "owner_class": "COMMON_FAMILY",
+      "pre_race_required": true,
+      "signed_receipt_required": true
+    },
+    {
+      "stage_id": "FINAL_BEFORE_POST_VERIFY",
       "owner_class": "COMMON_FAMILY",
       "pre_race_required": true,
       "signed_receipt_required": true
@@ -223,7 +265,13 @@
     "semantic_universe_frozen_before_mec": true,
     "canonical_ticket_frozen_pre_result": true,
     "final_receipt_verified": true,
-    "post_start_retroactive_promotion_forbidden": true
+    "post_start_retroactive_promotion_forbidden": true,
+    "krs_receipt_verified": true,
+    "mandatory_stage_manifest_verified": true,
+    "final_before_post_verified": true,
+    "ticket_construction_complete": true,
+    "race_identity_resolved": true,
+    "prediction_cutoff_frozen": true
   },
   "hard_distinctions": [
     "TERMINALIZED != NUMERICALLY_CALCULATED",
