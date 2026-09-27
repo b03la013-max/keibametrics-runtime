@@ -217,7 +217,9 @@
         "oos_semantics": true,
         "post_result_binding": true,
         "current_eligible_oos_races": 0,
-        "target_eligible_oos_races": 30
+        "target_eligible_oos_races": 30,
+        "classification": "HISTORICAL MECHANICAL ACCEPTANCE SNAPSHOT / NOT CURRENT DYNAMIC OOS STATE",
+        "current_eligible_oos_races_semantics": "HISTORICAL AT ACCEPTANCE; DO NOT USE AS CURRENT"
       },
       "production_authority_firewall": {
         "status": "ACTIVE / FAIL-CLOSED",
@@ -240,10 +242,10 @@
         "target_eligible_races": 30,
         "tracker": "runtime/source_candidate_oos_status.json",
         "automatic_promotion": false,
-        "current_eligible_races_semantics": "ENACTMENT SNAPSHOT ONLY; runtime/source_candidate_oos_status.json is Current dynamic truth"
+        "current_eligible_races_semantics": "ENACTMENT SNAPSHOT ONLY; CURRENT must be rebuilt/read from immutable result_evaluation tracker"
       },
       "source_only_full_numerical_ready": false,
-      "unknown_future_empirical_acceptance": "PENDING",
+      "unknown_future_empirical_acceptance": "COLLECTING / RESOLVE CURRENT COUNT FROM runtime/source_candidate_oos_status.json",
       "family_prediction_utility_contract": "KM-FAMILY-PREDICTION-UTILITY-CONTRACT-20260927-R1",
       "source_feature_trace_schema": "KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927",
       "source_index_static_trace_schema": "KM-JRA-SOURCE-FEATURE-INDEX-STATIC-TRACE-v1.0-20260927",
@@ -586,5 +588,13 @@
       "prediction_execution_claim": "FORBIDDEN UNTIL FAMILY-SPECIFIC RUNTIME VERIFIED",
       "cross_family_parameter_reuse": "FORBIDDEN"
     }
+  },
+  "snapshot_semantics": {
+    "rule": "Historical acceptance and enactment counters are evidence snapshots only. Current measurement state is resolved from immutable/runtime dynamic artifacts.",
+    "forbidden": "Do not overwrite a newer dynamic tracker with an older manifest or acceptance snapshot.",
+    "source_candidate_current": "runtime/source_candidate_oos_status.json",
+    "krs_current": "runtime/krs_oos_status.json",
+    "mec_r4_current": "runtime/mec_r4_oos_status.json",
+    "pfs_current": "runtime/pfs_grand_review/current.json"
   }
 }
