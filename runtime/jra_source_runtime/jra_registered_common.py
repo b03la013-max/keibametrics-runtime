@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue
 
-PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.4-20260927"
+PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.5-20260927"
 AUTHORITY="REGISTERED_JRA_COMMON"
 UA="KeibaMetrics-JRA-Registered-Common/1.0"
 BASE="https://race.netkeiba.com"
@@ -212,11 +212,20 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
             "attempt_count":len([x for x in snaps if str(x.get("source_id") or "").startswith("NETKEIBA-WORKOUT-")]),
             "rejected_attempts":workout_attempt_errors,
         }
-        raw,h,snap=_fetch(f"{BASE}/race/speed.html?mode=past&race_id={race_id}&type=shutuba",prediction_cutoff,
-                          "NETKEIBA-SPEED-PAST","REGISTERED_COMMON_NETKEIBA_SPEED")
-        speed=parse_speed(raw,h.get("content-type","")); speed["source_snapshot_sha256"]=snap["snapshot_sha256"]
-        speed["runner_universe_match"]=_reconcile(speed,artifact);snaps.append(snap)
-        base["speed"]=speed
+        try:
+            raw,h,snap=_fetch(f"{BASE}/race/speed.html?mode=past&race_id={race_id}&type=shutuba",prediction_cutoff,
+                              "NETKEIBA-SPEED-PAST","REGISTERED_COMMON_NETKEIBA_SPEED")
+            speed=parse_speed(raw,h.get("content-type",""))
+            speed["source_snapshot_sha256"]=snap["snapshot_sha256"]
+            speed["runner_universe_match"]=_reconcile(speed,artifact)
+            snaps.append(snap)
+            base["speed"]=speed
+        except Exception as exc:
+            # Historical speed is independent from the required workout fact.
+            # Debut/newcomer universes can legitimately have no past-speed table.
+            msg="REGISTERED_COMMON_SPEED_UNAVAILABLE:"+type(exc).__name__+":"+str(exc)
+            warnings.append(msg)
+            base["speed"]={"status":"UNAVAILABLE","reason":msg,"result_derived":False}
         base["status"]="PASS"
     except Exception as e:
         msg="REGISTERED_COMMON_FAILED:"+type(e).__name__+":"+str(e)
