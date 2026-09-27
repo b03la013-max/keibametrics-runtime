@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from krs_prediction_utility import evaluate_against_result as evaluate_krs_against_result
 
-PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-OOS-TRACKER-v0.2-20260927"
+PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-OOS-TRACKER-v0.1-20260926"
 TRACE_SCHEMA="KM-JRA-SOURCE-CANDIDATE-UTILITY-ATTRIBUTION-v1.0-20260927"
 
 def _sha(x:Any)->str:
