@@ -104,6 +104,15 @@ jobs:
           jra=((current.get("family_scoped_authority") or {}).get("JRA") or {})
           expected_source_runtime=str(jra.get("source_runtime_profile") or "")
           assert expected_source_runtime,"CANDIDATE_SOURCE_RUNTIME_AUTHORITY_MISSING"
+          utility_contract_id=str(((current.get("common_family_components") or {}).get("prediction_utility_contract") or ""))
+          utility_contract_path=str(((current.get("common_family_components") or {}).get("prediction_utility_contract_profile") or ""))
+          utility_contract=None
+          if utility_contract_id or utility_contract_path:
+              assert utility_contract_id and utility_contract_path,"CANDIDATE_PREDICTION_UTILITY_AUTHORITY_INCOMPLETE"
+              utility_contract=json.load(open(utility_contract_path,encoding="utf-8"))
+              assert utility_contract.get("profile_id")==utility_contract_id,"CANDIDATE_PREDICTION_UTILITY_ID_MISMATCH"
+              assert utility_contract.get("production_effect")=="NONE","CANDIDATE_PREDICTION_UTILITY_PRODUCTION_EFFECT"
+              assert utility_contract.get("automatic_promotion") is False,"CANDIDATE_PREDICTION_UTILITY_AUTO_PROMOTION"
 
           # Materialize and independently verify Signed SOURCE.
           source_dir=os.path.join("runtime_out","candidate_source")
@@ -246,6 +255,10 @@ jobs:
               "third_dispositions":req["third_dispositions"],
               "krs_prediction_utility_shadow":utility,
               "minimum_efficient_coverage":mec,"capital_policy_decision":capital,
+              "family_prediction_utility_contract":utility_contract_id or None,
+              "prediction_utility_objective_order":(
+                  utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
+              ),
               "production_effect":"NONE","unknown_future_empirical_acceptance":"PENDING",
           }
           freeze=datetime.now(timezone.utc).isoformat()
@@ -289,6 +302,7 @@ jobs:
           record["candidate_mec_coverage"]=mec.get("material_coverage_ratio")
           record["candidate_capital_decision"]=capital.get("decision")
           record["current_authority_manifest"]=current_id
+          record["family_prediction_utility_contract"]=utility_contract_id or None
           # Re-hash after full candidate execution metadata is bound.
           record["sha256"]=hashlib.sha256(json.dumps({k:v for k,v in record.items() if k!="sha256"},ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
           (outdir/"pre_result.json").write_text(json.dumps(record,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
@@ -306,6 +320,10 @@ jobs:
               "third_dispositions":req.get("third_dispositions"),
               "scheduled_post_at":scheduled_post,
               "temporal_mode":"FORMAL-PRE-RACE",
+              "family_prediction_utility_contract":utility_contract_id or None,
+              "prediction_utility_objective_order":(
+                  utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
+              ),
               "pre_krs_receipt":p,"krs_run_receipt":run,"krs_utility":utility,
               "mec":mec,"capital":capital,"final_receipt":final,
               "oos_pre_result_record_sha256":record["sha256"],
@@ -327,6 +345,7 @@ jobs:
               "final_receipt_sha256":final.get("receipt_sha256"),
               "pre_result_sha256":record["sha256"],
               "mec_r4_shadow_sha256":mec_r4_shadow.get("sha256"),
+              "family_prediction_utility_contract":utility_contract_id or None,
               "production_effect":"NONE"
           },ensure_ascii=False,separators=(",",":")))
           PY
