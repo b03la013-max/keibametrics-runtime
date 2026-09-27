@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
-PROFILE="KM-JRA-OFFICIAL-PERSON-STATS-v1.1-20260926"
+PROFILE="KM-JRA-OFFICIAL-PERSON-STATS-v1.2-20260927"
 BASE="https://www.jra.go.jp"
 UA="KeibaMetrics-JRA-Person-Stats/1.0"
 
@@ -29,15 +29,33 @@ def _int(v:Any):
     m=re.search(r"-?\d+",str(v or "").replace(",",""))
     return int(m.group(0)) if m else None
 
-def _fetch_horse_session(horse_token:str)->Tuple[Any,str]:
-    jar=http.cookiejar.CookieJar()
-    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+def _fetch_horse_session(horse_token:str,*,max_attempts:int=4)->Tuple[Any,str]:
     url=BASE+"/JRADB/accessU.html?"+urllib.parse.urlencode({"CNAME":horse_token})
     validate_public_url(url)
-    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4"})
-    with opener.open(req,timeout=30) as r:
-        r.read(3000000)
-        return opener,str(r.geturl())
+    retryable={429,500,502,503,504}
+    last=None
+    for attempt in range(1,max(1,int(max_attempts))+1):
+        try:
+            # Rebuild the cookie session on every attempt. A connection reset can
+            # leave the prior opener/cookie state half-initialized.
+            jar=http.cookiejar.CookieJar()
+            opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+            req=urllib.request.Request(url,headers={
+              "User-Agent":UA,"Accept":"text/html,*/*;q=0.1","Accept-Language":"ja,en;q=0.4"
+            })
+            with opener.open(req,timeout=30) as r:
+                r.read(3000000)
+                return opener,str(r.geturl())
+        except urllib.error.HTTPError as exc:
+            last=exc
+            if int(getattr(exc,"code",0) or 0) not in retryable or attempt>=max_attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionResetError) as exc:
+            last=exc
+            if attempt>=max_attempts:
+                raise
+        time.sleep(0.6*attempt)
+    raise last if last else RuntimeError("JRA_PERSON_SESSION_RETRY_EXHAUSTED")
 
 def _post_profile(opener,kind:str,token:str,referer:str,prediction_cutoff:str,*,max_attempts:int=4):
     page="accessK" if kind=="jockey" else "accessC"
