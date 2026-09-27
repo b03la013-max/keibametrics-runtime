@@ -1,0 +1,112 @@
+{
+  "profile": "KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921",
+  "state_id": "KM-JRA-NKY-20260927-DAILY-REV7-LEARNING-NEXT",
+  "venue": "NKY",
+  "source_scope": "2026-09-27 R03-R12",
+  "status": "PREQUENTIAL-NEXT-RACE-ONLY / NO-PRODUCTION-RULE-CHANGE",
+  "source_review": "runtime/daily_reviews/KM-JRA-NKY-20260927-R03-R12-REV7.json",
+  "source_review_blob_sha": "9a66c5049440885c3fd30a309b8e376361aec5cb",
+  "source_canon_audit": "runtime/venue_audits/KM-JRA-NKY-20260927-REV7-CANON-AUDIT.json",
+  "production_change_authorized": false,
+  "canon_revision_authorized": false,
+  "day_local_oos_increment": 7,
+  "family_current_oos_state": {
+    "eligible": 15,
+    "target": 30,
+    "status": "WAITING_R30"
+  },
+  "immediate_correctness": [
+    "Keep R04 source acquisition failure in SOURCE/CORRECTNESS ownership; do not repair it with a Nakayama prediction rule.",
+    "Keep Candidate result binding and immutable OOS tracker reconstruction.",
+    "Keep Production Source-only Full Numerical fail-closed until evaluator/rule closure exists.",
+    "Keep Candidate and Production numerical/PFS authorities separated."
+  ],
+  "next_race_measurement_priorities": [
+    "Production Source Fact -> 71 Feature -> Full Numerical closure",
+    "Winner / Role discrimination",
+    "Head-local P2 and Ordered Pair discrimination",
+    "KRS Unique Rescue versus Harm and rescue-to-ticket continuity",
+    "NKY D1200 multi-world winner discovery",
+    "NKY T2000 3C/4C progression hypothesis",
+    "Robust PFS and bet-type capital efficiency"
+  ],
+  "shadow_candidates": [
+    {
+      "id": "NKY-SHADOW-D1200-MIXED-COLLAPSE-LEADER-SURVIVAL",
+      "owner": "VENUE-SPECIFIC PREDICTION HYPOTHESIS",
+      "hypothesis": "For Nakayama D1200, fast-front collapse and leader survival may coexist in the same race structure; retain both pre-result alternative worlds instead of reducing the race to a single front/difference bias.",
+      "primary_fixture": "KM-JRA-NKY-20260927-R12",
+      "required_oos": "MULTIPLE FROZEN NKY D1200 OOS",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "NKY-SHADOW-T2000-MID-RACE-PROGRESSION",
+      "owner": "VENUE-SPECIFIC PREDICTION HYPOTHESIS",
+      "hypothesis": "On Nakayama T2000, material 3C/4C position gain may provide incremental winner/role discrimination beyond static early-position labels when the pre-result evidence supports the mechanism.",
+      "primary_fixture": "KM-JRA-NKY-20260927-R10",
+      "required_oos": "MULTIPLE FROZEN NKY T2000 OOS",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "NKY-SHADOW-KRS-ALT-W-RESCUE",
+      "owner": "COMMON KRS / ORDER-ROLE / TICKET",
+      "hypothesis": "A KRS pre-result ADD_W_SHADOW that also rescues the correct ordered pair may have incremental value if downstream continuity is measured without overwriting Static.",
+      "primary_fixture": "KM-JRA-NKY-20260927-R06",
+      "required_oos": "KRS FORWARD OOS GATE",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "NKY-SHADOW-HEAD-LOCAL-P2-ORDER",
+      "owner": "COMMON PREDICTION / ORDER-ROLE",
+      "hypothesis": "Second-place reachability must be re-evaluated per active winner head; test whether head-local P2 improves ordered-pair discrimination without uncontrolled candidate widening.",
+      "primary_fixtures": [
+        "KM-JRA-NKY-20260927-R11",
+        "KM-JRA-NKY-20260927-R12"
+      ],
+      "required_oos": "FROZEN OOS",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "NKY-SHADOW-SAME-DAY-BIAS-TTL",
+      "owner": "IMMEDIATE LEARNING / TEMPORAL HYPOTHESIS",
+      "hypothesis": "Same-day front or progression observations may inform the next race only under explicit TTL and must expire unless repeated OOS evidence supports a venue-persistent mechanism.",
+      "primary_scope": "2026-09-27 NKY",
+      "required_oos": "NEXT-RACE / MEETING-LOCAL ONLY",
+      "production_effect": "NONE"
+    },
+    {
+      "id": "NKY-SHADOW-CAPITAL-BETTYPE",
+      "owner": "MEC / CAPITAL / PFS",
+      "hypothesis": "Compare existing MEC-R4 arms and bet-type allocation using frozen recommendations; day-level positive Exacta/Trio/Trifecta PFS must not directly alter Production capital policy.",
+      "primary_scope": "2026-09-27 NKY FROZEN-OOS 7 races",
+      "required_oos": "FORWARD SHADOW",
+      "production_effect": "NONE"
+    }
+  ],
+  "forbidden": [
+    "RETROACTIVE_PREDICTION_REWRITE",
+    "AUTOMATIC_NUMERIC_WEIGHT_CHANGE",
+    "RESULT_DERIVED_FEATURE_REWRITE",
+    "IMMEDIATE_NKY_FIXED_DRAW_BONUS",
+    "IMMEDIATE_NKY_FIXED_WEIGHT_BONUS",
+    "IMMEDIATE_NKY_FIXED_POPULARITY_BONUS",
+    "PERMANENT_TRACK_BIAS_FROM_ONE_DAY",
+    "AUTOMATIC_KRS_RESCUE_PURCHASE",
+    "NEW_VENUE_VALIDATOR_FOR_COMMON_FAILURE"
+  ],
+  "reference_metrics": {
+    "day_frozen_oos_races": 7,
+    "day_winner_capture_rate": 0.5714,
+    "day_p2_capture_rate": 0.7143,
+    "day_p3_capture_rate": 0.7143,
+    "day_ordered_pair_capture_rate": 0.5714,
+    "day_pair_conditioned_third_capture_rate": 0.5714,
+    "day_top3_set_capture_rate": 0.4286,
+    "day_mean_winner_static_rank": 3.857,
+    "day_candidate_frozen_recommendation_pfs": 163.78,
+    "day_largest_win_excluded_pfs": 137.02,
+    "current_family_candidate_oos_count": 15,
+    "current_krs_oos_count": 4,
+    "current_mec_r4_oos_count": 3
+  }
+}
