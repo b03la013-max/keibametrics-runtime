@@ -36,6 +36,15 @@ jobs:
           echo "REQUEST_FILE=$REQ"
           echo "CANDIDATE_PARALLEL=$CANDIDATE_PARALLEL"
 
+      - name: Family authority scope guard
+        if: steps.request.outputs.candidate_parallel != 'true'
+        shell: bash
+        env:
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+        run: |
+          set -euo pipefail
+          python runtime/family_authority_guard.py --request "$REQUEST_FILE"
+
       - name: Full external formal execution
         if: steps.request.outputs.candidate_parallel != 'true'
         shell: bash

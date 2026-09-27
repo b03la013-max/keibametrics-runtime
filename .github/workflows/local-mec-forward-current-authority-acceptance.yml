@@ -4,9 +4,9 @@ on:
   pull_request:
     paths:
       - 'profiles/current_execution_gateway.json'
-      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20260925_R14.json'
-      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json'
-      - 'profiles/venue_chat_routes_20260925_R15.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_*.json'
+      - 'profiles/venue_chat_routes_*.json'
       - 'research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json'
       - 'research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json'
       - 'governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json'
@@ -34,13 +34,31 @@ jobs:
       - name: Verify current MEC authority graph and noninterference
         run: |
           python - <<'PY'
-          import json, pathlib
-          def j(p): return json.load(open(p,encoding="utf-8"))
+          import glob, json, pathlib
+          from datetime import datetime, timezone
+
+          def j(p):
+              return json.load(open(p,encoding="utf-8"))
+
+          now=datetime.now(timezone.utc)
+          candidates=[]
+          for p in glob.glob("profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+              try:
+                  x=j(p)
+                  if "CURRENT-AUTHORITY" not in str(x.get("status") or ""):
+                      continue
+                  d=datetime.fromisoformat(str(x["effective_at"]).replace("Z","+00:00")).astimezone(timezone.utc)
+                  if d<=now:
+                      candidates.append((d,str(x.get("manifest_id") or ""),p,x))
+              except Exception:
+                  pass
+          assert candidates, "CURRENT_AUTHORITY_RESOLUTION_EMPTY"
+          _,_,auth_path,auth=max(candidates,key=lambda z:(z[0],z[1]))
+          cc=auth["common_family_components"]
 
           gateway=j("profiles/current_execution_gateway.json")
-          auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260925_R14.json")
-          suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json")
-          route=j("profiles/venue_chat_routes_20260925_R15.json")
+          suite=j(cc["local_suite_manifest_profile"])
+          route=j(cc["venue_routing_profile"])
           r4=j("research/mec/KM-LOCAL-MEC-R4-20260923-POLICY-FROZEN-RETROSPECTIVE-REPLAY-R1.json")
           r5=j("research/mec/KM-LOCAL-MEC-R5-20260923-TRAINING-REPLAY-R1.json")
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
@@ -53,29 +71,30 @@ jobs:
           assert gateway["policy"]["production_mec_policy_changed"] is False
           assert gateway["policy"]["capital_policy_changed"] is False
 
-          assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260925-R14"
-          assert auth["common_family_components"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
-          assert auth["common_family_components"]["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15"
+          assert cc["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert cc["venue_routing"]==route["profile_id"]
+          assert cc["local_suite_manifest"]==suite["manifest_id"]
           L=auth["family_scoped_authority"]["LOCAL"]
           assert L["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert L["mec_status"]=="ACTIVE / PRODUCTION / UNCHANGED"
           assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
           assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
-          assert L["suite_manifest"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R9"
+          assert L["suite_manifest"]==suite["manifest_id"]
           assert L["numerical_authority_status"].startswith("NOT_READY")
           assert L["mec_measurement"]["r4_local"]["result"]=="LOCAL_PROMOTION_REJECTED"
           assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
           assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260924-R9"
+          assert suite["family_current_authority"]==auth["manifest_id"]
           assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert suite["production_numeric_suite"]["status"]=="FROZEN"
           assert suite["production_numeric_suite"]["numerical_change"] is False
           assert suite["decision_execution"]["mec_forward_measurement"]["signed_final_binding_required"] is True
 
-          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15"
           lr=route["family_routes"]["LOCAL"]
           assert lr["mec_profile"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert lr["suite_manifest"]==suite["manifest_id"]
+          assert lr["runtime_contract"]==cc["family_runtime_contracts"]
           pm=lr["parallel_mec_measurement"]
           assert pm["production_effect"]=="NONE"
           assert pm["nonblocking"] is True
@@ -120,5 +139,5 @@ jobs:
           assert "LOCAL_SIGNED_FINAL_BOUND" in result
           assert "LOCAL_MEC_R5_SIGNED_FINAL_BOUND" in result
 
-          print("LOCAL_MEC_FORWARD_CURRENT_AUTHORITY_PASS")
+          print("LOCAL_MEC_FORWARD_CURRENT_AUTHORITY_PASS",auth_path,auth["manifest_id"])
           PY

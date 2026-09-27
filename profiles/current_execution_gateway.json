@@ -1,9 +1,9 @@
 {
-  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.1-20260925",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER / BUNDLE-FINGERPRINT-GATE / EXECUTION-ID-HANDOFF / DURABLE-PHASE-STORE / TRANSIENT-RETRY",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260925-R14",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260925-R15",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260925_R11.json",
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.2-20260928",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R31-SCOPE-OWNERSHIP-ALIGNED / FAMILY-AUTHORITY-GUARD / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER / BUNDLE-FINGERPRINT-GATE / EXECUTION-ID-HANDOFF / DURABLE-PHASE-STORE / TRANSIENT-RETRY",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R31",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R31",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R23.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -20,7 +20,10 @@
     "actions_artifact_is_compatibility_fallback": true,
     "transient_http_retry_enabled": true,
     "transient_http_retry_attempts": 4,
-    "request_path_resolution_must_be_explicit_or_single_commit_request": true
+    "request_path_resolution_must_be_explicit_or_single_commit_request": true,
+    "family_authority_guard_required": true,
+    "cross_family_runtime_reuse_forbidden": true,
+    "venue_common_authority_override_forbidden": true
   },
   "families": {
     "LOCAL": {
@@ -142,5 +145,9 @@
     "deployment_id": "2a2144e3-36f9-4ae3-b05e-176eb0aade12",
     "status": "SUCCESS",
     "healthcheck_http": 200
-  }
+  },
+  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.1-20260925",
+  "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
+  "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
+  "authority_guard": "runtime/family_authority_guard.py"
 }
