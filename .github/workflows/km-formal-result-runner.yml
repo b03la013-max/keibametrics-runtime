@@ -133,6 +133,15 @@ jobs:
               assert isinstance(top3,list) and len(top3)>=3, "SOURCE_CANDIDATE_TOP3_MISSING"
               candidate_eval=evaluate_source_candidate_result(candidate_pre,[int(x) for x in top3[:3]])
               source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)
+              source_candidate_result["result_receipt_sha256"]=res.get("receipt_sha256")
+              source_candidate_result["result_receipt_verified"]=True
+              source_candidate_result["result_receipt_signer_key_id"]=res.get("signer_key_id")
+              source_candidate_result["result_receipt_signature_alg"]=res.get("signature_alg")
+              source_candidate_result["result_lane"]="SOURCE_DERIVED_CANDIDATE" if candidate_only else "PRODUCTION_WITH_CANDIDATE_SHADOW"
+              source_candidate_result["sha256"]=__import__("hashlib").sha256(
+                  json.dumps({k:v for k,v in source_candidate_result.items() if k!="sha256"},
+                             ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+              ).hexdigest()
               cdir=os.path.join("runtime","source_candidate_oos",p["race_id"])
               os.makedirs(cdir,exist_ok=True)
               with open(os.path.join(cdir,"result_evaluation.json"),"w",encoding="utf-8") as fh:
