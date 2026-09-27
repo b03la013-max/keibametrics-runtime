@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 from jra_source_manifest import JRA_VENUE_CODES, canonical_venue
 
-PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.3-20260926"
+PROFILE="KM-JRA-REGISTERED-COMMON-NETKEIBA-v1.4-20260927"
 AUTHORITY="REGISTERED_JRA_COMMON"
 UA="KeibaMetrics-JRA-Registered-Common/1.0"
 BASE="https://race.netkeiba.com"
@@ -61,12 +61,19 @@ def _discover_race_id(venue_id:str,race_date:str,race_no:int,prediction_cutoff:s
         raise ValueError(f"NETKEIBA_RACE_ID_NOT_UNIQUE:{venue_id}:{race_date}:{race_no}:{exact}")
     return exact[0],snap
 
-def _find_table(decoded:str,required:List[str]):
+def _find_tables(decoded:str,required:List[str]):
+    out=[]
     for table in _html_tables(decoded):
         if not table: continue
         h=[re.sub(r"\s+","",str(x or "")) for x in table[0]]
         if all(any(req in x for x in h) for req in required):
-            return h,table[1:]
+            out.append((h,table[1:]))
+    return out
+
+def _find_table(decoded:str,required:List[str]):
+    xs=_find_tables(decoded,required)
+    if xs:
+        return xs[0]
     raise ValueError("REGISTERED_COMMON_TABLE_NOT_FOUND:"+",".join(required))
 
 def _last_lap(v:Any):
@@ -76,43 +83,55 @@ def _last_lap(v:Any):
     nums=re.findall(r"\d{2}\.\d",s)
     return float(nums[-1]) if nums else None
 
-def parse_workout(raw:bytes,content_type:str="")->Dict[str,Any]:
+def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None)->Dict[str,Any]:
     decoded=_decode(raw,content_type)
-    try:
-        h,rows=_find_table(decoded,["馬番","馬名","コース","調教タイム","評価"])
-        schema="DETAILED"
-    except ValueError:
-        # The public default table can be universe-complete while exposing only
-        # assessment/rating. Missing course/time stays missing; it is never
-        # synthesized from the compact table.
-        h,rows=_find_table(decoded,["馬番","馬名","評価"])
+    tables=_find_tables(decoded,["馬番","馬名","コース","調教タイム","評価"])
+    schema="DETAILED"
+    if not tables:
+        tables=_find_tables(decoded,["馬番","馬名","評価"])
         schema="COMPACT_ASSESSMENT"
-    def idx(part):
-        return next((i for i,x in enumerate(h) if part in x),None)
-    ni,mi,ci,ti,gi,li,ei=[idx(x) for x in ["馬番","馬名","コース","調教タイム","脚色","評価","評価"]]
-    # Some pages put text assessment and A-D in the final two columns; locate both
-    # by fixed trailing layout when duplicate/compound headers collapse.
-    out=[]
-    for row in rows:
-        if ni is None or ni>=len(row):continue
-        m=re.search(r"\d+",str(row[ni] or ""))
-        if not m:continue
-        no=int(m.group(0))
-        if not 1<=no<=18:continue
-        name=_norm(row[mi] if mi is not None and mi<len(row) else "")
-        course=str(row[ci] if ci is not None and ci<len(row) else "").strip()
-        t=str(row[ti] if ti is not None and ti<len(row) else "").strip()
-        # The canonical netkeiba workout table ends with [脚色, short-comment, A-D].
-        gait=str(row[-3] if len(row)>=3 else "").strip()
-        comment=str(row[-2] if len(row)>=2 else "").strip()
-        rating=str(row[-1] if len(row)>=1 else "").strip().upper()
-        if rating not in {"A","B","C","D"}:
-            rating=""
-        out.append({"runner_id":str(no),"horse_no":no,"horse_name":name,"course":course,
-                    "workout_time_raw":t,"final1f":_last_lap(t),"gait":gait,
-                    "assessment":comment,"rating":rating})
-    if not out: raise ValueError("NETKEIBA_WORKOUT_RUNNERS_EMPTY")
-    return {"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
+    if not tables:
+        raise ValueError("REGISTERED_COMMON_TABLE_NOT_FOUND:馬番,馬名,評価")
+
+    expected=None
+    if official_universe:
+        expected={int(x.get("horse_no") or x.get("runner_id")):_norm(x.get("name"))
+                  for x in official_universe.get("runners") or []}
+
+    parsed_candidates=[]
+    for h,rows in tables:
+        def idx(part):
+            return next((i for i,x in enumerate(h) if part in x),None)
+        ni,mi,ci,ti,gi,li,ei=[idx(x) for x in ["馬番","馬名","コース","調教タイム","脚色","評価","評価"]]
+        out=[]
+        for row in rows:
+            if ni is None or ni>=len(row):continue
+            m=re.search(r"\d+",str(row[ni] or ""))
+            if not m:continue
+            no=int(m.group(0))
+            if not 1<=no<=18:continue
+            name=_norm(row[mi] if mi is not None and mi<len(row) else "")
+            course=str(row[ci] if ci is not None and ci<len(row) else "").strip()
+            t=str(row[ti] if ti is not None and ti<len(row) else "").strip()
+            gait=str(row[-3] if len(row)>=3 else "").strip()
+            comment=str(row[-2] if len(row)>=2 else "").strip()
+            rating=str(row[-1] if len(row)>=1 else "").strip().upper()
+            if rating not in {"A","B","C","D"}:
+                rating=""
+            out.append({"runner_id":str(no),"horse_no":no,"horse_name":name,"course":course,
+                        "workout_time_raw":t,"final1f":_last_lap(t),"gait":gait,
+                        "assessment":comment,"rating":rating})
+        if not out:
+            continue
+        payload={"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
+        parsed_candidates.append(payload)
+        if expected is not None:
+            got={int(x["horse_no"]):_norm(x["horse_name"]) for x in payload["runners"]}
+            if got==expected:
+                return payload
+    if parsed_candidates:
+        return parsed_candidates[0]
+    raise ValueError("NETKEIBA_WORKOUT_RUNNERS_EMPTY")
 
 def parse_speed(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
@@ -162,6 +181,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
         workout=None
         workout_attempt_errors=[]
         workout_urls=[
+            f"{BASE}/race/oikiri.html?race_id={race_id}&rf=race_submenu",
             f"{BASE}/race/oikiri.html?race_id={race_id}",
             f"{BASE}/race/oikiri.html?race_id={race_id}&type=1",
             f"{BASE}/race/oikiri.html?race_id={race_id}&type=2",
@@ -173,7 +193,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
                     f"NETKEIBA-WORKOUT-{wi}","REGISTERED_COMMON_NETKEIBA_WORKOUT"
                 )
                 snaps.append(snap)
-                candidate=parse_workout(raw,h.get("content-type",""))
+                candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"))
                 candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
                 candidate["runner_universe_match"]=_reconcile(candidate,artifact)
                 if candidate["runner_universe_match"]["verified"]:
