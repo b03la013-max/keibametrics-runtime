@@ -1,0 +1,64 @@
+name: NKY 20260927 Official Payout Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-nky-20260927-payout-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Fetch official JRA payouts R03-R12
+        run: |
+          python - <<'PY'
+          import json,re,urllib.request,http.cookiejar,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          from jra_race_card_detail import _calendar_url,_fetch,_post,_date8
+          race_date="2026-09-27"; key="0620260409"; d=_date8(race_date)
+          jar=http.cookiejar.CookieJar(); opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          out={"race_date":race_date,"meeting_key":key,"races":{}}
+          u0,r0,h0=_fetch(opener,_calendar_url(race_date)); s0=_decode(r0,h0.get("content-type",""))
+          entry_tokens=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",s0)
+          chosen=None
+          for entry in entry_tokens:
+            try:
+              u1,r1,h1=_post(opener,entry,u0); s1=_decode(r1,h1.get("content-type",""))
+              dm=re.findall(r"(pw01srl00"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
+              if dm: chosen=(u1,dm[0]); break
+            except Exception: pass
+          if not chosen: raise RuntimeError("NO_DAY_TOKEN")
+          u1,day=chosen; u2,r2,h2=_post(opener,day,u1); s2=_decode(r2,h2.get("content-type",""))
+          for race_no in range(3,13):
+            rec={"race_no":race_no}
+            try:
+              prefix="pw01sde01"+key+f"{race_no:02d}"+d
+              rm=re.findall(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",s2)
+              if not rm: raise RuntimeError("NO_RACE_TOKEN")
+              u3,r3,h3=_post(opener,rm[0],u2); s3=_decode(r3,h3.get("content-type",""))
+              toks=re.findall(r"doAction\('([^']+)'\s*,\s*'([^']+)'\)",s3)
+              pm=[t for path,t in toks if "accessO.html" in path and key+f"{race_no:02d}"+d in t]
+              if not pm: raise RuntimeError("NO_PAYOUT_TOKEN")
+              up,rp,hp=_post(opener,pm[0],u3); sp=_decode(rp,hp.get("content-type",""))
+              rec["status"]="PASS"; rec["url"]=up; rec["tables"]=_html_tables(sp); rec["text"]=_html_text(sp)
+            except Exception as e:
+              rec["status"]="FAIL"; rec["error"]=type(e).__name__+":"+str(e)
+            out["races"][str(race_no)]=rec
+          out["status"]="PASS"
+          p=Path("runtime/diagnostics/NKY-20260927-official-payouts.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"status":out["status"],"races":{k:v.get("status") for k,v in out["races"].items()}},ensure_ascii=False))
+          PY
+      - name: Persist probe
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/NKY-20260927-official-payouts.json
+          git commit -m "diagnostic: capture NKY 20260927 official payouts [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
