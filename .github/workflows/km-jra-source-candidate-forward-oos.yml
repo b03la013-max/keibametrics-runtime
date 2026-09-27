@@ -226,6 +226,7 @@ jobs:
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
 
           utility=build_krs_prediction_utility(req,k)
+          req["candidate_krs_utility_shadow"]=utility
           mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
           validate_mec_plan(mec)
           capital=resolve_capital_policy(req,mec)
@@ -237,6 +238,7 @@ jobs:
               "candidate_only":True,"production_authority":False,"acceptance_only":False,
               "temporal_mode":"FORMAL-PRE-RACE","source_snapshot_sha256":source_sha,
               "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "candidate_source_objective_sha256":(req.get("candidate_source_objective_shadow") or {}).get("sha256"),
               "candidate_semantic_freeze":req["candidate_semantic_freeze"],
               "static_prediction":req["static_prediction"],
               "role_registry":req["role_registry"],"pair_dispositions":req["pair_dispositions"],
@@ -295,6 +297,8 @@ jobs:
               "source_snapshot_sha256":source_sha,
               "candidate_semantic_freeze":req["candidate_semantic_freeze"],
               "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "candidate_source_objective_shadow":req.get("candidate_source_objective_shadow"),
+              "candidate_source_objective_sha256":(req.get("candidate_source_objective_shadow") or {}).get("sha256"),
               "pre_krs_receipt":p,"krs_run_receipt":run,"krs_utility":utility,
               "mec":mec,"capital":capital,"final_receipt":final,
               "oos_pre_result_record_sha256":record["sha256"],

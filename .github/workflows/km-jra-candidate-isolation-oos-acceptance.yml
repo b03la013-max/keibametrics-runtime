@@ -44,19 +44,25 @@ jobs:
           assert "build_source_objective_candidate" not in result
           print("CANDIDATE_ISOLATION_WORKFLOW_STRUCTURE_PASS")
           PY
-      - name: Initialize zero-OOS tracker
+      - name: Rebuild OOS tracker from immutable result artifacts
         run: |
           python - <<'PY'
-          import json,sys
+          import glob,json,sys
           from pathlib import Path
           sys.path.insert(0,"runtime")
           from jra_source_candidate_promotion_gate import evaluate
-          out=evaluate([])
-          assert out["eligible_race_count"]==0
-          assert out["status"]=="WAITING_R30"
+          records=[]
+          for path in sorted(glob.glob("runtime/source_candidate_oos/*/result_evaluation.json")):
+              with open(path,encoding="utf-8") as fh:
+                  row=json.load(fh)
+              if row.get("result_evaluation"):
+                  records.append(row)
+          out=evaluate(records)
+          assert out["eligible_race_count"]<=len(records)
+          assert out["automatic_promotion"] is False
           Path("runtime/source_candidate_oos_status.json").write_text(
               json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
-          print(json.dumps(out,ensure_ascii=False))
+          print(json.dumps({"stored_records":len(records),"tracker":out},ensure_ascii=False))
           PY
       - name: Persist acceptance
         run: |
