@@ -44,6 +44,7 @@ jobs:
           from mec_r4_shadow import settle_mec_r4_shadow
           from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
           from pfs_grand_review import write_report as write_pfs_grand_review
+          from family_prediction_utility import write_snapshot as write_family_prediction_utility_snapshot
           from jra_source_candidate_oos import evaluate_result as evaluate_source_candidate_result
           from jra_source_candidate_promotion_gate import bind_result as bind_source_candidate_result, evaluate as evaluate_source_candidate_gate
           BASE="https://quorumprobe-production.up.railway.app"
@@ -206,6 +207,10 @@ jobs:
               # Production/Formal PFS cohorts are not altered.
               pfs_grand=write_pfs_grand_review()
 
+          # Rebuild Family Prediction Utility current state after every closed-loop
+          # update. Dynamic trackers, not authority-enactment snapshots, are truth.
+          family_utility=write_family_prediction_utility_snapshot()
+
           summary={
             "race_id":p["race_id"],
             "result_lane":"SOURCE_DERIVED_CANDIDATE" if candidate_only else "PRODUCTION",
@@ -247,7 +252,10 @@ jobs:
             ),
             "source_candidate_r30_sha256":(
                 source_candidate_gate.get("sha256") if source_candidate_gate else None
-            )
+            ),
+            "family_prediction_utility_contract":family_utility.get("contract_id"),
+            "family_prediction_utility_status":family_utility.get("status"),
+            "family_prediction_utility_sha256":family_utility.get("sha256")
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -262,6 +270,7 @@ jobs:
           if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
           if [ -f runtime/source_candidate_oos_status.json ]; then git add runtime/source_candidate_oos_status.json; fi
           if [ -f runtime/pfs_grand_review/current.json ]; then git add runtime/pfs_grand_review/current.json; fi
+          if [ -f runtime/family_prediction_utility/current.json ]; then git add runtime/family_prediction_utility/current.json; fi
           if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json; fi
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
