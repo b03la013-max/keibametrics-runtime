@@ -38,6 +38,8 @@ jobs:
           assert "oos_eligible" in forward
           assert "CANDIDATE_FINAL_RECEIPT_POST_START" in forward
           assert 'pre_result.json' in forward
+          assert 'mec_r4_shadow_pre_result.json' in forward
+          assert 'mec_r4_shadow_result.json' in result
           assert 'pre_result.json' in result
           assert "evaluate_source_candidate_result(candidate_pre" in result
           assert "source_candidate_oos_status.json" in result
@@ -69,7 +71,7 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/source_candidate_oos_status.json
-          git commit -m "ci: initialize JRA source Candidate OOS tracker 0/30 [skip ci]" || exit 0
+          git commit -m "ci: rebuild JRA source Candidate OOS tracker from immutable results [skip ci]" || exit 0
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0
             git rebase --abort 2>/dev/null || true
