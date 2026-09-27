@@ -1,0 +1,142 @@
+name: Family R31 Scope Ownership and Maturity Acceptance
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R31.json"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R7.json"
+      - "profiles/venue_chat_routes_20260928_R31.json"
+      - "profiles/family_runtime_contracts_20260928_R23.json"
+      - "profiles/family_scope_ownership_20260928_R1.json"
+      - "profiles/family_formal_lifecycle_contract_20260928_R1.json"
+      - "profiles/family_maturity_promotion_20260928_R1.json"
+      - "governance/KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R7.md"
+      - "governance/KM-FAMILY-CROSS-FAMILY-MATURITY-PROMOTION-20260928-R1.md"
+      - "runtime/family_authority_guard.py"
+      - "tests/test_family_authority_guard.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-family-non-jra-formal-runner.yml"
+      - ".github/workflows/km-family-r31-authority-acceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R31.json"
+      - "runtime/family_authority_guard.py"
+      - ".github/workflows/km-family-r31-authority-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check -q pytest
+
+      - name: Syntax and authority guard selftest
+        run: |
+          set -euo pipefail
+          python -m py_compile runtime/family_authority_guard.py
+          python runtime/family_authority_guard.py             --selftest             --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R31.json
+
+      - name: Authority regression tests
+        run: python -m pytest -q tests/test_family_authority_guard.py
+
+      - name: Verify R31 contract synchronization
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def load(p):
+              return json.load(open(p,encoding="utf-8"))
+
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R31.json")
+          ep=load("profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R7.json")
+          route=load("profiles/venue_chat_routes_20260928_R31.json")
+          runtime=load("profiles/family_runtime_contracts_20260928_R23.json")
+          scope=load("profiles/family_scope_ownership_20260928_R1.json")
+          lifecycle=load("profiles/family_formal_lifecycle_contract_20260928_R1.json")
+          promotion=load("profiles/family_maturity_promotion_20260928_R1.json")
+          cc=ca["common_family_components"]
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R31"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260927-R30"
+          assert cc["execution_architecture"]==ep["profile_id"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R7"
+          assert cc["venue_routing"]==route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R31"
+          assert cc["family_runtime_contracts"]==runtime["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260928-R23"
+          assert cc["scope_ownership_contract"]==scope["profile_id"]
+          assert cc["formal_lifecycle_contract"]==lifecycle["profile_id"]
+          assert cc["maturity_promotion_contract"]==promotion["profile_id"]
+          assert cc["authority_guard"]=="runtime/family_authority_guard.py"
+
+          assert route["parent_profile"]==ep["profile_id"]
+          assert route["family_runtime_contracts"]==runtime["profile_id"]
+          assert route["scope_ownership_contract"]==scope["profile_id"]
+          assert route["formal_lifecycle_contract"]==lifecycle["profile_id"]
+          assert route["maturity_promotion_contract"]==promotion["profile_id"]
+
+          assert runtime["scope_ownership_contract"]==scope["profile_id"]
+          assert runtime["formal_lifecycle_contract"]==lifecycle["profile_id"]
+          assert runtime["maturity_promotion_contract"]==promotion["profile_id"]
+          assert runtime["production_numerical_change"] is False
+
+          for name in scope["common_reserved_scopes"]:
+              assert scope["scopes"][name]["owner"]=="COMMON_FAMILY", name
+          for name in scope["family_isolated_scopes"]:
+              assert scope["scopes"][name]["owner"]=="FAMILY_SPECIFIC", name
+          for name in scope["venue_allowed_scopes"]:
+              assert scope["scopes"][name]["owner"]=="VENUE_SPECIFIC", name
+
+          assert promotion["automatic_promotion"] is False
+          assert promotion["promotion_classes"]["C2_DECISION_POLICY"]["unknown_oos_required"] is True
+          assert promotion["promotion_classes"]["C3_NUMERICAL_MODEL"]["unknown_oos_required"] is True
+          assert promotion["promotion_classes"]["C3_NUMERICAL_MODEL"]["cross_family_direct_promotion_forbidden"] is True
+
+          stage_ids=[x["stage_id"] for x in lifecycle["stages"]]
+          for required in [
+              "SCOPE_OWNERSHIP_RESOLVE","FULL_RUNNER_UNIVERSE","REQUIRED_INDEX_MANIFEST",
+              "ACTUAL_NUMERICAL_MATERIALIZATION","INDEX_PROVENANCE","STATIC_PREDICTION_FREEZE",
+              "PRE_KRS","KRS_EXECUTE","PRECOMPRESSION_SEMANTIC_UNIVERSE","MEC",
+              "CAPITAL_POLICY","CANONICAL_TICKET","SIGNED_FINAL","SIGNED_RESULT",
+              "PREDICTION_UTILITY_MEASUREMENT","PFS_MEASUREMENT",
+              "FIRST_MATERIAL_FAILURE_LOCALIZATION","LEARNING_STATE_N_PLUS_1"
+          ]:
+              assert required in stage_ids, required
+
+          s=ca["supersession_declaration"]
+          for key in [
+              "predictive_model_formula_change","base_index_weight_change",
+              "derived_index_formula_change","krs_engine_physics_change",
+              "krs_production_authority_change","mec_r3_policy_change",
+              "capital_policy_change","venue_production_canon_change",
+              "candidate_to_production_promotion","production_numerical_change",
+              "automatic_promotion"
+          ]:
+              assert s[key] is False, key
+
+          jra=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          nonjra=Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
+          assert 'python runtime/family_authority_guard.py --request "$REQUEST_FILE"' in jra
+          assert 'python runtime/family_authority_guard.py --request "$REQUEST_FILE"' in nonjra
+
+          # R30 Prediction Utility contract must remain bound after R31.
+          assert cc["prediction_utility_contract"]=="KM-FAMILY-PREDICTION-UTILITY-CONTRACT-20260927-R1"
+          assert ca["family_evaluation_order"][0]=="PREDICTION_UTILITY"
+
+          print(json.dumps({
+              "status":"PASS",
+              "current_authority":ca["manifest_id"],
+              "execution_architecture":ep["profile_id"],
+              "scope_ownership":scope["profile_id"],
+              "formal_lifecycle":lifecycle["profile_id"],
+              "maturity_promotion":promotion["profile_id"],
+              "production_numerical_change":"NONE",
+              "automatic_promotion":False
+          },ensure_ascii=False,indent=2))
+          PY
