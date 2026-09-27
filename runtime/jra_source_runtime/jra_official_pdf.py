@@ -7,7 +7,7 @@ from source_acquisition import (
     _SafeRedirect, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 )
 
-PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.2-20260927"
+PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.3-20260927"
 SLUGS={
     "SPP":"sapporo","HKD":"hakodate","FKS":"fukushima","NGT":"niigata","TKY":"tokyo",
     "NKY":"nakayama","CHK":"chukyo","KYO":"kyoto","HSN":"hanshin","KKR":"kokura",
@@ -61,6 +61,63 @@ def _race_header_priority(line:Any,race_no:int)->int|None:
     if re.match(rf"^{re.escape(n)}R(?:$|[^0-9])",s):
         return 1
     return None
+
+def _race_label_number(v:Any)->int|None:
+    s=re.sub(r"\\s+","",_clean_line(v)).upper()
+    m=re.fullmatch(r"R(\\d{1,2})",s)
+    if m:return int(m.group(1))
+    m=re.fullmatch(r"(\\d{1,2})R",s)
+    if m:return int(m.group(1))
+    return None
+
+def _column_clip_for_race(page:Any,race_no:int):
+    words=list(page.get_text("words") or [])
+    labels=[]
+    for w in words:
+        if len(w)<5:continue
+        no=_race_label_number(w[4])
+        if no is None:continue
+        x0,y0,x1,y1=map(float,w[:4])
+        labels.append({"race_no":no,"x0":x0,"y0":y0,"x1":x1,"y1":y1,
+                       "xc":(x0+x1)/2.0,"yc":(y0+y1)/2.0})
+    targets=[x for x in labels if int(x["race_no"])==int(race_no)]
+    if not targets:
+        return None
+    # Race headers sharing the same page row define the JRA multi-column layout.
+    # Pick the target that has the largest same-row peer set.
+    ranked=[]
+    for t in targets:
+        peers=[x for x in labels if abs(x["yc"]-t["yc"])<=18.0]
+        ranked.append((len(peers),t,peers))
+    _,target,peers=max(ranked,key=lambda z:z[0])
+    peers=sorted(peers,key=lambda x:x["xc"])
+    centers=[x["xc"] for x in peers]
+    pos=min(range(len(peers)),key=lambda i:abs(peers[i]["xc"]-target["xc"]))
+    left=float(page.rect.x0) if pos==0 else (centers[pos-1]+centers[pos])/2.0
+    right=float(page.rect.x1) if pos==len(peers)-1 else (centers[pos]+centers[pos+1])/2.0
+    if right-left < 40:
+        return None
+    return fitz.Rect(left,float(page.rect.y0),right,float(page.rect.y1))
+
+def parse_runner_universe_from_doc(doc:Any,race_no:int)->Dict[str,Any]:
+    errors=[]
+    for page_index,page in enumerate(doc):
+        clip=_column_clip_for_race(page,int(race_no))
+        if clip is None:
+            continue
+        # sort=True restores natural top-to-bottom order inside a single race column.
+        text=page.get_text("text",clip=clip,sort=True)
+        try:
+            out=parse_runner_universe_from_pages([text],int(race_no))
+            out["pdf_page_number"]=page_index+1
+            out["pdf_column_clip"]=[round(float(clip.x0),3),round(float(clip.y0),3),
+                                    round(float(clip.x1),3),round(float(clip.y1),3)]
+            return out
+        except Exception as exc:
+            errors.append(type(exc).__name__+":"+str(exc))
+    if errors:
+        raise ValueError("JRA_OFFICIAL_PDF_COLUMN_PARSE_FAILED:"+"|".join(errors))
+    raise ValueError("JRA_OFFICIAL_PDF_RACE_COLUMN_NOT_FOUND")
 
 def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any]:
     candidates=[]
@@ -199,8 +256,12 @@ def fetch_and_enrich_official_pdf(
         if serr:
             raise ValueError("JRA_OFFICIAL_PDF_SNAPSHOT_ERROR:"+"|".join(serr))
     doc=fitz.open(stream=raw,filetype="pdf")
-    pages=[p.get_text("text") for p in doc]
-    universe=parse_runner_universe_from_pages(pages,int(race_no))
+    try:
+        universe=parse_runner_universe_from_doc(doc,int(race_no))
+    except Exception:
+        # Compatibility fallback for historical single-column fixtures/PDFs.
+        pages=[p.get_text("text") for p in doc]
+        universe=parse_runner_universe_from_pages(pages,int(race_no))
     universe["source_snapshot_sha256"]=snapshot["snapshot_sha256"]
     universe["raw_sha256"]=snapshot["raw_sha256"]
     universe["official_pdf_url"]=final_url
