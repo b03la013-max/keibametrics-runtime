@@ -22,8 +22,10 @@ jobs:
       - name: Verify R29 authority and isolation
         run: |
           python - <<'PY'
-          import json
+          import glob,json,sys
           from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from jra_source_candidate_promotion_gate import evaluate as evaluate_oos
           ca=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260926_R29.json",encoding="utf-8"))
           fr=json.load(open("profiles/family_runtime_contracts_20260926_R22.json",encoding="utf-8"))
           vr=json.load(open("profiles/venue_chat_routes_20260926_R27.json",encoding="utf-8"))
@@ -47,9 +49,17 @@ jobs:
           assert e2e["status"]=="PASS" and e2e["all_candidate_stages_pass"] is True
           assert e2e["required_count"]==e2e["calculated_count"]==320
           assert e2e["candidate_oos_eligible"] is False
-          assert tracker["eligible_race_count"]==0
+          records=[]
+          for rp in sorted(glob.glob("runtime/source_candidate_oos/*/result_evaluation.json")):
+              with open(rp,encoding="utf-8") as fh:
+                  row=json.load(fh)
+              if row.get("result_evaluation"):
+                  records.append(row)
+          expected_tracker=evaluate_oos(records)
+          assert tracker["eligible_race_count"]==expected_tracker["eligible_race_count"]
           assert tracker["target_eligible_races"]==30
           assert tracker["automatic_promotion"] is False
+          assert tracker["sha256"]==expected_tracker["sha256"]
           assert j["production_authority_firewall"]["status"]=="ACTIVE / FAIL-CLOSED"
           guard=Path("runtime/formal_request_validator.py").read_text(encoding="utf-8")
           formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
