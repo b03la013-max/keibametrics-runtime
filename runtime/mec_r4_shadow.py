@@ -43,13 +43,28 @@ def _add(store,bt,sel,stake=100,source="SHADOW"):
         }
 
 def _tickets(final_artifact):
-    return copy.deepcopy((final_artifact.get("final_ticket") or {}).get("tickets") or [])
+    tickets=(final_artifact.get("final_ticket") or {}).get("tickets")
+    if tickets is None:
+        tickets=(final_artifact.get("mec") or {}).get("tickets")
+    return copy.deepcopy(tickets or [])
 
 def _roles(final_artifact):
-    return (final_artifact.get("final_prediction_package") or {}).get("roles") or (final_artifact.get("static_prediction") or {}).get("roles") or {}
+    roles=(final_artifact.get("final_prediction_package") or {}).get("roles") or (final_artifact.get("static_prediction") or {}).get("roles")
+    if roles:
+        return roles
+    sem=final_artifact.get("candidate_semantic_freeze") or {}
+    out={}
+    for role,key in (("W","w_active"),("P2","p2_active"),("P3","p3_active")):
+        for rid in sem.get(key) or []:
+            out.setdefault(str(rid),[]).append(role)
+    return out
 
 def _ranking(final_artifact):
-    return [int(x) for x in ((final_artifact.get("final_prediction_package") or {}).get("ranking") or (final_artifact.get("static_prediction") or {}).get("ranking") or [])]
+    raw=((final_artifact.get("final_prediction_package") or {}).get("ranking")
+         or (final_artifact.get("static_prediction") or {}).get("ranking")
+         or (final_artifact.get("candidate_semantic_freeze") or {}).get("ranking")
+         or [])
+    return [int(x) for x in raw]
 
 def _thirds(final_artifact):
     return final_artifact.get("third_dispositions") or []
@@ -147,10 +162,17 @@ def build_mec_r4_shadow(final_artifact,generated_at=None):
         "race_id":final_artifact["race_id"],
         "generated_at":generated_at,
         "source_immutable_final_sha256":final_artifact.get("sha256"),
-        "source_final_receipt_sha256":final_artifact.get("final_receipt_sha256"),
+        "source_final_receipt_sha256":(
+            final_artifact.get("final_receipt_sha256")
+            or (final_artifact.get("final_receipt") or {}).get("receipt_sha256")
+        ),
         "scheduled_post_at":final_artifact.get("scheduled_post_at"),
         "temporal_mode":final_artifact.get("temporal_mode"),
-        "production_mec_profile":((final_artifact.get("minimum_efficient_coverage") or {}).get("profile")),
+        "source_lane":("SOURCE_DERIVED_CANDIDATE" if final_artifact.get("candidate_only") else "PRODUCTION_OR_STANDARD_FINAL"),
+        "production_mec_profile":(
+            (final_artifact.get("minimum_efficient_coverage") or {}).get("profile")
+            or (final_artifact.get("mec") or {}).get("profile")
+        ),
         "production_effect":"NONE",
         "semantic_universe_policy":"UNCHANGED_INFORMATION_RETENTION",
         "generic_tail_purchase":"OFF_IN_SHADOW_ARMS",
