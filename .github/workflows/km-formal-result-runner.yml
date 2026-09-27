@@ -8,6 +8,7 @@ on:
     branches: [ main ]
     paths:
       - "runtime/results/*.json"
+      - "runtime/source_candidate_results/*.json"
   workflow_dispatch:
 
 jobs:
@@ -23,9 +24,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' | tail -1)"
+          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' 'runtime/source_candidate_results/*.json' | tail -1)"
           if [ -z "$REQ" ]; then
-            REQ="$(find runtime/results -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
+            REQ="$(find runtime/results runtime/source_candidate_results -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort | tail -1)"
           fi
           test -n "$REQ"
           echo "request=$REQ" >> "$GITHUB_OUTPUT"
@@ -75,38 +76,56 @@ jobs:
           vcode,v=call("/verify",res)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
 
-          # Closed-loop: bind RESULT to the immutable signed FINAL artifact.
-          final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
-          assert os.path.exists(final_path), f"IMMUTABLE_FINAL_ARTIFACT_MISSING:{final_path}"
-          with open(final_path,encoding="utf-8") as fh:
-              final_artifact=json.load(fh)
-
-          # Settle the separately frozen pre-result MEC R4 SHADOW, if available.
-          # Never mutate the shadow artifact or Production FINAL.
+          # Closed-loop authority separation:
+          # Production RESULT requires Production Immutable FINAL.
+          # Source-Derived Candidate RESULT is allowed to bind only to its
+          # immutable pre-result Candidate sidecar and MUST NOT fabricate or
+          # substitute a Production FINAL.
+          candidate_only=str(p.get("result_lane") or "").upper()=="SOURCE_DERIVED_CANDIDATE"
+          final_artifact=None
           shadow_settlement=None
-          shadow_path=os.path.join("runtime","mec_shadow_artifacts",p["race_id"]+".json")
-          if os.path.exists(shadow_path):
-              with open(shadow_path,encoding="utf-8") as fh:
-                  shadow=json.load(fh)
-              assert shadow.get("source_immutable_final_sha256")==final_artifact.get("sha256"), "MEC_R4_SHADOW_FINAL_LINEAGE_MISMATCH"
-              shadow_settlement=settle_mec_r4_shadow(shadow,p)
-              os.makedirs(os.path.join("runtime","mec_shadow_results"),exist_ok=True)
-              with open(os.path.join("runtime","mec_shadow_results",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
-                  json.dump(shadow_settlement,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          review=None
+          learning=None
+          oos=None
 
-          review=build_post_result_review(p,final_artifact)
-          learning=build_learning_state(review)
-          oos=build_oos_measurement(review,final_artifact)
+          final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
+          if not candidate_only:
+              assert os.path.exists(final_path), f"IMMUTABLE_FINAL_ARTIFACT_MISSING:{final_path}"
+              with open(final_path,encoding="utf-8") as fh:
+                  final_artifact=json.load(fh)
 
-          # Source-derived Candidate closed loop. Only an immutable pre-result
-          # sidecar can be evaluated; RESULT never reconstructs Candidate prediction.
+              # Settle the separately frozen pre-result MEC R4 SHADOW, if available.
+              # Never mutate the shadow artifact or Production FINAL.
+              shadow_path=os.path.join("runtime","mec_shadow_artifacts",p["race_id"]+".json")
+              if os.path.exists(shadow_path):
+                  with open(shadow_path,encoding="utf-8") as fh:
+                      shadow=json.load(fh)
+                  assert shadow.get("source_immutable_final_sha256")==final_artifact.get("sha256"), "MEC_R4_SHADOW_FINAL_LINEAGE_MISMATCH"
+                  shadow_settlement=settle_mec_r4_shadow(shadow,p)
+                  os.makedirs(os.path.join("runtime","mec_shadow_results"),exist_ok=True)
+                  with open(os.path.join("runtime","mec_shadow_results",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                      json.dump(shadow_settlement,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
+              review=build_post_result_review(p,final_artifact)
+              learning=build_learning_state(review)
+              oos=build_oos_measurement(review,final_artifact)
+
+          # Source-derived Candidate closed loop. This branch is independent
+          # of Production FINAL availability and uses only the immutable
+          # pre-result Candidate sidecar. Production effect remains NONE.
           source_candidate_result=None
           source_candidate_gate=None
           candidate_pre_path=os.path.join("runtime","source_candidate_oos",p["race_id"],"pre_result.json")
+          if candidate_only:
+              assert os.path.exists(candidate_pre_path), f"SOURCE_CANDIDATE_PRE_RESULT_MISSING:{candidate_pre_path}"
           if os.path.exists(candidate_pre_path):
               with open(candidate_pre_path,encoding="utf-8") as fh:
                   candidate_pre=json.load(fh)
               assert candidate_pre.get("race_id")==p["race_id"], "SOURCE_CANDIDATE_RACE_ID_MISMATCH"
+              declared_candidate_receipt=str((p.get("frozen_prediction_ref") or {}).get("final_receipt_sha256") or "")
+              frozen_candidate_receipt=str(candidate_pre.get("candidate_final_receipt_sha256") or "")
+              if declared_candidate_receipt:
+                  assert declared_candidate_receipt==frozen_candidate_receipt, "SOURCE_CANDIDATE_FINAL_RECEIPT_MISMATCH"
               top3=(p.get("official_result") or {}).get("top3")
               if not isinstance(top3,list) or len(top3)<3:
                   finish=(p.get("official_result") or {}).get("finish_order") or []
@@ -134,33 +153,38 @@ jobs:
               with open(os.path.join("runtime","source_candidate_oos_status.json"),"w",encoding="utf-8") as fh:
                   json.dump(source_candidate_gate,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-          os.makedirs("runtime/reviews_auto",exist_ok=True)
-          os.makedirs("runtime/learning_states",exist_ok=True)
-          os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
-          with open(os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json"),"w",encoding="utf-8") as fh:
-              json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
-          with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
-              json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
-          with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
-              json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          if not candidate_only:
+              os.makedirs("runtime/reviews_auto",exist_ok=True)
+              os.makedirs("runtime/learning_states",exist_ok=True)
+              os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
+              with open(os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json"),"w",encoding="utf-8") as fh:
+                  json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                  json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                  json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-          measurements=[]
-          for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
-              if not fn.endswith(".json"): continue
-              with open(os.path.join("runtime","krs_oos_measurements",fn),encoding="utf-8") as fh:
-                  measurements.append(json.load(fh))
-          r30=evaluate_r30(measurements)
-          with open(os.path.join("runtime","krs_oos_status.json"),"w",encoding="utf-8") as fh:
-              json.dump(r30,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              measurements=[]
+              for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
+                  if not fn.endswith(".json"): continue
+                  with open(os.path.join("runtime","krs_oos_measurements",fn),encoding="utf-8") as fh:
+                      measurements.append(json.load(fh))
+              r30=evaluate_r30(measurements)
+              with open(os.path.join("runtime","krs_oos_status.json"),"w",encoding="utf-8") as fh:
+                  json.dump(r30,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-          # Forward MEC-R4 OOS and canonical PFS measurement are research/measurement only.
-          # They never mutate Production MEC-R3, prediction, tickets, or capital.
-          mec_r4_oos=write_mec_r4_oos_status()
-          pfs_grand=write_pfs_grand_review()
+              # Forward MEC-R4 OOS and canonical Production PFS measurement.
+              mec_r4_oos=write_mec_r4_oos_status()
+              pfs_grand=write_pfs_grand_review()
+          else:
+              r30={}
+              mec_r4_oos={}
+              pfs_grand={}
 
           summary={
             "race_id":p["race_id"],
-            "status":"RESULT_E2E_PASS",
+            "result_lane":"SOURCE_DERIVED_CANDIDATE" if candidate_only else "PRODUCTION",
+            "status":"CANDIDATE_RESULT_E2E_PASS" if candidate_only else "RESULT_E2E_PASS",
             "receipt_sha256":res.get("receipt_sha256"),
             "artifact_sha256":rec.get("artifact_sha256"),
             "signer_key_id":res.get("signer_key_id"),
@@ -168,21 +192,21 @@ jobs:
             "verified":True,
             "settlement_status":p["settlement"]["status"],
             "frozen_prediction_ref":p["frozen_prediction_ref"],
-            "automatic_review_sha256":review.get("sha256"),
-            "learning_state_sha256":learning.get("sha256"),
-            "first_material_failure":review.get("failure_localization",{}).get("first_material_failure"),
-            "pfs":review.get("capital",{}).get("pfs"),
-            "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification"),
-            "krs_oos_eligible":oos.get("eligible"),
-            "krs_oos_measurement_sha256":oos.get("sha256"),
-            "krs_r30_status":r30.get("status"),
-            "krs_r30_eligible_races":r30.get("eligible_races"),
+            "automatic_review_sha256":review.get("sha256") if review else None,
+            "learning_state_sha256":learning.get("sha256") if learning else None,
+            "first_material_failure":review.get("failure_localization",{}).get("first_material_failure") if review else None,
+            "pfs":review.get("capital",{}).get("pfs") if review else None,
+            "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification") if review else None,
+            "krs_oos_eligible":oos.get("eligible") if oos else None,
+            "krs_oos_measurement_sha256":oos.get("sha256") if oos else None,
+            "krs_r30_status":r30.get("status") if r30 else None,
+            "krs_r30_eligible_races":r30.get("eligible_races") if r30 else None,
             "mec_r4_shadow_settlement_sha256":shadow_settlement.get("sha256") if shadow_settlement else None,
-            "mec_r4_oos_status":mec_r4_oos.get("status"),
-            "mec_r4_oos_eligible_races":mec_r4_oos.get("eligible_races"),
-            "mec_r4_oos_remaining_races":mec_r4_oos.get("remaining_races"),
-            "mec_r4_oos_sha256":mec_r4_oos.get("sha256"),
-            "pfs_grand_review_sha256":pfs_grand.get("sha256"),
+            "mec_r4_oos_status":mec_r4_oos.get("status") if mec_r4_oos else None,
+            "mec_r4_oos_eligible_races":mec_r4_oos.get("eligible_races") if mec_r4_oos else None,
+            "mec_r4_oos_remaining_races":mec_r4_oos.get("remaining_races") if mec_r4_oos else None,
+            "mec_r4_oos_sha256":mec_r4_oos.get("sha256") if mec_r4_oos else None,
+            "pfs_grand_review_sha256":pfs_grand.get("sha256") if pfs_grand else None,
             "source_candidate_oos_evaluated":source_candidate_result is not None,
             "source_candidate_oos_eligible":(
                 source_candidate_result.get("oos_eligible") if source_candidate_result else None
