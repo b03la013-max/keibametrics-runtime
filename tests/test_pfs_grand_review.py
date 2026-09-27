@@ -90,3 +90,56 @@ def test_auto_review_capital_authority_counts_as_frozen_recommendation(tmp_path,
     assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["race_count"]==1
     assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["investment"]==1400
     assert r["cohorts"]["ALL_FROZEN_RECOMMENDATION"]["return"]==1420
+
+
+def test_source_candidate_oos_pfs_is_separate_and_tier_measured(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results",
+              "runtime/source_candidate_results"]:
+        Path(d).mkdir(parents=True,exist_ok=True)
+    rid="KM-JRA-HSN-20990101-R01"
+    od=Path("runtime/source_candidate_oos")/rid
+    od.mkdir(parents=True,exist_ok=True)
+    (od/"result_evaluation.json").write_text(json.dumps({
+      "race_id":rid,"oos_eligible":True,"result_evaluation":{"actual_top3":[1,2,3]}
+    }),encoding="utf-8")
+    (od/"candidate_final.json").write_text(json.dumps({
+      "race_id":rid,"candidate_only":True,
+      "mec":{"tickets":[
+        {"bet_type":"EXACTA","selection":[1,2],"stake":100,"mec_tier":"CORE"},
+        {"bet_type":"TRIO","selection":[1,2,3],"stake":100,"mec_tier":"PROTECTION"},
+        {"bet_type":"TRIO","selection":[1,2,4],"stake":100,"mec_tier":"TAIL"}
+      ]}
+    }),encoding="utf-8")
+    Path("runtime/source_candidate_results",rid+".json").write_text(json.dumps({
+      "race_id":rid,
+      "settlement":{
+        "status":"SETTLED",
+        "pfs_authority":"CANDIDATE-FROZEN-RECOMMENDATION-PFS",
+        "actual_ticket_status":"UNVERIFIED",
+        "total_investment":300,"total_payout":900,"pfs":300.0,
+        "winning_tickets":[
+          {"bet_type":"TRIO","selection":[1,2,3],"stake":100,"payout_per_100":900,"payout":900}
+        ],
+        "bet_type_summary":[
+          {"bet_type":"EXACTA","investment":100,"payout":0},
+          {"bet_type":"TRIO","investment":200,"payout":900}
+        ]
+      }
+    }),encoding="utf-8")
+
+    import sys, importlib
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review
+    importlib.reload(pfs_grand_review)
+    r=pfs_grand_review.build_report()
+    assert r["cohorts"]["FORMAL_PRE_RACE"]["race_count"]==0
+    c=r["candidate_forward_oos"]
+    assert c["eligible_race_count"]==1
+    assert c["settled_race_count"]==1
+    assert c["aggregate"]["investment_weighted_pfs"]==300.0
+    assert c["mec_capital_density"]["tiers"]["TAIL"]["capital_share_pct"]==33.333333
+    assert c["tier_pfs"]["tiers"]["CORE"]["pfs"]==0.0
+    assert c["tier_pfs"]["tiers"]["PROTECTION"]["pfs"]==900.0
+    assert c["tier_pfs"]["tiers"]["TAIL"]["pfs"]==0.0
+    assert c["production_effect"]=="NONE"

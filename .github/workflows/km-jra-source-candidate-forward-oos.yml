@@ -56,6 +56,7 @@ jobs:
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
+          from mec_r4_shadow import build_mec_r4_shadow
 
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           BASE=os.environ["KRS_BASE"].rstrip("/")
@@ -299,12 +300,24 @@ jobs:
               "candidate_numerical_summary":req["candidate_numerical_summary"],
               "candidate_source_objective_shadow":req.get("candidate_source_objective_shadow"),
               "candidate_source_objective_sha256":(req.get("candidate_source_objective_shadow") or {}).get("sha256"),
+              "static_prediction":req.get("static_prediction"),
+              "role_registry":req.get("role_registry"),
+              "pair_dispositions":req.get("pair_dispositions"),
+              "third_dispositions":req.get("third_dispositions"),
+              "scheduled_post_at":scheduled_post,
+              "temporal_mode":"FORMAL-PRE-RACE",
               "pre_krs_receipt":p,"krs_run_receipt":run,"krs_utility":utility,
               "mec":mec,"capital":capital,"final_receipt":final,
               "oos_pre_result_record_sha256":record["sha256"],
           }
           final_art["sha256"]=hashlib.sha256(json.dumps(final_art,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
           (outdir/"candidate_final.json").write_text(json.dumps(final_art,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          mec_r4_shadow=build_mec_r4_shadow(final_art,generated_at=freeze)
+          assert mec_r4_shadow["production_effect"]=="NONE"
+          assert mec_r4_shadow["source_lane"]=="SOURCE_DERIVED_CANDIDATE"
+          (outdir/"mec_r4_shadow_pre_result.json").write_text(
+              json.dumps(mec_r4_shadow,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
+          )
           print("KM_SOURCE_CANDIDATE_FORWARD="+json.dumps({
               "race_id":req["race_id"],"status":"PASS","oos_eligible":True,
               "required_count":expected,"calculated_count":expected,
@@ -313,6 +326,7 @@ jobs:
               "mec_required_capital":mec.get("minimum_required_capital"),
               "final_receipt_sha256":final.get("receipt_sha256"),
               "pre_result_sha256":record["sha256"],
+              "mec_r4_shadow_sha256":mec_r4_shadow.get("sha256"),
               "production_effect":"NONE"
           },ensure_ascii=False,separators=(",",":")))
           PY
