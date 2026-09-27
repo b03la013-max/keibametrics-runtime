@@ -1,0 +1,62 @@
+name: NKY 20260927 Payout Link Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-nky-20260927-payout-link-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt beautifulsoup4
+      - name: Inspect payout links and pages
+        run: |
+          python - <<'PY'
+          import json,re,urllib.request,http.cookiejar,sys,urllib.parse
+          from pathlib import Path
+          from bs4 import BeautifulSoup
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          from jra_race_card_detail import _calendar_url,_fetch,_post,_date8,BASE
+          date="2026-09-27"; key="0620260409"; d=_date8(date)
+          jar=http.cookiejar.CookieJar(); op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          u0,r0,h0=_fetch(op,_calendar_url(date)); s0=_decode(r0,h0.get("content-type",""))
+          ents=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",s0)
+          chosen=None
+          for e in ents:
+            try:
+              u1,r1,h1=_post(op,e,u0); s1=_decode(r1,h1.get("content-type",""))
+              dm=re.findall(r"(pw01srl00"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
+              if dm: chosen=(u1,dm[0]); break
+            except: pass
+          if not chosen: raise RuntimeError("NO_DAY")
+          u1,day=chosen; u2,r2,h2=_post(op,day,u1); s2=_decode(r2,h2.get("content-type",""))
+          out={"races":{}}
+          for rn in range(3,13):
+            prefix="pw01sde01"+key+f"{rn:02d}"+d
+            rm=re.findall(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",s2)
+            rec={"race_no":rn}
+            if not rm: rec["status"]="NO_RACE"; out["races"][str(rn)]=rec; continue
+            u3,r3,h3=_post(op,rm[0],u2); s3=_decode(r3,h3.get("content-type",""))
+            soup=BeautifulSoup(s3,"html.parser")
+            links=[]
+            for a in soup.find_all("a"):
+              txt=" ".join(a.get_text(" ",strip=True).split())
+              if "払戻" in txt or "オッズ" in txt or "結果" in txt:
+                links.append({"text":txt,"href":a.get("href"),"onclick":a.get("onclick")})
+            rec["status"]="PASS"; rec["links"]=links[:100]
+            out["races"][str(rn)]=rec
+          Path("runtime/diagnostics/NKY-20260927-payout-links.json").write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({k:v.get("links") for k,v in out["races"].items()},ensure_ascii=False)[:12000])
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/NKY-20260927-payout-links.json
+          git commit -m "diagnostic: inspect NKY payout links [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
