@@ -188,3 +188,32 @@ def test_fact_availability_is_separate_from_missing_feature_family():
     assert fa["JRA_SAME_DAY_RESULTS_PLUS_STYLE"]["style_binding_available"] is False
     assert "JRA_HORSE_HISTORY" in rep["missing_feature_source_families"]
     assert rep["missing_source_families_semantics"].startswith("LEGACY ALIAS")
+
+
+def test_source_feature_trace_covers_all_mapping_features_with_explicit_missing_reasons():
+    runners=[{"runner_id":"1","name":"A","career_starts":8,"evidence_features":{}},
+             {"runner_id":"2","name":"B","career_starts":6,"evidence_features":{}}]
+    rep=compile_source_to_features(_artifact(),runners,_mapping())
+    tr=rep["runners"]["1"]["source_feature_trace"]
+    assert tr["schema"]=="KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927"
+    assert tr["summary"]["feature_count"]==71
+    assert len(tr["features"])==71
+    assert tr["features"]["weight_load_fit"]["production_feature_state"]=="SOURCE_GENERATED_PRODUCTION_FEATURE"
+    assert tr["features"]["weight_load_fit"]["missing_reason"] is None
+    assert tr["features"]["recent_performance"]["production_feature_state"]=="MISSING"
+    assert tr["features"]["recent_performance"]["missing_reason"]=="SOURCE_FACT_NOT_AVAILABLE"
+    assert tr["features"]["external_index_support"]["missing_reason"]=="SHADOW_ONLY_NON_PRODUCTION"
+    assert tr["features"]["weight_load_fit"]["target_bindings"]
+    assert tr["sha256"]
+
+
+def test_attach_request_persists_source_feature_trace_for_final_artifact_transport():
+    req={"race_id":"T","runners":[
+        {"runner_id":"1","name":"A","career_starts":8,"evidence_features":{}},
+        {"runner_id":"2","name":"B","career_starts":6,"evidence_features":{}}
+    ]}
+    out=attach_source_features_to_request(req,_artifact(),_mapping())
+    rr=out["source_to_evidence_feature_runner_coverage"]["1"]
+    assert rr["source_feature_trace"]["summary"]["feature_count"]==71
+    assert rr["source_feature_trace_summary"]["generated_feature_count"]>=1
+    assert "source_fact_availability" in rr

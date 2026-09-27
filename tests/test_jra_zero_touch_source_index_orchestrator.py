@@ -39,3 +39,7 @@ def test_zero_touch_report_is_truthful_and_fail_closed():
     assert r["claims"]["no_synthesis"] is True
     assert r["shadow_has_all_71_feature_states"] is True
     assert r["shadow_has_20_index_diagnostic"] is True
+    assert r["source_feature_trace_schema"]=="KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927"
+    t=r["per_runner_coverage"]["1"]["source_feature_trace"]
+    assert t["summary"]["feature_count"]==71
+    assert t["features"]["weight_load_fit"]["production_feature_state"]=="SOURCE_GENERATED_PRODUCTION_FEATURE"

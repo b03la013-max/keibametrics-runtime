@@ -17,6 +17,7 @@ DCR_COMPONENT_MAX = {
 }
 FORMULA_REGISTRY = "index_formula_registry JRA v1.0"
 BASE_MAPPING_VERSION = "JRA-v1.0-IPL-RULE-BASED"
+TRACE_SCHEMA = "KM-JRA-SOURCE-FEATURE-INDEX-STATIC-TRACE-v1.0-20260927"
 
 
 class IndexLedgerError(ValueError):
@@ -109,7 +110,16 @@ def materialize_index_provenance(req: dict) -> dict:
     if set(rows) != set(runner_by_id):
         raise IndexLedgerError(f"INDEX_LEDGER_RUNNER_UNIVERSE_MISMATCH:{sorted(rows)}!={sorted(runner_by_id)}")
 
-    replay = {"formula_registry": FORMULA_REGISTRY, "runners": {}}
+    sp = req.get("static_prediction") or {}
+    ranking = [str(x) for x in (sp.get("ranking") or [])]
+    static_rank_by_id = {rid: pos + 1 for pos, rid in enumerate(ranking)}
+    static_roles = sp.get("roles") or {}
+    replay = {
+        "formula_registry": FORMULA_REGISTRY,
+        "trace_schema": TRACE_SCHEMA,
+        "static_ranking": ranking,
+        "runners": {},
+    }
 
     for rid, spec in rows.items():
         if not isinstance(spec, dict):
@@ -181,8 +191,44 @@ def materialize_index_provenance(req: dict) -> dict:
         canonical["T3I"] = _derived(t3i, "JRA-T3I-v1.0", formula_refs, "T3I fixed formula replay")
 
         runner_by_id[rid]["canonical_components"] = canonical
+        base_index_trace = {}
+        trace_complete = True
+        for idx in BASE:
+            raw = base_specs.get(idx) or {}
+            components = copy.deepcopy(raw.get("components") or [])
+            if not components:
+                trace_complete = False
+            base_index_trace[idx] = {
+                "value": vals[idx],
+                "rule_id": canonical[idx]["rule_id"],
+                "mapping_version": canonical[idx]["mapping_version"],
+                "coverage_weight": raw.get("coverage_weight"),
+                "components": components,
+                "evidence_refs": copy.deepcopy(canonical[idx]["evidence_refs"]),
+                "source_fact": canonical[idx]["source_fact"],
+            }
+
+        derived_index_trace = {
+            "DCR": copy.deepcopy(canonical["DCR"]),
+            "TPI": copy.deepcopy(canonical["TPI"]),
+            "ZAI_WIN": copy.deepcopy(canonical["ZAI_WIN"]),
+            "ZAI_PLACE": copy.deepcopy(canonical["ZAI_PLACE"]),
+            "SRI": copy.deepcopy(canonical["SRI"]),
+            "F3S": copy.deepcopy(canonical["F3S"]),
+            "T3I": copy.deepcopy(canonical["T3I"]),
+        }
+        runner_roles = sorted(
+            str(role) for role, ids in static_roles.items()
+            if isinstance(ids, list) and rid in {str(x) for x in ids}
+        )
+
         replay["runners"][rid] = {
             "base_final_values": {k: vals[k] for k in BASE},
+            "base_index_trace": base_index_trace,
+            "derived_index_trace": derived_index_trace,
+            "source_to_index_trace_complete": trace_complete,
+            "static_rank": static_rank_by_id.get(rid),
+            "static_roles": runner_roles,
             "dcr_score": dcr_score,
             "dcr_factor": round(dcr_factor, 6),
             "weak_penalty": round(weak, 6),
@@ -195,6 +241,10 @@ def materialize_index_provenance(req: dict) -> dict:
             "t3i": round(t3i, 6),
         }
 
+    replay["trace_complete_runner_count"] = sum(
+        1 for x in replay["runners"].values() if x.get("source_to_index_trace_complete")
+    )
+    replay["trace_incomplete_runner_count"] = len(replay["runners"]) - replay["trace_complete_runner_count"]
     replay["sha256"] = _canonical_sha(replay)
     req["index_provenance_replay"] = replay
     req["index_provenance_hash"] = replay["sha256"]

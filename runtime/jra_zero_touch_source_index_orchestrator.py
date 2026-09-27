@@ -94,6 +94,7 @@ def build_zero_touch_source_index_report(source:Dict[str,Any],mapping:Dict[str,A
       "runner_count":len(runners),
       "runner_stubs":runners,
       "production_source_feature_report_sha256":source_feature.get("sha256"),
+      "source_feature_trace_schema":source_feature.get("trace_schema"),
       "production_source_only_formal_base_ready":prod_ready,
       "production_status":"READY" if prod_ready else "BLOCKED_EXPLICIT_GAPS",
       "production_error":prod_error,
@@ -113,6 +114,9 @@ def build_zero_touch_source_index_report(source:Dict[str,Any],mapping:Dict[str,A
           "source_only_formal_base_ready":rr.get("source_only_formal_base_ready"),
           "automation_gap":rr.get("automation_gap"),
           "source_only_coverage":rr.get("source_only_coverage"),
+          "source_fact_availability":copy.deepcopy(rr.get("source_fact_availability") or {}),
+          "source_feature_trace_summary":copy.deepcopy(rr.get("source_feature_trace_summary") or {}),
+          "source_feature_trace":copy.deepcopy(rr.get("source_feature_trace") or {}),
         } for rid,rr in (source_feature.get("runners") or {}).items()
       },
       "objective_shadow":objective,
