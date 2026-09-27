@@ -210,9 +210,14 @@ def source_acquire(p:Dict[str,Any]):
             p={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (artifact["jra_official_runner_universe"].get("runners") or [])}
             h={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (detail_active.get("runners") or [])}
             mismatch=(p!=h)
-            artifact["official_runner_universe_reconciliation"]={"status":"PASS" if not mismatch else "MISMATCH","pdf_count":len(p),"detail_count":len(h)}
+            diffs=[{"horse_no":no,"pdf_name":p.get(no),"detail_name":h.get(no)}
+                   for no in sorted(set(p)|set(h)) if p.get(no)!=h.get(no)]
+            artifact["official_runner_universe_reconciliation"]={
+                "status":"PASS" if not mismatch else "MISMATCH",
+                "pdf_count":len(p),"detail_count":len(h),"diffs":diffs
+            }
             if mismatch:
-                errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH")
+                errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"+json.dumps(diffs,ensure_ascii=False,separators=(",",":")))
             else:
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
         except Exception as e:
