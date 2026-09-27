@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, re, hashlib
+import json, os, re, hashlib, glob
 from collections import defaultdict
 from mec_r4_shadow import settle_ticket_list
 
@@ -302,8 +302,193 @@ def _tier_pfs():
         "tiers":agg,
     }
 
+def _candidate_ticket_key(bt,sel):
+    bt=str(bt or "").upper()
+    vals=[int(x) for x in (sel or [])]
+    if bt=="TRIO":
+        vals=sorted(vals)
+    return (bt,tuple(vals))
+
+def _candidate_forward_records():
+    root="runtime/source_candidate_results"
+    rows=[]
+    if not os.path.isdir(root):
+        return rows
+    for path in sorted(glob.glob(os.path.join(root,"*.json"))):
+        try:
+            obj=json.load(open(path,encoding="utf-8"))
+        except Exception:
+            continue
+        rid=str(obj.get("race_id") or "")
+        if not rid:
+            continue
+        oos_path=os.path.join("runtime","source_candidate_oos",rid,"result_evaluation.json")
+        if not os.path.exists(oos_path):
+            continue
+        try:
+            oos=json.load(open(oos_path,encoding="utf-8"))
+        except Exception:
+            continue
+        if not bool(oos.get("oos_eligible")):
+            continue
+        s=obj.get("settlement") or {}
+        if str(s.get("status") or "").upper()!="SETTLED":
+            continue
+        inv=_num(s.get("total_investment"))
+        ret=_num(s.get("total_payout"))
+        pfs=_num(s.get("pfs"))
+        if inv is None or ret is None:
+            continue
+        if pfs is None and inv>0:
+            pfs=ret/inv*100.0
+        bet_types={}
+        for row in s.get("bet_type_summary") or []:
+            if not isinstance(row,dict):
+                continue
+            bt=str(row.get("bet_type") or "").upper()
+            bi=_num(row.get("investment")); br=_num(row.get("payout"))
+            if bt and bi is not None and br is not None:
+                bet_types[bt]={"investment":bi,"return":br}
+        rows.append({
+            "race_id":rid,
+            "date":_date(rid),
+            "venue":_venue(rid),
+            "source_path":path,
+            "source_priority":0,
+            "formal_grade":"FROZEN-OOS / SOURCE-DERIVED-CANDIDATE",
+            "formal_class":"FROZEN_OOS_CANDIDATE",
+            "model_comparison_eligibility":"CANDIDATE_OOS_ELIGIBLE",
+            "pfs_authority":s.get("pfs_authority"),
+            "actual_ticket_status":s.get("actual_ticket_status") or "UNVERIFIED",
+            "investment":inv,
+            "return":ret,
+            "profit_loss":ret-inv,
+            "pfs":pfs,
+            "no_bet":inv==0,
+            "hit":ret>0,
+            "hit_but_loss":ret>0 and ret<inv,
+            "bet_types":bet_types,
+        })
+    return rows
+
+def _candidate_mec_capital_density():
+    root="runtime/source_candidate_oos"
+    tiers=defaultdict(lambda:{"ticket_count":0,"capital":0.0})
+    bet_types=defaultdict(lambda:{"ticket_count":0,"capital":0.0})
+    races=[]
+    eligible=0
+    if not os.path.isdir(root):
+        return {"status":"NO_CANDIDATE_OOS_DATA","eligible_race_count":0,"tiers":{},"bet_types":{},"races":[]}
+    for d in sorted(glob.glob(os.path.join(root,"*"))):
+        if not os.path.isdir(d):
+            continue
+        eval_path=os.path.join(d,"result_evaluation.json")
+        final_path=os.path.join(d,"candidate_final.json")
+        if not (os.path.exists(eval_path) and os.path.exists(final_path)):
+            continue
+        try:
+            ev=json.load(open(eval_path,encoding="utf-8"))
+            final=json.load(open(final_path,encoding="utf-8"))
+        except Exception:
+            continue
+        if not bool(ev.get("oos_eligible")):
+            continue
+        eligible+=1
+        rid=str(final.get("race_id") or os.path.basename(d))
+        race={"race_id":rid,"tiers":{},"bet_types":{}}
+        for t in ((final.get("mec") or {}).get("tickets") or []):
+            tier=str(t.get("mec_tier") or t.get("tier") or "UNKNOWN").upper()
+            bt=str(t.get("bet_type") or "UNKNOWN").upper()
+            stake=float(t.get("stake") or 0)
+            tiers[tier]["ticket_count"]+=1; tiers[tier]["capital"]+=stake
+            bet_types[bt]["ticket_count"]+=1; bet_types[bt]["capital"]+=stake
+            race["tiers"].setdefault(tier,{"ticket_count":0,"capital":0.0})
+            race["tiers"][tier]["ticket_count"]+=1; race["tiers"][tier]["capital"]+=stake
+            race["bet_types"].setdefault(bt,{"ticket_count":0,"capital":0.0})
+            race["bet_types"][bt]["ticket_count"]+=1; race["bet_types"][bt]["capital"]+=stake
+        races.append(race)
+    total=sum(x["capital"] for x in tiers.values())
+    tout={}
+    for k,v in sorted(tiers.items()):
+        tout[k]={
+            "ticket_count":int(v["ticket_count"]),
+            "capital":round(v["capital"],2),
+            "capital_share_pct":round(v["capital"]/total*100.0,6) if total else None,
+        }
+    bout={k:{"ticket_count":int(v["ticket_count"]),"capital":round(v["capital"],2)}
+          for k,v in sorted(bet_types.items())}
+    return {
+        "status":"CANDIDATE-OOS-MEASUREMENT / NON-PRODUCTION",
+        "eligible_race_count":eligible,
+        "total_capital":round(total,2),
+        "tiers":tout,
+        "bet_types":bout,
+        "races":races,
+    }
+
+def _candidate_tier_pfs(candidate_rows):
+    tiers=defaultdict(lambda:{"investment":0.0,"return":0.0,"ticket_count":0})
+    races=[]
+    for rec in candidate_rows:
+        rid=rec["race_id"]
+        final_path=os.path.join("runtime","source_candidate_oos",rid,"candidate_final.json")
+        result_path=os.path.join("runtime","source_candidate_results",rid+".json")
+        if not (os.path.exists(final_path) and os.path.exists(result_path)):
+            continue
+        try:
+            final=json.load(open(final_path,encoding="utf-8"))
+            result=json.load(open(result_path,encoding="utf-8"))
+        except Exception:
+            continue
+        ticket_tier={}
+        race_tiers=defaultdict(lambda:{"investment":0.0,"return":0.0,"ticket_count":0})
+        for t in ((final.get("mec") or {}).get("tickets") or []):
+            tier=str(t.get("mec_tier") or t.get("tier") or "UNKNOWN").upper()
+            k=_candidate_ticket_key(t.get("bet_type"),t.get("selection"))
+            stake=float(t.get("stake") or 0)
+            ticket_tier[k]=tier
+            tiers[tier]["investment"]+=stake; tiers[tier]["ticket_count"]+=1
+            race_tiers[tier]["investment"]+=stake; race_tiers[tier]["ticket_count"]+=1
+        for w in ((result.get("settlement") or {}).get("winning_tickets") or []):
+            k=_candidate_ticket_key(w.get("bet_type"),w.get("selection"))
+            tier=ticket_tier.get(k)
+            if not tier:
+                continue
+            payout=float(w.get("payout") or 0)
+            tiers[tier]["return"]+=payout
+            race_tiers[tier]["return"]+=payout
+        race_out={}
+        for tier,x in sorted(race_tiers.items()):
+            inv=x["investment"]; ret=x["return"]
+            race_out[tier]={
+                "investment":round(inv,2),
+                "return":round(ret,2),
+                "profit_loss":round(ret-inv,2),
+                "pfs":round(ret/inv*100.0,9) if inv else None,
+                "ticket_count":int(x["ticket_count"]),
+            }
+        races.append({"race_id":rid,"tiers":race_out})
+    out={}
+    for tier,x in sorted(tiers.items()):
+        inv=x["investment"]; ret=x["return"]
+        out[tier]={
+            "investment":round(inv,2),
+            "return":round(ret,2),
+            "profit_loss":round(ret-inv,2),
+            "pfs":round(ret/inv*100.0,9) if inv else None,
+            "ticket_count":int(x["ticket_count"]),
+        }
+    return {
+        "status":"CANDIDATE-FROZEN-RECOMMENDATION-TIER-PFS / NON-PRODUCTION",
+        "note":"Uses only OOS-eligible Source-Derived Candidate settlements and the frozen Candidate MEC tier on the exact recommended ticket. Actual purchase remains separate.",
+        "tiers":out,
+        "races":races,
+    }
+
 def build_report():
     rows=canonical_records()
+    candidate_rows=_candidate_forward_records()
+    candidate_density=_candidate_mec_capital_density()
     formal=[r for r in rows if r["formal_class"]=="FORMAL_PRE_RACE"]
     eligible=[r for r in formal if str(r.get("model_comparison_eligibility") or "").upper()=="ELIGIBLE"]
     all_frozen=[r for r in rows if str(r.get("pfs_authority") or "").upper().startswith("FROZEN")]
@@ -331,11 +516,26 @@ def build_report():
             "verified_race_count":sum(str(r.get("actual_ticket_status")).upper()=="VERIFIED" for r in rows),
         },
         "tier_pfs":_tier_pfs(),
+        "candidate_forward_oos":{
+            "status":"MEASUREMENT-ONLY / NON-PRODUCTION / NO-AUTO-PROMOTION",
+            "production_effect":"NONE",
+            "eligible_race_count":candidate_density.get("eligible_race_count"),
+            "settled_race_count":len(candidate_rows),
+            "settlement_coverage_pct":round(len(candidate_rows)/candidate_density.get("eligible_race_count")*100.0,6) if candidate_density.get("eligible_race_count") else None,
+            "aggregate":_aggregate(candidate_rows),
+            "robustness":_robustness(candidate_rows),
+            "by_venue":_by(candidate_rows,"venue"),
+            "bet_type":_bet_type(candidate_rows),
+            "mec_capital_density":candidate_density,
+            "tier_pfs":_candidate_tier_pfs(candidate_rows),
+        },
         "limitations":[
             "Repository contains structured individual-race records only for part of historical KeibaMetrics operation.",
             "Legacy day aggregates are not mixed into race-level totals to avoid double counting.",
             "Actual purchase is generally unverified; primary authority is Frozen Recommendation PFS.",
-            "Post-start replay and nonconformant frozen races are excluded from FORMAL_PRE_RACE cohort but retained in ALL_FROZEN_RECOMMENDATION where settlement exists."
+            "Post-start replay and nonconformant frozen races are excluded from FORMAL_PRE_RACE cohort but retained in ALL_FROZEN_RECOMMENDATION where settlement exists.",
+            "Source-Derived Candidate OOS is reported in a separate candidate_forward_oos block and is never merged into Production/Formal PFS cohorts.",
+            "Candidate tier PFS is Frozen Recommendation PFS, not verified Actual Purchase PFS."
         ]
     }
     report["sha256"]=_sha(report)
