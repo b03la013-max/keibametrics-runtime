@@ -22,10 +22,22 @@ def evaluate(records:List[Dict[str,Any]])->Dict[str,Any]:
     def rate(key):
         vals=[1.0 if (r["result_evaluation"] or {}).get(key) else 0.0 for r in rows]
         return round(sum(vals)/len(vals),6) if vals else None
-    avg_rank=None
-    ranks=[(r["result_evaluation"] or {}).get("winner_static_rank") for r in rows]
-    ranks=[float(x) for x in ranks if isinstance(x,(int,float))]
-    if ranks: avg_rank=round(sum(ranks)/len(ranks),6)
+    def mean_metric(path):
+        vals=[]
+        for r in rows:
+            cur=r.get("result_evaluation") or {}
+            for key in path:
+                cur=cur.get(key) if isinstance(cur,dict) else None
+            if isinstance(cur,(int,float)):
+                vals.append(float(cur))
+        return round(sum(vals)/len(vals),6) if vals else None
+
+    avg_rank=mean_metric(["winner_static_rank"])
+    krs_classes={}
+    for r in rows:
+        cls=((r.get("result_evaluation") or {}).get("krs_incremental_utility") or {}).get("classification")
+        if cls:
+            krs_classes[str(cls)]=krs_classes.get(str(cls),0)+1
     report={
       "profile":PROFILE,
       "status":"WAITING_R30" if n<TARGET else "R30_REVIEW_REQUIRED",
@@ -38,6 +50,18 @@ def evaluate(records:List[Dict[str,Any]])->Dict[str,Any]:
       "exact_capture_rate":rate("exact_capture"),
       "top3_set_capture_rate":rate("top3_set_capture"),
       "mean_winner_static_rank":avg_rank,
+      "mean_second_static_rank":mean_metric(["second_static_rank"]),
+      "mean_third_static_rank":mean_metric(["third_static_rank"]),
+      "mean_top3_static_rank":mean_metric(["top3_mean_static_rank"]),
+      "mean_winner_capture_efficiency":mean_metric(["winner_capture_efficiency"]),
+      "mean_p2_capture_efficiency":mean_metric(["p2_capture_efficiency"]),
+      "mean_p3_capture_efficiency":mean_metric(["p3_capture_efficiency"]),
+      "mean_market_winner_rank":mean_metric(["market_baseline","winner_rank"]),
+      "mean_market_top3_rank":mean_metric(["market_baseline","top3_mean_rank"]),
+      "mean_candidate_vs_market_winner_rank_gain":mean_metric(["candidate_vs_market","winner_rank_gain"]),
+      "mean_candidate_vs_market_top3_rank_gain":mean_metric(["candidate_vs_market","top3_mean_rank_gain"]),
+      "mean_krs_rescue_density":mean_metric(["krs_incremental_utility","rescue_density"]),
+      "krs_result_class_counts":krs_classes,
       "automatic_promotion":False,
       "promotion_decision":"NOT_AUTHORIZED",
       "required_next_action":"Continue unknown pre-result frozen OOS collection." if n<TARGET else "Independent review against current Production and simple baselines; explicit Promotion Declaration required.",
