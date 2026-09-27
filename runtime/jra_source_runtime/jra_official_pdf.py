@@ -77,7 +77,6 @@ def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any
         raise ValueError("JRA_OFFICIAL_PDF_RACE_HEADER_NOT_FOUND")
     candidates.sort(key=lambda x:(x[0],x[1],x[3]))
     _,page_no,lines,header,count=candidates[0]
-    page_no,lines,header,count=chosen
     end=len(lines)
     for i in range(header+1,len(lines)-1):
         if lines[i]=="コース" and lines[i+1]=="レコード":
