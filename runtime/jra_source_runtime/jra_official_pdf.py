@@ -7,7 +7,7 @@ from source_acquisition import (
     _SafeRedirect, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 )
 
-PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.1-20260926"
+PROFILE="KM-JRA-OFFICIAL-PDF-RUNNER-UNIVERSE-v1.2-20260927"
 SLUGS={
     "SPP":"sapporo","HKD":"hakodate","FKS":"fukushima","NGT":"niigata","TKY":"tokyo",
     "NKY":"nakayama","CHK":"chukyo","KYO":"kyoto","HSN":"hanshin","KKR":"kokura",
@@ -50,21 +50,33 @@ def _expected_count(lines:List[str], header_idx:int)->int|None:
             return int(m.group(1))
     return None
 
+def _race_header_priority(line:Any,race_no:int)->int|None:
+    # Live JRA PDFs can emit the race label as either "10R" or "R4 <race name>"
+    # depending on page/layout text extraction. Prefer the explicit R<n> form
+    # because a bare <n>R token can also appear accidentally inside column text.
+    s=re.sub(r"\s+","",_clean_line(line)).upper()
+    n=str(int(race_no))
+    if re.match(rf"^R{re.escape(n)}(?:$|[^0-9])",s):
+        return 0
+    if re.match(rf"^{re.escape(n)}R(?:$|[^0-9])",s):
+        return 1
+    return None
+
 def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any]:
-    target=f"{int(race_no)}R"
-    chosen=None
+    candidates=[]
     for page_no,text in enumerate(pages,1):
         lines=[_clean_line(x) for x in str(text or "").splitlines()]
         for i,line in enumerate(lines):
-            if re.sub(r"\s+","",line).upper()==target.upper():
-                count=_expected_count(lines,i)
-                if count:
-                    chosen=(page_no,lines,i,count)
-                    break
-        if chosen:
-            break
-    if not chosen:
+            pri=_race_header_priority(line,int(race_no))
+            if pri is None:
+                continue
+            count=_expected_count(lines,i)
+            if count:
+                candidates.append((pri,page_no,lines,i,count))
+    if not candidates:
         raise ValueError("JRA_OFFICIAL_PDF_RACE_HEADER_NOT_FOUND")
+    candidates.sort(key=lambda x:(x[0],x[1],x[3]))
+    _,page_no,lines,header,count=candidates[0]
     page_no,lines,header,count=chosen
     end=len(lines)
     for i in range(header+1,len(lines)-1):
