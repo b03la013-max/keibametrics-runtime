@@ -31,9 +31,13 @@ jobs:
           fi
           test -n "$REQ"
           echo "request=$REQ" >> "$GITHUB_OUTPUT"
+          CANDIDATE_PARALLEL="$(python -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); print("true" if bool(x.get("candidate_parallel_handoff")) else "false")' "$REQ")"
+          echo "candidate_parallel=$CANDIDATE_PARALLEL" >> "$GITHUB_OUTPUT"
           echo "REQUEST_FILE=$REQ"
+          echo "CANDIDATE_PARALLEL=$CANDIDATE_PARALLEL"
 
       - name: Full external formal execution
+        if: steps.request.outputs.candidate_parallel != 'true'
         shell: bash
         env:
           REQUEST_FILE: ${{ steps.request.outputs.request }}
@@ -803,6 +807,7 @@ jobs:
           PY
 
       - name: Persist immutable FINAL or acceptance artifact
+        if: steps.request.outputs.candidate_parallel != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -818,7 +823,7 @@ jobs:
           fi
 
       - name: Upload KRS structured output and utility delta
-        if: always()
+        if: steps.request.outputs.candidate_parallel != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: krs-utility-${{ github.run_id }}
