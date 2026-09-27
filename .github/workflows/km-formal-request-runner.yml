@@ -104,9 +104,27 @@ jobs:
               (((resolved_authority_obj.get("family_scoped_authority") or {}).get("JRA") or {}).get("source_runtime_profile") or "")
           )
           assert expected_jra_source_runtime, "CURRENT_AUTHORITY_JRA_SOURCE_RUNTIME_MISSING"
+          utility_contract_id=str(
+              ((resolved_authority_obj.get("common_family_components") or {}).get("prediction_utility_contract") or "")
+          )
+          utility_contract_path=str(
+              ((resolved_authority_obj.get("common_family_components") or {}).get("prediction_utility_contract_profile") or "")
+          )
+          utility_contract=None
+          if utility_contract_id or utility_contract_path:
+              assert utility_contract_id and utility_contract_path, "PREDICTION_UTILITY_CONTRACT_AUTHORITY_INCOMPLETE"
+              with open(utility_contract_path,encoding="utf-8") as ucf:
+                  utility_contract=json.load(ucf)
+              assert utility_contract.get("profile_id")==utility_contract_id, (
+                  "PREDICTION_UTILITY_CONTRACT_ID_MISMATCH:"
+                  +str(utility_contract.get("profile_id"))+"!="+utility_contract_id
+              )
+              assert utility_contract.get("production_effect")=="NONE", "PREDICTION_UTILITY_CONTRACT_PRODUCTION_EFFECT"
+              assert utility_contract.get("automatic_promotion") is False, "PREDICTION_UTILITY_CONTRACT_AUTO_PROMOTION"
           req["resolved_current_authority_manifest"]=resolved_current_authority
           req["resolved_current_authority_profile_path"]=resolved_authority_path
           req["resolved_jra_source_runtime_profile"]=expected_jra_source_runtime
+          req["resolved_family_prediction_utility_contract"]=utility_contract_id or None
 
           # JRA SOURCE-first handoff. New formal requests may reference an immutable
           # signed SOURCE phase produced by the dedicated external JRA source runtime.
@@ -578,6 +596,10 @@ jobs:
           final_package["capital_policy_decision"]=capital_decision
           final_package["engine_parameter_map_sha256"]=rr.get("parameter_map_sha256")
           final_package["conformance_preflight"]=conformance
+          final_package["family_prediction_utility_contract"]=utility_contract_id or None
+          final_package["prediction_utility_objective_order"]=(
+              utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
+          )
           final_package["prediction_utility_metrics"]={k:conformance.get(k) for k in ["runner_count","ranking_complete","active_w_count","active_p2_count","active_p3_count","purchased_head_count","noncapitalized_active_w","expected_pair_count","pair_purchase_count","pair_protect_count","pair_exclude_count","pair_purchase_density","expected_third_count","third_purchase_count","third_protect_count","third_exclude_count","third_purchase_density","head_stake","max_head","max_head_stake","head_capital_concentration","bet_type_stake","total_investment"]}
           if mec is not None:
               final_package["prediction_utility_metrics"].update({
@@ -693,6 +715,10 @@ jobs:
             "final_receipt":f,
             "final_receipt_sha256":f.get("receipt_sha256"),
             "execution_stage_manifest":stage_manifest,
+            "family_prediction_utility_contract":utility_contract_id or None,
+            "prediction_utility_objective_order":(
+                utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
+            ),
             "production_history_immutable":True
           }
           immutable_final_artifact["sha256"]=hashlib.sha256(
@@ -801,7 +827,8 @@ jobs:
               {"status":"FROZEN","profile":shadow["profile"],"candidate_id":shadow["candidate_id"],"sha256":shadow["sha256"],"production_effect":"NONE"}
               if shadow else
               {"status":"NOT_FROZEN","reason":shadow_error,"production_effect":"NONE"}
-            )
+            ),
+            "family_prediction_utility_contract":utility_contract_id or None
           }
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
