@@ -1,0 +1,83 @@
+name: JRA HSN R2 0955 Candidate Change Audit
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-hsn-r2-0955-candidate-audit.yml"
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare R5 Candidate with frozen OOS
+        run: |
+          python - <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from jra_evidence_to_base_production import load_mapping
+          from jra_source_candidate_numerical import materialize_source_candidate
+          from jra_source_candidate_semantics import build_candidate_semantics
+
+          env=json.load(open("runtime/executions/KM-JRA-HSN-20260927-R02-LIVE-R5/SOURCE/runs/36283701846/source_receipt_envelope.json",encoding="utf-8"))
+          src=env["artifact"]
+          old=json.load(open("runtime/source_candidate_oos/KM-JRA-HSN-20260927-R02/pre_result.json",encoding="utf-8"))
+          mapping=load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+          req={
+            "race_id":"KM-JRA-HSN-20260927-R02",
+            "prediction_id":"KM-JRA-HSN-20260927-R02-R5-AUDIT",
+            "family_id":"JRA","venue_id":"HSN",
+            "race":{"venue":"阪神","surface":"芝","distance":1600,"course":"右外","going":"良","class":"2歳未勝利"},
+            "environment":{"track":"芝","weather":"雨"},
+            "prediction_cutoff":"2026-09-27T09:55:00+09:00",
+            "temporal_mode":"FORMAL-PRE-RACE","run_count":5000,"seed":2026092702,
+            "orchestration_ref":{"authority":"BASE44","execution_session_id":"hsn-r2-r5-audit","session_nonce":"r5-audit","created_at":"2026-09-27T09:56:00+09:00"}
+          }
+          req=materialize_source_candidate(req,src,mapping)
+          req=build_candidate_semantics(req)
+          det=src.get("jra_official_race_card_detail") or {}
+          bydet={str(x.get("runner_id")):x for x in det.get("runners") or []}
+          rows=[]
+          for rid in req["static_prediction"]["ranking"]:
+            r=next(x for x in req["runners"] if str(x["runner_id"])==str(rid))
+            d=bydet.get(str(rid),{})
+            c=r["canonical_components"]
+            rows.append({
+              "runner_id":str(rid),"name":r["name"],
+              "odds":d.get("win_odds"),"popularity_rank":d.get("popularity_rank"),
+              "body_weight":d.get("current_body_weight"),"body_weight_change":d.get("current_body_weight_change"),
+              "ZAI_WIN":c["ZAI_WIN"]["value"],"ZAI_PLACE":c["ZAI_PLACE"]["value"],"T3I":c["T3I"]["value"],
+              "TPI":c["TPI"]["value"],"DCR":c["DCR"]["value"],
+              "observed":(r.get("candidate_source_objective_runner") or {}).get("observed_feature_count"),
+              "missing":(r.get("candidate_source_objective_runner") or {}).get("missing_feature_count")
+            })
+          out={
+            "profile":"KM-JRA-HSN-R02-R5-CANDIDATE-CHANGE-AUDIT-20260927",
+            "classification":"PRE-RACE / CANDIDATE / NON-PRODUCTION / CHANGE-AUDIT",
+            "source_receipt_sha256":env.get("receipt_sha256"),
+            "source_snapshot_sha256":src.get("source_snapshot_sha256"),
+            "source_freeze_at":src.get("source_freeze_at"),
+            "prediction_cutoff":src.get("prediction_cutoff"),
+            "required_count":len(req["runners"])*20,
+            "calculated_count":req["candidate_numerical_summary"]["calculated_count"],
+            "old_ranking":old["ranking"],"new_ranking":req["static_prediction"]["ranking"],
+            "ranking_changed":old["ranking"]!=req["static_prediction"]["ranking"],
+            "old_roles":old["roles"],"new_roles":req["static_prediction"]["roles"],
+            "roles_changed":old["roles"]!=req["static_prediction"]["roles"],
+            "rows":rows,
+            "production_effect":"NONE"
+          }
+          out["sha256"]=hashlib.sha256(json.dumps(out,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          p=Path("runtime/diagnostics/hsn_r02_r5_candidate_audit_20260927.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False))
+          PY
+      - name: Persist audit
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/hsn_r02_r5_candidate_audit_20260927.json
+          git commit -m "diagnostic: persist HSN R2 0955 Candidate audit [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
