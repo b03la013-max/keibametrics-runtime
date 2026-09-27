@@ -1,0 +1,67 @@
+name: NKY 20260927 Haraimodoshi Probe
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-nky-20260927-haraimodoshi-probe.yml"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt beautifulsoup4
+      - name: Navigate official JRA payout
+        run: |
+          python - <<'PY'
+          import json,re,urllib.request,http.cookiejar,sys
+          from pathlib import Path
+          from bs4 import BeautifulSoup
+          sys.path.insert(0,"runtime/jra_source_runtime")
+          from source_acquisition import _decode,_html_tables,_html_text
+          from jra_race_card_detail import _calendar_url,_fetch,_post,_date8
+          date="2026-09-27"; key="0620260409"; d=_date8(date)
+          jar=http.cookiejar.CookieJar(); op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+          u0,r0,h0=_fetch(op,_calendar_url(date)); s0=_decode(r0,h0.get("content-type",""))
+          ents=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",s0)
+          chosen=None
+          for e in ents:
+            try:
+              u1,r1,h1=_post(op,e,u0); s1=_decode(r1,h1.get("content-type",""))
+              dm=re.findall(r"(pw01srl00"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
+              if dm: chosen=(u1,dm[0]); break
+            except: pass
+          if not chosen: raise RuntimeError("NO_DAY")
+          u1,day=chosen; u2,r2,h2=_post(op,day,u1); s2=_decode(r2,h2.get("content-type",""))
+          # enter any race result, then payout landing
+          prefix="pw01sde01"+key+"03"+d
+          rm=re.findall(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",s2)
+          u3,r3,h3=_post(op,rm[0],u2); s3=_decode(r3,h3.get("content-type",""))
+          hp="pw01hli00/03"
+          uh,rh,hh=_post(op,hp,u3); sh=_decode(rh,hh.get("content-type",""))
+          toks=re.findall(r"doAction\('([^']+)'\s*,\s*'([^']+)'\)",sh)
+          out={"landing":{"url":uh,"text":_html_text(sh),"tables":_html_tables(sh),"tokens":toks}}
+          # follow tokens that look tied to today's meeting/date, capture pages
+          pages=[]
+          for path,t in toks:
+            if key in t or d in t or "pw01h" in t.lower():
+              try:
+                up,rp,hp2=_post(op,t,uh); sp=_decode(rp,hp2.get("content-type",""))
+                pages.append({"path":path,"token":t,"url":up,"text":_html_text(sp),"tables":_html_tables(sp),
+                              "tokens":re.findall(r"doAction\('([^']+)'\s*,\s*'([^']+)'\)",sp)})
+              except Exception as e:
+                pages.append({"path":path,"token":t,"error":type(e).__name__+":"+str(e)})
+          out["pages"]=pages
+          p=Path("runtime/diagnostics/NKY-20260927-haraimodoshi.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"landing_tables":len(out["landing"]["tables"]),"candidate_pages":[{"token":x.get("token"),"tables":len(x.get("tables") or []),"text":(x.get("text") or "")[:300]} for x in pages]},ensure_ascii=False))
+          PY
+      - name: Persist
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/diagnostics/NKY-20260927-haraimodoshi.json
+          git commit -m "diagnostic: capture NKY official payouts [skip ci]" || exit 0
+          git pull --rebase origin main && git push origin HEAD:main
