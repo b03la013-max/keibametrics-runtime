@@ -1,0 +1,175 @@
+name: Family R30 Prediction Utility Authority Acceptance
+permissions:
+  contents: write
+on:
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260927_R30.json"
+      - "profiles/family_prediction_utility_contract_20260927_R1.json"
+      - "runtime/family_prediction_utility.py"
+      - "runtime/source_candidate_oos_status.json"
+      - "runtime/krs_oos_status.json"
+      - "runtime/mec_r4_oos_status.json"
+      - "runtime/pfs_grand_review/current.json"
+      - "runtime/venue_audits/KM-JRA-HSN-20260927-REV7-CANON-AUDIT.json"
+      - "runtime/venue_audits/KM-JRA-NKY-20260927-REV7-CANON-AUDIT.json"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-jra-source-candidate-forward-oos.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
+      - ".github/workflows/km-family-r30-prediction-utility-acceptance.yml"
+      - "tests/test_family_prediction_utility.py"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax
+        run: |
+          python -m py_compile             runtime/family_prediction_utility.py             runtime/jra_source_to_evidence_features.py             runtime/jra_index_provenance_builder.py             runtime/jra_source_candidate_oos.py             runtime/jra_source_candidate_promotion_gate.py             runtime/mec_r4_shadow.py             runtime/pfs_grand_review.py
+
+      - name: Related regression tests
+        run: |
+          python -m pytest -q             tests/test_family_prediction_utility.py             tests/test_jra_source_to_evidence_features.py             tests/test_jra_index_provenance_trace.py             tests/test_jra_source_candidate_oos_gate.py             tests/test_mec_r4_shadow.py             tests/test_pfs_grand_review.py
+
+      - name: Verify R30 authority and build current utility snapshot
+        run: |
+          python - <<'PY'
+          import glob,json,sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from family_prediction_utility import write_snapshot,validate_snapshot
+
+          def load(p):
+              with open(p,encoding="utf-8") as fh:
+                  return json.load(fh)
+
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260927_R30.json")
+          contract=load("profiles/family_prediction_utility_contract_20260927_R1.json")
+          candidate=load("runtime/source_candidate_oos_status.json")
+          krs=load("runtime/krs_oos_status.json")
+          mec=load("runtime/mec_r4_oos_status.json")
+          pfs=load("runtime/pfs_grand_review/current.json")
+          hsn=load("runtime/venue_audits/KM-JRA-HSN-20260927-REV7-CANON-AUDIT.json")
+          nky=load("runtime/venue_audits/KM-JRA-NKY-20260927-REV7-CANON-AUDIT.json")
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260927-R30"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260926-R29"
+          assert ca["common_family_components"]["prediction_utility_contract"]==contract["profile_id"]
+          assert ca["common_family_components"]["prediction_utility_contract_profile"]=="profiles/family_prediction_utility_contract_20260927_R1.json"
+          assert ca["family_evaluation_order"][0]=="PREDICTION_UTILITY"
+          assert ca["supersession_declaration"]["production_numerical_change"] is False
+          assert ca["supersession_declaration"]["predictive_model_formula_change"] is False
+          assert ca["supersession_declaration"]["base_index_weight_change"] is False
+          assert ca["supersession_declaration"]["derived_index_formula_change"] is False
+          assert ca["supersession_declaration"]["krs_engine_physics_change"] is False
+          assert ca["supersession_declaration"]["mec_r3_policy_change"] is False
+          assert ca["supersession_declaration"]["capital_policy_change"] is False
+          assert ca["supersession_declaration"]["candidate_to_production_promotion"] is False
+          assert ca["supersession_declaration"]["automatic_promotion"] is False
+
+          assert contract["production_effect"]=="NONE"
+          assert contract["automatic_promotion"] is False
+          assert contract["production_freeze"]["numerical_change"]=="NONE"
+          assert contract["krs_contract"]["role"]=="SECOND_OPINION_ENGINE"
+          assert contract["krs_contract"]["auto_purchase"] is False
+          assert contract["mec_contract"]["production"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
+          assert contract["mec_contract"]["shadow_arm_definitions_frozen"] is True
+          assert contract["pfs_contract"]["candidate_production_merge_forbidden"] is True
+
+          assert candidate["eligible_race_count"]>=15
+          assert candidate["target_eligible_races"]==30
+          assert candidate["automatic_promotion"] is False
+          assert krs["eligible_races"]>=4 and krs["required_races"]==30
+          assert krs["automatic_production_promotion"] is False
+          assert mec["eligible_races"]>=3 and mec["target_eligible_races"]==30
+          assert mec["automatic_promotion"] is False
+          assert mec["production_effect"]=="NONE"
+          assert (pfs["candidate_forward_oos"] or {})["production_effect"]=="NONE"
+          assert (pfs["candidate_forward_oos"] or {})["settled_race_count"]>=8
+          assert (hsn["decision"] or {})["canon_revision_required"] is False
+          assert (nky["decision"] or {})["canon_revision_required"] is False
+
+          # Resolve latest active authority exactly as Formal/Candidate runners do.
+          candidates=[]
+          now=datetime.now(timezone.utc)
+          for ap in glob.glob("profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+              try:
+                  ax=load(ap)
+                  if "CURRENT-AUTHORITY" not in str(ax.get("status") or ""): continue
+                  eat=ax.get("effective_at")
+                  if not eat: continue
+                  d=datetime.fromisoformat(str(eat).replace("Z","+00:00")).astimezone(timezone.utc)
+                  if d<=now:candidates.append((d,str(ax.get("manifest_id") or ""),ap))
+              except Exception:
+                  pass
+          assert candidates
+          resolved=max(candidates,key=lambda z:(z[0],z[1]))
+          assert resolved[1]==ca["manifest_id"], resolved
+
+          formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          forward=Path(".github/workflows/km-jra-source-candidate-forward-oos.yml").read_text(encoding="utf-8")
+          result=Path(".github/workflows/km-formal-result-runner.yml").read_text(encoding="utf-8")
+          trace=Path("runtime/jra_source_to_evidence_features.py").read_text(encoding="utf-8")
+          provenance=Path("runtime/jra_index_provenance_builder.py").read_text(encoding="utf-8")
+
+          assert "resolved_family_prediction_utility_contract" in formal
+          assert 'final_package["family_prediction_utility_contract"]' in formal
+          assert '"family_prediction_utility_contract":utility_contract_id or None' in forward
+          assert "write_family_prediction_utility_snapshot" in result
+          assert "runtime/family_prediction_utility/current.json" in result
+          assert "KM-JRA-SOURCE-FEATURE-INDEX-TRACE-v1.0-20260927" in trace
+          assert "KM-JRA-SOURCE-FEATURE-INDEX-STATIC-TRACE-v1.0-20260927" in provenance
+
+          snapshot=write_snapshot()
+          validate_snapshot(snapshot)
+          assert snapshot["contract_id"]==contract["profile_id"]
+          assert snapshot["system_objective_order"][0]=="PREDICTION_UTILITY"
+          assert snapshot["dynamic_state"]["source_derived_candidate"]["eligible_races"]==candidate["eligible_race_count"]
+          assert snapshot["dynamic_state"]["krs"]["eligible_races"]==krs["eligible_races"]
+          assert snapshot["dynamic_state"]["mec_r4"]["eligible_races"]==mec["eligible_races"]
+          assert snapshot["dynamic_state"]["candidate_pfs"]["settled_race_count"]==(pfs["candidate_forward_oos"] or {})["settled_race_count"]
+          assert snapshot["production_effect"]=="NONE"
+
+          out={
+            "profile":"KM-FAMILY-R30-PREDICTION-UTILITY-AUTHORITY-ACCEPTANCE-20260927",
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "prediction_utility_contract":contract["profile_id"],
+            "prediction_utility_snapshot_sha256":snapshot["sha256"],
+            "source_candidate_oos_eligible":candidate["eligible_race_count"],
+            "source_candidate_oos_target":candidate["target_eligible_races"],
+            "krs_oos_eligible":krs["eligible_races"],
+            "krs_oos_target":krs["required_races"],
+            "mec_r4_oos_eligible":mec["eligible_races"],
+            "mec_r4_oos_target":mec["target_eligible_races"],
+            "candidate_settled_races":(pfs["candidate_forward_oos"] or {})["settled_race_count"],
+            "hsn_canon_revision_required":False,
+            "nky_canon_revision_required":False,
+            "production_numerical_change":"NONE",
+            "production_effect":"NONE",
+            "automatic_promotion":False
+          }
+          p=Path("runtime/acceptance/family_r30_prediction_utility.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Persist R30 current state and acceptance
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/family_prediction_utility/current.json
+          git add runtime/acceptance/family_r30_prediction_utility.json
+          git commit -m "ci: persist Family R30 Prediction Utility PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
