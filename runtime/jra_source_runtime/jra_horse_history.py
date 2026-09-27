@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 from source_acquisition import _SafeRedirect, _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
-PROFILE="KM-JRA-OFFICIAL-HORSE-HISTORY-v1.0-20260926"
+PROFILE="KM-JRA-OFFICIAL-HORSE-HISTORY-v1.1-20260927"
 BASE="https://www.jra.go.jp/JRADB/accessU.html"
 
 def _norm(v:Any)->str:
@@ -61,7 +61,14 @@ def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
         required={"年月日","場","レース名","距離","頭数","人気","着順","騎手名","負担重量","馬体重","タイム"}
         if required.issubset(set(h)):
             chosen=table;break
+    no_prior_runs=("該当するデータがありません" in re.sub(r"\s+","",decoded))
     if chosen is None:
+        if no_prior_runs:
+            out={"profile":PROFILE,"official":True,"production_fact_authority":True,
+                 "status":"NO_PRIOR_RUNS","run_count":0,"runs":[],
+                 "person_profile_tokens":_person_tokens(decoded)}
+            out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
+            return out
         raise ValueError("JRA_HORSE_HISTORY_TABLE_NOT_FOUND")
     h=[_norm(x) for x in chosen[0]]
     idx={name:h.index(name) for name in h}
@@ -91,9 +98,11 @@ def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
           "rating":_int(cell("Rt")) if "Rt" in idx else None,
           "winner_or_second":_norm(cell("1着馬（2着馬）")) if "1着馬（2着馬）" in idx else None,
         })
-    if not runs:
+    if not runs and not no_prior_runs:
         raise ValueError("JRA_HORSE_HISTORY_RUNS_EMPTY")
-    out={"profile":PROFILE,"official":True,"production_fact_authority":True,"run_count":len(runs),"runs":runs,"person_profile_tokens":_person_tokens(decoded)}
+    out={"profile":PROFILE,"official":True,"production_fact_authority":True,
+         "status":"PASS" if runs else "NO_PRIOR_RUNS",
+         "run_count":len(runs),"runs":runs,"person_profile_tokens":_person_tokens(decoded)}
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
