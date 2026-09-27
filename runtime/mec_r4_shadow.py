@@ -239,6 +239,23 @@ def _payout(result,bet_type,top3):
             v=_dict_number(obj,*labels)
             if v is not None:
                 return v
+
+    # Candidate RESULT artifacts may preserve payout only on the frozen
+    # recommendation's winning_tickets. Use it when the winning combination
+    # is the same; never infer a payout for an unseen shadow-only winner.
+    settlement=result.get("settlement") or {}
+    target=_key(bt,targets[bt])
+    for row in settlement.get("winning_tickets") or []:
+        if str(row.get("bet_type") or "").upper()!=bt:
+            continue
+        if _key(bt,row.get("selection") or [])!=target:
+            continue
+        per100=row.get("payout_per_100")
+        if isinstance(per100,(int,float)):
+            return float(per100)
+        payout=row.get("payout"); stake=row.get("stake")
+        if isinstance(payout,(int,float)) and isinstance(stake,(int,float)) and float(stake)>0:
+            return float(payout)/float(stake)*100.0
     return None
 
 def settle_ticket_list(tickets,result):
