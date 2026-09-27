@@ -50,6 +50,10 @@ jobs:
           p=json.load(open("runtime/pfs_grand_review/current.json",encoding="utf-8"))
           assert p["production_effect"]=="NONE"
           assert "FORMAL_PRE_RACE" in p["cohorts"]
+          assert "candidate_forward_oos" in p
+          assert p["candidate_forward_oos"]["production_effect"]=="NONE"
+          assert "mec_capital_density" in p["candidate_forward_oos"]
+          assert "tier_pfs" in p["candidate_forward_oos"]
           print("MEC_R4_MEASUREMENT_ACCEPTANCE=PASS")
           PY
 
