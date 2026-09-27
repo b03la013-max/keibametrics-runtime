@@ -78,9 +78,9 @@ jobs:
             "production_firewall":True,
             "production_source_only_full_numerical_ready":False,
             "candidate_mechanical_full_lifecycle_verified":True,
-            "candidate_oos_eligible_races":0,
+            "candidate_oos_eligible_races":tracker["eligible_race_count"],
             "candidate_oos_target":30,
-            "unknown_future_empirical_acceptance":"PENDING",
+            "unknown_future_empirical_acceptance":"COLLECTING_R30" if tracker["eligible_race_count"]>0 else "PENDING",
             "production_effect":"NONE"
           }
           p=Path("runtime/acceptance/jra_r29_candidate_authority.json")
