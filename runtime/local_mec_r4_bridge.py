@@ -4,6 +4,7 @@ import copy, hashlib, json
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
+from formal_oos_policy import request_oos_policy
 from mec_r4_shadow import build_mec_r4_shadow, settle_mec_r4_shadow
 
 PROFILE="KM-LOCAL-MEC-R4-SIGNED-FINAL-BRIDGE-v1.0-20260924"
@@ -49,8 +50,9 @@ def build_pre_result_shadow(req: Dict[str,Any], final_ticket: Dict[str,Any], mec
     shadow=build_mec_r4_shadow(basis,generated_at=generated_at)
     shadow["local_bridge_profile"]=PROFILE
     shadow["local_basis_sha256"]=basis["sha256"]
-    acceptance_only=bool(req.get("acceptance_only"))
-    request_oos_enabled=req.get("oos_eligible") is not False
+    oos_policy=request_oos_policy(req)
+    acceptance_only=bool(oos_policy["acceptance_only"])
+    request_oos_enabled=bool(oos_policy["request_oos_eligible"])
     shadow["acceptance_only"]=acceptance_only
     shadow["request_oos_eligible"]=request_oos_enabled
     shadow["temporal_class"]=(
@@ -58,11 +60,8 @@ def build_pre_result_shadow(req: Dict[str,Any], final_ticket: Dict[str,Any], mec
         if acceptance_only else
         ("FORMAL-PRE-RACE-SHADOW" if request_oos_enabled else "FORMAL-PRE-RACE-SHADOW / OOS-DISABLED")
     )
-    shadow["oos_eligible_if_signed_final_bound"]=bool((not acceptance_only) and request_oos_enabled)
-    shadow["oos_exclusion_reason"]=(
-        "ACCEPTANCE_ONLY" if acceptance_only else
-        ("REQUEST_OOS_DISABLED" if not request_oos_enabled else None)
-    )
+    shadow["oos_eligible_if_signed_final_bound"]=bool(oos_policy["oos_allowed"])
+    shadow["oos_exclusion_reason"]=oos_policy.get("oos_exclusion_reason")
     shadow["production_effect"]="NONE"
     shadow["sha256"]=sha_obj({k:v for k,v in shadow.items() if k!="sha256"})
     return shadow,basis
