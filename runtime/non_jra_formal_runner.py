@@ -35,6 +35,7 @@ else:
         "phase":str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper(),
     }
 execution_id=str(execution_context["execution_id"])
+phase=str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper()
 fast_timer=StageTimer() if fam=="LOCAL" else None
 fast_path_runtime_report={
     "profile":RACE_DAY_FAST_PATH_PROFILE,
@@ -42,6 +43,42 @@ fast_path_runtime_report={
     "materialization":None,
     "fallback":None,
 }
+stage_manifest=[]
+def stage(name,**kw):
+    stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
+    if fast_timer is not None:
+        fast_timer.mark(name)
+
+def failure_class_for(code):
+    code=str(code or "")
+    if code.startswith(("RUNTIME_","GATEWAY_")):
+        return "INFRASTRUCTURE_COMPATIBILITY"
+    if code.startswith(("SOURCE_","RUNNER_UNIVERSE_")):
+        return "SOURCE_OR_RUNNER_UNIVERSE"
+    if code.startswith(("DEADLINE_","POST_START","FINAL_RECEIPT_POST_START","MEC_FINAL_FREEZE_POST_START")):
+        return "TEMPORAL_GUARD"
+    if code.startswith(("FULL_NUMERICAL_AUTHORITY_","UNAUTHORIZED_FULL_NUMERICAL","LOCAL_INDEX_TERMINALIZATION")):
+        return "NUMERICAL_AUTHORITY_OR_MATERIALIZATION"
+    if code.startswith(("PRE_KRS_","KRS_")):
+        return "KRS_EXECUTION"
+    if code.startswith(("MEC_","CAPITAL_","TICKET_")):
+        return "DECISION_OR_CAPITAL"
+    if code.startswith(("FINAL_","IMMUTABLE_FINAL_")):
+        return "FINALIZATION"
+    return "EXECUTION_CONFORMANCE"
+
+def resume_hint_for(code):
+    klass=failure_class_for(code)
+    if klass=="SOURCE_OR_RUNNER_UNIVERSE":
+        return "RETRY_SAME_EXECUTION_ID_FROM_SOURCE"
+    if klass in {"KRS_EXECUTION","DECISION_OR_CAPITAL","FINALIZATION","NUMERICAL_AUTHORITY_OR_MATERIALIZATION"}:
+        return "RETRY_SAME_EXECUTION_ID_REUSING_DURABLE_SOURCE"
+    if klass=="TEMPORAL_GUARD":
+        return "DO_NOT_CLAIM_FORMAL_PRE_RACE_AFTER_DEADLINE"
+    if klass=="INFRASTRUCTURE_COMPATIBILITY":
+        return "REPAIR_RUNTIME_GATEWAY_THEN_RETRY_SAME_EXECUTION_ID"
+    return "RETRY_SAME_EXECUTION_ID_FROM_LAST_DURABLE_PHASE"
+
 resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
@@ -55,7 +92,12 @@ def fail_closed(code,details=None):
     payload={
       "status":"FAIL_CLOSED",
       "code":code,
+      "failure_class":failure_class_for(code),
       "details":details,
+      "execution_id":execution_id,
+      "execution_phase":phase,
+      "last_successful_stage":(stage_manifest[-1]["stage"] if stage_manifest else None),
+      "resume_hint":resume_hint_for(code),
       "request_file":os.environ.get("REQUEST_FILE"),
       "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
@@ -107,8 +149,6 @@ def verify_envelope(env,label):
     vc,v=call("/verify",env,60)
     assert vc<300 and v.get("valid") is True,(label,vc,v)
     return env.get("receipt_sha256")
-
-phase=str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper()
 
 # LOCAL two-phase intake: acquire and verify signed official SOURCE
 # before Venue Static is built. This reuses the existing Formal Runner
@@ -634,12 +674,6 @@ scheduled=req.get("scheduled_post_at")
 if temporal_mode=="FORMAL-PRE-RACE":
     assert scheduled,"SCHEDULED_POST_AT_REQUIRED"
     assert datetime.datetime.now(datetime.timezone.utc) < parse_dt(scheduled).astimezone(datetime.timezone.utc),"POST_START_BEFORE_EXECUTION"
-
-stage_manifest=[]
-def stage(name,**kw):
-    stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
-    if fast_timer is not None:
-        fast_timer.mark(name)
 
 fast_cfg=(gateway or {}).get("race_day_fast_path") if isinstance(gateway,dict) else {}
 fast_enabled=bool(
