@@ -12,13 +12,16 @@ on:
       - 'runtime/execution_store.py'
       - 'runtime/family_runtime_contract.py'
       - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/formal_execution_orchestrator.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
       - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
+      - 'tests/test_formal_execution_orchestrator.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
+      - '.github/workflows/km-formal-single-entry.yml'
       - '.github/workflows/km-local-result-from-signed-final.yml'
   push:
     branches: [main]
@@ -29,13 +32,16 @@ on:
       - 'runtime/execution_store.py'
       - 'runtime/family_runtime_contract.py'
       - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/formal_execution_orchestrator.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
       - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
+      - 'tests/test_formal_execution_orchestrator.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
+      - '.github/workflows/km-formal-single-entry.yml'
       - '.github/workflows/km-local-result-from-signed-final.yml'
 
 permissions:
@@ -56,6 +62,7 @@ jobs:
           ./actionlint -color \
             .github/workflows/km-family-non-jra-formal-runner.yml \
             .github/workflows/km-local-result-from-signed-final.yml \
+            .github/workflows/km-formal-single-entry.yml \
             .github/workflows/km-local-execution-canary.yml
 
       - name: Compile and unit-test execution gateway
@@ -67,12 +74,14 @@ jobs:
             runtime/execution_store.py \
             runtime/family_runtime_contract.py \
             runtime/non_jra_formal_runner.py \
+            runtime/formal_execution_orchestrator.py \
             runtime/local_result_from_signed_final.py
           python -m pip install --disable-pip-version-check -q pytest
           python -m pytest -q \
             tests/test_execution_gateway.py \
             tests/test_execution_store.py \
-            tests/test_execution_workflow_contract.py
+            tests/test_execution_workflow_contract.py \
+            tests/test_formal_execution_orchestrator.py
 
       - name: Validate gateway pointer and external runtime bundle
         shell: bash

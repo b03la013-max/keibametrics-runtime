@@ -1,0 +1,158 @@
+name: KeibaMetrics Formal Single Entry
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/formal_intents/*.json"
+  workflow_dispatch:
+    inputs:
+      intent_path:
+        description: "Single-entry Formal intent JSON"
+        required: true
+        type: string
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve single intent
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          INTENT="${{ inputs.intent_path }}"
+          if [ -z "$INTENT" ]; then
+            mapfile -t INTENTS < <(
+              git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
+              grep '^runtime/formal_intents/.*\.json$' || true
+            )
+            if [ "${#INTENTS[@]}" -ne 1 ]; then
+              echo "Expected exactly one Formal intent; found ${#INTENTS[@]}" >&2
+              printf '%s\n' "${INTENTS[@]}" >&2
+              exit 2
+            fi
+            INTENT="${INTENTS[0]}"
+          fi
+          case "$INTENT" in
+            runtime/formal_intents/*.json) ;;
+            *) echo "Invalid intent path: $INTENT" >&2; exit 2 ;;
+          esac
+          test -f "$INTENT"
+          INTENT_FILE="$INTENT" python - <<'PY'
+          import json,os
+          import sys
+          sys.path.insert(0,"runtime")
+          from execution_gateway import derive_execution_id
+          req=json.load(open(os.environ["INTENT_FILE"],encoding="utf-8"))
+          family=str(req.get("family_id") or "").upper()
+          if family!="LOCAL":
+              raise SystemExit("Single-entry R1 currently requires LOCAL")
+          execution_id=derive_execution_id(req)
+          race=req.get("race") if isinstance(req.get("race"),dict) else {}
+          venue=str(req.get("venue_id") or race.get("venue_id") or "UNKNOWN")
+          date=str(req.get("race_date") or race.get("race_date") or race.get("date") or "UNKNOWN")
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
+              out.write(f"intent_file={os.environ['INTENT_FILE']}\n")
+              out.write(f"execution_id={execution_id}\n")
+              out.write(f"family_id={family}\n")
+              out.write(f"cache_prefix=km-raceday-fast-v1-{venue}-{date}-\n")
+          print(json.dumps({"execution_id":execution_id,"family_id":family},ensure_ascii=False))
+          PY
+
+      - name: Restore deterministic race-day cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .km_fast_cache
+          key: ${{ steps.meta.outputs.cache_prefix }}${{ github.run_id }}
+          restore-keys: |
+            ${{ steps.meta.outputs.cache_prefix }}
+
+      - name: Current Authority and scope guard
+        shell: bash
+        env:
+          REQUEST_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          python runtime/family_authority_guard.py --request "$REQUEST_FILE"
+
+      - name: Verify canonical Runtime before orchestration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_preflight.json
+
+      - name: Execute SOURCE to FORMAL as one lifecycle
+        id: execute
+        shell: bash
+        run: |
+          set +e
+          python runtime/formal_execution_orchestrator.py \
+            --intent "${{ steps.meta.outputs.intent_file }}" \
+            --run-id "${{ github.run_id }}" \
+            --github-sha "${{ github.sha }}"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Persist durable successful phase checkpoints
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          if [ ! -d "runtime/executions/$EXECUTION_ID" ]; then
+            exit 0
+          fi
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "runtime/executions/$EXECUTION_ID"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "execution: checkpoint $EXECUTION_ID [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo "Unable to persist orchestration checkpoints" >&2
+          exit 1
+
+      - name: Save deterministic race-day cache
+        if: steps.execute.outputs.rc == '0'
+        uses: actions/cache/save@v4
+        with:
+          path: .km_fast_cache
+          key: ${{ steps.meta.outputs.cache_prefix }}${{ github.run_id }}
+
+      - name: Upload orchestration evidence
+        if: always() && hashFiles('runtime_out/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-formal-single-entry-${{ steps.meta.outputs.execution_id }}-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Enforce orchestration result
+        if: always()
+        shell: bash
+        env:
+          RC: ${{ steps.execute.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test "${RC:-2}" = "0"

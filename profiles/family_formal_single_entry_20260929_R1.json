@@ -1,0 +1,62 @@
+{
+  "profile_id": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+  "status": "ACTIVE / EXECUTION-CORRECTNESS / LOCAL / NON-PREDICTIVE / NON-NUMERICAL / RESUMABLE / FAIL-CLOSED",
+  "created_at": "2026-09-29T01:55:00+09:00",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8",
+  "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
+  "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
+  "workflow": ".github/workflows/km-formal-single-entry.yml",
+  "orchestrator": "runtime/formal_execution_orchestrator.py",
+  "intent_root": "runtime/formal_intents",
+  "family_scope": [
+    "LOCAL"
+  ],
+  "sequence": [
+    "CURRENT_AUTHORITY_GUARD",
+    "RUNTIME_GATEWAY_PREFLIGHT",
+    "DURABLE_SOURCE_CHECKPOINT_RESOLVE",
+    "SIGNED_SOURCE_EXECUTE_IF_MISSING",
+    "SOURCE_CHECKPOINT_PERSIST",
+    "FORMAL_EXECUTE_FROM_VERIFIED_SOURCE",
+    "FORMAL_CHECKPOINT_PERSIST",
+    "SIGNED_EVIDENCE_OR_FIRST_FAILURE_RETURN"
+  ],
+  "checkpoint_policy": {
+    "stable_execution_id": true,
+    "source_phase_reuse": true,
+    "immutable_formal_reuse": true,
+    "corrupt_checkpoint": "FAIL_CLOSED",
+    "source_success_survives_formal_failure": true,
+    "derived_numeric_cache_authority": false
+  },
+  "failure_diagnostics": {
+    "required": [
+      "first_failed_phase",
+      "failure_code",
+      "failure_class",
+      "last_successful_stage",
+      "resume_hint"
+    ],
+    "expected_fail_closed_is_not_infrastructure_failure": true
+  },
+  "numerical_truthfulness": {
+    "full_lifecycle_does_not_imply_strict_full_numerical": true,
+    "unavailable_full_numerical_authority_may_not_be_fabricated": true,
+    "explicit_require_full_numerical_authority_is_preserved": true
+  },
+  "production_freeze": {
+    "prediction_model": "UNCHANGED",
+    "numerical_model": "UNCHANGED",
+    "krs_engine_physics": "UNCHANGED",
+    "parameter_map": "UNCHANGED",
+    "mec_r3": "UNCHANGED",
+    "capital_policy": "UNCHANGED",
+    "venue_canons": "UNCHANGED"
+  },
+  "legacy_compatibility": {
+    "two_phase_request_root": "runtime/family_requests",
+    "two_phase_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "default_chat_entry": false
+  },
+  "automatic_promotion": false
+}

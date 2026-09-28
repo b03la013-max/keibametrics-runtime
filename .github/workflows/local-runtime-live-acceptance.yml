@@ -17,32 +17,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify deployed runtime revision and hashes
+      - name: Verify deployed runtime through canonical gateway
         run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check \
+            --family LOCAL \
+            --output runtime_out/runtime_health_acceptance.json
           python - <<'PY'
-          import hashlib,json,pathlib,urllib.request
-          endpoint="https://witnessstrictimage-production.up.railway.app"
-          contract=json.load(open("profiles/family_runtime_contracts_20260923_R8.json",encoding="utf-8"))["families"]["LOCAL"]
-          expected=contract["runtime_git_revision"]
-          with urllib.request.urlopen(endpoint+"/health",timeout=60) as r:
-              h=json.loads(r.read().decode())
+          import json
+          x=json.load(open("runtime_out/runtime_health_acceptance.json",encoding="utf-8"))
+          a=x["assessment"]
+          h=x["health"]
+          assert a["status"]=="PASS",a
+          assert not a["bundle_mismatches"],a
           assert h["status"]=="READY",h
-          assert h["github_revision"]==expected,(h["github_revision"],expected)
-          paths={
-            "runtime_app_sha256":"runtime/local_physical/app_v15.py",
-            "legacy_runtime_app_sha256":"runtime/local_physical/app.py",
-            "source_acquisition_sha256":"runtime/local_physical/source_acquisition.py",
-            "nar_source_manifest_sha256":"runtime/local_physical/nar_source_manifest.py",
-            "nar_runner_universe_sha256":"runtime/local_physical/nar_runner_universe.py",
-          }
-          checked={}
-          for key,path in paths.items():
-              actual=hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
-              checked[key]={"repo":actual,"runtime":h.get(key)}
-              assert h.get(key)==actual,(key,actual,h.get(key))
-          pathlib.Path("runtime_out").mkdir(exist_ok=True)
-          json.dump({"health":h,"checked_hashes":checked},open("runtime_out/runtime_health_acceptance.json","w"),ensure_ascii=False,sort_keys=True)
-          print("RUNTIME_SYNC_PASS",expected)
+          print("RUNTIME_SYNC_PASS",a["runtime_profile_actual"],a["bundle_fingerprint_actual"])
           PY
 
       - name: Verify real Urawa R8 declared-active universe and scratch state
