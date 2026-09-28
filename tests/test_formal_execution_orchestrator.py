@@ -51,7 +51,7 @@ def test_resume_plan(monkeypatch, source_status, formal_status, action, resume):
     monkeypatch.setattr(
         o,
         "checkpoint_status",
-        lambda execution_id: {
+        lambda execution_id, intent=None: {
             "execution_id": execution_id,
             "source": {"status": source_status},
             "formal": {"status": formal_status},
@@ -66,7 +66,7 @@ def test_plan_only_has_no_production_policy_change(monkeypatch, tmp_path):
     monkeypatch.setattr(
         o,
         "resume_plan",
-        lambda execution_id: {
+        lambda execution_id, intent=None: {
             "action": "RUN_SOURCE_THEN_FORMAL",
             "resume_from": "SOURCE",
             "checkpoints": {
@@ -128,3 +128,89 @@ def test_import_closure_failure_is_classified_before_source(monkeypatch, tmp_pat
     assert report["first_failed_code"] == "FORMAL_IMPORT_CLOSURE_FAILED"
     assert report["first_failed_class"] == "INFRASTRUCTURE_COMPATIBILITY"
     assert report["resume_hint"] == "REPAIR_CODE_THEN_RETRY_SAME_EXECUTION_ID"
+
+
+
+def test_archived_acceptance_cannot_claim_formal_pre_race(tmp_path):
+    intent = base_intent()
+    intent["acceptance_only"] = True
+    intent["source_adapter_acceptance_mode"] = "ARCHIVED-NAR-SOURCE-FIXTURE"
+    report = o.orchestrate(
+        intent,
+        run_id="123",
+        github_sha="abc",
+        runtime_out=tmp_path / "out",
+        tmp_root=tmp_path / "tmp",
+        plan_only=True,
+    )
+    assert report["status"] == "FAIL_CLOSED"
+    assert report["first_failed_code"] == "ARCHIVED_ACCEPTANCE_MUST_USE_POST_START_REPLAY"
+    assert report["first_failed_class"] == "TEMPORAL_TRUTHFULNESS"
+    assert report["resume_hint"] == "CLASSIFY_ARCHIVED_ACCEPTANCE_AS_POST_START_REPLAY_NO_OOS"
+
+
+def test_source_checkpoint_basis_ignores_static_reforecast_fields():
+    a = base_intent()
+    b = base_intent()
+    b["temporal_mode"] = "POST-START-REPLAY"
+    b["race"] = {"going": "不良"}
+    b["static_prediction"] = {"ranking": [2, 1, 3]}
+    assert o.source_checkpoint_basis(a) == o.source_checkpoint_basis(b)
+
+
+def test_source_checkpoint_legacy_compatibility_passes_for_same_source_basis(tmp_path):
+    intent = base_intent()
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    envelope = {
+        "receipt": {
+            "family": "LOCAL",
+            "race_id": intent["race_id"],
+        },
+        "artifact": {
+            "race_id": intent["race_id"],
+            "prediction_cutoff": intent["prediction_cutoff"],
+            "source_race_context": {
+                "venue_id": intent["venue_id"],
+                "race_date": intent["race_date"],
+                "race_no": intent["race_no"],
+            },
+            "required_source_manifest_sha256": "abc",
+        },
+    }
+    (run_dir / "source_receipt_envelope.json").write_text(
+        json.dumps(envelope), encoding="utf-8"
+    )
+    comp = o.source_checkpoint_compatibility(intent, {"run_dir": run_dir})
+    assert comp["status"] == "PASS"
+    assert comp["basis_source"] == "LEGACY_SIGNED_SOURCE_DERIVATION"
+
+
+def test_source_checkpoint_reuse_rejects_changed_cutoff(tmp_path):
+    intent = base_intent()
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    basis = o.source_checkpoint_basis(intent)
+    (run_dir / "source_checkpoint_basis.json").write_text(
+        json.dumps(basis), encoding="utf-8"
+    )
+    changed = dict(intent)
+    changed["prediction_cutoff"] = "2099-01-01T11:40:00+09:00"
+    comp = o.source_checkpoint_compatibility(changed, {"run_dir": run_dir})
+    assert comp["status"] == "INCOMPATIBLE"
+    assert "prediction_cutoff" in comp["mismatches"]
+
+
+def test_source_checkpoint_reuse_rejects_changed_race_identity(tmp_path):
+    intent = base_intent()
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    basis = o.source_checkpoint_basis(intent)
+    (run_dir / "source_checkpoint_basis.json").write_text(
+        json.dumps(basis), encoding="utf-8"
+    )
+    changed = dict(intent)
+    changed["race_no"] = 2
+    comp = o.source_checkpoint_compatibility(changed, {"run_dir": run_dir})
+    assert comp["status"] == "INCOMPATIBLE"
+    assert "race_no" in comp["mismatches"]
