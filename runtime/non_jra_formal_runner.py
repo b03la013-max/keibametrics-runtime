@@ -529,10 +529,16 @@ else:
         fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
     source_artifact=source.get("artifact") or {}
 
-# Required-Evidence round trip: every required acquisition cell must be
-# terminal before Production numerical materialization. Missing/STALE/
-# NOT-AVAILABLE evidence is never fabricated and remains available for the
-# canonical materializer to resolve through RULED-HOLD/neutral/N-A policy.
+# Signed SOURCE formal readiness is universal, regardless of whether an
+# optional Required-Evidence declaration is present.
+if source_artifact.get("formal_ready") is not True:
+    fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
+
+# Required-Evidence round trip validates every DECLARED acquisition cell.
+# The current Family Formal Lifecycle does not define a standalone
+# Required-Evidence Manifest as a universal stage, so absence of a declaration
+# is recorded as NOT_DECLARED rather than manufacturing requirements or
+# blocking an otherwise valid Signed SOURCE.
 try:
     evidence_acquisition_ledger=enforce_before_numerical(req,source_artifact)
 except EvidenceRoundTripError as e:
@@ -541,9 +547,6 @@ persist("evidence_acquisition_ledger.json",evidence_acquisition_ledger)
 req["evidence_acquisition_ledger"]=evidence_acquisition_ledger
 if evidence_acquisition_ledger.get("full_terminalization") is not True:
     fail_closed("EVIDENCE_ACQUISITION_TERMINALIZATION_INCOMPLETE",evidence_acquisition_ledger)
-
-    if source_artifact.get("formal_ready") is not True:
-        fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
 
 source_receipt_sha=source.get("receipt_sha256")
 source_artifact=source.get("artifact") or {}
