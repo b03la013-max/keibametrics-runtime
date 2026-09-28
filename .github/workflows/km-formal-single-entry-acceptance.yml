@@ -157,6 +157,8 @@ jobs:
           assert "KM-FORMAL-CHECKPOINT-BASIS-v1" in orch
           assert "formal_checkpoint_compatibility" in orch
           assert "bind_formal_request_to_source" in orch
+          assert "current_single_entry_profile" in orch
+          assert "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1" not in orch
 
           runner=Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
           for token in [
