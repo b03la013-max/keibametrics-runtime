@@ -11,6 +11,7 @@ from execution_store import materialize_phase
 from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID as RACE_DAY_FAST_PATH_PROFILE
 from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
+from formal_oos_policy import request_oos_policy
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -1315,14 +1316,27 @@ def run_candidate_krs_arm(label,q,legacy=False):
         if cc<300 and (crun.get("receipt") or {}).get("status")=="EXECUTED":
             csha=verify_envelope(crun,"CANDIDATE_KRS_"+label)
             complete_at=datetime.datetime.now(datetime.timezone.utc)
-            temporal_ok=bool(scheduled_utc and complete_at<scheduled_utc)
+            pre_post_complete=bool(scheduled_utc and complete_at<scheduled_utc)
+            oos_policy=request_oos_policy(req)
+            acceptance_only=bool(oos_policy["acceptance_only"])
+            request_oos_enabled=bool(oos_policy["request_oos_eligible"])
+            oos_allowed=bool(oos_policy["oos_allowed"])
+            oos_temporal_eligible=bool(pre_post_complete and oos_allowed)
+            oos_exclusion_reason=(
+                oos_policy.get("oos_exclusion_reason")
+                if not oos_allowed else
+                (None if pre_post_complete else "NOT_PRE_POST_COMPLETE")
+            )
             return {
                 "status":"EXECUTED","label":label,"receipt_sha256":csha,
                 "actual_run_count":(crun.get("artifact") or {}).get("actual_run_count"),
                 "completed_at":complete_at.isoformat(),
-                "pre_post_complete":temporal_ok,
+                "pre_post_complete":pre_post_complete,
                 "production_authority":False,
-                "oos_temporal_eligible":temporal_ok,
+                "acceptance_only":acceptance_only,
+                "request_oos_eligible":request_oos_enabled,
+                "oos_temporal_eligible":oos_temporal_eligible,
+                "oos_exclusion_reason":oos_exclusion_reason,
                 "candidate_input_sha256":sha_obj(cand_input),
                 "output_sha256":(crun.get("artifact") or {}).get("output_sha256"),
                 "paired_seed":cand_seed,

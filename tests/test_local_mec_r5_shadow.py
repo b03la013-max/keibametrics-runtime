@@ -67,3 +67,38 @@ assert training["training_excluded"] is True
 training_settle=settle_shadow(training,{"finish_order":[1,2,4],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200}},signed_final_binding_valid=True)
 assert training_settle["oos_eligible"] is False
 assert training_settle["status"]=="RETROSPECTIVE-TRAINING-SETTLEMENT / NOT-OOS"
+
+
+accept_req=dict(
+    future_req,
+    race_id="FNB-ACCEPTANCE-R1",
+    acceptance_only=True,
+    oos_eligible=False,
+)
+accept_shadow=build_shadow(
+    accept_req,env,generated_at="2026-09-24T05:00:00+00:00",basis_sha256="AB"
+)
+assert accept_shadow["acceptance_only"] is True
+assert accept_shadow["forward_oos_candidate"] is False
+assert accept_shadow["oos_exclusion_reason"]=="ACCEPTANCE_ONLY"
+assert "NOT-OOS" in accept_shadow["temporal_class"]
+accept_trace=bind_shadow_to_trace({},accept_shadow,"AB")
+accept_binding=accept_trace["local_mec_r5_shadow_binding"]
+assert accept_binding["acceptance_only"] is True
+assert accept_binding["forward_oos_candidate"] is False
+accept_signed={
+    "artifact":{"ticket_transport_trace":accept_trace},
+    "receipt":{"phase":"FINAL","status":"PASS","artifact_sha256":"AFA"},
+    "receipt_sha256":"AFR",
+}
+accept_att=verify_signed_final_binding(accept_signed,accept_shadow)
+assert accept_att["valid"] is True
+assert accept_att["acceptance_only"] is True
+assert accept_att["forward_oos_candidate"] is False
+accept_settle=settle_shadow(
+    accept_shadow,
+    {"finish_order":[1,2,4],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200}},
+    signed_final_binding_valid=True,
+)
+assert accept_settle["oos_eligible"] is False
+assert accept_settle["status"]=="NON-FORWARD-SETTLEMENT / NOT-OOS"

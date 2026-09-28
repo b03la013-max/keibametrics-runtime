@@ -4,6 +4,7 @@ import copy, hashlib, json
 from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
+from formal_oos_policy import request_oos_policy
 from mec_r4_shadow import build_mec_r4_shadow, settle_mec_r4_shadow
 
 PROFILE="KM-LOCAL-MEC-R4-SIGNED-FINAL-BRIDGE-v1.0-20260924"
@@ -49,8 +50,18 @@ def build_pre_result_shadow(req: Dict[str,Any], final_ticket: Dict[str,Any], mec
     shadow=build_mec_r4_shadow(basis,generated_at=generated_at)
     shadow["local_bridge_profile"]=PROFILE
     shadow["local_basis_sha256"]=basis["sha256"]
-    shadow["temporal_class"]="FORMAL-PRE-RACE-SHADOW"
-    shadow["oos_eligible_if_signed_final_bound"]=True
+    oos_policy=request_oos_policy(req)
+    acceptance_only=bool(oos_policy["acceptance_only"])
+    request_oos_enabled=bool(oos_policy["request_oos_eligible"])
+    shadow["acceptance_only"]=acceptance_only
+    shadow["request_oos_eligible"]=request_oos_enabled
+    shadow["temporal_class"]=(
+        "ACCEPTANCE-ONLY-PRE-RACE-SHADOW / NOT-OOS"
+        if acceptance_only else
+        ("FORMAL-PRE-RACE-SHADOW" if request_oos_enabled else "FORMAL-PRE-RACE-SHADOW / OOS-DISABLED")
+    )
+    shadow["oos_eligible_if_signed_final_bound"]=bool(oos_policy["oos_allowed"])
+    shadow["oos_exclusion_reason"]=oos_policy.get("oos_exclusion_reason")
     shadow["production_effect"]="NONE"
     shadow["sha256"]=sha_obj({k:v for k,v in shadow.items() if k!="sha256"})
     return shadow,basis
@@ -67,6 +78,9 @@ def bind_shadow_to_trace(trace: Dict[str,Any], shadow: Dict[str,Any], basis: Dic
         "generated_at":shadow.get("generated_at"),
         "scheduled_post_at":shadow.get("scheduled_post_at"),
         "temporal_mode":shadow.get("temporal_mode"),
+        "acceptance_only":bool(shadow.get("acceptance_only")),
+        "oos_eligible_if_signed_final_bound":bool(shadow.get("oos_eligible_if_signed_final_bound")),
+        "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
         "production_effect":"NONE",
     }
     return out
@@ -84,6 +98,12 @@ def verify_signed_final_binding(final_envelope: Dict[str,Any], shadow: Dict[str,
         raise AssertionError("LOCAL_MEC_R4_BASIS_SHA_NOT_BOUND")
     if str(binding.get("production_effect"))!="NONE":
         raise AssertionError("LOCAL_MEC_R4_PRODUCTION_EFFECT_FORBIDDEN")
+    if bool(binding.get("acceptance_only"))!=bool(shadow.get("acceptance_only")):
+        raise AssertionError("LOCAL_MEC_R4_ACCEPTANCE_BINDING_MISMATCH")
+    if bool(binding.get("oos_eligible_if_signed_final_bound"))!=bool(shadow.get("oos_eligible_if_signed_final_bound")):
+        raise AssertionError("LOCAL_MEC_R4_OOS_ELIGIBILITY_BINDING_MISMATCH")
+    if bool(shadow.get("acceptance_only")) and bool(shadow.get("oos_eligible_if_signed_final_bound")):
+        raise AssertionError("LOCAL_MEC_R4_ACCEPTANCE_CANNOT_BE_OOS_ELIGIBLE")
     if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
         raise AssertionError("LOCAL_MEC_R4_NOT_FORMAL_PRE_RACE")
     gen=_dt(shadow.get("generated_at"))
@@ -101,6 +121,9 @@ def verify_signed_final_binding(final_envelope: Dict[str,Any], shadow: Dict[str,
         "generated_at":shadow.get("generated_at"),
         "scheduled_post_at":shadow.get("scheduled_post_at"),
         "temporal_mode":shadow.get("temporal_mode"),
+        "acceptance_only":bool(shadow.get("acceptance_only")),
+        "oos_eligible_if_signed_final_bound":bool(shadow.get("oos_eligible_if_signed_final_bound")),
+        "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
         "production_effect":"NONE",
         "sha256":None,
     }

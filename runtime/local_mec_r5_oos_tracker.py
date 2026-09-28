@@ -37,8 +37,10 @@ def _official_result_authority(race_id):
                     "request_file":fn,
                     "source":req.get("source"),
                     "verification_ref":req.get("official_result_verification_ref"),
+                    "acceptance_only":bool(req.get("acceptance_only")),
                 })
-    return {"verified":bool(refs),"refs":refs}
+    admissible=[x for x in refs if not bool(x.get("acceptance_only"))]
+    return {"verified":bool(refs),"oos_admissible":bool(admissible),"refs":refs}
 
 def _max_drawdown(rows):
     eq=peak=dd=0.0
@@ -77,6 +79,9 @@ def build_status():
                 if result_authority.get("verified") is not True:
                     held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
                     continue
+                if result_authority.get("oos_admissible") is not True:
+                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_RESULT_NOT_OOS"})
+                    continue
                 sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
                 lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
                 if not os.path.exists(sp) or not os.path.exists(lp):
@@ -86,6 +91,8 @@ def build_status():
                     continue
                 if sh.get("production_effect")!="NONE":
                     errors.append({"race_id":rid,"reason":"R5_PRODUCTION_EFFECT_NOT_NONE"}); continue
+                if bool(sh.get("acceptance_only")):
+                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_SHADOW_NOT_OOS"}); continue
                 if line.get("lineage_type")!="LOCAL_MEC_R5_SIGNED_FINAL_BOUND" or line.get("binding_valid") is not True:
                     errors.append({"race_id":rid,"reason":"R5_SIGNED_FINAL_BINDING_INVALID"}); continue
                 if line.get("shadow_sha256")!=sh.get("sha256") or line.get("basis_sha256")!=sh.get("source_basis_sha256"):

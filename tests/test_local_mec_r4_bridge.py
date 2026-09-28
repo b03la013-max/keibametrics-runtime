@@ -30,3 +30,29 @@ assert replay["oos_eligible_if_signed_final_bound"] is False
 settled=settle_replay(replay,{"finish_order":[1,2,3],"payouts":{"EXACTA":500,"TRIO":900,"TRIFECTA":2200},"result_available_at":"2026-09-24T12:10:00+09:00"})
 assert settled["oos_eligible"] is False
 assert settled["arms"]["CPSS_ALL"]["status"]=="SETTLED"
+
+
+accept_req=copy.deepcopy(req)
+accept_req["race_id"]="LOCAL-ACCEPT"
+accept_req["acceptance_only"]=True
+accept_req["oos_eligible"]=False
+accept_shadow,accept_basis=build_pre_result_shadow(
+    accept_req,ft,mec,fp,"2026-09-24T02:00:00+00:00"
+)
+assert accept_shadow["acceptance_only"] is True
+assert accept_shadow["oos_eligible_if_signed_final_bound"] is False
+assert accept_shadow["oos_exclusion_reason"]=="ACCEPTANCE_ONLY"
+assert "NOT-OOS" in accept_shadow["temporal_class"]
+accept_trace=bind_shadow_to_trace({},accept_shadow,accept_basis)
+accept_binding=accept_trace["mec_r4_shadow_binding"]
+assert accept_binding["acceptance_only"] is True
+assert accept_binding["oos_eligible_if_signed_final_bound"] is False
+accept_env={
+    "artifact":{"ticket_transport_trace":accept_trace},
+    "receipt":{"phase":"FINAL","status":"PASS","artifact_sha256":"AF"},
+    "receipt_sha256":"AR",
+}
+accept_att=verify_signed_final_binding(accept_env,accept_shadow)
+assert accept_att["valid"] is True
+assert accept_att["acceptance_only"] is True
+assert accept_att["oos_eligible_if_signed_final_bound"] is False

@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy, hashlib, json
 from datetime import datetime, timezone
+from formal_oos_policy import request_oos_policy
 from typing import Any, Dict, List
 from mec_r4_shadow import settle_ticket_list
 
@@ -116,22 +117,41 @@ def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
         and _dt(generated_at) < _dt(scheduled)
     )
     training_excluded=rid in TRAINING_EXCLUSION
-    forward_oos_candidate=bool(pre_result and not training_excluded)
-    if training_excluded:
+    oos_policy=request_oos_policy(req)
+    acceptance_only=bool(oos_policy["acceptance_only"])
+    request_oos_enabled=bool(oos_policy["request_oos_eligible"])
+    forward_oos_candidate=bool(
+        pre_result and not training_excluded and oos_policy["oos_allowed"]
+    )
+    if acceptance_only:
+        temporal_class="ACCEPTANCE-ONLY-PRE-RACE / NOT-OOS"
+    elif training_excluded:
         temporal_class="TRAINING-REPLAY-ONLY"
+    elif not request_oos_enabled:
+        temporal_class="FORMAL-PRE-RACE / OOS-DISABLED"
     elif forward_oos_candidate:
         temporal_class="FORWARD-OOS-PRE-RESULT-CANDIDATE"
     else:
         temporal_class="NON-FORWARD / NOT-OOS"
+    status=(
+        "SHADOW / LOCAL-SPECIFIC / NON-PRODUCTION / ACCEPTANCE-ONLY / NOT-OOS"
+        if acceptance_only else
+        "SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-MEASUREMENT"
+    )
     out={
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
-      "status":"SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-MEASUREMENT",
+      "status":status,
       "race_id":rid,"production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
       "generated_at":generated_at,"scheduled_post_at":scheduled,
       "temporal_mode":req.get("temporal_mode"),"source_basis_sha256":basis_sha256,
       "temporal_class":temporal_class,
       "training_excluded":training_excluded,
+      "acceptance_only":acceptance_only,
+      "request_oos_eligible":request_oos_enabled,
       "forward_oos_candidate":forward_oos_candidate,
+      "oos_exclusion_reason":(
+          "TRAINING_EXCLUDED" if training_excluded else oos_policy.get("oos_exclusion_reason")
+      ),
       "design_boundary":"2026-09-23 LOCAL results may inform this candidate; those races are TRAINING/REPLAY ONLY and never OOS.",
       "production_effect":"NONE","arms":arms
     }
@@ -174,7 +194,11 @@ def bind_shadow_to_trace(trace,shadow,basis_sha256):
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
       "shadow_sha256":shadow.get("sha256"),"basis_sha256":basis_sha256,
       "generated_at":shadow.get("generated_at"),"scheduled_post_at":shadow.get("scheduled_post_at"),
-      "temporal_mode":shadow.get("temporal_mode"),"production_effect":"NONE"
+      "temporal_mode":shadow.get("temporal_mode"),
+      "acceptance_only":bool(shadow.get("acceptance_only")),
+      "forward_oos_candidate":bool(shadow.get("forward_oos_candidate")),
+      "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
+      "production_effect":"NONE"
     }
     return out
 
@@ -190,6 +214,12 @@ def verify_signed_final_binding(final_envelope,shadow):
         raise AssertionError("LOCAL_MEC_R5_BASIS_SHA_NOT_BOUND")
     if str(b.get("production_effect"))!="NONE":
         raise AssertionError("LOCAL_MEC_R5_PRODUCTION_EFFECT_FORBIDDEN")
+    if bool(b.get("acceptance_only"))!=bool(shadow.get("acceptance_only")):
+        raise AssertionError("LOCAL_MEC_R5_ACCEPTANCE_BINDING_MISMATCH")
+    if bool(b.get("forward_oos_candidate"))!=bool(shadow.get("forward_oos_candidate")):
+        raise AssertionError("LOCAL_MEC_R5_OOS_ELIGIBILITY_BINDING_MISMATCH")
+    if bool(shadow.get("acceptance_only")) and bool(shadow.get("forward_oos_candidate")):
+        raise AssertionError("LOCAL_MEC_R5_ACCEPTANCE_CANNOT_BE_FORWARD_OOS")
     if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
         raise AssertionError("LOCAL_MEC_R5_NOT_FORMAL_PRE_RACE")
     gen=datetime.fromisoformat(str(shadow.get("generated_at")).replace("Z","+00:00"))
@@ -200,5 +230,9 @@ def verify_signed_final_binding(final_envelope,shadow):
       "valid":True,"profile":PROFILE,"candidate_id":CANDIDATE_ID,
       "shadow_sha256":shadow.get("sha256"),"basis_sha256":shadow.get("source_basis_sha256"),
       "final_receipt_sha256":final_envelope.get("receipt_sha256"),
-      "final_artifact_sha256":rec.get("artifact_sha256"),"production_effect":"NONE"
+      "final_artifact_sha256":rec.get("artifact_sha256"),
+      "acceptance_only":bool(shadow.get("acceptance_only")),
+      "forward_oos_candidate":bool(shadow.get("forward_oos_candidate")),
+      "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
+      "production_effect":"NONE"
     }

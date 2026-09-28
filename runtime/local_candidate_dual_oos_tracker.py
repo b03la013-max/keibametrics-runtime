@@ -42,16 +42,19 @@ def build_measurement(dual_postresult: Dict[str,Any], result_request: Dict[str,A
     krs_post=d.get("candidate_krs_postresult") or {}
 
     explicit_official=bool(result_request.get("official_result_verified") is True)
+    acceptance_only=bool(result_request.get("acceptance_only"))
     authority_ref=result_request.get("official_result_verification_ref")
-    result_authority_status="VERIFIED" if explicit_official else "HOLD_RESULT_AUTHORITY"
+    result_authority_status=("ACCEPTANCE_ONLY_NOT_OOS" if acceptance_only else ("VERIFIED" if explicit_official else "HOLD_RESULT_AUTHORITY"))
 
     temporal_pair=bool(
+        not acceptance_only
+        and 
         v01.get("candidate_oos_event_eligible") is True
         and v02.get("candidate_oos_event_eligible") is True
         and comp.get("same_source") is True
         and v02.get("candidate_is_calibration_training_race") is False
     )
-    promotion_admissible=bool(temporal_pair and explicit_official)
+    promotion_admissible=bool(temporal_pair and explicit_official and not acceptance_only)
 
     def krs_eval(label):
         x=krs_post.get(label) or {}
@@ -71,11 +74,13 @@ def build_measurement(dual_postresult: Dict[str,Any], result_request: Dict[str,A
         "official_result_verified":explicit_official,
         "verification_ref":authority_ref,
         "source":result_request.get("source"),
+        "acceptance_only":acceptance_only,
       },
       "temporal_dual_oos_eligible":temporal_pair,
       "promotion_measurement_admissible":promotion_admissible,
       "hold_reason":None if promotion_admissible else (
-        "RESULT_AUTHORITY_NOT_VERIFIED" if temporal_pair and not explicit_official else "DUAL_OOS_TEMPORAL_OR_TRAINING_GATE_NOT_PASS"
+        "ACCEPTANCE_ONLY_NOT_OOS" if acceptance_only else
+        ("RESULT_AUTHORITY_NOT_VERIFIED" if temporal_pair and not explicit_official else "DUAL_OOS_TEMPORAL_OR_TRAINING_GATE_NOT_PASS")
       ),
       "arms":{
         "v0.1":{

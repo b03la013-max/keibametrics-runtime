@@ -32,8 +32,13 @@ def build_measurement(post: Dict[str,Any], result_request: Dict[str,Any], *, bas
         raise ValueError("V03_RESULT_REQUEST_RACE_ID_MISMATCH")
     arm=d.get("arm") or {}
     official=bool(result_request.get("official_result_verified") is True)
-    temporal=bool(arm.get("candidate_oos_event_eligible") is True and d.get("future_oos_candidate") is True)
-    admissible=bool(official and temporal)
+    acceptance_only=bool(result_request.get("acceptance_only"))
+    temporal=bool(
+        not acceptance_only
+        and arm.get("candidate_oos_event_eligible") is True
+        and d.get("future_oos_candidate") is True
+    )
+    admissible=bool(official and temporal and not acceptance_only)
     base=baseline_measurement or {}
     v01=((base.get("arms") or {}).get("v0.1") or {})
     v02=((base.get("arms") or {}).get("v0.2") or {})
@@ -55,10 +60,14 @@ def build_measurement(post: Dict[str,Any], result_request: Dict[str,Any], *, bas
         "official_result_verified":official,
         "verification_ref":result_request.get("official_result_verification_ref"),
         "source":result_request.get("source"),
+        "acceptance_only":acceptance_only,
       },
       "temporal_v03_oos_eligible":temporal,
       "promotion_measurement_admissible":admissible,
-      "hold_reason":None if admissible else ("RESULT_AUTHORITY_NOT_VERIFIED" if temporal else "V03_PRE_DESIGN_OR_TEMPORAL_GATE_NOT_PASS"),
+      "hold_reason":None if admissible else (
+        "ACCEPTANCE_ONLY_NOT_OOS" if acceptance_only else
+        ("RESULT_AUTHORITY_NOT_VERIFIED" if temporal else "V03_PRE_DESIGN_OR_TEMPORAL_GATE_NOT_PASS")
+      ),
       "arm":{
         "mapping_id":arm.get("candidate_mapping_id"),
         "winner_rank":arm.get("winner_rank"),
