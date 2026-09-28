@@ -1,4 +1,4 @@
-name: Formal Single Entry R1 Acceptance
+name: Formal Single Entry R2 Acceptance
 
 permissions:
   contents: read
@@ -19,11 +19,11 @@ on:
       - "tests/test_formal_import_closure.py"
       - "tests/test_formal_failure_diagnostics.py"
       - "tests/test_local_evidence_acquisition_roundtrip.py"
-      - "profiles/family_formal_single_entry_20260929_R1.json"
-      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R34.json"
-      - "profiles/venue_chat_routes_20260929_R34.json"
-      - "profiles/family_runtime_contracts_20260929_R26.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R13.json"
+      - "profiles/family_formal_single_entry_20260929_R2.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json"
+      - "profiles/venue_chat_routes_20260929_R35.json"
+      - "profiles/family_runtime_contracts_20260929_R27.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
       - ".github/workflows/km-formal-single-entry-acceptance.yml"
@@ -32,10 +32,10 @@ on:
     paths:
       - "runtime/formal_execution_orchestrator.py"
       - "runtime/non_jra_formal_runner.py"
-      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R34.json"
-      - "profiles/venue_chat_routes_20260929_R34.json"
-      - "profiles/family_runtime_contracts_20260929_R26.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R13.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json"
+      - "profiles/venue_chat_routes_20260929_R35.json"
+      - "profiles/family_runtime_contracts_20260929_R27.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
       - ".github/workflows/km-formal-single-entry-acceptance.yml"
@@ -77,9 +77,9 @@ jobs:
         run: |
           python runtime/family_authority_guard.py \
             --selftest \
-            --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R34.json
+            --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json
 
-      - name: Verify R34 single-entry bindings and freezes
+      - name: Verify R35 single-entry R2 checkpoint integrity and freezes
         run: |
           python - <<'PY'
           import json
@@ -88,22 +88,22 @@ jobs:
           def load(path):
               return json.load(open(path,encoding="utf-8"))
 
-          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R34.json")
-          route=load("profiles/venue_chat_routes_20260929_R34.json")
-          runtime=load("profiles/family_runtime_contracts_20260929_R26.json")
-          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R13.json")
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json")
+          route=load("profiles/venue_chat_routes_20260929_R35.json")
+          runtime=load("profiles/family_runtime_contracts_20260929_R27.json")
+          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json")
           gateway=load("profiles/current_execution_gateway.json")
-          single=load("profiles/family_formal_single_entry_20260929_R1.json")
+          single=load("profiles/family_formal_single_entry_20260929_R2.json")
 
-          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R34"
-          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R33"
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R35"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R34"
           cc=ca["common_family_components"]
           assert cc["formal_single_entry"]==single["profile_id"]
           assert cc["venue_routing"]==route["profile_id"]
           assert cc["family_runtime_contracts"]==runtime["profile_id"]
           assert cc["local_suite_manifest"]==suite["manifest_id"]
 
-          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R34"
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R35"
           handoff=route["chat_execution_handoff"]
           assert handoff["canonical_single_entry_path"]=="runtime/formal_intents/*.json"
           assert handoff["canonical_single_entry_workflow"]==".github/workflows/km-formal-single-entry.yml"
@@ -111,7 +111,7 @@ jobs:
           assert handoff["production_prediction_change"] is False
           assert handoff["production_numerical_change"] is False
 
-          assert runtime["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260929-R26"
+          assert runtime["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260929-R27"
           local=runtime["families"]["LOCAL"]
           assert local["runtime"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL"
           assert local["source_acquisition_sha256"]=="3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df"
@@ -119,20 +119,33 @@ jobs:
           assert runtime["production_numerical_change"] is False
           assert runtime["runtime_bundle_change"] is False
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260929-R13"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260929-R14"
           assert suite["runtime"]["contract"]==runtime["profile_id"]
           assert suite["runtime"]["runtime"]==local["runtime"]
           assert suite["production_numeric_suite"]["numerical_change"] is False
 
           assert gateway["parent_current_authority"]==ca["manifest_id"]
           assert gateway["venue_routing"]==route["profile_id"]
-          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260929_R26.json"
+          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260929_R27.json"
           assert gateway["families"]["LOCAL"]["runtime_profile"]==local["runtime"]
           assert gateway["policy"]["single_entry_formal_orchestration_required_for_venue_chat"] is True
           assert gateway["policy"]["full_lifecycle_does_not_imply_full_numerical_authority"] is True
+          assert gateway["policy"]["source_checkpoint_basis_required"] is True
+          assert gateway["policy"]["static_signed_source_binding_required"] is True
+          assert gateway["policy"]["formal_checkpoint_semantic_basis_required"] is True
+          assert gateway["policy"]["immutable_formal_reuse_requires_semantic_basis_match"] is True
+          assert gateway["policy"]["legacy_unbound_formal_auto_reuse_forbidden"] is True
 
           assert single["checkpoint_policy"]["source_success_survives_formal_failure"] is True
+          assert single["checkpoint_policy"]["source_checkpoint_basis_required_for_new_execution"] is True
+          assert single["checkpoint_policy"]["static_prediction_signed_source_binding_required_for_single_entry"] is True
+          assert single["checkpoint_policy"]["formal_checkpoint_semantic_basis_required_for_new_execution"] is True
+          assert single["checkpoint_policy"]["legacy_formal_without_semantic_basis"].startswith("NO AUTOMATIC REUSE")
           assert single["numerical_truthfulness"]["full_lifecycle_does_not_imply_strict_full_numerical"] is True
+          assert single["live_acceptance"]["execution_id"]=="LOCAL-SINGLE-ENTRY-LIVE-ACCEPT-20260929-T02"
+          assert single["live_acceptance"]["krs_actual_run_count"]==5000
+          assert single["live_acceptance"]["immutable_retry_status"]=="ALREADY_COMPLETE / REUSED_IMMUTABLE / NO KRS RERUN"
+          assert single["live_acceptance"]["unknown_future_prediction_validation"] is False
           for key,value in single["production_freeze"].items():
               assert value=="UNCHANGED",(key,value)
 
@@ -141,6 +154,9 @@ jobs:
           assert "RESUME_FORMAL" in orch
           assert "RETURN_IMMUTABLE_FORMAL" in orch
           assert "require_full_numerical_authority" in orch
+          assert "KM-FORMAL-CHECKPOINT-BASIS-v1" in orch
+          assert "formal_checkpoint_compatibility" in orch
+          assert "bind_formal_request_to_source" in orch
 
           runner=Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
           for token in [

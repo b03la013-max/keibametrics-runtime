@@ -1,0 +1,158 @@
+{
+  "profile_id": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2",
+  "status": "ACTIVE / FAMILY-COMMON EXECUTION-CORRECTNESS / LOCAL / CHECKPOINT-INTEGRITY / SOURCE-STATIC-BINDING / NON-PREDICTIVE / NON-NUMERICAL / RESUMABLE / FAIL-CLOSED",
+  "effective_at": "2026-09-29T06:45:00+09:00",
+  "predecessor": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+  "execution_architecture": "KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8",
+  "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
+  "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
+  "workflow": ".github/workflows/km-formal-single-entry.yml",
+  "orchestrator": "runtime/formal_execution_orchestrator.py",
+  "formal_runner": "runtime/non_jra_formal_runner.py",
+  "intent_root": "runtime/formal_intents",
+  "family_scope": [
+    "LOCAL"
+  ],
+  "purpose": "One Venue-Chat Formal intent executes or resumes the complete authorized LOCAL lifecycle while preserving immutable SOURCE/FORMAL semantics, truthful numerical authority and signed evidence.",
+  "sequence": [
+    "CURRENT_AUTHORITY_GUARD",
+    "RUNTIME_GATEWAY_PREFLIGHT",
+    "FORMAL_IMPORT_CLOSURE_GUARD",
+    "TEMPORAL_TRUTHFULNESS_CLASSIFY",
+    "SOURCE_CHECKPOINT_BASIS_RESOLVE",
+    "SIGNED_SOURCE_EXECUTE_IF_MISSING",
+    "SOURCE_CHECKPOINT_PERSIST_WITH_BASIS",
+    "STATIC_PREDICTION_BIND_TO_DURABLE_SIGNED_SOURCE",
+    "FORMAL_SEMANTIC_BASIS_RESOLVE",
+    "FORMAL_EXECUTE_IF_MISSING",
+    "FORMAL_CHECKPOINT_PERSIST_WITH_SEMANTIC_BASIS",
+    "SIGNED_EVIDENCE_OR_FIRST_FAILURE_RETURN"
+  ],
+  "checkpoint_policy": {
+    "stable_execution_id": true,
+    "source_phase_reuse": true,
+    "source_checkpoint_basis_required_for_new_execution": true,
+    "source_basis_fields": [
+      "family_id",
+      "race_id",
+      "venue_id",
+      "race_date",
+      "race_no",
+      "prediction_cutoff",
+      "explicit_source_manifest_sha256"
+    ],
+    "source_basis_change": "FAIL_CLOSED / NEW_EXECUTION_ID_REQUIRED",
+    "source_success_survives_formal_failure": true,
+    "static_prediction_signed_source_binding_required_for_single_entry": true,
+    "formal_checkpoint_semantic_basis_required_for_new_execution": true,
+    "formal_semantic_basis_excludes_only_retry_and_transport_metadata": true,
+    "immutable_formal_reuse": "ONLY WHEN SEMANTIC BASIS + DURABLE SOURCE BINDING MATCH",
+    "formal_basis_change": "FAIL_CLOSED / NEW_EXECUTION_ID_REQUIRED",
+    "legacy_formal_without_semantic_basis": "NO AUTOMATIC REUSE / NEW EXECUTION ID REQUIRED",
+    "historical_artifact_rewrite": false,
+    "derived_numeric_cache_authority": false
+  },
+  "retry_metadata_nonsemantic": [
+    "execution_attempt",
+    "retry_reason",
+    "retry_repair_sha",
+    "execution_mode",
+    "single_entry",
+    "execution_phase",
+    "phase"
+  ],
+  "source_static_binding": {
+    "required_for_single_entry": true,
+    "exact_fields": [
+      "static_prediction.source_basis_receipt_sha256",
+      "static_prediction.source_basis_snapshot_sha256",
+      "static_prediction.source_checkpoint_manifest_sha256"
+    ],
+    "mismatch": "FAIL_CLOSED",
+    "source_binding_is_separately_cryptographic": true
+  },
+  "evidence_roundtrip": {
+    "explicit_required_evidence_declarations": "STRICT / FAIL-CLOSED",
+    "no_standalone_declaration": "NOT_DECLARED / NO FABRICATION / NO NUMERICAL AUTHORITY EFFECT",
+    "explicit_empty_declaration": "FAIL-CLOSED",
+    "universal_source_formal_ready_gate": true
+  },
+  "temporal_truthfulness": {
+    "archived_acceptance_formal_pre_race_claim": "FORBIDDEN",
+    "archived_acceptance_required_mode": "POST-START-REPLAY / NOT-OOS",
+    "result_leakage": "FORBIDDEN"
+  },
+  "failure_diagnostics": {
+    "required": [
+      "first_failed_phase",
+      "failure_code",
+      "failure_class",
+      "last_successful_stage",
+      "resume_hint"
+    ],
+    "classes": [
+      "INFRASTRUCTURE_COMPATIBILITY",
+      "SOURCE_OR_RUNNER_UNIVERSE",
+      "SOURCE_CHECKPOINT_INTEGRITY",
+      "FORMAL_CHECKPOINT_INTEGRITY",
+      "SOURCE_STATIC_BINDING",
+      "CURRENT_STATE_REFORECAST",
+      "RACE_IDENTITY_REFORECAST",
+      "EVIDENCE_CONFORMANCE",
+      "TEMPORAL_GUARD",
+      "TEMPORAL_TRUTHFULNESS",
+      "NUMERICAL_AUTHORITY_OR_MATERIALIZATION",
+      "KRS_EXECUTION",
+      "DECISION_OR_CAPITAL",
+      "FINALIZATION",
+      "EXECUTION_CONFORMANCE"
+    ],
+    "expected_fail_closed_is_not_infrastructure_failure": true
+  },
+  "numerical_truthfulness": {
+    "full_lifecycle_does_not_imply_strict_full_numerical": true,
+    "unavailable_full_numerical_authority_may_not_be_fabricated": true,
+    "local_current_status": "NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND / DEGRADED EXECUTION ONLY",
+    "degraded_execution": "ALLOWED ONLY WITH FULL TERMINALIZATION + EXPLICIT TECHNICAL_PROXY_DIAGNOSTIC KRS BRIDGE",
+    "explicit_require_full_numerical_authority_is_preserved": true
+  },
+  "live_acceptance": {
+    "classification": "POST-START-REPLAY / MECHANICAL / ACCEPTANCE-ONLY / NOT-OOS",
+    "execution_id": "LOCAL-SINGLE-ENTRY-LIVE-ACCEPT-20260929-T02",
+    "fresh_run_id": 36488158808,
+    "source_run_id": "36488158808-source",
+    "source_manifest_sha256": "9432a2108ce2feb2eeb44060ae232353aa677c54d3a0d2a968731628811044d1",
+    "source_receipt_sha256": "373b23399df422c7b40bffcb661296e06b265f59d40ea6fc0aaba43a8254b75e",
+    "source_snapshot_sha256": "cf525e7b406a2c49ae891b437dcad8432b656400ca82a91199de8680ad5fdfcf",
+    "formal_run_id": "36488158808-formal",
+    "formal_manifest_sha256": "2c1e398abbede62ff01d870b677d8058cc198507a0b5483da214970f55d67ac9",
+    "formal_semantic_basis_sha256": "9d04f186a0ca9898ca0128d811547b08a3ba6a1cf7cd82ac999b4ebaf895e123",
+    "numerical_authority": "NOT_READY / 63 OF 63 COMPONENT SCORE RULES UNBOUND",
+    "numeric_coverage": "348 REQUIRED / 348 TERMINALIZED / 0 CALCULATED / 348 RULED-HOLD / 0 UNRESOLVED",
+    "krs_actual_run_count": 5000,
+    "krs_receipt_sha256": "18bb92ab93b22260acd8f492b69fe6711b5bd82d3c97f00a793c2ed7a7dc387e",
+    "mec_profile": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
+    "mec_sha256": "faeb30ee84c608ac11de5c59222ec118d7d94c7a12688ca5f2bcfaca3ddef4f7",
+    "final_receipt_sha256": "f9228fa91022a634e68ec368dcc3dadc72a633128859505da1925102367d7f08",
+    "immutable_retry_run_id": 36488377428,
+    "immutable_retry_status": "ALREADY_COMPLETE / REUSED_IMMUTABLE / NO KRS RERUN",
+    "unknown_future_prediction_validation": false,
+    "production_effect": "NONE"
+  },
+  "production_freeze": {
+    "prediction_model": "UNCHANGED",
+    "numerical_model": "UNCHANGED",
+    "krs_engine_physics": "UNCHANGED",
+    "parameter_map": "UNCHANGED",
+    "mec_r3": "UNCHANGED",
+    "capital_policy": "UNCHANGED",
+    "venue_canons": "UNCHANGED"
+  },
+  "legacy_compatibility": {
+    "two_phase_request_root": "runtime/family_requests",
+    "two_phase_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "default_chat_entry": false,
+    "historical_formal_checkpoints_without_basis": "READABLE / NOT AUTO-REUSABLE"
+  },
+  "automatic_promotion": false
+}
