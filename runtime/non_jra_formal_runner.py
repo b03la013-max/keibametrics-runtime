@@ -1,5 +1,6 @@
 import json,os,sys,urllib.request,urllib.error,urllib.parse,hashlib,datetime,copy,pathlib,io,zipfile
 from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0,"runtime")
 from family_runtime_contract import load_contracts, resolve_family_runtime
 from execution_gateway import (
@@ -625,6 +626,17 @@ def stage(name,**kw):
     if fast_timer is not None:
         fast_timer.mark(name)
 
+fast_cfg=(gateway or {}).get("race_day_fast_path") if isinstance(gateway,dict) else {}
+fast_enabled=bool(
+    fam=="LOCAL"
+    and isinstance(fast_cfg,dict)
+    and fast_cfg.get("enabled") is True
+    and req.get("race_day_fast_path_disable") is not True
+)
+fast_path_runtime_report["enabled"]=fast_enabled
+fast_path_runtime_report["cache_root"]=str(os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"))
+fast_path_runtime_report["workers"]=int((fast_cfg or {}).get("materialization_workers") or 4)
+
 stage("SOURCE_FREEZE",
       source_receipt_sha256=source_receipt_sha,
       source_snapshot_sha256=req["source_snapshot_sha256"],
@@ -636,216 +648,246 @@ stage("SOURCE_FREEZE",
       source_freeze_at=source_artifact.get("source_freeze_at"))
 stage("RUNNER_UNIVERSE",runner_count=len(runners))
 
-# Always-on LOCAL numerical candidate DUAL SHADOW.
-# v0.1 is the frozen uncalibrated baseline. v0.2 is the same-day calibrated
-# non-OOS arm. Both are computed from the same Signed SOURCE before result.
-candidate_shadow_q=None
-candidate_shadow_q_v02=None
-candidate_shadow_q_v03=None
-candidate_shadow_summary=None
-candidate_v03_summary=None
-try:
-    ce=compile_candidate_evidence(source_artifact,req)
-
-    cq=materialize_candidate(copy.deepcopy(ce))
-    cq=build_candidate_prediction(cq)
-    cq=build_candidate_krs(cq)
-    ca=assess_candidate_numerical()
-    candidate_shadow_q=cq
-
-    def compact_candidate_arm(label,q):
-        return {
-            "label":label,
+# Candidate numerical Shadows have zero Production authority. Under the
+# Race-Day Fast Path they are computed concurrently with the canonical
+# Production path, but are joined before Signed FINAL so all existing
+# pre-result binding/OOS semantics are preserved.
+def compute_candidate_shadows():
+    candidate_shadow_q=None
+    candidate_shadow_q_v02=None
+    candidate_shadow_q_v03=None
+    candidate_shadow_summary=None
+    candidate_v03_summary=None
+    try:
+        ce=compile_candidate_evidence(source_artifact,req)
+    
+        cq=materialize_candidate(copy.deepcopy(ce))
+        cq=build_candidate_prediction(cq)
+        cq=build_candidate_krs(cq)
+        ca=assess_candidate_numerical()
+        candidate_shadow_q=cq
+    
+        def compact_candidate_arm(label,q):
+            return {
+                "label":label,
+                "production_authority":False,
+                "source_receipt_sha256":source_receipt_sha,
+                "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+                "candidate_current_state":q.get("candidate_current_state"),
+                "candidate_environment":q.get("candidate_environment"),
+                "candidate_full_numerical_summary":q.get("candidate_full_numerical_summary"),
+                "candidate_static_prediction":q.get("candidate_static_prediction"),
+                "candidate_krs_input_sha256":q.get("candidate_krs_input_sha256"),
+                "runner_indices":{
+                    str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
+                    for r in (q.get("runners") or [])
+                },
+                "runner_component_coverage":{
+                    str(r.get("runner_id")):{
+                        "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                        "missing_component_count":r.get("candidate_missing_count"),
+                        "missing_components":r.get("candidate_missing_components"),
+                    } for r in (q.get("runners") or [])
+                },
+            }
+    
+        v01_summary=compact_candidate_arm("v0.1-BASELINE",cq)
+        persist("candidate_numerical_shadow_summary.json",{
+            "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_SHADOW",
+            "candidate_authority":ca,
+            **v01_summary,
+        })
+        persist("candidate_krs_input_preresult.json",cq.get("candidate_krs_input_data"))
+    
+        v02_summary=None
+        v02_failure=None
+        try:
+            cq2=materialize_candidate(
+                copy.deepcopy(ce),
+                "mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
+                "mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json"
+            )
+            cq2=build_candidate_prediction(cq2)
+            cq2=build_candidate_krs(cq2)
+            candidate_shadow_q_v02=cq2
+            v02_summary=compact_candidate_arm("v0.2-URW-DAY-CALIBRATED",cq2)
+            persist("candidate_krs_input_preresult_v02.json",cq2.get("candidate_krs_input_data"))
+        except Exception as ve:
+            v02_failure={"status":"V02_SHADOW_FAIL_NON_BLOCKING","error_type":type(ve).__name__,"error":str(ve)}
+    
+        v01_rank=(cq.get("candidate_static_prediction") or {}).get("ranking") or []
+        v02_rank=((candidate_shadow_q_v02 or {}).get("candidate_static_prediction") or {}).get("ranking") or []
+        rank_changed_count=None
+        if v02_rank and len(v01_rank)==len(v02_rank):
+            pos1={str(x):i for i,x in enumerate(v01_rank)}
+            pos2={str(x):i for i,x in enumerate(v02_rank)}
+            if set(pos1)==set(pos2):
+                rank_changed_count=sum(pos1[k]!=pos2[k] for k in pos1)
+    
+        candidate_shadow_summary={
+            "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_DUAL_SHADOW",
             "production_authority":False,
             "source_receipt_sha256":source_receipt_sha,
             "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-            "candidate_current_state":q.get("candidate_current_state"),
-            "candidate_environment":q.get("candidate_environment"),
-            "candidate_full_numerical_summary":q.get("candidate_full_numerical_summary"),
-            "candidate_static_prediction":q.get("candidate_static_prediction"),
-            "candidate_krs_input_sha256":q.get("candidate_krs_input_sha256"),
+            "candidate_authority":ca,
+            "arms":{"v0.1":v01_summary,"v0.2":v02_summary},
+            "v0.2_failure":v02_failure,
+            "comparison":{
+                "v0.1_ranking":v01_rank,
+                "v0.2_ranking":v02_rank,
+                "rank_changed_runner_count":rank_changed_count,
+                "same_source":True,
+                "same_runner_universe":True,
+                "same_result_information":"NONE_PRE_RESULT",
+            },
+            "policy":{
+                "production_mutation":False,
+                "v0.2_status":"RETROSPECTIVE_CALIBRATED_NON_OOS",
+                "future_measurement":"PRE_RESULT_DUAL_SHADOW",
+                "automatic_promotion":False,
+            }
+        }
+        candidate_shadow_summary["sha256"]=sha_obj(candidate_shadow_summary)
+        persist("candidate_numerical_dual_shadow_summary.json",candidate_shadow_summary)
+        stage("NUMERICAL_CANDIDATE_DUAL_SHADOW",
+              status="PASS",production_authority=False,
+              v01_calculated_count=(cq.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
+              v02_calculated_count=((candidate_shadow_q_v02 or {}).get("candidate_full_numerical_summary") or {}).get("calculated_count"),
+              v01_prediction_sha256=(cq.get("candidate_static_prediction") or {}).get("sha256"),
+              v02_prediction_sha256=((candidate_shadow_q_v02 or {}).get("candidate_static_prediction") or {}).get("sha256"),
+              rank_changed_runner_count=rank_changed_count)
+    except Exception as e:
+        candidate_shadow_summary={
+            "status":"DUAL_SHADOW_FAIL",
+            "production_authority":False,
+            "error_type":type(e).__name__,
+            "error":str(e),
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+        }
+        persist("candidate_numerical_shadow_failure.json",candidate_shadow_summary)
+        stage("NUMERICAL_CANDIDATE_DUAL_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
+    
+    # v0.3 Evidence-Routing / Evidence-Window candidate is an independent,
+    # non-Production Shadow designed on 2026-09-25. Historical races before
+    # that date may be diagnostic replays only and can never enter v0.3 OOS.
+    try:
+        ce3=compile_candidate_evidence_v03(
+            source_artifact,req,
+            "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
+        )
+        cq3=materialize_candidate(
+            copy.deepcopy(ce3),
+            "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
+            "mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json"
+        )
+        cq3=build_candidate_prediction(cq3)
+        cq3=build_candidate_krs(cq3)
+        candidate_shadow_q_v03=cq3
+        race_date_v03=str(req.get("race_date") or (req.get("race") or {}).get("race_date") or "")
+        v03_arm={
+            "label":"v0.3-EVIDENCE-ROUTING",
+            "production_authority":False,
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "candidate_current_state":cq3.get("candidate_current_state"),
+            "candidate_environment":cq3.get("candidate_environment"),
+            "candidate_full_numerical_summary":cq3.get("candidate_full_numerical_summary"),
+            "candidate_static_prediction":cq3.get("candidate_static_prediction"),
+            "candidate_krs_input_sha256":cq3.get("candidate_krs_input_sha256"),
+            "candidate_evidence_compiler":cq3.get("candidate_evidence_compiler"),
+            "candidate_v03_policy":cq3.get("candidate_v03_policy"),
             "runner_indices":{
                 str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
-                for r in (q.get("runners") or [])
+                for r in (cq3.get("runners") or [])
             },
             "runner_component_coverage":{
                 str(r.get("runner_id")):{
                     "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
                     "missing_component_count":r.get("candidate_missing_count"),
                     "missing_components":r.get("candidate_missing_components"),
-                } for r in (q.get("runners") or [])
+                    "missing_policy":r.get("candidate_missing_policy"),
+                } for r in (cq3.get("runners") or [])
+            },
+            "runner_context_sha256":{
+                str(r.get("runner_id")):sha_obj(r.get("candidate_context_features_v03") or {})
+                for r in (cq3.get("runners") or [])
             },
         }
-
-    v01_summary=compact_candidate_arm("v0.1-BASELINE",cq)
-    persist("candidate_numerical_shadow_summary.json",{
-        "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_SHADOW",
-        "candidate_authority":ca,
-        **v01_summary,
-    })
-    persist("candidate_krs_input_preresult.json",cq.get("candidate_krs_input_data"))
-
-    v02_summary=None
-    v02_failure=None
-    try:
-        cq2=materialize_candidate(
-            copy.deepcopy(ce),
-            "mapping/local_evidence_feature_rule_registry_v0.2_candidate_20260923_urw_day_calibrated.json",
-            "mapping/local_full_numerical_mapping_v0.2_candidate_20260923_urw_day_calibrated.json"
-        )
-        cq2=build_candidate_prediction(cq2)
-        cq2=build_candidate_krs(cq2)
-        candidate_shadow_q_v02=cq2
-        v02_summary=compact_candidate_arm("v0.2-URW-DAY-CALIBRATED",cq2)
-        persist("candidate_krs_input_preresult_v02.json",cq2.get("candidate_krs_input_data"))
-    except Exception as ve:
-        v02_failure={"status":"V02_SHADOW_FAIL_NON_BLOCKING","error_type":type(ve).__name__,"error":str(ve)}
-
-    v01_rank=(cq.get("candidate_static_prediction") or {}).get("ranking") or []
-    v02_rank=((candidate_shadow_q_v02 or {}).get("candidate_static_prediction") or {}).get("ranking") or []
-    rank_changed_count=None
-    if v02_rank and len(v01_rank)==len(v02_rank):
-        pos1={str(x):i for i,x in enumerate(v01_rank)}
-        pos2={str(x):i for i,x in enumerate(v02_rank)}
-        if set(pos1)==set(pos2):
-            rank_changed_count=sum(pos1[k]!=pos2[k] for k in pos1)
-
-    candidate_shadow_summary={
-        "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_DUAL_SHADOW",
-        "production_authority":False,
-        "source_receipt_sha256":source_receipt_sha,
-        "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-        "candidate_authority":ca,
-        "arms":{"v0.1":v01_summary,"v0.2":v02_summary},
-        "v0.2_failure":v02_failure,
-        "comparison":{
-            "v0.1_ranking":v01_rank,
-            "v0.2_ranking":v02_rank,
-            "rank_changed_runner_count":rank_changed_count,
-            "same_source":True,
-            "same_runner_universe":True,
-            "same_result_information":"NONE_PRE_RESULT",
-        },
-        "policy":{
-            "production_mutation":False,
-            "v0.2_status":"RETROSPECTIVE_CALIBRATED_NON_OOS",
-            "future_measurement":"PRE_RESULT_DUAL_SHADOW",
+        candidate_v03_summary={
+            "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW",
+            "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
+            "production_authority":False,
+            "design_freeze_date":"2026-09-25",
+            "race_id":rid,
+            "race_date":race_date_v03,
+            "retrospective_replay":bool(race_date_v03 and race_date_v03<"2026-09-25"),
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "arm":v03_arm,
+            "baseline_v01_prediction_sha256":((candidate_shadow_q or {}).get("candidate_static_prediction") or {}).get("sha256"),
+            "policy":{
+                "production_mutation":False,
+                "weight_change_from_v01":False,
+                "evidence_routing_change":True,
+                "unknown_policy":"OBSERVED_ONLY_RENORMALIZE",
+                "sbo_ability_index_weight":0,
+                "future_oos_tracker":"KM-LOCAL-NUMERICAL-V03-FORWARD-OOS-TRACKER-v1.0-20260925",
+                "automatic_promotion":False,
+            },
+        }
+        candidate_v03_summary["sha256"]=sha_obj(candidate_v03_summary)
+        persist("candidate_numerical_v03_shadow_summary.json",candidate_v03_summary)
+        persist("candidate_krs_input_preresult_v03.json",cq3.get("candidate_krs_input_data"))
+        stage("NUMERICAL_CANDIDATE_V03_SHADOW",
+              status="PASS",production_authority=False,
+              shadow_sha256=candidate_v03_summary.get("sha256"),
+              calculated_count=(cq3.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
+              prediction_sha256=(cq3.get("candidate_static_prediction") or {}).get("sha256"),
+              missing_policy=(cq3.get("candidate_full_numerical_summary") or {}).get("missing_policy"),
+              future_oos_eligible_design=not candidate_v03_summary.get("retrospective_replay"))
+    except Exception as e:
+        candidate_shadow_q_v03=None
+        candidate_v03_summary={
+            "status":"V03_SHADOW_FAIL_NON_BLOCKING",
+            "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
+            "production_authority":False,
+            "error_type":type(e).__name__,
+            "error":str(e),
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
             "automatic_promotion":False,
         }
+        persist("candidate_numerical_v03_shadow_failure.json",candidate_v03_summary)
+        stage("NUMERICAL_CANDIDATE_V03_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
+    
+    
+    return {
+        "candidate_shadow_q":candidate_shadow_q,
+        "candidate_shadow_q_v02":candidate_shadow_q_v02,
+        "candidate_shadow_q_v03":candidate_shadow_q_v03,
+        "candidate_shadow_summary":candidate_shadow_summary,
+        "candidate_v03_summary":candidate_v03_summary,
     }
-    candidate_shadow_summary["sha256"]=sha_obj(candidate_shadow_summary)
-    persist("candidate_numerical_dual_shadow_summary.json",candidate_shadow_summary)
-    stage("NUMERICAL_CANDIDATE_DUAL_SHADOW",
-          status="PASS",production_authority=False,
-          v01_calculated_count=(cq.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
-          v02_calculated_count=((candidate_shadow_q_v02 or {}).get("candidate_full_numerical_summary") or {}).get("calculated_count"),
-          v01_prediction_sha256=(cq.get("candidate_static_prediction") or {}).get("sha256"),
-          v02_prediction_sha256=((candidate_shadow_q_v02 or {}).get("candidate_static_prediction") or {}).get("sha256"),
-          rank_changed_runner_count=rank_changed_count)
-except Exception as e:
-    candidate_shadow_summary={
-        "status":"DUAL_SHADOW_FAIL",
-        "production_authority":False,
-        "error_type":type(e).__name__,
-        "error":str(e),
-        "source_receipt_sha256":source_receipt_sha,
-        "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-    }
-    persist("candidate_numerical_shadow_failure.json",candidate_shadow_summary)
-    stage("NUMERICAL_CANDIDATE_DUAL_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
 
-# v0.3 Evidence-Routing / Evidence-Window candidate is an independent,
-# non-Production Shadow designed on 2026-09-25. Historical races before
-# that date may be diagnostic replays only and can never enter v0.3 OOS.
-try:
-    ce3=compile_candidate_evidence_v03(
-        source_artifact,req,
-        "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
-    )
-    cq3=materialize_candidate(
-        copy.deepcopy(ce3),
-        "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
-        "mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json"
-    )
-    cq3=build_candidate_prediction(cq3)
-    cq3=build_candidate_krs(cq3)
-    candidate_shadow_q_v03=cq3
-    race_date_v03=str(req.get("race_date") or (req.get("race") or {}).get("race_date") or "")
-    v03_arm={
-        "label":"v0.3-EVIDENCE-ROUTING",
-        "production_authority":False,
-        "source_receipt_sha256":source_receipt_sha,
-        "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-        "candidate_current_state":cq3.get("candidate_current_state"),
-        "candidate_environment":cq3.get("candidate_environment"),
-        "candidate_full_numerical_summary":cq3.get("candidate_full_numerical_summary"),
-        "candidate_static_prediction":cq3.get("candidate_static_prediction"),
-        "candidate_krs_input_sha256":cq3.get("candidate_krs_input_sha256"),
-        "candidate_evidence_compiler":cq3.get("candidate_evidence_compiler"),
-        "candidate_v03_policy":cq3.get("candidate_v03_policy"),
-        "runner_indices":{
-            str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
-            for r in (cq3.get("runners") or [])
-        },
-        "runner_component_coverage":{
-            str(r.get("runner_id")):{
-                "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
-                "missing_component_count":r.get("candidate_missing_count"),
-                "missing_components":r.get("candidate_missing_components"),
-                "missing_policy":r.get("candidate_missing_policy"),
-            } for r in (cq3.get("runners") or [])
-        },
-        "runner_context_sha256":{
-            str(r.get("runner_id")):sha_obj(r.get("candidate_context_features_v03") or {})
-            for r in (cq3.get("runners") or [])
-        },
-    }
-    candidate_v03_summary={
-        "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW",
-        "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
-        "production_authority":False,
-        "design_freeze_date":"2026-09-25",
-        "race_id":rid,
-        "race_date":race_date_v03,
-        "retrospective_replay":bool(race_date_v03 and race_date_v03<"2026-09-25"),
-        "source_receipt_sha256":source_receipt_sha,
-        "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-        "arm":v03_arm,
-        "baseline_v01_prediction_sha256":((candidate_shadow_q or {}).get("candidate_static_prediction") or {}).get("sha256"),
-        "policy":{
-            "production_mutation":False,
-            "weight_change_from_v01":False,
-            "evidence_routing_change":True,
-            "unknown_policy":"OBSERVED_ONLY_RENORMALIZE",
-            "sbo_ability_index_weight":0,
-            "future_oos_tracker":"KM-LOCAL-NUMERICAL-V03-FORWARD-OOS-TRACKER-v1.0-20260925",
-            "automatic_promotion":False,
-        },
-    }
-    candidate_v03_summary["sha256"]=sha_obj(candidate_v03_summary)
-    persist("candidate_numerical_v03_shadow_summary.json",candidate_v03_summary)
-    persist("candidate_krs_input_preresult_v03.json",cq3.get("candidate_krs_input_data"))
-    stage("NUMERICAL_CANDIDATE_V03_SHADOW",
-          status="PASS",production_authority=False,
-          shadow_sha256=candidate_v03_summary.get("sha256"),
-          calculated_count=(cq3.get("candidate_full_numerical_summary") or {}).get("calculated_count"),
-          prediction_sha256=(cq3.get("candidate_static_prediction") or {}).get("sha256"),
-          missing_policy=(cq3.get("candidate_full_numerical_summary") or {}).get("missing_policy"),
-          future_oos_eligible_design=not candidate_v03_summary.get("retrospective_replay"))
-except Exception as e:
+candidate_shadow_executor=None
+candidate_shadow_future=None
+if fast_enabled:
+    candidate_shadow_executor=ThreadPoolExecutor(max_workers=1,thread_name_prefix="km-fast-shadow")
+    candidate_shadow_future=candidate_shadow_executor.submit(compute_candidate_shadows)
+    candidate_shadow_q=None
+    candidate_shadow_q_v02=None
     candidate_shadow_q_v03=None
-    candidate_v03_summary={
-        "status":"V03_SHADOW_FAIL_NON_BLOCKING",
-        "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
-        "production_authority":False,
-        "error_type":type(e).__name__,
-        "error":str(e),
-        "source_receipt_sha256":source_receipt_sha,
-        "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
-        "automatic_promotion":False,
-    }
-    persist("candidate_numerical_v03_shadow_failure.json",candidate_v03_summary)
-    stage("NUMERICAL_CANDIDATE_V03_SHADOW",status="FAIL_NON_BLOCKING",production_authority=False,error=str(e))
+    candidate_shadow_summary=None
+    candidate_v03_summary=None
+    stage("FAST_PATH_SHADOW_PARALLEL_START",profile=RACE_DAY_FAST_PATH_PROFILE,production_authority=False)
+else:
+    _shadow_state=compute_candidate_shadows()
+    candidate_shadow_q=_shadow_state["candidate_shadow_q"]
+    candidate_shadow_q_v02=_shadow_state["candidate_shadow_q_v02"]
+    candidate_shadow_q_v03=_shadow_state["candidate_shadow_q_v03"]
+    candidate_shadow_summary=_shadow_state["candidate_shadow_summary"]
+    candidate_v03_summary=_shadow_state["candidate_v03_summary"]
 
 numerical_authority=assess_numerical_authority()
 persist("numerical_authority_preflight.json",numerical_authority)
@@ -859,17 +901,6 @@ if req_indices and isinstance(req_indices[0],dict):
     req_indices=[str(x.get("index") or x.get("index_name") or x.get("name") or "") for x in req_indices]
 req_indices=[str(x) for x in req_indices if str(x)]
 assert req_indices,"LOCAL_REQUIRED_INDEX_NAMES_EMPTY"
-
-fast_cfg=(gateway or {}).get("race_day_fast_path") if isinstance(gateway,dict) else {}
-fast_enabled=bool(
-    fam=="LOCAL"
-    and isinstance(fast_cfg,dict)
-    and fast_cfg.get("enabled") is True
-    and req.get("race_day_fast_path_disable") is not True
-)
-fast_path_runtime_report["enabled"]=fast_enabled
-fast_path_runtime_report["cache_root"]=str(os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"))
-fast_path_runtime_report["workers"]=int((fast_cfg or {}).get("materialization_workers") or 4)
 
 if fast_enabled:
     try:
@@ -1022,6 +1053,35 @@ trace={
   "selection_source":"CAPITAL_COMPATIBILITY_POLICY",
   "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
 }
+
+if candidate_shadow_future is not None:
+    try:
+        _shadow_state=candidate_shadow_future.result()
+        candidate_shadow_q=_shadow_state["candidate_shadow_q"]
+        candidate_shadow_q_v02=_shadow_state["candidate_shadow_q_v02"]
+        candidate_shadow_q_v03=_shadow_state["candidate_shadow_q_v03"]
+        candidate_shadow_summary=_shadow_state["candidate_shadow_summary"]
+        candidate_v03_summary=_shadow_state["candidate_v03_summary"]
+        stage("FAST_PATH_SHADOW_PARALLEL_JOIN",status="PASS",production_authority=False)
+    except Exception as shadow_parallel_exc:
+        # Candidate Shadow is explicitly non-Production. Preserve the existing
+        # non-blocking policy, but make the failure visible and do not claim OOS.
+        candidate_shadow_q=None
+        candidate_shadow_q_v02=None
+        candidate_shadow_q_v03=None
+        candidate_shadow_summary={
+            "status":"PARALLEL_SHADOW_FAIL_NON_BLOCKING",
+            "production_authority":False,
+            "error_type":type(shadow_parallel_exc).__name__,
+            "error":str(shadow_parallel_exc),
+        }
+        candidate_v03_summary=None
+        persist("candidate_parallel_shadow_failure.json",candidate_shadow_summary)
+        stage("FAST_PATH_SHADOW_PARALLEL_JOIN",status="FAIL_NON_BLOCKING",production_authority=False,error=str(shadow_parallel_exc))
+    finally:
+        candidate_shadow_executor.shutdown(wait=False)
+        candidate_shadow_executor=None
+        candidate_shadow_future=None
 
 if isinstance(candidate_v03_summary,dict) and candidate_v03_summary.get("status")=="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW":
     trace["numerical_candidate_v03_shadow"]={
