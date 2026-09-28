@@ -79,6 +79,9 @@ def bind_shadow_to_trace(trace: Dict[str,Any], shadow: Dict[str,Any], basis: Dic
         "generated_at":shadow.get("generated_at"),
         "scheduled_post_at":shadow.get("scheduled_post_at"),
         "temporal_mode":shadow.get("temporal_mode"),
+        "acceptance_only":bool(shadow.get("acceptance_only")),
+        "oos_eligible_if_signed_final_bound":bool(shadow.get("oos_eligible_if_signed_final_bound")),
+        "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
         "production_effect":"NONE",
     }
     return out
@@ -96,6 +99,12 @@ def verify_signed_final_binding(final_envelope: Dict[str,Any], shadow: Dict[str,
         raise AssertionError("LOCAL_MEC_R4_BASIS_SHA_NOT_BOUND")
     if str(binding.get("production_effect"))!="NONE":
         raise AssertionError("LOCAL_MEC_R4_PRODUCTION_EFFECT_FORBIDDEN")
+    if bool(binding.get("acceptance_only"))!=bool(shadow.get("acceptance_only")):
+        raise AssertionError("LOCAL_MEC_R4_ACCEPTANCE_BINDING_MISMATCH")
+    if bool(binding.get("oos_eligible_if_signed_final_bound"))!=bool(shadow.get("oos_eligible_if_signed_final_bound")):
+        raise AssertionError("LOCAL_MEC_R4_OOS_ELIGIBILITY_BINDING_MISMATCH")
+    if bool(shadow.get("acceptance_only")) and bool(shadow.get("oos_eligible_if_signed_final_bound")):
+        raise AssertionError("LOCAL_MEC_R4_ACCEPTANCE_CANNOT_BE_OOS_ELIGIBLE")
     if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
         raise AssertionError("LOCAL_MEC_R4_NOT_FORMAL_PRE_RACE")
     gen=_dt(shadow.get("generated_at"))
@@ -113,6 +122,9 @@ def verify_signed_final_binding(final_envelope: Dict[str,Any], shadow: Dict[str,
         "generated_at":shadow.get("generated_at"),
         "scheduled_post_at":shadow.get("scheduled_post_at"),
         "temporal_mode":shadow.get("temporal_mode"),
+        "acceptance_only":bool(shadow.get("acceptance_only")),
+        "oos_eligible_if_signed_final_bound":bool(shadow.get("oos_eligible_if_signed_final_bound")),
+        "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
         "production_effect":"NONE",
         "sha256":None,
     }
