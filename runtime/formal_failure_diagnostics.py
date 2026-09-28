@@ -9,6 +9,8 @@ def failure_class_for(code: object) -> str:
         return "CURRENT_STATE_REFORECAST"
     if code in {"OFFICIAL_POST_TIME_MISMATCH", "RACE_IDENTITY_MISMATCH"}:
         return "RACE_IDENTITY_REFORECAST"
+    if code.startswith("STATIC_SOURCE_BASIS_"):
+        return "SOURCE_STATIC_BINDING"
     if code.startswith(("RUNTIME_", "GATEWAY_")):
         return "INFRASTRUCTURE_COMPATIBILITY"
     if code.startswith(("SOURCE_", "RUNNER_UNIVERSE_")):
@@ -34,6 +36,8 @@ def resume_hint_for(code: object) -> str:
         return "REUSE_DURABLE_SOURCE_REFRESH_CURRENT_STATE_REBUILD_STATIC_THEN_RETRY_FORMAL"
     if klass == "RACE_IDENTITY_REFORECAST":
         return "REUSE_DURABLE_SOURCE_REFRESH_RACE_IDENTITY_REBUILD_STATIC_THEN_RETRY_FORMAL"
+    if klass == "SOURCE_STATIC_BINDING":
+        return "REUSE_DURABLE_SOURCE_REBIND_STATIC_PROVENANCE_THEN_RETRY_FORMAL"
     if klass == "SOURCE_OR_RUNNER_UNIVERSE":
         return "RETRY_SAME_EXECUTION_ID_FROM_SOURCE"
     if klass == "EVIDENCE_CONFORMANCE":
