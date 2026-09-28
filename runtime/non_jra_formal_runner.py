@@ -535,8 +535,17 @@ stage("EVIDENCE_ACQUISITION",
 # Temporal order alone is insufficient: a different earlier SOURCE may not
 # be substituted after Venue interpretation has been frozen.
 static_pred=req.get("static_prediction") if isinstance(req.get("static_prediction"),dict) else {}
-declared_source_receipt=str(static_pred.get("source_basis_receipt_sha256") or req.get("source_receipt_sha256") or "").strip()
-declared_source_snapshot=str(static_pred.get("source_basis_snapshot_sha256") or req.get("source_snapshot_sha256") or "").strip()
+static_source_receipt=str(static_pred.get("source_basis_receipt_sha256") or "").strip()
+static_source_snapshot=str(static_pred.get("source_basis_snapshot_sha256") or "").strip()
+if req.get("single_entry_source_binding_required") is True:
+    if not static_source_receipt or not static_source_snapshot:
+        fail_closed("STATIC_SOURCE_BASIS_REQUIRED_FOR_SINGLE_ENTRY",{
+            "static_source_receipt_present":bool(static_source_receipt),
+            "static_source_snapshot_present":bool(static_source_snapshot),
+            "execution_id":execution_id,
+        })
+declared_source_receipt=str(static_source_receipt or req.get("source_receipt_sha256") or "").strip()
+declared_source_snapshot=str(static_source_snapshot or req.get("source_snapshot_sha256") or "").strip()
 actual_source_receipt=str(source_receipt_sha or "").strip()
 actual_source_snapshot=str(source_artifact.get("source_snapshot_sha256") or "").strip()
 if declared_source_receipt and declared_source_receipt!=actual_source_receipt:

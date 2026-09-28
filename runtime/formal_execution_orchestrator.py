@@ -166,6 +166,9 @@ FORMAL_TRANSPORT_ONLY_FIELDS = {
     "artifact_name",
     "external_endpoint",
     "runtime_expected_revision",
+    "source_snapshot_sha256",
+    "single_entry_source_binding_required",
+    "single_entry_source_checkpoint_manifest_sha256",
 }
 
 
@@ -177,6 +180,14 @@ def _formal_semantic_payload(intent: Dict[str, Any]) -> Dict[str, Any]:
     # The exact signed SOURCE is bound separately below. Legacy transport fields
     # may therefore change without redefining the prediction/decision identity.
     payload.pop("source_receipt_sha256", None)
+
+    static = payload.get("static_prediction")
+    if isinstance(static, dict):
+        static = copy.deepcopy(static)
+        static.pop("source_basis_receipt_sha256", None)
+        static.pop("source_basis_snapshot_sha256", None)
+        static.pop("source_checkpoint_manifest_sha256", None)
+        payload["static_prediction"] = static
 
     # Normalize explicit execution_id rather than letting formatting aliases
     # create a false semantic difference.
@@ -199,6 +210,43 @@ def _source_binding_from_resolved(resolved: Optional[Dict[str, Any]]) -> Optiona
     }
 
 
+def bind_formal_request_to_source(request: Dict[str, Any]) -> Dict[str, Any]:
+    out = copy.deepcopy(request)
+    execution_id = derive_execution_id(out)
+    source_resolved = resolve_phase(execution_id, "SOURCE")
+    binding = _source_binding_from_resolved(source_resolved)
+    if not binding:
+        raise FormalOrchestrationError("SINGLE_ENTRY_SOURCE_BINDING_MISSING")
+
+    receipt_sha = str(binding.get("source_receipt_sha256") or "")
+    snapshot_sha = str(binding.get("source_snapshot_sha256") or "")
+    manifest_sha = str(binding.get("source_checkpoint_manifest_sha256") or "")
+    if not receipt_sha or not snapshot_sha or not manifest_sha:
+        raise FormalOrchestrationError("SINGLE_ENTRY_SOURCE_BINDING_INCOMPLETE")
+
+    static = out.get("static_prediction")
+    if not isinstance(static, dict):
+        raise FormalOrchestrationError("STATIC_PREDICTION_REQUIRED_FOR_SOURCE_BINDING")
+    static = copy.deepcopy(static)
+
+    existing_receipt = str(static.get("source_basis_receipt_sha256") or "")
+    existing_snapshot = str(static.get("source_basis_snapshot_sha256") or "")
+    if existing_receipt and existing_receipt != receipt_sha:
+        raise FormalOrchestrationError("STATIC_SOURCE_BASIS_RECEIPT_MISMATCH_BEFORE_FORMAL")
+    if existing_snapshot and existing_snapshot != snapshot_sha:
+        raise FormalOrchestrationError("STATIC_SOURCE_BASIS_SNAPSHOT_MISMATCH_BEFORE_FORMAL")
+
+    static["source_basis_receipt_sha256"] = receipt_sha
+    static["source_basis_snapshot_sha256"] = snapshot_sha
+    static["source_checkpoint_manifest_sha256"] = manifest_sha
+    out["static_prediction"] = static
+    out["source_receipt_sha256"] = receipt_sha
+    out["source_snapshot_sha256"] = snapshot_sha
+    out["single_entry_source_binding_required"] = True
+    out["single_entry_source_checkpoint_manifest_sha256"] = manifest_sha
+    return out
+
+
 def formal_checkpoint_basis(
     intent: Dict[str, Any],
     source_resolved: Optional[Dict[str, Any]],
@@ -214,7 +262,11 @@ def formal_checkpoint_basis(
         "race_id": str(intent.get("race_id") or ""),
         "semantic_basis_sha256": _sha_obj(semantic),
         "semantic_components": {
-            "static_prediction_sha256": _sha_obj(intent.get("static_prediction")) if isinstance(intent.get("static_prediction"), dict) else None,
+            "static_prediction_sha256": (
+                _sha_obj((_formal_semantic_payload(intent).get("static_prediction")))
+                if isinstance(intent.get("static_prediction"), dict)
+                else None
+            ),
             "final_prediction_package_sha256": _sha_obj(intent.get("final_prediction_package")) if isinstance(intent.get("final_prediction_package"), dict) else None,
             "capital_policy_sha256": _sha_obj(intent.get("capital_policy")) if isinstance(intent.get("capital_policy"), dict) else None,
             "local_krs_bridge_sha256": _sha_obj(intent.get("local_krs_bridge")) if isinstance(intent.get("local_krs_bridge"), dict) else None,
@@ -626,7 +678,9 @@ def orchestrate(
                 "checkpoint": plan["checkpoints"]["source"],
             })
 
-        formal_req = build_phase_request(intent, "FORMAL")
+        formal_req = bind_formal_request_to_source(
+            build_phase_request(intent, "FORMAL")
+        )
         report["phases"].append(run_phase(
             formal_req,
             "FORMAL",
