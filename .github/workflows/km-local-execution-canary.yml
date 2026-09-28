@@ -14,6 +14,7 @@ on:
       - 'runtime/non_jra_formal_runner.py'
       - 'runtime/formal_execution_orchestrator.py'
       - 'runtime/formal_import_closure.py'
+      - 'runtime/formal_failure_diagnostics.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
@@ -21,6 +22,7 @@ on:
       - 'tests/test_execution_workflow_contract.py'
       - 'tests/test_formal_execution_orchestrator.py'
       - 'tests/test_formal_import_closure.py'
+      - 'tests/test_formal_failure_diagnostics.py'
       - 'tests/test_local_evidence_acquisition_roundtrip.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
@@ -79,6 +81,7 @@ jobs:
             runtime/non_jra_formal_runner.py \
             runtime/formal_execution_orchestrator.py \
             runtime/formal_import_closure.py \
+            runtime/formal_failure_diagnostics.py \
             runtime/local_evidence_acquisition_roundtrip.py \
             runtime/local_result_from_signed_final.py
           python -m pip install --disable-pip-version-check -q pytest
@@ -88,6 +91,7 @@ jobs:
             tests/test_execution_workflow_contract.py \
             tests/test_formal_execution_orchestrator.py \
             tests/test_formal_import_closure.py \
+            tests/test_formal_failure_diagnostics.py \
             tests/test_local_evidence_acquisition_roundtrip.py
 
       - name: Verify recursive Formal import closure

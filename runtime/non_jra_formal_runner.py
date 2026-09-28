@@ -10,6 +10,7 @@ from execution_gateway import (
 from execution_store import materialize_phase
 from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID as RACE_DAY_FAST_PATH_PROFILE
 from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
+from formal_failure_diagnostics import failure_class_for, resume_hint_for
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -48,36 +49,6 @@ def stage(name,**kw):
     stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
     if fast_timer is not None:
         fast_timer.mark(name)
-
-def failure_class_for(code):
-    code=str(code or "")
-    if code.startswith(("RUNTIME_","GATEWAY_")):
-        return "INFRASTRUCTURE_COMPATIBILITY"
-    if code.startswith(("SOURCE_","RUNNER_UNIVERSE_")):
-        return "SOURCE_OR_RUNNER_UNIVERSE"
-    if code.startswith(("DEADLINE_","POST_START","FINAL_RECEIPT_POST_START","MEC_FINAL_FREEZE_POST_START")):
-        return "TEMPORAL_GUARD"
-    if code.startswith(("FULL_NUMERICAL_AUTHORITY_","UNAUTHORIZED_FULL_NUMERICAL","LOCAL_INDEX_TERMINALIZATION")):
-        return "NUMERICAL_AUTHORITY_OR_MATERIALIZATION"
-    if code.startswith(("PRE_KRS_","KRS_")):
-        return "KRS_EXECUTION"
-    if code.startswith(("MEC_","CAPITAL_","TICKET_")):
-        return "DECISION_OR_CAPITAL"
-    if code.startswith(("FINAL_","IMMUTABLE_FINAL_")):
-        return "FINALIZATION"
-    return "EXECUTION_CONFORMANCE"
-
-def resume_hint_for(code):
-    klass=failure_class_for(code)
-    if klass=="SOURCE_OR_RUNNER_UNIVERSE":
-        return "RETRY_SAME_EXECUTION_ID_FROM_SOURCE"
-    if klass in {"KRS_EXECUTION","DECISION_OR_CAPITAL","FINALIZATION","NUMERICAL_AUTHORITY_OR_MATERIALIZATION"}:
-        return "RETRY_SAME_EXECUTION_ID_REUSING_DURABLE_SOURCE"
-    if klass=="TEMPORAL_GUARD":
-        return "DO_NOT_CLAIM_FORMAL_PRE_RACE_AFTER_DEADLINE"
-    if klass=="INFRASTRUCTURE_COMPATIBILITY":
-        return "REPAIR_RUNTIME_GATEWAY_THEN_RETRY_SAME_EXECUTION_ID"
-    return "RETRY_SAME_EXECUTION_ID_FROM_LAST_DURABLE_PHASE"
 
 resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
@@ -550,6 +521,15 @@ if evidence_acquisition_ledger.get("full_terminalization") is not True:
 
 source_receipt_sha=source.get("receipt_sha256")
 source_artifact=source.get("artifact") or {}
+stage("SIGNED_SOURCE_RECEIPT",
+      receipt_sha256=source_receipt_sha,
+      source_snapshot_sha256=source_artifact.get("source_snapshot_sha256"),
+      status="VERIFIED")
+stage("EVIDENCE_ACQUISITION",
+      status=evidence_acquisition_ledger.get("status"),
+      declaration_present=evidence_acquisition_ledger.get("declaration_present"),
+      required_evidence_count=evidence_acquisition_ledger.get("required_evidence_count"),
+      unresolved_count=evidence_acquisition_ledger.get("unresolved_count"))
 
 # Static must be bound to the exact signed SOURCE used by FORMAL.
 # Temporal order alone is insufficient: a different earlier SOURCE may not
@@ -579,6 +559,10 @@ persist("static_source_basis_binding.json",{
     "declared_receipt_bound":bool(declared_source_receipt),
     "declared_snapshot_bound":bool(declared_source_snapshot),
 })
+stage("STATIC_SOURCE_BASIS_BINDING",
+      status="PASS",
+      declared_receipt_bound=bool(declared_source_receipt),
+      declared_snapshot_bound=bool(declared_source_snapshot))
 
 # Official start time is authoritative for temporal identity.
 ev=source_artifact.get("normalized_evidence") or {}
@@ -602,6 +586,10 @@ if temporal_mode=="FORMAL-PRE-RACE":
         "normalized_request_track_condition":rg,
         "source_receipt_sha256":source_receipt_sha,
     })
+    stage("OFFICIAL_CURRENT_STATE_PREFLIGHT",
+          official_track_condition=og,
+          request_track_condition=rg,
+          status=("MISMATCH" if og and rg and og!=rg else "PASS"))
     if og and rg and og!=rg:
         fail_closed("OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED",{
             "official_track_condition":official_going,
