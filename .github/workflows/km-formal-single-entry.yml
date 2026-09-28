@@ -92,6 +92,15 @@ jobs:
           mkdir -p runtime_out
           python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_preflight.json
 
+      - name: Verify Formal import closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/formal_import_closure.py \
+            --entry runtime/non_jra_formal_runner.py \
+            --output runtime_out/formal_import_closure.json
+
       - name: Execute SOURCE to FORMAL as one lifecycle
         id: execute
         shell: bash

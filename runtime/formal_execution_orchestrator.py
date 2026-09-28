@@ -16,6 +16,7 @@ sys.path.insert(0, "runtime")
 
 from execution_gateway import derive_execution_id, load_gateway
 from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
+from formal_import_closure import FormalImportClosureError, build_closure
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME_OUT = ROOT / "runtime_out"
@@ -211,6 +212,30 @@ def orchestrate(
         raise FormalOrchestrationError(f"UNSUPPORTED_EXECUTION_MODE:{mode}")
 
     execution_id = derive_execution_id(intent)
+    try:
+        import_closure = build_closure("runtime/non_jra_formal_runner.py")
+    except FormalImportClosureError as exc:
+        return {
+            "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
+            "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+            "status": "FAIL_CLOSED",
+            "family_id": family,
+            "race_id": intent.get("race_id"),
+            "execution_id": execution_id,
+            "gateway_profile": load_gateway().get("profile_id"),
+            "first_failed_phase": "BOOTSTRAP",
+            "first_failed_code": "FORMAL_IMPORT_CLOSURE_FAILED",
+            "first_failed_class": "INFRASTRUCTURE_COMPATIBILITY",
+            "last_successful_stage": None,
+            "resume_from": "BOOTSTRAP",
+            "resume_hint": "REPAIR_CODE_THEN_RETRY_SAME_EXECUTION_ID",
+            "detail": str(exc),
+            "production_prediction_change": False,
+            "production_numerical_change": False,
+            "krs_physics_change": False,
+            "mec_change": False,
+            "capital_change": False,
+        }
     plan = resume_plan(execution_id)
     report: Dict[str, Any] = {
         "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
@@ -223,6 +248,10 @@ def orchestrate(
         "gateway_profile": load_gateway().get("profile_id"),
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "plan": plan,
+        "import_closure": {
+            "status": import_closure.get("status"),
+            "file_count": import_closure.get("file_count"),
+        },
         "phases": [],
         "production_prediction_change": False,
         "production_numerical_change": False,

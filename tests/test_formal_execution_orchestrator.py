@@ -109,3 +109,22 @@ def test_failure_diagnostic_is_exposed(tmp_path):
     assert f["code"] == "RUNTIME_GATEWAY_COMPATIBILITY_FAILED"
     assert f["failure_class"] == "INFRASTRUCTURE_COMPATIBILITY"
     assert f["last_successful_stage"] == "SOURCE_FREEZE"
+
+
+def test_import_closure_failure_is_classified_before_source(monkeypatch, tmp_path):
+    def broken(entry):
+        raise o.FormalImportClosureError("FORMAL_IMPORT_CLOSURE_FAILED:runtime/broken.py:SyntaxError")
+    monkeypatch.setattr(o, "build_closure", broken)
+    report = o.orchestrate(
+        base_intent(),
+        run_id="123",
+        github_sha="abc",
+        runtime_out=tmp_path / "out",
+        tmp_root=tmp_path / "tmp",
+        plan_only=False,
+    )
+    assert report["status"] == "FAIL_CLOSED"
+    assert report["first_failed_phase"] == "BOOTSTRAP"
+    assert report["first_failed_code"] == "FORMAL_IMPORT_CLOSURE_FAILED"
+    assert report["first_failed_class"] == "INFRASTRUCTURE_COMPATIBILITY"
+    assert report["resume_hint"] == "REPAIR_CODE_THEN_RETRY_SAME_EXECUTION_ID"

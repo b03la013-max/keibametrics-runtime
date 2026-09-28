@@ -13,12 +13,14 @@ on:
       - 'runtime/family_runtime_contract.py'
       - 'runtime/non_jra_formal_runner.py'
       - 'runtime/formal_execution_orchestrator.py'
+      - 'runtime/formal_import_closure.py'
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
       - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
       - 'tests/test_formal_execution_orchestrator.py'
+      - 'tests/test_formal_import_closure.py'
       - '.github/workflows/km-local-execution-canary.yml'
       - '.github/workflows/km-family-non-jra-formal-runner.yml'
       - '.github/workflows/km-formal-single-entry.yml'
@@ -75,13 +77,25 @@ jobs:
             runtime/family_runtime_contract.py \
             runtime/non_jra_formal_runner.py \
             runtime/formal_execution_orchestrator.py \
+            runtime/formal_import_closure.py \
+            runtime/local_evidence_acquisition_roundtrip.py \
             runtime/local_result_from_signed_final.py
           python -m pip install --disable-pip-version-check -q pytest
           python -m pytest -q \
             tests/test_execution_gateway.py \
             tests/test_execution_store.py \
             tests/test_execution_workflow_contract.py \
-            tests/test_formal_execution_orchestrator.py
+            tests/test_formal_execution_orchestrator.py \
+            tests/test_formal_import_closure.py
+
+      - name: Verify recursive Formal import closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/formal_import_closure.py \
+            --entry runtime/non_jra_formal_runner.py \
+            --output runtime_out/formal_import_closure.json
 
       - name: Validate gateway pointer and external runtime bundle
         shell: bash
