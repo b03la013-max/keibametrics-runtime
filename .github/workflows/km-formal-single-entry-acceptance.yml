@@ -16,6 +16,15 @@ on:
       - "runtime/local_mec_r5_shadow.py"
       - "runtime/local_evidence_acquisition_roundtrip.py"
       - "runtime/non_jra_formal_runner.py"
+      - "tests/test_krs_oos_promotion_gate.py"
+      - "tests/test_local_candidate_v03_oos.py"
+      - "tests/test_local_candidate_dual_oos_tracker.py"
+      - "tests/test_acceptance_oos_tracker_firewall.py"
+      - "runtime/krs_oos_promotion_gate.py"
+      - "runtime/local_candidate_v03_oos_tracker.py"
+      - "runtime/local_candidate_dual_oos_tracker.py"
+      - "runtime/local_mec_r5_oos_tracker.py"
+      - "runtime/mec_r4_oos_tracker.py"
       - "runtime/execution_gateway.py"
       - "runtime/execution_store.py"
       - "tests/test_formal_execution_orchestrator.py"
@@ -79,7 +88,7 @@ jobs:
             runtime/family_authority_guard.py
 
       - name: Orchestration unit tests
-        run: python -m pytest -q tests/test_formal_execution_orchestrator.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_formal_oos_policy.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py
+        run: python -m pytest -q tests/test_formal_execution_orchestrator.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py tests/test_acceptance_oos_tracker_firewall.py tests/test_local_candidate_dual_oos_tracker.py tests/test_local_candidate_v03_oos.py tests/test_krs_oos_promotion_gate.py
 
       - name: Formal import closure guard
         run: python runtime/formal_import_closure.py --entry runtime/non_jra_formal_runner.py
