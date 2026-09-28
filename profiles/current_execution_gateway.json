@@ -26,7 +26,9 @@
     "venue_common_authority_override_forbidden": true,
     "race_day_fast_path_may_bypass_formal_gate": false,
     "cache_is_authority": false,
-    "fast_path_equivalence_required": true
+    "fast_path_equivalence_required": true,
+    "active_runtime_bundle_explicitly_frozen": true,
+    "candidate_checkout_may_not_redefine_active_runtime_bundle": true
   },
   "families": {
     "LOCAL": {
@@ -64,7 +66,20 @@
       "artifact_prefix": "km-local-execution",
       "source_artifact_resolution": "EXECUTION_ID_AND_PHASE",
       "final_artifact_resolution": "EXECUTION_ID_AND_PHASE",
-      "compatibility_rule": "RUNTIME_PROFILE_AND_BUNDLE_FINGERPRINT_MUST_MATCH; GITHUB_REVISION_IS_DIAGNOSTIC_ONLY"
+      "compatibility_rule": "RUNTIME_PROFILE_AND_BUNDLE_FINGERPRINT_MUST_MATCH; GITHUB_REVISION_IS_DIAGNOSTIC_ONLY",
+      "active_bundle_sha256": {
+        "runtime_app_sha256": "be44b5fa7012ae05c23192a1324195cf1d8e8c91cf2b8bf8ccd572589a489876",
+        "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+        "source_acquisition_sha256": "ed5a5437a521019e8fefa592225574a98984af0c25fe006d5e0bcde8f1edc96c",
+        "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+        "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+        "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+        "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+        "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+        "sbo_public_shadow_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53"
+      },
+      "active_bundle_source": "LIVE_CANARY_36375332931 / 2026-09-28T03:51:30Z",
+      "candidate_runtime_code_activation": "EXPLICIT_GATEWAY_UPDATE_AND_LIVE_REDEPLOY_REQUIRED"
     }
   },
   "railway_bootstrap": {
