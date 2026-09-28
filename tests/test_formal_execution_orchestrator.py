@@ -374,3 +374,55 @@ def test_resume_plan_never_silently_reuses_unbound_or_changed_formal(
     plan = o.resume_plan("LOCAL-FNB-EXEC", base_intent())
     assert plan["action"] == "FAIL_CLOSED"
     assert plan["resume_from"] == resume_from
+
+
+
+def test_bind_formal_request_to_source_injects_exact_signed_source(monkeypatch, tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {"ranking": [1, 2, 3]}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    monkeypatch.setattr(o, "resolve_phase", lambda execution_id, phase: source)
+
+    req = o.build_phase_request(intent, "FORMAL")
+    bound = o.bind_formal_request_to_source(req)
+
+    assert bound["single_entry_source_binding_required"] is True
+    assert bound["source_receipt_sha256"] == "source-receipt-sha"
+    assert bound["source_snapshot_sha256"] == "source-snapshot-sha"
+    assert bound["single_entry_source_checkpoint_manifest_sha256"] == "source-manifest-sha"
+    assert bound["static_prediction"]["source_basis_receipt_sha256"] == "source-receipt-sha"
+    assert bound["static_prediction"]["source_basis_snapshot_sha256"] == "source-snapshot-sha"
+    assert bound["static_prediction"]["source_checkpoint_manifest_sha256"] == "source-manifest-sha"
+
+
+def test_bind_formal_request_to_source_rejects_preexisting_mismatch(monkeypatch, tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": [1, 2, 3],
+        "source_basis_receipt_sha256": "wrong",
+    }
+    source = _source_resolved_for_basis(tmp_path, intent)
+    monkeypatch.setattr(o, "resolve_phase", lambda execution_id, phase: source)
+
+    with pytest.raises(o.FormalOrchestrationError, match="STATIC_SOURCE_BASIS_RECEIPT_MISMATCH_BEFORE_FORMAL"):
+        o.bind_formal_request_to_source(o.build_phase_request(intent, "FORMAL"))
+
+
+def test_formal_semantic_basis_is_independent_of_derived_source_binding_fields(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {"ranking": [1, 2, 3]}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    a = o.formal_checkpoint_basis(intent, source)
+
+    bound = json.loads(json.dumps(intent))
+    bound["source_receipt_sha256"] = "source-receipt-sha"
+    bound["source_snapshot_sha256"] = "source-snapshot-sha"
+    bound["single_entry_source_binding_required"] = True
+    bound["single_entry_source_checkpoint_manifest_sha256"] = "source-manifest-sha"
+    bound["static_prediction"]["source_basis_receipt_sha256"] = "source-receipt-sha"
+    bound["static_prediction"]["source_basis_snapshot_sha256"] = "source-snapshot-sha"
+    bound["static_prediction"]["source_checkpoint_manifest_sha256"] = "source-manifest-sha"
+    b = o.formal_checkpoint_basis(bound, source)
+
+    assert a["semantic_basis_sha256"] == b["semantic_basis_sha256"]
+    assert a["semantic_components"]["static_prediction_sha256"] == b["semantic_components"]["static_prediction_sha256"]
