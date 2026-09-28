@@ -92,25 +92,76 @@ def _status_from_source(source_artifact: Dict[str, Any], source_id: str | None) 
     return None
 
 
+def _resolve_declared_manifest(request: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
+    if "required_evidence_manifest" in request:
+        manifest = request.get("required_evidence_manifest")
+        if not isinstance(manifest, list):
+            raise EvidenceRoundTripError("REQUIRED_EVIDENCE_MANIFEST_INVALID")
+        if not manifest:
+            raise EvidenceRoundTripError("REQUIRED_EVIDENCE_MANIFEST_EMPTY")
+        return manifest, "REQUEST_MANIFEST"
+
+    # Backward-compatible explicit per-runner declarations. Absence of these
+    # declarations is NOT itself a failure: the current Family Formal Lifecycle
+    # requires signed SOURCE + Evidence Feature Compilation/Ledger, but does not
+    # define a standalone Required-Evidence Manifest stage.
+    manifest: List[Dict[str, Any]] = []
+    declared = False
+    for r in request.get("runners") or []:
+        if "required_evidence" not in r:
+            continue
+        declared = True
+        items = r.get("required_evidence")
+        if not isinstance(items, list):
+            raise EvidenceRoundTripError(
+                f"RUNNER_REQUIRED_EVIDENCE_INVALID:{_runner_id(r)}"
+            )
+        rid = _runner_id(r)
+        for item in items:
+            row = dict(item) if isinstance(item, dict) else {"evidence_key": str(item)}
+            row.setdefault("runner_id", rid)
+            manifest.append(row)
+    if declared and not manifest:
+        raise EvidenceRoundTripError("RUNNER_REQUIRED_EVIDENCE_EMPTY")
+    return manifest, ("RUNNER_DECLARATIONS" if declared else "NOT_DECLARED")
+
+
 def build_evidence_acquisition_ledger(
     request: Dict[str, Any],
     source_artifact: Dict[str, Any],
 ) -> Dict[str, Any]:
-    manifest = request.get("required_evidence_manifest")
-    if manifest is None:
-        # Backward compatible derivation from per-runner declarations.
-        manifest = []
-        for r in request.get("runners") or []:
-            rid = _runner_id(r)
-            for item in r.get("required_evidence") or []:
-                row = dict(item) if isinstance(item, dict) else {"evidence_key": str(item)}
-                row.setdefault("runner_id", rid)
-                manifest.append(row)
-    if not isinstance(manifest, list) or not manifest:
-        raise EvidenceRoundTripError("REQUIRED_EVIDENCE_MANIFEST_MISSING")
+    manifest, declaration_source = _resolve_declared_manifest(request)
 
     runner_ids = {_runner_id(r) for r in request.get("runners") or []}
     runner_ids.discard("")
+
+    if declaration_source == "NOT_DECLARED":
+        return {
+            "profile": PROFILE_ID,
+            "race_id": request.get("race_id"),
+            "status": "NOT_DECLARED",
+            "declaration_present": False,
+            "declaration_source": "NONE",
+            "runner_count": len(runner_ids),
+            "required_evidence_count": 0,
+            "terminalized_count": 0,
+            "found_count": 0,
+            "missing_count": 0,
+            "conflict_count": 0,
+            "stale_count": 0,
+            "not_available_count": 0,
+            "unresolved_count": 0,
+            "full_terminalization": True,
+            "all_found": None,
+            "rows": [],
+            "authority_note": (
+                "No standalone Required-Evidence declaration was supplied. "
+                "Current Formal Lifecycle authority remains Signed SOURCE plus "
+                "Evidence Feature Compilation/Ledger and Required Index Manifest."
+            ),
+            "numerical_authority_effect": "NONE",
+        }
+
     fields = _source_fields(source_artifact)
     declared_terminal = request.get("evidence_acquisition_dispositions") or []
     disp: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -178,6 +229,9 @@ def build_evidence_acquisition_ledger(
     return {
         "profile": PROFILE_ID,
         "race_id": request.get("race_id"),
+        "status": "VERIFIED",
+        "declaration_present": True,
+        "declaration_source": declaration_source,
         "runner_count": len(runner_ids),
         "required_evidence_count": len(required_rows),
         "terminalized_count": len(required_rows),
