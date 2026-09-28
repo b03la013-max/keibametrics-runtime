@@ -7,6 +7,7 @@ from execution_gateway import (
     artifact_name as gateway_artifact_name, derive_execution_id, request_json,
 )
 from execution_store import materialize_phase
+from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID as RACE_DAY_FAST_PATH_PROFILE
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -32,6 +33,13 @@ else:
         "phase":str(req.get("execution_phase") or req.get("phase") or "FORMAL").upper(),
     }
 execution_id=str(execution_context["execution_id"])
+fast_timer=StageTimer() if fam=="LOCAL" else None
+fast_path_runtime_report={
+    "profile":RACE_DAY_FAST_PATH_PROFILE,
+    "enabled":False,
+    "materialization":None,
+    "fallback":None,
+}
 resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
@@ -614,6 +622,8 @@ if temporal_mode=="FORMAL-PRE-RACE":
 stage_manifest=[]
 def stage(name,**kw):
     stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
+    if fast_timer is not None:
+        fast_timer.mark(name)
 
 stage("SOURCE_FREEZE",
       source_receipt_sha256=source_receipt_sha,
@@ -850,7 +860,36 @@ if req_indices and isinstance(req_indices[0],dict):
 req_indices=[str(x) for x in req_indices if str(x)]
 assert req_indices,"LOCAL_REQUIRED_INDEX_NAMES_EMPTY"
 
-req=materialize_request(req,req_indices)
+fast_cfg=(gateway or {}).get("race_day_fast_path") if isinstance(gateway,dict) else {}
+fast_enabled=bool(
+    fam=="LOCAL"
+    and isinstance(fast_cfg,dict)
+    and fast_cfg.get("enabled") is True
+    and req.get("race_day_fast_path_disable") is not True
+)
+fast_path_runtime_report["enabled"]=fast_enabled
+fast_path_runtime_report["cache_root"]=str(os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"))
+fast_path_runtime_report["workers"]=int((fast_cfg or {}).get("materialization_workers") or 4)
+
+if fast_enabled:
+    try:
+        req,fast_mat_report=materialize_request_fast(
+            req,req_indices,
+            cache_root=os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"),
+            workers=int((fast_cfg or {}).get("materialization_workers") or 4),
+        )
+        fast_path_runtime_report["materialization"]=fast_mat_report
+    except Exception as fast_exc:
+        # Quality is never sacrificed for speed. Any Fast Path uncertainty
+        # immediately falls back to the canonical Full Path implementation.
+        fast_path_runtime_report["fallback"]={
+            "stage":"LOCAL_NUMERICAL_MATERIALIZATION",
+            "reason":type(fast_exc).__name__+":"+str(fast_exc),
+            "action":"CANONICAL_FULL_PATH",
+        }
+        req=materialize_request(req,req_indices)
+else:
+    req=materialize_request(req,req_indices)
 cov=req["numeric_coverage"]
 persist("numerical_materialization_summary.json",{
     "numeric_coverage":cov,
@@ -1096,6 +1135,15 @@ if fc>=300 or (fin.get("receipt") or {}).get("status")!="PASS":
     fail_closed("FINAL_NOT_PASS",{"http":fc,"final":fin})
 final_sha=verify_envelope(fin,"FINAL")
 deadline_guard("AFTER_FINAL")
+
+if fast_timer is not None:
+    fast_path_runtime_report["final_release"]=fast_timer.report(scheduled)
+    fast_path_runtime_report["final_receipt_sha256"]=final_sha
+    fast_path_runtime_report["race_id"]=rid
+    fast_path_runtime_report["execution_id"]=execution_id
+    fast_path_runtime_report["quality_policy"]="FAST PATH MAY FALL BACK TO FULL PATH; IT MAY NOT RELAX ANY FORMAL GATE"
+    fast_path_runtime_report["production_effect"]="EXECUTION-ORDER/CACHE ONLY"
+    persist("race_day_fast_path_release_report.json",fast_path_runtime_report)
 
 mec_r4_binding=None
 if mec_r4_shadow is not None:
