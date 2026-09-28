@@ -1,0 +1,92 @@
+name: LOCAL Runtime Rev8 Source Parallel Activation
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R34.json"
+      - "profiles/venue_chat_routes_20260928_R34.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R13.json"
+      - "profiles/family_runtime_contracts_20260928_R26.json"
+      - "profiles/local_source_parallel_active_20260928_R1.json"
+      - "profiles/current_execution_gateway.json"
+      - ".github/workflows/km-local-source-parallel-rev8-activation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R34.json"
+      - "profiles/current_execution_gateway.json"
+      - ".github/workflows/km-local-source-parallel-rev8-activation.yml"
+  workflow_dispatch:
+
+jobs:
+  activation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pytest
+        run: python -m pip install --disable-pip-version-check -q pytest
+
+      - name: Static R34 synchronization
+        run: |
+          set -euo pipefail
+          python -m py_compile runtime/execution_gateway.py runtime/local_physical/source_acquisition.py
+          python -m pytest -q tests/test_execution_gateway.py tests/test_source_acquisition.py
+          python - <<'PY'
+          import json
+          def load(p): return json.load(open(p,encoding="utf-8"))
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R34.json")
+          rt=load("profiles/family_runtime_contracts_20260928_R26.json")
+          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R13.json")
+          route=load("profiles/venue_chat_routes_20260928_R34.json")
+          gw=load("profiles/current_execution_gateway.json")
+          sp=load("profiles/local_source_parallel_active_20260928_R1.json")
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R34"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R33"
+          assert ca["common_family_components"]["execution_architecture"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8"
+          assert ca["common_family_components"]["venue_routing"]==route["profile_id"]
+          assert ca["common_family_components"]["family_runtime_contracts"]==rt["profile_id"]
+          assert ca["common_family_components"]["local_suite_manifest"]==suite["manifest_id"]
+          assert ca["common_family_components"]["local_execution_gateway"]==gw["profile_id"]
+          assert ca["venue_canon_current_decisions"]["FNB"]["production"]=="船橋競馬攻略条項 v2.1-FNB"
+          assert rt["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260928-R26"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260928-R13"
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R34"
+          assert gw["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.5-20260928"
+          assert gw["parent_current_authority"]==ca["manifest_id"]
+          assert gw["families"]["LOCAL"]["runtime_git_revision"]=="67d8d7e01aff5cdc6821963568931ce7dacf8bdd"
+          assert gw["families"]["LOCAL"]["active_bundle_sha256"]["source_acquisition_sha256"]=="3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df"
+          assert sp["source_acquisition_sha256"]==gw["families"]["LOCAL"]["active_bundle_sha256"]["source_acquisition_sha256"]
+          for k in ["predictive_model_formula_change","production_numerical_change","krs_engine_physics_change","mec_r3_policy_change","capital_policy_change","candidate_to_production_promotion","automatic_promotion"]:
+              assert ca["supersession_declaration"][k] is False,k
+          print("R34_STATIC_SYNC_PASS")
+          PY
+
+      - name: Family authority guard R34
+        run: python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R34.json
+
+      - name: Verify live Railway Rev8 bundle
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/rev8_live_health.json
+          python - <<'PY'
+          import json
+          x=json.load(open("runtime_out/rev8_live_health.json",encoding="utf-8"))
+          h=x["health"]; a=x["assessment"]
+          assert a["status"]=="PASS"
+          assert h["runtime_revision"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL"
+          assert h["github_revision"]=="67d8d7e01aff5cdc6821963568931ce7dacf8bdd"
+          assert h["source_acquisition_sha256"]=="3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df"
+          assert h["engine_sha256"]=="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+          assert h["parameter_map_sha256"]=="d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5"
+          assert h["receipt_signer_key_id"]=="KM-LOCAL-RUNTIME-ED25519-20260922"
+          print("R34_LIVE_REV8_BUNDLE_PASS")
+          PY
