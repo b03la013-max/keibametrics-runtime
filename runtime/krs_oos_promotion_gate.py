@@ -12,15 +12,18 @@ def _dt(s):
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
-def build_oos_measurement(review, final_artifact):
+def build_oos_measurement(review, final_artifact, result_request=None):
     ku=final_artifact.get("krs_prediction_utility") or {}
     final_receipt=final_artifact.get("final_receipt") or {}
     receipt_ts=((final_receipt.get("receipt") or {}).get("timestamp")
                 if isinstance(final_receipt,dict) else None)
     post=final_artifact.get("scheduled_post_at")
     temporal=str(final_artifact.get("temporal_mode") or "")
+    result_request=result_request or {}
+    acceptance_only=bool(result_request.get("acceptance_only"))
     eligible=bool(
-        temporal=="FORMAL-PRE-RACE"
+        not acceptance_only
+        and temporal=="FORMAL-PRE-RACE"
         and _dt(receipt_ts) is not None and _dt(post) is not None
         and _dt(receipt_ts) < _dt(post)
         and ku.get("utility_revision")
@@ -41,7 +44,11 @@ def build_oos_measurement(review, final_artifact):
       "profile":PROFILE,
       "race_id":review.get("race_id"),
       "eligible":eligible,
-      "eligibility_reason":"PRE_RACE_FROZEN_SIGNED_KRS_UTILITY" if eligible else "NOT_OOS_ELIGIBLE",
+      "eligibility_reason":(
+          "PRE_RACE_FROZEN_SIGNED_KRS_UTILITY" if eligible else
+          ("ACCEPTANCE_ONLY_NOT_OOS" if acceptance_only else "NOT_OOS_ELIGIBLE")
+      ),
+      "acceptance_only":acceptance_only,
       "utility_revision":ku.get("utility_revision"),
       "utility_class":ku.get("utility_class"),
       "actionable_role_proposals":len(role_props),
