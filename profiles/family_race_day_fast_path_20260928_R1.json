@@ -69,7 +69,8 @@
     "runner_parallelism_default": 4,
     "max_workers": 8,
     "stale_restore_policy": "FORBIDDEN",
-    "cache_corruption_policy": "MISS_AND_CANONICAL_FULL_PATH"
+    "cache_corruption_policy": "MISS_AND_CANONICAL_FULL_PATH",
+    "authority": false
   },
   "equivalence": {
     "test_function": "race_day_fast_path.materialization_equivalence",
@@ -90,7 +91,8 @@
       "workflow ids",
       "cache telemetry",
       "research-shadow telemetry"
-    ]
+    ],
+    "required": true
   },
   "reflection": {
     "runtime": "runtime/race_day_fast_reflection.py",
@@ -110,7 +112,8 @@
     "depth": 3,
     "rule": "Only already-prepared future request files are prewarmed. Missing requests are not invented.",
     "use_of_warm_cache": "Production reuse only when exact dependency+implementation hash matches at Formal execution.",
-    "same_day_result_rule": "Race n observations may invalidate/update n+1 and later only; they never rewrite race n or earlier frozen artifacts."
+    "same_day_result_rule": "Race n observations may invalidate/update n+1 and later only; they never rewrite race n or earlier frozen artifacts.",
+    "future_race_depth": 3
   },
   "production_freeze": {
     "prediction_formula_change": false,
@@ -132,6 +135,7 @@
       "equivalence failure"
     ],
     "action": "CANONICAL FULL PATH",
-    "fail_open": false
+    "fail_open": false,
+    "mode": "CANONICAL_FULL_PATH"
   }
 }
