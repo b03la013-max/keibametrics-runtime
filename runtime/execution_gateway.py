@@ -138,6 +138,15 @@ def sha256_file(path: str | pathlib.Path, repo_root: pathlib.Path | None = None)
 
 
 def repository_bundle(cfg: Dict[str, Any], repo_root: pathlib.Path | None = None) -> Dict[str, str]:
+    # Active Runtime authority is the explicitly frozen bundle when present.
+    # This decouples Production Runtime verification from candidate code that
+    # happens to exist in the current Git checkout.
+    explicit = cfg.get("active_bundle_sha256") or {}
+    if isinstance(explicit, dict) and explicit:
+        out={str(k):str(v) for k,v in explicit.items() if str(k) and str(v)}
+        if not out:
+            raise ExecutionGatewayError("RUNTIME_ACTIVE_BUNDLE_SHA_MAP_EMPTY")
+        return out
     files = cfg.get("bundle_files") or {}
     if not isinstance(files, dict) or not files:
         raise ExecutionGatewayError("RUNTIME_BUNDLE_FILE_MAP_MISSING")
