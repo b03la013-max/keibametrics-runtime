@@ -97,3 +97,13 @@ def test_candidate_pfs_and_harm_are_not_invented():
     m=build_measurement(post(),request(verified=True))
     assert m["candidate_ticket_pfs"]["status"]=="NOT_AVAILABLE"
     assert m["krs_harm_measurement"]["status"]=="UNASSESSABLE_WITHOUT_CANDIDATE_TICKET_ACTIVATION"
+
+
+def test_acceptance_only_result_never_enters_dual_oos():
+    rr=request(verified=True)
+    rr["acceptance_only"]=True
+    m=build_measurement(post(),rr)
+    assert m["temporal_dual_oos_eligible"] is False
+    assert m["promotion_measurement_admissible"] is False
+    assert m["hold_reason"]=="ACCEPTANCE_ONLY_NOT_OOS"
+    assert m["result_authority"]["acceptance_only"] is True
