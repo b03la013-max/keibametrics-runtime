@@ -1,6 +1,7 @@
 from __future__ import annotations
 import copy, hashlib, json
 from datetime import datetime, timezone
+from formal_oos_policy import request_oos_policy
 from typing import Any, Dict, List
 from mec_r4_shadow import settle_ticket_list
 
@@ -116,10 +117,11 @@ def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
         and _dt(generated_at) < _dt(scheduled)
     )
     training_excluded=rid in TRAINING_EXCLUSION
-    acceptance_only=bool(req.get("acceptance_only"))
-    request_oos_enabled=req.get("oos_eligible") is not False
+    oos_policy=request_oos_policy(req)
+    acceptance_only=bool(oos_policy["acceptance_only"])
+    request_oos_enabled=bool(oos_policy["request_oos_eligible"])
     forward_oos_candidate=bool(
-        pre_result and not training_excluded and not acceptance_only and request_oos_enabled
+        pre_result and not training_excluded and oos_policy["oos_allowed"]
     )
     if acceptance_only:
         temporal_class="ACCEPTANCE-ONLY-PRE-RACE / NOT-OOS"
@@ -148,9 +150,7 @@ def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
       "request_oos_eligible":request_oos_enabled,
       "forward_oos_candidate":forward_oos_candidate,
       "oos_exclusion_reason":(
-          "ACCEPTANCE_ONLY" if acceptance_only else
-          ("TRAINING_EXCLUDED" if training_excluded else
-           ("REQUEST_OOS_DISABLED" if not request_oos_enabled else None))
+          "TRAINING_EXCLUDED" if training_excluded else oos_policy.get("oos_exclusion_reason")
       ),
       "design_boundary":"2026-09-23 LOCAL results may inform this candidate; those races are TRAINING/REPLAY ONLY and never OOS.",
       "production_effect":"NONE","arms":arms
