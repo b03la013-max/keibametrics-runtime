@@ -129,3 +129,20 @@ def test_v03_unverified_result_authority_is_hold():
     m=build_measurement(post,result_request(False))
     assert m["promotion_measurement_admissible"] is False
     assert m["hold_reason"]=="RESULT_AUTHORITY_NOT_VERIFIED"
+
+
+def test_v03_acceptance_only_result_is_never_admissible():
+    post=evaluate_v03(
+      frozen_v03(),[1,2,3],
+      result_available_at="2026-09-25T13:00:00+09:00",
+      race_id="URW-20260925-R01-FORMAL-R1",
+      krs_summary=krs(),
+      signed_final_binding_valid=True,
+    )
+    rr=result_request(True)
+    rr["acceptance_only"]=True
+    m=build_measurement(post,rr)
+    assert m["temporal_v03_oos_eligible"] is False
+    assert m["promotion_measurement_admissible"] is False
+    assert m["hold_reason"]=="ACCEPTANCE_ONLY_NOT_OOS"
+    assert m["result_authority"]["acceptance_only"] is True
