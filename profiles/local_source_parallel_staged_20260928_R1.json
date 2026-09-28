@@ -1,0 +1,45 @@
+{
+  "profile_id": "KM-LOCAL-SOURCE-PARALLEL-STAGED-20260928-R1",
+  "status": "STAGED / NON-PRODUCTION / C1-EXECUTION-CORRECTNESS / SOURCE-LATENCY-OPTIMIZATION / ACTIVATION-BLOCKED-BY-LIVE-RUNTIME-DEPLOYMENT",
+  "created_at": "2026-09-28T13:05:00+09:00",
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R33",
+  "current_gateway": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
+  "active_runtime_profile": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE",
+  "active_runtime_git_revision": "d753d0cbca00f790351a56ff9f5c923290830d4f",
+  "candidate_implementation": "runtime/local_physical/source_acquisition.py",
+  "optimization": {
+    "fetch_model": "BOUNDED_PARALLEL_IO",
+    "default_workers": 6,
+    "max_workers": 12,
+    "identity_and_duplicate_validation": "SERIAL_BEFORE_FETCH",
+    "source_fetch": "PARALLEL_FOR_INDEPENDENT_MANIFEST_ROWS",
+    "manifest_order": "RESTORED_BEFORE_MERGE_AND_HASH",
+    "authority_merge": "UNCHANGED",
+    "required_source_failure": "FAIL_CLOSED_UNCHANGED",
+    "cutoff_validation": "UNCHANGED",
+    "stale_validation": "UNCHANGED",
+    "raw_snapshot": "UNCHANGED",
+    "signed_source_receipt": "UNCHANGED"
+  },
+  "production_freeze": {
+    "prediction_change": false,
+    "numerical_change": false,
+    "krs_change": false,
+    "parameter_map_change": false,
+    "mec_change": false,
+    "capital_change": false,
+    "venue_canon_change": false
+  },
+  "activation_gate": [
+    "MERGE_CANDIDATE_CODE",
+    "DEPLOY_CANDIDATE_REVISION_TO_RAILWAY",
+    "VERIFY_HEALTH_READY",
+    "VERIFY_NEW_SOURCE_ACQUISITION_SHA256",
+    "VERIFY_ENGINE_PARAMETER_SIGNER_UNCHANGED",
+    "RUN_SOURCE_REGRESSION",
+    "UPDATE_ACTIVE_GATEWAY_BUNDLE_AND_RUNTIME_REVISION",
+    "RUN_LIVE_EXECUTION_GATEWAY_CANARY",
+    "ONLY_THEN_MARK_ACTIVE"
+  ],
+  "automatic_activation": false
+}

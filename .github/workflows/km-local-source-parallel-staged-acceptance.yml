@@ -1,0 +1,70 @@
+name: LOCAL Source Parallel Staged Acceptance
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/local_physical/source_acquisition.py"
+      - "runtime/execution_gateway.py"
+      - "profiles/current_execution_gateway.json"
+      - "profiles/local_source_parallel_staged_20260928_R1.json"
+      - "tests/test_source_acquisition.py"
+      - "tests/test_execution_gateway.py"
+      - ".github/workflows/km-local-source-parallel-staged-acceptance.yml"
+      - "governance/KM-LOCAL-SOURCE-PARALLEL-STAGED-20260928-R1.md"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/local_physical/source_acquisition.py"
+      - "runtime/execution_gateway.py"
+      - "profiles/current_execution_gateway.json"
+      - ".github/workflows/km-local-source-parallel-staged-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pytest
+        run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Compile
+        run: |
+          python -m py_compile             runtime/local_physical/source_acquisition.py             runtime/execution_gateway.py
+      - name: Source and gateway regression
+        run: |
+          python -m pytest -q             tests/test_source_acquisition.py             tests/test_execution_gateway.py
+      - name: Verify candidate is staged, not silently active
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          gw=json.load(open("profiles/current_execution_gateway.json",encoding="utf-8"))
+          st=json.load(open("profiles/local_source_parallel_staged_20260928_R1.json",encoding="utf-8"))
+          cfg=gw["families"]["LOCAL"]
+          active=cfg["active_bundle_sha256"]
+          cand=hashlib.sha256(Path("runtime/local_physical/source_acquisition.py").read_bytes()).hexdigest()
+          assert gw["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928"
+          assert gw["parent_current_authority"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R33"
+          assert cfg["runtime_git_revision"]=="d753d0cbca00f790351a56ff9f5c923290830d4f"
+          assert cfg["runtime_profile"]=="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE"
+          assert active["source_acquisition_sha256"]=="ed5a5437a521019e8fefa592225574a98984af0c25fe006d5e0bcde8f1edc96c"
+          assert cand != active["source_acquisition_sha256"]
+          assert st["automatic_activation"] is False
+          assert st["status"].startswith("STAGED / NON-PRODUCTION")
+          assert gw["policy"]["active_runtime_bundle_explicitly_frozen"] is True
+          assert gw["policy"]["candidate_checkout_may_not_redefine_active_runtime_bundle"] is True
+          print(json.dumps({
+            "status":"PASS",
+            "active_source_sha256":active["source_acquisition_sha256"],
+            "candidate_source_sha256":cand,
+            "activation":"BLOCKED_PENDING_LIVE_DEPLOYMENT"
+          },indent=2))
+          PY
