@@ -14,7 +14,9 @@ carry no synthetic value and are left for the Production materializer to
 resolve as RULED-HOLD / RULED-NEUTRAL / NOT-APPLICABLE under its own authority.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple\nimport json\nfrom pathlib import Path
+from typing import Any, Dict, Iterable, List, Tuple
+import json
+from pathlib import Path
 
 PROFILE_ID = "KM-LOCAL-EVIDENCE-ACQUISITION-ROUNDTRIP-v1.0-20260928-R1"
 TERMINAL = {"FOUND", "MISSING", "CONFLICT", "STALE", "NOT-AVAILABLE"}
