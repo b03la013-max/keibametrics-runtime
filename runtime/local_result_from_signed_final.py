@@ -17,6 +17,7 @@ from local_mec_r5_shadow import (
 from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
 from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json
 from execution_store import materialize_phase
+from race_day_fast_reflection import build_fast_reflection
 
 raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
 gateway=load_gateway()
@@ -164,6 +165,14 @@ if not ver.get("verified"):
 art=res.get("artifact") or {}
 os.makedirs("runtime_out",exist_ok=True)
 json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+# Critical-path reflection is available immediately after the verified RESULT.
+# Deep candidate/MEC research continues below but is not required to understand
+# the first material failure before preparing the next race.
+fast_reflection=build_fast_reflection(art,race_id=rid)
+json.dump(fast_reflection,open("runtime_out/race_day_fast_reflection.json","w",encoding="utf-8"),
+          ensure_ascii=False,sort_keys=True,separators=(",",":"))
+print("KM_RACE_DAY_FAST_REFLECTION="+json.dumps(fast_reflection,ensure_ascii=False,separators=(",",":")))
 
 # LOCAL MEC-R4 forward OOS: only a Shadow whose digest was bound into
 # the signed pre-result FINAL may enter the preregistered tracker.
@@ -414,6 +423,7 @@ summary={
   "failure_localization":art.get("failure_localization"),
   "automatic_post_result_review":art.get("automatic_post_result_review"),
   "learning_event":art.get("learning_event"),
+  "race_day_fast_reflection":fast_reflection,
   "candidate_dual_shadow_postresult":candidate_dual_postresult,
   "candidate_dual_oos_measurement":candidate_oos_measurement,
   "candidate_dual_oos_status":candidate_oos_status,
