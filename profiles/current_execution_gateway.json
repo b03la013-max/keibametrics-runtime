@@ -1,9 +1,9 @@
 {
   "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R34-SINGLE-ENTRY-FORMAL / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R34",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R34",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260929_R26.json",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R35-SINGLE-ENTRY-R2-CHECKPOINT-INTEGRITY / STATIC-SIGNED-SOURCE-BINDING / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R35",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R35",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260929_R27.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -32,7 +32,13 @@
     "single_entry_formal_orchestration_required_for_venue_chat": true,
     "stable_execution_id_across_source_and_formal": true,
     "durable_source_checkpoint_reuse_allowed": true,
-    "full_lifecycle_does_not_imply_full_numerical_authority": true
+    "full_lifecycle_does_not_imply_full_numerical_authority": true,
+    "source_checkpoint_basis_required": true,
+    "static_signed_source_binding_required": true,
+    "formal_checkpoint_semantic_basis_required": true,
+    "immutable_formal_reuse_requires_semantic_basis_match": true,
+    "legacy_unbound_formal_auto_reuse_forbidden": true,
+    "archived_acceptance_pre_race_claim_forbidden": true
   },
   "families": {
     "LOCAL": {
@@ -198,10 +204,15 @@
     "fallback": "CANONICAL_FULL_PATH"
   },
   "formal_single_entry": {
-    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2",
     "workflow": ".github/workflows/km-formal-single-entry.yml",
     "orchestrator": "runtime/formal_execution_orchestrator.py",
     "intent_root": "runtime/formal_intents",
+    "source_checkpoint_basis": "KM-SOURCE-CHECKPOINT-BASIS-v1",
+    "formal_checkpoint_basis": "KM-FORMAL-CHECKPOINT-BASIS-v1",
+    "static_signed_source_binding_required": true,
+    "immutable_formal_reuse": "SEMANTIC_BASIS_AND_SOURCE_BINDING_MATCH_ONLY",
+    "legacy_unbound_formal_auto_reuse": false,
     "legacy_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml"
   }
 }
