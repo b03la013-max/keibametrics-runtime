@@ -16,11 +16,13 @@ import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 SOURCE_PROFILE = "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1"
 SOURCE_SCHEMA = "KM-SOURCE-SNAPSHOT-v1"
 DEFAULT_MAX_BYTES = int(os.environ.get("KM_SOURCE_MAX_BYTES", "2000000"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("KM_SOURCE_TIMEOUT_SECONDS", "20"))
+DEFAULT_FETCH_WORKERS = max(1, min(int(os.environ.get("KM_SOURCE_FETCH_WORKERS", "6")), 12))
 DEFAULT_ALLOWED_HOSTS = [
     "keiba.go.jp",
     "*.keiba.go.jp",
@@ -521,6 +523,7 @@ def acquire_sources(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]
 
     snapshots: List[Dict[str, Any]] = []
     seen_ids = set()
+    validated_specs: List[Tuple[int, Dict[str, Any], str]] = []
     for idx, spec in enumerate(specs):
         if not isinstance(spec, dict):
             errors.append("SOURCE_SPEC_INVALID:" + str(idx))
@@ -533,12 +536,18 @@ def acquire_sources(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]
             errors.append("SOURCE_ID_DUPLICATE:" + source_id)
             continue
         seen_ids.add(source_id)
+        validated_specs.append((idx, spec, source_id))
+
+    # Fetch rows are independent I/O operations. Identity and duplicate checks
+    # remain serial; fetched snapshots are restored to original manifest order
+    # before evidence merge/hash construction so semantics are unchanged.
+    def _fetch_one(item: Tuple[int, Dict[str, Any], str]):
+        idx, spec, source_id = item
         try:
             snap, serr = fetch_source(spec, cutoff)
-            snapshots.append(snap)
-            errors.extend(serr)
+            return idx, snap, list(serr)
         except Exception as e:
-            snapshots.append({
+            snap = {
                 "schema": SOURCE_SCHEMA,
                 "source_id": source_id,
                 "source_class": str(spec.get("source_class") or "UNCLASSIFIED"),
@@ -549,9 +558,25 @@ def acquire_sources(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]
                 "status": "FETCH_FAILED",
                 "error": str(e),
                 "fetched_at": utcnow(),
-            })
+            }
+            serr = []
             if spec.get("required"):
-                errors.append("REQUIRED_SOURCE_FETCH_FAILED:" + source_id + ":" + str(e))
+                serr.append("REQUIRED_SOURCE_FETCH_FAILED:" + source_id + ":" + str(e))
+            return idx, snap, serr
+
+    workers = max(1, min(DEFAULT_FETCH_WORKERS, len(validated_specs) or 1))
+    if workers == 1:
+        fetched_rows = [_fetch_one(x) for x in validated_specs]
+    else:
+        fetched_rows = []
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="km-source") as ex:
+            futures = [ex.submit(_fetch_one, x) for x in validated_specs]
+            for future in as_completed(futures):
+                fetched_rows.append(future.result())
+
+    for idx, snap, serr in sorted(fetched_rows, key=lambda x: x[0]):
+        snapshots.append(snap)
+        errors.extend(serr)
 
     by_id = {s.get("source_id"): s for s in snapshots}
     missing_required = [
@@ -611,6 +636,14 @@ def acquire_sources(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]
         "race_id": race_id,
         "prediction_cutoff": cutoff,
         "source_freeze_at": utcnow(),
+        "source_fetch_execution": {
+            "mode": "PARALLEL" if len(validated_specs) > 1 and workers > 1 else "SERIAL",
+            "worker_limit": DEFAULT_FETCH_WORKERS,
+            "workers_used": workers,
+            "source_count": len(validated_specs),
+            "manifest_order_restored_before_merge": True,
+            "prediction_authority": False,
+        },
         "required_source_manifest": manifest_canonical,
         "required_source_manifest_sha256": sha_obj(manifest_canonical),
         "sources": snapshots,
