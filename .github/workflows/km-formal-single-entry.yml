@@ -56,7 +56,7 @@ jobs:
           req=json.load(open(os.environ["INTENT_FILE"],encoding="utf-8"))
           family=str(req.get("family_id") or "").upper()
           if family!="LOCAL":
-              raise SystemExit("Single-entry R1 currently requires LOCAL")
+              raise SystemExit("Single-entry currently supports LOCAL only")
           execution_id=derive_execution_id(req)
           race=req.get("race") if isinstance(req.get("race"),dict) else {}
           venue=str(req.get("venue_id") or race.get("venue_id") or "UNKNOWN")

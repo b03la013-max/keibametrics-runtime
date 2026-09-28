@@ -25,6 +25,15 @@ DEFAULT_TMP_ROOT = ROOT / "runtime" / "orchestrator_tmp"
 SUPPORTED_FAMILIES = {"LOCAL"}
 
 
+def current_single_entry_profile() -> str:
+    gateway = load_gateway()
+    block = gateway.get("formal_single_entry") if isinstance(gateway, dict) else None
+    profile = block.get("profile") if isinstance(block, dict) else None
+    if not profile:
+        raise FormalOrchestrationError("FORMAL_SINGLE_ENTRY_PROFILE_MISSING_FROM_GATEWAY")
+    return str(profile)
+
+
 class FormalOrchestrationError(RuntimeError):
     pass
 
@@ -551,7 +560,7 @@ def orchestrate(
     except FormalOrchestrationError as exc:
         return {
             "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
-            "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+            "profile": current_single_entry_profile(),
             "status": "FAIL_CLOSED",
             "family_id": family,
             "race_id": intent.get("race_id"),
@@ -574,7 +583,7 @@ def orchestrate(
     except FormalImportClosureError as exc:
         return {
             "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
-            "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+            "profile": current_single_entry_profile(),
             "status": "FAIL_CLOSED",
             "family_id": family,
             "race_id": intent.get("race_id"),
@@ -596,7 +605,7 @@ def orchestrate(
     plan = resume_plan(execution_id, intent)
     report: Dict[str, Any] = {
         "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
-        "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+        "profile": current_single_entry_profile(),
         "status": "PLANNED" if plan_only else "RUNNING",
         "family_id": family,
         "race_id": intent.get("race_id"),
