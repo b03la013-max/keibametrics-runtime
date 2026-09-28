@@ -11,6 +11,7 @@ from execution_store import materialize_phase
 from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID as RACE_DAY_FAST_PATH_PROFILE
 from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
+from formal_oos_policy import request_oos_policy
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -1316,18 +1317,16 @@ def run_candidate_krs_arm(label,q,legacy=False):
             csha=verify_envelope(crun,"CANDIDATE_KRS_"+label)
             complete_at=datetime.datetime.now(datetime.timezone.utc)
             pre_post_complete=bool(scheduled_utc and complete_at<scheduled_utc)
-            acceptance_only=bool(req.get("acceptance_only"))
-            request_oos_enabled=req.get("oos_eligible") is not False
-            oos_allowed=bool((not acceptance_only) and request_oos_enabled)
+            oos_policy=request_oos_policy(req)
+            acceptance_only=bool(oos_policy["acceptance_only"])
+            request_oos_enabled=bool(oos_policy["request_oos_eligible"])
+            oos_allowed=bool(oos_policy["oos_allowed"])
             oos_temporal_eligible=bool(pre_post_complete and oos_allowed)
-            if acceptance_only:
-                oos_exclusion_reason="ACCEPTANCE_ONLY"
-            elif not request_oos_enabled:
-                oos_exclusion_reason="REQUEST_OOS_DISABLED"
-            elif not pre_post_complete:
-                oos_exclusion_reason="NOT_PRE_POST_COMPLETE"
-            else:
-                oos_exclusion_reason=None
+            oos_exclusion_reason=(
+                oos_policy.get("oos_exclusion_reason")
+                if not oos_allowed else
+                (None if pre_post_complete else "NOT_PRE_POST_COMPLETE")
+            )
             return {
                 "status":"EXECUTED","label":label,"receipt_sha256":csha,
                 "actual_run_count":(crun.get("artifact") or {}).get("actual_run_count"),
