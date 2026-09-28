@@ -28,3 +28,12 @@ def test_evidence_roundtrip_failure_has_specific_class():
 def test_known_runtime_and_krs_classes_remain_stable():
     assert failure_class_for("RUNTIME_GATEWAY_COMPATIBILITY_FAILED") == "INFRASTRUCTURE_COMPATIBILITY"
     assert failure_class_for("KRS_RECEIPT_VERIFY_FAILED") == "KRS_EXECUTION"
+
+
+
+def test_static_source_binding_failure_has_actionable_resume():
+    code = "STATIC_SOURCE_BASIS_REQUIRED_FOR_SINGLE_ENTRY"
+    assert failure_class_for(code) == "SOURCE_STATIC_BINDING"
+    assert resume_hint_for(code) == (
+        "REUSE_DURABLE_SOURCE_REBIND_STATIC_PROVENANCE_THEN_RETRY_FORMAL"
+    )
