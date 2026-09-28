@@ -9,6 +9,7 @@ from execution_gateway import (
 )
 from execution_store import materialize_phase
 from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID as RACE_DAY_FAST_PATH_PROFILE
+from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -487,6 +488,20 @@ else:
     if svc>=300 or sv.get("valid") is not True:
         fail_closed("SOURCE_SIGNATURE_OR_ARTIFACT_VERIFY_FAILED",{"http":svc,"verify":sv})
     source_artifact=source.get("artifact") or {}
+
+# Required-Evidence round trip: every required acquisition cell must be
+# terminal before Production numerical materialization. Missing/STALE/
+# NOT-AVAILABLE evidence is never fabricated and remains available for the
+# canonical materializer to resolve through RULED-HOLD/neutral/N-A policy.
+try:
+    evidence_acquisition_ledger=enforce_before_numerical(req,source_artifact)
+except EvidenceRoundTripError as e:
+    fail_closed("EVIDENCE_ACQUISITION_ROUNDTRIP_FAILED",{"error":str(e)})
+persist("evidence_acquisition_ledger.json",evidence_acquisition_ledger)
+req["evidence_acquisition_ledger"]=evidence_acquisition_ledger
+if evidence_acquisition_ledger.get("full_terminalization") is not True:
+    fail_closed("EVIDENCE_ACQUISITION_TERMINALIZATION_INCOMPLETE",evidence_acquisition_ledger)
+
     if source_artifact.get("formal_ready") is not True:
         fail_closed("SOURCE_NOT_FORMAL_READY",source_artifact)
 
