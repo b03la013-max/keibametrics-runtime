@@ -116,22 +116,42 @@ def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
         and _dt(generated_at) < _dt(scheduled)
     )
     training_excluded=rid in TRAINING_EXCLUSION
-    forward_oos_candidate=bool(pre_result and not training_excluded)
-    if training_excluded:
+    acceptance_only=bool(req.get("acceptance_only"))
+    request_oos_enabled=req.get("oos_eligible") is not False
+    forward_oos_candidate=bool(
+        pre_result and not training_excluded and not acceptance_only and request_oos_enabled
+    )
+    if acceptance_only:
+        temporal_class="ACCEPTANCE-ONLY-PRE-RACE / NOT-OOS"
+    elif training_excluded:
         temporal_class="TRAINING-REPLAY-ONLY"
+    elif not request_oos_enabled:
+        temporal_class="FORMAL-PRE-RACE / OOS-DISABLED"
     elif forward_oos_candidate:
         temporal_class="FORWARD-OOS-PRE-RESULT-CANDIDATE"
     else:
         temporal_class="NON-FORWARD / NOT-OOS"
+    status=(
+        "SHADOW / LOCAL-SPECIFIC / NON-PRODUCTION / ACCEPTANCE-ONLY / NOT-OOS"
+        if acceptance_only else
+        "SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-MEASUREMENT"
+    )
     out={
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
-      "status":"SHADOW / LOCAL-SPECIFIC / RESULT-INFORMED-DESIGN / NON-PRODUCTION / FORWARD-OOS-MEASUREMENT",
+      "status":status,
       "race_id":rid,"production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
       "generated_at":generated_at,"scheduled_post_at":scheduled,
       "temporal_mode":req.get("temporal_mode"),"source_basis_sha256":basis_sha256,
       "temporal_class":temporal_class,
       "training_excluded":training_excluded,
+      "acceptance_only":acceptance_only,
+      "request_oos_eligible":request_oos_enabled,
       "forward_oos_candidate":forward_oos_candidate,
+      "oos_exclusion_reason":(
+          "ACCEPTANCE_ONLY" if acceptance_only else
+          ("TRAINING_EXCLUDED" if training_excluded else
+           ("REQUEST_OOS_DISABLED" if not request_oos_enabled else None))
+      ),
       "design_boundary":"2026-09-23 LOCAL results may inform this candidate; those races are TRAINING/REPLAY ONLY and never OOS.",
       "production_effect":"NONE","arms":arms
     }
