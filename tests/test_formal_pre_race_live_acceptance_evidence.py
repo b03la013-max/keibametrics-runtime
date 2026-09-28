@@ -88,3 +88,52 @@ def test_t03_acceptance_cannot_promote_prediction_or_numerical_authority():
     assert e["immutable_retry"]["status"] == "ALREADY_COMPLETE / REUSED_IMMUTABLE"
     assert e["immutable_retry"]["source_rerun"] is False
     assert e["immutable_retry"]["krs_rerun"] is False
+
+
+T04_EVIDENCE = ROOT / "runtime/acceptance_reports/KM-LOCAL-FORMAL-SINGLE-ENTRY-R2-ACCEPTANCE-OOS-ISOLATION-20260929-T04.json"
+T04_EXECUTION_ID = "LOCAL-FNB-20260929-R01-PREFLIGHT-T04"
+
+
+def test_t04_acceptance_shadows_are_cryptographically_non_oos():
+    e = load(T04_EVIDENCE)
+    assert e["status"].startswith("PASS / FORMAL-PRE-RACE")
+    assert e["classification"]["acceptance_only"] is True
+    assert e["classification"]["oos_eligible"] is False
+    assert e["classification"]["unknown_future_prediction_evidence"] is False
+
+    formal_latest = load(ROOT / f"runtime/executions/{T04_EXECUTION_ID}/FORMAL/LATEST.json")
+    formal_dir = ROOT / f"runtime/executions/{T04_EXECUTION_ID}/FORMAL/runs/{e['formal']['run_id']}"
+
+    krs = load(formal_dir / "candidate_krs_shadow_summary.json")
+    krs2 = load(formal_dir / "candidate_krs_v02_shadow_summary.json")
+    krs3 = load(formal_dir / "candidate_krs_v03_shadow_summary.json")
+    for row in (krs, krs2, krs3):
+        assert row["pre_post_complete"] is True
+        assert row["acceptance_only"] is True
+        assert row["request_oos_eligible"] is False
+        assert row["oos_temporal_eligible"] is False
+        assert row["oos_exclusion_reason"] == "ACCEPTANCE_ONLY"
+
+    r4 = load(formal_dir / "mec_r4_shadow_pre_result.json")
+    assert r4["acceptance_only"] is True
+    assert r4["oos_eligible_if_signed_final_bound"] is False
+    assert r4["oos_exclusion_reason"] == "ACCEPTANCE_ONLY"
+
+    r5 = load(formal_dir / "local_mec_r5_shadow_pre_result.json")
+    assert r5["acceptance_only"] is True
+    assert r5["forward_oos_candidate"] is False
+    assert r5["oos_exclusion_reason"] == "ACCEPTANCE_ONLY"
+
+    final = load(formal_dir / "final_receipt_envelope.json")
+    trace = final["artifact"]["ticket_transport_trace"]
+    rb4 = trace["mec_r4_shadow_binding"]
+    rb5 = trace["local_mec_r5_shadow_binding"]
+    assert rb4["acceptance_only"] is True
+    assert rb4["oos_eligible_if_signed_final_bound"] is False
+    assert rb4["oos_exclusion_reason"] == "ACCEPTANCE_ONLY"
+    assert rb5["acceptance_only"] is True
+    assert rb5["forward_oos_candidate"] is False
+    assert rb5["oos_exclusion_reason"] == "ACCEPTANCE_ONLY"
+
+    assert final["receipt_sha256"] == e["formal"]["final_receipt_sha256"]
+    assert e["production_effect"] == "NONE"

@@ -1,0 +1,74 @@
+{
+  "profile_id": "KM-LOCAL-FORMAL-SINGLE-ENTRY-R2-ACCEPTANCE-OOS-ISOLATION-20260929-T04",
+  "status": "PASS / FORMAL-PRE-RACE / MECHANICAL-ACCEPTANCE / ACCEPTANCE-ONLY / CRYPTOGRAPHIC-NOT-OOS",
+  "execution_id": "LOCAL-FNB-20260929-R01-PREFLIGHT-T04",
+  "github_actions_run_id": 36491419788,
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R35",
+  "formal_single_entry_profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2",
+  "production_effect": "NONE",
+  "classification": {
+    "acceptance_only": true,
+    "oos_eligible": false,
+    "unknown_future_prediction_evidence": false,
+    "production_prediction_change": false,
+    "production_numerical_change": false,
+    "krs_physics_change": false,
+    "mec_r3_change": false,
+    "capital_policy_change": false
+  },
+  "source": {
+    "run_id": "36491419788-source",
+    "checkpoint_manifest_sha256": "06d69a60e3731f5ea3c1b42e6f870ccaed258dda593c0015c1b7460b8cbc0b22",
+    "receipt_sha256": "8d2e81317b97f27b1c89336f03cb2b3850191c5aa2f76621c99d42a825eb29d0",
+    "snapshot_sha256": "4907a7b1ade7d792b119b1e1680c060cd0a2048ade3db4ce46f4f3a28bdabd2b",
+    "official_runner_count": 12
+  },
+  "formal": {
+    "run_id": "36491419788-formal",
+    "semantic_basis_sha256": "c2a22b69aa02465183c7c4cef896438182e7570dc7ca86cea300785f127a2233",
+    "krs_receipt_sha256": "91e90810b8f9922820ede224468ae9f9c36e8170fc5da8fb6b0a7f1898519178",
+    "krs_actual_run_count": 5000,
+    "final_receipt_sha256": "d0f6488f663f821796751e6f5cc4902fa8ac1aa320012fe3406f2e101b031fd0"
+  },
+  "acceptance_oos_isolation": {
+    "candidate_krs": {
+      "pre_post_complete": true,
+      "acceptance_only": true,
+      "request_oos_eligible": false,
+      "oos_temporal_eligible": false,
+      "oos_exclusion_reason": "ACCEPTANCE_ONLY",
+      "arms_verified": [
+        "V01",
+        "V02",
+        "V03"
+      ]
+    },
+    "mec_r4": {
+      "acceptance_only": true,
+      "oos_eligible_if_signed_final_bound": false,
+      "oos_exclusion_reason": "ACCEPTANCE_ONLY",
+      "signed_final_binding_verified": true
+    },
+    "mec_r5": {
+      "acceptance_only": true,
+      "forward_oos_candidate": false,
+      "oos_exclusion_reason": "ACCEPTANCE_ONLY",
+      "signed_final_binding_verified": true
+    },
+    "signed_final_trace": {
+      "r4_acceptance_only": true,
+      "r4_oos_eligible_if_signed_final_bound": false,
+      "r5_acceptance_only": true,
+      "r5_forward_oos_candidate": false,
+      "production_effect": "NONE"
+    }
+  },
+  "latency": {
+    "critical_path_seconds": 10.362738,
+    "target_seconds": 300,
+    "hard_slo_seconds": 420,
+    "target_met": true,
+    "hard_slo_met": true
+  },
+  "conclusion": "Acceptance-only executions are now non-OOS by construction in Candidate KRS and MEC-R4/R5 pre-result artifacts, and that exclusion is bound into Signed FINAL. Result-side acceptance isolation remains a second defense. This acceptance does not alter Production or supply predictive evidence."
+}
