@@ -62,3 +62,37 @@ def test_duplicate_required_cell_fails():
     req["required_evidence_manifest"].append(dict(req["required_evidence_manifest"][0]))
     with pytest.raises(EvidenceRoundTripError):
         build_evidence_acquisition_ledger(req, {"normalized_evidence": {}})
+
+
+
+def test_no_standalone_declaration_is_not_a_failure():
+    req = {
+        "race_id": "FUN-NO-DECL-R1",
+        "runners": [{"runner_id": "1"}, {"runner_id": "2"}],
+    }
+    led = build_evidence_acquisition_ledger(req, {"formal_ready": True, "normalized_evidence": {}})
+    assert led["status"] == "NOT_DECLARED"
+    assert led["declaration_present"] is False
+    assert led["required_evidence_count"] == 0
+    assert led["unresolved_count"] == 0
+    assert led["full_terminalization"] is True
+    assert led["numerical_authority_effect"] == "NONE"
+
+
+def test_explicit_empty_manifest_is_invalid_not_silently_ignored():
+    req = {
+        "race_id": "FUN-EMPTY-DECL-R1",
+        "runners": [{"runner_id": "1"}],
+        "required_evidence_manifest": [],
+    }
+    with pytest.raises(EvidenceRoundTripError, match="REQUIRED_EVIDENCE_MANIFEST_EMPTY"):
+        build_evidence_acquisition_ledger(req, {"normalized_evidence": {}})
+
+
+def test_empty_runner_declaration_is_invalid():
+    req = {
+        "race_id": "FUN-EMPTY-RUNNER-DECL-R1",
+        "runners": [{"runner_id": "1", "required_evidence": []}],
+    }
+    with pytest.raises(EvidenceRoundTripError, match="RUNNER_REQUIRED_EVIDENCE_EMPTY"):
+        build_evidence_acquisition_ledger(req, {"normalized_evidence": {}})
