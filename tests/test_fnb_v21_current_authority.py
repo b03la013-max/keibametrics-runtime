@@ -18,8 +18,8 @@ def load(path):
     return json.load(open(path,encoding="utf-8"))
 
 
-def test_fnb_v21_is_current_and_r31_aligned():
-    a=load(AUTH); f=load(FNB); r=load(ROUTE); s=load(SUITE); rt=load(RUNTIME); g=load(GATEWAY)
+def test_fnb_v21_r32_enactment_is_r31_aligned():
+    a=load(AUTH); f=load(FNB); r=load(ROUTE); s=load(SUITE); rt=load(RUNTIME)
     assert a["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R32"
     assert a["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R31"
     assert a["venue_canon_current_decisions"]["FNB"]["production"]=="船橋競馬攻略条項 v2.1-FNB"
@@ -35,10 +35,9 @@ def test_fnb_v21_is_current_and_r31_aligned():
     assert rt["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260928-R24"
     assert rt["families"]["LOCAL"]["suite_manifest"]==s["manifest_id"]
     assert rt["families"]["LOCAL"]["venue_routing"]==r["profile_id"]
-    assert g["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928"
-    assert g["parent_current_authority"]==a["manifest_id"]
-    assert g["venue_routing"]==r["profile_id"]
-    assert g["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260928_R24.json"
+    # current_execution_gateway.json is a moving operational pointer.
+    # R32 enactment is verified by its frozen authority/route/suite/runtime set;
+    # later Current Authorities may legitimately supersede the gateway.
 
 
 def test_fnb_v21_owns_venue_prediction_only():

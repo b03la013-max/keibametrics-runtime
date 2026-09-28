@@ -1,9 +1,9 @@
 {
-  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R32-FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R32",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R32",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R24.json",
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R33",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R33",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R25.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -23,7 +23,10 @@
     "request_path_resolution_must_be_explicit_or_single_commit_request": true,
     "family_authority_guard_required": true,
     "cross_family_runtime_reuse_forbidden": true,
-    "venue_common_authority_override_forbidden": true
+    "venue_common_authority_override_forbidden": true,
+    "race_day_fast_path_may_bypass_formal_gate": false,
+    "cache_is_authority": false,
+    "fast_path_equivalence_required": true
   },
   "families": {
     "LOCAL": {
@@ -146,7 +149,7 @@
     "status": "SUCCESS",
     "healthcheck_http": 200
   },
-  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.2-20260928",
+  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928",
   "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
   "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
   "authority_guard": "runtime/family_authority_guard.py",
@@ -156,5 +159,22 @@
       "profile_path": "profiles/fnb_venue_canon_20260928_v2.1.json",
       "runtime_effect": "NONE"
     }
+  },
+  "race_day_fast_path": {
+    "enabled": true,
+    "profile": "KM-FAMILY-RACE-DAY-FAST-PATH-20260928-R1",
+    "runtime": "runtime/race_day_fast_path.py",
+    "reflection_runtime": "runtime/race_day_fast_reflection.py",
+    "materialization_workers": 4,
+    "max_workers": 8,
+    "cache_root": ".km_fast_cache",
+    "next_race_prewarm_depth": 3,
+    "target_seconds": 300,
+    "hard_slo_seconds": 420,
+    "purchase_reserve_target_seconds": 600,
+    "exact_dependency_hash_required": true,
+    "implementation_hash_required": true,
+    "cache_authority": false,
+    "fallback": "CANONICAL_FULL_PATH"
   }
 }

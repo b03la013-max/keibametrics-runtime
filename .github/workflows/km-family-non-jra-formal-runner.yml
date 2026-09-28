@@ -64,12 +64,21 @@ jobs:
               execution_id=derive_execution_id(req)
               phase=execution_phase(req)
               art=re.sub(r"[^A-Za-z0-9._-]+","-",f"km-ban-execution-{execution_id}-{phase}")
+          race=req.get("race") if isinstance(req.get("race"),dict) else {}
+          venue_id=str(req.get("venue_id") or race.get("venue_id") or "UNKNOWN")
+          race_date=str(req.get("race_date") or race.get("race_date") or race.get("date") or "UNKNOWN")
+          race_no=str(req.get("race_no") or race.get("race_no") or "0")
+          cache_prefix=f"km-raceday-fast-v1-{venue_id}-{race_date}-"
           with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as out:
               out.write(f"request_file={os.environ['REQUEST_FILE']}\n")
               out.write(f"execution_id={execution_id}\n")
               out.write(f"family_id={fam}\n")
               out.write(f"phase={phase}\n")
               out.write(f"artifact_name={art}\n")
+              out.write(f"venue_id={venue_id}\n")
+              out.write(f"race_date={race_date}\n")
+              out.write(f"race_no={race_no}\n")
+              out.write(f"cache_prefix={cache_prefix}\n")
           print(json.dumps({
               "request_file":os.environ["REQUEST_FILE"],
               "execution_id":execution_id,
@@ -78,6 +87,15 @@ jobs:
               "artifact_name":art
           },ensure_ascii=False))
           PY
+
+      - name: Restore race-day deterministic cache
+        if: steps.execution_meta.outputs.family_id == 'LOCAL'
+        uses: actions/cache/restore@v4
+        with:
+          path: .km_fast_cache
+          key: ${{ steps.execution_meta.outputs.cache_prefix }}${{ github.run_id }}
+          restore-keys: |
+            ${{ steps.execution_meta.outputs.cache_prefix }}
 
       - name: Family authority scope guard
         shell: bash
@@ -104,6 +122,22 @@ jobs:
           REQ="${{ steps.execution_meta.outputs.request_file }}"
           test -n "$REQ"
           REQUEST_FILE="$REQ" python -m runtime.non_jra_formal_runner
+
+      - name: Prewarm next prepared LOCAL races
+        if: success() && steps.execution_meta.outputs.family_id == 'LOCAL' && steps.execution_meta.outputs.phase == 'FORMAL'
+        shell: bash
+        env:
+          REQUEST_FILE: ${{ steps.execution_meta.outputs.request_file }}
+        run: |
+          set -euo pipefail
+          python runtime/race_day_fast_path.py prewarm-next             --current-request "$REQUEST_FILE"             --request-dir runtime/family_requests             --cache-root .km_fast_cache             --limit 3 > runtime_out/race_day_next3_prewarm.json
+
+      - name: Save race-day deterministic cache
+        if: success() && steps.execution_meta.outputs.family_id == 'LOCAL'
+        uses: actions/cache/save@v4
+        with:
+          path: .km_fast_cache
+          key: ${{ steps.execution_meta.outputs.cache_prefix }}${{ github.run_id }}
 
       - name: Persist canonical signed execution phase
         if: success() && hashFiles('runtime_out/*.json') != ''

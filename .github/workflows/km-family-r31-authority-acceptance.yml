@@ -62,7 +62,6 @@ jobs:
           route=load("profiles/venue_chat_routes_20260928_R31.json")
           runtime=load("profiles/family_runtime_contracts_20260928_R23.json")
           local_suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R10.json")
-          gateway=load("profiles/current_execution_gateway.json")
           scope=load("profiles/family_scope_ownership_20260928_R1.json")
           lifecycle=load("profiles/family_formal_lifecycle_contract_20260928_R1.json")
           promotion=load("profiles/family_maturity_promotion_20260928_R1.json")
@@ -94,23 +93,9 @@ jobs:
           assert local_suite["venue_routing"]==route["profile_id"]
           assert local_suite["runtime"]["contract"]==runtime["profile_id"]
           assert local_suite["production_numeric_suite"]["numerical_change"] is False
-          # current_execution_gateway.json is an intentional moving pointer.
-          # R31 remains historically bound to v1.2; a later current gateway may
-          # supersede it only through explicit predecessor lineage.
-          r31_gateway_id="KM-LOCAL-EXECUTION-GATEWAY-v1.2-20260928"
-          if gateway["profile_id"]==r31_gateway_id:
-              assert gateway["parent_current_authority"]==ca["manifest_id"]
-              assert gateway["venue_routing"]==route["profile_id"]
-              assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260928_R23.json"
-          else:
-              assert gateway.get("predecessor")==r31_gateway_id
-              assert gateway["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928"
-              assert gateway["parent_current_authority"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R32"
-              assert gateway["venue_routing"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R32"
-              assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260928_R24.json"
-          assert gateway["policy"]["family_authority_guard_required"] is True
-          assert gateway["policy"]["production_prediction_policy_changed"] is False
-          assert gateway["policy"]["production_numerical_policy_changed"] is False
+          # The moving current_execution_gateway pointer is verified by the
+          # latest Current Authority acceptance, not by frozen R31 history.
+          assert cc["local_execution_gateway"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.2-20260928"
           assert runtime["families"]["LOCAL"]["suite_manifest"]==local_suite["manifest_id"]
           assert runtime["families"]["LOCAL"]["venue_routing"]==route["profile_id"]
           assert cc["local_suite_manifest"]==local_suite["manifest_id"]
