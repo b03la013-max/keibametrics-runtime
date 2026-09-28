@@ -1,9 +1,9 @@
 {
   "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R33",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R33",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R25.json",
+  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R34-SINGLE-ENTRY-FORMAL / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R34",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R34",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260929_R26.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -28,7 +28,11 @@
     "cache_is_authority": false,
     "fast_path_equivalence_required": true,
     "active_runtime_bundle_explicitly_frozen": true,
-    "candidate_checkout_may_not_redefine_active_runtime_bundle": true
+    "candidate_checkout_may_not_redefine_active_runtime_bundle": true,
+    "single_entry_formal_orchestration_required_for_venue_chat": true,
+    "stable_execution_id_across_source_and_formal": true,
+    "durable_source_checkpoint_reuse_allowed": true,
+    "full_lifecycle_does_not_imply_full_numerical_authority": true
   },
   "families": {
     "LOCAL": {
@@ -192,5 +196,12 @@
     "implementation_hash_required": true,
     "cache_authority": false,
     "fallback": "CANONICAL_FULL_PATH"
+  },
+  "formal_single_entry": {
+    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+    "workflow": ".github/workflows/km-formal-single-entry.yml",
+    "orchestrator": "runtime/formal_execution_orchestrator.py",
+    "intent_root": "runtime/formal_intents",
+    "legacy_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml"
   }
 }
