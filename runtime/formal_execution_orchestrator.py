@@ -34,6 +34,122 @@ def _sha_obj(obj: Any) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _norm_date(value: Any) -> Optional[str]:
+    if value is None or str(value).strip() == "":
+        return None
+    return str(value).strip().replace("/", "-")
+
+
+def _norm_cutoff(value: Any) -> Optional[str]:
+    if value is None or str(value).strip() == "":
+        return None
+    raw = str(value).strip()
+    try:
+        return dt.datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(dt.timezone.utc).isoformat()
+    except Exception:
+        return raw
+
+
+def source_checkpoint_basis(intent: Dict[str, Any]) -> Dict[str, Any]:
+    race = intent.get("race") if isinstance(intent.get("race"), dict) else {}
+    explicit_manifest = intent.get("required_source_manifest")
+    source_request = intent.get("source_acquisition_request")
+    explicit_sources = None
+    if isinstance(explicit_manifest, list):
+        explicit_sources = explicit_manifest
+    elif isinstance(source_request, dict) and isinstance(source_request.get("sources"), list):
+        explicit_sources = source_request.get("sources")
+    return {
+        "schema": "KM-SOURCE-CHECKPOINT-BASIS-v1",
+        "family_id": str(intent.get("family_id") or "").upper(),
+        "race_id": str(intent.get("race_id") or race.get("race_id") or ""),
+        "venue_id": str(intent.get("venue_id") or race.get("venue_id") or "") or None,
+        "race_date": _norm_date(intent.get("race_date") or race.get("race_date") or race.get("date")),
+        "race_no": int(intent.get("race_no") or race.get("race_no") or 0) or None,
+        "prediction_cutoff": _norm_cutoff(intent.get("prediction_cutoff") or race.get("prediction_cutoff")),
+        "explicit_source_manifest_sha256": _sha_obj(explicit_sources) if explicit_sources is not None else None,
+    }
+
+
+def _load_checkpoint_json(resolved: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
+    run_dir = resolved.get("run_dir")
+    if not isinstance(run_dir, pathlib.Path):
+        return None
+    path = run_dir / name
+    if not path.exists():
+        return None
+    value = json.loads(path.read_text(encoding="utf-8"))
+    return value if isinstance(value, dict) else None
+
+
+def _legacy_source_basis(resolved: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    env = _load_checkpoint_json(resolved, "source_receipt_envelope.json")
+    if not env:
+        return None
+    receipt = env.get("receipt") if isinstance(env.get("receipt"), dict) else {}
+    artifact = env.get("artifact") if isinstance(env.get("artifact"), dict) else {}
+    context = artifact.get("source_race_context") if isinstance(artifact.get("source_race_context"), dict) else {}
+    return {
+        "schema": "KM-SOURCE-CHECKPOINT-BASIS-v1-LEGACY-DERIVED",
+        "family_id": str(receipt.get("family") or "").upper(),
+        "race_id": str(receipt.get("race_id") or artifact.get("race_id") or ""),
+        "venue_id": str(context.get("venue_id") or "") or None,
+        "race_date": _norm_date(context.get("race_date")),
+        "race_no": int(context.get("race_no") or 0) or None,
+        "prediction_cutoff": _norm_cutoff(artifact.get("prediction_cutoff")),
+        "explicit_source_manifest_sha256": (
+            str(artifact.get("required_source_manifest_sha256") or "") or None
+        ),
+    }
+
+
+def source_checkpoint_compatibility(intent: Dict[str, Any], resolved: Dict[str, Any]) -> Dict[str, Any]:
+    expected = source_checkpoint_basis(intent)
+    actual = _load_checkpoint_json(resolved, "source_checkpoint_basis.json")
+    source = "PERSISTED_BASIS"
+    if actual is None:
+        actual = _legacy_source_basis(resolved)
+        source = "LEGACY_SIGNED_SOURCE_DERIVATION"
+    if actual is None:
+        return {
+            "status": "UNVERIFIABLE",
+            "basis_source": "NONE",
+            "mismatches": {"checkpoint_basis": ["PRESENT", None]},
+        }
+
+    mismatches: Dict[str, Any] = {}
+    for key in ("family_id", "race_id", "venue_id", "race_date", "race_no", "prediction_cutoff"):
+        ev = expected.get(key)
+        av = actual.get(key)
+        if ev is not None and ev != av:
+            mismatches[key] = [ev, av]
+
+    # Compare an explicit request manifest only when the request itself pins one.
+    # Auto-discovered manifests are validated by race identity + cutoff and the
+    # signed SOURCE receipt instead of guessing their future hash.
+    if expected.get("explicit_source_manifest_sha256") is not None:
+        if expected["explicit_source_manifest_sha256"] != actual.get("explicit_source_manifest_sha256"):
+            mismatches["explicit_source_manifest_sha256"] = [
+                expected["explicit_source_manifest_sha256"],
+                actual.get("explicit_source_manifest_sha256"),
+            ]
+
+    return {
+        "status": "PASS" if not mismatches else "INCOMPATIBLE",
+        "basis_source": source,
+        "expected": expected,
+        "actual": actual,
+        "mismatches": mismatches,
+    }
+
+
+def validate_temporal_truthfulness(intent: Dict[str, Any]) -> None:
+    mode = str(intent.get("temporal_mode") or "FORMAL-PRE-RACE").upper()
+    acceptance_mode = str(intent.get("source_adapter_acceptance_mode") or "").upper()
+    if bool(intent.get("acceptance_only")) and "ARCHIVED" in acceptance_mode and mode == "FORMAL-PRE-RACE":
+        raise FormalOrchestrationError("ARCHIVED_ACCEPTANCE_MUST_USE_POST_START_REPLAY")
+
+
 def _load(path: str | pathlib.Path) -> Dict[str, Any]:
     with pathlib.Path(path).open(encoding="utf-8") as fh:
         value = json.load(fh)
@@ -80,7 +196,7 @@ def build_phase_request(intent: Dict[str, Any], phase: str) -> Dict[str, Any]:
     return out
 
 
-def checkpoint_status(execution_id: str) -> Dict[str, Any]:
+def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     out: Dict[str, Any] = {
         "execution_id": execution_id,
         "source": {"status": "MISSING"},
@@ -99,18 +215,25 @@ def checkpoint_status(execution_id: str) -> Dict[str, Any]:
             continue
         files = set((resolved.get("manifest") or {}).get("files") or {})
         required = "source_receipt_envelope.json" if phase == "SOURCE" else "final_receipt_envelope.json"
-        out[phase.lower()] = {
-            "status": "COMPLETE" if required in files else "INCOMPLETE",
+        status = "COMPLETE" if required in files else "INCOMPLETE"
+        row = {
+            "status": status,
             "run_id": (resolved.get("manifest") or {}).get("run_id"),
             "manifest_sha256": (resolved.get("latest") or {}).get("manifest_sha256"),
             "required_file": required,
             "required_file_present": required in files,
         }
+        if phase == "SOURCE" and status == "COMPLETE" and intent is not None:
+            compatibility = source_checkpoint_compatibility(intent, resolved)
+            row["compatibility"] = compatibility
+            if compatibility["status"] != "PASS":
+                row["status"] = "INCOMPATIBLE"
+        out[phase.lower()] = row
     return out
 
 
-def resume_plan(execution_id: str) -> Dict[str, Any]:
-    cp = checkpoint_status(execution_id)
+def resume_plan(execution_id: str, intent: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    cp = checkpoint_status(execution_id, intent)
     if cp["formal"]["status"] == "COMPLETE":
         action = "RETURN_IMMUTABLE_FORMAL"
         resume_from = "COMPLETE"
@@ -120,6 +243,9 @@ def resume_plan(execution_id: str) -> Dict[str, Any]:
     elif cp["source"]["status"] == "CORRUPT":
         action = "FAIL_CLOSED"
         resume_from = "SOURCE_CHECKPOINT_REPAIR_REQUIRED"
+    elif cp["source"]["status"] == "INCOMPATIBLE":
+        action = "FAIL_CLOSED"
+        resume_from = "NEW_EXECUTION_ID_REQUIRED"
     else:
         action = "RUN_SOURCE_THEN_FORMAL"
         resume_from = "SOURCE"
@@ -178,6 +304,8 @@ def run_phase(
 
     phase_copy = tmp_root / execution_id / f"{phase.lower()}_out"
     _copy_json_dir(runtime_out, phase_copy)
+    if str(phase).upper() == "SOURCE":
+        _write(phase_copy / "source_checkpoint_basis.json", source_checkpoint_basis(request))
     persisted = persist_phase(
         execution_id,
         phase,
@@ -213,6 +341,29 @@ def orchestrate(
 
     execution_id = derive_execution_id(intent)
     try:
+        validate_temporal_truthfulness(intent)
+    except FormalOrchestrationError as exc:
+        return {
+            "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
+            "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
+            "status": "FAIL_CLOSED",
+            "family_id": family,
+            "race_id": intent.get("race_id"),
+            "execution_id": execution_id,
+            "gateway_profile": load_gateway().get("profile_id"),
+            "first_failed_phase": "BOOTSTRAP",
+            "first_failed_code": str(exc),
+            "first_failed_class": "TEMPORAL_TRUTHFULNESS",
+            "last_successful_stage": None,
+            "resume_from": "INTENT_RECLASSIFICATION",
+            "resume_hint": "CLASSIFY_ARCHIVED_ACCEPTANCE_AS_POST_START_REPLAY_NO_OOS",
+            "production_prediction_change": False,
+            "production_numerical_change": False,
+            "krs_physics_change": False,
+            "mec_change": False,
+            "capital_change": False,
+        }
+    try:
         import_closure = build_closure("runtime/non_jra_formal_runner.py")
     except FormalImportClosureError as exc:
         return {
@@ -236,7 +387,7 @@ def orchestrate(
             "mec_change": False,
             "capital_change": False,
         }
-    plan = resume_plan(execution_id)
+    plan = resume_plan(execution_id, intent)
     report: Dict[str, Any] = {
         "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
         "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1",
@@ -265,7 +416,14 @@ def orchestrate(
     if plan["action"] == "FAIL_CLOSED":
         report["status"] = "FAIL_CLOSED"
         report["first_failed_phase"] = "SOURCE"
-        report["first_failed_code"] = "SOURCE_CHECKPOINT_CORRUPT"
+        if plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED":
+            report["first_failed_code"] = "SOURCE_CHECKPOINT_BASIS_MISMATCH"
+            report["first_failed_class"] = "SOURCE_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "CREATE_NEW_EXECUTION_ID_FOR_CHANGED_SOURCE_BASIS"
+        else:
+            report["first_failed_code"] = "SOURCE_CHECKPOINT_CORRUPT"
+            report["first_failed_class"] = "SOURCE_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "REPAIR_OR_RECREATE_SOURCE_CHECKPOINT"
         report["resume_from"] = plan["resume_from"]
         return report
 
