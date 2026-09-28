@@ -1315,14 +1315,29 @@ def run_candidate_krs_arm(label,q,legacy=False):
         if cc<300 and (crun.get("receipt") or {}).get("status")=="EXECUTED":
             csha=verify_envelope(crun,"CANDIDATE_KRS_"+label)
             complete_at=datetime.datetime.now(datetime.timezone.utc)
-            temporal_ok=bool(scheduled_utc and complete_at<scheduled_utc)
+            pre_post_complete=bool(scheduled_utc and complete_at<scheduled_utc)
+            acceptance_only=bool(req.get("acceptance_only"))
+            request_oos_enabled=req.get("oos_eligible") is not False
+            oos_allowed=bool((not acceptance_only) and request_oos_enabled)
+            oos_temporal_eligible=bool(pre_post_complete and oos_allowed)
+            if acceptance_only:
+                oos_exclusion_reason="ACCEPTANCE_ONLY"
+            elif not request_oos_enabled:
+                oos_exclusion_reason="REQUEST_OOS_DISABLED"
+            elif not pre_post_complete:
+                oos_exclusion_reason="NOT_PRE_POST_COMPLETE"
+            else:
+                oos_exclusion_reason=None
             return {
                 "status":"EXECUTED","label":label,"receipt_sha256":csha,
                 "actual_run_count":(crun.get("artifact") or {}).get("actual_run_count"),
                 "completed_at":complete_at.isoformat(),
-                "pre_post_complete":temporal_ok,
+                "pre_post_complete":pre_post_complete,
                 "production_authority":False,
-                "oos_temporal_eligible":temporal_ok,
+                "acceptance_only":acceptance_only,
+                "request_oos_eligible":request_oos_enabled,
+                "oos_temporal_eligible":oos_temporal_eligible,
+                "oos_exclusion_reason":oos_exclusion_reason,
                 "candidate_input_sha256":sha_obj(cand_input),
                 "output_sha256":(crun.get("artifact") or {}).get("output_sha256"),
                 "paired_seed":cand_seed,
