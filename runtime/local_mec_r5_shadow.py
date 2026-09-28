@@ -194,7 +194,11 @@ def bind_shadow_to_trace(trace,shadow,basis_sha256):
       "profile":PROFILE,"candidate_id":CANDIDATE_ID,
       "shadow_sha256":shadow.get("sha256"),"basis_sha256":basis_sha256,
       "generated_at":shadow.get("generated_at"),"scheduled_post_at":shadow.get("scheduled_post_at"),
-      "temporal_mode":shadow.get("temporal_mode"),"production_effect":"NONE"
+      "temporal_mode":shadow.get("temporal_mode"),
+      "acceptance_only":bool(shadow.get("acceptance_only")),
+      "forward_oos_candidate":bool(shadow.get("forward_oos_candidate")),
+      "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
+      "production_effect":"NONE"
     }
     return out
 
@@ -210,6 +214,12 @@ def verify_signed_final_binding(final_envelope,shadow):
         raise AssertionError("LOCAL_MEC_R5_BASIS_SHA_NOT_BOUND")
     if str(b.get("production_effect"))!="NONE":
         raise AssertionError("LOCAL_MEC_R5_PRODUCTION_EFFECT_FORBIDDEN")
+    if bool(b.get("acceptance_only"))!=bool(shadow.get("acceptance_only")):
+        raise AssertionError("LOCAL_MEC_R5_ACCEPTANCE_BINDING_MISMATCH")
+    if bool(b.get("forward_oos_candidate"))!=bool(shadow.get("forward_oos_candidate")):
+        raise AssertionError("LOCAL_MEC_R5_OOS_ELIGIBILITY_BINDING_MISMATCH")
+    if bool(shadow.get("acceptance_only")) and bool(shadow.get("forward_oos_candidate")):
+        raise AssertionError("LOCAL_MEC_R5_ACCEPTANCE_CANNOT_BE_FORWARD_OOS")
     if str(shadow.get("temporal_mode") or "").upper()!="FORMAL-PRE-RACE":
         raise AssertionError("LOCAL_MEC_R5_NOT_FORMAL_PRE_RACE")
     gen=datetime.fromisoformat(str(shadow.get("generated_at")).replace("Z","+00:00"))
@@ -220,5 +230,9 @@ def verify_signed_final_binding(final_envelope,shadow):
       "valid":True,"profile":PROFILE,"candidate_id":CANDIDATE_ID,
       "shadow_sha256":shadow.get("sha256"),"basis_sha256":shadow.get("source_basis_sha256"),
       "final_receipt_sha256":final_envelope.get("receipt_sha256"),
-      "final_artifact_sha256":rec.get("artifact_sha256"),"production_effect":"NONE"
+      "final_artifact_sha256":rec.get("artifact_sha256"),
+      "acceptance_only":bool(shadow.get("acceptance_only")),
+      "forward_oos_candidate":bool(shadow.get("forward_oos_candidate")),
+      "oos_exclusion_reason":shadow.get("oos_exclusion_reason"),
+      "production_effect":"NONE"
     }
