@@ -41,8 +41,10 @@ def _official_result_authority(race_id):
                     "request_file":fn,
                     "source":req.get("source"),
                     "verification_ref":req.get("official_result_verification_ref"),
+                    "acceptance_only":bool(req.get("acceptance_only")),
                 })
-    return {"verified":bool(refs),"refs":refs}
+    admissible=[x for x in refs if not bool(x.get("acceptance_only"))]
+    return {"verified":bool(refs),"oos_admissible":bool(admissible),"refs":refs}
 
 def _max_drawdown(rows):
     equity=0.0
@@ -127,6 +129,9 @@ def build_status():
                 if result_authority.get("verified") is not True:
                     held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
                     continue
+                if result_authority.get("oos_admissible") is not True:
+                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_RESULT_NOT_OOS"})
+                    continue
                 shadow_path=os.path.join("runtime","mec_shadow_artifacts",rid+".json")
                 if not os.path.exists(shadow_path):
                     errors.append({"race_id":rid,"reason":"SHADOW_ARTIFACT_MISSING"})
@@ -136,6 +141,9 @@ def build_status():
                     continue
                 if shadow.get("production_effect")!="NONE":
                     errors.append({"race_id":rid,"reason":"PRODUCTION_EFFECT_NOT_NONE"})
+                    continue
+                if bool(shadow.get("acceptance_only")):
+                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_SHADOW_NOT_OOS"})
                     continue
                 arms=result.get("arms") or {}
                 if sorted(arms)!=sorted(EXPECTED_ARMS):
