@@ -150,6 +150,138 @@ def validate_temporal_truthfulness(intent: Dict[str, Any]) -> None:
         raise FormalOrchestrationError("ARCHIVED_ACCEPTANCE_MUST_USE_POST_START_REPLAY")
 
 
+FORMAL_RETRY_METADATA_FIELDS = {
+    "execution_attempt",
+    "retry_reason",
+    "retry_repair_sha",
+    "execution_mode",
+    "single_entry",
+    "execution_phase",
+    "phase",
+}
+
+FORMAL_TRANSPORT_ONLY_FIELDS = {
+    "source_receipt_artifact_id",
+    "source_run_id",
+    "artifact_name",
+    "external_endpoint",
+    "runtime_expected_revision",
+}
+
+
+def _formal_semantic_payload(intent: Dict[str, Any]) -> Dict[str, Any]:
+    payload = copy.deepcopy(intent)
+    for key in FORMAL_RETRY_METADATA_FIELDS | FORMAL_TRANSPORT_ONLY_FIELDS:
+        payload.pop(key, None)
+
+    # The exact signed SOURCE is bound separately below. Legacy transport fields
+    # may therefore change without redefining the prediction/decision identity.
+    payload.pop("source_receipt_sha256", None)
+
+    # Normalize explicit execution_id rather than letting formatting aliases
+    # create a false semantic difference.
+    payload["execution_id"] = derive_execution_id(intent)
+    return payload
+
+
+def _source_binding_from_resolved(resolved: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not resolved:
+        return None
+    env = _load_checkpoint_json(resolved, "source_receipt_envelope.json")
+    if not env:
+        return None
+    artifact = env.get("artifact") if isinstance(env.get("artifact"), dict) else {}
+    return {
+        "source_checkpoint_manifest_sha256": str((resolved.get("latest") or {}).get("manifest_sha256") or ""),
+        "source_run_id": str((resolved.get("manifest") or {}).get("run_id") or ""),
+        "source_receipt_sha256": str(env.get("receipt_sha256") or ""),
+        "source_snapshot_sha256": str(artifact.get("source_snapshot_sha256") or ""),
+    }
+
+
+def formal_checkpoint_basis(
+    intent: Dict[str, Any],
+    source_resolved: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    semantic = _formal_semantic_payload(intent)
+    source_binding = _source_binding_from_resolved(source_resolved)
+    if not source_binding or not source_binding.get("source_receipt_sha256"):
+        raise FormalOrchestrationError("FORMAL_BASIS_SOURCE_BINDING_MISSING")
+    return {
+        "schema": "KM-FORMAL-CHECKPOINT-BASIS-v1",
+        "execution_id": derive_execution_id(intent),
+        "family_id": str(intent.get("family_id") or "").upper(),
+        "race_id": str(intent.get("race_id") or ""),
+        "semantic_basis_sha256": _sha_obj(semantic),
+        "semantic_components": {
+            "static_prediction_sha256": _sha_obj(intent.get("static_prediction")) if isinstance(intent.get("static_prediction"), dict) else None,
+            "final_prediction_package_sha256": _sha_obj(intent.get("final_prediction_package")) if isinstance(intent.get("final_prediction_package"), dict) else None,
+            "capital_policy_sha256": _sha_obj(intent.get("capital_policy")) if isinstance(intent.get("capital_policy"), dict) else None,
+            "local_krs_bridge_sha256": _sha_obj(intent.get("local_krs_bridge")) if isinstance(intent.get("local_krs_bridge"), dict) else None,
+            "role_registry_sha256": _sha_obj(intent.get("role_registry")) if isinstance(intent.get("role_registry"), list) else None,
+            "pair_dispositions_sha256": _sha_obj(intent.get("pair_dispositions")) if isinstance(intent.get("pair_dispositions"), list) else None,
+            "third_dispositions_sha256": _sha_obj(intent.get("third_dispositions")) if isinstance(intent.get("third_dispositions"), list) else None,
+            "required_indices_sha256": _sha_obj(intent.get("required_indices") or intent.get("required_index_names") or []),
+            "run_count": int(intent.get("run_count") or 0) or None,
+            "seed": int(intent.get("seed") or 0) or None,
+            "temporal_mode": str(intent.get("temporal_mode") or "FORMAL-PRE-RACE").upper(),
+        },
+        "source_binding": source_binding,
+        "ignored_retry_metadata_fields": sorted(FORMAL_RETRY_METADATA_FIELDS),
+        "ignored_transport_only_fields": sorted(FORMAL_TRANSPORT_ONLY_FIELDS | {"source_receipt_sha256"}),
+    }
+
+
+def formal_checkpoint_compatibility(
+    intent: Dict[str, Any],
+    formal_resolved: Dict[str, Any],
+    source_resolved: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    actual = _load_checkpoint_json(formal_resolved, "formal_checkpoint_basis.json")
+    if actual is None:
+        return {
+            "status": "UNBOUND_LEGACY",
+            "basis_source": "NONE",
+            "mismatches": {"formal_checkpoint_basis": ["PRESENT", None]},
+        }
+    try:
+        expected = formal_checkpoint_basis(intent, source_resolved)
+    except FormalOrchestrationError as exc:
+        return {
+            "status": "UNVERIFIABLE",
+            "basis_source": "CURRENT_SOURCE_RESOLUTION_FAILED",
+            "mismatches": {"source_binding": ["VERIFIABLE", str(exc)]},
+        }
+
+    mismatches: Dict[str, Any] = {}
+    if expected.get("semantic_basis_sha256") != actual.get("semantic_basis_sha256"):
+        mismatches["semantic_basis_sha256"] = [
+            expected.get("semantic_basis_sha256"),
+            actual.get("semantic_basis_sha256"),
+        ]
+
+    expected_source = expected.get("source_binding") or {}
+    actual_source = actual.get("source_binding") or {}
+    for key in (
+        "source_checkpoint_manifest_sha256",
+        "source_receipt_sha256",
+        "source_snapshot_sha256",
+    ):
+        if expected_source.get(key) != actual_source.get(key):
+            mismatches["source_binding." + key] = [
+                expected_source.get(key),
+                actual_source.get(key),
+            ]
+
+    return {
+        "status": "PASS" if not mismatches else "INCOMPATIBLE",
+        "basis_source": "PERSISTED_FORMAL_BASIS",
+        "expected": expected,
+        "actual": actual,
+        "mismatches": mismatches,
+    }
+
+
 def _load(path: str | pathlib.Path) -> Dict[str, Any]:
     with pathlib.Path(path).open(encoding="utf-8") as fh:
         value = json.load(fh)
@@ -202,6 +334,7 @@ def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None
         "source": {"status": "MISSING"},
         "formal": {"status": "MISSING"},
     }
+    source_resolved: Optional[Dict[str, Any]] = None
     for phase in ("SOURCE", "FORMAL"):
         try:
             resolved = resolve_phase(execution_id, phase)
@@ -213,6 +346,8 @@ def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None
             continue
         if resolved is None:
             continue
+        if phase == "SOURCE":
+            source_resolved = resolved
         files = set((resolved.get("manifest") or {}).get("files") or {})
         required = "source_receipt_envelope.json" if phase == "SOURCE" else "final_receipt_envelope.json"
         status = "COMPLETE" if required in files else "INCOMPLETE"
@@ -228,6 +363,13 @@ def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None
             row["compatibility"] = compatibility
             if compatibility["status"] != "PASS":
                 row["status"] = "INCOMPATIBLE"
+        if phase == "FORMAL" and status == "COMPLETE" and intent is not None:
+            compatibility = formal_checkpoint_compatibility(intent, resolved, source_resolved)
+            row["compatibility"] = compatibility
+            if compatibility["status"] == "UNBOUND_LEGACY":
+                row["status"] = "UNBOUND_LEGACY"
+            elif compatibility["status"] != "PASS":
+                row["status"] = "INCOMPATIBLE"
         out[phase.lower()] = row
     return out
 
@@ -237,6 +379,12 @@ def resume_plan(execution_id: str, intent: Optional[Dict[str, Any]] = None) -> D
     if cp["formal"]["status"] == "COMPLETE":
         action = "RETURN_IMMUTABLE_FORMAL"
         resume_from = "COMPLETE"
+    elif cp["formal"]["status"] == "UNBOUND_LEGACY":
+        action = "FAIL_CLOSED"
+        resume_from = "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY"
+    elif cp["formal"]["status"] == "INCOMPATIBLE":
+        action = "FAIL_CLOSED"
+        resume_from = "NEW_EXECUTION_ID_REQUIRED_FORMAL_BASIS"
     elif cp["source"]["status"] == "COMPLETE":
         action = "RESUME_FORMAL"
         resume_from = "FORMAL"
@@ -306,6 +454,12 @@ def run_phase(
     _copy_json_dir(runtime_out, phase_copy)
     if str(phase).upper() == "SOURCE":
         _write(phase_copy / "source_checkpoint_basis.json", source_checkpoint_basis(request))
+    elif str(phase).upper() == "FORMAL":
+        source_resolved = resolve_phase(execution_id, "SOURCE")
+        _write(
+            phase_copy / "formal_checkpoint_basis.json",
+            formal_checkpoint_basis(request, source_resolved),
+        )
     persisted = persist_phase(
         execution_id,
         phase,
@@ -415,12 +569,23 @@ def orchestrate(
 
     if plan["action"] == "FAIL_CLOSED":
         report["status"] = "FAIL_CLOSED"
-        report["first_failed_phase"] = "SOURCE"
-        if plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED":
+        if plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY":
+            report["first_failed_phase"] = "FORMAL"
+            report["first_failed_code"] = "FORMAL_CHECKPOINT_LEGACY_UNBOUND"
+            report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "CREATE_NEW_EXECUTION_ID_TO_ESTABLISH_FORMAL_SEMANTIC_BASIS"
+        elif plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_BASIS":
+            report["first_failed_phase"] = "FORMAL"
+            report["first_failed_code"] = "FORMAL_CHECKPOINT_BASIS_MISMATCH"
+            report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "CREATE_NEW_EXECUTION_ID_FOR_CHANGED_FORMAL_BASIS"
+        elif plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED":
+            report["first_failed_phase"] = "SOURCE"
             report["first_failed_code"] = "SOURCE_CHECKPOINT_BASIS_MISMATCH"
             report["first_failed_class"] = "SOURCE_CHECKPOINT_INTEGRITY"
             report["resume_hint"] = "CREATE_NEW_EXECUTION_ID_FOR_CHANGED_SOURCE_BASIS"
         else:
+            report["first_failed_phase"] = "SOURCE"
             report["first_failed_code"] = "SOURCE_CHECKPOINT_CORRUPT"
             report["first_failed_class"] = "SOURCE_CHECKPOINT_INTEGRITY"
             report["resume_hint"] = "REPAIR_OR_RECREATE_SOURCE_CHECKPOINT"
@@ -439,6 +604,7 @@ def orchestrate(
             "status": "REUSED_IMMUTABLE",
             "run_id": (resolved.get("manifest") or {}).get("run_id"),
             "manifest_sha256": (resolved.get("latest") or {}).get("manifest_sha256"),
+            "compatibility": plan["checkpoints"]["formal"].get("compatibility"),
         })
         return report
 

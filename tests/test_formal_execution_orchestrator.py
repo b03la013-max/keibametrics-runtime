@@ -214,3 +214,163 @@ def test_source_checkpoint_reuse_rejects_changed_race_identity(tmp_path):
     comp = o.source_checkpoint_compatibility(changed, {"run_dir": run_dir})
     assert comp["status"] == "INCOMPATIBLE"
     assert "race_no" in comp["mismatches"]
+
+
+
+def _source_resolved_for_basis(tmp_path, intent):
+    run_dir = tmp_path / "source-run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    envelope = {
+        "receipt_sha256": "source-receipt-sha",
+        "receipt": {
+            "family": "LOCAL",
+            "race_id": intent["race_id"],
+        },
+        "artifact": {
+            "race_id": intent["race_id"],
+            "prediction_cutoff": intent["prediction_cutoff"],
+            "source_snapshot_sha256": "source-snapshot-sha",
+            "source_race_context": {
+                "venue_id": intent["venue_id"],
+                "race_date": intent["race_date"],
+                "race_no": intent["race_no"],
+            },
+        },
+    }
+    (run_dir / "source_receipt_envelope.json").write_text(
+        json.dumps(envelope), encoding="utf-8"
+    )
+    return {
+        "run_dir": run_dir,
+        "latest": {"manifest_sha256": "source-manifest-sha"},
+        "manifest": {"run_id": "source-run-1"},
+    }
+
+
+def test_formal_basis_ignores_retry_metadata_only(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {"ranking": [1, 2, 3]}
+    intent["capital_policy"] = {"mode": "RECOMMENDATION_ONLY"}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    a = o.formal_checkpoint_basis(intent, source)
+
+    retry = json.loads(json.dumps(intent))
+    retry["execution_attempt"] = 9
+    retry["retry_reason"] = "RETRY_AFTER_NETWORK"
+    retry["retry_repair_sha"] = "abc123"
+    retry["execution_phase"] = "FORMAL"
+    retry["phase"] = "FORMAL"
+    b = o.formal_checkpoint_basis(retry, source)
+
+    assert a["semantic_basis_sha256"] == b["semantic_basis_sha256"]
+    assert a["source_binding"] == b["source_binding"]
+
+
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda x: x.update({"seed": 999}),
+        lambda x: x.update({"run_count": 20000}),
+        lambda x: x.update({"static_prediction": {"ranking": [2, 1, 3]}}),
+        lambda x: x.update({"capital_policy": {"mode": "OTHER"}}),
+        lambda x: x.update({"local_krs_bridge": {"bridge_id": "CHANGED", "family": "LOCAL"}}),
+    ],
+)
+def test_formal_basis_changes_for_semantic_execution_changes(tmp_path, mutator):
+    intent = base_intent()
+    intent.update(
+        {
+            "seed": 1,
+            "run_count": 5000,
+            "static_prediction": {"ranking": [1, 2, 3]},
+            "capital_policy": {"mode": "RECOMMENDATION_ONLY"},
+            "local_krs_bridge": {"bridge_id": "B1", "family": "LOCAL"},
+        }
+    )
+    source = _source_resolved_for_basis(tmp_path, intent)
+    before = o.formal_checkpoint_basis(intent, source)
+
+    changed = json.loads(json.dumps(intent))
+    mutator(changed)
+    after = o.formal_checkpoint_basis(changed, source)
+
+    assert before["semantic_basis_sha256"] != after["semantic_basis_sha256"]
+
+
+def test_formal_checkpoint_compatibility_passes_with_matching_basis(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {"ranking": [1, 2, 3]}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    formal_dir = tmp_path / "formal-run"
+    formal_dir.mkdir()
+    basis = o.formal_checkpoint_basis(intent, source)
+    (formal_dir / "formal_checkpoint_basis.json").write_text(
+        json.dumps(basis), encoding="utf-8"
+    )
+    comp = o.formal_checkpoint_compatibility(
+        intent,
+        {"run_dir": formal_dir},
+        source,
+    )
+    assert comp["status"] == "PASS"
+    assert comp["mismatches"] == {}
+
+
+def test_formal_checkpoint_compatibility_rejects_changed_static(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {"ranking": [1, 2, 3]}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    formal_dir = tmp_path / "formal-run"
+    formal_dir.mkdir()
+    basis = o.formal_checkpoint_basis(intent, source)
+    (formal_dir / "formal_checkpoint_basis.json").write_text(
+        json.dumps(basis), encoding="utf-8"
+    )
+
+    changed = json.loads(json.dumps(intent))
+    changed["static_prediction"] = {"ranking": [2, 1, 3]}
+    comp = o.formal_checkpoint_compatibility(
+        changed,
+        {"run_dir": formal_dir},
+        source,
+    )
+    assert comp["status"] == "INCOMPATIBLE"
+    assert "semantic_basis_sha256" in comp["mismatches"]
+
+
+def test_formal_checkpoint_without_basis_is_legacy_unbound(tmp_path):
+    intent = base_intent()
+    source = _source_resolved_for_basis(tmp_path, intent)
+    formal_dir = tmp_path / "formal-run"
+    formal_dir.mkdir()
+    comp = o.formal_checkpoint_compatibility(
+        intent,
+        {"run_dir": formal_dir},
+        source,
+    )
+    assert comp["status"] == "UNBOUND_LEGACY"
+    assert "formal_checkpoint_basis" in comp["mismatches"]
+
+
+@pytest.mark.parametrize(
+    "formal_status,resume_from",
+    [
+        ("UNBOUND_LEGACY", "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY"),
+        ("INCOMPATIBLE", "NEW_EXECUTION_ID_REQUIRED_FORMAL_BASIS"),
+    ],
+)
+def test_resume_plan_never_silently_reuses_unbound_or_changed_formal(
+    monkeypatch, formal_status, resume_from
+):
+    monkeypatch.setattr(
+        o,
+        "checkpoint_status",
+        lambda execution_id, intent=None: {
+            "execution_id": execution_id,
+            "source": {"status": "COMPLETE"},
+            "formal": {"status": formal_status},
+        },
+    )
+    plan = o.resume_plan("LOCAL-FNB-EXEC", base_intent())
+    assert plan["action"] == "FAIL_CLOSED"
+    assert plan["resume_from"] == resume_from
