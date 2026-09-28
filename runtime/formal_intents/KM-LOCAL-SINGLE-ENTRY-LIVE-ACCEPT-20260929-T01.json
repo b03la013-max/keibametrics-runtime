@@ -1,10 +1,10 @@
 {
   "family_id": "LOCAL",
   "execution_phase": "AUTO",
-  "temporal_mode": "FORMAL-PRE-RACE",
+  "temporal_mode": "POST-START-REPLAY",
   "race_id": "KM-LOCAL-SINGLE-ENTRY-LIVE-ACCEPT-20260929-T01",
   "prediction_cutoff": "2099-01-01T00:00:00+00:00",
-  "scheduled_post_at": "2099-01-01T01:00:00+00:00",
+  "scheduled_post_at": "2026-09-13T16:00:00+09:00",
   "required_indices": [
     "HPI-L",
     "CFIg-L",
@@ -103,13 +103,13 @@
     "venue": "OHI",
     "surface": "dirt",
     "distance": 1400,
-    "going": "good"
+    "going": "不良"
   },
   "environment": {
     "course_family": "KCH-SYNTHETIC-ACCEPTANCE",
     "surface": "dirt",
     "distance": 1400,
-    "going": "good",
+    "going": "不良",
     "field_size": 12,
     "gci_confidence": 80,
     "similar_condition_confidence": 80,
@@ -12710,7 +12710,13 @@
         "P3"
       ]
     },
-    "status": "FROZEN-SYNTHETIC-OFFICIAL-UNIVERSE-ACCEPTANCE"
+    "status": "FROZEN-SYNTHETIC-OFFICIAL-UNIVERSE-ACCEPTANCE / SOURCE-BOUND / POST-START-REPLAY",
+    "source_basis_receipt_sha256": "b8fdab2a192f7677076cf93866b8d6e0e67f42554ed01b225e6a8481fb1c12b3",
+    "source_basis_snapshot_sha256": "14d3b7a750a4c4137ae0e5f899d2ed807eb4c0a8247b1b7828fc32b359e57b47",
+    "current_state_basis": {
+      "track_condition": "不良",
+      "source": "SIGNED_SOURCE"
+    }
   },
   "role_registry": [
     {
@@ -12807,7 +12813,10 @@
   "resolved_current_authority_manifest": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R34",
   "acceptance_purpose": "SINGLE_ENTRY_SOURCE_TO_FORMAL_LIVE_ACCEPTANCE / NON-OOS / NO-PRODUCTION-POLICY-CHANGE",
   "require_full_numerical_authority": false,
-  "execution_attempt": 3,
-  "retry_reason": "FOLLOWUP_AFTER_EVIDENCE_ROUNDTRIP_LIFECYCLE_ALIGNMENT_PR94",
-  "retry_repair_sha": "c67c936a549172f0b7f6e2d06fbe80a0c87f3915"
+  "execution_attempt": 4,
+  "retry_reason": "CURRENT_STATE_REFORECAST_FROM_DURABLE_SIGNED_SOURCE",
+  "retry_repair_sha": "38d31aa07d428360b735ab5e853fd6cb6236f779",
+  "oos_eligible": false,
+  "temporal_classification": "POST-START-REPLAY / MECHANICAL-ACCEPTANCE / NOT-OOS",
+  "acceptance_source_cutoff_semantics": "SYNTHETIC-FUTURE-CUTOFF / MECHANICAL-ONLY / PRESERVED-FOR-SOURCE-CHECKPOINT-COMPATIBILITY"
 }
