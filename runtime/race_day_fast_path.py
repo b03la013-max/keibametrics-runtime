@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime
 import hashlib
 import json
 import os
@@ -112,15 +113,30 @@ class StageTimer:
 
     def report(self,scheduled_post_at: str|None=None) -> Dict[str,Any]:
         total=time.perf_counter()-self.started
+        remaining=None
+        if scheduled_post_at:
+            try:
+                post=datetime.datetime.fromisoformat(str(scheduled_post_at).replace("Z","+00:00"))
+                if post.tzinfo is None:
+                    post=post.replace(tzinfo=datetime.timezone.utc)
+                remaining=(post.astimezone(datetime.timezone.utc)-datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+            except Exception:
+                remaining=None
+        cls=("FAST_TARGET" if total<=TARGET_CRITICAL_PATH_SECONDS else
+             "WITHIN_HARD_SLO" if total<=HARD_SLO_SECONDS else "SLO_MISS")
         return {
             "profile":PROFILE_ID,
             "critical_path_seconds":round(total,6),
+            "latency_class":cls,
             "target_seconds":TARGET_CRITICAL_PATH_SECONDS,
             "hard_slo_seconds":HARD_SLO_SECONDS,
             "target_met":total<=TARGET_CRITICAL_PATH_SECONDS,
             "hard_slo_met":total<=HARD_SLO_SECONDS,
             "purchase_reserve_target_seconds":PURCHASE_RESERVE_TARGET_SECONDS,
+            "purchase_reserve_seconds":None if remaining is None else round(remaining,6),
+            "purchase_reserve_target_met":None if remaining is None else remaining>=PURCHASE_RESERVE_TARGET_SECONDS,
             "scheduled_post_at":scheduled_post_at,
+            "slo_policy":"DIAGNOSTIC_ONLY; NEVER BYPASS FORMAL GATES TO MEET LATENCY",
             "events":copy.deepcopy(self.events),
         }
 
@@ -149,9 +165,14 @@ def materialize_request_fast(
     # This function is intentionally behavior-preserving. It calls the canonical
     # Production materialize_runner implementation and caches only the derived
     # runner fields. Unrelated request/source fields are never restored from cache.
-    from local_evidence_to_base_production import (
-        materialize_runner, TERMINAL_STATUSES, REGISTRY_ID
-    )
+    try:
+        from local_evidence_to_base_production import (
+            materialize_runner, TERMINAL_STATUSES, REGISTRY_ID
+        )
+    except ModuleNotFoundError:
+        from runtime.local_evidence_to_base_production import (
+            materialize_runner, TERMINAL_STATUSES, REGISTRY_ID
+        )
 
     q=copy.deepcopy(req)
     vr=q.get("venue_formula_registry")
@@ -254,7 +275,10 @@ def materialize_request_fast(
     return q,report
 
 def materialization_equivalence(req: Dict[str,Any],required_indices: Iterable[str],cache_root: str|pathlib.Path=DEFAULT_CACHE_ROOT) -> Dict[str,Any]:
-    from local_evidence_to_base_production import materialize_request
+    try:
+        from local_evidence_to_base_production import materialize_request
+    except ModuleNotFoundError:
+        from runtime.local_evidence_to_base_production import materialize_request
     full=materialize_request(copy.deepcopy(req),list(required_indices))
     fast,report=materialize_request_fast(copy.deepcopy(req),list(required_indices),cache_root=cache_root)
     same=full==fast
