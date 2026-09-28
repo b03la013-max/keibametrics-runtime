@@ -1,9 +1,9 @@
 {
-  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R33-RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / R31-SCOPE-OWNERSHIP-ALIGNED / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R33",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R33",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R25.json",
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.5-20260928",
+  "status": "ACTIVATION-CANDIDATE / LIVE-VERIFY-REQUIRED / NON-PREDICTIVE / NON-NUMERICAL / R34-LOCAL-REV8-SOURCE-PARALLEL / RACE-DAY-FAST-PATH / SINGLE-RUNTIME-POINTER",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20260928-R34",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R34",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20260928_R26.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -33,8 +33,8 @@
   "families": {
     "LOCAL": {
       "external_endpoint": "https://witnessstrictimage-production.up.railway.app",
-      "runtime_profile": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE",
-      "runtime_git_revision": "d753d0cbca00f790351a56ff9f5c923290830d4f",
+      "runtime_profile": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+      "runtime_git_revision": "67d8d7e01aff5cdc6821963568931ce7dacf8bdd",
       "receipt_signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
       "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
       "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
@@ -70,7 +70,7 @@
       "active_bundle_sha256": {
         "runtime_app_sha256": "be44b5fa7012ae05c23192a1324195cf1d8e8c91cf2b8bf8ccd572589a489876",
         "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
-        "source_acquisition_sha256": "ed5a5437a521019e8fefa592225574a98984af0c25fe006d5e0bcde8f1edc96c",
+        "source_acquisition_sha256": "3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df",
         "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
         "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
         "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
@@ -79,7 +79,14 @@
         "sbo_public_shadow_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53"
       },
       "active_bundle_source": "LIVE_CANARY_36375332931 / 2026-09-28T03:51:30Z",
-      "candidate_runtime_code_activation": "EXPLICIT_GATEWAY_UPDATE_AND_LIVE_REDEPLOY_REQUIRED"
+      "candidate_runtime_code_activation": "EXPLICIT_GATEWAY_UPDATE_AND_LIVE_REDEPLOY_REQUIRED",
+      "source_parallel_execution": {
+        "profile": "KM-LOCAL-SOURCE-PARALLEL-ACTIVE-20260928-R1",
+        "default_workers": 6,
+        "max_workers": 12,
+        "manifest_order_restored_before_merge": true,
+        "required_source_fail_closed": true
+      }
     }
   },
   "railway_bootstrap": {
@@ -145,7 +152,7 @@
     ],
     "non_retryable_4xx_fail_closed": true
   },
-  "active_correctness_closure": "KM-LOCAL-EXECUTION-GATEWAY-RELIABILITY-CLOSURE-20260925-R1",
+  "active_correctness_closure": "KM-LOCAL-RUNTIME-REV8-SOURCE-PARALLEL-ACTIVATION-20260928-R1",
   "mechanical_acceptance": {
     "execution_id": "LOCAL-GATEWAY-DURABLE-SMOKE-20260925-R1",
     "source_run_id": "36131015302",
@@ -164,7 +171,7 @@
     "status": "SUCCESS",
     "healthcheck_http": 200
   },
-  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928",
+  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
   "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
   "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
   "authority_guard": "runtime/family_authority_guard.py",
@@ -191,5 +198,12 @@
     "implementation_hash_required": true,
     "cache_authority": false,
     "fallback": "CANONICAL_FULL_PATH"
+  },
+  "activation_state": {
+    "status": "PENDING_LIVE_RAILWAY_VERIFICATION",
+    "required_runtime_profile": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+    "required_runtime_git_revision": "67d8d7e01aff5cdc6821963568931ce7dacf8bdd",
+    "required_source_acquisition_sha256": "3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df",
+    "verified": false
   }
 }
