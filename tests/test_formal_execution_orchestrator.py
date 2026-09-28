@@ -426,3 +426,12 @@ def test_formal_semantic_basis_is_independent_of_derived_source_binding_fields(t
 
     assert a["semantic_basis_sha256"] == b["semantic_basis_sha256"]
     assert a["semantic_components"]["static_prediction_sha256"] == b["semantic_components"]["static_prediction_sha256"]
+
+
+def test_current_single_entry_profile_resolves_gateway_authority(monkeypatch):
+    monkeypatch.setattr(
+        o,
+        "load_gateway",
+        lambda: {"formal_single_entry": {"profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2"}},
+    )
+    assert o.current_single_entry_profile() == "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2"
