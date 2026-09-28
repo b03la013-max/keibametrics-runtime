@@ -1,0 +1,175 @@
+name: Race-Day Fast Path R1 Acceptance
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/race_day_fast_path.py"
+      - "runtime/race_day_fast_reflection.py"
+      - "runtime/non_jra_formal_runner.py"
+      - "runtime/local_result_from_signed_final.py"
+      - "tests/test_race_day_fast_path.py"
+      - "profiles/family_race_day_fast_path_20260928_R1.json"
+      - "profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R8.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R33.json"
+      - "profiles/venue_chat_routes_20260928_R33.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R12.json"
+      - "profiles/family_runtime_contracts_20260928_R25.json"
+      - "profiles/current_execution_gateway.json"
+      - ".github/workflows/km-family-non-jra-formal-runner.yml"
+      - ".github/workflows/km-race-day-fast-path-acceptance.yml"
+      - ".github/workflows/km-family-r31-authority-acceptance.yml"
+      - ".github/workflows/km-fnb-v21-acceptance.yml"
+      - "governance/KM-FAMILY-RACE-DAY-FAST-PATH-20260928-R1.md"
+      - "governance/KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8.md"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/race_day_fast_path.py"
+      - "runtime/race_day_fast_reflection.py"
+      - "runtime/non_jra_formal_runner.py"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R33.json"
+      - "profiles/current_execution_gateway.json"
+      - ".github/workflows/km-race-day-fast-path-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check -q pytest
+
+      - name: Compile Fast Path and formal runners
+        run: |
+          set -euo pipefail
+          python -m py_compile             runtime/race_day_fast_path.py             runtime/race_day_fast_reflection.py             runtime/non_jra_formal_runner.py             runtime/local_result_from_signed_final.py             runtime/family_authority_guard.py
+
+      - name: Exact Full/Fast equivalence and invalidation tests
+        run: python -m pytest -q tests/test_race_day_fast_path.py
+
+      - name: Family authority guard under R33
+        run: |
+          python runtime/family_authority_guard.py             --selftest             --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R33.json
+
+      - name: Verify R8/R33 synchronization and no quality-stage deletion
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def load(p):
+              return json.load(open(p,encoding="utf-8"))
+
+          r7=load("profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R7.json")
+          r8=load("profiles/KM_FAMILY_EXECUTION_PROFILE_20260928_R8.json")
+          fast=load("profiles/family_race_day_fast_path_20260928_R1.json")
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260928_R33.json")
+          route=load("profiles/venue_chat_routes_20260928_R33.json")
+          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260928_R12.json")
+          runtime=load("profiles/family_runtime_contracts_20260928_R25.json")
+          gateway=load("profiles/current_execution_gateway.json")
+
+          assert r8["profile_id"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8"
+          assert r8["predecessor"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R7"
+          assert r8["execution_sequence"]==r7["execution_sequence"]
+          assert len(r8["execution_sequence"])==len(r7["execution_sequence"])
+          assert r8["production_freeze"]["predictive_numerics"]=="UNCHANGED"
+          assert r8["production_freeze"]["krs_engine_physics"]=="UNCHANGED"
+          assert r8["production_freeze"]["mec_r3"]=="UNCHANGED"
+          assert r8["production_freeze"]["capital_policy"]=="UNCHANGED"
+
+          assert fast["profile_id"]=="KM-FAMILY-RACE-DAY-FAST-PATH-20260928-R1"
+          assert fast["family_scope"]==["LOCAL"]
+          assert fast["current_venue_priority"]==["FNB"]
+          assert fast["cache"]["authority"] is False
+          assert fast["fallback"]["mode"]=="CANONICAL_FULL_PATH"
+          assert fast["equivalence"]["required"] is True
+          assert fast["latency_slo"]["production_final_critical_path_target_seconds"]==300
+          assert fast["latency_slo"]["production_final_hard_slo_seconds"]==420
+          assert fast["latency_slo"]["purchase_reserve_target_seconds"]==600
+          assert fast["prewarm"]["future_race_depth"]==3
+
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R33"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260928-R32"
+          cc=ca["common_family_components"]
+          assert cc["execution_architecture"]==r8["profile_id"]
+          assert cc["race_day_fast_path"]==fast["profile_id"]
+          assert cc["venue_routing"]==route["profile_id"]
+          assert cc["family_runtime_contracts"]==runtime["profile_id"]
+          assert cc["local_suite_manifest"]==suite["manifest_id"]
+          assert cc["local_execution_gateway"]==gateway["profile_id"]
+          assert ca["venue_canon_current_decisions"]["FNB"]["production"]=="船橋競馬攻略条項 v2.1-FNB"
+
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260928-R33"
+          assert route["parent_profile"]==r8["profile_id"]
+          fnb=next(x for x in route["venues"] if x["venue_id"]=="FNB")
+          assert fnb["venue_canon"]=="船橋競馬攻略条項 v2.1-FNB"
+          assert "RACE-DAY-FAST-PATH" in fnb["route_status"]
+
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260928-R12"
+          assert suite["family_current_authority"]==ca["manifest_id"]
+          assert suite["execution_architecture"]==r8["profile_id"]
+          assert suite["venue_routing"]==route["profile_id"]
+          assert suite["runtime"]["contract"]==runtime["profile_id"]
+          assert suite["production_numeric_suite"]["numerical_change"] is False
+
+          assert runtime["profile_id"]=="KM-FAMILY-RUNTIME-CONTRACTS-20260928-R25"
+          assert runtime["runtime_bundle_change"] is False
+          assert runtime["production_behavior_change"] is False
+          assert runtime["production_numerical_change"] is False
+
+          assert gateway["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928"
+          assert gateway["predecessor"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.3-20260928"
+          assert gateway["parent_current_authority"]==ca["manifest_id"]
+          assert gateway["venue_routing"]==route["profile_id"]
+          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260928_R25.json"
+          assert gateway["race_day_fast_path"]["enabled"] is True
+          assert gateway["race_day_fast_path"]["fallback"]=="CANONICAL_FULL_PATH"
+          assert gateway["policy"]["race_day_fast_path_may_bypass_formal_gate"] is False
+          assert gateway["policy"]["cache_is_authority"] is False
+          assert gateway["policy"]["fast_path_equivalence_required"] is True
+
+          s=ca["supersession_declaration"]
+          for k in [
+              "predictive_model_formula_change","base_index_weight_change",
+              "derived_index_formula_change","krs_engine_physics_change",
+              "krs_production_authority_change","mec_r3_policy_change",
+              "capital_policy_change","candidate_to_production_promotion",
+              "production_numerical_change","automatic_promotion"
+          ]:
+              assert s[k] is False,k
+
+          formal=Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
+          assert "materialize_request_fast" in formal
+          assert "candidate_shadow_future" in formal
+          assert formal.index("candidate_shadow_future.result()") < formal.index("final_payload={")
+          assert "CANONICAL_FULL_PATH" in formal
+
+          wf=Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
+          assert "actions/cache/restore@v4" in wf
+          assert "actions/cache/save@v4" in wf
+          assert "prewarm-next" in wf
+
+          result=Path("runtime/local_result_from_signed_final.py").read_text(encoding="utf-8")
+          assert result.index("race_day_fast_reflection.json") < result.index("# LOCAL MEC-R4 forward OOS")
+
+          print(json.dumps({
+            "status":"PASS",
+            "current_authority":ca["manifest_id"],
+            "execution_architecture":r8["profile_id"],
+            "fast_path":fast["profile_id"],
+            "formal_stage_sequence":"IDENTICAL_TO_R7",
+            "production_numerical_change":"NONE",
+            "fnb_venue_canon":"v2.1-FNB",
+          },ensure_ascii=False,indent=2))
+          PY
