@@ -154,3 +154,30 @@ def test_lifecycle_transition_order():
             "execution_id": "E2", "race_id": "R2", "family_id": "LOCAL",
             "gateway_profile": "GW", "current_phase": None, "status": "CREATED", "phases": {}
         }, "FORMAL", "NO")
+
+
+def test_explicit_active_bundle_decouples_live_runtime_from_candidate_checkout(tmp_path):
+    gateway=_gateway(tmp_path)
+    cfg=gateway["families"]["LOCAL"]
+    frozen=repository_bundle(cfg,tmp_path)
+    cfg["active_bundle_sha256"]=dict(frozen)
+    # Candidate checkout changes after the active live bundle was frozen.
+    (tmp_path/"runtime"/"local_physical"/"source_acquisition.py").write_text(
+        "candidate-new-code",encoding="utf-8"
+    )
+    assert repository_bundle(cfg,tmp_path)==frozen
+    health=_health(gateway,tmp_path)
+    result=assess_runtime_health(health,gateway=gateway,repo_root=tmp_path)
+    assert result["status"]=="PASS"
+    assert result["bundle_mismatches"]=={}
+
+
+def test_explicit_active_bundle_mismatch_still_fails_closed(tmp_path):
+    gateway=_gateway(tmp_path)
+    cfg=gateway["families"]["LOCAL"]
+    cfg["active_bundle_sha256"]=repository_bundle(cfg,tmp_path)
+    health=_health(gateway,tmp_path)
+    health["source_acquisition_sha256"]="candidate-not-active"
+    result=assess_runtime_health(health,gateway=gateway,repo_root=tmp_path)
+    assert result["status"]=="FAIL"
+    assert "RUNTIME_BUNDLE_HASH_MISMATCH" in result["errors"]
