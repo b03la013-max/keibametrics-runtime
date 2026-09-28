@@ -49,8 +49,20 @@ def build_pre_result_shadow(req: Dict[str,Any], final_ticket: Dict[str,Any], mec
     shadow=build_mec_r4_shadow(basis,generated_at=generated_at)
     shadow["local_bridge_profile"]=PROFILE
     shadow["local_basis_sha256"]=basis["sha256"]
-    shadow["temporal_class"]="FORMAL-PRE-RACE-SHADOW"
-    shadow["oos_eligible_if_signed_final_bound"]=True
+    acceptance_only=bool(req.get("acceptance_only"))
+    request_oos_enabled=req.get("oos_eligible") is not False
+    shadow["acceptance_only"]=acceptance_only
+    shadow["request_oos_eligible"]=request_oos_enabled
+    shadow["temporal_class"]=(
+        "ACCEPTANCE-ONLY-PRE-RACE-SHADOW / NOT-OOS"
+        if acceptance_only else
+        ("FORMAL-PRE-RACE-SHADOW" if request_oos_enabled else "FORMAL-PRE-RACE-SHADOW / OOS-DISABLED")
+    )
+    shadow["oos_eligible_if_signed_final_bound"]=bool((not acceptance_only) and request_oos_enabled)
+    shadow["oos_exclusion_reason"]=(
+        "ACCEPTANCE_ONLY" if acceptance_only else
+        ("REQUEST_OOS_DISABLED" if not request_oos_enabled else None)
+    )
     shadow["production_effect"]="NONE"
     shadow["sha256"]=sha_obj({k:v for k,v in shadow.items() if k!="sha256"})
     return shadow,basis
