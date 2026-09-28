@@ -1,11 +1,14 @@
 import sys
+import time
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"runtime"/"local_physical"))
 
+import source_acquisition as source_acquisition_module
 from source_acquisition import (
     SOURCE_PROFILE,
+    acquire_sources,
     _merge_evidence,
     sha_obj,
     snapshot_from_bytes,
@@ -140,3 +143,83 @@ def test_optional_http_failure_is_recorded_but_not_formal_blocking():
     )
     assert snap["http_status"]==404
     assert errs==[]
+
+
+def test_parallel_acquisition_restores_manifest_order(monkeypatch):
+    def fake_fetch(spec, cutoff):
+        # Complete in reverse manifest order.
+        if spec["source_id"]=="slow":
+            time.sleep(0.04)
+        else:
+            time.sleep(0.005)
+        return ({
+            "schema":"KM-SOURCE-SNAPSHOT-v1",
+            "source_id":spec["source_id"],
+            "source_class":"TEST",
+            "authority":"TEST",
+            "authority_priority":50,
+            "official":False,
+            "required":False,
+            "requested_url":spec["url"],
+            "final_url":spec["url"],
+            "http_status":200,
+            "fetched_at":"2026-09-28T03:00:00+00:00",
+            "cutoff_relation":"PRE_CUTOFF",
+            "stale":False,
+            "extracted_evidence":{},
+            "extraction_errors":[],
+            "raw_sha256":spec["source_id"],
+            "snapshot_sha256":"snap-"+spec["source_id"],
+        },[])
+    monkeypatch.setattr(source_acquisition_module,"fetch_source",fake_fetch)
+    payload={
+        "race_id":"FNB-FAST-SOURCE-ORDER",
+        "prediction_cutoff":"2026-09-28T05:00:00+00:00",
+        "sources":[
+            {"source_id":"slow","url":"https://www.keiba.go.jp/","required":False},
+            {"source_id":"fast","url":"https://www.keiba.go.jp/","required":False},
+        ],
+    }
+    art,errs=acquire_sources(payload)
+    assert errs==[]
+    assert [x["source_id"] for x in art["sources"]]==["slow","fast"]
+    assert art["source_fetch_execution"]["mode"]=="PARALLEL"
+    assert art["source_fetch_execution"]["manifest_order_restored_before_merge"] is True
+    assert art["source_fetch_execution"]["prediction_authority"] is False
+
+
+def test_parallel_required_fetch_failure_remains_fail_closed(monkeypatch):
+    def fake_fetch(spec, cutoff):
+        if spec["source_id"]=="required-bad":
+            raise RuntimeError("boom")
+        return ({
+            "schema":"KM-SOURCE-SNAPSHOT-v1",
+            "source_id":spec["source_id"],
+            "source_class":"TEST",
+            "authority":"TEST",
+            "authority_priority":50,
+            "official":False,
+            "required":False,
+            "requested_url":spec["url"],
+            "final_url":spec["url"],
+            "http_status":200,
+            "fetched_at":"2026-09-28T03:00:00+00:00",
+            "cutoff_relation":"PRE_CUTOFF",
+            "stale":False,
+            "extracted_evidence":{},
+            "extraction_errors":[],
+            "raw_sha256":spec["source_id"],
+            "snapshot_sha256":"snap-"+spec["source_id"],
+        },[])
+    monkeypatch.setattr(source_acquisition_module,"fetch_source",fake_fetch)
+    art,errs=acquire_sources({
+        "race_id":"FNB-FAST-SOURCE-FAIL",
+        "prediction_cutoff":"2026-09-28T05:00:00+00:00",
+        "sources":[
+            {"source_id":"required-bad","url":"https://www.keiba.go.jp/","required":True},
+            {"source_id":"optional-good","url":"https://www.keiba.go.jp/","required":False},
+        ],
+    })
+    assert art["formal_ready"] is False
+    assert any(x.startswith("REQUIRED_SOURCE_FETCH_FAILED:required-bad") for x in errs)
+    assert any(x.startswith("MISSING_REQUIRED_SOURCES:required-bad") for x in errs)
