@@ -70,6 +70,34 @@ def _static_status_is_explicitly_frozen(static_prediction: Dict[str, Any]) -> bo
     return any(token == "FROZEN" or token.startswith("FROZEN-") for token in tokens)
 
 
+FINAL_PREDICTION_STATIC_FIELDS = (
+    "ranking",
+    "roles",
+    "alternative_winner",
+    "alternative_winners",
+    "partial_order",
+    "ties",
+    "unresolved",
+    "ineligible",
+    "uncertainty",
+    "evidence_conflict",
+    "market_conflict",
+    "venue_state",
+)
+
+
+def _derive_final_prediction_package_from_static(static_prediction: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key in FINAL_PREDICTION_STATIC_FIELDS:
+        if key in static_prediction:
+            out[key] = copy.deepcopy(static_prediction[key])
+    if not out.get("ranking"):
+        raise FormalOrchestrationError("FINAL_PREDICTION_PACKAGE_DERIVATION_REQUIRES_STATIC_RANKING")
+    out["source"] = "CANONICALIZED_FROM_FROZEN_STATIC_SINGLE_ENTRY"
+    out["production_prediction_change"] = False
+    return out
+
+
 def normalize_single_entry_intent(intent: Dict[str, Any]) -> tuple[Dict[str, Any], list[Dict[str, Any]]]:
     """Canonicalize redundant execution declarations without changing prediction semantics."""
     out = copy.deepcopy(intent)
@@ -91,6 +119,22 @@ def normalize_single_entry_intent(intent: Dict[str, Any]) -> tuple[Dict[str, Any
             "source": "static_prediction.status",
             "status": static_prediction.get("status"),
         })
+
+    final_package = out.get("final_prediction_package")
+    if final_package is None or final_package == {}:
+        out["final_prediction_package"] = _derive_final_prediction_package_from_static(
+            static_prediction
+        )
+        normalizations.append({
+            "code": "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC",
+            "source": "static_prediction",
+            "ranking_sha256": _sha_obj(static_prediction.get("ranking")),
+            "roles_sha256": _sha_obj(static_prediction.get("roles") or {}),
+            "production_prediction_change": False,
+        })
+    elif not isinstance(final_package, dict):
+        raise FormalOrchestrationError("FINAL_PREDICTION_PACKAGE_MUST_BE_OBJECT")
+
     return out, normalizations
 
 
