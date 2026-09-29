@@ -691,34 +691,6 @@ def orchestrate(
 
     execution_id = derive_execution_id(intent)
 
-    # One canonical lifecycle entry normalizes redundant execution declarations.
-    # A frozen semantic payload remains mandatory; normalization may only derive
-    # the duplicate boolean from an explicit FROZEN status already present in
-    # the result-blind Static artifact.
-    try:
-        intent, intent_normalizations = normalize_single_entry_intent(intent)
-    except FormalOrchestrationError as exc:
-        code = str(exc)
-        return {
-            "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
-            "profile": current_single_entry_profile(),
-            "status": "FAIL_CLOSED",
-            "family_id": family,
-            "race_id": intent.get("race_id"),
-            "execution_id": execution_id,
-            "gateway_profile": load_gateway().get("profile_id"),
-            "first_failed_phase": "BOOTSTRAP",
-            "first_failed_code": code,
-            "first_failed_class": "INTENT_COMPLETENESS",
-            "last_successful_stage": None,
-            "resume_from": "INTENT_COMPLETION",
-            "resume_hint": "SUBMIT_EXPLICIT_RESULT_BLIND_FROZEN_STATIC_SEMANTIC_PAYLOAD",
-            "production_prediction_change": False,
-            "production_numerical_change": False,
-            "krs_physics_change": False,
-            "mec_change": False,
-            "capital_change": False,
-        }
     try:
         validate_temporal_truthfulness(intent)
     except FormalOrchestrationError as exc:
@@ -766,6 +738,36 @@ def orchestrate(
             "mec_change": False,
             "capital_change": False,
         }
+    intent_normalizations: list[Dict[str, Any]] = []
+    if not plan_only:
+        # Normalize only after temporal/import bootstrap checks, and only before
+        # real external execution. Plan-only remains side-effect free and may
+        # inspect an incomplete future intent without weakening live safety.
+        try:
+            intent, intent_normalizations = normalize_single_entry_intent(intent)
+        except FormalOrchestrationError as exc:
+            code = str(exc)
+            return {
+                "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
+                "profile": current_single_entry_profile(),
+                "status": "FAIL_CLOSED",
+                "family_id": family,
+                "race_id": intent.get("race_id"),
+                "execution_id": execution_id,
+                "gateway_profile": load_gateway().get("profile_id"),
+                "first_failed_phase": "BOOTSTRAP",
+                "first_failed_code": code,
+                "first_failed_class": "INTENT_COMPLETENESS",
+                "last_successful_stage": None,
+                "resume_from": "INTENT_COMPLETION",
+                "resume_hint": "SUBMIT_EXPLICIT_RESULT_BLIND_FROZEN_STATIC_SEMANTIC_PAYLOAD",
+                "production_prediction_change": False,
+                "production_numerical_change": False,
+                "krs_physics_change": False,
+                "mec_change": False,
+                "capital_change": False,
+            }
+
     plan = resume_plan(execution_id, intent)
     report: Dict[str, Any] = {
         "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
