@@ -556,3 +556,62 @@ def test_r7_live_identity_regression_one_minute_official_shift_is_repairable(tmp
     reconciled, change = o.reconcile_formal_request_with_signed_source(intent, source)
     assert reconciled["scheduled_post_at"] == "2099-01-01T17:46:00+09:00"
     assert change["delta_seconds"] == 60.0
+
+
+
+def test_final_prediction_package_is_losslessly_derived_from_frozen_static():
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "roles": {"4": ["W"], "12": ["P2"], "3": ["P3"]},
+        "alternative_winner": ["12"],
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    normalized, changes = o.normalize_single_entry_intent(intent)
+    fpp = normalized["final_prediction_package"]
+    assert fpp["ranking"] == intent["static_prediction"]["ranking"]
+    assert fpp["roles"] == intent["static_prediction"]["roles"]
+    assert fpp["alternative_winner"] == ["12"]
+    assert fpp["source"] == "CANONICALIZED_FROM_FROZEN_STATIC_SINGLE_ENTRY"
+    assert fpp["production_prediction_change"] is False
+    assert any(
+        x["code"] == "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC"
+        for x in changes
+    )
+
+
+def test_explicit_final_prediction_package_is_preserved():
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "roles": {"4": ["W"], "12": ["P2"], "3": ["P3"]},
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    intent["static_prediction_frozen"] = True
+    intent["final_prediction_package"] = {
+        "ranking": ["4", "12", "3"],
+        "roles": {"4": ["W"], "12": ["P2"], "3": ["P3"]},
+        "source": "EXPLICIT",
+    }
+    normalized, changes = o.normalize_single_entry_intent(intent)
+    assert normalized["final_prediction_package"] == intent["final_prediction_package"]
+    assert not any(
+        x["code"] == "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC"
+        for x in changes
+    )
+
+
+def test_r6_live_intent_also_derives_final_prediction_package():
+    intent = json.loads(
+        Path("runtime/formal_intents/KM-LOCAL-FNB-20260929-R06-LIVE-R1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "final_prediction_package" not in intent
+    normalized, changes = o.normalize_single_entry_intent(intent)
+    assert normalized["final_prediction_package"]["ranking"] == intent["static_prediction"]["ranking"]
+    assert normalized["final_prediction_package"]["roles"] == intent["static_prediction"]["roles"]
+    assert any(
+        x["code"] == "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC"
+        for x in changes
+    )
