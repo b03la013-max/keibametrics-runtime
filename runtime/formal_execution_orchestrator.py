@@ -306,6 +306,7 @@ FORMAL_TRANSPORT_ONLY_FIELDS = {
     "source_snapshot_sha256",
     "single_entry_source_binding_required",
     "single_entry_source_checkpoint_manifest_sha256",
+    "source_authoritative_reconciliation",
 }
 
 
