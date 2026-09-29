@@ -555,6 +555,34 @@ def orchestrate(
         raise FormalOrchestrationError(f"UNSUPPORTED_EXECUTION_MODE:{mode}")
 
     execution_id = derive_execution_id(intent)
+
+    # A true single-entry request must already carry the frozen semantic payload
+    # needed for SOURCE -> FORMAL continuation.  Accepting a SOURCE-only shell
+    # under AUTO/FULL_LIFECYCLE creates a misleading partial execution that can
+    # never bind Static to the signed SOURCE.  Fail before external SOURCE work
+    # so venue/chat callers must submit a lifecycle-complete intent.
+    static_prediction = intent.get("static_prediction")
+    if not isinstance(static_prediction, dict) or not static_prediction:
+        return {
+            "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
+            "profile": current_single_entry_profile(),
+            "status": "FAIL_CLOSED",
+            "family_id": family,
+            "race_id": intent.get("race_id"),
+            "execution_id": execution_id,
+            "gateway_profile": load_gateway().get("profile_id"),
+            "first_failed_phase": "BOOTSTRAP",
+            "first_failed_code": "SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED",
+            "first_failed_class": "INTENT_COMPLETENESS",
+            "last_successful_stage": None,
+            "resume_from": "INTENT_COMPLETION",
+            "resume_hint": "SUBMIT_STATIC_ROLE_PAIR_THIRD_AND_FINAL_SEMANTIC_PAYLOAD_BEFORE_SINGLE_ENTRY",
+            "production_prediction_change": False,
+            "production_numerical_change": False,
+            "krs_physics_change": False,
+            "mec_change": False,
+            "capital_change": False,
+        }
     try:
         validate_temporal_truthfulness(intent)
     except FormalOrchestrationError as exc:
