@@ -435,3 +435,124 @@ def test_current_single_entry_profile_resolves_gateway_authority(monkeypatch):
         lambda: {"formal_single_entry": {"profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2"}},
     )
     assert o.current_single_entry_profile() == "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R2"
+
+
+
+def test_single_entry_canonicalizes_explicit_frozen_static_status():
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    normalized, changes = o.normalize_single_entry_intent(intent)
+    assert normalized["static_prediction_frozen"] is True
+    assert changes[0]["code"] == "STATIC_FREEZE_CANONICALIZED_FROM_STATIC_STATUS"
+    assert normalized["static_prediction"]["ranking"] == ["4", "12", "3"]
+
+
+def test_single_entry_does_not_invent_freeze_for_unfrozen_static():
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "status": "DRAFT / NOT-FROZEN",
+    }
+    with pytest.raises(o.FormalOrchestrationError, match="SINGLE_ENTRY_STATIC_PREDICTION_FREEZE_REQUIRED"):
+        o.normalize_single_entry_intent(intent)
+
+
+def test_single_entry_rejects_conflicting_explicit_false_freeze():
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    intent["static_prediction_frozen"] = False
+    with pytest.raises(o.FormalOrchestrationError, match="STATIC_PREDICTION_FREEZE_DECLARATION_CONFLICT"):
+        o.normalize_single_entry_intent(intent)
+
+
+def _signed_source_with_start_time(tmp_path, start_time):
+    run_dir = tmp_path / "source-official-time"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "source_receipt_envelope.json").write_text(
+        json.dumps({
+            "receipt_sha256": "signed-source-sha",
+            "receipt": {"family": "LOCAL", "race_id": "FNB-20260929-R01"},
+            "artifact": {
+                "race_id": "FNB-20260929-R01",
+                "source_snapshot_sha256": "source-snapshot-sha",
+                "source_race_context": {
+                    "venue_id": "FNB",
+                    "race_date": "2099-01-01",
+                    "race_no": 1,
+                },
+                "normalized_evidence": {
+                    "start_time": {"value": start_time}
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    return {
+        "run_dir": run_dir,
+        "latest": {"manifest_sha256": "manifest-sha"},
+        "manifest": {"run_id": "source-run"},
+    }
+
+
+def test_signed_source_small_post_time_shift_is_reconciled_before_formal(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    intent["scheduled_post_at"] = "2099-01-01T12:00:00+09:00"
+    intent["prediction_cutoff"] = "2099-01-01T11:50:00+09:00"
+    source = _signed_source_with_start_time(tmp_path, "12:01")
+    reconciled, change = o.reconcile_formal_request_with_signed_source(intent, source)
+    assert reconciled["scheduled_post_at"] == "2099-01-01T12:01:00+09:00"
+    assert change["code"] == "OFFICIAL_POST_TIME_REBASED_FROM_SIGNED_SOURCE"
+    assert change["delta_seconds"] == 60.0
+    assert change["prediction_change"] is False
+    assert change["numerical_change"] is False
+
+
+def test_signed_source_large_post_time_shift_still_fails_closed(tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": ["4", "12", "3"],
+        "status": "FROZEN-LIVE-PRE-RACE / RESULT-BLIND",
+    }
+    intent["scheduled_post_at"] = "2099-01-01T12:00:00+09:00"
+    source = _signed_source_with_start_time(tmp_path, "12:10")
+    with pytest.raises(o.FormalOrchestrationError, match="OFFICIAL_POST_TIME_MISMATCH"):
+        o.reconcile_formal_request_with_signed_source(intent, source)
+
+
+def test_r6_live_intent_regression_missing_duplicate_boolean_is_repaired():
+    intent = json.loads(
+        Path("runtime/formal_intents/KM-LOCAL-FNB-20260929-R06-LIVE-R1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert "static_prediction_frozen" not in intent
+    normalized, changes = o.normalize_single_entry_intent(intent)
+    assert normalized["static_prediction_frozen"] is True
+    assert any(x["code"] == "STATIC_FREEZE_CANONICALIZED_FROM_STATIC_STATUS" for x in changes)
+
+
+def test_r7_live_identity_regression_one_minute_official_shift_is_repairable(tmp_path):
+    intent = json.loads(
+        Path("runtime/formal_intents/KM-LOCAL-FNB-20260929-R07-LIVE-R1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    # Preserve the frozen semantic payload; exercise only the source-authoritative
+    # identity reconciliation that failed live at 17:45 vs official 17:46.
+    intent["race_date"] = "2099-01-01"
+    intent["scheduled_post_at"] = "2099-01-01T17:45:00+09:00"
+    intent["prediction_cutoff"] = "2099-01-01T17:39:00+09:00"
+    source = _signed_source_with_start_time(tmp_path, "17:46")
+    reconciled, change = o.reconcile_formal_request_with_signed_source(intent, source)
+    assert reconciled["scheduled_post_at"] == "2099-01-01T17:46:00+09:00"
+    assert change["delta_seconds"] == 60.0
