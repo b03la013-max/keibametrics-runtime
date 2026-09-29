@@ -224,6 +224,7 @@ if fam=="BAN":
 from local_evidence_to_base_production import materialize_request
 from local_index_provenance_builder import build as build_local_provenance
 from local_krs_input_builder_production import build as build_local_krs
+from local_krs_technical_proxy_from_source import build as build_source_derived_krs_proxy, LocalSourceDerivedProxyError
 from krs_prediction_utility import build_krs_prediction_utility
 from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MEC_PROFILE
 from capital_policy import resolve_capital_policy
@@ -998,6 +999,27 @@ req=build_local_provenance(req)
 assert req.get("index_provenance_hash"),"LOCAL_INDEX_PROVENANCE_HASH_MISSING"
 stage("INDEX_PROVENANCE",index_provenance_hash=req["index_provenance_hash"],
       row_count=len((req.get("index_provenance_ledger") or {}).get("rows") or []))
+
+# When Production numerical authority is not ready, do not require callers to
+# inject a synthetic acceptance bridge. Derive a provenance-bearing technical
+# proxy from this race's verified signed SOURCE. It remains explicitly
+# non-Production and cannot upgrade held Production indices to CALCULATED.
+if req.get("full_numerical_calculation") is not True and not isinstance(req.get("local_krs_bridge"),dict):
+    if req.get("degraded_execution") is not True:
+        fail_closed("LOCAL_KRS_BRIDGE_REQUIRED_WHEN_NUMERICAL_HELD",{
+            "full_numerical_calculation":False,
+            "degraded_execution":req.get("degraded_execution"),
+        })
+    try:
+        req["local_krs_bridge"]=build_source_derived_krs_proxy(req,source_artifact)
+    except LocalSourceDerivedProxyError as e:
+        fail_closed("SOURCE_DERIVED_KRS_PROXY_BUILD_FAILED",{"error":str(e)})
+    persist("source_derived_krs_technical_proxy.json",req["local_krs_bridge"])
+    stage("SOURCE_DERIVED_KRS_TECHNICAL_PROXY",
+          bridge_id=req["local_krs_bridge"].get("bridge_id"),
+          bridge_sha256=req["local_krs_bridge"].get("sha256"),
+          source_snapshot_sha256=req["local_krs_bridge"].get("source_snapshot_sha256"),
+          production_authority=False)
 
 req=build_local_krs(req)
 assert isinstance(req.get("krs_input_data"),dict),"LOCAL_KRS_INPUT_MISSING"
