@@ -59,6 +59,134 @@ def _norm_cutoff(value: Any) -> Optional[str]:
         return raw
 
 
+
+def _parse_iso(value: Any) -> dt.datetime:
+    return dt.datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+
+
+def _static_status_is_explicitly_frozen(static_prediction: Dict[str, Any]) -> bool:
+    status = str(static_prediction.get("status") or "").upper()
+    tokens = status.replace("/", " ").replace("|", " ").split()
+    return any(token == "FROZEN" or token.startswith("FROZEN-") for token in tokens)
+
+
+def normalize_single_entry_intent(intent: Dict[str, Any]) -> tuple[Dict[str, Any], list[Dict[str, Any]]]:
+    """Canonicalize redundant execution declarations without changing prediction semantics."""
+    out = copy.deepcopy(intent)
+    normalizations: list[Dict[str, Any]] = []
+    static_prediction = out.get("static_prediction")
+    if not isinstance(static_prediction, dict) or not static_prediction:
+        raise FormalOrchestrationError("SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED")
+
+    freeze_flag = out.get("static_prediction_frozen")
+    explicit_frozen = _static_status_is_explicitly_frozen(static_prediction)
+    if freeze_flag is False and explicit_frozen:
+        raise FormalOrchestrationError("STATIC_PREDICTION_FREEZE_DECLARATION_CONFLICT")
+    if freeze_flag is not True:
+        if not explicit_frozen:
+            raise FormalOrchestrationError("SINGLE_ENTRY_STATIC_PREDICTION_FREEZE_REQUIRED")
+        out["static_prediction_frozen"] = True
+        normalizations.append({
+            "code": "STATIC_FREEZE_CANONICALIZED_FROM_STATIC_STATUS",
+            "source": "static_prediction.status",
+            "status": static_prediction.get("status"),
+        })
+    return out, normalizations
+
+
+def _official_post_from_source(
+    request: Dict[str, Any],
+    source_resolved: Optional[Dict[str, Any]],
+) -> Optional[dt.datetime]:
+    if not source_resolved:
+        return None
+    env = _load_checkpoint_json(source_resolved, "source_receipt_envelope.json")
+    if not env:
+        return None
+    artifact = env.get("artifact") if isinstance(env.get("artifact"), dict) else {}
+    evidence = artifact.get("normalized_evidence") if isinstance(artifact.get("normalized_evidence"), dict) else {}
+    start = evidence.get("start_time") if isinstance(evidence.get("start_time"), dict) else {}
+    start_value = start.get("value")
+    if not start_value:
+        return None
+
+    race = request.get("race") if isinstance(request.get("race"), dict) else {}
+    source_context = artifact.get("source_race_context") if isinstance(artifact.get("source_race_context"), dict) else {}
+    race_date = (
+        request.get("race_date")
+        or race.get("race_date")
+        or race.get("date")
+        or source_context.get("race_date")
+    )
+    if not race_date:
+        return None
+    hh, mm = [int(x) for x in str(start_value).split(":")[:2]]
+    local_date = dt.date.fromisoformat(str(race_date).replace("/", "-"))
+    jst = dt.timezone(dt.timedelta(hours=9))
+    return dt.datetime.combine(local_date, dt.time(hh, mm), tzinfo=jst)
+
+
+def reconcile_formal_request_with_signed_source(
+    request: Dict[str, Any],
+    source_resolved: Optional[Dict[str, Any]],
+    *,
+    max_auto_rebase_seconds: int = 300,
+) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    """Make signed official SOURCE authoritative for small, temporally safe post-time corrections."""
+    out = copy.deepcopy(request)
+    if str(out.get("temporal_mode") or "FORMAL-PRE-RACE").upper() != "FORMAL-PRE-RACE":
+        return out, None
+
+    official_post = _official_post_from_source(out, source_resolved)
+    scheduled = out.get("scheduled_post_at")
+    if official_post is None or not scheduled:
+        return out, None
+
+    request_post = _parse_iso(scheduled).astimezone(official_post.tzinfo)
+    delta_signed = (official_post - request_post).total_seconds()
+    delta = abs(delta_signed)
+    if delta <= 30:
+        return out, None
+    if delta > max_auto_rebase_seconds:
+        raise FormalOrchestrationError(
+            "OFFICIAL_POST_TIME_MISMATCH:"
+            + json.dumps({
+                "official_post_at": official_post.isoformat(),
+                "request_scheduled_post_at": request_post.isoformat(),
+                "delta_seconds": delta,
+                "max_auto_rebase_seconds": max_auto_rebase_seconds,
+            }, ensure_ascii=False, sort_keys=True)
+        )
+
+    cutoff = out.get("prediction_cutoff")
+    if cutoff and _parse_iso(cutoff).astimezone(official_post.tzinfo) >= official_post:
+        raise FormalOrchestrationError("OFFICIAL_POST_TIME_REBASE_VIOLATES_PREDICTION_CUTOFF")
+
+    explicit_deadline = out.get("release_deadline_at")
+    if explicit_deadline:
+        old_deadline = _parse_iso(explicit_deadline).astimezone(official_post.tzinfo)
+        buffer_seconds = max(0, int((request_post - old_deadline).total_seconds()))
+    else:
+        buffer_seconds = int(out.get("release_buffer_seconds") or 120)
+    official_deadline = official_post - dt.timedelta(seconds=buffer_seconds)
+    now = dt.datetime.now(dt.timezone.utc)
+    if now >= official_deadline.astimezone(dt.timezone.utc):
+        raise FormalOrchestrationError("DEADLINE_INSUFFICIENT_AFTER_OFFICIAL_POST_REBASE")
+
+    out["scheduled_post_at"] = official_post.isoformat()
+    out["release_deadline_at"] = official_deadline.isoformat()
+    reconciliation = {
+        "code": "OFFICIAL_POST_TIME_REBASED_FROM_SIGNED_SOURCE",
+        "old_scheduled_post_at": request_post.isoformat(),
+        "official_scheduled_post_at": official_post.isoformat(),
+        "delta_seconds": delta_signed,
+        "release_deadline_at": official_deadline.isoformat(),
+        "prediction_change": False,
+        "numerical_change": False,
+    }
+    return out, reconciliation
+
+
 def source_checkpoint_basis(intent: Dict[str, Any]) -> Dict[str, Any]:
     race = intent.get("race") if isinstance(intent.get("race"), dict) else {}
     explicit_manifest = intent.get("required_source_manifest")
@@ -226,6 +354,12 @@ def bind_formal_request_to_source(request: Dict[str, Any]) -> Dict[str, Any]:
     binding = _source_binding_from_resolved(source_resolved)
     if not binding:
         raise FormalOrchestrationError("SINGLE_ENTRY_SOURCE_BINDING_MISSING")
+
+    out, source_reconciliation = reconcile_formal_request_with_signed_source(
+        out, source_resolved
+    )
+    if source_reconciliation is not None:
+        out["source_authoritative_reconciliation"] = source_reconciliation
 
     receipt_sha = str(binding.get("source_receipt_sha256") or "")
     snapshot_sha = str(binding.get("source_snapshot_sha256") or "")
@@ -556,13 +690,14 @@ def orchestrate(
 
     execution_id = derive_execution_id(intent)
 
-    # A true single-entry request must already carry the frozen semantic payload
-    # needed for SOURCE -> FORMAL continuation.  Accepting a SOURCE-only shell
-    # under AUTO/FULL_LIFECYCLE creates a misleading partial execution that can
-    # never bind Static to the signed SOURCE.  Fail before external SOURCE work
-    # so venue/chat callers must submit a lifecycle-complete intent.
-    static_prediction = intent.get("static_prediction")
-    if not isinstance(static_prediction, dict) or not static_prediction:
+    # One canonical lifecycle entry normalizes redundant execution declarations.
+    # A frozen semantic payload remains mandatory; normalization may only derive
+    # the duplicate boolean from an explicit FROZEN status already present in
+    # the result-blind Static artifact.
+    try:
+        intent, intent_normalizations = normalize_single_entry_intent(intent)
+    except FormalOrchestrationError as exc:
+        code = str(exc)
         return {
             "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
             "profile": current_single_entry_profile(),
@@ -572,11 +707,11 @@ def orchestrate(
             "execution_id": execution_id,
             "gateway_profile": load_gateway().get("profile_id"),
             "first_failed_phase": "BOOTSTRAP",
-            "first_failed_code": "SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED",
+            "first_failed_code": code,
             "first_failed_class": "INTENT_COMPLETENESS",
             "last_successful_stage": None,
             "resume_from": "INTENT_COMPLETION",
-            "resume_hint": "SUBMIT_STATIC_ROLE_PAIR_THIRD_AND_FINAL_SEMANTIC_PAYLOAD_BEFORE_SINGLE_ENTRY",
+            "resume_hint": "SUBMIT_EXPLICIT_RESULT_BLIND_FROZEN_STATIC_SEMANTIC_PAYLOAD",
             "production_prediction_change": False,
             "production_numerical_change": False,
             "krs_physics_change": False,
@@ -647,6 +782,7 @@ def orchestrate(
             "file_count": import_closure.get("file_count"),
         },
         "phases": [],
+        "intent_normalizations": intent_normalizations,
         "production_prediction_change": False,
         "production_numerical_change": False,
         "krs_physics_change": False,
@@ -718,6 +854,10 @@ def orchestrate(
         formal_req = bind_formal_request_to_source(
             build_phase_request(intent, "FORMAL")
         )
+        if formal_req.get("source_authoritative_reconciliation"):
+            report["source_authoritative_reconciliation"] = formal_req[
+                "source_authoritative_reconciliation"
+            ]
         report["phases"].append(run_phase(
             formal_req,
             "FORMAL",
