@@ -248,6 +248,11 @@ from local_mec_r5_shadow import (
     bind_shadow_to_trace as bind_local_mec_r5_shadow_to_trace,
     verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
 )
+from common_exact_continuity_shadow import (
+    build_shadow as build_common_exact_continuity_shadow,
+    bind_shadow_to_trace as bind_common_exact_continuity_shadow_to_trace,
+    verify_signed_final_binding as verify_common_exact_continuity_signed_final_binding,
+)
 
 rid=str(req.get("race_id") or "")
 assert rid,"RACE_ID_REQUIRED"
@@ -1207,6 +1212,8 @@ mec_r4_basis=None
 mec_r4_shadow_error=None
 local_mec_r5_shadow=None
 local_mec_r5_shadow_error=None
+common_exact_continuity_shadow=None
+common_exact_continuity_shadow_error=None
 common_mec_shadow_basis=None
 shadow_ticket=None
 if temporal_mode=="FORMAL-PRE-RACE":
@@ -1271,6 +1278,34 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+    # Common C2 Decision Policy shadow: freeze the exact-continuity audit
+    # candidate set before FINAL. This never alters Production tickets or Capital.
+    try:
+        common_exact_continuity_shadow=build_common_exact_continuity_shadow(
+            req,shadow_ticket,final_package,utility,
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            basis_sha256=common_mec_shadow_basis["sha256"],
+        )
+        trace=bind_common_exact_continuity_shadow_to_trace(
+            trace,common_exact_continuity_shadow
+        )
+        persist("common_exact_continuity_shadow_pre_result.json",common_exact_continuity_shadow)
+        stage("COMMON_EXACT_CONTINUITY_SHADOW_PRE_RESULT_FREEZE",
+              profile=common_exact_continuity_shadow.get("profile"),
+              candidate_id=common_exact_continuity_shadow.get("candidate_id"),
+              shadow_sha256=common_exact_continuity_shadow.get("sha256"),
+              basis_sha256=common_exact_continuity_shadow.get("source_basis_sha256"),
+              candidate_count=common_exact_continuity_shadow.get("candidate_count"),
+              production_effect="NONE")
+    except Exception as e:
+        common_exact_continuity_shadow_error=type(e).__name__+":"+str(e)
+        persist("common_exact_continuity_shadow_error.json",{
+            "status":"NON_BLOCKING_SHADOW_FAILURE",
+            "error":common_exact_continuity_shadow_error,
+            "production_effect":"NONE",
+            "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
 final_payload={
   "family_id":"LOCAL","race_id":rid,
   "source_receipt":source,
@@ -1330,6 +1365,23 @@ if local_mec_r5_shadow is not None:
         persist("local_mec_r5_shadow_binding_error.json",{
             "status":"INVALID_FOR_OOS_NON_BLOCKING",
             "error":local_mec_r5_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha
+        })
+
+common_exact_continuity_binding=None
+if common_exact_continuity_shadow is not None:
+    try:
+        common_exact_continuity_binding=verify_common_exact_continuity_signed_final_binding(
+            fin,common_exact_continuity_shadow
+        )
+        persist("common_exact_continuity_shadow_binding_attestation.json",
+                common_exact_continuity_binding)
+    except Exception as e:
+        common_exact_continuity_shadow_error=type(e).__name__+":"+str(e)
+        persist("common_exact_continuity_shadow_binding_error.json",{
+            "status":"INVALID_FOR_OOS_NON_BLOCKING",
+            "error":common_exact_continuity_shadow_error,
             "production_effect":"NONE",
             "final_receipt_sha256":final_sha
         })
@@ -1574,6 +1626,14 @@ print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
     "shadow_sha256":(local_mec_r5_shadow or {}).get("sha256"),
     "binding":local_mec_r5_binding,
     "error":local_mec_r5_shadow_error,
+    "production_effect":"NONE"
+  },
+  "common_exact_continuity_shadow":{
+    "status":("SIGNED_FINAL_BOUND_PRE_RESULT" if common_exact_continuity_binding else ("NOT_ELIGIBLE" if common_exact_continuity_shadow_error else "NOT_GENERATED")),
+    "shadow_sha256":(common_exact_continuity_shadow or {}).get("sha256"),
+    "candidate_count":(common_exact_continuity_shadow or {}).get("candidate_count"),
+    "binding":common_exact_continuity_binding,
+    "error":common_exact_continuity_shadow_error,
     "production_effect":"NONE"
   },
   "verified":True
