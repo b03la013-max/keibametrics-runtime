@@ -230,6 +230,7 @@ from minimum_efficient_coverage import (
     build_mec_plan,
     validate_mec_plan,
     canonicalize_role_pair_third_closure,
+    MECError,
     MEC_PROFILE,
 )
 from capital_policy import resolve_capital_policy
@@ -1084,7 +1085,10 @@ deadline_guard("AFTER_KRS")
 # Common Role→Pair→Third closure is a mandatory decision-graph stage.
 # It terminalizes every active W×P2 pair and every material Pair×global-P3
 # relation without promoting missing records into material PURCHASE signals.
-req,role_pair_third_closure=canonicalize_role_pair_third_closure(req)
+try:
+    req,role_pair_third_closure=canonicalize_role_pair_third_closure(req)
+except MECError as e:
+    fail_closed("ROLE_PAIR_THIRD_CLOSURE_FAILED",{"error":str(e)})
 persist("role_pair_third_closure.json",role_pair_third_closure)
 stage(
     "FINAL_ROLE_PAIR_THIRD",
