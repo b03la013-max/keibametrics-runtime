@@ -616,7 +616,10 @@ def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None
 
 def resume_plan(execution_id: str, intent: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cp = checkpoint_status(execution_id, intent)
-    if cp["formal"]["status"] == "COMPLETE":
+    if cp["formal"]["status"] == "CORRUPT":
+        action = "FAIL_CLOSED"
+        resume_from = "FORMAL_CHECKPOINT_REPAIR_REQUIRED"
+    elif cp["formal"]["status"] == "COMPLETE":
         action = "RETURN_IMMUTABLE_FORMAL"
         resume_from = "COMPLETE"
     elif cp["formal"]["status"] == "UNBOUND_LEGACY":
@@ -668,6 +671,7 @@ def run_phase(
     github_sha: Optional[str],
     runtime_out: pathlib.Path,
     tmp_root: pathlib.Path,
+    checkpoint_intent: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     execution_id = str(request["execution_id"])
     request_path = tmp_root / execution_id / f"{phase.lower()}_request.json"
@@ -698,7 +702,7 @@ def run_phase(
         source_resolved = resolve_phase(execution_id, "SOURCE")
         _write(
             phase_copy / "formal_checkpoint_basis.json",
-            formal_checkpoint_basis(request, source_resolved),
+            formal_checkpoint_basis(checkpoint_intent if checkpoint_intent is not None else request, source_resolved),
         )
     persisted = persist_phase(
         execution_id,
@@ -841,7 +845,12 @@ def orchestrate(
 
     if plan["action"] == "FAIL_CLOSED":
         report["status"] = "FAIL_CLOSED"
-        if plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY":
+        if plan["resume_from"] == "FORMAL_CHECKPOINT_REPAIR_REQUIRED":
+            report["first_failed_phase"] = "FORMAL"
+            report["first_failed_code"] = "FORMAL_CHECKPOINT_CORRUPT"
+            report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "RESTORE_VERIFIED_IMMUTABLE_FORMAL_CHECKPOINT"
+        elif plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY":
             report["first_failed_phase"] = "FORMAL"
             report["first_failed_code"] = "FORMAL_CHECKPOINT_LEGACY_UNBOUND"
             report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
@@ -912,6 +921,7 @@ def orchestrate(
             github_sha=github_sha,
             runtime_out=runtime_out,
             tmp_root=tmp_root,
+            checkpoint_intent=intent,
         ))
         report["status"] = "FULL_LIFECYCLE_EXECUTION_PASS"
         report["resume_from"] = "COMPLETE"
