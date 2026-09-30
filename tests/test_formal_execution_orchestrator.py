@@ -615,3 +615,37 @@ def test_r6_live_intent_also_derives_final_prediction_package():
         x["code"] == "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC"
         for x in changes
     )
+
+
+@pytest.mark.parametrize('source_status', ['COMPLETE', 'MISSING', 'CORRUPT'])
+def test_corrupt_formal_never_reruns_or_overwrites(monkeypatch, source_status):
+    monkeypatch.setattr(o, 'checkpoint_status', lambda *args: {
+        'source': {'status': source_status}, 'formal': {'status': 'CORRUPT'}})
+    plan = o.resume_plan('E')
+    assert plan['action'] == 'FAIL_CLOSED'
+    assert plan['resume_from'] == 'FORMAL_CHECKPOINT_REPAIR_REQUIRED'
+
+
+def test_formal_persistence_uses_original_intent_after_transport_and_time_rebase(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    intent = base_intent()
+    intent['static_prediction'] = {'ranking': ['1', '2', '3'], 'status': 'FROZEN'}
+    source = _source_resolved_for_basis(tmp_path, intent)
+    request = o.build_phase_request(intent, 'FORMAL')
+    request['scheduled_post_at'] = '2099-01-01T12:01:00+09:00'
+    request['release_deadline_at'] = '2099-01-01T11:59:00+09:00'
+    request['source_authoritative_reconciliation'] = {'code': 'OFFICIAL_POST_TIME_REBASED_FROM_SIGNED_SOURCE'}
+    monkeypatch.setattr(o, 'ROOT', tmp_path)
+    monkeypatch.setattr(o, 'resolve_phase', lambda *args: source)
+    monkeypatch.setattr(o.subprocess, 'run', lambda *args, **kw: SimpleNamespace(returncode=0, stdout='', stderr=''))
+    captured = {}
+    def persist(execution_id, phase, run_id, source_dir, **kw):
+        captured.update(json.loads((source_dir / 'formal_checkpoint_basis.json').read_text()))
+        return {'latest': {'manifest_sha256': 'manifest'}, 'manifest': {'run_id': run_id}}
+    monkeypatch.setattr(o, 'persist_phase', persist)
+    o.run_phase(request, 'FORMAL', run_id='test', github_sha='test', runtime_out=tmp_path/'out', tmp_root=tmp_path/'tmp', checkpoint_intent=intent)
+    expected = o.formal_checkpoint_basis(intent, source)
+    assert captured == expected
+    changed = json.loads(json.dumps(intent))
+    changed['static_prediction']['ranking'] = ['2', '1', '3']
+    assert o.formal_checkpoint_basis(changed, source)['semantic_basis_sha256'] != captured['semantic_basis_sha256']
