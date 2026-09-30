@@ -212,6 +212,8 @@ def bind_shadow_to_trace(trace:Dict[str,Any], shadow:Dict[str,Any])->Dict[str,An
     return out
 
 def verify_signed_final_binding(final_envelope:Dict[str,Any], shadow:Dict[str,Any])->Dict[str,Any]:
+    if shadow.get("sha256") != _sha({k:v for k,v in shadow.items() if k!="sha256"}):
+        raise AssertionError("COMMON_EXACT_SHADOW_CONTENT_HASH_MISMATCH")
     rec=final_envelope.get("receipt") or {}
     art=final_envelope.get("artifact") or {}
     if rec.get("phase")!="FINAL" or rec.get("status")!="PASS":
@@ -240,6 +242,12 @@ def verify_signed_final_binding(final_envelope:Dict[str,Any], shadow:Dict[str,An
 def settle_shadow(shadow:Dict[str,Any], finish_order:list[int], payouts:Dict[str,Any],
                   production_investment:int, production_return:int,
                   signed_final_binding_valid:bool)->Dict[str,Any]:
+    if shadow.get("sha256") != _sha({k:v for k,v in shadow.items() if k!="sha256"}):
+        raise AssertionError("COMMON_EXACT_SHADOW_CONTENT_HASH_MISMATCH")
+    if len(finish_order)<3 or len(set(finish_order[:3]))!=3:
+        raise AssertionError("COMMON_EXACT_RESULT_TOP3_INVALID")
+    if "TRIFECTA" not in (payouts or {}) or int(payouts["TRIFECTA"])<=0:
+        raise AssertionError("COMMON_EXACT_OFFICIAL_PAYOUT_REQUIRED")
     top3=[int(x) for x in finish_order[:3]]
     exact=">".join(str(x) for x in top3)
     payout100=int((payouts or {}).get("TRIFECTA") or 0)
@@ -268,6 +276,7 @@ def settle_shadow(shadow:Dict[str,Any], finish_order:list[int], payouts:Dict[str
         "status":("FORWARD-OOS-SETTLEMENT / SIGNED-FINAL-BOUND" if eligible else "NOT-OOS-SETTLEMENT"),
         "oos_eligible":eligible,
         "signed_final_binding_valid":bool(signed_final_binding_valid),
+        "shadow_sha256":shadow.get("sha256"),
         "official_exact":top3,
         "official_exact_in_candidate_set":exact in set(shadow.get("arms",{}).get("CONTINUITY_ALL") or []),
         "production_investment":int(production_investment),

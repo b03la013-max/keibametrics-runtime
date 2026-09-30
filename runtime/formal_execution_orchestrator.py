@@ -616,7 +616,10 @@ def checkpoint_status(execution_id: str, intent: Optional[Dict[str, Any]] = None
 
 def resume_plan(execution_id: str, intent: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cp = checkpoint_status(execution_id, intent)
-    if cp["formal"]["status"] == "COMPLETE":
+    if cp["formal"]["status"] == "CORRUPT":
+        action = "FAIL_CLOSED"
+        resume_from = "FORMAL_CHECKPOINT_REPAIR_REQUIRED"
+    elif cp["formal"]["status"] == "COMPLETE":
         action = "RETURN_IMMUTABLE_FORMAL"
         resume_from = "COMPLETE"
     elif cp["formal"]["status"] == "UNBOUND_LEGACY":
@@ -668,6 +671,7 @@ def run_phase(
     github_sha: Optional[str],
     runtime_out: pathlib.Path,
     tmp_root: pathlib.Path,
+    checkpoint_intent: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     execution_id = str(request["execution_id"])
     request_path = tmp_root / execution_id / f"{phase.lower()}_request.json"
@@ -677,7 +681,9 @@ def run_phase(
     env = os.environ.copy()
     env["REQUEST_FILE"] = str(request_path.relative_to(ROOT))
     proc = subprocess.run(
-        [sys.executable, "-m", "runtime.non_jra_formal_runner"],
+        ([sys.executable, "-m", "runtime.local_result_from_signed_final", str(request_path)]
+         if str(phase).upper() == "RESULT" else
+         [sys.executable, "-m", "runtime.non_jra_formal_runner"]),
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -698,8 +704,10 @@ def run_phase(
         source_resolved = resolve_phase(execution_id, "SOURCE")
         _write(
             phase_copy / "formal_checkpoint_basis.json",
-            formal_checkpoint_basis(request, source_resolved),
+            formal_checkpoint_basis(checkpoint_intent if checkpoint_intent is not None else request, source_resolved),
         )
+    if str(phase).upper() == "RESULT":
+        _write(phase_copy / "result_checkpoint_basis.json", {"request_sha256": _sha_obj(request)})
     persisted = persist_phase(
         execution_id,
         phase,
@@ -728,6 +736,52 @@ def orchestrate(
     family = str(intent.get("family_id") or "").upper()
     if family not in SUPPORTED_FAMILIES:
         raise FormalOrchestrationError(f"SINGLE_ENTRY_FAMILY_NOT_SUPPORTED:{family}")
+
+    # RESULT is a later invocation of the same entry, never an attempt to
+    # reacquire SOURCE or recompute a historical prediction.
+    phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
+    if phase in {"SOURCE", "SOURCE_ACQUIRE"}:
+        execution_id = derive_execution_id(intent)
+        saved = resolve_phase(execution_id, "SOURCE")
+        if saved is not None:
+            compatibility = source_checkpoint_compatibility(intent, saved)
+            if compatibility.get("status") != "PASS":
+                raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE:" + json.dumps(compatibility))
+            return {"status": "ALREADY_COMPLETE", "execution_id": execution_id,
+                    "phase": "SOURCE", "next_stage": "PREDICTION_STATIC_FREEZE"}
+        if plan_only:
+            return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"],
+                    "next_stage": "PREDICTION_STATIC_FREEZE"}
+        acquired = run_phase(build_phase_request(intent, "SOURCE"), "SOURCE", run_id=run_id,
+                             github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
+        return {"status": "AWAITING_FROZEN_PREDICTION", "execution_id": execution_id,
+                "phases": [acquired], "next_stage": "PREDICTION_STATIC_FREEZE",
+                "prediction_calculated": False}
+
+    if phase in {"RESULT", "POST_RACE", "POST-RACE", "SETTLEMENT"}:
+        execution_id = derive_execution_id(intent)
+        request = copy.deepcopy(intent)
+        request["execution_id"] = execution_id
+        formal = resolve_phase(execution_id, "FORMAL")
+        if formal is None:
+            raise FormalOrchestrationError("RESULT_REQUIRES_EXISTING_FORMAL_CHECKPOINT")
+        # Pin the canonical FINAL: compatibility artifact overrides belong to
+        # the legacy RESULT entry, not this stable-execution lifecycle.
+        if request.get("source_run_id") or request.get("artifact_name"):
+            raise FormalOrchestrationError("RESULT_EXPLICIT_ARTIFACT_REQUIRES_COMPATIBILITY_ENTRY")
+        previous = resolve_phase(execution_id, "RESULT")
+        if previous is not None:
+            basis = _load_checkpoint_json(previous, "result_checkpoint_basis.json")
+            if basis != {"request_sha256": _sha_obj(request)}:
+                raise FormalOrchestrationError("RESULT_CHECKPOINT_REQUEST_MISMATCH_REQUIRES_EXPLICIT_REVISION")
+            return {"status": "ALREADY_COMPLETE", "execution_id": execution_id, "phase": "RESULT"}
+        if plan_only:
+            return {"status": "PLANNED", "execution_id": execution_id,
+                    "phases": ["RESULT"], "prediction_reexecution": False}
+        result = run_phase(request, "RESULT", run_id=run_id, github_sha=github_sha,
+                           runtime_out=runtime_out, tmp_root=tmp_root)
+        return {"status": "FULL_LIFECYCLE_EXECUTION_PASS", "execution_id": execution_id,
+                "phases": [result], "prediction_reexecution": False}
 
     mode = str(intent.get("execution_mode") or "AUTO").upper()
     if mode not in {"AUTO", "FULL_LIFECYCLE", "FORMAL_SINGLE_ENTRY"}:
@@ -841,7 +895,12 @@ def orchestrate(
 
     if plan["action"] == "FAIL_CLOSED":
         report["status"] = "FAIL_CLOSED"
-        if plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY":
+        if plan["resume_from"] == "FORMAL_CHECKPOINT_REPAIR_REQUIRED":
+            report["first_failed_phase"] = "FORMAL"
+            report["first_failed_code"] = "FORMAL_CHECKPOINT_CORRUPT"
+            report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
+            report["resume_hint"] = "RESTORE_VERIFIED_IMMUTABLE_FORMAL_CHECKPOINT"
+        elif plan["resume_from"] == "NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY":
             report["first_failed_phase"] = "FORMAL"
             report["first_failed_code"] = "FORMAL_CHECKPOINT_LEGACY_UNBOUND"
             report["first_failed_class"] = "FORMAL_CHECKPOINT_INTEGRITY"
@@ -912,6 +971,7 @@ def orchestrate(
             github_sha=github_sha,
             runtime_out=runtime_out,
             tmp_root=tmp_root,
+            checkpoint_intent=intent,
         ))
         report["status"] = "FULL_LIFECYCLE_EXECUTION_PASS"
         report["resume_from"] = "COMPLETE"
@@ -944,10 +1004,13 @@ def main() -> int:
     ap.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID") or "manual")
     ap.add_argument("--github-sha", default=os.environ.get("GITHUB_SHA"))
     ap.add_argument("--plan-only", action="store_true")
+    ap.add_argument("--phase", choices=["SOURCE", "RESULT"])
     ap.add_argument("--output", default=str(DEFAULT_RUNTIME_OUT / "orchestration_report.json"))
     args = ap.parse_args()
 
     intent = _load(args.intent)
+    if args.phase:
+        intent["execution_phase"] = args.phase
     runtime_out = DEFAULT_RUNTIME_OUT
     runtime_out.mkdir(parents=True, exist_ok=True)
     report = orchestrate(
@@ -959,7 +1022,7 @@ def main() -> int:
     )
     _write(pathlib.Path(args.output), report)
     print("KM_FORMAL_SINGLE_ENTRY_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    return 0 if report.get("status") in {"PLANNED", "ALREADY_COMPLETE", "FULL_LIFECYCLE_EXECUTION_PASS"} else 2
+    return 0 if report.get("status") in {"PLANNED", "ALREADY_COMPLETE", "FULL_LIFECYCLE_EXECUTION_PASS", "AWAITING_FROZEN_PREDICTION"} else 2
 
 
 if __name__ == "__main__":

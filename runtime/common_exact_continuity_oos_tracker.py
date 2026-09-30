@@ -49,6 +49,14 @@ def build_status():
                 if not os.path.exists(sp) or not os.path.exists(lp):
                     errors.append({"race_id":rid,"reason":"SHADOW_OR_LINEAGE_MISSING"});continue
                 sh=_load(sp);line=_load(lp)
+                if any(obj.get("sha256") != _sha({k:v for k,v in obj.items() if k!="sha256"})
+                       for obj in (sh,line,res)):
+                    errors.append({"race_id":rid,"reason":"CONTENT_HASH_MISMATCH"});continue
+                if any(str(obj.get("race_id") or "")!=rid for obj in (sh,line,res)):
+                    errors.append({"race_id":rid,"reason":"RACE_ID_MISMATCH"});continue
+                if res.get("shadow_sha256")!=sh.get("sha256"):
+                    errors.append({"race_id":rid,"reason":"SETTLEMENT_SHADOW_MISMATCH"});continue
+
                 if sh.get("profile")!=CANDIDATE_PROFILE or sh.get("candidate_id")!=CANDIDATE_ID:continue
                 if sh.get("production_effect")!="NONE" or line.get("production_effect")!="NONE":
                     errors.append({"race_id":rid,"reason":"PRODUCTION_EFFECT_NOT_NONE"});continue

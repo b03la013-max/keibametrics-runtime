@@ -7,6 +7,9 @@ import json
 import pathlib
 import re
 import shutil
+import tempfile
+import os
+import fcntl
 from typing import Any, Dict, Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -46,18 +49,56 @@ def persist_phase(
     src = pathlib.Path(source_dir)
     if not src.exists() or not src.is_dir():
         raise ExecutionStoreError(f"EXECUTION_STORE_SOURCE_DIR_MISSING:{src}")
-    files = sorted(p for p in src.iterdir() if p.is_file() and p.suffix == ".json")
+    files = sorted(p for p in src.iterdir() if p.is_file() and p.suffix == ".json" and p.name != "manifest.json")
     if not files:
         raise ExecutionStoreError("EXECUTION_STORE_NO_JSON_FILES")
 
     proot = phase_root(execution_id, phase, root)
     run_key = _safe(str(run_id))
-    dest = proot / "runs" / run_key
-    dest.mkdir(parents=True, exist_ok=True)
+    runs = proot / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    # Serialize pointer publication; a successful run is never overwritten.
+    with (proot / ".write.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _persist_locked(execution_id, phase, run_key, files, proot, runs,
+                               root or DEFAULT_ROOT, github_sha)
+
+
+def _persist_locked(execution_id, phase, run_key, files, proot, runs, root, github_sha):
+    dest = runs / run_key
+    if dest.exists():
+        try:
+            manifest = json.loads((dest / "manifest.json").read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict):
+                raise ExecutionStoreError("EXECUTION_STORE_EXISTING_RUN_INVALID")
+            incoming = {p.name: {"sha256": _sha256(p), "bytes": p.stat().st_size} for p in files}
+            if incoming != manifest.get("files") or any(
+                not (dest / p.name).is_file() or _sha256(dest / p.name) != incoming[p.name]["sha256"]
+                for p in files
+            ) or manifest.get("github_sha") != github_sha:
+                raise ExecutionStoreError("EXECUTION_STORE_IMMUTABLE_RUN_CONFLICT")
+            latest = resolve_phase(execution_id, phase, root=root)
+            if latest is None:
+                raise ExecutionStoreError("EXECUTION_STORE_POINTER_MISSING_FOR_EXISTING_RUN")
+            # A retry of an older run must not roll LATEST backwards.
+            return {"manifest": manifest, "latest": latest["latest"], "path": str(dest)}
+        except (OSError, ValueError, TypeError) as exc:
+            if isinstance(exc, ExecutionStoreError):
+                raise
+            raise ExecutionStoreError("EXECUTION_STORE_EXISTING_RUN_INVALID") from exc
+
+    staging = pathlib.Path(tempfile.mkdtemp(prefix=".pending-", dir=runs))
+    try:
+        return _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _publish_run(execution_id, phase, run_key, files, proot, dest, staging, root, github_sha):
 
     inventory = {}
     for p in files:
-        target = dest / p.name
+        target = staging / p.name
         shutil.copy2(p, target)
         inventory[p.name] = {"sha256": _sha256(target), "bytes": target.stat().st_size}
 
@@ -70,7 +111,7 @@ def persist_phase(
         "stored_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "files": inventory,
     }
-    manifest_path = dest / "manifest.json"
+    manifest_path = staging / "manifest.json"
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2),
         encoding="utf-8",
@@ -86,15 +127,20 @@ def persist_phase(
         "execution_id": manifest["execution_id"],
         "phase": manifest["phase"],
         "run_id": run_key,
-        "run_path": str(dest.relative_to(root or DEFAULT_ROOT)),
+        "run_path": str(dest.relative_to(root)),
         "manifest_sha256": _sha256(manifest_path),
         "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
-    proot.mkdir(parents=True, exist_ok=True)
-    (proot / "LATEST.json").write_text(
-        json.dumps(latest, ensure_ascii=False, sort_keys=True, indent=2),
-        encoding="utf-8",
-    )
+    # Publish complete bytes before atomically changing the pointer.
+    os.rename(staging, dest)
+    fd, pointer = tempfile.mkstemp(prefix=".LATEST-", dir=proot)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(latest, fh, ensure_ascii=False, sort_keys=True, indent=2)
+        os.replace(pointer, proot / "LATEST.json")
+    finally:
+        if os.path.exists(pointer):
+            os.unlink(pointer)
     return {"manifest": manifest, "latest": latest, "path": str(dest)}
 
 
@@ -109,21 +155,41 @@ def resolve_phase(
     latest_path = proot / "LATEST.json"
     if not latest_path.exists():
         return None
-    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    try:
+        latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ExecutionStoreError("EXECUTION_STORE_POINTER_INVALID") from exc
+    if not isinstance(latest, dict):
+        raise ExecutionStoreError("EXECUTION_STORE_POINTER_INVALID")
     run_path = latest.get("run_path")
     if not run_path:
         raise ExecutionStoreError("EXECUTION_STORE_LATEST_RUN_PATH_MISSING")
     run_dir = base / str(run_path)
+    expected_dir = proot / "runs" / _safe(str(latest.get("run_id") or ""))
+    if run_dir.resolve() != expected_dir.resolve() or not run_dir.resolve().is_relative_to(proot.resolve()):
+        raise ExecutionStoreError("EXECUTION_STORE_RUN_PATH_MISMATCH")
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
         raise ExecutionStoreError("EXECUTION_STORE_MANIFEST_MISSING")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ExecutionStoreError("EXECUTION_STORE_MANIFEST_INVALID") from exc
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict) or not manifest["files"]:
+        raise ExecutionStoreError("EXECUTION_STORE_MANIFEST_INVALID")
+    for key, value in (("execution_id", _safe(execution_id)), ("phase", _safe(str(phase).upper())), ("run_id", latest.get("run_id"))):
+        if manifest.get(key) != value or latest.get(key) != value:
+            raise ExecutionStoreError("EXECUTION_STORE_IDENTITY_MISMATCH:" + key)
     expected = str(latest.get("manifest_sha256") or "")
     actual = _sha256(manifest_path)
-    if expected and expected != actual:
+    if not expected or expected != actual:
         raise ExecutionStoreError("EXECUTION_STORE_MANIFEST_HASH_MISMATCH")
     for name, meta in (manifest.get("files") or {}).items():
+        if not isinstance(meta, dict):
+            raise ExecutionStoreError("EXECUTION_STORE_FILE_METADATA_INVALID")
         p = run_dir / name
+        if pathlib.Path(name).name != name or not p.resolve().is_relative_to(run_dir.resolve()):
+            raise ExecutionStoreError("EXECUTION_STORE_FILE_PATH_INVALID")
         if not p.exists() or _sha256(p) != str(meta.get("sha256") or ""):
             raise ExecutionStoreError(f"EXECUTION_STORE_FILE_HASH_MISMATCH:{name}")
     return {"latest": latest, "manifest": manifest, "run_dir": run_dir}
@@ -141,9 +207,9 @@ def materialize_phase(
         return None
     dest = pathlib.Path(destination)
     dest.mkdir(parents=True, exist_ok=True)
-    for p in resolved["run_dir"].iterdir():
-        if p.is_file() and p.name != "manifest.json":
-            shutil.copy2(p, dest / p.name)
+    # Only materialize bytes bound by the verified inventory, never stray files.
+    for name in resolved["manifest"]["files"]:
+        shutil.copy2(resolved["run_dir"] / name, dest / name)
     return resolved
 
 

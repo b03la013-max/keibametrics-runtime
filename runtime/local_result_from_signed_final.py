@@ -1,4 +1,4 @@
-import json,os,subprocess,sys,urllib.request,urllib.parse
+import json,os,shutil,subprocess,sys,urllib.request,urllib.parse
 sys.path.insert(0,"runtime")
 from local_candidate_postresult import evaluate_dual
 from local_candidate_dual_oos_tracker import build_measurement, write_status
@@ -29,6 +29,7 @@ gateway=load_gateway()
 req,execution_context=normalize_request(raw_req,gateway)
 execution_id=str(execution_context["execution_id"])
 acceptance_only=bool(req.get("acceptance_only"))
+shutil.rmtree("runtime_result_in",ignore_errors=True)
 os.makedirs("runtime_result_in",exist_ok=True)
 os.makedirs("runtime_out",exist_ok=True)
 
@@ -84,7 +85,7 @@ if run_id is None or not artifact_name:
             raise SystemExit("FORMAL_ARTIFACT_WORKFLOW_RUN_ID_MISSING")
         resolution_mode="EXECUTION_ID_AUTO_RESOLVE"
 
-if run_id is not None:
+if run_id is not None and resolution_mode!="CANONICAL_EXECUTION_STORE":
     run_id=int(run_id)
 json.dump({
     "mode":resolution_mode,
@@ -102,6 +103,8 @@ if resolution_mode!="CANONICAL_EXECUTION_STORE":
 fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
 fin=json.load(open(fin_path,encoding="utf-8"))
 rid=req["race_id"]
+if (fin.get("receipt") or {}).get("race_id")!=rid:
+    raise SystemExit("RESULT_FINAL_RACE_ID_MISMATCH")
 endpoint=str(family_config("LOCAL",gateway).get("external_endpoint") or "").rstrip("/")
 if not endpoint.startswith("https://"):
     raise SystemExit("CANONICAL_LOCAL_EXTERNAL_ENDPOINT_INVALID")
