@@ -15,6 +15,11 @@ from local_mec_r5_shadow import (
     settle_shadow as settle_local_mec_r5_shadow,
 )
 from local_mec_r5_oos_tracker import write_status as write_local_mec_r5_oos_status
+from common_exact_continuity_shadow import (
+    verify_signed_final_binding as verify_common_exact_continuity_binding,
+    settle_shadow as settle_common_exact_continuity_shadow,
+)
+from common_exact_continuity_oos_tracker import write_status as write_common_exact_continuity_oos_status
 from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json
 from execution_store import materialize_phase
 from race_day_fast_reflection import build_fast_reflection
@@ -303,6 +308,55 @@ if (not acceptance_only) and os.path.exists(local_mec_r5_shadow_path):
     json.dump(local_mec_r5_binding,open("runtime_out/local_mec_r5_shadow_binding.json","w",encoding="utf-8"),
               ensure_ascii=False,sort_keys=True,separators=(",",":"))
     json.dump(local_mec_r5_oos_status,open("runtime_out/local_mec_r5_oos_status.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+
+# Common Exact Continuity C2 shadow: only a pre-result artifact whose
+# digest is bound into the signed FINAL can enter the forward OOS tracker.
+common_exact_continuity_settlement=None
+common_exact_continuity_binding=None
+common_exact_continuity_oos_status=None
+common_exact_path=os.path.join("runtime_result_in","common_exact_continuity_shadow_pre_result.json")
+if (not acceptance_only) and os.path.exists(common_exact_path):
+    common_exact=json.load(open(common_exact_path,encoding="utf-8"))
+    common_exact_continuity_binding=verify_common_exact_continuity_binding(fin,common_exact)
+    common_exact_continuity_settlement=settle_common_exact_continuity_shadow(
+        common_exact,[int(x) for x in req["finish_order"]],payouts,
+        int(total_investment),int(total_return),signed_final_binding_valid=True
+    )
+    for d in (
+        "runtime/common_exact_continuity_shadow_artifacts",
+        "runtime/common_exact_continuity_shadow_results",
+        "runtime/common_exact_continuity_shadow_lineage",
+    ):
+        os.makedirs(d,exist_ok=True)
+    json.dump(common_exact,open(os.path.join("runtime","common_exact_continuity_shadow_artifacts",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    json.dump(common_exact_continuity_settlement,open(os.path.join("runtime","common_exact_continuity_shadow_results",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    common_lineage={
+        "lineage_type":"COMMON_EXACT_CONTINUITY_SIGNED_FINAL_BOUND",
+        "race_id":rid,"binding_valid":True,
+        "shadow_sha256":common_exact.get("sha256"),
+        "basis_sha256":common_exact.get("source_basis_sha256"),
+        "final_receipt_sha256":fin.get("receipt_sha256"),
+        "final_artifact_sha256":(fin.get("receipt") or {}).get("artifact_sha256"),
+        "source_run_id":run_id,"source_artifact_name":artifact_name,
+        "generated_at":common_exact.get("generated_at"),
+        "scheduled_post_at":common_exact.get("scheduled_post_at"),
+        "temporal_mode":common_exact.get("temporal_mode"),
+        "production_effect":"NONE",
+    }
+    common_lineage["sha256"]=__import__("hashlib").sha256(
+        json.dumps(common_lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    json.dump(common_lineage,open(os.path.join("runtime","common_exact_continuity_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,indent=2)
+    common_exact_continuity_oos_status=write_common_exact_continuity_oos_status()
+    json.dump(common_exact_continuity_settlement,open("runtime_out/common_exact_continuity_shadow_settlement.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(common_exact_continuity_binding,open("runtime_out/common_exact_continuity_shadow_binding.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump(common_exact_continuity_oos_status,open("runtime_out/common_exact_continuity_oos_status.json","w",encoding="utf-8"),
               ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 candidate_dual_postresult=None

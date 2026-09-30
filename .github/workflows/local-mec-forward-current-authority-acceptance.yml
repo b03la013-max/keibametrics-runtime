@@ -14,6 +14,10 @@ on:
       - 'runtime/local_mec_r5_shadow.py'
       - 'runtime/local_mec_r5_oos_tracker.py'
       - 'runtime/local_mec_r5_oos_status.json'
+      - 'runtime/common_exact_continuity_shadow.py'
+      - 'runtime/common_exact_continuity_oos_tracker.py'
+      - 'research/common/KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1.json'
+      - 'tests/test_common_exact_continuity_shadow.py'
       - 'runtime/non_jra_formal_runner.py'
       - 'runtime/local_result_from_signed_final.py'
       - '.github/workflows/local-mec-forward-current-authority-acceptance.yml'
@@ -134,10 +138,30 @@ jobs:
           result=pathlib.Path("runtime/local_result_from_signed_final.py").read_text(encoding="utf-8")
           assert "MEC_R4_SHADOW_PRE_RESULT_FREEZE" in formal
           assert "LOCAL_MEC_R5_SHADOW_PRE_RESULT_FREEZE" in formal
+          assert "COMMON_EXACT_CONTINUITY_SHADOW_PRE_RESULT_FREEZE" in formal
           assert "mec_r4_shadow_binding" in formal
           assert "local_mec_r5_shadow_binding" in formal
+          assert "common_exact_continuity_shadow_binding" in formal
+          assert "COMMON_EXACT_CONTINUITY_SIGNED_FINAL_BOUND" in result
           assert "LOCAL_SIGNED_FINAL_BOUND" in result
           assert "LOCAL_MEC_R5_SIGNED_FINAL_BOUND" in result
 
           print("LOCAL_MEC_FORWARD_CURRENT_AUTHORITY_PASS",auth_path,auth["manifest_id"])
+          PY
+
+      - name: Verify Common exact-continuity shadow isolation
+        run: |
+          python -m pip install -q pytest
+          python -m py_compile runtime/common_exact_continuity_shadow.py runtime/common_exact_continuity_oos_tracker.py
+          python -m pytest -q tests/test_common_exact_continuity_shadow.py
+          python - <<'PY'
+          import json
+          x=json.load(open("research/common/KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1.json",encoding="utf-8"))
+          assert "NON-PRODUCTION" in x["status"]
+          assert x["production_effect"]=="NONE"
+          assert x["candidate_definition"]["automatic_purchase"] is False
+          assert x["oos"]["automatic_promotion"] is False
+          assert x["capital_width_hypothesis"]["status"].startswith("SHADOW-HOLD")
+          assert x["capital_width_hypothesis"]["production_effect"]=="NONE"
+          print("COMMON_EXACT_CONTINUITY_SHADOW_ISOLATION_PASS")
           PY
