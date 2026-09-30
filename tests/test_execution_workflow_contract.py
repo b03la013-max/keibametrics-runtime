@@ -64,10 +64,13 @@ def test_result_gateway_contract_is_in_extracted_runner():
     assert 'gateway_artifact_name(execution_id,"FORMAL",gateway,"LOCAL")' in runner
     assert 'family_config("LOCAL",gateway)' in runner
     assert 'endpoint=req.get("external_endpoint")' not in runner
-    assert "python -m runtime.local_result_from_signed_final" in workflow
+    assert 'python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT' in workflow
+    parent=pathlib.Path("runtime/formal_execution_orchestrator.py").read_text()
+    assert '"runtime.local_result_from_signed_final"' in parent
     assert "steps.execution_meta.outputs.artifact_name" in workflow
     assert "km-local-result-failure-" in workflow
-    assert "execution_store.py persist" in workflow
+    assert "persist_phase(" in parent
+    assert "execution_store.py persist" not in workflow
     assert "CANONICAL_EXECUTION_STORE" in runner
     assert "runtime/executions/$EXECUTION_ID/RESULT" in workflow
     assert len(workflow) < 21000

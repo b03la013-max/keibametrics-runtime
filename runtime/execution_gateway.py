@@ -82,6 +82,23 @@ def derive_execution_id(request: Dict[str, Any]) -> str:
     return _safe_id(f"{family}-{race_id}-EXEC")
 
 
+def result_route(request: Dict[str, Any], gateway: Dict[str, Any] | None = None) -> str:
+    """Use the same normalized authority for Workflow, parent and executor."""
+    normalized, _ = normalize_request(request, gateway)
+    run = normalized.get("source_run_id")
+    artifact = normalized.get("artifact_name")
+    if normalized.get("legacy_handoff_override"):
+        if run is None or not str(artifact or "").strip():
+            raise ExecutionGatewayError("AMBIGUOUS_LEGACY_RESULT_REFERENCE")
+        try:
+            if int(run) <= 0:
+                raise ValueError()
+        except (TypeError, ValueError):
+            raise ExecutionGatewayError("LEGACY_RESULT_RUN_ID_INVALID")
+        return "LEGACY"
+    return "CANONICAL"
+
+
 def artifact_name(execution_id: str, phase: str, gateway: Dict[str, Any] | None = None, family: str = "LOCAL") -> str:
     g = gateway or load_gateway()
     cfg = family_config(family, g)

@@ -54,3 +54,41 @@ def test_signed_final_binding_and_settlement():
     assert res["oos_eligible"] is True
     assert res["arms"]["CONTINUITY_ALL"]["rescue_hit"] is True
     assert res["arms"]["KRS_TOP1"]["rescue_hit"] is True
+
+
+def test_mutated_content_cannot_retain_bound_sha():
+    import pytest
+    q=req();sh=build_shadow(q,{'tickets':[]},{'roles':q['static_prediction']['roles']},{},'2099-01-01T02:00:00Z','B')
+    env={'receipt':{'phase':'FINAL','status':'PASS'},'artifact':{'ticket_transport_trace':bind_shadow_to_trace({},sh)}}
+    sh['arms']['CONTINUITY_ALL'].append('1>2>3')
+    with pytest.raises(AssertionError,match='CONTENT_HASH_MISMATCH'):
+        verify_signed_final_binding(env,sh)
+    with pytest.raises(AssertionError,match='CONTENT_HASH_MISMATCH'):
+        settle_shadow(sh,[1,2,3],{'TRIFECTA':1000},100,0,True)
+
+
+def test_missing_payout_is_not_zero_return():
+    import pytest
+    q=req();sh=build_shadow(q,{'tickets':[]},{'roles':q['static_prediction']['roles']},{},'2099-01-01T02:00:00Z','B')
+    with pytest.raises(AssertionError,match='OFFICIAL_PAYOUT_REQUIRED'):
+        settle_shadow(sh,[7,2,8],{},100,0,True)
+
+
+def test_tracker_accepts_valid_lineage_rejects_mutation(monkeypatch,tmp_path):
+    import json,hashlib
+    from common_exact_continuity_oos_tracker import build_status
+    q=req();sh=build_shadow(q,{'tickets':[]},{'roles':q['static_prediction']['roles']},{},'2099-01-01T02:00:00Z','B')
+    res=settle_shadow(sh,[7,2,8],{'TRIFECTA':1000},100,0,True)
+    line={'race_id':q['race_id'],'lineage_type':'COMMON_EXACT_CONTINUITY_SIGNED_FINAL_BOUND',
+          'binding_valid':True,'shadow_sha256':sh['sha256'],'basis_sha256':'B','production_effect':'NONE'}
+    line['sha256']=hashlib.sha256(json.dumps(line,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    monkeypatch.chdir(tmp_path)
+    for folder,obj in [('common_exact_continuity_shadow_artifacts',sh),('common_exact_continuity_shadow_results',res),('common_exact_continuity_shadow_lineage',line),('family_result_requests',{'race_id':q['race_id'],'official_result_verified':True})]:
+        p=tmp_path/'runtime'/folder;p.mkdir(parents=True)
+        (p/(q['race_id']+'.json')).write_text(json.dumps(obj))
+    assert build_status()['eligible_races']==1
+    p=tmp_path/'runtime/common_exact_continuity_shadow_results'/(q['race_id']+'.json')
+    res['arms']['KRS_TOP1']['return']=99999999;p.write_text(json.dumps(res))
+    status=build_status()
+    assert status['eligible_races']==0
+    assert status['errors'][0]['reason']=='CONTENT_HASH_MISMATCH'
