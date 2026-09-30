@@ -93,4 +93,4 @@ for phase in ('SOURCE','FORMAL'):
         assert sha(env['receipt'])==env['receipt_sha256']
         assert sha(env['artifact'])==env['receipt']['artifact_sha256']
         verified.append(str(p.relative_to(ROOT)))
-print(json.dumps({'locally_verified_receipt_files':len(verified),'distinct_receipts':4,'remote_verify':'NOT_EXECUTED_AUTO_REVIEW_REJECTED','not_oos':True}))
+print(json.dumps({'locally_verified_receipt_files':len(verified),'distinct_receipts':4,'remote_verify':'SEE_EXTERNAL_VERIFICATION_JSON_THIS_SCRIPT_IS_OFFLINE','not_oos':True}))

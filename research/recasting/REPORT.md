@@ -83,7 +83,7 @@
 
 保存済みSOURCE/PRE_KRS/KRS/FINALの**4つの異なるReceipt（5ファイル）**について、取得済みHealth公開鍵でEd25519署名、receipt SHA256、artifact SHA256を全てローカル検証。公開鍵は現行endpointのHealth由来で、独立した第三者trust anchorを新設したわけではない。
 
-外部 `/source/verify`・`/verify` POSTは、自動承認審査が「Receipt内容をRailwayへ送る承認未確認」として拒否したため実行結果を得ていない。迂回・再送していない。外部検証PASSとは称さない。
+外部 `/source/verify`・`/verify` POSTは当初自動承認審査に拒否されたが、9/30のユーザー明示承認後に実行した。4種類の異なるReceipt（5ファイル）すべてHTTP 200 / valid=true。SOURCEはsignature_valid・artifact_validもtrue。その他のartifact hashはローカル照合済み。結果は `external_verification.json`。
 
 ## I. Behavior Equivalence
 
@@ -127,4 +127,4 @@ Candidate未deploy、Production未promotion。次のRaceへ既に改善が反映
 
 ## 提出状態（9/30追加）
 
-ローカルCandidateをcommit済み。公開GitHubへのpushは自動承認審査で拒否された。理由は、コードとレース／Receipt由来研究資料を公開repositoryへ掲載する明示承認が確認できないため。公開・PR作成・deployは未実施。続行には公開範囲を含む承認が必要。外部署名検証POSTも別途承認待ち。
+ユーザー明示承認後、GitHub接続を用いて `audit/execution-recasting` branchへ修正コード・検証資料を公開し、Draft PR #111を作成した。URL: https://github.com/b03la013-max/keibametrics-runtime/pull/111 。外部署名検証も上記の通りPASS。merge・deploy・Production昇格は未実施。Family全体統合と実レースの発走前受入は引き続き未完。
