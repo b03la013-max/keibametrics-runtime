@@ -226,7 +226,12 @@ from local_index_provenance_builder import build as build_local_provenance
 from local_krs_input_builder_production import build as build_local_krs
 from local_krs_technical_proxy_from_source import build as build_source_derived_krs_proxy, LocalSourceDerivedProxyError
 from krs_prediction_utility import build_krs_prediction_utility
-from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MEC_PROFILE
+from minimum_efficient_coverage import (
+    build_mec_plan,
+    validate_mec_plan,
+    canonicalize_role_pair_third_closure,
+    MEC_PROFILE,
+)
 from capital_policy import resolve_capital_policy
 from local_numerical_authority_gate import assess as assess_numerical_authority
 from local_candidate_numerical_authority import assess as assess_candidate_numerical
@@ -1075,6 +1080,25 @@ stage("KRS_UTILITY",utility_class=utility.get("utility_class"),utility_sha256=ut
       production_effect="NONE")
 
 deadline_guard("AFTER_KRS")
+
+# Common Role→Pair→Third closure is a mandatory decision-graph stage.
+# It terminalizes every active W×P2 pair and every material Pair×global-P3
+# relation without promoting missing records into material PURCHASE signals.
+req,role_pair_third_closure=canonicalize_role_pair_third_closure(req)
+persist("role_pair_third_closure.json",role_pair_third_closure)
+stage(
+    "FINAL_ROLE_PAIR_THIRD",
+    status=role_pair_third_closure.get("status"),
+    closure_sha256=role_pair_third_closure.get("sha256"),
+    expected_pair_terminal_count=role_pair_third_closure.get("expected_pair_terminal_count"),
+    pair_terminal_count=role_pair_third_closure.get("pair_terminal_count"),
+    synthesized_pair_terminal_count=role_pair_third_closure.get("synthesized_pair_terminal_count"),
+    expected_third_terminal_count=role_pair_third_closure.get("expected_third_terminal_count"),
+    third_terminal_count=role_pair_third_closure.get("third_terminal_count"),
+    synthesized_third_terminal_count=role_pair_third_closure.get("synthesized_third_terminal_count"),
+    semantic_only_purchase_authority=False,
+)
+
 mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
 mec_check=validate_mec_plan(mec)
 persist("mec_plan.json",mec)
@@ -1111,7 +1135,8 @@ final_package.update({
   "actual_numerical_calculation":copy.deepcopy(cov),
   "krs_prediction_utility_shadow":copy.deepcopy(utility),
   "minimum_efficient_coverage":copy.deepcopy(mec),
-  "capital_policy_decision":copy.deepcopy(capital)
+  "capital_policy_decision":copy.deepcopy(capital),
+  "role_pair_third_closure":copy.deepcopy(role_pair_third_closure)
 })
 
 trace={
