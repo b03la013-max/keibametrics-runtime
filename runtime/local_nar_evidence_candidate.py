@@ -652,6 +652,17 @@ def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[st
                                registry_path: str | Path = DEFAULT_REGISTRY) -> Dict[str, Any]:
     reg = _load(registry_path)
     raw_field = parse_race_card(source_artifact)
+    # Formal LOCAL execution is defined over the official ACTIVE runner universe.
+    # NAR race-card HTML may still contain cancelled runners; exclude those before
+    # comparing against the request and before deriving KRS technical evidence.
+    active_universe = source_artifact.get("active_runner_universe") or source_artifact.get("official_runner_universe") or {}
+    active_rows = active_universe.get("runners") if isinstance(active_universe, dict) else None
+    if isinstance(active_rows, list) and active_rows:
+        active_ids = {str(x.get("runner_id") or x.get("horse_no")) for x in active_rows}
+        missing_active = active_ids - set(raw_field)
+        if missing_active:
+            raise LocalCandidateEvidenceError(f"ACTIVE_RUNNER_SOURCE_MISSING:{sorted(missing_active)}")
+        raw_field = {rid: row for rid, row in raw_field.items() if rid in active_ids}
     request = json.loads(json.dumps(request, ensure_ascii=False))
     request["_candidate_raw_field"] = raw_field
     req_runners = request.get("runners") or []
