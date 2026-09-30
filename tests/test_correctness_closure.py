@@ -67,10 +67,9 @@ def test_valid_shadow_persists_across_fresh_checkout(tmp_path,monkeypatch):
         (p/(rid+'.json')).write_text(json.dumps({'race_id':rid,'official_result_verified':True}))
         execute_common(tmp_path,monkeypatch,rid)
         # Replay the actual workflow's common-ledger staging statements.
-        import yaml
-        workflow=yaml.safe_load((ROOT/'.github/workflows/km-local-result-from-signed-final.yml').read_text())
-        step=next(s for s in workflow['jobs']['result-gate']['steps'] if s.get('name')=='Persist LOCAL forward measurement ledgers')
-        stage='\n'.join(l for l in step['run'].splitlines() if 'git add runtime/common_exact' in l)
+        workflow=(ROOT/'.github/workflows/km-local-result-from-signed-final.yml').read_text()
+        section=workflow.split('      - name: Persist LOCAL forward measurement ledgers',1)[1].split('      - name:',1)[0]
+        stage='\n'.join(l for l in section.splitlines() if 'git add runtime/common_exact' in l)
         assert stage.count('git add')==4
         subprocess.run(['bash','-c',stage],check=True)
         subprocess.run(['git','add','runtime/family_result_requests'],check=True)
