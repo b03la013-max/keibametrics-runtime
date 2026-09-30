@@ -192,6 +192,80 @@ jobs:
           assert "family_authority_guard.py" in workflow
           assert "execution_gateway.py health-check" in workflow
 
+          # Common Role→Pair→Third closure regression:
+          # missing W×P2-Protected and Pair×P3 records must be terminalized,
+          # but SEMANTIC_ONLY must not create a material Exacta pair.
+          from runtime.minimum_efficient_coverage import (
+              canonicalize_role_pair_third_closure,
+              build_mec_plan,
+              MECError,
+          )
+          closure_fixture={
+              "family_id":"LOCAL",
+              "race_id":"FNB-CLOSURE-ACCEPTANCE",
+              "role_registry":[
+                  {"runner_id":"6","column":"W","status":"CORE"},
+                  {"runner_id":"5","column":"P2","status":"CORE"},
+                  {"runner_id":"3","column":"P2","status":"PROTECTED"},
+                  {"runner_id":"5","column":"P3","status":"CORE"},
+                  {"runner_id":"3","column":"P3","status":"CORE"},
+                  {"runner_id":"1","column":"P3","status":"PROTECTED"},
+              ],
+              "pair_dispositions":[
+                  {"head":"6","second":"5","status":"PURCHASE","reason":"FIXTURE_MATERIAL_PAIR"}
+              ],
+              "third_dispositions":[
+                  {"head":"6","second":"5","third":"3","status":"PURCHASE","reason":"FIXTURE_CORE_THIRD"}
+              ],
+              "available_bet_types":["EXACTA","TRIO","TRIFECTA"],
+          }
+          closed,closure_manifest=canonicalize_role_pair_third_closure(closure_fixture)
+          assert closure_manifest["status"]=="PASS"
+          assert closure_manifest["expected_pair_terminal_count"]==2
+          assert closure_manifest["synthesized_pair_terminal_count"]==1
+          assert any(
+              str(x.get("head"))=="6" and str(x.get("second"))=="3"
+              and x.get("status")=="SEMANTIC_ONLY"
+              for x in closed["pair_dispositions"]
+          )
+          assert any(
+              str(x.get("head"))=="6" and str(x.get("second"))=="5"
+              and str(x.get("third"))=="1" and x.get("status")=="SEMANTIC_ONLY"
+              for x in closed["third_dispositions"]
+          )
+          closure_plan=build_mec_plan(closed,None,strict_head_closure=True,min_stake=100)
+          assert closure_plan["material_coverage_ratio"]==1.0
+          assert not any(
+              x["bet_type"]=="EXACTA" and x["selection"]==[6,3]
+              for x in closure_plan["tickets"]
+          )
+          assert any(
+              x["bet_type"]=="TRIO" and set(x["selection"])=={1,5,6}
+              for x in closure_plan["tickets"]
+          )
+
+          no_material_pair={
+              "family_id":"LOCAL",
+              "race_id":"FNB-CLOSURE-HEAD-GUARD",
+              "role_registry":[
+                  {"runner_id":"7","column":"W","status":"CONDITIONAL"},
+                  {"runner_id":"5","column":"P2","status":"CORE"},
+              ],
+              "pair_dispositions":[],
+              "third_dispositions":[],
+          }
+          no_material_pair,_=canonicalize_role_pair_third_closure(no_material_pair)
+          try:
+              build_mec_plan(no_material_pair,None,strict_head_closure=True,min_stake=100)
+              raise AssertionError("SEMANTIC_ONLY_MUST_NOT_SATISFY_MATERIAL_HEAD_CLOSURE")
+          except MECError as exc:
+              assert "ACTIVE_W_WITHOUT_MATERIAL_PAIR_CLOSURE" in str(exc)
+
+          runner=Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
+          assert "canonicalize_role_pair_third_closure" in runner
+          assert 'stage(' in runner and '"FINAL_ROLE_PAIR_THIRD"' in runner
+          assert '"role_pair_third_closure"' in runner
+
           print(json.dumps({
               "status":"PASS",
               "authority":ca["manifest_id"],
