@@ -1,4 +1,6 @@
-import copy
+import copy, sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
 from common_exact_continuity_shadow import (
     build_shadow,bind_shadow_to_trace,verify_signed_final_binding,settle_shadow,PROFILE,CANDIDATE_ID
 )
