@@ -151,6 +151,7 @@ jobs:
 
       - name: Verify Common exact-continuity shadow isolation
         run: |
+          python -m pip install -q pytest
           python -m py_compile runtime/common_exact_continuity_shadow.py runtime/common_exact_continuity_oos_tracker.py
           python -m pytest -q tests/test_common_exact_continuity_shadow.py
           python - <<'PY'
