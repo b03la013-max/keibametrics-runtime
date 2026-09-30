@@ -34,6 +34,159 @@ def _active_roles(req):
             out[_s(x.get("runner_id"))].add(str(x.get("column")))
     return out
 
+def _dedupe_dispositions(rows, key_fields, label):
+    """Deduplicate identical terminal keys and fail closed on conflicting statuses."""
+    out=[]
+    by_key={}
+    duplicate_same_status=[]
+    for raw in rows or []:
+        x=copy.deepcopy(raw)
+        key=tuple(_s(x.get(k)) for k in key_fields)
+        if any(v in {"", "None"} for v in key):
+            raise MECError(f"{label}_KEY_INCOMPLETE:"+repr(key))
+        status=str(x.get("status") or "").strip().upper()
+        if not status:
+            raise MECError(f"{label}_STATUS_MISSING:"+repr(key))
+        if key in by_key:
+            prior=by_key[key]
+            prior_status=str(prior.get("status") or "").strip().upper()
+            if prior_status!=status:
+                raise MECError(
+                    f"{label}_CONFLICTING_STATUS:"
+                    +json.dumps({"key":key,"first":prior_status,"second":status},
+                                ensure_ascii=False,sort_keys=True)
+                )
+            duplicate_same_status.append({
+                "key":list(key),
+                "status":status,
+                "first_reason":prior.get("reason"),
+                "duplicate_reason":x.get("reason"),
+            })
+            continue
+        by_key[key]=x
+        out.append(x)
+    return out,by_key,duplicate_same_status
+
+def canonicalize_role_pair_third_closure(req:dict)->tuple[dict,dict]:
+    """Close the Common Role→Pair→Third terminal graph without inventing materiality.
+
+    Missing W×P2 or material Pair×P3 records are terminalized as SEMANTIC_ONLY.
+    SEMANTIC_ONLY is an audit/closure state, not a purchase or material-pair signal.
+    This preserves Production prediction/numerics/MEC policy while preventing
+    zero-connection records from disappearing between Static Role and MEC.
+    """
+    out=copy.deepcopy(req)
+    roles=_active_roles(out)
+    active_w={r for r,cols in roles.items() if "W" in cols}
+    active_p2={r for r,cols in roles.items() if "P2" in cols}
+    active_p3={r for r,cols in roles.items() if "P3" in cols}
+
+    pair_rows,pair_by_key,pair_duplicates=_dedupe_dispositions(
+        out.get("pair_dispositions") or [],("head","second"),"PAIR_DISPOSITION"
+    )
+    expected_pairs={
+        (h,s)
+        for h in active_w
+        for s in active_p2
+        if h!=s
+    }
+    synthesized_pairs=[]
+    for h,s in sorted(expected_pairs,key=lambda z:tuple(int(x) if x.isdigit() else x for x in z)):
+        if (h,s) in pair_by_key:
+            continue
+        row={
+            "head":h,
+            "second":s,
+            "status":"SEMANTIC_ONLY",
+            "reason":"AUTO_TERMINALIZED_ACTIVE_W_X_P2_NO_PAIR_SPECIFIC_MATERIALITY",
+            "generated_by":"COMMON_ROLE_PAIR_THIRD_CLOSURE_v1",
+            "production_prediction_change":False,
+            "purchase_authority":False,
+        }
+        pair_rows.append(row)
+        pair_by_key[(h,s)]=row
+        synthesized_pairs.append(copy.deepcopy(row))
+
+    out["pair_dispositions"]=pair_rows
+
+    # Only PURCHASE/PROTECT pairs are material MEC pairs.  SEMANTIC_ONLY closes
+    # the decision graph but cannot create a ticket by itself.
+    material_pairs={
+        (_s(x.get("head")),_s(x.get("second")))
+        for x in _semantic_pairs(out)
+    }
+
+    third_rows,third_by_key,third_duplicates=_dedupe_dispositions(
+        out.get("third_dispositions") or [],("head","second","third"),"THIRD_DISPOSITION"
+    )
+    expected_thirds={
+        (h,s,t)
+        for h,s in material_pairs
+        for t in active_p3
+        if t not in {h,s}
+    }
+    synthesized_thirds=[]
+    for h,s,t in sorted(
+        expected_thirds,
+        key=lambda z:tuple(int(x) if x.isdigit() else x for x in z)
+    ):
+        if (h,s,t) in third_by_key:
+            continue
+        row={
+            "head":h,
+            "second":s,
+            "third":t,
+            "status":"SEMANTIC_ONLY",
+            "reason":"AUTO_TERMINALIZED_MATERIAL_PAIR_X_GLOBAL_P3",
+            "generated_by":"COMMON_ROLE_PAIR_THIRD_CLOSURE_v1",
+            "production_prediction_change":False,
+            "purchase_authority":False,
+        }
+        third_rows.append(row)
+        third_by_key[(h,s,t)]=row
+        synthesized_thirds.append(copy.deepcopy(row))
+
+    out["third_dispositions"]=third_rows
+
+    missing_pairs=sorted(expected_pairs-set(pair_by_key))
+    missing_thirds=sorted(expected_thirds-set(third_by_key))
+    if missing_pairs or missing_thirds:
+        raise MECError("ROLE_PAIR_THIRD_CLOSURE_INCOMPLETE:"+json.dumps({
+            "missing_pairs":[list(x) for x in missing_pairs],
+            "missing_thirds":[list(x) for x in missing_thirds],
+        },ensure_ascii=False,sort_keys=True))
+
+    manifest={
+        "schema":"KM-COMMON-ROLE-PAIR-THIRD-CLOSURE-v1",
+        "status":"PASS",
+        "race_id":str(out.get("race_id") or ""),
+        "active_w":sorted(active_w,key=lambda x:int(x) if x.isdigit() else x),
+        "active_p2":sorted(active_p2,key=lambda x:int(x) if x.isdigit() else x),
+        "active_p3":sorted(active_p3,key=lambda x:int(x) if x.isdigit() else x),
+        "expected_pair_terminal_count":len(expected_pairs),
+        "pair_terminal_count":sum(1 for k in pair_by_key if k in expected_pairs),
+        "synthesized_pair_terminal_count":len(synthesized_pairs),
+        "synthesized_pair_terminals":synthesized_pairs,
+        "material_pair_count":len(material_pairs),
+        "expected_third_terminal_count":len(expected_thirds),
+        "third_terminal_count":sum(1 for k in third_by_key if k in expected_thirds),
+        "synthesized_third_terminal_count":len(synthesized_thirds),
+        "synthesized_third_terminals":synthesized_thirds,
+        "duplicate_same_status_pairs":pair_duplicates,
+        "duplicate_same_status_thirds":third_duplicates,
+        "full_terminalization":True,
+        "production_prediction_change":False,
+        "production_numerical_change":False,
+        "krs_physics_change":False,
+        "mec_policy_change":False,
+        "capital_policy_change":False,
+        "semantic_only_purchase_authority":False,
+    }
+    raw=json.dumps(manifest,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+    manifest["sha256"]=hashlib.sha256(raw).hexdigest()
+    out["role_pair_third_closure_manifest"]=copy.deepcopy(manifest)
+    return out,manifest
+
 def _semantic_pairs(req):
     rows=[]
     for x in req.get("pair_dispositions") or []:
@@ -82,6 +235,10 @@ def _semantic_third_universe(req, roles, pair_keys):
                 rows.append({**x,"mec_tier":"CORE","semantic_source":"PAIR_LOCAL"})
             elif st=="PROTECT":
                 rows.append({**x,"mec_tier":"PROTECTION","semantic_source":"PAIR_LOCAL"})
+            elif st=="SEMANTIC_ONLY":
+                y={**x,"mec_tier":"TAIL","semantic_source":"GLOBAL_P3",
+                   "mec_action":"SEMANTIC_ONLY_TO_GLOBAL_P3_TAIL"}
+                rows.append(y)
             elif st=="EXCLUDE":
                 if _hard_semantic_exclusion(reason):
                     hard_exclusions.append({**x,"mec_action":"HARD_EXCLUSION_RETAINED"})
