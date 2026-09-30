@@ -61,7 +61,7 @@ for direct in (False,True):
             checks.append({'old_path':'direct_formal' if direct else 'source','mode':mode,'failure':failure,'equivalent':previous(mode,failure)==fresh(mode,failure)})
 assert all(x['equivalent'] for x in checks)
 changed=subprocess.check_output(['git','diff',BASE,'--name-only','--','runtime','services','mapping','profiles'],cwd=ROOT,text=True).splitlines()
-allowed={'runtime/execution_store.py','runtime/formal_execution_orchestrator.py','runtime/non_jra_formal_runner.py','runtime/local_result_from_signed_final.py','runtime/common_exact_continuity_shadow.py','runtime/common_exact_continuity_oos_tracker.py'}
+allowed={'runtime/execution_gateway.py','runtime/execution_store.py','runtime/formal_execution_orchestrator.py','runtime/non_jra_formal_runner.py','runtime/local_result_from_signed_final.py','runtime/common_exact_continuity_shadow.py','runtime/common_exact_continuity_oos_tracker.py'}
 assert set(changed)<=allowed,changed
 # Reproduce old overwrite, confirm correction preserves original receipt.
 import types

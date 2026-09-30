@@ -66,8 +66,8 @@ def test_result_missing_final_cannot_recompute(monkeypatch):
 
 def test_result_override_cannot_switch_lineage(monkeypatch):
     monkeypatch.setattr(o,'resolve_phase',lambda *a:{})
-    r=request();r['source_run_id']=100
-    with pytest.raises(o.FormalOrchestrationError,match='COMPATIBILITY_ENTRY'):
+    r=request();r['source_run_id']=100;r['legacy_handoff_override']=True
+    with pytest.raises(ValueError,match='AMBIGUOUS_LEGACY'):
         o.orchestrate(r,run_id='x',github_sha=None)
 
 

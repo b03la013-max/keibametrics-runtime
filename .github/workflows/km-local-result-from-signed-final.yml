@@ -35,13 +35,6 @@ jobs:
           set -euo pipefail
           git pull --ff-only origin main
 
-      - name: Verify canonical gateway and runtime before RESULT
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p runtime_out
-          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_result_preflight.json
-
       - name: Resolve RESULT execution metadata
         id: execution_meta
         shell: bash
@@ -50,9 +43,13 @@ jobs:
           REQ="${{ inputs.request_path }}"
           if [ -z "$REQ" ]; then
             mapfile -t REQS < <(
-              git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
+              git diff-tree --no-commit-id --diff-filter=AM --name-only -r "${{ github.sha }}" |
               grep '^runtime/family_result_requests/.*\.json$' || true
             )
+            if [ "${#REQS[@]}" -eq 0 ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             if [ "${#REQS[@]}" -ne 1 ]; then
               echo "Expected exactly one changed RESULT request; found ${#REQS[@]}" >&2
               printf '%s\n' "${REQS[@]}" >&2
@@ -84,36 +81,31 @@ jobs:
           },ensure_ascii=False))
           PY
 
+      - name: Verify canonical gateway and runtime before RESULT
+        if: steps.execution_meta.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/execution_gateway.py health-check --family LOCAL --output runtime_out/execution_gateway_result_preflight.json
+
       - name: Resolve signed FINAL and execute RESULT gate
+        if: steps.execution_meta.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           REQ="${{ steps.execution_meta.outputs.request_file }}"
           test -n "$REQ"
-          # Explicit legacy artifact references retain the compatibility entry.
-          # Canonical requests use the same lifecycle parent as SOURCE/FORMAL.
-          if REQ="$REQ" python -c 'import json,os,sys; r=json.load(open(os.environ["REQ"])); sys.exit(0 if r.get("source_run_id") or r.get("artifact_name") else 1)'; then
-            python -m runtime.local_result_from_signed_final "$REQ"
-          else
-            python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT
-          fi
+          python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT
 
       - name: Persist canonical RESULT execution phase
-        if: success()
+        if: success() && steps.execution_meta.outputs.skip != 'true'
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
         run: |
           set -euo pipefail
-          if [ ! -f runtime_out/orchestration_report.json ]; then
-          python runtime/execution_store.py persist \
-            --execution-id "$EXECUTION_ID" \
-            --phase RESULT \
-            --run-id "${{ github.run_id }}" \
-            --source-dir runtime_out \
-            --github-sha "${{ github.sha }}"
-          fi
 
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
@@ -130,7 +122,7 @@ jobs:
           exit 1
 
       - name: Persist LOCAL forward measurement ledgers
-        if: success() && hashFiles('runtime_out/acceptance_only.flag') == ''
+        if: success() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/acceptance_only.flag') == ''
         shell: bash
         run: |
           set -euo pipefail
@@ -147,6 +139,10 @@ jobs:
           if [ -d runtime/local_mec_r5_shadow_results ]; then git add runtime/local_mec_r5_shadow_results/*.json 2>/dev/null || true; fi
           if [ -d runtime/local_mec_r5_shadow_lineage ]; then git add runtime/local_mec_r5_shadow_lineage/*.json 2>/dev/null || true; fi
           if [ -f runtime/local_mec_r5_oos_status.json ]; then git add runtime/local_mec_r5_oos_status.json; fi
+          if [ -d runtime/common_exact_continuity_shadow_artifacts ]; then git add runtime/common_exact_continuity_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/common_exact_continuity_shadow_results ]; then git add runtime/common_exact_continuity_shadow_results/*.json 2>/dev/null || true; fi
+          if [ -d runtime/common_exact_continuity_shadow_lineage ]; then git add runtime/common_exact_continuity_shadow_lineage/*.json 2>/dev/null || true; fi
+          if [ -f runtime/common_exact_continuity_oos_status.json ]; then git add runtime/common_exact_continuity_oos_status.json; fi
           if git diff --cached --quiet; then
             exit 0
           fi
@@ -162,7 +158,7 @@ jobs:
           exit 1
 
       - name: Persist successful signed RESULT envelope
-        if: success()
+        if: success() && steps.execution_meta.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.execution_meta.outputs.artifact_name }}

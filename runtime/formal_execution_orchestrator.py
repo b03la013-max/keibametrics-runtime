@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 
 sys.path.insert(0, "runtime")
 
-from execution_gateway import derive_execution_id, load_gateway
+from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
 from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
 from formal_import_closure import FormalImportClosureError, build_closure
 
@@ -762,13 +762,10 @@ def orchestrate(
         execution_id = derive_execution_id(intent)
         request = copy.deepcopy(intent)
         request["execution_id"] = execution_id
+        route = result_route(request)
         formal = resolve_phase(execution_id, "FORMAL")
-        if formal is None:
+        if route == "CANONICAL" and formal is None:
             raise FormalOrchestrationError("RESULT_REQUIRES_EXISTING_FORMAL_CHECKPOINT")
-        # Pin the canonical FINAL: compatibility artifact overrides belong to
-        # the legacy RESULT entry, not this stable-execution lifecycle.
-        if request.get("source_run_id") or request.get("artifact_name"):
-            raise FormalOrchestrationError("RESULT_EXPLICIT_ARTIFACT_REQUIRES_COMPATIBILITY_ENTRY")
         previous = resolve_phase(execution_id, "RESULT")
         if previous is not None:
             basis = _load_checkpoint_json(previous, "result_checkpoint_basis.json")

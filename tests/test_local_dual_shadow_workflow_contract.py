@@ -28,7 +28,9 @@ def test_result_closed_loop_loads_both_candidate_krs_envelopes_and_persists_oos(
     assert 'candidate_dual_oos_measurement.json' in impl
     assert 'candidate_dual_oos_status.json' in impl
     assert 'runtime/local_candidate_dual_oos_measurements/*.json' in workflow
-    assert "python -m runtime.local_result_from_signed_final" in workflow
+    assert 'python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT' in workflow
+    parent=Path("runtime/formal_execution_orchestrator.py").read_text()
+    assert '"runtime.local_result_from_signed_final"' in parent
 
 
 def test_result_ledger_is_serializable_by_repository_commit():
