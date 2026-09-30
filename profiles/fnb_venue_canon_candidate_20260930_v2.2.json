@@ -1,0 +1,126 @@
+{
+  "profile_id": "KM-LOCAL-FNB-v2.2-CANDIDATE-20260930-R1",
+  "canonical_name": "船橋競馬攻略条項 v2.2-FNB-CANDIDATE",
+  "created_at": "2026-09-30T21:40:00+09:00",
+  "status": "CANDIDATE / SHADOW-ONLY / NON-PRODUCTION / NON-NUMERICAL / BEHAVIOR-CHANGING / PROMOTION-HOLD / FROZEN-UNKNOWN-OOS-REQUIRED",
+  "predecessor": {
+    "canonical_name": "船橋競馬攻略条項 v2.1-FNB",
+    "profile": "KM-LOCAL-FNB-v2.1-20260928-R1",
+    "relationship": "PRODUCTION_REMAINS_CURRENT / CANDIDATE_DOES_NOT_SUPERSEDE"
+  },
+  "production_effect": "NONE",
+  "production_pointer_change": false,
+  "predictive_behavior_change": true,
+  "numerical_change": false,
+  "krs_physics_change": false,
+  "parameter_map_change": false,
+  "mec_r3_change": false,
+  "capital_policy_change": false,
+  "authority_resolution": {
+    "creation_time_reference": "KM-FAMILY-CURRENT-AUTHORITY-20260929-R35",
+    "rule": "RESOLVE CURRENT FORMAL SUCCESSOR AT EXECUTION; DO NOT PIN STALE AUTHORITY",
+    "production_venue_canon": "船橋競馬攻略条項 v2.1-FNB"
+  },
+  "day_regression_basis": {
+    "date": "2026-09-30",
+    "venue": "FNB",
+    "race_count": 12,
+    "settlement_authority": "FROZEN_RECOMMENDATION / ACTUAL PURCHASE NOT VERIFIED",
+    "investment_yen": 65200,
+    "return_yen": 35300,
+    "pfs_pct": 54.14,
+    "first_material_failure_counts": {
+      "prediction_or_role": 2,
+      "conversion": 8,
+      "capital": 2
+    },
+    "exact_semantic_only_repeat_races": [
+      "R04",
+      "R05",
+      "R07",
+      "R08",
+      "R09",
+      "R11",
+      "R12"
+    ],
+    "caveat": "Same-day correlated evidence; not Frozen Unknown OOS for this Candidate."
+  },
+  "venue_shadow_hypotheses": [
+    {
+      "id": "FNB-2YO-LOWOBS-ALT-P2-REACHABILITY-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "trigger": [
+        "2YO",
+        "LOW_OBSERVATION_OR_HIGH_UNCERTAINTY",
+        "P3_ACTIVE",
+        "P2_NOT_ACTIVE"
+      ],
+      "action": "RE-AUDIT ALTERNATIVE P2 PATHS USING EXISTING P2 REACHABILITY / STAGE COST; NO AUTO PROMOTION",
+      "numerical_rule": false
+    },
+    {
+      "id": "FNB-DISTANCE-RETURN-CLASS-CONTEXT-W-REACHABILITY-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "trigger": [
+        "PROVEN_FNB_DISTANCE_EVIDENCE",
+        "RECENT_OTHER_DISTANCE_OR_CONTEXT",
+        "RETURN_TO_COMPATIBLE_DISTANCE_CLASS"
+      ],
+      "action": "RE-AUDIT W/P2 CEILING; NO FIXED BONUS",
+      "numerical_rule": false
+    },
+    {
+      "id": "FNB-LAYOFF-HISTORICAL-CEILING-DECAY-AUDIT-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "trigger": [
+        "HISTORICAL_CEILING_MATERIAL",
+        "LONG_LAYOFF_OR_CURRENT_STATE_SPARSE_OR_CONFLICT"
+      ],
+      "action": "SEPARATE HISTORICAL CEILING FROM CURRENT EXECUTION EVIDENCE; NO FIXED DECAY",
+      "numerical_rule": false
+    },
+    {
+      "id": "FNB-CLASS-EXPOSURE-RELIEF-TRANSLATION-AUDIT-R1",
+      "owner": "VENUE_PREDICTION",
+      "status": "SHADOW / HOLD",
+      "trigger": [
+        "STRONGER_CLASS_EXPOSURE_OR_HIGH_CLASS_ROUTE",
+        "RELATIVE_CLASS_RELIEF_OR_RETURN_TO_COMPATIBLE_FNB_CONTEXT"
+      ],
+      "action": "RE-AUDIT ROLE CEILING WITHOUT AUTOMATIC UPLIFT",
+      "numerical_rule": false
+    }
+  ],
+  "common_handoff": {
+    "profile": "KM-FAMILY-FNB-DAY-REGRESSION-COMMON-SHADOW-20260930-R1",
+    "venue_canon_ownership": false,
+    "topics": [
+      "MATERIAL_PAIR_X_ACTIVE_P3_EXACT_CONTINUITY",
+      "KRS_ACTIONABLE_EXACT_REAUDIT_SIGNAL",
+      "CONCENTRATION_AWARE_CAPITAL_WIDTH"
+    ]
+  },
+  "oos_validation": {
+    "todays_races_eligible": false,
+    "reason": "KNOWN_RESULT / TRAINING_REGRESSION_ONLY",
+    "next_unknown_races": "PREREGISTERED RESULT-BLIND FREEZE REQUIRED",
+    "automatic_promotion": false,
+    "metrics": [
+      "WINNER_RANK",
+      "P2_RANK",
+      "P3_RANK",
+      "TOP3_MEAN_RANK",
+      "W_CAPTURE",
+      "P2_CAPTURE",
+      "P3_CAPTURE",
+      "ALTERNATIVE_WINNER",
+      "ORDERED_PAIR_REACHABILITY",
+      "CANDIDATE_WIDTH",
+      "FALSE_POSITIVE_WIDTH",
+      "POSITIVE_CONTROL_DESTRUCTION"
+    ]
+  }
+}
