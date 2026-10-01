@@ -147,7 +147,8 @@ def test_real_official_nar_acquisition_in_fresh_process():
     assert payouts == {"EXACTA": 940, "TRIO": 2220, "TRIFECTA": 8760}
 
 
-def test_post_signed_failure_preserves_verified_result_without_duplicate_settlement(tmp_path, monkeypatch):
+@pytest.mark.parametrize("verified", [True, False])
+def test_post_signed_failure_preserves_verified_result_without_duplicate_settlement(tmp_path, monkeypatch, verified):
     import execution_store
     from types import SimpleNamespace
     monkeypatch.setattr(execution_store, "DEFAULT_ROOT", tmp_path / "store")
@@ -155,12 +156,13 @@ def test_post_signed_failure_preserves_verified_result_without_duplicate_settlem
     request = {"execution_id": "A-EXEC", "family_id": "LOCAL", "race_id": "A"}
     def fail_after_signature(*a, **kw):
         (output / "result_receipt_envelope.json").write_text(json.dumps({"receipt": {"phase": "RESULT", "race_id": "A"}}))
-        (output / "receipt_verifications.json").write_text(json.dumps({"RESULT": True}))
+        (output / "receipt_verifications.json").write_text(json.dumps({"RESULT": verified}))
         return SimpleNamespace(returncode=1, stdout="", stderr="learning failed")
     monkeypatch.setattr(runner.subprocess, "run", fail_after_signature)
     with pytest.raises(runner.FormalOrchestrationError) as error:
         runner.run_phase(request, "RESULT", run_id="test", github_sha="sha", runtime_out=output, tmp_root=tmp_path)
     assert json.loads(str(error.value))["signed_result_preserved"] is True
+    assert json.loads(str(error.value))["signed_result_verified"] is verified
     resolved = execution_store.resolve_phase("A-EXEC", "RESULT")
     assert runner._load_checkpoint_json(resolved, "result_checkpoint_basis.json") == {"request_sha256": runner._sha_obj(request)}
     assert runner._load_checkpoint_json(resolved, "post_signed_result_failure.json")["duplicate_settlement_forbidden"] is True

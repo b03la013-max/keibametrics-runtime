@@ -25,7 +25,7 @@ The official-result watch automatically retries preserved RESULT transport failu
 
 ## Validation and its limits
 
-Local selected suite: **252 passed, 2 skipped** (opt-in network tests). Real external /verify plus existing RESULT runner through Learning/tracker HOLD succeeded locally in a fresh isolated process before adding independent NAR acquisition to that same control: **1 PASS, 16.75 seconds**. The control prevents /result and all Prediction/KRS routes; original R8 signed RESULT is unchanged. It is a historical recovery control, not new future acceptance.
+Local selected suite: **253 passed, 2 skipped** (opt-in network tests). Real external /verify plus existing RESULT runner through Learning/tracker HOLD succeeded locally in a fresh isolated process before adding independent NAR acquisition to that same control: **1 PASS, 16.75 seconds**. The control prevents /result and all Prediction/KRS routes; original R8 signed RESULT is unchanged. It is a historical recovery control, not new future acceptance.
 
 Local actual NAR fetch through the existing safety validator still fails DNS resolution. No proxy/DNS safety bypass is installed. The existing canary now runs actual R07 official acquisition and an R08 control that independently fetches official outcome/payouts, compares the original signed outcome, verifies the original FINAL/RESULT at the external Runtime, and executes downstream Learning in a fresh process. Remote results must be checked on this PR; they are not assumed PASS here.
 
@@ -52,3 +52,5 @@ All 183 protected Production/research files and nine Phase B.2 definition hashes
 | Genuine unknown-future acceptance | Requires reviewed merge/deploy and actual one-trigger pre/post closure; pending |
 
 Remaining work includes real Owner provenance and secure credentials, real outcome-blind equivalence/pre-race E2E, real two-race stateful test, factual SOURCE prewarm, cross-runtime concurrent deduplication and durable result watch beyond the workflow window. These prerequisites prohibit MERGE-READY or LIVE END-TO-END LIFECYCLE OPERATIONAL declarations.
+
+Remote canary evidence: actual safety-validated official acquisition and the combined same-race R8 acquisition/signature/Learning recovery controls both PASS (2 tests, 2.02 seconds combined). All ten remote workflows PASS on the initially published R3 head. Final PR checks must be used for any subsequent head; the additional verification-pending preservation regression is retained. These controls do not prove real Prediction Owner equivalence or unknown-future completion.
