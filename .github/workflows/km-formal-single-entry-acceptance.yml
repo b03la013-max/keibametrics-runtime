@@ -43,7 +43,7 @@ on:
       - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json"
       - "profiles/venue_chat_routes_20261001_R36.json"
       - "profiles/family_runtime_contracts_20260929_R27.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
       - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
@@ -56,7 +56,7 @@ on:
       - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json"
       - "profiles/venue_chat_routes_20261001_R36.json"
       - "profiles/family_runtime_contracts_20260929_R27.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
       - ".github/workflows/km-formal-single-entry-acceptance.yml"
@@ -115,7 +115,7 @@ jobs:
           ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json")
           route=load("profiles/venue_chat_routes_20261001_R36.json")
           runtime=load("profiles/family_runtime_contracts_20260929_R27.json")
-          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json")
+          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json")
           gateway=load("profiles/current_execution_gateway.json")
           single=load("profiles/family_formal_single_entry_20261001_R3.json")
 
@@ -143,7 +143,7 @@ jobs:
           assert runtime["production_numerical_change"] is False
           assert runtime["runtime_bundle_change"] is False
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260929-R14"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20261001-R15"
           assert suite["runtime"]["contract"]==runtime["profile_id"]
           assert suite["runtime"]["runtime"]==local["runtime"]
           assert suite["production_numeric_suite"]["numerical_change"] is False
