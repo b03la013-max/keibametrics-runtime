@@ -133,7 +133,11 @@ jobs:
           set -euo pipefail
           REQ="${{ steps.execution_meta.outputs.request_file }}"
           test -n "$REQ"
-          REQUEST_FILE="$REQ" python -m runtime.non_jra_formal_runner
+          if [ "${{ steps.execution_meta.outputs.family_id }}" = "LOCAL" ]; then
+            python runtime/formal_execution_orchestrator.py --intent "$REQ" --run-id "${{ github.run_id }}" --github-sha "${{ github.sha }}"
+          else
+            REQUEST_FILE="$REQ" python -m runtime.non_jra_formal_runner
+          fi
 
       - name: Prewarm next prepared LOCAL races
         if: success() && steps.execution_meta.outputs.family_id == 'LOCAL' && steps.execution_meta.outputs.phase == 'FORMAL'
@@ -152,23 +156,27 @@ jobs:
           key: ${{ steps.execution_meta.outputs.cache_prefix }}${{ github.run_id }}
 
       - name: Persist canonical signed execution phase
-        if: success() && hashFiles('runtime_out/*.json') != ''
+        if: always() && hashFiles('runtime_out/*.json') != ''
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
           EXECUTION_PHASE: ${{ steps.execution_meta.outputs.phase }}
         run: |
           set -euo pipefail
-          python runtime/execution_store.py persist \
-            --execution-id "$EXECUTION_ID" \
-            --phase "$EXECUTION_PHASE" \
-            --run-id "${{ github.run_id }}" \
-            --source-dir runtime_out \
-            --github-sha "${{ github.sha }}"
+          if [ "${{ steps.execution_meta.outputs.family_id }}" != "LOCAL" ]; then
+            # BAN retains its existing phase-specific path.
+            python runtime/execution_store.py persist \
+              --execution-id "$EXECUTION_ID" \
+              --phase "$EXECUTION_PHASE" \
+              --run-id "${{ github.run_id }}" \
+              --source-dir runtime_out \
+              --github-sha "${{ github.sha }}"
+          fi
+          test -d "runtime/executions/$EXECUTION_ID" || exit 0
 
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "runtime/executions/$EXECUTION_ID/$EXECUTION_PHASE"
+          git add "runtime/executions/$EXECUTION_ID"
           if git diff --cached --quiet; then
             exit 0
           fi

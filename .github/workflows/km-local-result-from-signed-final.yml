@@ -100,7 +100,7 @@ jobs:
           python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT
 
       - name: Persist canonical RESULT execution phase
-        if: success() && steps.execution_meta.outputs.skip != 'true'
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != ''
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
@@ -109,6 +109,7 @@ jobs:
 
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          test -d "runtime/executions/$EXECUTION_ID/RESULT" || exit 0
           git add "runtime/executions/$EXECUTION_ID/RESULT"
           git diff --cached --quiet || git commit -m "execution: persist $EXECUTION_ID RESULT [skip ci]"
 
@@ -140,7 +141,7 @@ jobs:
           fi
 
       - name: Persist LOCAL forward measurement ledgers
-        if: success() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/acceptance_only.flag') == ''
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != '' && hashFiles('runtime_out/acceptance_only.flag') == ''
         shell: bash
         run: |
           set -euo pipefail
@@ -192,7 +193,7 @@ jobs:
           exit 1
 
       - name: Persist successful signed RESULT envelope
-        if: success() && steps.execution_meta.outputs.skip != 'true'
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.execution_meta.outputs.artifact_name }}
