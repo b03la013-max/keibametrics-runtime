@@ -166,13 +166,19 @@ jobs:
           PY
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/execution_gateway_canary_status.json
-          git commit -m "canary: persist latest LOCAL execution gateway PASS [skip ci]"
+          cp runtime/execution_gateway_canary_status.json /tmp/execution_gateway_canary_status.json
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/execution_gateway_canary_status.json runtime/execution_gateway_canary_status.json
+            git add runtime/execution_gateway_canary_status.json
+            if git diff --cached --quiet; then
               exit 0
             fi
-            git rebase --abort 2>/dev/null || true
+            git commit -m "canary: persist latest LOCAL execution gateway PASS [skip ci]"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
             sleep $((attempt * 2))
           done
           echo "Unable to persist canary status" >&2
