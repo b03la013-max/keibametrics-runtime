@@ -84,7 +84,7 @@ Fresh processes use the actual immutable store/completion gate with synthetic Ra
 
 ## R. Checks / CI
 
-Local selected suite: 212 PASS, including Candidate and official parser/continuation tests, existing Phase B.1/B.2, numerical, fast-path, store, authority, fallback and orchestrator regressions. Changed Python compilation, workflow YAML parse and git diff --check pass. Remote PR CI results are reported separately; local checks do not imply remote CI or live operation. Live API invocation has not occurred.
+Local selected suite: 212 PASS, including Candidate and official parser/continuation tests, existing Phase B.1/B.2, numerical, fast-path, store, authority, fallback and orchestrator regressions. Changed Python compilation, workflow YAML parse and git diff --check pass. Draft PR #122 was published through the GitHub connector after git push failed for missing local credentials; remote Git tree exactly matched the tested local tree. Initial CI: 8 PASS, 2 failures. Formal Single Entry failures were obsolete SOURCE/completion expectations in test_recovery_result_entry.py; tests now require explicit analysis-only SOURCE_PASS and incomplete RESULT without mandatory proofs. MEC Current Authority failure was comparing the live count 7 to an enactment snapshot 3; CI now rebuilds counts with the unchanged tracker and keeps snapshot/ledger distinct. Local Formal Single Entry acceptance subset: 140 PASS after correction. Remote rerun results are reported separately; local checks do not imply remote CI or live operation. Live API invocation has not occurred.
 
 ## S. Freeze / secrets
 
