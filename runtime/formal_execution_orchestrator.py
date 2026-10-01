@@ -663,6 +663,54 @@ def _phase_failure(runtime_out: pathlib.Path, phase: str, returncode: int, stdou
     }
 
 
+def _validate_explicit_result_revision(
+    request: Dict[str, Any],
+    previous: Dict[str, Any],
+    formal: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Allow a RESULT correctness re-evaluation without deleting or rewriting the
+    prior immutable RESULT run. The previous signed outcome/payout/source and
+    the current immutable FINAL receipt must be identical. Only non-outcome
+    correctness logic may change between revisions.
+    """
+    if str(request.get("result_revision") or "") != "CORRECTNESS_REEVALUATION":
+        raise FormalOrchestrationError("RESULT_CHECKPOINT_REQUEST_MISMATCH_REQUIRES_EXPLICIT_REVISION")
+    prev_env = _load_checkpoint_json(previous, "result_receipt_envelope.json")
+    final_env = _load_checkpoint_json(formal, "final_receipt_envelope.json")
+    if not isinstance(prev_env, dict) or not isinstance(final_env, dict):
+        raise FormalOrchestrationError("RESULT_REVISION_LINEAGE_ARTIFACT_MISSING")
+    prev_art = prev_env.get("artifact") if isinstance(prev_env.get("artifact"), dict) else {}
+    prev_official = prev_art.get("official_result") if isinstance(prev_art.get("official_result"), dict) else {}
+    req_order = [int(x) for x in (request.get("finish_order") or [])]
+    prev_order = [int(x) for x in (prev_official.get("finish_order") or [])]
+    if not req_order or req_order != prev_order:
+        raise FormalOrchestrationError("RESULT_REVISION_OUTCOME_MISMATCH")
+    req_payouts = {str(k).upper(): int(v) for k,v in (request.get("payouts") or {}).items()}
+    prev_payouts = {str(k).upper(): int(v) for k,v in (prev_official.get("payouts") or {}).items()}
+    if req_payouts != prev_payouts:
+        raise FormalOrchestrationError("RESULT_REVISION_PAYOUT_MISMATCH")
+    if str(request.get("source") or "") != str(prev_official.get("source") or ""):
+        raise FormalOrchestrationError("RESULT_REVISION_SOURCE_MISMATCH")
+    if str(request.get("result_available_at") or "") != str(prev_art.get("result_available_at") or prev_official.get("result_available_at") or ""):
+        raise FormalOrchestrationError("RESULT_REVISION_RESULT_TIME_MISMATCH")
+    frozen = prev_art.get("frozen_refs") or prev_art.get("frozen_references") or {}
+    previous_final_sha = str(frozen.get("final_receipt_sha256") or "")
+    current_final_sha = str(final_env.get("receipt_sha256") or "")
+    if not previous_final_sha or previous_final_sha != current_final_sha:
+        raise FormalOrchestrationError("RESULT_REVISION_FINAL_LINEAGE_MISMATCH")
+    return {
+        "status":"PASS",
+        "revision":"CORRECTNESS_REEVALUATION",
+        "previous_result_manifest_sha256":str((previous.get("latest") or {}).get("manifest_sha256") or ""),
+        "previous_result_receipt_sha256":str(prev_env.get("receipt_sha256") or ""),
+        "final_receipt_sha256":current_final_sha,
+        "outcome_unchanged":True,
+        "payouts_unchanged":True,
+        "production_effect":"NONE",
+    }
+
+
 def run_phase(
     request: Dict[str, Any],
     phase: str,
@@ -770,8 +818,9 @@ def orchestrate(
         if previous is not None:
             basis = _load_checkpoint_json(previous, "result_checkpoint_basis.json")
             if basis != {"request_sha256": _sha_obj(request)}:
-                raise FormalOrchestrationError("RESULT_CHECKPOINT_REQUEST_MISMATCH_REQUIRES_EXPLICIT_REVISION")
-            return {"status": "ALREADY_COMPLETE", "execution_id": execution_id, "phase": "RESULT"}
+                _validate_explicit_result_revision(request, previous, formal)
+            else:
+                return {"status": "ALREADY_COMPLETE", "execution_id": execution_id, "phase": "RESULT"}
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id,
                     "phases": ["RESULT"], "prediction_reexecution": False}

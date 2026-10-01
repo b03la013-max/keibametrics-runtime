@@ -649,3 +649,44 @@ def test_formal_persistence_uses_original_intent_after_transport_and_time_rebase
     changed = json.loads(json.dumps(intent))
     changed['static_prediction']['ranking'] = ['2', '1', '3']
     assert o.formal_checkpoint_basis(changed, source)['semantic_basis_sha256'] != captured['semantic_basis_sha256']
+
+
+def test_explicit_result_revision_requires_identical_signed_outcome():
+    from runtime.formal_execution_orchestrator import _validate_explicit_result_revision, FormalOrchestrationError
+    import tempfile, pathlib, json
+    from unittest.mock import patch
+
+    request={
+      "result_revision":"CORRECTNESS_REEVALUATION",
+      "finish_order":[1,8,5],
+      "payouts":{"EXACTA":3930,"TRIO":2260,"TRIFECTA":25360},
+      "source":"NAR_OFFICIAL_RESULT_VERIFIED_20261001",
+      "result_available_at":"2026-10-01T21:04:00+09:00",
+    }
+    prev_env={
+      "receipt_sha256":"old-result",
+      "artifact":{
+        "official_result":{
+          "finish_order":[1,8,5],
+          "payouts":{"EXACTA":3930,"TRIO":2260,"TRIFECTA":25360},
+          "source":"NAR_OFFICIAL_RESULT_VERIFIED_20261001",
+          "result_available_at":"2026-10-01T21:04:00+09:00",
+        },
+        "result_available_at":"2026-10-01T21:04:00+09:00",
+        "frozen_refs":{"final_receipt_sha256":"final-sha"},
+      }
+    }
+    final_env={"receipt_sha256":"final-sha"}
+    def fake_load(resolved,name):
+        if name=="result_receipt_envelope.json": return prev_env
+        if name=="final_receipt_envelope.json": return final_env
+        return None
+    previous={"latest":{"manifest_sha256":"old-manifest"}}
+    formal={"latest":{"manifest_sha256":"formal-manifest"}}
+    with patch("runtime.formal_execution_orchestrator._load_checkpoint_json",side_effect=fake_load):
+        out=_validate_explicit_result_revision(request,previous,formal)
+        assert out["status"]=="PASS"
+        assert out["outcome_unchanged"] is True
+        bad=dict(request);bad["finish_order"]=[8,1,5]
+        with pytest.raises(FormalOrchestrationError,match="OUTCOME_MISMATCH"):
+            _validate_explicit_result_revision(bad,previous,formal)
