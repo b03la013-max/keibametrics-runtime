@@ -1303,9 +1303,15 @@ deadline_guard("AFTER_FINAL")
 # Failure is diagnostic only; Production tickets and release are immutable.
 try:
     from local_candidate_postresult import build_forward_capture
+    inventory={}
+    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json"]:
+        path=os.path.join("runtime_out",name)
+        if os.path.isfile(path):
+            with open(path,"rb") as frozen_file:inventory[name]={"sha256":hashlib.sha256(frozen_file.read()).hexdigest()}
+        else:inventory[name]={"status":"MISSING_NOT_ZERO"}
     forward=build_forward_capture(req,fin,utility,
         generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        candidate=candidate_shadow_summary,
+        candidate=candidate_shadow_summary,artifact_inventory=inventory,
         classification="MECHANICAL_ACCEPTANCE" if acceptance_only else "FORWARD")
     persist("local_forward_measurement_pre_result.json",forward)
 except Exception as forward_error:

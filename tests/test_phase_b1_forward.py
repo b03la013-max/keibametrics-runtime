@@ -21,6 +21,14 @@ def capture(**kw):
 def result(req,payout=True):
     return {'race_id':req['race_id'],'official_result':{'top3':[1,2,3],'payouts_per_100_yen':{'TRIFECTA':500} if payout else {}}}, {'race_id':req['race_id'],'execution_id':req['execution_id'],'result_available_at':'2026-10-02T02:10:00+00:00','official_result_verified':True,'acceptance_only':True}
 
+def signed_result(art):
+    receipt={'race_id':art['race_id'],'phase':'RESULT','status':'PASS','artifact_sha256':f._sha(art)}
+    return {'artifact':copy.deepcopy(art),'receipt':receipt,'receipt_sha256':f._sha(receipt),'signature':'MECHANICAL-TEST-SIGNATURE'}
+
+def settle(pre,fin,art,request):
+    request={**request,'official_result_verification_ref':'MECHANICAL_ACCEPTANCE_ONLY'}
+    return f.settle_forward_capture(pre,fin,art,result_request=request,result_envelope=signed_result(art),result_verification={'verified':True})
+
 def test_axes_are_independent():
     x=f.failure_axes(['NUMERICAL_AUTHORITY_NOT_READY'],{'first_material_failure':'EXACT','secondary_failures':['CAPITAL']})
     assert x['performance_first_material_failure']=='EXACT' and x['secondary_failures']==['CAPITAL']
@@ -32,7 +40,7 @@ def test_forward_binding_and_late_rejected():
 
 def test_capture_immutable_and_fresh_process(tmp_path):
     req,fin,pre=capture();root=str(tmp_path/'ledger');f.persist_forward_capture(pre,root)
-    result_art,rreq=result(req);settled=f.settle_forward_capture(pre,fin,result_art,result_request=rreq)
+    result_art,rreq=result(req);settled=settle(pre,fin,result_art,rreq)
     assert settled['status']=='SETTLED' and not settled['eligible'] and not settled['krs_eligible']
     f.persist_forward_settlement(pre,settled,root)
     subprocess.run([sys.executable,'-c',f"import sys;sys.path.insert(0,{str(ROOT/'runtime')!r});from local_candidate_postresult import forward_status; assert forward_status({root!r})['families']['LOCAL']['captured_races']==1"],cwd=ROOT,check=True)
@@ -43,7 +51,7 @@ def test_capture_immutable_and_fresh_process(tmp_path):
 
 def test_missing_payout_holds_only_shadow(tmp_path):
     req,fin,pre=capture();before=copy.deepcopy(fin);art,rreq=result(req,False)
-    x=f.settle_forward_capture(pre,fin,art,result_request=rreq)
+    x=settle(pre,fin,art,rreq)
     assert x['status'].startswith('HOLD') and fin==before and x['production_effect']=='NONE'
 
 def test_family_cohorts_never_pool(tmp_path):
@@ -78,7 +86,7 @@ def test_forward_eligibility_and_family_counts_in_isolated_test_ledger(tmp_path)
         req,fin,u=inputs(family=family,race=family+'-20990101-R01')
         pre=f.build_forward_capture(req,fin,u,generated_at='2026-10-02T01:00:00+00:00',candidate={'race_source_snapshot_sha256':'source-test'})
         art,rreq=result(req);rreq['acceptance_only']=False
-        measurement=f.settle_forward_capture(pre,fin,art,result_request=rreq)
+        measurement=settle(pre,fin,art,rreq)
         assert measurement['eligible'] and measurement['krs_eligible']
         assert measurement['krs_incremental_utility']['production_harm'] is False
         f.persist_forward_capture(pre,root);f.persist_forward_settlement(pre,measurement,root)

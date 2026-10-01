@@ -245,7 +245,7 @@ def _forward_dt(x):
     from datetime import datetime
     return datetime.fromisoformat(str(x).replace('Z','+00:00'))
 
-def build_forward_capture(request, final, utility, *, generated_at, candidate=None, classification='FORWARD'):
+def build_forward_capture(request, final, utility, *, generated_at, candidate=None, classification='FORWARD', artifact_inventory=None):
     from pfs_grand_review import capital_arms
     protocol=_forward_protocol();art=final.get('artifact') or {};receipt=final.get('receipt') or {}
     from pathlib import Path
@@ -279,7 +279,7 @@ def build_forward_capture(request, final, utility, *, generated_at, candidate=No
          'classification':classification,'generated_at':generated_at,'scheduled_post_at':post,
          'source_sha256':source,'final_basis_sha256':_sha(final),'runner_universe_sha256':_sha(request.get('runners')),
          'protocol_sha256':_sha(protocol),'definition_sha256':_definition_hashes(),'static_prediction':request.get('static_prediction') or {},
-         'krs_utility':utility,'candidate':candidate,'capital':capital,
+         'krs_utility':utility,'candidate':candidate,'capital':capital,'artifact_inventory':artifact_inventory or {},
          'authority_status':['NUMERICAL_AUTHORITY_NOT_READY'] if authority['status']!='READY' else ['FULL_NUMERICAL_AUTHORITY_READY'],'production_effect':'NONE','automatic_promotion':False}
     obj['sha256']=_sha(obj);return obj
 
@@ -311,12 +311,62 @@ def failure_axes(authority_status, diagnosis=None):
             'secondary_failures':diagnosis.get('secondary_failures') or diagnosis.get('secondary_failure') or [],
             'performance_diagnosis_source':'EXISTING_DIAGNOSIS' if first!='UNDIAGNOSED' else 'NOT_INFERRED_FROM_AUTHORITY'}
 
-def settle_forward_capture(obj, final, result, *, result_request, diagnosis=None):
+def result_authority(obj, result, request, envelope, verification):
+    """Caller verifies the signed envelope through existing /verify before invoking us."""
+    failures=[];receipt=(envelope or {}).get('receipt') or {};artifact=(envelope or {}).get('artifact') or {}
+    if request.get('official_result_verified') is not True:failures.append('OFFICIAL_CONFIRMATION_MISSING')
+    if not str(request.get('official_result_verification_ref') or '').strip():failures.append('VERIFICATION_REFERENCE_MISSING')
+    if request.get('execution_id')!=obj['execution_id']:failures.append('EXECUTION_ID_MISSING_OR_MISMATCH')
+    if request.get('race_id')!=obj['race_id'] or result.get('race_id')!=obj['race_id'] or receipt.get('race_id')!=obj['race_id']:failures.append('RACE_IDENTITY_MISMATCH')
+    if (verification or {}).get('verified') is not True or not (envelope or {}).get('signature'):failures.append('SIGNED_RESULT_NOT_VERIFIED')
+    if receipt.get('status')!='PASS' or receipt.get('phase')!='RESULT':failures.append('RESULT_RECEIPT_NOT_PASS')
+    if receipt.get('artifact_sha256')!=_sha(artifact) or (envelope or {}).get('receipt_sha256')!=_sha(receipt):failures.append('RESULT_DIGEST_MISMATCH')
+    # Normalized top3 is allowed, but outcome/payout/source/time must originate in signed RESULT.
+    official=artifact.get('official_result') or {};normalized=result.get('official_result') or {}
+    signed_top=official.get('top3') or official.get('finish_order',[])[:3]
+    actual_top=normalized.get('top3') or normalized.get('finish_order',[])[:3]
+    if list(signed_top)!=list(actual_top):failures.append('SIGNED_OUTCOME_MISMATCH')
+    if any(normalized.get(k)!=v for k,v in official.items() if k not in {'top3','finish_order'}):failures.append('SIGNED_RESULT_CONTENT_MISMATCH')
+    return {'status':'PASS' if not failures else 'HOLD_RESULT_AUTHORITY','failures':failures,
+        'verification_ref':request.get('official_result_verification_ref'),
+        'result_receipt_sha256':(envelope or {}).get('receipt_sha256'),
+        'result_artifact_sha256':receipt.get('artifact_sha256'),
+        'verified_signed_result':(verification or {}).get('verified') is True}
+
+def ranking_metrics(pred,actual,universe_size):
+    rank=[str(x) for x in pred.get('ranking') or []];roles=pred.get('roles') or {}
+    def role(r):return set(str(x) for x in pred.get(r) or []) or {str(k) for k,v in roles.items() if any(str(x).startswith(r) for x in v)}
+    ranks=[rank.index(str(x))+1 if str(x) in rank else universe_size+1 for x in actual]
+    w,p2,p3=role('W'),role('P2'),role('P3')
+    return {'winner_rank':ranks[0],'winner_reciprocal_rank':1/ranks[0] if str(actual[0]) in rank else 0,
+        'mean_actual_top3_rank':sum(ranks)/3,'top3_contained_count':sum(str(x) in rank[:3] for x in actual),
+        'W_hit':str(actual[0]) in w,'P2_hit':str(actual[1]) in p2,'P3_hit':str(actual[2]) in p3,
+        'W_universe':sorted(w),'missing_actual_count':sum(str(x) not in rank for x in actual)}
+
+def evaluate_frozen_candidate(obj,actual):
+    candidate=obj.get('candidate') or {};arm=(candidate.get('arms') or {}).get('v0.1') or candidate
+    pred=arm.get('candidate_static_prediction') or {}
+    if not pred.get('ranking'):return {'status':'HOLD_CANDIDATE_UNAVAILABLE','future_eligible':False}
+    universe=len(obj['static_prediction'].get('ranking') or [])
+    base=ranking_metrics(obj['static_prediction'],actual,universe);cand=ranking_metrics(pred,actual,universe)
+    bw,cw=set(base['W_universe']),set(cand['W_universe']);winner=str(actual[0])
+    missing=arm.get('missingness_saturation') or {};coverage=arm.get('runner_component_coverage') or {}
+    ratios=[float(v['missingness_ratio']) for indices in missing.values() if isinstance(indices,dict) for v in indices.values() if isinstance(v,dict) and isinstance(v.get('missingness_ratio'),(int,float))]
+    return {'status':'EVALUATED_FROZEN_V01','candidate_sha256':candidate.get('sha256') or _sha(candidate),
+        'baseline':base,'candidate':cand,'paired_winner_rank_difference':cand['winner_rank']-base['winner_rank'],
+        'paired_top3_rank_difference':cand['mean_actual_top3_rank']-base['mean_actual_top3_rank'],
+        'role_capture_delta':sum(int(cand[k])-int(base[k]) for k in ['W_hit','P2_hit','P3_hit']),
+        'false_W_promotion':len((cw-bw)-{winner}),'false_W_demotion':int(winner in bw-cw),
+        'missingness':{'mean_index_missingness_ratio':sum(ratios)/len(ratios) if ratios else None,'runner_component_coverage':coverage,'index_saturation':missing},
+        'neutral_component_causal_rank_effect':'UNIDENTIFIED_WITHOUT_PRE_REGISTERED_ABLATION',
+        'KRS_downstream_effect':'See frozen candidate KRS postresult artifact; no ticket effect inferred'}
+
+def settle_forward_capture(obj, final, result, *, result_request, diagnosis=None, result_envelope=None, result_verification=None):
     from mec_r4_shadow import settle_ticket_list
     _check_forward(obj)
     if obj['final_basis_sha256']!=_sha(final):raise ValueError('FINAL_BINDING_MISMATCH')
     if result.get('race_id')!=obj['race_id'] or result_request.get('race_id')!=obj['race_id']:raise ValueError('RESULT_RACE_MISMATCH')
-    if result_request.get('execution_id') and result_request['execution_id']!=obj['execution_id']:raise ValueError('EXECUTION_BINDING_MISMATCH')
+    # Missing/mismatched RESULT authority is a research HOLD, never Production veto.
     when=result_request['result_available_at']
     if _forward_dt(when)<=_forward_dt(obj['scheduled_post_at']):raise ValueError('RESULT_NOT_POST_RACE')
     top3=(result.get('official_result') or {}).get('top3') or (result.get('official_result') or {}).get('finish_order',[])[:3]
@@ -335,12 +385,16 @@ def settle_forward_capture(obj, final, result, *, result_request, diagnosis=None
             arm['net_delta_vs_production']=arm['profit_loss']-baseline['profit_loss']
             arm['marginal_return_vs_production']=arm['return']-baseline['return']
             arm['drawdown_equity_increment']=arm['profit_loss']
-    krs_eligible=(obj['classification']=='FORWARD' and result_request.get('official_result_verified') is True and not result_request.get('acceptance_only'))
+    authority=result_authority(obj,result,result_request,result_envelope,result_verification)
+    krs_eligible=(obj['classification']=='FORWARD' and authority['status']=='PASS' and not result_request.get('acceptance_only'))
     eligible=krs_eligible and complete and obj['capital']['production_comparable_equal_spend']
     out={'family_id':obj['family_id'],'race_id':obj['race_id'],'execution_id':obj['execution_id'],
          'profile':obj['profile'],'pre_result_sha256':obj['sha256'],'result_sha256':_sha(result),
          'scheduled_post_at':obj['scheduled_post_at'],'official_result_verified':result_request.get('official_result_verified') is True,
-         'classification':obj['classification'],'eligible':eligible,'krs_eligible':krs_eligible,'status':'SETTLED' if complete else 'HOLD_MISSING_PAYOUT_OR_ARM',
+         'classification':obj['classification'],'eligible':eligible,'krs_eligible':krs_eligible,
+         'status':authority['status'] if authority['status']!='PASS' else 'SETTLED' if complete else 'HOLD_MISSING_PAYOUT_OR_ARM',
+         'settlement_completeness':'SETTLED' if complete else 'HOLD_MISSING_PAYOUT_OR_ARM','result_authority':authority,
+         'candidate_evaluation':evaluate_frozen_candidate(obj,top3),
          'krs_incremental_utility':krs,'arms':arms,'failure_axes':failure_axes(obj['authority_status'],diagnosis),
          'production_effect':'NONE','automatic_promotion':False}
     out['sha256']=_sha(out);return out
@@ -391,6 +445,66 @@ def forward_status(root='runtime/local_candidate_forward_measurements'):
             economics=[{'race_id':f'{i:08d}','investment':x['arms'][arm]['investment'],'return':x['arms'][arm]['return'],
                         'profit_loss':x['arms'][arm]['profit_loss'],'hit_but_loss':x['arms'][arm]['hit_but_loss']} for i,x in enumerate(rows)]
             arm_report[arm]={'aggregate':_aggregate(economics),'robustness':_robustness(economics)}
-        out['families'][family]={'captured_races':captured,'krs_eligible_races':len(krs_rows),'krs_measurements':[{'race_id':x['race_id'],**x['krs_incremental_utility']} for x in krs_rows],'eligible_races':len(rows),'held':held,'arms':arm_report,'pilot_minimum':30,
+        out['families'][family]={'captured_races':captured,'krs_eligible_races':len(krs_rows),'candidate_evaluations':[{'race_id':x['race_id'],'scheduled_post_at':x['scheduled_post_at'],**x['candidate_evaluation']} for x in krs_rows if x.get('candidate_evaluation',{}).get('status')=='EVALUATED_FROZEN_V01'],'krs_measurements':[{'race_id':x['race_id'],**x['krs_incremental_utility']} for x in krs_rows],'eligible_races':len(rows),'held':held,'arms':arm_report,'pilot_minimum':30,
                                  'verdict':'EMPIRICAL_VERDICT_PENDING','race_ids':[x['race_id'] for x in rows]}
+    for family,data in out['families'].items():
+        data['candidate_futility_review']=candidate_futility_review(data['candidate_evaluations'])
     return out
+
+def candidate_futility_review(rows):
+    """Preregistered descriptive review trigger, not a statistical proof or automatic deletion."""
+    from collections import defaultdict
+    from pfs_grand_review import _venue
+    groups=defaultdict(list)
+    usable=[r for r in rows if r.get('status')=='EVALUATED_FROZEN_V01']
+    for row in usable:groups[(str(row['scheduled_post_at'])[:10],_venue(row['race_id']))].append(row)
+    contexts=[{'day':d,'venue':v,'races':len(xs),
+        'winner_difference':sum(x['paired_winner_rank_difference'] for x in xs)/len(xs),
+        'top3_difference':sum(x['paired_top3_rank_difference'] for x in xs)/len(xs),
+        'role_delta':sum(x['role_capture_delta'] for x in xs)} for (d,v),xs in sorted(groups.items())]
+    enough=len({x['day'] for x in contexts})>=2 and len({x['venue'] for x in contexts})>=2
+    adverse=sum(x['paired_winner_rank_difference']>0 and x['paired_top3_rank_difference']>0 for x in usable)
+    favorable=sum(x['paired_winner_rank_difference']<0 or x['paired_top3_rank_difference']<0 for x in usable)
+    strata=defaultdict(list)
+    for row in usable:
+        missing=(row.get('missingness') or {}).get('index_saturation') or {}
+        if not missing:continue
+        neutral=any(v.get('fully_neutral_sub_index') for indices in missing.values() if isinstance(indices,dict) for v in indices.values() if isinstance(v,dict))
+        strata[neutral].append(row)
+    missing_known=all(bool((r.get('missingness') or {}).get('index_saturation')) for r in usable)
+    reversals=any(sum(r['paired_winner_rank_difference'] for r in xs)<0 or sum(r['paired_top3_rank_difference'] for r in xs)<0 for xs in strata.values())
+    trigger=bool(enough and missing_known and adverse>favorable and not reversals and all(x['winner_difference']>0 and x['top3_difference']>0 and x['role_delta']<=0 for x in contexts))
+    return {'decision':'EARLY_FUTILITY_REJECT_OR_SIMPLIFY_HUMAN_REVIEW' if trigger else 'HOLD_INSUFFICIENT_CONTEXT' if not enough or not missing_known else 'CONTINUE',
+        'contexts':contexts,'adverse_races':adverse,'favorable_races':favorable,'missingness_observed':missing_known,
+        'missingness_stratum_reversal':reversals,'automatic_promotion':False,'automatic_deletion':False,
+        'allowed_decisions':_forward_protocol()['candidate_decisions']}
+
+
+def initial_forward_acceptance(pre,measurement,counts_before,counts_after):
+    required=['source_receipt_envelope.json','final_receipt_envelope.json','candidate_numerical_shadow_summary.json','krs_prediction_utility.json','mec_r4_shadow_pre_result.json','local_mec_r5_shadow_pre_result.json','common_exact_continuity_shadow_pre_result.json']
+    inventory=pre.get('artifact_inventory') or {};missing=[name for name in required if not inventory.get(name,{}).get('sha256')]
+    pre_pass=not missing and pre['classification']=='FORWARD' and pre.get('capital',{}).get('production_comparable_equal_spend') is True
+    post_pass=measurement.get('eligible') is True and measurement.get('result_authority',{}).get('status')=='PASS'
+    return {'profile':'PHASE-B2-INITIAL-FORWARD-ACCEPTANCE','race_id':pre['race_id'],'execution_id':pre['execution_id'],
+        'status':'LIVE_FORWARD_MEASUREMENT_OPERATIONAL' if pre_pass and post_pass else 'PENDING_OR_HELD',
+        'pre_race_capture':'PASS' if pre_pass else 'HOLD','post_result_settlement':'PASS' if post_pass else 'HOLD',
+        'freeze_timestamps':{'forward':pre['generated_at'],'scheduled_post':pre['scheduled_post_at']},
+        'source_sha256':pre['source_sha256'],'final_sha256':pre['final_basis_sha256'],'artifact_inventory':inventory,
+        'baseline':pre['static_prediction'],'candidate':measurement.get('candidate_evaluation'),
+        'KRS':measurement.get('krs_incremental_utility'),'capital_arms':measurement.get('arms'),
+        'official_result_authority':measurement.get('result_authority'),'first_material_failure':measurement.get('failure_axes'),
+        'counts_before':counts_before,'counts_after':counts_after,'capture_failures':missing,
+        'common_exact_MEC_settlements':'immutable RESULT execution artifacts, inspect independent eligibility counts',
+        'production_effect':'NONE','prediction_improvement_claim':False,'actual_PFS':'UNKNOWN unless explicit purchase ledger verified'}
+
+def forward_tracker_result_authority(race_id, lineage_root, *, local_only=False):
+    """Additional authority requirement for prospective LOCAL rows; preserve historical cohorts."""
+    import re
+    from pathlib import Path
+    dates=re.findall(r'20\d{6}',str(race_id))
+    if not dates or dates[0]<'20261001':return None
+    if local_only and not any(v in str(race_id).split('-') for v in ['LOCAL','FNB','URW','OHI','KAW','SON','NGY','KOC','SAG','MON','MOR','KSM']):return None
+    path=Path(lineage_root)/(str(race_id)+'.json')
+    auth=(json.loads(path.read_text()).get('result_authority') or {}) if path.exists() else {}
+    ok=auth.get('status')=='PASS' and auth.get('verified_signed_result') is True and all(auth.get(k) for k in ['verification_ref','result_receipt_sha256','result_artifact_sha256'])
+    return {'verified':bool(ok),'oos_admissible':bool(ok),'refs':[auth] if ok else [],'status':'PASS' if ok else 'HOLD_RESULT_AUTHORITY'}

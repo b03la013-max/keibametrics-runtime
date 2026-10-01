@@ -14,6 +14,9 @@ def _load(p):
 def _dt(s):
     return datetime.fromisoformat(str(s).replace("Z","+00:00"))
 def _official_result_authority(rid):
+    from local_candidate_postresult import forward_tracker_result_authority
+    forward=forward_tracker_result_authority(rid,'runtime/common_exact_continuity_shadow_lineage',local_only=False)
+    if forward is not None:return forward
     root="runtime/family_result_requests"; refs=[]
     if os.path.isdir(root):
         for fn in sorted(os.listdir(root)):

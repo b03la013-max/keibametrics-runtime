@@ -175,6 +175,11 @@ art=res.get("artifact") or {}
 os.makedirs("runtime_out",exist_ok=True)
 json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
+# Measurement authority is stronger than the operator confirmation flag alone.
+from local_candidate_postresult import result_authority
+normalized_signed_result={**art,"race_id":rid,"official_result":{**(art.get("official_result") or {}),"top3":top3}}
+shared_result_authority=result_authority({"race_id":rid,"execution_id":execution_id},normalized_signed_result,req,res,ver)
+
 # Critical-path reflection is available immediately after the verified RESULT.
 # Deep candidate/MEC research continues below but is not required to understand
 # the first material failure before preparing the next race.
@@ -211,7 +216,8 @@ try:
         # Signed API result may expose finish_order rather than top3; shared settlement needs top3.
         forward_result["official_result"]=dict(art.get("official_result") or result_payload["official_result"])
         forward_result["official_result"]["top3"]=list(req["finish_order"][:3])
-        forward_measurement=settle_forward_capture(forward,fin,forward_result,result_request=req,diagnosis=fast_reflection)
+        forward_measurement=settle_forward_capture(forward,fin,forward_result,result_request=req,diagnosis=fast_reflection,result_envelope=res,result_verification=ver)
+        counts_before=forward_status()
         persist_forward_settlement(forward,forward_measurement)
         json.dump(forward_measurement,open("runtime_out/local_forward_measurement_settlement.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
         status=forward_status()
@@ -268,7 +274,7 @@ try:
                 "total_investment":total_investment,
                 "total_payout":total_return,
             },
-            "production_effect":"NONE",
+            "production_effect":"NONE","result_authority":shared_result_authority,
         }
         lineage["sha256"]=__import__("hashlib").sha256(
             json.dumps(lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
@@ -344,7 +350,7 @@ try:
                 "total_investment":total_investment,
                 "total_payout":total_return,
             },
-            "production_effect":"NONE",
+            "production_effect":"NONE","result_authority":shared_result_authority,
         }
         r5_lineage["sha256"]=__import__("hashlib").sha256(
             json.dumps(r5_lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
@@ -402,7 +408,7 @@ try:
             "generated_at":common_exact.get("generated_at"),
             "scheduled_post_at":common_exact.get("scheduled_post_at"),
             "temporal_mode":common_exact.get("temporal_mode"),
-            "production_effect":"NONE",
+            "production_effect":"NONE","result_authority":shared_result_authority,
         }
         common_lineage["sha256"]=__import__("hashlib").sha256(
             json.dumps(common_lineage,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
@@ -496,7 +502,7 @@ try:
             "binding_valid":candidate_v03_binding_valid,
             "signed_final_bound":bound,
             "shadow_sha256":candidate_v03_summary.get("sha256"),
-            "production_effect":"NONE",
+            "production_effect":"NONE","result_authority":shared_result_authority,
         },open("runtime_out/candidate_v03_signed_final_binding.json","w",encoding="utf-8"),
           ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
@@ -605,3 +611,21 @@ summary={
 }
 json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
 print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
+
+# Initial live acceptance summarizes existing artifacts only; it does not generate predictions.
+try:
+    if 'forward_measurement' in globals():
+        from local_candidate_postresult import initial_forward_acceptance
+        acceptance=initial_forward_acceptance(forward,forward_measurement,counts_before,forward_status())
+        extra={}
+        for name in ['mec_r4_shadow_settlement.json','local_mec_r5_shadow_settlement.json','common_exact_continuity_shadow_settlement.json']:
+            path=os.path.join('runtime_out',name)
+            if os.path.exists(path):extra[name]=json.load(open(path,encoding='utf-8'))
+            else:extra[name]={'status':'MISSING_NOT_ZERO'}
+        acceptance['existing_shadow_settlements']=extra
+        if any(x.get('status')=='MISSING_NOT_ZERO' or not x.get('arms') or any(a.get('status') not in {None,'SETTLED'} for a in x.get('arms',{}).values()) for x in extra.values()) or any(x.get('oos_eligible') is False for x in extra.values()):
+            acceptance['status']='PENDING_OR_HELD';acceptance['post_result_settlement']='HOLD_MISSING_EXISTING_SHADOW_SETTLEMENT'
+        json.dump(acceptance,open('runtime_out/local_initial_forward_acceptance.json','w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
+        json.dump(acceptance,open('runtime/local_initial_forward_acceptance.json','w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
+except Exception as error:
+    json.dump({'status':'PENDING_OR_HELD','error':str(error),'production_effect':'NONE'},open('runtime_out/local_initial_forward_acceptance_failure.json','w',encoding='utf-8'),ensure_ascii=False)
