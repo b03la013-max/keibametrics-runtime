@@ -11,7 +11,7 @@ from pfs_grand_review import actual_purchase_records
 def inputs(family='LOCAL',race='FNB-20261002-R01'):
     req={'family_id':family,'race_id':race,'execution_id':race+'-EXEC','temporal_mode':'FORMAL-PRE-RACE','scheduled_post_at':'2026-10-02T02:00:00+00:00','runners':[{'runner_id':str(i),'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'static_prediction':{'ranking':['1','2','3','4']}}
     utility={'summary':[{'horse_no':i,'ranks':{'SSR-W':i,'SSR-P2':i,'SSR-P3':i},'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'snapshot':{'role_zones':{'W':1,'P2':2,'P3':3}}}
-    fin={'signature':'mechanical-signature-placeholder','receipt':{'race_id':race,'status':'PASS'},'artifact':{'source_snapshot_sha256':'source-test','final_freeze_timestamp':'2026-10-02T00:55:00+00:00','final_prediction_package':{'krs_prediction_utility_shadow':utility},'final_ticket':{'tickets':[{'bet_type':'TRIFECTA','selection':[1,2,3],'stake':100,'mec_tier':'CORE'},{'bet_type':'TRIO','selection':[1,2,4],'stake':100,'mec_tier':'TAIL'}]}}}
+    fin={'receipt_sha256':'MECHANICAL-FINAL-RECEIPT','signature':'mechanical-signature-placeholder','receipt':{'race_id':race,'status':'PASS'},'artifact':{'source_snapshot_sha256':'source-test','final_freeze_timestamp':'2026-10-02T00:55:00+00:00','final_prediction_package':{'krs_prediction_utility_shadow':utility},'final_ticket':{'tickets':[{'bet_type':'TRIFECTA','selection':[1,2,3],'stake':100,'mec_tier':'CORE'},{'bet_type':'TRIO','selection':[1,2,4],'stake':100,'mec_tier':'TAIL'}]}}}
     return req,fin,utility
 
 def capture(**kw):
@@ -19,7 +19,7 @@ def capture(**kw):
     return req,fin,f.build_forward_capture(req,fin,u,generated_at='2026-10-02T01:00:00+00:00',candidate={'race_source_snapshot_sha256':'source-test'},classification='MECHANICAL_ACCEPTANCE')
 
 def result(req,payout=True):
-    return {'race_id':req['race_id'],'official_result':{'top3':[1,2,3],'payouts_per_100_yen':{'TRIFECTA':500} if payout else {}}}, {'race_id':req['race_id'],'execution_id':req['execution_id'],'result_available_at':'2026-10-02T02:10:00+00:00','official_result_verified':True,'acceptance_only':True}
+    return {'race_id':req['race_id'],'frozen_references':{'final_receipt_sha256':'MECHANICAL-FINAL-RECEIPT'},'official_result':{'top3':[1,2,3],'payouts_per_100_yen':{'TRIFECTA':500} if payout else {}}}, {'race_id':req['race_id'],'execution_id':req['execution_id'],'result_available_at':'2026-10-02T02:10:00+00:00','official_result_verified':True,'acceptance_only':True}
 
 def signed_result(art):
     receipt={'race_id':art['race_id'],'phase':'RESULT','status':'PASS','artifact_sha256':f._sha(art)}

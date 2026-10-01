@@ -176,9 +176,13 @@ os.makedirs("runtime_out",exist_ok=True)
 json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 # Measurement authority is stronger than the operator confirmation flag alone.
-from local_candidate_postresult import result_authority
-normalized_signed_result={**art,"race_id":rid,"official_result":{**(art.get("official_result") or {}),"top3":top3}}
-shared_result_authority=result_authority({"race_id":rid,"execution_id":execution_id},normalized_signed_result,req,res,ver)
+try:
+    from local_candidate_postresult import result_authority
+    normalized_signed_result={**art,"race_id":rid,"official_result":{**(art.get("official_result") or {}),"top3":top3}}
+    shared_result_authority=result_authority({"race_id":rid,"execution_id":execution_id,"final_receipt_sha256":fin.get("receipt_sha256")},normalized_signed_result,req,res,ver)
+except Exception as authority_error:
+    shared_result_authority={"status":"HOLD_RESULT_AUTHORITY","verified_signed_result":False,
+                             "failures":[type(authority_error).__name__+":"+str(authority_error)],"production_effect":"NONE"}
 
 # Critical-path reflection is available immediately after the verified RESULT.
 # Deep candidate/MEC research continues below but is not required to understand

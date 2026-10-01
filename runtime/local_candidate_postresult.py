@@ -277,7 +277,7 @@ def build_forward_capture(request, final, utility, *, generated_at, candidate=No
         capital={'status':'HOLD_CAPITAL_ONLY','arms':{},'production_comparable_equal_spend':False,'reason':str(error)}
     obj={'profile':protocol['version'],'family_id':family,'race_id':rid,'execution_id':request['execution_id'],
          'classification':classification,'generated_at':generated_at,'scheduled_post_at':post,
-         'source_sha256':source,'final_basis_sha256':_sha(final),'runner_universe_sha256':_sha(request.get('runners')),
+         'source_sha256':source,'final_basis_sha256':_sha(final),'final_receipt_sha256':final.get('receipt_sha256'),'runner_universe_sha256':_sha(request.get('runners')),
          'protocol_sha256':_sha(protocol),'definition_sha256':_definition_hashes(),'static_prediction':request.get('static_prediction') or {},
          'krs_utility':utility,'candidate':candidate,'capital':capital,'artifact_inventory':artifact_inventory or {},
          'authority_status':['NUMERICAL_AUTHORITY_NOT_READY'] if authority['status']!='READY' else ['FULL_NUMERICAL_AUTHORITY_READY'],'production_effect':'NONE','automatic_promotion':False}
@@ -321,6 +321,8 @@ def result_authority(obj, result, request, envelope, verification):
     if (verification or {}).get('verified') is not True or not (envelope or {}).get('signature'):failures.append('SIGNED_RESULT_NOT_VERIFIED')
     if receipt.get('status')!='PASS' or receipt.get('phase')!='RESULT':failures.append('RESULT_RECEIPT_NOT_PASS')
     if receipt.get('artifact_sha256')!=_sha(artifact) or (envelope or {}).get('receipt_sha256')!=_sha(receipt):failures.append('RESULT_DIGEST_MISMATCH')
+    expected_final=obj.get('final_receipt_sha256')
+    if not expected_final or (artifact.get('frozen_references') or {}).get('final_receipt_sha256')!=expected_final:failures.append('SIGNED_FINAL_EXECUTION_BINDING_MISMATCH')
     # Normalized top3 is allowed, but outcome/payout/source/time must originate in signed RESULT.
     official=artifact.get('official_result') or {};normalized=result.get('official_result') or {}
     signed_top=official.get('top3') or official.get('finish_order',[])[:3]

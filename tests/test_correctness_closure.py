@@ -41,7 +41,7 @@ def execute_common(tmp_path,monkeypatch,rid='R1',failure=None):
         'write_common_exact_continuity_oos_status':lambda:build_status(),
         'fin':fin,'req':{'finish_order':[7,2,8]},'payouts':{} if failure=='payout' else {'TRIFECTA':1000},
         'total_investment':1000,'total_return':800,'rid':rid,'run_id':'run-formal','artifact_name':'FINAL',
-        'res':production}
+        'res':production,'shared_result_authority':{'status':'HOLD_RESULT_AUTHORITY','verified_signed_result':False}}
     exec(compile(ast.Module(body=[common_result_block()],type_ignores=[]),'<actual RESULT shadow>','exec'),ns)
     assert ns['res']==production
     return ns

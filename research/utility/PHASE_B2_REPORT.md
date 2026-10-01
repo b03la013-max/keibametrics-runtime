@@ -12,7 +12,7 @@ Mergeの理由は測定correctnessと前向き収集の接続。Prediction/PFS�
 
 ## Result authority
 
-OOSにはoperator verified=true、nonempty official_result_verification_ref、同一race/execution、既存/verifyで検証されたSigned RESULT、PASS RESULT phase、Receipt/Artifact SHA整合、署名Artifactと同じ結果/払戻を要求。flagだけでは不可。研究SettlementへReceipt SHA、Artifact SHA、検証参照を固定。
+OOSにはoperator verified=true、nonempty official_result_verification_ref、同一race/execution、既存/verifyで検証されたSigned RESULT、PASS RESULT phase、Receipt/Artifact SHA整合、同一Executionの凍結FINAL ReceiptへのSigned RESULT参照整合、署名Artifactと同じ結果/払戻を要求。flagだけでは不可。研究SettlementへReceipt SHA、Artifact SHA、検証参照を固定。
 
 不足はHOLD_RESULT_AUTHORITY。機械的払戻診断は保存するがKRS/Capital countへ算入しない。Production RESULT/Settlementは継続。Common Exact/MECの未来LOCAL行にも同じAuthorityを適用し、過去の既存cohortは変更しない。
 
@@ -55,8 +55,10 @@ SOURCE、FINAL、Candidate、KRS、Common Exact、MEC-R4/R5の結果前inventory
 
 ## Validation / launch status
 
-ローカル回帰79PASS（B.1 retained + authority/futility regression）。CIは新PR headで確認する。Production protected content22ファイルのmain一致とNumeric goldenを維持。Result race/digest/verification/ref/execution欠落はShadow HOLDとなり、Production不変をテスト。
+ローカル回帰80PASS（B.1 retained + authority/futility regression）。CIは新PR headで確認する。Production protected content22ファイルのmain一致とNumeric goldenを維持。Result race/digest/verification/ref/execution欠落はShadow HOLDとなり、Production不変をテスト。
 
 コード接続と実Race closureは別。現LOCAL KRS/Capital Forward0、Actual verified0。No genuine future race has yet closed both phases. Phase B.2 empirical completion is PENDING。実購入は証拠がなければUNKNOWN。
 
 PRが測定基盤としてmergeされた後、次のeligible LOCAL FORMALを監視し、前後のReceiptとpersistent countsを確認する。未来を待つ部分は自動追跡へ引き継ぐ。Prediction/KRS/MEC/Capital/PFS改善は宣言しない。
+
+CI初回の旧AST fixture入力不整合を修正し、Formal Single Entry関連135テストPASS。外部公式ページ404は再試行でPASS、SourceやProductionは変更しない。Authority評価例外も研究HOLDとしてProduction RESULTを継続する。

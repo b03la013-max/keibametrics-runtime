@@ -3,7 +3,7 @@ import copy
 import pytest
 from test_phase_b1_forward import capture,result,signed_result,settle,f
 
-@pytest.mark.parametrize('defect',['flag','reference','execution','receipt','digest','signature','outcome'])
+@pytest.mark.parametrize('defect',['flag','reference','execution','receipt','digest','signature','outcome','final_binding'])
 def test_result_authority_holds_research_not_production(defect):
     req,fin,pre=capture();art,rreq=result(req);before=copy.deepcopy(fin)
     rreq['official_result_verification_ref']='https://official.test/result'
@@ -15,6 +15,7 @@ def test_result_authority_holds_research_not_production(defect):
     if defect=='digest':env['receipt']['artifact_sha256']='WRONG'
     if defect=='signature':verify['verified']=False
     if defect=='outcome':art['official_result']['top3']=[2,1,3]
+    if defect=='final_binding':env['artifact']['frozen_references']['final_receipt_sha256']='OTHER-EXECUTION';env['receipt']['artifact_sha256']=f._sha(env['artifact']);env['receipt_sha256']=f._sha(env['receipt'])
     m=f.settle_forward_capture(pre,fin,art,result_request=rreq,result_envelope=env,result_verification=verify)
     assert m['status']=='HOLD_RESULT_AUTHORITY' and not m['krs_eligible'] and not m['eligible']
     assert fin==before and m['production_effect']=='NONE'
