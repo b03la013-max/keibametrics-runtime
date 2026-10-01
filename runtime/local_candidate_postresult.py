@@ -322,7 +322,11 @@ def result_authority(obj, result, request, envelope, verification):
     if receipt.get('status')!='PASS' or receipt.get('phase')!='RESULT':failures.append('RESULT_RECEIPT_NOT_PASS')
     if receipt.get('artifact_sha256')!=_sha(artifact) or (envelope or {}).get('receipt_sha256')!=_sha(receipt):failures.append('RESULT_DIGEST_MISMATCH')
     expected_final=obj.get('final_receipt_sha256')
-    if not expected_final or (artifact.get('frozen_references') or {}).get('final_receipt_sha256')!=expected_final:failures.append('SIGNED_FINAL_EXECUTION_BINDING_MISMATCH')
+    # Runtime RESULT v1 emits `frozen_refs`; older accepted fixtures used
+    # `frozen_references`. They are semantic aliases for the immutable FINAL
+    # lineage. Accept either canonical spelling, but still require exact SHA.
+    frozen_ref_block=(artifact.get('frozen_refs') or artifact.get('frozen_references') or {})
+    if not expected_final or frozen_ref_block.get('final_receipt_sha256')!=expected_final:failures.append('SIGNED_FINAL_EXECUTION_BINDING_MISMATCH')
     # Normalized top3 is allowed, but outcome/payout/source/time must originate in signed RESULT.
     official=artifact.get('official_result') or {};normalized=result.get('official_result') or {}
     signed_top=official.get('top3') or official.get('finish_order',[])[:3]
