@@ -1,4 +1,4 @@
-name: Formal Single Entry R2 Acceptance
+name: Formal Single Entry R3 Acceptance
 
 permissions:
   contents: read
@@ -33,11 +33,18 @@ on:
       - "tests/test_local_mec_r4_bridge.py"
       - "tests/test_local_mec_r5_shadow.py"
       - "tests/test_local_evidence_acquisition_roundtrip.py"
-      - "profiles/family_formal_single_entry_20260929_R2.json"
-      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json"
-      - "profiles/venue_chat_routes_20260929_R35.json"
+      - "profiles/family_formal_single_entry_20261001_R3.json"
+      - "profiles/family_formal_single_entry_20261001_R3.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json"
+      - "profiles/venue_chat_routes_20261001_R36.json"
+      - "profiles/current_execution_gateway.json"
+      - "runtime/entry_transport_fallback.py"
+      - "tests/test_entry_transport_fallback.py"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json"
+      - "profiles/venue_chat_routes_20261001_R36.json"
       - "profiles/family_runtime_contracts_20260929_R27.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
       - ".github/workflows/km-formal-single-entry-acceptance.yml"
@@ -46,10 +53,10 @@ on:
     paths:
       - "runtime/formal_execution_orchestrator.py"
       - "runtime/non_jra_formal_runner.py"
-      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json"
-      - "profiles/venue_chat_routes_20260929_R35.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json"
+      - "profiles/venue_chat_routes_20261001_R36.json"
       - "profiles/family_runtime_contracts_20260929_R27.json"
-      - "profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json"
+      - "profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json"
       - "profiles/current_execution_gateway.json"
       - ".github/workflows/km-formal-single-entry.yml"
       - ".github/workflows/km-formal-single-entry-acceptance.yml"
@@ -85,7 +92,7 @@ jobs:
             runtime/family_authority_guard.py
 
       - name: Orchestration unit tests
-        run: python -m pytest -q tests/test_formal_execution_orchestrator.py tests/test_formal_single_entry_intent_completeness.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_formal_oos_policy.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py tests/test_formal_pre_race_oos_isolation_evidence.py tests/test_acceptance_oos_tracker_firewall.py tests/test_local_candidate_dual_oos_tracker.py tests/test_local_candidate_v03_oos.py tests/test_krs_oos_promotion_gate.py tests/test_execution_store.py tests/test_source_acquisition_consolidation.py tests/test_recovery_result_entry.py tests/test_common_exact_continuity_shadow.py tests/test_correctness_closure.py
+        run: python -m pytest -q tests/test_entry_transport_fallback.py tests/test_formal_execution_orchestrator.py tests/test_formal_single_entry_intent_completeness.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_formal_oos_policy.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py tests/test_formal_pre_race_oos_isolation_evidence.py tests/test_acceptance_oos_tracker_firewall.py tests/test_local_candidate_dual_oos_tracker.py tests/test_local_candidate_v03_oos.py tests/test_krs_oos_promotion_gate.py tests/test_execution_store.py tests/test_source_acquisition_consolidation.py tests/test_recovery_result_entry.py tests/test_common_exact_continuity_shadow.py tests/test_correctness_closure.py
 
       - name: Formal import closure guard
         run: python runtime/formal_import_closure.py --entry runtime/non_jra_formal_runner.py
@@ -94,9 +101,9 @@ jobs:
         run: |
           python runtime/family_authority_guard.py \
             --selftest \
-            --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json
+            --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json
 
-      - name: Verify R35 single-entry R2 checkpoint integrity and freezes
+      - name: Verify R36 single-entry R3 checkpoint integrity, fallback and freezes
         run: |
           python - <<'PY'
           import json
@@ -105,22 +112,22 @@ jobs:
           def load(path):
               return json.load(open(path,encoding="utf-8"))
 
-          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json")
-          route=load("profiles/venue_chat_routes_20260929_R35.json")
+          ca=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json")
+          route=load("profiles/venue_chat_routes_20261001_R36.json")
           runtime=load("profiles/family_runtime_contracts_20260929_R27.json")
-          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20260929_R14.json")
+          suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json")
           gateway=load("profiles/current_execution_gateway.json")
-          single=load("profiles/family_formal_single_entry_20260929_R2.json")
+          single=load("profiles/family_formal_single_entry_20261001_R3.json")
 
-          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R35"
-          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R34"
+          assert ca["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261001-R36"
+          assert ca["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260929-R35"
           cc=ca["common_family_components"]
           assert cc["formal_single_entry"]==single["profile_id"]
           assert cc["venue_routing"]==route["profile_id"]
           assert cc["family_runtime_contracts"]==runtime["profile_id"]
           assert cc["local_suite_manifest"]==suite["manifest_id"]
 
-          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20260929-R35"
+          assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20261001-R36"
           handoff=route["chat_execution_handoff"]
           assert handoff["canonical_single_entry_path"]=="runtime/formal_intents/*.json"
           assert handoff["canonical_single_entry_workflow"]==".github/workflows/km-formal-single-entry.yml"
@@ -136,7 +143,7 @@ jobs:
           assert runtime["production_numerical_change"] is False
           assert runtime["runtime_bundle_change"] is False
 
-          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20260929-R14"
+          assert suite["manifest_id"]=="KM-LOCAL-SUITE-MANIFEST-20261001-R15"
           assert suite["runtime"]["contract"]==runtime["profile_id"]
           assert suite["runtime"]["runtime"]==local["runtime"]
           assert suite["production_numeric_suite"]["numerical_change"] is False
@@ -152,7 +159,20 @@ jobs:
           assert gateway["policy"]["formal_checkpoint_semantic_basis_required"] is True
           assert gateway["policy"]["immutable_formal_reuse_requires_semantic_basis_match"] is True
           assert gateway["policy"]["legacy_unbound_formal_auto_reuse_forbidden"] is True
+          assert gateway["policy"]["entry_transport_fallback_required"] is True
+          assert gateway["policy"]["entry_transport_fallback_may_bypass_external_safety"] is False
+          assert gateway["policy"]["entry_transport_fallback_semantic_hash_required"] is True
+          assert gateway["policy"]["entry_transport_fallback_same_execution_id_required"] is True
+          assert gateway["policy"]["source_only_is_formal_completion"] is False
 
+          assert single["profile_id"]=="KM-FAMILY-FORMAL-SINGLE-ENTRY-20261001-R3"
+          fb=single["entry_transport_fallback"]
+          assert fb["trigger"]=="PRIMARY_SINGLE_ENTRY_SUBMISSION_FAILED_BEFORE_GITHUB_COMMIT"
+          assert fb["same_execution_id_required"] is True
+          assert fb["durable_source_checkpoint_reuse_required"] is True
+          assert fb["semantic_payload_preservation"].startswith("EXACT")
+          assert fb["safety_policy"]=="DO_NOT_BYPASS_OR_OBFUSCATE_EXTERNAL_SAFETY_CONTROLS"
+          assert fb["if_fallback_transport_also_rejected"].startswith("FAIL_CLOSED")
           assert single["checkpoint_policy"]["source_success_survives_formal_failure"] is True
           assert single["checkpoint_policy"]["source_checkpoint_basis_required_for_new_execution"] is True
           assert single["checkpoint_policy"]["static_prediction_signed_source_binding_required_for_single_entry"] is True
@@ -176,6 +196,11 @@ jobs:
           assert "bind_formal_request_to_source" in orch
           assert "current_single_entry_profile" in orch
           assert "KM-FAMILY-FORMAL-SINGLE-ENTRY-20260929-R1" not in orch
+          fallback=Path("runtime/entry_transport_fallback.py").read_text(encoding="utf-8")
+          assert "ENTRY_FALLBACK_SEMANTIC_HASH_MISMATCH" in fallback
+          assert "ENTRY_FALLBACK_SAFETY_BYPASS_FORBIDDEN" in fallback
+          legacy=Path(".github/workflows/km-family-non-jra-formal-runner.yml").read_text(encoding="utf-8")
+          assert "Validate entry transport fallback integrity" in legacy
 
           runner=Path("runtime/non_jra_formal_runner.py").read_text(encoding="utf-8")
           for token in [
