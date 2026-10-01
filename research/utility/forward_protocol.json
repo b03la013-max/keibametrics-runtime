@@ -1,0 +1,81 @@
+{
+  "version": "PHASE-B2-FORWARD-v1",
+  "activation_at": "2026-10-01T01:40:29+00:00",
+  "family_cohorts": [
+    "JRA",
+    "LOCAL",
+    "BAN"
+  ],
+  "local_candidate": "v0.1 existing frozen numerical Candidate; no new weights",
+  "capital_arms": {
+    "PRODUCTION": "Frozen actual recommendation stakes",
+    "CONSERVATIVE": [
+      "CORE"
+    ],
+    "BALANCED": [
+      "CORE",
+      "PROTECTION"
+    ],
+    "WIDE": [
+      "CORE",
+      "PROTECTION",
+      "TAIL"
+    ]
+  },
+  "allocation": "Existing Phase-B minimum unit then nominal-stake largest remainder; equal actual spend",
+  "primary_endpoint": "paired net return difference vs Production, LOCAL only",
+  "pilot_minimum": 30,
+  "guardrails": [
+    "Conversion",
+    "hit-but-loss",
+    "drawdown",
+    "largest return stress",
+    "runtime",
+    "missingness"
+  ],
+  "aggregation": "chronological race; day/venue clustered; all arm results; incomplete payouts held not zero",
+  "failure_policy": "capture failures retained in denominator ledger; first 30 eligible paired races pilot; later evidence remains visible",
+  "automatic_promotion": false,
+  "known_result_training": "FNB20260930 excluded from forward OOS; development only",
+  "arm_change": "Close current window and preregister new version; no in-window mutation",
+  "definition_files": [
+    "runtime/local_fullnumerical_candidate.py",
+    "runtime/krs_prediction_utility.py",
+    "runtime/pfs_grand_review.py",
+    "runtime/local_candidate_postresult.py",
+    "runtime/common_exact_continuity_shadow.py",
+    "runtime/mec_r4_shadow.py",
+    "mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json",
+    "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json",
+    "runtime/local_mec_r5_shadow.py"
+  ],
+  "definition_sha256": {
+    "runtime/local_fullnumerical_candidate.py": "f4c83023fd8e331c690dc0d9f0a49d36095dfbc9003418e1a8374a59fc26471e",
+    "runtime/krs_prediction_utility.py": "5a6324282bc6f8d356ae696b585a3128015bf61482c7a8b94599ab9ae97468fc",
+    "runtime/pfs_grand_review.py": "6ef5d2e42d6c98c902e45a4739d15d9902ffb2703e513fa8b8b28570bbd8f49c",
+    "runtime/local_candidate_postresult.py": "79d00ffad987266bfb8be11c153295296869415f609d8f62a5aa6d8167529c64",
+    "runtime/common_exact_continuity_shadow.py": "862d56c66a07cb7d8a937fe481ea4f1c2736b001f22ea321c4d35e1ef219dfbf",
+    "runtime/mec_r4_shadow.py": "e51e195c3fa062bf428e63416e9759f7e9fde1815fe9f4c5f87ac7cd1ae753d5",
+    "mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json": "837d6395a2d99829c04e087f6572997e2343e0943d00865db3db6d3464d8a73e",
+    "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json": "b7740e4eb1d8e009eb872743e3f24a007e877727def72be8ee31c0931f9e5693",
+    "runtime/local_mec_r5_shadow.py": "4b2643b93f2eed687526dc4bb55d4f2f4e223b303c800aae3c27235f5ba9c23d"
+  },
+  "result_eligibility": "verified flag + nonempty official verification reference + matching race/execution + verified signed RESULT receipt and artifact digests. Missing authority HOLD_RESULT_AUTHORITY; Production continues.",
+  "prior_window": "Phase B.1 LOCAL eligible=0; pre-launch authority hardening, no Candidate/Arm change",
+  "candidate_decisions": [
+    "PROMOTE",
+    "CONTINUE",
+    "HOLD",
+    "REVISE",
+    "REJECT",
+    "SIMPLIFY"
+  ],
+  "candidate_futility": {
+    "decision": "EARLY_FUTILITY_HUMAN_REJECT_OR_SIMPLIFY_REVIEW",
+    "minimum_context": "at least two distinct day clusters and two venues; never a race-count-only decision",
+    "conditions": "All day/venue cluster means worse on paired Winner rank AND actual Top3 mean rank; role capture total nonpositive in each cluster; adverse races outnumber favorable races; observed missingness strata show no reversal. Missing evidence => HOLD.",
+    "missingness_strata": "fully neutral sub-index present vs absent, frozen only; no retrospective zero-weight reranking",
+    "action": "May close Candidate window before 30 after explicit human reject/simplify decision; other measurement programs continue; no automatic promotion",
+    "reason": "Persistent direction across independent contexts and multiple prediction dimensions is a futility warning, not statistical proof."
+  }
+}

@@ -323,6 +323,31 @@ def _result_rows_from_table(table: List[List[str]]) -> List[Dict[str, Any]]:
     return out
 
 
+def _corner_paths(tables):
+    """NAR separate corner tables; parenthesized packs retain rank intervals.
+    No invented order inside a pack. Invalid/duplicate runner rows are ignored.
+    """
+    import unicodedata
+    paths={}
+    for table in tables:
+        for row in table:
+            if len(row)!=2:continue
+            label=unicodedata.normalize("NFKC",str(row[0])).strip()
+            if not re.fullmatch(r"[1-4]角",label):continue
+            text=unicodedata.normalize("NFKC",str(row[1]))
+            groups=[];seen=set();valid=True
+            for token in re.findall(r"\([^)]*\)|\d+",text):
+                group=[int(x) for x in re.findall(r"\d+",token)]
+                if not group or any(x<=0 or x in seen for x in group) or len(group)!=len(set(group)):
+                    valid=False;break
+                seen.update(group);groups.append(group)
+            if not valid:continue
+            pos=1
+            for group in groups:
+                for horse in group:paths.setdefault(horse,[]).append({"corner":label,"rank_min":pos,"rank_max":pos+len(group)-1})
+                pos+=len(group)
+    return paths
+
 def build_same_day_bias(artifact: Dict[str, Any]) -> Dict[str, Any]:
     races = []
     for field, wrapped in sorted((artifact.get("normalized_evidence") or {}).items()):
@@ -336,18 +361,31 @@ def build_same_day_bias(artifact: Dict[str, Any]) -> Dict[str, Any]:
             result_rows = _result_rows_from_table(table)
             if result_rows: break
         if not result_rows: continue
+        paths=_corner_paths(tables)
+        for runner in result_rows:
+            path=paths.get(runner["horse_no"],[])
+            if path and not runner.get("passing_positions"):
+                runner["corner_rank_intervals"]=path
+                runner["passing_positions"]=[x["rank_min"] for x in path]
+                runner["passing_position_source"]="SEPARATE_OFFICIAL_CORNER_TABLE"
+                runner["last_corner_rank_max"]=path[-1]["rank_max"]
         top3 = [x for x in result_rows if x["finish"] <= 3]
         winner = next((x for x in result_rows if x["finish"] == 1), None)
-        races.append({"field": field, "field_size": len(result_rows), "winner_frame_no": (winner or {}).get("frame_no"), "winner_last_corner": ((winner or {}).get("passing_positions") or [None])[-1], "top3": top3, "source_id": (wrapped or {}).get("source_id"), "snapshot_sha256": (wrapped or {}).get("snapshot_sha256")})
+        races.append({"field": field, "field_size": len(result_rows), "winner_frame_no": (winner or {}).get("frame_no"), "winner_last_corner": ((winner or {}).get("passing_positions") or [None])[-1], "winner_last_corner_max": (winner or {}).get("last_corner_rank_max"), "top3": top3, "source_id": (wrapped or {}).get("source_id"), "snapshot_sha256": (wrapped or {}).get("snapshot_sha256")})
     top3_rows = [x for r in races for x in r["top3"]]
-    front_top3 = sum(1 for x in top3_rows if x.get("passing_positions") and x["passing_positions"][-1] <= 3)
-    leader_wins = sum(1 for r in races if r.get("winner_last_corner") == 1)
+    front_top3 = sum(1 for x in top3_rows if x.get("passing_positions") and x.get("last_corner_rank_max",x["passing_positions"][-1]) <= 3)
+    observed_corners = [x for x in top3_rows if x.get("passing_positions")]
+    observed_winners = [r for r in races if r.get("winner_last_corner") is not None]
+    leader_wins = sum(1 for r in races if r.get("winner_last_corner") == 1 and (r.get("winner_last_corner_max") or 1) == 1)
     frames = [x.get("frame_no") for x in top3_rows if x.get("frame_no") is not None]
     summary = {
         "profile": "KM-LOCAL-SAME-DAY-POSITION-BIAS-v1.0-20260924-SHADOW", "production_authority": False,
         "races_observed": len(races), "top3_observations": len(top3_rows),
-        "front_at_last_corner_top3_rate": round(front_top3 / len(top3_rows), 6) if top3_rows else None,
-        "leader_at_last_corner_win_rate": round(leader_wins / len(races), 6) if races else None,
+        "corner_observations": len(observed_corners),
+        "corner_missing_observations": len(top3_rows)-len(observed_corners),
+        "winner_corner_observations": len(observed_winners),
+        "front_at_last_corner_top3_rate": round(front_top3 / len(observed_corners), 6) if observed_corners else None,
+        "leader_at_last_corner_win_rate": round(leader_wins / len(observed_winners), 6) if observed_winners else None,
         "inner_frame_top3_rate": round(sum(1 for x in frames if x <= 3) / len(frames), 6) if frames else None,
         "outer_frame_top3_rate": round(sum(1 for x in frames if x >= 6) / len(frames), 6) if frames else None,
         "races": races,

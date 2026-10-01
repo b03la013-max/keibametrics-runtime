@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, re, hashlib, glob
+import json, os, re, hashlib, glob, copy
 from collections import defaultdict
 from mec_r4_shadow import settle_ticket_list
 
@@ -23,10 +23,16 @@ def _num(v):
 
 def _venue(race_id):
     u=str(race_id).upper()
-    for v in ("NKY","HSN","TKY","KYO","CHK","SPP","NGT","KKR","FKS","HKD"):
+    for v in ("FNB","KAW","URW","OHI","SON","KOC","SAG","MOR","MON","NGY","KSM","NKY","HSN","TKY","KYO","CHK","SPP","NGT","KKR","FKS","HKD"):
         if ("-"+v+"-" in u) or (u.startswith(v+"-")):
             return v
     return "UNKNOWN"
+
+def _family(race_id):
+    venue=_venue(race_id)
+    if venue in {"FNB","KAW","URW","OHI","SON","KOC","SAG","MOR","MON","NGY","KSM"}:return "LOCAL"
+    if "BAN" in str(race_id) or "OBI" in str(race_id):return "BAN"
+    return "JRA" if venue!="UNKNOWN" else "UNKNOWN"
 
 def _date(race_id):
     m=re.search(r"(20\d{6})",str(race_id))
@@ -179,6 +185,7 @@ def _aggregate(rows):
         "investment_weighted_pfs":round(ret/inv*100.0,9) if inv else None,
         "hit_race_count":sum(r["return"]>0 for r in bet),
         "hit_rate":round(sum(r["return"]>0 for r in bet)/len(bet)*100.0,6) if bet else None,
+        "median_race_pfs":__import__("statistics").median([r["return"]/r["investment"]*100 for r in bet]) if bet else None,
         "hit_but_loss_count":sum(r["hit_but_loss"] for r in bet),
         "hit_but_loss_rate":round(sum(r["hit_but_loss"] for r in bet)/len(bet)*100.0,6) if bet else None,
     }
@@ -211,7 +218,9 @@ def _robustness(rows):
         "largest_return":bet[0]["return"] if bet else None,
         "largest_return_share_pct":round((bet[0]["return"]/total_return*100.0),6) if bet and total_return else None,
         "excluding_largest_return":ex(1),
+        "excluding_top2_returns":ex(2),
         "excluding_top3_returns":ex(3),
+        "largest_return_zeroed_keep_stakes_pfs":(total_return-(bet[0]["return"] if bet else 0))/sum(r["investment"] for r in bet)*100 if bet else None,
         "max_drawdown":dd,
         "max_losing_streak":streak,
     }
@@ -269,7 +278,10 @@ def _tier_pfs():
             continue
         if str((result.get("settlement") or {}).get("status") or "").upper()!="SETTLED":
             continue
-        race={"race_id":rid,"tiers":{}}
+        try:
+            if settle_ticket_list(tickets,result).get("status")!="SETTLED":continue
+        except Exception:continue
+        race={"race_id":rid,"family_id":_family(rid),"venue":_venue(rid),"tiers":{}}
         for tier in tiers:
             subset=[x for x in tickets if str(x.get("mec_tier") or x.get("tier") or "").upper()==tier]
             if not subset: continue
@@ -283,6 +295,14 @@ def _tier_pfs():
             rows[tier].append(row)
             race["tiers"][tier]=row
         if race["tiers"]:
+            steps=[];previous_i=previous_r=0
+            for label,selected in [("CORE",{"CORE"}),("CORE+PROTECTION",{"CORE","PROTECTION"}),("FULL",{"CORE","PROTECTION","TAIL"})]:
+                inv=sum(float(v["investment"]) for k,v in race["tiers"].items() if k in selected)
+                ret=sum(float(v["return"]) for k,v in race["tiers"].items() if k in selected)
+                di,dr=inv-previous_i,ret-previous_r
+                steps.append({"stage":label,"investment":inv,"return":ret,"added_investment":di,"added_return":dr,"marginal_pfs":dr/di*100 if di else None,"profit_loss_delta":dr-di})
+                previous_i,previous_r=inv,ret
+            race["marginal_capital"]=steps
             races.append(race)
     agg={}
     for tier,xs in sorted(rows.items()):
@@ -487,11 +507,13 @@ def _candidate_tier_pfs(candidate_rows):
 
 def build_report():
     rows=canonical_records()
+    actual_rows,actual_held=actual_purchase_records()
     candidate_rows=_candidate_forward_records()
     candidate_density=_candidate_mec_capital_density()
     formal=[r for r in rows if r["formal_class"]=="FORMAL_PRE_RACE"]
     eligible=[r for r in formal if str(r.get("model_comparison_eligibility") or "").upper()=="ELIGIBLE"]
     all_frozen=[r for r in rows if str(r.get("pfs_authority") or "").upper().startswith("FROZEN")]
+    for row in all_frozen:row["family_id"]=_family(row["race_id"])
     report={
         "profile":PROFILE,
         "status":"MEASUREMENT-BASELINE / NON-AUTHORITY / NO-PRODUCTION-CHANGE",
@@ -511,9 +533,12 @@ def build_report():
         "formal_pre_race_by_venue":_by(formal,"venue"),
         "all_by_formal_class":_by(rows,"formal_class"),
         "formal_pre_race_bet_type":_bet_type(formal),
+        "frozen_by_family":{f:{"aggregate":_aggregate([r for r in all_frozen if r["family_id"]==f]),"robustness":_robustness([r for r in all_frozen if r["family_id"]==f]),"by_venue":_by([r for r in all_frozen if r["family_id"]==f],"venue"),"by_formal_class":_by([r for r in all_frozen if r["family_id"]==f],"formal_class"),"by_bet_type":_bet_type([r for r in all_frozen if r["family_id"]==f])} for f in ["JRA","LOCAL","BAN","UNKNOWN"]},
         "actual_pfs":{
-            "status":"NOT_AGGREGATED_UNLESS_PURCHASE_VERIFIED",
-            "verified_race_count":sum(str(r.get("actual_ticket_status")).upper()=="VERIFIED" for r in rows),
+            "status":"MEASURED" if actual_rows else "NO_VERIFIED_SETTLED_PURCHASES",
+            "verified_race_count":len(actual_rows),"status":"VERIFIED_DATA" if actual_rows else "UNKNOWN / NO VERIFIED PURCHASE","records":actual_rows,"held":actual_held,
+            "aggregate":_aggregate(actual_rows),"robustness":_robustness(actual_rows),
+            "by_venue":_by(actual_rows,"venue"),"bet_type":_bet_type(actual_rows),
         },
         "tier_pfs":_tier_pfs(),
         "candidate_forward_oos":{
@@ -547,6 +572,118 @@ def write_report(path="runtime/pfs_grand_review/current.json"):
     with open(path,"w",encoding="utf-8") as f:
         json.dump(report,f,ensure_ascii=False,sort_keys=True,indent=2)
     return report
+
+
+def actual_purchase_records(root="runtime/actual_purchases", *, result_overrides=None):
+    """Explicit receipt/user-confirmed purchases only; never infer from FINAL.
+
+    Reads complete race purchase ledgers. Incomplete/error ledgers remain visible
+    as held records; pending settlement is not a zero return.
+    """
+    from datetime import datetime
+    records=[];held=[]
+    seen=set()
+    paths=sorted(glob.glob(os.path.join(root,"*.json")))
+    race_counts={}
+    for candidate in paths:
+        try:
+            race=str(json.load(open(candidate,encoding="utf-8")).get("race_id") or "")
+            race_counts[race]=race_counts.get(race,0)+1
+        except Exception:pass
+    for path in paths:
+        rid=None
+        try:
+            obj=json.load(open(path,encoding="utf-8"));rid=str(obj.get("race_id") or "")
+            if not rid or rid in seen or race_counts.get(rid,0)>1:raise ValueError("DUPLICATE_OR_MISSING_RACE_ID")
+            if obj.get("purchase_verified") is not True or obj.get("ledger_complete") is not True or not obj.get("verification_ref"):
+                raise ValueError("PURCHASE_PROOF_OR_COMPLETE_LEDGER_REQUIRED")
+            post=datetime.fromisoformat(obj["scheduled_post_at"].replace("Z","+00:00"))
+            tickets=[];refs=set();refund=0;failed=0
+            for event in obj.get("purchases") or []:
+                pid=event.get("purchase_id")
+                if not pid or pid in refs:raise ValueError("DUPLICATE_OR_MISSING_PURCHASE_ID")
+                refs.add(pid)
+                ts=datetime.fromisoformat(event["timestamp"].replace("Z","+00:00"))
+                if ts>=post:raise ValueError("PURCHASE_NOT_PRE_RACE")
+                if event.get("success") is False:failed+=1;continue
+                if event.get("success") is not True or not event.get("proof_ref"):raise ValueError("PURCHASE_SUCCESS_PROOF_REQUIRED")
+                t=event["ticket"];stake=t.get("stake")
+                if isinstance(stake,bool) or not isinstance(stake,int) or stake<=0 or stake%100:raise ValueError("INVALID_PURCHASE_STAKE")
+                bt=str(t.get("bet_type") or "").upper();sel=t.get("selection") or []
+                if bt not in {"EXACTA","TRIO","TRIFECTA"} or len(sel)!=(2 if bt=="EXACTA" else 3) or len(set(sel))!=len(sel):raise ValueError("INVALID_PURCHASE_TICKET")
+                if any(isinstance(x,bool) or not isinstance(x,int) or x<=0 for x in sel):raise ValueError("INVALID_HORSE_ID")
+                rf=event.get("refund",0)
+                if isinstance(rf,bool) or not isinstance(rf,int) or rf<0 or rf>stake or rf%100 or (rf and not event.get("refund_proof_ref")):raise ValueError("INVALID_REFUND")
+                refund+=rf
+                if stake-rf:tickets.append({**t,"stake":stake-rf})
+            seen.add(rid)
+            rp=os.path.join("runtime","results",rid+".json")
+            if rid in (result_overrides or {}):
+                result=result_overrides[rid]
+            elif os.path.isfile(rp):
+                result=json.load(open(rp,encoding="utf-8"))
+            else:raise ValueError("PURCHASE_CONFIRMED_SETTLEMENT_PENDING")
+            if result.get("race_id")!=rid:raise ValueError("RESULT_RACE_MISMATCH")
+            if str((result.get("settlement") or {}).get("status")).upper() not in {"SETTLED","COMPLETE"}:raise ValueError("OFFICIAL_SETTLEMENT_PENDING")
+            settled=settle_ticket_list(tickets,result)
+            if settled.get("status")!="SETTLED":raise ValueError("ACTUAL_PAYOUT_MISSING")
+            inv=settled["investment"];ret=settled["return"]
+            records.append({"race_id":rid,"date":_date(rid),"venue":_venue(rid),
+                            "pfs_authority":"ACTUAL-PFS","actual_ticket_status":"VERIFIED",
+                            "verification_ref":obj["verification_ref"],"purchase_count":len(refs),
+                            "failed_purchase_count":failed,"refund":refund,"investment":inv,"return":ret,
+                            "profit_loss":ret-inv,"pfs":ret/inv*100 if inv else None,
+                            "hit_but_loss":0<ret<inv,"bet_types":settled.get("by_bet_type") or {},
+                            "source_path":path})
+        except Exception as e:
+            held.append({"race_id":rid,"source_path":path,"status":"HOLD_ACTUAL_PFS","reason":str(e)})
+    return records,held
+
+
+
+
+def _capital_dt(x):
+    from datetime import datetime
+    return datetime.fromisoformat(str(x).replace("Z","+00:00"))
+
+def capital_arms(final,budget,*,request,generated_at,scheduled_post_at):
+    """Tier ablation with equal ACTUAL spend; no ranking, AKI or odds weights."""
+    if _capital_dt(generated_at)>=_capital_dt(scheduled_post_at):raise ValueError('NOT_PRE_RACE')
+    if isinstance(budget,bool) or not isinstance(budget,int) or budget<100 or budget%100:raise ValueError('BUDGET_UNIT_INVALID')
+    art=final.get('artifact') or final
+    if not request.get('race_id') or _capital_dt(request['scheduled_post_at'])!=_capital_dt(scheduled_post_at):raise ValueError('RACE_SCHEDULE_BINDING_REQUIRED')
+    universe={int(x['runner_id']) for x in request.get('runners') or [] if not x.get('scratched') and not x.get('excluded')}
+    if not universe:raise ValueError('RUNNER_UNIVERSE_REQUIRED')
+    freeze=art.get('final_freeze_timestamp')
+    if not freeze or _capital_dt(freeze)>_capital_dt(generated_at) or _capital_dt(freeze)>=_capital_dt(scheduled_post_at):raise ValueError('FINAL_NOT_PRE_RACE_FROZEN')
+    tickets=copy.deepcopy((art.get('final_ticket') or {}).get('tickets') or [])
+    keys=[]
+    for t in tickets:
+        bt=t['bet_type'];sel=[int(x) for x in t['selection']]
+        if bt not in {'EXACTA','TRIO','TRIFECTA'} or len(sel)!=(2 if bt=='EXACTA' else 3) or len(sel)!=len(set(sel)):raise ValueError('INVALID_TICKET')
+        if not set(sel)<=universe:raise ValueError('RUNNER_UNIVERSE_VIOLATION')
+        k=(bt,tuple(sorted(sel) if bt=='TRIO' else sel))
+        if k in keys:raise ValueError('DUPLICATE_TICKET')
+        keys.append(k)
+        if isinstance(t.get('stake'),bool) or not isinstance(t.get('stake'),int) or t['stake']<=0 or t['stake']%100:raise ValueError('INVALID_STAKE')
+    arms={'PRODUCTION':{'tickets':tickets,'investment':sum(t['stake'] for t in tickets)}}
+    for name,tiers in [('CONSERVATIVE',{'CORE'}),('BALANCED',{'CORE','PROTECTION'}),('WIDE',{'CORE','PROTECTION','TAIL'})]:
+        subset=[copy.deepcopy(t) for t in tickets if str(t.get('mec_tier') or t.get('tier')).upper() in tiers]
+        if not subset or len(subset)>budget//100 or any(str(t.get('mec_tier') or t.get('tier')).upper() not in {'CORE','PROTECTION','TAIL'} for t in tickets):
+            arms[name]={'status':'HOLD_SHADOW','reason':'MISSING_TIER_OR_INSUFFICIENT_MINIMUM_BUDGET'};continue
+        # Existing nominal stakes are allocation ratios, not likelihoods.
+        remainder=budget//100-len(subset);den=sum(t['stake'] for t in subset)
+        units=[1+(remainder*t['stake']//den) for t in subset]
+        left=budget//100-sum(units)
+        order=sorted(range(len(subset)),key=lambda i:(-(remainder*subset[i]['stake']%den),keys[tickets.index(subset[i])]))
+        for i in order[:left]:units[i]+=1
+        for t,n in zip(subset,units):t['stake']=n*100
+        arms[name]={'status':'FROZEN_SHADOW','tickets':subset,'investment':sum(t['stake'] for t in subset)}
+    return {'status':'PRE-RACE-CAPITAL-SHADOW','generated_at':generated_at,'scheduled_post_at':scheduled_post_at,
+            'race_id':request['race_id'],'input_sha256':_sha(final),'request_sha256':_sha(request),'budget':budget,'arms':arms,'production_effect':'NONE',
+            'production_comparable_equal_spend':arms['PRODUCTION']['investment']==budget,
+            'notice':'Tier ablation, not an AKI/distribution-adaptive policy. No new ticket added.'}
+
 
 if __name__=="__main__":
     r=write_report()

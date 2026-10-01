@@ -21,6 +21,9 @@ def _load(p):
     with open(p,encoding="utf-8") as f:return json.load(f)
 
 def _official_result_authority(race_id):
+    from local_candidate_postresult import forward_tracker_result_authority
+    forward=forward_tracker_result_authority(race_id,'runtime/local_mec_r5_shadow_lineage',local_only=False)
+    if forward is not None:return forward
     root="runtime/family_result_requests"
     refs=[]
     if os.path.isdir(root):

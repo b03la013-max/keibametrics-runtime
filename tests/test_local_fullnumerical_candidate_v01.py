@@ -118,9 +118,12 @@ def test_end_to_end_source_to_29_to_30hsv_11static_is_deterministic():
     n=materialize_candidate(c1)
     s=n["candidate_full_numerical_summary"]
     assert s["required_count"]==3*29
-    assert s["calculated_count"]==3*29
+    assert s["terminalized_count"]==3*29
+    assert s["calculated_count"]+s["ruled_neutral_count"]==3*29
+    assert s["ruled_neutral_count"]>0
     assert s["unresolved_count"]==0
-    assert s["full_numerical_complete"] is True
+    assert s["numeric_transport_complete"] is True
+    assert s["full_numerical_complete"] is False
     assert all(set(r["canonical_components"])==set(REQUIRED) for r in n["runners"])
 
     n=build_candidate_prediction(n)
@@ -409,3 +412,9 @@ def test_v03_provenance_uses_concrete_profile_timestamp_and_keeps_jma_context_on
     assert "JMA-SHA" not in going_adaptation["evidence_refs"]
     assert r1["candidate_context_features_v03"]["jma_weather"]["profile"]=="KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924"
     assert out["candidate_evidence_compiler"]["provenance_policy"].startswith("FEATURE_TIMESTAMP_MUST_MATCH")
+
+def test_phase_b_terminal_fix_preserves_all_87_baseline_numeric_values():
+    source,request=fixture()
+    q=materialize_candidate(compile_candidate_evidence(source,request))
+    values={r['runner_id']:{k:x['value'] for k,x in r['canonical_components'].items()} for r in q['runners']}
+    assert values==json.loads((ROOT/'research/utility/numeric_value_regression.json').read_text())
