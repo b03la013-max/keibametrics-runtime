@@ -1299,8 +1299,11 @@ if fc>=300 or (fin.get("receipt") or {}).get("status")!="PASS":
 final_sha=verify_envelope(fin,"FINAL")
 deadline_guard("AFTER_FINAL")
 
-# Phase B.1: optional forward research AFTER verified Production FINAL.
+# Phase B.1/B.2: optional forward research AFTER verified Production FINAL.
 # Failure is diagnostic only; Production tickets and release are immutable.
+# Resolve OOS policy before forward capture; this must not depend on the later
+# post-FINAL candidate KRS block.
+acceptance_only=bool(request_oos_policy(req)["acceptance_only"])
 try:
     from local_candidate_postresult import build_forward_capture
     inventory={}
