@@ -52,7 +52,10 @@ def test_result_immutable_retry(monkeypatch):
     monkeypatch.setattr(o,'resolve_phase',lambda e,p:{'run_dir':Path('/unused')})
     monkeypatch.setattr(o,'_load_checkpoint_json',lambda *a:{'request_sha256':o._sha_obj(augmented)})
     monkeypatch.setattr(o,'run_phase',lambda *a,**k:pytest.fail('retry reruns result'))
-    assert o.orchestrate(r,run_id='x',github_sha=None)['status']=='ALREADY_COMPLETE'
+    out=o.orchestrate(r,run_id='x',github_sha=None)
+    # Stored RESULT request identity alone is not complete Settlement/Learning proof.
+    assert out['status']=='FORMAL_INCOMPLETE'
+    assert o.completion_exit_code(out)!=0
     r['payouts']['TRIFECTA']=2000
     with pytest.raises(o.FormalOrchestrationError,match='REQUEST_MISMATCH'):
         o.orchestrate(r,run_id='x',github_sha=None)
@@ -71,19 +74,21 @@ def test_result_override_cannot_switch_lineage(monkeypatch):
         o.orchestrate(r,run_id='x',github_sha=None)
 
 
-def test_source_then_human_prediction_boundary(monkeypatch):
+def test_explicit_source_analysis_is_not_full_lifecycle_completion(monkeypatch):
     monkeypatch.setattr(o,'resolve_phase',lambda *a:None)
     calls=[]
     monkeypatch.setattr(o,'run_phase',lambda r,p,**k:calls.append(p) or {'phase':p,'status':'PASS'})
-    r={'family_id':'LOCAL','race_id':'TEST','phase':'SOURCE'}
+    r={'family_id':'LOCAL','race_id':'TEST','phase':'SOURCE','analysis_only':True}
     out=o.orchestrate(r,run_id='x',github_sha=None)
     assert calls==['SOURCE']
-    assert out['status']=='AWAITING_FROZEN_PREDICTION'
-    assert out['prediction_calculated'] is False
+    assert out['status']=='SOURCE_PASS'
+    assert o.completion_exit_code(out)!=0
 
 
 def test_source_resume_compatible(monkeypatch):
     monkeypatch.setattr(o,'resolve_phase',lambda *a:{'run_dir':Path('/unused')})
     monkeypatch.setattr(o,'source_checkpoint_compatibility',lambda *a:{'status':'PASS'})
     monkeypatch.setattr(o,'run_phase',lambda *a,**k:pytest.fail('duplicate acquisition'))
-    assert o.orchestrate({'family_id':'LOCAL','race_id':'TEST','phase':'SOURCE'},run_id='x',github_sha=None)['status']=='ALREADY_COMPLETE'
+    out=o.orchestrate({'family_id':'LOCAL','race_id':'TEST','phase':'SOURCE','analysis_only':True},run_id='x',github_sha=None)
+    assert out['status']=='SOURCE_PASS'
+    assert o.completion_exit_code(out)!=0

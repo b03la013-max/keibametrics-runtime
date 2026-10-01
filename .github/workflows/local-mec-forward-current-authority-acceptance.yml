@@ -125,7 +125,15 @@ jobs:
 
           assert r5status["profile"]=="KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924"
           assert r5status["status"] in {"WAITING_30","HUMAN_REVIEW_REQUIRED"}
-          assert r5status["eligible_races"]==L["mec_measurement"]["r5_local"]["current_oos_count"]
+          # Authority carries an enactment snapshot, not the mutable OOS ledger.
+          # Rebuild with the unchanged tracker/eligibility rules instead of
+          # requiring live observations to equal the historical snapshot count.
+          import sys
+          sys.path.insert(0,"runtime")
+          from local_mec_r5_oos_tracker import build_status
+          rebuilt=build_status()
+          assert r5status["eligible_races"]==rebuilt["eligible_races"]
+          assert 0<=L["mec_measurement"]["r5_local"]["current_oos_count"]<=r5status["target_eligible_races"]
           assert r5status["remaining_races"]==max(0,r5status["target_eligible_races"]-r5status["eligible_races"])
           assert r5status["production_effect"]=="NONE"
           assert r5status["automatic_promotion"] is False

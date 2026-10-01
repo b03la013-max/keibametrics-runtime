@@ -392,6 +392,157 @@ def validate_request_context(
     }
 
 
+# Execution completeness is distinct from policy / numerical authority.
+# This is an executable gate over current mandatory stages, not a text report.
+_STAGE_PROOFS = {
+    "CANON_RESOLVE": "lifecycle_context.json",
+    "SCOPE_OWNERSHIP_RESOLVE": "lifecycle_context.json",
+    "RACE_IDENTITY_RESOLVE": "race_identity_preflight.json",
+    "PREDICTION_CUTOFF_FREEZE": "lifecycle_context.json",
+    "SOURCE_ACQUISITION": "source_receipt_envelope.json",
+    "REQUIRED_SOURCE_MANIFEST": "source_receipt_envelope.json",
+    "EXTERNAL_SOURCE_ACQUISITION": "source_receipt_envelope.json",
+    "RAW_SOURCE_SNAPSHOT": "source_receipt_envelope.json",
+    "SOURCE_VALIDATION": "source_verification.json",
+    "NORMALIZED_EVIDENCE": "source_receipt_envelope.json",
+    "SOURCE_FREEZE": "source_receipt_envelope.json",
+    "EVIDENCE_FEATURE_LEDGER": "evidence_acquisition_ledger.json",
+    "SIGNED_SOURCE_RECEIPT": "source_receipt_envelope.json",
+    "FULL_RUNNER_UNIVERSE": "runner_universe_diagnostic.json",
+    "EVIDENCE_FEATURE_COMPILATION": "evidence_acquisition_ledger.json",
+    "REQUIRED_INDEX_MANIFEST": "numerical_materialization_summary.json",
+    "ACTUAL_NUMERICAL_MATERIALIZATION": "numerical_materialization_summary.json",
+    "INDEX_PROVENANCE": "index_provenance_manifest.json",
+    "VENUE_PREDICTION_CONTEXT": "venue_prediction_context.json",
+    "STATIC_PREDICTION_FREEZE": "static_prediction_freeze.json",
+    "PRE_KRS": "pre_krs_receipt_envelope.json",
+    "KRS_EXECUTE": "krs_receipt_envelope.json",
+    "KRS_RECEIPT_VERIFY": "receipt_verifications.json",
+    "KRS_UTILITY_CAPTURE": "krs_prediction_utility.json",
+    "FINAL_ROLE_PAIR_THIRD": "role_pair_third_closure.json",
+    "PRECOMPRESSION_SEMANTIC_UNIVERSE": "mec_plan.json",
+    "MEC": "mec_verification.json",
+    "TICKET_CONSTRUCTION": "canonical_ticket.json",
+    "CAPITAL_POLICY": "capital_decision.json",
+    "CANONICAL_TICKET": "canonical_ticket.json",
+    "MANDATORY_STAGE_MANIFEST_VERIFY": "mandatory_stage_manifest.json",
+    "FINAL_FREEZE": "canonical_ticket.json",
+    "SIGNED_FINAL": "final_receipt_envelope.json",
+    "FINAL_BEFORE_POST_VERIFY": "final_before_post_verification.json",
+    "SIGNED_RESULT": "result_receipt_envelope.json",
+    "SETTLEMENT": "result_summary.json",
+    "PREDICTION_UTILITY_MEASUREMENT": "race_day_fast_reflection.json",
+    "PFS_MEASUREMENT": "result_summary.json",
+    "FIRST_MATERIAL_FAILURE_LOCALIZATION": "race_day_fast_reflection.json",
+    "LEARNING_STATE_N_PLUS_1": "learning_state.json",
+    "OOS_PROMOTION_TRACKER_UPDATE": "forward_tracker_terminal.json",
+}
+
+
+def verify_execution_completion(directory, request, *, phase="FORMAL", before_final=False):
+    """Every mandatory stage gets a terminal with actual artifact hash.
+
+    A new contract stage without a proof mapping fails closed. Research HOLD
+    cannot turn missing Production evidence into PASS. This never edits values
+    or forward/OOS definitions and never reclassifies historical runs.
+    """
+    import hashlib
+    directory = Path(directory)
+    _, authority = load_authority()
+    contract = load_lifecycle_contract(authority)
+    phase = str(phase).upper()
+    def read(name):
+        path = directory / name
+        if not path.is_file():
+            return None
+        try:
+            obj = _load_json(path)
+            return obj if isinstance(obj, dict) and obj else None
+        except (ValueError, OSError):
+            return None
+    rows = []
+    failures = []
+    numeric = read("numerical_materialization_summary.json") or {}
+    coverage = numeric.get("numeric_coverage") or {}
+    full_numeric = (numeric.get("numerical_authority_preflight") or {}).get("full_numerical_authority") is True
+    numeric_valid = bool(coverage) and coverage.get("unresolved_count") == 0 and numeric.get("full_terminalization") is True
+    required = int(coverage.get("required_count") or 0)
+    totals = sum(int(coverage.get(k) or 0) for k in
+                 ("calculated_count", "ruled_neutral_count", "ruled_hold_count", "not_applicable_count"))
+    numeric_valid = numeric_valid and required > 0 and totals == required
+    full_numeric = full_numeric and numeric_valid and int(coverage.get("calculated_count") or 0) == required
+    verifications = read("receipt_verifications.json") or {}
+    final_stages = {"MANDATORY_STAGE_MANIFEST_VERIFY", "SIGNED_FINAL", "FINAL_BEFORE_POST_VERIFY"}
+    for stage in contract["stages"]:
+        pre = stage.get("pre_race_required") is True
+        if pre != (phase == "FORMAL") or (before_final and stage["stage_id"] in final_stages):
+            continue
+        sid = stage["stage_id"]
+        name = _STAGE_PROOFS.get(sid)
+        obj = read(name) if name else None
+        status = "PASS" if obj is not None else "HOLD"
+        reason = None if obj is not None else "MANDATORY_ARTIFACT_MISSING_OR_INVALID"
+        if obj is not None:
+            valid = True
+            if sid in {"CANON_RESOLVE", "SCOPE_OWNERSHIP_RESOLVE", "PREDICTION_CUTOFF_FREEZE"}:
+                valid = obj.get("current_authority_manifest") == authority["manifest_id"] and obj.get("status") == "PASS" and bool(obj.get("prediction_cutoff"))
+            elif sid == "FULL_RUNNER_UNIVERSE":
+                valid = bool(obj.get("official_active_ids")) and set(obj.get("official_active_ids") or []) == set(obj.get("request_ids") or [])
+            elif sid in {"ACTUAL_NUMERICAL_MATERIALIZATION", "REQUIRED_INDEX_MANIFEST"}:
+                valid = numeric_valid
+                if valid and not full_numeric:
+                    status = "DEGRADED-HONEST"
+                    valid = request.get("require_full_numerical_authority") is not True and request.get("degraded_execution") is True
+            elif sid in {"SIGNED_SOURCE_RECEIPT", "PRE_KRS", "KRS_EXECUTE", "SIGNED_FINAL", "SIGNED_RESULT"}:
+                expected = {"SIGNED_SOURCE_RECEIPT":"SOURCE", "PRE_KRS":"PRE_KRS", "KRS_EXECUTE":"KRS_RUN", "SIGNED_FINAL":"FINAL", "SIGNED_RESULT":"RESULT"}[sid]
+                rec = obj.get("receipt") or {}
+                valid = rec.get("phase") == expected and rec.get("race_id") == request.get("race_id") and not rec.get("errors") and bool(obj.get("signature")) and verifications.get(expected) is True
+            elif sid in {"SOURCE_ACQUISITION", "EXTERNAL_SOURCE_ACQUISITION", "SOURCE_FREEZE"}:
+                valid = (obj.get("artifact") or {}).get("formal_ready") is True
+            elif sid == "REQUIRED_SOURCE_MANIFEST":
+                valid = bool((obj.get("artifact") or {}).get("required_source_manifest"))
+            elif sid == "RAW_SOURCE_SNAPSHOT":
+                valid = bool((obj.get("artifact") or {}).get("raw_source_bundle_sha256"))
+            elif sid == "NORMALIZED_EVIDENCE":
+                valid = bool((obj.get("artifact") or {}).get("normalized_evidence"))
+            elif sid == "SOURCE_VALIDATION":
+                valid = obj.get("verified") is True and obj.get("valid") is True
+            elif sid == "KRS_RECEIPT_VERIFY":
+                valid = obj.get("KRS_RUN") is True
+            elif sid == "MEC":
+                valid = obj.get("mec_verified") is True
+            elif sid == "PRECOMPRESSION_SEMANTIC_UNIVERSE":
+                valid = bool(obj.get("precompression_semantic_universe"))
+            elif sid == "STATIC_PREDICTION_FREEZE":
+                valid = obj.get("static_prediction_frozen") is True and bool((obj.get("static_prediction") or {}).get("ranking")) and bool(obj.get("source_receipt_sha256"))
+            elif sid in {"CANONICAL_TICKET", "TICKET_CONSTRUCTION", "FINAL_FREEZE"}:
+                valid = obj.get("finalized") is True and isinstance(obj.get("tickets"), list) and bool(obj.get("frozen_at"))
+            elif sid == "MANDATORY_STAGE_MANIFEST_VERIFY":
+                valid = obj.get("complete") is True and obj.get("execution_id") == request.get("execution_id")
+            elif sid == "FINAL_BEFORE_POST_VERIFY":
+                valid = obj.get("verified") is True and obj.get("execution_id") == request.get("execution_id")
+            elif sid in {"SETTLEMENT", "PFS_MEASUREMENT"}:
+                valid = obj.get("race_id") == request.get("race_id") and obj.get("execution_id") == request.get("execution_id") and obj.get("verified") is True and "pfs" in obj
+            elif sid == "LEARNING_STATE_N_PLUS_1":
+                valid = obj.get("race_id") == request.get("race_id") and obj.get("execution_id") == request.get("execution_id") and bool(obj.get("final_receipt_sha256")) and bool(obj.get("learning_event"))
+            elif sid == "OOS_PROMOTION_TRACKER_UPDATE":
+                valid = obj.get("status") in {"PASS", "HOLD", "NOT-APPLICABLE"} and obj.get("execution_id") == request.get("execution_id")
+            if not valid:
+                status, reason = "HOLD", "MANDATORY_STAGE_PROOF_NOT_VALID"
+        row = {"stage_id": sid, "terminal": status, "artifact": name, "reason": reason}
+        if obj is not None:
+            row["artifact_sha256"] = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+        rows.append(row)
+        if status not in {"PASS", "DEGRADED-HONEST", "NOT-APPLICABLE"}:
+            failures.append(sid)
+    execution_class = "PARTIAL-LIFECYCLE" if failures else ("STRICT-FULL" if full_numeric else "FULL-LIFECYCLE-DEGRADED-NUMERICAL")
+    return {"schema":"KM-MANDATORY-STAGE-COMPLETION-v1", "phase":phase,
+            "execution_id":request.get("execution_id"), "race_id":request.get("race_id"),
+            "current_authority_manifest":authority["manifest_id"], "complete":not failures,
+            "execution_class":execution_class, "missing_or_held_stages":failures,
+            "stages":rows, "numeric_coverage":coverage, "numerical_authority_ready":full_numeric}
+
+
 def _expect_fail(fn, code: str) -> None:
     try:
         fn()
