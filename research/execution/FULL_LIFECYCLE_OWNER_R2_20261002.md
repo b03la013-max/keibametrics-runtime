@@ -51,3 +51,5 @@ Selected lifecycle/Candidate/result/Phase B/numerical/fallback/store/workflow/sc
 5. Human review and separately authorized merge/deploy/Owner promotion, followed by the next genuine unknown-future one-trigger pre/post lifecycle. No `LIVE END-TO-END LIFECYCLE OPERATIONAL` declaration is justified now.
 
 No local mechanical test, historical receipt, healthy endpoint, HTTP page or API adapter replaces these completion requirements.
+
+Remote CI initially passed nine workflows and failed one stale workflow-contract assertion requiring hardcoded main persistence. The test now requires `github.ref_name` persistence and forbids hardcoded main push while retaining ledger concurrency and persistence assertions. The unchanged numerical Candidate regression group passes all 34 tests locally; final PR checks determine the updated remote result.
