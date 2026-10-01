@@ -97,6 +97,18 @@ jobs:
           restore-keys: |
             ${{ steps.execution_meta.outputs.cache_prefix }}
 
+      - name: Validate entry transport fallback integrity
+        if: steps.execution_meta.outputs.family_id == 'LOCAL'
+        shell: bash
+        env:
+          REQUEST_FILE: ${{ steps.execution_meta.outputs.request_file }}
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/entry_transport_fallback.py validate \
+            --request "$REQUEST_FILE" \
+            --output runtime_out/entry_transport_fallback_validation.json
+
       - name: Family authority scope guard
         shell: bash
         env:
