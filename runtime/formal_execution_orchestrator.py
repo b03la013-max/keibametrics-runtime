@@ -1156,7 +1156,8 @@ def prediction_checkpoint_basis(intent, source):
 
 def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
     """Automatically observe a Candidate without authorizing Production reuse."""
-    from openai_prediction_owner_candidate import execute, compare, digest, pinned_text, ensure_clean
+    from openai_prediction_owner_candidate import (execute, compare, digest, pinned_text,
+                                                  ensure_clean, INPUT_CONTRACT_VERSION)
     try:
         config_spec = intent["openai_prediction_owner_candidate_config"]
         config = json.loads(pinned_text(ROOT, config_spec))
@@ -1172,7 +1173,8 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
         if existing:
             candidate = _load_checkpoint_json(existing, "openai_owner_shadow.json")
             lineage = candidate["lineage"]
-            if (lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
+            if (lineage.get("input_contract_version") != INPUT_CONTRACT_VERSION
+                    or lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
                     or lineage["current_authority_sha256"] != digest(authority)):
                 raise ValueError("SHADOW_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
         else:

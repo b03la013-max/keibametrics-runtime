@@ -23,7 +23,8 @@ def sample(tmp_path):
         (tmp_path / (key + ".txt")).write_bytes(raw)
         config[key] = {"path": key + ".txt", "sha256": hashlib.sha256(raw).hexdigest()}
     context = {"execution_id": "A-EXEC", "race_id": "A", "source_binding": {"source": "a"},
-               "current_authority": {"manifest_id": "frozen-authority"},
+               "current_authority": {"manifest_id": "frozen-authority",
+                                     "effective_at": "2030-01-01T00:00:00+00:00"},
                "production_numerical_authority": {"status": "NOT_READY", "full_numerical_authority": False},
                "source_verification": {"verified": True},
                "prediction_cutoff": "2030-01-01T01:00:00+00:00",
@@ -183,3 +184,61 @@ def test_shadow_reserves_production_deadline_budget(sample, tmp_path):
     sample[0]["release_deadline_at"] = "2030-01-01T01:02:00+00:00"
     with pytest.raises(owner.CandidateHold, match="PROTECT_PRODUCTION"):
         run(sample, tmp_path)
+
+
+@pytest.mark.parametrize("effective,code", [
+    (None, "AUTHORITY_EFFECTIVE_AT_REQUIRED"),
+    ("2030-01-01T01:00:01+00:00", "POST_CUTOFF_AUTHORITY_HOLD"),
+])
+def test_authority_temporal_purity_before_api(sample, tmp_path, effective, code):
+    sample[0]["current_authority"]["effective_at"] = effective
+    with pytest.raises(owner.CandidateHold, match=code):
+        run(sample, tmp_path)
+
+
+def test_real_fnb_frozen_source_owner_input_excludes_research_and_acceptance():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    store = root / "runtime/executions/LOCAL-KM-LOCAL-FNB-20261001-R08-LIVE-R1-EXEC/SOURCE/runs/36840937924"
+    envelope = json.loads((store / "source_receipt_envelope.json").read_text())
+    authority = json.loads((root / "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260929_R35.json").read_text())
+    cutoff = owner.timestamp(envelope["artifact"]["prediction_cutoff"])
+    original_source_sha = owner.digest(envelope)
+    original_authority_sha = owner.digest(authority)
+    projected_authority = owner.prediction_authority_input(authority, cutoff)
+    assert projected_authority["family_scoped_authority"]["LOCAL"]["numerical_authority_status"].startswith("NOT_READY")
+    for key in ("local_acceptance_evidence", "single_entry_r2_acceptance", "dynamic_measurement_state"):
+        assert key not in projected_authority
+    assert "mec_measurement" not in projected_authority["family_scoped_authority"]["LOCAL"]
+    projected_source = owner.prediction_source_input(envelope)
+    assert projected_source["signed_envelope_sha256"] == original_source_sha
+    assert projected_source["source_receipt_sha256"] == envelope["receipt_sha256"]
+    assert projected_source["source_snapshot_sha256"] == envelope["artifact"]["source_snapshot_sha256"]
+    assert projected_source["projection_is_signed_artifact"] is False
+    assert "sbo_public_shadow_evidence" not in projected_source["artifact_projection"]
+    assert projected_source["artifact_projection"]["active_runner_universe"]["runner_count"] == 10
+    # Earlier official races observed in the frozen pre-cutoff source are legal
+    # Current-State evidence. Do not erase these together with research metrics.
+    assert "same_day_r07_result_tables" in projected_source["artifact_projection"]["normalized_evidence"]
+    assert owner.digest(envelope) == original_source_sha
+    assert owner.digest(authority) == original_authority_sha
+    current = json.loads((root / "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json").read_text())
+    with pytest.raises(owner.CandidateHold, match="POST_CUTOFF_AUTHORITY_HOLD"):
+        owner.prediction_authority_input(current, cutoff)
+
+
+def test_projected_input_not_full_authority_or_shadow_source(sample, tmp_path):
+    context, config, _, call, now = sample
+    context["current_authority"].update({
+        "dynamic_measurement_state": {"opaque": "private-research-marker"},
+        "family_scoped_authority": {"LOCAL": {
+            "numerical_authority_status": "NOT_READY",
+            "mec_measurement": {"opaque": "private-measurement-marker"}}}})
+    context["signed_source"]["artifact"]["sbo_public_shadow_evidence"] = "private-shadow-marker"
+    def inspect(payload, timeout):
+        assert all(marker not in payload["input"] for marker in (
+            "private-research-marker", "private-measurement-marker", "private-shadow-marker"))
+        return call(payload, timeout)
+    result = owner.execute(context, config, root=tmp_path, call=inspect, now=now)
+    assert result["lineage"]["input_contract_version"] == owner.INPUT_CONTRACT_VERSION
+    assert result["lineage"]["current_authority_sha256"] == owner.digest(context["current_authority"])
+    assert result["lineage"]["source_sha256"] == owner.digest(context["signed_source"])

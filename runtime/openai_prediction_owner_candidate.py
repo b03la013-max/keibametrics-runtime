@@ -14,6 +14,8 @@ import pathlib
 import re
 import urllib.request
 
+INPUT_CONTRACT_VERSION = "KM-OPENAI-OWNER-PRE-RACE-INPUT-v2"
+
 
 class CandidateHold(ValueError):
     pass
@@ -67,6 +69,52 @@ def obj(properties):
 
 def arr(items):
     return {"type": "array", "items": items}
+
+
+def prediction_authority_input(authority, cutoff):
+    """Expose normative pre-race authority, never acceptance/research ledgers.
+
+    The full immutable manifest remains digest-bound in lineage. Its operational
+    and measurement snapshots are not Prediction evidence. Historical comparison
+    must supply the authority effective at that historical prediction cutoff.
+    """
+    effective = authority.get("effective_at")
+    if not effective:
+        raise CandidateHold("AUTHORITY_EFFECTIVE_AT_REQUIRED")
+    if timestamp(effective) > cutoff:
+        raise CandidateHold("POST_CUTOFF_AUTHORITY_HOLD")
+    common = authority.get("common_family_components", {})
+    local = authority.get("family_scoped_authority", {}).get("LOCAL", {})
+    common_keys = ("prediction_utility_contract", "scope_ownership_contract",
+                   "formal_lifecycle_contract", "fnb_venue_canon")
+    local_keys = ("production_suite", "production_numeric_status", "common_canon",
+                  "common_canon_profile", "common_canon_compiled_sha256",
+                  "information_source_registry", "base_index_registry",
+                  "evidence_rule_registry", "numerical_authority_status",
+                  "current_venue_canons", "production_prediction_owner")
+    return {"manifest_id": authority["manifest_id"], "effective_at": effective,
+            "common_family_components": {k: common[k] for k in common_keys if k in common},
+            "family_scoped_authority": {"LOCAL": {k: local[k] for k in local_keys if k in local}}}
+
+
+def prediction_source_input(envelope):
+    """Preserve signed SOURCE references and factual inputs, exclude shadow state."""
+    artifact = envelope["artifact"]
+    # Validate before projection so an injected target outcome cannot be silently
+    # discarded and the corrupt source treated as clean.
+    ensure_clean(envelope)
+    keys = ("race_id", "formal_ready", "source_freeze_at", "prediction_cutoff",
+            "source_snapshot_sha256", "raw_source_bundle_sha256",
+            "active_runner_universe", "source_race_context", "normalized_evidence",
+            "normalized_evidence_sha256", "auxiliary_evidence", "auxiliary_evidence_sha256",
+            "jma_weather_evidence", "jma_weather_evidence_sha256",
+            "point_in_time_population_ledger", "point_in_time_population_ledger_sha256",
+            "sources", "missing_required_sources", "stale_sources", "conflicts")
+    return {"receipt": envelope["receipt"], "signed_envelope_sha256": digest(envelope),
+            "source_receipt_sha256": envelope.get("receipt_sha256"),
+            "source_snapshot_sha256": artifact.get("source_snapshot_sha256"),
+            "artifact_projection": {k: artifact[k] for k in keys if k in artifact},
+            "projection_is_signed_artifact": False}
 
 
 def prediction_schema(ids):
@@ -149,6 +197,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
     if receipt.get("race_id") != context["race_id"] or receipt.get("phase") != "SOURCE":
         raise CandidateHold("SOURCE_RACE_LINEAGE_MISMATCH")
     cutoff = timestamp(context["prediction_cutoff"])
+    authority_input = prediction_authority_input(context["current_authority"], cutoff)
     deadline = timestamp(context["release_deadline_at"])
     if timestamp(artifact["source_freeze_at"]) > cutoff or now >= deadline:
         raise CandidateHold("DEADLINE_OR_POST_CUTOFF_SOURCE_HOLD")
@@ -165,8 +214,9 @@ def execute(context, config, *, root, call=responses_call, now=None):
                for key in ("prompt_id", "prompt_version", "venue_canon_id", "policy_id")):
         raise CandidateHold("VERSIONED_PROMPT_POLICY_METADATA_REQUIRED")
     # Never send the baseline Prediction, intent-derived scores, KRS or RESULT.
-    data = {"race_id": context["race_id"], "signed_source": envelope,
-            "current_authority": context["current_authority"], "venue_canon": canon,
+    source_input = prediction_source_input(envelope)
+    data = {"race_id": context["race_id"], "signed_source": source_input,
+            "current_authority": authority_input, "venue_canon": canon,
             "policy": policy, "runner_universe": universe,
             "numerical_authority": context["production_numerical_authority"],
             "current_state_evidence": artifact.get("normalized_evidence", {}),
@@ -232,6 +282,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
     if frozen >= deadline:
         raise CandidateHold("DEADLINE_HOLD_AFTER_RESPONSE")
     lineage = {"execution_id": context["execution_id"], "race_id": context["race_id"],
+               "input_contract_version": INPUT_CONTRACT_VERSION,
                "source_binding": context["source_binding"], "source_sha256": digest(envelope),
                "venue_canon_sha256": config["venue_canon"]["sha256"],
                "venue_canon_id": config["venue_canon_id"],
@@ -240,6 +291,8 @@ def execute(context, config, *, root, call=responses_call, now=None):
                "authority_id": context["current_authority"]["manifest_id"],
                "input_schema_sha256": digest(input_schema), "output_schema_sha256": digest(schema),
                "current_authority_sha256": digest(context["current_authority"]),
+               "prediction_authority_input_sha256": digest(authority_input),
+               "prediction_source_input_sha256": digest(source_input),
                "instruction_sha256": config["instruction"]["sha256"], "schema_sha256": digest(schema),
                "model_identifier": model, "api_response_identifier": result["id"],
                "prediction_output_sha256": digest(prediction), "freeze_timestamp": frozen.isoformat(),
