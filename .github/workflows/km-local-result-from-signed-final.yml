@@ -24,6 +24,8 @@ jobs:
   result-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PERSIST_BRANCH: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git pull --ff-only origin main
+          git pull --ff-only origin "$PERSIST_BRANCH"
 
       - name: Resolve RESULT execution metadata
         id: execution_meta
@@ -100,7 +102,7 @@ jobs:
           python runtime/formal_execution_orchestrator.py --intent "$REQ" --phase RESULT
 
       - name: Persist canonical RESULT execution phase
-        if: success() && steps.execution_meta.outputs.skip != 'true'
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != ''
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.execution_meta.outputs.execution_id }}
@@ -109,6 +111,7 @@ jobs:
 
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          test -d "runtime/executions/$EXECUTION_ID/RESULT" || exit 0
           git add "runtime/executions/$EXECUTION_ID/RESULT"
           git diff --cached --quiet || git commit -m "execution: persist $EXECUTION_ID RESULT [skip ci]"
 
@@ -123,7 +126,7 @@ jobs:
 
           PUSHED=0
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
               PUSHED=1
               break
             fi
@@ -140,7 +143,7 @@ jobs:
           fi
 
       - name: Persist LOCAL forward measurement ledgers
-        if: success() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/acceptance_only.flag') == ''
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != '' && hashFiles('runtime_out/acceptance_only.flag') == ''
         shell: bash
         run: |
           set -euo pipefail
@@ -153,7 +156,7 @@ jobs:
             git stash push --include-untracked -m "km-forward-ledger-pending"
             STASHED=1
           fi
-          git pull --ff-only origin main
+          git pull --ff-only origin "$PERSIST_BRANCH"
           if [ "$STASHED" = "1" ]; then
             git stash pop
           fi
@@ -182,7 +185,7 @@ jobs:
           fi
           git commit -m "measurement: persist LOCAL forward OOS state [skip ci]"
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
@@ -192,7 +195,7 @@ jobs:
           exit 1
 
       - name: Persist successful signed RESULT envelope
-        if: success() && steps.execution_meta.outputs.skip != 'true'
+        if: always() && steps.execution_meta.outputs.skip != 'true' && hashFiles('runtime_out/result_receipt_envelope.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.execution_meta.outputs.artifact_name }}

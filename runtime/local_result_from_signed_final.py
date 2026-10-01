@@ -21,7 +21,7 @@ from common_exact_continuity_shadow import (
 )
 from common_exact_continuity_oos_tracker import write_status as write_common_exact_continuity_oos_status
 from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json, result_route
-from execution_store import materialize_phase
+from execution_store import materialize_phase, verify_result_reuse
 from race_day_fast_reflection import build_fast_reflection
 
 raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -164,16 +164,37 @@ final_ver=post("/verify",fin)
 if not final_ver.get("verified") and not final_ver.get("valid"):
     raise SystemExit("FINAL_SIGNATURE_VERIFY_FAILED_BEFORE_MEC_SHADOW")
 
-res=post("/result",result_payload)
+reuse_path=os.environ.get("KM_RESULT_REUSE_PATH")
+if reuse_path:
+    # The orchestrator transports an immutable stored receipt, not a new
+    # RESULT request. Verify it externally and bind every financial input.
+    res=json.load(open(reuse_path,encoding="utf-8"))
+    ver=post("/verify",res)
+    recovery=verify_result_reuse(res,fin,result_payload,ver)
+    json.dump(recovery,open("runtime_out/result_recovery.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True)
+else:
+    res=post("/result",result_payload)
+    # Preserve the response before /verify transport can fail. An unverified
+    # receipt is not completion, but must never trigger another /result call.
+    json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    json.dump({"FINAL":True,"RESULT":False},
+              open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),
+              ensure_ascii=False,sort_keys=True)
+    ver=post("/verify",res)
 if (res.get("receipt") or {}).get("status")!="PASS":
     raise SystemExit("RESULT_NOT_PASS:"+json.dumps(res,ensure_ascii=False))
-ver=post("/verify",res)
 if not ver.get("verified"):
     raise SystemExit("RESULT_SIGNATURE_VERIFY_FAILED")
 
 art=res.get("artifact") or {}
 os.makedirs("runtime_out",exist_ok=True)
 json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+# Persist verified terminal evidence before optional reflection/research work.
+# A later failure must not cause the same signed outcome to be settled twice.
+json.dump({"FINAL":bool(final_ver.get("verified") or final_ver.get("valid")),"RESULT":True},
+          open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 
 # Measurement authority is stronger than the operator confirmation flag alone.
 def _runtime_result_authority_compat(obj,result,request,envelope,verification):
@@ -692,3 +713,19 @@ try:
         json.dump(acceptance,open('runtime/local_initial_forward_acceptance.json','w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
 except Exception as error:
     json.dump({'status':'PENDING_OR_HELD','error':str(error),'production_effect':'NONE'},open('runtime_out/local_initial_forward_acceptance_failure.json','w',encoding='utf-8'),ensure_ascii=False)
+
+# Durable learning closure has a direct immutable FINAL/RESULT lineage.
+# Research HOLD is retained as a terminal, never counted or used to stop Production.
+learning_state={"race_id":rid,"execution_id":execution_id,
+    "final_receipt_sha256":fin.get("receipt_sha256"),"result_receipt_sha256":res.get("receipt_sha256"),
+    "learning_event":art.get("learning_event"),"failure_localization":art.get("failure_localization"),
+    "automatic_post_result_review":art.get("automatic_post_result_review"),
+    "production_policy_change":False,"actual_purchase_pfs":"UNKNOWN_UNLESS_VERIFIED"}
+json.dump(learning_state,open("runtime_out/learning_state.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+receipt_verifications={"FINAL":bool(final_ver.get("verified") or final_ver.get("valid")),"RESULT":bool(ver.get("verified"))}
+json.dump(receipt_verifications,open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+tracker_terminal={"race_id":rid,"execution_id":execution_id,
+    "status":"PASS" if 'forward_measurement' in globals() and forward_measurement.get("eligible") is True else "HOLD",
+    "research_failure_nonblocking":True,"production_effect":"NONE",
+    "reason":None if 'forward_measurement' in globals() else "FORWARD_CAPTURE_OR_SETTLEMENT_MISSING"}
+json.dump(tracker_terminal,open("runtime_out/forward_tracker_terminal.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
