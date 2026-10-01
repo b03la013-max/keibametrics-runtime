@@ -34,3 +34,25 @@ def test_futility_is_contextual_not_30_race_rule():
     assert f.candidate_futility_review(rows)['decision'].startswith('EARLY_FUTILITY')
     rows[1]['paired_winner_rank_difference']=-1
     assert f.candidate_futility_review(rows)['decision']=='CONTINUE'
+
+
+def test_result_authority_accepts_runtime_v1_frozen_refs_alias():
+    req,fin,pre=capture()
+    art,rreq=result(req)
+    rreq['official_result_verified']=True
+    rreq['official_result_verification_ref']='https://official.test/result'
+    rreq['execution_id']=pre['execution_id']
+    rreq['race_id']=pre['race_id']
+    env=signed_result(art)
+    # Production Runtime RESULT v1 uses frozen_refs.
+    env['artifact'].pop('frozen_references',None)
+    env['artifact']['frozen_refs']={'final_receipt_sha256':pre['final_receipt_sha256']}
+    import hashlib,json
+    sha=lambda x:hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    env['receipt']['artifact_sha256']=sha(env['artifact'])
+    env['receipt_sha256']=sha(env['receipt'])
+    from runtime.local_candidate_postresult import result_authority
+    normalized={**env['artifact'],'race_id':pre['race_id'],'official_result':{**env['artifact']['official_result'],'top3':env['artifact']['official_result']['finish_order'][:3]}}
+    out=result_authority(pre,normalized,rreq,env,{'verified':True})
+    assert out['status']=='PASS'
+    assert out['failures']==[]
