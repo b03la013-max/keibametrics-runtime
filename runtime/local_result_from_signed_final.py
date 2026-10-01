@@ -183,9 +183,44 @@ json.dump(fast_reflection,open("runtime_out/race_day_fast_reflection.json","w",e
           ensure_ascii=False,sort_keys=True,separators=(",",":"))
 print("KM_RACE_DAY_FAST_REFLECTION="+json.dumps(fast_reflection,ensure_ascii=False,separators=(",",":")))
 
+# Optional confirmed Actual Purchase measurement; never infer a purchase from FINAL.
+try:
+    from pfs_grand_review import actual_purchase_records
+    actual_result={**art,"race_id":rid,"official_result":{**(art.get("official_result") or result_payload["official_result"]),"top3":top3}}
+    actual_rows,actual_held=actual_purchase_records(result_overrides={rid:actual_result})
+    json.dump({"status":"VERIFIED_DATA" if actual_rows else "UNKNOWN / NO VERIFIED PURCHASE",
+        "records":actual_rows,"held":actual_held,"production_effect":"NONE"},
+        open("runtime_out/actual_purchase_pfs.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+except Exception as actual_error:
+    json.dump({"status":"UNKNOWN / MEASUREMENT_ERROR","error":str(actual_error),"production_effect":"NONE"},
+        open("runtime_out/actual_purchase_pfs.json","w",encoding="utf-8"),ensure_ascii=False)
+
 # LOCAL MEC-R4 forward OOS: only a Shadow whose digest was bound into
 # the signed pre-result FINAL may enter the preregistered tracker.
 mec_r4_shadow_settlement=None
+# Phase B.1 reuses the existing LOCAL measurement owner and persistence step.
+# RESULT signature has already been verified. A missing payout holds research only.
+try:
+    from local_candidate_postresult import persist_forward_capture,settle_forward_capture,persist_forward_settlement,forward_status
+    forward_path=os.path.join("runtime_result_in","local_forward_measurement_pre_result.json")
+    if os.path.exists(forward_path):
+        forward=json.load(open(forward_path,encoding="utf-8"))
+        persist_forward_capture(forward)
+        forward_result=dict(art)
+        forward_result["race_id"]=rid
+        # Signed API result may expose finish_order rather than top3; shared settlement needs top3.
+        forward_result["official_result"]=dict(art.get("official_result") or result_payload["official_result"])
+        forward_result["official_result"]["top3"]=list(req["finish_order"][:3])
+        forward_measurement=settle_forward_capture(forward,fin,forward_result,result_request=req,diagnosis=fast_reflection)
+        persist_forward_settlement(forward,forward_measurement)
+        json.dump(forward_measurement,open("runtime_out/local_forward_measurement_settlement.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        status=forward_status()
+        json.dump(status,open("runtime/local_candidate_forward_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(status,open("runtime_out/local_candidate_forward_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+except (Exception,SystemExit) as forward_error:
+    json.dump({"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE","error":str(forward_error)},
+        open("runtime_out/local_forward_measurement_failure.json","w",encoding="utf-8"),ensure_ascii=False)
+
 mec_r4_binding=None
 mec_r4_oos_status=None
 mec_r4_shadow_path=os.path.join("runtime_result_in","mec_r4_shadow_pre_result.json")

@@ -425,6 +425,20 @@ def materialize_candidate(request: Dict[str, Any],
         r["candidate_missing_policy"]=((mapping.get("missing_semantics") or {}).get("policy") or "LEGACY_NEUTRAL_INCLUDED")
         r["candidate_index_sha256"]=_sha(r["canonical_components"])
 
+    # Coverage diagnostics only: never a missingness score penalty.
+    for r in runners:
+        features=r.get("evidence_features") or {}
+        r["candidate_missingness_saturation"]={}
+        for name,spec in r["canonical_components"].items():
+            components=spec.get("components") or []
+            flags=[bool(x.get("missing")) for x in components]
+            missing=sum(flags);n=len(flags)
+            ratio=missing/n if n else float(spec.get("missingness_fraction",0))
+            refs={str(ref) for x in components if not x.get("missing") for ref in x.get("evidence_refs") or []}
+            r["candidate_missingness_saturation"][name]={"calculated_component_count":n-missing if n else None,"neutral_component_count":missing if n else None,
+                "component_counts_available":bool(n),"missingness_ratio":ratio,"effective_evidence_dimension":len(refs),
+                "effective_dimension_definition":"distinct source references, NOT independent causal signals",
+                "fully_neutral_sub_index":ratio==1,"neutral_dominant_sub_index":ratio>0.5}
     out=copy.deepcopy(request)
     out["runners"]=runners
     required_count=len(runners)*len(REQUIRED)

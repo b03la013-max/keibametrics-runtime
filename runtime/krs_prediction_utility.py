@@ -346,7 +346,8 @@ def evaluate_against_result(utility:dict,actual_top3:list[int], *, static_rankin
                           "static_role_hit":sh,"krs_role_zone_hit":kh,"frozen_k":limit})
     false_roles=[{"horse_no":h,"proposal":p} for h,p in sorted(actionable_roles)
                  if (h,p) not in {(actual[0],"ADD_W_SHADOW"),(actual[1],"ADD_P2_SHADOW"),(actual[2],"ADD_P3_SHADOW")}]
-    extra={"rank_comparison":rank_rows,"unique_rescue_role_count":role_rescue,
+    extra={"harm_semantics":"POTENTIAL_HARM / STATIC_CORRECT_ROLE_NON_CONFIRMATION; no Production deletion",
+           "production_harm":False,"rank_comparison":rank_rows,"unique_rescue_role_count":role_rescue,
            "unique_harm_role_count":role_harm,
            "comparison_kind":"STATIC_ROLES_VS_KRS_FROZEN_ROLE_ZONES; not actual decision replacement",
            "false_role_additions":false_roles,

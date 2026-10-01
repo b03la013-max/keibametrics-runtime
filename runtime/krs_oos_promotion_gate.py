@@ -67,7 +67,7 @@ def build_oos_measurement(review, final_artifact, result_request=None):
     return m
 
 def evaluate_r30(measurements):
-    eligible=[x for x in measurements if x.get("eligible") is True]
+    eligible=[x for x in measurements if x.get("eligible") is True and (x.get("family_id") or ("LOCAL" if "LOCAL" in str(x.get("race_id")) else "BAN" if "BAN" in str(x.get("race_id")) else "JRA"))=="JRA"]
     n=len(eligible)
     role_props=sum(int(x.get("actionable_role_proposals",0)) for x in eligible)
     role_hits=sum(int(x.get("actionable_role_hits",0)) for x in eligible)

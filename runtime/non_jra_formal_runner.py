@@ -710,6 +710,7 @@ def compute_candidate_shadows():
                     str(r.get("runner_id")):{k:v.get("value") for k,v in (r.get("canonical_components") or {}).items()}
                     for r in (q.get("runners") or [])
                 },
+                "missingness_saturation":{str(r["runner_id"]):r.get("candidate_missingness_saturation") for r in q.get("runners") or []},
                 "runner_component_coverage":{
                     str(r.get("runner_id")):{
                         "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
@@ -1297,6 +1298,19 @@ if fc>=300 or (fin.get("receipt") or {}).get("status")!="PASS":
     fail_closed("FINAL_NOT_PASS",{"http":fc,"final":fin})
 final_sha=verify_envelope(fin,"FINAL")
 deadline_guard("AFTER_FINAL")
+
+# Phase B.1: optional forward research AFTER verified Production FINAL.
+# Failure is diagnostic only; Production tickets and release are immutable.
+try:
+    from local_candidate_postresult import build_forward_capture
+    forward=build_forward_capture(req,fin,utility,
+        generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        candidate=candidate_shadow_summary,
+        classification="MECHANICAL_ACCEPTANCE" if acceptance_only else "FORWARD")
+    persist("local_forward_measurement_pre_result.json",forward)
+except Exception as forward_error:
+    persist("local_forward_measurement_failure.json",{"status":"SHADOW_CAPTURE_FAILED","production_effect":"NONE",
+        "race_id":rid,"execution_id":execution_id,"error":type(forward_error).__name__+":"+str(forward_error)})
 
 if fast_timer is not None:
     fast_path_runtime_report["final_release"]=fast_timer.report(scheduled)

@@ -129,6 +129,8 @@ jobs:
           git pull --ff-only origin main
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/local_candidate_forward_measurements ]; then git add runtime/local_candidate_forward_measurements; fi
+          if [ -f runtime/local_candidate_forward_status.json ]; then git add runtime/local_candidate_forward_status.json; fi
           if [ -d runtime/local_candidate_dual_oos_measurements ]; then git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/local_candidate_v03_oos_measurements ]; then git add runtime/local_candidate_v03_oos_measurements/*.json runtime/local_candidate_v03_oos_status.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi

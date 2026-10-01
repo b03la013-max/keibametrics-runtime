@@ -1,0 +1,62 @@
+{
+  "version": "PHASE-B1-FORWARD-v1",
+  "activation_at": "2026-10-01T00:48:37+00:00",
+  "family_cohorts": [
+    "JRA",
+    "LOCAL",
+    "BAN"
+  ],
+  "local_candidate": "v0.1 existing frozen numerical Candidate; no new weights",
+  "capital_arms": {
+    "PRODUCTION": "Frozen actual recommendation stakes",
+    "CONSERVATIVE": [
+      "CORE"
+    ],
+    "BALANCED": [
+      "CORE",
+      "PROTECTION"
+    ],
+    "WIDE": [
+      "CORE",
+      "PROTECTION",
+      "TAIL"
+    ]
+  },
+  "allocation": "Existing Phase-B minimum unit then nominal-stake largest remainder; equal actual spend",
+  "primary_endpoint": "paired net return difference vs Production, LOCAL only",
+  "pilot_minimum": 30,
+  "guardrails": [
+    "Conversion",
+    "hit-but-loss",
+    "drawdown",
+    "largest return stress",
+    "runtime",
+    "missingness"
+  ],
+  "aggregation": "chronological race; day/venue clustered; all arm results; incomplete payouts held not zero",
+  "failure_policy": "capture failures retained in denominator ledger; first 30 eligible paired races pilot; later evidence remains visible",
+  "automatic_promotion": false,
+  "known_result_training": "FNB20260930 excluded from forward OOS; development only",
+  "arm_change": "Close current window and preregister new version; no in-window mutation",
+  "definition_files": [
+    "runtime/local_fullnumerical_candidate.py",
+    "runtime/krs_prediction_utility.py",
+    "runtime/pfs_grand_review.py",
+    "runtime/local_candidate_postresult.py",
+    "runtime/common_exact_continuity_shadow.py",
+    "runtime/mec_r4_shadow.py",
+    "mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json",
+    "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
+  ],
+  "definition_sha256": {
+    "runtime/local_fullnumerical_candidate.py": "f4c83023fd8e331c690dc0d9f0a49d36095dfbc9003418e1a8374a59fc26471e",
+    "runtime/krs_prediction_utility.py": "5a6324282bc6f8d356ae696b585a3128015bf61482c7a8b94599ab9ae97468fc",
+    "runtime/pfs_grand_review.py": "6ef5d2e42d6c98c902e45a4739d15d9902ffb2703e513fa8b8b28570bbd8f49c",
+    "runtime/local_candidate_postresult.py": "5d4a654813417d8aa91958c0837ae3e04fc2a8b2b539a8cdd1a58088eecf71f7",
+    "runtime/common_exact_continuity_shadow.py": "862d56c66a07cb7d8a937fe481ea4f1c2736b001f22ea321c4d35e1ef219dfbf",
+    "runtime/mec_r4_shadow.py": "e51e195c3fa062bf428e63416e9759f7e9fde1815fe9f4c5f87ac7cd1ae753d5",
+    "mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json": "837d6395a2d99829c04e087f6572997e2343e0943d00865db3db6d3464d8a73e",
+    "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json": "b7740e4eb1d8e009eb872743e3f24a007e877727def72be8ee31c0931f9e5693"
+  },
+  "result_eligibility": "official_result_verified=true explicitly asserted by result operator; absent confirmation remains ineligible; acceptance_only never OOS"
+}

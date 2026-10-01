@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit user-confirmed Actual Purchase race ledger",
+  "type": "object",
+  "required": [
+    "race_id",
+    "purchase_verified",
+    "ledger_complete",
+    "verification_ref",
+    "scheduled_post_at",
+    "purchases"
+  ],
+  "properties": {
+    "race_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "purchase_verified": {
+      "const": true
+    },
+    "ledger_complete": {
+      "const": true
+    },
+    "verification_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scheduled_post_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "purchases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "purchase_id",
+          "timestamp",
+          "success"
+        ],
+        "properties": {
+          "purchase_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "proof_ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ticket": {
+            "type": "object",
+            "required": [
+              "bet_type",
+              "selection",
+              "stake"
+            ],
+            "properties": {
+              "bet_type": {
+                "enum": [
+                  "EXACTA",
+                  "TRIO",
+                  "TRIFECTA"
+                ]
+              },
+              "selection": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 3,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "stake": {
+                "type": "integer",
+                "minimum": 100,
+                "multipleOf": 100
+              }
+            }
+          },
+          "refund": {
+            "type": "integer",
+            "minimum": 0,
+            "multipleOf": 100
+          },
+          "refund_proof_ref": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "success": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "ticket",
+                "proof_ref"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "refund"
+              ],
+              "properties": {
+                "refund": {
+                  "minimum": 100
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "refund_proof_ref"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$comment": "Reader also enforces pre-post timestamp, distinct purchase IDs, ticket arity, refund <= stake, official settlement. Optional ledger, never generated from recommendation. Mechanical fixtures do not assert actual purchase."
+}

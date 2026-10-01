@@ -1,3 +1,5 @@
+> Phase B履歴報告。最新状態・Family別カウント・二軸DiagnosisはPHASE_B1_REPORT.mdを参照。
+
 # KeibaMetrics Family — Phase B execution report
 
 ## A. Evidence Coverage Matrix
@@ -35,7 +37,7 @@
 
 FNB9/30既知11レースをDevelopmentとしてのみ再計算。R1の対応canonical FORMAL保存が見つからず、12レース完備とは宣言しない。重複retryは同じLATEST runを再計上しない。結果表の馬別corner欄が空でも別表に公式隊列があった。別表を利用する修正後、R12の先行11レースTop3はcorner33/33、従来0/33。括弧内集団はrank_min/rank_maxを保持し、集団内順序を捏造しない。馬体重、休養、転入をtraining/paddockの代理観測としない。
 
-## C. 63 Numerical Rule Closure Matrix
+## C. 63 Candidate Rule Coverage / Terminalization Matrix
 
 ProductionはNOT_READY、required63 / bound0。既存v0.1 Candidateの63規則を再利用し、新bonus・weight・thresholdなし。Candidate BOUNDはProduction READYと異なる。欠測由来52等の既存中立値の輸送を維持しながら、RULED-NEUTRALをCALCULATEDから除外。KRS研究bridgeはnumeric_transport_completeを参照し、計算済み偽装によって接続しない。以下のholdはCandidate不正入力の隔離でありLIVE停止権ではない。
 

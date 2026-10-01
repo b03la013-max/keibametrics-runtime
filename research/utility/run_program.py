@@ -20,43 +20,7 @@ from local_physical.nar_auxiliary_evidence import build_same_day_bias
 def load(p):return json.loads(Path(p).read_text())
 def sha(x):return hashlib.sha256(json.dumps(x,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
 def dt(x):return datetime.datetime.fromisoformat(str(x).replace('Z','+00:00'))
-def capital_arms(final,budget,*,request,generated_at,scheduled_post_at):
-    """Tier ablation with equal ACTUAL spend; no ranking, AKI or odds weights."""
-    if dt(generated_at)>=dt(scheduled_post_at):raise ValueError('NOT_PRE_RACE')
-    if isinstance(budget,bool) or not isinstance(budget,int) or budget<100 or budget%100:raise ValueError('BUDGET_UNIT_INVALID')
-    art=final.get('artifact') or final
-    if not request.get('race_id') or dt(request['scheduled_post_at'])!=dt(scheduled_post_at):raise ValueError('RACE_SCHEDULE_BINDING_REQUIRED')
-    universe={int(x['runner_id']) for x in request.get('runners') or [] if not x.get('scratched') and not x.get('excluded')}
-    if not universe:raise ValueError('RUNNER_UNIVERSE_REQUIRED')
-    freeze=art.get('final_freeze_timestamp')
-    if not freeze or dt(freeze)>dt(generated_at) or dt(freeze)>=dt(scheduled_post_at):raise ValueError('FINAL_NOT_PRE_RACE_FROZEN')
-    tickets=copy.deepcopy((art.get('final_ticket') or {}).get('tickets') or [])
-    keys=[]
-    for t in tickets:
-        bt=t['bet_type'];sel=[int(x) for x in t['selection']]
-        if bt not in {'EXACTA','TRIO','TRIFECTA'} or len(sel)!=(2 if bt=='EXACTA' else 3) or len(sel)!=len(set(sel)):raise ValueError('INVALID_TICKET')
-        if not set(sel)<=universe:raise ValueError('RUNNER_UNIVERSE_VIOLATION')
-        k=(bt,tuple(sorted(sel) if bt=='TRIO' else sel))
-        if k in keys:raise ValueError('DUPLICATE_TICKET')
-        keys.append(k)
-        if isinstance(t.get('stake'),bool) or not isinstance(t.get('stake'),int) or t['stake']<=0 or t['stake']%100:raise ValueError('INVALID_STAKE')
-    arms={'PRODUCTION':{'tickets':tickets,'investment':sum(t['stake'] for t in tickets)}}
-    for name,tiers in [('CONSERVATIVE',{'CORE'}),('BALANCED',{'CORE','PROTECTION'}),('WIDE',{'CORE','PROTECTION','TAIL'})]:
-        subset=[copy.deepcopy(t) for t in tickets if str(t.get('mec_tier') or t.get('tier')).upper() in tiers]
-        if not subset or len(subset)>budget//100 or any(str(t.get('mec_tier') or t.get('tier')).upper() not in {'CORE','PROTECTION','TAIL'} for t in tickets):
-            arms[name]={'status':'HOLD_SHADOW','reason':'MISSING_TIER_OR_INSUFFICIENT_MINIMUM_BUDGET'};continue
-        # Existing nominal stakes are allocation ratios, not likelihoods.
-        remainder=budget//100-len(subset);den=sum(t['stake'] for t in subset)
-        units=[1+(remainder*t['stake']//den) for t in subset]
-        left=budget//100-sum(units)
-        order=sorted(range(len(subset)),key=lambda i:(-(remainder*subset[i]['stake']%den),keys[tickets.index(subset[i])]))
-        for i in order[:left]:units[i]+=1
-        for t,n in zip(subset,units):t['stake']=n*100
-        arms[name]={'status':'FROZEN_SHADOW','tickets':subset,'investment':sum(t['stake'] for t in subset)}
-    return {'status':'PRE-RACE-CAPITAL-SHADOW','generated_at':generated_at,'scheduled_post_at':scheduled_post_at,
-            'race_id':request['race_id'],'input_sha256':sha(final),'request_sha256':sha(request),'budget':budget,'arms':arms,'production_effect':'NONE',
-            'production_comparable_equal_spend':arms['PRODUCTION']['investment']==budget,
-            'notice':'Tier ablation, not an AKI/distribution-adaptive policy. No new ticket added.'}
+from pfs_grand_review import capital_arms
 
 
 def run():
@@ -133,7 +97,7 @@ def run():
     programs['LOCAL_NUMERICAL_DUAL']=dual_eval(dual_read(ROOT/'runtime/local_candidate_dual_oos_measurements'))
     programs['LOCAL_NUMERICAL_V03']=v03_eval(v03_read(ROOT/'runtime/local_candidate_v03_oos_measurements'))
     pfs=build_report()
-    artifacts={'numerical_rule_closure':closure,'runner_rule_terminalization':feature_rows,'numerical_comparison':comparisons,
+    artifacts={'candidate_rule_coverage':closure,'runner_rule_terminalization':feature_rows,'numerical_comparison':comparisons,
                'evidence_details':evidence,'mec_conversion':mec,'current_state_shadow':current,'program_status':programs,
                'pfs_report':pfs,'program_errors':errors}
     for name,data in artifacts.items():(out/(name+'.json')).write_text(json.dumps(data,ensure_ascii=False,sort_keys=True,indent=2))
