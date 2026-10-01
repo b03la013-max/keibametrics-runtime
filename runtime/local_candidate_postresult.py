@@ -117,7 +117,7 @@ def evaluate_candidate_krs_envelope(candidate_summary: Dict[str,Any], envelope: 
       "third_dispositions":[],
     }
     utility=build_krs_prediction_utility(req,{"status":"EXECUTED","output":raw})
-    evaluation=evaluate_against_result(utility,[int(x) for x in actual_finish_order[:3]])
+    evaluation=evaluate_against_result(utility,[int(x) for x in actual_finish_order[:3]],static_ranking=ranking)
     out={
       "arm_label":arm_label,
       "candidate_krs_receipt_sha256":(envelope or {}).get("receipt_sha256"),

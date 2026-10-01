@@ -156,7 +156,7 @@ def build_runner_bridge(runner: Dict[str,Any]) -> Dict[str,Any]:
 def build_candidate_krs(request: Dict[str,Any]) -> Dict[str,Any]:
     q=copy.deepcopy(request)
     summary=q.get("candidate_full_numerical_summary") or {}
-    if summary.get("full_numerical_complete") is not True:
+    if summary.get("numeric_transport_complete",summary.get("full_numerical_complete")) is not True:
         raise LocalCandidateBridgeError("CANDIDATE_FULL_NUMERICAL_REQUIRED")
     runners=q.get("runners") or []
     bridge_runners={}

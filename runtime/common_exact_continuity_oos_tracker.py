@@ -27,7 +27,15 @@ def _official_result_authority(rid):
 def _agg(rows):
     inv=sum(float(x.get("investment") or 0) for x in rows)
     ret=sum(float(x.get("return") or 0) for x in rows)
+    from pfs_grand_review import _robustness
+    diagnostic_rows=[{"race_id":f"{i:08d}","investment":float(x.get("investment") or 0),
+                      "return":float(x.get("return") or 0),
+                      "profit_loss":float(x.get("profit_loss") or 0),
+                      "hit_but_loss":0<float(x.get("return") or 0)<float(x.get("investment") or 0)} for i,x in enumerate(rows)]
     return {
+      "added_ticket_count":sum(int(x.get("candidate_count",0)) for x in rows),
+      "false_addition_count":sum(int(x.get("candidate_count",0))-int(bool(x.get("rescue_hit"))) for x in rows),
+      "added_capital":round(inv,2),"robustness":_robustness(diagnostic_rows),
       "eligible_races":len(rows),"investment":round(inv,2),"return":round(ret,2),
       "profit_loss":round(ret-inv,2),"investment_weighted_pfs":round(ret/inv*100,9) if inv else None,
       "rescue_hits":sum(bool(x.get("rescue_hit")) for x in rows),

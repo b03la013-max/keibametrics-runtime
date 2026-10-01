@@ -73,7 +73,8 @@ def _index(mapping_id: str, name: str, value: float, refs: Iterable[str], fact: 
            *, rule_id: str, components: List[Dict[str, Any]] | None = None,
            missing_fraction: float = 0.0, exact_canon_formula: bool = False) -> Dict[str, Any]:
     return {
-        "terminal_status": "CALCULATED",
+        "terminal_status": "RULED-NEUTRAL" if missing_fraction >= 1.0 else "CALCULATED",
+        "observation_basis": "ALL-MISSING" if missing_fraction >= 1.0 else ("PARTIAL" if missing_fraction > 0 else "OBSERVED"),
         "value": round(_clamp(value), 6),
         "rule_id": rule_id,
         "mapping_version": mapping_id,
@@ -129,7 +130,7 @@ def _weighted_base(runner: Dict[str, Any], idx: str, weights: Dict[str, float], 
     )
     out["missing_policy"]="OBSERVED_ONLY_RENORMALIZE" if observed_only else "LEGACY_NEUTRAL_INCLUDED"
     out["observed_weight_fraction"]=round(0.0 if total_weight<=0 else denom/total_weight,6)
-    out["all_components_unknown"]=bool(all_missing)
+    out["all_components_unknown"]=bool(missing_weight >= total_weight)
     if all_missing:
         out["source_fact"] += " | all components UNKNOWN; 52 retained as transport-only value with confidence zero."
     return out
@@ -433,14 +434,17 @@ def materialize_candidate(request: Dict[str, Any],
             spec=r["canonical_components"][name]
             if not isinstance(spec.get("value"),(int,float)) or not math.isfinite(float(spec["value"])):
                 raise LocalCandidateNumericalError(f"NON_NUMERIC_INDEX:{r['runner_id']}:{name}")
-            rows.append({"runner_id":str(r["runner_id"]),"index":name,"value":spec["value"],"rule_id":spec["rule_id"]})
+            rows.append({"runner_id":str(r["runner_id"]),"index":name,"value":spec["value"],"rule_id":spec["rule_id"],"terminal_status":spec["terminal_status"]})
 
     out["candidate_full_numerical_summary"]={
         "required_indices":REQUIRED,
         "required_count":required_count,
-        "calculated_count":len(rows),
+        "calculated_count":sum(x["terminal_status"]=="CALCULATED" for x in rows),
+        "terminalized_count":len(rows),
+        "ruled_neutral_count":sum(x["terminal_status"]=="RULED-NEUTRAL" for x in rows),
         "unresolved_count":0,
-        "full_numerical_complete":len(rows)==required_count,
+        "numeric_transport_complete":len(rows)==required_count,
+        "full_numerical_complete":len(rows)==required_count and all(x["terminal_status"]=="CALCULATED" for x in rows),
         "mapping_id":mapping_id,
         "evidence_registry_id":reg["registry_id"],
         "production_authority":False,

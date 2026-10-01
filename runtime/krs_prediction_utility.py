@@ -282,7 +282,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
     report["sha256"]=hashlib.sha256(raw).hexdigest()
     return report
 
-def evaluate_against_result(utility:dict,actual_top3:list[int])->dict:
+def evaluate_against_result(utility:dict,actual_top3:list[int], *, static_ranking=None)->dict:
     actual=[int(x) for x in actual_top3]
     actionable_roles={(int(x["horse_no"]),x["proposal"]) for x in utility.get("actionable_role_proposals") or []}
     actionable_pairs={(int(x["head"]),int(x["second"])) for x in utility.get("actionable_ordered_pair_proposals") or []}
@@ -322,7 +322,41 @@ def evaluate_against_result(utility:dict,actual_top3:list[int])->dict:
         cls="MIXED"
     else:
         cls="NO-OBSERVED-RESCUE"
+    # Comparable rankings are diagnostics, never purchase authority.
+    rows=utility.get("summary") or []
+    if len(actual)!=3 or len(set(actual))!=3:
+        raise ValueError("ACTUAL_TOP3_INVALID")
+    universe={int(x["horse_no"]) for x in rows}
+    static=[int(x) for x in (static_ranking or [])]
+    zones=(utility.get("snapshot") or {}).get("role_zones") or {}
+    rank_rows=[]
+    role_rescue=role_harm=0
+    for role,horse in zip(("W","P2","P3"),actual):
+        key="SSR-"+role
+        kr=next(((x.get("ranks") or {}).get(key) for x in rows if int(x["horse_no"])==horse),None)
+        sr=static.index(horse)+1 if horse in static else None
+        sh=any(int(x["horse_no"])==horse and role in (x.get("static_roles") or []) for x in rows)
+        limit=zones.get(role)
+        kh=None if not isinstance(limit,int) else bool(kr is not None and kr<=limit)
+        if kh is not None:
+            role_rescue+=int(not sh and kh);role_harm+=int(sh and not kh)
+        rank_rows.append({"role":role,"horse":horse,"static_rank":sr,"krs_rank":kr,
+                          "rank_gain":None if not static or not universe else (sr or len(universe)+1)-(kr or len(universe)+1),
+                          "static_missing":horse not in static if static else None,"krs_missing":kr is None,
+                          "static_role_hit":sh,"krs_role_zone_hit":kh,"frozen_k":limit})
+    false_roles=[{"horse_no":h,"proposal":p} for h,p in sorted(actionable_roles)
+                 if (h,p) not in {(actual[0],"ADD_W_SHADOW"),(actual[1],"ADD_P2_SHADOW"),(actual[2],"ADD_P3_SHADOW")}]
+    extra={"rank_comparison":rank_rows,"unique_rescue_role_count":role_rescue,
+           "unique_harm_role_count":role_harm,
+           "comparison_kind":"STATIC_ROLES_VS_KRS_FROZEN_ROLE_ZONES; not actual decision replacement",
+           "false_role_additions":false_roles,
+           "false_pair_addition_count":len(actionable_pairs-{tuple(actual[:2])}),
+           "false_exact_addition_count":len(actionable_thirds-{tuple(actual)}),
+           "proposal_width":len(actionable_roles)+len(actionable_pairs)+len(actionable_thirds),
+           "added_ticket_count":None,"added_capital":None,
+           "capital_status":"NOT_INFERRED_FROM_ROLE_PROPOSALS"}
     return {
+      **extra,
       "actual_top3":actual,"rescues":rescues,"supports":supports,"misses":misses,
       "rescue_count":len(rescues),"support_count":len(supports),"classification":cls,
       "note":"Post-result evaluation only; never feeds back into the pre-race artifact."

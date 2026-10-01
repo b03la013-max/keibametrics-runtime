@@ -16,6 +16,8 @@ on:
       - 'tests/test_local_numerical_authority_gate.py'
       - 'tests/test_local_production_numerical_closure.py'
       - '.github/workflows/local-runtime-correctness-regression.yml'
+  pull_request:
+    paths: ['runtime/**', 'tests/**', 'research/utility/**', '.github/workflows/local-runtime-correctness-regression.yml']
   workflow_dispatch:
 
 permissions:
@@ -36,7 +38,14 @@ jobs:
             tests/test_nar_runner_universe.py \
             tests/test_nar_source_manifest.py \
             tests/test_local_numerical_authority_gate.py \
-            tests/test_local_production_numerical_closure.py
+            tests/test_local_production_numerical_closure.py \
+            tests/test_phase_b_utility.py \
+            tests/test_local_fullnumerical_candidate_v01.py \
+            tests/test_pfs_grand_review.py \
+            tests/test_krs_prediction_utility.py \
+            tests/test_krs_oos_promotion_gate.py \
+            tests/test_common_exact_continuity_shadow.py \
+            tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
           python -m py_compile             runtime/local_physical/app.py             runtime/local_physical/app_v15.py             runtime/local_physical/source_acquisition.py             runtime/local_physical/nar_source_manifest.py             runtime/local_physical/nar_runner_universe.py \

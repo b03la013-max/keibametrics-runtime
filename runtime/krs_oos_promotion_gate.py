@@ -40,6 +40,8 @@ def build_oos_measurement(review, final_artifact, result_request=None):
         third_hit=any((int(x["head"]),int(x["second"]),int(x["third"]))==tuple(map(int,actual)) for x in third_props)
     else:
         pair_hit=third_hit=False
+    from krs_prediction_utility import evaluate_against_result
+    incremental=evaluate_against_result(ku,actual,static_ranking=(final_artifact.get("static_prediction") or {}).get("ranking")) if len(actual)==3 else None
     m={
       "profile":PROFILE,
       "race_id":review.get("race_id"),
@@ -58,6 +60,7 @@ def build_oos_measurement(review, final_artifact, result_request=None):
       "actionable_third_proposals":len(third_props),
       "ordered_exact_rescue_hit":bool(third_hit),
       "post_result_classification":(review.get("krs") or {}).get("post_result_evaluation",{}).get("classification"),
+      "incremental_utility":incremental,
       "production_effect":"NONE",
     }
     m["sha256"]=_sha(m)
@@ -72,6 +75,7 @@ def evaluate_r30(measurements):
     pair_hits=sum(1 for x in eligible if x.get("ordered_pair_rescue_hit"))
     third_props=sum(int(x.get("actionable_third_proposals",0)) for x in eligible)
     third_hits=sum(1 for x in eligible if x.get("ordered_exact_rescue_hit"))
+    measured=[x for x in eligible if isinstance(x.get("incremental_utility"),dict)]
     out={
       "profile":PROFILE,
       "eligible_races":n,
@@ -79,6 +83,10 @@ def evaluate_r30(measurements):
       "status":"WAITING_R30" if n<R30_MINIMUM else "R30_EVIDENCE_COMPLETE_HUMAN_PROMOTION_REVIEW_REQUIRED",
       "automatic_production_promotion":False,
       "metrics":{
+        "incremental_measurement_races":sum(isinstance(x.get("incremental_utility"),dict) for x in eligible),
+        "unique_harm_role_count":sum(int(x["incremental_utility"].get("unique_harm_role_count",0)) for x in measured) if measured else None,
+        "false_role_addition_count":sum(len(x["incremental_utility"].get("false_role_additions") or []) for x in measured) if measured else None,
+        "legacy_missing_incremental_measurement_races":sum(not isinstance(x.get("incremental_utility"),dict) for x in eligible),
         "role_proposals":role_props,
         "role_hits":role_hits,
         "role_hit_rate":(role_hits/role_props if role_props else None),
