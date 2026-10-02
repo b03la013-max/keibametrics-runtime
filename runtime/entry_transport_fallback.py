@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-PROFILE = "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261001-R1"
+PROFILE = "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261003-R2"\n\nFAMILY_FALLBACK = {\n    "LOCAL": {\n        "root": "runtime/family_requests",\n        "workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",\n    },\n    "JRA": {\n        "root": "runtime/requests",\n        "workflow": ".github/workflows/km-formal-request-runner.yml",\n    },\n}
 
 SEMANTIC_FIELDS = (
     "race_id", "family_id", "venue_id", "race_date", "race_no",
@@ -55,7 +55,7 @@ def build_legacy_formal_request(
         "trigger": "PRIMARY_SINGLE_ENTRY_SUBMISSION_FAILED_BEFORE_COMMIT",
         "primary_failure_code": str(primary_failure_code),
         "primary_root": "runtime/formal_intents",
-        "fallback_root": "runtime/family_requests",
+        "family": family,\n        "fallback_root": cfg["root"],\n        "fallback_workflow": cfg["workflow"],
         "same_execution_id_required": True,
         "durable_source_checkpoint_reuse_required": True,
         "semantic_sha256": digest,
