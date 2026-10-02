@@ -10,6 +10,12 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import time
+import re
+import base64
+import gzip
+import unicodedata
+import urllib.error
 from typing import Any, Dict, Optional
 
 sys.path.insert(0, "runtime")
@@ -17,6 +23,8 @@ sys.path.insert(0, "runtime")
 from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
 from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
 from formal_import_closure import FormalImportClosureError, build_closure
+from family_authority_guard import load_authority, validate_request_context, verify_execution_completion
+from entry_transport_fallback import build_legacy_formal_request, validate_fallback_request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME_OUT = ROOT / "runtime_out"
@@ -350,6 +358,7 @@ FORMAL_TRANSPORT_ONLY_FIELDS = {
     "source_snapshot_sha256",
     "single_entry_source_binding_required",
     "single_entry_source_checkpoint_manifest_sha256",
+    "mandatory_lifecycle_completion_required",
     "source_authoritative_reconciliation",
 }
 
@@ -565,6 +574,8 @@ def build_phase_request(intent: Dict[str, Any], phase: str) -> Dict[str, Any]:
     # "完全フル規格" means full lifecycle, not permission to fabricate
     # unavailable Production numerical authority.
     out.setdefault("require_full_numerical_authority", False)
+    if str(phase).upper() == "FORMAL":
+        out["mandatory_lifecycle_completion_required"] = True
     return out
 
 
@@ -655,7 +666,8 @@ def _phase_failure(runtime_out: pathlib.Path, phase: str, returncode: int, stdou
         "phase": phase,
         "returncode": returncode,
         "code": diag.get("code") or "SUBPROCESS_FAILED",
-        "failure_class": diag.get("failure_class") or "UNCLASSIFIED",
+        "failure_class": diag.get("failure_class") or (
+            "RUNTIME_TRANSPORT" if any(x in stderr for x in ("urllib.error.URLError:", "TimeoutError:", "ConnectionResetError:")) else "UNCLASSIFIED"),
         "last_successful_stage": diag.get("last_successful_stage"),
         "resume_hint": diag.get("resume_hint") or "RETRY_SAME_EXECUTION_ID",
         "stdout_tail": stdout[-4000:],
@@ -720,6 +732,7 @@ def run_phase(
     runtime_out: pathlib.Path,
     tmp_root: pathlib.Path,
     checkpoint_intent: Optional[Dict[str, Any]] = None,
+    resume_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     execution_id = str(request["execution_id"])
     request_path = tmp_root / execution_id / f"{phase.lower()}_request.json"
@@ -727,7 +740,24 @@ def run_phase(
     _reset_runtime_out(runtime_out)
 
     env = os.environ.copy()
-    env["REQUEST_FILE"] = str(request_path.relative_to(ROOT))
+    env.pop("KM_RESULT_REUSE_PATH", None)
+    store_run_id = f"{run_id}-{phase.lower()}"
+    if resume_result is not None:
+        if str(phase).upper() != "RESULT":
+            raise FormalOrchestrationError("RESULT_RECOVERY_PHASE_INVALID")
+        envelope = _load_checkpoint_json(resume_result, "result_receipt_envelope.json")
+        flags = _load_checkpoint_json(resume_result, "receipt_verifications.json") or {}
+        if (not envelope or flags.get("RESULT") not in (True, False) or "RESULT" not in flags
+                or _load_checkpoint_json(resume_result, "result_checkpoint_basis.json") != {"request_sha256": _sha_obj(request)}):
+            raise FormalOrchestrationError("RESULT_RECOVERY_CHECKPOINT_OR_BASIS_INVALID")
+        recovery_path = request_path.parent / "resume_signed_result.json"
+        _write(recovery_path, envelope)
+        env["KM_RESULT_REUSE_PATH"] = str(recovery_path.resolve())
+        manifest_sha = (resume_result.get("latest") or {}).get("manifest_sha256")
+        if not manifest_sha:
+            raise FormalOrchestrationError("RESULT_RECOVERY_MANIFEST_REQUIRED")
+        store_run_id += "-recovery-" + manifest_sha[:12]
+    env["REQUEST_FILE"] = str(request_path.resolve())
     proc = subprocess.run(
         ([sys.executable, "-m", "runtime.local_result_from_signed_final", str(request_path)]
          if str(phase).upper() == "RESULT" else
@@ -738,8 +768,30 @@ def run_phase(
         text=True,
     )
     if proc.returncode != 0:
+        failure = _phase_failure(runtime_out, phase, proc.returncode, proc.stdout, proc.stderr)
+        if resume_result is not None:
+            # The earlier immutable receipt survives even when fresh /verify
+            # transport fails before this attempt produces another artifact.
+            failure["signed_result_preserved"] = True
+            failure["resume_hint"] = "VERIFY_STORED_RESULT_THEN_RESUME_DOWNSTREAM"
+        if str(phase).upper() == "RESULT" and (runtime_out / "result_receipt_envelope.json").is_file():
+            verifications_path = runtime_out / "receipt_verifications.json"
+            verifications = _load(verifications_path) if verifications_path.is_file() else {}
+            response = _load(runtime_out / "result_receipt_envelope.json")
+            if ("RESULT" in verifications and verifications.get("RESULT") in (True, False)
+                    and (response.get("receipt") or {}).get("phase") == "RESULT"
+                    and (response.get("receipt") or {}).get("race_id") == request.get("race_id")):
+                partial_copy = tmp_root / execution_id / "result_out"
+                _copy_json_dir(runtime_out, partial_copy)
+                _write(partial_copy / "result_checkpoint_basis.json", {"request_sha256": _sha_obj(request)})
+                _write(partial_copy / "post_signed_result_failure.json", {
+                    "code": failure["code"], "status": "PARTIAL-LIFECYCLE", "duplicate_settlement_forbidden": True})
+                persist_phase(execution_id, "RESULT", store_run_id, partial_copy, github_sha=github_sha)
+                failure["signed_result_preserved"] = True
+                failure["signed_result_verified"] = verifications.get("RESULT") is True
+                failure["resume_hint"] = "RESUME_MISSING_LEARNING_WITHOUT_RESULT_REGENERATION"
         raise FormalOrchestrationError(json.dumps(
-            _phase_failure(runtime_out, phase, proc.returncode, proc.stdout, proc.stderr),
+            failure,
             ensure_ascii=False,
             sort_keys=True,
         ))
@@ -759,7 +811,7 @@ def run_phase(
     persisted = persist_phase(
         execution_id,
         phase,
-        f"{run_id}-{phase.lower()}",
+        store_run_id,
         phase_copy,
         github_sha=github_sha,
     )
@@ -788,23 +840,24 @@ def orchestrate(
     # RESULT is a later invocation of the same entry, never an attempt to
     # reacquire SOURCE or recompute a historical prediction.
     phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
-    if phase in {"SOURCE", "SOURCE_ACQUIRE"}:
+    # SOURCE-only is explicit analysis/prewarm work, never full completion.
+    if phase in {"SOURCE", "SOURCE_ACQUIRE"} and intent.get("analysis_only") is True:
         execution_id = derive_execution_id(intent)
         saved = resolve_phase(execution_id, "SOURCE")
         if saved is not None:
-            compatibility = source_checkpoint_compatibility(intent, saved)
-            if compatibility.get("status") != "PASS":
-                raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE:" + json.dumps(compatibility))
-            return {"status": "ALREADY_COMPLETE", "execution_id": execution_id,
-                    "phase": "SOURCE", "next_stage": "PREDICTION_STATIC_FREEZE"}
+            if source_checkpoint_compatibility(intent, saved).get("status") != "PASS":
+                raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE")
+            return {"status": "SOURCE_PASS", "execution_id": execution_id, "completion": False}
         if plan_only:
-            return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"],
-                    "next_stage": "PREDICTION_STATIC_FREEZE"}
+            return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"]}
         acquired = run_phase(build_phase_request(intent, "SOURCE"), "SOURCE", run_id=run_id,
                              github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
-        return {"status": "AWAITING_FROZEN_PREDICTION", "execution_id": execution_id,
-                "phases": [acquired], "next_stage": "PREDICTION_STATIC_FREEZE",
-                "prediction_calculated": False}
+        return {"status": "SOURCE_PASS", "execution_id": execution_id,
+                "phases": [acquired], "completion": False}
+    if phase in {"SOURCE", "SOURCE_ACQUIRE"}:
+        intent = copy.deepcopy(intent)
+        intent.pop("execution_phase", None)
+        intent.pop("phase", None)
 
     if phase in {"RESULT", "POST_RACE", "POST-RACE", "SETTLEMENT"}:
         execution_id = derive_execution_id(intent)
@@ -815,21 +868,45 @@ def orchestrate(
         if route == "CANONICAL" and formal is None:
             raise FormalOrchestrationError("RESULT_REQUIRES_EXISTING_FORMAL_CHECKPOINT")
         previous = resolve_phase(execution_id, "RESULT")
+        recovery = None
         if previous is not None:
             basis = _load_checkpoint_json(previous, "result_checkpoint_basis.json")
             if basis != {"request_sha256": _sha_obj(request)}:
                 _validate_explicit_result_revision(request, previous, formal)
             else:
-                return {"status": "ALREADY_COMPLETE", "execution_id": execution_id, "phase": "RESULT"}
+                _reset_runtime_out(runtime_out)
+                materialize_phase(execution_id, "RESULT", runtime_out)
+                completion = verify_execution_completion(runtime_out, request, phase="RESULT")
+                flags = _load_checkpoint_json(previous, "receipt_verifications.json") or {}
+                if (completion["complete"] or plan_only or "RESULT" not in flags
+                        or flags.get("RESULT") not in (True, False)
+                        or not _load_checkpoint_json(previous, "result_receipt_envelope.json")):
+                    return {"status": "ALREADY_COMPLETE" if completion["complete"] else "FORMAL_INCOMPLETE",
+                            "execution_id": execution_id, "phase": "RESULT", "completion": completion,
+                            "prediction_owner_measurement": (measure_prediction_owner_shadow(execution_id,
+                                run_id=run_id, github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
+                                if completion["complete"] and not plan_only else {"status": "NOT-APPLICABLE"})}
+                recovery = previous
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id,
                     "phases": ["RESULT"], "prediction_reexecution": False}
         result = run_phase(request, "RESULT", run_id=run_id, github_sha=github_sha,
-                           runtime_out=runtime_out, tmp_root=tmp_root)
-        return {"status": "FULL_LIFECYCLE_EXECUTION_PASS", "execution_id": execution_id,
-                "phases": [result], "prediction_reexecution": False}
+                           runtime_out=runtime_out, tmp_root=tmp_root, resume_result=recovery)
+        completion = verify_execution_completion(runtime_out, request, phase="RESULT")
+        _write(runtime_out / "lifecycle_completion.json", completion)
+        owner_measurement = (measure_prediction_owner_shadow(execution_id, run_id=run_id,
+                             github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
+                             if completion["complete"] else {"status": "HOLD / PRODUCTION_RESULT_INCOMPLETE"})
+        return {"status": "FULL_LIFECYCLE_EXECUTION_PASS" if completion["complete"] else "FORMAL_INCOMPLETE",
+                "execution_id": execution_id, "completion": completion,
+                "execution_class": completion["execution_class"],
+                "phases": [result], "prediction_reexecution": False,
+                "prediction_owner_measurement": owner_measurement}
 
     mode = str(intent.get("execution_mode") or "AUTO").upper()
+    if mode == "ENTRY_TRANSPORT_FALLBACK":
+        validate_fallback_request(intent)
+        mode = "AUTO"
     if mode not in {"AUTO", "FULL_LIFECYCLE", "FORMAL_SINGLE_ENTRY"}:
         raise FormalOrchestrationError(f"UNSUPPORTED_EXECUTION_MODE:{mode}")
 
@@ -884,33 +961,20 @@ def orchestrate(
         }
     intent_normalizations: list[Dict[str, Any]] = []
     if not plan_only:
-        # Normalize only after temporal/import bootstrap checks, and only before
-        # real external execution. Plan-only remains side-effect free and may
-        # inspect an incomplete future intent without weakening live safety.
-        try:
+        # Current authority remains the owner, including for resumed execution.
+        validate_request_context(intent)
+        if intent.get("static_prediction"):
             intent, intent_normalizations = normalize_single_entry_intent(intent)
-        except FormalOrchestrationError as exc:
-            code = str(exc)
-            return {
-                "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
-                "profile": current_single_entry_profile(),
-                "status": "FAIL_CLOSED",
-                "family_id": family,
-                "race_id": intent.get("race_id"),
-                "execution_id": execution_id,
-                "gateway_profile": load_gateway().get("profile_id"),
-                "first_failed_phase": "BOOTSTRAP",
-                "first_failed_code": code,
-                "first_failed_class": "INTENT_COMPLETENESS",
-                "last_successful_stage": None,
-                "resume_from": "INTENT_COMPLETION",
-                "resume_hint": "SUBMIT_EXPLICIT_RESULT_BLIND_FROZEN_STATIC_SEMANTIC_PAYLOAD",
-                "production_prediction_change": False,
-                "production_numerical_change": False,
-                "krs_physics_change": False,
-                "mec_change": False,
-                "capital_change": False,
-            }
+        else:
+            # Reuse the immutable owner output across fresh processes only when
+            # both the original intent and verified SOURCE binding are identical.
+            saved_prediction = resolve_phase(execution_id, "PREDICTION")
+            if saved_prediction is not None:
+                saved_source = resolve_phase(execution_id, "SOURCE")
+                basis = prediction_checkpoint_basis(intent, saved_source)
+                if _load_checkpoint_json(saved_prediction, "prediction_checkpoint_basis.json") != basis:
+                    raise FormalOrchestrationError("PREDICTION_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
+                intent = _load_checkpoint_json(saved_prediction, "prediction_intent.json")
 
     plan = resume_plan(execution_id, intent)
     report: Dict[str, Any] = {
@@ -974,8 +1038,11 @@ def orchestrate(
         resolved = materialize_phase(execution_id, "FORMAL", runtime_out)
         if resolved is None:
             raise FormalOrchestrationError("FORMAL_CHECKPOINT_DISAPPEARED")
-        report["status"] = "ALREADY_COMPLETE"
-        report["resume_from"] = "COMPLETE"
+        completion = verify_execution_completion(runtime_out, {**intent,"execution_id":execution_id}, phase="FORMAL")
+        report["completion"] = completion
+        report["execution_class"] = completion["execution_class"]
+        report["status"] = "ALREADY_COMPLETE" if completion["complete"] else "FORMAL_INCOMPLETE"
+        report["resume_from"] = "RESULT_PENDING" if completion["complete"] else "MISSING_STAGES"
         report["phases"].append({
             "phase": "FORMAL",
             "status": "REUSED_IMMUTABLE",
@@ -986,6 +1053,7 @@ def orchestrate(
         return report
 
     try:
+        check_deadline(intent)
         if plan["action"] == "RUN_SOURCE_THEN_FORMAL":
             source_req = build_phase_request(intent, "SOURCE")
             report["phases"].append(run_phase(
@@ -1003,14 +1071,33 @@ def orchestrate(
                 "checkpoint": plan["checkpoints"]["source"],
             })
 
-        formal_req = bind_formal_request_to_source(
-            build_phase_request(intent, "FORMAL")
-        )
+        check_deadline(intent)
+        current_phase = "PREDICTION"
+        shadow_intent = intent
+        if (not intent.get("openai_prediction_owner_candidate_config")
+                and os.environ.get("KM_CREDENTIAL_ENVIRONMENT") == "keibametrics-staging"
+                and os.environ.get("GITHUB_ACTIONS") == "true"):
+            # Explicit staging workflow activation owns the Candidate config;
+            # it never mutates the Production intent/semantic SOURCE basis.
+            candidate_path = "research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json"
+            shadow_intent = {**intent, "openai_prediction_owner_candidate_config": {
+                "path": candidate_path,
+                "sha256": hashlib.sha256((ROOT / candidate_path).read_bytes()).hexdigest()}}
+        if shadow_intent.get("openai_prediction_owner_candidate_config"):
+            report["prediction_owner_shadow"] = execute_prediction_owner_shadow(
+                shadow_intent, run_id=run_id, github_sha=github_sha, tmp_root=tmp_root)
+        if not intent.get("static_prediction"):
+            intent = execute_prediction_owner(intent, run_id=run_id, github_sha=github_sha,
+                                              tmp_root=tmp_root)
+            intent, intent_normalizations = normalize_single_entry_intent(intent)
+            report["intent_normalizations"] = intent_normalizations
+        formal_req = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
         if formal_req.get("source_authoritative_reconciliation"):
             report["source_authoritative_reconciliation"] = formal_req[
                 "source_authoritative_reconciliation"
             ]
-        report["phases"].append(run_phase(
+        current_phase = "FORMAL"
+        report["phases"].append(run_formal_with_fallback(
             formal_req,
             "FORMAL",
             run_id=run_id,
@@ -1019,29 +1106,470 @@ def orchestrate(
             tmp_root=tmp_root,
             checkpoint_intent=intent,
         ))
-        report["status"] = "FULL_LIFECYCLE_EXECUTION_PASS"
-        report["resume_from"] = "COMPLETE"
+        completion = verify_execution_completion(runtime_out, {**intent,"execution_id":execution_id}, phase="FORMAL")
+        _write(runtime_out / "lifecycle_completion.json", completion)
+        report["completion"] = completion
+        report["execution_class"] = completion["execution_class"]
+        report["status"] = "FULL_LIFECYCLE_EXECUTION_PASS" if completion["complete"] else "FORMAL_INCOMPLETE"
+        report["resume_from"] = "RESULT_PENDING" if completion["complete"] else "MISSING_STAGES"
         return report
     except FormalOrchestrationError as exc:
         try:
             failure = json.loads(str(exc))
         except Exception:
             failure = {
-                "phase": "UNKNOWN",
-                "code": "ORCHESTRATION_EXCEPTION",
+                "phase": locals().get("current_phase", "SOURCE"),
+                "code": str(exc),
                 "failure_class": "ORCHESTRATION",
                 "detail": str(exc),
                 "resume_hint": "RETRY_SAME_EXECUTION_ID",
             }
-        report["status"] = "FAIL_CLOSED"
+        code = str(failure.get("code") or failure.get("detail") or "")
+        if "OWNER" in code:
+            report["dependency_failure"] = failure.get("detail") or code
+        report["status"] = "DEADLINE_HOLD" if "DEADLINE" in code else "BLOCKED"
+        report["execution_class"] = "BLOCKED"
         report["failure"] = failure
         report["first_failed_phase"] = failure.get("phase")
         report["first_failed_code"] = failure.get("code")
         report["first_failed_class"] = failure.get("failure_class")
         report["last_successful_stage"] = failure.get("last_successful_stage")
         # SOURCE success is already durable even if FORMAL fails.
-        report["resume_from"] = "FORMAL" if failure.get("phase") == "FORMAL" else "SOURCE"
+        report["resume_from"] = failure.get("phase") or "SOURCE"
         return report
+
+
+def completion_exit_code(report: Dict[str, Any]) -> int:
+    # PLANNED is a successful read-only command, not an execution completion.
+    if report.get("status") == "PLANNED":
+        return 0
+    if report.get("status") in {"FULL_LIFECYCLE_EXECUTION_PASS", "ALREADY_COMPLETE"}:
+        completion = report.get("completion")
+        return 0 if isinstance(completion, dict) and completion.get("complete") is True else 2
+    return 2
+
+
+def check_deadline(intent: Dict[str, Any]) -> None:
+    if str(intent.get("temporal_mode") or "FORMAL-PRE-RACE").upper() != "FORMAL-PRE-RACE":
+        return
+    post = intent.get("scheduled_post_at")
+    if not post:
+        raise FormalOrchestrationError("SCHEDULED_POST_AT_REQUIRED")
+    deadline = intent.get("release_deadline_at")
+    end = _parse_iso(deadline) if deadline else _parse_iso(post) - dt.timedelta(
+        seconds=int(intent.get("release_buffer_seconds") or 120))
+    if dt.datetime.now(dt.timezone.utc) >= end.astimezone(dt.timezone.utc):
+        raise FormalOrchestrationError("DEADLINE_HOLD:FORMAL_INCOMPLETE")
+
+
+def prediction_checkpoint_basis(intent, source):
+    binding = _source_binding_from_resolved(source)
+    if not binding:
+        raise FormalOrchestrationError("PREDICTION_REQUIRES_VERIFIED_SOURCE_CHECKPOINT")
+    _, authority = load_authority()
+    return {"intent_sha256": _sha_obj(_formal_semantic_payload(intent)),
+            "source_binding": binding, "authority": authority["manifest_id"]}
+
+
+def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
+    """Automatically observe a Candidate without authorizing Production reuse."""
+    from openai_prediction_owner_candidate import (execute, compare, digest, pinned_text,
+                                                  ensure_clean, INPUT_CONTRACT_VERSION)
+    try:
+        config_spec = intent["openai_prediction_owner_candidate_config"]
+        config = json.loads(pinned_text(ROOT, config_spec))
+        ensure_clean(config)
+        if config.get("owner_entrypoint"):
+            pinned_text(ROOT, config["owner_entrypoint"])
+        pinned_text(ROOT, config["instruction"])
+        pinned_text(ROOT, config["venue_canon"])
+        pinned_text(ROOT, config["policy"])
+        for spec in config.get("normative_sources", []):
+            pinned_text(ROOT, spec)
+        execution_id = derive_execution_id(intent)
+        source = resolve_phase(execution_id, "SOURCE")
+        binding = _source_binding_from_resolved(source)
+        _, authority = load_authority()
+        existing = resolve_phase(execution_id, "PREDICTION_OWNER_SHADOW")
+        if existing:
+            candidate = _load_checkpoint_json(existing, "openai_owner_shadow.json")
+            lineage = candidate["lineage"]
+            if (lineage.get("input_contract_version") != INPUT_CONTRACT_VERSION
+                    or lineage.get("owner_entrypoint_sha256") != hashlib.sha256(
+                        (ROOT / "runtime/openai_prediction_owner_candidate.py").read_bytes()).hexdigest()
+                    or lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
+                    or lineage["current_authority_sha256"] != digest(authority)):
+                raise ValueError("SHADOW_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
+        else:
+            deadline = intent.get("release_deadline_at") or (
+                _parse_iso(intent["scheduled_post_at"]) - dt.timedelta(
+                    seconds=int(intent.get("release_buffer_seconds") or 120))).isoformat()
+            context = {"execution_id": execution_id, "race_id": intent["race_id"],
+                       "signed_source": _load_checkpoint_json(source, "source_receipt_envelope.json"),
+                       "source_verification": _load_checkpoint_json(source, "source_verification.json"),
+                       "source_binding": binding, "current_authority": authority,
+                       "prediction_cutoff": intent["prediction_cutoff"], "release_deadline_at": deadline}
+            from local_numerical_authority_gate import assess as assess_numerical_authority
+            context["production_numerical_authority"] = assess_numerical_authority()
+            candidate = execute(context, config, root=ROOT)
+            dest = tmp_root / execution_id / "openai_owner_shadow_out"
+            _write(dest / "openai_owner_shadow.json", candidate)
+            if intent.get("static_prediction"):
+                baseline = {key: intent.get(key) for key in (
+                    "static_prediction", "role_registry", "pair_dispositions",
+                    "third_dispositions", "venue_prediction_context")}
+                # Same SOURCE must be explicitly bound by the canonical binder.
+                bound = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
+                static = bound["static_prediction"]
+                if static["source_basis_receipt_sha256"] != binding["source_receipt_sha256"]:
+                    raise ValueError("SHADOW_BASELINE_SOURCE_MISMATCH")
+                _write(dest / "openai_owner_equivalence.json", compare(candidate, baseline, binding))
+                _write(dest / "openai_owner_legacy_baseline.json", baseline)
+            persist_phase(execution_id, "PREDICTION_OWNER_SHADOW", f"{run_id}-openai-shadow",
+                          dest, github_sha=github_sha)
+        return {"status": candidate["status"], "production_effect": "NONE",
+                "promotion": "HOLD", "lineage": candidate["lineage"]}
+    except Exception as exc:
+        # Only audited fixed CandidateHold codes may enter durable diagnostics.
+        from openai_prediction_owner_candidate import CandidateHold
+        code = str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD"
+        return {"status": "HOLD", "code": code, "production_effect": "NONE", "promotion": "HOLD"}
+
+
+def measure_prediction_owner_shadow(execution_id, *, run_id, github_sha, runtime_out, tmp_root):
+    """Research-only post-result persistence; never blocks Production closure."""
+    from openai_prediction_owner_candidate import post_result_prediction_utility, CandidateHold
+    try:
+        shadow = resolve_phase(execution_id, "PREDICTION_OWNER_SHADOW")
+        if shadow is None:
+            return {"status": "NOT-APPLICABLE", "production_effect": "NONE"}
+        candidate = _load_checkpoint_json(shadow, "openai_owner_shadow.json")
+        baseline = _load_checkpoint_json(shadow, "openai_owner_legacy_baseline.json")
+        formal = resolve_phase(execution_id, "FORMAL")
+        final = _load_checkpoint_json(formal, "final_receipt_envelope.json")
+        result = _load(runtime_out / "result_receipt_envelope.json")
+        flags = _load(runtime_out / "receipt_verifications.json")
+        report = post_result_prediction_utility(candidate, baseline, candidate["lineage"]["source_binding"],
+                                               final, result, {"verified": flags.get("RESULT") is True},
+                                               expected_execution_id=execution_id)
+        phase = "PREDICTION_OWNER_MEASUREMENT"
+        existing = resolve_phase(execution_id, phase)
+        if existing is not None:
+            previous = _load_checkpoint_json(existing, "openai_owner_prediction_utility.json")
+            if previous == report:
+                return {"status": "ALREADY_MEASURED", "count_increment": 0, "production_effect": "NONE"}
+        dest = tmp_root / execution_id / "openai_owner_measurement_out"
+        _write(dest / "openai_owner_prediction_utility.json", report)
+        persist_phase(execution_id, phase, f"{run_id}-owner-{str(result['receipt_sha256'])[:12]}",
+                      dest, github_sha=github_sha)
+        return {"status": report["status"], "count_increment": 0, "production_effect": "NONE", "promotion": "HOLD"}
+    except Exception as exc:
+        return {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_MEASUREMENT_HOLD",
+                "production_effect": "NONE", "promotion": "HOLD"}
+
+
+def execute_prediction_owner(intent, *, run_id, github_sha, tmp_root):
+    """Invoke ONLY an authority-pinned existing Production implementation.
+
+    No Candidate fallback, new score, market sort, or operator supplied executable.
+    The current R36 authority has no executable prediction owner. That is an
+    explicit BLOCKED dependency; registering one requires a policy-equivalence
+    review outside this C1 patch.
+    """
+    check_deadline(intent)
+    execution_id = derive_execution_id(intent)
+    source = resolve_phase(execution_id, "SOURCE")
+    basis = prediction_checkpoint_basis(intent, source)
+    env = _load_checkpoint_json(source, "source_receipt_envelope.json") or {}
+    verification = _load_checkpoint_json(source, "source_verification.json") or {}
+    artifact = env.get("artifact") or {}
+    if verification.get("verified") is not True or artifact.get("formal_ready") is not True:
+        raise FormalOrchestrationError("PREDICTION_SOURCE_NOT_VERIFIED_OR_PARTIAL")
+    if (env.get("receipt") or {}).get("race_id") != intent.get("race_id"):
+        raise FormalOrchestrationError("PREDICTION_SOURCE_RACE_MISMATCH")
+    universe = artifact.get("active_runner_universe") or {}
+    runners = universe.get("runners") or []
+    if not runners or len(runners) != universe.get("runner_count"):
+        raise FormalOrchestrationError("PREDICTION_RUNNER_UNIVERSE_INCOMPLETE")
+    _, authority = load_authority()
+    owner = (authority.get("family_scoped_authority", {}).get("LOCAL", {})
+             .get("production_prediction_owner"))
+    if not isinstance(owner, dict) or owner.get("production_authorized") is not True:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_NOT_REGISTERED")
+    path = (ROOT / str(owner.get("entrypoint") or "")).resolve()
+    if not path.is_relative_to(ROOT) or not path.is_file():
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_PATH_INVALID")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != owner.get("sha256"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_HASH_MISMATCH")
+    if not owner.get("production_policy_sha256"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_POLICY_BINDING_MISSING")
+    # Existing Production materializer runs before prediction. The default index
+    # manifest is read from the current Production registry, never from Candidate.
+    from local_numerical_authority_gate import assess as assess_numerical_authority
+    from race_day_fast_path import materialize_request_fast
+    from local_index_provenance_builder import build as build_provenance
+    registry = _load(ROOT / "mapping/local_base_index_mapping_registry_v1.0_20260922.json")
+    current_local = authority["family_scoped_authority"]["LOCAL"]
+    if registry["registry_id"] != current_local.get("base_index_registry"):
+        raise FormalOrchestrationError("PREDICTION_PRODUCTION_MAPPING_AUTHORITY_MISMATCH")
+    required = intent.get("required_indices") or intent.get("required_index_names") or (
+        registry["exact_common_indices"] + registry["externally_rule_bound_indices"])
+    if any(isinstance(x, dict) for x in required):
+        required = [str(x.get("index") or x.get("index_name") or x.get("name") or "") for x in required]
+    prepared = {**copy.deepcopy(intent), "runners": copy.deepcopy(runners)}
+    numerical_authority = assess_numerical_authority()
+    if intent.get("require_full_numerical_authority") is True and not numerical_authority["full_numerical_authority"]:
+        raise FormalOrchestrationError("FULL_NUMERICAL_AUTHORITY_NOT_READY")
+    degraded_allowed = "DEGRADED-EXECUTION-ONLY" in str(current_local.get("status"))
+    prepared.setdefault("degraded_execution", degraded_allowed)
+    prepared.setdefault("allow_base_index_rule_hold", degraded_allowed)
+    prepared, numerical_cache = materialize_request_fast(prepared, required)
+    if prepared.get("full_terminalization") is not True:
+        raise FormalOrchestrationError("PREDICTION_NUMERICAL_TERMINALIZATION_INCOMPLETE")
+    prepared = build_provenance(prepared)
+    prepared["numerical_authority_preflight"] = numerical_authority
+    context = {"intent": prepared, "signed_source": env,
+               "official_runner_universe": universe, "current_authority": authority,
+               "production_numerical_authority": numerical_authority,
+               "production_numeric_coverage": prepared["numeric_coverage"],
+               "missing_evidence_policy": "UNKNOWN_NO_PROXY", "basis": basis}
+    proc = subprocess.run([sys.executable, str(path)], input=json.dumps(context),
+                          capture_output=True, text=True, cwd=ROOT,
+                          timeout=int(owner.get("timeout_seconds") or 120))
+    if proc.returncode != 0:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_FAILED")
+    response = json.loads(proc.stdout)
+    if response.get("basis") != basis:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_BASIS_MISMATCH")
+    semantic = response.get("prediction_semantics")
+    allowed = {"static_prediction", "role_registry", "pair_dispositions", "third_dispositions",
+               "venue_prediction_context", "final_prediction_package"}
+    if not isinstance(semantic, dict) or set(semantic) - allowed:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_PAYLOAD_INVALID")
+    static = semantic.get("static_prediction") or {}
+    if set(map(str, static.get("ranking") or [])) != {str(r["runner_id"]) for r in runners}:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_RANK_UNIVERSE_MISMATCH")
+    if not semantic.get("venue_prediction_context") or not semantic.get("role_registry"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_CONTEXT_OR_ROLES_MISSING")
+    check_deadline(intent)
+    out = {**prepared, **semantic}
+    # Freeze ownership is execution, not a claim that all indices are calculated.
+    out["static_prediction"] = {**static, "status": "FROZEN",
+                                "frozen_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    out["static_prediction_frozen"] = True
+    out["temporal_separation"] = {"static_prediction_freeze_at": out["static_prediction"]["frozen_at"]}
+    out, _ = normalize_single_entry_intent(out)
+    dest = tmp_root / execution_id / "prediction_out"
+    _write(dest / "prediction_checkpoint_basis.json", basis)
+    _write(dest / "prediction_intent.json", out)
+    _write(dest / "prediction_owner_context.json", context)
+    persist_phase(execution_id, "PREDICTION", f"{run_id}-prediction", dest, github_sha=github_sha)
+    return out
+
+
+def run_formal_with_fallback(request, phase, **kwargs):
+    try:
+        check_deadline(request)
+        return run_phase(request, phase, **kwargs)
+    except FormalOrchestrationError as exc:
+        try:
+            failure = json.loads(str(exc))
+        except ValueError:
+            raise
+        # R36 only handles transport failures. Safety, Authority, Prediction,
+        # temporal and numerical failures never become a legacy retry.
+        if failure.get("failure_class") not in {"TRANSPORT", "NETWORK", "RUNTIME_TRANSPORT"}:
+            raise
+        check_deadline(request)
+        fallback = build_legacy_formal_request(request, primary_failure_code=failure.get("code"))
+        validate_fallback_request(fallback)
+        fallback = bind_formal_request_to_source(fallback)
+        return run_phase(fallback, phase, **kwargs)
+
+
+def parse_official_result_snapshot(snapshot, race_context, runner_ids):
+    """NAR official finish/payout verification; unsupported outcomes HOLD.
+
+    Uses the existing factual SOURCE decoder/table parser, never Prediction.
+    The current settlement runtime supports EXACTA/TRIO/TRIFECTA only.
+    """
+    physical_path = str(ROOT / "runtime" / "local_physical")
+    if physical_path not in sys.path:
+        sys.path.insert(0, physical_path)
+    from local_physical.source_acquisition import _decode, _html_tables, _html_text
+    from local_physical.nar_auxiliary_evidence import _result_rows_from_table
+    from local_physical.nar_source_manifest import VENUE_NAMES
+    if snapshot.get("http_status") != 200 or snapshot.get("official") is not True:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_HTTP_OR_AUTHORITY_HOLD")
+    raw = gzip.decompress(base64.b64decode(snapshot["raw_gzip_b64"]))
+    if hashlib.sha256(raw).hexdigest() != snapshot.get("raw_sha256"):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_RAW_DIGEST_MISMATCH")
+    html = _decode(raw, snapshot.get("content_type") or "")
+    # Inspect race-page content, excluding site navigation and script literals.
+    # An apparently populated finish/payout table is not sufficient while the
+    # official page expressly reports a provisional or suspended result.
+    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", "", html, flags=re.S | re.I)
+    page_text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", _html_text(body)))
+    if any(marker in page_text for marker in (
+            "審議中", "審議しています", "成績未確定", "着順未確定", "払戻未確定", "結果未確定")):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_FINAL")
+    if any(marker in page_text for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
+        # Cancellations require the existing authorized refund path; the flat
+        # payout representation used here cannot safely settle them.
+        raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
+    headings = re.findall(r"<h4\b[^>]*>(.*?)</h4>", html, re.S | re.I)
+    heading = unicodedata.normalize("NFKC", "".join(_html_text(h) for h in headings))
+    heading = re.sub(r"\s+", "", heading)
+    date = dt.date.fromisoformat(str(race_context["race_date"]).replace("/", "-"))
+    if (f"{date.year}年{date.month}月{date.day}日" not in heading
+            or VENUE_NAMES[race_context["venue_id"]] not in heading
+            or f"第{int(race_context['race_no'])}競走" not in heading or "競走成績" not in heading):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD")
+    tables = _html_tables(html)
+    finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
+    if len(finish_tables) != 1:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
+    rows = sorted(finish_tables[0], key=lambda row: row["finish"])
+    positions = [row["finish"] for row in rows]
+    order = [row["horse_no"] for row in rows]
+    if (len(rows) < 3 or positions != list(range(1, len(rows) + 1))
+            or len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids)))):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
+    # Validate published winning selection as well as amount. Flat per-bet-type
+    # payouts cannot represent dead heats, refunds or multiple winning sets.
+    expected = {"馬連単": ("EXACTA", order[:2]), "三連複": ("TRIO", sorted(order[:3])),
+                "三連単": ("TRIFECTA", order[:3])}
+    payouts = {}
+    for table in tables:
+        for row in table:
+            if not row or row[0] not in expected:
+                continue
+            name, selection = expected[row[0]]
+            if len(row) != 4 or name in payouts:
+                raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_AMBIGUOUS_HOLD")
+            parsed = [int(x) for x in re.findall(r"\d+", row[1])]
+            if parsed != selection or not re.fullmatch(r"[\d,]+円", row[2]):
+                raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_SELECTION_HOLD")
+            amount = int(row[2].replace(",", "").replace("円", ""))
+            if amount <= 0:
+                raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_AMOUNT_HOLD")
+            payouts[name] = amount
+    if set(payouts) != {"EXACTA", "TRIO", "TRIFECTA"}:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_NOT_READY")
+    return order, payouts
+
+
+def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fetch=None):
+    """Acquire one immutable official RESULT checkpoint from frozen SOURCE identity."""
+    from local_physical.source_acquisition import fetch_source
+    from local_physical.nar_source_manifest import _result_source, LOCAL_BABA_CODES
+    execution_id = derive_execution_id(intent)
+    formal = resolve_phase(execution_id, "FORMAL")
+    source = resolve_phase(execution_id, "SOURCE")
+    if not formal or not source:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_REQUIRES_SOURCE_AND_FROZEN_FINAL")
+    final = _load_checkpoint_json(formal, "final_receipt_envelope.json")
+    signed_source = _load_checkpoint_json(source, "source_receipt_envelope.json")
+    if not final or not signed_source:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_LINEAGE_MISSING")
+    if final.get("receipt", {}).get("race_id") != intent["race_id"]:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_FINAL_RACE_MISMATCH")
+    source_binding = _source_binding_from_resolved(source)
+    formal_basis = _load_checkpoint_json(formal, "formal_checkpoint_basis.json") or {}
+    if formal_basis.get("source_binding") != source_binding:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_FINAL_SOURCE_LINEAGE_MISMATCH")
+    verification = _load_checkpoint_json(source, "source_verification.json") or {}
+    if verification.get("verified") is not True or signed_source["artifact"].get("formal_ready") is not True:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_SOURCE_AUTHORITY_HOLD")
+    cached = resolve_phase(execution_id, "OFFICIAL_RESULT")
+    if cached:
+        request = _load_checkpoint_json(cached, "official_result_request.json")
+        if (request.get("frozen_final_sha256") != _sha_obj(final)
+                or request.get("source_binding") != source_binding):
+            raise FormalOrchestrationError("OFFICIAL_RESULT_FROZEN_FINAL_CHANGED")
+        return request
+    artifact = signed_source["artifact"]
+    identity = artifact["source_race_context"]
+    context_keys = {"venue_id": intent.get("venue_id"), "race_date": intent.get("race_date"),
+                    "race_no": intent.get("race_no")}
+    for key, value in context_keys.items():
+        if str(value).replace("/", "-") != str(identity[key]).replace("/", "-"):
+            raise FormalOrchestrationError("OFFICIAL_RESULT_SOURCE_IDENTITY_MISMATCH")
+    if dt.datetime.now(dt.timezone.utc) < _parse_iso(intent["scheduled_post_at"]):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_DUE")
+    tickets = ((final.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
+    if any(str(t.get("bet_type", "")).upper() not in {"EXACTA", "TRIO", "TRIFECTA"} for t in tickets):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_UNSUPPORTED_SETTLEMENT_TICKET_HOLD")
+    spec = _result_source(identity["venue_id"], LOCAL_BABA_CODES[identity["venue_id"]],
+                          str(identity["race_date"]).replace("-", "/"), int(identity["race_no"]))
+    # RESULT collection has its own time axis; never reuse prediction cutoff.
+    try:
+        snapshot, errors = (fetch or fetch_source)(spec, "")
+    except ValueError as exc:
+        # DNS validation is part of the existing Source safety boundary. Retry
+        # resolution failures without bypassing it or retaining raw diagnostics.
+        if str(exc).startswith("SOURCE_DNS_RESOLUTION_FAILED:"):
+            raise FormalOrchestrationError("OFFICIAL_RESULT_TRANSPORT_PENDING") from None
+        raise
+    if errors or snapshot.get("final_url") != spec["url"]:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_FETCH_OR_REDIRECT_HOLD")
+    runners = artifact["active_runner_universe"]["runners"]
+    order, payouts = parse_official_result_snapshot(snapshot, identity, [r["runner_id"] for r in runners])
+    request = {"family_id": "LOCAL", "execution_id": execution_id, "race_id": intent["race_id"],
+               "phase": "RESULT", "execution_phase": "RESULT", "temporal_mode": "RESULT",
+               "finish_order": order, "payouts": payouts, "result_available_at": snapshot["fetched_at"],
+               "result_timestamp_authority": "OBSERVED_AT_OFFICIAL_RETRIEVAL_PUBLICATION_TIME_UNKNOWN",
+               "source": spec["url"], "official_result_verified": True,
+               "official_result_verification_ref": spec["url"] + "#sha256=" + snapshot["raw_sha256"],
+               "frozen_final_sha256": _sha_obj(final), "official_snapshot_sha256": snapshot["snapshot_sha256"],
+               "source_binding": source_binding,
+               "pfs_authority": "FROZEN-RECOMMENDATION"}
+    dest = tmp_root / execution_id / "official_result_out"
+    _write(dest / "official_result_snapshot.json", snapshot)
+    _write(dest / "official_result_request.json", request)
+    persist_phase(execution_id, "OFFICIAL_RESULT", f"{run_id}-official-result", dest, github_sha=github_sha)
+    return request
+
+
+def resume_official_result(intent, *, run_id, github_sha, runtime_out, tmp_root, wait_seconds=0):
+    """Same workflow continues RESULT without generating another Prediction."""
+    until = time.monotonic() + min(max(int(wait_seconds), 0), 10800)
+    recovery_attempt = 0
+    transport_policy = load_gateway().get("transport_reliability") or {}
+    while True:
+        try:
+            request = acquire_official_result_request(intent, run_id=run_id, github_sha=github_sha, tmp_root=tmp_root)
+            return orchestrate(request, run_id=run_id, github_sha=github_sha,
+                               runtime_out=runtime_out, tmp_root=tmp_root)
+        except FormalOrchestrationError as exc:
+            code = str(exc)
+            try:
+                failure = json.loads(code)
+            except ValueError:
+                failure = {}
+            if (isinstance(failure, dict) and failure.get("signed_result_preserved") is True
+                    and failure.get("failure_class") == "RUNTIME_TRANSPORT"
+                    and recovery_attempt < int(transport_policy.get("max_attempts", 1)) - 1
+                    and time.monotonic() < until):
+                delays = transport_policy.get("backoff_seconds") or [0]
+                delay = float(delays[min(recovery_attempt, len(delays) - 1)])
+                recovery_attempt += 1
+                time.sleep(min(delay, max(0, until - time.monotonic())))
+                continue
+            retryable = code in {"OFFICIAL_RESULT_NOT_DUE", "OFFICIAL_RESULT_FINISH_TABLE_HOLD",
+                                 "OFFICIAL_RESULT_PAYOUT_NOT_READY", "OFFICIAL_RESULT_HTTP_OR_AUTHORITY_HOLD",
+                                 "OFFICIAL_RESULT_NOT_FINAL", "OFFICIAL_RESULT_TRANSPORT_PENDING"}
+            if not retryable or time.monotonic() >= until:
+                return {"status": "WAITING_OFFICIAL_RESULT" if retryable else "BLOCKED",
+                        "execution_id": derive_execution_id(intent), "first_failed_code": code,
+                        "prediction_reexecution": False, "completion": {"complete": False}}
+            time.sleep(min(30, max(0, until - time.monotonic())))
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if time.monotonic() >= until:
+                return {"status": "WAITING_OFFICIAL_RESULT", "execution_id": derive_execution_id(intent),
+                        "first_failed_code": "OFFICIAL_RESULT_TRANSPORT_PENDING",
+                        "prediction_reexecution": False, "completion": {"complete": False}}
+            time.sleep(min(30, max(0, until - time.monotonic())))
 
 
 def main() -> int:
@@ -1051,6 +1579,8 @@ def main() -> int:
     ap.add_argument("--github-sha", default=os.environ.get("GITHUB_SHA"))
     ap.add_argument("--plan-only", action="store_true")
     ap.add_argument("--phase", choices=["SOURCE", "RESULT"])
+    ap.add_argument("--resume-official-result", action="store_true")
+    ap.add_argument("--result-wait-seconds", type=int, default=0)
     ap.add_argument("--output", default=str(DEFAULT_RUNTIME_OUT / "orchestration_report.json"))
     args = ap.parse_args()
 
@@ -1059,16 +1589,23 @@ def main() -> int:
         intent["execution_phase"] = args.phase
     runtime_out = DEFAULT_RUNTIME_OUT
     runtime_out.mkdir(parents=True, exist_ok=True)
-    report = orchestrate(
-        intent,
-        run_id=str(args.run_id),
-        github_sha=args.github_sha,
-        runtime_out=runtime_out,
-        plan_only=args.plan_only,
-    )
+    try:
+        report = resume_official_result(
+            intent, run_id=str(args.run_id), github_sha=args.github_sha, runtime_out=runtime_out,
+            tmp_root=DEFAULT_TMP_ROOT, wait_seconds=args.result_wait_seconds,
+        ) if args.resume_official_result else orchestrate(
+            intent,
+            run_id=str(args.run_id),
+            github_sha=args.github_sha,
+            runtime_out=runtime_out,
+            plan_only=args.plan_only,
+        )
+    except (FormalOrchestrationError, ExecutionStoreError, ValueError, subprocess.TimeoutExpired) as exc:
+        report = {"status": "BLOCKED", "execution_class": "BLOCKED", "completion": False,
+                  "execution_id": derive_execution_id(intent), "first_failed_code": str(exc)}
     _write(pathlib.Path(args.output), report)
     print("KM_FORMAL_SINGLE_ENTRY_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    return 0 if report.get("status") in {"PLANNED", "ALREADY_COMPLETE", "FULL_LIFECYCLE_EXECUTION_PASS", "AWAITING_FROZEN_PREDICTION"} else 2
+    return completion_exit_code(report)
 
 
 if __name__ == "__main__":

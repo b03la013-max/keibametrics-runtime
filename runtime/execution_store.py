@@ -20,6 +20,38 @@ class ExecutionStoreError(ValueError):
     pass
 
 
+def verify_result_reuse(envelope, final, expected_payload, verification):
+    """Reuse a signed RESULT only after fresh external signature verification.
+
+    This is downstream recovery, never authorization to change the outcome,
+    payouts, immutable FINAL, settlement amounts or recommendation authority.
+    """
+    receipt = envelope.get("receipt") or {}
+    artifact = envelope.get("artifact") or {}
+    if verification.get("verified") is not True:
+        raise ExecutionStoreError("RESULT_RECOVERY_SIGNATURE_REQUIRED")
+    if (receipt.get("phase") != "RESULT" or receipt.get("status") != "PASS"
+            or receipt.get("race_id") != expected_payload.get("race_id")
+            or (final.get("receipt") or {}).get("race_id") != receipt.get("race_id")):
+        raise ExecutionStoreError("RESULT_RECOVERY_RACE_OR_PHASE_MISMATCH")
+    final_sha = final.get("receipt_sha256")
+    if not final_sha or (artifact.get("frozen_refs") or {}).get("final_receipt_sha256") != final_sha:
+        raise ExecutionStoreError("RESULT_RECOVERY_FINAL_BINDING_MISMATCH")
+    if artifact.get("official_result") != expected_payload.get("official_result"):
+        raise ExecutionStoreError("RESULT_RECOVERY_OFFICIAL_OUTCOME_MISMATCH")
+    settlement = artifact.get("settlement") or {}
+    expected = expected_payload.get("settlement") or {}
+    for key in ("status", "investment", "settled_investment", "return"):
+        if key not in expected or settlement.get(key) != expected[key]:
+            raise ExecutionStoreError("RESULT_RECOVERY_SETTLEMENT_MISMATCH")
+    if settlement.get("pfs_authority") != expected_payload.get("pfs_authority"):
+        raise ExecutionStoreError("RESULT_RECOVERY_PFS_AUTHORITY_MISMATCH")
+    return {"status": "VERIFIED_REUSE", "prediction_reexecution": False,
+            "result_resigning": False, "settlement_reexecution": False,
+            "final_receipt_sha256": final_sha,
+            "result_receipt_sha256": envelope.get("receipt_sha256")}
+
+
 def _safe(value: str) -> str:
     x = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "").strip())
     x = re.sub(r"-+", "-", x).strip("-")

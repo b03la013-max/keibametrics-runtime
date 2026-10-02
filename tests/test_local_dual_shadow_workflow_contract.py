@@ -38,8 +38,10 @@ def test_result_ledger_is_serializable_by_repository_commit():
     assert "group: km-local-result-oos-ledger" in workflow
     assert "cancel-in-progress: false" in workflow
     assert 'git add runtime/local_candidate_dual_oos_measurements/*.json runtime/local_candidate_dual_oos_status.json' in workflow
-    assert 'git pull --rebase origin main' in workflow
-    assert 'git push origin HEAD:main' in workflow
+    assert 'PERSIST_BRANCH: ${{ github.ref_name }}' in workflow
+    assert 'git pull --rebase origin "$PERSIST_BRANCH"' in workflow
+    assert 'git push origin "HEAD:$PERSIST_BRANCH"' in workflow
+    assert 'git push origin HEAD:main' not in workflow
 
 
 def test_formal_v03_shadow_is_pre_result_frozen_final_bound_and_krs_executed():

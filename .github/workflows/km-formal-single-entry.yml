@@ -15,11 +15,24 @@ on:
         description: "Single-entry Formal intent JSON"
         required: true
         type: string
+      candidate_shadow:
+        description: "Use protected KeibaMetrics staging Service Account secret for SHADOW only"
+        type: boolean
+        default: false
+      owner_historical_comparison:
+        description: "C2 Owner behavioral comparison only; historical / NOT OOS"
+        type: boolean
+        default: false
 
 jobs:
   orchestrate:
+    if: ${{ !inputs.owner_historical_comparison }}
+    concurrency:
+      group: km-formal-${{ inputs.intent_path || github.sha }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    environment: ${{ inputs.candidate_shadow && 'keibametrics-staging' || '' }}
+    timeout-minutes: 190
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,6 +117,9 @@ jobs:
       - name: Execute SOURCE to FORMAL as one lifecycle
         id: execute
         shell: bash
+        env:
+          OPENAI_API_KEY: ${{ inputs.candidate_shadow && secrets.OPENAI_API_KEY || '' }}
+          KM_CREDENTIAL_ENVIRONMENT: ${{ inputs.candidate_shadow && 'keibametrics-staging' || '' }}
         run: |
           set +e
           python runtime/formal_execution_orchestrator.py \
@@ -114,11 +130,51 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Persist pre-result SOURCE and FINAL before waiting
+        if: always() && steps.meta.outputs.execution_id != ''
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          PERSIST_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -d "runtime/executions/$EXECUTION_ID" || exit 0
+          mkdir -p "runtime/execution_reports/$EXECUTION_ID"
+          if [ -f runtime_out/orchestration_report.json ]; then
+            cp runtime_out/orchestration_report.json "runtime/execution_reports/$EXECUTION_ID/${{ github.run_id }}-formal.json"
+          fi
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
+          git diff --cached --quiet && exit 0
+          git commit -m "execution: pre-result freeze $EXECUTION_ID [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          exit 1
+
+      - name: Continue official RESULT to Settlement and Learning
+        id: result
+        if: steps.execute.outputs.rc == '0'
+        shell: bash
+        run: |
+          set +e
+          python runtime/formal_execution_orchestrator.py \
+            --intent "${{ steps.meta.outputs.intent_file }}" \
+            --resume-official-result --result-wait-seconds 10800 \
+            --run-id "${{ github.run_id }}" --github-sha "${{ github.sha }}"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
       - name: Persist durable successful phase checkpoints
         if: always()
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          PERSIST_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           if [ ! -d "runtime/executions/$EXECUTION_ID" ]; then
@@ -127,12 +183,23 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add "runtime/executions/$EXECUTION_ID"
+          if [ -d "runtime/execution_reports/$EXECUTION_ID" ]; then git add "runtime/execution_reports/$EXECUTION_ID"; fi
+          # Existing RESULT workflow owns the same forward ledgers. Preserve
+          # its generated state when RESULT runs as an internal continuation.
+          for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_initial_forward_acceptance.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
+            if [ -e "$path" ]; then git add "$path"; fi
+          done
+          if [ -f runtime_out/orchestration_report.json ]; then
+            mkdir -p "runtime/execution_reports/$EXECUTION_ID"
+            cp runtime_out/orchestration_report.json "runtime/execution_reports/$EXECUTION_ID/${{ github.run_id }}.json"
+            git add "runtime/execution_reports/$EXECUTION_ID"
+          fi
           if git diff --cached --quiet; then
             exit 0
           fi
           git commit -m "execution: checkpoint $EXECUTION_ID [skip ci]"
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
@@ -162,6 +229,34 @@ jobs:
         shell: bash
         env:
           RC: ${{ steps.execute.outputs.rc }}
+          RESULT_RC: ${{ steps.result.outputs.rc }}
         run: |
           set -euo pipefail
           test "${RC:-2}" = "0"
+          test "${RESULT_RC:-2}" = "0"
+
+  owner_behavioral_comparison:
+    if: ${{ inputs.owner_historical_comparison }}
+    runs-on: ubuntu-latest
+    environment: keibametrics-staging
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: NEW C2 Owner / frozen historical behavioral comparison
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          KM_CREDENTIAL_ENVIRONMENT: keibametrics-staging
+        run: |
+          python runtime/openai_prediction_owner_candidate.py \
+            --historical-comparison \
+            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
+            --output runtime_out/owner_behavioral_comparison.json
+      - name: Preserve sanitized Candidate comparison or HOLD
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c2-owner-behavioral-comparison-${{ github.run_id }}
+          path: runtime_out/owner_behavioral_comparison.json
+          if-no-files-found: ignore
