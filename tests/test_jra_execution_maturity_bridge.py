@@ -63,7 +63,9 @@ def test_build_source_request_uses_jra_not_local_source_semantics():
     assert s["jra_meeting_key"]=="TESTMEETING"
     assert s["execution_id"]==intent()["execution_id"]
     assert s["require_jra_horse_history"] is True
-    assert "LOCAL" not in str(s)
+    assert "local_source_adapter" not in s
+    assert "local_numerical_mapping" not in s
+    assert "parameter_map_sha256" not in s
 
 def test_build_formal_binds_static_to_signed_source_and_semantic_basis():
     q=build_formal_request(intent(),envelope())
