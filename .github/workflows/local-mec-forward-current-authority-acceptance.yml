@@ -68,8 +68,19 @@ jobs:
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
           r5status=j("runtime/local_mec_r5_oos_status.json")
 
-          assert gateway["parent_current_authority"]==auth["manifest_id"]
-          assert gateway["venue_routing"]==route["profile_id"]
+          inherited_local=auth.get("local_r36_inheritance") or {}
+          expected_local_parent=(
+              auth["manifest_id"]
+              if not inherited_local
+              else "KM-FAMILY-CURRENT-AUTHORITY-20261001-R36"
+          )
+          expected_local_route=(
+              route["profile_id"]
+              if not inherited_local
+              else "KM-VENUE-CHAT-FORMAL-ROUTING-20261001-R36"
+          )
+          assert gateway["parent_current_authority"]==expected_local_parent
+          assert gateway["venue_routing"]==expected_local_route
           assert gateway["policy"]["production_prediction_policy_changed"] is False
           assert gateway["policy"]["production_numerical_policy_changed"] is False
           assert gateway["policy"]["production_mec_policy_changed"] is False
@@ -89,7 +100,7 @@ jobs:
           assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
           assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
 
-          assert suite["family_current_authority"]==auth["manifest_id"]
+          assert suite["family_current_authority"]==expected_local_parent
           assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert suite["production_numeric_suite"]["status"]=="FROZEN"
           assert suite["production_numeric_suite"]["numerical_change"] is False

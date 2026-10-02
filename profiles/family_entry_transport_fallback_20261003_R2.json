@@ -1,0 +1,37 @@
+{
+  "profile_id": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261003-R2",
+  "status": "ACTIVE / FAMILY-WIDE LOCAL+JRA / EXECUTION-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / SEMANTIC-HASH / FAIL-CLOSED",
+  "effective_at": "2026-10-03T01:30:00+09:00",
+  "predecessor": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261001-R1",
+  "validator": "runtime/entry_transport_fallback.py",
+  "families": {
+    "LOCAL": {
+      "primary_root": "runtime/formal_intents",
+      "fallback_root": "runtime/family_requests",
+      "fallback_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+      "behavioral_change": false
+    },
+    "JRA": {
+      "primary_root": "runtime/jra_formal_intents",
+      "fallback_root": "runtime/requests",
+      "fallback_workflow": ".github/workflows/km-formal-request-runner.yml",
+      "source_execution_id_required": true,
+      "static_signed_source_binding_required": true
+    }
+  },
+  "invariants": [
+    "SAME_EXECUTION_ID",
+    "EXACT_SEMANTIC_HASH",
+    "DURABLE_SOURCE_CHECKPOINT_REUSE",
+    "STATIC_PREDICTION_FROZEN",
+    "NO_SILENT_SEMANTIC_REDUCTION",
+    "NO_EXTERNAL_SAFETY_BYPASS",
+    "FAIL_CLOSED_IF_BOTH_TRANSPORTS_UNAVAILABLE"
+  ],
+  "prediction_change": false,
+  "numerical_change": false,
+  "krs_change": false,
+  "mec_change": false,
+  "capital_change": false,
+  "production_effect": "NONE"
+}

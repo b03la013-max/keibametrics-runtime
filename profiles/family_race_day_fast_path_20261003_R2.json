@@ -1,0 +1,162 @@
+{
+  "profile_id": "KM-FAMILY-RACE-DAY-FAST-PATH-20261003-R2",
+  "status": "ACTIVE / FAMILY-WIDE / LOCAL-FULL-CACHE + JRA-CHECKPOINT-FASTPATH / NON-NUMERICAL / BEHAVIOR-PRESERVING / FAIL-SAFE-FULL-PATH-FALLBACK / FAST-REFLECTION",
+  "effective_at": "2026-10-03T01:30:00+09:00",
+  "family_scope": [
+    "LOCAL",
+    "JRA"
+  ],
+  "current_venue_priority": [
+    "FNB",
+    "JRA_ALL_ACTIVE_VENUES"
+  ],
+  "purpose": "Preserve LOCAL exact numerical-cache fast path and extend only mature family-independent fast-path mechanisms to JRA: durable SOURCE checkpoint reuse, single-entry continuation, prepared-intent prewarm and post-result fast reflection. JRA numerical result caching remains disabled until JRA-specific equivalence acceptance.",
+  "invariants": [
+    "FAST_PATH_OUTPUT_MUST_BE_PRODUCTION-BEHAVIOR-EQUIVALENT_TO_FULL_PATH_FOR_IDENTICAL_INPUT",
+    "CACHE_REUSE_REQUIRES_EXACT_DEPENDENCY_SHA_AND_IMPLEMENTATION_SHA",
+    "CACHE_MISS_OR_ERROR_FALLS_BACK_TO_CANONICAL_FULL_PATH",
+    "NO_CACHE_ENTRY_HAS_SOURCE_OR_PREDICTION_AUTHORITY",
+    "NO_RESULT_DERIVED_FEATURE_CAN_ENTER_PRE_RACE_CACHE",
+    "SIGNED_SOURCE_AND_CURRENT_TRACK_STATE_REMAIN_FORMAL_DYNAMIC_INPUTS",
+    "FINAL_GATE_SET_IS_UNCHANGED",
+    "DEEP_RESEARCH_MAY_NOT_DELAY_IMMEDIATE_RACE_DAY_REFLECTION"
+  ],
+  "latency_slo": {
+    "production_final_critical_path_target_seconds": 300,
+    "production_final_hard_slo_seconds": 420,
+    "purchase_reserve_target_seconds": 600,
+    "immediate_reflection_target_seconds": 120,
+    "next_race_prewarm_depth": 3,
+    "note": "SLO failure is diagnostic. Formal correctness gates remain authoritative; speed cannot override a fail-closed condition."
+  },
+  "execution_model": {
+    "cold_to_warm": [
+      "prepare all known meeting race identities",
+      "prepare next-three request artifacts when data exists",
+      "parallel runner-level Production numerical materialization",
+      "content-addressed cache of derived runner numerical fields",
+      "prewarm next three prepared requests"
+    ],
+    "dynamic_refresh": [
+      "official runner universe",
+      "scratch/weight/current market/current weather",
+      "same-day track-state observations",
+      "venue current-state interpretation",
+      "affected Production indices",
+      "Static Freeze and downstream Formal lifecycle"
+    ],
+    "always_live": [
+      "Current Authority",
+      "Prediction Cutoff",
+      "Signed SOURCE verify",
+      "Runner Universe verify",
+      "Temporal checks",
+      "PRE_KRS/KRS receipt verify",
+      "MEC/Ticket/Capital",
+      "Signed FINAL and Final-before-post"
+    ]
+  },
+  "cache": {
+    "schema": "KM-RACE-DAY-CONTENT-CACHE-v1",
+    "runtime": "runtime/race_day_fast_path.py",
+    "default_root": ".km_fast_cache",
+    "persistent_transport": "GitHub Actions cache; non-authoritative",
+    "key_components": [
+      "stage",
+      "exact dependency SHA256",
+      "implementation file SHA256",
+      "Fast Path profile"
+    ],
+    "cached_production_stage": "LOCAL_NUMERICAL_RUNNER_ONLY",
+    "runner_parallelism_default": 4,
+    "max_workers": 8,
+    "stale_restore_policy": "FORBIDDEN",
+    "cache_corruption_policy": "MISS_AND_CANONICAL_FULL_PATH",
+    "authority": false,
+    "jra_numerical_cache_enabled": false,
+    "jra_reason": "LOCAL numerical materialization cache is family-specific and is not cross-family portable."
+  },
+  "equivalence": {
+    "test_function": "race_day_fast_path.materialization_equivalence",
+    "production_projection_function": "race_day_fast_path.compare_production_outputs",
+    "required_equal": [
+      "Static Prediction behavior",
+      "Actual numerical calculation",
+      "Index provenance hash",
+      "KRS input hash",
+      "MEC tickets/coverage",
+      "Capital decision",
+      "Final no-bet flag",
+      "Final ticket selections",
+      "Final stakes"
+    ],
+    "excluded_from_behavior_equivalence": [
+      "receipt timestamps",
+      "workflow ids",
+      "cache telemetry",
+      "research-shadow telemetry"
+    ],
+    "required": true,
+    "jra_requirement": "Before any JRA numerical caching, prove exact JRA full/fast equivalence for Actual Numerical Calculation, Index Provenance, KRS input, semantics, MEC, tickets and capital."
+  },
+  "reflection": {
+    "runtime": "runtime/race_day_fast_reflection.py",
+    "stage": "RESULT_VERIFIED -> FAST_REFLECTION -> DEEP_OOS_RESEARCH",
+    "immediate_fields": [
+      "PFS",
+      "W/P2/P3 capture",
+      "ordered pair/set/exact conversion",
+      "KRS post-result classification",
+      "first material failure",
+      "next-race learning state id"
+    ],
+    "deep_research_deferred_to": "AFTER_MEETING_OR_EXPLICIT_EXCEPTION",
+    "automatic_production_change": false
+  },
+  "prewarm": {
+    "depth": 3,
+    "rule": "Only already-prepared future request files are prewarmed. Missing requests are not invented.",
+    "use_of_warm_cache": "Production reuse only when exact dependency+implementation hash matches at Formal execution.",
+    "same_day_result_rule": "Race n observations may invalidate/update n+1 and later only; they never rewrite race n or earlier frozen artifacts.",
+    "future_race_depth": 3
+  },
+  "production_freeze": {
+    "prediction_formula_change": false,
+    "index_weight_change": false,
+    "venue_prediction_mechanism_change": false,
+    "krs_engine_physics_change": false,
+    "parameter_map_change": false,
+    "mec_r3_change": false,
+    "capital_policy_change": false,
+    "probability_ev_change": false,
+    "ticket_policy_change": false,
+    "jra_prediction_formula_change": false,
+    "jra_numerical_mapping_change": false,
+    "jra_source_adapter_change": false
+  },
+  "fallback": {
+    "trigger": [
+      "cache corruption",
+      "implementation hash change",
+      "dependency hash change",
+      "Fast Path exception",
+      "equivalence failure"
+    ],
+    "action": "CANONICAL FULL PATH",
+    "fail_open": false,
+    "mode": "CANONICAL_FULL_PATH"
+  },
+  "predecessor": "KM-FAMILY-RACE-DAY-FAST-PATH-20260928-R1",
+  "jra_mode": {
+    "status": "ACTIVE / EXECUTION-CORRECTNESS FAST PATH / NO NUMERICAL CACHE",
+    "single_entry": "KM-JRA-FORMAL-SINGLE-ENTRY-20261003-R1",
+    "workflow": ".github/workflows/km-jra-formal-single-entry.yml",
+    "checkpoint_reuse": "SIGNED SOURCE / EXACT SOURCE BASIS ONLY",
+    "static_source_binding": "REQUIRED",
+    "semantic_basis": "REQUIRED",
+    "prepared_intent_prewarm": "ALLOWED / NON-AUTHORITATIVE / NO INVENTED REQUESTS",
+    "numerical_runner_cache": "DISABLED / JRA-SPECIFIC EQUIVALENCE NOT YET PROMOTED",
+    "fast_reflection": "ACTIVE",
+    "full_path_fallback": true
+  }
+}

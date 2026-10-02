@@ -1,0 +1,274 @@
+name: JRA LOCAL Maturity Import Acceptance
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/entry_transport_fallback.py"
+      - "runtime/race_day_fast_reflection.py"
+      - "tests/test_jra_execution_maturity_bridge.py"
+      - "tests/test_entry_transport_fallback.py"
+      - "tests/test_race_day_fast_path.py"
+      - ".github/workflows/km-jra-formal-single-entry.yml"
+      - ".github/workflows/km-jra-source-first-runner.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
+      - "profiles/jra_local_maturity_import_20261003_R1.json"
+      - "profiles/jra_formal_single_entry_20261003_R1.json"
+      - "profiles/family_entry_transport_fallback_20261003_R2.json"
+      - "profiles/family_race_day_fast_path_20261003_R2.json"
+      - "profiles/venue_chat_routes_20261003_R37.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261003_R37.json"
+      - ".github/workflows/km-jra-local-maturity-import-acceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/entry_transport_fallback.py"
+      - ".github/workflows/km-jra-formal-single-entry.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
+      - "profiles/jra_local_maturity_import_20261003_R1.json"
+      - "profiles/jra_formal_single_entry_20261003_R1.json"
+      - "profiles/family_entry_transport_fallback_20261003_R2.json"
+      - "profiles/family_race_day_fast_path_20261003_R2.json"
+      - "profiles/venue_chat_routes_20261003_R37.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261003_R37.json"
+      - ".github/workflows/km-jra-local-maturity-import-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test and workflow lint dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+
+      - name: Compile imported execution mechanisms
+        run: |
+          set -euo pipefail
+          python -m py_compile             runtime/jra_execution_maturity_bridge.py             runtime/entry_transport_fallback.py             runtime/race_day_fast_reflection.py
+
+      - name: Cross-family regression and JRA bridge tests
+        run: |
+          python -m pytest -q             tests/test_jra_execution_maturity_bridge.py             tests/test_entry_transport_fallback.py             tests/test_race_day_fast_path.py
+
+      - name: Lint JRA execution workflows
+        run: |
+          ./actionlint -color             .github/workflows/km-jra-formal-single-entry.yml             .github/workflows/km-jra-source-first-runner.yml             .github/workflows/km-formal-request-runner.yml             .github/workflows/km-formal-result-runner.yml             .github/workflows/km-jra-local-maturity-import-acceptance.yml
+
+      - name: Verify R37 authority, LOCAL isolation and migration boundaries
+        run: |
+          python - <<'PY'
+          import glob,json,sys
+          from datetime import datetime,timezone
+          from pathlib import Path
+
+          def load(p):
+              return json.load(open(p,encoding="utf-8"))
+
+          r36=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json")
+          r37=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261003_R37.json")
+          route36=load("profiles/venue_chat_routes_20261001_R36.json")
+          route37=load("profiles/venue_chat_routes_20261003_R37.json")
+          maturity=load("profiles/jra_local_maturity_import_20261003_R1.json")
+          single=load("profiles/jra_formal_single_entry_20261003_R1.json")
+          fallback=load("profiles/family_entry_transport_fallback_20261003_R2.json")
+          fast=load("profiles/family_race_day_fast_path_20261003_R2.json")
+
+          assert r37["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261003-R37"
+          assert r37["predecessor"]==r36["manifest_id"]
+          assert r37["common_family_components"]["venue_routing"]==route37["profile_id"]
+          assert r37["common_family_components"]["jra_local_maturity_import"]==maturity["profile_id"]
+          assert r37["common_family_components"]["jra_formal_single_entry"]==single["profile_id"]
+          assert r37["common_family_components"]["jra_entry_transport_fallback"]==fallback["profile_id"]
+          assert r37["common_family_components"]["jra_race_day_fast_path"]==fast["profile_id"]
+
+          # R37 is a JRA execution-correctness promotion only. LOCAL and BAN
+          # scoped authority remain byte-semantically identical to R36.
+          assert r37["family_scoped_authority"]["LOCAL"]==r36["family_scoped_authority"]["LOCAL"]
+          assert r37["family_scoped_authority"]["BAN"]==r36["family_scoped_authority"]["BAN"]
+          assert route37["family_routes"]["LOCAL"]==route36["family_routes"]["LOCAL"]
+          assert route37["family_routes"]["BAN"]==route36["family_routes"]["BAN"]
+          assert r37["local_r36_inheritance"]["production_behavior_change"] is False
+          assert r37["local_r36_inheritance"]["numerical_change"] is False
+
+          j=r37["family_scoped_authority"]["JRA"]
+          assert j["local_maturity_import"]==maturity["profile_id"]
+          assert j["single_entry"]["profile"]==single["profile_id"]
+          assert j["entry_transport_fallback"]==fallback["profile_id"]
+          assert j["race_day_fast_path"]["profile"]==fast["profile_id"]
+          assert j["race_day_fast_path"]["jra_numerical_cache"] is False
+          assert j["fast_reflection"]["production_change_authority"] is False
+          assert j.get("source_only_full_numerical_ready") is False
+          assert "LOCAL_PARAMETER_MAP" in j["cross_family_nonimports"]
+
+          assert maturity["production_imports"]["C0_SCHEMA_INTERFACE"]
+          assert maturity["production_imports"]["C1_EXECUTION_CORRECTNESS"]
+          assert maturity["C2_decision_policy"]["direct_production_import"] is False
+          assert "FORBIDDEN" in maturity["C3_numerical_model"]["status"]
+          assert maturity["automatic_promotion"] is False
+
+          assert single["family_scope"]==["JRA"]
+          assert single["checkpoint_policy"]["source_success_survives_formal_failure"] is True
+          assert single["checkpoint_policy"]["static_signed_source_binding_required"] is True
+          assert single["checkpoint_policy"]["formal_semantic_basis_required"] is True
+          assert single["entry_transport_fallback"]["external_safety_bypass"] is False
+          assert single["production_freeze"]["prediction_model"]=="UNCHANGED"
+          assert single["production_freeze"]["numerical_model"]=="UNCHANGED"
+
+          assert fallback["families"]["LOCAL"]["behavioral_change"] is False
+          assert fallback["families"]["JRA"]["source_execution_id_required"] is True
+          assert fallback["prediction_change"] is False
+          assert fallback["numerical_change"] is False
+
+          assert "JRA" in fast["family_scope"]
+          assert fast["jra_mode"]["numerical_runner_cache"].startswith("DISABLED")
+          assert fast["cache"]["jra_numerical_cache_enabled"] is False
+          assert fast["production_freeze"]["jra_prediction_formula_change"] is False
+          assert fast["production_freeze"]["jra_numerical_mapping_change"] is False
+
+          jra_venues=[v for v in route37["venues"] if v.get("family")=="JRA"]
+          assert len(jra_venues)==10
+          required_tokens=[
+            "JRA-SINGLE-ENTRY-R1","SOURCE-CHECKPOINT-REUSE",
+            "STATIC-SIGNED-SOURCE-BINDING","FORMAL-SEMANTIC-BASIS",
+            "FAST-REFLECTION","ENTRY-TRANSPORT-FALLBACK-R2"
+          ]
+          for v in jra_venues:
+              for token in required_tokens:
+                  assert token in v["route_status"],(v["venue_id"],token)
+
+          assert route37["family_routes"]["JRA"]["single_entry_workflow"]==".github/workflows/km-jra-formal-single-entry.yml"
+          assert route37["family_routes"]["JRA"]["local_numerical_reuse_forbidden"] is True
+          assert route37["family_routes"]["JRA"]["local_parameter_map_reuse_forbidden"] is True
+          assert route37["jra_race_day_fast_path"]["jra_numerical_cache"] is False
+          assert route37["jra_entry_transport_fallback"]["no_safety_bypass"] is True
+
+          # Resolve latest Current Authority exactly as runtime selection does.
+          rows=[]
+          now=datetime.now(timezone.utc)
+          for p in glob.glob("profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+              try:
+                  x=load(p)
+                  if "CURRENT-AUTHORITY" not in str(x.get("status") or ""): continue
+                  d=datetime.fromisoformat(str(x["effective_at"]).replace("Z","+00:00")).astimezone(timezone.utc)
+                  if d<=now: rows.append((d,str(x["manifest_id"])))
+              except Exception:
+                  pass
+          assert rows
+          assert max(rows,key=lambda z:(z[0],z[1]))[1]==r37["manifest_id"]
+
+          bridge=Path("runtime/jra_execution_maturity_bridge.py").read_text(encoding="utf-8")
+          for forbidden in [
+              "local_evidence_to_base_production",
+              "local_index_provenance_builder",
+              "local_krs_input_builder_production",
+              "parameter_map_sha256"
+          ]:
+              assert forbidden not in bridge,forbidden
+
+          formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "verify_formal_request_binding" in formal
+          assert "JRA_LOCAL_MATURITY_SOURCE_STATIC_BINDING_VERIFIED" in formal
+          assert "validate_fallback_request" in formal
+
+          result=Path(".github/workflows/km-formal-result-runner.yml").read_text(encoding="utf-8")
+          assert "build_fast_reflection" in result
+          assert "runtime/jra_fast_reflections" in result
+
+          single_wf=Path(".github/workflows/km-jra-formal-single-entry.yml").read_text(encoding="utf-8")
+          for token in [
+              "materialize_phase",
+              "km-jra-source-first-runner.yml",
+              "km-formal-request-runner.yml",
+              "jra_execution_maturity_bridge.py build-formal",
+              "jra_single_entry_binding_verification.json"
+          ]:
+              assert token in single_wf,token
+          for forbidden in [
+              "local_evidence_to_base_production",
+              "local_krs_input_builder_production",
+              "KM-LOCAL-PHYSICAL-RUNTIME",
+              "-RETRY-"
+          ]:
+              assert forbidden not in single_wf,forbidden
+          assert "gh workflow run km-jra-source-first-runner.yml" in single_wf
+          assert "gh workflow run km-formal-request-runner.yml" in single_wf
+          assert "SOURCE_REDISPATCH" in single_wf
+          assert "FORMAL_REDISPATCH" in single_wf
+
+          source_wf=Path(".github/workflows/km-jra-source-first-runner.yml").read_text(encoding="utf-8")
+          formal_wf=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "run-name: JRA SOURCE" in source_wf
+          assert "request_path:" in source_wf
+          assert "run-name: JRA Formal" in formal_wf
+          assert "request_path:" in formal_wf
+
+          s=r37["supersession_declaration"]
+          for k in [
+              "predictive_model_formula_change","base_index_weight_change",
+              "derived_index_formula_change","krs_engine_physics_change",
+              "krs_production_authority_change","mec_r3_policy_change",
+              "capital_policy_change","candidate_to_production_promotion",
+              "production_numerical_change","automatic_promotion"
+          ]:
+              assert s[k] is False,(k,s[k])
+
+          out={
+            "profile":"KM-JRA-LOCAL-MATURITY-IMPORT-ACCEPTANCE-20261003-R1",
+            "status":"PASS",
+            "current_authority":r37["manifest_id"],
+            "routing":route37["profile_id"],
+            "maturity_import":maturity["profile_id"],
+            "single_entry":single["profile_id"],
+            "jra_entry_fallback":fallback["profile_id"],
+            "jra_fast_path":fast["profile_id"],
+            "jra_venue_count":len(jra_venues),
+            "local_scoped_authority_unchanged":True,
+            "ban_scoped_authority_unchanged":True,
+            "jra_numerical_cache_imported":False,
+            "local_numerical_model_imported":False,
+            "c2_production_imported":False,
+            "c3_imported":False,
+            "production_prediction_change":False,
+            "production_numerical_change":False,
+            "krs_physics_change":False,
+            "mec_r3_change":False,
+            "capital_policy_change":False,
+            "venue_canon_change":False,
+            "automatic_promotion":False
+          }
+          Path("runtime/acceptance/jra_local_maturity_import_r1.json").parent.mkdir(parents=True,exist_ok=True)
+          Path("runtime/acceptance/jra_local_maturity_import_r1.json").write_text(
+              json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8"
+          )
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Persist acceptance on main
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/acceptance/jra_local_maturity_import_r1.json
+          git commit -m "ci: persist JRA LOCAL maturity import PASS [skip ci]" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
