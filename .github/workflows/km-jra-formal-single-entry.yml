@@ -2,7 +2,7 @@ name: KeibaMetrics JRA Formal Single Entry
 
 permissions:
   contents: write
-  actions: read
+  actions: write
   attestations: read
 
 on:
@@ -114,9 +114,10 @@ jobs:
               echo "Existing SOURCE request differs: $TARGET" >&2
               exit 2
             }
-            # Exact semantic retry: preserve the same execution_id and payload,
-            # but create a fresh trigger path so canonical SOURCE can resume.
-            TARGET="runtime/jra_source_requests/${SAFE}-RETRY-${GITHUB_RUN_ID}.json"
+            echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
+            echo "redispatch=true" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           cp runtime_out/jra_single_entry_source_request.json "$TARGET"
           git config user.name "keibametrics-runtime"
@@ -125,6 +126,8 @@ jobs:
           git commit -m "execution: JRA single-entry SOURCE $EXECUTION_ID"
           for attempt in 1 2 3 4 5; do
             if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
+              echo "redispatch=false" >> "$GITHUB_OUTPUT"
               echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -139,16 +142,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.submit_source.outputs.source_sha }}
+          SOURCE_REQUEST_PATH: ${{ steps.submit_source.outputs.request_path }}
+          SOURCE_REDISPATCH: ${{ steps.submit_source.outputs.redispatch }}
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
         run: |
           set -euo pipefail
           RUN_ID=""
-          for attempt in $(seq 1 80); do
-            echo "Waiting for SOURCE run (attempt $attempt)" >/dev/null
-            RUN_ID="$(gh run list               --workflow km-jra-source-first-runner.yml               --commit "$SOURCE_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
-            [ -n "$RUN_ID" ] && break
-            sleep 3
-          done
+          if [ "$SOURCE_REDISPATCH" = "true" ]; then
+            DISPATCHED_AT="$(date -u +%s)"
+            gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"
+            RUN_TITLE="JRA SOURCE $SOURCE_REQUEST_PATH"
+            for attempt in $(seq 1 80); do
+              echo "Waiting for redispatched SOURCE run (attempt $attempt)" >/dev/null
+              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,createdAt | RUN_TITLE="$RUN_TITLE" DISPATCHED_AT="$DISPATCHED_AT" python -c 'import datetime,json,os,sys; rows=json.load(sys.stdin); cutoff=int(os.environ["DISPATCHED_AT"])-5; out="";
+for x in rows:
+ t=x.get("createdAt") or ""; ts=int(datetime.datetime.fromisoformat(t.replace("Z","+00:00")).timestamp()) if t else 0
+ if x.get("displayTitle")==os.environ["RUN_TITLE"] and ts>=cutoff: out=str(x.get("databaseId") or ""); break
+print(out)')"
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
+          else
+            for attempt in $(seq 1 80); do
+              echo "Waiting for SOURCE run (attempt $attempt)" >/dev/null
+              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --commit "$SOURCE_SHA" --json databaseId,status,conclusion --limit 1 --jq '.[0].databaseId // empty')"
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
+          fi
           test -n "$RUN_ID"
           gh run watch "$RUN_ID" --exit-status
           echo "$RUN_ID" > runtime_out/jra_single_entry_source_run_id.txt
@@ -191,9 +212,10 @@ jobs:
               echo "Existing FORMAL request differs: $TARGET" >&2
               exit 2
             }
-            # Exact semantic retry after an earlier FORMAL failure. The payload,
-            # execution_id and Signed SOURCE binding remain byte-identical.
-            TARGET="runtime/requests/${SAFE}-FORMAL-RETRY-${GITHUB_RUN_ID}.json"
+            echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
+            echo "redispatch=true" >> "$GITHUB_OUTPUT"
+            echo "formal_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           cp runtime_out/jra_single_entry_formal_request.json "$TARGET"
           git config user.name "keibametrics-runtime"
@@ -202,6 +224,8 @@ jobs:
           git commit -m "execution: JRA single-entry FORMAL $EXECUTION_ID"
           for attempt in 1 2 3 4 5; do
             if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
+              echo "redispatch=false" >> "$GITHUB_OUTPUT"
               echo "formal_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -216,15 +240,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FORMAL_SHA: ${{ steps.submit_formal.outputs.formal_sha }}
+          FORMAL_REQUEST_PATH: ${{ steps.submit_formal.outputs.request_path }}
+          FORMAL_REDISPATCH: ${{ steps.submit_formal.outputs.redispatch }}
         run: |
           set -euo pipefail
           RUN_ID=""
-          for attempt in $(seq 1 80); do
-            echo "Waiting for FORMAL run (attempt $attempt)" >/dev/null
-            RUN_ID="$(gh run list               --workflow km-formal-request-runner.yml               --commit "$FORMAL_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
-            [ -n "$RUN_ID" ] && break
-            sleep 3
-          done
+          if [ "$FORMAL_REDISPATCH" = "true" ]; then
+            DISPATCHED_AT="$(date -u +%s)"
+            gh workflow run km-formal-request-runner.yml --ref main -f request_path="$FORMAL_REQUEST_PATH"
+            RUN_TITLE="JRA Formal $FORMAL_REQUEST_PATH"
+            for attempt in $(seq 1 80); do
+              echo "Waiting for redispatched FORMAL run (attempt $attempt)" >/dev/null
+              RUN_ID="$(gh run list --workflow km-formal-request-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,createdAt | RUN_TITLE="$RUN_TITLE" DISPATCHED_AT="$DISPATCHED_AT" python -c 'import datetime,json,os,sys; rows=json.load(sys.stdin); cutoff=int(os.environ["DISPATCHED_AT"])-5; out="";
+for x in rows:
+ t=x.get("createdAt") or ""; ts=int(datetime.datetime.fromisoformat(t.replace("Z","+00:00")).timestamp()) if t else 0
+ if x.get("displayTitle")==os.environ["RUN_TITLE"] and ts>=cutoff: out=str(x.get("databaseId") or ""); break
+print(out)')"
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
+          else
+            for attempt in $(seq 1 80); do
+              echo "Waiting for FORMAL run (attempt $attempt)" >/dev/null
+              RUN_ID="$(gh run list --workflow km-formal-request-runner.yml --commit "$FORMAL_SHA" --json databaseId,status,conclusion --limit 1 --jq '.[0].databaseId // empty')"
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
+          fi
           test -n "$RUN_ID"
           gh run watch "$RUN_ID" --exit-status
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
