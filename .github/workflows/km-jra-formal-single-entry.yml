@@ -1,0 +1,272 @@
+name: KeibaMetrics JRA Formal Single Entry
+
+permissions:
+  contents: write
+  actions: read
+  attestations: read
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "runtime/jra_formal_intents/*.json"
+  workflow_dispatch:
+    inputs:
+      intent_path:
+        description: "JRA single-entry Formal intent JSON"
+        required: true
+        type: string
+
+jobs:
+  orchestrate:
+    concurrency:
+      group: km-jra-single-entry-${{ inputs.intent_path || github.sha }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve JRA single-entry intent
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          INTENT="${{ inputs.intent_path }}"
+          if [ -z "$INTENT" ]; then
+            mapfile -t INTENTS < <(
+              git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
+              grep '^runtime/jra_formal_intents/.*\.json$' || true
+            )
+            if [ "${#INTENTS[@]}" -ne 1 ]; then
+              echo "Expected exactly one JRA Formal intent; found ${#INTENTS[@]}" >&2
+              exit 2
+            fi
+            INTENT="${INTENTS[0]}"
+          fi
+          case "$INTENT" in
+            runtime/jra_formal_intents/*.json) ;;
+            *) echo "Invalid JRA intent path: $INTENT" >&2; exit 2 ;;
+          esac
+          test -f "$INTENT"
+          INTENT_FILE="$INTENT" python - <<'PY'
+          import json,os
+          q=json.load(open(os.environ["INTENT_FILE"],encoding="utf-8"))
+          if str(q.get("family_id") or "").upper()!="JRA":
+              raise SystemExit("JRA single-entry requires family_id=JRA")
+          execution_id=str(q.get("execution_id") or (str(q.get("race_id") or "")+"-SINGLE-R1"))
+          if not execution_id.strip():
+              raise SystemExit("JRA single-entry execution_id/race_id missing")
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as fh:
+              fh.write(f"intent_file={os.environ['INTENT_FILE']}\n")
+              fh.write(f"execution_id={execution_id}\n")
+          PY
+
+      - name: Build canonical JRA SOURCE request
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/jra_execution_maturity_bridge.py build-source             --intent "${{ steps.meta.outputs.intent_file }}"             --output runtime_out/jra_single_entry_source_request.json
+
+      - name: Reuse durable SOURCE checkpoint when available
+        id: source_reuse
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set +e
+          rm -rf runtime_out/jra_single_entry_source_checkpoint
+          python - <<'PY'
+          import os,sys
+          sys.path.insert(0,"runtime")
+          from execution_store import materialize_phase
+          x=materialize_phase(
+              os.environ["EXECUTION_ID"],"SOURCE",
+              "runtime_out/jra_single_entry_source_checkpoint"
+          )
+          raise SystemExit(0 if x is not None else 3)
+          PY
+          rc=$?
+          if [ "$rc" = "0" ]; then
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Submit SOURCE request when checkpoint missing
+        if: steps.source_reuse.outputs.reused != 'true'
+        id: submit_source
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
+          TARGET="runtime/jra_source_requests/${SAFE}.json"
+          mkdir -p runtime/jra_source_requests
+          git pull --rebase origin main
+          if [ -f "$TARGET" ]; then
+            cmp -s "$TARGET" runtime_out/jra_single_entry_source_request.json || {
+              echo "Existing SOURCE request differs: $TARGET" >&2
+              exit 2
+            }
+          else
+            cp runtime_out/jra_single_entry_source_request.json "$TARGET"
+          fi
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$TARGET"
+          if git diff --cached --quiet; then
+            echo "SOURCE request already committed but checkpoint is unavailable" >&2
+            exit 2
+          fi
+          git commit -m "execution: JRA single-entry SOURCE $EXECUTION_ID"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt*2))
+          done
+          exit 1
+
+      - name: Wait for canonical Signed SOURCE
+        if: steps.source_reuse.outputs.reused != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.submit_source.outputs.source_sha }}
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 80); do
+            RUN_ID="$(gh run list               --workflow km-jra-source-first-runner.yml               --commit "$SOURCE_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
+            [ -n "$RUN_ID" ] && break
+            sleep 3
+          done
+          test -n "$RUN_ID"
+          gh run watch "$RUN_ID" --exit-status
+          echo "$RUN_ID" > runtime_out/jra_single_entry_source_run_id.txt
+          git pull --rebase origin main
+          rm -rf runtime_out/jra_single_entry_source_checkpoint
+          EXECUTION_ID="$EXECUTION_ID" python - <<'PY'
+          import os,sys
+          sys.path.insert(0,"runtime")
+          from execution_store import materialize_phase
+          x=materialize_phase(
+              os.environ["EXECUTION_ID"],"SOURCE",
+              "runtime_out/jra_single_entry_source_checkpoint"
+          )
+          assert x is not None,"JRA_SINGLE_ENTRY_SOURCE_CHECKPOINT_NOT_PERSISTED"
+          PY
+
+      - name: Verify and bind Static to durable Signed SOURCE
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
+          SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
+          mkdir -p runtime_out
+          python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json
+          python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
+
+      - name: Submit canonical JRA FORMAL request
+        id: submit_formal
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
+          TARGET="runtime/requests/${SAFE}-FORMAL.json"
+          git pull --rebase origin main
+          if [ -f "$TARGET" ]; then
+            cmp -s "$TARGET" runtime_out/jra_single_entry_formal_request.json || {
+              echo "Existing FORMAL request differs: $TARGET" >&2
+              exit 2
+            }
+          else
+            cp runtime_out/jra_single_entry_formal_request.json "$TARGET"
+          fi
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$TARGET"
+          if git diff --cached --quiet; then
+            echo "FORMAL request already committed; refusing ambiguous rerun" >&2
+            exit 2
+          fi
+          git commit -m "execution: JRA single-entry FORMAL $EXECUTION_ID"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "formal_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt*2))
+          done
+          exit 1
+
+      - name: Wait for canonical JRA FORMAL completion
+        id: formal_run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORMAL_SHA: ${{ steps.submit_formal.outputs.formal_sha }}
+        run: |
+          set -euo pipefail
+          RUN_ID=""
+          for i in $(seq 1 80); do
+            RUN_ID="$(gh run list               --workflow km-formal-request-runner.yml               --commit "$FORMAL_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
+            [ -n "$RUN_ID" ] && break
+            sleep 3
+          done
+          test -n "$RUN_ID"
+          gh run watch "$RUN_ID" --exit-status
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Persist single-entry execution report
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          FORMAL_RUN_ID: ${{ steps.formal_run.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          def sha(path):
+              p=pathlib.Path(path)
+              return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+          out={
+            "profile":"KM-JRA-LOCAL-MATURITY-IMPORT-20261003-R1",
+            "execution_id":os.environ["EXECUTION_ID"],
+            "source_checkpoint_reused":"${{ steps.source_reuse.outputs.reused }}"=="true",
+            "formal_run_id":os.environ.get("FORMAL_RUN_ID") or None,
+            "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
+            "status":"FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else "INCOMPLETE",
+            "production_prediction_change":False,
+            "production_numerical_change":False,
+            "local_numerical_reuse":False,
+          }
+          pathlib.Path("runtime_out/jra_single_entry_report.json").write_text(
+              json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8"
+          )
+          PY
+
+      - name: Upload JRA single-entry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-jra-single-entry-${{ steps.meta.outputs.execution_id }}-${{ github.run_id }}
+          path: runtime_out/
+          if-no-files-found: warn
+          retention-days: 90
