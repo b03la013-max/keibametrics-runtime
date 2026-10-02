@@ -7,15 +7,17 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-PROFILE = "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261003-R2"
+MULTI_PROFILE = "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-MULTI-20261003"
 
 FAMILY_FALLBACK = {
     "LOCAL": {
+        "profile": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261001-R1",
         "root": "runtime/family_requests",
         "workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
         "primary_root": "runtime/formal_intents",
     },
     "JRA": {
+        "profile": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261003-R2",
         "root": "runtime/requests",
         "workflow": ".github/workflows/km-formal-request-runner.yml",
         "primary_root": "runtime/jra_formal_intents",
@@ -73,7 +75,7 @@ def build_legacy_formal_request(
     out["phase"] = "FORMAL"
     out["execution_mode"] = "ENTRY_TRANSPORT_FALLBACK"
     out["entry_transport_fallback"] = {
-        "profile": PROFILE,
+        "profile": cfg["profile"],
         "family": family,
         "trigger": "PRIMARY_SINGLE_ENTRY_SUBMISSION_FAILED_BEFORE_COMMIT",
         "primary_failure_code": str(primary_failure_code),
@@ -96,7 +98,7 @@ def build_legacy_formal_request(
 def validate_fallback_request(req: Dict[str, Any]) -> Dict[str, Any]:
     meta = req.get("entry_transport_fallback")
     if not isinstance(meta, dict):
-        return {"profile": PROFILE, "status": "NOT_APPLICABLE"}
+        return {"profile": MULTI_PROFILE, "status": "NOT_APPLICABLE"}
 
     family,cfg=_family_cfg(req)
     if str(req.get("execution_phase") or req.get("phase") or "").upper() != "FORMAL":
@@ -115,6 +117,8 @@ def validate_fallback_request(req: Dict[str, Any]) -> Dict[str, Any]:
         raise EntryTransportFallbackError("ENTRY_FALLBACK_STABLE_EXECUTION_ID_REQUIRED")
     if meta.get("durable_source_checkpoint_reuse_required") is not True:
         raise EntryTransportFallbackError("ENTRY_FALLBACK_SOURCE_REUSE_REQUIRED")
+    if str(meta.get("profile") or "")!=cfg["profile"]:
+        raise EntryTransportFallbackError("ENTRY_FALLBACK_PROFILE_MISMATCH")
     if str(meta.get("family") or "")!=family:
         raise EntryTransportFallbackError("ENTRY_FALLBACK_FAMILY_MISMATCH")
     if str(meta.get("fallback_root") or "")!=cfg["root"]:
@@ -128,7 +132,7 @@ def validate_fallback_request(req: Dict[str, Any]) -> Dict[str, Any]:
             f"ENTRY_FALLBACK_SEMANTIC_HASH_MISMATCH:{expected}!={actual}"
         )
     return {
-        "profile": PROFILE,
+        "profile": cfg["profile"],
         "status": "PASS",
         "family": family,
         "execution_id": str(req["execution_id"]),
