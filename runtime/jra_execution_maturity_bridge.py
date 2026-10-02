@@ -4,6 +4,7 @@ import argparse
 import copy
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -38,6 +39,26 @@ def _load(path: str | Path) -> Dict[str,Any]:
 
 def _family(req: Dict[str,Any]) -> str:
     return str(req.get("family_id") or "").upper()
+
+def resolve_current_authority(profile_root: str | Path="profiles") -> str:
+    rows=[]
+    now=datetime.now(timezone.utc)
+    for p in Path(profile_root).glob("KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+        try:
+            x=_load(p)
+            if "CURRENT-AUTHORITY" not in str(x.get("status") or ""):
+                continue
+            raw=str(x.get("effective_at") or "")
+            if not raw:
+                continue
+            dt=datetime.fromisoformat(raw.replace("Z","+00:00")).astimezone(timezone.utc)
+            if dt<=now:
+                rows.append((dt,str(x.get("manifest_id") or "")))
+        except Exception:
+            continue
+    if not rows:
+        raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_CURRENT_AUTHORITY_EMPTY")
+    return max(rows,key=lambda z:(z[0],z[1]))[1]
 
 def _execution_id(intent: Dict[str,Any]) -> str:
     explicit=str(intent.get("execution_id") or "").strip()
@@ -133,6 +154,14 @@ def build_formal_request(
     out=copy.deepcopy(intent)
     out.pop("jra_source",None)
     out["family_id"]="JRA"
+    resolved_authority=resolve_current_authority()
+    declared_authority=str(out.get("current_authority_manifest") or "").strip()
+    if declared_authority and declared_authority!=resolved_authority:
+        raise JRAMaturityBridgeError(
+            "JRA_SINGLE_ENTRY_STALE_CURRENT_AUTHORITY:"
+            +declared_authority+"!="+resolved_authority
+        )
+    out["current_authority_manifest"]=resolved_authority
     out["execution_id"]=_execution_id(intent)
     out["source_execution_id"]=source_execution_id
     out["temporal_mode"]=str(out.get("temporal_mode") or "FORMAL-PRE-RACE")
@@ -178,6 +207,7 @@ def build_formal_request(
         "mec_r3_change":False,
         "capital_policy_change":False,
         "automatic_promotion":False,
+        "resolved_current_authority_manifest":resolved_authority,
     }
     out["formal_semantic_basis_sha256"]=semantic_sha256(out)
     return out
