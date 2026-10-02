@@ -1,0 +1,53 @@
+{
+  "profile_id": "KM-JRA-FORMAL-SINGLE-ENTRY-20261003-R1",
+  "status": "ACTIVE / JRA / SINGLE-ENTRY / RESUMABLE-SOURCE-CHECKPOINT / STATIC-SIGNED-SOURCE-BINDING / SEMANTIC-BASIS / FAIL-CLOSED / NON-NUMERICAL",
+  "effective_at": "2026-10-03T01:30:00+09:00",
+  "maturity_import": "KM-JRA-LOCAL-MATURITY-IMPORT-20261003-R1",
+  "workflow": ".github/workflows/km-jra-formal-single-entry.yml",
+  "bridge": "runtime/jra_execution_maturity_bridge.py",
+  "intent_root": "runtime/jra_formal_intents",
+  "family_scope": [
+    "JRA"
+  ],
+  "sequence": [
+    "JRA_INTENT_RESOLVE",
+    "SOURCE_REQUEST_BUILD",
+    "DURABLE_SOURCE_CHECKPOINT_REUSE_IF_EXACT",
+    "SIGNED_SOURCE_EXECUTE_IF_MISSING",
+    "SOURCE_CHECKPOINT_MATERIALIZE",
+    "STATIC_BIND_TO_EXACT_SIGNED_SOURCE",
+    "FORMAL_SEMANTIC_BASIS_FREEZE",
+    "CANONICAL_JRA_FORMAL_REQUEST_SUBMIT",
+    "CANONICAL_JRA_FORMAL_COMPLETION_VERIFY",
+    "EVIDENCE_REPORT"
+  ],
+  "checkpoint_policy": {
+    "stable_execution_id": true,
+    "source_success_survives_formal_failure": true,
+    "source_phase_reuse": true,
+    "static_signed_source_binding_required": true,
+    "formal_semantic_basis_required": true,
+    "semantic_tamper": "FAIL_CLOSED",
+    "source_basis_change": "FAIL_CLOSED / NEW EXECUTION ID REQUIRED"
+  },
+  "entry_transport_fallback": {
+    "profile": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261003-R2",
+    "fallback_root": "runtime/requests",
+    "fallback_workflow": ".github/workflows/km-formal-request-runner.yml",
+    "same_execution_id_required": true,
+    "durable_source_checkpoint_reuse_required": true,
+    "semantic_hash_required": true,
+    "external_safety_bypass": false
+  },
+  "result_closed_loop": ".github/workflows/km-formal-result-runner.yml",
+  "automatic_result_wait": false,
+  "result_note": "Official result remains a separate verified input; the existing JRA closed loop handles RESULT, Settlement, Learning and Fast Reflection.",
+  "production_freeze": {
+    "prediction_model": "UNCHANGED",
+    "numerical_model": "UNCHANGED",
+    "krs_engine_physics": "UNCHANGED",
+    "mec_r3": "UNCHANGED",
+    "capital_policy": "UNCHANGED",
+    "venue_canons": "UNCHANGED"
+  }
+}
