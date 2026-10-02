@@ -10,6 +10,11 @@ on:
     paths:
       - "runtime/requests/*.json"
   workflow_dispatch:
+    inputs:
+      request_path:
+        description: "Existing JRA Formal request JSON path"
+        required: false
+        type: string
 
 jobs:
   formal-run:
@@ -25,11 +30,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/requests/*.json' | tail -1)"
+          REQ="${{ inputs.request_path }}"
+          if [ -z "$REQ" ]; then
+            REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/requests/*.json' | tail -1)"
+          fi
           if [ -z "$REQ" ]; then
             REQ="$(find runtime/requests -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
           fi
-          test -n "$REQ"
+          case "$REQ" in
+            runtime/requests/*.json) ;;
+            *) echo "Invalid JRA Formal request path: $REQ" >&2; exit 2 ;;
+          esac
+          test -f "$REQ"
           echo "request=$REQ" >> "$GITHUB_OUTPUT"
           CANDIDATE_PARALLEL="$(python -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); print("true" if bool(x.get("candidate_parallel_handoff")) else "false")' "$REQ")"
           echo "candidate_parallel=$CANDIDATE_PARALLEL" >> "$GITHUB_OUTPUT"
