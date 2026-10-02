@@ -3,10 +3,16 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "runtime"))
 
+import formal_execution_orchestrator as o
 from formal_execution_orchestrator import orchestrate
 
 
-def test_single_entry_rejects_source_only_shell_before_external_source(tmp_path):
+def test_single_entry_missing_static_reaches_internal_prediction_owner(monkeypatch, tmp_path):
+    phases=[]
+    monkeypatch.setattr(o,"run_phase",lambda request,phase,**kw: phases.append(phase) or {"phase":phase,"status":"PASS"})
+    def unavailable(intent, **kw):
+        raise o.FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_NOT_REGISTERED")
+    monkeypatch.setattr(o,"execute_prediction_owner",unavailable)
     intent = {
         "family_id": "LOCAL",
         "execution_mode": "AUTO",
@@ -25,8 +31,7 @@ def test_single_entry_rejects_source_only_shell_before_external_source(tmp_path)
         runtime_out=tmp_path / "out",
         tmp_root=tmp_path / "tmp",
     )
-    assert report["status"] == "FAIL_CLOSED"
-    assert report["first_failed_phase"] == "BOOTSTRAP"
-    assert report["first_failed_code"] == "SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED"
-    assert report["first_failed_class"] == "INTENT_COMPLETENESS"
-    assert report["resume_from"] == "INTENT_COMPLETION"
+    assert phases == ["SOURCE"]
+    assert report["status"] == "BLOCKED"
+    assert report["dependency_failure"] == "PRODUCTION_PREDICTION_OWNER_NOT_REGISTERED"
+    assert "SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED" not in str(report)
