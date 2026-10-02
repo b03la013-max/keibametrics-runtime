@@ -19,9 +19,14 @@ on:
         description: "Use protected KeibaMetrics staging Service Account secret for SHADOW only"
         type: boolean
         default: false
+      owner_historical_comparison:
+        description: "C2 Owner behavioral comparison only; historical / NOT OOS"
+        type: boolean
+        default: false
 
 jobs:
   orchestrate:
+    if: ${{ !inputs.owner_historical_comparison }}
     concurrency:
       group: km-formal-${{ inputs.intent_path || github.sha }}
       cancel-in-progress: false
@@ -114,6 +119,7 @@ jobs:
         shell: bash
         env:
           OPENAI_API_KEY: ${{ inputs.candidate_shadow && secrets.OPENAI_API_KEY || '' }}
+          KM_CREDENTIAL_ENVIRONMENT: ${{ inputs.candidate_shadow && 'keibametrics-staging' || '' }}
         run: |
           set +e
           python runtime/formal_execution_orchestrator.py \
@@ -228,3 +234,29 @@ jobs:
           set -euo pipefail
           test "${RC:-2}" = "0"
           test "${RESULT_RC:-2}" = "0"
+
+  owner_behavioral_comparison:
+    if: ${{ inputs.owner_historical_comparison }}
+    runs-on: ubuntu-latest
+    environment: keibametrics-staging
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: NEW C2 Owner / frozen historical behavioral comparison
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          KM_CREDENTIAL_ENVIRONMENT: keibametrics-staging
+        run: |
+          python runtime/openai_prediction_owner_candidate.py \
+            --historical-comparison \
+            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
+            --output runtime_out/owner_behavioral_comparison.json
+      - name: Preserve sanitized Candidate comparison or HOLD
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c2-owner-behavioral-comparison-${{ github.run_id }}
+          path: runtime_out/owner_behavioral_comparison.json
+          if-no-files-found: ignore

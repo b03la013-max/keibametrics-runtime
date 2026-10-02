@@ -882,7 +882,10 @@ def orchestrate(
                         or flags.get("RESULT") not in (True, False)
                         or not _load_checkpoint_json(previous, "result_receipt_envelope.json")):
                     return {"status": "ALREADY_COMPLETE" if completion["complete"] else "FORMAL_INCOMPLETE",
-                            "execution_id": execution_id, "phase": "RESULT", "completion": completion}
+                            "execution_id": execution_id, "phase": "RESULT", "completion": completion,
+                            "prediction_owner_measurement": (measure_prediction_owner_shadow(execution_id,
+                                run_id=run_id, github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
+                                if completion["complete"] and not plan_only else {"status": "NOT-APPLICABLE"})}
                 recovery = previous
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id,
@@ -891,10 +894,14 @@ def orchestrate(
                            runtime_out=runtime_out, tmp_root=tmp_root, resume_result=recovery)
         completion = verify_execution_completion(runtime_out, request, phase="RESULT")
         _write(runtime_out / "lifecycle_completion.json", completion)
+        owner_measurement = (measure_prediction_owner_shadow(execution_id, run_id=run_id,
+                             github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
+                             if completion["complete"] else {"status": "HOLD / PRODUCTION_RESULT_INCOMPLETE"})
         return {"status": "FULL_LIFECYCLE_EXECUTION_PASS" if completion["complete"] else "FORMAL_INCOMPLETE",
                 "execution_id": execution_id, "completion": completion,
                 "execution_class": completion["execution_class"],
-                "phases": [result], "prediction_reexecution": False}
+                "phases": [result], "prediction_reexecution": False,
+                "prediction_owner_measurement": owner_measurement}
 
     mode = str(intent.get("execution_mode") or "AUTO").upper()
     if mode == "ENTRY_TRANSPORT_FALLBACK":
@@ -1066,9 +1073,19 @@ def orchestrate(
 
         check_deadline(intent)
         current_phase = "PREDICTION"
-        if intent.get("openai_prediction_owner_candidate_config"):
+        shadow_intent = intent
+        if (not intent.get("openai_prediction_owner_candidate_config")
+                and os.environ.get("KM_CREDENTIAL_ENVIRONMENT") == "keibametrics-staging"
+                and os.environ.get("GITHUB_ACTIONS") == "true"):
+            # Explicit staging workflow activation owns the Candidate config;
+            # it never mutates the Production intent/semantic SOURCE basis.
+            candidate_path = "research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json"
+            shadow_intent = {**intent, "openai_prediction_owner_candidate_config": {
+                "path": candidate_path,
+                "sha256": hashlib.sha256((ROOT / candidate_path).read_bytes()).hexdigest()}}
+        if shadow_intent.get("openai_prediction_owner_candidate_config"):
             report["prediction_owner_shadow"] = execute_prediction_owner_shadow(
-                intent, run_id=run_id, github_sha=github_sha, tmp_root=tmp_root)
+                shadow_intent, run_id=run_id, github_sha=github_sha, tmp_root=tmp_root)
         if not intent.get("static_prediction"):
             intent = execute_prediction_owner(intent, run_id=run_id, github_sha=github_sha,
                                               tmp_root=tmp_root)
@@ -1162,9 +1179,13 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
         config_spec = intent["openai_prediction_owner_candidate_config"]
         config = json.loads(pinned_text(ROOT, config_spec))
         ensure_clean(config)
+        if config.get("owner_entrypoint"):
+            pinned_text(ROOT, config["owner_entrypoint"])
         pinned_text(ROOT, config["instruction"])
         pinned_text(ROOT, config["venue_canon"])
         pinned_text(ROOT, config["policy"])
+        for spec in config.get("normative_sources", []):
+            pinned_text(ROOT, spec)
         execution_id = derive_execution_id(intent)
         source = resolve_phase(execution_id, "SOURCE")
         binding = _source_binding_from_resolved(source)
@@ -1174,6 +1195,8 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
             candidate = _load_checkpoint_json(existing, "openai_owner_shadow.json")
             lineage = candidate["lineage"]
             if (lineage.get("input_contract_version") != INPUT_CONTRACT_VERSION
+                    or lineage.get("owner_entrypoint_sha256") != hashlib.sha256(
+                        (ROOT / "runtime/openai_prediction_owner_candidate.py").read_bytes()).hexdigest()
                     or lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
                     or lineage["current_authority_sha256"] != digest(authority)):
                 raise ValueError("SHADOW_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
@@ -1201,6 +1224,7 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
                 if static["source_basis_receipt_sha256"] != binding["source_receipt_sha256"]:
                     raise ValueError("SHADOW_BASELINE_SOURCE_MISMATCH")
                 _write(dest / "openai_owner_equivalence.json", compare(candidate, baseline, binding))
+                _write(dest / "openai_owner_legacy_baseline.json", baseline)
             persist_phase(execution_id, "PREDICTION_OWNER_SHADOW", f"{run_id}-openai-shadow",
                           dest, github_sha=github_sha)
         return {"status": candidate["status"], "production_effect": "NONE",
@@ -1210,6 +1234,38 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
         from openai_prediction_owner_candidate import CandidateHold
         code = str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD"
         return {"status": "HOLD", "code": code, "production_effect": "NONE", "promotion": "HOLD"}
+
+
+def measure_prediction_owner_shadow(execution_id, *, run_id, github_sha, runtime_out, tmp_root):
+    """Research-only post-result persistence; never blocks Production closure."""
+    from openai_prediction_owner_candidate import post_result_prediction_utility, CandidateHold
+    try:
+        shadow = resolve_phase(execution_id, "PREDICTION_OWNER_SHADOW")
+        if shadow is None:
+            return {"status": "NOT-APPLICABLE", "production_effect": "NONE"}
+        candidate = _load_checkpoint_json(shadow, "openai_owner_shadow.json")
+        baseline = _load_checkpoint_json(shadow, "openai_owner_legacy_baseline.json")
+        formal = resolve_phase(execution_id, "FORMAL")
+        final = _load_checkpoint_json(formal, "final_receipt_envelope.json")
+        result = _load(runtime_out / "result_receipt_envelope.json")
+        flags = _load(runtime_out / "receipt_verifications.json")
+        report = post_result_prediction_utility(candidate, baseline, candidate["lineage"]["source_binding"],
+                                               final, result, {"verified": flags.get("RESULT") is True},
+                                               expected_execution_id=execution_id)
+        phase = "PREDICTION_OWNER_MEASUREMENT"
+        existing = resolve_phase(execution_id, phase)
+        if existing is not None:
+            previous = _load_checkpoint_json(existing, "openai_owner_prediction_utility.json")
+            if previous == report:
+                return {"status": "ALREADY_MEASURED", "count_increment": 0, "production_effect": "NONE"}
+        dest = tmp_root / execution_id / "openai_owner_measurement_out"
+        _write(dest / "openai_owner_prediction_utility.json", report)
+        persist_phase(execution_id, phase, f"{run_id}-owner-{str(result['receipt_sha256'])[:12]}",
+                      dest, github_sha=github_sha)
+        return {"status": report["status"], "count_increment": 0, "production_effect": "NONE", "promotion": "HOLD"}
+    except Exception as exc:
+        return {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_MEASUREMENT_HOLD",
+                "production_effect": "NONE", "promotion": "HOLD"}
 
 
 def execute_prediction_owner(intent, *, run_id, github_sha, tmp_root):

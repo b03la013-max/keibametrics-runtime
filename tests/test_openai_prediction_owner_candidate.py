@@ -142,12 +142,14 @@ def test_comparison_requires_identical_source_and_never_promotes(sample, tmp_pat
                                       "uncertainty": p["uncertainty"]},
                 **{key: p[key] for key in ("role_registry", "pair_dispositions", "third_dispositions", "venue_prediction_context")}}
     comparison = owner.compare(result, baseline, sample[0]["source_binding"])
-    assert comparison["status"] == "STRUCTURAL_MATCH"
-    assert comparison["production_equivalence"] == "UNPROVEN"
+    assert comparison["status"] == "UNKNOWN"
+    assert comparison["metrics"]["ranking"]["status"] == "MATCH"
+    assert comparison["metrics"]["alternative_winner"]["status"] == "UNKNOWN"
+    assert comparison["production_equivalence"] == "NOT_CLAIMED"
     with pytest.raises(owner.CandidateHold, match="SOURCE_BASIS"):
         owner.compare(result, baseline, {"source": "changed"})
     baseline["static_prediction"]["ranking"] = ["2", "1"]
-    assert owner.compare(result, baseline, sample[0]["source_binding"])["status"] == "SEMANTIC_DIFFERENCE"
+    assert owner.compare(result, baseline, sample[0]["source_binding"])["status"] == "DIFFERENCE"
 
 
 def test_runtime_secret_absent_does_not_create_personal_key_or_leak(monkeypatch):
@@ -242,3 +244,133 @@ def test_projected_input_not_full_authority_or_shadow_source(sample, tmp_path):
     assert result["lineage"]["input_contract_version"] == owner.INPUT_CONTRACT_VERSION
     assert result["lineage"]["current_authority_sha256"] == owner.digest(context["current_authority"])
     assert result["lineage"]["source_sha256"] == owner.digest(context["signed_source"])
+
+
+def test_new_c2_prompt_pins_and_legacy_provenance_terminalization():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    config = json.loads((root/'research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json').read_text())
+    assert config['candidate_id'] == owner.CANDIDATE_ID
+    assert config['production_authorized'] is False
+    assert config['credential_attestation_verified'] is False
+    assert config['credential_environment'] == 'keibametrics-staging'
+    for spec in [config['instruction'],config['policy'],config['venue_canon'],config['maturity_promotion'],*config['normative_sources']]:
+        owner.pinned_text(root,spec)
+    policy=json.loads(owner.pinned_text(root,config['policy']))
+    assert policy['legacy_provenance_is_permanent_merge_gate'] is False
+    audit=json.loads((root/'research/execution/OWNER_REALITY_AUDIT_20261002.json').read_text())
+    assert all(r['classification']=='LEGACY EXTERNAL PREDICTION OWNER / PROVENANCE INCOMPLETE' for r in audit['findings'])
+    assert audit['historical_provenance_terminal']=='UNKNOWN / NOT_FAIL / NOT_PROVEN'
+
+
+def test_live_secret_absent_precedes_metadata_and_no_api(sample,tmp_path,monkeypatch):
+    monkeypatch.delenv('OPENAI_API_KEY',raising=False)
+    sample[1]['project_id']=None
+    with pytest.raises(owner.CandidateHold,match='SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING'):
+        owner.execute(sample[0],sample[1],root=tmp_path,now=sample[4])
+
+
+def test_historical_comparison_cannot_become_forward_oos(sample,tmp_path):
+    context,config,_,call,now=sample
+    context['release_deadline_at']='2029-12-31T23:59:00+00:00'
+    context['execution_class']='HISTORICAL_BEHAVIORAL_COMPARISON'
+    report=owner.execute(context,config,root=tmp_path,call=call,now=now)
+    assert report['status']=='HISTORICAL_COMPARISON_FROZEN'
+    assert report['lineage']['historical_oos_eligible'] is False
+    assert report['lineage']['credential_attestation']['api_authentication']=='NOT_TESTED'
+    assert report['automatic_promotion'] is False
+
+
+@pytest.mark.parametrize('case,code',[('attestation','SERVICE_ACCOUNT_ATTESTATION_REQUIRED'),('environment','STAGING_ENVIRONMENT_REQUIRED'),('identity','SERVICE_ACCOUNT_ID_REQUIRED')])
+def test_real_api_activation_requires_staging_identity(sample,tmp_path,monkeypatch,case,code):
+    monkeypatch.setenv('OPENAI_API_KEY','credential-not-printed')
+    monkeypatch.setenv('GITHUB_ACTIONS','true')
+    monkeypatch.setenv('KM_CREDENTIAL_ENVIRONMENT','keibametrics-staging')
+    config=sample[1]
+    config.update(credential_attestation_verified=True,credential_environment='keibametrics-staging',service_account_id='service-test')
+    if case=='attestation': config['credential_attestation_verified']=False
+    if case=='environment': monkeypatch.setenv('KM_CREDENTIAL_ENVIRONMENT','production')
+    if case=='identity':config['service_account_id']=None
+    with pytest.raises(owner.CandidateHold,match=code):
+        owner.execute(sample[0],config,root=tmp_path,now=sample[4])
+
+
+def test_behavioral_comparison_all_requested_metrics_no_bug_claim(sample,tmp_path):
+    report=run(sample,tmp_path)
+    prediction=sample[2]
+    baseline={'static_prediction':{'ranking':prediction['ranking'],'roles':{'1':['W'],'2':['P2']},'uncertainty':prediction['uncertainty']},
+              **{key:prediction[key] for key in ('pair_dispositions','third_dispositions','venue_prediction_context','unresolved')}}
+    measured=owner.compare(report,baseline,sample[0]['source_binding'])
+    assert set(measured['metrics'])=={'ranking','W','P2','P3','alternative_winner','Pair','Third','uncertainty','unresolved','venue_interpretation'}
+    assert measured['metrics']['ranking']['position_agreement']==1
+    assert measured['metrics']['W']['intersection']==1
+    assert measured['difference_classification']=='NOT_AUTOMATICALLY_A_BUG'
+    assert measured['promotion']=='HOLD'
+
+
+def test_historical_three_races_read_only_frozen_basis_not_result(tmp_path):
+    root=pathlib.Path(__file__).resolve().parents[1]
+    config=json.loads((root/'research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json').read_text())
+    config['project_id']='TEST-ONLY-NOT-A-CREDENTIAL'
+    inputs=[]
+    def call(payload,timeout):
+        data=json.loads(payload['input']); inputs.append(data)
+        ids=[str(r['runner_id']) for r in data['runner_universe']['runners']]
+        p={'ranking':ids,'roles':[{'runner_id':i,'columns':[]} for i in ids],
+           'role_registry':[],'pair_dispositions':[],'third_dispositions':[],
+           'uncertainty':{'level':'UNKNOWN','reasons':['TEST TRANSPORT ONLY']},
+           'alternative_winner':'UNKNOWN','partial_order':[],'ties':[],'unresolved':['TEST TRANSPORT ONLY'],
+           'evidence_conflict':'UNKNOWN','market_conflict':'UNKNOWN',
+           'venue_prediction_context':{'interpretation':'TEST TRANSPORT ONLY','evidence_refs':[]}}
+        return {'id':'resp_test_not_real','model':config['model_identifier'],'status':'completed',
+                'output':[{'content':[{'type':'output_text','text':json.dumps(p)}]}]}
+    report=owner.historical_behavioral_comparison(config,root=root,verify=lambda e:{'verified':True},call=call)
+    assert len(report['comparisons'])==3 and report['count_increment']==0
+    assert report['oos_eligible'] is False
+    for data in inputs:
+        assert 'static_prediction' not in data
+        assert 'official_result' not in data
+        assert 'mec_measurement' not in data['current_authority']['family_scoped_authority']['LOCAL']
+    assert all(r['candidate']['lineage']['credential_attestation']['api_authentication']=='NOT_TESTED' for r in report['comparisons'])
+
+
+def test_post_result_utility_separates_pfs_and_rejects_lineage_or_tamper(sample,tmp_path):
+    context,_,p,_,_=sample
+    context['source_binding']={'execution_id':'A-EXEC','source_receipt_sha256':'source','source_snapshot_sha256':'snapshot'}
+    context['signed_source']['artifact']['active_runner_universe']={'runner_count':3,'runners':[{'runner_id':str(i)} for i in (1,2,3)]}
+    p['ranking']=['1','2','3'];p['roles'].append({'runner_id':'3','columns':[]})
+    candidate=run(sample,tmp_path)
+    baseline={'static_prediction':{'ranking':['2','1','3'],'roles':{'2':['W'],'1':['P2'],'3':['P3']}}}
+    final={'receipt_sha256':'final','receipt':{'race_id':'A'},'artifact':{'source_receipt_sha256':'source','source_snapshot_sha256':'snapshot'}}
+    result={'receipt_sha256':'result','receipt':{'race_id':'A','phase':'RESULT','status':'PASS'},
+            'artifact':{'frozen_refs':{'final_receipt_sha256':'final'},'official_result':{'finish_order':[2,1,3]}}}
+    report=owner.post_result_prediction_utility(candidate,baseline,context['source_binding'],final,result,{'verified':True})
+    assert report['candidate']['Winner_rank']==2 and report['legacy']['Winner_rank']==1
+    assert report['role_changes']['W']['false_promotions']==['1']
+    assert report['role_changes']['W']['false_demotions']==['2']
+    assert report['count_increment']==0 and report['actual_purchase_pfs']=='UNKNOWN'
+    assert report['uncertainty_quality'].startswith('UNKNOWN')
+    with pytest.raises(owner.CandidateHold,match='VERIFICATION_REQUIRED'):
+        owner.post_result_prediction_utility(candidate,baseline,context['source_binding'],final,result,{'verified':False})
+    candidate['prediction']['ranking']=['3','2','1']
+    with pytest.raises(owner.CandidateHold,match='RACE_OR_PREDICTION_MISMATCH'):
+        owner.post_result_prediction_utility(candidate,baseline,context['source_binding'],final,result,{'verified':True})
+
+
+def test_owner_measurement_failure_does_not_block_production(tmp_path,monkeypatch):
+    monkeypatch.setattr(orchestrator,'resolve_phase',lambda *a,**k:{'bad':'checkpoint'})
+    report=orchestrator.measure_prediction_owner_shadow('A',run_id='test',github_sha='test',runtime_out=tmp_path,tmp_root=tmp_path)
+    assert report['status']=='HOLD' and report['production_effect']=='NONE'
+
+
+def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
+    import urllib.error
+    monkeypatch.setenv('OPENAI_API_KEY','test-credential-do-not-print')
+    observed=[]
+    def forbidden(req,timeout):
+        observed.append(req.get_header('Openai-project'))
+        raise urllib.error.HTTPError(req.full_url,401,'SECRET BODY MUST NOT APPEAR',{},None)
+    monkeypatch.setattr(owner.urllib.request,'urlopen',forbidden)
+    with pytest.raises(owner.CandidateHold) as exc:
+        owner.responses_call({},timeout=1,project_id='proj-test')
+    assert str(exc.value)=='OPENAI_API_AUTHENTICATION_HOLD'
+    assert observed==['proj-test']
