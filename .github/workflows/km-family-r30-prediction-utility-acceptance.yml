@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20260927_R30.json"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_*.json"
       - "profiles/family_prediction_utility_contract_20260927_R1.json"
       - "runtime/family_prediction_utility.py"
       - "runtime/source_candidate_oos_status.json"
@@ -112,7 +112,20 @@ jobs:
                   pass
           assert candidates
           resolved=max(candidates,key=lambda z:(z[0],z[1]))
-          assert resolved[1]==ca["manifest_id"], resolved
+          resolved_authority=load(resolved[2])
+          assert resolved_authority["common_family_components"]["prediction_utility_contract"]==contract["profile_id"], (
+              "CURRENT_SUCCESSOR_DROPPED_R30_PREDICTION_UTILITY_CONTRACT:"
+              +str(resolved_authority.get("manifest_id"))
+          )
+          assert resolved_authority["common_family_components"]["prediction_utility_contract_profile"]=="profiles/family_prediction_utility_contract_20260927_R1.json"
+          # R30 is the origin contract. Successor Current Authorities may supersede
+          # R30 operationally but must continue to preserve its Prediction Utility
+          # contract and numerical freeze semantics.
+          successor_supersession=resolved_authority.get("supersession_declaration") or {}
+          if "production_numerical_change" in successor_supersession:
+              assert successor_supersession["production_numerical_change"] is False
+          if "automatic_promotion" in successor_supersession:
+              assert successor_supersession["automatic_promotion"] is False
 
           formal=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
           forward=Path(".github/workflows/km-jra-source-candidate-forward-oos.yml").read_text(encoding="utf-8")
@@ -141,7 +154,9 @@ jobs:
           out={
             "profile":"KM-FAMILY-R30-PREDICTION-UTILITY-AUTHORITY-ACCEPTANCE-20260927",
             "status":"PASS",
-            "current_authority":ca["manifest_id"],
+            "r30_origin_authority":ca["manifest_id"],
+            "current_authority":resolved_authority["manifest_id"],
+            "authority_semantics":"R30_CONTRACT_PRESERVED_UNDER_CURRENT_SUCCESSOR",
             "prediction_utility_contract":contract["profile_id"],
             "prediction_utility_snapshot_sha256":snapshot["sha256"],
             "source_candidate_oos_eligible":candidate["eligible_race_count"],
