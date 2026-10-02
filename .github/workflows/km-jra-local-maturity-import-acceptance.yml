@@ -15,6 +15,7 @@ on:
       - "tests/test_entry_transport_fallback.py"
       - "tests/test_race_day_fast_path.py"
       - ".github/workflows/km-jra-formal-single-entry.yml"
+      - ".github/workflows/km-jra-source-first-runner.yml"
       - ".github/workflows/km-formal-request-runner.yml"
       - ".github/workflows/km-formal-result-runner.yml"
       - "profiles/jra_local_maturity_import_20261003_R1.json"
@@ -67,7 +68,7 @@ jobs:
 
       - name: Lint JRA execution workflows
         run: |
-          ./actionlint -color             .github/workflows/km-jra-formal-single-entry.yml             .github/workflows/km-formal-request-runner.yml             .github/workflows/km-formal-result-runner.yml             .github/workflows/km-jra-local-maturity-import-acceptance.yml
+          ./actionlint -color             .github/workflows/km-jra-formal-single-entry.yml             .github/workflows/km-jra-source-first-runner.yml             .github/workflows/km-formal-request-runner.yml             .github/workflows/km-formal-result-runner.yml             .github/workflows/km-jra-local-maturity-import-acceptance.yml
 
       - name: Verify R37 authority, LOCAL isolation and migration boundaries
         run: |
