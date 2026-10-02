@@ -201,9 +201,21 @@ jobs:
           for forbidden in [
               "local_evidence_to_base_production",
               "local_krs_input_builder_production",
-              "KM-LOCAL-PHYSICAL-RUNTIME"
+              "KM-LOCAL-PHYSICAL-RUNTIME",
+              "-RETRY-"
           ]:
               assert forbidden not in single_wf,forbidden
+          assert "gh workflow run km-jra-source-first-runner.yml" in single_wf
+          assert "gh workflow run km-formal-request-runner.yml" in single_wf
+          assert "SOURCE_REDISPATCH" in single_wf
+          assert "FORMAL_REDISPATCH" in single_wf
+
+          source_wf=Path(".github/workflows/km-jra-source-first-runner.yml").read_text(encoding="utf-8")
+          formal_wf=Path(".github/workflows/km-formal-request-runner.yml").read_text(encoding="utf-8")
+          assert "run-name: JRA SOURCE" in source_wf
+          assert "request_path:" in source_wf
+          assert "run-name: JRA Formal" in formal_wf
+          assert "request_path:" in formal_wf
 
           s=r37["supersession_declaration"]
           for k in [
