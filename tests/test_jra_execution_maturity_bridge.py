@@ -25,7 +25,6 @@ def intent():
         "prediction_cutoff":"2099-01-01T10:00:00+09:00",
         "scheduled_post_at":"2099-01-01T10:15:00+09:00",
         "external_dispatch_deadline_at":"2099-01-01T10:08:00+09:00",
-        "current_authority_manifest":"KM-FAMILY-CURRENT-AUTHORITY-TEST",
         "jra_source":{"jra_meeting_key":"TESTMEETING"},
         "run_count":5000,
         "seed":2099010101,
@@ -73,6 +72,7 @@ def test_build_formal_binds_static_to_signed_source_and_semantic_basis():
     assert static["source_basis_snapshot_sha256"]=="b"*64
     assert static["source_checkpoint_manifest_sha256"]==q["source_checkpoint_manifest"]["sha256"]
     assert q["source_execution_id"]==intent()["execution_id"]
+    assert str(q["current_authority_manifest"]).startswith("KM-FAMILY-CURRENT-AUTHORITY-")
     assert q["formal_semantic_basis_sha256"]
     assert q["jra_maturity_bridge"]["production_prediction_change"] is False
     assert q["jra_maturity_bridge"]["production_numerical_change"] is False
@@ -110,3 +110,9 @@ def test_jra_entry_fallback_requires_signed_source_reference():
     q["phase"]="FORMAL"
     with pytest.raises(EntryTransportFallbackError,match="JRA_SOURCE_EXECUTION_ID_REQUIRED"):
         build_legacy_formal_request(q)
+
+def test_build_formal_rejects_stale_declared_authority():
+    q=intent()
+    q["current_authority_manifest"]="KM-FAMILY-CURRENT-AUTHORITY-20000101-R0"
+    with pytest.raises(JRAMaturityBridgeError,match="STALE_CURRENT_AUTHORITY"):
+        build_formal_request(q,envelope())
