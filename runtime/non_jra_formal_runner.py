@@ -45,6 +45,7 @@ fast_path_runtime_report={
     "materialization":None,
     "fallback":None,
 }
+receipt_verifications={}
 stage_manifest=[]
 def stage(name,**kw):
     stage_manifest.append({"stage":name,"timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),**kw})
@@ -120,6 +121,8 @@ def call(path,payload,timeout=600):
 def verify_envelope(env,label):
     vc,v=call("/verify",env,60)
     assert vc<300 and v.get("valid") is True,(label,vc,v)
+    receipt_verifications[label]=True
+    persist("receipt_verifications.json",receipt_verifications)
     return env.get("receipt_sha256")
 
 def acquire_verified_source(req, rid):
@@ -500,6 +503,14 @@ if evidence_acquisition_ledger.get("full_terminalization") is not True:
 
 source_receipt_sha=source.get("receipt_sha256")
 source_artifact=source.get("artifact") or {}
+receipt_verifications["SOURCE"]=True  # verified by source /verify above
+persist("receipt_verifications.json",receipt_verifications)
+from family_authority_guard import validate_request_context, verify_execution_completion
+context=validate_request_context(req)
+context.update({"execution_id":execution_id,"race_id":rid,"prediction_cutoff":req.get("prediction_cutoff")})
+persist("lifecycle_context.json",context)
+if isinstance(req.get("venue_prediction_context"),dict) and req["venue_prediction_context"]:
+    persist("venue_prediction_context.json",req["venue_prediction_context"])
 stage("SIGNED_SOURCE_RECEIPT",
       receipt_sha256=source_receipt_sha,
       source_snapshot_sha256=source_artifact.get("source_snapshot_sha256"),
@@ -975,6 +986,7 @@ stage("NUMERICAL_MATERIALIZATION",
 
 req=build_local_provenance(req)
 assert req.get("index_provenance_hash"),"LOCAL_INDEX_PROVENANCE_HASH_MISSING"
+persist("index_provenance_manifest.json",req.get("index_provenance_ledger") or {})
 stage("INDEX_PROVENANCE",index_provenance_hash=req["index_provenance_hash"],
       row_count=len((req.get("index_provenance_ledger") or {}).get("rows") or []))
 
@@ -1001,6 +1013,10 @@ if req.get("full_numerical_calculation") is not True and not isinstance(req.get(
 
 req=build_local_krs(req)
 assert isinstance(req.get("krs_input_data"),dict),"LOCAL_KRS_INPUT_MISSING"
+persist("static_prediction_freeze.json",{
+    "static_prediction":req["static_prediction"],"static_prediction_frozen":req.get("static_prediction_frozen"),
+    "source_receipt_sha256":source_receipt_sha,"execution_id":execution_id,
+    "race_id":rid,"prediction_cutoff":req.get("prediction_cutoff")})
 stage("STATIC_FREEZE",static_prediction_sha256=sha_obj(req["static_prediction"]))
 stage("LOCAL_KRS_INPUT",local_krs_input_sha256=req.get("local_krs_input_sha256"),
       bridge_id=req.get("local_krs_bridge_id"))
@@ -1273,6 +1289,16 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+persist("canonical_ticket.json",{
+    "finalized":True,"no_bet":no_bet,"total_investment":total,"tickets":tickets,
+    "frozen_at":final_freeze,"execution_id":execution_id,"race_id":rid})
+if req.get("mandatory_lifecycle_completion_required") is True:
+    gate=verify_execution_completion(pathlib.Path("runtime_out"),req,before_final=True)
+    persist("mandatory_stage_manifest.json",gate)
+    if gate["complete"] is not True:
+        fail_closed("MANDATORY_STAGE_INCOMPLETE_BEFORE_FINAL",gate)
+    trace["mandatory_stage_manifest_sha256"]=sha_obj(gate)
+
 final_payload={
   "family_id":"LOCAL","race_id":rid,
   "source_receipt":source,
@@ -1298,6 +1324,17 @@ if fc>=300 or (fin.get("receipt") or {}).get("status")!="PASS":
     fail_closed("FINAL_NOT_PASS",{"http":fc,"final":fin})
 final_sha=verify_envelope(fin,"FINAL")
 deadline_guard("AFTER_FINAL")
+final_time=parse_dt((fin.get("receipt") or {}).get("timestamp")).astimezone(datetime.timezone.utc)
+pre_post=bool(scheduled and final_time<parse_dt(scheduled).astimezone(datetime.timezone.utc))
+persist("final_before_post_verification.json",{
+    "verified":pre_post,"execution_id":execution_id,"race_id":rid,
+    "final_receipt_sha256":final_sha,"final_timestamp":final_time.isoformat(),
+    "scheduled_post_at":scheduled,"temporal_mode":temporal_mode})
+if req.get("mandatory_lifecycle_completion_required") is True:
+    gate=verify_execution_completion(pathlib.Path("runtime_out"),req)
+    persist("lifecycle_completion.json",gate)
+    if gate["complete"] is not True:
+        fail_closed("MANDATORY_STAGE_INCOMPLETE_AFTER_FINAL",gate)
 
 # Phase B.1/B.2: optional forward research AFTER verified Production FINAL.
 # Failure is diagnostic only; Production tickets and release are immutable.
