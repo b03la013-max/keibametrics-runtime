@@ -251,7 +251,12 @@ def test_new_c2_prompt_pins_and_legacy_provenance_terminalization():
     config = json.loads((root/'research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json').read_text())
     assert config['candidate_id'] == owner.CANDIDATE_ID
     assert config['production_authorized'] is False
-    assert config['credential_attestation_verified'] is False
+    assert isinstance(config['credential_attestation_verified'], bool)
+    if config['credential_attestation_verified']:
+        assert config['project_id'] and config['service_account_id']
+        assert config['credential_owner_type'] == 'service_account'
+    assert config['automatic_promotion'] is False
+    assert config['production_effect'] == 'NONE'
     assert config['credential_environment'] == 'keibametrics-staging'
     for spec in [config['instruction'],config['policy'],config['venue_canon'],config['maturity_promotion'],*config['normative_sources']]:
         owner.pinned_text(root,spec)
