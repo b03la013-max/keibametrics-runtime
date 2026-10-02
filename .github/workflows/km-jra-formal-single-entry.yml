@@ -145,7 +145,8 @@ jobs:
         run: |
           set -euo pipefail
           RUN_ID=""
-          for i in $(seq 1 80); do
+          for attempt in $(seq 1 80); do
+            echo "Waiting for SOURCE run (attempt $attempt)" >/dev/null
             RUN_ID="$(gh run list               --workflow km-jra-source-first-runner.yml               --commit "$SOURCE_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
             [ -n "$RUN_ID" ] && break
             sleep 3
@@ -173,7 +174,6 @@ jobs:
         run: |
           set -euo pipefail
           test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
-          SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
           mkdir -p runtime_out
           python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
@@ -223,7 +223,8 @@ jobs:
         run: |
           set -euo pipefail
           RUN_ID=""
-          for i in $(seq 1 80); do
+          for attempt in $(seq 1 80); do
+            echo "Waiting for FORMAL run (attempt $attempt)" >/dev/null
             RUN_ID="$(gh run list               --workflow km-formal-request-runner.yml               --commit "$FORMAL_SHA"               --json databaseId,status,conclusion               --limit 1               --jq '.[0].databaseId // empty')"
             [ -n "$RUN_ID" ] && break
             sleep 3
