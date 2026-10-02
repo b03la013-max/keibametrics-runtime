@@ -149,16 +149,11 @@ jobs:
           set -euo pipefail
           RUN_ID=""
           if [ "$SOURCE_REDISPATCH" = "true" ]; then
-            DISPATCHED_AT="$(date -u +%s)"
             gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"
             RUN_TITLE="JRA SOURCE $SOURCE_REQUEST_PATH"
             for attempt in $(seq 1 80); do
               echo "Waiting for redispatched SOURCE run (attempt $attempt)" >/dev/null
-              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,createdAt | RUN_TITLE="$RUN_TITLE" DISPATCHED_AT="$DISPATCHED_AT" python -c 'import datetime,json,os,sys; rows=json.load(sys.stdin); cutoff=int(os.environ["DISPATCHED_AT"])-5; out="";
-for x in rows:
- t=x.get("createdAt") or ""; ts=int(datetime.datetime.fromisoformat(t.replace("Z","+00:00")).timestamp()) if t else 0
- if x.get("displayTitle")==os.environ["RUN_TITLE"] and ts>=cutoff: out=str(x.get("databaseId") or ""); break
-print(out)')"
+              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle | jq -r --arg title "$RUN_TITLE" '[.[] | select(.displayTitle==$title)][0].databaseId // empty')"
               [ -n "$RUN_ID" ] && break
               sleep 3
             done
@@ -246,16 +241,11 @@ print(out)')"
           set -euo pipefail
           RUN_ID=""
           if [ "$FORMAL_REDISPATCH" = "true" ]; then
-            DISPATCHED_AT="$(date -u +%s)"
             gh workflow run km-formal-request-runner.yml --ref main -f request_path="$FORMAL_REQUEST_PATH"
             RUN_TITLE="JRA Formal $FORMAL_REQUEST_PATH"
             for attempt in $(seq 1 80); do
               echo "Waiting for redispatched FORMAL run (attempt $attempt)" >/dev/null
-              RUN_ID="$(gh run list --workflow km-formal-request-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,createdAt | RUN_TITLE="$RUN_TITLE" DISPATCHED_AT="$DISPATCHED_AT" python -c 'import datetime,json,os,sys; rows=json.load(sys.stdin); cutoff=int(os.environ["DISPATCHED_AT"])-5; out="";
-for x in rows:
- t=x.get("createdAt") or ""; ts=int(datetime.datetime.fromisoformat(t.replace("Z","+00:00")).timestamp()) if t else 0
- if x.get("displayTitle")==os.environ["RUN_TITLE"] and ts>=cutoff: out=str(x.get("databaseId") or ""); break
-print(out)')"
+              RUN_ID="$(gh run list --workflow km-formal-request-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle | jq -r --arg title "$RUN_TITLE" '[.[] | select(.displayTitle==$title)][0].databaseId // empty')"
               [ -n "$RUN_ID" ] && break
               sleep 3
             done
