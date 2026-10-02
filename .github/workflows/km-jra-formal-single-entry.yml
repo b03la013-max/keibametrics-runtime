@@ -114,9 +114,11 @@ jobs:
               echo "Existing SOURCE request differs: $TARGET" >&2
               exit 2
             }
-            echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
-            echo "redispatch=true" >> "$GITHUB_OUTPUT"
-            echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            {
+              echo "request_path=$TARGET"
+              echo "redispatch=true"
+              echo "source_sha=$(git rev-parse HEAD)"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           cp runtime_out/jra_single_entry_source_request.json "$TARGET"
@@ -126,9 +128,11 @@ jobs:
           git commit -m "execution: JRA single-entry SOURCE $EXECUTION_ID"
           for attempt in 1 2 3 4 5; do
             if git pull --rebase origin main && git push origin HEAD:main; then
-              echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
-              echo "redispatch=false" >> "$GITHUB_OUTPUT"
-              echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              {
+                echo "request_path=$TARGET"
+                echo "redispatch=false"
+                echo "source_sha=$(git rev-parse HEAD)"
+              } >> "$GITHUB_OUTPUT"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
@@ -207,9 +211,11 @@ jobs:
               echo "Existing FORMAL request differs: $TARGET" >&2
               exit 2
             }
-            echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
-            echo "redispatch=true" >> "$GITHUB_OUTPUT"
-            echo "formal_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            {
+              echo "request_path=$TARGET"
+              echo "redispatch=true"
+              echo "formal_sha=$(git rev-parse HEAD)"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           cp runtime_out/jra_single_entry_formal_request.json "$TARGET"
@@ -219,9 +225,11 @@ jobs:
           git commit -m "execution: JRA single-entry FORMAL $EXECUTION_ID"
           for attempt in 1 2 3 4 5; do
             if git pull --rebase origin main && git push origin HEAD:main; then
-              echo "request_path=$TARGET" >> "$GITHUB_OUTPUT"
-              echo "redispatch=false" >> "$GITHUB_OUTPUT"
-              echo "formal_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              {
+                echo "request_path=$TARGET"
+                echo "redispatch=false"
+                echo "formal_sha=$(git rev-parse HEAD)"
+              } >> "$GITHUB_OUTPUT"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
