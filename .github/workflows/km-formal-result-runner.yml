@@ -45,6 +45,7 @@ jobs:
           from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
           from pfs_grand_review import write_report as write_pfs_grand_review
           from family_prediction_utility import write_snapshot as write_family_prediction_utility_snapshot
+          from race_day_fast_reflection import build_fast_reflection
           from jra_source_candidate_oos import evaluate_result as evaluate_source_candidate_result
           from jra_source_candidate_promotion_gate import bind_result as bind_source_candidate_result, evaluate as evaluate_source_candidate_gate
           BASE="https://quorumprobe-production.up.railway.app"
@@ -88,6 +89,7 @@ jobs:
           review=None
           learning=None
           oos=None
+          fast_reflection=None
 
           final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
           if not candidate_only:
@@ -110,6 +112,13 @@ jobs:
               review=build_post_result_review(p,final_artifact)
               learning=build_learning_state(review)
               oos=build_oos_measurement(review,final_artifact,p)
+              fast_reflection=build_fast_reflection({
+                  "race_id":p["race_id"],
+                  "settlement":p.get("settlement") or {},
+                  "automatic_post_result_review":review,
+                  "failure_localization":review.get("failure_localization") or {},
+                  "learning_event":learning,
+              },race_id=p["race_id"])
 
           # Source-derived Candidate closed loop. This branch is independent
           # of Production FINAL availability and uses only the immutable
@@ -181,12 +190,15 @@ jobs:
               os.makedirs("runtime/reviews_auto",exist_ok=True)
               os.makedirs("runtime/learning_states",exist_ok=True)
               os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
+              os.makedirs("runtime/jra_fast_reflections",exist_ok=True)
               with open(os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json"),"w",encoding="utf-8") as fh:
                   json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              with open(os.path.join("runtime","jra_fast_reflections",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                  json.dump(fast_reflection,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
               measurements=[]
               for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
@@ -255,7 +267,9 @@ jobs:
             ),
             "family_prediction_utility_contract":family_utility.get("contract_id"),
             "family_prediction_utility_status":family_utility.get("status"),
-            "family_prediction_utility_sha256":family_utility.get("sha256")
+            "family_prediction_utility_sha256":family_utility.get("sha256"),
+            "race_day_fast_reflection_sha256":fast_reflection.get("sha256") if fast_reflection else None,
+            "race_day_first_material_failure":fast_reflection.get("first_material_failure") if fast_reflection else None
           }
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
@@ -267,6 +281,7 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json runtime/mec_r4_oos_status.json
+          if [ -d runtime/jra_fast_reflections ]; then git add runtime/jra_fast_reflections/*.json 2>/dev/null || true; fi
           if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
           if [ -f runtime/source_candidate_oos_status.json ]; then git add runtime/source_candidate_oos_status.json; fi
           if [ -f runtime/pfs_grand_review/current.json ]; then git add runtime/pfs_grand_review/current.json; fi
