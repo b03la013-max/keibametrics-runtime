@@ -13,6 +13,7 @@ NONSEMANTIC_KEYS = {
     "execution_attempt","retry_reason","retry_repair_sha","execution_mode",
     "single_entry","execution_phase","phase","jra_single_entry",
     "jra_maturity_bridge","entry_transport_fallback","transport_metadata",
+    "formal_semantic_basis_sha256",
 }
 
 SOURCE_REQUIRED = (
