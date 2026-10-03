@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, json, pathlib
 
-PROFILE="KM-FAMILY-CAPITAL-COMPATIBILITY-v1.1-20261003"
+PROFILE="KM-FAMILY-CAPITAL-COMPATIBILITY-v1.0-20260921"
 DEFAULT_PROFILE_ID="KM-FAMILY-USER-CAPITAL-DEFAULT-20261003-R1"
 DEFAULT_PROFILE_PATH=pathlib.Path(__file__).resolve().parents[1] / "profiles" / "family_user_capital_default_20261003_R1.json"
 
