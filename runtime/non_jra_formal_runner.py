@@ -12,6 +12,7 @@ from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID 
 from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
 from formal_oos_policy import request_oos_policy
+from capital_policy import load_family_default_capital_policy
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -21,6 +22,11 @@ def parse_dt(s):
 
 with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
     raw_req=json.load(f)
+
+# Family-wide user operating preference: inject the shared race-budget default
+# only when the request did not explicitly provide a capital policy.
+if raw_req.get("capital_policy") is None:
+    raw_req["capital_policy"]=load_family_default_capital_policy()
 
 fam=str(raw_req.get("family_id") or "").upper()
 assert fam in {"LOCAL","BAN"}, f"NON_JRA_BRIDGE_FAMILY_INVALID:{fam}"
