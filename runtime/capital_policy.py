@@ -11,7 +11,7 @@ class CapitalPolicyError(ValueError):
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
-def _load_family_default()->dict:
+def load_family_default_capital_policy()->dict:
     try:
         obj=json.loads(DEFAULT_PROFILE_PATH.read_text(encoding="utf-8"))
     except Exception as e:
@@ -31,7 +31,7 @@ def resolve_capital_policy(request:dict, mec:dict)->dict:
     p=request.get("capital_policy")
     budget_source="REQUEST_EXPLICIT"
     if p is None:
-        p=_load_family_default()
+        p=load_family_default_capital_policy()
         budget_source="FAMILY_USER_DEFAULT"
     if not isinstance(p,dict):
         raise CapitalPolicyError("CAPITAL_POLICY_NOT_OBJECT")
