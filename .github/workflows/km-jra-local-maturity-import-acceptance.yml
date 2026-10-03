@@ -12,6 +12,7 @@ on:
       - "runtime/entry_transport_fallback.py"
       - "runtime/race_day_fast_reflection.py"
       - "tests/test_jra_execution_maturity_bridge.py"
+      - "tests/test_jra_single_entry_exact_gap.py"
       - "tests/test_entry_transport_fallback.py"
       - "tests/test_race_day_fast_path.py"
       - ".github/workflows/km-jra-formal-single-entry.yml"
@@ -54,7 +55,7 @@ jobs:
 
       - name: Install test and workflow lint dependencies
         run: |
-          python -m pip install --disable-pip-version-check -q pytest
+          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
 
       - name: Compile imported execution mechanisms
@@ -64,7 +65,35 @@ jobs:
 
       - name: Cross-family regression and JRA bridge tests
         run: |
-          python -m pytest -q             tests/test_jra_execution_maturity_bridge.py             tests/test_entry_transport_fallback.py             tests/test_race_day_fast_path.py
+          python -m pytest -q tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
+
+      - name: JRA lifecycle and LOCAL non-regression
+        run: |
+          python -m pytest -q \
+            tests/test_jra_source_runtime.py \
+            tests/test_jra_source_to_evidence_features.py \
+            tests/test_jra_supplemental_evidence_pack.py \
+            tests/test_jra_supplemental_production_source_gate.py \
+            tests/test_jra_supplemental_full_numerical_closure.py \
+            tests/test_jra_production_fullnumerical_to_krs.py \
+            tests/test_jra_production_authority_boundary.py \
+            tests/test_jra_index_provenance_trace.py \
+            tests/test_correctness_closure.py \
+            tests/test_minimum_efficient_coverage.py \
+            tests/test_mec_r3_precompression_tail_floor.py \
+            tests/test_capital_policy.py \
+            tests/test_execution_store.py \
+            tests/test_execution_gateway.py \
+            tests/test_family_authority_guard.py \
+            tests/test_formal_execution_orchestrator.py \
+            tests/test_formal_failure_diagnostics.py \
+            tests/test_recovery_result_entry.py \
+            tests/test_pfs_grand_review.py \
+            tests/test_family_prediction_utility.py \
+            tests/test_krs_prediction_utility.py \
+            tests/test_family_runtime_contract.py \
+            tests/test_local_production_numerical_closure.py \
+            tests/test_local_numerical_authority_gate.py
 
       - name: Lint JRA execution workflows
         run: |
