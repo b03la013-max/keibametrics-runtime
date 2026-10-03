@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       request_path:
-        description: "Existing JRA Candidate request JSON path"
+        description: "Explicit JRA Candidate Parallel request JSON path"
         required: false
         type: string
 
@@ -39,7 +39,7 @@ jobs:
             REQ="$(find runtime/requests -maxdepth 1 -type f -name '*.json' | sort | tail -1)"
           fi
           case "$REQ" in
-            runtime/requests/*.json) ;;
+            runtime/requests/*.json|runtime/jra_candidate_requests/*.json) ;;
             *) echo "Invalid JRA Candidate request path: $REQ" >&2; exit 2 ;;
           esac
           test -f "$REQ"
