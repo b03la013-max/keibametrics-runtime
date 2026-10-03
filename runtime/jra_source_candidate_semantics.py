@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Any, Dict
 
-PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-SEMANTICS-v0.1-20260926"
+PROFILE="KM-JRA-SOURCE-DERIVED-CANDIDATE-SEMANTICS-v0.2-20261003-WIDTH-BALANCED"
 ACTIVE={"CORE","PROTECTED","CONDITIONAL","RESIDUAL"}
 
 def _sha(x:Any)->str:
@@ -21,11 +21,22 @@ def build_candidate_semantics(request:Dict[str,Any])->Dict[str,Any]:
         raise ValueError("CANDIDATE_RUNNERS_INSUFFICIENT")
     ordered=sorted(runners,key=lambda r:(-_val(r,"ZAI_WIN"),int(r["runner_id"])))
     ids=[str(r["runner_id"]) for r in ordered]
-    w_ids=ids[:min(2,len(ids))]
+    # JRA width-balanced Candidate policy.
+    # The former fixed W2/P2-4/P3-6 topology converged near 23 tickets / 2,300 yen
+    # regardless of field size and over-compressed plausible Role alternatives.
+    # For normal fields, preserve a broader but bounded semantic universe comparable
+    # to LOCAL presentation density: W3 / P2-6 / P3-8. MEC still performs the
+    # actual ticket compression and the family hard budget (10,000 yen) remains the
+    # final cap. Small fields are naturally bounded by runner count; no artificial
+    # budget filling is allowed.
+    w_width=min(3,len(ids))
+    p2_width=min(6,len(ids))
+    p3_width=min(8,len(ids))
+    w_ids=ids[:w_width]
     p2_order=[str(r["runner_id"]) for r in sorted(runners,key=lambda r:(-_val(r,"ZAI_PLACE"),int(r["runner_id"])))]
-    p2_ids=p2_order[:min(4,len(p2_order))]
+    p2_ids=p2_order[:p2_width]
     p3_order=[str(r["runner_id"]) for r in sorted(runners,key=lambda r:(-_val(r,"T3I"),int(r["runner_id"])))]
-    p3_ids=p3_order[:min(6,len(p3_order))]
+    p3_ids=p3_order[:p3_width]
 
     role_registry=[]
     roles={rid:[] for rid in ids}
@@ -52,10 +63,11 @@ def build_candidate_semantics(request:Dict[str,Any])->Dict[str,Any]:
     for h in w_ids:
         seconds=[s for s in p2_ids if s!=h]
         seconds=sorted(seconds,key=lambda s:(-(_val(by[h],"ZAI_WIN")+_val(by[s],"ZAI_PLACE")),int(s)))
+        pair_purchase_width=min(3,len(seconds))
         for i,s in enumerate(seconds):
             pair.append({
                 "head":h,"second":s,
-                "status":"PURCHASE" if i<2 else "PROTECT",
+                "status":"PURCHASE" if i<pair_purchase_width else "PROTECT",
                 "reason":f"CANDIDATE_PAIR_SCORE_RANK_{i+1}",
                 "authority":PROFILE,"production_authority":False,
             })
@@ -103,6 +115,17 @@ def build_candidate_semantics(request:Dict[str,Any])->Dict[str,Any]:
         "role_registry_count":len(role_registry),
         "pair_count":len(pair),
         "third_count":len(third),
+        "width_policy":{
+            "policy_id":"KM-JRA-CANDIDATE-WIDTH-BALANCED-20261003-R1",
+            "w_width":len(w_ids),
+            "p2_width":len(p2_ids),
+            "p3_width":len(p3_ids),
+            "pair_purchase_per_head":3,
+            "target_capital_band_yen":[5000,10000],
+            "target_is_soft":True,
+            "budget_fill_forbidden":True,
+            "note":"Semantic width is broadened before MEC; tickets/stakes are never added solely to consume budget."
+        },
         "production_authority":False,
     }
     req["candidate_semantic_freeze"]["sha256"]=_sha(req["candidate_semantic_freeze"])
