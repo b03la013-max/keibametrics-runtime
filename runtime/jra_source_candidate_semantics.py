@@ -87,7 +87,13 @@ def build_candidate_semantics(request:Dict[str,Any])->Dict[str,Any]:
     req["orientation_exclusions"]=[]
     req["head_nonselection_reasons"]={}
     req["available_bet_types"]=["EXACTA","TRIO","TRIFECTA"]
-    req["capital_policy"]=copy.deepcopy(req.get("capital_policy") or {"mode":"RECOMMENDATION_ONLY"})
+    # Preserve an explicit race-level capital override only.
+    # If absent, leave capital_policy unset so runtime/capital_policy.py
+    # resolves the active family-wide user default (10,000-yen hard ceiling).
+    if "capital_policy" in req and req.get("capital_policy") is not None:
+        req["capital_policy"]=copy.deepcopy(req["capital_policy"])
+    else:
+        req.pop("capital_policy",None)
     req["candidate_semantic_freeze"]={
         "profile":PROFILE,
         "ranking":ids,
