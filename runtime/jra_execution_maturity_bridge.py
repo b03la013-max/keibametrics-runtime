@@ -106,11 +106,16 @@ def build_source_request(intent: Dict[str,Any]) -> Dict[str,Any]:
             intent.get("external_dispatch_deadline_at")
             or intent.get("release_deadline_at")
         ),
-        "require_jra_race_card_detail":bool(cfg.get("require_jra_race_card_detail",True)),
-        "require_jra_horse_history":bool(cfg.get("require_jra_horse_history",True)),
-        "require_jra_person_stats":bool(cfg.get("require_jra_person_stats",True)),
-        "require_registered_common_workout":bool(cfg.get("require_registered_common_workout",True)),
-        "require_jma_weather":bool(cfg.get("require_jma_weather",True)),
+        # Current Source Manifest formal core is the official runner universe.
+        # These enrichments are still attempted by the Source Runtime, but are
+        # optional by default so an unavailable fact remains UNKNOWN and flows
+        # into Source→Feature→Index Exact Gap instead of blocking Signed SOURCE.
+        # Callers may explicitly set any require_* flag true for acceptance/tests.
+        "require_jra_race_card_detail":bool(cfg.get("require_jra_race_card_detail",False)),
+        "require_jra_horse_history":bool(cfg.get("require_jra_horse_history",False)),
+        "require_jra_person_stats":bool(cfg.get("require_jra_person_stats",False)),
+        "require_registered_common_workout":bool(cfg.get("require_registered_common_workout",False)),
+        "require_jma_weather":bool(cfg.get("require_jma_weather",False)),
         "require_tsl_shadow":bool(cfg.get("require_tsl_shadow",False)),
         "jra_single_entry_profile":PROFILE,
     }
