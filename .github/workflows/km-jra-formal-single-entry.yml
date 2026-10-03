@@ -186,6 +186,8 @@ jobs:
           PY
 
       - name: Verify and bind Static to durable Signed SOURCE
+        id: build_formal
+        continue-on-error: true
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
@@ -196,7 +198,64 @@ jobs:
           python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json --gap-output runtime_out/jra_single_entry_exact_gap.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
 
+      - name: Persist exact Production gap and run Candidate Parallel
+        if: steps.build_formal.outcome != 'success'
+        id: candidate_parallel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          test -f runtime_out/jra_single_entry_exact_gap.json
+          SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
+          GAP_TARGET="runtime/exact_gaps/${SAFE}.json"
+          CANDIDATE_TARGET="runtime/requests/${SAFE}-CANDIDATE-R1.json"
+          mkdir -p runtime/exact_gaps runtime/requests
+          cp runtime_out/jra_single_entry_exact_gap.json "$GAP_TARGET"
+          INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
+          import copy,json,os,pathlib
+          q=json.load(open(os.environ['INTENT_FILE'],encoding='utf-8'))
+          out=copy.deepcopy(q)
+          out.pop('jra_source',None)
+          out['family_id']='JRA'
+          out['source_execution_id']=os.environ['EXECUTION_ID']
+          out['candidate_parallel_handoff']=True
+          out['prediction_id']=str(out.get('prediction_id') or out.get('race_id'))+'-SOURCE-CANDIDATE-AUTO-R1'
+          out['acceptance_only']=False
+          out['note']='AUTO Candidate Parallel after Production Exact Gap. Production authority unchanged; Candidate-only full lifecycle.'
+          pathlib.Path(os.environ['CANDIDATE_TARGET']).write_text(
+              json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$GAP_TARGET" "$CANDIDATE_TARGET"
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: persist JRA exact gap and Candidate handoff $EXECUTION_ID"
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt*2))
+            done
+          fi
+          gh workflow run km-jra-source-candidate-forward-oos.yml --ref main -f request_path="$CANDIDATE_TARGET"
+          RUN_TITLE="JRA Candidate $CANDIDATE_TARGET"
+          RUN_ID=""
+          for attempt in $(seq 1 80); do
+            RUN_ID="$(gh run list --workflow km-jra-source-candidate-forward-oos.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle | jq -r --arg title "$RUN_TITLE" '[.[] | select(.displayTitle==$title)][0].databaseId // empty')"
+            [ -n "$RUN_ID" ] && break
+            sleep 3
+          done
+          test -n "$RUN_ID"
+          gh run watch "$RUN_ID" --exit-status
+          {
+            echo "run_id=$RUN_ID"
+            echo "gap_path=$GAP_TARGET"
+            echo "candidate_request_path=$CANDIDATE_TARGET"
+          } >> "$GITHUB_OUTPUT"
       - name: Submit canonical JRA FORMAL request
+        if: steps.build_formal.outcome == 'success'
         id: submit_formal
         shell: bash
         env:
@@ -238,6 +297,7 @@ jobs:
           exit 1
 
       - name: Wait for canonical JRA FORMAL completion
+        if: steps.build_formal.outcome == 'success'
         id: formal_run
         shell: bash
         env:
@@ -275,6 +335,7 @@ jobs:
         env:
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
           FORMAL_RUN_ID: ${{ steps.formal_run.outputs.run_id }}
+          CANDIDATE_RUN_ID: ${{ steps.candidate_parallel.outputs.run_id }}
         run: |
           set -euo pipefail
           mkdir -p runtime_out
@@ -288,9 +349,10 @@ jobs:
             "execution_id":os.environ["EXECUTION_ID"],
             "source_checkpoint_reused":"${{ steps.source_reuse.outputs.reused }}"=="true",
             "formal_run_id":os.environ.get("FORMAL_RUN_ID") or None,
+            "candidate_run_id":os.environ.get("CANDIDATE_RUN_ID") or None,
             "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
             "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
-            "status":"FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else "INCOMPLETE",
+            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_COMPLETE" if os.environ.get("CANDIDATE_RUN_ID") else "INCOMPLETE")),
             "production_prediction_change":False,
             "production_numerical_change":False,
             "local_numerical_reuse":False,
