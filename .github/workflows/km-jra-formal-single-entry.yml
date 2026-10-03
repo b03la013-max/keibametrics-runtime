@@ -211,8 +211,8 @@ jobs:
           test -f runtime_out/jra_single_entry_exact_gap.json
           SAFE="$(printf '%s' "$EXECUTION_ID" | tr -c 'A-Za-z0-9._-' '-')"
           GAP_TARGET="runtime/exact_gaps/${SAFE}.json"
-          CANDIDATE_TARGET="runtime/requests/${SAFE}-CANDIDATE-R1.json"
-          mkdir -p runtime/exact_gaps runtime/requests
+          CANDIDATE_TARGET="runtime/jra_candidate_requests/${SAFE}-CANDIDATE-R1.json"
+          mkdir -p runtime/exact_gaps runtime/jra_candidate_requests
           cp runtime_out/jra_single_entry_exact_gap.json "$GAP_TARGET"
           INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
           import copy,json,os,pathlib
@@ -223,7 +223,6 @@ jobs:
           out['source_execution_id']=os.environ['EXECUTION_ID']
           out['candidate_parallel_handoff']=True
           out['prediction_id']=str(out.get('prediction_id') or out.get('race_id'))+'-SOURCE-CANDIDATE-AUTO-R1'
-          out['acceptance_only']=False
           out['note']='AUTO Candidate Parallel after Production Exact Gap. Production authority unchanged; Candidate-only full lifecycle.'
           pathlib.Path(os.environ['CANDIDATE_TARGET']).write_text(
               json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
@@ -352,7 +351,7 @@ jobs:
             "candidate_run_id":os.environ.get("CANDIDATE_RUN_ID") or None,
             "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
             "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
-            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_COMPLETE" if os.environ.get("CANDIDATE_RUN_ID") else "INCOMPLETE")),
+            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_RUN_COMPLETED" if os.environ.get("CANDIDATE_RUN_ID") else "PRODUCTION_CLOSURE_BLOCKED")),
             "production_prediction_change":False,
             "production_numerical_change":False,
             "local_numerical_reuse":False,
@@ -370,3 +369,9 @@ jobs:
           path: runtime_out/
           if-no-files-found: warn
           retention-days: 90
+
+      - name: Enforce Production closure result
+        if: steps.build_formal.outcome != 'success'
+        run: |
+          echo "Production FORMAL-FULL remains fail-closed. Candidate Parallel is a separate NON-PRODUCTION lane." >&2
+          exit 1
