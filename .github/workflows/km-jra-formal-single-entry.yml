@@ -193,7 +193,7 @@ jobs:
           set -euo pipefail
           test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
           mkdir -p runtime_out
-          python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json
+          python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json --gap-output runtime_out/jra_single_entry_exact_gap.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
 
       - name: Submit canonical JRA FORMAL request
@@ -289,6 +289,7 @@ jobs:
             "source_checkpoint_reused":"${{ steps.source_reuse.outputs.reused }}"=="true",
             "formal_run_id":os.environ.get("FORMAL_RUN_ID") or None,
             "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
+            "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
             "status":"FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else "INCOMPLETE",
             "production_prediction_change":False,
             "production_numerical_change":False,

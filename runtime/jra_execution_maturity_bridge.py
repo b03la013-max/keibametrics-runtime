@@ -136,6 +136,91 @@ def source_checkpoint_manifest(source_env: Dict[str,Any], source_execution_id: s
     manifest["sha256"]=_sha(manifest)
     return manifest
 
+def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None) -> Dict[str,Any]:
+    """Expose the existing JRA numerical boundary; never manufacture Static roles.
+
+    This is a preparation report, not signature verification or a FINAL receipt.
+    SOURCE authentication remains owned by the existing signed-receipt loader.
+    """
+    try:
+        from .jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+        from .jra_source_to_evidence_features import compile_source_to_features
+        from .jra_evidence_to_base_production import load_mapping, build_production_ledger
+        from .jra_index_provenance_builder import materialize_index_provenance
+        from .jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
+    except ImportError:
+        from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+        from jra_source_to_evidence_features import compile_source_to_features
+        from jra_evidence_to_base_production import load_mapping, build_production_ledger
+        from jra_index_provenance_builder import materialize_index_provenance
+        from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
+
+    _require_jra(intent)
+    source = source_env.get("artifact") or {}
+    checkpoint = source_checkpoint_manifest(source_env, source_execution_id or _execution_id(intent))
+    if source.get("race_id") != intent["race_id"] or source.get("prediction_cutoff") != intent["prediction_cutoff"]:
+        raise JRAMaturityBridgeError("JRA_PRODUCTION_PREPARATION_SOURCE_IDENTITY_MISMATCH")
+    official = source.get("jra_official_runner_universe") or source.get("official_runner_universe") or {}
+    ids = [str(r.get("runner_id") or r.get("horse_no") or "") for r in official.get("runners") or []]
+    if len(ids) < 2 or "" in ids or len(set(ids)) != len(ids):
+        raise JRAMaturityBridgeError("JRA_PRODUCTION_PREPARATION_OFFICIAL_UNIVERSE_INVALID")
+    # Detail cards may enrich an official runner, never add a new runner.
+    runners = [r for r in build_source_runner_stubs(source) if r["runner_id"] in set(ids)]
+    mapping = load_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
+    req = {"family_id":"JRA", "race_id":intent["race_id"],
+           "prediction_cutoff":intent["prediction_cutoff"],
+           "acceptance_only":bool(intent.get("acceptance_only")), "runners":runners}
+    if intent.get("supplemental_evidence_pack") is not None:
+        req, _ = apply_supplemental_evidence_pack(req, intent["supplemental_evidence_pack"], mapping)
+    features = compile_source_to_features(source, req["runners"], mapping)
+    gaps = []
+    for runner in req["runners"]:
+        rid = runner["runner_id"]
+        rr = features["runners"][rid]
+        runner.update(rr["factual_runner_updates"])
+        for name, value in rr["generated_production_features"].items():
+            runner["evidence_features"].setdefault(name, copy.deepcopy(value))
+        for name, row in rr["source_feature_trace"]["features"].items():
+            if row["production_feature_state"] != "MISSING":
+                continue
+            gaps.append({"runner_id":rid, "feature":name,
+                         "source_fact_available":row["fact_available"],
+                         "production_evaluator_available":None,
+                         "evaluator_implementation_status":"NOT_ESTABLISHED_BY_PRODUCTION_FEATURE_TRACE",
+                         "rule_id":row["rule_id"], "authority":row["source_authority"],
+                         "source_family":row["source_family"],
+                         "automation_class":row["automation_class"],
+                         "index_binding":row["target_bindings"],
+                         "evidence_refs":row["evidence_refs"],
+                         "missing_reason":row["missing_reason"],
+                         "correct_owner":"JRA_SOURCE_ADAPTER" if row["fact_available"] is False else "JRA_PRODUCTION_FEATURE_EVALUATOR_OR_AUTHORITY"})
+    numeric_error = None
+    try:
+        req["index_provenance_ledger"] = build_production_ledger(intent["race_id"], req["runners"], mapping)
+        req = materialize_index_provenance(req)
+        numerical_ready = all(len(r.get("canonical_components") or {}) == 20 for r in req["runners"])
+    except ValueError as exc:
+        numerical_ready = False
+        numeric_error = str(exc)
+    report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
+              "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
+              "current_authority_manifest":resolve_current_authority(),
+              "mapping_id":mapping["mapping_id"],
+              "mapping_sha256":hashlib.sha256(Path("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json").read_bytes()).hexdigest(),
+              "source_checkpoint_manifest":checkpoint,
+              "runner_universe":ids, "source_feature_trace_schema":features["trace_schema"],
+              "source_feature_report":features, "exact_gaps":gaps,
+              "production_full_numerical_ready":numerical_ready,
+              "production_numerical_error":numeric_error,
+              "prepared_numerical_request":req if numerical_ready else None,
+              "first_blocked_stage":"PRODUCTION_STATIC_PREDICTION_OWNER" if numerical_ready else "PRODUCTION_FEATURE_INDEX_CLOSURE",
+              "static_generation_ready":False,
+              "static_generation_missing_reason":"NO_AUTHORIZED_SOURCE_ONLY_STATIC_RANK_ROLE_DECISION_RULE_CONNECTED",
+              "status":"PARTIAL_EXACT_GAP_IDENTIFIED", "production_prediction_change":False,
+              "production_numerical_change":False, "candidate_numerics_used":False}
+    report["sha256"] = _sha(report)
+    return report
+
 def build_formal_request(
     intent: Dict[str,Any],
     source_env: Dict[str,Any],
@@ -266,6 +351,7 @@ def main() -> int:
     f.add_argument("--source-envelope",required=True)
     f.add_argument("--source-execution-id")
     f.add_argument("--output",required=True)
+    f.add_argument("--gap-output")
 
     v=sp.add_parser("verify-formal")
     v.add_argument("--request",required=True)
@@ -276,8 +362,16 @@ def main() -> int:
     if args.cmd=="build-source":
         out=build_source_request(_load(args.intent))
     elif args.cmd=="build-formal":
+        intent = _load(args.intent)
+        source_env = _load(args.source_envelope)
+        if not isinstance(intent.get("static_prediction"), dict):
+            report = prepare_production_numerical(intent, source_env, source_execution_id=args.source_execution_id)
+            gap_path = Path(args.gap_output or (args.output + ".exact-gap.json"))
+            gap_path.parent.mkdir(parents=True, exist_ok=True)
+            gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+            raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED:" + report["first_blocked_stage"] + ":" + str(gap_path))
         out=build_formal_request(
-            _load(args.intent),_load(args.source_envelope),
+            intent,source_env,
             source_execution_id=args.source_execution_id
         )
     else:
