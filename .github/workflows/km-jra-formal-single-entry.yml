@@ -130,7 +130,7 @@ jobs:
             if git pull --rebase origin main && git push origin HEAD:main; then
               {
                 echo "request_path=$TARGET"
-                echo "redispatch=false"
+                echo "redispatch=true"
                 echo "source_sha=$(git rev-parse HEAD)"
               } >> "$GITHUB_OUTPUT"
               exit 0
@@ -227,7 +227,7 @@ jobs:
             if git pull --rebase origin main && git push origin HEAD:main; then
               {
                 echo "request_path=$TARGET"
-                echo "redispatch=false"
+                echo "redispatch=true"
                 echo "formal_sha=$(git rev-parse HEAD)"
               } >> "$GITHUB_OUTPUT"
               exit 0
