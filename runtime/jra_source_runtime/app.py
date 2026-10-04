@@ -12,7 +12,7 @@ from tsl_public_shadow_evidence import build_tsl_shadow_evidence,discover_tsl_ra
 from jma_weather_evidence import build_jma_weather_evidence
 from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
-from jra_official_pdf import fetch_and_enrich_official_pdf
+from jra_official_pdf import fetch_and_enrich_official_pdf, reconcile_pdf_column_with_detail
 from jra_race_context import enrich_with_race_context
 from jra_horse_history import enrich_with_horse_histories
 from jra_person_stats import enrich_with_person_stats
@@ -217,7 +217,31 @@ def source_acquire(p:Dict[str,Any]):
                 "pdf_count":len(p),"detail_count":len(h),"diffs":diffs
             }
             if mismatch:
-                errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"+json.dumps(diffs,ensure_ascii=False,separators=(",",":")))
+                try:
+                    reconciled_u,recon_diag=reconcile_pdf_column_with_detail(
+                        artifact,ctx["race_no"],detail_active
+                    )
+                    artifact["jra_declared_runner_universe"]={**reconciled_u,"universe_type":"DECLARED"}
+                    artifact["jra_official_runner_universe"]=reconciled_u
+                    artifact["jra_official_runner_universe_sha256"]=sha_obj(reconciled_u)
+                    artifact["official_runner_universe"]=reconciled_u
+                    artifact["official_runner_universe_sha256"]=reconciled_u["runner_universe_sha256"]
+                    artifact["official_runner_source"]="JRA_OFFICIAL_PDF_STRICT_COLUMN_PROOF_RECONCILED_WITH_JRADB_DETAIL"
+                    artifact["official_runner_universe_reconciliation"]={
+                        "status":"PASS / LEGACY PDF PARSE MISMATCH RECOVERED BY STRICT TARGET-COLUMN PROOF",
+                        "legacy_pdf_count":len(p),
+                        "detail_count":len(h),
+                        "legacy_diffs":diffs,
+                        "strict_reconciliation":recon_diag,
+                    }
+                except Exception as recon_exc:
+                    errors.append(
+                        "JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"
+                        +json.dumps(diffs,ensure_ascii=False,separators=(",",":"))
+                    )
+                    artifact["official_runner_universe_reconciliation"]["strict_recovery_error"]=(
+                        type(recon_exc).__name__+":"+str(recon_exc)
+                    )
             else:
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
         except Exception as e:
