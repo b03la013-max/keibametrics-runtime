@@ -97,7 +97,22 @@ def _column_clip_for_race(page:Any,race_no:int):
     right=float(page.rect.x1) if pos==len(peers)-1 else (centers[pos]+centers[pos+1])/2.0
     if right-left < 40:
         return None
-    return fitz.Rect(left,float(page.rect.y0),right,float(page.rect.y1))
+
+    # JRA race-card PDF pages may use a multi-row grid (for example R5/R6 on
+    # the upper row and later races below).  An X-only clip therefore leaks a
+    # later race from the same column into the target race block.  Bound the
+    # clip vertically at midpoints between race headers in the same column.
+    same_col=sorted(
+        [x for x in labels if left <= x["xc"] <= right],
+        key=lambda x:x["yc"]
+    )
+    above=[x for x in same_col if x["yc"] < target["yc"]-18.0]
+    below=[x for x in same_col if x["yc"] > target["yc"]+18.0]
+    top=float(page.rect.y0) if not above else (above[-1]["yc"]+target["yc"])/2.0
+    bottom=float(page.rect.y1) if not below else (target["yc"]+below[0]["yc"])/2.0
+    if bottom-top < 60:
+        return None
+    return fitz.Rect(left,top,right,bottom)
 
 def parse_runner_universe_from_doc(doc:Any,race_no:int)->Dict[str,Any]:
     errors=[]
