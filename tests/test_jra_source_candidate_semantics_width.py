@@ -3,7 +3,8 @@ import sys
 sys.path.insert(0,"runtime")
 
 from jra_source_candidate_semantics import build_candidate_semantics, PROFILE
-from minimum_efficient_coverage import build_mec_plan, validate_mec_plan\nfrom capital_policy import resolve_capital_policy
+from minimum_efficient_coverage import build_mec_plan, validate_mec_plan
+from capital_policy import resolve_capital_policy
 
 
 def runner(i, win, place, third):
