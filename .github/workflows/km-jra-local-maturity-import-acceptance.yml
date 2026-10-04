@@ -61,11 +61,11 @@ jobs:
       - name: Compile imported execution mechanisms
         run: |
           set -euo pipefail
-          python -m py_compile             runtime/jra_execution_maturity_bridge.py             runtime/entry_transport_fallback.py             runtime/race_day_fast_reflection.py
+          python -m py_compile             runtime/jra_execution_maturity_bridge.py             runtime/jra_candidate_risk_budget_semantics.py             runtime/entry_transport_fallback.py             runtime/race_day_fast_reflection.py
 
       - name: Cross-family regression and JRA bridge tests
         run: |
-          python -m pytest -q tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
+          python -m pytest -q tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_candidate_risk_budget_semantics.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
 
       - name: JRA lifecycle and LOCAL non-regression
         run: |
@@ -99,7 +99,7 @@ jobs:
         run: |
           ./actionlint -color             .github/workflows/km-jra-formal-single-entry.yml             .github/workflows/km-jra-source-first-runner.yml             .github/workflows/km-formal-request-runner.yml             .github/workflows/km-formal-result-runner.yml             .github/workflows/km-jra-local-maturity-import-acceptance.yml
 
-      - name: Verify R37 authority, LOCAL isolation and migration boundaries
+      - name: Verify R38 authority, LOCAL isolation and migration boundaries
         run: |
           python - <<'PY'
           import glob,json,sys
@@ -111,6 +111,7 @@ jobs:
 
           r36=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json")
           r37=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261003_R37.json")
+          r38=load("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261004_R38.json")
           route36=load("profiles/venue_chat_routes_20261001_R36.json")
           route37=load("profiles/venue_chat_routes_20261003_R37.json")
           maturity=load("profiles/jra_local_maturity_import_20261003_R1.json")
@@ -125,6 +126,12 @@ jobs:
           assert r37["common_family_components"]["jra_formal_single_entry"]==single["profile_id"]
           assert r37["common_family_components"]["jra_entry_transport_fallback"]==fallback["profile_id"]
           assert r37["common_family_components"]["jra_race_day_fast_path"]==fast["profile_id"]
+          assert r38["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261004-R38"
+          assert r38["predecessor"]==r37["manifest_id"]
+          assert r38["common_family_components"]["venue_routing"]==route37["profile_id"]
+          assert r38["common_family_components"]["jra_candidate_risk_budget_semantic_expansion"]=="KM-JRA-CANDIDATE-RISK-BUDGET-SEMANTIC-EXPANSION-v0.1-20261004"
+          assert r38["family_scoped_authority"]["LOCAL"]==r37["family_scoped_authority"]["LOCAL"]
+          assert r38["family_scoped_authority"]["BAN"]==r37["family_scoped_authority"]["BAN"]
 
           # R37 is a JRA execution-correctness promotion only. LOCAL and BAN
           # scoped authority remain byte-semantically identical to R36.
@@ -135,7 +142,7 @@ jobs:
           assert r37["local_r36_inheritance"]["production_behavior_change"] is False
           assert r37["local_r36_inheritance"]["numerical_change"] is False
 
-          j=r37["family_scoped_authority"]["JRA"]
+          j=r38["family_scoped_authority"]["JRA"]
           assert j["local_maturity_import"]==maturity["profile_id"]
           assert j["single_entry"]["profile"]==single["profile_id"]
           assert j["entry_transport_fallback"]==fallback["profile_id"]
@@ -199,7 +206,7 @@ jobs:
               except Exception:
                   pass
           assert rows
-          assert max(rows,key=lambda z:(z[0],z[1]))[1]==r37["manifest_id"]
+          assert max(rows,key=lambda z:(z[0],z[1]))[1]==r38["manifest_id"]
 
           bridge=Path("runtime/jra_execution_maturity_bridge.py").read_text(encoding="utf-8")
           for forbidden in [
@@ -247,7 +254,7 @@ jobs:
           assert "run-name: JRA Formal" in formal_wf
           assert "request_path:" in formal_wf
 
-          s=r37["supersession_declaration"]
+          s=r38["supersession_declaration"]
           for k in [
               "predictive_model_formula_change","base_index_weight_change",
               "derived_index_formula_change","krs_engine_physics_change",
@@ -258,9 +265,9 @@ jobs:
               assert s[k] is False,(k,s[k])
 
           out={
-            "profile":"KM-JRA-LOCAL-MATURITY-IMPORT-ACCEPTANCE-20261003-R1",
+            "profile":"KM-JRA-LOCAL-MATURITY-IMPORT-ACCEPTANCE-20261004-R2",
             "status":"PASS",
-            "current_authority":r37["manifest_id"],
+            "current_authority":r38["manifest_id"],
             "routing":route37["profile_id"],
             "maturity_import":maturity["profile_id"],
             "single_entry":single["profile_id"],
