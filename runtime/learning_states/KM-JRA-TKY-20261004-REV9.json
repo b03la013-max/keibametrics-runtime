@@ -1,0 +1,175 @@
+{
+  "profile": "KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921",
+  "state_id": "KM-JRA-TKY-20261004-REV9-LEARNING-NEXT",
+  "venue": "TKY",
+  "source_scope": "2026-10-04 R06/R07/R09/R11/R12",
+  "status": "PREQUENTIAL-NEXT-RACE-ONLY / NO-PRODUCTION-RULE-CHANGE / R39-ALIGNED",
+  "source_review": "runtime/daily_reviews/KM-JRA-TKY-20261004-R06-R12-REV9.json",
+  "source_canon_audit": "runtime/venue_audits/KM-JRA-TKY-20261005-REV9-CANON-AUDIT.json",
+  "production_change_authorized": false,
+  "canon_revision_authorized": false,
+  "frozen_learning_label": "HEAD_LOCAL_P2_MATERIALITY_AND_SCENARIO_CONTINUITY",
+  "next_race_mandatory_checks": [
+    {
+      "id": "TKY-W-ALTW-X-GLOBAL-P2-TERMINALIZATION",
+      "owner": "COMMON ORDER/ROLE / CORRECTNESS",
+      "instruction": "For every active W and Alternative-W head, terminalize every Global P2 candidate as SELECT / PROTECT / EXCLUDE + reason. Silent disappearance is forbidden.",
+      "fixtures": [
+        "R07",
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE / CORRECTNESS"
+    },
+    {
+      "id": "TKY-SCENARIO-REPRESENTATIVE-PAIR",
+      "owner": "COMMON PREDICTION / MATERIALITY",
+      "instruction": "Do not optimize pair count. For each winner head, verify that each material race world has at least one representative P2 pair or an explicit exclusion reason.",
+      "fixtures": [
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE / SHADOW-OOS"
+    },
+    {
+      "id": "TKY-P2-INDEPENDENT-REAUDIT",
+      "owner": "COMMON PREDICTION / P2",
+      "instruction": "Re-audit P2 independently from W. 'Not strong enough to win' must not imply 'unlikely to finish second'.",
+      "fixtures": [
+        "R07"
+      ],
+      "production_effect": "NONE / MEASUREMENT-FIRST"
+    },
+    {
+      "id": "TKY-PAIR-CONDITIONED-THIRD-TERMINALIZATION",
+      "owner": "SEMANTIC / TICKET CONVERSION CORRECTNESS",
+      "instruction": "For every SELECT/PROTECT pair, process Global P3 as INCLUDE / PROTECT / EXCLUDE + pair-local reason before ticket compression.",
+      "fixtures": [
+        "R07",
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE / CORRECTNESS"
+    },
+    {
+      "id": "TKY-HIGH-ROLE-INTERSECTION-CLOSURE",
+      "owner": "SEMANTIC / MEC",
+      "instruction": "For high-role three-horse sets, record COVERED / PROTECTED / EXCLUDED-WITH-REASON so a dominant hub cannot silently remove all alternative intersections.",
+      "fixtures": [
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE / SHADOW"
+    },
+    {
+      "id": "TKY-CAPITAL-EXPOSURE-DIAGNOSTIC",
+      "owner": "CAPITAL / MEASUREMENT",
+      "instruction": "Before FINAL, display Head Exposure Share, Scenario Exposure Share, Alternative Head Exposure and single_scenario_multi_bet_exposure. Do not impose a fixed percentage cap yet.",
+      "fixtures": [
+        "R06",
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE / SHADOW-MEASUREMENT"
+    },
+    {
+      "id": "TKY-ABILITY-READINESS-SEPARATION",
+      "owner": "COMMON EVIDENCE / PREDICTION",
+      "instruction": "Keep Capability/Ability/Venue Fit separate from Race Readiness. Do not infer fixed penalties from one post-result realization failure.",
+      "fixtures": [
+        "R06",
+        "R11"
+      ],
+      "production_effect": "NONE / HYPOTHESIS"
+    },
+    {
+      "id": "TKY-D1600-POSITION-COST-FINAL-SUSTAIN",
+      "owner": "VENUE OBSERVATION",
+      "instruction": "For Tokyo D1600, observe POSITION_GAIN and POSITION_COST separately, then evaluate Turf Start -> Dirt Transition -> Cruise -> Final Sustain. Do not convert 2026-10-04 into a permanent front-bias rule.",
+      "fixtures": [
+        "R12"
+      ],
+      "production_effect": "NONE / VENUE-PERSISTENT-CANDIDATE OBSERVATION"
+    },
+    {
+      "id": "JRA-AKI-BRIDGE-RESTORATION",
+      "owner": "COMMON PREDICTION / AKI",
+      "instruction": "Keep W-AKI/P2-AKI/P3-AKI formal bridge as explicit gap; never synthesize AKI values.",
+      "fixtures": [
+        "R07",
+        "R09",
+        "R11"
+      ],
+      "production_effect": "NONE UNTIL AUTHORIZED"
+    },
+    {
+      "id": "TKY-PFS-AUTHORITY-SEPARATION",
+      "owner": "MEASUREMENT",
+      "instruction": "Keep Actual, Frozen Recommendation, Paper and NOT-ESTABLISHED/Abstention PFS separate. R12 must not be scored as 0% without a pre-race freeze.",
+      "fixtures": [
+        "R06",
+        "R07",
+        "R09",
+        "R11",
+        "R12"
+      ],
+      "production_effect": "NONE / CORRECTNESS"
+    }
+  ],
+  "positive_control": {
+    "fixture": "TKY-20261004-R06-COMPLETE-CLOSURE-EXACT-HIT-CAPITAL-SHARPNESS-GOLDEN",
+    "preservation_requirement": "Any repair must preserve the successful 5->10->12 complete closure while reducing unnecessary scenario-concentrated exposure."
+  },
+  "next_race_measurement_priorities": [
+    "Head-local P2 Materiality",
+    "Scenario Representative Pair coverage",
+    "Winner/P2 independent discrimination",
+    "Role->Pair->Third silent loss",
+    "High-Role Intersection Closure",
+    "Head/Scenario/Alternative exposure concentration",
+    "Ability vs Race Readiness",
+    "Score vs Evidence Confidence",
+    "KRS Rescue/Harm",
+    "Robust PFS"
+  ],
+  "current_reference_metrics": {
+    "source_candidate_oos_count": 21,
+    "krs_oos_count": 4,
+    "mec_r4_oos_count": 7,
+    "registered_candidate_pfs_pct": 162.37804878,
+    "registered_candidate_largest_win_excluded_pfs_pct": 39.770491803,
+    "registered_candidate_top3_excluded_pfs_pct": 5.096525097,
+    "tokyo_frozen_daily_pfs_pct": 58.129496403,
+    "tokyo_top3_horse_discovery_rate": 1,
+    "tokyo_winner_capture_rate": 0.75,
+    "tokyo_p2_capture_rate": 0.75,
+    "tokyo_p3_capture_rate": 1,
+    "tokyo_ordered_pair_rate": 0.25
+  },
+  "do_not_change": [
+    "Production Base13 weights",
+    "Derived7 formulas",
+    "Probability mapping",
+    "KRS physics",
+    "parameter_map",
+    "KRS Production authority",
+    "Production MEC-R3",
+    "Capital formula",
+    "Fixed Tokyo bias",
+    "Fixed W/P2/P3 width",
+    "Fixed ticket count",
+    "Fixed minimum Alternative-W pair count",
+    "Fixed one-horse exposure cap"
+  ],
+  "forbidden": [
+    "RETROACTIVE_PREDICTION_REWRITE",
+    "RESULT-DERIVED NUMERIC WEIGHT CHANGE",
+    "POST-RESULT ADDITION TO REGISTERED OOS COHORT",
+    "GLOBAL P2 SILENTLY DISAPPEARING FROM HEAD-LOCAL MATRIX",
+    "PAIR-LOCAL THIRD SILENT LOSS",
+    "FIXED PAIR-COUNT PATCH",
+    "TOKYO FRONT-BIAS HARD RULE FROM ONE DAY",
+    "FAKE AKI SYNTHESIS",
+    "POST-RESULT TICKET INSERTION INTO FORMAL PFS"
+  ]
+}
