@@ -1,5 +1,5 @@
 from __future__ import annotations
-import datetime, re, urllib.request
+import base64, datetime, gzip, json, re, urllib.request
 from typing import Any, Dict, List, Tuple
 import fitz
 
@@ -228,6 +228,121 @@ def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any
     }
     base["runner_universe_sha256"]=sha_obj(base)
     return base
+
+def reconcile_pdf_column_with_detail(
+    artifact:Dict[str,Any], race_no:int, detail_active:Dict[str,Any]
+)->Tuple[Dict[str,Any],Dict[str,Any]]:
+    """Rebuild the official PDF runner universe after strict PDF/detail proof.
+
+    Live JRA meeting PDFs use dense multi-column layouts.  PyMuPDF text-block
+    ordering can cause the legacy marker parser to bind the right race header
+    to a later column's runners.  This recovery path does not relax source
+    authority: it requires the target R<n> column to exist in the official PDF,
+    requires exactly one nationality marker per official-detail runner, and
+    requires every official-detail horse name to be visibly recoverable from
+    that same PDF column before using the detail table only for row numbering
+    and current identity fields.
+    """
+    snap=next(
+        (s for s in (artifact.get("sources") or [])
+         if isinstance(s,dict) and s.get("source_id")=="JRA-OFFICIAL-RACE-PDF"),
+        None
+    )
+    if not snap or not snap.get("raw_gzip_b64"):
+        raise ValueError("JRA_OFFICIAL_PDF_RAW_SNAPSHOT_REQUIRED_FOR_RECONCILIATION")
+    raw=gzip.decompress(base64.b64decode(str(snap["raw_gzip_b64"])))
+    doc=fitz.open(stream=raw,filetype="pdf")
+    target_text=None; page_no=None; clip_coords=None
+    try:
+        for i,page in enumerate(doc):
+            clip=_column_clip_for_race(page,int(race_no))
+            if clip is None:
+                continue
+            target_text=page.get_text("text",clip=clip,sort=True)
+            page_no=i+1
+            clip_coords=[round(float(clip.x0),3),round(float(clip.y0),3),
+                         round(float(clip.x1),3),round(float(clip.y1),3)]
+            break
+    finally:
+        doc.close()
+    if not target_text:
+        raise ValueError("JRA_OFFICIAL_PDF_TARGET_COLUMN_NOT_FOUND_FOR_RECONCILIATION")
+
+    detail_runners=list(detail_active.get("runners") or [])
+    if not detail_runners:
+        raise ValueError("JRA_DETAIL_ACTIVE_RUNNERS_REQUIRED_FOR_PDF_RECONCILIATION")
+    marker_count=len(re.findall(r"[（(][A-Z]{3}[）)]",target_text))
+    if marker_count!=len(detail_runners):
+        raise ValueError(
+            f"JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL:{marker_count}!={len(detail_runners)}"
+        )
+
+    lines=target_text.splitlines()
+    missing=[]
+    proofs=[]
+    for r in detail_runners:
+        name=re.sub(r"\s+","",str(r.get("canonical_name") or r.get("name") or ""))
+        if not name:
+            missing.append({"horse_no":r.get("horse_no"),"name":name,"reason":"EMPTY_NAME"})
+            continue
+        # PDF layout may split a horse name with ownership/trainer metadata
+        # (e.g. オ|ミゴト, ゴ|ンタ, ビ|ゾ|ー).  Require the ordered Katakana
+        # character sequence on one target-column line while allowing only
+        # non-Katakana material between name characters.
+        pat="[^ァ-ヶー]{0,400}".join(re.escape(ch) for ch in name)
+        hit=next((ln for ln in lines if re.search(pat,ln)),None)
+        if hit is None:
+            missing.append({"horse_no":r.get("horse_no"),"name":name,"reason":"PDF_NAME_NOT_FOUND"})
+        else:
+            proofs.append({"horse_no":int(r.get("horse_no")),"name":name})
+
+    if missing:
+        raise ValueError(
+            "JRA_OFFICIAL_PDF_DETAIL_NAME_PROOF_FAIL:"
+            +json.dumps(missing,ensure_ascii=False,separators=(",",":"))
+        )
+
+    pdf_u=artifact.get("jra_official_pdf_runner_universe") or {}
+    runners=[]
+    for x in detail_runners:
+        y=dict(x)
+        y["source"]="JRA_OFFICIAL_RACE_PDF_RECONCILED_WITH_JRADB_DETAIL"
+        y["pdf_name_presence_verified"]=True
+        runners.append(y)
+    out={
+        "profile":PROFILE,
+        "source_id":"JRA-OFFICIAL-RACE-PDF",
+        "source_snapshot_sha256":snap.get("snapshot_sha256"),
+        "raw_sha256":snap.get("raw_sha256"),
+        "official_pdf_url":snap.get("final_url"),
+        "pdf_page_number":page_no,
+        "pdf_column_clip":clip_coords,
+        "race_no":int(race_no),
+        "declared_runner_count":len(runners),
+        "runner_count":len(runners),
+        "runners":runners,
+        "universe_type":"ACTIVE",
+        "detail_assisted_row_mapping":True,
+        "independent_pdf_name_presence_verified":True,
+        "pdf_target_column_nationality_marker_count":marker_count,
+        "pdf_name_presence_proofs":proofs,
+        "reconciliation_policy":"STRICT_PDF_TARGET_COLUMN_PRESENCE_PLUS_JRA_DETAIL_ROW_MAPPING",
+    }
+    out["runner_universe_sha256"]=sha_obj(out)
+    diag={
+        "status":"PASS / STRICT PDF TARGET-COLUMN PRESENCE PROOF",
+        "race_no":int(race_no),
+        "pdf_page_number":page_no,
+        "pdf_column_clip":clip_coords,
+        "runner_count":len(runners),
+        "nationality_marker_count":marker_count,
+        "all_detail_names_verified_in_target_pdf_column":True,
+        "production_authority":"JRA_OFFICIAL_PDF",
+        "detail_role":"ROW_MAPPING_ONLY_AFTER_PDF_PRESENCE_PROOF",
+    }
+    diag["sha256"]=sha_obj(diag)
+    return out,diag
+
 
 def fetch_and_enrich_official_pdf(
     artifact:Dict[str,Any], prediction_cutoff:str, *,
