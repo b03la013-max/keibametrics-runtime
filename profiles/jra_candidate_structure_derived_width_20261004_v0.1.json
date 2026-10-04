@@ -1,0 +1,84 @@
+{
+  "profile_id": "KM-JRA-CANDIDATE-STRUCTURE-DERIVED-WIDTH-v0.1-20261004",
+  "status": "ACTIVE-CANDIDATE / NON-PRODUCTION / FORWARD-OOS / NO-AUTO-PROMOTION",
+  "effective_at": "2026-10-04T10:30:00+09:00",
+  "family": "JRA",
+  "semantic_profile": "KM-JRA-SOURCE-DERIVED-CANDIDATE-SEMANTICS-v0.3-20261004-STRUCTURE-DERIVED",
+  "purpose": "Derive semantic ticket topology from race force relationships before capital, rather than from fixed column counts or a target budget.",
+  "causal_order": [
+    "Source/Evidence",
+    "20-index Candidate numerical materialization",
+    "Column score/Role structure",
+    "AKI column review context when formally available",
+    "Future Multiplicity",
+    "W/P2/P3 Role",
+    "Pair-conditioned Second/Third structure",
+    "Semantic Universe",
+    "MEC",
+    "Capital feasibility",
+    "FINAL"
+  ],
+  "invariants": {
+    "budget_may_change_role_width": false,
+    "budget_may_change_pair_width": false,
+    "budget_may_change_third_width": false,
+    "budget_fill_forbidden": true,
+    "fixed_w_width": null,
+    "fixed_p2_width": null,
+    "fixed_p3_width": null,
+    "fixed_ticket_count": null,
+    "aki_direct_ticket_count_control": false,
+    "aki_role": "COLUMN_REVIEW_TRIGGER",
+    "capital_role": "DOWNSTREAM_FEASIBILITY_AND_SIZING_ONLY"
+  },
+  "structure_method": {
+    "candidate_only": true,
+    "method": "UPPER_CLUSTER_1D_KMEANS",
+    "metrics": {
+      "W": "ZAI_WIN",
+      "P2": "ZAI_PLACE",
+      "P3": "T3I"
+    },
+    "structural_minimum_only": {
+      "W": 1,
+      "P2": 2,
+      "P3": 3
+    },
+    "note": "The minima exist only because ordered-pair/triple combinations require distinct horses. They are not target widths."
+  },
+  "aki_capital_bridge": {
+    "central_reference": "AKI-Capital Bridge JRA v1.0 / Central v2.3",
+    "direct_ticket_count_control": false,
+    "current_jra_candidate_formal_aki_numeric_status": "NOT_IMPLEMENTED_IN_CURRENT_20-INDEX MATERIALIZATION",
+    "missing_aki_policy": "EXPLICIT_GAP / NO_SYNTHETIC_AKI",
+    "future_work": "Restore formal W-AKI/P2-AKI/P3-AKI/ASI/RSI materialization and use them as review triggers alongside PRED/Role/Scenario/Evidence, never as a fixed ticket-count table."
+  },
+  "future_multiplicity": {
+    "states": ["CONCENTRATED", "ASYMMETRIC", "DIVERSE", "UNRESOLVED"],
+    "current_candidate_basis": "PRE_RESULT_SCORE_STRUCTURE / ROLE_CLUSTERING",
+    "production_authority": false
+  },
+  "capital_boundary": {
+    "if_structure_cost_below_budget": "EXECUTE_ONLY_THE_DERIVED_STRUCTURE; DO_NOT_FILL_UNUSED_BUDGET",
+    "if_structure_cost_above_budget": "DO_NOT_REWRITE_SEMANTIC_WIDTH_TO_MATCH_BUDGET; ROUTE_TO LIMITED/PAPER/NO-BET ACCORDING_TO_CAPITAL_POLICY",
+    "capital_is_not_prediction": true
+  },
+  "r38_risk_budget_overlay": {
+    "profile": "KM-JRA-CANDIDATE-RISK-BUDGET-SEMANTIC-EXPANSION-v0.1-20261004",
+    "status": "DEPRECATED",
+    "reason": "It inverted causality by allowing unused budget to expand semantic alternatives."
+  },
+  "production_freeze": {
+    "base_index_weights": "UNCHANGED",
+    "derived_index_formulas": "UNCHANGED",
+    "krs_physics": "UNCHANGED",
+    "parameter_map": "UNCHANGED",
+    "mec_r3": "UNCHANGED",
+    "capital_policy": "UNCHANGED",
+    "venue_canons": "UNCHANGED"
+  },
+  "candidate_policy_cohort": "JRA-CANDIDATE-v0.3-STRUCTURE-DERIVED",
+  "historical_retrofit": false,
+  "automatic_production_promotion": false,
+  "production_effect": "NONE"
+}
