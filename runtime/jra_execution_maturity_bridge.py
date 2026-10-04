@@ -141,6 +141,52 @@ def source_checkpoint_manifest(source_env: Dict[str,Any], source_execution_id: s
     manifest["sha256"]=_sha(manifest)
     return manifest
 
+def _production_gap_summary(gaps: list[dict]) -> dict:
+    """Aggregate the exact Production closure gap without inventing readiness."""
+    by_owner: dict[str,int] = {}
+    by_feature: dict[str,int] = {}
+    by_source_family: dict[str,int] = {}
+    by_index: dict[str,int] = {}
+    classes = {"SOURCE_FACT_UNAVAILABLE":0, "EVALUATOR_OR_AUTHORITY_GAP":0}
+    for row in gaps:
+        owner=str(row.get("correct_owner") or "UNKNOWN")
+        feature=str(row.get("feature") or "UNKNOWN")
+        sf=str(row.get("source_family") or "UNKNOWN")
+        by_owner[owner]=by_owner.get(owner,0)+1
+        by_feature[feature]=by_feature.get(feature,0)+1
+        by_source_family[sf]=by_source_family.get(sf,0)+1
+        for idx in row.get("index_binding") or []:
+            key=str(idx)
+            by_index[key]=by_index.get(key,0)+1
+        if row.get("source_fact_available") is False:
+            classes["SOURCE_FACT_UNAVAILABLE"]+=1
+        else:
+            classes["EVALUATOR_OR_AUTHORITY_GAP"]+=1
+
+    def top(d: dict[str,int], n:int=20) -> list[dict]:
+        return [
+            {"key":k,"count":v}
+            for k,v in sorted(d.items(), key=lambda kv:(-kv[1], kv[0]))[:n]
+        ]
+
+    return {
+        "schema":"KM-JRA-PRODUCTION-CLOSURE-EXACT-GAP-SUMMARY-v1",
+        "exact_gap_count":len(gaps),
+        "gap_class_counts":classes,
+        "owner_counts":by_owner,
+        "source_family_counts":by_source_family,
+        "index_binding_counts":by_index,
+        "top_features":top(by_feature),
+        "first_repair_priority":(
+            "SOURCE_FACT_ACQUISITION" if classes["SOURCE_FACT_UNAVAILABLE"]>classes["EVALUATOR_OR_AUTHORITY_GAP"]
+            else "PRODUCTION_EVALUATOR_OR_AUTHORITY_CLOSURE"
+        ) if gaps else "NONE",
+        "production_ready":len(gaps)==0,
+        "candidate_parallel_is_not_production_repair":True,
+        "no_neutral_fill":True,
+        "no_candidate_to_production_substitution":True,
+    }
+
 def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None) -> Dict[str,Any]:
     """Expose the existing JRA numerical boundary; never manufacture Static roles.
 
@@ -207,6 +253,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     except ValueError as exc:
         numerical_ready = False
         numeric_error = str(exc)
+    gap_summary = _production_gap_summary(gaps)
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
               "current_authority_manifest":resolve_current_authority(),
@@ -215,12 +262,21 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "source_checkpoint_manifest":checkpoint,
               "runner_universe":ids, "source_feature_trace_schema":features["trace_schema"],
               "source_feature_report":features, "exact_gaps":gaps,
+              "exact_gap_count":len(gaps),
+              "production_closure_summary":gap_summary,
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
               "first_blocked_stage":"PRODUCTION_STATIC_PREDICTION_OWNER" if numerical_ready else "PRODUCTION_FEATURE_INDEX_CLOSURE",
               "static_generation_ready":False,
               "static_generation_missing_reason":"NO_AUTHORIZED_SOURCE_ONLY_STATIC_RANK_ROLE_DECISION_RULE_CONNECTED",
+              "production_full_pipeline_ready":False,
+              "completion_next_owner":(
+                  "JRA_PRODUCTION_FEATURE_EVALUATOR_OR_SOURCE_ADAPTER"
+                  if not numerical_ready else "JRA_PRODUCTION_STATIC_PREDICTION_OWNER"
+              ),
+              "candidate_parallel_required":True,
+              "candidate_parallel_reason":"Preserve all-stage execution without mislabeling Candidate as Production.",
               "status":"PARTIAL_EXACT_GAP_IDENTIFIED", "production_prediction_change":False,
               "production_numerical_change":False, "candidate_numerics_used":False}
     report["sha256"] = _sha(report)
