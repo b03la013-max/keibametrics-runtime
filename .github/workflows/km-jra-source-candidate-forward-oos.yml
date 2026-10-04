@@ -63,7 +63,6 @@ jobs:
           from jra_evidence_to_base_production import load_mapping
           from jra_source_candidate_numerical import materialize_source_candidate
           from jra_source_candidate_semantics import build_candidate_semantics
-          from jra_candidate_risk_budget_semantics import expand_candidate_semantics_with_risk_budget
           from jra_source_candidate_oos import pre_result_record
           from formal_request_validator import validate_pre_krs_request
           from prekrs_terminal_compat import adapt_calculator_output
@@ -187,7 +186,6 @@ jobs:
           }
           req=materialize_source_candidate(req,source,mapping)
           req=build_candidate_semantics(req)
-          req=expand_candidate_semantics_with_risk_budget(req)
           req["source_snapshot"]=source_projection
           req["source_snapshot_sha256"]=source_sha
           req["candidate_frozen_at"]=datetime.now(timezone.utc).isoformat()
