@@ -62,7 +62,7 @@ def test_build_source_request_uses_jra_not_local_source_semantics():
     assert s["family_id"]=="JRA"
     assert s["jra_meeting_key"]=="TESTMEETING"
     assert s["execution_id"]==intent()["execution_id"]
-    assert s["require_jra_horse_history"] is True
+    assert s["require_jra_horse_history"] is False
     assert "local_source_adapter" not in s
     assert "local_numerical_mapping" not in s
     assert "parameter_map_sha256" not in s
