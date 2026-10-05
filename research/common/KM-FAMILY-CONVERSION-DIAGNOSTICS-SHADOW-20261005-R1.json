@@ -1,0 +1,55 @@
+{
+  "profile_id": "KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1",
+  "created_at": "2026-10-05T23:05:00+09:00",
+  "activation_at": "2026-10-06T00:00:00+09:00",
+  "status": "C2-DIAGNOSTIC / SHADOW / NON-PRODUCTION / RESULT-BLIND PRE-RESULT FREEZE / NO-AUTO-PROMOTION",
+  "owner": "COMMON_FAMILY / PREDICTION-TO-TICKET-CONVERSION-MEASUREMENT",
+  "production_effect": "NONE",
+  "evidence_seed": "2026-10-05 OHI R4-R10 day regression is retrospective training/regression evidence only and receives no Forward-OOS credit.",
+  "preserves": {
+    "common_exact_profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
+    "common_exact_definition_hash": "UNCHANGED / PREREGISTERED CONTRACT PRESERVED",
+    "local_mec_r5_profile": "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1",
+    "local_mec_r5_arm_definitions": "UNCHANGED",
+    "production_prediction": "UNCHANGED",
+    "production_mec_r3": "UNCHANGED",
+    "production_capital": "UNCHANGED"
+  },
+  "diagnostics": {
+    "winner_role_migration": {
+      "trigger": "W absent + P2/P3 CORE or PROTECTED retained + no observed structural-hard W negative",
+      "output": "LOWER_ROLE_RETAINED_W_ABSENT",
+      "automatic_w_promotion": false,
+      "purchase_authority": false
+    },
+    "pair_residual": {
+      "trigger": "Active W x P2 CORE/PROTECTED + no existing material pair + no hard structural pair exclusion",
+      "output": "PAIR-RESIDUAL",
+      "automatic_purchase": false,
+      "purchase_authority": false
+    },
+    "selective_exact": {
+      "trigger": "Material Pair x Active P3 not already purchased + at least one independent protection reason",
+      "independent_reasons": [
+        "P3 CORE/PROTECTED",
+        "P3 reason contains DIRECT/PROTECT/CURRENT_STATE/STAGE",
+        "pair-local third PURCHASE/PROTECT/MATERIAL",
+        "KRS SSR-P3 rank <= 3 as re-audit priority only"
+      ],
+      "output": "MATERIAL_PAIR_X_INDEPENDENTLY_PROTECTED_P3",
+      "automatic_purchase": false,
+      "purchase_authority": false,
+      "krs_notice": "KRS rank is uncalibrated re-audit priority only; never probability/EV/purchase authority."
+    }
+  },
+  "temporal_integrity": {
+    "generated_before_final": true,
+    "signed_final_binding_required": true,
+    "result_after_freeze_only": true
+  },
+  "promotion": {
+    "automatic": false,
+    "same_day_result_promotion": "FORBIDDEN",
+    "future_policy_change_requires": "FROZEN UNKNOWN OOS + explicit promotion declaration"
+  }
+}
