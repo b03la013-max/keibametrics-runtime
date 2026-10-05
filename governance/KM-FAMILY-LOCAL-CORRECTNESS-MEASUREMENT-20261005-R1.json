@@ -14,15 +14,10 @@
     },
     "common_exact_continuity": {
       "existing_profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
-      "arm_definitions": "FROZEN / UNCHANGED",
-      "added_measurement": [
-        "Winner role migration candidates: W absent + lower P2/P3 CORE/PROTECTED retained",
-        "Pair residual candidates: Active W x P2 CORE/PROTECTED with no material pair and no hard structural pair exclusion",
-        "Selective exact candidates: material pair x active P3 with independent static/pair-local/KRS re-audit protection"
-      ],
-      "production_effect": "NONE",
-      "automatic_purchase": false,
-      "oos_arm_change": false
+      "implementation": "runtime/common_exact_continuity_shadow.py",
+      "definition_and_oos_arms": "BYTE-SEMANTIC FROZEN / UNCHANGED",
+      "change": "NONE",
+      "production_effect": "NONE"
     },
     "local_mec_r5": {
       "existing_profile": "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1",
@@ -38,6 +33,20 @@
       "profile": "KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1",
       "oos_credit": false,
       "venue_canon_revision": false
+    },
+    "family_conversion_diagnostics": {
+      "profile": "KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1",
+      "profile_path": "research/common/KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1.json",
+      "runtime": "runtime/family_conversion_diagnostics.py",
+      "measurements": [
+        "Winner role migration candidates: W absent + lower P2/P3 CORE/PROTECTED retained",
+        "Pair residual candidates: Active W x P2 CORE/PROTECTED with no material pair and no hard structural pair exclusion",
+        "Selective exact candidates: material pair x active P3 with independent static/pair-local/KRS re-audit protection"
+      ],
+      "signed_final_binding_required": true,
+      "oos_arm": false,
+      "automatic_purchase": false,
+      "production_effect": "NONE"
     }
   },
   "invariants": {
