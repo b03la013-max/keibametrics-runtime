@@ -34,9 +34,14 @@ def test_family_revision_is_correctness_and_measurement_only():
     assert g["parent_current_authority"]=="KM-FAMILY-CURRENT-AUTHORITY-20261004-R39"
     assert g["changes"]["result_acquisition_correctness"]["code"]=="OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD"
     exact=g["changes"]["common_exact_continuity"]
-    assert exact["arm_definitions"]=="FROZEN / UNCHANGED"
+    assert exact["definition_and_oos_arms"]=="BYTE-SEMANTIC FROZEN / UNCHANGED"
+    assert exact["change"]=="NONE"
     assert exact["production_effect"]=="NONE"
-    assert exact["automatic_purchase"] is False
+    diag=g["changes"]["family_conversion_diagnostics"]
+    assert diag["profile"]=="KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1"
+    assert diag["oos_arm"] is False
+    assert diag["automatic_purchase"] is False
+    assert diag["production_effect"]=="NONE"
     r5=g["changes"]["local_mec_r5"]
     assert r5["arm_definitions"]=="FROZEN / UNCHANGED"
     assert r5["production_effect"]=="NONE"
@@ -52,6 +57,10 @@ def test_r40_is_correctness_only_successor():
     assert r40["common_family_components"]["mec"]==r39["common_family_components"]["mec"]
     assert r40["common_family_components"]["capital_policy"]==r39["common_family_components"]["capital_policy"]
     assert r40["family_scoped_authority"]["LOCAL"]["mec"]==r39["family_scoped_authority"]["LOCAL"]["mec"]
+    diag=r40["family_scoped_authority"]["LOCAL"]["conversion_diagnostics"]
+    assert diag["profile"]=="KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1"
+    assert diag["existing_common_exact_definition"]=="UNCHANGED / PREREGISTERED OOS CONTRACT PRESERVED"
+    assert diag["production_effect"]=="NONE"
     s=r40["supersession_declaration"]
     assert s["execution_correctness_change"] is True
     assert s["measurement_diagnostic_change"] is True
