@@ -65,7 +65,10 @@ def _aggregate(rows):
       "hit_races":hits,"hit_race_rate":round(hits/len(rows)*100,6) if rows else None,
       "hit_but_loss_count":hbl,"hit_but_loss_rate":round(hbl/len(rows)*100,6) if rows else None,
       "ticket_count_total":sum(int(x.get("ticket_count") or 0) for x in rows),
-      "max_drawdown":_max_drawdown(rows)
+      "max_drawdown":_max_drawdown(rows),
+      "return_per_yen":round(ret/inv,9) if inv else None,
+      "profit_per_ticket":round((ret-inv)/sum(int(x.get("ticket_count") or 0) for x in rows),9) if sum(int(x.get("ticket_count") or 0) for x in rows) else None,
+      "hit_but_loss_given_hit_rate":round(hbl/hits*100,6) if hits else None
     }
 
 
