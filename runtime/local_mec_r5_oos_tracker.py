@@ -68,6 +68,42 @@ def _aggregate(rows):
       "max_drawdown":_max_drawdown(rows)
     }
 
+
+def _normalized_comparison(aggregates):
+    positive_budget=[float(x.get("investment") or 0) for x in aggregates.values()
+                     if float(x.get("investment") or 0)>0]
+    positive_tickets=[int(x.get("ticket_count_total") or 0) for x in aggregates.values()
+                      if int(x.get("ticket_count_total") or 0)>0]
+    common_budget=min(positive_budget) if positive_budget else 0.0
+    common_tickets=min(positive_tickets) if positive_tickets else 0
+    by_arm={}
+    for arm,x in aggregates.items():
+        inv=float(x.get("investment") or 0)
+        ret=float(x.get("return") or 0)
+        tickets=int(x.get("ticket_count_total") or 0)
+        pfs=(ret/inv*100) if inv else None
+        return_per_ticket=(ret/tickets) if tickets else None
+        scaled_return=(common_budget*pfs/100) if pfs is not None else None
+        scaled_ticket_return=(return_per_ticket*common_tickets) if return_per_ticket is not None else None
+        by_arm[arm]={
+          "observed_investment":round(inv,2),
+          "observed_ticket_count":tickets,
+          "equal_budget_reference":round(common_budget,2),
+          "equal_budget_scaled_return":round(scaled_return,2) if scaled_return is not None else None,
+          "equal_budget_scaled_profit_loss":round(scaled_return-common_budget,2) if scaled_return is not None else None,
+          "return_per_ticket":round(return_per_ticket,9) if return_per_ticket is not None else None,
+          "equal_ticket_count_reference":common_tickets,
+          "equal_ticket_count_scaled_return":round(scaled_ticket_return,2) if scaled_ticket_return is not None else None,
+        }
+    return {
+      "status":"NORMALIZED-COMPARISON / MEASUREMENT-ONLY / NO-RESELECTION / NON-PRODUCTION",
+      "method":"Linear exposure normalization of already frozen/settled arms; does not claim a realizable reselected portfolio.",
+      "common_budget_reference":round(common_budget,2),
+      "common_ticket_count_reference":common_tickets,
+      "by_arm":by_arm,
+      "production_effect":"NONE",
+    }
+
 def build_status():
     activation=_dt(ACTIVATION_AT)
     entries=[]; held=[]; errors=[]
@@ -172,7 +208,8 @@ def build_status():
       "production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
       "production_effect":"NONE","automatic_promotion":False,"human_review_required":True,
       "rule_change_during_window":"FORBIDDEN except correctness repair",
-      "entries":entries,"aggregates":agg,"comparison_vs_production":cmp,"errors":errors
+      "entries":entries,"aggregates":agg,"comparison_vs_production":cmp,
+      "normalized_comparison":_normalized_comparison(agg),"errors":errors
     }
     out["sha256"]=_sha(out)
     return out
