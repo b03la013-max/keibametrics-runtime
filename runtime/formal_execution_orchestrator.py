@@ -1160,7 +1160,7 @@ def _official_result_identity_matches(page_text: str, race_context: Dict[str, An
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(page_text or "")))
     pattern = (
         re.escape(f"{date.year}年{date.month}月{date.day}日")
-        + r"(?:（[^）]{1,4}）)?"
+        + r"(?:\\([^)]{1,4}\\))?"
         + re.escape(venue)
         + re.escape(f"第{race_no}競走")
         + re.escape("競走成績")
