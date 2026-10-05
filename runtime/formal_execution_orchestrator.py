@@ -1155,7 +1155,7 @@ def _official_result_identity_matches(page_text: str, race_context: Dict[str, An
     """
     from local_physical.nar_source_manifest import VENUE_NAMES
     date = dt.date.fromisoformat(str(race_context["race_date"]).replace("/", "-"))
-    venue = VENUE_NAMES[race_context["venue_id"]]
+    venue = re.sub(r"\\s+", "", unicodedata.normalize("NFKC", VENUE_NAMES[race_context["venue_id"]]))
     race_no = int(race_context["race_no"])
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(page_text or "")))
     pattern = (
