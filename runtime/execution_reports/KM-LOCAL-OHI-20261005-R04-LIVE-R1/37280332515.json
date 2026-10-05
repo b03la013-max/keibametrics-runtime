@@ -1,0 +1,72 @@
+{
+  "capital_change": false,
+  "created_at": "2026-10-05T07:54:13.387608+00:00",
+  "execution_class": "BLOCKED",
+  "execution_id": "KM-LOCAL-OHI-20261005-R04-LIVE-R1",
+  "failure": {
+    "code": "OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED",
+    "failure_class": "CURRENT_STATE_REFORECAST",
+    "last_successful_stage": "OFFICIAL_CURRENT_STATE_PREFLIGHT",
+    "phase": "FORMAL",
+    "resume_hint": "REUSE_DURABLE_SOURCE_REFRESH_CURRENT_STATE_REBUILD_STATIC_THEN_RETRY_FORMAL",
+    "returncode": 1,
+    "stderr_tail": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/non_jra_formal_runner.py\", line 599, in <module>\n    fail_closed(\"OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED\",{\n  File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/non_jra_formal_runner.py\", line 84, in fail_closed\n    raise AssertionError((code,details))\nAssertionError: ('OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED', {'official_track_condition': '良', 'request_track_condition': 'CURRENT_SOURCE_RESOLVE', 'normalized_official': '良', 'normalized_request': 'CURRENT_SOURCE_RESOLVE', 'source_receipt_sha256': '243778295cffcf6715b49333b93665a73a60631b76507457634c8ff2efba8ce4'})\n",
+    "stdout_tail": ""
+  },
+  "family_id": "LOCAL",
+  "first_failed_class": "CURRENT_STATE_REFORECAST",
+  "first_failed_code": "OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED",
+  "first_failed_phase": "FORMAL",
+  "gateway_profile": "KM-LOCAL-EXECUTION-GATEWAY-v1.5-20261001",
+  "import_closure": {
+    "file_count": 30,
+    "status": "PASS"
+  },
+  "intent_basis_sha256": "703a2b1e5e5a1e69acb4a3832b28a01969e6a5d3a96b231c413677ba4ba23c63",
+  "intent_normalizations": [
+    {
+      "code": "STATIC_FREEZE_CANONICALIZED_FROM_STATIC_STATUS",
+      "source": "static_prediction.status",
+      "status": "FROZEN-LIVE-PRE-RACE-REFCAST-R2 / CHAT-OWNED-PRODUCTION-INPUT / RESULT-BLIND / NUMERICAL-DEGRADED"
+    },
+    {
+      "code": "FINAL_PREDICTION_PACKAGE_CANONICALIZED_FROM_FROZEN_STATIC",
+      "production_prediction_change": false,
+      "ranking_sha256": "f1314ccabe3151f57822191ee322fe53dd70d27feaad2878b6c7374f4e78d10a",
+      "roles_sha256": "973af94c586f8739270526dacca77fe82912cfaa45483162d7b18627bfeab047",
+      "source": "static_prediction"
+    }
+  ],
+  "krs_physics_change": false,
+  "last_successful_stage": "OFFICIAL_CURRENT_STATE_PREFLIGHT",
+  "mec_change": false,
+  "phases": [
+    {
+      "manifest_sha256": "9730db6f6ea99e95ed97329cf2c85bf3096fba67a2c16444ff14794e72c91831",
+      "phase": "SOURCE",
+      "run_id": "37280332515-source",
+      "status": "PASS",
+      "stdout_tail": "KM_NON_JRA_FORMAL_RESULT={\"race_id\":\"KM-LOCAL-OHI-20261005-R04-LIVE-R1\",\"family_id\":\"LOCAL\",\"execution_id\":\"KM-LOCAL-OHI-20261005-R04-LIVE-R1\",\"execution_phase\":\"SOURCE\",\"status\":\"SOURCE_VERIFIED\",\"external_endpoint\":\"https://witnessstrictimage-production.up.railway.app\",\"source_receipt\":\"243778295cffcf6715b49333b93665a73a60631b76507457634c8ff2efba8ce4\",\"source_snapshot_sha256\":\"2dd754de905302f3f846b9051d598e444a92a479d33bdb9a4515386eb56b5eed\",\"official_runner_universe_sha256\":\"479eb01861c2f2d049f57e81ae244438753b8e716bf84a4c2ee2b9a258fd2c8d\",\"official_runner_count\":9,\"source_freeze_at\":\"2026-10-05T07:54:14.459724+00:00\",\"verified\":true}\n"
+    }
+  ],
+  "plan": {
+    "action": "RUN_SOURCE_THEN_FORMAL",
+    "checkpoints": {
+      "execution_id": "KM-LOCAL-OHI-20261005-R04-LIVE-R1",
+      "formal": {
+        "status": "MISSING"
+      },
+      "source": {
+        "status": "MISSING"
+      }
+    },
+    "resume_from": "SOURCE"
+  },
+  "production_numerical_change": false,
+  "production_prediction_change": false,
+  "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20261001-R3",
+  "race_id": "KM-LOCAL-OHI-20261005-R04-LIVE-R1",
+  "resume_from": "FORMAL",
+  "schema": "KM-FORMAL-SINGLE-ENTRY-ORCHESTRATION-v1",
+  "status": "BLOCKED"
+}
