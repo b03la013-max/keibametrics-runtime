@@ -42,3 +42,24 @@ def test_family_revision_is_correctness_and_measurement_only():
     assert r5["production_effect"]=="NONE"
     assert g["invariants"]["same_day_promotion"]=="FORBIDDEN"
     assert g["invariants"]["automatic_promotion"] is False
+
+
+def test_r40_is_correctness_only_successor():
+    r39=load(Path("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261004_R39.json"))
+    r40=load(Path("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261005_R40.json"))
+    assert r40["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261005-R40"
+    assert r40["predecessor"]==r39["manifest_id"]
+    assert r40["common_family_components"]["mec"]==r39["common_family_components"]["mec"]
+    assert r40["common_family_components"]["capital_policy"]==r39["common_family_components"]["capital_policy"]
+    assert r40["family_scoped_authority"]["LOCAL"]["mec"]==r39["family_scoped_authority"]["LOCAL"]["mec"]
+    s=r40["supersession_declaration"]
+    assert s["execution_correctness_change"] is True
+    assert s["measurement_diagnostic_change"] is True
+    assert s["predictive_model_formula_change"] is False
+    assert s["production_semantic_policy_change"] is False
+    assert s["production_numerical_change"] is False
+    assert s["krs_engine_physics_change"] is False
+    assert s["mec_r3_policy_change"] is False
+    assert s["capital_policy_change"] is False
+    assert s["venue_canon_change"] is False
+    assert s["automatic_promotion"] is False
