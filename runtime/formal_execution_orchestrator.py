@@ -46,6 +46,17 @@ class FormalOrchestrationError(RuntimeError):
     pass
 
 
+RETRYABLE_OFFICIAL_RESULT_CODES = frozenset({
+    "OFFICIAL_RESULT_NOT_DUE",
+    "OFFICIAL_RESULT_FINISH_TABLE_HOLD",
+    "OFFICIAL_RESULT_PAYOUT_NOT_READY",
+    "OFFICIAL_RESULT_HTTP_OR_AUTHORITY_HOLD",
+    "OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD",
+    "OFFICIAL_RESULT_NOT_FINAL",
+    "OFFICIAL_RESULT_TRANSPORT_PENDING",
+})
+
+
 def _sha_obj(obj: Any) -> str:
     raw = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
@@ -1331,9 +1342,7 @@ def resume_official_result(intent, *, run_id, github_sha, runtime_out, tmp_root,
                 recovery_attempt += 1
                 time.sleep(min(delay, max(0, until - time.monotonic())))
                 continue
-            retryable = code in {"OFFICIAL_RESULT_NOT_DUE", "OFFICIAL_RESULT_FINISH_TABLE_HOLD",
-                                 "OFFICIAL_RESULT_PAYOUT_NOT_READY", "OFFICIAL_RESULT_HTTP_OR_AUTHORITY_HOLD",
-                                 "OFFICIAL_RESULT_NOT_FINAL", "OFFICIAL_RESULT_TRANSPORT_PENDING"}
+            retryable = code in RETRYABLE_OFFICIAL_RESULT_CODES
             if not retryable or time.monotonic() >= until:
                 return {"status": "WAITING_OFFICIAL_RESULT" if retryable else "BLOCKED",
                         "execution_id": derive_execution_id(intent), "first_failed_code": code,
