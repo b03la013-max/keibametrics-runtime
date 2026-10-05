@@ -32,6 +32,98 @@ def _active_p3(req:Dict[str,Any], final_package:Dict[str,Any])->set[int]:
             out.add(int(k))
     return out
 
+
+def _role_status_map(req:Dict[str,Any])->dict[int,dict[str,str]]:
+    out={}
+    for row in req.get("role_registry") or []:
+        try:
+            runner=int(row["runner_id"])
+        except Exception:
+            continue
+        col=str(row.get("column") or "").upper()
+        status=str(row.get("status") or "").upper()
+        if col:
+            out.setdefault(runner,{})[col]=status
+    return out
+
+def _hard_reason(reason:Any)->bool:
+    text=str(reason or "").upper()
+    return any(marker in text for marker in HARD_MARKERS)
+
+def _hard_pair_exclusions(req:Dict[str,Any])->set[tuple[int,int]]:
+    out=set()
+    for row in req.get("pair_dispositions") or []:
+        if str(row.get("status") or "").upper()!="EXCLUDE" or not _hard_reason(row.get("reason")):
+            continue
+        try:
+            out.add((int(row["head"]),int(row["second"])))
+        except Exception:
+            continue
+    return out
+
+def _conversion_diagnostics(req:Dict[str,Any], final_package:Dict[str,Any],
+                            candidates:list[Dict[str,Any]])->Dict[str,Any]:
+    roles=_roles(req,final_package)
+    status_map=_role_status_map(req)
+    material={(h,s) for h,s,_ in _material_pairs(req)}
+    hard_pairs=_hard_pair_exclusions(req)
+
+    winner_migration=[]
+    for runner,vals in roles.items():
+        rid=int(runner)
+        role_set={str(v).upper() for v in (vals or [])}
+        if any(v.startswith("W") for v in role_set):
+            continue
+        lower={k:v for k,v in status_map.get(rid,{}).items()
+               if k in {"P2","P3"} and v in {"CORE","PROTECTED"}}
+        if lower:
+            winner_migration.append({
+                "runner_id":rid,
+                "lower_role_status":lower,
+                "diagnostic":"LOWER_ROLE_RETAINED_W_ABSENT",
+                "automatic_w_promotion":False,
+                "purchase_authority":False,
+            })
+
+    active_w=sorted(int(r) for r,vals in roles.items()
+                    if any(str(v).upper().startswith("W") for v in (vals or [])))
+    protected_p2=sorted(r for r,cols in status_map.items()
+                        if cols.get("P2") in {"CORE","PROTECTED"})
+    pair_residual=[]
+    for h in active_w:
+        for s in protected_p2:
+            if h==s or (h,s) in material or (h,s) in hard_pairs:
+                continue
+            pair_residual.append({
+                "head":h,"second":s,
+                "p2_status":status_map.get(s,{}).get("P2"),
+                "diagnostic":"ACTIVE_W_X_CORE_OR_PROTECTED_P2_NO_MATERIAL_PAIR",
+                "terminal":"PAIR-RESIDUAL",
+                "automatic_purchase":False,
+                "purchase_authority":False,
+            })
+
+    selective=[]
+    for row in candidates:
+        if row.get("selective_exact_candidate"):
+            selective.append({
+                "exact":list(row["exact"]),
+                "pair_status":row.get("pair_status"),
+                "p3_role_status":row.get("p3_role_status"),
+                "independent_protection_reasons":list(row.get("independent_protection_reasons") or []),
+                "diagnostic":"MATERIAL_PAIR_X_INDEPENDENTLY_PROTECTED_P3",
+                "automatic_purchase":False,
+                "purchase_authority":False,
+            })
+    return {
+        "status":"SHADOW-DIAGNOSTIC-ONLY / NOT-OOS-ARM / NO-AUTO-PROMOTION",
+        "production_effect":"NONE",
+        "arm_definition_changed":False,
+        "winner_role_migration_candidates":winner_migration,
+        "pair_residual_candidates":pair_residual,
+        "selective_exact_candidates":selective,
+    }
+
 def _material_pairs(req:Dict[str,Any])->list[tuple[int,int,str]]:
     out=[]
     for x in req.get("pair_dispositions") or []:
@@ -138,11 +230,25 @@ def build_shadow(req:Dict[str,Any], final_ticket:Dict[str,Any], final_package:Di
             if _hard_excluded(explicit): continue
             if key in prod_exact: continue
             k=kr.get(key) or {}
+            p3_status=_role_status_map(req).get(t,{}).get("P3")
+            protection=[]
+            if p3_status in {"CORE","PROTECTED"}:
+                protection.append("STATIC_P3_"+p3_status)
+            explicit_status=str((explicit or {}).get("status") or "").upper()
+            if explicit_status in {"PURCHASE","PROTECT","MATERIAL"}:
+                protection.append("PAIR_LOCAL_THIRD_"+explicit_status)
+            if bool(k.get("actionable")):
+                protection.append("KRS_ACTIONABLE_REAUDIT")
+            if isinstance(k.get("rank"),int) and k["rank"]<=3:
+                protection.append("KRS_TOP3_REAUDIT")
             candidates.append({
                 "exact":[h,s,t],
                 "pair_status":pstat,
                 "third_status":(explicit or {}).get("status") or "AUTO_SEMANTIC_ONLY",
                 "third_reason":(explicit or {}).get("reason") or "MATERIAL_PAIR_X_ACTIVE_P3_NOT_EXPLICITLY_MATERIALIZED",
+                "p3_role_status":p3_status,
+                "independent_protection_reasons":protection,
+                "selective_exact_candidate":bool(protection),
                 "krs_rank":k.get("rank"),
                 "krs_frequency":k.get("frequency"),
                 "krs_count":k.get("count"),
@@ -192,6 +298,7 @@ def build_shadow(req:Dict[str,Any], final_ticket:Dict[str,Any], final_package:Di
             (None if after_activation else "BEFORE_CANDIDATE_ACTIVATION")
         ),
         "capital_width_diagnostics":_capital_diagnostics(final_ticket,final_package),
+        "conversion_diagnostics":_conversion_diagnostics(req,final_package,candidates),
     }
     out["sha256"]=_sha({k:v for k,v in out.items() if k!="sha256"})
     return out
