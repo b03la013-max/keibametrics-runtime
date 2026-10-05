@@ -253,7 +253,7 @@ from local_candidate_numerical_authority import assess as assess_candidate_numer
 from local_nar_evidence_candidate import compile_candidate_evidence
 from local_evidence_routing_candidate_v03 import compile_candidate_evidence_v03
 from local_fullnumerical_candidate import materialize_candidate
-from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
+from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_prediction_structure_derived, build_candidate_krs
 from local_candidate_postresult import evaluate_dual
 from local_candidate_v03_postresult import evaluate_v03
 from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding, build_basis as build_mec_shadow_basis
@@ -822,12 +822,16 @@ def compute_candidate_shadows():
             source_artifact,req,
             "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
         )
-        cq3=materialize_candidate(
+        cq3_num=materialize_candidate(
             copy.deepcopy(ce3),
             "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
             "mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json"
         )
-        cq3=build_candidate_prediction(cq3)
+        # Preserve the existing v0.3 candidate definition and tracker exactly.
+        cq3=build_candidate_prediction(copy.deepcopy(cq3_num))
+        # Weekend JRA R39 learning is measured only as a paired LOCAL shadow:
+        # same evidence/numerics, structure-derived role widths, no budget input.
+        cq4=build_candidate_prediction_structure_derived(copy.deepcopy(cq3_num))
         cq3=build_candidate_krs(cq3)
         candidate_shadow_q_v03=cq3
         race_date_v03=str(req.get("race_date") or (req.get("race") or {}).get("race_date") or "")
@@ -860,6 +864,46 @@ def compute_candidate_shadows():
                 for r in (cq3.get("runners") or [])
             },
         }
+        v04_arm={
+            "label":"v0.4-STRUCTURE-DERIVED-PAIRED-SHADOW",
+            "production_authority":False,
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "candidate_full_numerical_summary":cq4.get("candidate_full_numerical_summary"),
+            "candidate_static_prediction":cq4.get("candidate_static_prediction"),
+            "candidate_structure_derived_shadow":cq4.get("candidate_structure_derived_shadow"),
+            "runner_component_coverage":{
+                str(r.get("runner_id")):{
+                    "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                    "missing_component_count":r.get("candidate_missing_count"),
+                    "missing_components":r.get("candidate_missing_components"),
+                    "missing_policy":r.get("candidate_missing_policy"),
+                } for r in (cq4.get("runners") or [])
+            },
+        }
+        paired_v04_summary={
+            "status":"FROZEN_PRE_RESULT_LOCAL_STRUCTURE_DERIVED_V04_PAIRED_SHADOW",
+            "profile":"KM-LOCAL-CANDIDATE-STRUCTURE-DERIVED-WIDTH-v0.4-20261005",
+            "production_authority":False,
+            "automatic_promotion":False,
+            "race_id":rid,
+            "race_date":race_date_v03,
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "parent_v03_mapping_id":(cq3_num.get("candidate_full_numerical_summary") or {}).get("mapping_id"),
+            "arm":v04_arm,
+            "oos_tracker_effect":"NONE / DOES NOT INHERIT OR MUTATE V0.3 COUNT",
+            "note":"Paired static-role measurement imported from JRA R39. Capital is downstream and never determines W/P2/P3 width.",
+        }
+        paired_v04_summary["sha256"]=sha_obj(paired_v04_summary)
+        persist("candidate_numerical_v04_structure_shadow_summary.json",paired_v04_summary)
+        stage("NUMERICAL_CANDIDATE_V04_STRUCTURE_SHADOW",
+              status="PASS",production_authority=False,
+              shadow_sha256=paired_v04_summary.get("sha256"),
+              prediction_sha256=(cq4.get("candidate_static_prediction") or {}).get("sha256"),
+              future_multiplicity=((cq4.get("candidate_static_prediction") or {}).get("role_width_policy") or {}).get("future_multiplicity"),
+              v03_tracker_effect="NONE")
+
         candidate_v03_summary={
             "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW",
             "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
@@ -871,6 +915,7 @@ def compute_candidate_shadows():
             "source_receipt_sha256":source_receipt_sha,
             "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
             "arm":v03_arm,
+            "paired_structure_derived_shadow":paired_v04_summary,
             "baseline_v01_prediction_sha256":((candidate_shadow_q or {}).get("candidate_static_prediction") or {}).get("sha256"),
             "policy":{
                 "production_mutation":False,

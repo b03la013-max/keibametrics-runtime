@@ -264,3 +264,141 @@ def build_candidate_prediction(request: Dict[str,Any]) -> Dict[str,Any]:
     }
     q["candidate_static_prediction"]["sha256"]=_sha(q["candidate_static_prediction"])
     return q
+
+
+STRUCTURE_DERIVED_PROFILE = "KM-LOCAL-NUMERICAL-STATIC-PREDICTION-v0.4-STRUCTURE-DERIVED-20261005"
+
+def _structure_upper_cluster(rows: List[Dict[str,Any]], score_key: str, *, min_active: int) -> tuple[List[str],Dict[str,Any]]:
+    """Select the naturally stronger score cluster without using race budget.
+
+    The minimum is combination cardinality only, not a preferred role width.
+    """
+    ordered=sorted(
+        [(str(x["runner_id"]),float(x[score_key])) for x in rows],
+        key=lambda z:(-z[1],int(z[0]) if z[0].isdigit() else z[0])
+    )
+    if not ordered:
+        return [],{"method":"UPPER_CLUSTER_1D_KMEANS","status":"EMPTY","budget_input_used":False}
+    floor=max(1,min(int(min_active),len(ordered)))
+    vals=[v for _,v in ordered]
+    span=max(vals)-min(vals)
+    if len(ordered)<=floor:
+        return [rid for rid,_ in ordered],{
+            "method":"UPPER_CLUSTER_1D_KMEANS","status":"STRUCTURAL_FLOOR",
+            "active_count":len(ordered),"field_count":len(ordered),
+            "structural_floor":floor,"score_range":round(span,6),"budget_input_used":False,
+        }
+    if abs(span)<=1e-12:
+        return [rid for rid,_ in ordered],{
+            "method":"UPPER_CLUSTER_1D_KMEANS","status":"PARITY_ALL_ACTIVE",
+            "active_count":len(ordered),"field_count":len(ordered),
+            "structural_floor":floor,"score_range":0.0,"budget_input_used":False,
+        }
+    low=min(vals); high=max(vals); assignments=None
+    for _ in range(64):
+        now=[0 if abs(v-low)<=abs(v-high) else 1 for v in vals]
+        if assignments==now:
+            break
+        assignments=now
+        g0=[v for v,a in zip(vals,assignments) if a==0]
+        g1=[v for v,a in zip(vals,assignments) if a==1]
+        if not g0 or not g1:
+            break
+        low=sum(g0)/len(g0); high=sum(g1)/len(g1)
+        if low>high:
+            low,high=high,low
+            assignments=[1-a for a in assignments]
+    chosen=[rid for (rid,_),a in zip(ordered,assignments or [1]*len(ordered)) if a==1]
+    if len(chosen)<floor:
+        chosen=[rid for rid,_ in ordered[:floor]]
+    return chosen,{
+        "method":"UPPER_CLUSTER_1D_KMEANS","status":"PASS",
+        "active_count":len(chosen),"field_count":len(ordered),
+        "structural_floor":floor,"score_range":round(span,6),
+        "upper_centroid":round(high,6),"lower_centroid":round(low,6),
+        "budget_input_used":False,
+    }
+
+def build_candidate_prediction_structure_derived(request: Dict[str,Any]) -> Dict[str,Any]:
+    """Paired LOCAL shadow imported from JRA R39 causal ordering.
+
+    It reuses the already-frozen LOCAL candidate numerics but replaces fixed
+    percentage role widths with independent score-column structure.  It never
+    reads capital/budget to choose W/P2/P3 and never mutates Production.
+    """
+    q=build_candidate_prediction(request)
+    baseline=copy.deepcopy(q["candidate_static_prediction"])
+    rows=copy.deepcopy(baseline.get("runner_scores") or [])
+    if len(rows)<2:
+        raise LocalCandidateBridgeError("STRUCTURE_DERIVED_RUNNERS_REQUIRED")
+    n=len(rows)
+    W,wdiag=_structure_upper_cluster(rows,"w_score",min_active=1)
+    P2,p2diag=_structure_upper_cluster(rows,"p2_score",min_active=min(2,n))
+    P3,p3diag=_structure_upper_cluster(rows,"p3_score",min_active=min(3,n))
+    role_map={}
+    for rid in baseline["ranking"]:
+        rr=[]
+        if rid in W: rr.append("W")
+        if rid in P2: rr.append("P2")
+        if rid in P3: rr.append("P3")
+        role_map[rid]=rr
+    for r in q.get("runners") or []:
+        r["candidate_static_roles"]=role_map.get(str(r.get("runner_id")),[])
+
+    if len(W)<=1 and len(P2)<=2 and len(P3)<=3:
+        multiplicity="CONCENTRATED"
+    elif len(W)<=1:
+        multiplicity="ASYMMETRIC"
+    else:
+        multiplicity="DIVERSE"
+
+    confidence={}
+    for r in q.get("runners") or []:
+        rid=str(r.get("runner_id"))
+        coverage=r.get("candidate_feature_coverage_ratio")
+        missing=r.get("candidate_missing_count")
+        confidence[rid]={
+            "real_component_coverage_ratio":coverage,
+            "missing_component_count":missing,
+            "classification":(
+                "UNKNOWN" if not isinstance(coverage,(int,float))
+                else "HIGH" if float(coverage)>=0.80
+                else "MEDIUM" if float(coverage)>=0.55
+                else "LOW"
+            ),
+            "score_effect":"NONE / CONFIDENCE_REPORTED_SEPARATELY",
+        }
+
+    pred={
+        **baseline,
+        "profile":STRUCTURE_DERIVED_PROFILE,
+        "production_authority":False,
+        "parent_fixed_width_prediction_sha256":baseline.get("sha256"),
+        "W":W,"P2":P2,"P3":P3,"roles":role_map,
+        "role_width_policy":{
+            "driver":"RACE_FORCE_RELATIONSHIP_NOT_BUDGET",
+            "fixed_w_width":None,"fixed_p2_width":None,"fixed_p3_width":None,
+            "fixed_ticket_count":None,"budget_input_used":False,"budget_fill_forbidden":True,
+            "W":wdiag,"P2":p2diag,"P3":p3diag,
+            "future_multiplicity":multiplicity,
+            "status":"PAIRED_SHADOW / NON-PRODUCTION / NO-AUTO-PROMOTION",
+        },
+        "evidence_confidence":confidence,
+        "score_confidence_rule":"SCORE != EVIDENCE_CONFIDENCE; UNKNOWN != WEAK",
+        "independent_p2_review":"P2 ACTIVE SET IS DERIVED FROM P2 SCORE STRUCTURE INDEPENDENTLY OF W MEMBERSHIP",
+        "capital_boundary":"SEMANTIC WIDTH FREEZES BEFORE CAPITAL; CAPITAL MAY LIMIT/PAPER/NO-BET BUT MUST NOT BACKSOLVE ROLE WIDTH",
+        "note":"Central R39 weekend learning imported as a paired LOCAL shadow. Existing v0.3 Forward OOS definition remains unchanged.",
+    }
+    pred["sha256"]=_sha(pred)
+    q["candidate_static_prediction"]=pred
+    q["candidate_structure_derived_shadow"]={
+        "profile":STRUCTURE_DERIVED_PROFILE,
+        "production_authority":False,
+        "paired_against":"LOCAL v0.3 fixed-width candidate when supplied from the same numerical basis",
+        "future_multiplicity":multiplicity,
+        "budget_input_used":False,
+        "automatic_promotion":False,
+        "oos_tracker_effect":"NONE / NEW PAIRED MEASUREMENT ONLY",
+    }
+    q["candidate_structure_derived_shadow"]["sha256"]=_sha(q["candidate_structure_derived_shadow"])
+    return q

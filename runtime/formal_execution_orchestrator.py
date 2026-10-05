@@ -1146,6 +1146,28 @@ def run_formal_with_fallback(request, phase, **kwargs):
         return run_phase(fallback, phase, **kwargs)
 
 
+def _official_result_identity_matches(page_text: str, race_context: Dict[str, Any]) -> bool:
+    """Match the official NAR result header in normalized visible page text.
+
+    NAR may change which heading element wraps the result identity.  The
+    identity itself remains fail-closed: date -> venue -> race -> 競走成績 must
+    appear as one ordered result header, not as unrelated navigation tokens.
+    """
+    from local_physical.nar_source_manifest import VENUE_NAMES
+    date = dt.date.fromisoformat(str(race_context["race_date"]).replace("/", "-"))
+    venue = re.sub(r"\s+", "", unicodedata.normalize("NFKC", VENUE_NAMES[race_context["venue_id"]]))
+    race_no = int(race_context["race_no"])
+    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(page_text or "")))
+    pattern = (
+        re.escape(f"{date.year}年{date.month}月{date.day}日")
+        + r"(?:\([^)]{1,4}\))?"
+        + re.escape(venue)
+        + re.escape(f"第{race_no}競走")
+        + re.escape("競走成績")
+    )
+    return re.search(pattern, normalized) is not None
+
+
 def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     """NAR official finish/payout verification; unsupported outcomes HOLD.
 
@@ -1176,13 +1198,7 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
         # Cancellations require the existing authorized refund path; the flat
         # payout representation used here cannot safely settle them.
         raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
-    headings = re.findall(r"<h4\b[^>]*>(.*?)</h4>", html, re.S | re.I)
-    heading = unicodedata.normalize("NFKC", "".join(_html_text(h) for h in headings))
-    heading = re.sub(r"\s+", "", heading)
-    date = dt.date.fromisoformat(str(race_context["race_date"]).replace("/", "-"))
-    if (f"{date.year}年{date.month}月{date.day}日" not in heading
-            or VENUE_NAMES[race_context["venue_id"]] not in heading
-            or f"第{int(race_context['race_no'])}競走" not in heading or "競走成績" not in heading):
+    if not _official_result_identity_matches(page_text, race_context):
         raise FormalOrchestrationError("OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD")
     tables = _html_tables(html)
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
