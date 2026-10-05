@@ -17,7 +17,21 @@ def req():
       "third_dispositions":[
         {"head":"7","second":"8","third":"2","status":"PURCHASE","reason":"CORE_EXACT"},
       ],
-      "static_prediction":{"roles":{"2":["P2","P3"],"7":["W","P2","P3"],"8":["P2","P3"]}},
+      "static_prediction":{"roles":{
+        "2":["P2","P3"],"6":["P3"],"7":["W","P2","P3"],"8":["P2","P3"],"9":["P2","P3"]
+      }},
+      "role_registry":[
+        {"runner_id":"2","column":"P2","status":"CORE"},
+        {"runner_id":"2","column":"P3","status":"CORE"},
+        {"runner_id":"6","column":"P3","status":"PROTECTED"},
+        {"runner_id":"7","column":"W","status":"CORE"},
+        {"runner_id":"7","column":"P2","status":"CORE"},
+        {"runner_id":"7","column":"P3","status":"CORE"},
+        {"runner_id":"8","column":"P2","status":"CORE"},
+        {"runner_id":"8","column":"P3","status":"CORE"},
+        {"runner_id":"9","column":"P2","status":"PROTECTED"},
+        {"runner_id":"9","column":"P3","status":"PROTECTED"},
+      ],
     }
 
 def test_build_gap_and_krs_arms():
@@ -40,6 +54,15 @@ def test_build_gap_and_krs_arms():
     assert sh["production_effect"]=="NONE"
     assert sh["automatic_purchase"] is False
     assert sh["capital_width_diagnostics"]["oos_arm"] is False
+    diag=sh["conversion_diagnostics"]
+    assert diag["arm_definition_changed"] is False
+    assert any(x["runner_id"]==6 for x in diag["winner_role_migration_candidates"])
+    assert any(x["head"]==7 and x["second"]==9 and x["terminal"]=="PAIR-RESIDUAL"
+               for x in diag["pair_residual_candidates"])
+    selective={tuple(x["exact"]):x for x in diag["selective_exact_candidates"]}
+    assert (7,2,8) in selective
+    assert "STATIC_P3_CORE" in selective[(7,2,8)]["independent_protection_reasons"]
+    assert selective[(7,2,8)]["purchase_authority"] is False
 
 def test_signed_final_binding_and_settlement():
     q=req();fp={"ranking":["7","2","8"],"roles":q["static_prediction"]["roles"]}
