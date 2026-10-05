@@ -267,6 +267,11 @@ from common_exact_continuity_shadow import (
     bind_shadow_to_trace as bind_common_exact_continuity_shadow_to_trace,
     verify_signed_final_binding as verify_common_exact_continuity_signed_final_binding,
 )
+from family_conversion_diagnostics import (
+    build_diagnostics as build_family_conversion_diagnostics,
+    bind_to_trace as bind_family_conversion_diagnostics_to_trace,
+    verify_signed_final_binding as verify_family_conversion_diagnostics_signed_final_binding,
+)
 
 rid=str(req.get("race_id") or "")
 assert rid,"RACE_ID_REQUIRED"
@@ -1248,6 +1253,8 @@ local_mec_r5_shadow=None
 local_mec_r5_shadow_error=None
 common_exact_continuity_shadow=None
 common_exact_continuity_shadow_error=None
+family_conversion_diagnostics=None
+family_conversion_diagnostics_error=None
 common_mec_shadow_basis=None
 shadow_ticket=None
 if temporal_mode=="FORMAL-PRE-RACE":
@@ -1340,6 +1347,37 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+    # Companion diagnostic: result-blind Role -> Pair -> Exact continuity
+    # observations. This is deliberately separate from the preregistered
+    # Common Exact OOS arm so its definition hash and OOS contract stay frozen.
+    try:
+        family_conversion_diagnostics=build_family_conversion_diagnostics(
+            req,shadow_ticket,final_package,utility,
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            basis_sha256=common_mec_shadow_basis["sha256"],
+        )
+        trace=bind_family_conversion_diagnostics_to_trace(
+            trace,family_conversion_diagnostics
+        )
+        persist("family_conversion_diagnostics_pre_result.json",
+                family_conversion_diagnostics)
+        stage("FAMILY_CONVERSION_DIAGNOSTICS_PRE_RESULT_FREEZE",
+              profile=family_conversion_diagnostics.get("profile"),
+              diagnostic_sha256=family_conversion_diagnostics.get("sha256"),
+              basis_sha256=family_conversion_diagnostics.get("source_basis_sha256"),
+              winner_migration_count=len(family_conversion_diagnostics.get("winner_role_migration_candidates") or []),
+              pair_residual_count=len(family_conversion_diagnostics.get("pair_residual_candidates") or []),
+              selective_exact_count=len(family_conversion_diagnostics.get("selective_exact_candidates") or []),
+              production_effect="NONE")
+    except Exception as e:
+        family_conversion_diagnostics_error=type(e).__name__+":"+str(e)
+        persist("family_conversion_diagnostics_error.json",{
+            "status":"NON_BLOCKING_DIAGNOSTIC_FAILURE",
+            "error":family_conversion_diagnostics_error,
+            "production_effect":"NONE",
+            "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
 persist("canonical_ticket.json",{
     "finalized":True,"no_bet":no_bet,"total_investment":total,"tickets":tickets,
     "frozen_at":final_freeze,"execution_id":execution_id,"race_id":rid})
@@ -1395,7 +1433,7 @@ acceptance_only=bool(request_oos_policy(req)["acceptance_only"])
 try:
     from local_candidate_postresult import build_forward_capture
     inventory={}
-    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json"]:
+    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json","family_conversion_diagnostics_pre_result.json"]:
         path=os.path.join("runtime_out",name)
         if os.path.isfile(path):
             with open(path,"rb") as frozen_file:inventory[name]={"sha256":hashlib.sha256(frozen_file.read()).hexdigest()}
@@ -1459,6 +1497,23 @@ if common_exact_continuity_shadow is not None:
         persist("common_exact_continuity_shadow_binding_error.json",{
             "status":"INVALID_FOR_OOS_NON_BLOCKING",
             "error":common_exact_continuity_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha
+        })
+
+family_conversion_diagnostics_binding=None
+if family_conversion_diagnostics is not None:
+    try:
+        family_conversion_diagnostics_binding=verify_family_conversion_diagnostics_signed_final_binding(
+            fin,family_conversion_diagnostics
+        )
+        persist("family_conversion_diagnostics_binding_attestation.json",
+                family_conversion_diagnostics_binding)
+    except Exception as e:
+        family_conversion_diagnostics_error=type(e).__name__+":"+str(e)
+        persist("family_conversion_diagnostics_binding_error.json",{
+            "status":"INVALID_DIAGNOSTIC_BINDING_NON_BLOCKING",
+            "error":family_conversion_diagnostics_error,
             "production_effect":"NONE",
             "final_receipt_sha256":final_sha
         })
