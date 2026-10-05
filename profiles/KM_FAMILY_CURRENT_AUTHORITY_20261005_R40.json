@@ -61,7 +61,10 @@
     "local_correctness_measurement_revision": "KM-FAMILY-LOCAL-CORRECTNESS-MEASUREMENT-20261005-R1",
     "local_correctness_measurement_governance": "governance/KM-FAMILY-LOCAL-CORRECTNESS-MEASUREMENT-20261005-R1.json",
     "local_ohi_20261005_regression": "KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1",
-    "local_ohi_20261005_regression_profile": "research/common/KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1.json"
+    "local_ohi_20261005_regression_profile": "research/common/KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1.json",
+    "family_conversion_diagnostics": "KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1",
+    "family_conversion_diagnostics_profile": "research/common/KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1.json",
+    "family_conversion_diagnostics_runtime": "runtime/family_conversion_diagnostics.py"
   },
   "family_scoped_authority": {
     "JRA": {
@@ -558,14 +561,18 @@
         "numerical_change": false
       },
       "conversion_diagnostics": {
-        "status": "ACTIVE SHADOW DIAGNOSTIC / NON-PRODUCTION / NO-AUTO-PROMOTION",
-        "existing_exact_profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
-        "exact_oos_arm_definition": "UNCHANGED",
+        "status": "ACTIVE / COMPANION SHADOW DIAGNOSTIC / NON-PRODUCTION / NO-AUTO-PROMOTION",
+        "profile": "KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1",
+        "profile_path": "research/common/KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1.json",
+        "runtime": "runtime/family_conversion_diagnostics.py",
+        "existing_common_exact_profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
+        "existing_common_exact_definition": "UNCHANGED / PREREGISTERED OOS CONTRACT PRESERVED",
         "diagnostics": [
           "LOWER_ROLE_RETAINED_W_ABSENT",
           "ACTIVE_W_X_CORE_OR_PROTECTED_P2_NO_MATERIAL_PAIR",
           "MATERIAL_PAIR_X_INDEPENDENTLY_PROTECTED_P3"
         ],
+        "signed_final_binding_required": true,
         "automatic_purchase": false,
         "production_effect": "NONE"
       }
