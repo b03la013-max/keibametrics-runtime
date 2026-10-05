@@ -1,0 +1,92 @@
+name: Family LOCAL Correctness Measurement Acceptance
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/formal_execution_orchestrator.py"
+      - "runtime/common_exact_continuity_shadow.py"
+      - "runtime/local_mec_r5_oos_tracker.py"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261005_R40.json"
+      - "governance/KM-FAMILY-LOCAL-CORRECTNESS-MEASUREMENT-20261005-R1.json"
+      - "research/common/KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1.json"
+      - "tests/test_local_central_weekend_import.py"
+      - "tests/test_common_exact_continuity_shadow.py"
+      - "tests/test_local_mec_r5_shadow.py"
+      - "tests/test_ohi_20261005_family_regression.py"
+      - ".github/workflows/km-family-local-correctness-measurement-acceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "runtime/formal_execution_orchestrator.py"
+      - "runtime/common_exact_continuity_shadow.py"
+      - "runtime/local_mec_r5_oos_tracker.py"
+      - "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261005_R40.json"
+      - "governance/KM-FAMILY-LOCAL-CORRECTNESS-MEASUREMENT-20261005-R1.json"
+      - "research/common/KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1.json"
+      - ".github/workflows/km-family-local-correctness-measurement-acceptance.yml"
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+
+      - name: Compile changed runtime modules
+        run: |
+          python -m py_compile \
+            runtime/formal_execution_orchestrator.py \
+            runtime/common_exact_continuity_shadow.py \
+            runtime/local_mec_r5_oos_tracker.py
+
+      - name: Focused family regression tests
+        run: |
+          python -m pytest -q \
+            tests/test_local_central_weekend_import.py \
+            tests/test_common_exact_continuity_shadow.py \
+            tests/test_local_mec_r5_shadow.py \
+            tests/test_ohi_20261005_family_regression.py \
+            tests/test_formal_execution_orchestrator.py \
+            tests/test_recovery_result_entry.py
+
+      - name: Validate R40 authority
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from family_authority_guard import selftest
+
+          r39=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261004_R39.json",encoding="utf-8"))
+          r40=json.load(open("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261005_R40.json",encoding="utf-8"))
+          assert r40["predecessor"]==r39["manifest_id"]
+          assert r40["common_family_components"]["mec"]==r39["common_family_components"]["mec"]
+          assert r40["common_family_components"]["capital_policy"]==r39["common_family_components"]["capital_policy"]
+          assert r40["family_scoped_authority"]["JRA"]==r39["family_scoped_authority"]["JRA"]
+          assert r40["family_scoped_authority"]["BAN"]==r39["family_scoped_authority"]["BAN"]
+          assert r40["supersession_declaration"]["predictive_model_formula_change"] is False
+          assert r40["supersession_declaration"]["production_numerical_change"] is False
+          assert r40["supersession_declaration"]["mec_r3_policy_change"] is False
+          assert r40["supersession_declaration"]["capital_policy_change"] is False
+          report=selftest("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261005_R40.json")
+          assert report["status"]=="PASS", report
+          print("R40_LOCAL_CORRECTNESS_MEASUREMENT_PASS",report)
+          PY
+
+      - name: Lint workflow
+        run: |
+          ./actionlint -color .github/workflows/km-family-local-correctness-measurement-acceptance.yml
