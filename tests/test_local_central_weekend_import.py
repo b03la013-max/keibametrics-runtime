@@ -7,7 +7,7 @@ import sys
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"runtime"))
 
-from formal_execution_orchestrator import _official_result_identity_matches
+from formal_execution_orchestrator import _official_result_identity_matches, RETRYABLE_OFFICIAL_RESULT_CODES
 from local_krs_bridge_candidate import build_candidate_prediction_structure_derived
 from minimum_efficient_coverage import build_mec_plan
 
@@ -96,6 +96,16 @@ def test_nar_result_identity_uses_visible_result_header_not_h4_wrapper():
         context,
     )
 
+
+
+
+def test_ooi_result_identity_hold_is_retryable_and_current_header_matches():
+    context={"venue_id":"OHI","race_date":"2026-10-05","race_no":7}
+    assert _official_result_identity_matches(
+        "2026年10月5日（月）　大　井　第7競走　競走成績",
+        context,
+    )
+    assert "OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD" in RETRYABLE_OFFICIAL_RESULT_CODES
 
 def test_mec_exposes_exact_to_trio_gap_without_adding_ticket():
     req={
