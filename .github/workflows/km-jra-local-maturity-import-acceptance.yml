@@ -99,7 +99,7 @@ jobs:
         run: |
           ./actionlint -color             .github/workflows/km-jra-formal-single-entry.yml             .github/workflows/km-jra-source-first-runner.yml             .github/workflows/km-formal-request-runner.yml             .github/workflows/km-formal-result-runner.yml             .github/workflows/km-jra-local-maturity-import-acceptance.yml
 
-      - name: Verify R39 authority, LOCAL isolation and migration boundaries
+      - name: Verify maturity import, Current Authority isolation and migration boundaries
         run: |
           python - <<'PY'
           import glob,json,sys
@@ -214,7 +214,11 @@ jobs:
               except Exception:
                   pass
           assert rows
-          assert max(rows,key=lambda z:(z[0],z[1]))[1]==r39["manifest_id"]
+          from runtime.family_authority_guard import resolve_current_authority
+          _,current=resolve_current_authority(root=Path.cwd(),now=now)
+          assert max(rows,key=lambda z:(z[0],z[1]))[1]==current["manifest_id"]
+          for family in ["JRA","BAN"]:
+              assert current["family_scoped_authority"][family]==r39["family_scoped_authority"][family],family
 
           bridge=Path("runtime/jra_execution_maturity_bridge.py").read_text(encoding="utf-8")
           for forbidden in [
@@ -272,17 +276,26 @@ jobs:
           ]:
               assert s[k] is False,(k,s[k])
 
+          for k in [
+              "predictive_model_formula_change","production_semantic_policy_change",
+              "production_numerical_change","krs_engine_physics_change",
+              "mec_r3_policy_change","capital_policy_change","venue_canon_change",
+              "candidate_to_production_promotion","automatic_promotion"
+          ]:
+              assert current["supersession_declaration"][k] is False,k
+
           out={
             "profile":"KM-JRA-LOCAL-MATURITY-IMPORT-ACCEPTANCE-20261004-R3",
             "status":"PASS",
-            "current_authority":r39["manifest_id"],
+            "current_authority":current["manifest_id"],
             "routing":route37["profile_id"],
             "maturity_import":maturity["profile_id"],
             "single_entry":single["profile_id"],
             "jra_entry_fallback":fallback["profile_id"],
             "jra_fast_path":fast["profile_id"],
             "jra_venue_count":len(jra_venues),
-            "local_scoped_authority_unchanged":True,
+            "historical_maturity_import_local_scope_unchanged":True,
+            "current_jra_scoped_authority_unchanged":True,
             "ban_scoped_authority_unchanged":True,
             "jra_numerical_cache_imported":False,
             "local_numerical_model_imported":False,
