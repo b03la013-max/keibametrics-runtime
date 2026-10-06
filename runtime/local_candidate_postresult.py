@@ -286,7 +286,12 @@ def build_forward_capture(request, final, utility, *, generated_at, candidate=No
 def _check_forward(obj):
     body={k:v for k,v in obj.items() if k!='sha256'}
     if _sha(body)!=obj.get('sha256'):raise ValueError('FORWARD_HASH_MISMATCH')
-    if obj.get('protocol_sha256')!=_sha(_forward_protocol()):raise ValueError('PROTOCOL_VERSION_MISMATCH')
+    protocol=_forward_protocol()
+    # Exact preregistered historical pairs remain valid across C1 settlement
+    # repairs. This is not a wildcard for changing arm selectors or weights.
+    version={'protocol_sha256':obj.get('protocol_sha256'),'definition_sha256':obj.get('definition_sha256')}
+    if version in protocol.get('correctness_compatible_frozen_versions',[]):return
+    if obj.get('protocol_sha256')!=_sha(protocol):raise ValueError('PROTOCOL_VERSION_MISMATCH')
     if obj.get('definition_sha256')!=_definition_hashes():raise ValueError('DEFINITION_VERSION_MISMATCH')
 
 def persist_forward_capture(obj, root='runtime/local_candidate_forward_measurements'):

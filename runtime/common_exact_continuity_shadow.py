@@ -241,23 +241,27 @@ def verify_signed_final_binding(final_envelope:Dict[str,Any], shadow:Dict[str,An
 
 def settle_shadow(shadow:Dict[str,Any], finish_order:list[int], payouts:Dict[str,Any],
                   production_investment:int, production_return:int,
-                  signed_final_binding_valid:bool)->Dict[str,Any]:
+                  signed_final_binding_valid:bool, official_outcome=None)->Dict[str,Any]:
     if shadow.get("sha256") != _sha({k:v for k,v in shadow.items() if k!="sha256"}):
         raise AssertionError("COMMON_EXACT_SHADOW_CONTENT_HASH_MISMATCH")
     if len(finish_order)<3 or len(set(finish_order[:3]))!=3:
         raise AssertionError("COMMON_EXACT_RESULT_TOP3_INVALID")
-    if "TRIFECTA" not in (payouts or {}) or int(payouts["TRIFECTA"])<=0:
-        raise AssertionError("COMMON_EXACT_OFFICIAL_PAYOUT_REQUIRED")
+    from mec_r4_shadow import settle_ticket_list, official_result_for_settlement
     top3=[int(x) for x in finish_order[:3]]
     exact=">".join(str(x) for x in top3)
-    payout100=int((payouts or {}).get("TRIFECTA") or 0)
+    official_exacts=[x["selection"] for x in ((official_outcome or {}).get("winning_selections") or {}).get("TRIFECTA",[])] or [top3]
+    request={"finish_order":finish_order,"payouts":payouts,**(official_outcome or {})}
+    result=official_result_for_settlement(request)
+    payout100=payouts.get("TRIFECTA")
     arms={}
     for name,ids in (shadow.get("arms") or {}).items():
         ids=list(ids or [])
-        hit=exact in ids
-        inv=len(ids)*int(shadow.get("shadow_measurement_unit_stake") or 100)
-        ret=payout100 if hit else 0
-        pfs=(ret/inv*100) if inv else None
+        unit=int(shadow.get("shadow_measurement_unit_stake") or 100)
+        tickets=[{"bet_type":"TRIFECTA","selection":[int(x) for x in key.split(">")],"stake":unit} for key in ids]
+        settled=settle_ticket_list(tickets,result)
+        if settled["status"]!="SETTLED":raise AssertionError("COMMON_EXACT_OFFICIAL_PAYOUT_REQUIRED")
+        inv=settled["investment"];ret=settled["return"];hit=bool(settled["hit_types"])
+        pfs=settled["pfs"]
         plus_inv=int(production_investment)+inv
         plus_ret=int(production_return)+ret
         plus_pfs=(plus_ret/plus_inv*100) if plus_inv else None
@@ -265,6 +269,8 @@ def settle_shadow(shadow:Dict[str,Any], finish_order:list[int], payouts:Dict[str
         arms[name]={
             "candidate_count":len(ids),"investment":inv,"return":ret,
             "profit_loss":ret-inv,"pfs":pfs,"rescue_hit":hit,
+            "refund":settled["refund"],"at_risk_capital":settled["at_risk_capital"],
+            "refund_adjusted_pfs":settled["refund_adjusted_pfs"],
             "production_plus_arm_investment":plus_inv,
             "production_plus_arm_return":plus_ret,
             "production_plus_arm_pfs":plus_pfs,
@@ -278,7 +284,8 @@ def settle_shadow(shadow:Dict[str,Any], finish_order:list[int], payouts:Dict[str
         "signed_final_binding_valid":bool(signed_final_binding_valid),
         "shadow_sha256":shadow.get("sha256"),
         "official_exact":top3,
-        "official_exact_in_candidate_set":exact in set(shadow.get("arms",{}).get("CONTINUITY_ALL") or []),
+        "official_exact_in_candidate_set":any(">".join(map(str,x)) in set(shadow.get("arms",{}).get("CONTINUITY_ALL") or []) for x in official_exacts),
+        "official_exacts":official_exacts,
         "production_investment":int(production_investment),
         "production_return":int(production_return),
         "production_pfs":(int(production_return)/int(production_investment)*100) if int(production_investment) else None,

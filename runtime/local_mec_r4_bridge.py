@@ -148,13 +148,8 @@ def build_replay_shadow(req: Dict[str,Any], final_envelope: Dict[str,Any], gener
 
 
 def settle_replay(shadow: Dict[str,Any], result_request: Dict[str,Any]) -> Dict[str,Any]:
-    result={
-        "official_result":{
-            "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
-            "top3":[int(x) for x in (result_request.get("finish_order") or [])[:3]],
-            "payouts_per_100_yen":{str(k).upper():int(v) for k,v in (result_request.get("payouts") or {}).items()},
-        }
-    }
+    from mec_r4_shadow import official_result_for_settlement
+    result=official_result_for_settlement(result_request)
     out=settle_mec_r4_shadow(shadow,result)
     out["temporal_class"]="POST-RESULT-POLICY-FROZEN-REPLAY"
     out["oos_eligible"]=False

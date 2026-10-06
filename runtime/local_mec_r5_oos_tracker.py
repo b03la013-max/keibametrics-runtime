@@ -20,6 +20,90 @@ def _dt(s):
 def _load(p):
     with open(p,encoding="utf-8") as f:return json.load(f)
 
+def canonical_capture(race_id):
+    """Read verified immutable execution checkpoints; never regenerate an arm."""
+    from pathlib import Path
+    from execution_store import resolve_phase
+    from local_mec_r5_shadow import verify_signed_final_binding, settle_shadow
+    root=Path("runtime/executions")
+    matches=[]
+    if not root.exists():return None
+    for execution in sorted(root.iterdir()):
+        if race_id not in execution.name:continue
+        formal=resolve_phase(execution.name,"FORMAL",root=root)
+        if not formal:continue
+        directory=formal["run_dir"]
+        fp=directory/"final_receipt_envelope.json"
+        if not fp.exists():continue
+        final=_load(fp)
+        if (final.get("receipt") or {}).get("race_id")!=race_id:continue
+        result_phase=resolve_phase(execution.name,"RESULT",root=root)
+        if not result_phase:continue
+        rd=result_phase["run_dir"]
+        if not all(p.exists() for p in (directory/"local_mec_r5_shadow_binding_attestation.json",directory/"receipt_verifications.json",rd/"receipt_verifications.json")):
+            continue  # Older verified legacy protocol remains compatible.
+        shadow=_load(directory/"local_mec_r5_shadow_pre_result.json")
+        attestation=_load(directory/"local_mec_r5_shadow_binding_attestation.json")
+        checked=verify_signed_final_binding(final,shadow)
+        if shadow.get("sha256")!=_sha({k:v for k,v in shadow.items() if k!="sha256"}):
+            raise AssertionError("R5_CANONICAL_SHADOW_CONTENT_HASH_MISMATCH")
+        if any(attestation.get(k)!=v for k,v in checked.items()):
+            raise AssertionError("R5_CANONICAL_ATTESTATION_MISMATCH")
+        envelope=_load(rd/"result_receipt_envelope.json")
+        fv=_load(directory/"receipt_verifications.json")
+        rv=_load(rd/"receipt_verifications.json")
+        if fv.get("FINAL") is not True or rv.get("FINAL") is not True or rv.get("RESULT") is not True:
+            raise AssertionError("R5_CANONICAL_SIGNATURE_VERIFICATION_MISSING")
+        for env in (final,envelope):
+            receipt=env.get("receipt") or {}
+            if (_sha(env.get("artifact"))!=receipt.get("artifact_sha256")
+                    or _sha(receipt)!=env.get("receipt_sha256") or receipt.get("status")!="PASS"
+                    or receipt.get("race_id")!=race_id):
+                raise AssertionError("R5_CANONICAL_RECEIPT_INTEGRITY_FAILURE")
+        if envelope["receipt"].get("phase")!="RESULT" or final["receipt"].get("phase")!="FINAL":
+            raise AssertionError("R5_CANONICAL_RECEIPT_PHASE_MISMATCH")
+        official_phase=resolve_phase(execution.name,"OFFICIAL_RESULT",root=root)
+        if not official_phase:continue  # Legacy authority remains fail-closed.
+        official_request=_load(official_phase["run_dir"]/"official_result_request.json")
+        if (official_request.get("official_result_verified") is not True or official_request.get("acceptance_only")
+                or not official_request.get("official_result_verification_ref")):
+            raise AssertionError("R5_CANONICAL_OFFICIAL_AUTHORITY_FAILURE")
+        if not (_dt(shadow["generated_at"])<=_dt(final["receipt"]["timestamp"])<_dt(shadow["scheduled_post_at"])):
+            raise AssertionError("R5_CANONICAL_FINAL_AFTER_POST")
+        artifact=envelope["artifact"]
+        if (artifact.get("frozen_refs") or {}).get("final_receipt_sha256")!=final.get("receipt_sha256"):
+            raise AssertionError("R5_CANONICAL_RESULT_FINAL_MISMATCH")
+        official=artifact["official_result"]
+        if official_request.get("race_id")!=race_id or any(
+                official_request.get(k)!=official.get(k) for k in ("finish_order","payouts")):
+            raise AssertionError("R5_CANONICAL_OFFICIAL_OUTCOME_MISMATCH")
+        available=artifact.get("result_available_at")
+        if not available or not _dt(shadow["generated_at"])<_dt(shadow["scheduled_post_at"])<=_dt(available):
+            raise AssertionError("R5_CANONICAL_CHRONOLOGY_FAILURE")
+        authority={"status":"PASS","verified_signed_result":True,
+            "verification_ref":official_request["official_result_verification_ref"],
+            "result_receipt_sha256":envelope.get("receipt_sha256"),
+            "result_artifact_sha256":envelope["receipt"]["artifact_sha256"]}
+        if not authority["verification_ref"]:raise AssertionError("R5_CANONICAL_OFFICIAL_SOURCE_MISSING")
+        request={"finish_order":official["finish_order"],"payouts":official.get("payouts") or {},
+            "winning_selections":official.get("winning_selections"),
+            "refund_runner_ids":official.get("refund_runner_ids") or [],"refund_authority":official.get("refund_authority")}
+        result=settle_shadow(shadow,request,signed_final_binding_valid=True)
+        settlement=artifact["settlement"]
+        line={"lineage_type":"LOCAL_MEC_R5_SIGNED_FINAL_BOUND","binding_valid":True,
+            "shadow_sha256":shadow["sha256"],"basis_sha256":shadow["source_basis_sha256"],
+            "final_receipt_sha256":final.get("receipt_sha256"),
+            "final_artifact_sha256":final["receipt"]["artifact_sha256"],
+            "production_tickets":final["artifact"]["final_ticket"]["tickets"],
+            "production_result":{"official_result":{**official,"top3":official["finish_order"][:3]}},
+            "production_settlement":{"status":"SETTLED","total_investment":settlement["investment"],"total_payout":settlement["return"]},
+            "capture_source":"CANONICAL_FORMAL_PRE_RESULT_ATTESTATION",
+            "result_authority":authority,"execution_id":execution.name}
+        matches.append((shadow,line,result,{"verified":True,"oos_admissible":True,"refs":[authority]}))
+    if len(matches)>1:raise AssertionError("R5_CANONICAL_RACE_AMBIGUOUS")
+    return matches[0] if matches else None
+
+
 def _official_result_authority(race_id):
     from local_candidate_postresult import forward_tracker_result_authority
     forward=forward_tracker_result_authority(race_id,'runtime/local_mec_r5_shadow_lineage',local_only=False)
@@ -56,16 +140,23 @@ def _max_drawdown(rows):
 def _aggregate(rows):
     inv=sum(float(x.get("investment") or 0) for x in rows)
     ret=sum(float(x.get("return") or 0) for x in rows)
-    hits=sum(float(x.get("return") or 0)>0 for x in rows)
-    hbl=sum(0<float(x.get("return") or 0)<float(x.get("investment") or 0) for x in rows)
+    hits=sum(float(x.get("winning_return",x.get("return")) or 0)>0 for x in rows)
+    hbl=sum(float(x.get("winning_return",x.get("return")) or 0)>0 and float(x.get("return") or 0)<float(x.get("investment") or 0) for x in rows)
+    refund=sum(float(x.get("refund") or 0) for x in rows)
+    winning=sum(float(x.get("winning_return",x.get("return")) or 0) for x in rows)
     return {
       "eligible_races":len(rows),
+      "refund":refund,"winning_return":winning,"at_risk_capital":inv-refund,
+      "refund_adjusted_pfs":winning/(inv-refund)*100 if inv>refund else None,
       "investment":round(inv,2),"return":round(ret,2),"profit_loss":round(ret-inv,2),
       "investment_weighted_pfs":round(ret/inv*100,9) if inv else None,
       "hit_races":hits,"hit_race_rate":round(hits/len(rows)*100,6) if rows else None,
       "hit_but_loss_count":hbl,"hit_but_loss_rate":round(hbl/len(rows)*100,6) if rows else None,
       "ticket_count_total":sum(int(x.get("ticket_count") or 0) for x in rows),
-      "max_drawdown":_max_drawdown(rows)
+      "max_drawdown":_max_drawdown(rows),
+      "return_per_yen":round(ret/inv,9) if inv else None,
+      "profit_per_ticket":round((ret-inv)/sum(int(x.get("ticket_count") or 0) for x in rows),9) if sum(int(x.get("ticket_count") or 0) for x in rows) else None,
+      "hit_but_loss_given_hit_rate":round(hbl/hits*100,6) if hits else None
     }
 
 
@@ -113,19 +204,21 @@ def build_status():
             if not fn.endswith(".json"): continue
             rid=fn[:-5]
             try:
-                result=_load(os.path.join(root,fn))
-                result_authority=_official_result_authority(rid)
+                canonical=canonical_capture(rid)
+                if canonical:
+                    sh,line,result,result_authority=canonical
+                else:
+                    result=_load(os.path.join(root,fn))
+                    result_authority=_official_result_authority(rid)
+                    sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
+                    lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
+                    if not os.path.exists(sp) or not os.path.exists(lp):
+                        errors.append({"race_id":rid,"reason":"R5_LINEAGE_MISSING"}); continue
+                    sh=_load(sp); line=_load(lp)
                 if result_authority.get("verified") is not True:
-                    held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
-                    continue
+                    held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"});continue
                 if result_authority.get("oos_admissible") is not True:
-                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_RESULT_NOT_OOS"})
-                    continue
-                sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
-                lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
-                if not os.path.exists(sp) or not os.path.exists(lp):
-                    errors.append({"race_id":rid,"reason":"R5_LINEAGE_MISSING"}); continue
-                sh=_load(sp); line=_load(lp)
+                    held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_RESULT_NOT_OOS"});continue
                 if sh.get("profile")!=CANDIDATE_PROFILE or sh.get("candidate_id")!=CANDIDATE_ID:
                     continue
                 if sh.get("production_effect")!="NONE":
@@ -161,18 +254,20 @@ def build_status():
 
                 rowarms={"PRODUCTION_BASELINE_R3":{
                   "investment":p_inv,"return":p_ret,"profit_loss":p_ret-p_inv,
-                  "pfs":p_ret/p_inv*100 if p_inv else None,"ticket_count":len(p_tickets),"hit":p_ret>0
+                  "pfs":p_ret/p_inv*100 if p_inv else None,"ticket_count":len(p_tickets),"hit":bool(replay["hit_types"]),
+                  **{k:replay[k] for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs")}
                 }}
                 for a in ARM_ORDER:
                     x=arms[a]
                     rowarms[a]={
                       "investment":x.get("investment"),"return":x.get("return"),
                       "profit_loss":x.get("profit_loss"),"pfs":x.get("pfs"),
-                      "ticket_count":x.get("ticket_count"),"hit":float(x.get("return") or 0)>0
+                      "ticket_count":x.get("ticket_count"),"hit":bool(x.get("hit_types")) if "hit_types" in x else float(x.get("return") or 0)>0,
+                      **{k:x[k] for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs") if k in x}
                     }
                 entries.append({
                   "race_id":rid,"generated_at":sh.get("generated_at"),
-                  "shadow_sha256":sh.get("sha256"),"final_receipt_sha256":line.get("final_receipt_sha256"),
+                  "shadow_sha256":sh.get("sha256"),"capture_source":line.get("capture_source","LEGACY_COMPATIBILITY"),"final_receipt_sha256":line.get("final_receipt_sha256"),
                   "final_artifact_sha256":line.get("final_artifact_sha256"),"arms":rowarms
                 })
             except Exception as e:

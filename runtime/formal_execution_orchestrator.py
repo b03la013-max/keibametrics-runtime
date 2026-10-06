@@ -1068,6 +1068,9 @@ def orchestrate(
         check_deadline(intent)
         current_phase = "FORMAL"
         formal_req = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
+        report["formal_start_preflight"]=formal_start_preflight(
+            formal_req,resolve_phase(execution_id,"SOURCE"))
+        _write(tmp_root / execution_id / "formal_start_preflight.json",report["formal_start_preflight"])
         if formal_req.get("source_authoritative_reconciliation"):
             report["source_authoritative_reconciliation"] = formal_req[
                 "source_authoritative_reconciliation"
@@ -1137,6 +1140,37 @@ def check_deadline(intent: Dict[str, Any]) -> None:
         raise FormalOrchestrationError("DEADLINE_HOLD:FORMAL_INCOMPLETE")
 
 
+def formal_start_preflight(request, source_resolved, *, now=None):
+    """Official active universe and operational margin before FORMAL work."""
+    if str(request.get("temporal_mode") or "FORMAL-PRE-RACE").upper()!="FORMAL-PRE-RACE":
+        return {"status":"NOT_APPLICABLE"}
+    now=now or dt.datetime.now(dt.timezone.utc)
+    source=_load_checkpoint_json(source_resolved,"source_receipt_envelope.json") or {}
+    verification=_load_checkpoint_json(source_resolved,"source_verification.json") or {}
+    universe=(source.get("artifact") or {}).get("active_runner_universe") or {}
+    official={str(x.get("runner_id")) for x in universe.get("runners") or []}
+    declared={str(x.get("runner_id")) for x in request.get("runners") or []}
+    if not official or verification.get("verified") is not True or official!=declared:
+        raise FormalOrchestrationError("ACTIVE_RUNNER_UNIVERSE_PREFLIGHT_HOLD")
+    roles=(request.get("static_prediction") or {}).get("roles") or {}
+    references=set(map(str,roles))
+    for row in request.get("pair_dispositions") or []:
+        references.update(str(row[k]) for k in ("head","second"))
+    for row in request.get("third_dispositions") or []:
+        references.update(str(row[k]) for k in ("head","second","third"))
+    if not references.issubset(official):
+        raise FormalOrchestrationError("INACTIVE_RUNNER_PREDICTION_REFERENCE_PREFLIGHT_HOLD")
+    post=_parse_iso(request["scheduled_post_at"])
+    deadline=_parse_iso(request["release_deadline_at"]) if request.get("release_deadline_at") else post-dt.timedelta(seconds=int(request.get("release_buffer_seconds") or 120))
+    remaining=(deadline-now).total_seconds()
+    required=180
+    if remaining<required:
+        raise FormalOrchestrationError("DEADLINE_MARGIN_PREFLIGHT_HOLD")
+    return {"status":"PASS","checked_at":now.isoformat(),"active_runner_ids":sorted(official),
+            "source_receipt_sha256":source.get("receipt_sha256"),"deadline_remaining_seconds":remaining,
+            "required_formal_margin_seconds":required,"automatic_universe_rewrite":False}
+
+
 def run_formal_with_fallback(request, phase, **kwargs):
     try:
         check_deadline(request)
@@ -1179,7 +1213,7 @@ def _official_result_identity_matches(page_text: str, race_context: Dict[str, An
     return re.search(pattern, normalized) is not None
 
 
-def parse_official_result_snapshot(snapshot, race_context, runner_ids):
+def parse_official_result_snapshot(snapshot, race_context, runner_ids, *, detailed=False):
     """NAR official finish/payout verification; unsupported outcomes HOLD.
 
     Uses the existing factual SOURCE decoder/table parser, never Prediction.
@@ -1215,34 +1249,69 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
+    from itertools import permutations, product
     rows = sorted(finish_tables[0], key=lambda row: row["finish"])
-    positions = [row["finish"] for row in rows]
     order = [row["horse_no"] for row in rows]
-    if (len(rows) < 3 or positions != list(range(1, len(rows) + 1))
-            or len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids)))):
-        raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
-    # Validate published winning selection as well as amount. Flat per-bet-type
-    # payouts cannot represent dead heats, refunds or multiple winning sets.
-    expected = {"馬連単": ("EXACTA", order[:2]), "三連複": ("TRIO", sorted(order[:3])),
-                "三連単": ("TRIFECTA", order[:3])}
-    payouts = {}
+    universe=set(map(int,runner_ids))
+    if len(rows)<3 or len(set(order))!=len(order) or not set(order).issubset(universe):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_UNIVERSE_HOLD")
+    groups=[]
+    for row in rows:
+        if not groups or groups[-1]["rank"]!=row["finish"]:
+            groups.append({"rank":row["finish"],"runners":[]})
+        groups[-1]["runners"].append(row["horse_no"])
+    count=0
+    for group in groups:
+        if group["rank"]!=count+1:
+            raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_RANK_HOLD")
+        count+=len(group["runners"])
+    # Only tied groups intersecting the first three positions need expansion.
+    top_groups=[g for g in groups if g["rank"]<=3]
+    orders=[sum((list(part) for part in seq),[])[:3]
+            for seq in product(*(permutations(g["runners"],min(len(g["runners"]),4-g["rank"])) for g in top_groups))]
+    targets={"EXACTA":{tuple(o[:2]) for o in orders},
+             "TRIO":{tuple(sorted(o)) for o in orders},
+             "TRIFECTA":{tuple(o) for o in orders}}
+    winning={bt:[] for bt in targets};payouts={};refunds=set()
+    names={"馬連単":"EXACTA","三連複":"TRIO","三連単":"TRIFECTA"}
     for table in tables:
+        if table and {"着順","馬番","馬名"}.issubset(set(table[0])):
+            header=table[0];hi=header.index("馬番");ri=header.index("着順")
+            for row in table[1:]:
+                if len(row)>max(hi,ri) and row[ri].strip() in {"除外","取消","競走除外","出走取消"}:
+                    refunds.add(int(row[hi]))
+        payout_name=None
         for row in table:
-            if not row or row[0] not in expected:
+            if row and row[0] in names:payout_name=row[0]
+            elif payout_name and len(row)==3 and re.fullmatch(r"[0-9]+(?:-[0-9]+){1,2}",row[0]):
+                row=[payout_name,*row]
+            elif payout_name and len(row)==4 and row[0]=="":
+                row=[payout_name,*row[1:]]
+            else:
+                payout_name=None
                 continue
-            name, selection = expected[row[0]]
-            if len(row) != 4 or name in payouts:
+            bt=names[row[0]]
+            if len(row)!=4:
                 raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_AMBIGUOUS_HOLD")
-            parsed = [int(x) for x in re.findall(r"\d+", row[1])]
-            if parsed != selection or not re.fullmatch(r"[\d,]+円", row[2]):
+            selection=tuple(int(x) for x in re.findall(r"\d+",row[1]))
+            if selection not in targets[bt] or not re.fullmatch(r"[\d,]+円",row[2]):
                 raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_SELECTION_HOLD")
-            amount = int(row[2].replace(",", "").replace("円", ""))
-            if amount <= 0:
+            amount=int(row[2].replace(",","").replace("円",""))
+            if amount<=0 or any(tuple(x["selection"])==selection for x in winning[bt]):
                 raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_AMOUNT_HOLD")
-            payouts[name] = amount
-    if set(payouts) != {"EXACTA", "TRIO", "TRIFECTA"}:
+            winning[bt].append({"selection":list(selection),"payout_per_100":amount})
+    if any({tuple(x["selection"]) for x in winning[bt]}!=targets[bt] for bt in targets):
         raise FormalOrchestrationError("OFFICIAL_RESULT_PAYOUT_NOT_READY")
-    return order, payouts
+    if any(x<=0 for x in refunds) or refunds.intersection(order):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_UNIVERSE_HOLD")
+    for bt,vals in winning.items():
+        payouts[bt]=vals[0]["payout_per_100"] if len(vals)==1 else {
+            ">".join(map(str,x["selection"])) if bt!="TRIO" else "-".join(map(str,x["selection"])):x["payout_per_100"] for x in vals}
+    details={"winning_selections":winning,"finish_rank_groups":groups,
+             "dead_heat":any(len(g["runners"])>1 for g in groups),
+             "refund_runner_ids":sorted(refunds),
+             "refund_authority":snapshot.get("url") or snapshot.get("final_url") or snapshot.get("raw_sha256")}
+    return (order,payouts,details) if detailed else (order,payouts)
 
 
 def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fetch=None):
@@ -1300,10 +1369,10 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
     if errors or snapshot.get("final_url") != spec["url"]:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FETCH_OR_REDIRECT_HOLD")
     runners = artifact["active_runner_universe"]["runners"]
-    order, payouts = parse_official_result_snapshot(snapshot, identity, [r["runner_id"] for r in runners])
+    order, payouts, outcome = parse_official_result_snapshot(snapshot, identity, [r["runner_id"] for r in runners], detailed=True)
     request = {"family_id": "LOCAL", "execution_id": execution_id, "race_id": intent["race_id"],
                "phase": "RESULT", "execution_phase": "RESULT", "temporal_mode": "RESULT",
-               "finish_order": order, "payouts": payouts, "result_available_at": snapshot["fetched_at"],
+               "finish_order": order, "payouts": payouts, **outcome, "result_available_at": snapshot["fetched_at"],
                "result_timestamp_authority": "OBSERVED_AT_OFFICIAL_RETRIEVAL_PUBLICATION_TIME_UNKNOWN",
                "source": spec["url"], "official_result_verified": True,
                "official_result_verification_ref": spec["url"] + "#sha256=" + snapshot["raw_sha256"],

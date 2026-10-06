@@ -32,23 +32,28 @@ def _coverage(final_artifact, top3):
     exacta=False
     top3set=False
     exact=False
+    exact_set=False
+    unordered=False
     hit_types=[]
     for t in tickets:
         bt,sel=_ticket_key(t)
         if bt=="EXACTA" and sel==(a,b):
             exacta=True; hit_types.append("EXACTA")
         elif bt=="TRIO" and set(sel)=={a,b,c}:
-            top3set=True; hit_types.append("TRIO")
+            top3set=True; unordered=True; hit_types.append("TRIO")
         elif bt=="TRIFECTA":
             if len(sel)>=2 and sel[:2]==(a,b):
                 exacta=True
             if set(sel)=={a,b,c}:
-                top3set=True
+                top3set=True; exact_set=True
             if sel==(a,b,c):
                 exact=True; hit_types.append("TRIFECTA")
     return {
       "ordered_pair_ticket_coverage":exacta,
       "top3_set_ticket_coverage":top3set,
+      "semantic_set_coverage":all(bool(_roles(final_artifact).get(str(h))) for h in top3),
+      "exact_oriented_set_coverage":exact_set,
+      "unordered_monetizable_set_coverage":unordered,
       "ordered_exact_ticket_coverage":exact,
       "matching_ticket_types":sorted(set(hit_types)),
       "ticket_count":len(tickets),
@@ -100,7 +105,20 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "second_p2": "P2" in roles.get(p2,set()),
       "third_p3": "P3" in roles.get(p3,set()),
     }
+    winning_orders=[x["selection"] for x in ((result.get("official_result") or {}).get("winning_selections") or {}).get("TRIFECTA",[])]
+    winning_orders=winning_orders or [top3]
+    path_evaluations=[{"order":order,"role_capture":{
+        "winner_w":"W" in roles.get(str(order[0]),set()),
+        "second_p2":"P2" in roles.get(str(order[1]),set()),
+        "third_p3":"P3" in roles.get(str(order[2]),set())},
+        "coverage":_coverage(final_artifact,order)} for order in winning_orders]
     coverage=_coverage(final_artifact,top3)
+    for key in ("ordered_pair_ticket_coverage","top3_set_ticket_coverage","ordered_exact_ticket_coverage",
+                "semantic_set_coverage","exact_oriented_set_coverage","unordered_monetizable_set_coverage"):
+        coverage[key]=any(x["coverage"][key] for x in path_evaluations)
+    coverage["matching_ticket_types"]=sorted({bt for x in path_evaluations for bt in x["coverage"]["matching_ticket_types"]})
+    if len(winning_orders)>1:
+        role_eval={key:any(x["role_capture"][key] for x in path_evaluations) for key in role_eval}
     mec_eval=_mec_actual_coverage(final_artifact,top3)
 
     ku=final_artifact.get("krs_prediction_utility") or {}
@@ -133,6 +151,7 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         pfs=(ret/inv*100.0) if ret is not None and inv>0 else None
         profit_loss=(ret-inv) if ret is not None else None
         settlement_completeness=100.0 if ret is not None else None
+    refund_adjusted_pfs=settlement.get("refund_adjusted_pfs")
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
 
@@ -153,7 +172,7 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     else:
         first_failure="NONE"
 
-    prediction_status=("PASS" if all(role_eval.values()) else "PARTIAL")
+    prediction_status=("PASS" if any(all(x["role_capture"].values()) for x in path_evaluations) else "PARTIAL")
     conversion_status=("PASS" if coverage["ordered_pair_ticket_coverage"] and coverage["top3_set_ticket_coverage"] else "PARTIAL")
     capital_status=("HOLD" if settlement_status in {"PENDING","UNKNOWN"} else ("PASS" if pfs is not None and pfs>=100.0 else "PARTIAL"))
 
@@ -164,6 +183,8 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "immutable_final_artifact_sha256":final_artifact.get("sha256"),
       "final_receipt_sha256":actual or declared,
       "official_top3":top3,
+      "official_winning_order_evaluations":path_evaluations,
+      "unique_finish_order":len(winning_orders)==1,
       "prediction":{
         "status":prediction_status,
         "role_capture":role_eval,
@@ -173,6 +194,7 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         "pre_result_utility_class":ku.get("utility_class"),
         "post_result_evaluation":krs_eval,
       },
+      "measurement_principles":["UNKNOWN != WEAK","UNKNOWN != MUST PURCHASE"],
       "conversion":{
         "status":conversion_status,
         **coverage,
@@ -187,6 +209,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         "return":ret,
         "profit_loss":profit_loss,
         "pfs":round(pfs,9) if pfs is not None else None,
+        "refund_adjusted_pfs":refund_adjusted_pfs,
+        "at_risk_capital":settlement.get("at_risk_capital"),
+        "refund":settlement.get("refund"),
+        "winning_return":settlement.get("winning_return"),
         "settlement_completeness_pct":round(settlement_completeness,9) if settlement_completeness is not None else None,
         "hit":hit,
         "hit_but_loss":hit_but_loss,
