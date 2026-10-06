@@ -294,9 +294,11 @@ if temporal_mode=="FORMAL-PRE-RACE":
         "scheduled_post_at":scheduled,
         "release_deadline_at":deadline_dt.isoformat(),
         "release_buffer_seconds":int((post_dt-deadline_dt).total_seconds()),
+        "remaining_seconds":(deadline_dt-now).total_seconds(),
+        "required_formal_margin_seconds":180,
     })
     formal_release_deadline_utc=deadline_dt
-    if now>=deadline_dt:
+    if (deadline_dt-now).total_seconds()<180:
         fail_closed("DEADLINE_INSUFFICIENT_AT_EXECUTION_START",{
             "now":now.isoformat(),"release_deadline":deadline_dt.isoformat()
         })
@@ -1641,25 +1643,12 @@ if isinstance(post_result,dict):
     order=[int(x) for x in (post_result.get("finish_order") or [])]
     assert len(order)>=3,"POST_RESULT_FINISH_ORDER_REQUIRED"
     top3=order[:3]
-    payouts={str(k).upper():int(v) for k,v in (post_result.get("payouts") or {}).items()}
-    winning=[]
-    total_return=0
-    for t in tickets:
-        bt=str(t.get("bet_type") or "").upper()
-        sel=[int(x) for x in (t.get("selection") or [])]
-        hit=False
-        if bt=="EXACTA" and sel==top3[:2]:
-            hit=True
-        elif bt=="TRIO" and set(sel)==set(top3):
-            hit=True
-        elif bt=="TRIFECTA" and sel==top3:
-            hit=True
-        if hit and bt in payouts:
-            stake=int(t.get("stake") or 0)
-            payout100=int(payouts[bt])
-            ticket_return=(stake*payout100)//100
-            total_return+=ticket_return
-            winning.append({"bet_type":bt,"selection":sel,"stake":stake,"payout_per_100":payout100,"return":ticket_return})
+    from mec_r4_shadow import official_result_for_settlement,settle_ticket_list
+    payouts=post_result.get("payouts") or {}
+    post_settled=settle_ticket_list(tickets,official_result_for_settlement(post_result))
+    assert post_settled["status"]=="SETTLED","POST_RESULT_PAYOUT_INCOMPLETE"
+    winning=post_settled["winning_tickets"]
+    total_return=post_settled["return"]
     result_payload={
       "family_id":"LOCAL","race_id":rid,
       "final_receipt":fin,
@@ -1667,7 +1656,8 @@ if isinstance(post_result,dict):
         "finish_order":order,
         "result_available_at":post_result.get("result_available_at"),
         "source":post_result.get("source") or "USER_SUPPLIED_RESULT_WITH_OFFICIAL_CROSSCHECK",
-        "payouts":payouts
+        "payouts":payouts,
+        **{k:post_result[k] for k in ("winning_selections","refund_runner_ids","refund_authority","finish_rank_groups") if post_result.get(k) is not None}
       },
       "result_available_at":post_result.get("result_available_at"),
       "settlement":{
@@ -1675,7 +1665,8 @@ if isinstance(post_result,dict):
         "investment":total,
         "settled_investment":total,
         "return":total_return,
-        "winning_tickets":winning
+        "winning_tickets":winning,
+        **{k:post_settled[k] for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs")}
       },
       "pfs_authority":post_result.get("pfs_authority") or "RECON"
     }
@@ -1766,6 +1757,12 @@ print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
     "candidate_count":(common_exact_continuity_shadow or {}).get("candidate_count"),
     "binding":common_exact_continuity_binding,
     "error":common_exact_continuity_shadow_error,
+    "production_effect":"NONE"
+  },
+  "family_conversion_diagnostics":{
+    "status":"SIGNED_FINAL_BOUND_PRE_RESULT" if family_conversion_diagnostics_binding else "HOLD",
+    "binding":family_conversion_diagnostics_binding,
+    "error":family_conversion_diagnostics_error,
     "production_effect":"NONE"
   },
   "verified":True

@@ -159,8 +159,8 @@ def build_shadow(req,final_envelope,generated_at=None,basis_sha256=None):
     return out
 
 def settle_shadow(shadow,result_request,signed_final_binding_valid=False):
-    result={"official_result":{"top3":[int(x) for x in (result_request.get("finish_order") or [])[:3]],
-                               "payouts_per_100_yen":{str(k).upper():int(v) for k,v in (result_request.get("payouts") or {}).items()}}}
+    from mec_r4_shadow import official_result_for_settlement
+    result=official_result_for_settlement(result_request)
     arms={}
     for a,x in shadow["arms"].items():
         arms[a]=settle_ticket_list(x["tickets"],result)

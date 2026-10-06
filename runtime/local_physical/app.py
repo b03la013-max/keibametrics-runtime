@@ -390,6 +390,17 @@ def result(p:Dict[str,Any]):
         profit_loss=ret-investment
         settlement_completeness=100.0
 
+    refund_fields={}
+    if settlement_status=="COMPLETE" and (official.get("winning_selections") is not None or official.get("refund_runner_ids")):
+        from mec_r4_shadow import settle_ticket_list
+        try:
+            checked=settle_ticket_list((final_ticket or {}).get("tickets") or [],{"official_result":{**official,"top3":official.get("finish_order",[])[:3]}})
+            if checked["status"]!="SETTLED" or checked["return"]!=ret:
+                errs.append("OFFICIAL_SETTLEMENT_REPLAY_MISMATCH")
+            refund_fields={k:checked[k] for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs")}
+        except (ValueError,AssertionError,KeyError) as exc:
+            errs.append("OFFICIAL_SETTLEMENT_INVALID:"+str(exc))
+
     auto_review=None
     auto_learning=None
     try:
@@ -418,7 +429,7 @@ def result(p:Dict[str,Any]):
             }
             learning_result={
                 "race_id":rid,
-                "official_result":{"top3":[int(x) for x in finish_order[:3]]},
+                "official_result":{**official,"top3":[int(x) for x in finish_order[:3]]},
                 "frozen_prediction_ref":{
                     "final_receipt_sha256":fin.get("receipt_sha256"),
                     "final_status":(fin.get("receipt") or {}).get("status")
@@ -431,6 +442,7 @@ def result(p:Dict[str,Any]):
                     "return":ret,
                     "total_payout":ret,
                     "pfs_authority":p.get("pfs_authority"),
+                    **refund_fields,
                     "winning_tickets":settlement.get("winning_tickets") or []
                 }
             }
@@ -484,6 +496,7 @@ def result(p:Dict[str,Any]):
         "official_result":official,
         "settlement":{
             "status":settlement_status,
+            **refund_fields,
             "investment":investment,
             "settled_investment":(
                 settled_investment

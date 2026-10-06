@@ -33,6 +33,7 @@ def build_fast_reflection(result_artifact:Dict[str,Any], *, race_id:str|None=Non
             "return":settlement.get("return"),
             "profit_loss":settlement.get("profit_loss"),
             "pfs":settlement.get("pfs"),
+            **{k:settlement.get(k) for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs")},
             "status":settlement.get("status") or settlement.get("settlement_status"),
         },
         "prediction":{
@@ -45,6 +46,7 @@ def build_fast_reflection(result_artifact:Dict[str,Any], *, race_id:str|None=Non
             "status":conversion.get("status"),
             "ordered_pair_ticket_coverage":conversion.get("ordered_pair_ticket_coverage"),
             "top3_set_ticket_coverage":conversion.get("top3_set_ticket_coverage"),
+            **{k:conversion.get(k) for k in ("semantic_set_coverage","exact_oriented_set_coverage","unordered_monetizable_set_coverage")},
             "ordered_exact_ticket_coverage":conversion.get("ordered_exact_ticket_coverage"),
         },
         "krs":{

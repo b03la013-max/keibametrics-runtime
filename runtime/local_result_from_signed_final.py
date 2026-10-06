@@ -112,23 +112,16 @@ if not endpoint.startswith("https://"):
 
 tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
 top3=[int(x) for x in req["finish_order"][:3]]
-payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
-total_investment=sum(int(t.get("stake") or 0) for t in tickets)
-total_return=0
-winning=[]
-by_type={}
-for t in tickets:
-    bt=str(t.get("bet_type") or "").upper()
-    sel=[int(x) for x in (t.get("selection") or [])]
-    st=int(t.get("stake") or 0)
-    b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
-    b["investment"]+=st
-    hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
-    if hit and bt in payouts:
-        r=st*payouts[bt]//100
-        total_return+=r; b["return"]+=r
-        win={"bet_type":bt,"selection":sel,"stake":st,"payout_per_100":payouts[bt],"return":r}
-        winning.append(win); b["wins"].append(win)
+payouts={str(k).upper():v for k,v in (req.get("payouts") or {}).items()}
+from mec_r4_shadow import official_result_for_settlement
+shadow_result=official_result_for_settlement(req)
+settled=settle_ticket_list(tickets,shadow_result)
+if settled["status"]!="SETTLED":
+    raise SystemExit("OFFICIAL_SETTLEMENT_PAYOUT_INCOMPLETE")
+total_investment=settled["investment"]
+total_return=settled["return"]
+winning=settled["winning_tickets"]
+by_type=settled["by_bet_type"]
 
 result_payload={
   "family_id":"LOCAL","race_id":rid,
@@ -137,7 +130,8 @@ result_payload={
     "finish_order":[int(x) for x in req["finish_order"]],
     "result_available_at":req["result_available_at"],
     "source":req.get("source") or "USER_SUPPLIED_RESULT",
-    "payouts":payouts
+    "payouts":payouts,
+    **{k:req[k] for k in ("winning_selections","refund_runner_ids","refund_authority","finish_rank_groups") if req.get(k) is not None}
   },
   "result_available_at":req["result_available_at"],
   "settlement":{
@@ -145,7 +139,11 @@ result_payload={
     "investment":total_investment,
     "settled_investment":total_investment,
     "return":total_return,
-    "winning_tickets":winning
+    "winning_tickets":winning,
+    "refund":settled["refund"],
+    "winning_return":settled["winning_return"],
+    "at_risk_capital":settled["at_risk_capital"],
+    "refund_adjusted_pfs":settled["refund_adjusted_pfs"]
   },
   "pfs_authority":req.get("pfs_authority") or "FROZEN-RECOMMENDATION"
 }
@@ -318,13 +316,7 @@ try:
     if (not acceptance_only) and os.path.exists(mec_r4_shadow_path):
         shadow=json.load(open(mec_r4_shadow_path,encoding="utf-8"))
         mec_r4_binding=verify_signed_final_binding(fin,shadow)
-        shadow_result={
-            "official_result":{
-                "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
-                "top3":top3,
-                "payouts_per_100_yen":payouts,
-            }
-        }
+        shadow_result=official_result_for_settlement(req)
         mec_r4_shadow_settlement=settle_mec_r4_shadow(shadow,shadow_result)
         prod_replay=settle_ticket_list(tickets,shadow_result)
         if prod_replay.get("status")!="SETTLED":
@@ -381,6 +373,29 @@ except (Exception, SystemExit) as shadow_error:
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
+# Reuse the signed RESULT authority and existing persistence lifecycle.
+try:
+    from family_conversion_diagnostics import settle_diagnostics, forward_status
+    from pathlib import Path
+    conversion_path=Path("runtime_result_in/family_conversion_diagnostics_pre_result.json")
+    if conversion_path.exists():
+        diagnostic=json.loads(conversion_path.read_text())
+        measurement=settle_diagnostics(diagnostic,fin,req,shared_result_authority,
+            final_signature_verified=bool(final_ver.get("verified") or final_ver.get("valid")))
+        destination=Path("runtime/family_conversion_measurements")
+        destination.mkdir(parents=True,exist_ok=True)
+        target=destination/(rid+".json")
+        if target.exists() and json.loads(target.read_text())!=measurement:
+            raise AssertionError("FAMILY_CONVERSION_IMMUTABLE_MEASUREMENT_CONFLICT")
+        target.write_text(json.dumps(measurement,ensure_ascii=False,sort_keys=True,indent=2))
+        status=forward_status()
+        Path("runtime/family_conversion_forward_status.json").write_text(json.dumps(status,ensure_ascii=False,sort_keys=True,indent=2))
+        Path("runtime_out/family_conversion_settlement.json").write_text(json.dumps(measurement,ensure_ascii=False,sort_keys=True))
+        Path("runtime_out/family_conversion_forward_status.json").write_text(json.dumps(status,ensure_ascii=False,sort_keys=True))
+except (Exception,SystemExit) as conversion_error:
+    Path("runtime_out/family_conversion_failure.json").write_text(json.dumps({
+        "status":"SHADOW_HOLD_OR_REJECTED","error":str(conversion_error),"production_effect":"NONE"}))
+
 # LOCAL-specific MEC-R5 candidate was designed from 2026-09-23
 # training races and is eligible only for future signed-bound shadows.
 local_mec_r5_shadow_settlement=None
@@ -395,13 +410,7 @@ try:
             r5_shadow,req,signed_final_binding_valid=True
         )
 
-        shadow_result={
-            "official_result":{
-                "status":"OFFICIAL_OR_USER_SUPPLIED_OFFICIAL",
-                "top3":top3,
-                "payouts_per_100_yen":payouts,
-            }
-        }
+        shadow_result=official_result_for_settlement(req)
         prod_replay_r5=settle_ticket_list(tickets,shadow_result)
         if prod_replay_r5.get("status")!="SETTLED":
             raise SystemExit("LOCAL_MEC_R5_PRODUCTION_REPLAY_NOT_SETTLED")
@@ -469,7 +478,8 @@ try:
         common_exact_continuity_binding=verify_common_exact_continuity_binding(fin,common_exact)
         common_exact_continuity_settlement=settle_common_exact_continuity_shadow(
             common_exact,[int(x) for x in req["finish_order"]],payouts,
-            int(total_investment),int(total_return),signed_final_binding_valid=True
+            int(total_investment),int(total_return),signed_final_binding_valid=True,
+            official_outcome={k:req.get(k) for k in ("winning_selections","refund_runner_ids","refund_authority")}
         )
         for d in (
             "runtime/common_exact_continuity_shadow_artifacts",
@@ -674,6 +684,7 @@ summary={
   "profit_loss":total_return-total_investment,
   "pfs":(None if total_investment==0 else round(total_return/total_investment*100,6)),
   "winning_tickets":winning,
+  **{k:settled[k] for k in ("refund","winning_return","at_risk_capital","refund_adjusted_pfs")},
   "by_type":by_type,
   "failure_localization":art.get("failure_localization"),
   "automatic_post_result_review":art.get("automatic_post_result_review"),

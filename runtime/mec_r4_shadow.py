@@ -264,64 +264,93 @@ def _payout(result,bet_type,top3):
             return float(payout)/float(stake)*100.0
     return None
 
-def settle_ticket_list(tickets,result):
-    """Settle exacta/trio/trifecta tickets with one canonical implementation.
+def official_result_for_settlement(request):
+    """Preserve all official winning selections and refund evidence."""
+    return {"official_result":{
+        "top3":list(request.get("finish_order") or [])[:3],
+        "finish_order":request.get("finish_order") or [],
+        "payouts_per_100_yen":request.get("payouts") or {},
+        "winning_selections":request.get("winning_selections"),
+        "refund_runner_ids":request.get("refund_runner_ids") or [],
+        "refund_authority":request.get("refund_authority"),
+    }}
 
-    This helper is shared by MEC-R4 Shadow and the Production-R3 comparator.
-    It does not infer Actual Purchase; it settles a frozen recommendation list.
+
+def settle_ticket_list(tickets,result):
+    """Shared frozen recommendation settlement; refunds are cash, never hits.
+
+    Gross PFS includes refunds. Refund-adjusted PFS is winnings / at-risk
+    capital. Neither is Actual Purchase PFS without a verified purchase ledger.
     """
     top3=_top3_ids(result)
     if len(top3)!=3:
         raise AssertionError("SHADOW_RESULT_TOP3_MISSING")
-    targets={
-        "EXACTA":top3[:2],
-        "TRIO":sorted(top3),
-        "TRIFECTA":top3,
-    }
-    by_type={}
-    unresolved=[]
-    total_inv=0
-    total_ret=0.0
-    hit_types=[]
+    official=result.get("official_result") or {}
+    excluded=set(map(int,official.get("refund_runner_ids") or []))
+    if excluded and not official.get("refund_authority"):
+        raise AssertionError("REFUND_OFFICIAL_AUTHORITY_REQUIRED")
+    selections=official.get("winning_selections")
+    explicit=selections is not None
+    if explicit and (not isinstance(selections,dict) or set(selections)!={"EXACTA","TRIO","TRIFECTA"}):
+        raise AssertionError("OFFICIAL_WINNING_SELECTIONS_INCOMPLETE")
+    targets={"EXACTA":top3[:2],"TRIO":sorted(top3),"TRIFECTA":top3}
+    by_type={};unresolved=[];hit_types=[];winning=[];refunded=[]
+    total_inv=0;total_win=0.0;total_refund=0
+    supported={"EXACTA","TRIO","TRIFECTA"}
+    if any(str(t.get("bet_type") or "").upper() not in supported for t in tickets):
+        raise AssertionError("UNSUPPORTED_SETTLEMENT_TICKET")
     for bt in ("EXACTA","TRIO","TRIFECTA"):
         rows=[x for x in tickets if str(x.get("bet_type") or "").upper()==bt]
         inv=sum(int(x.get("stake") or 0) for x in rows)
-        ret=0.0
-        hit=False
-        matching=[x for x in rows if _key(bt,x.get("selection") or [])==_key(bt,targets[bt])]
-        if matching:
-            pay=_payout(result,bt,top3)
-            if pay is None:
-                unresolved.append(bt)
-            else:
-                for x in matching:
-                    ret += pay*(int(x.get("stake") or 0)/100.0)
-                hit=ret>0
-                if hit:
-                    hit_types.append(bt)
-        total_inv += inv
-        total_ret += ret
-        by_type[bt]={
-            "investment":inv,
-            "return":ret if bt not in unresolved else None,
-            "profit_loss":(ret-inv) if bt not in unresolved else None,
-            "pfs":(ret/inv*100.0) if (inv and bt not in unresolved) else (None if bt in unresolved else None),
-            "hit":hit if bt not in unresolved else None,
-            "ticket_count":len(rows),
-        }
-    status="SETTLED" if not unresolved else "PARTIAL_PAYOUT_MISSING"
-    return {
-        "status":status,
-        "investment":total_inv,
-        "return":total_ret if not unresolved else None,
-        "profit_loss":(total_ret-total_inv) if not unresolved else None,
-        "pfs":(total_ret/total_inv*100.0) if (total_inv and not unresolved) else None,
-        "hit_types":sorted(set(hit_types)),
-        "unresolved_payout_types":sorted(set(unresolved)),
-        "ticket_count":len(tickets),
-        "by_bet_type":by_type,
-        "top3":top3,
-    }
+        win=0.0;refund=0
+        payouts={}
+        if explicit:
+            if not isinstance(selections[bt],list) or not selections[bt]:
+                raise AssertionError("OFFICIAL_WINNING_SELECTION_INVALID")
+            for row in selections[bt]:
+                sel=row.get("selection") or []
+                if len(sel)!=(2 if bt=="EXACTA" else 3) or len(set(map(int,sel)))!=len(sel) or excluded.intersection(map(int,sel)):
+                    raise AssertionError("OFFICIAL_WINNING_SELECTION_INVALID")
+                key=_key(bt,row["selection"])
+                amount=float(row["payout_per_100"])
+                if key in payouts or amount<=0:
+                    raise AssertionError("OFFICIAL_WINNING_SELECTION_INVALID")
+                payouts[key]=amount
+        for t in rows:
+            stake=int(t.get("stake") or 0)
+            if stake<0 or stake%100:
+                raise AssertionError("SETTLEMENT_STAKE_INVALID")
+            if excluded.intersection(map(int,t.get("selection") or [])):
+                refund+=stake;refunded.append({**t,"refund":stake});continue
+            key=_key(bt,t.get("selection") or [])
+            if explicit:
+                pay=payouts.get(key)
+            elif key==_key(bt,targets[bt]):
+                pay=_payout(result,bt,top3)
+                if pay is None:unresolved.append(bt)
+            else:pay=None
+            if pay is not None:
+                amount=pay*stake/100.0;win+=amount
+                winning.append({**t,"payout_per_100":pay,"return":amount})
+        ret=win+refund;at_risk=inv-refund
+        if win>0:hit_types.append(bt)
+        by_type[bt]={"investment":inv,"return":ret if bt not in unresolved else None,
+            "winning_return":win,"refund":refund,"at_risk_capital":at_risk,
+            "refund_adjusted_pfs":win/at_risk*100 if at_risk and bt not in unresolved else None,
+            "profit_loss":ret-inv if bt not in unresolved else None,
+            "pfs":ret/inv*100 if inv and bt not in unresolved else None,
+            "hit":win>0 if bt not in unresolved else None,"ticket_count":len(rows)}
+        total_inv+=inv;total_win+=win;total_refund+=refund
+    settled=not unresolved;ret=total_win+total_refund;at_risk=total_inv-total_refund
+    return {"status":"SETTLED" if settled else "PARTIAL_PAYOUT_MISSING",
+        "investment":total_inv,"return":ret if settled else None,
+        "winning_return":total_win if settled else None,"refund":total_refund,
+        "at_risk_capital":at_risk,"refund_adjusted_pfs":total_win/at_risk*100 if settled and at_risk else None,
+        "profit_loss":ret-total_inv if settled else None,
+        "pfs":ret/total_inv*100 if settled and total_inv else None,
+        "hit_types":sorted(hit_types),"winning_tickets":winning,"refunded_tickets":refunded,
+        "unresolved_payout_types":sorted(set(unresolved)),"ticket_count":len(tickets),
+        "by_bet_type":by_type,"top3":top3}
 
 def settle_mec_r4_shadow(shadow_artifact,result):
     top3=_top3_ids(result)
