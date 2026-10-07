@@ -105,7 +105,7 @@ def test_current_production_numerical_authority_is_ready_but_candidate_remains_n
     assert out["krs_consumption_authorized"] is False
     candidate=assess_candidate()
     assert candidate["production_ready"] is False
-    assert candidate["status"].startswith("IMPLEMENTATION-COMPLETE")
+    assert candidate["status"]=="IMPLEMENTATION_READY_NON_PRODUCTION"
 
 
 def test_end_to_end_source_to_29_to_30hsv_11static_is_deterministic():
