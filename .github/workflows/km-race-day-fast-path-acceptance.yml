@@ -77,7 +77,6 @@ jobs:
           route=load("profiles/venue_chat_routes_20261001_R36.json")
           suite=load("profiles/KM_LOCAL_SUITE_MANIFEST_20261001_R15.json")
           runtime=load("profiles/family_runtime_contracts_20260929_R27.json")
-          gateway=load("profiles/current_execution_gateway.json")
 
           assert r8["profile_id"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R8"
           assert r8["predecessor"]=="KM-FAMILY-EXECUTION-ARCHITECTURE-20260928-R7"
@@ -107,7 +106,6 @@ jobs:
           assert cc["venue_routing"]==route["profile_id"]
           assert cc["family_runtime_contracts"]==runtime["profile_id"]
           assert cc["local_suite_manifest"]==suite["manifest_id"]
-          assert cc["local_execution_gateway"]==gateway["profile_id"]
           assert ca["venue_canon_current_decisions"]["FNB"]["production"]=="船橋競馬攻略条項 v2.1-FNB"
 
           assert route["profile_id"]=="KM-VENUE-CHAT-FORMAL-ROUTING-20261001-R36"
@@ -130,11 +128,11 @@ jobs:
           assert runtime["production_behavior_change"] is False
           assert runtime["production_numerical_change"] is False
 
-          assert gateway["profile_id"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.5-20261001"
-          assert gateway["predecessor"]=="KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928"
-          assert gateway["parent_current_authority"]==ca["manifest_id"]
-          assert gateway["venue_routing"]==route["profile_id"]
-          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260929_R27.json"
+          # current_execution_gateway.json is an operational pointer and may
+          # advance after the frozen R36 enactment. Validate only the Fast Path
+          # safety invariants against the current pointer; do not require its
+          # profile/parent/route to remain R36 forever.
+          gateway=load("profiles/current_execution_gateway.json")
           assert gateway["race_day_fast_path"]["enabled"] is True
           assert gateway["race_day_fast_path"]["fallback"]=="CANONICAL_FULL_PATH"
           assert gateway["policy"]["race_day_fast_path_may_bypass_formal_gate"] is False
@@ -142,6 +140,9 @@ jobs:
           assert gateway["policy"]["fast_path_equivalence_required"] is True
           assert gateway["policy"]["entry_transport_fallback_required"] is True
           assert gateway["policy"]["entry_transport_fallback_may_bypass_external_safety"] is False
+          assert gateway["policy"]["production_prediction_policy_changed"] is False
+          assert gateway["policy"]["production_mec_policy_changed"] is False
+          assert gateway["policy"]["capital_policy_changed"] is False
 
           s=ca["supersession_declaration"]
           for k in [
