@@ -1,0 +1,45 @@
+name: Family Owner Utility PFS R43 Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'governance/KM-FAMILY-OWNER-UTILITY-PFS-CONTINUOUS-IMPROVEMENT-20261007-R1.md'
+      - 'profiles/family_owner_utility_pfs_improvement_20261007_R1.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json'
+      - 'runtime/family_pfs_improvement.py'
+      - 'runtime/post_result_learning.py'
+      - 'runtime/race_day_fast_reflection.py'
+      - 'runtime/acceptance/family_owner_utility_pfs_r43.json'
+      - 'tests/test_family_pfs_improvement.py'
+      - 'tests/test_family_owner_utility_r43.py'
+      - '.github/workflows/km-family-owner-utility-pfs-r43-acceptance.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest cryptography PyMuPDF fastapi httpx pyyaml
+      - name: Owner utility and PFS improvement tests
+        run: >-
+          python -m pytest -q
+          tests/test_family_pfs_improvement.py
+          tests/test_family_owner_utility_r43.py
+          tests/test_family_authority_guard.py
+          tests/test_race_day_fast_path.py
+      - name: Compile post-result integration
+        run: >-
+          python -m py_compile
+          runtime/family_pfs_improvement.py
+          runtime/post_result_learning.py
+          runtime/race_day_fast_reflection.py
+      - name: R43 authority selftest
+        run: python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json
