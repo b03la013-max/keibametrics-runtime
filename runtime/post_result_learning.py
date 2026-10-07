@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib, json
 from typing import Any
 from krs_prediction_utility import evaluate_against_result
+from family_pfs_improvement import build_pfs_improvement_assessment
 
 LEARNING_PROFILE="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
 
@@ -198,11 +199,13 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "production_change_authorized":False,
       "prequential_only":True,
     }
+    review["pfs_improvement"]=build_pfs_improvement_assessment(review)
     review["sha256"]=_sha(review)
     return review
 
 def build_learning_state(review:dict)->dict:
     ff=(review.get("failure_localization") or {}).get("first_material_failure")
+    pfs_improvement=review.get("pfs_improvement") or build_pfs_improvement_assessment(review)
     shadow=[]
     immediate=[]
     if ff=="THIRD_SET_COVERAGE":
@@ -221,6 +224,7 @@ def build_learning_state(review:dict)->dict:
         shadow.append("KRS_RESCUE_PROMOTION_EVIDENCE")
     if review.get("mec",{}).get("available") and review["mec"].get("precompression_semantic_universe") is not True:
         immediate.append("MEC_PRECOMPRESSION_SEMANTIC_UNIVERSE_REQUIRED")
+    shadow.extend(pfs_improvement.get("test_next_tracks") or [])
 
     state={
       "profile":LEARNING_PROFILE,
@@ -233,9 +237,14 @@ def build_learning_state(review:dict)->dict:
       "reference_metrics":{
         "pfs":review.get("capital",{}).get("pfs"),
         "first_material_failure":ff,
+        "dominant_pfs_loss_owner":(pfs_improvement.get("dominant_pfs_loss_owner") or {}).get("owner"),
+        "hit_but_loss":pfs_improvement.get("hit_but_loss"),
         "krs_classification":krs.get("classification"),
         "mec_profile":review.get("mec",{}).get("profile"),
       },
+      "pfs_improvement_profile":pfs_improvement.get("profile"),
+      "improvement_routes":pfs_improvement.get("learning_routes") or [],
+      "no_stagnation_satisfied":bool(pfs_improvement.get("no_stagnation_satisfied")),
       "forbidden":["RETROACTIVE_PREDICTION_REWRITE","AUTOMATIC_NUMERIC_WEIGHT_CHANGE","RESULT_DERIVED_FEATURE_REWRITE"],
       "production_change_authorized":False,
     }
