@@ -94,10 +94,18 @@ def test_candidate_rule_registry_is_63_of_63_and_nonproduction():
     assert out["required_index_count"]==29
 
 
-def test_current_production_authority_remains_not_ready():
+def test_current_production_numerical_authority_is_ready_but_candidate_remains_nonproduction():
     out=assess_production()
-    assert out["full_numerical_authority"] is False
-    assert out["status"]=="NOT_READY"
+    assert out["full_numerical_authority"] is True
+    assert out["status"]=="READY"
+    assert out["required_component_rule_count"]==63
+    assert out["bound_component_rule_count"]==63
+    assert out["required_index_count"]==29
+    assert out["prediction_consumption_authorized"] is False
+    assert out["krs_consumption_authorized"] is False
+    candidate=assess_candidate()
+    assert candidate["production_ready"] is False
+    assert candidate["automatic_promotion"] is False
 
 
 def test_end_to_end_source_to_29_to_30hsv_11static_is_deterministic():
