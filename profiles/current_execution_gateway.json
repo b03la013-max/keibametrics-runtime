@@ -3,7 +3,7 @@
   "status": "ACTIVE / LOCAL / R44-ALIGNED / PRODUCTION-NUMERICAL-READY / EXECUTION-ROUTING / FAIL-CLOSED",
   "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261008-R44",
   "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20261008-R38",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260929_R27.json",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20261008_R28.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -212,7 +212,25 @@
     "cache_authority": false,
     "fallback": "CANONICAL_FULL_PATH"
   },
-  "formal_single_entry": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20261008-R4",
+  "formal_single_entry": {
+    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20261008-R4",
+    "workflow": ".github/workflows/km-formal-single-entry.yml",
+    "orchestrator": "runtime/formal_execution_orchestrator.py",
+    "intent_root": "runtime/formal_intents",
+    "source_checkpoint_basis": "KM-SOURCE-CHECKPOINT-BASIS-v1",
+    "formal_checkpoint_basis": "KM-FORMAL-CHECKPOINT-BASIS-v1",
+    "static_signed_source_binding_required": true,
+    "immutable_formal_reuse": "SEMANTIC_BASIS_AND_SOURCE_BINDING_MATCH_ONLY",
+    "legacy_unbound_formal_auto_reuse": false,
+    "legacy_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "transport_fallback_profile": "KM-FAMILY-ENTRY-TRANSPORT-FALLBACK-20261001-R1",
+    "transport_fallback_validator": "runtime/entry_transport_fallback.py",
+    "transport_fallback_root": "runtime/family_requests",
+    "transport_fallback_workflow": ".github/workflows/km-family-non-jra-formal-runner.yml",
+    "transport_fallback_condition": "PRIMARY_SUBMISSION_FAILED_BEFORE_COMMIT",
+    "transport_fallback_semantics": "SAME_EXECUTION_ID + EXACT_SEMANTIC_HASH + DURABLE_SOURCE_REUSE",
+    "transport_fallback_both_blocked": "FAIL_CLOSED / ENTRY-TRANSPORT-BLOCKED"
+  },
   "suite_manifest": "KM-LOCAL-SUITE-MANIFEST-20261008-R16",
   "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20261008-R28"
 }
