@@ -464,13 +464,31 @@ def verify_execution_completion(directory, request, *, phase="FORMAL", before_fi
     failures = []
     numeric = read("numerical_materialization_summary.json") or {}
     coverage = numeric.get("numeric_coverage") or {}
-    full_numeric = (numeric.get("numerical_authority_preflight") or {}).get("full_numerical_authority") is True
+    numerical_preflight = numeric.get("numerical_authority_preflight") or {}
+    full_numeric = numerical_preflight.get("full_numerical_authority") is True
     numeric_valid = bool(coverage) and coverage.get("unresolved_count") == 0 and numeric.get("full_terminalization") is True
     required = int(coverage.get("required_count") or 0)
     totals = sum(int(coverage.get(k) or 0) for k in
                  ("calculated_count", "ruled_neutral_count", "ruled_hold_count", "not_applicable_count"))
     numeric_valid = numeric_valid and required > 0 and totals == required
-    full_numeric = full_numeric and numeric_valid and int(coverage.get("calculated_count") or 0) == required
+
+    # Production Numerical v1 distinguishes observed CALCULATED cells from
+    # explicit rule-bound neutral numeric terminals. A RULED-NEUTRAL cell is
+    # never relabeled CALCULATED, but it may close the strict numerical layer
+    # when the authority explicitly declares CALCULATED_OR_RULED_NEUTRAL.
+    strict_policy = str(numerical_preflight.get("strict_numeric_terminal_policy") or "")
+    if strict_policy == "CALCULATED_OR_RULED_NEUTRAL":
+        numeric_value_count = int(coverage.get("calculated_count") or 0) + int(coverage.get("ruled_neutral_count") or 0)
+        full_numeric = (
+            full_numeric
+            and numeric_valid
+            and int(coverage.get("ruled_hold_count") or 0) == 0
+            and int(coverage.get("not_applicable_count") or 0) == 0
+            and numeric_value_count == required
+            and numeric.get("full_numerical_closure") is True
+        )
+    else:
+        full_numeric = full_numeric and numeric_valid and int(coverage.get("calculated_count") or 0) == required
     verifications = read("receipt_verifications.json") or {}
     final_stages = {"MANDATORY_STAGE_MANIFEST_VERIFY", "SIGNED_FINAL", "FINAL_BEFORE_POST_VERIFY"}
     for stage in contract["stages"]:

@@ -14,8 +14,8 @@ def _load(path: str | Path) -> Dict[str, Any]:
 
 
 def assess(
-    evidence_registry_path: str | Path = "mapping/local_evidence_feature_rule_registry_v1.0_20260922.json",
-    mapping_registry_path: str | Path = "mapping/local_base_index_mapping_registry_v1.0_20260922.json",
+    evidence_registry_path: str | Path = "mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json",
+    mapping_registry_path: str | Path = "mapping/local_full_numerical_mapping_v1.0_production_20261008.json",
 ) -> Dict[str, Any]:
     evidence = _load(evidence_registry_path)
     mapping = _load(mapping_registry_path)
@@ -44,12 +44,21 @@ def assess(
     evidence_status = str(evidence.get("status") or "")
     mapping_status = str(mapping.get("status") or "")
     explicitly_non_numerical = "NON-NUMERICAL" in evidence_status.upper()
+    required_indices = list(mapping.get("required_indices") or [])
+    full_29_index_manifest = len(required_indices) == 29 and len(set(required_indices)) == 29
+    production_registry = "PRODUCTION-NUMERICAL-AUTHORITY" in evidence_status.upper()
+    production_mapping = "PRODUCTION-NUMERICAL-AUTHORITY" in mapping_status.upper()
+    strict_terminal_policy = str(mapping.get("strict_numerical_terminal_policy") or "")
 
     ready = (
         not explicitly_non_numerical
         and not missing_rules
         and not invalid_rules
         and bool(component_sets)
+        and full_29_index_manifest
+        and production_registry
+        and production_mapping
+        and strict_terminal_policy == "CALCULATED_OR_RULED_NEUTRAL"
     )
 
     reasons = []
@@ -59,6 +68,14 @@ def assess(
         reasons.append("COMPONENT_SCORE_RULES_MISSING")
     if invalid_rules:
         reasons.append("COMPONENT_SCORE_RULES_INVALID")
+    if not full_29_index_manifest:
+        reasons.append("FULL_29_INDEX_MANIFEST_INVALID")
+    if not production_registry:
+        reasons.append("EVIDENCE_REGISTRY_NOT_PRODUCTION_NUMERICAL_AUTHORITY")
+    if not production_mapping:
+        reasons.append("MAPPING_NOT_PRODUCTION_NUMERICAL_AUTHORITY")
+    if strict_terminal_policy != "CALCULATED_OR_RULED_NEUTRAL":
+        reasons.append("STRICT_NUMERICAL_TERMINAL_POLICY_INVALID")
 
     return {
         "profile": PROFILE,
@@ -69,6 +86,14 @@ def assess(
         "mapping_registry_id": mapping.get("registry_id"),
         "mapping_registry_status": mapping_status,
         "component_index_count": len(component_sets),
+        "required_index_count": len(required_indices),
+        "required_indices": required_indices,
+        "strict_numeric_terminal_policy": strict_terminal_policy,
+        "prediction_consumption_authorized": False,
+        "krs_consumption_authorized": False,
+        "ticket_consumption_authorized": False,
+        "capital_consumption_authorized": False,
+        "calibration_status": str(mapping.get("calibration_status") or "UNCALIBRATED_RULE_BASED_PRODUCTION_NUMERICAL"),
         "required_component_rule_count": sum(len(x) for x in component_sets.values() if isinstance(x, dict)),
         "bound_component_rule_count": (
             sum(
@@ -84,9 +109,10 @@ def assess(
         "invalid_component_rules": invalid_rules,
         "reasons": reasons,
         "policy": (
-            "Do not fabricate evidence scores. Formal execution may continue only "
-            "as numerical-degraded/terminalized diagnostic until a separately "
-            "approved numerical rule registry binds every required component."
+            "Production numerical materialization is READY only when all 63 deterministic component rules "
+            "and the full 29-index manifest are bound. RULED-NEUTRAL is an authorized numeric terminal for "
+            "UNKNOWN/incomparable evidence and must remain explicitly distinguishable from CALCULATED. "
+            "Numerical readiness alone does not authorize Prediction/KRS/Ticket/Capital behavior changes."
         ),
     }
 

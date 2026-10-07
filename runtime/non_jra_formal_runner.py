@@ -236,6 +236,7 @@ if fam=="BAN":
 
 # LOCAL staged full-pipeline execution.
 from local_evidence_to_base_production import materialize_request
+from local_fullnumerical_production import materialize_production as materialize_production_numerical
 from local_index_provenance_builder import build as build_local_provenance
 from local_krs_input_builder_production import build as build_local_krs
 from local_krs_technical_proxy_from_source import build as build_source_derived_krs_proxy, LocalSourceDerivedProxyError
@@ -998,31 +999,49 @@ if req_indices and isinstance(req_indices[0],dict):
 req_indices=[str(x) for x in req_indices if str(x)]
 assert req_indices,"LOCAL_REQUIRED_INDEX_NAMES_EMPTY"
 
-if fast_enabled:
-    try:
-        req,fast_mat_report=materialize_request_fast(
-            req,req_indices,
-            cache_root=os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"),
-            workers=int((fast_cfg or {}).get("materialization_workers") or 4),
-        )
-        fast_path_runtime_report["materialization"]=fast_mat_report
-    except Exception as fast_exc:
-        # Quality is never sacrificed for speed. Any Fast Path uncertainty
-        # immediately falls back to the canonical Full Path implementation.
-        fast_path_runtime_report["fallback"]={
-            "stage":"LOCAL_NUMERICAL_MATERIALIZATION",
-            "reason":type(fast_exc).__name__+":"+str(fast_exc),
-            "action":"CANONICAL_FULL_PATH",
-        }
-        req=materialize_request(req,req_indices)
+if numerical_authority.get("full_numerical_authority") is True:
+    # Current Production numerical authority is a deterministic rule-bound
+    # materialization layer. It is intentionally independent from Prediction
+    # and KRS decision authority.
+    req=materialize_production_numerical(source_artifact,req,req_indices)
+    fast_path_runtime_report["materialization"]={
+        "mode":"PRODUCTION_FULL_NUMERICAL_V1",
+        "profile":(req.get("production_numerical_authority") or {}).get("profile"),
+        "mapping_registry":req.get("local_mapping_registry"),
+        "strict_full_numerical_ready":req.get("strict_full_numerical_ready"),
+        "prediction_consumption_authorized":False,
+        "krs_consumption_authorized":False,
+    }
 else:
-    req=materialize_request(req,req_indices)
+    if fast_enabled:
+        try:
+            req,fast_mat_report=materialize_request_fast(
+                req,req_indices,
+                cache_root=os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"),
+                workers=int((fast_cfg or {}).get("materialization_workers") or 4),
+            )
+            fast_path_runtime_report["materialization"]=fast_mat_report
+        except Exception as fast_exc:
+            # Quality is never sacrificed for speed. Any Fast Path uncertainty
+            # immediately falls back to the canonical Full Path implementation.
+            fast_path_runtime_report["fallback"]={
+                "stage":"LOCAL_NUMERICAL_MATERIALIZATION",
+                "reason":type(fast_exc).__name__+":"+str(fast_exc),
+                "action":"CANONICAL_FULL_PATH",
+            }
+            req=materialize_request(req,req_indices)
+    else:
+        req=materialize_request(req,req_indices)
 cov=req["numeric_coverage"]
 persist("numerical_materialization_summary.json",{
     "numeric_coverage":cov,
     "full_terminalization":req.get("full_terminalization"),
     "full_numerical_calculation":req.get("full_numerical_calculation"),
+    "full_numerical_closure":req.get("full_numerical_closure"),
+    "strict_full_numerical_ready":req.get("strict_full_numerical_ready"),
     "mapping_registry":req.get("local_mapping_registry"),
+    "evidence_registry":req.get("numerical_evidence_registry"),
+    "production_numerical_summary":req.get("production_numerical_summary"),
     "numerical_authority_preflight":numerical_authority,
 })
 if req.get("full_terminalization") is not True or int(cov.get("unresolved_count",0))!=0:
@@ -1046,16 +1065,12 @@ persist("index_provenance_manifest.json",req.get("index_provenance_ledger") or {
 stage("INDEX_PROVENANCE",index_provenance_hash=req["index_provenance_hash"],
       row_count=len((req.get("index_provenance_ledger") or {}).get("rows") or []))
 
-# When Production numerical authority is not ready, do not require callers to
-# inject a synthetic acceptance bridge. Derive a provenance-bearing technical
-# proxy from this race's verified signed SOURCE. It remains explicitly
-# non-Production and cannot upgrade held Production indices to CALCULATED.
-if req.get("full_numerical_calculation") is not True and not isinstance(req.get("local_krs_bridge"),dict):
-    if req.get("degraded_execution") is not True:
-        fail_closed("LOCAL_KRS_BRIDGE_REQUIRED_WHEN_NUMERICAL_HELD",{
-            "full_numerical_calculation":False,
-            "degraded_execution":req.get("degraded_execution"),
-        })
+# Production Numerical closure and KRS consumption authority are deliberately
+# separate. Until the numerical->KRS bridge passes its own forward-OOS gate,
+# keep the existing source-derived KRS technical proxy even when all 29
+# Production indices are numerically closed.
+numerical_krs_authorized = numerical_authority.get("krs_consumption_authorized") is True
+if not numerical_krs_authorized and not isinstance(req.get("local_krs_bridge"),dict):
     try:
         req["local_krs_bridge"]=build_source_derived_krs_proxy(req,source_artifact)
     except LocalSourceDerivedProxyError as e:
@@ -1065,7 +1080,8 @@ if req.get("full_numerical_calculation") is not True and not isinstance(req.get(
           bridge_id=req["local_krs_bridge"].get("bridge_id"),
           bridge_sha256=req["local_krs_bridge"].get("sha256"),
           source_snapshot_sha256=req["local_krs_bridge"].get("source_snapshot_sha256"),
-          production_authority=False)
+          production_authority=False,
+          reason="NUMERICAL_TO_KRS_CONSUMPTION_NOT_YET_AUTHORIZED")
 
 req=build_local_krs(req)
 assert isinstance(req.get("krs_input_data"),dict),"LOCAL_KRS_INPUT_MISSING"
@@ -1083,6 +1099,8 @@ pre_payload={
   "required_index_unresolved":0,
   "full_terminalization":bool(req.get("full_terminalization")),
   "full_numerical_calculation":bool(req.get("full_numerical_calculation")),
+  "full_numerical_closure":bool(req.get("full_numerical_closure")),
+  "strict_full_numerical_ready":bool(req.get("strict_full_numerical_ready")),
   "krs_input_mode":req.get("krs_input_mode"),
   "static_prediction_frozen":True,
   "krs_input_data":req["krs_input_data"]

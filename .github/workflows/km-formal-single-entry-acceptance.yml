@@ -148,12 +148,17 @@ jobs:
           assert suite["runtime"]["runtime"]==local["runtime"]
           assert suite["production_numeric_suite"]["numerical_change"] is False
 
-          assert gateway["parent_current_authority"]==ca["manifest_id"]
-          assert gateway["venue_routing"]==route["profile_id"]
-          assert gateway["family_runtime_contracts"]=="profiles/family_runtime_contracts_20260929_R27.json"
+          # current_execution_gateway.json is a moving operational pointer.
+          # The frozen R36 enactment above proves the historical R3 authority;
+          # later Current Authorities may legitimately advance gateway/route/
+          # numerical pointers. Preserve only Single-Entry safety invariants.
           assert gateway["families"]["LOCAL"]["runtime_profile"]==local["runtime"]
+          assert isinstance(gateway["formal_single_entry"],dict)
+          assert gateway["formal_single_entry"]["profile"]
           assert gateway["policy"]["single_entry_formal_orchestration_required_for_venue_chat"] is True
-          assert gateway["policy"]["full_lifecycle_does_not_imply_full_numerical_authority"] is True
+          assert gateway["policy"]["production_prediction_policy_changed"] is False
+          assert gateway["policy"]["production_mec_policy_changed"] is False
+          assert gateway["policy"]["capital_policy_changed"] is False
           assert gateway["policy"]["source_checkpoint_basis_required"] is True
           assert gateway["policy"]["static_signed_source_binding_required"] is True
           assert gateway["policy"]["formal_checkpoint_semantic_basis_required"] is True
@@ -297,7 +302,7 @@ jobs:
               "single_entry":single["profile_id"],
               "runtime":local["runtime"],
               "prediction_change":"NONE",
-              "numerical_change":"NONE",
+              "numerical_change":"HISTORICAL_R36_NONE / CURRENT_GATEWAY_MAY_ADVANCE",
               "resume":"SOURCE_CHECKPOINT_PLUS_IMMUTABLE_FORMAL"
           },ensure_ascii=False,indent=2))
           PY

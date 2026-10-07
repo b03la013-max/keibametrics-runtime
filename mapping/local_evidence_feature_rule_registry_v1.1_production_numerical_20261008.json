@@ -1,0 +1,990 @@
+{
+  "registry_id": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.1-PRODUCTION-NUMERICAL-20261008",
+  "predecessor": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.1-CANDIDATE-20260923",
+  "status": "ACTIVE / PRODUCTION-NUMERICAL-AUTHORITY / FULL-63-RULE-BOUND / UNCALIBRATED-RULE-BASED / RESULT-BLIND / FAIL-CLOSED",
+  "purpose": "Bind every LOCAL common numerical component to deterministic pre-result source-to-score transforms for formal Production numerical materialization. This authority makes the numerical layer executable; it does not by itself grant Prediction/KRS/Ticket/Capital decision authority.",
+  "canon_basis": [
+    "ケイバメトリクス地方版 v4.13 Rev.1 / inherited v4.12 Rev.3 index definitions",
+    "UNKNOWN != WEAK; missing/incomparable starts from canonical neutral 50-55 with lower DCR",
+    "No odds/popularity in HPI-L ability scoring",
+    "No single-race or same-day result-derived permanent coefficients"
+  ],
+  "score_semantics": "0..100 Production numerical component score. Missing or incomparable evidence may use explicit canonical neutral 52 only under the bound missing rule; that value is transport-neutral, not an ability estimate, and must retain missingness/DCR consequence.",
+  "common_component_sets": {
+    "HPI-L": {
+      "recent_finish": 20,
+      "finish_margin": 15,
+      "passing_position_content": 20,
+      "class_level": 15,
+      "opponent_strength": 15,
+      "repeatability": 15
+    },
+    "CFIg-L": {
+      "same_venue": 25,
+      "same_distance": 20,
+      "similar_distance": 15,
+      "course_geometry": 15,
+      "turn_direction": 10,
+      "draw_style_fit": 10,
+      "going_fit": 5
+    },
+    "RFIg-L": {
+      "running_style_repro": 15,
+      "position_acquisition": 15,
+      "position_maintenance": 15,
+      "third_corner_progression": 15,
+      "leadership_stalk_acceptance": 10,
+      "kickback_traffic_tolerance": 10,
+      "going_adaptation": 10,
+      "jockey_reproducibility": 10
+    },
+    "BVIg-L": {
+      "sire_fit": 30,
+      "damsire_fit": 20,
+      "distance_sustain": 15,
+      "distance_trait": 10,
+      "surface_sand_fit": 15,
+      "venue_stat": 5,
+      "physical_style_fit": 5
+    },
+    "JTI-L": {
+      "venue_recent": 25,
+      "distance_record": 15,
+      "stable_combo": 15,
+      "position_acquisition_skill": 15,
+      "progression_timing_skill": 10,
+      "favorite_reliability": 10,
+      "longshot_record": 10
+    },
+    "CSI-L": {
+      "stable_venue_class_distance": 25,
+      "transfer_preparation": 15,
+      "layoff_preparation": 15,
+      "jockey_use_continuity": 10,
+      "cci_specificity": 15,
+      "tri_vertical_comparison": 15,
+      "rotation_management": 5
+    },
+    "BWI-L": {
+      "good_weight_range": 25,
+      "weight_change_reason_rate": 15,
+      "carried_weight": 15,
+      "age_growth": 10,
+      "interval": 10,
+      "fatigue_rebound": 10,
+      "transport_season": 5,
+      "paddock": 10
+    },
+    "DCR": {
+      "official_recent_coverage": 25,
+      "same_venue_distance_comparability": 20,
+      "training_comment_trial": 15,
+      "bodyweight_range_coverage": 15,
+      "same_day_gci_coverage": 15,
+      "late_odds_changes_coverage": 10
+    },
+    "NCI": {
+      "current_class": 20,
+      "previous_class": 15,
+      "recent_opponent_class": 20,
+      "race_set_level": 15,
+      "class_change_pressure": 10,
+      "transfer_class": 10,
+      "class_relative_time": 10
+    }
+  },
+  "component_score_rules": {
+    "HPI-L": {
+      "recent_finish": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-recent_finish",
+        "transform": "RECENCY_WEIGHTED_NORMALIZED_FINISH",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "finish_margin": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-finish_margin",
+        "transform": "RECENCY_WEIGHTED_EXPONENTIAL_MARGIN",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "passing_position_content": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-passing_position_content",
+        "transform": "RECENCY_WEIGHTED_LAST_CORNER_REACH_AND_PROGRESS",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "class_level": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-class_level",
+        "transform": "RECENCY_WEIGHTED_CLASS_ORDINAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "opponent_strength": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-opponent_strength",
+        "transform": "RECENCY_WEIGHTED_CLASS_AND_FIELD_STRENGTH",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "repeatability": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-HPI-L-repeatability",
+        "transform": "RECENT_PERFORMANCE_STABILITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "CFIg-L": {
+      "same_venue": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-same_venue",
+        "transform": "MATCHED_VENUE_PERFORMANCE_WITH_COVERAGE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "same_distance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-same_distance",
+        "transform": "MATCHED_DISTANCE_PERFORMANCE_WITH_COVERAGE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "similar_distance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-similar_distance",
+        "transform": "SIMILAR_DISTANCE_PERFORMANCE_WITH_COVERAGE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "course_geometry": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-course_geometry",
+        "transform": "DIRECTION_SURFACE_GEOMETRY_MATCH_WITH_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "turn_direction": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-turn_direction",
+        "transform": "DIRECTION_MATCH_RATE_WITH_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "draw_style_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-draw_style_fit",
+        "transform": "DRAW_BY_EARLY_POSITION_INTERACTION_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "going_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CFIg-L-going_fit",
+        "transform": "GOING_GROUP_MATCHED_PERFORMANCE_WITH_COVERAGE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "RFIg-L": {
+      "running_style_repro": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-running_style_repro",
+        "transform": "EARLY_POSITION_STYLE_STABILITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "position_acquisition": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-position_acquisition",
+        "transform": "NORMALIZED_FIRST_CALL_POSITION",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "position_maintenance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-position_maintenance",
+        "transform": "EARLY_TO_LATE_POSITION_RETENTION",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "third_corner_progression": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-third_corner_progression",
+        "transform": "EARLY_TO_THIRD_CALL_PROGRESS",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "leadership_stalk_acceptance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-leadership_stalk_acceptance",
+        "transform": "TOP3_EARLY_OR_STALK_SUCCESS_RATE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "kickback_traffic_tolerance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-kickback_traffic_tolerance",
+        "transform": "NON_FRONT_RUN_PERFORMANCE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "going_adaptation": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-going_adaptation",
+        "transform": "WET_DRY_MATCHED_POSITION_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "jockey_reproducibility": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-RFIg-L-jockey_reproducibility",
+        "transform": "CURRENT_JOCKEY_RECENT_HORSE_REPRODUCIBILITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "BVIg-L": {
+      "sire_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-sire_fit",
+        "transform": "OFFICIAL_PEDIGREE_POPULATION_FIT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "damsire_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-damsire_fit",
+        "transform": "OFFICIAL_PEDIGREE_POPULATION_FIT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "distance_sustain": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-distance_sustain",
+        "transform": "OFFICIAL_PEDIGREE_DISTANCE_SUSTAIN_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "distance_trait": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-distance_trait",
+        "transform": "OFFICIAL_PEDIGREE_DISTANCE_TRAIT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "surface_sand_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-surface_sand_fit",
+        "transform": "OFFICIAL_PEDIGREE_DIRT_FIT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "venue_stat": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-venue_stat",
+        "transform": "OFFICIAL_PEDIGREE_VENUE_STAT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "physical_style_fit": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BVIg-L-physical_style_fit",
+        "transform": "PEDIGREE_PHYSICAL_STYLE_FIT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "JTI-L": {
+      "venue_recent": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-venue_recent",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_VENUE_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "distance_record": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-distance_record",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_DISTANCE_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "stable_combo": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-stable_combo",
+        "transform": "CURRENT_JOCKEY_STABLE_COMBO_SOURCE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "position_acquisition_skill": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-position_acquisition_skill",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_FIRST_CALL_QUALITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "progression_timing_skill": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-progression_timing_skill",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_PROGRESS_QUALITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "favorite_reliability": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-favorite_reliability",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_POPULAR_RUN_RELIABILITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "longshot_record": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-JTI-L-longshot_record",
+        "transform": "CURRENT_JOCKEY_ON_HORSE_LONGSHOT_RUN_PERFORMANCE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "CSI-L": {
+      "stable_venue_class_distance": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-stable_venue_class_distance",
+        "transform": "OFFICIAL_STABLE_CONTEXT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "transfer_preparation": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-transfer_preparation",
+        "transform": "TRANSFER_STATE_PREPARATION_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "layoff_preparation": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-layoff_preparation",
+        "transform": "LAYOFF_INTERVAL_READINESS",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "jockey_use_continuity": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-jockey_use_continuity",
+        "transform": "CURRENT_JOCKEY_CONTINUITY",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "cci_specificity": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-cci_specificity",
+        "transform": "COMMENT_SPECIFICITY_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "tri_vertical_comparison": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-tri_vertical_comparison",
+        "transform": "TRAINING_VERTICAL_COMPARISON_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "rotation_management": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-CSI-L-rotation_management",
+        "transform": "RECENT_INTERVAL_STABILITY_AND_FRESHNESS",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "BWI-L": {
+      "good_weight_range": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-good_weight_range",
+        "transform": "CURRENT_WEIGHT_VS_GOOD_RECENT_RANGE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "weight_change_reason_rate": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-weight_change_reason_rate",
+        "transform": "WEIGHT_CHANGE_CONTEXT_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "carried_weight": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-carried_weight",
+        "transform": "FIELD_RELATIVE_CARRIED_WEIGHT",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "age_growth": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-age_growth",
+        "transform": "AGE_GROWTH_EVIDENCE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "interval": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-interval",
+        "transform": "DAYS_SINCE_LAST_RUN_READINESS_BAND",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "fatigue_rebound": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-fatigue_rebound",
+        "transform": "INTERVAL_AND_WEIGHT_REBOUND_CONTEXT",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "transport_season": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-transport_season",
+        "transform": "TRANSPORT_SEASON_SOURCE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "paddock": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-BWI-L-paddock",
+        "transform": "PADDOCK_SOURCE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "DCR": {
+      "official_recent_coverage": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-official_recent_coverage",
+        "transform": "DIRECT_EVIDENCE_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "same_venue_distance_comparability": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-same_venue_distance_comparability",
+        "transform": "COMPARABLE_RUN_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "training_comment_trial": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-training_comment_trial",
+        "transform": "COMMENT_TRAINING_SOURCE_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "bodyweight_range_coverage": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-bodyweight_range_coverage",
+        "transform": "BODYWEIGHT_HISTORY_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "same_day_gci_coverage": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-same_day_gci_coverage",
+        "transform": "SAME_DAY_RESULT_SOURCE_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "late_odds_changes_coverage": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-DCR-late_odds_changes_coverage",
+        "transform": "OFFICIAL_ODDS_SOURCE_COVERAGE_RATIO",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    },
+    "NCI": {
+      "current_class": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-current_class",
+        "transform": "CURRENT_CLASS_ORDINAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "previous_class": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-previous_class",
+        "transform": "PREVIOUS_CLASS_ORDINAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "recent_opponent_class": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-recent_opponent_class",
+        "transform": "RECENCY_WEIGHTED_CLASS_ORDINAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "race_set_level": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-race_set_level",
+        "transform": "CURRENT_RACE_SET_CLASS_ORDINAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "class_change_pressure": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-class_change_pressure",
+        "transform": "CURRENT_MINUS_PREVIOUS_CLASS_PRESSURE",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "transfer_class": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-transfer_class",
+        "transform": "JRA_NAR_TRANSFER_CLASS_CONTEXT",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      },
+      "class_relative_time": {
+        "rule_id": "LOCAL-NUM-PROD-v1.0-NCI-class_relative_time",
+        "transform": "COMPARABLE_DISTANCE_TIME_PERCENTILE_OR_CANONICAL_NEUTRAL",
+        "range": [
+          0,
+          100
+        ],
+        "missing_rule": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "result_derived_allowed": false,
+        "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION",
+        "production_numerical_authority": true,
+        "prediction_authority": false
+      }
+    }
+  },
+  "recency_weights_last5": [
+    0.3,
+    0.25,
+    0.2,
+    0.15,
+    0.1
+  ],
+  "missing_policy": {
+    "neutral_score": 52,
+    "state": "CANONICAL_NEUTRAL_MISSING",
+    "require_missing_flag": true,
+    "require_source_fact": true,
+    "require_evidence_refs": true,
+    "lower_dcr": true,
+    "ability_interpretation": "UNKNOWN_NOT_WEAK"
+  },
+  "market_policy": {
+    "forbidden_in": [
+      "HPI-L",
+      "TPI-L_BASE_ABILITY_COMPONENTS"
+    ],
+    "allowed_only_in": [
+      "PRI",
+      "OPI-V",
+      "AKI_DIAGNOSTICS"
+    ],
+    "note": "Market is diagnostic/price evidence, never horse ability evidence."
+  },
+  "promotion_policy": {
+    "production_authority": false,
+    "automatic_promotion": false,
+    "prerequisites": [
+      "deterministic regression PASS",
+      "no result-derived feature contamination",
+      "time-ordered walk-forward OOS",
+      "venue/profile stratified discrimination review",
+      "human promotion review"
+    ]
+  },
+  "production_boundaries": {
+    "production_numerical_authority": true,
+    "prediction_authority": false,
+    "krs_decision_authority": false,
+    "ticket_authority": false,
+    "capital_authority": false,
+    "market_into_ability": false,
+    "result_derived_feature_values": false,
+    "automatic_weight_calibration": false
+  },
+  "promotion_basis": {
+    "source_candidate": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v0.1-CANDIDATE-20260923",
+    "rationale": "Mechanical rule binding is promoted as C1 numerical execution closure only. Predictive calibration remains a separate C3/OOS question.",
+    "candidate_oos_not_required_for_mechanical_materialization": true,
+    "predictive_consumption_still_oos_gated": true
+  }
+}

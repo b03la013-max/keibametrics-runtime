@@ -1,9 +1,9 @@
 {
-  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.5-20261001",
-  "status": "ACTIVE / OPERATIONAL-CORRECTNESS / NON-PREDICTIVE / NON-NUMERICAL / R36-ENTRY-TRANSPORT-FALLBACK / SINGLE-ENTRY-R3 / CHECKPOINT-INTEGRITY / STATIC-SIGNED-SOURCE-BINDING / RACE-DAY-FAST-PATH / FNB-v2.1-CURRENT / NO-PRODUCTION-POLICY-CHANGE / SINGLE-RUNTIME-POINTER",
-  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261001-R36",
-  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20261001-R36",
-  "family_runtime_contracts": "profiles/family_runtime_contracts_20260929_R27.json",
+  "profile_id": "KM-LOCAL-EXECUTION-GATEWAY-v1.6-20261008",
+  "status": "ACTIVE / LOCAL / R44-ALIGNED / PRODUCTION-NUMERICAL-READY / EXECUTION-ROUTING / FAIL-CLOSED",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261008-R44",
+  "venue_routing": "KM-VENUE-CHAT-FORMAL-ROUTING-20261008-R38",
+  "family_runtime_contracts": "profiles/family_runtime_contracts_20261008_R28.json",
   "policy": {
     "request_runtime_revision_is_authority": false,
     "request_external_endpoint_is_authority": false,
@@ -13,7 +13,7 @@
     "signed_receipt_verification_required": true,
     "source_before_static_required": true,
     "production_prediction_policy_changed": false,
-    "production_numerical_policy_changed": false,
+    "production_numerical_policy_changed": true,
     "production_mec_policy_changed": false,
     "capital_policy_changed": false,
     "durable_execution_phase_store_required": true,
@@ -32,7 +32,7 @@
     "single_entry_formal_orchestration_required_for_venue_chat": true,
     "stable_execution_id_across_source_and_formal": true,
     "durable_source_checkpoint_reuse_allowed": true,
-    "full_lifecycle_does_not_imply_full_numerical_authority": true,
+    "full_lifecycle_does_not_imply_full_numerical_authority": false,
     "source_checkpoint_basis_required": true,
     "static_signed_source_binding_required": true,
     "formal_checkpoint_semantic_basis_required": true,
@@ -43,7 +43,11 @@
     "entry_transport_fallback_may_bypass_external_safety": false,
     "entry_transport_fallback_semantic_hash_required": true,
     "entry_transport_fallback_same_execution_id_required": true,
-    "source_only_is_formal_completion": false
+    "source_only_is_formal_completion": false,
+    "numerical_change_scope": "C1 NUMERICAL EXECUTION CLOSURE ONLY / NO DOWNSTREAM PREDICTIVE AUTHORITY",
+    "production_numerical_authority_ready": true,
+    "numerical_to_prediction_consumption_authorized": false,
+    "numerical_to_krs_consumption_authorized": false
   },
   "families": {
     "LOCAL": {
@@ -180,7 +184,7 @@
     "status": "SUCCESS",
     "healthcheck_http": 200
   },
-  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.4-20260928",
+  "predecessor": "KM-LOCAL-EXECUTION-GATEWAY-v1.5-20261001",
   "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
   "formal_lifecycle_contract": "KM-FAMILY-FORMAL-LIFECYCLE-CONTRACT-20260928-R1",
   "authority_guard": "runtime/family_authority_guard.py",
@@ -209,7 +213,7 @@
     "fallback": "CANONICAL_FULL_PATH"
   },
   "formal_single_entry": {
-    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20261001-R3",
+    "profile": "KM-FAMILY-FORMAL-SINGLE-ENTRY-20261008-R4",
     "workflow": ".github/workflows/km-formal-single-entry.yml",
     "orchestrator": "runtime/formal_execution_orchestrator.py",
     "intent_root": "runtime/formal_intents",
@@ -226,5 +230,7 @@
     "transport_fallback_condition": "PRIMARY_SUBMISSION_FAILED_BEFORE_COMMIT",
     "transport_fallback_semantics": "SAME_EXECUTION_ID + EXACT_SEMANTIC_HASH + DURABLE_SOURCE_REUSE",
     "transport_fallback_both_blocked": "FAIL_CLOSED / ENTRY-TRANSPORT-BLOCKED"
-  }
+  },
+  "suite_manifest": "KM-LOCAL-SUITE-MANIFEST-20261008-R16",
+  "runtime_contract": "KM-FAMILY-RUNTIME-CONTRACTS-20261008-R28"
 }

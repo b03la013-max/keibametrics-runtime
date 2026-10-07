@@ -1,0 +1,51 @@
+name: LOCAL Production Numerical v1 Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json'
+      - 'mapping/local_full_numerical_mapping_v1.0_production_20261008.json'
+      - 'runtime/local_fullnumerical_production.py'
+      - 'runtime/local_numerical_authority_gate.py'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/family_authority_guard.py'
+      - 'profiles/KM_LOCAL_SUITE_MANIFEST_20261008_R16.json'
+      - 'profiles/family_runtime_contracts_20261008_R28.json'
+      - 'profiles/family_formal_single_entry_20261008_R4.json'
+      - 'profiles/KM_FAMILY_CURRENT_AUTHORITY_20261008_R44.json'
+      - 'profiles/venue_chat_routes_20261008_R38.json'
+      - 'profiles/current_execution_gateway.json'
+      - 'governance/KM-LOCAL-PRODUCTION-NUMERICAL-CLOSURE-20261008-R1.md'
+      - 'runtime/acceptance/local_production_numerical_v1.json'
+      - 'tests/test_local_production_numerical_v1.py'
+      - '.github/workflows/km-local-production-numerical-v1-acceptance.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest cryptography PyMuPDF fastapi httpx pyyaml
+      - name: Production numerical closure tests
+        run: >-
+          python -m pytest -q
+          tests/test_local_production_numerical_v1.py
+          tests/test_local_fullnumerical_candidate_v01.py
+          tests/test_family_authority_guard.py
+      - name: Compile numerical runtime
+        run: >-
+          python -m py_compile
+          runtime/local_fullnumerical_production.py
+          runtime/local_numerical_authority_gate.py
+          runtime/non_jra_formal_runner.py
+          runtime/family_authority_guard.py
+      - name: R44 authority selftest
+        run: python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261008_R44.json
