@@ -68,23 +68,19 @@ jobs:
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
           r5status=j("runtime/local_mec_r5_oos_status.json")
 
-          inherited_local=auth.get("local_r36_inheritance") or {}
-          expected_local_parent=(
-              auth["manifest_id"]
-              if not inherited_local
-              else "KM-FAMILY-CURRENT-AUTHORITY-20261001-R36"
-          )
-          expected_local_route=(
-              route["profile_id"]
-              if not inherited_local
-              else "KM-VENUE-CHAT-FORMAL-ROUTING-20261001-R36"
-          )
+          # Current LOCAL pointers must resolve directly from the latest
+          # authority once a LOCAL-scoped authority change is enacted.
+          expected_local_parent=auth["manifest_id"]
+          expected_local_route=route["profile_id"]
           assert gateway["parent_current_authority"]==expected_local_parent
           assert gateway["venue_routing"]==expected_local_route
           assert gateway["policy"]["production_prediction_policy_changed"] is False
-          assert gateway["policy"]["production_numerical_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_policy_changed"] is True
           assert gateway["policy"]["production_mec_policy_changed"] is False
           assert gateway["policy"]["capital_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_authority_ready"] is True
+          assert gateway["policy"]["numerical_to_prediction_consumption_authorized"] is False
+          assert gateway["policy"]["numerical_to_krs_consumption_authorized"] is False
 
           assert cc["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert cc["venue_routing"]==route["profile_id"]
@@ -93,17 +89,23 @@ jobs:
           assert L["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert L["mec_status"]=="ACTIVE / PRODUCTION / UNCHANGED"
           assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
-          assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
+          assert "PRODUCTION NUMERICAL MATERIALIZATION v1.0" in L["production_numeric_status"]
           assert L["suite_manifest"]==suite["manifest_id"]
-          assert L["numerical_authority_status"].startswith("NOT_READY")
+          assert L["numerical_authority_status"].startswith("READY")
+          assert L["numerical_consumption_boundary"]["prediction_authority"] is False
+          assert L["numerical_consumption_boundary"]["krs_input_authority"] is False
           assert L["mec_measurement"]["r4_local"]["result"]=="LOCAL_PROMOTION_REJECTED"
           assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
           assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
 
           assert suite["family_current_authority"]==expected_local_parent
           assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
-          assert suite["production_numeric_suite"]["status"]=="FROZEN"
-          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert "PRODUCTION NUMERICAL EXECUTION CLOSURE v1.0 ACTIVE" in suite["production_numeric_suite"]["status"]
+          assert suite["production_numeric_suite"]["numerical_execution_change"] is True
+          assert suite["production_numeric_suite"]["predictive_weight_change"] is False
+          assert suite["numerical"]["status"].startswith("READY")
+          assert suite["numerical"]["prediction_consumption_authorized"] is False
+          assert suite["numerical"]["krs_consumption_authorized"] is False
           assert suite["decision_execution"]["mec_forward_measurement"]["signed_final_binding_required"] is True
 
           lr=route["family_routes"]["LOCAL"]
