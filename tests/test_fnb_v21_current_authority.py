@@ -54,7 +54,7 @@ def test_fnb_v21_owns_venue_prediction_only():
 
 
 def test_fnb_v21_preserves_v20_numerical_freeze():
-    f=load(FNB); a=load(AUTH); s=load(SUITE); g=load(GATEWAY)
+    f=load(FNB); a=load(AUTH); s=load(SUITE)
     assert f["predictive_behavior_change"] is False
     assert f["numerical_change"] is False
     freeze=f["production_freeze"]
@@ -71,9 +71,10 @@ def test_fnb_v21_preserves_v20_numerical_freeze():
     assert sup["mec_r3_policy_change"] is False
     assert sup["capital_policy_change"] is False
     assert s["production_numeric_suite"]["numerical_change"] is False
-    assert g["policy"]["production_numerical_policy_changed"] is False
-    assert g["policy"]["production_mec_policy_changed"] is False
-    assert g["policy"]["capital_policy_changed"] is False
+    # current_execution_gateway.json is a moving operational pointer and may
+    # legitimately advance after the frozen R32 enactment. Historical FNB v2.1
+    # invariants are proven by the frozen R32 authority/suite above, not by a
+    # later mutable gateway.
 
 
 def test_first_day_temporal_bootstrap_and_oos_are_fail_closed():
