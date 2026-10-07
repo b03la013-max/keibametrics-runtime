@@ -160,5 +160,36 @@
     "ohi_v24": "OPEN_CANDIDATE_NOT_INHERITED_AS_PRODUCTION"
   },
   "runtime": "runtime/family_pfs_improvement.py",
-  "governance": "governance/KM-FAMILY-OWNER-UTILITY-PFS-CONTINUOUS-IMPROVEMENT-20261007-R1.md"
+  "governance": "governance/KM-FAMILY-OWNER-UTILITY-PFS-CONTINUOUS-IMPROVEMENT-20261007-R1.md",
+  "owner_scorecard": {
+    "profile": "KM-FAMILY-PFS-OWNER-SCORECARD-20261007-R1",
+    "runtime": "runtime/family_pfs_owner_scorecard.py",
+    "purpose": "Aggregate PFS, drawdown, Hit-but-Loss, first failure, dominant loss owner, bet-type economics and payout concentration without granting Production authority."
+  },
+  "promotion_gate": {
+    "profile": "KM-FAMILY-PFS-PROMOTION-GATE-20261007-R1",
+    "runtime": "runtime/family_pfs_promotion_gate.py",
+    "minimum_races": 30,
+    "minimum_days": 3,
+    "candidate_pfs": "above Production and above 100",
+    "raw_drawdown": "no worse",
+    "equal_budget_drawdown": "no worse",
+    "equal_ticket_profit": "no worse",
+    "set_coverage": "no worse",
+    "hit_but_loss": "no worse",
+    "maximum_single_race_return_share": 0.5,
+    "profit_without_best_race": "positive",
+    "integrity_holds": "zero",
+    "passing_action": "REVIEW_ELIGIBLE / EXPLICIT HUMAN REVIEW ONLY",
+    "automatic_promotion": false
+  },
+  "forward_measurement_boundary": {
+    "local_existing_components": [
+      "LOCAL MEC-R5 SET_ONLY / SET_PAIR / TOP-N arms remain separately frozen",
+      "Family Conversion Diagnostics Winner Role / Pair Residual / Selective Exact remain non-purchase diagnostics",
+      "Existing Phase-B capital arms and PFS Grand Review remain measurement sources"
+    ],
+    "rule": "R43 does not retrospectively credit 2026-10-07 races to a new selector cohort. New selector variants require pre-result freeze after R43 effective_at.",
+    "equal_budget_equal_ticket": "measurement only; no result-informed reselection"
+  }
 }
