@@ -75,7 +75,10 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         seen.add(race_id)
 
         src_path = _get_existing_file(root, str(item.get("result_summary_path") or ""))
-        raw = src_path.read_bytes()
+        try:
+            raw = src_path.read_bytes()
+        except OSError as exc:
+            raise RegressionEvidenceError(f"EVIDENCE_NOT_READABLE:{src_path}") from exc
         pinned = str(item.get("result_summary_git_blob_sha") or "")
         if len(pinned) != 40 or _git_blob_sha(raw) != pinned:
             raise RegressionEvidenceError(f"FROZEN_RESULT_BLOB_CHANGED:{race_id}")
