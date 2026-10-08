@@ -1539,6 +1539,22 @@ if local_mec_r5_shadow is not None:
             "final_receipt_sha256":final_sha
         })
 
+aki_adaptive_purchase_binding=None
+if aki_adaptive_purchase_shadow is not None:
+    try:
+        aki_adaptive_purchase_binding=verify_aki_adaptive_purchase_signed_final(
+            fin,aki_adaptive_purchase_shadow
+        )
+        persist("aki_adaptive_purchase_binding_attestation.json",aki_adaptive_purchase_binding)
+    except Exception as e:
+        aki_adaptive_purchase_shadow_error=type(e).__name__+":"+str(e)
+        persist("aki_adaptive_purchase_binding_error.json",{
+            "status":"INVALID_FOR_OOS_NON_BLOCKING",
+            "error":aki_adaptive_purchase_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha,
+        })
+
 common_exact_continuity_binding=None
 if common_exact_continuity_shadow is not None:
     try:
