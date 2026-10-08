@@ -102,7 +102,7 @@ def evaluate_canonical(
     p = settled_production
     c = measured["settlement"]
     return {
-        "race_id": race, "race_day": str(_when(shadow["scheduled_post_at"]).date()),
+        "race_id": race, "race_day": str(_when(shadow["scheduled_post_at"]).astimezone(dt.timezone(dt.timedelta(hours=9))).date()),
         "profile": PROFILE, "shadow_sha256": shadow["sha256"],
         "final_receipt_sha256": final["receipt_sha256"],
         "result_receipt_sha256": result["receipt_sha256"],
@@ -172,6 +172,7 @@ def scan_execution_store(root: Path) -> dict:
 
 def _summary(rows: list[dict], held: list[dict], errors: list[dict]) -> dict:
     valid = rows if not errors else []
+    distinct_days = len(set(x["race_day"] for x in valid))
     def total(which: str):
         inv = sum(float(x[which]["investment"]) for x in valid)
         ret = sum(float(x[which]["return"]) for x in valid)
@@ -186,8 +187,8 @@ def _summary(rows: list[dict], held: list[dict], errors: list[dict]) -> dict:
     report = {
         "profile": PROFILE,
         "status": ("INTEGRITY_HOLD" if errors else
-                   "WAITING_FORWARD_OOS" if len(valid) < 30 else "HUMAN_REVIEW_REQUIRED"),
-        "eligible_races": len(valid), "days": len(set(x["race_day"] for x in valid)),
+                   "WAITING_FORWARD_OOS" if (len(valid) < 30 or distinct_days < 3) else "HUMAN_REVIEW_REQUIRED"),
+        "eligible_races": len(valid), "days": distinct_days,
         "minimum_review_races": 30, "minimum_review_days": 3,
         "production": total("production"), "adaptive": total("adaptive"),
         "abstention_races": len(no_bet),
