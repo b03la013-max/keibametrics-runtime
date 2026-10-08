@@ -379,3 +379,16 @@ def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
         owner.responses_call({},timeout=1,project_id='proj-test')
     assert str(exc.value)=='OPENAI_API_AUTHENTICATION_HOLD'
     assert observed==['proj-test']
+    # Existing credential boundary test also covers the formerly opaque HTTP
+    # failure family; retain status codes only, never provider body/headers.
+    for status, expected in [(400, 'OPENAI_API_HTTP_400_HOLD'),
+                             (404, 'OPENAI_API_HTTP_404_HOLD'),
+                             (429, 'OPENAI_API_HTTP_429_HOLD'),
+                             (503, 'OPENAI_API_HTTP_5XX_HOLD')]:
+        def reject(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, status, 'SECRET BODY', {}, None)
+        monkeypatch.setattr(owner.urllib.request, 'urlopen', reject)
+        with pytest.raises(owner.CandidateHold) as e:
+            owner.responses_call({}, timeout=1, project_id='proj-test')
+        assert str(e.value) == expected
+        assert 'SECRET' not in str(e.value)
