@@ -179,11 +179,27 @@ def responses_call(payload, *, timeout, project_id=None):
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
-        raise CandidateHold("OPENAI_API_AUTHENTICATION_HOLD" if exc.code in (401, 403)
-                            else "OPENAI_API_TRANSPORT_OR_PROVIDER_HOLD") from None
+        # HTTP status is non-secret; provider bodies, headers and error messages
+        # are not preserved. Distinguish request/account/rate failures from
+        # transport failures without exposing credentials or changing policy.
+        if exc.code in (401, 403):
+            code = "OPENAI_API_AUTHENTICATION_HOLD"
+        elif exc.code in (400, 404, 408, 409, 422, 429):
+            code = f"OPENAI_API_HTTP_{exc.code}_HOLD"
+        elif 500 <= exc.code < 600:
+            code = "OPENAI_API_HTTP_5XX_HOLD"
+        else:
+            code = "OPENAI_API_HTTP_UNCLASSIFIED_HOLD"
+        raise CandidateHold(code) from None
+    except (TimeoutError,):
+        raise CandidateHold("OPENAI_API_TIMEOUT_HOLD") from None
+    except urllib.error.URLError:
+        raise CandidateHold("OPENAI_API_NETWORK_HOLD") from None
+    except (ValueError, UnicodeDecodeError):
+        raise CandidateHold("OPENAI_API_RESPONSE_DECODE_HOLD") from None
     except Exception:
-        # Never retain provider error bodies/headers or credentials in diagnostics.
-        raise CandidateHold("OPENAI_API_TRANSPORT_OR_PROVIDER_HOLD") from None
+        # Never retain provider response bodies/headers or credentials.
+        raise CandidateHold("OPENAI_API_CLIENT_RUNTIME_HOLD") from None
 
 
 def execute(context, config, *, root, call=responses_call, now=None):
