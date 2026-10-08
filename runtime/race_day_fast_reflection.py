@@ -4,6 +4,10 @@ from typing import Any,Dict
 if __package__:
     from .family_pfs_improvement import build_pfs_improvement_assessment
 else:
+    # Works when imported both as runtime.race_day_fast_reflection and as a script-side module.
+try:
+    from .family_pfs_improvement import build_pfs_improvement_assessment
+except ImportError:
     from family_pfs_improvement import build_pfs_improvement_assessment
 
 PROFILE_ID="KM-FAMILY-RACE-DAY-FAST-REFLECTION-20260928-R1"
