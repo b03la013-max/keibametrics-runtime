@@ -182,8 +182,25 @@ def build_shadow(req: dict, final_artifact: dict, *, generated_at: str,
         "RSI": _axis(model, by_role["W"], "RSI"),
     }
     t = THRESHOLDS
-    stable = axes["W-AKI"] < t["w_stable_max"] and axes["ASI"] >= t["asi_stable_min"]
-    volatile = axes["W-AKI"] >= t["w_contested_min"] or axes["ASI"] <= t["asi_fragile_max"]
+    registry = req.get("role_registry") or []
+    core_w = []
+    for role_row in registry:
+        if (str(role_row.get("column") or "").upper() == "W"
+                and str(role_row.get("status") or "").upper() == "CORE"):
+            try:
+                core_w.append(int(role_row["runner_id"]))
+            except (ValueError, KeyError, TypeError) as exc:
+                raise AdaptivePurchaseError("ROLE_REGISTRY_W_INVALID") from exc
+    if len(core_w) != len(set(core_w)) or set(core_w) - set(by_role["W"]):
+        raise AdaptivePurchaseError("ROLE_REGISTRY_W_CONFLICT")
+    head_fix_supported = len(core_w) == 1
+    stable = (axes["W-AKI"] < t["w_stable_max"]
+              and axes["ASI"] >= t["asi_stable_min"]
+              and axes["RSI"] < t["rsi_uncertain_min"]
+              and head_fix_supported)
+    volatile = (axes["W-AKI"] >= t["w_contested_min"]
+                or axes["ASI"] <= t["asi_fragile_max"]
+                or axes["RSI"] >= t["rsi_uncertain_min"])
     regime = "STABLE" if stable else ("VOLATILE" if volatile else "SELECTIVE")
     fragile = regime == "VOLATILE" and axes["ASI"] <= t["asi_fragile_max"] and axes["RSI"] >= t["rsi_uncertain_min"]
     head_size = 1 if stable else (3 if volatile else 2)
@@ -306,6 +323,10 @@ def build_shadow(req: dict, final_artifact: dict, *, generated_at: str,
             "thirds_by_pair": {str(h) + ">" + str(s): v for (h, s), v in thirds_by_pair.items()},
         },
         "fragile_market": fragile, "type_caps": copy.deepcopy(caps),
+        "head_fix_guard": {"core_w": sorted(core_w),
+                           "single_core_w_supported": head_fix_supported,
+                           "reason": ("SINGLE_CORE_W" if head_fix_supported else
+                                      "MULTIPLE_CORE_W" if core_w else "CORE_W_UNRESOLVED")},
         "capital_ceiling_yen": budget, "capital_basis": budget_source,
         "production_ticket_count": len(production_tickets),
         "candidate_action": not_buy, "candidate_tickets": chosen,
