@@ -105,6 +105,24 @@ def test_stable_aki_concentrates_columns_and_limits_capital():
     assert verify_signed_final_binding(fake_final(req, shadow), shadow)["valid"] is True
 
 
+def test_pair_local_third_keeps_distinct_thirds_when_top_p3_are_head_and_second():
+    req, sh = valid_shadow()
+    # Global P3 top-two are 1 and 2. Under head 1 / second 2,
+    # actual legal third candidates must become 3 and 4, not disappear.
+    assert sh["pair_local_columns"]["thirds_by_pair"]["1>2"] == [3, 4]
+    keyset = {(t["bet_type"], tuple(t["selection"])) for t in sh["candidate_tickets"]}
+    assert ("TRIFECTA", (1, 2, 3)) in keyset
+    assert ("TRIO", (1, 2, 3)) in keyset
+    assert sh["unselected_semantic_unit_count"] >= 0
+
+
+def test_volatile_prefers_unordered_set_hedge_before_exact_orientation():
+    req, sh = valid_shadow(w=78, p2=70, p3=75, asi=55, rsi=42)
+    assert sh["regime"] == "VOLATILE"
+    assert sh["candidate_tickets"][0]["bet_type"] == "TRIO"
+    assert sh["candidate_capital_yen"] <= 1000
+
+
 def test_mixed_and_volatile_expand_only_justified_columns():
     req, mixed = valid_shadow(w=50, p2=71, p3=68, asi=65, rsi=40)
     assert mixed["regime"] == "SELECTIVE"
