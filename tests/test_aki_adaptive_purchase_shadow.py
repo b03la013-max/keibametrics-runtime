@@ -108,7 +108,7 @@ def test_stable_aki_concentrates_columns_and_limits_capital():
 def test_mixed_and_volatile_expand_only_justified_columns():
     req, mixed = valid_shadow(w=50, p2=71, p3=68, asi=65, rsi=40)
     assert mixed["regime"] == "SELECTIVE"
-    assert mixed["width"] == {"head": 2, "p2": 3, "p3": 5}
+    assert mixed["width"] == {"head": 2, "p2": 4, "p3": 5}
     assert mixed["candidate_capital_yen"] <= 1500
 
     req, volatile = valid_shadow(w=76, p2=75, p3=74, asi=54, rsi=50)
