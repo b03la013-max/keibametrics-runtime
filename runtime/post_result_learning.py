@@ -31,25 +31,32 @@ def _coverage(final_artifact, top3):
     tickets=ft.get("tickets") or []
     a,b,c=map(str,top3)
     exacta=False
+    purchased_exacta=False
+    purchased_trio=False
+    exact_oriented_set=False
     top3set=False
     exact=False
     hit_types=[]
     for t in tickets:
         bt,sel=_ticket_key(t)
         if bt=="EXACTA" and sel==(a,b):
-            exacta=True; hit_types.append("EXACTA")
+            exacta=True; purchased_exacta=True; hit_types.append("EXACTA")
         elif bt=="TRIO" and set(sel)=={a,b,c}:
-            top3set=True; hit_types.append("TRIO")
+            top3set=True; purchased_trio=True; hit_types.append("TRIO")
         elif bt=="TRIFECTA":
             if len(sel)>=2 and sel[:2]==(a,b):
                 exacta=True
-            if set(sel)=={a,b,c}:
+            if len(sel)==3 and set(sel)=={a,b,c}:
                 top3set=True
+                exact_oriented_set=True
             if sel==(a,b,c):
                 exact=True; hit_types.append("TRIFECTA")
     return {
       "ordered_pair_ticket_coverage":exacta,
       "top3_set_ticket_coverage":top3set,
+      "purchased_trio_ticket_coverage":purchased_trio,
+      "exact_oriented_top3_set_coverage":exact_oriented_set,
+      "purchased_exacta_ticket_coverage":purchased_exacta,
       "ordered_exact_ticket_coverage":exact,
       "matching_ticket_types":sorted(set(hit_types)),
       "ticket_count":len(tickets),
