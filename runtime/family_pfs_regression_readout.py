@@ -36,7 +36,7 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def _git_blob_sha(raw: bytes) -> str:
-    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\\0" + raw).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
 
 
 def _get_existing_file(root: Path, path: str) -> Path:
@@ -195,7 +195,7 @@ def main() -> int:
     parser.add_argument("--output", help="Optional output JSON path (no mutation of source artifacts)")
     args = parser.parse_args()
     readout = build_regression_readout(Path(args.root), Path(args.manifest))
-    data = json.dumps(readout, ensure_ascii=False, indent=2, sort_keys=True) + "\\n"
+    data = json.dumps(readout, ensure_ascii=False, indent=2, sort_keys=True) + chr(10)
     if args.output:
         Path(args.output).write_text(data, encoding="utf-8")
     else:
