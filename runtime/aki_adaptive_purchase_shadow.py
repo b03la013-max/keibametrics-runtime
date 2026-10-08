@@ -190,8 +190,20 @@ def build_shadow(req: dict, final_artifact: dict, *, generated_at: str,
     p2_size = 2 if axes["P2-AKI"] < t["axis_low_max"] else (4 if axes["P2-AKI"] >= t["axis_high_min"] else 3)
     p3_size = 2 if axes["P3-AKI"] < t["axis_low_max"] else (5 if axes["P3-AKI"] >= t["axis_high_min"] else 3)
     heads = by_role["W"][:head_size]
-    seconds = by_role["P2"][:p2_size]
-    thirds = by_role["P3"][:p3_size]
+    # Each ordered head/second has its OWN distinct third candidate list.
+    # A globally truncated P3 list can contain the head and second only,
+    # silently destroying all valid triples in a genuinely stable race.
+    seconds_by_head = {
+        h: [s for s in by_role["P2"] if s != h][:p2_size] for h in heads
+    }
+    thirds_by_pair = {
+        (h, s): [t for t in by_role["P3"] if t not in {h, s}][:p3_size]
+        for h in heads for s in seconds_by_head[h]
+    }
+    second_union = set(s for group in seconds_by_head.values() for s in group)
+    third_union = set(t for group in thirds_by_pair.values() for t in group)
+    seconds = [i for i in order if i in second_union]
+    thirds = [i for i in order if i in third_union]
     caps = TYPE_CAPS[regime]
     budget, budget_source = _budget(req, regime)
 
@@ -210,21 +222,34 @@ def build_shadow(req: dict, final_artifact: dict, *, generated_at: str,
     for key, original in distinct.items():
         bt, sel = key
         if bt == "EXACTA":
-            allowed = sel[0] in heads and sel[1] in seconds
+            allowed = sel[0] in heads and sel[1] in seconds_by_head.get(sel[0], ())
         elif bt == "TRIFECTA":
-            allowed = sel[0] in heads and sel[1] in seconds and sel[2] in thirds
+            allowed = (sel[0] in heads and
+                       sel[1] in seconds_by_head.get(sel[0], ()) and
+                       sel[2] in thirds_by_pair.get((sel[0], sel[1]), ()))
         else:
-            allowed = any(a in heads and b in seconds and c in thirds
-                          and len({a, b, c}) == 3
-                          for a in sel for b in sel for c in sel)
+            allowed = any(
+                a in heads and b in seconds_by_head.get(a, ()) and
+                c in thirds_by_pair.get((a, b), ())
+                for a in sel for b in sel for c in sel
+                if len({a, b, c}) == 3
+            )
         if not allowed:
             discard["NON_MATERIAL_COLUMN_FOR_THIS_REGIME"] += 1
             continue
         tier = str(original.get("mec_tier") or "TAIL").upper()
         tier_score = {"CORE": 0, "PROTECTION": 7, "TAIL": 13}.get(tier, 20)
         # Prefer smaller ranks and core independent evidence. No post-result data.
-        score = (tier_score, sum(rank[x] for x in sel), max(rank[x] for x in sel),
-                 {"TRIO": 0, "EXACTA": 1, "TRIFECTA": 2}[bt], sel)
+        # Prioritize unordered protection in uncertain races; in stable
+        # races prioritize justified ordered connections. This is a fixed
+        # experimental preference, not an observed profit-based reranking.
+        type_priority = (
+            {"EXACTA": 0, "TRIFECTA": 1, "TRIO": 2}
+            if regime == "STABLE" else
+            {"TRIO": 0, "EXACTA": 1, "TRIFECTA": 2}
+        )
+        score = (type_priority[bt], tier_score, sum(rank[x] for x in sel),
+                 max(rank[x] for x in sel), sel)
         eligible.append((score, key, original))
     eligible.sort(key=lambda x: x[0])
 
@@ -274,8 +299,12 @@ def build_shadow(req: dict, final_artifact: dict, *, generated_at: str,
         "acceptance_only": acceptance_only, "forward_oos_candidate": forward,
         "oos_exclusion_reason": request_policy.get("oos_exclusion_reason"),
         "regime": regime, "experimental_thresholds": copy.deepcopy(THRESHOLDS),
-        "aki_axes": axes, "width": {"head": len(heads), "p2": len(seconds), "p3": len(thirds)},
+        "aki_axes": axes, "width": {"head": len(heads), "p2": p2_size, "p3": p3_size},
         "selected_role_columns": {"W": heads, "P2": seconds, "P3": thirds},
+        "pair_local_columns": {
+            "seconds_by_head": {str(h): v for h, v in seconds_by_head.items()},
+            "thirds_by_pair": {str(h) + ">" + str(s): v for (h, s), v in thirds_by_pair.items()},
+        },
         "fragile_market": fragile, "type_caps": copy.deepcopy(caps),
         "capital_ceiling_yen": budget, "capital_basis": budget_source,
         "production_ticket_count": len(production_tickets),
