@@ -206,7 +206,55 @@
       "status": "WAITING_30",
       "automatic_promotion": false
     },
-    "method": "Do not append result-known regressions to a closed cohort. Continue original future capture only with independent pre-race freeze."
+    "method": "Do not append result-known regressions to a closed cohort. Continue original future capture only with independent pre-race freeze.",
+    "human_review": {
+      "mec_r5_r30": {
+        "production": {
+          "investment_yen": 455600,
+          "return_yen": 275210,
+          "pfs_pct": 60.406057946,
+          "max_drawdown_yen": 188800,
+          "hit_races": 25
+        },
+        "exact_top4": {
+          "investment_yen": 332400,
+          "return_yen": 213340,
+          "pfs_pct": 64.181708785,
+          "max_drawdown_yen": 126720,
+          "hit_races": 25
+        },
+        "raw_pfs_gain_points": 3.775650839,
+        "linear_normalization": {
+          "capital_reference_yen": 199400,
+          "production_scaled_return_yen": 120449.68,
+          "top4_scaled_return_yen": 127978.33,
+          "realizable_reselected_portfolio": false
+        },
+        "decision": "PROMOTION_HOLD / R30_COMPLETE_IS_HUMAN_REVIEW_TRIGGER_NOT_APPROVAL / BOTH_PFS_BELOW_100"
+      },
+      "mec_r4_r8": {
+        "production": {
+          "investment_yen": 78700,
+          "return_yen": 63140,
+          "pfs_pct": 80.228716645,
+          "hit_races": 5
+        },
+        "cpss_all": {
+          "investment_yen": 48600,
+          "return_yen": 50540,
+          "pfs_pct": 103.991769547,
+          "hit_races": 4,
+          "pfs_excluding_largest_return": 42.483221477,
+          "largest_return_share_pct": 62.425801
+        },
+        "decision": "WAITING_30 / DO_NOT_USE_EIGHT_RACES_FOR_POLICY_PROMOTION"
+      },
+      "research_only": "Historical R4/R5 shadow comparisons are not new OOS credit, are not controlled equal-budget ticket reallocation, and never authorize auto-Promotion.",
+      "evidence_paths": [
+        "runtime/local_mec_r5_oos_status.json",
+        "runtime/mec_r4_oos_status.json"
+      ]
+    }
   },
   "production_freeze": {
     "prediction_model": "UNCHANGED",
