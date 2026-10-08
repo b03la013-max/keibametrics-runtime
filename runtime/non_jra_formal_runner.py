@@ -263,6 +263,11 @@ from local_mec_r5_shadow import (
     bind_shadow_to_trace as bind_local_mec_r5_shadow_to_trace,
     verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
 )
+from aki_adaptive_purchase_shadow import (
+    build_shadow as build_aki_adaptive_purchase_shadow,
+    bind_to_trace as bind_aki_adaptive_purchase_to_trace,
+    verify_signed_final_binding as verify_aki_adaptive_purchase_signed_final,
+)
 from common_exact_continuity_shadow import (
     build_shadow as build_common_exact_continuity_shadow,
     bind_shadow_to_trace as bind_common_exact_continuity_shadow_to_trace,
@@ -1269,6 +1274,8 @@ mec_r4_basis=None
 mec_r4_shadow_error=None
 local_mec_r5_shadow=None
 local_mec_r5_shadow_error=None
+aki_adaptive_purchase_shadow=None
+aki_adaptive_purchase_shadow_error=None
 common_exact_continuity_shadow=None
 common_exact_continuity_shadow_error=None
 family_conversion_diagnostics=None
@@ -1335,6 +1342,36 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "error":local_mec_r5_shadow_error,
             "production_effect":"NONE",
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
+    # AKI-aware PAPER selector: existing R3 tickets only, frozen before FINAL,
+    # zero purchase authority. Does not mutate MEC, Capital or ranked roles.
+    try:
+        aki_adaptive_purchase_shadow=build_aki_adaptive_purchase_shadow(
+            req,
+            {"artifact":{
+                "final_ticket":copy.deepcopy(shadow_ticket),
+                "minimum_efficient_coverage":copy.deepcopy(mec),
+                "final_prediction_package":copy.deepcopy(final_package),
+            }},
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            basis_sha256=common_mec_shadow_basis["sha256"],
+        )
+        trace=bind_aki_adaptive_purchase_to_trace(trace,aki_adaptive_purchase_shadow)
+        persist("aki_adaptive_purchase_shadow_pre_result.json",aki_adaptive_purchase_shadow)
+        stage("AKI_ADAPTIVE_PURCHASE_PRE_RESULT_FREEZE",
+              profile=aki_adaptive_purchase_shadow["profile"],
+              shadow_sha256=aki_adaptive_purchase_shadow["sha256"],
+              candidate_ticket_count=aki_adaptive_purchase_shadow["candidate_ticket_count"],
+              candidate_action=aki_adaptive_purchase_shadow["candidate_action"],
+              production_effect="NONE")
+    except Exception as e:
+        aki_adaptive_purchase_shadow_error=type(e).__name__+":"+str(e)
+        persist("aki_adaptive_purchase_shadow_error.json",{
+            "status":"NON_BLOCKING_SHADOW_HOLD",
+            "error":aki_adaptive_purchase_shadow_error,
+            "production_effect":"NONE",
+            "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
         })
 
     # Common C2 Decision Policy shadow: freeze the exact-continuity audit
@@ -1451,7 +1488,7 @@ acceptance_only=bool(request_oos_policy(req)["acceptance_only"])
 try:
     from local_candidate_postresult import build_forward_capture
     inventory={}
-    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json","family_conversion_diagnostics_pre_result.json"]:
+    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","aki_adaptive_purchase_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json","family_conversion_diagnostics_pre_result.json"]:
         path=os.path.join("runtime_out",name)
         if os.path.isfile(path):
             with open(path,"rb") as frozen_file:inventory[name]={"sha256":hashlib.sha256(frozen_file.read()).hexdigest()}
@@ -1500,6 +1537,22 @@ if local_mec_r5_shadow is not None:
             "error":local_mec_r5_shadow_error,
             "production_effect":"NONE",
             "final_receipt_sha256":final_sha
+        })
+
+aki_adaptive_purchase_binding=None
+if aki_adaptive_purchase_shadow is not None:
+    try:
+        aki_adaptive_purchase_binding=verify_aki_adaptive_purchase_signed_final(
+            fin,aki_adaptive_purchase_shadow
+        )
+        persist("aki_adaptive_purchase_binding_attestation.json",aki_adaptive_purchase_binding)
+    except Exception as e:
+        aki_adaptive_purchase_shadow_error=type(e).__name__+":"+str(e)
+        persist("aki_adaptive_purchase_binding_error.json",{
+            "status":"INVALID_FOR_OOS_NON_BLOCKING",
+            "error":aki_adaptive_purchase_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha,
         })
 
 common_exact_continuity_binding=None

@@ -156,6 +156,18 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
+      - name: Evaluate AKI adaptive purchase paper OOS after official RESULT
+        if: steps.result.outputs.rc == '0'
+        shell: bash
+        run: |
+          set +e
+          python runtime/aki_adaptive_oos_tracker.py --root runtime/executions --output runtime/aki_adaptive_oos_status.json
+          rc=$?
+          if [ "$rc" != "0" ]; then
+            echo "::warning::AKI paper OOS integrity HOLD; no Production modification."
+          fi
+          exit 0
+
       - name: Persist durable successful phase checkpoints
         if: always()
         shell: bash
@@ -173,7 +185,7 @@ jobs:
           if [ -d "runtime/execution_reports/$EXECUTION_ID" ]; then git add "runtime/execution_reports/$EXECUTION_ID"; fi
           # Existing RESULT workflow owns the same forward ledgers. Preserve
           # its generated state when RESULT runs as an internal continuation.
-          for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_initial_forward_acceptance.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
+          for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_initial_forward_acceptance.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
             if [ -e "$path" ]; then git add "$path"; fi
           done
           if [ -f runtime_out/orchestration_report.json ]; then
