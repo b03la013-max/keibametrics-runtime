@@ -1,7 +1,10 @@
 from __future__ import annotations
 import copy,hashlib,json
 from typing import Any,Dict
-from family_pfs_improvement import build_pfs_improvement_assessment
+if __package__:
+    from .family_pfs_improvement import build_pfs_improvement_assessment
+else:
+    from family_pfs_improvement import build_pfs_improvement_assessment
 
 PROFILE_ID="KM-FAMILY-RACE-DAY-FAST-REFLECTION-20260928-R1"
 
