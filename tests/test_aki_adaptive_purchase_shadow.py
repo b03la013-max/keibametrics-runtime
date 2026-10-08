@@ -46,6 +46,10 @@ def fixture(w=28, p2=30, p3=31, asi=78, rsi=25, acceptance=False):
         "scheduled_post_at": POST,
         "acceptance_only": acceptance,
         "static_prediction": {"ranking": ranks, "roles": roles},
+        "role_registry": [
+            {"runner_id": "1", "column": "W", "status": "CORE"},
+            {"runner_id": "4", "column": "W", "status": "CONDITIONAL"},
+        ],
         "index_provenance_ledger": ledger, "index_provenance_hash": ledger["sha256"],
         "capital_policy": {"mode": "RECOMMENDATION_ONLY"},
     }
@@ -121,6 +125,21 @@ def test_volatile_prefers_unordered_set_hedge_before_exact_orientation():
     assert sh["regime"] == "VOLATILE"
     assert sh["candidate_tickets"][0]["bet_type"] == "TRIO"
     assert sh["candidate_capital_yen"] <= 1000
+
+
+def test_two_independent_core_w_horses_prevent_false_single_head():
+    req, art = fixture(w=23, asi=90, rsi=20)
+    req["role_registry"][1]["status"] = "CORE"
+    sh = build_shadow(req, art, generated_at=PRE, basis_sha256="BASIS-1")
+    assert sh["regime"] == "SELECTIVE"
+    assert sh["width"]["head"] == 2
+    assert sh["head_fix_guard"]["reason"] == "MULTIPLE_CORE_W"
+
+
+def test_role_shift_rsi_prevents_aki_only_single_head():
+    _, sh = valid_shadow(w=27, asi=85, rsi=80)
+    assert sh["regime"] == "VOLATILE"
+    assert sh["width"]["head"] == 2
 
 
 def test_mixed_and_volatile_expand_only_justified_columns():
