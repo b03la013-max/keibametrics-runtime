@@ -23,7 +23,7 @@ on:
 jobs:
   orchestrate:
     concurrency:
-      group: km-formal-${{ inputs.intent_path || github.sha }}
+      group: km-formal-${{ inputs.intent_path || (inputs.intent_json && github.run_id) || github.sha }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 190
