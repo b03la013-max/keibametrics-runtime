@@ -87,9 +87,19 @@ def evaluate_canonical(
     )
     if settled_production.get("status") != "SETTLED":
         raise AdaptivePurchaseError("PRODUCTION_PAYOUT_UNRESOLVED")
+    # The signed Production RESULT uses "investment" / "return" (not the
+    # synthetic "total_investment" / "total_payout" accepted by old tests).
+    # Missing or non-numeric fields must fail closed, not silently compare -1.
     signed_settlement = ra.get("settlement") or {}
-    if (abs(float(signed_settlement.get("total_investment", -1)) - settled_production["investment"]) > 0.001
-            or abs(float(signed_settlement.get("total_payout", -1)) - settled_production["return"]) > 0.001):
+    signed_investment = signed_settlement.get("investment")
+    signed_return = signed_settlement.get("return")
+    if (not isinstance(signed_investment, (int, float))
+            or isinstance(signed_investment, bool)
+            or not isinstance(signed_return, (int, float))
+            or isinstance(signed_return, bool)):
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_MISMATCH")
+    if (abs(float(signed_investment) - settled_production["investment"]) > 0.001
+            or abs(float(signed_return) - settled_production["return"]) > 0.001):
         raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_CONFLICT")
 
     measured = settle_shadow(
