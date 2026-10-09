@@ -40,6 +40,26 @@ def _envelope(envelope: dict, phase: str, race: str):
         raise AdaptivePurchaseError(f"{phase}_RECEIPT_HASH_INVALID")
 
 
+def _verify_production_signed_settlement(signed: dict, recalculated: dict) -> None:
+    """Match the actual Signed RESULT settlement schema; never silently default to -1.
+
+    Production RESULT uses 'investment' and 'return', not the OOS-trackers'
+    historical 'total_investment' / 'total_payout' aliases.
+    """
+    if (signed.get("status") != "COMPLETE"
+            or signed.get("pfs_authority") != "FROZEN-RECOMMENDATION"
+            or not all(k in signed for k in ("investment", "return"))):
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID")
+    try:
+        investment = float(signed["investment"])
+        payout = float(signed["return"])
+    except (TypeError, ValueError) as exc:
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID") from exc
+    if (abs(investment - recalculated["investment"]) > 0.001
+            or abs(payout - recalculated["return"]) > 0.001):
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_CONFLICT")
+
+
 def evaluate_canonical(
     shadow: dict, attestation: dict, final: dict, result: dict,
     official_request: dict, formal_verifications: dict, result_verifications: dict,
@@ -87,10 +107,7 @@ def evaluate_canonical(
     )
     if settled_production.get("status") != "SETTLED":
         raise AdaptivePurchaseError("PRODUCTION_PAYOUT_UNRESOLVED")
-    signed_settlement = ra.get("settlement") or {}
-    if (abs(float(signed_settlement.get("total_investment", -1)) - settled_production["investment"]) > 0.001
-            or abs(float(signed_settlement.get("total_payout", -1)) - settled_production["return"]) > 0.001):
-        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_CONFLICT")
+    _verify_production_signed_settlement(ra.get("settlement") or {}, settled_production)
 
     measured = settle_shadow(
         shadow, official,
