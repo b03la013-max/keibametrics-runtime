@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime"))
-from jra_local_week_transfer_shadow import build_jra_week_transfer_shadow
+from jra_local_week_transfer_shadow import build_jra_week_transfer_shadow, evaluate_jra_week_transfer_shadow_result
 
 UTC = "2026-10-11T01:01:00+09:00"
 POST = "2026-10-11T14:00:00+09:00"
@@ -172,3 +172,90 @@ def test_live_workflow_freezes_before_signed_final():
     assert '"jra_local_week_transfer_shadow_binding"' in script
     assert 'jra_local_week_transfer_shadow_pre_result.json' in script
     assert '"jra_local_week_transfer_shadow_sha256"' in script
+
+
+def pre_result_reference(req, frozen):
+    return {
+        "race_id": req["race_id"],
+        "sha256": "f" * 64,
+        "source_snapshot_sha256": req["source_snapshot_sha256"],
+        "candidate_semantic_freeze_sha256": req["candidate_semantic_freeze"]["sha256"],
+        "scheduled_post_at": req["scheduled_post_at"],
+        "jra_local_week_transfer_shadow_sha256": frozen["sha256"],
+        "candidate_final_verified": True,
+        "oos_eligible": True,
+        "roles": req["static_prediction"]["roles"],
+    }
+
+
+def test_signed_result_attribution_to_frozen_pair_third_and_exposure():
+    req = request()
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    pre = pre_result_reference(req, frozen)
+    original = copy.deepcopy(frozen)
+    observed = evaluate_jra_week_transfer_shadow_result(frozen, pre, [1, 2, 3])
+    assert frozen == original
+    assert observed["conversion_first_lost_link_observation"] == "NO_DECLARED_ROLE_PAIR_THIRD_LOSS"
+    assert observed["actual_head_local_p2"]["purchased_declared"] is True
+    assert observed["actual_pair_conditioned_third"]["purchased_declared"] is True
+    assert observed["cross_ticket_observation"]["actual_exact_has_missing_same_set_trio"] is True
+    assert observed["observed_capital_exposure"]["total_frozen_yen"] == 300
+    assert observed["counterfactual_pfs"] is None
+    assert observed["production_effect"] == "NONE"
+    assert observed["automatic_purchase"] is False
+    assert digest({k: v for k, v in observed.items() if k != "sha256"}) == observed["sha256"]
+
+
+def test_result_distinguishes_winner_miss_from_pair_loss():
+    req = request()
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    pre = pre_result_reference(req, frozen)
+    observed = evaluate_jra_week_transfer_shadow_result(frozen, pre, [4, 2, 3])
+    assert observed["conversion_first_lost_link_observation"] == "WINNER_HEAD_NOT_IN_FROZEN_MATRIX"
+    assert observed["actual_second_in_global_p2_matrix"] is True
+
+
+def test_result_detects_global_p2_present_but_head_local_unterminalized():
+    req = request()
+    req["pair_dispositions"] = [req["pair_dispositions"][0]]
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    observed = evaluate_jra_week_transfer_shadow_result(frozen, pre_result_reference(req, frozen), [1, 3, 4])
+    assert observed["actual_second_in_global_p2_matrix"] is True
+    assert observed["conversion_first_lost_link_observation"] == "HEAD_LOCAL_P2_UNTERMINALIZED"
+    assert observed["population_terminalization"]["head_local_p2_unterminalized"] == 1
+
+
+def test_result_detects_third_missing_from_purchased_pair():
+    req = request()
+    req["third_dispositions"] = [req["third_dispositions"][1]]
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    observed = evaluate_jra_week_transfer_shadow_result(frozen, pre_result_reference(req, frozen), [1, 2, 3])
+    assert observed["actual_third_in_global_p3_matrix"] is True
+    assert observed["conversion_first_lost_link_observation"] == "PURCHASED_PAIR_THIRD_UNTERMINALIZED"
+
+
+def test_result_fails_closed_on_tampered_sha_semantic_and_oos():
+    req = request()
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    pre = pre_result_reference(req, frozen)
+    broken = copy.deepcopy(frozen)
+    broken["profile"] = "FAKE"
+    with pytest.raises(ValueError, match="HASH_INVALID"):
+        evaluate_jra_week_transfer_shadow_result(broken, pre, [1, 2, 3])
+    bad_pre = copy.deepcopy(pre)
+    bad_pre["candidate_semantic_freeze_sha256"] = "e" * 64
+    with pytest.raises(ValueError, match="SEMANTIC_BASIS_MISMATCH"):
+        evaluate_jra_week_transfer_shadow_result(frozen, bad_pre, [1, 2, 3])
+    bad_pre = copy.deepcopy(pre)
+    bad_pre["oos_eligible"] = False
+    with pytest.raises(ValueError, match="NOT_FROZEN_FORWARD_OOS"):
+        evaluate_jra_week_transfer_shadow_result(frozen, bad_pre, [1, 2, 3])
+
+
+def test_result_runner_wires_frozen_transfer_before_candidate_result_binding():
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/km-formal-result-runner.yml").read_text()
+    assert "evaluate_jra_week_transfer_shadow_result" in workflow
+    assert workflow.index("transfer_eval=evaluate_jra_week_transfer_shadow_result(") < workflow.index(
+        "source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)")
+    assert "JRA_TRANSFER_FROZEN_PRE_RESULT_SHADOW_MISSING" in workflow
+    assert "jra_local_week_transfer_result_sha256" in workflow
