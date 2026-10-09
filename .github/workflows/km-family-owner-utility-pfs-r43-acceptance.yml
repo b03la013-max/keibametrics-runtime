@@ -54,8 +54,3 @@ jobs:
           runtime/race_day_fast_reflection.py
       - name: R43 authority selftest
         run: python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json
-
-      - name: Historical R43 OHI report capture (one-shot, read-only)
-        run: |
-          python runtime/family_pfs_regression_readout.py --manifest research/common/KM-FAMILY-OHI-20261009-DAY-R43-REGRESSION-R1.json --output /tmp/ohi-r43-verified-report.json
-          python -c 'import json; from pathlib import Path; obj=json.loads(Path("/tmp/ohi-r43-verified-report.json").read_text()); print("R43_OHI_REPORT_JSON="+json.dumps(obj,ensure_ascii=False,sort_keys=True,separators=(",",":")))'
