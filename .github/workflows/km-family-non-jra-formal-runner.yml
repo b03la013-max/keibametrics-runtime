@@ -28,9 +28,11 @@ jobs:
       - name: Resolve execution metadata
         id: execution_meta
         shell: bash
+        env:
+          REQUEST_INPUT_PATH: ${{ inputs.request_path }}
         run: |
           set -euo pipefail
-          REQ="${{ inputs.request_path }}"
+          REQ="${REQUEST_INPUT_PATH:-}"
           if [ -z "$REQ" ]; then
             mapfile -t REQS < <(
               git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
