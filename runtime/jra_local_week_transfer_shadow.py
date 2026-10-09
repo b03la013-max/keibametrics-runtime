@@ -229,3 +229,165 @@ def build_jra_week_transfer_shadow(
     }
     trace["sha256"] = _sha(trace)
     return trace
+
+
+def evaluate_jra_week_transfer_shadow_result(
+    frozen: Mapping[str, Any],
+    pre_result: Mapping[str, Any],
+    actual_top3: list[int],
+) -> dict[str, Any]:
+    """Attribute *already frozen* conversion decisions to a later RESULT.
+
+    This does not reconstruct or alter prediction, tickets, capital or OOS
+    eligibility.  It labels first lost conversion links and capital exposures
+    without imputing unpurchased winning tickets or counterfactual payout.
+    """
+    if frozen.get("sha256") != _sha({k: v for k, v in frozen.items() if k != "sha256"}):
+        raise ValueError("JRA_TRANSFER_FROZEN_SHADOW_HASH_INVALID")
+    if str(frozen.get("sha256")) != str(pre_result.get("jra_local_week_transfer_shadow_sha256")):
+        raise ValueError("JRA_TRANSFER_PRE_RESULT_SHADOW_BINDING_MISMATCH")
+    if str(frozen.get("race_id")) != str(pre_result.get("race_id")):
+        raise ValueError("JRA_TRANSFER_RACE_ID_MISMATCH")
+    if str(frozen.get("source_basis_sha256")) != str(pre_result.get("source_snapshot_sha256")):
+        raise ValueError("JRA_TRANSFER_SOURCE_BASIS_MISMATCH")
+    if str(frozen.get("semantic_freeze_sha256")) != str(pre_result.get("candidate_semantic_freeze_sha256")):
+        raise ValueError("JRA_TRANSFER_SEMANTIC_BASIS_MISMATCH")
+    if str(frozen.get("scheduled_post_at")) != str(pre_result.get("scheduled_post_at")):
+        raise ValueError("JRA_TRANSFER_SCHEDULE_MISMATCH")
+    if frozen.get("production_effect") != "NONE" or frozen.get("purchase_authority") is not False:
+        raise ValueError("JRA_TRANSFER_PRODUCTION_FIREWALL")
+    if (frozen.get("temporal_class") != "FORWARD_PRE_RESULT"
+            or pre_result.get("oos_eligible") is not True
+            or pre_result.get("candidate_final_verified") is not True
+            or _when(frozen.get("generated_at")) >= _when(frozen.get("scheduled_post_at"))):
+        raise ValueError("JRA_TRANSFER_NOT_FROZEN_FORWARD_OOS")
+    if not isinstance(actual_top3, list) or len(actual_top3) < 3:
+        raise ValueError("JRA_TRANSFER_ACTUAL_TOP3_REQUIRED")
+    actual = [int(x) for x in actual_top3[:3]]
+    if any(x <= 0 for x in actual) or len(set(actual)) != 3:
+        raise ValueError("JRA_TRANSFER_ACTUAL_TOP3_INVALID")
+    w, p2, p3 = actual
+
+    pair_matrix = frozen.get("head_local_p2_matrix") or []
+    third_matrix = frozen.get("pair_conditioned_third_matrix") or []
+    all_heads = {int(x["head"]) for x in pair_matrix}
+    all_heads |= {int(x) for x in (frozen.get("capital_exposure_diagnostic") or {}).get("head_exposure_yen", {})}
+    global_p2 = {int(x["second"]) for x in pair_matrix}
+    global_p3 = {int(x["third"]) for x in third_matrix}
+    actual_pair = next((x for x in pair_matrix
+                        if int(x["head"]) == w and int(x["second"]) == p2), None)
+    actual_third = next((x for x in third_matrix
+                         if int(x["head"]) == w and int(x["second"]) == p2
+                         and int(x["third"]) == p3), None)
+    head_present = w in all_heads
+    p2_present = p2 in global_p2
+    p3_present = p3 in global_p3
+    pair_status = str((actual_pair or {}).get("status") or "NOT_IN_FROZEN_MATRIX")
+    third_status = str((actual_third or {}).get("third_status") or "NOT_IN_FROZEN_MATRIX")
+    pair_terminal = bool((actual_pair or {}).get("terminalized"))
+    third_terminal = bool((actual_third or {}).get("terminalized"))
+    if not head_present:
+        first_loss = "WINNER_HEAD_NOT_IN_FROZEN_MATRIX"
+    elif not p2_present:
+        first_loss = "ACTUAL_SECOND_NOT_IN_GLOBAL_P2"
+    elif not pair_terminal:
+        first_loss = "HEAD_LOCAL_P2_UNTERMINALIZED"
+    elif pair_status == "EXCLUDE":
+        first_loss = "HEAD_LOCAL_P2_EXCLUDED_WITH_REASON"
+    elif pair_status == "PROTECT":
+        first_loss = "HEAD_LOCAL_P2_PROTECTED_NOT_PURCHASE_DECLARED"
+    elif not p3_present:
+        first_loss = "ACTUAL_THIRD_NOT_IN_GLOBAL_P3"
+    elif not third_terminal:
+        first_loss = "PURCHASED_PAIR_THIRD_UNTERMINALIZED"
+    elif third_status == "EXCLUDE":
+        first_loss = "PAIR_LOCAL_THIRD_EXCLUDED_WITH_REASON"
+    elif third_status == "PROTECT":
+        first_loss = "PAIR_LOCAL_THIRD_PROTECTED_NOT_PURCHASE_DECLARED"
+    else:
+        first_loss = "NO_DECLARED_ROLE_PAIR_THIRD_LOSS"
+
+    exposure = frozen.get("capital_exposure_diagnostic") or {}
+    head_exposure = exposure.get("head_exposure_yen") or {}
+    horse_exposure = {
+        int(x["runner_id"]): x for x in exposure.get("horse_exposure") or []
+    }
+    absent_trios = {
+        tuple(int(x) for x in row)
+        for row in (frozen.get("cross_ticket_diagnostic") or {}).get(
+            "purchased_exact_without_same_set_trio") or []
+    }
+    absent_exactas = {
+        tuple(int(x) for x in row)
+        for row in (frozen.get("cross_ticket_diagnostic") or {}).get(
+            "purchased_trifecta_without_same_head_exacta") or []
+    }
+    all_pair_cells = len(pair_matrix)
+    all_third_cells = len(third_matrix)
+    out = {
+        "profile": "KM-JRA-LOCAL-WEEK-TRANSFER-RESULT-ATTRIBUTION-20261010-R1",
+        "race_id": pre_result.get("race_id"),
+        "pre_result_record_sha256": pre_result.get("sha256"),
+        "frozen_shadow_sha256": frozen.get("sha256"),
+        "candidate_policy_cohort": frozen.get("candidate_policy_cohort"),
+        "actual_top3": actual,
+        "winner_head_in_frozen_matrix": head_present,
+        "actual_second_in_global_p2_matrix": p2_present,
+        "actual_third_in_global_p3_matrix": p3_present,
+        "actual_head_local_p2": {
+            "status": pair_status,
+            "reason": (actual_pair or {}).get("reason"),
+            "terminalized": pair_terminal,
+            "purchased_declared": pair_status == "PURCHASE",
+        },
+        "actual_pair_conditioned_third": {
+            "status": third_status,
+            "reason": (actual_third or {}).get("reason"),
+            "terminalized": third_terminal,
+            "purchased_declared": third_status == "PURCHASE",
+        },
+        "conversion_first_lost_link_observation": first_loss,
+        "population_terminalization": {
+            "head_local_p2_cells": all_pair_cells,
+            "head_local_p2_unterminalized": len(frozen.get("head_local_p2_unterminalized") or []),
+            "pair_conditioned_third_cells": all_third_cells,
+            "purchased_pair_third_unterminalized": len(
+                frozen.get("purchased_pair_third_unterminalized") or []),
+        },
+        "cross_ticket_observation": {
+            "actual_exact_has_missing_same_set_trio": actual in [
+                list(x) for x in absent_trios
+            ],
+            "actual_exact_has_missing_same_head_exacta": actual in [
+                list(x) for x in absent_exactas
+            ],
+            "note": "Cross-bet type absence alone is not a ticket construction failure.",
+        },
+        "observed_capital_exposure": {
+            "total_frozen_yen": exposure.get("total_yen"),
+            "winner_head_yen": head_exposure.get(str(w), head_exposure.get(w, 0)),
+            "actual_top3_horse_exposure": [
+                {
+                    "runner_id": rid,
+                    "stake_yen": (horse_exposure.get(rid) or {}).get("stake_yen", 0),
+                    "portfolio_share_pct": (horse_exposure.get(rid) or {}).get(
+                        "share_of_portfolio_pct"),
+                }
+                for rid in actual
+            ],
+            "unpriced_world_concentration": "NOT CALCULATED",
+            "exposure_is_not_probability": True,
+        },
+        "oos_eligibility_change": False,
+        "counterfactual_pfs": None,
+        "automatic_purchase": False,
+        "purchase_authority": False,
+        "production_effect": "NONE",
+        "automatic_promotion": False,
+        "note": (
+            "Outcome attribution to immutable pre-result decisions, not causal "
+            "proof of predictive improvement or permission to purchase missing links."
+        ),
+    }
+    out["sha256"] = _sha(out)
+    return out
