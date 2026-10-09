@@ -42,8 +42,9 @@ def canonical_fixture(no_bet=False):
     ra = {"official_result": official,
           "frozen_refs": {"final_receipt_sha256": final["receipt_sha256"]},
           "result_available_at": "2026-10-09T14:00:00+09:00",
-          "settlement": {"total_investment": p_settled["investment"],
-                         "total_payout": p_settled["return"]}}
+          "settlement": {"status": "COMPLETE", "pfs_authority": "FROZEN-RECOMMENDATION",
+                         "investment": p_settled["investment"],
+                         "return": p_settled["return"]}}
     rr = {"phase": "RESULT", "status": "PASS", "race_id": req["race_id"],
           "artifact_sha256": _sha(ra)}
     result = {"artifact": ra, "receipt": rr, "receipt_sha256": _sha(rr)}
@@ -104,7 +105,7 @@ def test_receipt_tampering_and_missing_authorities_fail_closed():
 def test_signed_settlement_mismatch_is_not_hidden():
     x = canonical_fixture()
     result = x[3]
-    result["artifact"]["settlement"]["total_payout"] += 1
+    result["artifact"]["settlement"]["return"] += 1
     result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
     result["receipt_sha256"] = _sha(result["receipt"])
     with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_CONFLICT"):
@@ -117,3 +118,52 @@ def test_history_is_not_silently_backfilled(tmp_path):
     assert r["settled_rows"] == []
     assert r["adaptive"]["pfs"] is None
     assert r["actual_purchase_pfs"] is None
+
+
+def test_real_ohi_20261009_seven_receipt_bound_replay():
+    """Read-only 7-race actual Signed FINAL/RESULT replay, not synthetic evidence.
+
+    This must NOT mutate the original 2026-10-09 OOS status. If any real
+    Receipt/official-result/settlement binding is broken, fail closed.
+    """
+    root = ROOT / "runtime" / "executions"
+    expected = {
+        "KM-LOCAL-OHI-20261009-R04-LIVE-R2": (16500, 3050),
+        "KM-LOCAL-OHI-20261009-R05-LIVE-R1": (46000, 36840),
+        "KM-LOCAL-OHI-20261009-R06-LIVE-R1": (70400, 39120),
+        "KM-LOCAL-OHI-20261009-R07-LIVE-R1": (25400, 10310),
+        "KM-LOCAL-OHI-20261009-R08-LIVE-R1": (22800, 1370),
+        "KM-LOCAL-OHI-20261009-R09-LIVE-R1": (38000, 52800),
+        "KM-LOCAL-OHI-20261009-R10-LIVE-R1": (46000, 5240),
+    }
+    # The historical Git-tracked execution store is the test's external
+    # evidence basis; do not silently PASS an empty or sparse checkout.
+    for race_id in expected:
+        assert (root / race_id).is_dir(), f"MISSING_REAL_EXECUTION:{race_id}"
+
+    original_status = ROOT / "runtime" / "aki_adaptive_oos_status.json"
+    original_bytes = original_status.read_bytes()
+    report = scan_execution_store(root)
+    assert report["errors"] == [], report["errors"]
+    assert report["eligible_races"] == 7, report
+    assert report["days"] == 1, report
+    assert report["status"] == "WAITING_FORWARD_OOS"
+    assert report["automatic_promotion"] is False
+    assert report["production_change_authorized"] is False
+    assert report["actual_purchase_pfs"] is None
+
+    by_id = {x["race_id"]: x for x in report["settled_rows"]}
+    assert set(by_id) == set(expected), set(by_id)
+    for race_id, (investment, returned) in expected.items():
+        item = by_id[race_id]
+        assert (item["production"]["investment"], item["production"]["return"]) == (investment, returned)
+        assert item["oos_eligible"] is True
+        assert item["candidate_action"] == "PAPER"
+        assert item["regime"] == "SELECTIVE"
+        assert item["paper_only"] is True
+        assert item["actual_purchase"] is False
+        assert item["production_effect"] == "NONE"
+        assert item["shadow_sha256"] and item["final_receipt_sha256"] and item["result_receipt_sha256"]
+    assert report["production"]["investment"] == 265100
+    assert report["production"]["return"] == 148730
+    assert original_status.read_bytes() == original_bytes, "ORIGINAL_HOLD_LEDGER_WAS_MUTATED"
