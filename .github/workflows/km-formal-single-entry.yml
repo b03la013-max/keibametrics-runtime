@@ -12,8 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       intent_path:
-        description: "Single-entry Formal intent JSON"
-        required: true
+        description: "Existing single-entry Formal intent file path"
+        required: false
+        type: string
+      intent_json:
+        description: "Full Formal intent JSON for approved manual dispatch (alternative to intent_path)"
+        required: false
         type: string
 
 jobs:
@@ -28,12 +32,47 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Materialize approved manual Formal intent
+        if: github.event_name == 'workflow_dispatch' && inputs.intent_json != ''
+        shell: bash
+        env:
+          MANUAL_INTENT_JSON: ${{ inputs.intent_json }}
+          MANUAL_INTENT_PATH: ${{ inputs.intent_path }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib, re, sys
+          sys.path.insert(0, "runtime")
+          from execution_gateway import derive_execution_id
+          if os.environ.get("MANUAL_INTENT_PATH", "").strip():
+              raise SystemExit("Choose exactly one of intent_path or intent_json")
+          raw = os.environ.get("MANUAL_INTENT_JSON", "").strip()
+          if not raw:
+              raise SystemExit("Empty manual Formal intent")
+          intent = json.loads(raw)
+          if not isinstance(intent, dict) or intent.get("family_id") != "LOCAL":
+              raise SystemExit("Invalid LOCAL Formal intent payload")
+          execution_id = str(derive_execution_id(intent))
+          if not re.fullmatch(r"KM-LOCAL-[A-Z0-9-]{8,150}", execution_id):
+              raise SystemExit("Unsafe derived execution_id")
+          if intent.get("execution_id") != execution_id or intent.get("race_id") != execution_id:
+              raise SystemExit("Formal identity mismatch")
+          path = pathlib.Path("runtime/formal_intents") / (execution_id + ".json")
+          if path.exists():
+              raise SystemExit("Formal intent already exists: use intent_path instead")
+          path.write_text(json.dumps(intent, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"KM_MANUAL_INTENT_PATH={path.as_posix()}\n")
+          print(f"Manual Formal intent materialized for canonical preflight: {path}")
+          PY
       - name: Resolve single intent
         id: meta
         shell: bash
+        env:
+          INTENT_INPUT_PATH: ${{ inputs.intent_path }}
         run: |
           set -euo pipefail
-          INTENT="${{ inputs.intent_path }}"
+          INTENT="${KM_MANUAL_INTENT_PATH:-${INTENT_INPUT_PATH:-}}"
           if [ -z "$INTENT" ]; then
             mapfile -t INTENTS < <(
               git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
@@ -133,6 +172,8 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
+          # Persist the exact manual intent in the same immutable pre-result lineage.
+          if [ -n "${KM_MANUAL_INTENT_PATH:-}" ]; then git add "$KM_MANUAL_INTENT_PATH"; fi
           git diff --cached --quiet && exit 0
           git commit -m "execution: pre-result freeze $EXECUTION_ID [skip ci]"
           for attempt in 1 2 3 4 5; do
