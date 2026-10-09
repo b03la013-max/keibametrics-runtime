@@ -31,9 +31,11 @@ jobs:
       - name: Resolve single intent
         id: meta
         shell: bash
+        env:
+          INTENT_INPUT_PATH: ${{ inputs.intent_path }}
         run: |
           set -euo pipefail
-          INTENT="${{ inputs.intent_path }}"
+          INTENT="${INTENT_INPUT_PATH:-}"
           if [ -z "$INTENT" ]; then
             mapfile -t INTENTS < <(
               git diff-tree --no-commit-id --name-only -r "${{ github.sha }}" |
