@@ -42,8 +42,9 @@ def canonical_fixture(no_bet=False):
     ra = {"official_result": official,
           "frozen_refs": {"final_receipt_sha256": final["receipt_sha256"]},
           "result_available_at": "2026-10-09T14:00:00+09:00",
-          "settlement": {"total_investment": p_settled["investment"],
-                         "total_payout": p_settled["return"]}}
+          "settlement": {"investment": p_settled["investment"],
+                         "return": p_settled["return"],
+                         "status": "COMPLETE"}}
     rr = {"phase": "RESULT", "status": "PASS", "race_id": req["race_id"],
           "artifact_sha256": _sha(ra)}
     result = {"artifact": ra, "receipt": rr, "receipt_sha256": _sha(rr)}
@@ -104,12 +105,40 @@ def test_receipt_tampering_and_missing_authorities_fail_closed():
 def test_signed_settlement_mismatch_is_not_hidden():
     x = canonical_fixture()
     result = x[3]
-    result["artifact"]["settlement"]["total_payout"] += 1
+    result["artifact"]["settlement"]["return"] += 1
     result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
     result["receipt_sha256"] = _sha(result["receipt"])
     with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_CONFLICT"):
         evaluate_canonical(*x)
 
+
+
+def test_legacy_synthetic_settlement_keys_cannot_masquerade_as_signed_result():
+    inputs = canonical_fixture()
+    result = inputs[3]
+    original = result["artifact"]["settlement"]
+    result["artifact"]["settlement"] = {
+        "total_investment": original["investment"],
+        "total_payout": original["return"],
+    }
+    result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+    result["receipt_sha256"] = _sha(result["receipt"])
+    with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_MISMATCH"):
+        evaluate_canonical(*inputs)
+
+
+def test_missing_or_non_numeric_signed_settlement_fails_closed():
+    for invalid in (None, "UNRESOLVED", True):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        if invalid is None:
+            del result["artifact"]["settlement"]["return"]
+        else:
+            result["artifact"]["settlement"]["return"] = invalid
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+        with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_MISMATCH"):
+            evaluate_canonical(*inputs)
 
 def test_history_is_not_silently_backfilled(tmp_path):
     r = scan_execution_store(tmp_path / "nonexistent")
