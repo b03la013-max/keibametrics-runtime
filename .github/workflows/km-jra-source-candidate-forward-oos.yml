@@ -70,6 +70,7 @@ jobs:
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
+          from jra_local_week_transfer_shadow import build_jra_week_transfer_shadow
 
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           BASE=os.environ["KRS_BASE"].rstrip("/")
@@ -255,6 +256,12 @@ jobs:
           capital=resolve_capital_policy(req,mec)
           tickets=mec["tickets"] if not capital["no_bet"] else []
           total=int(mec["minimum_required_capital"]) if not capital["no_bet"] else 0
+          transfer_generated_at=datetime.now(timezone.utc).isoformat()
+          transfer_shadow=build_jra_week_transfer_shadow(req,tickets,utility,generated_at=transfer_generated_at)
+          assert transfer_shadow["production_effect"]=="NONE"
+          assert transfer_shadow["automatic_purchase"] is False
+          assert dt(transfer_generated_at)<post_utc,"JRA_TRANSFER_DIAGNOSTIC_AFTER_START"
+          req["jra_local_week_transfer_shadow"]=transfer_shadow
 
           final_package={
               "authority":"KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1",
@@ -268,6 +275,14 @@ jobs:
               "third_dispositions":req["third_dispositions"],
               "krs_prediction_utility_shadow":utility,
               "minimum_efficient_coverage":mec,"capital_policy_decision":capital,
+              "jra_local_week_transfer_shadow_binding":{
+                  "profile":transfer_shadow["profile"],
+                  "sha256":transfer_shadow["sha256"],
+                  "source_basis_sha256":source_sha,
+                  "semantic_freeze_sha256":req["candidate_semantic_freeze"]["sha256"],
+                  "generated_at":transfer_generated_at,
+                  "production_effect":"NONE","purchase_authority":False,
+              },
               "family_prediction_utility_contract":utility_contract_id or None,
               "prediction_utility_objective_order":(
                   utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
@@ -331,6 +346,7 @@ jobs:
               "role_registry":req.get("role_registry"),
               "pair_dispositions":req.get("pair_dispositions"),
               "third_dispositions":req.get("third_dispositions"),
+              "jra_local_week_transfer_shadow_binding":final_package["jra_local_week_transfer_shadow_binding"],
               "scheduled_post_at":scheduled_post,
               "temporal_mode":"FORMAL-PRE-RACE",
               "family_prediction_utility_contract":utility_contract_id or None,
@@ -343,6 +359,9 @@ jobs:
           }
           final_art["sha256"]=hashlib.sha256(json.dumps(final_art,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
           (outdir/"candidate_final.json").write_text(json.dumps(final_art,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          (outdir/"jra_local_week_transfer_shadow_pre_result.json").write_text(
+              json.dumps(transfer_shadow,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
+          )
           mec_r4_shadow=build_mec_r4_shadow(final_art,generated_at=freeze)
           assert mec_r4_shadow["production_effect"]=="NONE"
           assert mec_r4_shadow["source_lane"]=="SOURCE_DERIVED_CANDIDATE"
@@ -358,6 +377,7 @@ jobs:
               "final_receipt_sha256":final.get("receipt_sha256"),
               "pre_result_sha256":record["sha256"],
               "mec_r4_shadow_sha256":mec_r4_shadow.get("sha256"),
+              "jra_local_week_transfer_shadow_sha256":transfer_shadow["sha256"],
               "family_prediction_utility_contract":utility_contract_id or None,
               "production_effect":"NONE"
           },ensure_ascii=False,separators=(",",":")))
