@@ -162,3 +162,105 @@ def test_missing_result_binding_and_unsettled_amount_are_not_zero(tmp_path):
         fixture.write_text(json.dumps(broken), encoding="utf-8")
         with pytest.raises(RegressionEvidenceError, match=error):
             build_regression_readout(root, fixture)
+
+
+MANIFEST_20261009 = ROOT / "research/common/KM-FAMILY-OHI-20261009-DAY-R43-REGRESSION-R1.json"
+
+
+def test_real_ohi_20261009_existing_r43_scorecard_and_paired_aki():
+    """Verify source-pinned RESULT+Learning and pre-existing adverse AKI OOS."""
+    report = build_regression_readout(ROOT, MANIFEST_20261009)
+    assert report["status"].endswith("NOT-NEW-OOS-CREDIT")
+    assert report["verification_class"].endswith("NOT_INDEPENDENT_SIGNATURE_VERIFICATION")
+    score = report["frozen_recommendation_scorecard"]
+    assert score["aggregate"]["race_count"] == 7
+    assert score["aggregate"]["investment"] == 265100
+    assert score["aggregate"]["return"] == 148730
+    assert score["aggregate"]["profit_loss"] == -116370
+    assert score["aggregate"]["hit_races"] == 7
+    assert score["aggregate"]["hit_but_loss_count"] == 6
+    assert score["first_material_failure_frequency"] == {
+        "CAPITAL_EFFICIENCY": 4, "EXACT_ORIENTATION": 2, "NONE": 1,
+    }
+    assert report["prediction_capture"] == {
+        "winner_w_capture": 7, "second_p2_capture": 7, "third_p3_capture": 7,
+    }
+    assert report["conversion_capture"] == {
+        "purchased_trio_hit": 2, "ordered_pair_hit": 7, "exact_oriented_hit": 5,
+    }
+    assert report["prequential_learning_binding"]["verified_existing_event_count"] == 7
+    assert report["prequential_learning_binding"]["new_learning_events_created"] == 0
+    assert report["prequential_learning_binding"]["source_review_artifacts_rewritten"] is False
+    assert report["actual_purchase_pfs"] is None
+    assert report["no_bet_reference"]["pfs"] is None
+    assert "R03" in report["excluded"]
+
+    a = report["paired_aki_paper"]
+    assert a["measurement_status"] == "WAITING_FORWARD_OOS"
+    assert a["eligible_races_already_counted_by_original_tracker"] == 7
+    assert a["distinct_days"] == 1
+    assert a["oos_increment_from_this_regression"] == 0
+    assert a["candidate"]["investment"] == 9200
+    assert a["candidate"]["return"] == 1370
+    assert a["candidate"]["pfs"] == pytest.approx(14.891304348)
+    assert a["production_same_races"]["pfs"] == pytest.approx(56.103357224)
+    assert a["economic_verdict"] == "ADVERSE"
+    assert a["equal_budget_comparison"] is None
+    assert a["equal_ticket_comparison"] is None
+    assert a["promotion_authorized"] is False
+    assert score["candidate_comparisons"]["AKI_SELECTIVE_PAPER"]["pfs"] == pytest.approx(14.891304348)
+    assert score["candidate_comparisons"]["AKI_SELECTIVE_PAPER"]["equal_budget_pfs"] is None
+    assert score["candidate_comparisons"]["AKI_SELECTIVE_PAPER"]["equal_ticket_profit"] is None
+
+    r5 = report["distinct_mec_r5_cohort"]
+    assert r5["eligible_races"] == 30
+    assert r5["status"] == "COMPLETE_30_HUMAN_REVIEW_REQUIRED"
+    assert r5["candidate_top4"]["investment_weighted_pfs"] == pytest.approx(64.181708785)
+    assert r5["production"]["investment_weighted_pfs"] == pytest.approx(60.406057946)
+    assert r5["pooled_pfs"] is None
+    assert r5["oos_increment_from_this_regression"] == 0
+    assert report["automatic_promotion"] is False
+    assert report["production_change_authorized"] is False
+
+
+def test_ohi_20261009_aki_and_r5_blob_conflicts_fail_closed(tmp_path):
+    manifest = json.loads(MANIFEST_20261009.read_text(encoding="utf-8"))
+    for source, code in [
+        ("aki", "AKI_STATUS_BLOB_CHANGED"),
+        ("mec_r5", "R5_STATUS_BLOB_CHANGED"),
+    ]:
+        broken = copy.deepcopy(manifest)
+        broken["candidate_measurement_bindings"][source]["status_git_blob_sha"] = "0" * 40
+        path = tmp_path / "broken.json"
+        path.write_text(json.dumps(broken), encoding="utf-8")
+        with pytest.raises(RegressionEvidenceError, match=code):
+            build_regression_readout(ROOT, path)
+
+
+def test_r43_prequential_binding_is_required_not_recreated(tmp_path):
+    root, source, fixture, summary, manifest = _tmp_basis(tmp_path)
+    manifest["require_prequential_learning_binding"] = True
+    fixture.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RegressionEvidenceError, match="LEARNING_BINDING_INVALID"):
+        build_regression_readout(root, fixture)
+    summary["learning_event"] = {
+        "status": "PREQUENTIAL-NEXT-RACE-ONLY",
+        "state_id": "TEST-R01-LEARNING-NEXT",
+        "source_review_sha256": "wrong-review-sha",
+        "reference_metrics": {"first_material_failure": "PREDICTION_ROLE_W"},
+        "forbidden": ["RETROACTIVE_PREDICTION_REWRITE"],
+        "production_change_authorized": False,
+    }
+    source.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+    manifest["verified_result_records"][0]["result_summary_git_blob_sha"] = _git_blob_sha(source.read_bytes())
+    fixture.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RegressionEvidenceError, match="LEARNING_BINDING_INVALID"):
+        build_regression_readout(root, fixture)
+
+    summary["learning_event"]["source_review_sha256"] = "signed-review"
+    source.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+    manifest["verified_result_records"][0]["result_summary_git_blob_sha"] = _git_blob_sha(source.read_bytes())
+    fixture.write_text(json.dumps(manifest), encoding="utf-8")
+    out = build_regression_readout(root, fixture)
+    assert out["prequential_learning_binding"]["verified_existing_event_count"] == 1
+    assert out["prequential_learning_binding"]["new_learning_events_created"] == 0

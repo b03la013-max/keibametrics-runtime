@@ -65,6 +65,8 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
     if not isinstance(cohort, list) or not cohort:
         raise RegressionEvidenceError("EMPTY_COHORT")
 
+    learning_required = manifest.get("require_prequential_learning_binding") is True
+    learning_ids = []
     reviews = []
     rows = []
     seen = set()
@@ -119,6 +121,23 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         trio_purchased = "TRIO" in matching
         if trio_purchased != item.get("expected_purchased_trio"):
             raise RegressionEvidenceError(f"PURCHASED_TRIO_CONFLICT:{race_id}")
+        for key, field in (
+            ("expected_ordered_pair", "ordered_pair_ticket_coverage"),
+            ("expected_ordered_exact", "ordered_exact_ticket_coverage"),
+        ):
+            if key in item and conversion.get(field) is not item[key]:
+                raise RegressionEvidenceError(f"CONVERSION_COVERAGE_CONFLICT:{race_id}:{key}")
+
+        if learning_required:
+            event = summary.get("learning_event") or {}
+            if (event.get("status") != "PREQUENTIAL-NEXT-RACE-ONLY"
+                    or event.get("state_id") != race_id + "-LEARNING-NEXT"
+                    or event.get("source_review_sha256") != review.get("sha256")
+                    or event.get("production_change_authorized") is not False
+                    or event.get("reference_metrics", {}).get("first_material_failure") != failure
+                    or "RETROACTIVE_PREDICTION_REWRITE" not in (event.get("forbidden") or [])):
+                raise RegressionEvidenceError(f"LEARNING_BINDING_INVALID:{race_id}")
+            learning_ids.append(event["state_id"])
 
         row = {
             "race_id": race_id,
@@ -141,7 +160,117 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
             "pfs_improvement": build_pfs_improvement_assessment(review),
         })
 
-    score = build_owner_scorecard(reviews)
+    # The paired AKI paper tracker is the *same seven-race* pre-result cohort.
+    # It remains non-Production and never creates new OOS entries. MEC-R5's
+    # 30-race cohort is deliberately not pooled with these seven AKI rows.
+    paired_aki = None
+    separate_r5 = None
+    comparison = None
+    bindings = manifest.get("candidate_measurement_bindings") or {}
+    if "aki" in bindings:
+        pinned = bindings["aki"]
+        aki_path = pinned.get("status_path")
+        if aki_path != "runtime/aki_adaptive_oos_status.json":
+            raise RegressionEvidenceError("AKI_PATH_NOT_CANONICAL")
+        source = (root / aki_path)
+        try:
+            aki_raw = source.read_bytes()
+        except OSError as exc:
+            raise RegressionEvidenceError("AKI_STATUS_UNAVAILABLE") from exc
+        if _git_blob_sha(aki_raw) != pinned.get("status_git_blob_sha"):
+            raise RegressionEvidenceError("AKI_STATUS_BLOB_CHANGED")
+        aki = _load(source)
+        if (aki.get("sha256") != pinned.get("reported_sha256")
+                or aki.get("status") != "WAITING_FORWARD_OOS"
+                or aki.get("errors") != []
+                or aki.get("eligible_races") != len(rows)
+                or aki.get("eligible_races") != pinned.get("race_count")
+                or aki.get("days") != pinned.get("distinct_days")
+                or aki.get("actual_purchase_pfs") is not None
+                or aki.get("automatic_promotion") is not False
+                or aki.get("production_change_authorized") is not False):
+            raise RegressionEvidenceError("AKI_MEASUREMENT_STATUS_INVALID")
+        settled = aki.get("settled_rows") or []
+        indexed = {r["race_id"]: r for r in settled}
+        if len(indexed) != len(settled) or set(indexed) != seen:
+            raise RegressionEvidenceError("AKI_RACE_UNIVERSE_MISMATCH")
+        for row, review in zip(rows, reviews):
+            arow = indexed[row["race_id"]]
+            if (arow.get("oos_eligible") is not True
+                    or arow.get("paper_only") is not True
+                    or arow.get("actual_purchase") is not False
+                    or arow.get("production_effect") != "NONE"
+                    or arow.get("candidate_action") != "PAPER"
+                    or arow.get("regime") != "SELECTIVE"
+                    or arow.get("production", {}).get("investment") != row["investment"]
+                    or arow.get("production", {}).get("return") != row["return"]
+                    or arow.get("final_receipt_sha256") != review["final_receipt_sha256"]):
+                raise RegressionEvidenceError(f"AKI_FROZEN_ROW_CONFLICT:{row['race_id']}")
+            source_summary = _load(_get_existing_file(root,
+                next(x["result_summary_path"] for x in cohort if x["race_id"] == row["race_id"])))
+            if arow.get("result_receipt_sha256") != source_summary.get("result_receipt"):
+                raise RegressionEvidenceError(f"AKI_RESULT_RECEIPT_CONFLICT:{row['race_id']}")
+        prod, cand = aki.get("production") or {}, aki.get("adaptive") or {}
+        if (prod.get("investment") != sum(x["investment"] for x in rows)
+                or prod.get("return") != sum(x["return"] for x in rows)
+                or prod.get("investment") != pinned.get("production_investment_yen")
+                or prod.get("return") != pinned.get("production_return_yen")
+                or cand.get("investment") != pinned.get("adaptive_paper_investment_yen")
+                or cand.get("return") != pinned.get("adaptive_paper_return_yen")):
+            raise RegressionEvidenceError("AKI_AGGREGATE_CONFLICT")
+        comparison = {"AKI_SELECTIVE_PAPER": {
+            "investment": cand["investment"], "return": cand["return"],
+            "pfs": cand["pfs"], "profit_loss": cand["profit_loss"],
+            "max_drawdown": None,
+            "equal_budget_pfs": None,
+            "equal_ticket_profit": None,
+            "hit_but_loss_rate": None,
+            "set_coverage_rate": None,
+            "largest_return_share": None,
+        }}
+        paired_aki = {
+            "measurement_status": aki["status"],
+            "measurement_report_sha256": aki["sha256"],
+            "candidate": cand, "production_same_races": prod,
+            "eligible_races_already_counted_by_original_tracker": len(rows),
+            "distinct_days": aki["days"],
+            "oos_increment_from_this_regression": 0,
+            "actual_purchase_pfs": None,
+            "economic_verdict": ("ADVERSE" if cand["pfs"] < prod["pfs"]
+                                 else "NOT_YET_PROMOTION_EVIDENCE"),
+            "equal_budget_comparison": None,
+            "equal_ticket_comparison": None,
+            "normalization_note": "DIFFERENT_PURCHASED_TICKETS_AND_BUDGETS; NO_LINEAR_REWEIGHTING_AS_EXECUTABLE_RESULT",
+            "promotion_authorized": False,
+        }
+    if "mec_r5" in bindings:
+        pinned = bindings["mec_r5"]
+        if pinned.get("status_path") != "runtime/local_mec_r5_oos_status.json":
+            raise RegressionEvidenceError("R5_PATH_NOT_CANONICAL")
+        r5_source = root / pinned["status_path"]
+        try:
+            r5_raw = r5_source.read_bytes()
+        except OSError as exc:
+            raise RegressionEvidenceError("R5_STATUS_UNAVAILABLE") from exc
+        if _git_blob_sha(r5_raw) != pinned.get("status_git_blob_sha"):
+            raise RegressionEvidenceError("R5_STATUS_BLOB_CHANGED")
+        r5 = _load(r5_source)
+        prod30 = (r5.get("aggregates") or {}).get("PRODUCTION_BASELINE_R3") or {}
+        cand30 = (r5.get("aggregates") or {}).get("SET_PAIR_EXACT_TOP4") or {}
+        if (r5.get("status") != "COMPLETE_30_HUMAN_REVIEW_REQUIRED"
+                or r5.get("eligible_races") != pinned.get("eligible_races")
+                or prod30.get("investment_weighted_pfs") != pinned.get("production_30_pfs")
+                or cand30.get("investment_weighted_pfs") != pinned.get("candidate_top4_pfs")
+                or r5.get("automatic_promotion") is not False):
+            raise RegressionEvidenceError("R5_COHORT_STATUS_INVALID")
+        separate_r5 = {
+            "status": r5["status"], "eligible_races": r5["eligible_races"],
+            "production": prod30, "candidate_top4": cand30,
+            "overlap_with_seven_race_aki_not_assumed": True,
+            "pooled_pfs": None, "oos_increment_from_this_regression": 0,
+            "promotion_authorized": False,
+        }
+    score = build_owner_scorecard(reviews, candidate_comparisons=comparison)
     totals = manifest.get("day_totals") or {}
     aggregate = score["aggregate"]
     if (aggregate["investment"] != totals.get("investment_yen")
@@ -183,6 +312,15 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         },
         "owner_attribution_caveat": "HEURISTIC_DIAGNOSTIC_NOT_CAUSAL_ESTIMATE",
         "existing_shadow": manifest.get("existing_forward_shadow_status_at_basis_main"),
+        "prequential_learning_binding": {
+            "required": learning_required,
+            "verified_existing_event_count": len(learning_ids),
+            "existing_state_ids": learning_ids,
+            "new_learning_events_created": 0,
+            "source_review_artifacts_rewritten": False,
+        },
+        "paired_aki_paper": paired_aki,
+        "distinct_mec_r5_cohort": separate_r5,
         "excluded": manifest.get("excluded"),
         "production_change_authorized": False,
         "automatic_promotion": False,
