@@ -315,3 +315,34 @@ CURRENT PRODUCTION：`大井競馬攻略条項 v2.3-OHI` UNCHANGED
 > Capitalで負けたRaceをVenue Predictionへ転嫁しない。大井固有のPrediction Failureだけを最小Shadow仮説として抽出する。
 
 > v2.4は昨日を説明するRuleではなく、次の未知大井Raceで反証されるためのCandidateである。
+
+
+## 14. 2026-10-09 大井 Day Regression Supplement（既知結果 / Venue固有 / 非OOS）
+
+- Evidence：`research/ohi/KM-LOCAL-OHI-20261009-VENUE-REGRESSION-R1.json`
+- 位置付け：`REGRESSION ONLY / KNOWN RESULT / NON-OOS / NON-PRODUCTION / NO RULE CHANGE`。
+- 2026-10-07に凍結されたv2.4 Candidate本体の予測仮説、適用条件、数値式、Promotion Gateは一切変更しない。
+- 2026-10-09開催の大井4R〜10R：正式推奨券7戦、投資265,100円、払戻148,730円、損益-116,370円、PFS56.10%、的中7/7、黒字1/7、Hit-but-Loss 6/7。実購入PFSではない。
+- R3：発走前のFormal Intent／Signed FINAL／Canonical Ticketは確認されていないため、`POST_RESULT_DIAGNOSTIC / NO_FORMAL_PFS_AUTHORITY` としてのみ保持し、正式集計・未知未来OOSへ混入しない。
+
+### Venue所有：既存仮説を再検査する回帰フィクスチャ
+1. **R3**：2歳・初1600m・休養明け等の不確実性の下で、先行残存と後方進出／勝ち切りを分ける。結果後資料のみでW救済が予測可能だったと主張しない。
+2. **R6・R7・R10**：Ability Ceiling／Current Readiness／Venue Adaptation／Acquisition／Leadership Cost／Stalkability／Final Conversionを再監査する。馬体重の大幅増、転入、休養を固定点に変換しない。
+3. **R8**：Static上位3頭・三連単の正解を保持しつつ大幅赤字。Venue PredictionのPositive ControlとFamily CapitalのNegative Controlを同一事例で分離する。
+4. **R9**：条件付きW（事前順位6位の⑪）が的中三連単へ変換されたPositive Control。未較正KRS SSR-Wが低いだけで独立Static Wを削除しない。
+5. **R4・R5・R6**：Venue側のRunner/Role保持を理由に、Common所有のPair/Third/Exact購入権限を変更しない。
+
+### Family/Commonに返す — Venue Canonへ混入禁止
+- R5・R6：購入済みOrdered Pairに対し、3着候補のPair-local Thirdが全件PROTECTまたは購入ゼロ。独立理由・Ticket Conversionを検証するが全件Exact補完しない。
+- R4・R7・R8・R9・R10：正解三連単を購入済みなのに対応する三連複集合を購入していないことがある。事前GAP_DETECTEDから経済的な追加価値まで測る。全件Trio追加はしない。
+- R8・R10：Exact的中でも配当が購入総額に見合わない。Market-Payout Sufficiency／Selective Capital／NO-BETはCommon Shadowで測る。R9の高配当黒字機会を失う可能性も必ず測る。
+- MEC-R5 TOP4の30戦PFS64.18%は同30戦Production60.41%を上回るが双方100%未満。AKIは別Cohortで、2026-10-09時点の7件`PRODUCTION_SIGNED_SETTLEMENT_CONFLICT`はCorrectness HOLD。いずれも自動昇格不可。
+
+### 既存Candidateへの影響（凍結を尊重）
+- KEEP：v2.4 Candidate R1の4つのVenue仮説・KRS Firewall・Positive/Negative Control。
+- APPEND：歴史回帰Evidenceと反例、Family/CommonへのHandoffだけ。
+- NO：新たな固定加減点、閾値、Prediction Weight、購入ルール、VenueからのPair購入、結果後のCandidate ON改竄。
+- `2026-10-09 v2.4-CANDIDATE OOS incremental = 0`。Candidateの真の結果前ON/OFF Freezeが別途証明される場合に限り再審査可能。今後の未知未来については予めFreezeして比較する。
+
+### 補注
+この補遺はv2.4 Candidateを正式Productionへ昇格させない。実行基盤上のCurrent Productionは引き続きv2.3-OHIであり、R44 Family Authority・MEC-R3・数値式・KRSは不変。
