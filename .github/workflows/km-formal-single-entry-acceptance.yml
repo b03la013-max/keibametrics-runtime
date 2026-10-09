@@ -20,6 +20,8 @@ on:
       - "runtime/execution_store.py"
       - "tests/test_formal_execution_orchestrator.py"
       - "tests/test_formal_single_entry_intent_completeness.py"
+      - "tests/test_local_formal_owner_submitter.py"
+      - "tools/submit_local_formal_intent.py"
       - "tests/test_formal_pre_race_live_acceptance_evidence.py"
       - "tests/test_krs_oos_promotion_gate.py"
       - "tests/test_local_candidate_v03_oos.py"
@@ -79,6 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m py_compile \
+            tools/submit_local_formal_intent.py \
             runtime/formal_execution_orchestrator.py \
             runtime/formal_import_closure.py \
             runtime/formal_failure_diagnostics.py \
@@ -92,7 +95,7 @@ jobs:
             runtime/family_authority_guard.py
 
       - name: Orchestration unit tests
-        run: python -m pytest -q tests/test_entry_transport_fallback.py tests/test_formal_execution_orchestrator.py tests/test_formal_single_entry_intent_completeness.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_formal_oos_policy.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py tests/test_formal_pre_race_oos_isolation_evidence.py tests/test_acceptance_oos_tracker_firewall.py tests/test_local_candidate_dual_oos_tracker.py tests/test_local_candidate_v03_oos.py tests/test_krs_oos_promotion_gate.py tests/test_execution_store.py tests/test_source_acquisition_consolidation.py tests/test_recovery_result_entry.py tests/test_common_exact_continuity_shadow.py tests/test_correctness_closure.py
+        run: python -m pytest -q tests/test_local_formal_owner_submitter.py tests/test_entry_transport_fallback.py tests/test_formal_execution_orchestrator.py tests/test_formal_single_entry_intent_completeness.py tests/test_formal_import_closure.py tests/test_formal_failure_diagnostics.py tests/test_local_evidence_acquisition_roundtrip.py tests/test_execution_gateway.py tests/test_formal_pre_race_live_acceptance_evidence.py tests/test_formal_oos_policy.py tests/test_local_mec_r4_bridge.py tests/test_local_mec_r5_shadow.py tests/test_formal_pre_race_oos_isolation_evidence.py tests/test_acceptance_oos_tracker_firewall.py tests/test_local_candidate_dual_oos_tracker.py tests/test_local_candidate_v03_oos.py tests/test_krs_oos_promotion_gate.py tests/test_execution_store.py tests/test_source_acquisition_consolidation.py tests/test_recovery_result_entry.py tests/test_common_exact_continuity_shadow.py tests/test_correctness_closure.py
 
       - name: Formal import closure guard
         run: python runtime/formal_import_closure.py --entry runtime/non_jra_formal_runner.py
