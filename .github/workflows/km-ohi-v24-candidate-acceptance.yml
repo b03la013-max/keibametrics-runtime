@@ -1,0 +1,31 @@
+name: OHI v2.4 Venue Candidate Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'governance/KM-OHI-VENUE-CANON-v2.4-CANDIDATE-20261007-R1.md'
+      - 'profiles/ohi_venue_canon_candidate_20261007_v2.4.json'
+      - 'research/ohi/KM-LOCAL-OHI-20261007-VENUE-REGRESSION-R1.json'
+      - 'tests/test_ohi_v24_candidate_boundary.py'
+      - '.github/workflows/km-ohi-v24-candidate-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest
+      - name: OHI v2.4 candidate boundary
+        run: python -m pytest -q tests/test_ohi_v24_candidate_boundary.py
+      - name: JSON parse check
+        run: >-
+          python -c "import json;
+          json.load(open('profiles/ohi_venue_canon_candidate_20261007_v2.4.json',encoding='utf-8'));
+          json.load(open('research/ohi/KM-LOCAL-OHI-20261007-VENUE-REGRESSION-R1.json',encoding='utf-8'));
+          print('OHI v2.4 candidate JSON PASS')"
