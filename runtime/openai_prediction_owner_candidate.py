@@ -184,7 +184,27 @@ def responses_call(payload, *, timeout, project_id=None):
         # transport failures without exposing credentials or changing policy.
         if exc.code in (401, 403):
             code = "OPENAI_API_AUTHENTICATION_HOLD"
-        elif exc.code in (400, 404, 408, 409, 422, 429):
+        elif exc.code == 429:
+            # Only fixed, approved enum tokens may leave the provider boundary.
+            # Never echo the provider message, raw response body or headers.
+            allow = {
+                "insufficient_quota": "OPENAI_API_429_INSUFFICIENT_QUOTA_HOLD",
+                "credit_balance_exhausted": "OPENAI_API_429_CREDIT_BALANCE_EXHAUSTED_HOLD",
+                "project_spend_limit_exceeded": "OPENAI_API_429_PROJECT_SPEND_LIMIT_HOLD",
+                "organization_spend_limit_exceeded": "OPENAI_API_429_ORG_SPEND_LIMIT_HOLD",
+                "organization_usage_limit_exceeded": "OPENAI_API_429_ORG_USAGE_LIMIT_HOLD",
+                "rate_limit_exceeded": "OPENAI_API_429_RATE_LIMIT_HOLD",
+            }
+            provider_code = None
+            try:
+                error_object = json.loads(exc.read(4096).decode("utf-8"))
+                error_block = error_object.get("error") if isinstance(error_object, dict) else None
+                if isinstance(error_block, dict):
+                    provider_code = error_block.get("code") or error_block.get("type")
+            except (ValueError, UnicodeDecodeError, AttributeError, TypeError):
+                pass
+            code = allow.get(provider_code, "OPENAI_API_HTTP_429_HOLD") if isinstance(provider_code, str) else "OPENAI_API_HTTP_429_HOLD"
+        elif exc.code in (400, 404, 408, 409, 422):
             code = f"OPENAI_API_HTTP_{exc.code}_HOLD"
         elif 500 <= exc.code < 600:
             code = "OPENAI_API_HTTP_5XX_HOLD"
