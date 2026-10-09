@@ -392,3 +392,24 @@ def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
             owner.responses_call({}, timeout=1, project_id='proj-test')
         assert str(e.value) == expected
         assert 'SECRET' not in str(e.value)
+
+
+def test_c2_real_429_error_class_is_allowlisted_without_provider_leakage(monkeypatch):
+    import io
+    import urllib.error
+    for provider_code, expected in [
+        ("insufficient_quota", "OPENAI_API_429_INSUFFICIENT_QUOTA_HOLD"),
+        ("credit_balance_exhausted", "OPENAI_API_429_CREDIT_BALANCE_EXHAUSTED_HOLD"),
+        ("project_spend_limit_exceeded", "OPENAI_API_429_PROJECT_SPEND_LIMIT_HOLD"),
+        ("rate_limit_exceeded", "OPENAI_API_429_RATE_LIMIT_HOLD"),
+        ("not_allowlisted_or_provider_specific", "OPENAI_API_HTTP_429_HOLD"),
+    ]:
+        def reject(req, timeout):
+            body = json.dumps({"error": {"code": provider_code, "message": "SECRET PROVIDER TEXT"}}).encode()
+            raise urllib.error.HTTPError(req.full_url, 429, "SECRET PROVIDER HEADER", {},
+                                         io.BytesIO(body))
+        monkeypatch.setattr(owner.urllib.request, "urlopen", reject)
+        with pytest.raises(owner.CandidateHold) as exc:
+            owner.responses_call({}, timeout=1, project_id="proj-test")
+        assert str(exc.value) == expected
+        assert "SECRET" not in str(exc.value)
