@@ -381,6 +381,29 @@ except (Exception, SystemExit) as shadow_error:
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
+# Reuse the signed RESULT authority and existing persistence lifecycle.
+try:
+    from family_conversion_diagnostics import settle_diagnostics, forward_status
+    from pathlib import Path
+    conversion_path=Path("runtime_result_in/family_conversion_diagnostics_pre_result.json")
+    if conversion_path.exists():
+        diagnostic=json.loads(conversion_path.read_text())
+        measurement=settle_diagnostics(diagnostic,fin,req,shared_result_authority,
+            final_signature_verified=bool(final_ver.get("verified") or final_ver.get("valid")))
+        destination=Path("runtime/family_conversion_measurements")
+        destination.mkdir(parents=True,exist_ok=True)
+        target=destination/(rid+".json")
+        if target.exists() and json.loads(target.read_text())!=measurement:
+            raise AssertionError("FAMILY_CONVERSION_IMMUTABLE_MEASUREMENT_CONFLICT")
+        target.write_text(json.dumps(measurement,ensure_ascii=False,sort_keys=True,indent=2))
+        status=forward_status()
+        Path("runtime/family_conversion_forward_status.json").write_text(json.dumps(status,ensure_ascii=False,sort_keys=True,indent=2))
+        Path("runtime_out/family_conversion_settlement.json").write_text(json.dumps(measurement,ensure_ascii=False,sort_keys=True))
+        Path("runtime_out/family_conversion_forward_status.json").write_text(json.dumps(status,ensure_ascii=False,sort_keys=True))
+except (Exception,SystemExit) as conversion_error:
+    Path("runtime_out/family_conversion_failure.json").write_text(json.dumps({
+        "status":"SHADOW_HOLD_OR_REJECTED","error":str(conversion_error),"production_effect":"NONE"}))
+
 # LOCAL-specific MEC-R5 candidate was designed from 2026-09-23
 # training races and is eligible only for future signed-bound shadows.
 local_mec_r5_shadow_settlement=None

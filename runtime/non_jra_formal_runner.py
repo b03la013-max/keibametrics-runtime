@@ -1861,5 +1861,11 @@ print("KM_NON_JRA_FORMAL_RESULT="+json.dumps({
     "error":common_exact_continuity_shadow_error,
     "production_effect":"NONE"
   },
+  "family_conversion_diagnostics":{
+    "status":"SIGNED_FINAL_BOUND_PRE_RESULT" if family_conversion_diagnostics_binding else "HOLD",
+    "binding":family_conversion_diagnostics_binding,
+    "error":family_conversion_diagnostics_error,
+    "production_effect":"NONE"
+  },
   "verified":True
 },separators=(",",":"),ensure_ascii=False))
