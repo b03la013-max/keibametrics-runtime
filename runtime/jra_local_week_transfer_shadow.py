@@ -270,10 +270,16 @@ def evaluate_jra_week_transfer_shadow_result(
 
     pair_matrix = frozen.get("head_local_p2_matrix") or []
     third_matrix = frozen.get("pair_conditioned_third_matrix") or []
-    all_heads = {int(x["head"]) for x in pair_matrix}
+    # Global roles come from the separately frozen pre-result record.  A third
+    # can be globally active even if no purchased pair reaches its third matrix.
+    roles = {int(rid): {str(role).upper() for role in (vals or [])}
+             for rid, vals in (pre_result.get("roles") or {}).items()}
+    all_heads = {rid for rid, cols in roles.items()
+                 if any(col.startswith("W") or "ALTERNATIVE-W" in col for col in cols)}
+    all_heads |= {int(x["head"]) for x in pair_matrix}
     all_heads |= {int(x) for x in (frozen.get("capital_exposure_diagnostic") or {}).get("head_exposure_yen", {})}
-    global_p2 = {int(x["second"]) for x in pair_matrix}
-    global_p3 = {int(x["third"]) for x in third_matrix}
+    global_p2 = {rid for rid, cols in roles.items() if "P2" in cols}
+    global_p3 = {rid for rid, cols in roles.items() if "P3" in cols}
     actual_pair = next((x for x in pair_matrix
                         if int(x["head"]) == w and int(x["second"]) == p2), None)
     actual_third = next((x for x in third_matrix
