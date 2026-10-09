@@ -1,0 +1,60 @@
+name: LOCAL C2 staging real API acceptance (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: km-local-c2-real-api-acceptance-manual
+  cancel-in-progress: false
+
+jobs:
+  c2-staging-acceptance:
+    runs-on: ubuntu-latest
+    environment: keibametrics-staging
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed immutable C2 candidate
+        uses: actions/checkout@v4
+        with:
+          ref: 1033c818bf2451ccb9496ae017c7aea0c35ad13e
+          persist-credentials: false
+      - name: Verify C2 non-production scope and candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "1033c818bf2451ccb9496ae017c7aea0c35ad13e"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          spec=json.loads(Path('research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json').read_text())
+          assert spec['candidate_id']=='KM-LOCAL-OPENAI-PREDICTION-OWNER-CANDIDATE-v1'
+          assert spec['mode']=='SHADOW'
+          assert spec['production_authorized'] is False
+          assert spec['automatic_promotion'] is False
+          assert spec['credential_environment']=='keibametrics-staging'
+          assert spec['credential_attestation_verified'] is True
+          print('PINNED_C2_SHADOW_SCOPE_VERIFIED')
+          PY
+      - name: Execute C2 real API authentication and frozen historical comparison
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          KM_CREDENTIAL_ENVIRONMENT: keibametrics-staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out
+          python runtime/openai_prediction_owner_candidate.py \
+            --historical-comparison \
+            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
+            --output runtime_out/owner_behavioral_comparison.json
+      - name: Preserve sanitized candidate PASS or HOLD
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-c2-staging-real-api-${{ github.run_id }}
+          path: runtime_out/owner_behavioral_comparison.json
+          if-no-files-found: warn
+          retention-days: 90
