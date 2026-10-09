@@ -76,7 +76,10 @@ def fail_closed(code,details=None):
       "execution_id":execution_id,
       "execution_phase":phase,
       "last_successful_stage":(stage_manifest[-1]["stage"] if stage_manifest else None),
-      "resume_hint":resume_hint_for(code),
+      "resume_hint":("NEW_EXECUTION_ID_IF_CUTOFF_CHANGES_KEEP_PRIOR_SOURCE_BASIS" if (
+          code=="SOURCE_ACQUISITION_NOT_FROZEN" and isinstance(details,dict)
+          and any(str(e).startswith("SOURCE_POST_CUTOFF:") for e in (details.get("source_errors") or []))
+      ) else resume_hint_for(code)),
       "request_file":os.environ.get("REQUEST_FILE"),
       "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
@@ -166,7 +169,26 @@ def acquire_verified_source(req, rid):
     sc,source=call("/source/acquire",source_req,180)
     persist("source_receipt_envelope.json",source)
     if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
-        fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
+        # The full signed SOURCE envelope is already persisted above.
+        # Preserve the original Fail-Closed decision but surface bounded,
+        # actionable causal details instead of dumping hundreds of KB of
+        # official SOURCE into Actions logs.
+        source_artifact=source.get("artifact") if isinstance(source.get("artifact"),dict) else {}
+        source_errors=list(source_artifact.get("errors") or [])
+        fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{
+            "http":sc,
+            "receipt_status":(source.get("receipt") or {}).get("status"),
+            "source_errors":source_errors[:50],
+            "source_errors_truncated":len(source_errors)>50,
+            "required_post_cutoff_sources":[
+                str(e).split(":",1)[1] for e in source_errors
+                if str(e).startswith("SOURCE_POST_CUTOFF:")
+            ][:50],
+            "prediction_cutoff":source_req.get("prediction_cutoff"),
+            "source_freeze_at":source_artifact.get("source_freeze_at"),
+            "receipt_sha256":source.get("receipt_sha256"),
+            "source_evidence_retained_as_artifact":True,
+        })
     svc,sv=call("/source/verify",source,60)
     persist("source_verification.json",sv)
     if svc>=300 or sv.get("valid") is not True:
