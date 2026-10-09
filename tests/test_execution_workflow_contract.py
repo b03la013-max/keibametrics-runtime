@@ -74,3 +74,22 @@ def test_result_gateway_contract_is_in_extracted_runner():
     assert "CANONICAL_EXECUTION_STORE" in runner
     assert "runtime/executions/$EXECUTION_ID/RESULT" in workflow
     assert len(workflow) < 21000
+
+
+def test_authorized_formal_dispatch_paths_remain_shell_literal():
+    """Existing user-authorized GitHub Actions input must not execute as shell code."""
+    single = (ROOT / ".github/workflows/km-formal-single-entry.yml").read_text(encoding="utf-8")
+    bridge = FORMAL.read_text(encoding="utf-8")
+    assert "INTENT_INPUT_PATH: ${{ inputs.intent_path }}" in single
+    assert 'INTENT="${INTENT_INPUT_PATH:-}"' in single
+    assert 'INTENT="${{ inputs.intent_path }}"' not in single
+    assert "REQUEST_INPUT_PATH: ${{ inputs.request_path }}" in bridge
+    assert 'REQ="${REQUEST_INPUT_PATH:-}"' in bridge
+    assert 'REQ="${{ inputs.request_path }}"' not in bridge
+    # Preserve both established triggers, the authority guard, and the result lifecycle.
+    for workflow in (single, bridge):
+        assert "workflow_dispatch:" in workflow
+        assert "push:" in workflow
+        assert "python runtime/family_authority_guard.py --request" in workflow
+    assert "python runtime/formal_execution_orchestrator.py" in single
+    assert "--resume-official-result" in single
