@@ -1,0 +1,27 @@
+name: JRA LOCAL Week Transfer Shadow Acceptance
+
+on:
+  pull_request:
+    paths:
+      - "runtime/jra_local_week_transfer_shadow.py"
+      - "runtime/jra_source_candidate_oos.py"
+      - ".github/workflows/km-jra-source-candidate-forward-oos.yml"
+      - "tests/test_jra_local_week_transfer_shadow.py"
+      - ".github/workflows/km-jra-local-week-transfer-shadow-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jra-transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check -q pytest
+      - name: Compile diagnostic and OOS modules
+        run: python -m py_compile runtime/jra_local_week_transfer_shadow.py runtime/family_conversion_diagnostics.py runtime/jra_source_candidate_oos.py
+      - name: Read-only transfer and existing Candidate regression
+        run: pytest -q tests/test_jra_local_week_transfer_shadow.py tests/test_jra_source_candidate_semantics_width.py tests/test_jra_source_candidate_full_lifecycle.py
