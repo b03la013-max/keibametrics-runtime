@@ -148,6 +148,15 @@ jobs:
               if frozen_transfer_sha:
                   transfer_path=os.path.join(os.path.dirname(candidate_pre_path),"jra_local_week_transfer_shadow_pre_result.json")
                   assert os.path.isfile(transfer_path), "JRA_TRANSFER_FROZEN_PRE_RESULT_SHADOW_MISSING"
+                  signed_candidate_path=os.path.join(os.path.dirname(candidate_pre_path),"candidate_final.json")
+                  assert os.path.isfile(signed_candidate_path), "JRA_TRANSFER_SIGNED_CANDIDATE_FINAL_MISSING"
+                  with open(signed_candidate_path,encoding="utf-8") as fh:
+                      candidate_final_frozen=json.load(fh)
+                  final_transfer_binding=candidate_final_frozen.get("jra_local_week_transfer_shadow_binding") or {}
+                  assert final_transfer_binding.get("sha256")==frozen_transfer_sha, "JRA_TRANSFER_FINAL_BINDING_MISMATCH"
+                  assert final_transfer_binding.get("source_basis_sha256")==candidate_pre.get("source_snapshot_sha256"), "JRA_TRANSFER_FINAL_SOURCE_MISMATCH"
+                  assert final_transfer_binding.get("semantic_freeze_sha256")==candidate_pre.get("candidate_semantic_freeze_sha256"), "JRA_TRANSFER_FINAL_SEMANTIC_MISMATCH"
+                  assert candidate_final_frozen.get("oos_pre_result_record_sha256")==candidate_pre.get("sha256"), "JRA_TRANSFER_FINAL_OOS_RECORD_MISMATCH"
                   with open(transfer_path,encoding="utf-8") as fh:
                       frozen_transfer=json.load(fh)
                   transfer_eval=evaluate_jra_week_transfer_shadow_result(
