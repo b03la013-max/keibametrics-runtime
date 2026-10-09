@@ -43,3 +43,8 @@ jobs:
           runtime/formal_execution_orchestrator.py
       - name: Test formal import closure
         run: python runtime/formal_import_closure.py --entry runtime/non_jra_formal_runner.py --output /tmp/aki-import-closure.json
+
+      - name: Read-only AKI seven-race canonical OOS replay
+        run: |
+          python runtime/aki_adaptive_oos_tracker.py --root runtime/executions --output /tmp/aki-replay-20261009.json
+          python -c 'import json; from pathlib import Path; p=json.loads(Path("/tmp/aki-replay-20261009.json").read_text()); assert p["eligible_races"] == 7 and p["errors"] == [] and p["days"] == 1; print("AKI_REAL_REPLAY_JSON="+json.dumps(p,ensure_ascii=False,sort_keys=True,separators=(",",":")))'
