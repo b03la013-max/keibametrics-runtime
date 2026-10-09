@@ -1,0 +1,39 @@
+name: C2 Candidate real API one-shot acceptance
+
+on:
+  push:
+    branches:
+      - candidate/result-learning-resume-r3
+    paths:
+      - research/execution/C2_REAL_API_ACCEPTANCE_TRIGGER_20261009.json
+
+permissions:
+  contents: read
+
+env:
+  KM_CREDENTIAL_ENVIRONMENT: keibametrics-staging
+
+jobs:
+  c2-real-api:
+    if: github.ref == 'refs/heads/candidate/result-learning-resume-r3'
+    runs-on: ubuntu-latest
+    environment: keibametrics-staging
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify frozen C2 Candidate and execute existing real API comparison
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p runtime_out
+          python runtime/openai_prediction_owner_candidate.py \
+            --historical-comparison \
+            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
+            --output runtime_out/owner_behavioral_comparison.json
+      - name: Preserve sanitized result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c2-one-shot-real-api-${{ github.run_id }}
+          path: runtime_out/owner_behavioral_comparison.json
+          if-no-files-found: warn
