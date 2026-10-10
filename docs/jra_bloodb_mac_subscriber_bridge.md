@@ -71,3 +71,37 @@ python runtime/jra_bloodb_mac_collector.py capture \
 ## 証拠の意味
 
 `raw_sha256` は**保存したブラウザHTMLバイト列**の完全性のみを示す。提供元が電子署名したとの意味ではない。正式JRA SOURCEのEd25519/OIDCとは別のtrust domain。スクレイピング自体はBVIの欠落する実走サンプルの捏造やStatic認可を解決しない。
+
+## 4. Mac自動レース発見・5分間隔の会員データ収集
+
+これまでの単一レース収集に加え、認証済み /allsel に**実際に掲載されたレースリンクのみ**を抽出し、日付・レース番号・開催場を照合する queue ワーカーを実装した。rcodeを生成・推測しない。複数開催場で同じレース番号がある場合、開催場のラベルが明瞭でなければ停止する。これは模擬HTMLのテストであり、実会員ページのDOMやライセンス条件を確認した証明ではない。
+
+契約者のMacに ~/.keibametrics/bloodb_queue.json を置き、正式JRA SOURCEから導いたレース情報を配列で登録する。例:
+
+~~~json
+[
+  {
+    "race_id": "KM-JRA-KYO-20261011-R09",
+    "race_date": "2026-10-11",
+    "race_no": 9,
+    "venue": "京都",
+    "prediction_cutoff": "2026-10-11T14:00:00+09:00",
+    "signed_source_envelope_path": "/Users/YOU/.keibametrics/jra_signed_source_envelope.json"
+  }
+]
+~~~
+
+上記日付・締切は動作説明用で、実レースの証明ではない。signed_source_envelope_path は署名済みJRA SOURCEと一致する必要がある。埋込Ed25519の検証だけでは第三者OIDCを証明せず、SOURCEの外部証跡は別ゲートで確認する。代替として official_runners_path が使えるが、これは非署名Diagnostic照合情報と明示される。
+
+提供元からの自動利用許可を確認した場合のみ、次の順で本人のMac上で実行する。
+
+~~~sh
+python runtime/jra_bloodb_mac_collector.py login
+python runtime/jra_bloodb_mac_automation.py discover --queue ~/.keibametrics/bloodb_queue.json --provider-permission-confirmed
+python runtime/jra_bloodb_mac_automation.py queue --queue ~/.keibametrics/bloodb_queue.json --provider-permission-confirmed
+python runtime/jra_bloodb_mac_automation.py install-launchd --queue ~/.keibametrics/bloodb_queue.json --provider-permission-confirmed
+~~~
+
+macOS launchd により約5分間隔で実行。締切まで65分以内の対象だけ取り込む。Macがスリープ中・オフライン・認証失効・契約範囲外の場合は成功とみなさない。保存は ~/.keibametrics/private_bloodb/<race_id>/ だけで、ログイン情報・生HTML・有料評価をGitHubやCIへアップロードしない。止めるには launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/jp.keibametrics.bloodb-collector.plist を実行する。
+
+現時点の未完了条件: 実会員HTMLのセレクタ実測、全レースからの自動キュー生成、血統評価の実指数化・較正、Production Full20/Staticの認可。キュー取込は独自Blood-BラベルをDiagnosticで保持し、JRA実績ベースの血統コーパス・正式Predictionと混合しない。実会員取得と本番接続をテスト済みと主張しない。
