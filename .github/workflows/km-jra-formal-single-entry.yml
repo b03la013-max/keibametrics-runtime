@@ -275,6 +275,26 @@ jobs:
           NO_BET_TARGET="runtime/jra_no_bet_terminals/${SAFE}.json"
           mkdir -p runtime/jra_no_bet_terminals
           cp runtime_out/jra_production_no_bet_terminal.json "$NO_BET_TARGET"
+          # A Production evidence NO_BET remains a valid zero-exposure
+          # terminal decision even when a late OOS Candidate is impossible.
+          # Never backdate or submit an expired race as prospective.
+          INTENT_FILE="$INTENT_FILE" PYTHONPATH=runtime python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from jra_candidate_dispatch_guard import candidate_dispatch_decision
+          intent=json.loads(Path(os.environ["INTENT_FILE"]).read_text(encoding="utf-8"))
+          report=json.loads(Path("runtime_out/jra_single_entry_exact_gap.json").read_text(encoding="utf-8"))
+          result=candidate_dispatch_decision(
+              intent, report["source_checkpoint_manifest"]
+          )
+          Path("runtime_out/jra_candidate_dispatch_decision.json").write_text(
+              json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\n",
+              encoding="utf-8"
+          )
+          print("JRA_CANDIDATE_DISPATCH="+json.dumps(result,ensure_ascii=False))
+          PY
+          DISPATCH_ELIGIBLE="$(python -c 'import json; print("true" if json.load(open("runtime_out/jra_candidate_dispatch_decision.json"))["dispatch"] else "false")')"
+          if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
           INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
           import copy,json,os,pathlib
           q=json.load(open(os.environ['INTENT_FILE'],encoding='utf-8'))
@@ -288,9 +308,13 @@ jobs:
           pathlib.Path(os.environ['CANDIDATE_TARGET']).write_text(
               json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
           PY
+          fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "$GAP_TARGET" "$CANDIDATE_TARGET" "$NO_BET_TARGET"
+          git add "$GAP_TARGET" "$NO_BET_TARGET"
+          if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
+            git add "$CANDIDATE_TARGET"
+          fi
           if ! git diff --cached --quiet; then
             git commit -m "execution: persist JRA exact gap and Candidate handoff $EXECUTION_ID"
             for attempt in 1 2 3 4 5; do
@@ -298,6 +322,30 @@ jobs:
               git rebase --abort 2>/dev/null || true
               sleep $((attempt*2))
             done
+          fi
+          # A Production evidence NO_BET remains a valid zero-exposure
+          # terminal decision even when a late OOS Candidate is impossible.
+          # Never backdate or submit an expired race as prospective.
+          INTENT_FILE="$INTENT_FILE" PYTHONPATH=runtime python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from jra_candidate_dispatch_guard import candidate_dispatch_decision
+          intent=json.loads(Path(os.environ["INTENT_FILE"]).read_text(encoding="utf-8"))
+          report=json.loads(Path("runtime_out/jra_single_entry_exact_gap.json").read_text(encoding="utf-8"))
+          result=candidate_dispatch_decision(
+              intent, report["source_checkpoint_manifest"]
+          )
+          Path("runtime_out/jra_candidate_dispatch_decision.json").write_text(
+              json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\n",
+              encoding="utf-8"
+          )
+          print("JRA_CANDIDATE_DISPATCH="+json.dumps(result,ensure_ascii=False))
+          PY
+          DISPATCH_ELIGIBLE="$(python -c 'import json; print("true" if json.load(open("runtime_out/jra_candidate_dispatch_decision.json"))["dispatch"] else "false")')"
+          if [ "$DISPATCH_ELIGIBLE" != "true" ]; then
+            echo "Candidate forward dispatch skipped: temporal gate is closed"
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           gh workflow run km-jra-source-candidate-forward-oos.yml --ref main -f request_path="$CANDIDATE_TARGET"
           RUN_TITLE="JRA Candidate $CANDIDATE_TARGET"
@@ -414,7 +462,9 @@ jobs:
             "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
             "production_no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
             "production_full_prediction_completed":False if sha("runtime_out/jra_production_no_bet_terminal.json") else bool(os.environ.get("FORMAL_RUN_ID")),
-            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_RUN_COMPLETED" if os.environ.get("CANDIDATE_RUN_ID") else "PRODUCTION_CLOSURE_BLOCKED")),
+            "no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
+            "candidate_dispatch_decision_sha256":sha("runtime_out/jra_candidate_dispatch_decision.json"),
+            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_RUN_COMPLETED" if os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
             "production_prediction_change":False,
             "production_numerical_change":False,
             "local_numerical_reuse":False,
