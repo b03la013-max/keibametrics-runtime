@@ -77,7 +77,7 @@ def _source_candidates(root:Path,execution_id:str)->list[Path]:
     return sorted((root/"runtime/executions"/execution_id/"SOURCE/runs").glob(
         "*/source_receipt_envelope.json"))
 
-def _race_binding(root:Path, intent:dict)->tuple[Path,dict]:
+def _race_binding(root:Path, intent:dict, *, now:datetime)->tuple[Path,dict]:
     valid=[]
     for source in _source_candidates(root,intent["execution_id"]):
         try:
@@ -93,7 +93,9 @@ def _race_binding(root:Path, intent:dict)->tuple[Path,dict]:
             if source_cutoff!=utc_time(intent["prediction_cutoff"]):
                 continue
             frozen=utc_time(art["source_freeze_at"])
-            if frozen>=source_cutoff:
+            if frozen>=source_cutoff or frozen>now:
+                # A signed pre-race SOURCE cannot be used before its own
+                # actual freeze time, even in a synthetic future fixture.
                 continue
             if frozen>utc_time(intent["scheduled_post_at"]):
                 continue
@@ -137,7 +139,7 @@ def collect_specs(root:Path, *, now:datetime, horizon_h:int=36,
         seen[rid]=candidate
     for item in seen.values():
         try:
-            source,origin=_race_binding(root,item)
+            source,origin=_race_binding(root,item,now=now)
         except BloodBError:
             stats["skipped_source_missing"]+=1
             continue
