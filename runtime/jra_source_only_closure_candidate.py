@@ -113,7 +113,14 @@ def propose_official_observed_features(source: dict) -> dict:
     )
     person = ((source.get("jra_official_person_stats") or {}).get("runners") or {})
     person_source_sha = str(source.get("jra_official_person_stats_sha256") or "")
-    going = str(context.get("going") or context.get("track_condition") or "")
+    detail_environment = ((source.get("jra_official_race_card_detail") or {}).get("race_environment") or {})
+    # Calendar context does not carry track going; JRA's detailed official
+    # race-card does. Only use it when its surface agrees with the target race.
+    official_going = str(detail_environment.get("going") or "")
+    official_going_surface = str(detail_environment.get("going_surface") or "")
+    if official_going_surface and official_going_surface != surface:
+        official_going = ""
+    going = str(context.get("going") or context.get("track_condition") or official_going or "")
     observed = {}
     required = sorted(RULE_IDS)
     for runner in official:
