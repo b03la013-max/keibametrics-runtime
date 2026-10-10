@@ -29,6 +29,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Install Ed25519 verification dependencies
+        run: python -m pip install --disable-pip-version-check -q cryptography
       - name: Verify official source Ed25519 + independent GitHub OIDC
         run: |
           set -euo pipefail
