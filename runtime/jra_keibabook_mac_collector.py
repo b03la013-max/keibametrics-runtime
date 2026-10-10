@@ -52,7 +52,7 @@ class BookCollectorError(ValueError):
 def _private_dir(path: Path) -> Path:
     path = path.expanduser().resolve()
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if path.is_symlink() or path.stat().st_mode & 0o077:
+    if path.stat().st_mode & 0o077:
         raise BookCollectorError("PRIVATE_DIRECTORY_PERMISSIONS_UNSAFE:" + str(path))
     return path
 
@@ -159,7 +159,7 @@ def capture_race(context, *, book_race_id: str, race_date: str, prediction_cutof
             manifest.append(meta)
         _write_private(staging / "manifest.json", _json_bytes(manifest))
         private = ingest(
-            staging / "manifest.json", official=official, race_date=race,
+            staging / "manifest.json", official=official, race_date=race_date,
             book_race_id=race, prediction_cutoff=prediction_cutoff,
         )
         assessed = evaluate(private)
@@ -332,7 +332,7 @@ def main(argv=None):
     else:
         if sys.platform != "darwin":
             raise BookCollectorError("LAUNCHD_ONLY_ON_MACOS")
-        launch_dir = _private_dir(HOME)
+        _private_dir(HOME)
         plist = make_launchd_plist(
             repo_root=args.repo, queue_path=args.queue, profile=args.profile,
             private_dir=args.private_dir, interval_seconds=args.interval_seconds,
