@@ -8,6 +8,14 @@ on:
       - "runtime/jra_source_to_evidence_features.py"
       - "runtime/jra_execution_maturity_bridge.py"
       - "runtime/jra_static_owner_executable.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-production-source-closure-real.yml"
+      - "runtime/jra_official_fact_evaluator_production.py"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_static_owner_executable.py"
   workflow_dispatch:
 
 permissions:
@@ -28,7 +36,7 @@ jobs:
           python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py
       - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
         run: |
-          python - <<'PY'
+          PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
           from runtime.jra_execution_maturity_bridge import prepare_production_numerical
