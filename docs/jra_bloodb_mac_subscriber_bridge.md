@@ -168,3 +168,41 @@ python runtime/jra_bloodb_mac_acceptance.py status \
 **未了の必須実証：** 会員契約者のMacで許可済みの実ページに対して `inspect` と `live` を実行し、当該レースの表ヘッダーと全馬照合を確認すること。現在はこの実会員Acceptance未実施。実ページのDOMが既存パーサと異なる場合は、端末に有料本文を出さずヘッダー・行数等のみでセレクタ修正を行う。許諾の有無をフラグが技術的に証明するわけではない。
 
 **Production境界：** `LOCAL_CAPTURE_ARTIFACT_INTEGRITY_VERIFIED` はあくまでMac上のData Integrity結果。JRA公式血統BVIを置換しない。Unknown OOS加算、買い目、KRS、STATIC、FINALに影響させない。次の昇格は提供元の利用許諾確認とJRA独立OIDCゲート、時系列純度、正確な実HTML解析の実証、血統信号の未知未来OOSの順序を守る。
+
+## 7. 次工程：Mac実会員DOMのプライバシー保持Probe（2026-10-10）
+
+PR #206の`live`受入試験は厳格に失敗する設計であるため、実サイトのHTMLが未確認の段階では、失敗原因を実会員情報やスクリーンショットを転送せず調べる必要がある。今回 `runtime/jra_bloodb_mac_probe.py` を追加した。
+
+**提供元から会員ページの当該自動閲覧・構造検査について許可を得ている場合のみ**、Macの専用プロファイルで本人ログインした後、次を実行する。事前にPR #205のSigned SOURCE Queueが生成されている必要がある。
+
+~~~sh
+git pull --ff-only
+source .venv/bin/activate
+python scripts/jra_bloodb_signed_source_queue_sync.py --dry-run
+python scripts/jra_bloodb_signed_source_queue_sync.py
+
+# 本人ログイン（未実施なら）
+python runtime/jra_bloodb_mac_collector.py login
+
+# 実際のキュー内の未来Race IDを指定する。下記は形式例であり、
+# 有効なSOURCE・会員ページを有することを示すものではない。
+python runtime/jra_bloodb_mac_probe.py \
+  --race-id KM-JRA-KYO-20261011-R09 \
+  --provider-permission-confirmed
+~~~
+
+Probeは署名付きJRA SOURCE、日付・場・レース番号・全馬集合・発走前cutoffを再確認し、会員`/allsel`から**実際に表示されているリンク**のみを探索する。レースの数字を生成・推測しない。
+
+出力は、index/detailそれぞれのテーブル数、行数、`th/td`件数、列見出し（最大数・長さ制限、馬名を含む見出しはREDACT）、`div/span/iframe/script`等の構造件数、実際のレース候補数、全馬照合の**件数**、失敗理由だけ。**HTML本文、有料の馬別値、馬名一覧、認証Cookie、パスワード、会員ID、具体的な会員レースURLは出力・永続保存しない。** 出力された構造情報は人がレビューできるが、その構造が有料サービスのライセンス条件上共有可能かは別途確認する。
+
+成功時の`LOCAL_MEMBER_DOM_SCHEMA_COMPATIBLE`は**画面構造と既存パーサが1レース全馬分で一致すること**のみを意味する。会員情報の収集・永続化はしない。正式なローカル収集受入は前節の`jra_bloodb_mac_acceptance.py live`で別途行う。
+
+- `BLOODB_RACE_LINK_MISSING_OR_AMBIGUOUS`：会員indexから場・日・Rが一意に見つからない。見える表・ドロップダウン・script/iframe構成を確認し、実サイト固有の発見方法を修正する
+- `BLOODB_RUNNER_COVERAGE_UNVERIFIED`：表形式・馬名列・全馬が現行パーサの前提と合わない。構造診断だけで原因を分類する
+- `BLOODB_LOGIN_REQUIRED`、`...REDIRECT`：本人認証・画面遷移・権利条件を確認する。認証バイパスしない
+- `BLOODB_PROBE_PREDICTION_CUTOFF_EXPIRED`：締切後には発走前Probe成功を主張しない
+- `BLOCKED`：実会員HTMLや許可未確認の段階では本番成功ではない
+
+CIは署名付きJRA SOURCEテストフィクスチャと合成HTMLでProbe出力・全馬一致・動的div非対応・リンク不在・ログイン失効・レース取り違え・cutoffを確認する。実会員DOMが実証済みという意味ではない。Probeは`production_authority=false`、`bvi_authority=false`、`oos_increment=0`固定で、BVI/Static/KRS/FINALへ干渉しない。
+
+**次の実証は、提供元が許諾した範囲で契約者のMacからProbeを1レース実行し、出力された構造診断だけでparser対応を判断すること。** 現時点でこの実行は未実施。
