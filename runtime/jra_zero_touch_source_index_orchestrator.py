@@ -24,20 +24,28 @@ def _official_map(source:Dict[str,Any])->Dict[str,Dict[str,Any]]:
 
 def build_source_runner_stubs(source:Dict[str,Any])->List[Dict[str,Any]]:
     detail=_detail_map(source)
+    universe=(source.get("jra_official_runner_universe") or source.get("official_runner_universe") or {})
+    raw=universe.get("runners") or []
+    declared=[str(r.get("runner_id") or r.get("horse_no") or "") for r in raw]
+    if len(declared)<2 or "" in declared or len(set(declared))!=len(declared):
+        raise ValueError("JRA_OFFICIAL_RUNNER_UNIVERSE_INVALID")
+    # Official PDF runner universe is the sole authority for runner identity.
+    # Auxiliary detail/history may enrich an official runner, never create one.
     official=_official_map(source)
-    ids=sorted(set(official)|set(detail),key=lambda x:int(x) if x.isdigit() else x)
+    ids=sorted(declared,key=lambda x:int(x) if x.isdigit() else x)
     out=[]
     for rid in ids:
-        o=official.get(rid) or {}
+        o=official[rid]
         d=detail.get(rid) or {}
         record=d.get("career_record") or {}
         starts=record.get("starts")
         if starts is None:
-            # Full horse history is authoritative factual fallback for starts.
+            # An adapter may expose a verified full career start count, but a
+            # truncated list of prior runs is NOT evidence of total starts.
             h=(((source.get("jra_official_horse_history") or {}).get("runners") or {}).get(rid) or {})
-            runs=h.get("runs") or []
-            if runs:
-                starts=len(runs)
+            starts=h.get("career_starts")
+            if starts is None:
+                starts=h.get("total_starts")
         r={
           "runner_id":rid,
           "name":str(d.get("horse_name") or o.get("canonical_name") or o.get("name") or ""),
