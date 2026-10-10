@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
 from jra_production_no_bet_terminal import (
-    build_no_bet_terminal, JRANoBetTerminalError, BASE, DERIVED, digest,
+    build_no_bet_terminal, verify_no_bet_terminal, JRANoBetTerminalError, BASE, DERIVED, digest,
 )
 
 CUTOFF="2026-10-10T12:18:00+09:00"
@@ -82,6 +82,41 @@ class TestJraNoBetTerminal(unittest.TestCase):
         self.assertEqual(obj["index_universe"]["1"]["HPI"]["terminal_status"],"RULED-HOLD")
         self.assertIsNone(obj["index_universe"]["1"]["HPI"]["value"])
         self.assertEqual(obj["sha256"],digest({k:v for k,v in obj.items() if k!="sha256"}))
+
+    def test_independent_decision_terminal_verifier(self):
+        q,r=fixtures()
+        good=build_no_bet_terminal(q,r,source_receipt_verified=True,created_at=PRE)
+        check=verify_no_bet_terminal(good, race_id=q["race_id"],require_live=True)
+        self.assertEqual(check["status"],"VERIFIED_ZERO_EXPOSURE_DECISION_ONLY")
+        self.assertEqual(check["terminal_index_count"],40)
+        self.assertEqual(check["total_investment"],0)
+        self.assertFalse(check["signed_final_verified"])
+
+    def test_terminal_verifier_rejects_changed_body_even_with_recomputed_hash(self):
+        q,r=fixtures()
+        good=build_no_bet_terminal(q,r,source_receipt_verified=True,created_at=PRE)
+        mutations=(
+            lambda o:o["index_universe"]["1"]["HPI"].update(value=50),
+            lambda o:o["index_universe"]["1"]["VMI"].update(value=150),
+            lambda o:o["index_universe"]["1"].pop("DCR"),
+            lambda o:o.update(tickets=[{"stake":100}]),
+            lambda o:o.update(total_investment=100),
+            lambda o:o.update(krs_executed=True),
+            lambda o:o.update(signed_final_verified=True),
+            lambda o:o.update(base_calculated_count=400),
+            lambda o:o.update(lineage="UNKNOWN"),
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=str(mutation)):
+                bad=deepcopy(good)
+                mutation(bad)
+                bad["sha256"]=digest({k:v for k,v in bad.items() if k!="sha256"})
+                with self.assertRaises(JRANoBetTerminalError):
+                    verify_no_bet_terminal(bad)
+        bad=deepcopy(good)
+        bad["total_investment"]=100
+        with self.assertRaisesRegex(JRANoBetTerminalError,"SHA256_MISMATCH"):
+            verify_no_bet_terminal(bad)
 
     def test_source_must_have_independently_verified_receipt(self):
         q,r=fixtures()

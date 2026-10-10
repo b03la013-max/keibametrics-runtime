@@ -464,7 +464,7 @@ jobs:
             "production_full_prediction_completed":False if sha("runtime_out/jra_production_no_bet_terminal.json") else bool(os.environ.get("FORMAL_RUN_ID")),
             "no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
             "candidate_dispatch_decision_sha256":sha("runtime_out/jra_candidate_dispatch_decision.json"),
-            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_RUN_COMPLETED" if os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
+            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_NO_BET_TERMINAL_CANDIDATE_PARALLEL_COMPLETED" if sha("runtime_out/jra_production_no_bet_terminal.json") and os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
             "production_prediction_change":False,
             "production_numerical_change":False,
             "local_numerical_reuse":False,
@@ -483,8 +483,19 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-      - name: Enforce Production closure result
+      - name: Verify source-attested zero-exposure decision terminal
         if: steps.build_formal.outcome != 'success'
+        shell: bash
         run: |
-          echo "Production FORMAL-FULL remains fail-closed. Candidate Parallel is a separate NON-PRODUCTION lane." >&2
-          exit 1
+          set -euo pipefail
+          # NO_BET closes the capital decision without inventing a signed
+          # Production FINAL, KRS execution, or actual ticket purchase.
+          test -f runtime_out/jra_production_no_bet_terminal.json
+          PYTHONPATH=runtime python - <<'PY'
+          import json
+          from pathlib import Path
+          from jra_production_no_bet_terminal import verify_no_bet_terminal
+          terminal=json.loads(Path("runtime_out/jra_production_no_bet_terminal.json").read_text())
+          result=verify_no_bet_terminal(terminal)
+          print("JRA_SIGNED_SOURCE_ZERO_CAPITAL_DECISION_COMPLETE",result)
+          PY
