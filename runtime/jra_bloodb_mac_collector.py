@@ -151,7 +151,7 @@ def check_page_actual(actual_url: str, expected_url: str):
 
 def capture_context(context, *, race_url: str, race_date: str, cutoff: str,
                     official: list[dict], output_root: Path = PRIVATE,
-                    race_id: str, now=None) -> dict:
+                    race_id: str, now=None, source_binding: dict | None = None) -> dict:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{4,120}", race_id):
         raise BloodBError("RACE_ID_UNSAFE")
     expected = allowed_page(race_url)
@@ -198,6 +198,15 @@ def capture_context(context, *, race_url: str, race_date: str, cutoff: str,
         }
         private_write(staging/"subscriber_page.html",raw)
         private_write(staging/"diagnostic.json",json_bytes(record))
+        if source_binding is not None:
+            private_write(staging/"jra_source_binding.json",json_bytes({
+                "race_id":race_id,
+                "jra_official_source":source_binding,
+                "bloodb_page_sha256":digest,
+                "production_authority":False,
+                "bvi_population_authority":False,
+                "signed_final":False,"oos_increment":0,
+            }))
         summary = {
             "profile":SOURCE_PROFILE,"race_id":race_id,"runner_count":parsed["horse_count"],
             "captured_at":at.isoformat(),"raw_sha256":digest,
