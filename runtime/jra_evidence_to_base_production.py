@@ -194,6 +194,78 @@ def _dcr_for_runner(runner, profile, features, mapping):
     return out
 
 
+def evaluate_partial_production_base_indices(race_id, runners, mapping):
+    """Run authorized *existing* Base13 evaluators independently, without fill.
+
+    A partial value is a diagnostic calculation, not a FULL_REQUIRED closure,
+    a Static Prediction, or an externally signed Production receipt.
+    """
+    if not race_id or not isinstance(runners, list) or len(runners) < 2:
+        raise ProductionMappingError("PARTIAL_BASE_RACE_OR_UNIVERSE_INVALID")
+    if not str(mapping.get("status") or "").startswith("PRODUCTION"):
+        raise ProductionMappingError("MAPPING_NOT_PRODUCTION")
+    if str(mapping.get("mapping_id") or "") == "":
+        raise ProductionMappingError("MAPPING_ID_MISSING")
+    seen = set()
+    rows = {}
+    calculated = blocked = 0
+    for runner in runners:
+        rid = str(runner.get("runner_id") or "")
+        if not rid or rid in seen:
+            raise ProductionMappingError("PARTIAL_BASE_RUNNER_ID_INVALID_OR_DUPLICATE")
+        seen.add(rid)
+        cells = {}
+        try:
+            profile = _profile_for_runner(runner)
+            profile_error = None
+        except (ProductionMappingError, ValueError, TypeError) as exc:
+            profile = None
+            profile_error = str(exc)
+        features = runner.get("evidence_features")
+        for idx in BASE:
+            if profile is None or not isinstance(features, dict):
+                calculated_cell = None
+                reason = profile_error or f"EVIDENCE_FEATURES_MISSING:{rid}"
+            else:
+                try:
+                    calculated_cell = _weighted_index(idx, profile, features, mapping)
+                    reason = None
+                except (ProductionMappingError, ValueError, TypeError) as exc:
+                    calculated_cell = None
+                    reason = str(exc)
+            if calculated_cell is not None:
+                calculated += 1
+                cells[idx] = {
+                    "status": "CALCULATED",
+                    "value": calculated_cell["value"],
+                    "rule_id": calculated_cell["rule_id"],
+                    "mapping_version": calculated_cell["mapping_version"],
+                    "evidence_refs": calculated_cell["evidence_refs"],
+                    "source_fact": calculated_cell["source_fact"],
+                    "components": calculated_cell["components"],
+                    "coverage_weight": calculated_cell["coverage_weight"],
+                }
+            else:
+                blocked += 1
+                cells[idx] = {"status": "BLOCKED", "value": None, "reason": reason}
+        rows[rid] = {"profile": profile, "indices": cells}
+    report = {
+        "race_id": race_id,
+        "schema": "KM-JRA-PRODUCTION-BASE13-PARTIAL-CALCULATION-DIAGNOSTIC-v1",
+        "mapping_id": mapping["mapping_id"],
+        "required_base_cells": len(runners) * len(BASE),
+        "calculated_base_cells": calculated,
+        "blocked_base_cells": blocked,
+        "runners": rows,
+        "full20_authority": False,
+        "static_prediction_authority": False,
+        "signed_receipt": False,
+        "never_substitute_missing": True,
+    }
+    report["sha256"] = _sha(report)
+    return report
+
+
 def build_production_ledger(race_id, runners, mapping):
     if not race_id:
         raise ProductionMappingError("RACE_ID_MISSING")
