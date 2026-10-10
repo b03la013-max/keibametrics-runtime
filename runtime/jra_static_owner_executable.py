@@ -93,10 +93,15 @@ def compile_static_owner(request, *, source_snapshot_sha256, source_receipt_sha2
     rank_w = _rank(runners, "ZAI_WIN")
     rank_p2 = _rank(runners, "ZAI_PLACE")
     rank_p3 = _rank(runners, "T3I")
+    # Preserve structural order feasibility without using race bankroll to
+    # choose widths. At least two distinct P2 and three P3 candidates are
+    # needed for a complete 3-place semantic universe.
+    p2_order = _rank(runners, "ZAI_PLACE")
+    p3_order = _rank(runners, "T3I")
     active = {
         "W": _cluster(runners, "ZAI_WIN"),
-        "P2": _cluster(runners, "ZAI_PLACE"),
-        "P3": _cluster(runners, "T3I"),
+        "P2": list(dict.fromkeys(_cluster(runners, "ZAI_PLACE") + p2_order[:min(2, len(runners))])),
+        "P3": list(dict.fromkeys(_cluster(runners, "T3I") + p3_order[:min(3, len(runners))])),
     }
     # Do not let two-runner exact sequences artificially include the same horse.
     role_registry = [
