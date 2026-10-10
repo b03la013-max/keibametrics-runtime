@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 from typing import Any, Dict, List
+from bs4 import BeautifulSoup
 
 from source_acquisition import _decode
 from jra_horse_history import parse_horse_history
@@ -96,18 +97,52 @@ def _calendar(race_date: str) -> str:
 
 
 def parse_horse_pedigree(decoded: str) -> Dict[str, str | None]:
-    def dd(label: str) -> str | None:
-        m = re.search(r"<dt>\s*" + label + r"\s*</dt>\s*<dd>(.*?)</dd>", decoded, re.S)
-        if not m:
-            return None
-        txt = re.sub(r"<span class=\"sanku\">.*?</span>", "", m.group(1), flags=re.S)
-        txt = html.unescape(re.sub(r"<[^>]+>", "", txt)).strip()
-        return txt or None
+    """Parse actual JRA horse-profile headers and parent cells (variable markup).
+
+    Keep identity UNKNOWN when a genuinely incomplete profile has no parent.
+    Never guess a sire or borrow a neighboring horse's profile.
+    """
+    soup = BeautifulSoup(decoded, "html.parser")
+    def parent(label: str) -> str | None:
+        for dt in soup.select("dt"):
+            if re.sub(r"\s+", "", dt.get_text(" ",strip=True)).strip("：:") != label:
+                continue
+            dd = dt.find_next_sibling("dd")
+            if dd is not None:
+                copy = BeautifulSoup(str(dd), "html.parser")
+                for el in copy.select(".sanku"):
+                    el.decompose()
+                value = copy.get_text(" ", strip=True)
+                return re.sub(r"\s+", " ", value).strip() or None
+        # Some official profile revisions use table headers for pedigree.
+        for th in soup.select("th"):
+            if re.sub(r"\s+", "", th.get_text(" ",strip=True)).strip("：:") == label:
+                td = th.find_next_sibling("td")
+                if td:
+                    return td.get_text(" ", strip=True) or None
+        return None
     name = None
     m = re.search(r'<span class="opt">\s*競走馬情報\s*</span>\s*([^<]+?)\s*<span class="name_en">', decoded)
     if m:
         name = html.unescape(m.group(1)).strip()
-    return {"horse_name": name, "sire": dd("父"), "dam": dd("母"), "damsire": dd("母の父")}
+    if not name:
+        for opt in soup.select("span.opt"):
+            if "競走馬情報" not in opt.get_text(strip=True):
+                continue
+            for sibling in opt.next_siblings:
+                if isinstance(sibling, str) and sibling.strip():
+                    name = re.sub(r"\s+", " ", sibling).strip()
+                    break
+                if getattr(sibling, "name", "") == "span" and "name_en" in sibling.get("class",[]):
+                    break
+    if not name:
+        for css in (".name_ja", ".name_jp", ".horse_name", ".horseName"):
+            tag=soup.select_one(css)
+            if tag:
+                name=tag.get_text(" ",strip=True)
+                if name: break
+    return {"horse_name": name, "sire": parent("父"), "dam": parent("母"),
+            "damsire": parent("母の父")}
 
 
 def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
@@ -194,8 +229,10 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
             dec = _decode(raw, ct)
             ped = parse_horse_pedigree(dec)
             hist = parse_horse_history(raw, ct)
-            if not ped.get("horse_name") or not ped.get("sire"):
-                raise ValueError("PEDIGREE_IDENTITY_MISSING")
+            if not ped.get("horse_name") or not ped.get("sire") or not ped.get("dam"):
+                raise ValueError("PEDIGREE_IDENTITY_MISSING:"+
+                                 "|".join(f"{k}={bool(ped.get(k))}" for k in ("horse_name","sire","dam","damsire"))+
+                                 ":horse_profile_hash="+hashlib.sha256(tok.encode()).hexdigest()[:10])
             horses.append({**ped, "runs": hist.get("runs") or [], "raw_sha256": _sha(raw),
                            "profile_token_sha256": hashlib.sha256(tok.encode()).hexdigest()})
         except Exception as exc:  # recorded, never fabricated
