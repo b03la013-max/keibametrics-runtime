@@ -5,6 +5,10 @@ permissions:
   contents: write
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-candidate-auto-postresult-closedloop.yml"
   workflow_run:
     workflows: ["JRA Source Candidate Forward OOS"]
     types: [completed]
