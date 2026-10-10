@@ -4,9 +4,11 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_bloodb_mac_collector.py"
+      - "runtime/jra_bloodb_mac_acceptance.py"
       - "runtime/jra_bloodb_mac_automation.py"
       - "scripts/jra_bloodb_signed_source_queue_sync.py"
       - "tests/test_jra_bloodb_mac_collector.py"
+      - "tests/test_jra_bloodb_mac_acceptance.py"
       - "tests/test_jra_bloodb_mac_automation.py"
       - "tests/test_jra_bloodb_signed_source_queue_sync.py"
       - ".github/workflows/km-jra-bloodb-private-diagnostic.yml"
@@ -14,7 +16,9 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_bloodb_mac_collector.py"
+      - "runtime/jra_bloodb_mac_acceptance.py"
       - "tests/test_jra_bloodb_mac_collector.py"
+      - "tests/test_jra_bloodb_mac_acceptance.py"
       - ".github/workflows/km-jra-bloodb-private-diagnostic.yml"
   workflow_dispatch:
 permissions:
@@ -35,3 +39,4 @@ jobs:
           python -m unittest discover -s tests -p test_jra_bloodb_mac_collector.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_automation.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_signed_source_queue_sync.py -v
+          python -m unittest discover -s tests -p test_jra_bloodb_mac_acceptance.py -v
