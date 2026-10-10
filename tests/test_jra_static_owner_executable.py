@@ -36,7 +36,7 @@ def request():
                 "mapping_id":MAPPING,"production_authority":True,
                 "status":"PRODUCTION / UNCALIBRATED"
             },
-            "runners":[runner(1,91,82,80),runner(2,87,89,87),runner(3,65,70,71)]}
+            "runners":[runner(1,91,82,80),runner(2,87,89,87),runner(3,65,70,84)]}
 
 
 def evaluate(req):
