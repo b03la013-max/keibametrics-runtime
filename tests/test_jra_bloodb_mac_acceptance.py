@@ -72,7 +72,7 @@ class LocalAcceptanceTests(unittest.TestCase):
     def test_raw_html_or_runner_or_binding_tampering_is_rejected(self):
         for target, field, newvalue, error in (
             ("subscriber_page.html", None, None, "HTML_SHA256_MISMATCH"),
-            ("diagnostic.json", "horse_no", "99", "HORSE_IDENTITY_FAILED"),
+            ("diagnostic.json", "horse_no", "99", "REPARSED_HTML_MISMATCH"),
             ("jra_source_binding.json", "bloodb_page_sha256", "0" * 64, "SOURCE_BINDING_MISMATCH"),
         ):
             with self.subTest(target=target):
@@ -90,6 +90,26 @@ class LocalAcceptanceTests(unittest.TestCase):
                         path.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
                     with self.assertRaisesRegex(BloodBError, error):
                         verify_capture(spec, private_root=dest)
+
+    def test_paid_label_edit_with_unchanged_html_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, spec, dest = self.populate(Path(directory))
+            path = dest / RACE / "diagnostic.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["observations"][0]["observed_labels"]["相対指数"] = "999"
+            path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(BloodBError, "REPARSED_HTML_MISMATCH"):
+                verify_capture(spec, private_root=dest)
+
+    def test_wrong_race_detail_url_cannot_be_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, spec, dest = self.populate(Path(directory))
+            path = dest / RACE / "diagnostic.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["origin_url"] = "https://www.blood-b.com/main.php?rcode=2026101101010610"
+            path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(BloodBError, "RACE_DETAIL_IDENTITY_MISMATCH"):
+                verify_capture(spec, private_root=dest)
 
     def test_cannot_accept_capture_predating_signed_source_or_after_cutoff(self):
         for replacement, error in (
