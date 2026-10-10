@@ -396,6 +396,14 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     numeric_error = None
     try:
         req["index_provenance_ledger"] = build_production_ledger(intent["race_id"], req["runners"], mapping)
+        # Bind authority to the real Production ledger only after the existing
+        # evidence-based evaluator has succeeded for every index.
+        req["base_index_mapping_authority"] = {
+            "mapping_id": mapping["mapping_id"],
+            "status": mapping["status"],
+            "production_authority": True,
+            "calibration_status": mapping.get("calibration_status"),
+        }
         req = materialize_index_provenance(req)
         numerical_ready = all(len(r.get("canonical_components") or {}) == 20 for r in req["runners"])
     except ValueError as exc:
