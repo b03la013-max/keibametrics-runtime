@@ -154,6 +154,17 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-verified-backfill.yml"
           echo "JRA_PEDIGREE_SIGSTORE_ATTESTATION_VERIFIED"
+      - name: Revalidate previously stored corpus before moving durable cursor
+        if: steps.harvest.outputs.new == 'false' && steps.harvest.outputs.exhausted != 'true' && steps.window.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.window.outputs.filename }}
+        run: |
+          set -euo pipefail
+          test -f "$FILE"
+          gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-verified-backfill.yml"
+          echo "EXISTING_CORPUS_ORIGINAL_OIDC_ATTESTATION_VERIFIED"
       - name: Advance only completed, attested windows
         if: steps.window.outputs.skip != 'true'
         env:
