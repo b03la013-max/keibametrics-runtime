@@ -177,18 +177,8 @@ def run_one(context, spec: dict, *, private_root: Path = PRIVATE,
         context, race_url=url, race_date=spec["race_date"],
         cutoff=spec["prediction_cutoff"], official=official,
         race_id=race_id, output_root=private_root, now=clock,
+        source_binding=source,
     )
-    dest = private_root / race_id
-    # Private sidecar is not Production authority; verified identity is
-    # provenance context, never imply BloodB supplied independently signed.
-    sidecar = dest / "jra_source_binding.json"
-    from jra_bloodb_mac_collector import private_write, json_bytes
-    private_write(sidecar, json_bytes({
-        "race_id":race_id, "jra_official_source":source,
-        "bloodb_page_sha256":data["raw_sha256"],
-        "production_authority":False, "bvi_population_authority":False,
-        "signed_final":False, "oos_increment":0,
-    }))
     return {"race_id":race_id,"status":"PRIVATE_DIAGNOSTIC_CAPTURED",
             "runner_count":data["runner_count"],"raw_sha256":data["raw_sha256"],
             "source_binding":source["level"],
