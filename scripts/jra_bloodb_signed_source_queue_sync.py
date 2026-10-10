@@ -44,6 +44,9 @@ def _intent(path:Path, *, now:datetime, horizon_h:int)->dict|None:
         if not m or len(race_id)!=len(f"KM-JRA-{m[1]}-{m[2]}-R{m[3]}"):
             return None
         venue_id,d8,n=m.groups()
+        execution_id=str(row.get("execution_id") or "")
+        if not re.fullmatch(re.escape(race_id)+r"-LIVE-R[1-9][0-9]*",execution_id):
+            return None
         if row.get("venue_id")!=venue_id or venue_id not in VENUE_ID:
             return None
         when=datetime.strptime(d8,"%Y%m%d").date().isoformat()
