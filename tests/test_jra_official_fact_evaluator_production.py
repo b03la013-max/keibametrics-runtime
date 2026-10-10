@@ -130,6 +130,34 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         src["jra_official_horse_history"]["runners"]["5"]["runs"] = []
         self.assertNotIn("recent_speed", official_production_observations(src, self.registry)["1"])
 
+    def test_official_rotation_and_bodyweight_from_actual_prior_runs(self):
+        src=source()
+        row=src["jra_official_race_card_detail"]["runners"][0]
+        row["current_body_weight"]=500
+        runs=src["jra_official_horse_history"]["runners"]["1"]["runs"]
+        runs[0]["body_weight"]=498
+        runs[1]["body_weight"]=494
+        out=official_production_observations(src,self.registry)["1"]
+        self.assertEqual(out["rotation_fit"]["rule_id"],"KM-JRA-ROTATION-FIT-v1")
+        self.assertIn("days_to_target_race=30",out["rotation_fit"]["source_fact"])
+        self.assertEqual(out["rotation_fit"]["category"],"STRONG")
+        self.assertEqual(out["bodyweight_range_fit"]["category"],"STRONG")
+        self.assertEqual(out["bodyweight_range_fit"]["observation_count"],2)
+        self.assertIn("signed_delta=+4.0 kg",out["bodyweight_range_fit"]["source_fact"])
+        src["jra_official_horse_history"]["runners"]["1"]["runs"][1].pop("body_weight")
+        out=official_production_observations(src,self.registry)["1"]
+        self.assertNotIn("bodyweight_range_fit",out)
+        self.assertIn("rotation_fit",out)
+
+    def test_no_phantom_rotation_for_debut_or_future_only(self):
+        src=source()
+        out=official_production_observations(src,self.registry)
+        self.assertNotIn("rotation_fit",out["2"])
+        src["jra_official_horse_history"]["runners"]["1"]["runs"]=[
+            src["jra_official_horse_history"]["runners"]["1"]["runs"][2]
+        ]
+        self.assertNotIn("rotation_fit",official_production_observations(src,self.registry)["1"])
+
     def test_registry_identity_and_ambiguous_person_rate_fail_closed(self):
         src = source()
         src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]["win_rate"] = 1.0
