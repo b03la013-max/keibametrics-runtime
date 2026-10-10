@@ -250,16 +250,24 @@ jobs:
           path=Path("runtime_out/jra_single_entry_exact_gap.json")
           report=json.loads(path.read_text()) if path.exists() else {}
           eligible=evidence_terminal_eligible(report)
+          route=(report.get("production_blocker_classification") or {}).get("terminal_route")
+          # Actual Full20 + unapproved Owner gets its own zero-exposure terminal.
+          static_terminal=(route=="STATIC_OWNER_UNAUTHORIZED_NO_BET"
+                           and report.get("production_full_numerical_ready") is True)
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
               fh.write("evidence_terminal="+str(eligible).lower()+"\n")
+              fh.write("static_terminal="+str(static_terminal).lower()+"\n")
           print({"first_blocked_stage":report.get("first_blocked_stage"),
                  "handoff_error":report.get("auto_handoff_error"),
                  "evidence_terminal_eligible":eligible})
           PY
 
       - name: Produce verified zero-exposure Production terminal when Full20 is blocked
-        if: steps.failure_class.outputs.evidence_terminal == 'true'
+        if: steps.failure_class.outputs.evidence_terminal == 'true' || steps.failure_class.outputs.static_terminal == 'true'
         id: blocked_terminal
+        # Fail-closed routes must still persist the exact gap and run the
+        # Candidate lane; the final verification step owns the job verdict.
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -274,22 +282,53 @@ jobs:
           from pathlib import Path
           from datetime import datetime, timezone
           from verify_source_envelope import verify
-          from jra_production_no_bet_terminal import build_no_bet_terminal
+          from jra_production_no_bet_terminal import (
+              build_no_bet_terminal, build_static_unauthorized_no_bet_terminal,
+          )
+          from jra_production_blocker_classifier import (
+              classify_production_blockers, ROUTE_EVIDENCE_NO_BET, ROUTE_STATIC_NO_BET,
+          )
           source_path=Path("runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json")
           result=verify(str(source_path))
           assert result.get("valid") is True, "JRA_SIGNED_SOURCE_RECEIPT_NOT_VALID"
           intent=json.loads(Path(os.environ["INTENT_FILE"]).read_text(encoding="utf-8"))
           report=json.loads(Path("runtime_out/jra_single_entry_exact_gap.json").read_text(encoding="utf-8"))
           ts=datetime.now(timezone.utc)
+          owner_status=report.get("static_owner_activation_status") or {"authorized":False,"reason":"OWNER_STATUS_MISSING"}
+          # First actual stop vs. independent later blockers decide the ONLY
+          # admissible terminal. Receipt/identity/deadline/internal failures
+          # are never relabelled as an evidence-insufficient NO_BET.
+          classification=classify_production_blockers(
+              report, owner_status=owner_status, intent=intent, now=ts.isoformat(),
+              feasibility=report.get("structural_closure_feasibility"))
+          Path("runtime_out/jra_production_blocker_classification.json").write_text(
+              json.dumps(classification,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print("JRA_PRODUCTION_BLOCKERS="+json.dumps({
+            "first_actual_blocked_stage":classification["first_actual_blocked_stage"],
+            "independent_blocker_stages":classification["independent_blocker_stages"],
+            "terminal_route":classification["terminal_route"]},ensure_ascii=False))
           cutoff=datetime.fromisoformat(str(intent["prediction_cutoff"]).replace("Z","+00:00"))
           lineage="LIVE" if ts <= cutoff else "HISTORICAL_DIAGNOSTIC"
-          receipt=build_no_bet_terminal(intent,report,source_receipt_verified=True,
-                created_at=ts.isoformat(),lineage=lineage)
+          route=classification["terminal_route"]
+          from jra_single_entry_outcome import evidence_terminal_eligible
+          if route==ROUTE_EVIDENCE_NO_BET and evidence_terminal_eligible(report):
+              receipt=build_no_bet_terminal(intent,report,source_receipt_verified=True,
+                    created_at=ts.isoformat(),lineage=lineage)
+              status="PRODUCTION_NO_BET_EVIDENCE_TERMINAL"
+          elif route==ROUTE_STATIC_NO_BET:
+              receipt=build_static_unauthorized_no_bet_terminal(intent,report,
+                    owner_status=owner_status,source_receipt_verified=True,
+                    created_at=ts.isoformat(),lineage=lineage)
+              status="PRODUCTION_NO_BET_STATIC_OWNER_UNAUTHORIZED_TERMINAL"
+          else:
+              raise SystemExit("JRA_PRODUCTION_FAIL_CLOSED_NO_TERMINAL:"+route+":"
+                               +str(classification["first_actual_blocked_stage"]))
           output=Path("runtime_out/jra_production_no_bet_terminal.json")
           output.write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
           print(json.dumps({
-            "status":"PRODUCTION_NO_BET_EVIDENCE_TERMINAL",
+            "status":status,
             "race_id":receipt["race_id"],"lineage":receipt["lineage"],
+            "decision_reason":receipt["decision_reason"],
             "required_index_count":receipt["required_index_count"],
             "base_calculated_count":receipt["base_calculated_count"],
             "base_held_count":receipt["base_held_count"],
@@ -329,8 +368,11 @@ jobs:
           CANDIDATE_TARGET="runtime/jra_candidate_requests/${SAFE}-CANDIDATE-R1.json"
           mkdir -p runtime/exact_gaps runtime/jra_candidate_requests
           cp runtime_out/jra_single_entry_exact_gap.json "$GAP_TARGET"
-          NO_BET_TARGET="runtime/jra_no_bet_terminals/${SAFE}.json"
+          # A fail-closed stop (no admissible terminal) still persists the gap
+          # and keeps Candidate Parallel running; it never fabricates NO_BET.
+          NO_BET_TARGET=""
           if [ -f runtime_out/jra_production_no_bet_terminal.json ]; then
+            NO_BET_TARGET="runtime/jra_no_bet_terminals/${SAFE}.json"
             mkdir -p runtime/jra_no_bet_terminals
             cp runtime_out/jra_production_no_bet_terminal.json "$NO_BET_TARGET"
           fi
@@ -371,7 +413,9 @@ jobs:
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add "$GAP_TARGET"
-          if [ -f runtime_out/jra_production_no_bet_terminal.json ]; then git add "$NO_BET_TARGET"; fi
+          if [ -n "$NO_BET_TARGET" ]; then
+            git add "$NO_BET_TARGET"
+          fi
           if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
             git add "$CANDIDATE_TARGET"
           fi
@@ -537,6 +581,12 @@ jobs:
             "formal_completion_verification_sha256":sha("runtime_out/jra_formal_completion_verification.json"),
             "no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
             "candidate_dispatch_decision_sha256":sha("runtime_out/jra_candidate_dispatch_decision.json"),
+            "blocker_classification_sha256":sha("runtime_out/jra_production_blocker_classification.json"),
+            "first_actual_blocked_stage":(json.loads(pathlib.Path("runtime_out/jra_production_blocker_classification.json").read_text()).get("first_actual_blocked_stage") if pathlib.Path("runtime_out/jra_production_blocker_classification.json").exists() else None),
+            "independent_blocker_stages":(json.loads(pathlib.Path("runtime_out/jra_production_blocker_classification.json").read_text()).get("independent_blocker_stages") if pathlib.Path("runtime_out/jra_production_blocker_classification.json").exists() else None),
+            "terminal_route":(json.loads(pathlib.Path("runtime_out/jra_production_blocker_classification.json").read_text()).get("terminal_route") if pathlib.Path("runtime_out/jra_production_blocker_classification.json").exists() else None),
+            "zero_exposure_decision_complete":bool(sha("runtime_out/jra_production_no_bet_terminal.json")) and "${{ steps.blocked_terminal.outcome }}"=="success",
+            "signed_final_verified_by_this_job":False,
             "status":("FORMAL_COMPLETE" if sha("runtime_out/jra_formal_completion_verification.json") else ("PRODUCTION_NO_BET_TERMINAL_CANDIDATE_PARALLEL_COMPLETED" if sha("runtime_out/jra_production_no_bet_terminal.json") and os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
             "production_prediction_change":False,
             "production_numerical_change":False,
@@ -563,7 +613,12 @@ jobs:
           set -euo pipefail
           # NO_BET closes the capital decision without inventing a signed
           # Production FINAL, KRS execution, or actual ticket purchase.
-          test -f runtime_out/jra_production_no_bet_terminal.json
+          if [ ! -f runtime_out/jra_production_no_bet_terminal.json ]; then
+            echo "JRA_PRODUCTION_FAIL_CLOSED_NO_ADMISSIBLE_TERMINAL" >&2
+            cat runtime_out/jra_production_blocker_classification.json 2>/dev/null >&2 || true
+            exit 1
+          fi
+          test "${{ steps.blocked_terminal.outcome }}" = "success"
           PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
@@ -571,4 +626,5 @@ jobs:
           terminal=json.loads(Path("runtime_out/jra_production_no_bet_terminal.json").read_text())
           result=verify_no_bet_terminal(terminal)
           print("JRA_SIGNED_SOURCE_ZERO_CAPITAL_DECISION_COMPLETE",result)
+          print("JRA_FORMAL_FULL_PREDICTION_COMPLETE=false")
           PY
