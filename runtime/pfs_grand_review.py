@@ -401,7 +401,7 @@ def _candidate_forward_records():
     root="runtime/source_candidate_results"
     rows=[]
     if not os.path.isdir(root):
-        return rows
+        return _candidate_automatic_settlements()
     for path in sorted(glob.glob(os.path.join(root,"*.json"))):
         try:
             obj=json.load(open(path,encoding="utf-8"))
