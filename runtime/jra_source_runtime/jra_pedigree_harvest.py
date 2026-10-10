@@ -245,7 +245,8 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
            "total_discovered_tokens": total_tokens if max_horses is None and max_races is None else None,
            "selected_token_count": len(tokens),
            "horse_token_count": len(tokens), "horse_count": len(horses), "horses": horses,
-           "errors": errors}
+           "errors": errors,
+           "coverage_class": "FULL" if not errors and len(horses)==len(tokens) else "PARTIAL_WITH_EXPLICIT_MISSINGNESS"}
     out["sha256"] = hashlib.sha256(json.dumps(out, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     return out
 
@@ -277,7 +278,11 @@ if __name__ == "__main__":
         p.parent.mkdir(parents=True, exist_ok=True)
         if res["errors"] or res["horse_count"] != res["horse_token_count"]:
             print("JRA_HARVEST_DIAGNOSTIC_ERRORS="+json.dumps(res["errors"][:6],ensure_ascii=False))
-            raise SystemExit(f"JRA_HARVEST_INCOMPLETE:{day}:{len(res['errors'])} errors; {res['horse_count']}/{res['horse_token_count']} parsed")
+            # A small number of honestly missing profiles can be included in a
+            # bounded cohort with explicit coverage, never represented as full.
+            # Substantial collection loss remains fatal and produces no corpus.
+            if res["horse_token_count"] < 5 or res["horse_count"] / res["horse_token_count"] < 0.90:
+                raise SystemExit(f"JRA_HARVEST_INCOMPLETE:{day}:{len(res['errors'])} errors; {res['horse_count']}/{res['horse_token_count']} parsed")
         if p.exists():
             raise SystemExit("JRA_HARVEST_IMMUTABLE_ALREADY_EXISTS:" + str(p))
         p.write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
