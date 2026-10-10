@@ -67,6 +67,7 @@ jobs:
           from formal_request_validator import validate_pre_krs_request
           from prekrs_terminal_compat import adapt_calculator_output
           from krs_prediction_utility import build_krs_prediction_utility
+          from jra_candidate_krs_plan import build_candidate_krs_payload, verify_candidate_krs_execution
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
@@ -258,30 +259,13 @@ jobs:
           pvcode,pv=call("/verify",p,30)
           assert pvcode<300 and pv.get("valid") is True,(pvcode,pv)
 
-          kinput=req["krs_input_data"]
-          kinput["simulation"]["run_count"]=int(req["run_count"])
-          kinput["simulation"]["master_seed"]=int(req["seed"])
-          # The runtime derives effective KRS count from mode. Passing
-          # SIM-STD for a 20,000-run request silently caps execution at 5,000
-          # and fails post-execution count verification. Choose the authorized
-          # KRS mode before constructing the signed run input.
-          requested_count=int(req["run_count"])
-          if requested_count>=20000:
-              krs_mode="SIM-HIGH"
-          elif requested_count>=5000:
-              krs_mode="SIM-STD"
-          else:
-              raise AssertionError("KRS_REQUESTED_RUN_COUNT_BELOW_SIM_STD_MINIMUM")
-          kpayload={
-              "race_id":req["race_id"],"input_data":kinput,"mode":krs_mode,"seed":req["seed"],
-              "input_class":"FORWARD-OOS-CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
-          }
+          # Fail closed before transport on unsupported simulation contracts.
+          kpayload=build_candidate_krs_payload(req)
+          req["krs_input_data"]=kpayload["input_data"]
           kcode,k=call("/krs/execute",kpayload,360)
-          run=k.get("run_receipt") or {}; rr=run.get("receipt") or {}
-          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
-          assert rr.get("engine_sha256")==ENGINE_SHA,rr
-          assert int(rr.get("actual_run_count") or 0)>=int(req["run_count"]),rr
-          assert str(rr.get("mode") or "")==krs_mode,rr
+          assert kcode<300,(kcode,k)
+          rr=verify_candidate_krs_execution(kpayload,k,engine_sha256=ENGINE_SHA)
+          run=k["run_receipt"]
           kvcode,kv=call("/verify",run,30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
 
