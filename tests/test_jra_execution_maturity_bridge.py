@@ -87,6 +87,16 @@ def test_formal_binding_rejects_semantic_tamper():
     with pytest.raises(JRAMaturityBridgeError,match="FORMAL_SEMANTIC_HASH_MISMATCH"):
         verify_formal_request_binding(q,envelope())
 
+def test_formal_binding_tolerates_runner_resolved_authority_annotations():
+    # The canonical Formal Runner overwrites these from the resolved Current
+    # Authority before verifying the binding; they must not break the hash.
+    q=build_formal_request(intent(),envelope())
+    q["resolved_current_authority_manifest"]="KM-FAMILY-CURRENT-AUTHORITY-X"
+    q["resolved_current_authority_profile_path"]="profiles/x.json"
+    q["resolved_jra_source_runtime_profile"]="KM-JRA-SOURCE-RUNTIME-X"
+    q["resolved_family_prediction_utility_contract"]=None
+    verify_formal_request_binding(q,envelope())
+
 def test_formal_binding_rejects_source_cutoff_mismatch():
     e=envelope()
     e["artifact"]["prediction_cutoff"]="2099-01-01T09:59:00+09:00"

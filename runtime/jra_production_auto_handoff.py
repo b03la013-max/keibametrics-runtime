@@ -19,6 +19,10 @@ from formal_request_validator import (
 )
 
 
+# Production KRS-Engine v1.1.0 (Runtime Contracts / Formal Runner ENGINE_SHA).
+KRS_ENGINE_SHA256 = "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+
+
 class JRAProductionAutoHandoffError(ValueError):
     pass
 
@@ -193,6 +197,14 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     static.update(status="FROZEN-PRE-KRS / PRODUCTION", production_authority=True)
     req["static_prediction"] = static
     req["static_prediction_frozen"] = True
+    # Canonical Formal Runner contract (same as every historical Production
+    # FINAL): cutoff <= static_freeze_timestamp < post. The Owner output was
+    # computed at owner.frozen_at <= cutoff and is immutable from the cutoff,
+    # so the declared freeze instant is the prediction cutoff itself.
+    req["static_freeze_timestamp"] = str(intent["prediction_cutoff"])
+    req["engine_sha256"] = KRS_ENGINE_SHA256
+    req.setdefault("jra_adapter_mode", "EXPLICIT_ENGINE_HSV")
+    req["static_computed_at"] = owner.get("frozen_at")
     for name in ("role_registry", "pair_dispositions", "third_dispositions"):
         req[name] = [
             {**deepcopy(item), "production_authority": True}
@@ -213,6 +225,15 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     if activation.get("status") == "OWNER_AUTHORIZED_UNVALIDATED":
         req["static_prediction"]["status"] = "FROZEN-PRE-KRS / PRODUCTION / OWNER-AUTHORIZED-UNVALIDATED"
         req["static_prediction"]["validation_status"] = "UNVALIDATED"
+    # The Formal Runner copies final_prediction_package verbatim into FINAL.
+    # Derive it canonically from the frozen Static (same derivation the
+    # Single Entry orchestrator uses); never invent prediction content.
+    from formal_execution_orchestrator import _derive_final_prediction_package_from_static
+    req["final_prediction_package"] = _derive_final_prediction_package_from_static(
+        req["static_prediction"])
+    req["final_prediction_package"]["source"] = "CANONICALIZED_FROM_FROZEN_STATIC_PRODUCTION_AUTO_HANDOFF"
+    if activation.get("status") == "OWNER_AUTHORIZED_UNVALIDATED":
+        req["final_prediction_package"]["validation_status"] = "UNVALIDATED"
     req = build_krs_input(req)
     validate_production_authority(req)
     validate_pre_krs_request(req)
