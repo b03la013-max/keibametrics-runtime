@@ -5,6 +5,8 @@ on:
     paths:
       - "runtime/jra_source_runtime/**"
       - "runtime/jra_keibabook_private_intake.py"
+      - "runtime/jra_keibabook_evaluator_conformance.py"
+      - "tests/test_jra_keibabook_evaluator_conformance.py"
       - "tests/test_jra_keibabook_private_intake.py"
       - "runtime/jra_static_owner_forward_oos.py"
       - "runtime/jra_official_fact_evaluator_production.py"
@@ -37,7 +39,7 @@ jobs:
         run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4
       - name: Check Production boundaries and Single Entry outcomes
         run: |
-          python -m pytest -q tests/test_jra_keibabook_private_intake.py tests/test_jra_production_auto_handoff.py tests/test_jra_single_entry_outcome.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_static_owner_executable.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_production_no_bet_real_source.py tests/test_jra_candidate_dispatch_guard.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_production_krs_contract.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_observed_context.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_evidence_acquisition_repair.py tests/test_jra_source_to_evidence_features.py
+          python -m pytest -q tests/test_jra_keibabook_evaluator_conformance.py tests/test_jra_keibabook_private_intake.py tests/test_jra_production_auto_handoff.py tests/test_jra_single_entry_outcome.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_static_owner_executable.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_production_no_bet_real_source.py tests/test_jra_candidate_dispatch_guard.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_production_krs_contract.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_observed_context.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_evidence_acquisition_repair.py tests/test_jra_source_to_evidence_features.py
       - name: Recompute immutable real SOURCE as historical diagnostics
         run: python scripts/audit_jra_formal_repair.py --output runtime_out/repair_audit
       - uses: actions/upload-artifact@v4
