@@ -187,6 +187,59 @@ def _production_gap_summary(gaps: list[dict]) -> dict:
         "no_candidate_to_production_substitution":True,
     }
 
+def _production_index_coverage_diagnostic(runners: list[dict], mapping: dict) -> dict:
+    """Explain every runner x Base13 gap using the *existing* authorized weights.
+
+    Diagnostic only. Never materialize a missing feature or change a score.
+    """
+    base = ("HPI","SSI","CFI","RFI","BVI","JTI","CSI",
+            "TRI","BWI","GCI","PRI","KGI","VMI")
+    rows = []
+    for runner in runners:
+        rid = str(runner.get("runner_id") or "")
+        career = runner.get("career_starts")
+        if career is None:
+            profile = "NEWCOMER" if runner.get("newcomer") is True else None
+        else:
+            starts = int(career)
+            profile = "NEWCOMER" if starts <= 0 else ("LOW_CAREER" if starts <= 3 else "ESTABLISHED")
+        if profile is None:
+            for index in base:
+                rows.append({"runner_id":rid, "index_id":index,
+                             "profile":"UNRESOLVED", "status":"BLOCKED",
+                             "reason":"CAREER_STARTS_MISSING",
+                             "required_features":[], "missing_features":[]})
+            continue
+        spec = mapping["index_profiles"][profile]
+        minimum = float(mapping["profiles"][profile]["minimum_index_coverage_weight"])
+        evidence = runner.get("evidence_features") or {}
+        for index in base:
+            weights = spec[index]
+            available = []
+            missing = []
+            covered = 0.0
+            for name, weight in weights.items():
+                feature = evidence.get(name)
+                if isinstance(feature, dict) and feature.get("category") in mapping["category_scale"] and feature.get("evidence_refs") and feature.get("rule_id") and feature.get("source_fact"):
+                    covered += float(weight)
+                    available.append(name)
+                else:
+                    missing.append({"feature":name, "weight":float(weight)})
+            rows.append({"runner_id":rid,"index_id":index,"profile":profile,
+                         "status":"COVERAGE_THRESHOLD_MET" if covered + 1e-12 >= minimum else "BLOCKED",
+                         "coverage_weight":round(covered,6),"required_weight":minimum,
+                         "required_features":list(weights),
+                         "available_features":available,
+                         "missing_features":missing,
+                         "reason":None if covered + 1e-12 >= minimum else "INDEX_EVIDENCE_COVERAGE_LOW"})
+    blocked = [row for row in rows if row["status"]=="BLOCKED"]
+    return {"schema":"KM-JRA-PRODUCTION-BASE13-INDEX-COVERAGE-DIAGNOSTIC-v1",
+            "rows":rows, "required":len(rows), "blocked":len(blocked),
+            "all_base_index_coverage_met":not blocked,
+            "authority":"DIAGNOSTIC_ONLY / PRODUCTION_MAPPING_UNCHANGED",
+            "no_missing_value_imputation":True}
+
+
 def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None) -> Dict[str,Any]:
     """Expose the existing JRA numerical boundary; never manufacture Static roles.
 
@@ -253,6 +306,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     except ValueError as exc:
         numerical_ready = False
         numeric_error = str(exc)
+    index_coverage = _production_index_coverage_diagnostic(req["runners"], mapping)
     gap_summary = _production_gap_summary(gaps)
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
@@ -264,6 +318,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "source_feature_report":features, "exact_gaps":gaps,
               "exact_gap_count":len(gaps),
               "production_closure_summary":gap_summary,
+              "base_index_coverage_diagnostic":index_coverage,
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
