@@ -1,0 +1,79 @@
+name: JRA Production Source-only Real Evidence Closure
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-production-source-closure-real.yml"
+      - "runtime/jra_official_fact_evaluator_production.py"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_static_owner_executable.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test registered feature and Static Owner implementation
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest
+          python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py
+      - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from runtime.jra_execution_maturity_bridge import prepare_production_numerical
+
+          race = "KM-JRA-TKY-20261010-R05"
+          execution = race + "-LIVE-R1"
+          intent = json.loads(Path("runtime/jra_formal_intents/" + execution + ".json").read_text())
+          src_path = Path("runtime/executions") / execution / "SOURCE" / "runs" / "38019477297" / "source_receipt_envelope.json"
+          source = json.loads(src_path.read_text())
+          assert source["artifact"]["race_id"] == race
+          assert source["artifact"]["prediction_cutoff"] == intent["prediction_cutoff"]
+
+          report = prepare_production_numerical(intent, source, source_execution_id=execution)
+          assert report["race_id"] == race
+          assert report["required_index_count"] == 240
+          assert len(report["runner_universe"]) == 12
+          result = {
+              "race_id": race,
+              "classification": "POST-START / HISTORICAL PRODUCTION EVIDENCE DIAGNOSTIC / NO-OOS / NO-BET",
+              "source_execution_id": execution,
+              "source_snapshot_sha256": report["source_checkpoint_manifest"]["source_snapshot_sha256"],
+              "production_full_numerical_ready": report["production_full_numerical_ready"],
+              "source_only_full_numerical_ready": report["source_only_full_numerical_ready"],
+              "partial_base_calculated_count": report["partial_base_calculated_count"],
+              "partial_base_blocked_count": report["partial_base_blocked_count"],
+              "required_index_count": report["required_index_count"],
+              "full_index_count": report["verified_full_index_count"],
+              "exact_gap_count": report["exact_gap_count"],
+              "production_closure_summary": report["production_closure_summary"],
+              "source_only_coverage_repair_plan": report["source_only_coverage_repair_plan"],
+              "first_blocked_stage": report["first_blocked_stage"],
+              "static_owner_executable": bool(report["static_owner_executable_diagnostic"]),
+              "static_owner_error": report["static_owner_executable_error"],
+              "production_full_pipeline_ready": report["production_full_pipeline_ready"],
+              "source_only_status": "PASS" if report["source_only_full_numerical_ready"] else "BLOCKED",
+              "signed_final_verified": False,
+              "purchase_authority": False,
+          }
+          dest = Path("jra-production-closure-report.json")
+          dest.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+          print(json.dumps(result, ensure_ascii=False, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-tokyo-r05-real-source-production-closure
+          path: jra-production-closure-report.json
+          if-no-files-found: warn
