@@ -8,11 +8,13 @@ on:
       - "runtime/jra_bloodb_mac_probe.py"
       - "runtime/jra_bloodb_mac_automation.py"
       - "scripts/jra_bloodb_signed_source_queue_sync.py"
+      - "scripts/jra_bloodb_mac_readiness.py"
       - "tests/test_jra_bloodb_mac_collector.py"
       - "tests/test_jra_bloodb_mac_acceptance.py"
       - "tests/test_jra_bloodb_mac_probe.py"
       - "tests/test_jra_bloodb_mac_automation.py"
       - "tests/test_jra_bloodb_signed_source_queue_sync.py"
+      - "tests/test_jra_bloodb_mac_readiness.py"
       - ".github/workflows/km-jra-bloodb-private-diagnostic.yml"
   push:
     branches: [main]
@@ -45,3 +47,4 @@ jobs:
           python -m unittest discover -s tests -p test_jra_bloodb_signed_source_queue_sync.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_acceptance.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_probe.py -v
+          python -m unittest discover -s tests -p test_jra_bloodb_mac_readiness.py -v
