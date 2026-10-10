@@ -121,8 +121,10 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
                 continue
             identities = set()
             for cell in cells:
-                candidates = [cell.get_text(" ", strip=True)]
+                rendered = cell.get_text(" ", strip=True)
+                candidates = [rendered, rendered.split(" ")[0] if rendered else ""]
                 candidates.extend(a.get_text(" ",strip=True) for a in cell.find_all("a"))
+                candidates.extend(x.get_text(" ",strip=True) for x in cell.select(".bamei, .horse-name, .horse_name"))
                 identities.update(namekey(v) for v in candidates if namekey(v) in official_names)
             if len(identities) != 1:
                 continue
@@ -130,14 +132,23 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
             if horse in selected:
                 raise BloodBError("BLOODB_DUPLICATE_HORSE_ROWS")
             values = {}
+            visual_markers = {}
             for title, cell in zip(header, cells):
                 if title in {namekey(k) for k in FIELDS}:
+                    label = next(k for k in FIELDS if namekey(k) == title)
                     value = cell.get_text(" ", strip=True)
                     if value:
-                        values[next(k for k in FIELDS if namekey(k) == title)] = value[:160]
-            if values:
+                        values[label] = value[:160]
+                    if label in ("血統", "血統評価", "血統タイプ"):
+                        color = {"class":cell.get("class", [])[:8],
+                                 "style":str(cell.get("style") or "")[:160],
+                                 "bgcolor":str(cell.get("bgcolor") or "")[:40]}
+                        if any(color.values()):
+                            visual_markers[label] = color
+            if values or visual_markers:
                 selected[horse] = {"horse_no": official_names[horse], "horse_name": horse,
-                                   "observed_labels": values}
+                                   "observed_labels": values,
+                                   "observed_visual_markers": visual_markers}
     missing = sorted(set(official_names) - set(selected))
     if missing:
         raise BloodBError("BLOODB_RUNNER_COVERAGE_UNVERIFIED:" + str(len(missing)) + "/" + str(len(official_names)))
@@ -151,7 +162,7 @@ def check_page_actual(actual_url: str, expected_url: str):
 
 def capture_context(context, *, race_url: str, race_date: str, cutoff: str,
                     official: list[dict], output_root: Path = PRIVATE,
-                    race_id: str, now=None) -> dict:
+                    race_id: str, now=None, source_binding: dict | None = None) -> dict:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{4,120}", race_id):
         raise BloodBError("RACE_ID_UNSAFE")
     expected = allowed_page(race_url)
@@ -198,6 +209,15 @@ def capture_context(context, *, race_url: str, race_date: str, cutoff: str,
         }
         private_write(staging/"subscriber_page.html",raw)
         private_write(staging/"diagnostic.json",json_bytes(record))
+        if source_binding is not None:
+            private_write(staging/"jra_source_binding.json",json_bytes({
+                "race_id":race_id,
+                "jra_official_source":source_binding,
+                "bloodb_page_sha256":digest,
+                "production_authority":False,
+                "bvi_population_authority":False,
+                "signed_final":False,"oos_increment":0,
+            }))
         summary = {
             "profile":SOURCE_PROFILE,"race_id":race_id,"runner_count":parsed["horse_count"],
             "captured_at":at.isoformat(),"raw_sha256":digest,
