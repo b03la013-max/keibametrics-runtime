@@ -23,21 +23,28 @@ def evaluate(root=ROOT, file=DATA):
     if not file.is_file():
         raise RuntimeError("JRA_REAL_SIGNED_HARVEST_MISSING")
     later = datetime.fromisoformat(AFTER)
-    signed = _verified_harvest(file, not_after=later)
-    if signed is None:
-        raise RuntimeError("JRA_REAL_HARVEST_OIDC_TIMESTAMP_OR_DIGEST_NOT_VERIFIED")
-    if signed["horse_count"] != len(signed["horses"]) or signed["horse_count"] < 30:
-        raise RuntimeError("JRA_REAL_HARVEST_UNDERCOVERED")
-    if signed["horse_count"] / signed["horse_token_count"] < 0.9:
-        raise RuntimeError("JRA_REAL_HARVEST_UNDERCOVERED")
+    signed_files = sorted((ROOT/"runtime/pedigree_corpus").glob("20261004-results-race*-r3.json"))
+    if len(signed_files) < 3:
+        raise RuntimeError("JRA_PUBLISHED_HISTORICAL_BATCHES_MISSING")
+    verified = []
+    for entry in signed_files:
+        signed = _verified_harvest(entry, not_after=later)
+        if signed is None:
+            raise RuntimeError("JRA_REAL_HARVEST_OIDC_TIMESTAMP_OR_DIGEST_NOT_VERIFIED:"+entry.name)
+        if signed["horse_count"] != len(signed["horses"]) or signed["horse_count"] < 30:
+            raise RuntimeError("JRA_REAL_HARVEST_UNDERCOVERED:"+entry.name)
+        if signed["horse_count"] / signed["horse_token_count"] < 0.9:
+            raise RuntimeError("JRA_REAL_HARVEST_UNDERCOVERED:"+entry.name)
+        verified.append(signed)
     # A historical signed receipt can be in both; do not count as new harvest.
     early = build_corpus(root, prediction_cutoff=EARLY, race_date=DATE)
     current = build_corpus(root, prediction_cutoff=AFTER, race_date=DATE)
-    sha = "ATTESTED_HARVEST:" + signed["sha256"]
-    if sha in early.get("snapshots", []):
-        raise RuntimeError("JRA_BACKFILL_USED_BEFORE_ACTUAL_SIGNED_CAPTURE_TIME")
-    if sha not in current.get("snapshots", []):
-        raise RuntimeError("JRA_BACKFILL_NOT_ACTUALLY_IN_PRODUCTION_BVI_CORPUS")
+    for entry, signed in zip(signed_files, verified):
+        sha = "ATTESTED_HARVEST:" + signed["sha256"]
+        if sha in early.get("snapshots", []):
+            raise RuntimeError("JRA_BACKFILL_USED_BEFORE_ACTUAL_SIGNED_CAPTURE_TIME")
+        if sha not in current.get("snapshots", []):
+            raise RuntimeError("JRA_BACKFILL_NOT_ACTUALLY_IN_PRODUCTION_BVI_CORPUS:"+entry.name)
     def summarize_sires(corpus):
         group = defaultdict(lambda: {"offspring": set(), "races": 0})
         for key, horse in corpus["horses"].items():
@@ -53,11 +60,13 @@ def evaluate(root=ROOT, file=DATA):
     eligible_raw=summarize_sires(current)
     report = {
         "classification": "POST-CAPTURE SOURCE CORPUS ACCEPTANCE / NOT OOS / NO BET",
-        "harvest_sha256": signed["sha256"],
-        "harvested_at": signed["harvested_at"],
+        "verified_batch_count": len(verified),
+        "verified_batch_files": [p.name for p in signed_files],
+        "harvest_sha256_list": [j["sha256"] for j in verified],
+        "harvested_at_list": [j["harvested_at"] for j in verified],
         "verified_by": "GITHUB_OIDC_AND_SIGSTORE_WITNESSED_TIMESTAMP",
-        "fixture_horse_count": signed["horse_count"],
-        "fixture_prior_runs": sum(len(x["runs"]) for x in signed["horses"]),
+        "fixture_horse_count": sum(j["horse_count"] for j in verified),
+        "fixture_prior_runs": sum(len(x["runs"]) for j in verified for x in j["horses"]),
         "pre_capture_harvest_included": False,
         "post_capture_harvest_included": True,
         "pre_capture_corpus_horses": early["horse_count"],
