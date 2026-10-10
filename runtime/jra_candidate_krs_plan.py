@@ -18,9 +18,13 @@ class CandidateKRSConformanceError(ValueError):
     pass
 
 
-def build_candidate_krs_payload(\n    request: Mapping[str, Any], *, input_class: str = INPUT_CLASS\n) -> dict[str, Any]:
+def build_candidate_krs_payload(
+    request: Mapping[str, Any], *, input_class: str = INPUT_CLASS
+) -> dict[str, Any]:
     """Make mode and actual simulation count impossible to disagree silently."""
-    if input_class not in {INPUT_CLASS, ACCEPTANCE_INPUT_CLASS}:\n        raise CandidateKRSConformanceError("KRS_INPUT_CLASS_NOT_AUTHORIZED")\n    if request.get("family_id") != "JRA":
+    if input_class not in {INPUT_CLASS, ACCEPTANCE_INPUT_CLASS}:
+        raise CandidateKRSConformanceError("KRS_INPUT_CLASS_NOT_AUTHORIZED")
+    if request.get("family_id") != "JRA":
         raise CandidateKRSConformanceError("JRA_ONLY")
     race_id = str(request.get("race_id") or "").strip()
     if not race_id:
