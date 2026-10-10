@@ -63,8 +63,16 @@ def discover_links(html: str, *, date_text: str, race_no: int,
         raise BloodBError("JRA_VENUE_UNKNOWN")
     soup = _auth_ok(html)
     rows = []
-    for a in soup.find_all("a", href=True):
-        resolved = urljoin(ROOT + "/allsel", a.get("href", ""))
+    # The member selector may present observed race links as anchors or
+    # explicit URL-valued <option> elements. Accept only URLs literally
+    # present in markup; do not infer any rcode from numeric option IDs.
+    nodes = list(soup.find_all("a", href=True)) + [
+        x for x in soup.find_all("option", value=True)
+        if "/main.php?rcode=" in str(x.get("value", ""))
+    ]
+    for a in nodes:
+        literal = a.get("href") if a.name == "a" else a.get("value")
+        resolved = urljoin(ROOT + "/allsel", literal)
         rcode = _rcode(resolved)
         if not rcode or not (rcode.startswith(race_day) and int(rcode[-2:]) == int(race_no)):
             continue
@@ -202,7 +210,10 @@ def process_queue(context, queue_path: Path, *,
         raise BloodBError("BLOODB_QUEUE_INVALID_OR_OVERSIZED")
     private_root = private_dir(private_root)
     fd = os.open(private_root / ".queue.lock", os.O_CREAT | os.O_RDWR, 0o600)
-    result = {"completed":[],"not_due":[],"past_cutoff":[],"already_collected":[],"failed":[]}
+    result = {"completed":[],"not_due":[],"past_cutoff":[],"already_collected":[],"failed":[],
+              "deferred":[]}
+    seen=set()
+    network_attempts=0
     with os.fdopen(fd, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         for spec in specs:
@@ -210,6 +221,9 @@ def process_queue(context, queue_path: Path, *,
                 race_id = str(spec["race_id"])
                 if not re.fullmatch(r"[A-Za-z0-9_.-]{4,120}", race_id):
                     raise BloodBError("RACE_ID_UNSAFE")
+                if race_id in seen:
+                    raise BloodBError("DUPLICATE_RACE_ID_IN_PRIVATE_QUEUE")
+                seen.add(race_id)
                 remaining = (utc_time(spec["prediction_cutoff"])-clock()).total_seconds()
                 if (private_root / race_id).exists():
                     result["already_collected"].append(race_id)
@@ -217,13 +231,24 @@ def process_queue(context, queue_path: Path, *,
                     result["past_cutoff"].append(race_id)
                 elif remaining > lookahead_minutes * 60:
                     result["not_due"].append(race_id)
+                elif network_attempts >= 3:
+                    # Bounded subscriber traffic: defer further eligible
+                    # races until the next five-minute launchd invocation.
+                    result["deferred"].append(race_id)
                 else:
+                    network_attempts += 1
                     try:
                         done = run_one(context, spec, private_root=private_root,
                                        clock=clock, discover=discover)
                         result["completed"].append(done)
                     except Exception as exc:
-                        result["failed"].append({"race_id":race_id, "reason":str(exc)[:240]})
+                        reason=str(exc)[:240]
+                        result["failed"].append({"race_id":race_id, "reason":reason})
+                        if any(x in reason for x in (
+                            "LOGIN", "AUTHENTICATION", "ACCESS_NOT", "UNEXPECTED_REDIRECT",
+                            "SUBSCRIBER_SESSION_EXPIRED")):
+                            result["stopped_on_authentication_failure"]=True
+                            break
             except (KeyError, ValueError, TypeError) as exc:
                 result["failed"].append({"race_id":str(spec.get("race_id") if isinstance(spec,dict) else "?"),
                                          "reason":str(exc)[:240]})
