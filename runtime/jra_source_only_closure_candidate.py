@@ -181,8 +181,8 @@ def evaluate_static_owner_candidate(request: dict, *, source_snapshot_sha256: st
     if request.get("family_id") != "JRA" or not source_snapshot_sha256:
         raise CandidateClosureError("JRA_SOURCE_BASIS_REQUIRED")
     runners = request.get("runners") or []
-    if len(runners) < 3:
-        raise CandidateClosureError("AT_LEAST_THREE_OFFICIAL_RUNNERS_REQUIRED")
+    if len(runners) < 2:
+        raise CandidateClosureError("AT_LEAST_TWO_OFFICIAL_RUNNERS_REQUIRED")
     ids = [str(r.get("runner_id") or "") for r in runners]
     if not all(ids) or len(set(ids)) != len(ids):
         raise CandidateClosureError("RUNNER_UNIVERSE_INVALID")
