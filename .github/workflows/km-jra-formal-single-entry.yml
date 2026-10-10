@@ -204,6 +204,7 @@ jobs:
         id: blocked_terminal
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
         run: |
           set -euo pipefail
