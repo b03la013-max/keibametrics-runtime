@@ -25,6 +25,7 @@ PROFILE = "KM-JRA-POINT-IN-TIME-PEDIGREE-CORPUS-v1.1-20261010-TRUSTED-IDENTITY"
 HARVEST_PROFILE = "KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
 REPO = "b03la013-max/keibametrics-runtime"
 _CACHE: dict[str, dict] = {}
+_ATTEST_CACHE: dict[tuple, tuple[bool, list[datetime]]] = {}
 
 
 def _sha(obj: Any) -> str:
@@ -64,27 +65,31 @@ def _attested(path: Path, *, signer: str | None = None,
     """Verify artifact bytes against GitHub OIDC / Sigstore, not an in-file flag."""
     if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
         return False
+    stat = path.stat()
+    cache_key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns, signer)
+    if cache_key in _ATTEST_CACHE:
+        verified, witnessed = _ATTEST_CACHE[cache_key]
+        return bool(verified and (not_after is None or any(t <= not_after for t in witnessed)))
     cmd = ["gh", "attestation", "verify", str(path), "--repo", REPO,
            "--format", "json"]
     if signer:
         cmd += ["--signer-workflow", REPO + "/.github/workflows/" + signer]
     try:
         r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           text=True, timeout=60, check=False)
+                           text=True, timeout=20, check=False)
         if r.returncode != 0:
+            _ATTEST_CACHE[cache_key] = (False, [])
             return False
-        if not_after is None:
-            return True
         data = json.loads(r.stdout)
-        # A stored harvest timestamp is never an authority. Use signed
-        # Sigstore transparency / TSA witness time to reject retrospective use.
+        witnessed = []
         for item in data:
             result = item.get("verificationResult") or {}
             for stamp in result.get("verifiedTimestamps") or []:
                 t = _dt(stamp.get("timestamp") or stamp.get("time"))
-                if t is not None and t <= not_after:
-                    return True
-        return False
+                if t is not None:
+                    witnessed.append(t)
+        _ATTEST_CACHE[cache_key] = (True, witnessed)
+        return bool(not_after is None or any(t <= not_after for t in witnessed))
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
 
