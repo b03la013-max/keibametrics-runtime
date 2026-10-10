@@ -1,6 +1,10 @@
 name: JRA Full20 PRE_KRS KRS FINAL SIM-HIGH 20000 Acceptance
 
 on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-jra-full20-high20000-signed-final-acceptance.yml"
   push:
     branches: [ main ]
     paths:
@@ -155,3 +159,9 @@ jobs:
           out.write_text(json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2)+"\\n")
           print("KM_FULL_E2E_SUMMARY="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-full20-high20000-signed-final-acceptance
+          path: runtime_out/jra_full20_high20000_signed_final_acceptance.json
+          if-no-files-found: warn
