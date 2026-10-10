@@ -14,7 +14,7 @@ from test_jra_bloodb_mac_collector import HTML, URL, OFFICIAL, Context, Page
 
 DATE="2026-08-09"
 CUTOFF="2026-08-09T15:00:00+09:00"
-CLOCK=lambda: datetime.fromisoformat("2026-08-09T10:00:00+09:00")
+CLOCK=lambda: datetime.fromisoformat("2026-08-09T14:30:00+09:00")
 INDEX='''<html><body><h1>東京 9R</h1><section>
 <div>東京 9R <a href="/main.php?rcode=2026080901010609">9R 夏の出走表</a></div>
 </section></body></html>'''
