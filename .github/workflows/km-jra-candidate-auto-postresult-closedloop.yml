@@ -1,0 +1,92 @@
+name: JRA Candidate Automatic Official Postresult Closed Loop
+run-name: JRA Candidate Result to PFS to Learning
+
+permissions:
+  contents: write
+
+on:
+  workflow_run:
+    workflows: ["JRA Source Candidate Forward OOS"]
+    types: [completed]
+  schedule:
+    # UTC 01:00-12:30 daily; JRA local 10:00-21:30.
+    - cron: "0,30 1-12 * * *"
+  workflow_dispatch:
+    inputs:
+      race_id:
+        description: "Optional single frozen JRA Race ID"
+        required: false
+        type: string
+
+concurrency:
+  group: jra-candidate-official-postresult
+  cancel-in-progress: false
+
+jobs:
+  result-to-learning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install official JRA HTTP/parser dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Run official-result parser and settlement tests
+        run: |
+          python -m py_compile runtime/jra_candidate_postresult_closedloop.py
+          python -m pip install --disable-pip-version-check -q pytest
+          python -m pytest -q tests/test_jra_candidate_postresult_closedloop.py
+      - name: Fetch official result, settle immutable Candidate tickets and record learning
+        id: execute
+        env:
+          RACE_ID: ${{ inputs.race_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$RACE_ID" ]; then
+            python runtime/jra_candidate_postresult_closedloop.py --race-id "$RACE_ID"
+          else
+            python runtime/jra_candidate_postresult_closedloop.py --days 3
+          fi
+      - name: Update no-promotion Candidate OOS scorecard
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"runtime")
+          from jra_source_candidate_promotion_gate import evaluate
+          root=Path("runtime/source_candidate_oos")
+          records=[]
+          for p in sorted(root.glob("KM-JRA-*/result_evaluation.json")):
+              try: records.append(json.loads(p.read_text(encoding="utf-8")))
+              except (OSError,ValueError): pass
+          out=evaluate(records)
+          p=Path("runtime/source_candidate_oos_status.json")
+          p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print(json.dumps({"profile":out.get("profile"),"eligible_race_count":out.get("eligible_race_count"),
+                            "production_effect":"NONE","automatic_promotion":False},ensure_ascii=False))
+          PY
+      - name: Persist only newly observed result/settlement/learning
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/source_candidate_oos runtime/source_candidate_oos_status.json
+          if git diff --cached --quiet; then
+            echo "NO_NEW_OFFICIAL_SETTLEMENT"
+            exit 0
+          fi
+          git commit -m "learning: official JRA candidate result and frozen PFS [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "CANDIDATE_OFFICIAL_RESULT_CLOSED_LOOP_PERSISTED"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          exit 1
