@@ -331,13 +331,13 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     try:
         from .jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
         from .jra_source_to_evidence_features import compile_source_to_features
-        from .jra_evidence_to_base_production import load_mapping, build_production_ledger
+        from .jra_evidence_to_base_production import load_mapping, build_production_ledger, evaluate_partial_production_base_indices
         from .jra_index_provenance_builder import materialize_index_provenance
         from .jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
     except ImportError:
         from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
         from jra_source_to_evidence_features import compile_source_to_features
-        from jra_evidence_to_base_production import load_mapping, build_production_ledger
+        from jra_evidence_to_base_production import load_mapping, build_production_ledger, evaluate_partial_production_base_indices
         from jra_index_provenance_builder import materialize_index_provenance
         from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
 
@@ -388,6 +388,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     except ValueError as exc:
         numerical_ready = False
         numeric_error = str(exc)
+    partial_base = evaluate_partial_production_base_indices(intent["race_id"], req["runners"], mapping)
     index_coverage = _production_index_coverage_diagnostic(req["runners"], mapping)
     gap_summary = _production_gap_summary(gaps)
     closure_plan = _source_only_coverage_repair_plan(index_coverage, features)
@@ -431,6 +432,9 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "exact_gap_count":len(gaps),
               "production_closure_summary":gap_summary,
               "base_index_coverage_diagnostic":index_coverage,
+              "partial_production_base_calculation":partial_base,
+              "partial_base_calculated_count":partial_base["calculated_base_cells"],
+              "partial_base_blocked_count":partial_base["blocked_base_cells"],
               "source_only_coverage_repair_plan":closure_plan,
               "required_index_count":len(ids)*20,
               "verified_full_index_count":len(ids)*20 if numerical_ready else 0,
