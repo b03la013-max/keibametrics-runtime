@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_bloodb_mac_collector.py"
+      - "runtime/jra_bloodb_browser_bridge.py"
+      - "scripts/jra_bloodb_browser_bvi.py"
+      - "tests/test_jra_bloodb_browser_bridge.py"
       - "runtime/jra_bloodb_mac_acceptance.py"
       - "runtime/jra_bloodb_mac_probe.py"
       - "runtime/jra_bloodb_mac_automation.py"
@@ -22,6 +25,9 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_bloodb_mac_collector.py"
+      - "runtime/jra_bloodb_browser_bridge.py"
+      - "scripts/jra_bloodb_browser_bvi.py"
+      - "tests/test_jra_bloodb_browser_bridge.py"
       - "runtime/jra_bloodb_mac_acceptance.py"
       - "runtime/jra_bloodb_mac_probe.py"
       - "tests/test_jra_bloodb_mac_collector.py"
@@ -45,6 +51,7 @@ jobs:
       - name: Test strict BloodB membership boundary, exact runner facts, no post-cutoff use
         run: |
           python -m unittest discover -s tests -p test_jra_bloodb_mac_collector.py -v
+          python -m unittest discover -s tests -p test_jra_bloodb_browser_bridge.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_automation.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_signed_source_queue_sync.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_acceptance.py -v
