@@ -189,6 +189,10 @@ def build_jra_week_transfer_shadow(
         "head_local_p2_unterminalized": open_pair_cells,
         "pair_conditioned_third_matrix": pair_third_cells,
         "purchased_pair_third_unterminalized": open_purchased_thirds,
+        "frozen_purchased_ticket_registry": {
+            bet: [list(selection) for selection in sorted(purchased[bet])]
+            for bet in sorted(BET_TYPES)
+        },
         "cross_ticket_diagnostic": {
             "purchased_exact_without_same_set_trio": missing_trio_for_exact,
             "purchased_trifecta_without_same_head_exacta": missing_exact_for_pair,
@@ -330,6 +334,42 @@ def evaluate_jra_week_transfer_shadow_result(
     }
     all_pair_cells = len(pair_matrix)
     all_third_cells = len(third_matrix)
+    # Distinguish a role/Pair/Third declaration from an actual frozen
+    # recommendation ticket. Older Candidate freezes lack this registry: do
+    # not backfill them from the result or reinterpret missing as zero cover.
+    frozen_registry = frozen.get("frozen_purchased_ticket_registry")
+    if frozen_registry is None:
+        purchased_reachability = {
+            "status": "LEGACY_NOT_FROZEN",
+            "EXACTA": None, "TRIO": None, "TRIFECTA": None,
+            "frozen_recommendation_only": True,
+            "actual_purchase_verified": False,
+        }
+    else:
+        if not isinstance(frozen_registry, Mapping) or set(frozen_registry) != set(BET_TYPES):
+            raise ValueError("JRA_TRANSFER_FROZEN_PURCHASE_REGISTRY_INVALID")
+        registered = {}
+        for bet in sorted(BET_TYPES):
+            selections = frozen_registry[bet]
+            if not isinstance(selections, list):
+                raise ValueError("JRA_TRANSFER_FROZEN_PURCHASE_REGISTRY_INVALID")
+            parsed = set()
+            for selection in selections:
+                if not isinstance(selection, list):
+                    raise ValueError("JRA_TRANSFER_FROZEN_PURCHASE_REGISTRY_INVALID")
+                _, canonical, _ = _sel({"bet_type": bet, "selection": selection, "stake": 100})
+                if canonical in parsed:
+                    raise ValueError("JRA_TRANSFER_FROZEN_PURCHASE_REGISTRY_DUPLICATE")
+                parsed.add(canonical)
+            registered[bet] = parsed
+        purchased_reachability = {
+            "status": "FROZEN_CANONICAL_RECOMMENDATION",
+            "EXACTA": (w, p2) in registered["EXACTA"],
+            "TRIO": tuple(sorted(actual)) in registered["TRIO"],
+            "TRIFECTA": tuple(actual) in registered["TRIFECTA"],
+            "frozen_recommendation_only": True,
+            "actual_purchase_verified": False,
+        }
     out = {
         "profile": "KM-JRA-LOCAL-WEEK-TRANSFER-RESULT-ATTRIBUTION-20261010-R1",
         "race_id": pre_result.get("race_id"),
@@ -353,6 +393,7 @@ def evaluate_jra_week_transfer_shadow_result(
             "purchased_declared": third_status == "PURCHASE",
         },
         "conversion_first_lost_link_observation": first_loss,
+        "frozen_purchased_ticket_reachability": purchased_reachability,
         "population_terminalization": {
             "head_local_p2_cells": all_pair_cells,
             "head_local_p2_unterminalized": len(frozen.get("head_local_p2_unterminalized") or []),
