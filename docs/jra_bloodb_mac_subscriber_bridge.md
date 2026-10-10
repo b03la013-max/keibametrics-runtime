@@ -206,3 +206,26 @@ Probeは署名付きJRA SOURCE、日付・場・レース番号・全馬集合�
 CIは署名付きJRA SOURCEテストフィクスチャと合成HTMLでProbe出力・全馬一致・動的div非対応・リンク不在・ログイン失効・レース取り違え・cutoffを確認する。実会員DOMが実証済みという意味ではない。Probeは`production_authority=false`、`bvi_authority=false`、`oos_increment=0`固定で、BVI/Static/KRS/FINALへ干渉しない。
 
 **次の実証は、提供元が許諾した範囲で契約者のMacからProbeを1レース実行し、出力された構造診断だけでparser対応を判断すること。** 現時点でこの実行は未実施。
+
+## 8. Mac Last-Mile Readiness（2026-10-10）
+
+macOSの端末で本人のプライバシーを保護しながら「実運用の残り障害」を確認するコマンドを追加した。GitHub CIがPASSしたからといって有料会員画面を実際に読めたと誤判定することを防ぐ。
+
+~~~sh
+cd ~/keibametrics-runtime
+git pull --ff-only
+source .venv/bin/activate
+python scripts/jra_bloodb_mac_readiness.py
+~~~
+
+JSON出力はMac環境、必要パッケージ、専用ブラウザのフォルダ存在、署名SOURCE関連キューの状態（将来レース件数のみ）、launchdファイルの有無を示す。これは**オフライン検査**であり、プロファイルが存在することと「実際にBlood-Bへログインできている」ことは同義ではない。また許諾や実会員DOMの適合を技術的に証明するコマンドではない。
+
+### 残りの現実世界の受入条件
+
+1. サイト運営者からこの自動閲覧・ローカル保存用途の許可があること（契約の有料会員であることだけでは証明不能）
+2. Macで本人がDataBuyer IDへログインしていること。パスワードや認証CookieはChatGPT、GitHubに渡さない
+3. Macに未来レースの正式JRA SOURCE受領証とRace Intentが同期されていること。SOURCEそのものがなければ私的Blood-Bキューは作られない
+4. 許可を得た範囲で `jra_bloodb_mac_probe.py` を対象1レースで実行し、実際の見出しと全馬一致を確認すること
+5. `jra_bloodb_mac_acceptance.py live` で取得とハッシュ照合に成功すること。その後もProduction BVIと混ぜずDiagnosticで保持すること
+
+「readinessに未完了がある状態」「実会員HTMLを取得できていない状態」では**会員サイト自動取得の完成を認定しない**。コンポーネントのCIテストだけは既に通過しており、実運用の最後の一段がどこかを数値的に表示するためのチェックである。現時点でMacの実機操作はChatGPTから実行されていない。
