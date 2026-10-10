@@ -15,7 +15,7 @@ from jra_candidate_postresult_closedloop import (
 
 def price_text():
     return (
-        "レース結果 払戻金 馬単 4-8 1,240 円 3 番人気 "
+        "レース結果 払戻金 単勝 4 270 円 1 番人気 馬単 4-8 1,240 円 3 番人気 "
         "3連複 3-4-8 720 円 1 番人気 "
         "3連単 4-8-3 4,850 円 4 番人気 勝馬の紹介"
     )
