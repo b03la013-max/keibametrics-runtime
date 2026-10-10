@@ -194,6 +194,10 @@ def _production_index_coverage_diagnostic(runners: list[dict], mapping: dict) ->
     """
     base = ("HPI","SSI","CFI","RFI","BVI","JTI","CSI",
             "TRI","BWI","GCI","PRI","KGI","VMI")
+    try:
+        from .jra_evidence_to_base_production import _feature_score, ProductionMappingError
+    except ImportError:
+        from jra_evidence_to_base_production import _feature_score, ProductionMappingError
     rows = []
     for runner in runners:
         rid = str(runner.get("runner_id") or "")
@@ -219,12 +223,21 @@ def _production_index_coverage_diagnostic(runners: list[dict], mapping: dict) ->
             missing = []
             covered = 0.0
             for name, weight in weights.items():
-                feature = evidence.get(name)
-                if isinstance(feature, dict) and feature.get("category") in mapping["category_scale"] and feature.get("evidence_refs") and feature.get("rule_id") and feature.get("source_fact"):
+                try:
+                    # Use the *same* Production authority firewall as the actual
+                    # numerical evaluator. A syntactically complete Shadow or
+                    # result-derived fact must not close an index gap.
+                    evaluated = _feature_score(name, evidence, mapping)
+                    if evaluated is None:
+                        raise ProductionMappingError("FEATURE_MISSING")
                     covered += float(weight)
                     available.append(name)
-                else:
-                    missing.append({"feature":name, "weight":float(weight)})
+                except (ProductionMappingError, ValueError, TypeError) as exc:
+                    missing.append({
+                        "feature": name,
+                        "weight": float(weight),
+                        "validation_reason": str(exc),
+                    })
             rows.append({"runner_id":rid,"index_id":index,"profile":profile,
                          "status":"COVERAGE_THRESHOLD_MET" if covered + 1e-12 >= minimum else "BLOCKED",
                          "coverage_weight":round(covered,6),"required_weight":minimum,
