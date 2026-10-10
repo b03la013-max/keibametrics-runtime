@@ -65,8 +65,10 @@ def _attested(path: Path, *, signer: str | None = None,
     """Verify artifact bytes against GitHub OIDC / Sigstore, not an in-file flag."""
     if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
         return False
-    stat = path.stat()
-    cache_key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns, signer)
+    # Always key attestation cache by the actual artifact bytes. A same-size
+    # modification that restores mtime must never reuse signed provenance.
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    cache_key = (digest, signer)
     if cache_key in _ATTEST_CACHE:
         verified, witnessed = _ATTEST_CACHE[cache_key]
         return bool(verified and (not_after is None or any(t <= not_after for t in witnessed)))
@@ -90,7 +92,7 @@ def _attested(path: Path, *, signer: str | None = None,
                     witnessed.append(t)
         _ATTEST_CACHE[cache_key] = (True, witnessed)
         return bool(not_after is None or any(t <= not_after for t in witnessed))
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired, ValueError, TypeError):
         return False
 
 
@@ -126,7 +128,7 @@ def _verified_source(path: Path) -> dict | None:
     checks the original receipt bytes. An untrusted unsigned JSON fixture
     cannot participate in Production BVI.
     """
-    key = f"{path}:{path.stat().st_mtime_ns}"
+    key = f"{path}:{hashlib.sha256(path.read_bytes()).hexdigest()}"
     if key in _CACHE:
         return _CACHE[key]
     try:

@@ -1,6 +1,11 @@
 """Regression for truly bounded JRA pedigree collection (no site credentials)."""
-from datetime import date
+from datetime import date,datetime,timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+import json
+import os
+import tempfile
 import sys
 import unittest
 
@@ -11,6 +16,7 @@ sys.path.insert(0,str(ROOT/"runtime/jra_source_runtime"))
 from jra_pedigree_harvest import (
     horse_tokens_for_day, parse_horse_pedigree, _Client)
 from scripts.jra_pedigree_backfill_cursor import advance
+from jra_pedigree_corpus import _attested, _ATTEST_CACHE
 
 class FakeOfficial:
     def __init__(self):
@@ -78,3 +84,26 @@ class TestBackfillCursor(unittest.TestCase):
         second=advance(first,exhausted=True)
         self.assertEqual((second["date"],second["start_race"]),("2026-09-27",0))
         self.assertEqual(first["completed_batch_count"],12)
+
+class TestSignedAttestationCache(unittest.TestCase):
+    def test_same_size_same_mtime_tamper_cannot_reuse_attestation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p=Path(temp)/"signed.json"
+            p.write_bytes(b"abc!")
+            old=p.stat()
+            witnessed=[{"verificationResult":{"verifiedTimestamps":[
+                {"timestamp":"2026-10-10T09:45:00Z"}]}}]
+            response=SimpleNamespace(returncode=0,stdout=json.dumps(witnessed))
+            before=datetime.fromisoformat("2026-10-10T09:44:00+00:00")
+            after=datetime.fromisoformat("2026-10-10T09:46:00+00:00")
+            with patch.dict(os.environ,{"GH_TOKEN":"TEST"}):
+                with patch("jra_pedigree_corpus.subprocess.run",return_value=response) as run:
+                    self.assertFalse(_attested(p,not_after=before))
+                    self.assertTrue(_attested(p,not_after=after))
+                    self.assertEqual(run.call_count,1)
+                    # Preserve both file length and mtime: old cache key was
+                    # vulnerable; new hash-key requires fresh verification.
+                    p.write_bytes(b"xyz!")
+                    os.utime(p,ns=(old.st_atime_ns,old.st_mtime_ns))
+                    self.assertTrue(_attested(p,not_after=after))
+                    self.assertEqual(run.call_count,2)
