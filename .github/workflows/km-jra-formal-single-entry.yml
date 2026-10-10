@@ -295,19 +295,19 @@ jobs:
           PY
           DISPATCH_ELIGIBLE="$(python -c 'import json; print("true" if json.load(open("runtime_out/jra_candidate_dispatch_decision.json"))["dispatch"] else "false")')"
           if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
-            INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
-            import copy,json,os,pathlib
-            q=json.load(open(os.environ['INTENT_FILE'],encoding='utf-8'))
-            out=copy.deepcopy(q)
-            out.pop('jra_source',None)
-            out['family_id']='JRA'
-            out['source_execution_id']=os.environ['EXECUTION_ID']
-            out['candidate_parallel_handoff']=True
-            out['prediction_id']=str(out.get('prediction_id') or out.get('race_id'))+'-SOURCE-CANDIDATE-AUTO-R1'
-            out['note']='AUTO Candidate Parallel after Production Exact Gap. Production authority unchanged; Candidate-only full lifecycle.'
-            pathlib.Path(os.environ['CANDIDATE_TARGET']).write_text(
-                json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
-            PY
+          INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
+          import copy,json,os,pathlib
+          q=json.load(open(os.environ['INTENT_FILE'],encoding='utf-8'))
+          out=copy.deepcopy(q)
+          out.pop('jra_source',None)
+          out['family_id']='JRA'
+          out['source_execution_id']=os.environ['EXECUTION_ID']
+          out['candidate_parallel_handoff']=True
+          out['prediction_id']=str(out.get('prediction_id') or out.get('race_id'))+'-SOURCE-CANDIDATE-AUTO-R1'
+          out['note']='AUTO Candidate Parallel after Production Exact Gap. Production authority unchanged; Candidate-only full lifecycle.'
+          pathlib.Path(os.environ['CANDIDATE_TARGET']).write_text(
+              json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n',encoding='utf-8')
+          PY
           fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
