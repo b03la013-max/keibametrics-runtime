@@ -47,7 +47,7 @@ def _tsl_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def _detail_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     d = artifact.get("jra_official_race_card_detail") or {}
-    return {str(x.get("runner_id") or x.get("horse_no")): x for x in (d.get("runners") or []) if x.get("horse_no") is not None}
+    return {str(x.get("runner_id") or x.get("horse_no")): x for x in (d.get("runners") or []) if (x.get("runner_id") is not None or x.get("horse_no") is not None)}
 
 def _history_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     d=artifact.get("jra_official_horse_history") or {}
@@ -175,9 +175,12 @@ def _official_detail_production_features(rid: str, artifact: Dict[str, Any]) -> 
         )
     rank=x.get("popularity_rank")
     if rank is not None:
-        active=[z for z in detail.values() if str(z.get("status") or "ACTIVE")=="ACTIVE"]
+        # The verified official runner universe, not a possibly partial detail
+        # page, determines the population for a market-rank band.
+        official=_official_runner_map(artifact)
+        active=[z for z in official.values() if str(z.get("status") or "ACTIVE")=="ACTIVE"]
         n=len(active)
-        if n>=2:
+        if rid in official and n>=2 and 1 <= int(rank) <= n:
             cat=market_rank_band(rank,n)
             out["market_rank"]=_feature(
                 cat,"JRA-MARKET-RANK-BAND-v1",refs,
@@ -190,10 +193,17 @@ def _official_detail_production_features(rid: str, artifact: Dict[str, Any]) -> 
 def _registered_common_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     rc=artifact.get("jra_registered_common") or {}
     w=(rc.get("workout") or {}).get("runners") or []
-    return {str(x.get("runner_id") or x.get("horse_no")):x for x in w if x.get("horse_no") is not None}
+    return {str(x.get("runner_id") or x.get("horse_no")):x for x in w if (x.get("runner_id") is not None or x.get("horse_no") is not None)}
 
 def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    x=_registered_common_runner_map(artifact).get(rid)
+    official=_official_runner_map(artifact)
+    workout=_registered_common_runner_map(artifact)
+    # Registered common workout assessments must cover exactly the verified
+    # official active runner universe; partial feeds cannot become Production.
+    active={no for no,z in official.items() if str(z.get("status") or "ACTIVE")=="ACTIVE"}
+    if len(active)<2 or set(workout)!=active:
+        return {}
+    x=workout.get(rid)
     if not x:return {}
     rc=artifact.get("jra_registered_common") or {}
     w=rc.get("workout") or {}
