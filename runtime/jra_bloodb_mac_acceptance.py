@@ -16,7 +16,7 @@ import re
 
 from jra_bloodb_mac_collector import (
     BloodBError, PRIVATE, PROFILE, HOME, FIELDS, allowed_page,
-    namekey, official_universe, private_dir, private_write, utc_time,
+    namekey, official_universe, parse_rendered, private_dir, utc_time,
     playwright_sync,
 )
 from jra_bloodb_mac_automation import load_official, run_one
@@ -97,14 +97,24 @@ def verify_capture(spec: dict, *, private_root: Path = PRIVATE) -> dict:
         raise BloodBError("BLOODB_ACCEPTANCE_CAPTURE_PRECEDES_SIGNED_SOURCE")
     if detail.get("raw_sha256") != digest or summary.get("raw_sha256") != digest:
         raise BloodBError("BLOODB_ACCEPTANCE_HTML_SHA256_MISMATCH")
+    # Re-parse the immutable captured bytes. A diagnostic row or paid-label
+    # edit must not pass by merely preserving raw HTML and its SHA-256.
+    recomputed = parse_rendered(raw.decode("utf-8"), official)
+    if any(detail.get(key) != recomputed[key] for key in
+           ("horse_count", "observations", "parser", "observed_labels")):
+        raise BloodBError("BLOODB_ACCEPTANCE_REPARSED_HTML_MISMATCH")
     if binding.get("bloodb_page_sha256") != digest or binding.get("jra_official_source") != source:
         raise BloodBError("BLOODB_ACCEPTANCE_SOURCE_BINDING_MISMATCH")
     if detail.get("race_id") != race_id or summary.get("race_id") != race_id or binding.get("race_id") != race_id:
         raise BloodBError("BLOODB_ACCEPTANCE_RACE_ID_MISMATCH")
     if detail.get("capture_method") != "MEMBER_AUTHENTICATED_RENDERED_DOM":
         raise BloodBError("BLOODB_ACCEPTANCE_CAPTURE_METHOD_MISMATCH")
-    if allowed_page(detail.get("origin_url", "")) == "https://www.blood-b.com/allsel":
-        raise BloodBError("BLOODB_ACCEPTANCE_RACE_DETAIL_URL_REQUIRED")
+    origin = allowed_page(detail.get("origin_url", ""))
+    from urllib.parse import urlparse, parse_qs
+    observed_rcode = parse_qs(urlparse(origin).query).get("rcode", [None])[0]
+    if (not observed_rcode or observed_rcode[:8] != spec["race_date"].replace("-", "") or
+            int(observed_rcode[-2:]) != int(spec["race_no"])):
+        raise BloodBError("BLOODB_ACCEPTANCE_RACE_DETAIL_IDENTITY_MISMATCH")
     if (detail.get("production_authority") is not False or
             detail.get("bvi_population_authority") is not False or
             detail.get("signed_final") is not False or detail.get("oos_increment") != 0 or
