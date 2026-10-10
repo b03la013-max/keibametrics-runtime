@@ -112,7 +112,7 @@ jobs:
           detail=source.get("jra_official_race_card_detail") or {}
           history=source.get("jra_official_horse_history") or {}
           persons=source.get("jra_official_person_stats") or {}
-          before=json.loads(Path("runtime/exact_gaps")/(exec_id+".json").read_text(encoding="utf-8"))
+          before=json.loads((Path("runtime/exact_gaps")/(exec_id+".json")).read_text(encoding="utf-8"))
           result={
               "race_id":report["race_id"],
               "classification":"POSTSTART RECOMPUTE / HISTORICAL DIAGNOSTIC / NO OOS / NO BET",
