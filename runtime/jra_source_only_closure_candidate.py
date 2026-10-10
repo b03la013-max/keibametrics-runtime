@@ -129,8 +129,7 @@ def propose_official_observed_features(source: dict) -> dict:
             spec = {
                 "category": category,
                 "rule_id": RULE_IDS[name],
-                "evidence_refs": [
-                    source_sha,
+                "evidence_refs": [source_sha] + [
                     f"JRA_OFFICIAL_HISTORY:{rid}:{x['date']}:{x['finish']}:{x['field_size']}"
                     for x in selected
                 ],
