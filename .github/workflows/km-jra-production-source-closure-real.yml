@@ -36,7 +36,7 @@ jobs:
           python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py
       - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
         run: |
-          python - <<'PY'
+          PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
           from runtime.jra_execution_maturity_bridge import prepare_production_numerical
