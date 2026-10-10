@@ -71,19 +71,20 @@ def discover_links(html: str, *, date_text: str, race_no: int,
         label = a.get_text(" ", strip=True)
         # Broadest nearby venue context is a bounded parent, never scrape
         # other URLs or assume a numeric JRA course code.
-        contexts = [label]
-        parent = a.parent
-        for _ in range(3):
+        # Inspect nearest meaningful element only. A whole page may list
+        # both Kyoto and Tokyo, and must not contaminate a local link's venue.
+        unique_found = None
+        parent = a
+        for _ in range(4):
             if parent is None:
                 break
-            val = parent.get_text(" ", strip=True)
-            if len(val) <= 220:
-                contexts.append(val)
+            snippet = parent.get_text(" ", strip=True)
+            if len(snippet) <= 220:
+                names = [name for name in VENUES if name in snippet]
+                if len(names) == 1:
+                    unique_found = names[0]
+                    break
             parent = parent.parent
-        # The page may have a venue heading preceding a table. Do not trust
-        # that context without a clear exact venue match.
-        found = [name for name in VENUES if any(name in x for x in contexts)]
-        unique_found = found[0] if len(found) == 1 else None
         if venue and unique_found and unique_found != venue:
             continue
         rows.append({"url": resolved, "rcode": rcode, "label": label[:100],
