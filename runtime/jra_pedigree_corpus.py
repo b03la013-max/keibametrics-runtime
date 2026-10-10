@@ -220,7 +220,9 @@ def _verified_harvest(path: Path, *, not_after: datetime,
 def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                  exclude_race_id: str | None = None,
                  attestation_verifier=None,
-                 source_attestation_verifier=None) -> dict:
+                 source_attestation_verifier=None,
+                 required_sires: set[str] | None = None,
+                 required_damsires: set[str] | None = None) -> dict:
     cutoff = _dt(prediction_cutoff)
     try:
         day = date.fromisoformat(str(race_date))
@@ -270,6 +272,11 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             continue
         if summary.get("race_id") == exclude_race_id:
             continue
+        if required_sires is not None or required_damsires is not None:
+            if not any(h.get("sire") in (required_sires or set())
+                       or h.get("damsire") in (required_damsires or set())
+                       for h in summary["horses"]):
+                continue
         frozen = _dt(summary.get("source_freeze_at"))
         if frozen is None or frozen > cutoff:
             continue
@@ -295,6 +302,9 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             continue
         snaps.add("ATTESTED_HARVEST:" + hv["sha256"])
         for h in hv.get("horses") or []:
+            if required_sires is not None or required_damsires is not None:
+                if h.get("sire") not in (required_sires or set()) and h.get("damsire") not in (required_damsires or set()):
+                    continue
             add(h, "ATTESTED_HARVEST")
     manifest = sorted(snaps)
     return {
