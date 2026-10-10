@@ -134,15 +134,30 @@ def make_forecast_brief(pre, final, *, generated_at=None,
                                bet,selection,stake))
 
     candidates.sort(key=lambda z:(z[0],z[1],z[2],z[3]))
+    # Avoid converting a wide W universe into a 20-ticket monoculture:
+    # split only the visual advisory across the two leading actual W heads.
+    buckets={h:[] for h in heads}
+    for item in candidates:
+        bet,selection=item[2:4]
+        head=selection[0] if bet!="TRIO" else min(selection,key=ranking.index)
+        if head in buckets:
+            buckets[head].append(item)
     selected=[]
     remaining=maximum_paper_budget_yen
-    for _,__,bet,selection,original_stake in candidates:
-        if remaining<100:break
-        stake=min(100,remaining,original_stake)
-        if stake<100:continue
-        selected.append({"bet_type":bet,"selection":list(selection),"paper_stake_yen":stake,
-                         "frozen_ticket_stake_yen":original_stake})
-        remaining-=stake
+    while remaining>=100 and any(buckets.values()):
+        progressed=False
+        for head in heads:
+            if remaining<100:break
+            if not buckets[head]:continue
+            _,__,bet,selection,original_stake=buckets[head].pop(0)
+            stake=min(100,remaining,original_stake)
+            if stake<100:continue
+            selected.append({"bet_type":bet,"selection":list(selection),
+                             "paper_stake_yen":stake,
+                             "frozen_ticket_stake_yen":original_stake})
+            remaining-=stake
+            progressed=True
+        if not progressed:break
 
     if not selected:
         raise PracticalForecastError("NO_VALID_BUDGETED_FROZEN_TICKETS")
