@@ -29,7 +29,7 @@ from jra_production_auto_handoff import (
 )
 
 REAL = "KM-JRA-TKY-20261010-R12-FULLPIPELINE-VALIDATION-LIVE-R1"
-REGISTRY = json.loads((ROOT / "mapping/jra_evidence_feature_rule_registry_v1.2_20261010.json").read_text())
+REGISTRY = json.loads((ROOT / "mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json").read_text())
 
 
 def real_artifact():
@@ -352,3 +352,64 @@ class TestOwnerAuthorizedActivation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOwnerRulesV11(unittest.TestCase):
+    """v1.1 additions: opposition faced, hidden class, geometry x surface,
+    physical pedigree fit and damsire fallbacks (distinct rule ids)."""
+
+    def setUp(self):
+        self.art = real_artifact()
+        self.rows = [x for x in self.art["jra_official_race_card_detail"]["runners"] if x.get("sire")]
+
+    def corpus(self, key, value, n, surface, bw=480):
+        horses = {}
+        for j in range(n):
+            runs = {}
+            for i in range(4):
+                runs[(f"2026-0{i+5}-01", "東京", j)] = {
+                    "date": f"2026-0{i+5}-01", "venue": "東京", "surface": surface,
+                    "distance_m": self.art["jra_race_context"]["distance_m"],
+                    "race_name": "3勝クラス", "field_size": 12, "finish": 2, "body_weight": bw + i}
+            h = {"horse_name": f"観測馬{key}{j}", "sire": "別父", "dam": f"母{j}", "damsire": "別母父", "runs": runs}
+            h[key] = value
+            horses[str(j)] = h
+        return {"manifest_sha256": "b" * 64, "horses": horses}
+
+    def test_class_rules_registered_and_labelled(self):
+        out = owner_authorized_observations(self.art, REGISTRY)
+        found = {name for f in out.values() for name in f}
+        self.assertIn("opponent_strength", found)
+        self.assertIn("hidden_class", found)
+        for f in out.values():
+            for name in ("opponent_strength", "hidden_class", "course_geometry_fit"):
+                if name in f:
+                    self.assertEqual(f[name]["rule_id"], RULES[name])
+                    self.assertIn("UNVALIDATED", f[name]["rule_authority"])
+                    self.assertGreaterEqual(f[name]["observation_count"], 1)
+
+    def test_damsire_fallback_only_when_sire_sample_unmet(self):
+        from jra_owner_authorized_feature_rules import FALLBACK_RULES
+        surface = self.art["jra_race_context"]["surface"]
+        target = self.rows[0]
+        rid = str(target["runner_id"])
+        # Only the damsire population exists -> fallback rule ids are used.
+        c = self.corpus("damsire", target["damsire"], 5, surface)
+        out = owner_authorized_observations(self.art, REGISTRY, corpus=c)[rid]
+        self.assertEqual(out["pedigree_distance"]["rule_id"], FALLBACK_RULES["pedigree_distance"])
+        self.assertIn("DAMSIRE_FALLBACK", out["pedigree_distance"]["source_fact"])
+        self.assertEqual(out["physical_pedigree_fit"]["rule_id"], FALLBACK_RULES["physical_pedigree_fit"])
+        self.assertNotIn("pedigree_surface", out)  # never duplicated from damsire
+        # Sire population present -> primary rules, no fallback.
+        c2 = self.corpus("sire", target["sire"], 5, surface)
+        out2 = owner_authorized_observations(self.art, REGISTRY, corpus=c2)[rid]
+        self.assertEqual(out2["pedigree_distance"]["rule_id"], RULES["pedigree_distance"])
+        self.assertEqual(out2["physical_pedigree_fit"]["rule_id"], RULES["physical_pedigree_fit"])
+
+    def test_small_damsire_pool_is_not_filled(self):
+        surface = self.art["jra_race_context"]["surface"]
+        target = self.rows[0]
+        c = self.corpus("damsire", target["damsire"], 2, surface)
+        out = owner_authorized_observations(self.art, REGISTRY, corpus=c)[str(target["runner_id"])]
+        self.assertNotIn("pedigree_distance", out)
+        self.assertNotIn("physical_pedigree_fit", out)

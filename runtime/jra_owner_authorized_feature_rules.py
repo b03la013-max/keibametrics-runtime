@@ -26,7 +26,7 @@ from typing import Any
 
 from jra_evidence_feature_normalizer_production import comment_band, percentile_band, rate_band
 
-PROFILE = "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.0-20261010"
+PROFILE = "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.1-20261010"
 RULE_AUTHORITY = "OWNER-AUTHORIZED-NEW-RULE-20261010 / UNVALIDATED"
 
 RULES = {
@@ -72,6 +72,19 @@ RULES = {
     "sire_track_signal": "KM-JRA-OA-PEDIGREE-SIRE-TRACK-v1",
     "sprint_pedigree": "KM-JRA-OA-PEDIGREE-SIRE-SPRINT-v1",
     "sire_newcomer_signal": "KM-JRA-OA-PEDIGREE-SIRE-DEBUT-v1",
+    # v1.1 additions (owner-authorized 2026-10-10 22:30 JST, UNVALIDATED)
+    "opponent_strength": "KM-JRA-OA-OPPONENT-CLASS-FACED-v1",
+    "hidden_class": "KM-JRA-OA-HIDDEN-CLASS-PEAK-v1",
+    "course_geometry_fit": "KM-JRA-OA-COURSE-GEOMETRY-SURFACE-FIT-v1",
+    "physical_pedigree_fit": "KM-JRA-OA-PEDIGREE-PHYSICAL-FIT-v1",
+}
+
+# Alternative rule ids for a feature, used only when the primary rule's sample
+# is unmet. Each is a distinct, registered rule with its own sample minimum.
+FALLBACK_RULES = {
+    "pedigree_distance": "KM-JRA-OA-PEDIGREE-DAMSIRE-DISTANCE-FALLBACK-v1",
+    "pedigree_class": "KM-JRA-OA-PEDIGREE-DAMSIRE-CLASS-FALLBACK-v1",
+    "physical_pedigree_fit": "KM-JRA-OA-PEDIGREE-PHYSICAL-FIT-DAMSIRE-FALLBACK-v1",
 }
 
 LEFT_TURN = {"東京", "中京", "新潟"}
@@ -234,7 +247,8 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
     if not (sha and freeze and cutoff and freeze <= cutoff and day):
         return {}
     registered = registry.get("feature_rules") or {}
-    missing = [f for f, rule in RULES.items() if rule not in registered.get(f, [])]
+    missing = [f for f, rule in list(RULES.items()) + list(FALLBACK_RULES.items())
+               if rule not in registered.get(f, [])]
     if missing:
         raise ValueError("JRA_OWNER_AUTHORIZED_RULE_NOT_REGISTERED:" + ",".join(sorted(missing)))
     official = _rows(source.get("jra_official_runner_universe") or {})
@@ -324,9 +338,9 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         d = detail.get(rid) or {}
         feats: dict[str, dict] = {}
 
-        def put(name, category, refs, fact, n, authority="JRA_OFFICIAL"):
+        def put(name, category, refs, fact, n, authority="JRA_OFFICIAL", rule=None):
             feats[name] = {
-                "category": category, "rule_id": RULES[name],
+                "category": category, "rule_id": rule or RULES[name],
                 "evidence_refs": [sha] + list(refs),
                 "source_fact": f"{name}: {fact}; pre_race_only; {RULE_AUTHORITY}",
                 "source_authority": authority, "result_derived": False,
@@ -428,6 +442,27 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
             elif len(below) >= k:
                 put("class_performance", _shift(percentile_band(mean(_nf(r) for r in below)), -1), href,
                     f"untested_at_class; one_class_below_normalized_finish={mean(_nf(r) for r in below):.3f}; one_band_discount", len(below))
+            # Opposition faced: official class of the last <=6 runs relative to
+            # today's class (strength of fields met, independent of finish).
+            faced = [c for c, _ in ranked[:6] if c is not None]
+            if len(faced) >= k:
+                dlt = mean(c - cur_class for c in faced)
+                put("opponent_strength", _thr(dlt, ((1.0, "STRONG"), (0.34, "POSITIVE"), (-0.34, "NEUTRAL"),
+                                                    (-1.0, "MIXED")), "CAUTION"),
+                    href, f"mean_official_class_faced_minus_today={dlt:+.2f}; runs={len(faced)}", len(faced))
+            # Hidden class: highest official class at which the horse has
+            # already finished top-3 or in the top 30% of the field.
+            known = [(c, r) for c, r in ranked if c is not None]
+            if len(known) >= k:
+                peaks = [c for c, r in known if r["finish"] <= 3 or _nf(r) >= 0.7]
+                if peaks:
+                    gap_c = max(peaks) - cur_class
+                    cat = ("STRONG" if gap_c >= 1 else "POSITIVE" if gap_c == 0
+                           else "NEUTRAL" if gap_c == -1 else "MIXED")
+                    fact = f"peak_class_with_top3_or_top30pct={max(peaks)}; today_class={cur_class}"
+                else:
+                    cat, fact = "CAUTION", f"no_top3_or_top30pct_at_any_known_class; today_class={cur_class}"
+                put("hidden_class", cat, href, fact + f"; runs={len(known)}", len(known))
         if runs:
             q = mean(_nf(r) for r in runs[:4])
             put("official_recent_quality", percentile_band(q), href,
@@ -505,6 +540,11 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
             if geo and len(same_geo) >= k:
                 put("similar_geometry_fit", percentile_band(mean(_nf(r) for r in same_geo)), href,
                     f"{geo}_normalized_finish={mean(_nf(r) for r in same_geo):.3f}; runs={len(same_geo)}", len(same_geo))
+            geo_surf = [r for r in same_geo if r.get("surface") == surface]
+            if geo and surface and len(geo_surf) >= k:
+                put("course_geometry_fit", percentile_band(mean(_nf(r) for r in geo_surf)), href,
+                    f"{geo}_{surface}_normalized_finish={mean(_nf(r) for r in geo_surf):.3f}; runs={len(geo_surf)}",
+                    len(geo_surf))
         if distance is not None:
             near = [r for r in runs if r.get("surface") == surface and r.get("distance_m") is not None
                     and abs(int(r["distance_m"]) - int(distance)) <= 200]
@@ -623,13 +663,33 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                         rows.extend(sel)
                 return horses, rows
 
-            def ped(feature, key, value, pred, min_h, min_r, label):
+            def ped(feature, key, value, pred, min_h, min_r, label, rule=None):
                 h, rows = pool(key, value, pred)
                 if h >= min_h and len(rows) >= min_r:
                     m = mean(_nf(r) for r in rows)
                     put(feature, _ped_band(m), cref,
                         f"{key}={value}; {label}; offspring={h}; runs={len(rows)}; normalized_finish={m:.3f}",
-                        len(rows), authority="JRA_OFFICIAL_POINT_IN_TIME_CORPUS")
+                        len(rows), authority="JRA_OFFICIAL_POINT_IN_TIME_CORPUS", rule=rule)
+
+            def physical_fit(key, value, rule):
+                # Body weights at which this sire's (or damsire's) offspring ran
+                # well on today's surface vs. this horse's official body weight.
+                if not value or not surface:
+                    return
+                bw_now = cur_bw if isinstance(cur_bw, int) else (bws[0][0] if bws else None)
+                if not isinstance(bw_now, int):
+                    return
+                h, rows = pool(key, value, lambda r: r["surface"] == surface and isinstance(r.get("body_weight"), int)
+                               and _nf(r) >= 0.6)
+                if h < 3 or len(rows) < 8:
+                    return
+                w = sorted(int(r["body_weight"]) for r in rows)
+                lo, hi = w[len(w) // 10], w[min(len(w) - 1, (9 * len(w)) // 10)]
+                cat = "POSITIVE" if lo <= bw_now <= hi else "NEUTRAL" if lo - 10 <= bw_now <= hi + 10 else "CAUTION"
+                put("physical_pedigree_fit", cat, cref + href[:1],
+                    f"{key}={value}; surface={surface}; good_run_bodyweight_p10_p90={lo}-{hi}kg; "
+                    f"horse_bodyweight={bw_now}kg; offspring={h}; runs={len(rows)}",
+                    len(rows), authority="JRA_OFFICIAL_POINT_IN_TIME_CORPUS", rule=rule)
             if surface:
                 ped("pedigree_surface", "sire", sire, lambda r: r["surface"] == surface, 4, 12, f"surface={surface}")
                 ped("maternal_class_signal", "damsire", damsire, lambda r: r["surface"] == surface, 3, 8, f"damsire_surface={surface}")
@@ -639,6 +699,20 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
             if cur_class is not None:
                 ped("pedigree_class", "sire", sire, lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 3, 6,
                     f"class_rank>={cur_class}")
+            # Damsire fallbacks: only when the sire sample is unmet, with a
+            # stricter minimum, a distinct rule id and the damsire named.
+            if surface and distance is not None and "pedigree_distance" not in feats:
+                ped("pedigree_distance", "damsire", damsire, lambda r: r["surface"] == surface
+                    and r.get("distance_m") is not None and abs(int(r["distance_m"]) - int(distance)) <= 200,
+                    4, 12, f"DAMSIRE_FALLBACK; surface={surface}; distance={distance}±200",
+                    rule=FALLBACK_RULES["pedigree_distance"])
+            if cur_class is not None and "pedigree_class" not in feats:
+                ped("pedigree_class", "damsire", damsire,
+                    lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 4, 10,
+                    f"DAMSIRE_FALLBACK; class_rank>={cur_class}", rule=FALLBACK_RULES["pedigree_class"])
+            physical_fit("sire", sire, RULES["physical_pedigree_fit"])
+            if "physical_pedigree_fit" not in feats:
+                physical_fit("damsire", damsire, FALLBACK_RULES["physical_pedigree_fit"])
             if venue:
                 ped("sire_track_signal", "sire", sire, lambda r: r.get("venue") == venue, 3, 6, f"venue={venue}")
             ped("sprint_pedigree", "sire", sire, lambda r: r.get("distance_m") is not None and int(r["distance_m"]) <= 1400,
