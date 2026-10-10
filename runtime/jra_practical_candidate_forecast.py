@@ -89,8 +89,7 @@ def make_forecast_brief(pre, final, *, generated_at=None,
     mec=final.get("mec") or {}
     original=mec.get("tickets") or []
     capital=final.get("capital") or {}
-    if capital.get("no_bet") is True:
-        raise PracticalForecastError("FROZEN_CANDIDATE_ORIGINAL_NO_BET")
+    frozen_no_bet=capital.get("no_bet") is True
     if not isinstance(original,list) or not original:
         raise PracticalForecastError("CANONICAL_MEC_TICKETS_MISSING")
     frozen_total=sum(int(t.get("stake",0)) for t in original)
@@ -195,10 +194,15 @@ def make_forecast_brief(pre, final, *, generated_at=None,
         "frozen_mec_ticket_count":len(original),
         "frozen_mec_capital_yen":frozen_total,
         "retained_ticket_fraction":round(len(selected)/len(original),6),
+        "original_signed_candidate_final_no_bet":frozen_no_bet,
+        "display_is_signed_final_ticket":False,
+        "display_is_purchased_ticket":False,
+        "display_scenario":"MEC_HYPOTHETICAL_PAPER_SUBSET_OF_NO_BET"
+                           if frozen_no_bet else "MEC_HYPOTHETICAL_PAPER_SUBSET",
         "semantic_coverage_equivalence_claim":False,
         "winner_probability_calibrated":False,
         "ev_calibrated":False,
-        "scope":"HUMAN-READABLE CANDIDATE SUBSET / PAPER ONLY / NON-PRODUCTION",
+        "scope":"HYPOTHETICAL FROZEN MEC SUBSET / PAPER ONLY / NOT A FINAL TICKET / NON-PRODUCTION",
         "authority":"NON-PRODUCTION / NO AUTO-PURCHASE / NO PROMOTION",
         "production_effect":"NONE",
         "new_final_generated":False,
