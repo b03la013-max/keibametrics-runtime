@@ -229,3 +229,33 @@ JSON出力はMac環境、必要パッケージ、専用ブラウザのフォル�
 5. `jra_bloodb_mac_acceptance.py live` で取得とハッシュ照合に成功すること。その後もProduction BVIと混ぜずDiagnosticで保持すること
 
 「readinessに未完了がある状態」「実会員HTMLを取得できていない状態」では**会員サイト自動取得の完成を認定しない**。コンポーネントのCIテストだけは既に通過しており、実運用の最後の一段がどこかを数値的に表示するためのチェックである。現時点でMacの実機操作はChatGPTから実行されていない。
+
+## 9. Mac最終受入：オペレーター1コマンド統合（PR #213後続）
+
+PR #213のオフライン診断に加えて、既存の正式SOURCE署名検証、キュー同期、
+将来レース選択、会員DOM Probe、取得、全馬・SHA・時点・出典の再照合を
+一つのローカル実行へ接続した。これは**Mac内の有料データ診断取得**であり、
+モデルのProduction昇格やJRA独立OIDC attestationは一切発行しない。
+
+まずMacでコードを更新し、認証済みプロファイルを準備する。利用条件は本書冒頭と同じ。
+自動閲覧・保存への提供元許諾が確認できている場合に限り、次を実行する。
+
+~~~sh
+cd ~/keibametrics-runtime
+git pull --ff-only
+source .venv/bin/activate
+python scripts/jra_bloodb_mac_final_acceptance.py offline
+python scripts/jra_bloodb_mac_final_acceptance.py live --provider-permission-confirmed
+~~~
+
+`offline` はサイトへ接続せず、未来レースの公式署名SOURCE候補を確認する。
+`live` は同期済みの有効SOURCEをもつ未来のレースから締切65分以内で最も早い1件を
+自動選択する。既存の`--race-id KM-JRA-KYO-YYYYMMDD-RNN`で正確な1レースも指定可能。
+認証済みMacブラウザと提供元許可が必須で、ID/Cookie/生HTML・有料馬別値は
+GitHubやChatGPTへ出さない。会員DOMの構造照合失敗・ログイン失効・出走馬不一致
+・締切切れ・SOURCE署名不整合は`BLOCKED`で終了する。
+
+正常終了時の`MAC_LOCAL_BLOODB_ACCEPTANCE_VERIFIED`は
+「指定レースの会員表示をローカル取得し、保存物をSOURCEと照合できた」という意味に限定する。
+無権限での自動実行・事後時点書換え・正式BVI/Static/KRS/FINALへの自動流入を許可しない。
+会員許諾・本人ログイン・実DOM確認はMac側でのみ成立する受入要件のままである。
