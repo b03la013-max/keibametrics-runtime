@@ -3,7 +3,8 @@ name: KeibaMetrics JRA Formal Single Entry
 permissions:
   contents: write
   actions: write
-  attestations: read
+  id-token: write
+  attestations: write
 
 on:
   push:
@@ -198,6 +199,61 @@ jobs:
           python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json --gap-output runtime_out/jra_single_entry_exact_gap.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
 
+      - name: Produce verified zero-exposure Production terminal when Full20 is blocked
+        if: steps.build_formal.outcome != 'success'
+        id: blocked_terminal
+        shell: bash
+        env:
+          INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          test -f runtime_out/jra_single_entry_exact_gap.json
+          test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
+          gh attestation verify runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --repo "${{ github.repository }}"
+          PYTHONPATH=runtime:runtime/jra_source_runtime python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from datetime import datetime, timezone
+          from verify_source_envelope import verify
+          from jra_production_no_bet_terminal import build_no_bet_terminal
+          source_path=Path("runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json")
+          result=verify(str(source_path))
+          assert result.get("valid") is True, "JRA_SIGNED_SOURCE_RECEIPT_NOT_VALID"
+          intent=json.loads(Path(os.environ["INTENT_FILE"]).read_text(encoding="utf-8"))
+          report=json.loads(Path("runtime_out/jra_single_entry_exact_gap.json").read_text(encoding="utf-8"))
+          ts=datetime.now(timezone.utc)
+          cutoff=datetime.fromisoformat(str(intent["prediction_cutoff"]).replace("Z","+00:00"))
+          lineage="LIVE" if ts <= cutoff else "HISTORICAL_DIAGNOSTIC"
+          receipt=build_no_bet_terminal(intent,report,source_receipt_verified=True,
+                created_at=ts.isoformat(),lineage=lineage)
+          output=Path("runtime_out/jra_production_no_bet_terminal.json")
+          output.write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print(json.dumps({
+            "status":"PRODUCTION_NO_BET_EVIDENCE_TERMINAL",
+            "race_id":receipt["race_id"],"lineage":receipt["lineage"],
+            "required_index_count":receipt["required_index_count"],
+            "base_calculated_count":receipt["base_calculated_count"],
+            "base_held_count":receipt["base_held_count"],
+            "derived_held_count":receipt["derived_held_count"],
+            "investment":0,"not_signed_final":True,
+            "terminal_sha256":receipt["sha256"]
+          },ensure_ascii=False))
+          PY
+
+      - name: Independently attest JRA NO_BET terminal with GitHub OIDC
+        if: steps.blocked_terminal.outcome == 'success'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: runtime_out/jra_production_no_bet_terminal.json
+
+      - name: Upload signed-source JRA zero-investment terminal
+        if: steps.blocked_terminal.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-production-evidence-no-bet-terminal
+          path: runtime_out/jra_production_no_bet_terminal.json
+          if-no-files-found: error
+
       - name: Persist exact Production gap and run Candidate Parallel
         if: steps.build_formal.outcome != 'success'
         id: candidate_parallel
@@ -214,6 +270,10 @@ jobs:
           CANDIDATE_TARGET="runtime/jra_candidate_requests/${SAFE}-CANDIDATE-R1.json"
           mkdir -p runtime/exact_gaps runtime/jra_candidate_requests
           cp runtime_out/jra_single_entry_exact_gap.json "$GAP_TARGET"
+          test -f runtime_out/jra_production_no_bet_terminal.json
+          NO_BET_TARGET="runtime/jra_no_bet_terminals/${SAFE}.json"
+          mkdir -p runtime/jra_no_bet_terminals
+          cp runtime_out/jra_production_no_bet_terminal.json "$NO_BET_TARGET"
           INTENT_FILE="$INTENT_FILE" EXECUTION_ID="$EXECUTION_ID" CANDIDATE_TARGET="$CANDIDATE_TARGET" python - <<'PY'
           import copy,json,os,pathlib
           q=json.load(open(os.environ['INTENT_FILE'],encoding='utf-8'))
@@ -229,7 +289,7 @@ jobs:
           PY
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "$GAP_TARGET" "$CANDIDATE_TARGET"
+          git add "$GAP_TARGET" "$CANDIDATE_TARGET" "$NO_BET_TARGET"
           if ! git diff --cached --quiet; then
             git commit -m "execution: persist JRA exact gap and Candidate handoff $EXECUTION_ID"
             for attempt in 1 2 3 4 5; do
@@ -351,6 +411,8 @@ jobs:
             "candidate_run_id":os.environ.get("CANDIDATE_RUN_ID") or None,
             "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
             "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
+            "production_no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
+            "production_full_prediction_completed":False if sha("runtime_out/jra_production_no_bet_terminal.json") else bool(os.environ.get("FORMAL_RUN_ID")),
             "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_CLOSURE_BLOCKED_CANDIDATE_RUN_COMPLETED" if os.environ.get("CANDIDATE_RUN_ID") else "PRODUCTION_CLOSURE_BLOCKED")),
             "production_prediction_change":False,
             "production_numerical_change":False,
