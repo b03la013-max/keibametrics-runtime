@@ -38,7 +38,7 @@ jobs:
           python-version: "3.13"
       - name: Test registered feature and Static Owner implementation
         run: |
-          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi
+          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi beautifulsoup4
           python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py
       - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
         env:
