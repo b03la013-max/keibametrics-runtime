@@ -3,7 +3,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from jra_official_fact_evaluator_production import official_production_observations
 
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
@@ -719,6 +721,9 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     detail = _detail_runner_map(source_artifact)
     allowed = _allowed_features(mapping)
     contract = validate_feature_contract(mapping)
+    registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json"
+    official_fact_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    official_observations = official_production_observations(source_artifact, official_fact_registry)
     runners_out = {}
     all_missing_sources = set()
     # Empty runner universes must fail closed. A vacuous all([])==True is not
@@ -741,6 +746,9 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             generated["weight_load_fit"] = w
         generated.update(_official_detail_production_features(rid,source_artifact))
         generated.update(_registered_common_workout_features(rid,source_artifact))
+        # Only signed, pre-cutoff JRA history/person facts and registered
+        # Production normalizers; no fallback for missing sample evidence.
+        generated.update(official_observations.get(rid, {}))
         generated = {k:v for k,v in generated.items() if k in allowed}
         existing_features = copy.deepcopy(r.get("evidence_features") or {})
         merged, conflicts = _merge_generated(existing_features, generated)
