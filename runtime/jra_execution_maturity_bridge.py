@@ -461,9 +461,29 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
             )
         except ValueError as exc:
             static_executable_error = str(exc)
+    authority_id = resolve_current_authority()
+    owner_activation_error = None
+    try:
+        try:
+            from .jra_production_auto_handoff import require_independent_owner_activation
+        except ImportError:
+            from jra_production_auto_handoff import require_independent_owner_activation
+        authority = next(_load(p) for p in Path("profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json")
+                         if _load(p).get("manifest_id") == authority_id)
+        require_independent_owner_activation(authority)
+    except ValueError as exc:
+        owner_activation_error = str(exc)
+    static_ready = numerical_ready and owner_activation_error is None and static_executable is not None
+    blockers = []
+    if not numerical_ready:
+        blockers.append({"stage":"PRODUCTION_FEATURE_INDEX_CLOSURE", "reason":numeric_error})
+    if owner_activation_error:
+        blockers.append({"stage":"PRODUCTION_STATIC_PREDICTION_OWNER", "reason":owner_activation_error})
+    elif static_executable_error:
+        blockers.append({"stage":"PRODUCTION_STATIC_PREDICTION_OWNER", "reason":static_executable_error})
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
-              "current_authority_manifest":resolve_current_authority(),
+              "current_authority_manifest":authority_id,
               "mapping_id":mapping["mapping_id"],
               "mapping_sha256":hashlib.sha256(Path("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json").read_bytes()).hexdigest(),
               "source_checkpoint_manifest":checkpoint,
@@ -491,9 +511,12 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
-              "first_blocked_stage":"PRODUCTION_STATIC_PREDICTION_OWNER" if numerical_ready else "PRODUCTION_FEATURE_INDEX_CLOSURE",
-              "static_generation_ready":False,
-              "static_generation_missing_reason":"NO_AUTHORIZED_SOURCE_ONLY_STATIC_RANK_ROLE_DECISION_RULE_CONNECTED",
+              "first_blocked_stage":blockers[0]["stage"] if blockers else None,
+              "independent_blockers":blockers,
+              "static_owner_activation_error":owner_activation_error,
+              "static_generation_ready":static_ready,
+              "static_generation_missing_reason":owner_activation_error or static_executable_error,
+              "production_auto_handoff_ready":static_ready,
               "production_full_pipeline_ready":False,
               "completion_next_owner":(
                   "JRA_PRODUCTION_FEATURE_EVALUATOR_OR_SOURCE_ADAPTER"
@@ -676,9 +699,16 @@ def main() -> int:
                     auto, source_env, source_execution_id=args.source_execution_id
                 )
             except (ValueError, KeyError, TypeError) as exc:
+                # Persist the actual failure before raising. An unapproved
+                # Static owner or invalid transport is not missing evidence.
+                report["auto_handoff_error"] = str(exc)
+                from jra_single_entry_outcome import evidence_terminal_eligible
+                report["evidence_no_bet_eligible"] = evidence_terminal_eligible(report)
+                report["sha256"] = _sha({k: v for k, v in report.items() if k != "sha256"})
+                gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
                 raise JRAMaturityBridgeError(
                     "JRA_SINGLE_ENTRY_AUTO_FORMAL_BLOCKED:"
-                    + str(exc) + ":" + report["first_blocked_stage"] + ":" + str(gap_path)
+                    + str(exc) + ":" + str(report["first_blocked_stage"]) + ":" + str(gap_path)
                 ) from exc
         else:
             out=build_formal_request(

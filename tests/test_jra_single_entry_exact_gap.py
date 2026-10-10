@@ -188,6 +188,13 @@ class ProductionPreparationTest(unittest.TestCase):
             report = json.loads((d/"formal.json.exact-gap.json").read_text())
             self.assertTrue(report["exact_gaps"])
             self.assertIn("PRODUCTION_FEATURE_INDEX_CLOSURE", proc.stderr)
+            self.assertEqual(report["auto_handoff_error"], "JRA_AUTHORIZED_FULL20_INCOMPLETE")
+            self.assertTrue(report["evidence_no_bet_eligible"])
+            self.assertEqual(report["sha256"], hashlib.sha256(json.dumps(
+                {k:v for k,v in report.items() if k!="sha256"}, ensure_ascii=False,
+                sort_keys=True,separators=(",",":")).encode()).hexdigest())
+            self.assertEqual([b["stage"] for b in report["independent_blockers"]],
+                             ["PRODUCTION_FEATURE_INDEX_CLOSURE", "PRODUCTION_STATIC_PREDICTION_OWNER"])
 
 
 if __name__ == "__main__":

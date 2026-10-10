@@ -6,6 +6,8 @@ unmatched identities are not treated as neutral observations.
 """
 from __future__ import annotations
 
+from jra_source_runtime.jra_observed_context import resolve_observed_context
+
 import json
 import math
 import re
@@ -20,6 +22,7 @@ PROFILE = "JRA-OFFICIAL-OBSERVED-FEATURE-PRODUCTION-IMPLEMENTATION-20261010"
 RULES = {
     "recent_performance": "JRA-EVIDENCE-PERCENTILE-RECENT-PERFORMANCE-v1",
     "recent_speed": "JRA-EVIDENCE-PERCENTILE-RECENT-SPEED-v1",
+    "closing_quality": "JRA-EVIDENCE-PERCENTILE-CLOSING-v1",
     "recent_consistency": "JRA-RECENT-CONSISTENCY-RATE-v1",
     "same_course_fit": "KM-JRA-SAME-COURSE-FIT-v1",
     "same_distance_fit": "KM-JRA-SAME-DISTANCE-FIT-v1",
@@ -63,6 +66,20 @@ def _rows(obj: Any) -> dict[str, dict]:
 
 def _observed_runs(history: dict, detail: dict, race_day: date) -> list[dict]:
     records = history.get("runs") or detail.get("recent_runs") or []
+    # The compact full-history table omits sectionals and call positions.
+    # Join detail observations only on the same independently identified run;
+    # never overwrite history facts or join on date alone.
+    records = [dict(x) for x in records if isinstance(x, dict)]
+    keys = ("date", "venue", "surface", "distance_m", "finish", "field_size", "going")
+    supplemental = detail.get("recent_runs") or []
+    for row in records:
+        matches = [x for x in supplemental if isinstance(x, dict)
+                   and all(row.get(k) is not None and x.get(k) == row[k] for k in keys)]
+        if len(matches) != 1:
+            continue
+        for key in ("final3f", "margin", "passing_positions", "passing_positions_raw"):
+            if row.get(key) is None and matches[0].get(key) is not None:
+                row[key] = matches[0][key]
     out = []
     for x in records:
         if not isinstance(x, dict):
@@ -135,7 +152,7 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
     detail = _rows(source.get("jra_official_race_card_detail") or {})
     history = _rows(source.get("jra_official_horse_history") or {})
     persons = _rows(source.get("jra_official_person_stats") or {})
-    ctx = source.get("jra_race_context") or {}
+    ctx = resolve_observed_context(source)
     environment = ((source.get("jra_official_race_card_detail") or {}).get("race_environment") or {})
     venue = str(ctx.get("venue_name") or "")
     surface = str(ctx.get("surface") or "")
@@ -161,6 +178,17 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 scores.append(rating)
         if len(scores) >= 2:
             speed_means[rid] = sum(scores) / len(scores)
+    closing_rows = {}
+    for rid, rows in histories.items():
+        selected = [r for r in rows[:4]
+                    if r.get("surface") == surface and r.get("distance_m") == distance
+                    and (not going or r.get("going") == going)
+                    and type(r.get("final3f")) in (int, float)
+                    and math.isfinite(r["final3f"]) and 25 <= r["final3f"] <= 60]
+        if len(selected) >= 2:
+            closing_rows[rid] = selected
+    closing_means = {rid: sum(x["final3f"] for x in rows)/len(rows)
+                     for rid, rows in closing_rows.items()}
     out = {}
     for rid in official:
         d = detail.get(rid) or {}
@@ -190,6 +218,23 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 "result_derived": False,
                 "production_authority": True,
                 "observation_count": len(references),
+            }
+
+        if len(closing_means) >= 4 and rid in closing_means:
+            value = closing_means[rid]
+            faster = sum(v > value for v in closing_means.values())
+            tied = sum(v == value for v in closing_means.values())
+            percentile = (faster + (tied - 1)/2)/(len(closing_means)-1)
+            features["closing_quality"] = {
+                "category": percentile_band(percentile), "rule_id": RULES["closing_quality"],
+                "evidence_refs": [sha] + [f"JRA_OFFICIAL_DETAIL_FINAL3F:{rid}:{r['date']}:{r['final3f']}"
+                                         for r in closing_rows[rid]],
+                "source_fact": (f"Observed prior final3F mean={value:.6f}; peer_percentile={percentile:.6f};"
+                                f" same_surface={surface}; same_distance={distance}; same_going={going};"
+                                f" peers={len(closing_means)}; observations={len(closing_rows[rid])};"
+                                " raw sectional comparison, no pace correction or winning probability"),
+                "source_authority": "JRA_OFFICIAL", "result_derived": False,
+                "production_authority": True, "observation_count": len(closing_rows[rid]),
             }
 
         def observed(name: str, selected: list[dict], *, normalized: bool = False):

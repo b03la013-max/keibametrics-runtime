@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from jra_source_runtime.jra_observed_context import resolve_observed_context
+
 import copy
 import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-from jra_official_fact_evaluator_production import official_production_observations
+from jra_official_fact_evaluator_production import official_production_observations, _observed_runs
 
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
@@ -65,8 +67,13 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
         return {"available":False,"source_family_inputs":{},"feature_inputs":{}}
     recent_runs=list(x.get("recent_runs") or [])
     history=_history_runner_map(artifact).get(rid) or {}
-    runs=list(history.get("runs") or recent_runs)
-    ctx=artifact.get("jra_race_context") or {}
+    from datetime import date
+    try:
+        race_day=date.fromisoformat((artifact.get("source_race_context") or {}).get("race_date", ""))
+        runs=_observed_runs(history, x, race_day)
+    except (ValueError, TypeError):
+        runs=[]
+    ctx=resolve_observed_context(artifact)
     venue_name=str(ctx.get("venue_name") or "")
     target_distance=ctx.get("distance_m")
     target_surface=ctx.get("surface")

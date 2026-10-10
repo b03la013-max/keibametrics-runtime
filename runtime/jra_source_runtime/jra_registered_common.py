@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from html.parser import HTMLParser
 import hashlib
 import re
 import urllib.parse
@@ -133,18 +134,75 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
         return parsed_candidates[0]
     raise ValueError("NETKEIBA_WORKOUT_RUNNERS_EMPTY")
 
+class _SpeedTables(HTMLParser):
+    """Preserve multi-row speed-table headers without shifting data columns."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tables=[]; self.table=None; self.row=None; self.cell=None
+        self.depth=0; self.spans={}; self.width=1; self.height=1
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            if self.table is None: self.table=[]; self.spans={}; self.depth=1
+            else: self.depth+=1
+        elif self.depth==1 and tag=="tr":
+            self.row={}; self.col=0
+            for col,(value,left) in list(self.spans.items()):
+                self.row[col]=value
+                if left<=1: del self.spans[col]
+                else: self.spans[col]=(value,left-1)
+        elif self.depth==1 and self.row is not None and tag in ("td","th"):
+            self.cell=[]; a=dict(attrs)
+            try: self.width=int(a.get("colspan",1)); self.height=int(a.get("rowspan",1))
+            except (ValueError,TypeError): raise ValueError("SPEED_HEADER_INVALID_SPAN")
+            if not 1<=self.width<=32 or not 1<=self.height<=8:
+                raise ValueError("SPEED_HEADER_INVALID_SPAN")
+        elif self.cell is not None and tag in ("br","div","p"):
+            self.cell.append(" ")
+
+    def handle_data(self, data):
+        if self.cell is not None and self.depth==1: self.cell.append(data)
+
+    def handle_endtag(self, tag):
+        if self.depth==1 and tag in ("td","th") and self.cell is not None:
+            value=re.sub(r"\s+"," ","".join(self.cell)).strip()
+            while self.col in self.row: self.col+=1
+            for offset in range(self.width):
+                col=self.col+offset
+                if col in self.row: raise ValueError("SPEED_HEADER_OVERLAPPING_SPAN")
+                self.row[col]=value
+                if self.height>1: self.spans[col]=(value,self.height-1)
+            self.col+=self.width; self.cell=None
+        elif self.depth==1 and tag=="tr" and self.row is not None:
+            if self.row:
+                self.table.append([self.row.get(i,"") for i in range(max(self.row)+1)])
+            self.row=None
+        elif tag=="table" and self.table is not None:
+            self.depth-=1
+            if self.depth==0:
+                self.tables.append(self.table); self.table=None
+
+
 def parse_speed(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
-    h,rows=_find_table(decoded,["馬番","馬名","過去1年","5走平均"])
+    reader=_SpeedTables(); reader.feed(decoded)
+    candidates=[]
+    for table in reader.tables:
+        if not table: continue
+        header=[re.sub(r"\s+","",str(x)) for x in table[0]]
+        if all(any(key in x for x in header) for key in ("馬番","馬名","過去1年","5走平均")):
+            candidates.append((header,table[1:]))
+    if len(candidates)!=1: raise ValueError("REGISTERED_COMMON_SPEED_TABLE_NOT_UNIQUE")
+    h,rows=candidates[0]
     def idx(part):
         return next((i for i,x in enumerate(h) if part in x),None)
     ni,mi,hi,ai=idx("馬番"),idx("馬名"),idx("過去1年"),idx("5走平均")
     out=[]
     for row in rows:
         if ni is None or ni>=len(row):continue
-        m=re.search(r"\d+",str(row[ni] or ""))
-        if not m:continue
-        no=int(m.group(0))
+        cell=str(row[ni] or "").strip()
+        if not re.fullmatch(r"\d{1,2}",cell):continue
+        no=int(cell)
         if not 1<=no<=18:continue
         name=_norm(row[mi] if mi is not None and mi<len(row) else "")
         highest=str(row[hi] if hi is not None and hi<len(row) else "").strip()
@@ -205,7 +263,9 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
             except Exception as exc:
                 workout_attempt_errors.append(type(exc).__name__+":"+str(exc))
         if workout is None:
-            raise ValueError("NETKEIBA_WORKOUT_NO_COMPLETE_UNIVERSE:"+"|".join(workout_attempt_errors))
+            msg="NETKEIBA_WORKOUT_NO_COMPLETE_UNIVERSE:"+"|".join(workout_attempt_errors)
+            if require_workout: errors.append(msg)
+            else: warnings.append(msg)
         base["workout"]=workout
         base["workout_selection"]={
             "strategy":"FIRST_COMPLETE_OFFICIAL-UNIVERSE-MATCH",
@@ -226,7 +286,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
             msg="REGISTERED_COMMON_SPEED_UNAVAILABLE:"+type(exc).__name__+":"+str(exc)
             warnings.append(msg)
             base["speed"]={"status":"UNAVAILABLE","reason":msg,"result_derived":False}
-        base["status"]="PASS"
+        base["status"]="PASS" if workout is not None else "PARTIAL"
     except Exception as e:
         msg="REGISTERED_COMMON_FAILED:"+type(e).__name__+":"+str(e)
         if require_workout:errors.append(msg)

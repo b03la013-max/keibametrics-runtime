@@ -141,6 +141,12 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
         self.assertTrue(all(c["production_authority"] for c in result["role_registry"]))
         self.assertFalse(result.get("signed_final_verified", False))
 
+    def test_numeric_failure_precedes_independent_static_blocker(self):
+        intent, source, report, _ = fixture()
+        report["production_full_numerical_ready"] = False
+        with self.assertRaisesRegex(JRAProductionAutoHandoffError, "FULL20_INCOMPLETE"):
+            self.submit(intent, source, report, {})
+
     def test_no_authority_cannot_upgrade_static_even_with_full20(self):
         intent, source, report, authority = fixture()
         for patch in (
