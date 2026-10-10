@@ -45,6 +45,15 @@ class ProductionPreparationTest(unittest.TestCase):
             self.assertEqual(len(row["source_feature_trace"]["features"]), 71)
             self.assertIn(rid, {"1", "2"})
         self.assertTrue(report["exact_gaps"])
+        partial = report["partial_production_base_calculation"]
+        self.assertEqual(partial["required_base_cells"], 26)
+        self.assertEqual(partial["calculated_base_cells"] + partial["blocked_base_cells"], 26)
+        self.assertFalse(partial["full20_authority"])
+        self.assertFalse(partial["static_prediction_authority"])
+        self.assertFalse(partial["signed_receipt"])
+        self.assertTrue(partial["never_substitute_missing"])
+        self.assertEqual(partial["runners"]["1"]["indices"]["HPI"]["status"], "BLOCKED")
+        self.assertIsNone(partial["runners"]["1"]["indices"]["HPI"]["value"])
         self.assertFalse(report["source_only_full_numerical_ready"])
         self.assertEqual(report["numerical_closure_mode"], "BLOCKED")
         self.assertEqual(report["required_index_count"], 40)
@@ -103,6 +112,12 @@ class ProductionPreparationTest(unittest.TestCase):
         self.intent["supplemental_evidence_pack"] = self.supplemental()
         report = prepare_production_numerical(self.intent, self.env)
         self.assertTrue(report["production_full_numerical_ready"])
+        partial = report["partial_production_base_calculation"]
+        self.assertEqual(partial["required_base_cells"], 26)
+        self.assertEqual(partial["calculated_base_cells"], 26)
+        self.assertEqual(partial["blocked_base_cells"], 0)
+        self.assertIsInstance(partial["runners"]["1"]["indices"]["HPI"]["value"], float)
+        self.assertFalse(partial["full20_authority"])
         # Acceptance-only supplemental numerics cannot pass the source-only gate.
         self.assertFalse(report["source_only_full_numerical_ready"])
         self.assertEqual(report["numerical_closure_mode"], "WITH_SUPPLEMENTAL_EVIDENCE")
