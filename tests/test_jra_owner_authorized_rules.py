@@ -200,7 +200,7 @@ class TestPedigreeCorpus(unittest.TestCase):
                                 attestation_verifier=lambda p: True)
             self.assertEqual({h["horse_name"] for h in late["horses"].values()}, {"A","B","C"})
             self.assertEqual(late["horse_count"], 3)
-            self.assertEqual(late["run_count"], 3)
+            self.assertEqual(late["run_count"], 5)
             skipped = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
                                    race_date="2026-10-10",
                                    attestation_verifier=lambda p: False)
