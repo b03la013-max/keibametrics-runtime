@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import sys
+import re
 
 REPO=Path(__file__).resolve().parents[1]
 CURRENT_PROFILE="BLOODB-MAC-LAST-MILE-READINESS-v1.0"
@@ -59,11 +60,12 @@ def readiness(*, repo:Path=REPO, home:Path=HOME, now=None,
             if not isinstance(rows,list) or len(rows)>80:
                 raise ValueError("QUEUE_SHAPE")
             seen=set()
-            from datetime import datetime
             for x in rows:
                 if not isinstance(x,dict) or not isinstance(x.get("race_id"),str):
                     raise ValueError("QUEUE_ROW")
                 race=x["race_id"]
+                if not re.fullmatch(r"[A-Za-z0-9_.-]{4,120}",race):
+                    raise ValueError("QUEUE_RACE_ID_UNSAFE")
                 if race in seen:
                     raise ValueError("QUEUE_DUPLICATE")
                 seen.add(race)
