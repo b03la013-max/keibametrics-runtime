@@ -239,6 +239,7 @@ if __name__ == "__main__":
         p = Path(a.out_dir) / f"{day.replace('-', '')}-{a.mode}{suffix}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         if res["errors"] or res["horse_count"] != res["horse_token_count"]:
+            print("JRA_HARVEST_DIAGNOSTIC_ERRORS="+json.dumps(res["errors"][:6],ensure_ascii=False))
             raise SystemExit(f"JRA_HARVEST_INCOMPLETE:{day}:{len(res['errors'])} errors; {res['horse_count']}/{res['horse_token_count']} parsed")
         if p.exists():
             raise SystemExit("JRA_HARVEST_IMMUTABLE_ALREADY_EXISTS:" + str(p))
