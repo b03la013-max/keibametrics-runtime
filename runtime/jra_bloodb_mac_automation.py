@@ -137,7 +137,23 @@ def load_official(spec: dict) -> tuple[list[dict], dict]:
         identity = art.get("source_race_context") or art.get("jra_race_context") or {}
         if identity.get("race_date") != spec["race_date"]:
             raise BloodBError("JRA_SIGNED_RACE_DATE_MISMATCH")
+        codes = {"札幌":"SPP","函館":"HKD","福島":"FKS","新潟":"NGT",
+                 "東京":"TKY","中山":"NKY","中京":"CHK","京都":"KYO",
+                 "阪神":"HSN","小倉":"KKR"}
+        if spec.get("race_no") is not None:
+            if int(identity.get("race_no") or -1) != int(spec["race_no"]):
+                raise BloodBError("JRA_SIGNED_RACE_NUMBER_MISMATCH")
+        if spec.get("venue") and identity.get("venue_id") != codes.get(spec["venue"]):
+            raise BloodBError("JRA_SIGNED_VENUE_MISMATCH")
+        observed = art.get("jra_race_context") or {}
+        for k in ("race_date","venue_id","race_no"):
+            if observed.get(k) is not None and str(observed.get(k))!=str(identity.get(k)):
+                raise BloodBError("JRA_OBSERVED_RACE_CONTEXT_IDENTITY_CONFLICT:"+k)
+        if art.get("family_id") not in (None,"JRA"):
+            raise BloodBError("JRA_SOURCE_FAMILY_INVALID")
         cutoff = utc_time(spec["prediction_cutoff"])
+        if art.get("prediction_cutoff") != spec["prediction_cutoff"]:
+            raise BloodBError("JRA_SIGNED_SOURCE_CUTOFF_MISMATCH")
         frozen = utc_time(art.get("source_freeze_at"))
         if frozen >= cutoff:
             raise BloodBError("JRA_SOURCE_FREEZE_AFTER_PREDICTION_CUTOFF")
@@ -272,6 +288,8 @@ def launchd_plist(*, repo: Path, queue: Path = QUEUE,
              "--queue",str(queue.expanduser().resolve()),
              "--profile",str(profile.expanduser().resolve()),
              "--private-dir",str(directory),
+             "--repo",str(repo.expanduser().resolve()),
+             "--sync-jra-queue",
              "--provider-permission-confirmed"],
         "StandardOutPath":str(directory/"queue.stdout.log"),
         "StandardErrorPath":str(directory/"queue.stderr.log")}
@@ -285,6 +303,7 @@ def cli(argv=None):
     ap.add_argument("--repo",type=Path,default=Path(__file__).resolve().parents[1])
     ap.add_argument("--interval",type=int,default=300)
     ap.add_argument("--provider-permission-confirmed",action="store_true")
+    ap.add_argument("--sync-jra-queue",action="store_true")
     args=ap.parse_args(argv)
     if not args.provider_permission_confirmed:
         raise BloodBError("PROVIDER_AUTOMATED_ACCESS_PERMISSION_MUST_BE_CONFIRMED")
@@ -304,6 +323,14 @@ def cli(argv=None):
         result={"installed":True,"plist":str(target),
                 "runs_locally":True,"subscriber_session_stays_on_mac":True}
     else:
+        if args.sync_jra_queue:
+            # Import locally to avoid circular runtime imports.
+            scripts=str(args.repo.expanduser().resolve()/"scripts")
+            if scripts not in sys.path:
+                sys.path.insert(0,scripts)
+            from jra_bloodb_signed_source_queue_sync import synchronize
+            synchronize(args.repo.expanduser().resolve(),
+                        args.queue.expanduser().resolve())
         specs=json.loads(args.queue.expanduser().read_text(encoding="utf-8"))
         profile=private_dir(args.profile)
         with playwright_sync()() as pl:

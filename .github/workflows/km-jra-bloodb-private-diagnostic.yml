@@ -5,8 +5,10 @@ on:
     paths:
       - "runtime/jra_bloodb_mac_collector.py"
       - "runtime/jra_bloodb_mac_automation.py"
+      - "scripts/jra_bloodb_signed_source_queue_sync.py"
       - "tests/test_jra_bloodb_mac_collector.py"
       - "tests/test_jra_bloodb_mac_automation.py"
+      - "tests/test_jra_bloodb_signed_source_queue_sync.py"
       - ".github/workflows/km-jra-bloodb-private-diagnostic.yml"
   push:
     branches: [main]
@@ -27,8 +29,9 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install safe local parser, not a subscriber login
-        run: python -m pip install -q beautifulsoup4
+        run: python -m pip install -q beautifulsoup4 cryptography
       - name: Test strict BloodB membership boundary, exact runner facts, no post-cutoff use
         run: |
           python -m unittest discover -s tests -p test_jra_bloodb_mac_collector.py -v
           python -m unittest discover -s tests -p test_jra_bloodb_mac_automation.py -v
+          python -m unittest discover -s tests -p test_jra_bloodb_signed_source_queue_sync.py -v

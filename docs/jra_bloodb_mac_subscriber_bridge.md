@@ -105,3 +105,21 @@ python runtime/jra_bloodb_mac_automation.py install-launchd --queue ~/.keibametr
 macOS launchd により約5分間隔で実行。締切まで65分以内の対象だけ取り込む。Macがスリープ中・オフライン・認証失効・契約範囲外の場合は成功とみなさない。保存は ~/.keibametrics/private_bloodb/<race_id>/ だけで、ログイン情報・生HTML・有料評価をGitHubやCIへアップロードしない。止めるには launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/jp.keibametrics.bloodb-collector.plist を実行する。
 
 現時点の未完了条件: 実会員HTMLのセレクタ実測、全レースからの自動キュー生成、血統評価の実指数化・較正、Production Full20/Staticの認可。キュー取込は独自Blood-BラベルをDiagnosticで保持し、JRA実績ベースの血統コーパス・正式Predictionと混合しない。実会員取得と本番接続をテスト済みと主張しない。
+
+## 5. JRA正式SOURCE → Blood-Bキューを自動生成する実装（2026-10-10）
+
+旧方式の手動JSONキュー作成は必須ではなくなった。MacにGitHubリポジトリの最新runtime/executions（各正式レースのSOURCE受領証）とruntime/jra_formal_intentsがある場合、scripts/jra_bloodb_signed_source_queue_sync.pyが未来36時間のFORMAL-PRE-RACEから有効なものだけを選び、同じexecution_idのEd25519署名SOURCEを検証してキューへ登録する。欠測SOURCEのレースは明示してスキップ。Blood-Bの有料会員ページへはアクセスしない。
+
+~~~sh
+git pull --ff-only
+source .venv/bin/activate
+python -m pip install cryptography beautifulsoup4 playwright
+python scripts/jra_bloodb_signed_source_queue_sync.py --dry-run
+python scripts/jra_bloodb_signed_source_queue_sync.py
+~~~
+
+キューの初期実行・CIとも、SOURCEの外部GitHub OIDC証人をローカルで再照合する工程ではない。SOURCE受領証自体のEd25519署名とSOURCE本文ハッシュ、race_date、venue_id、race_no、正式cutoff、署名時刻を再検証する。SOURCEに対応する正式Race Intentのないレースは採用せず、期限超過分を未来レースへ付け替えない。JRA正式Productionへの接続は既存の独立OIDCゲートによる別の権限確認が必要。
+
+前節で設定したlaunchdは、登録済みリポジトリのスナップショットを対象に5分間隔でこのキュー同期を実行してから（許可済みであれば）Blood-Bの会員情報を3レース以内で取得する。**自動git pull・JRA全レースの自動起動を無条件に行う仕組みではない。** GitHubのmainを最新にし、発走前の正式SOURCE受領証がMacに存在することが必要。
+
+実会員ページ確認は、提供元が当該自動利用を許可していることを確認後、`python runtime/jra_bloodb_mac_collector.py login` で本人ログインしたうえで、`python runtime/jra_bloodb_mac_collector.py inspect --provider-permission-confirmed` を実行する。表見出し・行数だけが出力され、馬別有料情報・ID・パスワード・認証Cookieは出さない。取得失敗、会員DOM非対応、利用許諾未確認を理由に不正なProduction BVI・OOS・Finalへ自動昇格させない。
