@@ -654,11 +654,37 @@ def main() -> int:
             gap_path = Path(args.gap_output or (args.output + ".exact-gap.json"))
             gap_path.parent.mkdir(parents=True, exist_ok=True)
             gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
-            raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED:" + report["first_blocked_stage"] + ":" + str(gap_path))
-        out=build_formal_request(
-            intent,source_env,
-            source_execution_id=args.source_execution_id
-        )
+            try:
+                # The existing External Single-Entry workflow owns signed
+                # SOURCE acquisition. No Static Owner is self-approved here.
+                from jra_production_auto_handoff import compile_production_auto_handoff
+                authority_id = resolve_current_authority()
+                authority_obj = None
+                for authority_path in Path("profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+                    row = _load(authority_path)
+                    if row.get("manifest_id") == authority_id:
+                        authority_obj = row
+                        break
+                if authority_obj is None:
+                    raise JRAMaturityBridgeError("JRA_CURRENT_AUTHORITY_FILE_UNAVAILABLE")
+                auto = compile_production_auto_handoff(
+                    intent, source_env, report,
+                    current_authority=authority_obj,
+                    frozen_at=datetime.now(timezone.utc).isoformat(),
+                )
+                out = build_formal_request(
+                    auto, source_env, source_execution_id=args.source_execution_id
+                )
+            except (ValueError, KeyError, TypeError) as exc:
+                raise JRAMaturityBridgeError(
+                    "JRA_SINGLE_ENTRY_AUTO_FORMAL_BLOCKED:"
+                    + str(exc) + ":" + report["first_blocked_stage"] + ":" + str(gap_path)
+                ) from exc
+        else:
+            out=build_formal_request(
+                intent,source_env,
+                source_execution_id=args.source_execution_id
+            )
     else:
         out=verify_formal_request_binding(_load(args.request),_load(args.source_envelope))
     if getattr(args,"output",None):
