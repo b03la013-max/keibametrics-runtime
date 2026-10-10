@@ -262,8 +262,11 @@ jobs:
           # keys an Authority explicitly declares as its owner-authorized JRA
           # delta. Every other JRA key and the entire BAN scope must still be
           # identical, and an activation can never self-promote.
+          # R46 (owner-approved audit fix): the stale status LABEL may change only
+          # to restate the same activation; it can never claim READY/VALIDATED.
           R45_ALLOWED_JRA_DELTA={"evidence_rule_registry","owner_authorized_feature_rules",
-                                 "pedigree_corpus","production_static_owner_activation"}
+                                 "pedigree_corpus","production_static_owner_activation",
+                                 "production_static_prediction_owner_status"}
           for family in ["JRA","BAN"]:
               delta=set()
               if family=="JRA":
@@ -280,6 +283,13 @@ jobs:
                   if act["status"]=="OWNER_AUTHORIZED_UNVALIDATED":
                       assert act["market_baseline_superiority_proven"] is False
                       assert Path(act["owner_authorization_record"]).is_file()
+              if "production_static_prediction_owner_status" in delta:
+                  assert "production_static_owner_activation" in delta
+                  act=current["family_scoped_authority"]["JRA"]["production_static_owner_activation"]
+                  label=str(current["family_scoped_authority"]["JRA"]["production_static_prediction_owner_status"])
+                  assert label.startswith(str(act["status"])+" /"),label
+                  if act["status"]=="OWNER_AUTHORIZED_UNVALIDATED":
+                      assert "FORWARD_OOS=0" in label and "VALIDATED /" not in label.replace("UNVALIDATED",""),label
 
           bridge=Path("runtime/jra_execution_maturity_bridge.py").read_text(encoding="utf-8")
           for forbidden in [
