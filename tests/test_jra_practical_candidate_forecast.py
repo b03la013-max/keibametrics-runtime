@@ -122,12 +122,17 @@ class TestPracticalCandidateForecast(unittest.TestCase):
             with self.subTest(k=k),self.assertRaises(PracticalForecastError):
                 self.forecast(bad,final)
 
-    def test_original_no_bet_is_not_overridden_by_paper_recommendation(self):
+    def test_original_no_bet_is_not_overridden_by_hypothetical_display(self):
         pre,final=frozen_fixture()
         final["capital"]["no_bet"]=True
         final["sha256"]=digest({k:v for k,v in final.items() if k!="sha256"})
-        with self.assertRaisesRegex(PracticalForecastError,"ORIGINAL_NO_BET"):
-            self.forecast(pre,final)
+        out=self.forecast(pre,final)
+        self.assertTrue(out["original_signed_candidate_final_no_bet"])
+        self.assertEqual(out["display_scenario"],"MEC_HYPOTHETICAL_PAPER_SUBSET_OF_NO_BET")
+        self.assertFalse(out["display_is_signed_final_ticket"])
+        self.assertFalse(out["display_is_purchased_ticket"])
+        self.assertFalse(out["new_final_generated"])
+        self.assertEqual(out["display_paper_total_yen"],2000)
 
 
 if __name__=="__main__":
