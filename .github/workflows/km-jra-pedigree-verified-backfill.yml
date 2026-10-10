@@ -5,8 +5,9 @@ on:
     paths:
       - "runtime/pedigree_backfill_cursor.json"
   schedule:
-    # 11:15 JST Tue/Thu/Sat. Each run is limited to three JRA races.
-    - cron: "15 2 * * 2,4,6"
+    # 07:15 / 22:15 JST daily. Each run is limited to three JRA races;
+    # single concurrency key serializes collection and prevents load bursts.
+    - cron: "15 22,13 * * *"
   workflow_dispatch:
     inputs:
       date:

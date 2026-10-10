@@ -643,18 +643,28 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                 ped("sire_track_signal", "sire", sire, lambda r: r.get("venue") == venue, 3, 6, f"venue={venue}")
             ped("sprint_pedigree", "sire", sire, lambda r: r.get("distance_m") is not None and int(r["distance_m"]) <= 1400,
                 3, 8, "distance<=1400")
+            # The earliest available race is NOT necessarily a debut: a
+            # historical SOURCE often has only the last few prior starts.
+            # Only an explicitly labelled official 新馬/メイクデビュー
+            # result establishes debut. Missing debut is UNKNOWN, not WEAK.
             debut = []
             debut_h = 0
             for hn, h in corpus["horses"].items():
                 if h.get("horse_name") == name or h.get("sire") != sire or not h["runs"]:
                     continue
-                first = min(h["runs"].values(), key=lambda r: r["date"])
-                debut.append(first)
+                explicit_debuts = [
+                    r for r in h["runs"].values()
+                    if "新馬" in str(r.get("race_name") or "")
+                    or "メイクデビュー" in str(r.get("race_name") or "")
+                ]
+                if len(explicit_debuts) != 1:
+                    continue
+                debut.append(explicit_debuts[0])
                 debut_h += 1
             if debut_h >= 4:
                 m = mean(_nf(r) for r in debut)
                 put("sire_newcomer_signal", _ped_band(m), cref,
-                    f"sire={sire}; offspring_debut_runs={debut_h}; normalized_finish={m:.3f}", debut_h,
+                    f"sire={sire}; explicit_official_debut_race_count={debut_h}; normalized_finish={m:.3f}", debut_h,
                     authority="JRA_OFFICIAL_POINT_IN_TIME_CORPUS")
             if "distance_fit" not in feats and "pedigree_distance" in feats and not runs:
                 x = dict(feats["pedigree_distance"])

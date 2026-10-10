@@ -89,6 +89,32 @@ class TestOwnerAuthorizedRules(unittest.TestCase):
                      "preparation_continuity", "same_day_track_fit", "market_mismatch"):
             self.assertIn(must, seen)
 
+    def test_newcomer_pedigree_rejects_oldest_known_non_debut_race(self):
+        art = real_artifact()
+        eligible = [(str(x.get("runner_id") or x.get("horse_no")),
+                     x.get("sire"), x.get("horse_name"))
+                    for x in art["jra_official_race_card_detail"]["runners"]
+                    if x.get("sire")]
+        self.assertTrue(eligible)
+        rid, sire, target_name = eligible[0]
+        def fake_horse(j, title):
+            run = {"date": "2026-09-01", "venue": "東京", "surface": "芝",
+                   "distance_m": 1600, "race_name": title,
+                   "field_size": 12, "finish": j + 1}
+            return {"horse_name": "血統観測馬" + str(j), "sire": sire,
+                    "dam": "母" + str(j), "damsire": "母父",
+                    "runs": {("2026-09-01","東京"): run}}
+        corpus = {"manifest_sha256": "a"*64, "horses": {
+            str(j): fake_horse(j, "3歳未勝利") for j in range(4)}}
+        old = owner_authorized_observations(art, REGISTRY, corpus=corpus)
+        self.assertNotIn("sire_newcomer_signal", old[rid])
+        for x in corpus["horses"].values():
+            next(iter(x["runs"].values()))["race_name"] = "2歳新馬"
+        correct = owner_authorized_observations(art, REGISTRY, corpus=corpus)
+        self.assertIn("sire_newcomer_signal", correct[rid])
+        self.assertIn("explicit_official_debut_race_count=4",
+                      correct[rid]["sire_newcomer_signal"]["source_fact"])
+
     def test_unregistered_rule_fails_closed(self):
         reg = deepcopy(REGISTRY)
         reg["feature_rules"]["recent_speed"] = ["SOMETHING-ELSE"]
