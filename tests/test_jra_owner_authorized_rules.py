@@ -192,22 +192,26 @@ class TestPedigreeCorpus(unittest.TestCase):
             # Unsigned flag and hash alone are not provenance.
             early = build_corpus(root, prediction_cutoff="2026-10-03T12:00:00+09:00",
                                  race_date="2026-10-03",
-                                 attestation_verifier=lambda p: True)
+                                 attestation_verifier=lambda p: True,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual({h["horse_name"] for h in early["horses"].values()}, {"A"})
             self.assertEqual(early["run_count"], 1)
             late = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
                                 race_date="2026-10-10",
-                                attestation_verifier=lambda p: True)
+                                attestation_verifier=lambda p: True,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual({h["horse_name"] for h in late["horses"].values()}, {"A","B","C"})
             self.assertEqual(late["horse_count"], 3)
             self.assertEqual(late["run_count"], 5)
             skipped = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
                                    race_date="2026-10-10",
-                                   attestation_verifier=lambda p: False)
+                                   attestation_verifier=lambda p: False,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual({h["horse_name"] for h in skipped["horses"].values()}, {"A","B"})
             excluded = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
                                     race_date="2026-10-10",exclude_race_id="R1",
-                                    attestation_verifier=lambda p: False)
+                                    attestation_verifier=lambda p: False,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual({h["horse_name"] for h in excluded["horses"].values()}, {"B"})
 
     def test_reject_tamper_and_name_collision(self):
@@ -227,7 +231,8 @@ class TestPedigreeCorpus(unittest.TestCase):
             }]
             self._harvest(path,at="2026-10-01T00:00:00+09:00",horses=horses)
             ok = build_corpus(root,prediction_cutoff="2026-10-10T12:00:00+09:00",
-                              race_date="2026-10-10",attestation_verifier=lambda p: True)
+                              race_date="2026-10-10",attestation_verifier=lambda p: True,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual(ok["horse_count"], 2)
             self.assertEqual(ok["identity_collision_count"], 1)
             # Tampering with a published result after SHA creation fails.
@@ -235,7 +240,8 @@ class TestPedigreeCorpus(unittest.TestCase):
             obj["horses"][0]["runs"][0]["finish"]=9
             path.write_text(json.dumps(obj))
             bad=build_corpus(root,prediction_cutoff="2026-10-10T12:00:00+09:00",
-                             race_date="2026-10-10",attestation_verifier=lambda p: True)
+                             race_date="2026-10-10",attestation_verifier=lambda p: True,
+                                 source_attestation_verifier=lambda p: True)
             self.assertEqual(bad["horse_count"],0)
             self.assertEqual(bad["rejected_untrusted_inputs"],1)
 
