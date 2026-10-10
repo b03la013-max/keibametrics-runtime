@@ -55,3 +55,13 @@ python -m pytest -q tests/test_jra_production_auto_handoff.py tests/test_jra_sin
 - 本修復で新規の実レースProduction PRE_KRS/FINALは発行していない。締切後の京都10Rに事前FINALは作らない。外部mechanical acceptanceが通っても、未知Raceの発走前正式完走とは別。
 
 正式完了には「実SOURCE Full20 closure」および「正当なStatic権限」を満たした次の発走前Raceで、canonical経路のKRS/MEC/Ticket/Capital/Signed FINALを実証する必要がある。
+
+## PR外部検証の実施結果
+
+[PR190](https://github.com/b03la013-max/keibametrics-runtime/pull/190)の実装commit `2aa7a470ea836d6be79761f8b7a1e53b0d97607e` で6workflow成功を確認。
+
+- [専用回帰CI 38028621226](https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38028621226): Python 3.13でも52件・70 subtests成功、実SOURCE5件の歴史的再計算成功。
+- [外部KRS 38028621166](https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38028621166): SIM-HIGH requested=20000 / actual=20000、外部`/verify`成功。Receipt SHA `7dfe15f2516db9e5b75638d419c00fb4456b3524c2a3e03b2fbf264908721b7b`。入力は合成mechanical acceptanceで、Production/OOS/購入権限なし、FINAL未発行。
+- Production Source-only Real Evidence Closure、JRA LOCAL Maturity Import、Family R31 Scope Ownership、LOCAL Runtime Correctness Regressionも成功。これらのCI成功を実RaceのProduction全工程完了として扱わない。
+
+実装commitのGit treeはローカルcommit `308b5072a900b8a2afe2d41a1034d1f6cbb6d0b9` と同一 (`5b65a4750c8a36559eb8f2d51f3db97ade10b21a`)。Git送信の認証が利用できなかったため、接続済みGitHub API経由で同一treeを提出した。main未反映、draft PRとして保存。
