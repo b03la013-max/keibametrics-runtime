@@ -163,3 +163,99 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
     }
     out["sha256"] = digest(out)
     return out
+
+
+def verify_no_bet_terminal(terminal, *, race_id=None, require_live=False):
+    """Verify complete, zero-investment terminal without equating it to FINAL.
+
+    Cryptographic SOURCE and OIDC attestations are independently verified by
+    the external runner; this deterministic validator verifies their claimed
+    decision content, index universe, and zero-capital invariants.
+    """
+    if not isinstance(terminal, dict):
+        raise JRANoBetTerminalError("NO_BET_TERMINAL_REQUIRED")
+    if terminal.get("profile") != PROFILE or terminal.get("family_id") != "JRA":
+        raise JRANoBetTerminalError("NO_BET_PROFILE_OR_FAMILY_INVALID")
+    if race_id is not None and str(terminal.get("race_id")) != str(race_id):
+        raise JRANoBetTerminalError("NO_BET_RACE_MISMATCH")
+    if terminal.get("sha256") != digest({k: v for k, v in terminal.items() if k != "sha256"}):
+        raise JRANoBetTerminalError("NO_BET_SHA256_MISMATCH")
+    if terminal.get("source_verified") is not True or not terminal.get("signed_source_receipt_sha256"):
+        raise JRANoBetTerminalError("NO_BET_SOURCE_UNVERIFIED")
+    if require_live and (
+        terminal.get("lineage") != "LIVE"
+        or terminal.get("temporal_classification") != "PRE_CUTOFF"
+    ):
+        raise JRANoBetTerminalError("NO_BET_NOT_FORWARD_LIVE")
+    if terminal.get("lineage") not in ("LIVE", "HISTORICAL_DIAGNOSTIC"):
+        raise JRANoBetTerminalError("NO_BET_LINEAGE_INVALID")
+    if terminal.get("decision") != "NO_BET":
+        raise JRANoBetTerminalError("NO_BET_DECISION_MISMATCH")
+    forbidden = (
+        "formal_full_prediction_completed",
+        "pre_krs_executed",
+        "krs_executed",
+        "signed_final_verified",
+        "purchase_authority",
+        "production_full20_ready",
+    )
+    if any(terminal.get(k) is not False for k in forbidden):
+        raise JRANoBetTerminalError("NO_BET_FALSE_FORMAL_COMPLETION")
+    if terminal.get("total_investment") != 0 or terminal.get("tickets") != []:
+        raise JRANoBetTerminalError("NO_BET_NONZERO_EXPOSURE")
+    universe = terminal.get("index_universe")
+    if not isinstance(universe, dict) or len(universe) < 2:
+        raise JRANoBetTerminalError("NO_BET_RUNNER_UNIVERSE_INVALID")
+    if len(universe) != len(set(universe)) or any(not rid for rid in universe):
+        raise JRANoBetTerminalError("NO_BET_DUPLICATE_RUNNER")
+    count, calculated, held, derived_held = 0, 0, 0, 0
+    for rid, slots in universe.items():
+        if not isinstance(slots, dict) or set(slots) != set(BASE) | set(DERIVED):
+            raise JRANoBetTerminalError("NO_BET_INDEX_UNIVERSE_INCOMPLETE:" + str(rid))
+        for name in BASE:
+            cell = slots[name]
+            state = cell.get("terminal_status")
+            if state == "CALCULATED":
+                value = cell.get("value")
+                if (isinstance(value, bool) or not isinstance(value, (float, int))
+                        or not math.isfinite(value) or not 0 <= value <= 100
+                        or not cell.get("rule_id") or not cell.get("evidence_refs")
+                        or not cell.get("source_fact")):
+                    raise JRANoBetTerminalError("NO_BET_CALCULATED_INVALID:" + rid + ":" + name)
+                calculated += 1
+            elif state == "RULED-HOLD":
+                if cell.get("value") is not None or not cell.get("reason"):
+                    raise JRANoBetTerminalError("NO_BET_HOLD_HAS_VALUE:" + rid + ":" + name)
+                held += 1
+            else:
+                raise JRANoBetTerminalError("NO_BET_BASE_NOT_TERMINAL:" + rid + ":" + name)
+            count += 1
+        for name in DERIVED:
+            cell = slots[name]
+            if (cell.get("terminal_status") != "RULED-HOLD"
+                    or cell.get("value") is not None
+                    or not cell.get("reason")):
+                raise JRANoBetTerminalError("NO_BET_DERIVED_NOT_HELD:" + rid + ":" + name)
+            derived_held += 1
+            count += 1
+    required = len(universe) * 20
+    if (count != required or terminal.get("terminal_index_count") != required
+            or terminal.get("required_index_count") != required
+            or terminal.get("base_calculated_count") != calculated
+            or terminal.get("base_held_count") != held
+            or terminal.get("derived_held_count") != derived_held
+            or terminal.get("unresolved_count") != 0
+            or held < 1):
+        raise JRANoBetTerminalError("NO_BET_INDEX_COUNTS_INVALID")
+    return {
+        "status": "VERIFIED_ZERO_EXPOSURE_DECISION_ONLY",
+        "race_id": terminal["race_id"],
+        "lineage": terminal["lineage"],
+        "terminal_index_count": count,
+        "calculated_base_count": calculated,
+        "held_base_count": held,
+        "held_derived_count": derived_held,
+        "signed_final_verified": False,
+        "total_investment": 0,
+        "terminal_sha256": terminal["sha256"],
+    }
