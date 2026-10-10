@@ -2,7 +2,10 @@ from __future__ import annotations
 import datetime, hashlib, http.cookiejar, html, re, urllib.parse, urllib.request
 from typing import Any, Dict, List, Tuple
 
-from source_acquisition import _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+try:
+    from .source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+except ImportError:
+    from source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-RACE-CARD-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
@@ -56,6 +59,39 @@ def _discover_and_fetch(race_date:str,meeting_key:str,race_no:int)->Tuple[bytes,
     race=m.group(1)
     u3,r3,h3=_post(opener,race,u2)
     return r3,h3,u3,{"entry_token":entry,"day_token":day,"race_token":race}
+
+def parse_detail_race_context(raw:bytes, content_type:str="")->Dict[str,Any]|None:
+    """Printed current card conditions; calendar is only a scheduled program."""
+    text=_html_text(_decode(raw,content_type))
+    head=re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日[（(][^）)]*[）)]\s*(\d+)回(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d+)日\s+(\d+)レース",text)
+    tm=re.search(r"発走時刻[：:]\s*(\d{1,2})時(\d{2})分",text)
+    course=re.search(r"コース[：:]\s*([\d,]+)\s*メートル\s*[（(]([^）)]+)[）)]",text)
+    if not (head and tm and course): return None
+    y,m,d,meeting,venue,day,rn=head.groups()
+    date=datetime.date(int(y),int(m),int(d)).isoformat()
+    distance=int(course.group(1).replace(",",""))
+    description=course.group(2)
+    surface="ダ" if "ダ" in description else "芝" if "芝" in description else "障" if "障" in description else None
+    if surface is None: return None
+    before=text[tm.end():course.start()]
+    classes=[x for x in ("新馬","未勝利","1勝クラス","2勝クラス","3勝クラス","オープン","リステッド","GⅠ","GⅡ","GⅢ") if x in before]
+    weather=re.search(r"天候\s+(\S+)",before)
+    going=re.search(r"(?:芝|ダート|ダ)\s+(良|稍重|重|不良)",before)
+    try:
+        from .jra_source_manifest import JRA_VENUE_NAMES
+    except ImportError:
+        from jra_source_manifest import JRA_VENUE_NAMES
+    start=f"{int(tm.group(1)):02d}:{tm.group(2)}"
+    return {"profile":"KM-JRA-OBSERVED-DETAIL-RACE-CONTEXT-v1",
+            "official":True,"production_fact_authority":True,
+            "venue_id":next(k for k,v in JRA_VENUE_NAMES.items() if v==venue),"venue_name":venue,
+            "race_date":date,"race_no":int(rn),"meeting_no":int(meeting),"meeting_day":int(day),
+            "distance_m":distance,"surface":surface,"course_variant":"外" if "外" in description else "内" if "内" in description else None,
+            "race_class":classes[-1] if classes else None,
+            "weight_rule":next((x for x in ("ハンデ","定量","別定") if x in before),None),
+            "weather":weather.group(1) if weather else None,"going":going.group(1) if going else None,
+            "start_time":start,"scheduled_post_at":f"{date}T{start}:00+09:00",
+            "raw_race_context":before.strip()+" コース： "+course.group(0)}
 
 def _num(v:Any)->int|None:
     m=re.search(r"-?\d+",str(v or "").replace(",",""))
@@ -144,7 +180,7 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
             calls=[int(ch) for ch in str(pos)]
     out["passing_positions"]=calls
     # Recent rider is the text between popularity and assigned weight.
-    jm=re.search(r"番人気\\s+(.+?)\\s+\\d{2}(?:\\.\\d+)?\\s*kg",s)
+    jm=re.search(r"番人気\s+(.+?)\s+\\d{2}(?:\\.\\d+)?\s*kg",s)
     out["jockey"]=jm.group(1).strip() if jm else None
     # class text between venue and finish, retained for future registered evaluator.
     if m:=re.search(r"\d{1,2}日\s+[^\s]+\s+(.*?)\s+\d+\s*着",s):
@@ -172,7 +208,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             token=None
             if "CNAME=" in attrs:
                 tail=attrs.split("CNAME=",1)[1]
-                token=re.split(r"[&\"'<>\\s]+",tail,1)[0]
+                token=re.split(r"[&\"'<>\s]+",tail,1)[0]
             if not token and re.search(r"doAction",attrs,re.I):
                 m_action=re.search(
                     r"""doAction\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)""",
@@ -184,7 +220,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
                 continue
             token=urllib.parse.unquote(str(token))
             label_txt=re.sub(r"<[^>]+>","",html.unescape(label))
-            key=re.sub(r"[▲△◇☆★\\s]+","",label_txt).strip()
+            key=re.sub(r"[▲△◇☆★\s]+","",label_txt).strip()
             if key and key not in out:
                 out[key]=token
         return out
@@ -217,8 +253,8 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
             x=_parse_recent(row[i] if i<len(row) else "")
             if x:recent.append(x)
         cname=re.sub(r"\s+","",str(ident.get("horse_name") or "")).strip()
-        jkey=re.sub(r"[▲△◇☆★\\s]+","",str(person.get("jockey") or "")).strip()
-        tkey=re.sub(r"[▲△◇☆★\\s]+","",str(ident.get("trainer") or "")).strip()
+        jkey=re.sub(r"[▲△◇☆★\s]+","",str(person.get("jockey") or "")).strip()
+        tkey=re.sub(r"[▲△◇☆★\s]+","",str(ident.get("trainer") or "")).strip()
         runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,
                         "horse_profile_token":token_by_name.get(cname),
                         "jockey_profile_token":jockey_token_by_name.get(jkey),
@@ -226,12 +262,18 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
                         **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     weather=None; going=None; going_surface=None
-    mw=re.search(r"天候\\s*([^\\s<]+)",decoded)
+    mw=re.search(r"天候\s*([^\s<]+)",decoded)
     if mw: weather=mw.group(1)
-    mgc=re.search(r"(芝|ダート|ダ)\\s*(良|稍重|重|不良)",decoded)
+    mgc=re.search(r"(芝|ダート|ダ)\s*(良|稍重|重|不良)",decoded)
     if mgc:
         going_surface=mgc.group(1); going=mgc.group(2)
+    observed_context = parse_detail_race_context(raw, content_type)
+    if observed_context:
+        weather=observed_context["weather"]
+        going=observed_context["going"]
+        going_surface=observed_context["surface"]
     out={"profile":PROFILE,"official":True,"production_fact_authority":True,"runner_count":len(runners),"runners":runners,
+         "race_context":observed_context,
          "race_environment":{"weather":weather,"going":going,"going_surface":going_surface}}
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
@@ -250,7 +292,11 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     artifact["sources"]=list(artifact.get("sources") or [])+[snap]
     artifact["jra_official_race_card_detail"]=detail
     artifact["jra_official_race_card_detail_sha256"]=sha_obj(detail)
-    return artifact
+    try:
+        from .jra_observed_context import bind_observed_context
+    except ImportError:
+        from jra_observed_context import bind_observed_context
+    return bind_observed_context(artifact)
 
 
 def runner_universes_from_detail(detail:Dict[str,Any])->Tuple[Dict[str,Any],Dict[str,Any]]:

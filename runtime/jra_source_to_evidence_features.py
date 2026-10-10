@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from jra_source_runtime.jra_observed_context import resolve_observed_context
+
 import copy
 import hashlib
 import json
@@ -66,7 +68,7 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
     recent_runs=list(x.get("recent_runs") or [])
     history=_history_runner_map(artifact).get(rid) or {}
     runs=list(history.get("runs") or recent_runs)
-    ctx=artifact.get("jra_race_context") or {}
+    ctx=resolve_observed_context(artifact)
     venue_name=str(ctx.get("venue_name") or "")
     target_distance=ctx.get("distance_m")
     target_surface=ctx.get("surface")

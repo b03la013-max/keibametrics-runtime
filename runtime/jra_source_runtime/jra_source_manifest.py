@@ -1,7 +1,10 @@
 from __future__ import annotations
 import datetime, re
 from typing import Any, Dict, List
-from source_acquisition import sha_obj
+try:
+    from .source_acquisition import sha_obj
+except ImportError:
+    from source_acquisition import sha_obj
 
 PROFILE="KM-JRA-SOURCE-MANIFEST-v1.0-20260925"
 JRA_VENUE_CODES={

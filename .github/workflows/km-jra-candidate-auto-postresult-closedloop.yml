@@ -58,6 +58,9 @@ jobs:
           else
             python runtime/jra_candidate_postresult_closedloop.py --days 3
           fi
+      - name: Settle separate Static Owner cohort against official results
+        continue-on-error: true
+        run: python runtime/jra_static_owner_forward_oos.py settle
       - name: Update no-promotion Candidate OOS scorecard
         run: |
           python - <<'PY'
@@ -88,6 +91,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_static_owner_forward_oos
           git add runtime/source_candidate_oos runtime/source_candidate_results runtime/source_candidate_oos_status.json runtime/pfs_grand_review/current.json runtime/family_prediction_utility/current.json
           if git diff --cached --quiet; then
             echo "NO_NEW_OFFICIAL_SETTLEMENT"

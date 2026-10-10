@@ -199,6 +199,45 @@ jobs:
           python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json --gap-output runtime_out/jra_single_entry_exact_gap.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
 
+      - name: Freeze independent Static Owner forward shadow after real Full20
+        id: static_owner_shadow
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          REPORT=runtime_out/jra_single_entry_exact_gap.json
+          test -f "$REPORT" || exit 0
+          READY="$(python -c 'import json; print(str(json.load(open("runtime_out/jra_single_entry_exact_gap.json")).get("source_only_full_numerical_ready") is True).lower())')"
+          [ "$READY" = "true" ] || exit 0
+          gh attestation verify runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --repo "${{ github.repository }}"
+          PYTHONPATH=runtime python runtime/jra_static_owner_forward_oos.py freeze --intent "$INTENT_FILE" --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --report "$REPORT" --output runtime_out/static_owner_forward_pre_result.json
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Persist immutable independent Static Owner before cutoff
+        if: steps.static_owner_shadow.outputs.created == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json; print(json.load(open("runtime_out/static_owner_forward_pre_result.json"))["race_id"])')"
+          SAFE="$(printf '%s' "$RID" | tr -c 'A-Za-z0-9._-' '-')"
+          TARGET="runtime/jra_static_owner_forward_oos/${SAFE}/pre_result.json"
+          mkdir -p "$(dirname "$TARGET")"
+          if [ -f "$TARGET" ]; then
+            cmp -s "$TARGET" runtime_out/static_owner_forward_pre_result.json
+            exit 0
+          fi
+          cp runtime_out/static_owner_forward_pre_result.json "$TARGET"
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$TARGET"
+          git commit -m "shadow: freeze independent JRA Static Owner before result [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
       - name: Classify Production failure before choosing a terminal
         if: steps.build_formal.outcome != 'success'
         id: failure_class
