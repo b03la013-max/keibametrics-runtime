@@ -272,6 +272,8 @@ def launchd_plist(*, repo: Path, queue: Path = QUEUE,
              "--queue",str(queue.expanduser().resolve()),
              "--profile",str(profile.expanduser().resolve()),
              "--private-dir",str(directory),
+             "--repo",str(repo.expanduser().resolve()),
+             "--sync-jra-queue",
              "--provider-permission-confirmed"],
         "StandardOutPath":str(directory/"queue.stdout.log"),
         "StandardErrorPath":str(directory/"queue.stderr.log")}
@@ -285,6 +287,7 @@ def cli(argv=None):
     ap.add_argument("--repo",type=Path,default=Path(__file__).resolve().parents[1])
     ap.add_argument("--interval",type=int,default=300)
     ap.add_argument("--provider-permission-confirmed",action="store_true")
+    ap.add_argument("--sync-jra-queue",action="store_true")
     args=ap.parse_args(argv)
     if not args.provider_permission_confirmed:
         raise BloodBError("PROVIDER_AUTOMATED_ACCESS_PERMISSION_MUST_BE_CONFIRMED")
@@ -304,6 +307,14 @@ def cli(argv=None):
         result={"installed":True,"plist":str(target),
                 "runs_locally":True,"subscriber_session_stays_on_mac":True}
     else:
+        if args.sync_jra_queue:
+            # Import locally to avoid circular runtime imports.
+            scripts=str(args.repo.expanduser().resolve()/"scripts")
+            if scripts not in sys.path:
+                sys.path.insert(0,scripts)
+            from jra_bloodb_signed_source_queue_sync import synchronize
+            synchronize(args.repo.expanduser().resolve(),
+                        args.queue.expanduser().resolve())
         specs=json.loads(args.queue.expanduser().read_text(encoding="utf-8"))
         profile=private_dir(args.profile)
         with playwright_sync()() as pl:
