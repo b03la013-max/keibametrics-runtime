@@ -188,13 +188,17 @@ class ProductionPreparationTest(unittest.TestCase):
             report = json.loads((d/"formal.json.exact-gap.json").read_text())
             self.assertTrue(report["exact_gaps"])
             self.assertIn("PRODUCTION_FEATURE_INDEX_CLOSURE", proc.stderr)
-            self.assertEqual(report["auto_handoff_error"], "JRA_AUTHORIZED_FULL20_INCOMPLETE")
+            self.assertEqual(report["auto_handoff_error"].split("|")[0], "JRA_AUTHORIZED_FULL20_INCOMPLETE")
             self.assertTrue(report["evidence_no_bet_eligible"])
             self.assertEqual(report["sha256"], hashlib.sha256(json.dumps(
                 {k:v for k,v in report.items() if k!="sha256"}, ensure_ascii=False,
                 sort_keys=True,separators=(",",":")).encode()).hexdigest())
-            self.assertEqual([b["stage"] for b in report["independent_blockers"]],
-                             ["PRODUCTION_FEATURE_INDEX_CLOSURE", "PRODUCTION_STATIC_PREDICTION_OWNER"])
+            stages = [b["stage"] for b in report["independent_blockers"]]
+            self.assertEqual(stages[0], "PRODUCTION_FEATURE_INDEX_CLOSURE")
+            # The Owner stage appears only while the live Current Authority has
+            # no valid Static activation (governance may change independently).
+            self.assertEqual("PRODUCTION_STATIC_PREDICTION_OWNER" in stages,
+                             report["static_owner_activation_status"]["authorized"] is not True)
 
 
 if __name__ == "__main__":

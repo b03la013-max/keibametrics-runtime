@@ -56,9 +56,11 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
     created = _parse_time(created_at or datetime.now(timezone.utc).isoformat())
     if not (snapshot and cutoff and post and created) or not snapshot <= cutoff < post:
         raise JRANoBetTerminalError("SOURCE_TEMPORAL_INVALID")
-    if (report.get("production_full_numerical_ready") is True
-            and report.get("source_only_full_numerical_ready") is True):
-        raise JRANoBetTerminalError("FULL20_READY_USE_FORMAL_LIVE_PATH")
+    if report.get("production_full_numerical_ready") is True:
+        # Actual Full20 (source-only or verified supplemental) is never an
+        # evidence-insufficient decision: route to the Formal path or to the
+        # distinct Static-Owner-unauthorized terminal instead.
+        raise JRANoBetTerminalError("FULL20_READY_USE_FORMAL_LIVE_PATH_OR_STATIC_NO_BET")
     ids = [str(x) for x in report.get("runner_universe") or []]
     if len(ids) < 2 or "" in ids or len(ids) != len(set(ids)):
         raise JRANoBetTerminalError("RUNNER_UNIVERSE_INVALID")
@@ -165,6 +167,179 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
     return out
 
 
+STATIC_PROFILE = "KM-JRA-PRODUCTION-STATIC-OWNER-UNAUTHORIZED-NO-BET-TERMINAL-v1-20261010"
+
+
+def _check_source_and_time(intent, report, source_receipt_verified, created_at):
+    if intent.get("family_id") != "JRA" or report.get("family_id") != "JRA":
+        raise JRANoBetTerminalError("JRA_ONLY")
+    rid = str(intent.get("race_id") or "")
+    if not rid or report.get("race_id") != rid:
+        raise JRANoBetTerminalError("RACE_ID_MISMATCH")
+    if source_receipt_verified is not True:
+        raise JRANoBetTerminalError("SIGNED_SOURCE_VERIFICATION_REQUIRED")
+    source = report.get("source_checkpoint_manifest") or {}
+    if (source.get("race_id") != rid
+            or source.get("prediction_cutoff") != intent.get("prediction_cutoff")
+            or not source.get("source_snapshot_sha256")
+            or not source.get("receipt_sha256")):
+        raise JRANoBetTerminalError("SOURCE_CHECKPOINT_INVALID")
+    snapshot = _parse_time(source.get("source_freeze_at"))
+    cutoff = _parse_time(intent.get("prediction_cutoff"))
+    post = _parse_time(intent.get("scheduled_post_at"))
+    created = _parse_time(created_at or datetime.now(timezone.utc).isoformat())
+    if not (snapshot and cutoff and post and created) or not snapshot <= cutoff < post:
+        raise JRANoBetTerminalError("SOURCE_TEMPORAL_INVALID")
+    return rid, source, cutoff, post, created
+
+
+def build_static_unauthorized_no_bet_terminal(intent, report, *, owner_status,
+                                              source_receipt_verified=False,
+                                              created_at=None, lineage="LIVE"):
+    """Zero-exposure terminal for Actual Full20 with an unapproved Static Owner.
+
+    Distinct from the evidence-insufficient NO_BET: every Runner x 20 index is
+    an Actual CALCULATED Production value, and the ONLY reason for zero
+    exposure is that no independently authorized Static Owner exists. The
+    Candidate Static output is deliberately not recorded as a prediction.
+    """
+    rid, source, cutoff, post, created = _check_source_and_time(
+        intent, report, source_receipt_verified, created_at)
+    if not isinstance(owner_status, dict) or owner_status.get("authorized") is not False:
+        raise JRANoBetTerminalError("STATIC_OWNER_AUTHORIZED_USE_FORMAL_LIVE_PATH")
+    if (report.get("production_full_numerical_ready") is not True
+            or report.get("verified_full_index_count") != report.get("required_index_count")):
+        raise JRANoBetTerminalError("FULL20_NOT_READY_USE_EVIDENCE_NO_BET")
+    if intent.get("acceptance_only") is True and lineage == "LIVE":
+        raise JRANoBetTerminalError("ACCEPTANCE_ONLY_CANNOT_BE_LIVE")
+    ids = [str(x) for x in report.get("runner_universe") or []]
+    if len(ids) < 2 or "" in ids or len(ids) != len(set(ids)):
+        raise JRANoBetTerminalError("RUNNER_UNIVERSE_INVALID")
+    prepared = report.get("prepared_numerical_request") or {}
+    rows = {str(r.get("runner_id")): r for r in prepared.get("runners") or []}
+    if set(rows) != set(ids):
+        raise JRANoBetTerminalError("FULL20_UNIVERSE_MISMATCH")
+    runners = {}
+    for runner_id in ids:
+        cc = rows[runner_id].get("canonical_components") or {}
+        if set(cc) != set(BASE) | set(DERIVED):
+            raise JRANoBetTerminalError("FULL20_INCOMPLETE:" + runner_id)
+        row = {}
+        for name in BASE + DERIVED:
+            c = cc[name]
+            num = c.get("value")
+            if (str(c.get("terminal_status") or "CALCULATED").upper() != "CALCULATED"
+                    or isinstance(num, bool) or not isinstance(num, (int, float))
+                    or not math.isfinite(num) or not 0 <= num <= 100
+                    or c.get("candidate_only") is True or c.get("production_authority") is False
+                    or not c.get("rule_id") or not c.get("evidence_refs")
+                    or not str(c.get("source_fact") or "").strip()):
+                raise JRANoBetTerminalError("FULL20_CELL_NOT_ACTUAL:" + runner_id + ":" + name)
+            row[name] = {"terminal_status": "CALCULATED", "value": num,
+                         "rule_id": c["rule_id"], "evidence_refs": c["evidence_refs"],
+                         "source_fact": c["source_fact"]}
+        runners[runner_id] = row
+    pre_cutoff = created <= cutoff and created <= post
+    if lineage == "LIVE" and not pre_cutoff:
+        raise JRANoBetTerminalError("LIVE_NO_BET_DECISION_AFTER_CUTOFF")
+    if lineage not in ("LIVE", "HISTORICAL_DIAGNOSTIC", "ACCEPTANCE_ONLY"):
+        raise JRANoBetTerminalError("TEMPORAL_LINEAGE_UNKNOWN")
+    n = len(ids)
+    out = {
+        "profile": STATIC_PROFILE,
+        "race_id": rid,
+        "family_id": "JRA",
+        "lineage": lineage,
+        "temporal_classification": "PRE_CUTOFF" if pre_cutoff else "POST_CUTOFF_HISTORICAL",
+        "source_execution_id": source.get("source_execution_id"),
+        "source_snapshot_sha256": source["source_snapshot_sha256"],
+        "signed_source_receipt_sha256": source["receipt_sha256"],
+        "source_checkpoint_manifest_sha256": source.get("sha256"),
+        "numerical_mapping_id": report.get("mapping_id"),
+        "numerical_closure_mode": report.get("numerical_closure_mode"),
+        "required_index_count": n * 20,
+        "base_calculated_count": n * len(BASE),
+        "base_held_count": 0,
+        "derived_calculated_count": n * len(DERIVED),
+        "derived_held_count": 0,
+        "terminal_index_count": n * 20,
+        "unresolved_count": 0,
+        "index_universe": runners,
+        "decision": "NO_BET",
+        "decision_reason": "PRODUCTION_STATIC_OWNER_NOT_AUTHORIZED",
+        "static_owner_activation_reason": owner_status.get("reason"),
+        "first_blocked_stage": "PRODUCTION_STATIC_PREDICTION_OWNER",
+        "production_full20_ready": True,
+        "static_prediction_issued": False,
+        "candidate_static_recorded_as_prediction": False,
+        "formal_full_prediction_completed": False,
+        "pre_krs_executed": False,
+        "krs_executed": False,
+        "signed_final_verified": False,
+        "purchase_authority": False,
+        "total_investment": 0,
+        "tickets": [],
+        "source_verified": True,
+        "created_at": created.isoformat(),
+        "report_sha256": report.get("sha256"),
+        "evidence_attestation_required": "INDEPENDENT_GITHUB_OIDC_ARTIFACT_ATTESTATION",
+    }
+    out["sha256"] = digest(out)
+    return out
+
+
+def _verify_static_unauthorized(terminal):
+    forbidden = ("formal_full_prediction_completed", "pre_krs_executed", "krs_executed",
+                 "signed_final_verified", "purchase_authority", "static_prediction_issued",
+                 "candidate_static_recorded_as_prediction")
+    if any(terminal.get(k) is not False for k in forbidden):
+        raise JRANoBetTerminalError("NO_BET_FALSE_FORMAL_COMPLETION")
+    if terminal.get("production_full20_ready") is not True:
+        raise JRANoBetTerminalError("STATIC_NO_BET_REQUIRES_ACTUAL_FULL20")
+    if terminal.get("decision_reason") != "PRODUCTION_STATIC_OWNER_NOT_AUTHORIZED":
+        raise JRANoBetTerminalError("STATIC_NO_BET_REASON_INVALID")
+    universe = terminal.get("index_universe")
+    if not isinstance(universe, dict) or len(universe) < 2 or any(not r for r in universe):
+        raise JRANoBetTerminalError("NO_BET_RUNNER_UNIVERSE_INVALID")
+    count = 0
+    for rid, slots in universe.items():
+        if not isinstance(slots, dict) or set(slots) != set(BASE) | set(DERIVED):
+            raise JRANoBetTerminalError("NO_BET_INDEX_UNIVERSE_INCOMPLETE:" + str(rid))
+        for name, cell in slots.items():
+            value = cell.get("value")
+            if (cell.get("terminal_status") != "CALCULATED"
+                    or isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or not 0 <= value <= 100
+                    or not cell.get("rule_id") or not cell.get("evidence_refs")
+                    or not cell.get("source_fact")):
+                raise JRANoBetTerminalError("STATIC_NO_BET_CELL_NOT_ACTUAL:" + rid + ":" + name)
+            count += 1
+    n = len(universe)
+    if (count != n * 20 or terminal.get("terminal_index_count") != n * 20
+            or terminal.get("required_index_count") != n * 20
+            or terminal.get("base_calculated_count") != n * len(BASE)
+            or terminal.get("derived_calculated_count") != n * len(DERIVED)
+            or terminal.get("base_held_count") != 0
+            or terminal.get("derived_held_count") != 0
+            or terminal.get("unresolved_count") != 0):
+        raise JRANoBetTerminalError("NO_BET_INDEX_COUNTS_INVALID")
+    return {
+        "status": "VERIFIED_ZERO_EXPOSURE_DECISION_ONLY",
+        "decision_reason": terminal["decision_reason"],
+        "race_id": terminal["race_id"],
+        "lineage": terminal["lineage"],
+        "terminal_index_count": count,
+        "calculated_base_count": n * len(BASE),
+        "calculated_derived_count": n * len(DERIVED),
+        "held_base_count": 0,
+        "held_derived_count": 0,
+        "actual_full20": True,
+        "signed_final_verified": False,
+        "total_investment": 0,
+        "terminal_sha256": terminal["sha256"],
+    }
+
+
 def verify_no_bet_terminal(terminal, *, race_id=None, require_live=False):
     """Verify complete, zero-investment terminal without equating it to FINAL.
 
@@ -174,8 +349,25 @@ def verify_no_bet_terminal(terminal, *, race_id=None, require_live=False):
     """
     if not isinstance(terminal, dict):
         raise JRANoBetTerminalError("NO_BET_TERMINAL_REQUIRED")
-    if terminal.get("profile") != PROFILE or terminal.get("family_id") != "JRA":
+    if terminal.get("profile") not in (PROFILE, STATIC_PROFILE) or terminal.get("family_id") != "JRA":
         raise JRANoBetTerminalError("NO_BET_PROFILE_OR_FAMILY_INVALID")
+    if terminal.get("profile") == STATIC_PROFILE:
+        if race_id is not None and str(terminal.get("race_id")) != str(race_id):
+            raise JRANoBetTerminalError("NO_BET_RACE_MISMATCH")
+        if terminal.get("sha256") != digest({k: v for k, v in terminal.items() if k != "sha256"}):
+            raise JRANoBetTerminalError("NO_BET_SHA256_MISMATCH")
+        if terminal.get("source_verified") is not True or not terminal.get("signed_source_receipt_sha256"):
+            raise JRANoBetTerminalError("NO_BET_SOURCE_UNVERIFIED")
+        if require_live and (terminal.get("lineage") != "LIVE"
+                             or terminal.get("temporal_classification") != "PRE_CUTOFF"):
+            raise JRANoBetTerminalError("NO_BET_NOT_FORWARD_LIVE")
+        if terminal.get("lineage") not in ("LIVE", "HISTORICAL_DIAGNOSTIC", "ACCEPTANCE_ONLY"):
+            raise JRANoBetTerminalError("NO_BET_LINEAGE_INVALID")
+        if terminal.get("decision") != "NO_BET":
+            raise JRANoBetTerminalError("NO_BET_DECISION_MISMATCH")
+        if terminal.get("total_investment") != 0 or terminal.get("tickets") != []:
+            raise JRANoBetTerminalError("NO_BET_NONZERO_EXPOSURE")
+        return _verify_static_unauthorized(terminal)
     if race_id is not None and str(terminal.get("race_id")) != str(race_id):
         raise JRANoBetTerminalError("NO_BET_RACE_MISMATCH")
     if terminal.get("sha256") != digest({k: v for k, v in terminal.items() if k != "sha256"}):

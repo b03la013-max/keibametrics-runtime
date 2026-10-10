@@ -68,6 +68,10 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     """
     if str(intent.get("family_id") or "") != "JRA":
         raise JRAProductionAutoHandoffError("JRA_ONLY")
+    # Evaluate in canonical pipeline order (numerical closure precedes Static)
+    # but collect BOTH independent gates, so a missing Owner approval can never
+    # mask the earlier, actual numerical stop (and vice versa).
+    blockers = []
     closure_mode = report.get("numerical_closure_mode")
     verified_supplement = (
         closure_mode == "WITH_SUPPLEMENTAL_EVIDENCE"
@@ -77,8 +81,18 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     if (report.get("production_full_numerical_ready") is not True
             or not (report.get("source_only_full_numerical_ready") is True or verified_supplement)
             or report.get("verified_full_index_count") != report.get("required_index_count")):
-        raise JRAProductionAutoHandoffError("JRA_AUTHORIZED_FULL20_INCOMPLETE")
-    require_independent_owner_activation(current_authority, root=root)
+        blockers.append("JRA_AUTHORIZED_FULL20_INCOMPLETE")
+    try:
+        require_independent_owner_activation(current_authority, root=root)
+    except JRAProductionAutoHandoffError as exc:
+        blockers.append(str(exc))
+    if blockers:
+        message = blockers[0]
+        if len(blockers) > 1:
+            message += "|INDEPENDENT_BLOCKERS:" + ",".join(blockers[1:])
+        err = JRAProductionAutoHandoffError(message)
+        err.blockers = list(blockers)
+        raise err
     owner = report.get("static_owner_executable_diagnostic")
     if not isinstance(owner, dict) or not owner.get("static_prediction"):
         raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_EXECUTION_NOT_AVAILABLE")

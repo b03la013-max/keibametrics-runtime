@@ -60,6 +60,18 @@ def resolve_current_authority(profile_root: str | Path="profiles") -> str:
         raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_CURRENT_AUTHORITY_EMPTY")
     return max(rows,key=lambda z:(z[0],z[1]))[1]
 
+def load_current_authority(profile_root: str | Path="profiles") -> Dict[str,Any]:
+    """Return the single resolved Current Authority manifest object (read-only)."""
+    authority_id=resolve_current_authority(profile_root)
+    for p in Path(profile_root).glob("KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+        try:
+            row=_load(p)
+        except Exception:
+            continue
+        if row.get("manifest_id")==authority_id:
+            return row
+    raise JRAMaturityBridgeError("JRA_CURRENT_AUTHORITY_FILE_UNAVAILABLE")
+
 def _execution_id(intent: Dict[str,Any]) -> str:
     explicit=str(intent.get("execution_id") or "").strip()
     if explicit:
@@ -335,7 +347,8 @@ def _source_only_coverage_repair_plan(index_coverage: dict, features: dict) -> d
     }
 
 
-def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None) -> Dict[str,Any]:
+def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None,
+                                 current_authority: Dict[str,Any] | None = None) -> Dict[str,Any]:
     """Expose the existing JRA numerical boundary; never manufacture Static roles.
 
     This is a preparation report, not signature verification or a FINAL receipt.
@@ -461,19 +474,27 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
             )
         except ValueError as exc:
             static_executable_error = str(exc)
-    authority_id = resolve_current_authority()
-    owner_activation_error = None
+    # Read-only Static Owner activation state. It is reported (never granted)
+    # so the readiness flags agree with the auto-handoff gate.
     try:
+        from .jra_production_blocker_classifier import (
+            owner_activation_status, structural_closure_feasibility,
+        )
+    except ImportError:
+        from jra_production_blocker_classifier import (
+            owner_activation_status, structural_closure_feasibility,
+        )
+    if current_authority is None:
         try:
-            from .jra_production_auto_handoff import require_independent_owner_activation
-        except ImportError:
-            from jra_production_auto_handoff import require_independent_owner_activation
-        authority = next(_load(p) for p in Path("profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json")
-                         if _load(p).get("manifest_id") == authority_id)
-        require_independent_owner_activation(authority)
-    except ValueError as exc:
-        owner_activation_error = str(exc)
-    static_ready = numerical_ready and owner_activation_error is None and static_executable is not None
+            current_authority = load_current_authority()
+        except JRAMaturityBridgeError:
+            current_authority = None
+    authority_id = str((current_authority or {}).get("manifest_id") or resolve_current_authority())
+    owner_status = owner_activation_status(current_authority)
+    owner_activation_error = None if owner_status["authorized"] else owner_status["reason"]
+    static_ready = bool(numerical_ready and owner_status["authorized"]
+                        and isinstance(static_executable, dict)
+                        and static_executable.get("static_prediction"))
     blockers = []
     if not numerical_ready:
         blockers.append({"stage":"PRODUCTION_FEATURE_INDEX_CLOSURE", "reason":numeric_error})
@@ -514,18 +535,35 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "first_blocked_stage":blockers[0]["stage"] if blockers else None,
               "independent_blockers":blockers,
               "static_owner_activation_error":owner_activation_error,
+              "static_owner_activation_status":owner_status,
               "static_generation_ready":static_ready,
               "static_generation_missing_reason":owner_activation_error or static_executable_error,
               "production_auto_handoff_ready":static_ready,
-              "production_full_pipeline_ready":False,
+              # Local readiness to hand a PRE_KRS request to the canonical
+              # Formal Runner. External KRS / MEC / Capital / Signed FINAL are
+              # never implied by this flag.
+              "production_full_pipeline_ready":static_ready,
+              "production_full_pipeline_ready_scope":"LOCAL_PRE_KRS_HANDOFF_ONLY",
               "completion_next_owner":(
                   "JRA_PRODUCTION_FEATURE_EVALUATOR_OR_SOURCE_ADAPTER"
-                  if not numerical_ready else "JRA_PRODUCTION_STATIC_PREDICTION_OWNER"
+                  if not numerical_ready else
+                  "JRA_PRODUCTION_STATIC_PREDICTION_OWNER" if not static_ready else
+                  "CANONICAL_FORMAL_RUNNER"
               ),
               "candidate_parallel_required":True,
               "candidate_parallel_reason":"Preserve all-stage execution without mislabeling Candidate as Production.",
               "status":"PARTIAL_EXACT_GAP_IDENTIFIED", "production_prediction_change":False,
               "production_numerical_change":False, "candidate_numerics_used":False}
+    try:
+        from .jra_production_blocker_classifier import classify_production_blockers
+    except ImportError:
+        from jra_production_blocker_classifier import classify_production_blockers
+    feasibility = structural_closure_feasibility(report, mapping)
+    report["structural_closure_feasibility"] = feasibility
+    # Temporal state is evaluated by the live caller, not by a reproducible
+    # preparation report (historical recomputation must stay deterministic).
+    report["production_blocker_classification"] = classify_production_blockers(
+        report, owner_status=owner_status, intent=None, feasibility=feasibility)
     report["sha256"] = _sha(report)
     return report
 
@@ -646,6 +684,51 @@ def verify_formal_request_binding(req: Dict[str,Any], source_env: Dict[str,Any])
         "production_effect":"NONE",
     }
 
+def require_manual_static_parity(intent: Dict[str,Any], report: Dict[str,Any]) -> Dict[str,Any]:
+    """Apply the SAME numerical/source/authority boundary to an explicit Static.
+
+    An explicit (manual) Static is an existing Production entry, but it may not
+    be used to bypass the automatic Owner gate: Full20 must be Actual from the
+    same signed SOURCE, and no unapproved Candidate Owner output may be
+    relabelled as an explicit Static.
+    """
+    blockers=[]
+    supplemental=intent.get("supplemental_evidence_pack")
+    verified_supplement=(report.get("numerical_closure_mode")=="WITH_SUPPLEMENTAL_EVIDENCE"
+                         and intent.get("acceptance_only") is not True
+                         and isinstance(supplemental,dict))
+    if (report.get("production_full_numerical_ready") is not True
+            or report.get("verified_full_index_count")!=report.get("required_index_count")
+            or not (report.get("source_only_full_numerical_ready") is True or verified_supplement)):
+        blockers.append("JRA_AUTHORIZED_FULL20_INCOMPLETE")
+    try:
+        from .jra_static_owner_executable import PROFILE as OWNER_PROFILE
+    except ImportError:
+        from jra_static_owner_executable import PROFILE as OWNER_PROFILE
+    def tainted(row: Any) -> bool:
+        if not isinstance(row,dict):
+            return False
+        marks=" ".join(str(row.get(k) or "") for k in ("authority","profile","status","policy_id")).upper()
+        return (row.get("production_authority") is False or row.get("candidate_only") is True
+                or row.get("candidate_policy") is True or OWNER_PROFILE.upper() in marks
+                or "CANDIDATE" in marks or "SHADOW" in marks)
+    static=intent.get("static_prediction")
+    if tainted(static) or any(tainted(r) for k in ("role_registry","pair_dispositions","third_dispositions")
+                              for r in (intent.get(k) or [])):
+        blockers.append("JRA_MANUAL_STATIC_CANDIDATE_OR_SHADOW_AUTHORITY_FORBIDDEN")
+    owner=report.get("static_owner_executable_diagnostic") or {}
+    owner_authorized=((report.get("static_owner_activation_status") or {}).get("authorized") is True)
+    if (isinstance(static,dict) and not owner_authorized and isinstance(owner.get("static_prediction"),dict)
+            and [str(x) for x in static.get("ranking") or []]==[str(x) for x in owner["static_prediction"].get("ranking") or []]
+            and {str(k):sorted(v) for k,v in (static.get("roles") or {}).items() if v}
+                =={str(k):sorted(v) for k,v in (owner["static_prediction"].get("roles") or {}).items() if v}):
+        blockers.append("JRA_MANUAL_STATIC_EQUALS_UNAUTHORIZED_CANDIDATE_OWNER")
+    if blockers:
+        raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_MANUAL_STATIC_BLOCKED:"+",".join(blockers))
+    return {"status":"PASS","numerical_closure_mode":report.get("numerical_closure_mode"),
+            "verified_full_index_count":report.get("verified_full_index_count")}
+
+
 def main() -> int:
     p=argparse.ArgumentParser()
     sp=p.add_subparsers(dest="cmd",required=True)
@@ -672,24 +755,23 @@ def main() -> int:
     elif args.cmd=="build-formal":
         intent = _load(args.intent)
         source_env = _load(args.source_envelope)
+        # Both the automatic and the explicit-Static entry compute the SAME
+        # Production numerical report from the SAME signed SOURCE and persist
+        # it, so every stop is diagnosable and neither entry skips the gate.
+        report = prepare_production_numerical(intent, source_env, source_execution_id=args.source_execution_id)
+        gap_path = Path(args.gap_output or (args.output + ".exact-gap.json"))
+        gap_path.parent.mkdir(parents=True, exist_ok=True)
+        gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+        classification = report.get("production_blocker_classification") or {}
+        diag = ("FIRST=" + str(classification.get("first_actual_blocked_stage"))
+                + ":INDEPENDENT=" + ",".join(classification.get("independent_blocker_stages") or [])
+                + ":ROUTE=" + str(classification.get("terminal_route")))
         if not isinstance(intent.get("static_prediction"), dict):
-            report = prepare_production_numerical(intent, source_env, source_execution_id=args.source_execution_id)
-            gap_path = Path(args.gap_output or (args.output + ".exact-gap.json"))
-            gap_path.parent.mkdir(parents=True, exist_ok=True)
-            gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
             try:
                 # The existing External Single-Entry workflow owns signed
                 # SOURCE acquisition. No Static Owner is self-approved here.
                 from jra_production_auto_handoff import compile_production_auto_handoff
-                authority_id = resolve_current_authority()
-                authority_obj = None
-                for authority_path in Path("profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json"):
-                    row = _load(authority_path)
-                    if row.get("manifest_id") == authority_id:
-                        authority_obj = row
-                        break
-                if authority_obj is None:
-                    raise JRAMaturityBridgeError("JRA_CURRENT_AUTHORITY_FILE_UNAVAILABLE")
+                authority_obj = load_current_authority()
                 auto = compile_production_auto_handoff(
                     intent, source_env, report,
                     current_authority=authority_obj,
@@ -708,9 +790,15 @@ def main() -> int:
                 gap_path.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
                 raise JRAMaturityBridgeError(
                     "JRA_SINGLE_ENTRY_AUTO_FORMAL_BLOCKED:"
-                    + str(exc) + ":" + str(report["first_blocked_stage"]) + ":" + str(gap_path)
+                    + str(exc) + ":" + str(report["first_blocked_stage"]) + ":" + diag + ":" + str(gap_path)
                 ) from exc
         else:
+            try:
+                require_manual_static_parity(intent, report)
+            except JRAMaturityBridgeError as exc:
+                raise JRAMaturityBridgeError(
+                    str(exc) + ":" + str(report["first_blocked_stage"]) + ":" + diag + ":" + str(gap_path)
+                ) from exc
             out=build_formal_request(
                 intent,source_env,
                 source_execution_id=args.source_execution_id

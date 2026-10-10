@@ -7,7 +7,9 @@ from datetime import datetime
 def evidence_terminal_eligible(report):
     """Only a demonstrated missing Base evidence failure can use this terminal."""
     return (
-        report.get("auto_handoff_error") == "JRA_AUTHORIZED_FULL20_INCOMPLETE"
+        # The numerical gate is evaluated first; an unapproved Owner may be
+        # appended as an independent blocker ("|INDEPENDENT_BLOCKERS:...").
+        str(report.get("auto_handoff_error") or "").split("|", 1)[0] == "JRA_AUTHORIZED_FULL20_INCOMPLETE"
         and report.get("production_full_numerical_ready") is False
         and report.get("first_blocked_stage") == "PRODUCTION_FEATURE_INDEX_CLOSURE"
         and report.get("partial_base_blocked_count", 0) > 0
