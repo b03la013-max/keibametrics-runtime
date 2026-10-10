@@ -18,6 +18,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from typing import Any, Dict, List
 
 from source_acquisition import _decode
@@ -53,7 +54,15 @@ class _Client:
         req = urllib.request.Request(url, data=data, headers={
             "User-Agent": UA, "Accept": "text/html,*/*;q=0.1", "Accept-Language": "ja"})
         time.sleep(self.delay)
-        with self.opener.open(req, timeout=30) as r:
+        for attempt in range(3):
+            try:
+                response = self.opener.open(req, timeout=30)
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (502, 503, 504) or attempt == 2:
+                    raise
+                time.sleep(3 * (attempt + 1))
+        with response as r:
             if urllib.parse.urlsplit(r.geturl()).hostname != "www.jra.go.jp":
                 raise ValueError("JRA_HARVEST_FINAL_HOST_INVALID")
             raw = r.read(6_000_001)
