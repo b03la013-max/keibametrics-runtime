@@ -104,11 +104,7 @@ def _append_jra_card_specs(p:Dict[str,Any],meeting_key:str)->Dict[str,Any]:
     q["sources"]=existing+[x for x in m["sources"] if str(x.get("source_id")) not in ids]
     return q
 
-def _bind_source_identity(artifact:Dict[str,Any], race_id:str, ctx:Dict[str,Any])->Dict[str,Any]:
-    artifact["family_id"]="JRA"
-    artifact["race_id"]=str(race_id)
-    artifact["source_race_context"]=dict(ctx)
-    return artifact
+from jra_source_identity import bind_source_identity as _bind_source_identity
 
 def _rehash(artifact:Dict[str,Any]):
     raw_bundle=[{"source_id":s.get("source_id"),"raw_sha256":s.get("raw_sha256"),
