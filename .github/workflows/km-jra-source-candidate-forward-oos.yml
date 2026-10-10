@@ -68,6 +68,7 @@ jobs:
           from prekrs_terminal_compat import adapt_calculator_output
           from krs_prediction_utility import build_krs_prediction_utility
           from jra_candidate_krs_plan import build_candidate_krs_payload, verify_candidate_krs_execution
+          from jra_practical_candidate_forecast import make_forecast_brief
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
@@ -379,6 +380,16 @@ jobs:
           }
           final_art["sha256"]=hashlib.sha256(json.dumps(final_art,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
           (outdir/"candidate_final.json").write_text(json.dumps(final_art,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          # Narrow, budgeted PAPER subset of original immutable Candidate MEC.
+          brief=make_forecast_brief(record,final_art,
+              generated_at=datetime.now(timezone.utc).isoformat(),
+              maximum_paper_budget_yen=2000)
+          assert brief["production_effect"]=="NONE"
+          assert brief["new_final_generated"] is False
+          assert brief["display_temporal_class"]=="PRE_START_PREVIEW"
+          (outdir/"candidate_forecast_brief.json").write_text(
+              json.dumps(brief,ensure_ascii=False,sort_keys=True,indent=2),
+              encoding="utf-8")
           (outdir/"jra_local_week_transfer_shadow_pre_result.json").write_text(
               json.dumps(transfer_shadow,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
           )
