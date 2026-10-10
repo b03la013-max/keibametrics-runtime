@@ -329,79 +329,11 @@ def _candidate_ticket_key(bt,sel):
         vals=sorted(vals)
     return (bt,tuple(vals))
 
-
-def _candidate_automatic_settlements():
-    """Read new immutable JRA RESULT→PFS ledgers without implying Actual purchase.
-
-    Legacy source_candidate_results is a separate input path. Both sources are
-    reconciled by race_id and never included in FORMAL_PRE_RACE/Production PFS.
-    """
-    rows=[]
-    for path in sorted(glob.glob("runtime/source_candidate_oos/KM-JRA-*/settlement.json")):
-        d=os.path.dirname(path)
-        try:
-            settlement=json.load(open(path,encoding="utf-8"))
-            pre=json.load(open(os.path.join(d,"pre_result.json"),encoding="utf-8"))
-            final=json.load(open(os.path.join(d,"candidate_final.json"),encoding="utf-8"))
-            evaluated=json.load(open(os.path.join(d,"result_evaluation.json"),encoding="utf-8"))
-        except (OSError,ValueError) as exc:
-            raise ValueError("CANDIDATE_PFS_LEDGER_INCOMPLETE:"+path) from exc
-        rid=str(settlement.get("race_id") or "")
-        if (not rid or rid != os.path.basename(d) or rid != pre.get("race_id")
-                or rid != final.get("race_id") or rid != evaluated.get("race_id")):
-            raise ValueError("CANDIDATE_PFS_RACE_ID_MISMATCH:"+path)
-        for obj,label in ((pre,"PRE_RESULT"),(final,"FINAL"),(settlement,"SETTLEMENT"),
-                          (evaluated,"EVALUATION")):
-            if str(obj.get("sha256") or "")!=_sha({k:v for k,v in obj.items() if k!="sha256"}):
-                raise ValueError("CANDIDATE_PFS_"+label+"_HASH_INVALID:"+rid)
-        if (pre.get("oos_eligible") is not True or
-                evaluated.get("oos_eligible") is not True or
-                pre.get("candidate_final_verified") is not True):
-            raise ValueError("CANDIDATE_PFS_PRE_START_ELIGIBILITY_FAIL:"+rid)
-        if (str(settlement.get("status"))!="SETTLED_FROZEN_CANDIDATE_RECOMMENDATION"
-                or settlement.get("production_effect")!="NONE"
-                or settlement.get("automatic_promotion") is not False
-                or str(settlement.get("actual_purchase_status"))!="UNVERIFIED"
-                or settlement.get("frozen_pre_result_sha256")!=pre["sha256"]
-                or settlement.get("frozen_candidate_final_sha256")!=final["sha256"]
-                or evaluated.get("settlement_sha256")!=settlement["sha256"]):
-            raise ValueError("CANDIDATE_PFS_SETTLEMENT_AUTHORITY_OR_LINEAGE_MISMATCH:"+rid)
-        inv=_num(settlement.get("recommended_stake_yen"))
-        ret=_num(settlement.get("recommended_return_yen"))
-        tickets=settlement.get("frozen_tickets") or []
-        if (inv is None or ret is None or inv<=0 or ret<0 or
-                round(sum(float(t.get("stake") or 0) for t in tickets),2)!=inv or
-                int(settlement.get("purchased_ticket_count") or 0)!=len(tickets)):
-            raise ValueError("CANDIDATE_PFS_STAKE_OR_RETURN_MISMATCH:"+rid)
-        return_sum=sum(float(t.get("recommended_return") or 0) for t in tickets)
-        if round(return_sum,2)!=ret:
-            raise ValueError("CANDIDATE_PFS_TICKET_RETURN_MISMATCH:"+rid)
-        types=defaultdict(lambda:{"investment":0.0,"return":0.0})
-        for t in tickets:
-            kind=str(t.get("bet_type") or "").upper()
-            if kind not in {"EXACTA","TRIO","TRIFECTA"}:
-                raise ValueError("CANDIDATE_PFS_TICKET_TYPE_INVALID:"+rid)
-            types[kind]["investment"]+=float(t["stake"])
-            types[kind]["return"]+=float(t.get("recommended_return") or 0)
-        rows.append({
-            "race_id":rid,"date":_date(rid),"venue":_venue(rid),"source_path":path,
-            "source_priority":0,"formal_grade":"FROZEN-OOS / SOURCE-DERIVED-CANDIDATE",
-            "formal_class":"FROZEN_OOS_CANDIDATE",
-            "model_comparison_eligibility":"CANDIDATE_OOS_ELIGIBLE",
-            "pfs_authority":"CANDIDATE-FROZEN-RECOMMENDATION-PFS",
-            "actual_ticket_status":"UNVERIFIED","investment":inv,"return":ret,
-            "profit_loss":ret-inv,"pfs":ret/inv*100.0,
-            "no_bet":False,"hit":ret>0,"hit_but_loss":0<ret<inv,
-            "bet_types":dict(types),
-        })
-    return rows
-
-
 def _candidate_forward_records():
     root="runtime/source_candidate_results"
     rows=[]
     if not os.path.isdir(root):
-        return _candidate_automatic_settlements()
+        return rows
     for path in sorted(glob.glob(os.path.join(root,"*.json"))):
         try:
             obj=json.load(open(path,encoding="utf-8"))
@@ -457,19 +389,7 @@ def _candidate_forward_records():
             "hit_but_loss":ret>0 and ret<inv,
             "bet_types":bet_types,
         })
-    # New postresult automation writes per-race settlement.json instead of the
-    # legacy source_candidate_results path. Without merging both lanes here,
-    # headline and robust PFS remain stale while the OOS tracker advances.
-    by_id={x["race_id"]:x for x in rows}
-    for row in _candidate_automatic_settlements():
-        previous=by_id.get(row["race_id"])
-        if previous is not None:
-            if (round(previous["investment"],2)!=round(row["investment"],2)
-                    or round(previous["return"],2)!=round(row["return"],2)):
-                raise ValueError("CANDIDATE_PFS_DOUBLE_SOURCE_CONFLICT:"+row["race_id"])
-            continue
-        by_id[row["race_id"]]=row
-    return [by_id[k] for k in sorted(by_id)]
+    return rows
 
 def _candidate_mec_capital_density():
     root="runtime/source_candidate_oos"
@@ -533,17 +453,11 @@ def _candidate_tier_pfs(candidate_rows):
         rid=rec["race_id"]
         final_path=os.path.join("runtime","source_candidate_oos",rid,"candidate_final.json")
         result_path=os.path.join("runtime","source_candidate_results",rid+".json")
-        auto_path=os.path.join("runtime","source_candidate_oos",rid,"settlement.json")
-        if not os.path.exists(final_path) or not (os.path.exists(result_path) or os.path.exists(auto_path)):
+        if not (os.path.exists(final_path) and os.path.exists(result_path)):
             continue
         try:
             final=json.load(open(final_path,encoding="utf-8"))
-            # The new immutable JRA result ledger was independently verified
-            # by _candidate_forward_records() before this tier projection.
-            result=(json.load(open(result_path,encoding="utf-8"))
-                    if os.path.exists(result_path) else None)
-            auto=(json.load(open(auto_path,encoding="utf-8"))
-                  if os.path.exists(auto_path) else None)
+            result=json.load(open(result_path,encoding="utf-8"))
         except Exception:
             continue
         ticket_tier={}
@@ -555,22 +469,10 @@ def _candidate_tier_pfs(candidate_rows):
             ticket_tier[k]=tier
             tiers[tier]["investment"]+=stake; tiers[tier]["ticket_count"]+=1
             race_tiers[tier]["investment"]+=stake; race_tiers[tier]["ticket_count"]+=1
-        # Use actual frozen-ticket recommended payouts on the new ledger.
-        # The legacy format carries only winning tickets.
-        if auto is not None:
-            paying=[{
-                "bet_type":t.get("bet_type"),
-                "selection":t.get("selection"),
-                "payout":t.get("recommended_return"),
-            } for t in (auto.get("frozen_tickets") or [])]
-        else:
-            paying=((result.get("settlement") or {}).get("winning_tickets") or [])
-        for w in paying:
+        for w in ((result.get("settlement") or {}).get("winning_tickets") or []):
             k=_candidate_ticket_key(w.get("bet_type"),w.get("selection"))
             tier=ticket_tier.get(k)
             if not tier:
-                if float(w.get("payout") or 0)>0:
-                    raise ValueError("CANDIDATE_TIER_PAYOUT_WITHOUT_FROZEN_TICKET:"+rid)
                 continue
             payout=float(w.get("payout") or 0)
             tiers[tier]["return"]+=payout
