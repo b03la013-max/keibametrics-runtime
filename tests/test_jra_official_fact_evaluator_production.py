@@ -17,8 +17,8 @@ from jra_evidence_to_base_production import load_mapping
 
 def source():
     histories = [
-        {"date": "2026-09-10", "finish": 1, "field_size": 10, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良"},
-        {"date": "2026-09-01", "finish": 3, "field_size": 12, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良"},
+        {"date": "2026-09-10", "finish": 1, "field_size": 10, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良", "rating": 94},
+        {"date": "2026-09-01", "finish": 3, "field_size": 12, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良", "rating": 90},
         {"date": "2026-10-10", "finish": 1, "field_size": 12, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良"},
     ]
     return {
@@ -44,9 +44,9 @@ def source():
         "jra_official_person_stats": {"runners": {
             "1": {
                 "jockey_matched": True,
-                "jockey": {"current_year_flat": {"starts": 125, "win_rate": 18.0}},
+                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 17.6}},
                 "trainer_matched": True,
-                "trainer": {"current_year_flat": {"starts": 50, "win_rate": .18}},
+                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 18.0}},
             },
             "2": {
                 "jockey_matched": False,
@@ -96,6 +96,39 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         src = source()
         src["source_freeze_at"] = "2026-10-10T12:35:00+09:00"
         self.assertEqual(official_production_observations(src, self.registry), {})
+
+    def test_real_jra_percentage_under_one_is_not_fraction(self):
+        src = source()
+        stats = src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]
+        stats.update(starts=1000, wins=8, win_rate=0.8)
+        result = official_production_observations(src, self.registry)
+        self.assertEqual(result["1"]["jockey_quality"]["category"], "WEAK")
+        self.assertIn("ratio=0.008000", result["1"]["jockey_quality"]["source_fact"])
+        # A forged percentage inconsistent with wins/starts must be discarded.
+        stats["win_rate"] = 18.0
+        self.assertNotIn("jockey_quality", official_production_observations(src, self.registry)["1"])
+
+    def test_recent_speed_uses_registered_actual_history_rt_and_peer_group(self):
+        src = source()
+        original = src["jra_official_horse_history"]["runners"]["1"]["runs"]
+        active = src["jra_official_runner_universe"]["runners"]
+        details = src["jra_official_race_card_detail"]["runners"]
+        for rid, mean_rt in (("3", 65), ("4", 80), ("5", 110)):
+            active.append({"runner_id": rid, "status": "ACTIVE"})
+            details.append({"runner_id": rid, "career_record": {"starts": 2}})
+            src["jra_official_horse_history"]["runners"][rid] = {
+                "runs": [{**original[0], "rating": mean_rt},
+                         {**original[1], "rating": mean_rt}]
+            }
+        # Horse 2 is a true newcomer; only four independently observed peers.
+        got = official_production_observations(src, self.registry)
+        self.assertEqual(got["1"]["recent_speed"]["rule_id"],
+                         "JRA-EVIDENCE-PERCENTILE-RECENT-SPEED-v1")
+        self.assertEqual(got["1"]["recent_speed"]["observation_count"], 2)
+        self.assertNotIn("recent_speed", got["2"])
+        self.assertNotIn("2026-10-10", got["1"]["recent_speed"]["source_fact"])
+        src["jra_official_horse_history"]["runners"]["5"]["runs"] = []
+        self.assertNotIn("recent_speed", official_production_observations(src, self.registry)["1"])
 
     def test_registry_identity_and_ambiguous_person_rate_fail_closed(self):
         src = source()

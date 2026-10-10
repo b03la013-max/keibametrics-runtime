@@ -17,6 +17,7 @@ from jra_evidence_feature_normalizer_production import percentile_band, rate_ban
 PROFILE = "JRA-OFFICIAL-OBSERVED-FEATURE-PRODUCTION-IMPLEMENTATION-20261010"
 RULES = {
     "recent_performance": "JRA-EVIDENCE-PERCENTILE-RECENT-PERFORMANCE-v1",
+    "recent_speed": "JRA-EVIDENCE-PERCENTILE-RECENT-SPEED-v1",
     "recent_consistency": "JRA-RECENT-CONSISTENCY-RATE-v1",
     "same_course_fit": "KM-JRA-SAME-COURSE-FIT-v1",
     "same_distance_fit": "KM-JRA-SAME-DISTANCE-FIT-v1",
@@ -107,11 +108,54 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
     going = str(ctx.get("going") or ctx.get("track_condition") or "")
     if not going and environment.get("going_surface") in (None, "", surface):
         going = str(environment.get("going") or "")
+    # Real JRA horse-history Rt measures can support a peer-relative speed
+    # category. Each runner needs 2 earlier ratings and the active race needs
+    # at least 4 independently rated runners; no cross-date leakage or
+    # fallback zero ratings. Keep this normalizer under the registered v1 rule.
+    histories = {rid: _observed_runs(history.get(rid) or {}, detail.get(rid) or {}, race_day)
+                 for rid in official}
+    speed_means = {}
+    for rid, rows in histories.items():
+        scores = []
+        for row in rows[:4]:
+            rating = row.get("rating")
+            if isinstance(rating, bool) or not isinstance(rating, (int, float)):
+                continue
+            rating = float(rating)
+            if math.isfinite(rating) and 1 <= rating <= 150:
+                scores.append(rating)
+        if len(scores) >= 2:
+            speed_means[rid] = sum(scores) / len(scores)
     out = {}
     for rid in official:
         d = detail.get(rid) or {}
-        runs = _observed_runs(history.get(rid) or {}, d, race_day)
+        runs = histories[rid]
         features = {}
+        if len(speed_means) >= 4 and rid in speed_means:
+            value = speed_means[rid]
+            less = sum(v < value for v in speed_means.values())
+            tied = sum(v == value for v in speed_means.values())
+            percentile = (less + (tied - 1) / 2) / (len(speed_means) - 1)
+            references = [
+                f"JRA_OFFICIAL_HISTORY_RT:{rid}:{r['date']}:{r.get('rating')}"
+                for r in runs[:4] if isinstance(r.get("rating"), (float, int))
+                and not isinstance(r.get("rating"), bool)
+                and math.isfinite(float(r["rating"])) and 1 <= float(r["rating"]) <= 150
+            ]
+            features["recent_speed"] = {
+                "category": percentile_band(percentile),
+                "rule_id": RULES["recent_speed"],
+                "evidence_refs": [sha] + references,
+                "source_fact": (
+                    f"Pre-race JRA history Rt mean={value:.6f};"
+                    f" peer_percentile={percentile:.6f}; rated_peers={len(speed_means)};"
+                    f" prior_race_rating_observations={len(references)}"
+                ),
+                "source_authority": "JRA_OFFICIAL",
+                "result_derived": False,
+                "production_authority": True,
+                "observation_count": len(references),
+            }
 
         def observed(name: str, selected: list[dict], *, normalized: bool = False):
             if len(selected) < 2:
@@ -160,16 +204,31 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 starts, raw = int(stats["starts"]), float(stats["win_rate"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if starts < 30 or not math.isfinite(raw) or raw < 0 or raw == 1.0:
+            if starts < 30 or not math.isfinite(raw) or not 0 <= raw <= 100:
                 continue
-            rate = raw/100.0 if raw > 1.0 else raw
+            # JRA prints win_rate as a *percentage*: 0.8 means 0.8%,
+            # not 80%. Prefer the independently observed integer wins/starts;
+            # verify agreement with the rounded official displayed percent.
+            wins = stats.get("wins")
+            if wins is None:
+                # Without an integer numerator, sub-1% and fractional rates
+                # are ambiguous in legacy fixtures; hold rather than invent.
+                if raw <= 1:
+                    continue
+                rate = raw / 100.0
+            else:
+                if type(wins) is not int or wins < 0 or wins > starts:
+                    continue
+                rate = wins / starts
+                if abs((rate * 100.0) - raw) > 0.55:
+                    continue
             if not 0 <= rate <= 1:
                 continue
             features[feature] = {
                 "category": rate_band(rate),
                 "rule_id": RULES[feature],
                 "evidence_refs": [sha, f"JRA_OFFICIAL_PERSON_STATS:{rid}:{who}"],
-                "source_fact": f"Official {who} matched; starts={starts}; raw_win_rate={raw}; ratio={rate:.6f}",
+                "source_fact": f"Official {who} matched; starts={starts}; wins={wins}; display_percent={raw}; ratio={rate:.6f}",
                 "source_authority": "JRA_OFFICIAL",
                 "result_derived": False,
                 "production_authority": True,
