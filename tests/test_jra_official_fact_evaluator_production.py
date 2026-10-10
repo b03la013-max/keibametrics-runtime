@@ -44,9 +44,9 @@ def source():
         "jra_official_person_stats": {"runners": {
             "1": {
                 "jockey_matched": True,
-                "jockey": {"current_year_flat": {"starts": 125, "win_rate": 18.0}},
+                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 17.6}},
                 "trainer_matched": True,
-                "trainer": {"current_year_flat": {"starts": 50, "win_rate": .18}},
+                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 18.0}},
             },
             "2": {
                 "jockey_matched": False,
