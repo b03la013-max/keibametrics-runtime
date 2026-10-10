@@ -51,6 +51,11 @@ class BookCollectorError(ValueError):
 
 def _private_dir(path: Path) -> Path:
     path = path.expanduser().resolve()
+    # Never leave the common parent of cookies and paid observations at 0755.
+    # Recursive mkdir(parents=True) otherwise defaults to a public-ish mode.
+    home = HOME.expanduser().resolve()
+    if path != home and home in path.parents:
+        _private_dir(home)
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     if path.stat().st_mode & 0o077:
         raise BookCollectorError("PRIVATE_DIRECTORY_PERMISSIONS_UNSAFE:" + str(path))
