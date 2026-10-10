@@ -434,6 +434,25 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
             )
         except ValueError as exc:
             static_owner_candidate_error = str(exc)
+    # Executable deterministic Static Owner runs independently of the old
+    # Candidate semantics but is not promoted by a successful computation.
+    static_executable = None
+    static_executable_error = None
+    if numerical_ready:
+        try:
+            try:
+                from .jra_static_owner_executable import compile_static_owner
+            except ImportError:
+                from jra_static_owner_executable import compile_static_owner
+            static_executable = compile_static_owner(
+                req,
+                source_snapshot_sha256=checkpoint["source_snapshot_sha256"],
+                source_receipt_sha256=checkpoint["receipt_sha256"],
+                frozen_at=checkpoint["source_freeze_at"],
+                prediction_cutoff=intent["prediction_cutoff"],
+            )
+        except ValueError as exc:
+            static_executable_error = str(exc)
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
               "current_authority_manifest":resolve_current_authority(),
@@ -459,6 +478,8 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "candidate_official_observed_feature_error":candidate_fact_evaluation_error,
               "static_owner_candidate_diagnostic":static_owner_candidate,
               "static_owner_candidate_error":static_owner_candidate_error,
+              "static_owner_executable_diagnostic":static_executable,
+              "static_owner_executable_error":static_executable_error,
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
