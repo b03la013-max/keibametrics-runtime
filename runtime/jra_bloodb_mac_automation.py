@@ -137,7 +137,23 @@ def load_official(spec: dict) -> tuple[list[dict], dict]:
         identity = art.get("source_race_context") or art.get("jra_race_context") or {}
         if identity.get("race_date") != spec["race_date"]:
             raise BloodBError("JRA_SIGNED_RACE_DATE_MISMATCH")
+        codes = {"札幌":"SPP","函館":"HKD","福島":"FKS","新潟":"NGT",
+                 "東京":"TKY","中山":"NKY","中京":"CHK","京都":"KYO",
+                 "阪神":"HSN","小倉":"KKR"}
+        if spec.get("race_no") is not None:
+            if int(identity.get("race_no") or -1) != int(spec["race_no"]):
+                raise BloodBError("JRA_SIGNED_RACE_NUMBER_MISMATCH")
+        if spec.get("venue") and identity.get("venue_id") != codes.get(spec["venue"]):
+            raise BloodBError("JRA_SIGNED_VENUE_MISMATCH")
+        observed = art.get("jra_race_context") or {}
+        for k in ("race_date","venue_id","race_no"):
+            if observed.get(k) is not None and str(observed.get(k))!=str(identity.get(k)):
+                raise BloodBError("JRA_OBSERVED_RACE_CONTEXT_IDENTITY_CONFLICT:"+k)
+        if art.get("family_id") not in (None,"JRA"):
+            raise BloodBError("JRA_SOURCE_FAMILY_INVALID")
         cutoff = utc_time(spec["prediction_cutoff"])
+        if art.get("prediction_cutoff") != spec["prediction_cutoff"]:
+            raise BloodBError("JRA_SIGNED_SOURCE_CUTOFF_MISMATCH")
         frozen = utc_time(art.get("source_freeze_at"))
         if frozen >= cutoff:
             raise BloodBError("JRA_SOURCE_FREEZE_AFTER_PREDICTION_CUTOFF")
