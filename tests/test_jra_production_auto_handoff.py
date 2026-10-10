@@ -140,6 +140,15 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
         self.assertEqual(result["source_snapshot_sha256"], source["artifact"]["source_snapshot_sha256"])
         self.assertTrue(all(c["production_authority"] for c in result["role_registry"]))
         self.assertFalse(result.get("signed_final_verified", False))
+        # Canonical Formal Runner contract fields.
+        self.assertEqual(result["static_freeze_timestamp"], intent["prediction_cutoff"])
+        self.assertEqual(result["static_computed_at"], FREEZE)
+        self.assertEqual(len(result["engine_sha256"]), 64)
+        self.assertEqual(result["jra_adapter_mode"], "EXPLICIT_ENGINE_HSV")
+        fpp = result["final_prediction_package"]
+        self.assertEqual(fpp["ranking"], result["static_prediction"]["ranking"])
+        self.assertEqual(fpp["roles"], result["static_prediction"]["roles"])
+        self.assertFalse(fpp["production_prediction_change"])
 
     def test_numeric_failure_precedes_independent_static_blocker(self):
         intent, source, report, _ = fixture()

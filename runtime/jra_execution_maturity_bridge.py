@@ -15,6 +15,13 @@ NONSEMANTIC_KEYS = {
     "single_entry","execution_phase","phase","jra_single_entry",
     "jra_maturity_bridge","entry_transport_fallback","transport_metadata",
     "formal_semantic_basis_sha256",
+    # Annotations the canonical Formal Runner adds from the resolved Current
+    # Authority BEFORE it re-verifies this binding; they are not request
+    # semantics, and treating them as such failed every bridged request.
+    "resolved_current_authority_manifest",
+    "resolved_current_authority_profile_path",
+    "resolved_jra_source_runtime_profile",
+    "resolved_family_prediction_utility_contract",
 }
 
 SOURCE_REQUIRED = (
