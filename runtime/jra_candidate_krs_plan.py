@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 ENGINE_SHA256 = "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
 INPUT_CLASS = "FORWARD-OOS-CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
+ACCEPTANCE_INPUT_CLASS = "CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
 MODE_BY_COUNT = {5000: "SIM-STD", 20000: "SIM-HIGH"}
 
 
@@ -17,8 +18,12 @@ class CandidateKRSConformanceError(ValueError):
     pass
 
 
-def build_candidate_krs_payload(request: Mapping[str, Any]) -> dict[str, Any]:
+def build_candidate_krs_payload(
+    request: Mapping[str, Any], *, input_class: str = INPUT_CLASS
+) -> dict[str, Any]:
     """Make mode and actual simulation count impossible to disagree silently."""
+    if input_class not in {INPUT_CLASS, ACCEPTANCE_INPUT_CLASS}:
+        raise CandidateKRSConformanceError("KRS_INPUT_CLASS_NOT_AUTHORIZED")
     if request.get("family_id") != "JRA":
         raise CandidateKRSConformanceError("JRA_ONLY")
     race_id = str(request.get("race_id") or "").strip()
@@ -41,7 +46,7 @@ def build_candidate_krs_payload(request: Mapping[str, Any]) -> dict[str, Any]:
         "input_data": kinput,
         "mode": MODE_BY_COUNT[count],
         "seed": seed,
-        "input_class": INPUT_CLASS,
+        "input_class": input_class,
     }
 
 

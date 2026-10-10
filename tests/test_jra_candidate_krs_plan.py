@@ -11,6 +11,7 @@ from jra_candidate_krs_plan import (
     CandidateKRSConformanceError,
     ENGINE_SHA256,
     INPUT_CLASS,
+    ACCEPTANCE_INPUT_CLASS,
     build_candidate_krs_payload,
     verify_candidate_krs_execution,
 )
@@ -38,7 +39,7 @@ def executed(payload):
         "requested_run_count": count,
         "actual_run_count": count,
         "seed": payload["seed"],
-        "input_class": INPUT_CLASS,
+        "input_class": payload["input_class"],
         "input_sha256": "a" * 64,
         "output_sha256": "b" * 64,
     }}}
@@ -61,6 +62,20 @@ class CandidateKRSConformanceTest(unittest.TestCase):
         self.assertEqual(payload["mode"], "SIM-STD")
         self.assertEqual(verify_candidate_krs_execution(payload, executed(payload))
                          ["actual_run_count"], 5000)
+
+    def test_poststart_acceptance_uses_independent_non_oos_input_class(self):
+        payload = build_candidate_krs_payload(
+            request(20000), input_class=ACCEPTANCE_INPUT_CLASS
+        )
+        self.assertEqual(payload["mode"], "SIM-HIGH")
+        self.assertEqual(payload["input_class"], ACCEPTANCE_INPUT_CLASS)
+        self.assertEqual(
+            verify_candidate_krs_execution(payload, executed(payload))
+            ["actual_run_count"], 20000,
+        )
+        with self.assertRaisesRegex(CandidateKRSConformanceError,
+                                    "KRS_INPUT_CLASS_NOT_AUTHORIZED"):
+            build_candidate_krs_payload(request(), input_class="PRODUCTION")
 
     def test_non_executable_counts_fail_before_external_call(self):
         for count in (None, 0, 4999, 6000, 19999, 20001, True, "20000"):
