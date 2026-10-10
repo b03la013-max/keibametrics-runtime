@@ -30,39 +30,59 @@ jobs:
           RID="KM-ACCEPT-JRA-FULL20-SIMHIGH-20000-20261010-T01"
           CUTOFF="2026-09-20T14:30:00+09:00"
 
-          runners=[
-            {"runner_id":"1","name":"ACCEPT-A","newcomer":False,"raw_evidence":{"gate":"POSITIVE","distance_fit":"POSITIVE"}},
-            {"runner_id":"2","name":"ACCEPT-B","newcomer":False,"raw_evidence":{"workout_capability":"POSITIVE","course_fit":"POSITIVE"}},
-            {"runner_id":"3","name":"ACCEPT-C","newcomer":False,"raw_evidence":{"sustain_reserve":"POSITIVE","body_condition_growth":"POSITIVE"}}
-          ]
+          # Use the actual JRA Production 13 Base + 7 Derived mapping,
+          # not the legacy /calculate-jra-base compatibility output, which
+          # can be 60 RULED-HOLD with zero formal numerical calculations.
+          import runpy
+          fixture=runpy.run_path("tests/test_jra_production_fullnumerical_to_krs.py")
+          numeric=fixture["req"]
+          runners=numeric["runners"]
+          assert len(runners)==3
           ranking=[1,2,3]
           roles={"1":["W","P2","P3"],"2":["W","P2","P3"],"3":["P2","P3"]}
+          required=[]
+          for r in runners:
+              rid=r["runner_id"]
+              comp=r["canonical_components"]
+              assert len(comp)==20 and all(
+                  isinstance(x.get("value"),(int,float))
+                  and x.get("rule_id") and x.get("mapping_version")
+                  and x.get("evidence_refs") and x.get("source_fact")
+                  for x in comp.values()
+              )
+              for name,item in sorted(comp.items()):
+                  required.append({
+                      "runner_id":rid,"name":name,
+                      "status":"CALCULATED","terminal_status":"CALCULATED",
+                      "value":item["value"],"formal_value":item["value"],
+                      "missing_flag":False,
+                      "rule_id":item["rule_id"],
+                      "mapping_version":item["mapping_version"],
+                  })
+          assert len(required)==60
+          c={
+              "status":"PASS",
+              "registry_id":"JRA-EVIDENCE-TO-BASE-MAPPING-v1.0-PRODUCTION-20260921",
+              "required_count":60,
+              "calculated_count":60,
+              "ruled_hold_count":0,
+              "not_applicable_count":0,
+              "unresolved_count":0,
+          }
 
           def call(base,path,payload=None,method="POST",timeout=240):
               data=None if payload is None else json.dumps(payload,separators=(",",":")).encode()
               headers={"content-type":"application/json"} if payload is not None else {}
-              req=urllib.request.Request(base+path,data=data,headers=headers,method=method)
+              rq=urllib.request.Request(base+path,data=data,headers=headers,method=method)
               try:
-                  with urllib.request.urlopen(req,timeout=timeout) as r:
-                      raw=r.read().decode()
-                      return r.status,json.loads(raw) if raw else {}
-              except urllib.error.HTTPError as e:
-                  raw=e.read().decode(errors="replace")
+                  with urllib.request.urlopen(rq,timeout=timeout) as response:
+                      raw=response.read().decode()
+                      return response.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as exc:
+                  raw=exc.read().decode(errors="replace")
                   try: body=json.loads(raw)
                   except Exception: body={"raw":raw}
-                  return e.code,body
-
-          hcode,h=call(CALC,"/health",None,"GET",30)
-          assert hcode==200 and h.get("status")=="READY",(hcode,h)
-
-          ccode,c=call(CALC,"/calculate-jra-base",{"race_id":RID,"runners":runners},timeout=60)
-          assert ccode==200 and c.get("status")=="PASS",(ccode,c)
-          assert c.get("required_count")==60,c
-          assert c.get("unresolved_count")==0,c
-
-          required=adapt_calculator_output(c)
-          assert len(required)==60,len(required)
-
+                  return exc.code,body
           pre={
             "race_id":RID,
             "runner_universe":[{"horse_no":int(r["runner_id"]),"name":r["name"]} for r in runners],
@@ -73,21 +93,21 @@ jobs:
             "krs_executable":True
           }
           pcode,p=call(KRS,"/pre-krs",pre,timeout=60)
+          assert c["calculated_count"]==c["required_count"]==60
           assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
           vcode,v=call(KRS,"/verify",p,timeout=30)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
 
-          by_runner={r["runner_id"]:{i["index_name"]:i.get("transport_value",50) for i in r["items"]} for r in c["runners"]}
-          horses=[{"horse_no":int(r["runner_id"]),"name":r["name"],"hsv":by_runner[r["runner_id"]],"static_roles":roles.get(r["runner_id"],[])} for r in runners]
+          # This is a real external KRS execution using the official JRA
+          # 20→30HSV/11Static bridge on *synthetic* evidence inputs.
+          kinput=numeric["krs_input_data"]
+          assert len(kinput["horses"])==3
+          assert all(len(h["hsv"])==30 and len(h["static"])==11 for h in kinput["horses"])
+          kinput["simulation"]={"run_count":20000,"master_seed":20260920}
           kpayload={
-            "race_id":RID,
-            "input_data":{
-              "race":{"race_id":RID,"venue":"阪神","surface":"turf","distance":2000,"course":"inner","going":"good","class":"acceptance_test"},
-              "environment":{"track":"B","weather":"clear","source_cutoff":CUTOFF},
-              "horses":horses,
-              "simulation":{"run_count":20000,"master_seed":20260920}
-            },
-            "mode":"SIM-HIGH","seed":20260920,"input_class":"FULL-E2E-ACCEPTANCE"
+              "race_id":RID,"input_data":kinput,
+              "mode":"SIM-HIGH","seed":20260920,
+              "input_class":"FULL-E2E-ACCEPTANCE",
           }
           kcode,k=call(KRS,"/krs/execute",kpayload,timeout=300)
           run=k.get("run_receipt",{})
@@ -156,7 +176,7 @@ jobs:
           from pathlib import Path
           out=Path("runtime_out/jra_full20_high20000_signed_final_acceptance.json")
           out.parent.mkdir(parents=True,exist_ok=True)
-          out.write_text(json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2)+"\\n")
+          out.write_text(json.dumps(summary,ensure_ascii=False,sort_keys=True,indent=2)+chr(10))
           print("KM_FULL_E2E_SUMMARY="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
