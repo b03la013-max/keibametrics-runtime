@@ -52,7 +52,20 @@ jobs:
           from jra_production_no_bet_terminal import build_no_bet_terminal, digest
           race="KM-JRA-TKY-20261010-R05-LIVE-R1"
           intent=json.loads(Path("runtime/jra_formal_intents/"+race+".json").read_text())
-          report=json.loads(Path("runtime/exact_gaps/"+race+".json").read_text())
+          # Recompute from the signed original SOURCE and CURRENT code.
+          # A stored historical exact-gap file may predate new Production
+          # evaluators and must not be treated as current numerical truth.
+          from jra_execution_maturity_bridge import prepare_production_numerical
+          source_path=Path(
+              "runtime/executions/"+race+"/SOURCE/runs/38019477297/"
+              "source_receipt_envelope.json"
+          )
+          source_env=json.loads(source_path.read_text(encoding="utf-8"))
+          report=prepare_production_numerical(
+              intent, source_env, source_execution_id=race
+          )
+          assert report["production_full_numerical_ready"] is False
+          assert report["partial_base_calculated_count"] + report["partial_base_blocked_count"] == 156
           result=build_no_bet_terminal(intent,report,
              source_receipt_verified=True,
              lineage="HISTORICAL_DIAGNOSTIC",
@@ -65,6 +78,8 @@ jobs:
           assert result["signed_final_verified"] is False
           assert result["sha256"] == digest({k:v for k,v in result.items() if k!="sha256"})
           Path("runtime_out").mkdir(exist_ok=True)
+          Path("runtime_out/JRA-TKY-R05-CURRENT-PRODUCTION-EXACT-GAP.json").write_text(
+              json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
           Path("runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json").write_text(
               json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
           print(json.dumps({k:result[k] for k in (
@@ -78,5 +93,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: real-jra-source-nobet-tokyo-r05-oidc
-          path: runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json
+          path: |
+            runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json
+            runtime_out/JRA-TKY-R05-CURRENT-PRODUCTION-EXACT-GAP.json
           if-no-files-found: error
