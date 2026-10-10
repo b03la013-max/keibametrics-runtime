@@ -114,7 +114,7 @@ class ProductionPreparationTest(unittest.TestCase):
         self.assertTrue(owner["production_index_inputs_validated"])
         self.assertFalse(owner["static_prediction_production_authority"])
         self.assertFalse(owner["signed_static_freeze_verified"])
-        self.assertEqual(len(owner["ranking"]), 2) if owner else None
+        self.assertEqual(len(owner["ranking"]), 2)
         coverage = report["base_index_coverage_diagnostic"]
         self.assertEqual(coverage["required"], 26)
         self.assertEqual(coverage["blocked"], 0)
