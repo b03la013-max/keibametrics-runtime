@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import hashlib
+import base64
 import json
 from pathlib import Path
 import shutil
@@ -125,36 +126,119 @@ class TestOwnerAuthorizedRules(unittest.TestCase):
 
 
 class TestPedigreeCorpus(unittest.TestCase):
+    def _signed_source(self, artifact, path):
+        """An actual valid Ed25519 test receipt, never an unsigned JSON label."""
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        from jra_source_runtime.verify_source_envelope import sha_obj
+        private = Ed25519PrivateKey.generate()
+        artifact = deepcopy(artifact)
+        artifact["source_snapshot_sha256"] = sha_obj(artifact)
+        receipt = {"race_id": artifact["race_id"], "family": "JRA",
+                   "artifact_sha256": sha_obj(artifact)}
+        canonical = json.dumps(receipt, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":")).encode()
+        env = {
+            "artifact": artifact,
+            "receipt": receipt,
+            "receipt_sha256": hashlib.sha256(canonical).hexdigest(),
+            "signature": base64.b64encode(private.sign(canonical)).decode(),
+            "receipt_public_key_b64": base64.b64encode(
+                private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode(),
+            "signer_trust_class": "GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION",
+            "github_repository": "b03la013-max/keibametrics-runtime",
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(env))
+
+    def _harvest(self, path, *, at, horses):
+        profile = "KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
+        data = {"profile": profile, "official": True, "source": "www.jra.go.jp",
+                "race_date": "2026-10-01", "mode": "results",
+                "harvested_at": at, "horse_token_count": len(horses),
+                "horse_count": len(horses), "horses": horses, "errors": []}
+        data["sha256"] = hashlib.sha256(json.dumps(
+            data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data))
+
     def test_point_in_time_and_harvest_cutoff(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            d = root / "runtime/executions/X/SOURCE/runs/1"
-            d.mkdir(parents=True)
-            art = {"family_id": "JRA", "race_id": "R1", "source_freeze_at": "2026-10-01T10:00:00+09:00",
-                   "source_snapshot_sha256": "a" * 64,
-                   "jra_official_race_card_detail": {"runners": [
-                       {"runner_id": "1", "horse_name": "A", "sire": "S", "damsire": "D",
-                        "recent_runs": [{"date": "2026-09-01", "finish": 1, "field_size": 10, "surface": "芝",
-                                         "venue": "東京", "distance_m": 1600},
-                                        {"date": "2026-10-05", "finish": 1, "field_size": 10, "surface": "芝",
-                                         "venue": "東京", "distance_m": 1600}]}]}}
-            (d / "source_receipt_envelope.json").write_text(json.dumps({"artifact": art}))
-            late = root / "runtime/executions/Y/SOURCE/runs/1"
-            late.mkdir(parents=True)
+            src = root / "runtime/executions/X/SOURCE/runs/1/source_receipt_envelope.json"
+            art = {"family_id": "JRA", "race_id": "R1",
+                   "source_freeze_at": "2026-10-01T10:00:00+09:00",
+                   "jra_official_race_card_detail": {"runners": [{
+                       "runner_id": "1", "horse_name": "A", "sire": "S", "dam": "MA",
+                       "damsire": "D",
+                       "recent_runs": [
+                           {"date": "2026-09-01", "finish": 1, "field_size": 10,
+                            "surface": "芝", "venue": "東京", "distance_m": 1600},
+                           {"date": "2026-10-05", "finish": 1, "field_size": 10,
+                            "surface": "芝", "venue": "東京", "distance_m": 1600}]}]}}
+            self._signed_source(art, src)
+            later = root / "runtime/executions/Y/SOURCE/runs/1/source_receipt_envelope.json"
             art2 = deepcopy(art)
             art2.update(race_id="R2", source_freeze_at="2026-10-09T10:00:00+09:00")
-            art2["jra_official_race_card_detail"]["runners"][0]["horse_name"] = "B"
-            (late / "source_receipt_envelope.json").write_text(json.dumps({"artifact": art2}))
-            hv = root / "runtime/pedigree_corpus"
-            hv.mkdir(parents=True)
-            (hv / "h.json").write_text(json.dumps({"official": True, "harvested_at": "2026-10-08T00:00:00+09:00",
-                                                   "sha256": "h" * 64, "horses": [{"horse_name": "C", "sire": "S",
-                                                   "runs": [{"date": "2026-09-02", "finish": 2, "field_size": 8}]}]}))
-            c = build_corpus(root, prediction_cutoff="2026-10-03T12:00:00+09:00", race_date="2026-10-03")
-            self.assertEqual(set(c["horses"]), {"A"})
-            self.assertEqual(len(c["horses"]["A"]["runs"]), 1)  # 2026-10-05 excluded
-            c2 = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00", race_date="2026-10-10")
-            self.assertEqual(set(c2["horses"]), {"A", "B", "C"})
+            art2["jra_official_race_card_detail"]["runners"][0].update(
+                horse_name="B", dam="MB")
+            self._signed_source(art2, later)
+            hv = root / "runtime/pedigree_corpus/h.json"
+            self._harvest(hv, at="2026-10-08T00:00:00+09:00", horses=[
+                {"horse_name": "C", "sire": "S", "dam": "MC",
+                 "raw_sha256": "1"*64,
+                 "runs": [{"date": "2026-09-02", "finish": 2, "field_size": 8}]},
+            ])
+            # Unsigned flag and hash alone are not provenance.
+            early = build_corpus(root, prediction_cutoff="2026-10-03T12:00:00+09:00",
+                                 race_date="2026-10-03",
+                                 attestation_verifier=lambda p: True)
+            self.assertEqual({h["horse_name"] for h in early["horses"].values()}, {"A"})
+            self.assertEqual(early["run_count"], 1)
+            late = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
+                                race_date="2026-10-10",
+                                attestation_verifier=lambda p: True)
+            self.assertEqual({h["horse_name"] for h in late["horses"].values()}, {"A","B","C"})
+            self.assertEqual(late["horse_count"], 3)
+            self.assertEqual(late["run_count"], 3)
+            skipped = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
+                                   race_date="2026-10-10",
+                                   attestation_verifier=lambda p: False)
+            self.assertEqual({h["horse_name"] for h in skipped["horses"].values()}, {"A","B"})
+            excluded = build_corpus(root, prediction_cutoff="2026-10-10T12:00:00+09:00",
+                                    race_date="2026-10-10",exclude_race_id="R1",
+                                    attestation_verifier=lambda p: False)
+            self.assertEqual({h["horse_name"] for h in excluded["horses"].values()}, {"B"})
+
+    def test_reject_tamper_and_name_collision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "runtime/pedigree_corpus/h.json"
+            horses = [{
+                "horse_name":"同名馬", "sire":"S", "dam":"M1",
+                "raw_sha256":"a"*64,
+                "runs":[{"date":"2026-09-01","venue":"東京","surface":"芝",
+                         "distance_m":1600,"finish":1,"field_size":10}]
+            },{
+                "horse_name":"同名馬", "sire":"S", "dam":"M2",
+                "raw_sha256":"b"*64,
+                "runs":[{"date":"2026-09-01","venue":"東京","surface":"芝",
+                         "distance_m":1600,"finish":7,"field_size":10}]
+            }]
+            self._harvest(path,at="2026-10-01T00:00:00+09:00",horses=horses)
+            ok = build_corpus(root,prediction_cutoff="2026-10-10T12:00:00+09:00",
+                              race_date="2026-10-10",attestation_verifier=lambda p: True)
+            self.assertEqual(ok["horse_count"], 2)
+            self.assertEqual(ok["identity_collision_count"], 1)
+            # Tampering with a published result after SHA creation fails.
+            obj=json.loads(path.read_text())
+            obj["horses"][0]["runs"][0]["finish"]=9
+            path.write_text(json.dumps(obj))
+            bad=build_corpus(root,prediction_cutoff="2026-10-10T12:00:00+09:00",
+                             race_date="2026-10-10",attestation_verifier=lambda p: True)
+            self.assertEqual(bad["horse_count"],0)
+            self.assertEqual(bad["rejected_untrusted_inputs"],1)
+
 
 
 class TestResolverAndHarvestParsers(unittest.TestCase):
