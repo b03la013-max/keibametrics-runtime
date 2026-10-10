@@ -104,7 +104,7 @@ python runtime/jra_bloodb_mac_automation.py install-launchd --queue ~/.keibametr
 
 macOS launchd により約5分間隔で実行。締切まで65分以内の対象だけ取り込む。Macがスリープ中・オフライン・認証失効・契約範囲外の場合は成功とみなさない。保存は ~/.keibametrics/private_bloodb/<race_id>/ だけで、ログイン情報・生HTML・有料評価をGitHubやCIへアップロードしない。止めるには launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/jp.keibametrics.bloodb-collector.plist を実行する。
 
-現時点の未完了条件: 実会員HTMLのセレクタ実測、全レースからの自動キュー生成、血統評価の実指数化・較正、Production Full20/Staticの認可。キュー取込は独自Blood-BラベルをDiagnosticで保持し、JRA実績ベースの血統コーパス・正式Predictionと混合しない。実会員取得と本番接続をテスト済みと主張しない。
+現時点の未完了条件: 実会員HTMLのセレクタ実測、ローカルGitHub SOURCE同期の実運用検証、血統評価の実指数化・較正、Production Full20/Staticの認可。キュー取込は独自Blood-BラベルをDiagnosticで保持し、JRA実績ベースの血統コーパス・正式Predictionと混合しない。実会員取得と本番接続をテスト済みと主張しない。
 
 ## 5. JRA正式SOURCE → Blood-Bキューを自動生成する実装（2026-10-10）
 
@@ -123,3 +123,48 @@ python scripts/jra_bloodb_signed_source_queue_sync.py
 前節で設定したlaunchdは、登録済みリポジトリのスナップショットを対象に5分間隔でこのキュー同期を実行してから（許可済みであれば）Blood-Bの会員情報を3レース以内で取得する。**自動git pull・JRA全レースの自動起動を無条件に行う仕組みではない。** GitHubのmainを最新にし、発走前の正式SOURCE受領証がMacに存在することが必要。
 
 実会員ページ確認は、提供元が当該自動利用を許可していることを確認後、`python runtime/jra_bloodb_mac_collector.py login` で本人ログインしたうえで、`python runtime/jra_bloodb_mac_collector.py inspect --provider-permission-confirmed` を実行する。表見出し・行数だけが出力され、馬別有料情報・ID・パスワード・認証Cookieは出さない。取得失敗、会員DOM非対応、利用許諾未確認を理由に不正なProduction BVI・OOS・Finalへ自動昇格させない。
+
+## 6. 次工程：Mac実会員1レースのローカル受入（2026-10-10）
+
+新規の `runtime/jra_bloodb_mac_acceptance.py` は、PR #205で正式SOURCEから生成したキューの**指定1レース**を対象に、「実会員ブラウザ取得→HTML/SHA再照合→全馬の馬名・馬番照合→SOURCEハッシュ照合→締切前取得の判定」をMac内だけで行う。CIは模擬HTMLとテスト用Ed25519 SOURCEを使い、**実会員サイト取得済みとは主張しない**。
+
+手順：Macの最新mainを取り込み、本人のログインセッション・提供元の自動利用許諾があることを確認する。受入コマンド実行にはSOURCEをMacに同期しておく必要がある。
+
+~~~sh
+git pull --ff-only
+source .venv/bin/activate
+python -m pip install -q beautifulsoup4 cryptography playwright
+python -m playwright install chromium
+
+# 利用規約・許諾未確認でも可能。SOURCE署名と今後36時間の対象確認のみ。
+python scripts/jra_bloodb_signed_source_queue_sync.py --dry-run
+python scripts/jra_bloodb_signed_source_queue_sync.py
+
+# 以下のinspect/liveは提供元がこの目的の自動アクセス・保存を許可した場合だけ実行
+python runtime/jra_bloodb_mac_collector.py login
+python runtime/jra_bloodb_mac_collector.py inspect --provider-permission-confirmed
+
+# 対象の正式race_idはdry-run/queueから実在値を指定。下記は書式例。
+python runtime/jra_bloodb_mac_acceptance.py live \
+  --race-id KM-JRA-KYO-20261011-R09 \
+  --provider-permission-confirmed
+
+# ブラウザ接続なし。締切後でもローカル保存物の完全性を再検査可能
+python runtime/jra_bloodb_mac_acceptance.py status \
+  --race-id KM-JRA-KYO-20261011-R09
+~~~
+
+`live` が出す結果は `LOCAL_CAPTURE_ARTIFACT_INTEGRITY_VERIFIED` であり、次の内容を**公開せず**ローカルに検査する。
+
+- 元SOURCEのEd25519受領証とSOURCE本文、対象競馬場・レース日・レース番号・締切を再検証
+- 対象SOURCEをMacで検証した時点のJRA全馬集合と血統診断保存馬の完全一致（馬名と馬番、重複ゼロ）
+- 保存済み有料HTMLのSHA-256とsummary・bindingの一致
+- SOURCE凍結より前にBlood-Bを取得したような時刻矛盾、締切後取得、別レース混入を拒否
+- 生HTML、有料馬別評価、Cookie、ID・パスワードは端末出力、GitHub、CIへ転送しない
+- Local Captured Dataは正式SOURCEと同一trust domainではない。提供元電子署名も第三者OIDC検証も本コマンドでは成立しない
+
+`status` はブラウザ・Blood-Bサーバーへアクセスしない。事前に`live`または既存workerで取得した `~/.keibametrics/private_bloodb/<race_id>/` がなければ失敗する。 `live` も締切後、権限不明、ログイン切れ、レースリンク曖昧、表解析不可ならFAIL CLOSEDする。
+
+**未了の必須実証：** 会員契約者のMacで許可済みの実ページに対して `inspect` と `live` を実行し、当該レースの表ヘッダーと全馬照合を確認すること。現在はこの実会員Acceptance未実施。実ページのDOMが既存パーサと異なる場合は、端末に有料本文を出さずヘッダー・行数等のみでセレクタ修正を行う。許諾の有無をフラグが技術的に証明するわけではない。
+
+**Production境界：** `LOCAL_CAPTURE_ARTIFACT_INTEGRITY_VERIFIED` はあくまでMac上のData Integrity結果。JRA公式血統BVIを置換しない。Unknown OOS加算、買い目、KRS、STATIC、FINALに影響させない。次の昇格は提供元の利用許諾確認とJRA独立OIDCゲート、時系列純度、正確な実HTML解析の実証、血統信号の未知未来OOSの順序を守る。
