@@ -193,8 +193,12 @@ def _verified_harvest(path: Path, *, not_after: datetime,
         if digest != actual:
             return None
         trusted = (attestation_verifier or
-                   (lambda p: _attested(p, signer="km-jra-pedigree-corpus-harvest.yml",
-                                        not_after=not_after)))(path)
+                   (lambda p: (
+                       _attested(p, signer="km-jra-pedigree-verified-backfill.yml",
+                                 not_after=not_after)
+                       or _attested(p, signer="km-jra-pedigree-corpus-harvest.yml",
+                                    not_after=not_after)
+                   )))(path)
         if not trusted:
             return None
         if (obj.get("horse_count") != len(obj.get("horses") or [])
