@@ -268,21 +268,22 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 continue
             if starts < 30 or not math.isfinite(raw) or not 0 <= raw <= 100:
                 continue
-            # JRA prints win_rate as a *percentage*: 0.8 means 0.8%,
-            # not 80%. Prefer the independently observed integer wins/starts;
-            # verify agreement with the rounded official displayed percent.
+            # Official JRA "勝率" uses a fractional 0..1 ratio (e.g. 0.044
+            # for 4.4%), not 4.4 percent; published figures round to 3
+            # decimal places. Other explicit percent-style imports may be
+            # accepted ONLY when integer wins/starts independently agree.
             wins = stats.get("wins")
             if wins is None:
-                # Without an integer numerator, sub-1% and fractional rates
-                # are ambiguous in legacy fixtures; hold rather than invent.
-                if raw <= 1:
+                if raw > 1.0:
                     continue
-                rate = raw / 100.0
+                rate = raw
             else:
                 if type(wins) is not int or wins < 0 or wins > starts:
                     continue
                 rate = wins / starts
-                if abs((rate * 100.0) - raw) > 0.55:
+                displayed = raw if raw <= 1.0 else raw / 100.0
+                tolerance = 0.0015 if raw <= 1.0 else 0.0055
+                if abs(rate - displayed) > tolerance:
                     continue
             if not 0 <= rate <= 1:
                 continue
@@ -290,7 +291,7 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 "category": rate_band(rate),
                 "rule_id": RULES[feature],
                 "evidence_refs": [sha, f"JRA_OFFICIAL_PERSON_STATS:{rid}:{who}"],
-                "source_fact": f"Official {who} matched; starts={starts}; wins={wins}; display_percent={raw}; ratio={rate:.6f}",
+                "source_fact": f"Official {who} matched; starts={starts}; wins={wins}; displayed_win_rate={raw}; ratio={rate:.6f}",
                 "source_authority": "JRA_OFFICIAL",
                 "result_derived": False,
                 "production_authority": True,
