@@ -217,3 +217,55 @@ def test_attach_request_persists_source_feature_trace_for_final_artifact_transpo
     assert rr["source_feature_trace"]["summary"]["feature_count"]==71
     assert rr["source_feature_trace_summary"]["generated_feature_count"]>=1
     assert "source_fact_availability" in rr
+
+
+def test_official_detail_runner_id_only_not_silently_lost():
+    a=_artifact()
+    a["jra_official_race_card_detail_sha256"]="DETAIL-ID"
+    a["jra_official_race_card_detail"]={"runners":[
+        {"runner_id":"1","career_record":{"starts":6},
+         "current_body_weight":485,"current_body_weight_change":2,
+         "popularity_rank":1},
+        {"runner_id":"2","career_record":{"starts":4},
+         "current_body_weight":472,"current_body_weight_change":-6,
+         "popularity_rank":2}
+    ]}
+    rows=[{"runner_id":"1","career_starts":6,"evidence_features":{}},
+          {"runner_id":"2","career_starts":4,"evidence_features":{}}]
+    rep=compile_source_to_features(a,rows,_mapping())
+    first=rep["runners"]["1"]["generated_production_features"]
+    assert first["bodyweight_delta_fit"]["category"]=="STRONG"
+    assert first["market_rank"]["category"]=="VERY_STRONG"
+    assert rep["runners"]["1"]["source_fact_availability"]["JRA_OFFICIAL_RACE_CARD"]["fact_available"] is True
+
+
+def test_market_rank_uses_full_official_population_not_partial_detail():
+    a=_artifact()
+    a["jra_official_runner_universe"]["runners"] += [
+        {"runner_id":str(n),"horse_no":n,"status":"ACTIVE","assigned_weight":56}
+        for n in range(3,17)
+    ]
+    a["jra_official_race_card_detail_sha256"]="DETAIL-ID"
+    a["jra_official_race_card_detail"]={"runners":[
+        {"runner_id":"1","career_record":{"starts":5},"popularity_rank":2},
+        {"runner_id":"2","career_record":{"starts":5},"popularity_rank":5}
+    ]}
+    rows=[{"runner_id":"1","career_starts":5,"evidence_features":{}},
+          {"runner_id":"2","career_starts":5,"evidence_features":{}}]
+    rep=compile_source_to_features(a,rows,_mapping())
+    assert rep["runners"]["2"]["generated_production_features"]["market_rank"]["category"]=="POSITIVE"
+    assert rep["runners"]["1"]["generated_production_features"]["market_rank"]["category"]=="STRONG"
+
+
+def test_workout_requires_full_verified_runner_universe_and_runner_id_supported():
+    a=_artifact()
+    a["jra_registered_common"]={"workout":{"source_snapshot_sha256":"W",
+      "runners":[{"runner_id":"1","assessment":"順調"}]}}
+    rows=[{"runner_id":"1","career_starts":3,"evidence_features":{}},
+          {"runner_id":"2","career_starts":3,"evidence_features":{}}]
+    rep=compile_source_to_features(a,rows,_mapping())
+    assert "workout_capability" not in rep["runners"]["1"]["generated_production_features"]
+    a["jra_registered_common"]["workout"]["runners"].append(
+        {"runner_id":"2","assessment":"好調"})
+    rep2=compile_source_to_features(a,rows,_mapping())
+    assert rep2["runners"]["1"]["generated_production_features"]["workout_capability"]["rule_id"]=="JRA-WORKOUT-CAPABILITY-COMMENT-v1"

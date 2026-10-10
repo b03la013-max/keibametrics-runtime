@@ -45,6 +45,12 @@ class ProductionPreparationTest(unittest.TestCase):
             self.assertEqual(len(row["source_feature_trace"]["features"]), 71)
             self.assertIn(rid, {"1", "2"})
         self.assertTrue(report["exact_gaps"])
+        coverage = report["base_index_coverage_diagnostic"]
+        self.assertEqual(coverage["required"], 26)
+        self.assertTrue(coverage["blocked"] > 0)
+        self.assertFalse(coverage["all_base_index_coverage_met"])
+        self.assertTrue(coverage["no_missing_value_imputation"])
+        self.assertTrue(all(row["index_id"] and row["runner_id"] for row in coverage["rows"]))
         for gap in report["exact_gaps"]:
             self.assertIn("index_binding", gap)
             self.assertIn("missing_reason", gap)
@@ -82,12 +88,37 @@ class ProductionPreparationTest(unittest.TestCase):
         self.intent["supplemental_evidence_pack"] = self.supplemental()
         report = prepare_production_numerical(self.intent, self.env)
         self.assertTrue(report["production_full_numerical_ready"])
+        coverage = report["base_index_coverage_diagnostic"]
+        self.assertEqual(coverage["required"], 26)
+        self.assertEqual(coverage["blocked"], 0)
+        self.assertTrue(coverage["all_base_index_coverage_met"])
         self.assertFalse(report["static_generation_ready"])
         self.assertEqual(report["first_blocked_stage"], "PRODUCTION_STATIC_PREDICTION_OWNER")
         self.assertEqual(report["exact_gaps"], [])
         for r in report["prepared_numerical_request"]["runners"]:
             self.assertEqual(len(r["canonical_components"]), 20)
         self.assertNotIn("static_prediction", report["prepared_numerical_request"])
+
+    def test_feature_authority_firewall_rejects_candidate_shadow_and_result_facts(self):
+        from jra_evidence_to_base_production import load_mapping, build_production_ledger, ProductionMappingError
+        self.intent["acceptance_only"] = True
+        self.intent["supplemental_evidence_pack"] = self.supplemental()
+        report = prepare_production_numerical(self.intent, self.env)
+        self.assertTrue(report["production_full_numerical_ready"])
+        mapping = load_mapping(str(ROOT/"mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"))
+        from copy import deepcopy
+        base = report["prepared_numerical_request"]["runners"]
+        for marker in (
+            {"candidate_only": True},
+            {"production_authority": False},
+            {"result_derived": True},
+            {"source_authority": "THIRD_PARTY_PUBLIC_SHADOW"},
+        ):
+            with self.subTest(marker=marker):
+                rows = deepcopy(base)
+                rows[0]["evidence_features"]["recent_performance"].update(marker)
+                with self.assertRaises(ProductionMappingError):
+                    build_production_ledger(self.intent["race_id"],rows,mapping)
 
     def test_synthetic_supplemental_never_enters_production(self):
         self.intent["supplemental_evidence_pack"] = self.supplemental()

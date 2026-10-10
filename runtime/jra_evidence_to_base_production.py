@@ -48,6 +48,16 @@ def _feature_score(feature_name, features, mapping):
         return None
     if not isinstance(spec, dict):
         raise ProductionMappingError(f"FEATURE_NOT_OBJECT:{feature_name}")
+    # Authority firewall for inputs supplied outside the trusted source compiler.
+    # The absence of an optional authority annotation retains legacy authorized
+    # supplemental ledgers, but any explicit non-Production marker fails closed.
+    if spec.get("candidate_only") is True or spec.get("production_authority") is False:
+        raise ProductionMappingError(f"NON_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
+    if spec.get("result_derived") is True:
+        raise ProductionMappingError(f"RESULT_DERIVED_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
+    authority = str(spec.get("source_authority") or "").upper()
+    if authority and ("SHADOW" in authority or "TSL" in authority or "NON_PRODUCTION" in authority):
+        raise ProductionMappingError(f"SHADOW_SOURCE_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
     category = str(spec.get("category") or "").strip().upper()
     scale = mapping["category_scale"]
     if category not in scale:
