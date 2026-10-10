@@ -25,6 +25,10 @@ RULE_IDS = {
     "same_course_fit": "KM-JRA-SAME-COURSE-FIT-v1",
     "same_distance_fit": "KM-JRA-SAME-DISTANCE-FIT-v1",
     "surface_fit": "KM-JRA-SURFACE-FIT-v1",
+    "going_fit": "KM-JRA-GOING-FIT-v1",
+    "same_course_distance_quality": "KM-JRA-SAME-COURSE-DISTANCE-QUALITY-v1",
+    "jockey_quality": "KM-JRA-JOCKEY-QUALITY-v1",
+    "trainer_quality": "KM-JRA-TRAINER-QUALITY-v1",
 }
 
 
@@ -107,6 +111,9 @@ def propose_official_observed_features(source: dict) -> dict:
         context.get("distance_m"),
         str(context.get("surface") or ""),
     )
+    person = ((source.get("jra_official_person_stats") or {}).get("runners") or {})
+    person_source_sha = str(source.get("jra_official_person_stats_sha256") or "")
+    going = str(context.get("going") or context.get("track_condition") or "")
     observed = {}
     required = sorted(RULE_IDS)
     for runner in official:
@@ -151,6 +158,59 @@ def propose_official_observed_features(source: dict) -> dict:
             add("same_distance_fit", [x for x in rows if str(x.get("distance_m") or "") == str(target_dist)], "top3_rate")
         if surface:
             add("surface_fit", [x for x in rows if str(x.get("surface") or "") == surface], "top3_rate")
+        if going and surface:
+            add("going_fit", [x for x in rows
+                              if str(x.get("surface") or "") == surface
+                              and str(x.get("going") or "") == going], "top3_rate")
+        if venue and target_dist is not None and surface:
+            add("same_course_distance_quality", [x for x in rows
+                 if str(x.get("venue") or "") == venue
+                 and str(x.get("distance_m") or "") == str(target_dist)
+                 and str(x.get("surface") or "") == surface], "top3_rate")
+
+        # JRA person statistics are observed facts. Transformations below are
+        # NON-PRODUCTION candidates and require an exact current-name/token
+        # match performed by the official Source Adapter.
+        by_person = person.get(rid) or {}
+        for kind, feature in (("jockey", "jockey_quality"),
+                              ("trainer", "trainer_quality")):
+            if by_person.get(f"{kind}_matched") is not True:
+                continue
+            profile = by_person.get(kind) or {}
+            flat = profile.get("current_year_flat") or {}
+            try:
+                starts = int(flat.get("starts"))
+                win_rate = float(flat.get("win_rate"))
+            except (ValueError, TypeError):
+                continue
+            # Official pages may express ratios as 0..1 or percentages as
+            # 0..100. Exact value 1.0 is ambiguous and cannot be guessed.
+            if starts < 30 or not math.isfinite(win_rate) or win_rate < 0:
+                continue
+            if win_rate == 1.0:
+                continue
+            rate = win_rate / 100.0 if win_rate > 1.0 else win_rate
+            if not 0.0 <= rate <= 1.0:
+                continue
+            fact = {
+                "category": rate_band(rate),
+                "rule_id": RULE_IDS[feature],
+                "evidence_refs": [x for x in [
+                    source_sha, person_source_sha,
+                    str(profile.get("sha256") or ""),
+                    f"JRA_OFFICIAL_PERSON_STATS:{rid}:{kind}"
+                ] if x],
+                "source_fact": (
+                    f"Current-year official {kind} stats: starts={starts}, "
+                    f"win_rate_raw={win_rate}, normalized_ratio={rate:.6f}; "
+                    f"current runner/person identity matched before cutoff."
+                ),
+                "sample_count": starts,
+                "numeric_observation": round(rate, 6),
+                "candidate_only": True,
+                "production_authority": False,
+            }
+            facts[feature] = fact
         observed[rid] = {
             "features": facts,
             "observed_count": len(facts),

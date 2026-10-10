@@ -64,7 +64,8 @@ def test_source_observed_evaluation_with_restricted_temporal_universe():
     f = a["runners"]["1"]["features"]
     assert set(f) == {
         "recent_performance", "recent_consistency",
-        "same_course_fit", "same_distance_fit", "surface_fit"
+        "same_course_fit", "same_distance_fit", "surface_fit",
+        "same_course_distance_quality",
     }
     assert f["recent_consistency"]["category"] == "VERY_STRONG"
     assert f["recent_consistency"]["sample_count"] == 2
@@ -135,3 +136,55 @@ def test_static_owner_rejects_candidate_numerics_missing_index_and_bad_provenanc
     req["runners"][1]["canonical_components"]["SSI"]["mapping_version"] = "CANDIDATE"
     with pytest.raises(CandidateClosureError, match="NON_PRODUCTION_MAPPING"):
         evaluate_static_owner_candidate(req, source_snapshot_sha256="SOURCE")
+
+
+def test_official_person_stats_candidate_is_sample_bound_identity_matched_and_never_production():
+    src = official_source()
+    src["jra_official_person_stats_sha256"] = "PERSON-FACTS"
+    src["jra_official_person_stats"] = {"runners": {
+        "1": {
+            "jockey_matched": True, "trainer_matched": True,
+            "jockey": {"sha256": "JOCKEY-SHA",
+                       "current_year_flat": {"starts": 100, "win_rate": 0.20}},
+            "trainer": {"sha256": "TRAINER-SHA",
+                        "current_year_flat": {"starts": 80, "win_rate": 15.0}},
+        },
+        "2": {
+            "jockey_matched": False, "trainer_matched": True,
+            "jockey": {"current_year_flat": {"starts": 100, "win_rate": 0.50}},
+            "trainer": {"current_year_flat": {"starts": 7, "win_rate": 0.50}},
+        },
+        "3": {
+            "jockey_matched": True,
+            "jockey": {"current_year_flat": {"starts": 100, "win_rate": 1.0}},
+        },
+    }}
+    out = propose_official_observed_features(src)
+    a = out["runners"]["1"]["features"]
+    assert a["jockey_quality"]["numeric_observation"] == 0.20
+    assert a["trainer_quality"]["numeric_observation"] == 0.15
+    assert a["jockey_quality"]["rule_id"] == "KM-JRA-JOCKEY-QUALITY-v1"
+    assert "PERSON-FACTS" in a["jockey_quality"]["evidence_refs"]
+    assert a["jockey_quality"]["candidate_only"] is True
+    assert a["trainer_quality"]["production_authority"] is False
+    assert "jockey_quality" not in out["runners"]["2"]["features"]
+    assert "trainer_quality" not in out["runners"]["2"]["features"]
+    assert "jockey_quality" not in out["runners"]["3"]["features"]
+    assert out["production_feature_merge_allowed"] is False
+
+
+def test_going_and_course_distance_are_actual_pre_race_filtered_observations():
+    src = official_source()
+    src["jra_race_context"]["going"] = "良"
+    runs = src["jra_official_race_card_detail"]["runners"][0]["recent_runs"]
+    runs[0]["going"] = "良"
+    runs[1]["going"] = "良"
+    runs[2]["going"] = "良"  # Target result still excluded.
+    out = propose_official_observed_features(src)
+    features = out["runners"]["1"]["features"]
+    assert features["going_fit"]["sample_count"] == 2
+    assert features["same_course_distance_quality"]["sample_count"] == 2
+    assert features["same_course_distance_quality"]["numeric_observation"] == 1.0
+    assert "2026-10-10" not in features["going_fit"]["source_fact"].split("source_dates=")[1].split("; all before")[0]
+    assert features["going_fit"]["production_authority"] is False
+    assert out == propose_official_observed_features(copy.deepcopy(src))
