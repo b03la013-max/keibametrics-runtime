@@ -189,7 +189,13 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
     def test_static_freeze_later_than_external_handoff_rejected(self):
         intent, source, report, authority = fixture()
         tampered = deepcopy(report)
-        tampered["static_owner_executable_diagnostic"]["frozen_at"] = "2026-10-10T12:12:00+09:00"
+        tampered["static_owner_executable_diagnostic"] = compile_static_owner(
+            tampered["prepared_numerical_request"],
+            source_snapshot_sha256=source["artifact"]["source_snapshot_sha256"],
+            source_receipt_sha256=source["receipt_sha256"],
+            frozen_at="2026-10-10T12:12:00+09:00",
+            prediction_cutoff=CUTOFF,
+        )
         with self.assertRaisesRegex(JRAProductionAutoHandoffError, "FREEZE_AFTER_CUTOFF"):
             self.submit(intent, source, tampered, authority)
 
