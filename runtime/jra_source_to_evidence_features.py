@@ -735,7 +735,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     # JRA official SOURCE plus a point-in-time pedigree corpus of earlier
     # signed SOURCEs. They only fill features still missing after the rules
     # above, never overwrite, and keep thresholds/weights unchanged.
-    owner_registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.2_20261010.json"
+    owner_registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json"
     owner_observations = {}
     owner_corpus_manifest = None
     if owner_registry_path.exists():
