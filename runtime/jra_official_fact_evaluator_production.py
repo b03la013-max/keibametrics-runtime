@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 import math
+from statistics import median
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from jra_evidence_feature_normalizer_production import percentile_band, rate_band
+from jra_evidence_feature_normalizer_production import percentile_band, rate_band, bodyweight_delta_band
 
 PROFILE = "JRA-OFFICIAL-OBSERVED-FEATURE-PRODUCTION-IMPLEMENTATION-20261010"
 RULES = {
@@ -26,6 +27,8 @@ RULES = {
     "same_course_distance_quality": "KM-JRA-SAME-COURSE-DISTANCE-QUALITY-v1",
     "jockey_quality": "KM-JRA-JOCKEY-QUALITY-v1",
     "trainer_quality": "KM-JRA-TRAINER-QUALITY-v1",
+    "rotation_fit": "KM-JRA-ROTATION-FIT-v1",
+    "bodyweight_range_fit": "KM-JRA-BODYWEIGHT-RANGE-FIT-v1",
 }
 
 
@@ -178,6 +181,65 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                 "production_authority": True,
                 "observation_count": len(selected),
             }
+
+        # Consecutive-race timing is a directly observed pre-race fact.
+        # Use the existing registered rotation rule and already existing
+        # candidate timing bands; leave debutants and malformed dates missing.
+        if runs:
+            latest = _date(runs[0]["date"])
+            days = (race_day - latest).days if latest else None
+            if days is not None and days > 0:
+                if 14 <= days <= 42:
+                    cat = "STRONG"
+                elif 8 <= days <= 70:
+                    cat = "POSITIVE"
+                elif 71 <= days <= 120:
+                    cat = "NEUTRAL"
+                elif days < 8:
+                    cat = "CAUTION"
+                else:
+                    cat = "MIXED"
+                features["rotation_fit"] = {
+                    "category": cat,
+                    "rule_id": RULES["rotation_fit"],
+                    "evidence_refs": [sha, f"JRA_OFFICIAL_HISTORY:{rid}:{latest}"],
+                    "source_fact": f"Last verified prior start {latest}; days_to_target_race={days}; course conditions not assumed",
+                    "source_authority": "JRA_OFFICIAL",
+                    "result_derived": False,
+                    "production_authority": True,
+                    "observation_count": 1,
+                }
+
+        # Existing, registered delta-band normalizer applied to the distance
+        # from the horse's real prior bodyweight median. Distinct from the
+        # official same-day bodyweight-change feature; never use imaginary
+        # 'ideal weight', and require >=2 independent past observations.
+        current = d.get("current_body_weight")
+        if type(current) is int and 300 <= current <= 700:
+            historical = [
+                (int(x["body_weight"]), str(x["date"]))
+                for x in runs[:6] if type(x.get("body_weight")) is int
+                and 300 <= x["body_weight"] <= 700
+            ]
+            if len(historical) >= 2:
+                baseline = float(median(v for v, _ in historical))
+                features["bodyweight_range_fit"] = {
+                    "category": bodyweight_delta_band(current-baseline),
+                    "rule_id": RULES["bodyweight_range_fit"],
+                    "evidence_refs": [sha] + [
+                        f"JRA_OFFICIAL_BODYWEIGHT:{rid}:{day}:{weight}"
+                        for weight, day in historical
+                    ],
+                    "source_fact": (
+                        f"Official current bodyweight={current} kg; prior "
+                        f"median={baseline:.1f} kg; signed_delta={current-baseline:+.1f} kg;"
+                        f" prior_observations={len(historical)}"
+                    ),
+                    "source_authority": "JRA_OFFICIAL",
+                    "result_derived": False,
+                    "production_authority": True,
+                    "observation_count": len(historical),
+                }
 
         observed("recent_performance", runs[:4], normalized=True)
         observed("recent_consistency", runs[:4])
