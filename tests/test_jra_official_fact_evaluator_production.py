@@ -160,6 +160,28 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         ]
         self.assertNotIn("rotation_fit",official_production_observations(src,self.registry)["1"])
 
+    def test_registered_historical_class_from_only_prior_official_runs(self):
+        from jra_official_fact_evaluator_production import _jra_official_class_strength
+        self.assertEqual(_jra_official_class_strength("東京優駿 GⅠ"),96)
+        self.assertEqual(_jra_official_class_strength("神戸新聞杯 GⅡ"),92)
+        self.assertEqual(_jra_official_class_strength("新潟2歳ステークス GⅢ"),88)
+        self.assertEqual(_jra_official_class_strength("3歳1勝クラス"),70)
+        self.assertIsNone(_jra_official_class_strength("ジョーカークラシック"))
+        src=source()
+        runs=src["jra_official_horse_history"]["runners"]["1"]["runs"]
+        runs[0]["race_name"]="東京優駿 GⅠ"
+        runs[1]["race_name"]="3歳1勝クラス"
+        runs[2]["race_name"]="宝塚記念 GⅠ" # Same-day: forbidden
+        got=official_production_observations(src,self.registry)
+        f=got["1"]["class_performance"]
+        self.assertEqual(f["rule_id"],"KM-JRA-CLASS-PERFORMANCE-v1")
+        self.assertEqual(f["observation_count"],2)
+        self.assertIn("class_level_weight=0.55",f["source_fact"])
+        self.assertTrue(all("2026-10-10" not in x for x in f["evidence_refs"]))
+        src["jra_official_horse_history"]["runners"]["1"]["runs"][1].pop("race_name")
+        self.assertNotIn("class_performance", official_production_observations(src,self.registry)["1"])
+        self.assertNotIn("class_performance",got["2"])
+
     def test_registry_identity_and_ambiguous_person_rate_fail_closed(self):
         src = source()
         src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]["win_rate"] = 1.0
