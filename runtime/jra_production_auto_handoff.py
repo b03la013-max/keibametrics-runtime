@@ -109,7 +109,10 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
         raise JRAProductionAutoHandoffError(
             "JRA_STATIC_PRODUCTION_LEDGER_RECOMPUTE_FAILED:" + str(exc)
         ) from exc
-    if owner.get("sha256") != canonical_owner.get("sha256"):
+    declared_owner_sha = owner.get("sha256")
+    actual_owner_sha = _canon({k: v for k, v in owner.items() if k != "sha256"})
+    if (declared_owner_sha != actual_owner_sha
+            or declared_owner_sha != canonical_owner.get("sha256")):
         raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_CONTENT_HASH_MISMATCH")
     freeze = _iso(frozen_at)
     cutoff = _iso(intent.get("prediction_cutoff"))
