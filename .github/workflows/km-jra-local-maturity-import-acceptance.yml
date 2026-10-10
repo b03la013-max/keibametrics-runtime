@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_static_owner_executable.py"
+      - "tests/test_jra_static_owner_executable.py"
       - "runtime/jra_official_fact_evaluator_production.py"
       - "runtime/jra_source_to_evidence_features.py"
       - "tests/test_jra_official_fact_evaluator_production.py"
@@ -41,6 +43,8 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_static_owner_executable.py"
+      - "tests/test_jra_static_owner_executable.py"
       - "runtime/jra_official_fact_evaluator_production.py"
       - "runtime/jra_source_to_evidence_features.py"
       - "tests/test_jra_official_fact_evaluator_production.py"
@@ -79,7 +83,7 @@ jobs:
 
       - name: Cross-family regression and JRA bridge tests
         run: |
-          python -m pytest -q tests/test_jra_candidate_postresult_closedloop.py tests/test_jra_source_only_closure_candidate.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_production_index_coverage_firewall.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_candidate_risk_budget_semantics.py tests/test_jra_source_candidate_semantics_width.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
+          python -m pytest -q tests/test_jra_candidate_postresult_closedloop.py tests/test_jra_source_only_closure_candidate.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_production_index_coverage_firewall.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_candidate_risk_budget_semantics.py tests/test_jra_source_candidate_semantics_width.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
 
       - name: JRA lifecycle and LOCAL non-regression
         run: |
