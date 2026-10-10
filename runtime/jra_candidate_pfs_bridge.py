@@ -118,7 +118,7 @@ def bridge_all(root:Path=Path("."))->dict:
             old=previous.get("settlement") or {}
             new=doc["settlement"]
             if (int(old.get("total_investment") or -1)!=new["total_investment"]
-                or int(old.get("total_payout") or -1)!=new["total_payout"]):
+                or int(old.get("total_payout",-1))!=new["total_payout"]):
                 raise ValueError("CANDIDATE_LEGACY_PFS_CONFLICT:"+rid)
             if previous.get("source_result_settlement_sha256") not in (None,doc["source_result_settlement_sha256"]):
                 raise ValueError("CANDIDATE_LEGACY_SOURCE_HASH_CONFLICT:"+rid)
