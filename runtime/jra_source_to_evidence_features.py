@@ -743,10 +743,17 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         from jra_pedigree_corpus import build_corpus
         race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
                         or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
+        target_rows = (source_artifact.get("jra_official_race_card_detail") or {}).get("runners") or []
+        relevant_sires = {str(x.get("sire") or "").strip() for x in target_rows if x.get("sire")}
+        relevant_damsires = {str(x.get("damsire") or "").strip() for x in target_rows if x.get("damsire")}
         corpus = build_corpus(Path(__file__).resolve().parents[1],
                               prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
-                              race_date=race_date, exclude_race_id=source_artifact.get("race_id"))
-        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "horse_count", "run_count", "manifest_sha256")}
+                              race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
+                              required_sires=relevant_sires,
+                              required_damsires=relevant_damsires)
+        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "horse_count", "run_count", "manifest_sha256",
+                                                                        "identity_collision_count", "run_conflict_count",
+                                                                        "rejected_untrusted_inputs", "source_signature_level")}
         owner_observations = owner_authorized_observations(
             source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
     runners_out = {}

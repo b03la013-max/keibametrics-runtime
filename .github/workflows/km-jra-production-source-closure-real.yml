@@ -6,6 +6,9 @@ on:
       - ".github/workflows/km-jra-production-source-closure-real.yml"
       - "runtime/jra_official_fact_evaluator_production.py"
       - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - "runtime/jra_owner_authorized_feature_rules.py"
+      - "runtime/jra_source_runtime/jra_pedigree_harvest.py"
       - "runtime/jra_execution_maturity_bridge.py"
       - "runtime/jra_static_owner_executable.py"
   pull_request:
@@ -14,6 +17,9 @@ on:
       - ".github/workflows/km-jra-production-source-closure-real.yml"
       - "runtime/jra_official_fact_evaluator_production.py"
       - "runtime/jra_source_to_evidence_features.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - "runtime/jra_owner_authorized_feature_rules.py"
+      - "runtime/jra_source_runtime/jra_pedigree_harvest.py"
       - "runtime/jra_execution_maturity_bridge.py"
       - "runtime/jra_static_owner_executable.py"
   workflow_dispatch:
@@ -32,9 +38,11 @@ jobs:
           python-version: "3.13"
       - name: Test registered feature and Static Owner implementation
         run: |
-          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi
-          python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py
+          python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi beautifulsoup4
+          python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py
       - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           PYTHONPATH=runtime python - <<'PY'
           import json
@@ -68,6 +76,7 @@ jobs:
               "production_closure_summary": report["production_closure_summary"],
               "source_only_coverage_repair_plan": report["source_only_coverage_repair_plan"],
               "first_blocked_stage": report["first_blocked_stage"],
+              "pedigree_corpus_manifest": (report.get("source_feature_report") or {}).get("pedigree_corpus_manifest"),
               "static_owner_executable": bool(report["static_owner_executable_diagnostic"]),
               "static_owner_error": report["static_owner_executable_error"],
               "production_full_pipeline_ready": report["production_full_pipeline_ready"],
@@ -126,6 +135,7 @@ jobs:
               "new_calculated_base_cells":report.get("partial_base_calculated_count"),
               "new_blocked_base_cells":report.get("partial_base_blocked_count"),
               "generated_registered_production_features":dict(sorted(names.items())),
+              "pedigree_corpus_manifest":features.get("pedigree_corpus_manifest"),
               "required_full20_indices":report["required_index_count"],
               "full20_ready":report["production_full_numerical_ready"],
           }

@@ -5,6 +5,9 @@ run-name: JRA pedigree harvest ${{ inputs.dates || 'scheduled' }} ${{ inputs.mod
 # point-in-time pedigree corpus that closes BVI with JRA official facts.
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 on:
   schedule:
@@ -52,19 +55,53 @@ jobs:
           MODE="${MODE:-results}"
           ARGS=()
           IFS=',' read -ra DS <<< "$DATES"
+          if [ "${#DS[@]}" -ne 1 ]; then echo "SINGLE_DATE_ONLY" >&2; exit 1; fi
           for d in "${DS[@]}"; do ARGS+=(--date "$(echo "$d" | xargs)"); done
           cd runtime/jra_source_runtime
-          python jra_pedigree_harvest.py "${ARGS[@]}" --mode "$MODE" --out-dir ../pedigree_corpus
-      - name: Persist corpus files
+          python jra_pedigree_harvest.py "${ARGS[@]}" --mode "$MODE" --out-dir ../pedigree_corpus \
+            --max-races 3 --start-race 0 --delay 1.3
+      - name: Detect and validate exactly one new official pedigree file
+        id: corpus
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(git ls-files --others --exclude-standard runtime/pedigree_corpus/)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${#FILES[@]}" -ne 1 ]; then echo "EXPECTED_ONE_CORPUS_FILE" >&2; exit 1; fi
+          FILE="${FILES[0]}"
+          [[ "$FILE" == runtime/pedigree_corpus/*.json ]]
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+      - name: Attest official pedigree bytes using GitHub OIDC
+        if: steps.corpus.outputs.exists == 'true'
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.corpus.outputs.file }}
+      - name: Verify official pedigree OIDC provenance before commit
+        if: steps.corpus.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.corpus.outputs.file }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml"
+      - name: Persist verified official pedigree file only
+        if: steps.corpus.outputs.exists == 'true'
+        env:
+          FILE: ${{ steps.corpus.outputs.file }}
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/pedigree_corpus/*.json
+          git add "$FILE"
           git diff --cached --quiet && exit 0
-          git commit -m "corpus: JRA official pedigree harvest [skip ci]"
-          for i in 1 2 3 4 5; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            git rebase --abort 2>/dev/null || true; sleep $((i*3))
+          git commit -m "corpus: OIDC-verified JRA official pedigree [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*4))
           done
           exit 1

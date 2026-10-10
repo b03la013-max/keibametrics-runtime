@@ -77,6 +77,7 @@ jobs:
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e
           rm -rf runtime_out/jra_single_entry_source_checkpoint
