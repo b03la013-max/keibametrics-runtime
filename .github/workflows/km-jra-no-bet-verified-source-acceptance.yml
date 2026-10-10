@@ -1,0 +1,80 @@
+name: JRA Actual-SOURCE NO_BET Terminal OIDC Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-no-bet-verified-source-acceptance.yml"
+      - "runtime/jra_production_no_bet_terminal.py"
+      - "tests/test_jra_production_no_bet_real_source.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-no-bet-verified-source-acceptance.yml"
+      - "runtime/jra_production_no_bet_terminal.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+
+jobs:
+  tokyo-r05-actual-official-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify official source Ed25519 + independent GitHub OIDC
+        run: |
+          set -euo pipefail
+          SOURCE="runtime/executions/KM-JRA-TKY-20261010-R05-LIVE-R1/SOURCE/runs/38019477297/source_receipt_envelope.json"
+          test -f "$SOURCE"
+          gh attestation verify "$SOURCE" --repo "${{ github.repository }}"
+          SOURCE="$SOURCE" PYTHONPATH=runtime:runtime/jra_source_runtime python - <<'PY'
+          import os
+          from verify_source_envelope import verify
+          result=verify(os.environ["SOURCE"])
+          assert result.get("valid") is True,result
+          print("JRA_TOKYO_REAL_SOURCE_ED25519_PASS")
+          PY
+      - name: Build non-OOS real historical NO_BET Full20 terminal from actual exact gap
+        run: |
+          PYTHONPATH=runtime python - <<'PY'
+          import json
+          from pathlib import Path
+          from jra_production_no_bet_terminal import build_no_bet_terminal, digest
+          race="KM-JRA-TKY-20261010-R05-LIVE-R1"
+          intent=json.loads(Path("runtime/jra_formal_intents/"+race+".json").read_text())
+          report=json.loads(Path("runtime/exact_gaps/"+race+".json").read_text())
+          result=build_no_bet_terminal(intent,report,
+             source_receipt_verified=True,
+             lineage="HISTORICAL_DIAGNOSTIC",
+             created_at="2026-10-10T13:25:00+09:00")
+          assert len(result["index_universe"]) == 12
+          assert result["required_index_count"] == 240
+          assert result["unresolved_count"] == 0
+          assert result["total_investment"] == 0
+          assert result["tickets"] == []
+          assert result["signed_final_verified"] is False
+          assert result["sha256"] == digest({k:v for k,v in result.items() if k!="sha256"})
+          Path("runtime_out").mkdir(exist_ok=True)
+          Path("runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json").write_text(
+              json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
+          print(json.dumps({k:result[k] for k in (
+             "race_id","required_index_count","base_calculated_count",
+             "base_held_count","derived_held_count","decision",
+             "total_investment","lineage","sha256")},ensure_ascii=False))
+          PY
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-jra-source-nobet-tokyo-r05-oidc
+          path: runtime_out/JRA-TKY-R05-OFFICIAL-NO-BET-HISTORICAL.json
+          if-no-files-found: error
