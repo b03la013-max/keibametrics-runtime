@@ -45,7 +45,7 @@ def fixture(root:Path,*,signed=True,cutoff=CUTOFF,source_race=RACE,
     src=root/"runtime/executions"/RUN/"SOURCE/runs"/"123"/"source_receipt_envelope.json"
     src.parent.mkdir(parents=True,exist_ok=True)
     art={"race_id":source_race,"family_id":"JRA",
-        "prediction_cutoff":cutoff,"source_freeze_at":"2026-10-11T12:20:00+09:00",
+        "prediction_cutoff":cutoff,"source_freeze_at":"2026-10-10T09:20:00+09:00",
         "source_race_context":{"race_date":"2026-10-11","venue_id":"KYO","race_no":9},
         "jra_official_race_card_detail":{"runners":OFFICIAL},
         "formal_ready":True, "errors":[]}
@@ -100,6 +100,28 @@ class SignedSourceQueueTests(unittest.TestCase):
                 self.assertEqual(result["signed_source_ready"],0)
                 self.assertEqual(result["missing_signed_source"],1)
                 self.assertEqual(json.loads(queue.read_text()),[])
+
+    def test_future_frozen_source_not_admitted_before_it_exists(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            fi,source=fixture(root)
+            envelope=json.loads(source.read_text())
+            envelope["artifact"]["source_freeze_at"]="2026-10-11T12:20:00+09:00"
+            # Even if an attacker re-signs the new payload legitimately,
+            # SOURCE cannot be admitted ahead of actual frozen-at time.
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            from cryptography.hazmat.primitives.serialization import Encoding,PublicFormat
+            private=Ed25519PrivateKey.generate()
+            rec=envelope["receipt"]
+            rec["artifact_sha256"]=sha_obj(envelope["artifact"])
+            raw=json.dumps(rec,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
+            envelope["receipt_sha256"]=hashlib.sha256(raw).hexdigest()
+            envelope["signature"]=base64.b64encode(private.sign(raw)).decode()
+            envelope["receipt_public_key_b64"]=base64.b64encode(
+                private.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw)).decode()
+            source.write_text(json.dumps(envelope))
+            report=synchronize(root,root/"queue.json",now=NOW,dry_run=True)
+            self.assertEqual(report["signed_source_ready"],0)
 
     def test_historical_date_and_cutoff_mismatch_cannot_be_smuggled(self):
         with tempfile.TemporaryDirectory() as d:
