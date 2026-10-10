@@ -192,6 +192,30 @@ jobs:
           req["candidate_frozen_at"]=datetime.now(timezone.utc).isoformat()
           assert dt(req["candidate_frozen_at"])<post_utc,"CANDIDATE_SEMANTIC_FREEZE_POST_START"
 
+          # Independently preserve the pre-result Static evidence before calls to
+          # external PRE_KRS/KRS/FINAL; no unsigned stage is a formal FINAL.
+          static_checkpoint={
+              "schema":"KM-JRA-CANDIDATE-PRE_KRS-STATIC-CHECKPOINT-v1",
+              "race_id":req["race_id"],"execution_id":source_execution_id,
+              "source_snapshot_sha256":source_sha,
+              "candidate_semantic_freeze":req["candidate_semantic_freeze"],
+              "candidate_frozen_at":req["candidate_frozen_at"],
+              "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "static_prediction":req["static_prediction"],
+              "role_registry":req["role_registry"],
+              "pair_dispositions":req["pair_dispositions"],
+              "third_dispositions":req["third_dispositions"],
+              "stage":"STATIC_FREEZE_BEFORE_EXTERNAL_KRS",
+              "production_authority":False,
+              "signed_final_verified":False,"purchase_authority":False,
+              "oos_eligible":False,
+          }
+          static_checkpoint["sha256"]=hashlib.sha256(json.dumps(static_checkpoint,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          Path("runtime_out").mkdir(parents=True,exist_ok=True)
+          Path("runtime_out/jra_candidate_static_checkpoint.json").write_text(
+              json.dumps(static_checkpoint,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
+          )
+
           preflight=validate_pre_krs_request(req)
           expected=len(req["runners"])*20
           assert preflight["canonical_component_count"]==expected
@@ -398,3 +422,55 @@ jobs:
             done
             exit 1
           fi
+
+      - name: Persist incomplete JRA Candidate and pre-KRS checkpoint
+        if: failure()
+        env:
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          p=pathlib.Path(os.environ.get("REQUEST_FILE") or "")
+          if not p.is_file():
+              raise SystemExit("JRA_INCOMPLETE_REQUEST_UNAVAILABLE")
+          q=json.loads(p.read_text(encoding="utf-8"))
+          if str(q.get("family_id") or "")!="JRA":
+              raise SystemExit(0)
+          f=pathlib.Path("runtime_out/jra_candidate_static_checkpoint.json")
+          checkpoint=json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+          target=pathlib.Path("runtime/candidate_attempt_status")/(str(q.get("execution_id") or q.get("race_id"))+".json")
+          target.parent.mkdir(parents=True,exist_ok=True)
+          report={
+              "schema":"KM-JRA-CANDIDATE-EXECUTION-ATTEMPT-v1",
+              "race_id":q.get("race_id"),
+              "execution_id":q.get("execution_id"),
+              "github_run_id":os.environ.get("GH_RUN_ID"),
+              "github_run_url":os.environ.get("GH_RUN_URL"),
+              "status":"INCOMPLETE / EXTERNAL-PIPELINE-FAILED",
+              "last_verified_stage":"CANDIDATE_STATIC_FREEZE" if checkpoint else "UNKNOWN_BEFORE_STATIC",
+              "static_checkpoint":checkpoint,
+              "production_authority":False,
+              "signed_final_verified":False,
+              "oos_eligible":False,
+              "purchase_authority":False,
+              "action":"Inspect GitHub failed step; do not issue formal tickets or backdate FINAL.",
+          }
+          report["sha256"]=hashlib.sha256(json.dumps(report,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          target.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print("JRA_CANDIDATE_INCOMPLETE="+str(target))
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/candidate_attempt_status
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "execution: preserve incomplete JRA Candidate checkpoint [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1
