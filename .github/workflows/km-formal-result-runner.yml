@@ -10,6 +10,11 @@ on:
       - "runtime/results/*.json"
       - "runtime/source_candidate_results/*.json"
   workflow_dispatch:
+    inputs:
+      request_path:
+        description: "Exact result request path (runtime/results/<race_id>.json)"
+        required: false
+        type: string
 
 jobs:
   result-run:
@@ -22,9 +27,20 @@ jobs:
       - name: Resolve result request
         id: result
         shell: bash
+        env:
+          REQUEST_PATH: ${{ inputs.request_path }}
         run: |
           set -euo pipefail
-          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' 'runtime/source_candidate_results/*.json' | tail -1)"
+          REQ=""
+          if [ -n "${REQUEST_PATH:-}" ]; then
+            case "$REQUEST_PATH" in
+              runtime/results/KM-*.json|runtime/source_candidate_results/KM-*.json) ;;
+              *) echo "INVALID_RESULT_REQUEST_PATH" >&2; exit 2 ;;
+            esac
+            test -f "$REQUEST_PATH"
+            REQ="$REQUEST_PATH"
+          fi
+          [ -n "$REQ" ] || REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' 'runtime/source_candidate_results/*.json' | tail -1)"
           if [ -z "$REQ" ]; then
             REQ="$(find runtime/results runtime/source_candidate_results -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort | tail -1)"
           fi
