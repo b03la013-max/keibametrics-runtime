@@ -99,6 +99,27 @@ class ProductionPreparationTest(unittest.TestCase):
             self.assertEqual(len(r["canonical_components"]), 20)
         self.assertNotIn("static_prediction", report["prepared_numerical_request"])
 
+    def test_feature_authority_firewall_rejects_candidate_shadow_and_result_facts(self):
+        from jra_evidence_to_base_production import load_mapping, build_production_ledger, ProductionMappingError
+        self.intent["acceptance_only"] = True
+        self.intent["supplemental_evidence_pack"] = self.supplemental()
+        report = prepare_production_numerical(self.intent, self.env)
+        self.assertTrue(report["production_full_numerical_ready"])
+        mapping = load_mapping(str(ROOT/"mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"))
+        from copy import deepcopy
+        base = report["prepared_numerical_request"]["runners"]
+        for marker in (
+            {"candidate_only": True},
+            {"production_authority": False},
+            {"result_derived": True},
+            {"source_authority": "THIRD_PARTY_PUBLIC_SHADOW"},
+        ):
+            with self.subTest(marker=marker):
+                rows = deepcopy(base)
+                rows[0]["evidence_features"]["recent_performance"].update(marker)
+                with self.assertRaises(ProductionMappingError):
+                    build_production_ledger(self.intent["race_id"],rows,mapping)
+
     def test_synthetic_supplemental_never_enters_production(self):
         self.intent["supplemental_evidence_pack"] = self.supplemental()
         with self.assertRaisesRegex(ValueError, "SYNTHETIC_SOURCE_FORBIDDEN"):
