@@ -115,3 +115,20 @@ def test_missing_true_role_is_first_failure_without_imputation():
     out=settle_frozen_candidate(pre,fin,official(),source_sha256="OFFICIAL_RAW_HASH",source_url="JRA")
     assert out["settlement"]["first_material_failure"]=="W_HEAD_ZERO"
     assert out["settlement"]["dominant_pfs_loss_owner"]=="NONE"
+
+def test_real_repo_jra_official_payout_html_text_fixture():
+    historical=ROOT/"runtime"/"diagnostics"/"jra_official_result_nav_probe.json"
+    doc=json.loads(historical.read_text(encoding="utf-8"))
+    prices=parse_official_payouts(doc["text_head"])
+    assert prices["EXACTA"]=={"selection":[11,9],"per_100_yen":42810}
+    assert prices["TRIO"]=={"selection":[9,11,12],"per_100_yen":118680}
+    assert prices["TRIFECTA"]=={"selection":[11,9,12],"per_100_yen":699560}
+
+
+def test_real_kyoto_pre_start_frozen_receipt_and_hashes_are_intact():
+    from jra_candidate_postresult_closedloop import _verified_pre_frozen
+    race="KM-JRA-KYO-20261010-R03"
+    folder=ROOT/"runtime"/"source_candidate_oos"/race
+    pre=json.loads((folder/"pre_result.json").read_text(encoding="utf-8"))
+    final=json.loads((folder/"candidate_final.json").read_text(encoding="utf-8"))
+    _verified_pre_frozen(pre,final,race)
