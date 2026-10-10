@@ -46,6 +46,25 @@ jobs:
       - name: Check Production boundaries and Single Entry outcomes
         run: |
           python -m pytest -q tests/test_jra_keibabook_evaluator_conformance.py tests/test_jra_keibabook_private_intake.py tests/test_jra_keibabook_mac_collector.py tests/test_jra_production_auto_handoff.py tests/test_jra_single_entry_outcome.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_static_owner_executable.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_production_no_bet_real_source.py tests/test_jra_candidate_dispatch_guard.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_production_krs_contract.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_observed_context.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_evidence_acquisition_repair.py tests/test_jra_source_to_evidence_features.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py
+      - name: Verify both OIDC pedigree collector workflows parse and preserve verification order
+        run: |
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          for path in (".github/workflows/km-jra-pedigree-corpus-harvest.yml",
+                       ".github/workflows/km-jra-pedigree-verified-backfill.yml"):
+              text=Path(path).read_text(encoding="utf-8")
+              obj=yaml.safe_load(text)
+              assert len(obj["jobs"])==1 and obj["permissions"]["id-token"]=="write"
+              job=next(iter(obj["jobs"].values()))
+              steps=job["steps"]
+              attest=[i for i,s in enumerate(steps) if s.get("uses","").startswith("actions/attest@")]
+              assert len(attest)==1, path
+              verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
+              persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]
+              assert attest[0]<verified[0]<persisted[0],path
+              print("JRA_PEDIGREE_WORKFLOW_VALID",path)
+          PY
       - name: Recompute immutable real SOURCE as historical diagnostics
         run: python scripts/audit_jra_formal_repair.py --output runtime_out/repair_audit
       - uses: actions/upload-artifact@v4
