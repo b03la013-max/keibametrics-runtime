@@ -11,7 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from jra_static_owner_executable import PROFILE as OWNER_PROFILE
+from jra_static_owner_executable import PROFILE as OWNER_PROFILE, compile_static_owner
 from jra_krs_input_builder_production import build_krs_input
 from formal_request_validator import (
     validate_pre_krs_request, validate_production_authority,
@@ -91,20 +91,38 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
         raise JRAProductionAutoHandoffError("JRA_STATIC_SOURCE_BASIS_MISMATCH")
     if owner.get("source_receipt_sha256") != source_env.get("receipt_sha256"):
         raise JRAProductionAutoHandoffError("JRA_STATIC_SOURCE_RECEIPT_MISMATCH")
+    # The external report is not a Static authority. Recalculate Static solely
+    # from the already verified Production Full20 ledger, and require the exact
+    # same immutable content hash before any PRE_KRS transport.
+    prepared = report.get("prepared_numerical_request") or {}
+    if prepared.get("family_id") != "JRA":
+        raise JRAProductionAutoHandoffError("JRA_PREPARED_PRODUCTION_LEDGER_MISSING")
+    try:
+        canonical_owner = compile_static_owner(
+            prepared,
+            source_snapshot_sha256=snap_sha,
+            source_receipt_sha256=source_env["receipt_sha256"],
+            frozen_at=owner.get("frozen_at"),
+            prediction_cutoff=intent["prediction_cutoff"],
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise JRAProductionAutoHandoffError(
+            "JRA_STATIC_PRODUCTION_LEDGER_RECOMPUTE_FAILED:" + str(exc)
+        ) from exc
+    if owner.get("sha256") != canonical_owner.get("sha256"):
+        raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_CONTENT_HASH_MISMATCH")
     freeze = _iso(frozen_at)
     cutoff = _iso(intent.get("prediction_cutoff"))
     dispatch = _iso(intent.get("external_dispatch_deadline_at"))
     post = _iso(intent.get("scheduled_post_at"))
     if not all((freeze, cutoff, dispatch, post)) or not freeze <= cutoff <= dispatch < post:
         raise JRAProductionAutoHandoffError("JRA_STATIC_OR_DISPATCH_TIME_INVALID")
-    if _iso(owner.get("frozen_at")) is None or _iso(owner["frozen_at"]) > cutoff:
+    owner_frozen = _iso(owner.get("frozen_at"))
+    if owner_frozen is None or owner_frozen > cutoff or owner_frozen > freeze:
         raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_FREEZE_AFTER_CUTOFF")
     if (str(official.get("race_id")) != str(intent.get("race_id"))
             or str(official.get("prediction_cutoff")) != str(intent.get("prediction_cutoff"))):
         raise JRAProductionAutoHandoffError("JRA_SIGNED_SOURCE_RACE_BINDING_MISMATCH")
-    prepared = report.get("prepared_numerical_request") or {}
-    if prepared.get("family_id") != "JRA":
-        raise JRAProductionAutoHandoffError("JRA_PREPARED_PRODUCTION_LEDGER_MISSING")
     req = deepcopy(intent)
     req.update({
         "source_snapshot": snap, "source_snapshot_sha256": snap_sha,
