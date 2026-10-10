@@ -24,8 +24,8 @@ def evaluate(root=ROOT, file=DATA):
         raise RuntimeError("JRA_REAL_SIGNED_HARVEST_MISSING")
     later = datetime.fromisoformat(AFTER)
     signed_files = sorted((ROOT/"runtime/pedigree_corpus").glob("20261004-results-race*-r3.json"))
-    if len(signed_files) < 3:
-        raise RuntimeError("JRA_PUBLISHED_HISTORICAL_BATCHES_MISSING")
+    if len(signed_files) < 4:
+        raise RuntimeError("JRA_FOUR_PUBLISHED_SIGNED_HISTORICAL_BATCHES_MISSING")
     verified = []
     for entry in signed_files:
         signed = _verified_harvest(entry, not_after=later)
@@ -36,6 +36,8 @@ def evaluate(root=ROOT, file=DATA):
         if signed["horse_count"] / signed["horse_token_count"] < 0.9:
             raise RuntimeError("JRA_REAL_HARVEST_UNDERCOVERED:"+entry.name)
         verified.append(signed)
+    if sum(j["horse_count"] for j in verified) < 181:
+        raise RuntimeError("JRA_FOUR_BATCH_OFFICIAL_RUNNER_COVERAGE_MISSING")
     # A historical signed receipt can be in both; do not count as new harvest.
     early = build_corpus(root, prediction_cutoff=EARLY, race_date=DATE)
     current = build_corpus(root, prediction_cutoff=AFTER, race_date=DATE)
