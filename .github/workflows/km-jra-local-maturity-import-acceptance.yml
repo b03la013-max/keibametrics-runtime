@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_zero_touch_source_index_orchestrator.py"
+      - "tests/test_jra_zero_touch_source_index_orchestrator.py"
       - "runtime/entry_transport_fallback.py"
       - "runtime/race_day_fast_reflection.py"
       - "tests/test_jra_execution_maturity_bridge.py"
@@ -72,6 +74,7 @@ jobs:
           python -m pytest -q \
             tests/test_jra_source_runtime.py \
             tests/test_jra_source_to_evidence_features.py \
+            tests/test_jra_zero_touch_source_index_orchestrator.py \
             tests/test_jra_supplemental_evidence_pack.py \
             tests/test_jra_supplemental_production_source_gate.py \
             tests/test_jra_supplemental_full_numerical_closure.py \
