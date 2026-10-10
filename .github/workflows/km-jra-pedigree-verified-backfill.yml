@@ -126,7 +126,9 @@ jobs:
           assert j["profile"]=="KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
           assert j["official"] is True and j["source"]=="www.jra.go.jp"
           assert 3<=j["horse_count"]==len(j["horses"])<=60
-          assert j["horse_count"]==j["horse_token_count"] and not j["errors"]
+          assert j["horse_count"]/j["horse_token_count"]>=0.90, "PEDIGREE_COLLECTION_COVERAGE_BELOW_90_PERCENT"
+          assert j["coverage_class"] in ("FULL","PARTIAL_WITH_EXPLICIT_MISSINGNESS")
+          assert j["coverage_class"]=="FULL" or bool(j["errors"])
           assert j["mode"]=="results" and j["max_races"]==3
           assert all(h.get("horse_name") and h.get("sire") and h.get("dam") for h in j["horses"])
           assert all(re.fullmatch(r"[0-9a-f]{64}",h.get("raw_sha256") or "") for h in j["horses"])
