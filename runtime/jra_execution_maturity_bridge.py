@@ -240,6 +240,88 @@ def _production_index_coverage_diagnostic(runners: list[dict], mapping: dict) ->
             "no_missing_value_imputation":True}
 
 
+
+def _source_only_coverage_repair_plan(index_coverage: dict, features: dict) -> dict:
+    """Identify the smallest *candidate* missing-feature set per blocked Base13 index.
+
+    The plan is advisory: factual availability does not authorize an evaluator,
+    and the plan must never generate Evidence or Production scores.
+    """
+    trace_by_runner = (features.get("runners") or {})
+    rows = []
+    feature_frequency: dict[str, int] = {}
+    for index_row in index_coverage.get("rows") or []:
+        if index_row.get("status") != "BLOCKED":
+            continue
+        rid = str(index_row.get("runner_id") or "")
+        missing = index_row.get("missing_features") or []
+        deficit = max(
+            0.0,
+            float(index_row.get("required_weight") or 0.0)
+            - float(index_row.get("coverage_weight") or 0.0),
+        )
+        feature_trace = ((trace_by_runner.get(rid) or {}).get("source_feature_trace") or {}).get("features") or {}
+        options = []
+        for item in missing:
+            name = str(item["feature"])
+            trace = feature_trace.get(name) or {}
+            fact_available = trace.get("fact_available")
+            options.append({
+                "feature": name,
+                "weight": float(item["weight"]),
+                "fact_available": fact_available if isinstance(fact_available, bool) else None,
+                "source_family": trace.get("source_family"),
+                "correct_owner": (
+                    "JRA_PRODUCTION_FEATURE_EVALUATOR_OR_AUTHORITY"
+                    if fact_available is True else "JRA_SOURCE_ADAPTER_OR_FACT_ACQUISITION"
+                    if fact_available is False else "UNRESOLVED_EVIDENCE_PROVENANCE"
+                ),
+            })
+        # The fewest components needed to clear a coverage threshold can be
+        # found greedily by weight. Factual availability breaks ties, but NEVER
+        # authorizes use. This is not a proposed Production feature selection.
+        options.sort(key=lambda x: (
+            -x["weight"],
+            0 if x["fact_available"] is True else 1 if x["fact_available"] is None else 2,
+            x["feature"],
+        ))
+        chosen = []
+        restored = 0.0
+        for option in options:
+            if restored + 1e-12 >= deficit:
+                break
+            chosen.append(option)
+            restored += option["weight"]
+            feature_frequency[option["feature"]] = feature_frequency.get(option["feature"], 0) + 1
+        rows.append({
+            "runner_id": rid,
+            "index_id": index_row["index_id"],
+            "profile": index_row.get("profile"),
+            "missing_coverage_weight": round(deficit, 6),
+            "additional_weight_if_all_chosen_authorized": round(restored, 6),
+            "conditional_minimum_missing_feature_count": len(chosen),
+            "conditional_repair_features": chosen,
+            "authorized_evaluators_required": True,
+            "closure_proven": False,
+            "closure_feasible_with_available_facts_only": (
+                bool(chosen) and restored + 1e-12 >= deficit
+                and all(x["fact_available"] is True for x in chosen)
+            ),
+        })
+    return {
+        "schema": "KM-JRA-SOURCE-ONLY-BASE13-CLOSURE-PLAN-v1",
+        "status": "DIAGNOSTIC_ONLY / NO_FEATURE_PROMOTION / NO_PREDICTION_POLICY_CHANGE",
+        "blocked_index_count": len(rows),
+        "conditional_repair_rows": rows,
+        "highest_coverage_impact_features": [
+            {"feature": name, "blocked_indices_affected": count}
+            for name, count in sorted(feature_frequency.items(), key=lambda z: (-z[1], z[0]))
+        ],
+        "static_owner_independent_blocker": "NO_AUTHORIZED_SOURCE_ONLY_STATIC_RANK_ROLE_DECISION_RULE_CONNECTED",
+        "production_authority_granted": False,
+    }
+
+
 def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any], *, source_execution_id: str | None = None) -> Dict[str,Any]:
     """Expose the existing JRA numerical boundary; never manufacture Static roles.
 
@@ -308,6 +390,10 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
         numeric_error = str(exc)
     index_coverage = _production_index_coverage_diagnostic(req["runners"], mapping)
     gap_summary = _production_gap_summary(gaps)
+    closure_plan = _source_only_coverage_repair_plan(index_coverage, features)
+    supplemental_supplied = intent.get("supplemental_evidence_pack") is not None
+    source_only_ready = (numerical_ready and not supplemental_supplied
+                         and bool(features.get("source_only_formal_base_ready")))
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
               "current_authority_manifest":resolve_current_authority(),
@@ -319,6 +405,13 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "exact_gap_count":len(gaps),
               "production_closure_summary":gap_summary,
               "base_index_coverage_diagnostic":index_coverage,
+              "source_only_coverage_repair_plan":closure_plan,
+              "required_index_count":len(ids)*20,
+              "verified_full_index_count":len(ids)*20 if numerical_ready else 0,
+              "source_only_full_numerical_ready":source_only_ready,
+              "numerical_closure_mode":("SOURCE_ONLY" if source_only_ready else
+                  "WITH_SUPPLEMENTAL_EVIDENCE" if numerical_ready and supplemental_supplied else
+                  "BLOCKED"),
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
