@@ -188,3 +188,19 @@ def test_going_and_course_distance_are_actual_pre_race_filtered_observations():
     assert "2026-10-10" not in features["going_fit"]["source_fact"].split("source_dates=")[1].split("; all before")[0]
     assert features["going_fit"]["production_authority"] is False
     assert out == propose_official_observed_features(copy.deepcopy(src))
+
+
+def test_official_detail_race_environment_supplies_missing_calendar_going():
+    src = official_source()
+    assert "going" not in src["jra_race_context"]
+    src["jra_official_race_card_detail"]["race_environment"] = {
+        "going": "良", "going_surface": "芝",
+    }
+    runs = src["jra_official_race_card_detail"]["runners"][0]["recent_runs"]
+    for row in runs:
+        row["going"] = "良"
+    out = propose_official_observed_features(src)
+    assert out["runners"]["1"]["features"]["going_fit"]["sample_count"] == 2
+    src["jra_official_race_card_detail"]["race_environment"]["going_surface"] = "ダ"
+    blocked = propose_official_observed_features(src)
+    assert "going_fit" not in blocked["runners"]["1"]["features"]
