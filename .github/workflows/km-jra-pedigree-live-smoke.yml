@@ -29,9 +29,18 @@ jobs:
           python - <<'PY'
           import urllib.request
           from urllib.robotparser import RobotFileParser
+          try:
+              req=urllib.request.Request("https://www.jra.go.jp/robots.txt",
+                headers={"User-Agent":"KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0"})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  data=response.read(100000).decode("utf-8",errors="replace")
+                  status=response.status
+          except Exception as exc:
+              print("JRA_OFFICIAL_ROBOTS_FETCH_FAILED=",type(exc).__name__,str(exc))
+              raise
+          print("JRA_OFFICIAL_ROBOTS_HTTP=",status,"body=",repr(data[:200]))
           p=RobotFileParser()
-          p.set_url("https://www.jra.go.jp/robots.txt")
-          p.read()
+          p.parse(data.splitlines())
           paths=("/JRADB/accessS.html","/JRADB/accessU.html")
           assert all(p.can_fetch("KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0",x) for x in paths), "JRA_ROBOTS_DISALLOW"
           print("JRA_OFFICIAL_ROBOTS_CHECK=PASS")
