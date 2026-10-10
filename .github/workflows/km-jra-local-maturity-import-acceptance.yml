@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_source_only_closure_candidate.py"
+      - "tests/test_jra_source_only_closure_candidate.py"
       - "runtime/jra_zero_touch_source_index_orchestrator.py"
       - "tests/test_jra_zero_touch_source_index_orchestrator.py"
       - "runtime/entry_transport_fallback.py"
@@ -63,11 +65,11 @@ jobs:
       - name: Compile imported execution mechanisms
         run: |
           set -euo pipefail
-          python -m py_compile             runtime/jra_execution_maturity_bridge.py             runtime/jra_source_candidate_semantics.py             runtime/entry_transport_fallback.py             runtime/race_day_fast_reflection.py
+          python -m py_compile             runtime/jra_source_only_closure_candidate.py             runtime/jra_execution_maturity_bridge.py             runtime/jra_source_candidate_semantics.py             runtime/entry_transport_fallback.py             runtime/race_day_fast_reflection.py
 
       - name: Cross-family regression and JRA bridge tests
         run: |
-          python -m pytest -q tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_candidate_risk_budget_semantics.py tests/test_jra_source_candidate_semantics_width.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
+          python -m pytest -q tests/test_jra_source_only_closure_candidate.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_candidate_risk_budget_semantics.py tests/test_jra_source_candidate_semantics_width.py tests/test_entry_transport_fallback.py tests/test_race_day_fast_path.py
 
       - name: JRA lifecycle and LOCAL non-regression
         run: |

@@ -108,6 +108,13 @@ class ProductionPreparationTest(unittest.TestCase):
         self.assertEqual(report["numerical_closure_mode"], "WITH_SUPPLEMENTAL_EVIDENCE")
         self.assertEqual(report["required_index_count"], 40)
         self.assertEqual(report["verified_full_index_count"], 40)
+        owner = report["static_owner_candidate_diagnostic"]
+        self.assertIsNone(report["static_owner_candidate_error"])
+        self.assertIsNotNone(owner)
+        self.assertTrue(owner["production_index_inputs_validated"])
+        self.assertFalse(owner["static_prediction_production_authority"])
+        self.assertFalse(owner["signed_static_freeze_verified"])
+        self.assertEqual(len(owner["ranking"]), 2)
         coverage = report["base_index_coverage_diagnostic"]
         self.assertEqual(coverage["required"], 26)
         self.assertEqual(coverage["blocked"], 0)

@@ -394,6 +394,32 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     supplemental_supplied = intent.get("supplemental_evidence_pack") is not None
     source_only_ready = (numerical_ready and not supplemental_supplied
                          and bool(features.get("source_only_formal_base_ready")))
+    # Both observational feature proposals and numerical->Static conversion
+    # execute in a strictly separate CANDIDATE lane. Neither satisfies a
+    # Production evaluator or Production Static Owner acceptance gate.
+    candidate_fact_evaluation = None
+    candidate_fact_evaluation_error = None
+    static_owner_candidate = None
+    static_owner_candidate_error = None
+    try:
+        from .jra_source_only_closure_candidate import (
+            propose_official_observed_features, evaluate_static_owner_candidate,
+        )
+    except ImportError:
+        from jra_source_only_closure_candidate import (
+            propose_official_observed_features, evaluate_static_owner_candidate,
+        )
+    try:
+        candidate_fact_evaluation = propose_official_observed_features(source)
+    except ValueError as exc:
+        candidate_fact_evaluation_error = str(exc)
+    if numerical_ready:
+        try:
+            static_owner_candidate = evaluate_static_owner_candidate(
+                req, source_snapshot_sha256=str(source.get("source_snapshot_sha256") or "")
+            )
+        except ValueError as exc:
+            static_owner_candidate_error = str(exc)
     report = {"profile":PROFILE, "family_id":"JRA", "race_id":intent["race_id"],
               "evidence_class":"NUMERICAL_PREPARATION_ONLY / NOT_SIGNATURE_VERIFICATION / NOT_FINAL / NOT_OOS",
               "current_authority_manifest":resolve_current_authority(),
@@ -412,6 +438,10 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "numerical_closure_mode":("SOURCE_ONLY" if source_only_ready else
                   "WITH_SUPPLEMENTAL_EVIDENCE" if numerical_ready and supplemental_supplied else
                   "BLOCKED"),
+              "candidate_official_observed_feature_report":candidate_fact_evaluation,
+              "candidate_official_observed_feature_error":candidate_fact_evaluation_error,
+              "static_owner_candidate_diagnostic":static_owner_candidate,
+              "static_owner_candidate_error":static_owner_candidate_error,
               "production_full_numerical_ready":numerical_ready,
               "production_numerical_error":numeric_error,
               "prepared_numerical_request":req if numerical_ready else None,
