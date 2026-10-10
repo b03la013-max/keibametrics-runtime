@@ -533,11 +533,17 @@ def _candidate_tier_pfs(candidate_rows):
         rid=rec["race_id"]
         final_path=os.path.join("runtime","source_candidate_oos",rid,"candidate_final.json")
         result_path=os.path.join("runtime","source_candidate_results",rid+".json")
-        if not (os.path.exists(final_path) and os.path.exists(result_path)):
+        auto_path=os.path.join("runtime","source_candidate_oos",rid,"settlement.json")
+        if not os.path.exists(final_path) or not (os.path.exists(result_path) or os.path.exists(auto_path)):
             continue
         try:
             final=json.load(open(final_path,encoding="utf-8"))
-            result=json.load(open(result_path,encoding="utf-8"))
+            # The new immutable JRA result ledger was independently verified
+            # by _candidate_forward_records() before this tier projection.
+            result=(json.load(open(result_path,encoding="utf-8"))
+                    if os.path.exists(result_path) else None)
+            auto=(json.load(open(auto_path,encoding="utf-8"))
+                  if os.path.exists(auto_path) else None)
         except Exception:
             continue
         ticket_tier={}
@@ -549,10 +555,22 @@ def _candidate_tier_pfs(candidate_rows):
             ticket_tier[k]=tier
             tiers[tier]["investment"]+=stake; tiers[tier]["ticket_count"]+=1
             race_tiers[tier]["investment"]+=stake; race_tiers[tier]["ticket_count"]+=1
-        for w in ((result.get("settlement") or {}).get("winning_tickets") or []):
+        # Use actual frozen-ticket recommended payouts on the new ledger.
+        # The legacy format carries only winning tickets.
+        if auto is not None:
+            paying=[{
+                "bet_type":t.get("bet_type"),
+                "selection":t.get("selection"),
+                "payout":t.get("recommended_return"),
+            } for t in (auto.get("frozen_tickets") or [])]
+        else:
+            paying=((result.get("settlement") or {}).get("winning_tickets") or [])
+        for w in paying:
             k=_candidate_ticket_key(w.get("bet_type"),w.get("selection"))
             tier=ticket_tier.get(k)
             if not tier:
+                if float(w.get("payout") or 0)>0:
+                    raise ValueError("CANDIDATE_TIER_PAYOUT_WITHOUT_FROZEN_TICKET:"+rid)
                 continue
             payout=float(w.get("payout") or 0)
             tiers[tier]["return"]+=payout
