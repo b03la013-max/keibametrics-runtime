@@ -65,7 +65,12 @@ def parse_official_payouts(text: str) -> dict:
     """
     if "払戻金" not in text:
         raise PendingOfficialResult("JRA_OFFICIAL_PAYOUT_SECTION_NOT_PUBLISHED")
-    tail = text.rsplit("払戻金", 1)[-1].split("勝馬の紹介",1)[0]
+    # JRA footer also contains 払戻金 (e.g., 払戻金の支払を受けた方へ).
+    # Anchor the actual payout table by the adjacent first bet-type label.
+    anchors = list(re.finditer(r"払戻金\s+単勝\s+", text))
+    if len(anchors) != 1:
+        raise PendingOfficialResult("JRA_OFFICIAL_PAYOUT_TABLE_NOT_UNIQUE")
+    tail = "単勝 " + text[anchors[0].end():].split("勝馬の紹介",1)[0]
     out = {}
     for kind, (label, count) in BET_KINDS.items():
         pattern = re.escape(label) + r"\s+((?:\d{1,2}\s*-\s*){" + str(count - 1) + r"}\d{1,2})\s+([\d,]+)\s*円"
