@@ -101,7 +101,9 @@ def parse_horse_pedigree(decoded: str) -> Dict[str, str | None]:
     return {"horse_name": name, "sire": dd("父"), "dam": dd("母"), "damsire": dd("母の父")}
 
 
-def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str) -> List[str]:
+def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
+                         stop_after: int | None = None,
+                         start_race: int = 0, max_races: int | None = None) -> List[str]:
     """Return official horse-page CNAME tokens for every race on a day."""
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
     page, entry_pat, day_pat, race_pat = {
@@ -117,10 +119,22 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str) -> List[
     s1 = client.post(page, m.group(1))
     days = sorted(set(re.findall(day_pat, s1)))
     out: List[str] = []
+    race_index = 0
+    completed = False
     for day in days:
         client.post(page, m.group(1))
         s2 = client.post(page, day)
         for race in sorted(set(re.findall(race_pat, s2))):
+            # Always select explicit race windows; a small three-horse test
+            # must never visit all 36 race result pages. This also limits
+            # requests during temporary 503/service-unavailable windows.
+            if race_index < start_race:
+                race_index += 1
+                continue
+            if max_races is not None and race_index >= start_race + max_races:
+                completed = True
+                break
+            race_index += 1
             client.post(page, m.group(1))
             client.post(page, day)
             s3 = client.post(page, race)
@@ -128,15 +142,28 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str) -> List[
                 tok = urllib.parse.unquote(tok)
                 if tok not in out:
                     out.append(tok)
+                if stop_after is not None and len(out) >= stop_after:
+                    completed = True
+                    break
+            if completed:
+                break
+        if completed:
+            break
     return out
 
 
 def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None = None,
-                delay: float = 1.0, start_index: int = 0) -> Dict[str, Any]:
+                delay: float = 1.0, start_index: int = 0,
+                start_race: int = 0, max_races: int | None = None) -> Dict[str, Any]:
     client = _Client(delay=delay)
-    tokens = horse_tokens_for_day(client, race_date, mode=mode)
+    if start_race < 0 or (max_races is not None and not 1 <= max_races <= 36):
+        raise ValueError("JRA_HARVEST_RACE_WINDOW_INVALID")
     if start_index < 0 or (max_horses is not None and not 1 <= max_horses <= 1000):
         raise ValueError("JRA_HARVEST_RANGE_INVALID")
+    tokens = horse_tokens_for_day(
+        client, race_date, mode=mode,
+        stop_after=start_index + max_horses if max_horses is not None else None,
+        start_race=start_race, max_races=max_races)
     total_tokens = len(tokens)
     if total_tokens == 0:
         raise ValueError("JRA_HARVEST_EMPTY_RACE_UNIVERSE")
@@ -158,7 +185,10 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
             errors.append(f"{type(exc).__name__}:{exc}"[:200])
     out = {"profile": PROFILE, "official": True, "source": "www.jra.go.jp", "race_date": race_date,
            "mode": mode, "harvested_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-           "start_index": start_index, "total_discovered_tokens": total_tokens,
+           "start_index": start_index, "start_race": start_race,
+           "max_races": max_races,
+           "discovery_complete": max_horses is None and max_races is None,
+           "total_discovered_tokens": total_tokens if max_horses is None and max_races is None else None,
            "selected_token_count": len(tokens),
            "horse_token_count": len(tokens), "horse_count": len(horses), "horses": horses,
            "errors": errors}
@@ -175,12 +205,17 @@ if __name__ == "__main__":
     ap.add_argument("--out-dir", default="runtime/pedigree_corpus")
     ap.add_argument("--max-horses", type=int)
     ap.add_argument("--start-index", type=int, default=0)
+    ap.add_argument("--start-race", type=int, default=0)
+    ap.add_argument("--max-races", type=int)
     ap.add_argument("--delay", type=float, default=1.0)
     a = ap.parse_args()
     for day in a.date:
         res = harvest_day(day, mode=a.mode, max_horses=a.max_horses,
-                          delay=a.delay, start_index=a.start_index)
-        suffix = f"-offset{a.start_index}-n{a.max_horses}" if a.start_index or a.max_horses else ""
+                          delay=a.delay, start_index=a.start_index,
+                          start_race=a.start_race, max_races=a.max_races)
+        suffix = (f"-race{a.start_race}-r{a.max_races}" if a.max_races is not None else "")
+        if a.start_index or a.max_horses:
+            suffix += f"-offset{a.start_index}-n{a.max_horses}"
         p = Path(a.out_dir) / f"{day.replace('-', '')}-{a.mode}{suffix}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         if res["errors"] or res["horse_count"] != res["horse_token_count"]:
