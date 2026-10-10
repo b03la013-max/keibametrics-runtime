@@ -338,7 +338,8 @@ class TestPreparationReadinessIsNotHardcoded(unittest.TestCase):
         self.assertTrue(authorized["static_generation_ready"])
         self.assertTrue(authorized["production_full_pipeline_ready"])
         self.assertEqual(authorized["production_full_pipeline_ready_scope"], "LOCAL_PRE_KRS_HANDOFF_ONLY")
-        self.assertEqual(authorized["first_blocked_stage"], "NONE_LOCAL_PRE_KRS_HANDOFF_READY")
+        self.assertIsNone(authorized["first_blocked_stage"])
+        self.assertEqual(authorized["independent_blockers"], [])
         # Acceptance-only supplemental numerics still never become LIVE.
         with self.assertRaisesRegex(JRANoBetTerminalError, "ACCEPTANCE_ONLY"):
             build_static_unauthorized_no_bet_terminal(
