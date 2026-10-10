@@ -456,7 +456,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
                 req,
                 source_snapshot_sha256=checkpoint["source_snapshot_sha256"],
                 source_receipt_sha256=checkpoint["receipt_sha256"],
-                frozen_at=checkpoint["source_freeze_at"],
+                frozen_at=(checkpoint["source_freeze_at"] if intent.get("acceptance_only") is True else datetime.now(timezone.utc).isoformat()),
                 prediction_cutoff=intent["prediction_cutoff"],
             )
         except ValueError as exc:
