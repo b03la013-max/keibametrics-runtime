@@ -143,3 +143,92 @@ def test_source_candidate_oos_pfs_is_separate_and_tier_measured(tmp_path, monkey
     assert c["tier_pfs"]["tiers"]["PROTECTION"]["pfs"]==900.0
     assert c["tier_pfs"]["tiers"]["TAIL"]["pfs"]==0.0
     assert c["production_effect"]=="NONE"
+
+
+def test_auto_postresult_settlement_updates_candidate_and_tiers_without_actual_promotion(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for path in ("runtime/performance_ledger", "runtime/reviews",
+                 "runtime/reviews_auto", "runtime/results", "runtime/source_candidate_oos"):
+        Path(path).mkdir(parents=True, exist_ok=True)
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    rid="KM-JRA-KYO-20990101-R03"
+    home=Path("runtime/source_candidate_oos")/rid
+    home.mkdir(parents=True)
+    source="signed-source-sha"
+    pre={"race_id":rid,"oos_eligible":True,"candidate_final_verified":True,
+         "source_snapshot_sha256":source}
+    pre["sha256"]=p._sha(pre)
+    final={"race_id":rid,"candidate_only":True,"source_snapshot_sha256":source,
+           "mec":{"tickets":[
+             {"bet_type":"EXACTA","selection":[4,8],"stake":100,"mec_tier":"CORE"},
+             {"bet_type":"TRIFECTA","selection":[4,8,3],"stake":100,"mec_tier":"PROTECTION"},
+           ]}}
+    final["sha256"]=p._sha(final)
+    settlement={
+        "race_id":rid,"status":"SETTLED_FROZEN_CANDIDATE_RECOMMENDATION",
+        "production_effect":"NONE","automatic_promotion":False,
+        "actual_purchase_status":"UNVERIFIED",
+        "frozen_pre_result_sha256":pre["sha256"],
+        "frozen_candidate_final_sha256":final["sha256"],
+        "recommended_stake_yen":200,"recommended_return_yen":850,
+        "purchased_ticket_count":2,
+        "frozen_tickets":[
+          {"bet_type":"EXACTA","selection":[4,8],"stake":100,"recommended_return":0},
+          {"bet_type":"TRIFECTA","selection":[4,8,3],"stake":100,"recommended_return":850},
+        ],
+    }
+    settlement["sha256"]=p._sha(settlement)
+    evaluated={"race_id":rid,"oos_eligible":True,
+               "settlement_sha256":settlement["sha256"]}
+    evaluated["sha256"]=p._sha(evaluated)
+    for n,doc in (("pre_result.json",pre),("candidate_final.json",final),
+                  ("settlement.json",settlement),("result_evaluation.json",evaluated)):
+        (home/n).write_text(json.dumps(doc),encoding="utf-8")
+    report=p.build_report()
+    c=report["candidate_forward_oos"]
+    assert c["eligible_race_count"]==1
+    assert c["settled_race_count"]==1
+    assert c["aggregate"]["investment"]==200
+    assert c["aggregate"]["return"]==850
+    assert c["aggregate"]["investment_weighted_pfs"]==425.0
+    assert c["tier_pfs"]["tiers"]["CORE"]["return"]==0
+    assert c["tier_pfs"]["tiers"]["PROTECTION"]["return"]==850
+    assert report["actual_pfs"]["verified_race_count"]==0
+    assert report["cohorts"]["FORMAL_PRE_RACE"]["race_count"]==0
+
+    # A legacy RESULT for the same race must not double the Candidate PFS.
+    Path("runtime/source_candidate_results").mkdir(parents=True)
+    legacy={"race_id":rid,"settlement":{
+      "status":"SETTLED","total_investment":200,"total_payout":850,
+      "pfs_authority":"CANDIDATE-FROZEN-RECOMMENDATION-PFS"}}
+    (Path("runtime/source_candidate_results")/(rid+".json")).write_text(
+        json.dumps(legacy),encoding="utf-8")
+    report=p.build_report()
+    assert report["candidate_forward_oos"]["settled_race_count"]==1
+    assert report["candidate_forward_oos"]["aggregate"]["investment"]==200
+
+    legacy["settlement"]["total_payout"]=900
+    (Path("runtime/source_candidate_results")/(rid+".json")).write_text(
+        json.dumps(legacy),encoding="utf-8")
+    import pytest
+    with pytest.raises(ValueError,match="CANDIDATE_PFS_DOUBLE_SOURCE_CONFLICT"):
+        p.build_report()
+
+
+def test_live_repo_kyoto_r03_immutable_candidate_settlement_is_aggregatable(monkeypatch):
+    repo=Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo)
+    import sys
+    sys.path.insert(0,str(repo/"runtime"))
+    import pfs_grand_review as p
+    rows={x["race_id"]:x for x in p._candidate_automatic_settlements()}
+    rid="KM-JRA-KYO-20261010-R03"
+    assert rid in rows
+    assert rows[rid]["investment"]==1400
+    assert rows[rid]["return"]==0
+    assert rows[rid]["actual_ticket_status"]=="UNVERIFIED"
+    merged=[x for x in p._candidate_forward_records() if x["race_id"]==rid]
+    assert len(merged)==1
+    assert merged[0]["formal_class"]=="FROZEN_OOS_CANDIDATE"
