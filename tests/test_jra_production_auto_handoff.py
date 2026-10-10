@@ -169,6 +169,30 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
         with self.assertRaises(Exception):
             self.submit(intent, source, bad, authority)
 
+    def test_forged_static_and_changed_numeric_inputs_cannot_pass_auto_handoff(self):
+        intent, source, report, authority = fixture()
+        tampered = deepcopy(report)
+        tampered["static_owner_executable_diagnostic"]["static_prediction"]["ranking"].reverse()
+        with self.assertRaisesRegex(JRAProductionAutoHandoffError, "CONTENT_HASH_MISMATCH"):
+            self.submit(intent, source, tampered, authority)
+
+        different_numeric = deepcopy(report)
+        different_numeric["prepared_numerical_request"]["runners"][0]["canonical_components"]["ZAI_WIN"]["value"] = 1.0
+        with self.assertRaisesRegex(JRAProductionAutoHandoffError, "CONTENT_HASH_MISMATCH"):
+            self.submit(intent, source, different_numeric, authority)
+
+        forged_candidate = deepcopy(report)
+        forged_candidate["prepared_numerical_request"]["runners"][0]["canonical_components"]["HPI"]["candidate_only"] = True
+        with self.assertRaisesRegex(JRAProductionAutoHandoffError, "RECOMPUTE_FAILED"):
+            self.submit(intent, source, forged_candidate, authority)
+
+    def test_static_freeze_later_than_external_handoff_rejected(self):
+        intent, source, report, authority = fixture()
+        tampered = deepcopy(report)
+        tampered["static_owner_executable_diagnostic"]["frozen_at"] = "2026-10-10T12:12:00+09:00"
+        with self.assertRaisesRegex(JRAProductionAutoHandoffError, "FREEZE_AFTER_CUTOFF"):
+            self.submit(intent, source, tampered, authority)
+
     def test_source_sha_time_and_external_orchestration_mandatory(self):
         intent, source, report, authority = fixture()
         badsource = deepcopy(source)
