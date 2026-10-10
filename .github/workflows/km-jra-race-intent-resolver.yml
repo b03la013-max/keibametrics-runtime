@@ -1,0 +1,78 @@
+name: KeibaMetrics JRA Race Intent Resolver
+run-name: JRA intent ${{ inputs.venue }} ${{ inputs.race_date }} R${{ inputs.race_no }}
+
+# "競馬場 + R番号" -> official meeting key / post time -> Formal intent.
+# A GITHUB_TOKEN push does not trigger other workflows, so the Single Entry
+# workflow is dispatched explicitly with the committed intent path.
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      venue:
+        description: "競馬場名 (例: 京都) or venue_id (KYO)"
+        required: true
+        type: string
+      race_no:
+        description: "R番号"
+        required: true
+        type: string
+      race_date:
+        description: "YYYY-MM-DD (empty = today JST)"
+        required: false
+        type: string
+      run_count:
+        description: "KRS run count (5000=SIM-STD, 20000=SIM-HIGH)"
+        required: false
+        default: "5000"
+        type: choice
+        options: ["5000", "20000"]
+      revision:
+        description: "Execution revision (new SOURCE basis => increment)"
+        required: false
+        default: "1"
+        type: string
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install JRA SOURCE runtime dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Resolve official race and build intent
+        id: intent
+        env:
+          VENUE: ${{ inputs.venue }}
+          RACE_NO: ${{ inputs.race_no }}
+          RACE_DATE: ${{ inputs.race_date }}
+          RUN_COUNT: ${{ inputs.run_count }}
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RACE_DATE:-}" ]; then RACE_DATE="$(TZ=Asia/Tokyo date +%F)"; fi
+          cd runtime/jra_source_runtime
+          python jra_race_day_resolver.py --date "$RACE_DATE" --venue "$VENUE" --race "$RACE_NO" \
+            --run-count "$RUN_COUNT" --revision "$REVISION" --out-dir ../jra_formal_intents | tee ../../intent.json
+      - name: Commit intent and dispatch JRA Formal Single Entry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_formal_intents/*.json
+          git diff --cached --quiet && { echo "No new intent"; exit 1; }
+          git commit -m "execution: resolved JRA formal intent ${{ inputs.venue }} R${{ inputs.race_no }}"
+          INTENT_PATH="runtime/jra_formal_intents/$(python -c 'import json;print(json.load(open("intent.json"))["execution_id"])').json"
+          pushed=false
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then pushed=true; break; fi
+            git rebase --abort 2>/dev/null || true; sleep $((i*2))
+          done
+          $pushed
+          gh workflow run km-jra-formal-single-entry.yml --ref main -f intent_path="$INTENT_PATH"
+          echo "Dispatched Single Entry for $INTENT_PATH"

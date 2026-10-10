@@ -731,6 +731,24 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json"
     official_fact_registry = json.loads(registry_path.read_text(encoding="utf-8"))
     official_observations = official_production_observations(source_artifact, official_fact_registry)
+    # Owner-authorized (2026-10-10) deterministic rules over the same signed
+    # JRA official SOURCE plus a point-in-time pedigree corpus of earlier
+    # signed SOURCEs. They only fill features still missing after the rules
+    # above, never overwrite, and keep thresholds/weights unchanged.
+    owner_registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.2_20261010.json"
+    owner_observations = {}
+    owner_corpus_manifest = None
+    if owner_registry_path.exists():
+        from jra_owner_authorized_feature_rules import owner_authorized_observations
+        from jra_pedigree_corpus import build_corpus
+        race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
+                        or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
+        corpus = build_corpus(Path(__file__).resolve().parents[1],
+                              prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
+                              race_date=race_date, exclude_race_id=source_artifact.get("race_id"))
+        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "horse_count", "run_count", "manifest_sha256")}
+        owner_observations = owner_authorized_observations(
+            source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
     runners_out = {}
     all_missing_sources = set()
     # Empty runner universes must fail closed. A vacuous all([])==True is not
@@ -756,6 +774,8 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         # Only signed, pre-cutoff JRA history/person facts and registered
         # Production normalizers; no fallback for missing sample evidence.
         generated.update(official_observations.get(rid, {}))
+        for name, value in (owner_observations.get(rid) or {}).items():
+            generated.setdefault(name, value)
         generated = {k:v for k,v in generated.items() if k in allowed}
         existing_features = copy.deepcopy(r.get("evidence_features") or {})
         merged, conflicts = _merge_generated(existing_features, generated)
@@ -805,6 +825,8 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         "source_only_formal_base_ready": all(bool(x.get("source_only_formal_base_ready")) for x in runners_out.values()) if runners_out else False,
         "production_feature_principle": "ONLY_DETERMINISTIC_RULE_BOUND_FACTS_FROM_PRODUCTION_AUTHORIZED_SOURCES; NO_TSL_OR_JMA_SHADOW_INJECTION",
         "shadow_isolation": True,
+        "owner_authorized_rules_profile": "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.0-20261010" if owner_observations else None,
+        "pedigree_corpus_manifest": owner_corpus_manifest,
         "runner_count": len(runners_out),
         "runners": runners_out,
         "formal_base_ready_after_merge": all_ready,

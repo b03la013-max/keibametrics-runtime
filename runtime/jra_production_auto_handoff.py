@@ -37,10 +37,47 @@ def _iso(value):
         return None
 
 
+def require_owner_authorized_unvalidated(approval, *, root="."):
+    """Owner's explicit Production decision WITHOUT empirical validation.
+
+    The race-owner may authorize the exact Static policy before forward OOS
+    reaches 30 or market superiority is proven. That decision is accepted only
+    when it is recorded as such: the real OOS count and the unproven market
+    status must be stated truthfully (never 30/true by declaration), the
+    policy code fingerprint must match, and the owner's signed-off record file
+    must exist in the repository with a matching SHA-256. Every downstream
+    artifact carries the UNVALIDATED label.
+    """
+    if (approval.get("profile") != OWNER_PROFILE
+            or approval.get("automatic_promotion") is not False
+            or approval.get("validation_status") != "UNVALIDATED"
+            or approval.get("market_baseline_superiority_proven") is not False
+            or not isinstance(approval.get("forward_oos_eligible_races_at_authorization"), int)):
+        raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_AUTHORIZATION_RECORD_INVALID")
+    expected = hashlib.sha256(
+        (Path(root) / "runtime/jra_static_owner_executable.py").read_bytes()
+    ).hexdigest()
+    if approval.get("policy_source_sha256") != expected:
+        raise JRAProductionAutoHandoffError("JRA_STATIC_POLICY_CODE_FINGERPRINT_MISMATCH")
+    record_path = Path(root) / str(approval.get("owner_authorization_record") or "")
+    if not record_path.is_file():
+        raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_AUTHORIZATION_RECORD_MISSING")
+    if hashlib.sha256(record_path.read_bytes()).hexdigest() != approval.get("owner_authorization_record_sha256"):
+        raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_AUTHORIZATION_RECORD_SHA_MISMATCH")
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    if (record.get("decision") != "AUTHORIZE_PRODUCTION_STATIC_OWNER_UNVALIDATED"
+            or record.get("policy_profile") != OWNER_PROFILE
+            or not record.get("authorized_by") or not record.get("authorized_at")):
+        raise JRAProductionAutoHandoffError("JRA_STATIC_OWNER_AUTHORIZATION_RECORD_CONTENT_INVALID")
+    return {**approval, "independent_review_receipt_sha256": approval["owner_authorization_record_sha256"]}
+
+
 def require_independent_owner_activation(current_authority, *, root="."):
     """Accept ONLY separately recorded, immutable and empirically cleared governance."""
     jra = ((current_authority.get("family_scoped_authority") or {}).get("JRA") or {})
     approval = jra.get("production_static_owner_activation") or {}
+    if approval.get("status") == "OWNER_AUTHORIZED_UNVALIDATED":
+        return require_owner_authorized_unvalidated(approval, root=root)
     if (approval.get("status") != "PRODUCTION_AUTHORIZED"
             or approval.get("profile") != OWNER_PROFILE
             or approval.get("automatic_promotion") is not False
@@ -82,8 +119,9 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
             or not (report.get("source_only_full_numerical_ready") is True or verified_supplement)
             or report.get("verified_full_index_count") != report.get("required_index_count")):
         blockers.append("JRA_AUTHORIZED_FULL20_INCOMPLETE")
+    activation = None
     try:
-        require_independent_owner_activation(current_authority, root=root)
+        activation = require_independent_owner_activation(current_authority, root=root)
     except JRAProductionAutoHandoffError as exc:
         blockers.append(str(exc))
     if blockers:
@@ -166,13 +204,15 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     req["available_bet_types"] = ["EXACTA", "TRIO", "TRIFECTA"]
     req["static_owner_activation_binding"] = {
         "policy_id": OWNER_PROFILE,
-        "independent_review_receipt_sha256": (
-            current_authority["family_scoped_authority"]["JRA"]
-            ["production_static_owner_activation"]["independent_review_receipt_sha256"]
-        ),
+        "activation_status": activation.get("status"),
+        "validation_status": activation.get("validation_status", "VALIDATED"),
+        "independent_review_receipt_sha256": activation["independent_review_receipt_sha256"],
         "production_effect": "AUTHORIZED_ONLY",
         "source_snapshot_sha256": snap_sha,
     }
+    if activation.get("status") == "OWNER_AUTHORIZED_UNVALIDATED":
+        req["static_prediction"]["status"] = "FROZEN-PRE-KRS / PRODUCTION / OWNER-AUTHORIZED-UNVALIDATED"
+        req["static_prediction"]["validation_status"] = "UNVALIDATED"
     req = build_krs_input(req)
     validate_production_authority(req)
     validate_pre_krs_request(req)

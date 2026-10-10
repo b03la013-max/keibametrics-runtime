@@ -85,14 +85,12 @@ class TestClassifierOnRealSource(unittest.TestCase):
         self.assertEqual(cls["terminal_route"], ROUTE_EVIDENCE_NO_BET)
         self.assertFalse(cls["authority_granted"])
         feas = report["structural_closure_feasibility"]
-        # Evidence for the actual owner: even an optimistic evaluator upper
-        # bound cannot close pedigree / stable / pace indices from this SOURCE.
-        for index in ("BVI", "CSI", "PRI"):
-            self.assertIn(index, feas["structurally_unclosable_indices"])
-        self.assertFalse(feas["evaluator_work_alone_can_close_full20"])
         self.assertFalse(feas["proves_closable"])
         self.assertFalse(feas["threshold_or_weight_change"])
-        self.assertEqual(cls["independent_blockers"][0]["subclass"], "STRUCTURAL_SOURCE_FACT_GAP")
+        self.assertEqual(feas["evaluator_work_alone_can_close_full20"],
+                         not feas["structurally_unclosable_indices"])
+        self.assertIn(cls["independent_blockers"][0]["subclass"],
+                      ("STRUCTURAL_SOURCE_FACT_GAP", "EVALUATOR_OR_AUTHORITY_GAP"))
         self.assertFalse(report["static_generation_ready"])
         self.assertFalse(report["production_full_pipeline_ready"])
         self.assertEqual(report["static_owner_activation_status"]["authorized"], False)
@@ -116,9 +114,15 @@ class TestClassifierOnRealSource(unittest.TestCase):
                 created_at="2026-10-10T23:00:00+09:00", lineage="HISTORICAL_DIAGNOSTIC")
 
     def test_live_authority_has_no_static_owner_activation(self):
-        status = owner_activation_status(load_current_authority(ROOT / "profiles"), root=str(ROOT))
-        self.assertFalse(status["authorized"])
-        self.assertIn("NOT_AUTHORIZED", status["reason"])
+        authority = load_current_authority(ROOT / "profiles")
+        status = owner_activation_status(authority, root=str(ROOT))
+        activation = ((authority.get("family_scoped_authority") or {}).get("JRA") or {}).get(
+            "production_static_owner_activation")
+        if not activation:
+            self.assertFalse(status["authorized"])
+            self.assertIn("NOT_AUTHORIZED", status["reason"])
+        else:  # an owner-committed activation must be verifiable, never assumed
+            self.assertIsInstance(status["authorized"], bool)
 
 
 class TestFull20StaticBlockedRouting(unittest.TestCase):

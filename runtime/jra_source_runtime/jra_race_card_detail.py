@@ -142,6 +142,45 @@ def _parse_current_person(cell:str)->Dict[str,Any]:
     if m2: assigned=float(m2.group(1)); jockey=m2.group(2).strip()
     return {"sex":sex,"age":age,"color":color,"assigned_weight":assigned,"jockey":jockey,"raw":s}
 
+def decode_passing_positions(digits:str,field_size:Any)->List[int]|None:
+    """Decode concatenated corner calls; None when ambiguous or invalid."""
+    s=str(digits or "")
+    try:
+        n=int(field_size)
+    except (TypeError,ValueError):
+        return None
+    if not s.isdigit() or n<1:
+        return None
+    best=[]
+    def walk(i,acc):
+        if len(acc)>4:
+            return
+        if i==len(s):
+            if acc:
+                best.append(list(acc))
+            return
+        for w in (1,2):
+            part=s[i:i+w]
+            if len(part)<w or part.startswith("0"):
+                continue
+            v=int(part)
+            if 1<=v<=n:
+                acc.append(v); walk(i+w,acc); acc.pop()
+    walk(0,[])
+    if not best:
+        return None
+    # JRA cards list at least two calls whenever more than one digit is shown.
+    multi=[c for c in best if len(c)>=2]
+    if multi:
+        best=multi
+    def cost(c):
+        return sum(abs(a-b) for a,b in zip(c,c[1:]))
+    low=min(cost(c) for c in best)
+    winners=[c for c in best if cost(c)==low]
+    if len({(c[0],c[-1]) for c in winners})!=1:
+        return None
+    return min(winners,key=len)
+
 def _parse_recent(cell:str)->Dict[str,Any]|None:
     s=_norm(cell)
     if not s or "着" not in s:return None
@@ -158,8 +197,11 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
         out["assigned_weight"]=float(m.group(1)); out["distance_m"]=int(m.group(2)); out["surface"]=m.group(3)
     mt=re.search(r"(?:芝|ダ|障)\s+(\d+:\d{2}\.\d|\d{2,3}\.\d)",s)
     if mt: out["time"]=mt.group(1)
-    mg=re.search(r"\s(良|稍重|重|不良)\s+(\d{3})\s*kg",s)
-    if mg: out["going"]=mg.group(1); out["body_weight"]=int(mg.group(2))
+    # Open/handicap races print the official rating between going and weight.
+    mg=re.search(r"\s(良|稍重|重|不良)\s+(?:(\d{2,3})\s+)?(\d{3})\s*kg",s)
+    if mg:
+        out["going"]=mg.group(1); out["body_weight"]=int(mg.group(3))
+        if mg.group(2): out["rating"]=int(mg.group(2))
     mf=re.search(r"3F\s*(\d{2}\.\d)",s)
     if mf: out["final3f"]=float(mf.group(1))
     mm=re.search(r"\(([+-]?\d+(?:\.\d+)?)\)\s*$",s)
@@ -175,12 +217,22 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
     calls=[]
     if mg and mf:
         between=s[mg.end():mf.start()]
-        calls=[int(z) for z in re.findall(r"(?<!\\d)(\\d{1,2})(?!\\d)",between)]
-        if not calls and pos and str(pos).isdigit() and len(str(pos))<=8:
-            calls=[int(ch) for ch in str(pos)]
+        calls=[int(z) for z in re.findall(r"(?<!\d)(\d{1,2})(?!\d)",between)]
+        if len(calls)==1 and pos and len(str(pos))>2:
+            calls=[]
+        if calls:
+            out["passing_positions_parser"]="CORNER-LIST-SEPARATED-v2"
+        if not calls and pos and str(pos).isdigit():
+            # The official card concatenates corner calls without separators
+            # ("1515" = 15-15, "119" = 11-9). Splitting per digit corrupted
+            # every call >=10. Decode only when the segmentation is unique
+            # under the field-size bound and the smallest-movement criterion.
+            calls=decode_passing_positions(str(pos),out.get("field_size")) or []
+            if calls:
+                out["passing_positions_parser"]="CONCATENATED-DECODED-v2"
     out["passing_positions"]=calls
     # Recent rider is the text between popularity and assigned weight.
-    jm=re.search(r"番人気\s+(.+?)\s+\\d{2}(?:\\.\\d+)?\s*kg",s)
+    jm=re.search(r"番人気\s+(.+?)\s+\d{2}(?:\.\d+)?\s*kg",s)
     out["jockey"]=jm.group(1).strip() if jm else None
     # class text between venue and finish, retained for future registered evaluator.
     if m:=re.search(r"\d{1,2}日\s+[^\s]+\s+(.*?)\s+\d+\s*着",s):
@@ -189,6 +241,10 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
 
 def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
+    # Corner calls are separate <li> items; keep a separator so tag stripping
+    # cannot concatenate "10","10","1","1" into the ambiguous "101011".
+    decoded=re.sub(r'(<div class="corner_list">.*?</div>)',
+                   lambda m:re.sub(r"</li>"," </li>",m.group(1)),decoded,flags=re.S)
     token_by_name={}
     for token,label in re.findall(r'<a[^>]+href=["\']/JRADB/accessU\.html\?CNAME=([^"\']+)["\'][^>]*>(.*?)</a>',decoded,re.I|re.S):
         name=re.sub(r"<[^>]+>","",html.unescape(label))
@@ -262,16 +318,23 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
                         **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     weather=None; going=None; going_surface=None
-    mw=re.search(r"天候\s*([^\s<]+)",decoded)
+    # Official markup: <span class="cap">天候</span><span class="txt">晴</span>
+    # and <span class="cap">ダート</span><span class="txt">良</span>.
+    mw=re.search(r'class="cap">\s*天候\s*</span>\s*<span class="txt">\s*([^<\s]+)',decoded) \
+        or re.search(r"天候\s*[:：]?\s*([^\s<]+)",decoded)
     if mw: weather=mw.group(1)
-    mgc=re.search(r"(芝|ダート|ダ)\s*(良|稍重|重|不良)",decoded)
+    mgc=re.search(r'class="cap">\s*(芝|ダート|ダ)\s*</span>\s*<span class="txt">\s*(良|稍重|重|不良)',decoded) \
+        or re.search(r"(芝|ダート|ダ)\s*[:：]?\s*(良|稍重|重|不良)",decoded)
     if mgc:
         going_surface=mgc.group(1); going=mgc.group(2)
     observed_context = parse_detail_race_context(raw, content_type)
     if observed_context:
-        weather=observed_context["weather"]
-        going=observed_context["going"]
-        going_surface=observed_context["surface"]
+        # Prefer the printed race context, but never erase an observed value
+        # with an absent one.
+        weather=observed_context["weather"] or weather
+        if observed_context["going"]:
+            going=observed_context["going"]
+            going_surface=observed_context["surface"]
     out={"profile":PROFILE,"official":True,"production_fact_authority":True,"runner_count":len(runners),"runners":runners,
          "race_context":observed_context,
          "race_environment":{"weather":weather,"going":going,"going_surface":going_surface}}
