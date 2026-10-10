@@ -13,6 +13,8 @@ from jra_bloodb_mac_automation import (
 from test_jra_bloodb_mac_collector import HTML, URL, OFFICIAL, Context, Page
 
 DATE="2026-08-09"
+CUTOFF="2026-08-09T15:00:00+09:00"
+CLOCK=lambda: datetime.fromisoformat("2026-08-09T10:00:00+09:00")
 INDEX='''<html><body><h1>東京 9R</h1><section>
 <div>東京 9R <a href="/main.php?rcode=2026080901010609">9R 夏の出走表</a></div>
 </section></body></html>'''
@@ -91,7 +93,7 @@ class Tests(unittest.TestCase):
             directory=Path(d)
             official=directory/"official.json"
             official.write_text(json.dumps(OFFICIAL))
-            future=(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()
+            future=CUTOFF
             spec={"race_id":"KM-JRA-TKY-20260809-R09",
                 "race_date":DATE,"race_no":9,"venue":"東京",
                 "official_runners_path":str(official),
@@ -100,7 +102,7 @@ class Tests(unittest.TestCase):
             # 'pass' a synthetic unrelated/mismatched chosen race link.
             correct=HTML
             context=FakeBrowser(html=INDEX,detail=correct)
-            result=run_one(context,spec,private_root=directory/"private")
+            result=run_one(context,spec,private_root=directory/"private",clock=CLOCK)
             self.assertEqual(result["status"],"PRIVATE_DIAGNOSTIC_CAPTURED")
             self.assertFalse(result["production_authority"])
             self.assertIn("UNATTESTED",result["source_binding"])
@@ -110,19 +112,30 @@ class Tests(unittest.TestCase):
             self.assertFalse(sidecar["bvi_population_authority"])
             self.assertEqual(sidecar["oos_increment"],0)
             with self.assertRaisesRegex(BloodBError,"IMMUTABLE"):
-                run_one(context,spec,private_root=directory/"private")
+                run_one(context,spec,private_root=directory/"private",clock=CLOCK)
+
+    def test_reject_past_race_attached_to_future_cutoff(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            official=root/"official.json"
+            official.write_text(json.dumps(OFFICIAL))
+            spec={"race_id":"KM-JRA-TKY-20260809-R09","race_date":DATE,"race_no":9,
+                  "official_runners_path":str(official),
+                  "prediction_cutoff":"2026-10-11T14:00:00+09:00"}
+            with self.assertRaisesRegex(BloodBError,"CUTOFF_JST_DAY_MISMATCH"):
+                run_one(FakeBrowser(),spec,private_root=root/"private",clock=CLOCK)
 
     def test_no_bypass_of_ambiguous_race_even_when_other_horses_exist(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
             official=root/"official.json"
             official.write_text(json.dumps(OFFICIAL))
-            future=(datetime.now(timezone.utc)+timedelta(minutes=20)).isoformat()
+            future=CUTOFF
             spec={"race_id":"KM-JRA-TKY-20260809-R09","race_date":DATE,"race_no":9,
                   "official_runners_path":str(official),
                   "prediction_cutoff":future}
             with self.assertRaisesRegex(BloodBError,"AMBIGUOUS"):
-                run_one(FakeBrowser(html=OTHER),spec,private_root=root/"private")
+                run_one(FakeBrowser(html=OTHER),spec,private_root=root/"private",clock=CLOCK)
             self.assertFalse((root/"private"/spec["race_id"]).exists())
 
 if __name__=="__main__":
