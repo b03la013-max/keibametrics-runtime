@@ -42,6 +42,7 @@ import test_jra_production_auto_handoff as handoff_fixture
 REAL = "KM-JRA-TKY-20261010-R12-FULLPIPELINE-VALIDATION-LIVE-R1"
 UNAUTHORIZED = {"authorized": False, "reason": "JRA_PRODUCTION_STATIC_OWNER_NOT_AUTHORIZED"}
 AUTHORIZED = {"authorized": True, "reason": None}
+NO_ACTIVATION = {"manifest_id": "TEST-NO-ACTIVATION", "family_scoped_authority": {"JRA": {}}}
 
 
 def real_inputs(eid=REAL):
@@ -77,7 +78,9 @@ def full20_report():
 class TestClassifierOnRealSource(unittest.TestCase):
     def test_real_source_first_stop_is_numerical_and_static_is_independent(self):
         intent, env = real_inputs()
-        report = prepare_production_numerical(intent, env, source_execution_id=REAL)
+        # Pin an authority WITHOUT Static activation; live governance may change.
+        report = prepare_production_numerical(intent, env, source_execution_id=REAL,
+                                              current_authority=NO_ACTIVATION)
         cls = report["production_blocker_classification"]
         self.assertEqual(report["verified_full_index_count"], 0)
         self.assertEqual(cls["first_actual_blocked_stage"], STAGE_NUMERICAL)
@@ -97,7 +100,8 @@ class TestClassifierOnRealSource(unittest.TestCase):
 
     def test_real_source_evidence_no_bet_is_historical_not_live(self):
         intent, env = real_inputs()
-        report = prepare_production_numerical(intent, env, source_execution_id=REAL)
+        report = prepare_production_numerical(intent, env, source_execution_id=REAL,
+                                              current_authority=NO_ACTIVATION)
         with self.assertRaisesRegex(JRANoBetTerminalError, "AFTER_CUTOFF"):
             build_no_bet_terminal(intent, report, source_receipt_verified=True,
                                   created_at="2026-10-10T23:00:00+09:00", lineage="LIVE")

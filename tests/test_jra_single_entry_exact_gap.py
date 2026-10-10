@@ -110,7 +110,10 @@ class ProductionPreparationTest(unittest.TestCase):
     def test_existing_supplemental_closes_numerics_not_static_policy(self):
         self.intent["acceptance_only"] = True
         self.intent["supplemental_evidence_pack"] = self.supplemental()
-        report = prepare_production_numerical(self.intent, self.env)
+        # Pin an authority without a Static activation (live governance varies).
+        report = prepare_production_numerical(
+            self.intent, self.env,
+            current_authority={"manifest_id": "TEST", "family_scoped_authority": {"JRA": {}}})
         self.assertTrue(report["production_full_numerical_ready"])
         partial = report["partial_production_base_calculation"]
         self.assertEqual(partial["required_base_cells"], 26)

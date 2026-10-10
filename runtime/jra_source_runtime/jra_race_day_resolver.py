@@ -56,7 +56,7 @@ def parse_day_rows(day_html_text_rows: List[str]) -> List[Dict[str, Any]]:
 
 def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, race: Dict[str, Any],
                  cutoff_minutes: int = 5, dispatch_minutes: int = 2, run_count: int = 5000,
-                 revision: int = 1) -> Dict[str, Any]:
+                 revision: int = 1, orchestration_session_id: str | None = None) -> Dict[str, Any]:
     code = venue_code(venue)
     vid, vname = VENUES[code]
     if not re.fullmatch(code + r"\d{8}", str(meeting_key)):
@@ -72,7 +72,7 @@ def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, 
         raise ValueError("JRA_INTENT_TIME_ORDER_INVALID")
     d8 = day.strftime("%Y%m%d")
     race_id = f"KM-JRA-{vid}-{d8}-R{int(race_no):02d}"
-    return {
+    intent = {
         "family_id": "JRA",
         "execution_id": f"{race_id}-LIVE-R{int(revision)}",
         "race_id": race_id,
@@ -94,6 +94,17 @@ def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, 
                             "cutoff_minutes_before_post": cutoff_minutes,
                             "dispatch_minutes_before_post": dispatch_minutes},
     }
+    if orchestration_session_id:
+        # Same orchestration-reference contract the Candidate lane uses; the
+        # session id names the real GitHub Actions run that resolved the race.
+        intent["orchestration_ref"] = {
+            "authority": "BASE44",
+            "execution_session_id": str(orchestration_session_id),
+            "session_nonce": f"{intent['execution_id']}:{orchestration_session_id}",
+            "created_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            "issuer": "km-jra-race-intent-resolver / GitHub Actions",
+        }
+    return intent
 
 
 def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[str, Any]:
@@ -136,8 +147,10 @@ if __name__ == "__main__":
     ap.add_argument("--run-count", type=int, default=5000)
     ap.add_argument("--revision", type=int, default=1)
     ap.add_argument("--out-dir", default="runtime/jra_formal_intents")
+    ap.add_argument("--orchestration-session-id")
     a = ap.parse_args()
-    intent = resolve_and_build(a.date, a.venue, a.race, run_count=a.run_count, revision=a.revision)
+    intent = resolve_and_build(a.date, a.venue, a.race, run_count=a.run_count, revision=a.revision,
+                               orchestration_session_id=a.orchestration_session_id)
     p = Path(a.out_dir) / (intent["execution_id"] + ".json")
     if p.exists():
         raise SystemExit("INTENT_ALREADY_EXISTS:" + str(p))

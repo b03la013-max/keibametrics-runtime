@@ -56,7 +56,8 @@ jobs:
           if [ -z "${RACE_DATE:-}" ]; then RACE_DATE="$(TZ=Asia/Tokyo date +%F)"; fi
           cd runtime/jra_source_runtime
           python jra_race_day_resolver.py --date "$RACE_DATE" --venue "$VENUE" --race "$RACE_NO" \
-            --run-count "$RUN_COUNT" --revision "$REVISION" --out-dir ../jra_formal_intents | tee ../../intent.json
+            --run-count "$RUN_COUNT" --revision "$REVISION" --out-dir ../jra_formal_intents \
+            --orchestration-session-id "github-run-${{ github.run_id }}-${{ github.run_attempt }}" | tee ../../intent.json
       - name: Commit intent and dispatch JRA Formal Single Entry
         env:
           GH_TOKEN: ${{ github.token }}
