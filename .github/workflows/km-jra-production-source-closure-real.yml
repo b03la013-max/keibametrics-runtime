@@ -79,9 +79,65 @@ jobs:
           dest.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
           print(json.dumps(result, ensure_ascii=False, indent=2))
           PY
+      - name: Recompute source-verified real Kyoto R09 Production evidence after new evaluators
+        env:
+          PYTHONPATH: runtime:runtime/jra_source_runtime
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from collections import Counter
+          from execution_store import materialize_phase
+          from verify_source_envelope import verify
+          from jra_execution_maturity_bridge import prepare_production_numerical
+          exec_id="KM-JRA-KYO-20261010-R09-LIVE-R1"
+          src=Path("runtime_out/kyoto_source")
+          phase=materialize_phase(exec_id,"SOURCE",src)
+          assert phase is not None, "REAL_KYO_R09_SIGNED_SOURCE_UNAVAILABLE"
+          env_path=src/"source_receipt_envelope.json"
+          assert verify(str(env_path))["valid"] is True,"KYO_R09_ED25519_SOURCE_FAIL"
+          envelope=json.loads(env_path.read_text(encoding="utf-8"))
+          intent_path=Path("runtime/jra_formal_intents")/(exec_id+".json")
+          intent=json.loads(intent_path.read_text(encoding="utf-8"))
+          report=prepare_production_numerical(intent,envelope,source_execution_id=exec_id)
+          assert report["family_id"]=="JRA"
+          assert report["race_id"]=="KM-JRA-KYO-20261010-R09"
+          source=envelope["artifact"]
+          features=report.get("source_feature_report") or {}
+          names=Counter(
+              k for data in (features.get("runners") or {}).values()
+              for k in (data.get("generated_production_features") or {})
+          )
+          detail=source.get("jra_official_race_card_detail") or {}
+          history=source.get("jra_official_horse_history") or {}
+          persons=source.get("jra_official_person_stats") or {}
+          before=json.loads((Path("runtime/exact_gaps")/(exec_id+".json")).read_text(encoding="utf-8"))
+          result={
+              "race_id":report["race_id"],
+              "classification":"POSTSTART RECOMPUTE / HISTORICAL DIAGNOSTIC / NO OOS / NO BET",
+              "signed_source_sha256":source["source_snapshot_sha256"],
+              "runner_count":len(report["runner_universe"]),
+              "detail_runner_count":len(detail.get("runners") or []),
+              "history_runner_count":len(history.get("runners") or {}),
+              "matched_jockey_count":persons.get("matched_jockey_count"),
+              "matched_trainer_count":persons.get("matched_trainer_count"),
+              "previous_calculated_base_cells":before.get("partial_base_calculated_count"),
+              "new_calculated_base_cells":report.get("partial_base_calculated_count"),
+              "new_blocked_base_cells":report.get("partial_base_blocked_count"),
+              "generated_registered_production_features":dict(sorted(names.items())),
+              "required_full20_indices":report["required_index_count"],
+              "full20_ready":report["production_full_numerical_ready"],
+          }
+          Path("jra-production-kyoto-r09-repair.json").write_text(
+              json.dumps(result,ensure_ascii=False,indent=2)+"\\n")
+          print("JRA_REAL_KYO_R09_EVIDENCE_REPAIR="+json.dumps(result,ensure_ascii=False))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jra-tokyo-r05-real-source-production-closure
-          path: jra-production-closure-report.json
+          path: |
+            jra-production-closure-report.json
+            jra-production-kyoto-r09-repair.json
           if-no-files-found: warn

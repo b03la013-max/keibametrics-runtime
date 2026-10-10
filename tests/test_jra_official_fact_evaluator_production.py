@@ -44,9 +44,9 @@ def source():
         "jra_official_person_stats": {"runners": {
             "1": {
                 "jockey_matched": True,
-                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 17.6}},
+                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 0.176}},
                 "trainer_matched": True,
-                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 18.0}},
+                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 0.180}},
             },
             "2": {
                 "jockey_matched": False,
@@ -97,15 +97,17 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         src["source_freeze_at"] = "2026-10-10T12:35:00+09:00"
         self.assertEqual(official_production_observations(src, self.registry), {})
 
-    def test_real_jra_percentage_under_one_is_not_fraction(self):
+    def test_real_jra_fractional_win_rate_is_not_percentage(self):
         src = source()
         stats = src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]
-        stats.update(starts=1000, wins=8, win_rate=0.8)
+        stats.update(starts=1000, wins=8, win_rate=0.008)
         result = official_production_observations(src, self.registry)
         self.assertEqual(result["1"]["jockey_quality"]["category"], "WEAK")
         self.assertIn("ratio=0.008000", result["1"]["jockey_quality"]["source_fact"])
+        # 0.008 means 0.8%, not 0.008% or 80%.
+        self.assertIn("displayed_win_rate=0.008", result["1"]["jockey_quality"]["source_fact"])
         # A forged percentage inconsistent with wins/starts must be discarded.
-        stats["win_rate"] = 18.0
+        stats["win_rate"] = 0.180
         self.assertNotIn("jockey_quality", official_production_observations(src, self.registry)["1"])
 
     def test_recent_speed_uses_registered_actual_history_rt_and_peer_group(self):
@@ -129,6 +131,34 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         self.assertNotIn("2026-10-10", got["1"]["recent_speed"]["source_fact"])
         src["jra_official_horse_history"]["runners"]["5"]["runs"] = []
         self.assertNotIn("recent_speed", official_production_observations(src, self.registry)["1"])
+
+    def test_official_rotation_and_bodyweight_from_actual_prior_runs(self):
+        src=source()
+        row=src["jra_official_race_card_detail"]["runners"][0]
+        row["current_body_weight"]=500
+        runs=src["jra_official_horse_history"]["runners"]["1"]["runs"]
+        runs[0]["body_weight"]=498
+        runs[1]["body_weight"]=494
+        out=official_production_observations(src,self.registry)["1"]
+        self.assertEqual(out["rotation_fit"]["rule_id"],"KM-JRA-ROTATION-FIT-v1")
+        self.assertIn("days_to_target_race=30",out["rotation_fit"]["source_fact"])
+        self.assertEqual(out["rotation_fit"]["category"],"STRONG")
+        self.assertEqual(out["bodyweight_range_fit"]["category"],"STRONG")
+        self.assertEqual(out["bodyweight_range_fit"]["observation_count"],2)
+        self.assertIn("signed_delta=+4.0 kg",out["bodyweight_range_fit"]["source_fact"])
+        src["jra_official_horse_history"]["runners"]["1"]["runs"][1].pop("body_weight")
+        out=official_production_observations(src,self.registry)["1"]
+        self.assertNotIn("bodyweight_range_fit",out)
+        self.assertIn("rotation_fit",out)
+
+    def test_no_phantom_rotation_for_debut_or_future_only(self):
+        src=source()
+        out=official_production_observations(src,self.registry)
+        self.assertNotIn("rotation_fit",out["2"])
+        src["jra_official_horse_history"]["runners"]["1"]["runs"]=[
+            src["jra_official_horse_history"]["runners"]["1"]["runs"][2]
+        ]
+        self.assertNotIn("rotation_fit",official_production_observations(src,self.registry)["1"])
 
     def test_registry_identity_and_ambiguous_person_rate_fail_closed(self):
         src = source()
