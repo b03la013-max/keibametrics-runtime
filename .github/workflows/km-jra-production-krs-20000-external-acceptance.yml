@@ -1,0 +1,93 @@
+name: JRA Production 20000 KRS External Mechanical Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-production-krs-20000-external-acceptance.yml"
+      - "runtime/jra_production_krs_contract.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-production-krs-20000-external-acceptance.yml"
+      - "runtime/jra_production_krs_contract.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  mechanical-krs-high:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: External KRS Production-shape SIM-HIGH 20000 acceptance
+        env:
+          KRS_BASE: https://quorumprobe-production.up.railway.app
+        run: |
+          python - <<'PY'
+          import json, os, runpy, urllib.request, urllib.error
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import sys
+          sys.path.insert(0, "runtime")
+          from jra_production_krs_contract import production_krs_payload, assert_production_krs_receipt
+
+          # Synthetic numerical fixture only; no pre-race OOS, no purchase,
+          # no Production authority, no signed FINAL of a real horse race.
+          regression = runpy.run_path("tests/test_jra_production_fullnumerical_to_krs.py")
+          req = regression["req"]
+          req["family_id"] = "JRA"
+          req["race_id"] = "KM-JRA-ACCEPTANCE-ONLY-PRODUCTION-SHAPE-SIMHIGH-20000-20261010"
+          req["run_count"] = 20000
+          req["seed"] = 2026101005
+          assert len(req["krs_input_data"]["horses"]) == 3
+          payload = production_krs_payload(req)
+          assert payload["mode"] == "SIM-HIGH"
+          assert payload["input_data"]["simulation"]["run_count"] == 20000
+
+          BASE = os.environ["KRS_BASE"].rstrip("/")
+          def call(path, payload, timeout=420):
+              data = json.dumps(payload, ensure_ascii=False).encode()
+              rq = urllib.request.Request(BASE+path, data=data,
+                      headers={"Content-Type":"application/json"}, method="POST")
+              try:
+                  with urllib.request.urlopen(rq, timeout=timeout) as resp:
+                      return resp.status, json.loads(resp.read())
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode(errors="replace")
+                  raise RuntimeError(f"EXTERNAL_{path}_HTTP_{e.code}:{body[-1000:]}") from e
+
+          code, result = call("/krs/execute",payload)
+          assert code < 300
+          engine_sha = "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+          receipt = assert_production_krs_receipt(payload,result,expected_engine_sha256=engine_sha)
+          code, verified = call("/verify",result["run_receipt"],timeout=30)
+          assert code < 300 and verified.get("valid") is True, verified
+          artifact = {
+            "profile":"KM-JRA-PRODUCTION-KRS-SIMHIGH-20000-MECHANICAL-20261010",
+            "classification":"SYNTHETIC / POST-START / ACCEPTANCE-ONLY / NO-OOS / NO-PRODUCTION-OR-PURCHASE-AUTHORITY",
+            "status":"PASS",
+            "krs_mode":receipt["mode"],
+            "requested_run_count":receipt["requested_run_count"],
+            "actual_run_count":receipt["actual_run_count"],
+            "engine_sha256":receipt["engine_sha256"],
+            "receipt_sha256":result["run_receipt"]["receipt_sha256"],
+            "signed_run_receipt_verified":verified["valid"],
+            "production_effect":"NONE",
+            "final_receipt_verified":False,
+            "created_at":datetime.now(timezone.utc).isoformat(),
+          }
+          out=Path("runtime_out/acceptance_jra_production_krs_high.json")
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(artifact,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
+          print(json.dumps(artifact,ensure_ascii=False,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-production-krs-simhigh-20000-mechanical
+          path: runtime_out/acceptance_jra_production_krs_high.json
+          if-no-files-found: warn
