@@ -129,11 +129,14 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
     days = sorted(set(re.findall(day_pat, s1)))
     out: List[str] = []
     race_index = 0
+    client.scanned_race_count = 0
     completed = False
     for day in days:
         client.post(page, m.group(1))
         s2 = client.post(page, day)
-        for race in sorted(set(re.findall(race_pat, s2))):
+        day_races = sorted(set(re.findall(race_pat, s2)))
+        client.scanned_race_count += len(day_races)
+        for race in day_races:
             # Always select explicit race windows; a small three-horse test
             # must never visit all 36 race result pages. This also limits
             # requests during temporary 503/service-unavailable windows.
@@ -175,6 +178,11 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
         start_race=start_race, max_races=max_races)
     total_tokens = len(tokens)
     if total_tokens == 0:
+        if start_race > 0 and start_race >= client.scanned_race_count > 0:
+            return {"profile": PROFILE, "race_date": race_date, "mode": mode,
+                    "exhausted_window": True,
+                    "observed_races": client.scanned_race_count,
+                    "start_race": start_race, "horse_count": 0}
         raise ValueError("JRA_HARVEST_EMPTY_RACE_UNIVERSE")
     tokens = tokens[start_index:start_index + max_horses if max_horses is not None else None]
     if not tokens:
@@ -222,6 +230,9 @@ if __name__ == "__main__":
         res = harvest_day(day, mode=a.mode, max_horses=a.max_horses,
                           delay=a.delay, start_index=a.start_index,
                           start_race=a.start_race, max_races=a.max_races)
+        if res.get("exhausted_window"):
+            print(json.dumps(res, ensure_ascii=False))
+            continue
         suffix = (f"-race{a.start_race}-r{a.max_races}" if a.max_races is not None else "")
         if a.start_index or a.max_horses:
             suffix += f"-offset{a.start_index}-n{a.max_horses}"
