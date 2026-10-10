@@ -149,6 +149,11 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
         self.assertEqual(fpp["ranking"], result["static_prediction"]["ranking"])
         self.assertEqual(fpp["roles"], result["static_prediction"]["roles"])
         self.assertFalse(fpp["production_prediction_change"])
+        self.assertEqual(result["capital_policy"]["mode"], "RECOMMENDATION_ONLY")
+        explicit = deepcopy(intent)
+        explicit["capital_policy"] = {"mode": "HARD_RACE_BUDGET", "max_race_capital": 10000}
+        self.assertEqual(self.submit(explicit, source, report, authority)["capital_policy"],
+                         explicit["capital_policy"])
 
     def test_numeric_failure_precedes_independent_static_blocker(self):
         intent, source, report, _ = fixture()
