@@ -259,3 +259,71 @@ def test_result_runner_wires_frozen_transfer_before_candidate_result_binding():
         "source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)")
     assert "JRA_TRANSFER_FROZEN_PRE_RESULT_SHADOW_MISSING" in workflow
     assert "jra_local_week_transfer_result_sha256" in workflow
+
+
+
+def test_frozen_recommendation_ticket_reachability_is_order_specific():
+    req = request()
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    assert frozen["frozen_purchased_ticket_registry"] == {
+        "EXACTA": [[1, 2]],
+        "TRIFECTA": [[1, 2, 3]],
+        "TRIO": [[1, 2, 4]],
+    }
+    pre = pre_result_reference(req, frozen)
+    exact = evaluate_jra_week_transfer_shadow_result(frozen, pre, [1, 2, 3])
+    assert exact["conversion_first_lost_link_observation"] == "NO_DECLARED_ROLE_PAIR_THIRD_LOSS"
+    assert exact["frozen_purchased_ticket_reachability"] == {
+        "status": "FROZEN_CANONICAL_RECOMMENDATION",
+        "EXACTA": True, "TRIO": False, "TRIFECTA": True,
+        "frozen_recommendation_only": True, "actual_purchase_verified": False,
+    }
+    trio = evaluate_jra_week_transfer_shadow_result(frozen, pre, [1, 2, 4])
+    assert trio["frozen_purchased_ticket_reachability"]["EXACTA"] is True
+    assert trio["frozen_purchased_ticket_reachability"]["TRIO"] is True
+    assert trio["frozen_purchased_ticket_reachability"]["TRIFECTA"] is False
+    reversal = evaluate_jra_week_transfer_shadow_result(frozen, pre, [2, 1, 4])
+    assert reversal["frozen_purchased_ticket_reachability"]["EXACTA"] is False
+    assert reversal["frozen_purchased_ticket_reachability"]["TRIO"] is True
+    assert reversal["frozen_purchased_ticket_reachability"]["TRIFECTA"] is False
+
+
+def test_declared_pair_third_does_not_imply_purchased_exact():
+    req = request()
+    only_pair = [tickets()[0]]
+    frozen = build_jra_week_transfer_shadow(req, only_pair, None, generated_at=UTC)
+    observed = evaluate_jra_week_transfer_shadow_result(
+        frozen, pre_result_reference(req, frozen), [1, 2, 3]
+    )
+    assert observed["conversion_first_lost_link_observation"] == "NO_DECLARED_ROLE_PAIR_THIRD_LOSS"
+    assert observed["actual_pair_conditioned_third"]["purchased_declared"] is True
+    assert observed["frozen_purchased_ticket_reachability"]["EXACTA"] is True
+    assert observed["frozen_purchased_ticket_reachability"]["TRIFECTA"] is False
+    assert observed["frozen_purchased_ticket_reachability"]["actual_purchase_verified"] is False
+
+
+def test_legacy_transfer_has_unknown_not_false_and_registry_integrity_guard():
+    req = request()
+    frozen = build_jra_week_transfer_shadow(req, tickets(), None, generated_at=UTC)
+    legacy = copy.deepcopy(frozen)
+    del legacy["frozen_purchased_ticket_registry"]
+    legacy["sha256"] = digest({k: v for k, v in legacy.items() if k != "sha256"})
+    observed = evaluate_jra_week_transfer_shadow_result(
+        legacy, pre_result_reference(req, legacy), [1, 2, 3]
+    )
+    reach = observed["frozen_purchased_ticket_reachability"]
+    assert reach["status"] == "LEGACY_NOT_FROZEN"
+    assert reach["TRIFECTA"] is None
+    tampered = copy.deepcopy(frozen)
+    tampered["frozen_purchased_ticket_registry"]["TRIFECTA"] = []
+    with pytest.raises(ValueError, match="FROZEN_SHADOW_HASH_INVALID"):
+        evaluate_jra_week_transfer_shadow_result(
+            tampered, pre_result_reference(req, frozen), [1, 2, 3]
+        )
+    duplicate = copy.deepcopy(frozen)
+    duplicate["frozen_purchased_ticket_registry"]["EXACTA"].append([1, 2])
+    duplicate["sha256"] = digest({k: v for k, v in duplicate.items() if k != "sha256"})
+    with pytest.raises(ValueError, match="FROZEN_PURCHASE_REGISTRY_DUPLICATE"):
+        evaluate_jra_week_transfer_shadow_result(
+            duplicate, pre_result_reference(req, duplicate), [1, 2, 3]
+        )
