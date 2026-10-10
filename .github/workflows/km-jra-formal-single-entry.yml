@@ -494,17 +494,8 @@ jobs:
           PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
-          from jra_production_no_bet_terminal import digest
-          t=json.loads(Path("runtime_out/jra_production_no_bet_terminal.json").read_text())
-          assert t["decision"]=="NO_BET"
-          assert t["source_verified"] is True
-          assert t["total_investment"]==0 and t["tickets"]==[]
-          assert t["unresolved_count"]==0
-          assert t["terminal_index_count"]==t["required_index_count"]
-          assert t["pre_krs_executed"] is False and t["krs_executed"] is False
-          assert t["formal_full_prediction_completed"] is False
-          assert t["signed_final_verified"] is False
-          assert t["purchase_authority"] is False
-          assert t["sha256"]==digest({k:v for k,v in t.items() if k!="sha256"})
-          print("JRA_SIGNED_SOURCE_ZERO_CAPITAL_DECISION_COMPLETE",t["race_id"],t["lineage"])
+          from jra_production_no_bet_terminal import verify_no_bet_terminal
+          terminal=json.loads(Path("runtime_out/jra_production_no_bet_terminal.json").read_text())
+          result=verify_no_bet_terminal(terminal)
+          print("JRA_SIGNED_SOURCE_ZERO_CAPITAL_DECISION_COMPLETE",result)
           PY
