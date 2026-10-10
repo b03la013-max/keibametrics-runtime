@@ -7,7 +7,7 @@
 ## 作成・実装
 
 - `runtime/jra_source_runtime/jra_pedigree_harvest.py`：公式サイト限定・robots許容・逐次低負荷取得・外部リダイレクト拒否・HTML親族セルの実態に合わせた解析。HTTP 502/503/504のみ限定再試行。403/429では回避せず中止。最大3レース単位で逐次取得・取得失敗を明示。父/母のない馬に値を捏造しない。
-- `runtime/jra_pedigree_corpus.py`：旧実装の任意の `official:true` を拒否。JRA SOURCEはEd25519/ハッシュ/レースIDを再検証し、さらにGitHub OIDC/Sigstoreの署名・署名時刻を確認。ハーベストも実際にGitHub Actionsの承認済み収集ワークフローが署名したファイルだけを採用。予測締切後のハーベストや予測対象レースは除外。
+- `runtime/jra_pedigree_corpus.py`：旧実装の任意の `official:true` を拒否。JRA旧SOURCEはEd25519/ハッシュ/レースIDを再検証。旧SOURCEのOIDCは原取得時の上流ワークフロー検証に依存し、コーパス読込時の全件独立再検証はしていない（必要ならsource_attestation_verifierを渡してfail-closed検査できる）。ハーベストも実際にGitHub Actionsの承認済み収集ワークフローが署名したファイルだけを採用。予測締切後のハーベストや予測対象レースは除外。
 - 同名馬の誤結合防止：名前＋父＋母のトリプルをsha256に変換して同定。産駒数と過去走数は別々に数える。矛盾する同一条件・同日過去走は後勝ち上書きせず除去する。サンプル不足は元の規則通り不足のまま。
 - `runtime/jra_source_to_evidence_features.py`：対象レースの父・母父に関連する母集団だけを読み込む。検証失敗数を検証レポートに記録。
 - `.github/workflows/km-jra-pedigree-verified-backfill.yml`：過去日付を3レースずつ取得、実測の一致と内容ハッシュを検査、GitHub OIDCで出力ファイルを署名し、同じ署名を再検証してからコミットする。前回の最後の位置を `runtime/pedigree_backfill_cursor.json` で記録。火・木・土に稼働予定。GitHub Actions runnerが実際に動作しネット接続があることが前提。競馬番組がない日、503継続、サンプル欠落、署名失敗は**完了したことにせず停止**。
