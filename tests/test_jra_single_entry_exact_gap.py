@@ -45,6 +45,21 @@ class ProductionPreparationTest(unittest.TestCase):
             self.assertEqual(len(row["source_feature_trace"]["features"]), 71)
             self.assertIn(rid, {"1", "2"})
         self.assertTrue(report["exact_gaps"])
+        self.assertFalse(report["source_only_full_numerical_ready"])
+        self.assertEqual(report["numerical_closure_mode"], "BLOCKED")
+        self.assertEqual(report["required_index_count"], 40)
+        self.assertEqual(report["verified_full_index_count"], 0)
+        plan = report["source_only_coverage_repair_plan"]
+        self.assertEqual(plan["blocked_index_count"], report["base_index_coverage_diagnostic"]["blocked"])
+        self.assertFalse(plan["production_authority_granted"])
+        self.assertEqual(plan["static_owner_independent_blocker"],
+                         "NO_AUTHORIZED_SOURCE_ONLY_STATIC_RANK_ROLE_DECISION_RULE_CONNECTED")
+        for row in plan["conditional_repair_rows"]:
+            self.assertFalse(row["closure_proven"])
+            self.assertTrue(row["authorized_evaluators_required"])
+            for needed in row["conditional_repair_features"]:
+                self.assertIn(needed["fact_available"], (True, False, None))
+                self.assertTrue(needed["feature"])
         coverage = report["base_index_coverage_diagnostic"]
         self.assertEqual(coverage["required"], 26)
         self.assertTrue(coverage["blocked"] > 0)
@@ -88,6 +103,11 @@ class ProductionPreparationTest(unittest.TestCase):
         self.intent["supplemental_evidence_pack"] = self.supplemental()
         report = prepare_production_numerical(self.intent, self.env)
         self.assertTrue(report["production_full_numerical_ready"])
+        # Acceptance-only supplemental numerics cannot pass the source-only gate.
+        self.assertFalse(report["source_only_full_numerical_ready"])
+        self.assertEqual(report["numerical_closure_mode"], "WITH_SUPPLEMENTAL_EVIDENCE")
+        self.assertEqual(report["required_index_count"], 40)
+        self.assertEqual(report["verified_full_index_count"], 40)
         coverage = report["base_index_coverage_diagnostic"]
         self.assertEqual(coverage["required"], 26)
         self.assertEqual(coverage["blocked"], 0)
