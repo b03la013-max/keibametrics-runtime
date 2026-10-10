@@ -93,6 +93,14 @@ def discover_links(html: str, *, date_text: str, race_no: int,
                     unique_found = names[0]
                     break
             parent = parent.parent
+        # Actual racesel uses one table per venue, with the venue heading in
+        # its first row. Do not infer venue from rcode or whole-page text.
+        if unique_found is None:
+            table = a.find_parent("table")
+            first = table.find("tr") if table else None
+            names = [name for name in VENUES if first and name in first.get_text(" ", strip=True)]
+            if len(names) == 1:
+                unique_found = names[0]
         if venue and unique_found and unique_found != venue:
             continue
         rows.append({"url": resolved, "rcode": rcode, "label": label[:100],
@@ -111,6 +119,26 @@ def discover_race_url(context, *, date_text: str, race_no: int,
         raw = page.content()
         options = discover_links(raw, date_text=date_text,
                                  race_no=race_no, venue=venue)
+        if not options:
+            # Follow only the real day link on allsel; never fabricate URLs.
+            soup = _auth_ok(raw)
+            day = date.fromisoformat(date_text).strftime("%Y%m%d")
+            urls = set()
+            for a in soup.find_all("a", href=True):
+                url = urljoin(ROOT + "/allsel", a["href"])
+                p = urlparse(url)
+                if (p.scheme == "https" and p.netloc == "www.blood-b.com"
+                        and p.path == "/racesel" and not p.fragment
+                        and parse_qs(p.query) == {"rdate": [day]}):
+                    urls.add(url)
+            if len(urls) != 1:
+                raise BloodBError("BLOODB_DAY_LINK_MISSING_OR_AMBIGUOUS")
+            expected = urls.pop()
+            response = page.goto(expected, wait_until="domcontentloaded", timeout=30000)
+            if response is None or response.status != 200 or page.url != expected:
+                raise BloodBError("BLOODB_DAY_LOGIN_OR_ACCESS_FAILURE")
+            options = discover_links(page.content(), date_text=date_text,
+                                     race_no=race_no, venue=venue)
     finally:
         page.close()
     if len(options) != 1:
