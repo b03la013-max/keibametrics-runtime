@@ -199,8 +199,27 @@ jobs:
           python runtime/jra_execution_maturity_bridge.py build-formal             --intent "${{ steps.meta.outputs.intent_file }}"             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --source-execution-id "$EXECUTION_ID"             --output runtime_out/jra_single_entry_formal_request.json --gap-output runtime_out/jra_single_entry_exact_gap.json
           python runtime/jra_execution_maturity_bridge.py verify-formal             --request runtime_out/jra_single_entry_formal_request.json             --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json             --output runtime_out/jra_single_entry_binding_verification.json
 
-      - name: Produce verified zero-exposure Production terminal when Full20 is blocked
+      - name: Classify Production failure before choosing a terminal
         if: steps.build_formal.outcome != 'success'
+        id: failure_class
+        shell: bash
+        run: |
+          PYTHONPATH=runtime python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from jra_single_entry_outcome import evidence_terminal_eligible
+          path=Path("runtime_out/jra_single_entry_exact_gap.json")
+          report=json.loads(path.read_text()) if path.exists() else {}
+          eligible=evidence_terminal_eligible(report)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write("evidence_terminal="+str(eligible).lower()+"\n")
+          print({"first_blocked_stage":report.get("first_blocked_stage"),
+                 "handoff_error":report.get("auto_handoff_error"),
+                 "evidence_terminal_eligible":eligible})
+          PY
+
+      - name: Produce verified zero-exposure Production terminal when Full20 is blocked
+        if: steps.failure_class.outputs.evidence_terminal == 'true'
         id: blocked_terminal
         shell: bash
         env:
@@ -271,10 +290,11 @@ jobs:
           CANDIDATE_TARGET="runtime/jra_candidate_requests/${SAFE}-CANDIDATE-R1.json"
           mkdir -p runtime/exact_gaps runtime/jra_candidate_requests
           cp runtime_out/jra_single_entry_exact_gap.json "$GAP_TARGET"
-          test -f runtime_out/jra_production_no_bet_terminal.json
           NO_BET_TARGET="runtime/jra_no_bet_terminals/${SAFE}.json"
-          mkdir -p runtime/jra_no_bet_terminals
-          cp runtime_out/jra_production_no_bet_terminal.json "$NO_BET_TARGET"
+          if [ -f runtime_out/jra_production_no_bet_terminal.json ]; then
+            mkdir -p runtime/jra_no_bet_terminals
+            cp runtime_out/jra_production_no_bet_terminal.json "$NO_BET_TARGET"
+          fi
           # A Production evidence NO_BET remains a valid zero-exposure
           # terminal decision even when a late OOS Candidate is impossible.
           # Never backdate or submit an expired race as prospective.
@@ -311,7 +331,8 @@ jobs:
           fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "$GAP_TARGET" "$NO_BET_TARGET"
+          git add "$GAP_TARGET"
+          if [ -f runtime_out/jra_production_no_bet_terminal.json ]; then git add "$NO_BET_TARGET"; fi
           if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
             git add "$CANDIDATE_TARGET"
           fi
@@ -436,6 +457,18 @@ jobs:
           test -n "$RUN_ID"
           gh run watch "$RUN_ID" --exit-status
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          gh run download "$RUN_ID" --name "krs-utility-$RUN_ID" --dir runtime_out/canonical_formal
+          PYTHONPATH=runtime python - <<'PY'
+          import json
+          from pathlib import Path
+          from jra_single_entry_outcome import verify_formal_completion_summary
+          request=json.loads(Path("runtime_out/jra_single_entry_formal_request.json").read_text())
+          summaries=list(Path("runtime_out/canonical_formal").glob("*/formal_execution_summary.json"))
+          assert len(summaries)==1, "JRA_CANONICAL_FORMAL_SUMMARY_REQUIRED"
+          summary=json.loads(summaries[0].read_text())
+          result=verify_formal_completion_summary(summary,request)
+          Path("runtime_out/jra_formal_completion_verification.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          PY
 
       - name: Persist single-entry execution report
         if: always()
@@ -461,10 +494,11 @@ jobs:
             "binding_verification_sha256":sha("runtime_out/jra_single_entry_binding_verification.json"),
             "exact_gap_sha256":sha("runtime_out/jra_single_entry_exact_gap.json"),
             "production_no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
-            "production_full_prediction_completed":False if sha("runtime_out/jra_production_no_bet_terminal.json") else bool(os.environ.get("FORMAL_RUN_ID")),
+            "production_full_prediction_completed":bool(sha("runtime_out/jra_formal_completion_verification.json")),
+            "formal_completion_verification_sha256":sha("runtime_out/jra_formal_completion_verification.json"),
             "no_bet_terminal_sha256":sha("runtime_out/jra_production_no_bet_terminal.json"),
             "candidate_dispatch_decision_sha256":sha("runtime_out/jra_candidate_dispatch_decision.json"),
-            "status":("FORMAL_COMPLETE" if os.environ.get("FORMAL_RUN_ID") else ("PRODUCTION_NO_BET_TERMINAL_CANDIDATE_PARALLEL_COMPLETED" if sha("runtime_out/jra_production_no_bet_terminal.json") and os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
+            "status":("FORMAL_COMPLETE" if sha("runtime_out/jra_formal_completion_verification.json") else ("PRODUCTION_NO_BET_TERMINAL_CANDIDATE_PARALLEL_COMPLETED" if sha("runtime_out/jra_production_no_bet_terminal.json") and os.environ.get("CANDIDATE_RUN_ID") else ("PRODUCTION_EVIDENCE_NO_BET_TERMINAL_ONLY" if sha("runtime_out/jra_production_no_bet_terminal.json") else "PRODUCTION_CLOSURE_BLOCKED"))),
             "production_prediction_change":False,
             "production_numerical_change":False,
             "local_numerical_reuse":False,

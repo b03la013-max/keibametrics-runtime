@@ -841,7 +841,7 @@ jobs:
               "prediction_utility_sha256":utility.get("sha256"),
               "material_shadow_delta":utility.get("material_shadow_delta")
             },
-            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"]},
+            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"],"receipt_timestamp":f.get("receipt",{}).get("timestamp")},
             "ticket_count":len(tickets),
             "total_investment":expected_total,
             "no_bet":final_no_bet,
@@ -875,6 +875,8 @@ jobs:
             ),
             "entry_transport_fallback_status":fallback_validation.get("status")
           }
+          with open(os.path.join(artifact_dir,"formal_execution_summary.json"),"w",encoding="utf-8") as fh:
+              json.dump(summary,fh,ensure_ascii=False,sort_keys=True,indent=2)
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 
