@@ -59,17 +59,32 @@ def _horse_identity(h: dict) -> str | None:
     return hashlib.sha256(("\x1f".join([name, sire, dam])).encode("utf-8")).hexdigest()
 
 
-def _attested(path: Path, *, signer: str | None = None) -> bool:
+def _attested(path: Path, *, signer: str | None = None,
+              not_after: datetime | None = None) -> bool:
     """Verify artifact bytes against GitHub OIDC / Sigstore, not an in-file flag."""
     if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
         return False
-    cmd = ["gh", "attestation", "verify", str(path), "--repo", REPO]
+    cmd = ["gh", "attestation", "verify", str(path), "--repo", REPO,
+           "--format", "json"]
     if signer:
         cmd += ["--signer-workflow", REPO + "/.github/workflows/" + signer]
     try:
-        r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+        r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            text=True, timeout=60, check=False)
-        return r.returncode == 0
+        if r.returncode != 0:
+            return False
+        if not_after is None:
+            return True
+        data = json.loads(r.stdout)
+        # A stored harvest timestamp is never an authority. Use signed
+        # Sigstore transparency / TSA witness time to reject retrospective use.
+        for item in data:
+            result = item.get("verificationResult") or {}
+            for stamp in result.get("verifiedTimestamps") or []:
+                t = _dt(stamp.get("timestamp") or stamp.get("time"))
+                if t is not None and t <= not_after:
+                    return True
+        return False
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
 
@@ -154,7 +169,8 @@ def _verified_source(path: Path) -> dict | None:
         return None
 
 
-def _verified_harvest(path: Path, *, attestation_verifier=None) -> dict | None:
+def _verified_harvest(path: Path, *, not_after: datetime,
+                      attestation_verifier=None) -> dict | None:
     """A self-declared 'official' flag or sha256 is NEVER trust authority.
 
     Confirm content integrity, actual JRA site, identity/raw checks, and
@@ -177,7 +193,8 @@ def _verified_harvest(path: Path, *, attestation_verifier=None) -> dict | None:
         if digest != actual:
             return None
         trusted = (attestation_verifier or
-                   (lambda p: _attested(p, signer="km-jra-pedigree-corpus-harvest.yml")))(path)
+                   (lambda p: _attested(p, signer="km-jra-pedigree-corpus-harvest.yml",
+                                        not_after=not_after)))(path)
         if not trusted:
             return None
         if (obj.get("horse_count") != len(obj.get("horses") or [])
@@ -193,7 +210,8 @@ def _verified_harvest(path: Path, *, attestation_verifier=None) -> dict | None:
 
 def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                  exclude_race_id: str | None = None,
-                 attestation_verifier=None) -> dict:
+                 attestation_verifier=None,
+                 source_attestation_verifier=None) -> dict:
     cutoff = _dt(prediction_cutoff)
     try:
         day = date.fromisoformat(str(race_date))
@@ -246,12 +264,20 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
         frozen = _dt(summary.get("source_freeze_at"))
         if frozen is None or frozen > cutoff:
             continue
+        # Receipt public keys are embedded in envelopes; independent OIDC
+        # signer verification and timestamp are required for BVI Production.
+        verified = (source_attestation_verifier or
+                    (lambda p: _attested(p, not_after=cutoff)))(path)
+        if verified is not True:
+            rejected += 1
+            continue
         snaps.add(str(summary["source_snapshot_sha256"]))
         for h in summary["horses"]:
             add(h, "SIGNED_SOURCE")
 
     for path in sorted(Path(root).glob("runtime/pedigree_corpus/*.json")):
-        hv = _verified_harvest(path, attestation_verifier=attestation_verifier)
+        hv = _verified_harvest(path, not_after=cutoff,
+                               attestation_verifier=attestation_verifier)
         if not hv:
             rejected += 1
             continue
@@ -272,6 +298,6 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
         "run_conflict_count": len(conflicts),
         "rejected_untrusted_inputs": rejected,
         "production_harvest_rule": "OIDC_ATTESTED_JRA_HARVEST_OR_SIGNED_SOURCE_ONLY",
-        "source_signature_level": "ENVELOPE_ED25519_VERIFIED / SOURCE_OIDC_NOT_RECHECKED_HERE",
+        "source_signature_level": "ENVELOPE_ED25519_PLUS_GITHUB_OIDC_ATTESTATION_BEFORE_CUTOFF",
         "valid_for_historical_OOS_recompute": False,
     }
