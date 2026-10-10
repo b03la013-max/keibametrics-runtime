@@ -104,7 +104,7 @@ jobs:
           assert report["family_id"]=="JRA"
           assert report["race_id"]=="KM-JRA-KYO-20261010-R09"
           source=envelope["artifact"]
-          features=report.get("source_feature_compilation") or {}
+          features=report.get("source_feature_report") or {}
           names=Counter(
               k for data in (features.get("runners") or {}).values()
               for k in (data.get("generated_production_features") or {})
