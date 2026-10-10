@@ -7,7 +7,7 @@ session. No Production feature/BVI population/ticket/OOS activation.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 import fcntl
 import hashlib
 import json
@@ -157,6 +157,11 @@ def run_one(context, spec: dict, *, private_root: Path = PRIVATE,
     if today.isoformat() != spec["race_date"]:
         raise BloodBError("RACE_DATE_INVALID")
     cutoff = utc_time(spec["prediction_cutoff"])
+    # Cutoff must be on the target race day in JST. A historical race with
+    # tomorrow's cutoff must never be disguised as a prospective race.
+    jst_day = (cutoff + timedelta(hours=9)).date()
+    if jst_day != today:
+        raise BloodBError("JRA_RACE_DATE_AND_CUTOFF_JST_DAY_MISMATCH")
     if clock() >= cutoff:
         raise BloodBError("BLOODB_PREDICTION_CUTOFF_EXPIRED")
     official, source = load_official(spec)
