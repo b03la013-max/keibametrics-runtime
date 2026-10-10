@@ -615,7 +615,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
             def pool(key, value, pred):
                 horses, rows = 0, []
                 for hn, h in corpus["horses"].items():
-                    if hn == name or not value or h.get(key) != value:
+                    if h.get("horse_name") == name or not value or h.get(key) != value:
                         continue
                     sel = [r for r in h["runs"].values() if pred(r)]
                     if sel:
@@ -646,7 +646,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
             debut = []
             debut_h = 0
             for hn, h in corpus["horses"].items():
-                if hn == name or h.get("sire") != sire or not h["runs"]:
+                if h.get("horse_name") == name or h.get("sire") != sire or not h["runs"]:
                     continue
                 first = min(h["runs"].values(), key=lambda r: r["date"])
                 debut.append(first)
