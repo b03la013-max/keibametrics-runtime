@@ -86,13 +86,19 @@ def _jra_official_class_strength(name: str) -> float | None:
     t = str(name or "").upper().replace(" ", "").replace("　", "")
     if not t:
         return None
-    # Match grade only at a grade word, not single 'L' in unrelated words.
-    if re.search(r"(?:\\bG\\s*[1ⅠI](?![IⅡⅢ])|Ｇ[ⅠI1]|JPN[ⅠI1])", t):
-        return 96.0
-    if re.search(r"(?:\\bG\\s*(?:2|Ⅱ|II)|Ｇ[Ⅱ2]|JPN(?:Ⅱ|II|2))", t):
-        return 92.0
-    if re.search(r"(?:\\bG\\s*(?:3|Ⅲ|III)|Ｇ[Ⅲ3]|JPN(?:Ⅲ|III|3))", t):
-        return 88.0
+    # Normalize full-width grade tokens and unicode Roman numerals before
+    # checking a grade token. Japanese characters before G are NOT a
+    # Unicode word boundary, so \\bG... would incorrectly miss all JRA
+    # Japanese race names such as 神戸新聞杯GⅡ.
+    t=(t.replace("Ｇ","G").replace("Ⅲ","III")
+         .replace("Ⅱ","II").replace("Ⅰ","I")
+         .replace("３","3").replace("２","2").replace("１","1"))
+    for pattern,value in (
+        (r"(?<![A-Z])(?:GIII|G3|JPNIII|JPN3)(?![A-Z0-9])",88.0),
+        (r"(?<![A-Z])(?:GII|G2|JPNII|JPN2)(?![A-Z0-9])",92.0),
+        (r"(?<![A-Z])(?:GI|G1|JPNI|JPN1)(?![A-Z0-9])",96.0),
+    ):
+        if re.search(pattern,t): return value
     if "リステッド" in t or re.search(r"\\(L\\)$", t):
         return 84.0
     if any(x in t for x in ("オープン", "OPEN")):
