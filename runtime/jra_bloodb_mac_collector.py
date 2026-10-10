@@ -27,7 +27,8 @@ HOME = Path.home() / ".keibametrics"
 PROFILE = HOME / "browser_bloodb"
 PRIVATE = HOME / "private_bloodb"
 ROOT = "https://www.blood-b.com"
-FIELDS = ("血統", "血統評価", "血統タイプ", "相対指数", "ローテ評価", "人気ランク")
+FIELDS = ("血統", "血統評価", "血統タイプ", "相対指数", "ローテ評価", "人気ランク",
+          "父小系統", "母父小系統", "父母父小系統母母父小系統")
 SOURCE_PROFILE = "BLOODB-SUBSCRIBER-LOCAL-DIAGNOSTIC-v0.1"
 
 class BloodBError(ValueError):
@@ -107,9 +108,32 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
         raise BloodBError("BLOODB_LOGIN_REQUIRED")
     selected = {}
     for table in soup.select("table"):
-        trs = table.select("tr")
-        header = next(([namekey(cell.get_text(" ", strip=True)) for cell in tr.select("th")]
-                       for tr in trs if len(tr.select("th")) >= 2), None)
+        trs = [tr for tr in table.select("tr") if tr.find_parent("table") is table]
+        header = None
+        for tr in trs:
+            top = tr.find_all(["th", "td"], recursive=False)
+            labels = [namekey(c.get_text(" ", strip=True)) for c in top]
+            if len(labels) < 2 or "馬名" not in labels:
+                continue
+            if not any(x in {namekey(k) for k in FIELDS} for x in labels):
+                continue
+            header = []
+            for cell, label in zip(top, labels):
+                try:
+                    span = int(cell.get("colspan", 1))
+                except (TypeError, ValueError):
+                    raise BloodBError("BLOODB_HEADER_SPAN_INVALID")
+                if span == 4 and label == "血統タイプ":
+                    sibling = tr.find_next_sibling("tr")
+                    sub = [namekey(c.get_text()) for c in sibling.find_all(["th", "td"], recursive=False)] if sibling else []
+                    if sub != ["W", "P", "S", "T"]:
+                        raise BloodBError("BLOODB_TYPE_SUBHEADER_INVALID")
+                    header.extend(["血統タイプ"] * 4)
+                elif span == 1:
+                    header.append(label)
+                else:
+                    raise BloodBError("BLOODB_HEADER_SPAN_UNSUPPORTED")
+            break
         if not header:
             continue
         recognizable = [x for x in header if any(namekey(k) == x for k in FIELDS)]
@@ -129,6 +153,10 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
             if len(identities) != 1:
                 continue
             horse = identities.pop()
+            if "馬番" in header:
+                observed_no = namekey(cells[header.index("馬番")].get_text())
+                if observed_no != official_names[horse]:
+                    raise BloodBError("BLOODB_HORSE_NUMBER_MISMATCH")
             if horse in selected:
                 raise BloodBError("BLOODB_DUPLICATE_HORSE_ROWS")
             values = {}
@@ -138,7 +166,7 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
                     label = next(k for k in FIELDS if namekey(k) == title)
                     value = cell.get_text(" ", strip=True)
                     if value:
-                        values[label] = value[:160]
+                        values[label] = " | ".join([values[label], value[:160]]) if label in values else value[:160]
                     if label in ("血統", "血統評価", "血統タイプ"):
                         color = {"class":cell.get("class", [])[:8],
                                  "style":str(cell.get("style") or "")[:160],
@@ -153,7 +181,7 @@ def parse_rendered(html: str, official: list[dict]) -> dict:
     if missing:
         raise BloodBError("BLOODB_RUNNER_COVERAGE_UNVERIFIED:" + str(len(missing)) + "/" + str(len(official_names)))
     return {"horse_count":len(selected), "observations":list(selected.values()),
-            "parser":"EXACT-NAME-HEADER-TABLE-v0.1", "observed_labels":sorted(set(
+            "parser":"EXACT-NAME-HEADER-TABLE-v0.2", "observed_labels":sorted(set(
                 label for row in selected.values() for label in row["observed_labels"]))}
 
 def check_page_actual(actual_url: str, expected_url: str):
