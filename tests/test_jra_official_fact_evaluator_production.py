@@ -44,9 +44,9 @@ def source():
         "jra_official_person_stats": {"runners": {
             "1": {
                 "jockey_matched": True,
-                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 17.6}},
+                "jockey": {"current_year_flat": {"starts": 125, "wins": 22, "win_rate": 0.176}},
                 "trainer_matched": True,
-                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 18.0}},
+                "trainer": {"current_year_flat": {"starts": 50, "wins": 9, "win_rate": 0.180}},
             },
             "2": {
                 "jockey_matched": False,
@@ -97,15 +97,17 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         src["source_freeze_at"] = "2026-10-10T12:35:00+09:00"
         self.assertEqual(official_production_observations(src, self.registry), {})
 
-    def test_real_jra_percentage_under_one_is_not_fraction(self):
+    def test_real_jra_fractional_win_rate_is_not_percentage(self):
         src = source()
         stats = src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]
-        stats.update(starts=1000, wins=8, win_rate=0.8)
+        stats.update(starts=1000, wins=8, win_rate=0.008)
         result = official_production_observations(src, self.registry)
         self.assertEqual(result["1"]["jockey_quality"]["category"], "WEAK")
         self.assertIn("ratio=0.008000", result["1"]["jockey_quality"]["source_fact"])
+        # 0.008 means 0.8%, not 0.008% or 80%.
+        self.assertIn("displayed_win_rate=0.008", result["1"]["jockey_quality"]["source_fact"])
         # A forged percentage inconsistent with wins/starts must be discarded.
-        stats["win_rate"] = 18.0
+        stats["win_rate"] = 0.180
         self.assertNotIn("jockey_quality", official_production_observations(src, self.registry)["1"])
 
     def test_recent_speed_uses_registered_actual_history_rt_and_peer_group(self):
