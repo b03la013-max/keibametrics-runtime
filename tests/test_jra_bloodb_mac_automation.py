@@ -52,6 +52,15 @@ class Tests(unittest.TestCase):
         self.assertTrue(discover_race_url(FakeBrowser(OTHER),
                         date_text=DATE,race_no=9,venue="京都").endswith("0609"))
 
+    def test_selector_option_explicit_url_is_discoverable_without_id_guess(self):
+        menu='''<html><select>
+          <option value="/main.php?rcode=2026080901010609">東京 9R</option>
+          <option value="2026080901020609">数字だけのIDはURLではない</option>
+          </select></html>'''
+        got=discover_links(menu,date_text=DATE,race_no=9,venue="東京")
+        self.assertEqual(len(got),1)
+        self.assertIn("2026080901010609",got[0]["url"])
+
     def test_unknown_venue_and_auth_redirect_fail(self):
         with self.assertRaisesRegex(BloodBError,"VENUE_UNKNOWN"):
             discover_links(INDEX,date_text=DATE,race_no=9,venue="地球")
@@ -87,6 +96,30 @@ class Tests(unittest.TestCase):
             self.assertEqual(results["not_due"],["KM-ALPHA"])
             self.assertEqual(results["past_cutoff"],["KM-BETA"])
             self.assertEqual(ctx.calls,[])
+
+    def test_limit_subscriber_traffic_and_duplicate_queue_ids(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory=Path(d)
+            official=directory/"jra_official.json"
+            official.write_text(json.dumps(OFFICIAL))
+            queue=[]
+            for i in range(1,6):
+                queue.append({"race_id":"KM-QU-"+str(i),"race_date":DATE,"race_no":9,
+                  "venue":"東京","official_runners_path":str(official),
+                  "prediction_cutoff":CUTOFF})
+            q=directory/"queue.json"
+            q.write_text(json.dumps(queue))
+            browser=FakeBrowser()
+            result=process_queue(browser,q,private_root=directory/"private",clock=CLOCK)
+            self.assertEqual(len(result["completed"]),3)
+            self.assertEqual(len(result["deferred"]),2)
+            self.assertEqual(len(browser.calls),6) # index + detail for each
+            queue[1]["race_id"]=queue[0]["race_id"]
+            q.write_text(json.dumps(queue))
+            # Existing immutable collected race takes priority; duplicate
+            # then explicitly fails instead of trusting duplicate queue facts.
+            second=process_queue(FakeBrowser(),q,private_root=directory/"private",clock=CLOCK)
+            self.assertTrue(any("DUPLICATE_RACE_ID" in x["reason"] for x in second["failed"]))
 
     def test_real_link_required_and_unverified_official_marked(self):
         with tempfile.TemporaryDirectory() as d:
