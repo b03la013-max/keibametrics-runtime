@@ -258,8 +258,28 @@ jobs:
           from runtime.family_authority_guard import resolve_current_authority
           _,current=resolve_current_authority(root=Path.cwd(),now=now)
           assert max(rows,key=lambda z:(z[0],z[1]))[1]==current["manifest_id"]
+          # Owner-approved (2026-10-10): JRA may differ from R39 ONLY in the four
+          # keys an Authority explicitly declares as its owner-authorized JRA
+          # delta. Every other JRA key and the entire BAN scope must still be
+          # identical, and an activation can never self-promote.
+          R45_ALLOWED_JRA_DELTA={"evidence_rule_registry","owner_authorized_feature_rules",
+                                 "pedigree_corpus","production_static_owner_activation"}
           for family in ["JRA","BAN"]:
-              assert current["family_scoped_authority"][family]==r39["family_scoped_authority"][family],family
+              delta=set()
+              if family=="JRA":
+                  declared=current.get("jra_owner_authorized_delta") or {}
+                  delta=set(declared.get("keys") or [])
+                  assert delta<=R45_ALLOWED_JRA_DELTA,sorted(delta-R45_ALLOWED_JRA_DELTA)
+              cur={k:v for k,v in current["family_scoped_authority"][family].items() if k not in delta}
+              ref={k:v for k,v in r39["family_scoped_authority"][family].items() if k not in delta}
+              assert cur==ref,family
+              if "production_static_owner_activation" in delta:
+                  act=current["family_scoped_authority"]["JRA"]["production_static_owner_activation"]
+                  assert act["automatic_promotion"] is False
+                  assert act["status"] in ("OWNER_AUTHORIZED_UNVALIDATED","PRODUCTION_AUTHORIZED")
+                  if act["status"]=="OWNER_AUTHORIZED_UNVALIDATED":
+                      assert act["market_baseline_superiority_proven"] is False
+                      assert Path(act["owner_authorization_record"]).is_file()
 
           bridge=Path("runtime/jra_execution_maturity_bridge.py").read_text(encoding="utf-8")
           for forbidden in [
