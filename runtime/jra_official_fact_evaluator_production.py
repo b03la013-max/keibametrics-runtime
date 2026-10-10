@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from statistics import median
 from datetime import date, datetime
 from pathlib import Path
@@ -29,6 +30,7 @@ RULES = {
     "trainer_quality": "KM-JRA-TRAINER-QUALITY-v1",
     "rotation_fit": "KM-JRA-ROTATION-FIT-v1",
     "bodyweight_range_fit": "KM-JRA-BODYWEIGHT-RANGE-FIT-v1",
+    "class_performance": "KM-JRA-CLASS-PERFORMANCE-v1",
 }
 
 
@@ -77,6 +79,30 @@ def _observed_runs(history: dict, detail: dict, race_day: date) -> list[dict]:
         out.append({**x, "finish": finish, "field_size": field, "date": str(day)})
     out.sort(key=lambda x: x["date"], reverse=True)
     return out
+
+
+def _jra_official_class_strength(name: str) -> float | None:
+    """Known printed JRA class labels only. Never infer from a horse name."""
+    t = str(name or "").upper().replace(" ", "").replace("　", "")
+    if not t:
+        return None
+    # Match grade only at a grade word, not single 'L' in unrelated words.
+    if re.search(r"(?:\\bG\\s*[1ⅠI](?![IⅡⅢ])|Ｇ[ⅠI1]|JPN[ⅠI1])", t):
+        return 96.0
+    if re.search(r"(?:\\bG\\s*(?:2|Ⅱ|II)|Ｇ[Ⅱ2]|JPN(?:Ⅱ|II|2))", t):
+        return 92.0
+    if re.search(r"(?:\\bG\\s*(?:3|Ⅲ|III)|Ｇ[Ⅲ3]|JPN(?:Ⅲ|III|3))", t):
+        return 88.0
+    if "リステッド" in t or re.search(r"\\(L\\)$", t):
+        return 84.0
+    if any(x in t for x in ("オープン", "OPEN")):
+        return 82.0
+    if "3勝クラス" in t or "３勝クラス" in t: return 78.0
+    if "2勝クラス" in t or "２勝クラス" in t: return 74.0
+    if "1勝クラス" in t or "１勝クラス" in t: return 70.0
+    if "未勝利" in t: return 54.0
+    if "新馬" in t: return 52.0
+    return None
 
 
 def official_production_observations(source: dict, registry: dict) -> dict[str, dict[str, dict]]:
@@ -241,6 +267,39 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
                     "observation_count": len(historical),
                 }
 
+        # Class-adjusted performance is derived only from the race class
+        # printed in JRA's historical result and that race's verified field/
+        # finish, never the future/current target's class. These levels are
+        # inherited from the already existing candidate JRA class ladder.
+        class_records=[]
+        for x in runs[:4]:
+            cls=_jra_official_class_strength(x.get("race_name") or x.get("race_class_text"))
+            if cls is None:
+                continue
+            finishing=(x["field_size"]-x["finish"])/(x["field_size"]-1)
+            class_records.append((x,cls,finishing))
+        if len(class_records)>=2:
+            # An explicit quality/class mixture: 55% level reached, 45%
+            # normalized finish within the class. Observed-only, not P(win).
+            values=[0.55*cls + 45.0*finish for _,cls,finish in class_records]
+            value=sum(values)/len(values)
+            features["class_performance"]={
+                "category": percentile_band(value/100.0),
+                "rule_id":RULES["class_performance"],
+                "evidence_refs":[sha]+[
+                    f"JRA_OFFICIAL_HISTORY_CLASS:{rid}:{row['date']}:{row.get('race_name')}:{row['finish']}/{row['field_size']}"
+                    for row,_,_ in class_records
+                ],
+                "source_fact": (
+                    f"Real prior JRA class-adjusted finish observations={len(values)};"
+                    f" class_level_weight=0.55; field_finish_weight=0.45;"
+                    f" score={value:.6f}; target result excluded"
+                ),
+                "source_authority":"JRA_OFFICIAL",
+                "result_derived":False,
+                "production_authority":True,
+                "observation_count":len(values),
+            }
         observed("recent_performance", runs[:4], normalized=True)
         observed("recent_consistency", runs[:4])
         if venue:
