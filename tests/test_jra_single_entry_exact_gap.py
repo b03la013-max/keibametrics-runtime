@@ -45,6 +45,12 @@ class ProductionPreparationTest(unittest.TestCase):
             self.assertEqual(len(row["source_feature_trace"]["features"]), 71)
             self.assertIn(rid, {"1", "2"})
         self.assertTrue(report["exact_gaps"])
+        coverage = report["base_index_coverage_diagnostic"]
+        self.assertEqual(coverage["required"], 26)
+        self.assertTrue(coverage["blocked"] > 0)
+        self.assertFalse(coverage["all_base_index_coverage_met"])
+        self.assertTrue(coverage["no_missing_value_imputation"])
+        self.assertTrue(all(row["index_id"] and row["runner_id"] for row in coverage["rows"]))
         for gap in report["exact_gaps"]:
             self.assertIn("index_binding", gap)
             self.assertIn("missing_reason", gap)
@@ -82,6 +88,10 @@ class ProductionPreparationTest(unittest.TestCase):
         self.intent["supplemental_evidence_pack"] = self.supplemental()
         report = prepare_production_numerical(self.intent, self.env)
         self.assertTrue(report["production_full_numerical_ready"])
+        coverage = report["base_index_coverage_diagnostic"]
+        self.assertEqual(coverage["required"], 26)
+        self.assertEqual(coverage["blocked"], 0)
+        self.assertTrue(coverage["all_base_index_coverage_met"])
         self.assertFalse(report["static_generation_ready"])
         self.assertEqual(report["first_blocked_stage"], "PRODUCTION_STATIC_PREDICTION_OWNER")
         self.assertEqual(report["exact_gaps"], [])
