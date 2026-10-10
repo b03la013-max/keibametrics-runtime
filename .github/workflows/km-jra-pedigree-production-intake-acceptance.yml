@@ -1,0 +1,40 @@
+name: JRA Real Signed Pedigree Corpus Production Intake Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/jra_pedigree_live_acceptance.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
+      - "runtime/pedigree_corpus/**"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/jra_pedigree_live_acceptance.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
+      - "runtime/pedigree_corpus/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+  attestations: read
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -q cryptography
+      - name: Verify real stored official JRA corpus OIDC and cutoff gating in Base feature loader
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/jra_pedigree_live_acceptance.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-real-signed-pedigree-corpus-intake
+          path: runtime_out/jra_pedigree_verified_acceptance.json
+          if-no-files-found: warn
