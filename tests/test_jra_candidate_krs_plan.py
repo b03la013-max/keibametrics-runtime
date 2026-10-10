@@ -39,7 +39,7 @@ def executed(payload):
         "requested_run_count": count,
         "actual_run_count": count,
         "seed": payload["seed"],
-        "input_class": INPUT_CLASS,
+        "input_class": payload["input_class"],
         "input_sha256": "a" * 64,
         "output_sha256": "b" * 64,
     }}}
