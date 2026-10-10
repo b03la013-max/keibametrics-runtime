@@ -70,6 +70,15 @@ class TestBloodBPrivate(unittest.TestCase):
         with self.assertRaisesRegex(BloodBError,"DUPLICATE"):
             parse_rendered(HTML.replace("</table>","<tr><td>テストホース一号</td><td>血</td><td>?</td><td>50</td><td>?</td></tr></table>"),OFFICIAL)
 
+    def test_color_markers_and_horse_sex_inside_single_cell_preserve_exact_identity(self):
+        html=HTML.replace("<a>テストホース一号</a>",
+                          "<a>テストホース一号</a> 牝3 53.0kg").replace(
+                          "<td>血</td>", '<td class="ped-green" style="background:#acd">血</td>',1)
+        observed=parse_rendered(html,OFFICIAL)["observations"][0]
+        self.assertEqual(observed["horse_no"],"1")
+        self.assertIn("ped-green",observed["observed_visual_markers"]["血統評価"]["class"])
+        self.assertFalse(any("production" in k for k in observed))
+
     def test_local_immutable_pre_cutoff_and_not_production(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/"secrets"
