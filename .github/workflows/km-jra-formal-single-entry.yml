@@ -554,6 +554,19 @@ jobs:
           Path("runtime_out/jra_formal_completion_verification.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
           PY
 
+      - name: Render FINAL ticket tree (買い目表記規格)
+        if: steps.formal_run.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          RACE_ID="$(jq -r .race_id runtime_out/jra_single_entry_formal_request.json)"
+          git fetch -q origin main
+          git show "origin/main:runtime/final_artifacts/${RACE_ID}.json" > runtime_out/jra_immutable_final.json
+          PYTHONPATH=runtime python runtime/jra_ticket_tree_renderer.py runtime_out/jra_immutable_final.json \
+            > runtime_out/jra_ticket_tree.txt
+          { echo "## ${RACE_ID} 買い目"; echo '```'; cat runtime_out/jra_ticket_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Persist single-entry execution report
         if: always()
         shell: bash
