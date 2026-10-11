@@ -1,0 +1,25 @@
+name: AKI adaptive width research acceptance
+on:
+  pull_request:
+    paths:
+      - 'research/adaptive_width/**'
+      - '.github/workflows/km-adaptive-width-research-acceptance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'research/adaptive_width/**'
+      - '.github/workflows/km-adaptive-width-research-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  research-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s research/adaptive_width -p 'test_*.py' -v
+      - run: python research/adaptive_width/build_ledger.py --output /tmp/km-width-ledger.json
+      - run: python research/adaptive_width/evaluate.py --ledger /tmp/km-width-ledger.json --output /tmp/km-width-evaluation.json
