@@ -13,7 +13,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
-from jra_pedigree_corpus import _clean_runs, _source_horses_from_verified_artifact
+from jra_pedigree_corpus import (_clean_runs, _source_horses_from_verified_artifact,\n                                 _harvest_might_match_target, build_corpus)
 
 
 def run(*, weight=478, when="2026-09-22", surface="ダ"):
@@ -92,6 +92,57 @@ class SignedSourcePedigreeIdentityTests(unittest.TestCase):
                             {"sire": "", "dam": ""})
         art["untrusted_third_party_parent"] = {"sire": "父A", "dam": "母B"}
         self.assertEqual(_source_horses_from_verified_artifact(art), [])
+
+
+class CorpusRelevanceSecurityTests(unittest.TestCase):
+    def test_irrelevant_harvest_skips_network_attestation_but_adds_zero_evidence(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "runtime" / "pedigree_corpus"
+            archive.mkdir(parents=True)
+            archive_file = archive / "unrelated.json"
+            archive_file.write_text(json.dumps({
+                "horses": [{"sire": "無関係の父", "damsire": "無関係の母父"}]
+            }, ensure_ascii=False), encoding="utf-8")
+            with patch("jra_pedigree_corpus._verified_harvest",
+                       side_effect=AssertionError("irrelevant harvest verified")):
+                out = build_corpus(root, prediction_cutoff="2026-10-11T14:10:00+09:00",
+                                   race_date="2026-10-11",
+                                   required_sires={"Mor Spirit"},
+                                   required_damsires={"Liam's Map"})
+            self.assertEqual(out["horse_count"], 0)
+            self.assertEqual(out["snapshot_count"], 0)
+
+    def test_relevant_or_malformed_harvest_never_skips_real_attestation(self):
+        import json
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / "runtime" / "pedigree_corpus"
+            archive.mkdir(parents=True)
+            archive_file = archive / "candidate.json"
+            archive_file.write_text(json.dumps({
+                "horses": [{"sire": "Mor Spirit", "damsire": "Some Other Sire"}]
+            }), encoding="utf-8")
+            self.assertTrue(_harvest_might_match_target(
+                archive_file, required_sires={"Mor Spirit"},
+                required_damsires={"Liam's Map"}))
+            with patch("jra_pedigree_corpus._verified_harvest",
+                       return_value=None) as verified:
+                out = build_corpus(root, prediction_cutoff="2026-10-11T14:10:00+09:00",
+                                   race_date="2026-10-11",
+                                   required_sires={"Mor Spirit"},
+                                   required_damsires={"Liam's Map"})
+            verified.assert_called_once()
+            self.assertEqual(out["horse_count"], 0)
+            self.assertEqual(out["rejected_untrusted_inputs"], 1)
+            archive_file.write_text("{malformed", encoding="utf-8")
+            self.assertTrue(_harvest_might_match_target(
+                archive_file, required_sires={"Mor Spirit"}, required_damsires=set()))
 
 
 if __name__ == "__main__":
