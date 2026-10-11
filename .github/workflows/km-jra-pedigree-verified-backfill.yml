@@ -7,6 +7,8 @@ on:
       # Re-run one bounded OFFICIAL historical collection after the corpus
       # retention/identity repair lands; never backdate a race prediction.
       - "runtime/jra_pedigree_corpus.py"
+      - "runtime/pedigree_targeted_cohorts/**"
+      - "runtime/jra_source_runtime/jra_pedigree_targeted_harvest.py"
   schedule:
     # 07:15 / 22:15 JST daily. Each run is limited to three JRA races;
     # single concurrency key serializes collection and prevents load bursts.
@@ -198,5 +200,89 @@ jobs:
           for n in 1 2 3; do
              git pull --rebase origin main && git push origin HEAD:main && exit 0
              git rebase --abort 2>/dev/null || true; sleep $((n*4))
+          done
+          exit 1
+
+  targeted-rare-sires:
+    # Invoked by the explicitly reviewed owner-curated official profile cohort.
+    # Signed outputs may ONLY enter predictions whose cutoff follows capture.
+    if: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, 'BVI targeted') }}
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install existing official JRA parser dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Verify official JRA robots permission
+        run: |
+          python - <<'PY'
+          import urllib.request
+          from urllib.robotparser import RobotFileParser
+          ua="KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0"
+          req=urllib.request.Request("https://www.jra.go.jp/robots.txt",headers={"User-Agent":ua})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              assert response.status==200
+              lines=response.read(30000).decode("utf-8").splitlines()
+          rules=RobotFileParser()
+          rules.parse(lines)
+          assert rules.can_fetch(ua,"https://www.jra.go.jp/JRADB/accessU.html")
+          print("JRA_TARGETED_ROBOTS_PERMISSION_PASS")
+          PY
+      - name: Bounded real JRA rare-sire source acquisition
+        env:
+          MANIFEST: runtime/pedigree_targeted_cohorts/20261011-kyo-r09-rare-sires.json
+          OUTPUT: runtime/pedigree_corpus/20261011-targeted-kyo-r09-rare-sires-r1.json
+        run: |
+          set -euo pipefail
+          test ! -e "$OUTPUT" || { echo "TARGETED_IMMUTABLE_ALREADY_EXISTS"; exit 1; }
+          PYTHONPATH=runtime:runtime/jra_source_runtime python \
+            runtime/jra_source_runtime/jra_pedigree_targeted_harvest.py \
+            --manifest "$MANIFEST" --output "$OUTPUT"
+          python - <<'PY'
+          import os,json,hashlib
+          from pathlib import Path
+          p=Path(os.environ["OUTPUT"])
+          j=json.loads(p.read_text())
+          assert j["profile"]=="KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
+          assert j["official"] is True and j["source"]=="www.jra.go.jp"
+          assert j["horse_count"]>=3 and j["horse_count"]/j["horse_token_count"]>=0.90
+          assert j["mode"]=="targeted_official_horse_profiles"
+          assert all(h["horse_name"] and h["sire"] in j["target_sires"] and h["dam"]
+                     for h in j["horses"])
+          payload={k:v for k,v in j.items() if k!="sha256"}
+          assert hashlib.sha256(json.dumps(payload,ensure_ascii=False,sort_keys=True).encode()).hexdigest()==j["sha256"]
+          print("JRA_TARGETED_REAL_HORSES",j["horse_count"],"RUNS",
+                sum(len(h["runs"]) for h in j["horses"]))
+          PY
+      - name: Attest exact real official JRA cohort bytes with GitHub OIDC
+        uses: actions/attest@v4
+        with:
+          subject-path: runtime/pedigree_corpus/20261011-targeted-kyo-r09-rare-sires-r1.json
+      - name: Independently verify signed corpus
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            runtime/pedigree_corpus/20261011-targeted-kyo-r09-rare-sires-r1.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-verified-backfill.yml"
+      - name: Persist immutable publicly derived structured facts for future BVI
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/pedigree_corpus/20261011-targeted-kyo-r09-rare-sires-r1.json
+          git commit -m "corpus: OIDC-signed JRA targeted rare-sire evidence, future cutoff only [skip ci]"
+          for n in 1 2 3; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((n*4))
           done
           exit 1
