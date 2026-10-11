@@ -73,9 +73,9 @@ class TestTargetedJraCorpus(unittest.TestCase):
         ped={"horse_name":"独立の実測産駒","sire":"別の父","dam":"別の母",
              "damsire":"Swiss Spirit"}
         fake=FakeOfficialClient()
-        with patch("jra_pedigree_targeted_harvest._decode",return_value="<official/>"), \\
-             patch("jra_pedigree_targeted_harvest.parse_horse_pedigree",return_value=ped), \\
-             patch("jra_pedigree_targeted_harvest.parse_horse_history",return_value={"runs":[]}), \\
+        with patch("jra_pedigree_targeted_harvest._decode",return_value="<official/>"), \
+             patch("jra_pedigree_targeted_harvest.parse_horse_pedigree",return_value=ped), \
+             patch("jra_pedigree_targeted_harvest.parse_horse_history",return_value={"runs":[]}), \
              patch("jra_pedigree_targeted_harvest._sha",return_value="1"*64):
             j=acquire(m,client=fake,
                       now=datetime(2026,10,11,5,45,tzinfo=timezone.utc))
@@ -93,8 +93,8 @@ class TestTargetedJraCorpus(unittest.TestCase):
             {"horse_name":"別馬","sire":"独立父","dam":"母A","damsire":"別母父"},
             {"horse_name":"別馬","sire":"独立父","dam":"","damsire":"Liam's Map"},
         ):
-            with self.subTest(ped=ped), \\
-                 patch("jra_pedigree_targeted_harvest._decode",return_value="<official/>"), \\
+            with self.subTest(ped=ped), \
+                 patch("jra_pedigree_targeted_harvest._decode",return_value="<official/>"), \
                  patch("jra_pedigree_targeted_harvest.parse_horse_pedigree",return_value=ped):
                 got=acquire(m,client=fake,
                       now=datetime(2026,10,11,5,45,tzinfo=timezone.utc))
