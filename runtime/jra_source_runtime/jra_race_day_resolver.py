@@ -107,8 +107,8 @@ def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, 
     return intent
 
 
-def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[str, Any]:
-    """Network path (official JRA only); used by the resolver workflow."""
+def resolve_day(race_date: str, venue: str):
+    """Official JRA day race list for one venue: (meeting_key, races)."""
     from jra_pedigree_harvest import _Client, _calendar
     from source_acquisition import _html_tables
     code = venue_code(venue)
@@ -130,6 +130,12 @@ def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[st
     toks = set(re.findall(r"pw01dde01" + key + r"(\d{2})" + d8, s2))
     if len(races) != len(toks):
         raise ValueError(f"JRA_RESOLVER_RACE_LIST_MISMATCH:{len(races)}!={len(toks)}")
+    return key, races
+
+
+def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[str, Any]:
+    """Network path (official JRA only); used by the resolver workflow."""
+    key, races = resolve_day(race_date, venue)
     race = next((r for r in races if r["race_no"] == int(race_no)), None)
     if race is None:
         raise ValueError("JRA_RESOLVER_RACE_NOT_FOUND")
