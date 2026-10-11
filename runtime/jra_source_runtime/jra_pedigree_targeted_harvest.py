@@ -40,7 +40,7 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
     if client is None:
         client = _Client(delay=1.3)
     cohort_date = str(manifest.get("cohort_date") or "")
-    if not re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}", cohort_date):
+    if not re.fullmatch(r"20\d{2}-\d{2}-\d{2}", cohort_date):
         raise ValueError("JRA_TARGETED_COHORT_DATE_INVALID")
     # Acquisition date is recorded at collection time, not claimed as observed
     # before the target race's already frozen prediction cutoff.
