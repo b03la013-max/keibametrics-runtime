@@ -12,7 +12,9 @@ def evidence_terminal_eligible(report):
         str(report.get("auto_handoff_error") or "").split("|", 1)[0] == "JRA_AUTHORIZED_FULL20_INCOMPLETE"
         and report.get("production_full_numerical_ready") is False
         and report.get("first_blocked_stage") == "PRODUCTION_FEATURE_INDEX_CLOSURE"
-        and report.get("partial_base_blocked_count", 0) > 0
+        and (report.get("partial_base_blocked_count", 0) > 0
+             # Base13 closed but a Derived DCR component lacks its evidence.
+             or str(report.get("production_numerical_error") or "").startswith("DCR_COMPONENT_UNRESOLVED:"))
     )
 
 

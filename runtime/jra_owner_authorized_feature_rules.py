@@ -500,7 +500,8 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         # -- bodyweight
         bws = [(int(r["body_weight"]), r) for r in runs if isinstance(r.get("body_weight"), int)]
         cur_bw = d.get("current_body_weight")
-        if len(bws) >= 3:
+        # Same low-career convention as k: 2 official weights suffice for <=3 starts.
+        if len(bws) >= (2 if career <= 3 else 3):
             spread = max(b for b, _ in bws[:6]) - min(b for b, _ in bws[:6])
             put("bodyweight_history_quality", _thr(-spread, ((-10, "STRONG"), (-20, "POSITIVE"), (-30, "NEUTRAL")), "CAUTION"),
                 href, f"bodyweight_spread_last6={spread}kg", len(bws[:6]))

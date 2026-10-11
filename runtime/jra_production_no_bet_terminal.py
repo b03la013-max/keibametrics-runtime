@@ -71,6 +71,12 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
     runners = {}
     counted = 0
     blocked = 0
+    # Base13 may be fully calculated while a Derived DCR component still lacks
+    # its evidence feature (e.g. too few official body weights): that is the
+    # same evidence-insufficient decision, recorded for the exact runner.
+    derived_error = str(report.get("production_numerical_error") or "")
+    derived_blocker = derived_error if derived_error.startswith("DCR_COMPONENT_UNRESOLVED:") else None
+    derived_runner = derived_blocker.split(":")[1] if derived_blocker else None
     for runner_id in ids:
         src = (source_rows[runner_id].get("indices") or {})
         if set(src) != set(BASE):
@@ -110,7 +116,9 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
         for name in DERIVED:
             row[name] = {
                 "terminal_status":"RULED-HOLD",
-                "reason":"DEPENDENCY_BASE13_NOT_FULLY_CALCULATED",
+                "reason":(derived_blocker if (derived_blocker and runner_id == derived_runner and name == "DCR")
+                          else "DEPENDENCY_DERIVED_FULL20_NOT_CLOSED" if derived_blocker
+                          else "DEPENDENCY_BASE13_NOT_FULLY_CALCULATED"),
                 "rule_id":"JRA-DERIVED-FULL20-DEPENDENCY-GATE",
                 "value":None,
                 "evidence_refs":[source["receipt_sha256"]],
@@ -119,7 +127,7 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
     if counted != partial.get("calculated_base_cells") or blocked != partial.get("blocked_base_cells"):
         raise JRANoBetTerminalError("PARTIAL_BASE_COUNTS_MISMATCH")
     expected = len(ids)*len(BASE)
-    if counted + blocked != expected or blocked <= 0:
+    if counted + blocked != expected or (blocked <= 0 and not derived_blocker):
         raise JRANoBetTerminalError("NO_BET_BLOCKING_EVIDENCE_NOT_ESTABLISHED")
     # Do not silently present a computed decision made after the race as OOS.
     pre_cutoff = created <= cutoff and created <= post
@@ -147,7 +155,9 @@ def build_no_bet_terminal(intent, report, *, source_receipt_verified=False,
         "unresolved_count":0,
         "index_universe":runners,
         "decision":"NO_BET",
-        "decision_reason":"PRODUCTION_FULL20_EVIDENCE_INSUFFICIENT",
+        "decision_reason":("PRODUCTION_FULL20_EVIDENCE_INSUFFICIENT" if blocked
+                           else "PRODUCTION_FULL20_DERIVED_EVIDENCE_INSUFFICIENT"),
+        "derived_blocker":derived_blocker,
         "first_blocked_stage":report.get("first_blocked_stage"),
         "production_full20_ready":False,
         "formal_full_prediction_completed":False,
