@@ -25,3 +25,22 @@ A retained synthetic counterexample proves the existing proxy does not guarantee
 45 focused tests plus 20 unittest subtests passed, covering official formula arithmetic, separate ASI, missing/forged component rejection, real 1,584-to-20 replay, immutable old input, budget/PAPER routing, no budget fill, width re-expansion rejection, existing Static/handoff/MEC mechanics and tree rendering. Full20 index values, rankings, KRS settings and engine are unchanged.
 
 The workflow's embedded Python is syntax-checked. No live race execution, signing, Authority activation or empirical accuracy/PFS claim is made. This is a reviewable change on a repair branch; default budget behavior changes only when that branch is merged and deployed. The capital-policy acceptance script also passed.
+
+## Follow-up implementation: registered v2.1 route
+
+The owner's 2026-10-11 16:47 JST instruction was to finish formal implementation. `runtime/jra_aki_v21.py` now supplies an executable registered-mapping path, without inventing Production coefficients:
+
+1. Current Authority must explicitly activate exact runtime and component/column registry hashes. Requests cannot supply their own Production rule authority.
+2. Signed SOURCE must carry compiler-observed `aki_evidence_features` and `aki_selection_features`, matching race, cutoff and source digest. Every rule-required fact is present and observed before cutoff. Missing and unknown facts block.
+3. Each component executes only the enacted category-to-contribution table and declared SUM / 100_MINUS_SUM formula. Bounds apply only when enacted. Complete contribution/evidence lineage is saved. The source-defined official v2.1 aggregate and compatibility formulas then execute.
+4. Separate W, P2 and P3 review triggers use the documented initial operational thresholds. ASI and RSI participate in their prescribed reviews. Base and review selection rules are separately enacted and evidence-based; no numerical axis directly sets a count. Each runner gets a role disposition, each selected Head its own pair decisions, and each purchased pair its own third decisions.
+5. Auto-handoff connects the activated registry path before KRS. Formal Runner independently recomputes it from signed SOURCE and resolved Authority before KRS; actual MEC tickets are recomputed/compared before Capital. Contribution package, selection, verification and ticket binding are preserved in FINAL's signed stage/package route. The renderer displays independent P2/P3 axes.
+6. Family budget compatibility is downstream. It cannot change the selected prediction structure. Missing official activation or mapping does not fall back to the Full20 proxy when OFFICIAL_V2_1 is required.
+
+57 focused tests and 20 subtests passed. New tests cover formula→column review→Pair/Third→MEC→Capital, independent P2/P3 changes, preserved ranking, all-runner dispositions, nonexpansion to fill budget, and rejection of missing facts, late facts, false source identity, registry changes, code changes, missing activation and forged verification. Successful v2.1 examples use explicit synthetic test registries; they are not source-established race calculations or empirical performance evidence.
+
+### Concrete remaining normative/data dependency
+
+No formal Production AKI component registry or column-selection registry is present in the provided sources/current repository. The Central specification lists relevant positive/negative factors and coefficients for combining the axes, but it does not supply the per-factor point tables or all individual-column selection predicates. The source compiler also does not produce the new registered AKI feature sets. Therefore the route is implemented and tested but not activated; no live official-v2.1 numerical completion or formal deployment is claimed.
+
+To activate without inventing official calculations, the actual authoritative mapping must specify each W/P2/P3/axis-failure/RSI/external-change/solid-finish factor's source feature, categories, numerical contribution, formula/bounds, rule ID and mapping version; the column registry must specify the evidence predicates for BASE/REVIEW runner roles and head-local/pair-local eligibility. Those enacted rules then need matching signed-SOURCE feature extraction and a new verified Current Authority activation. An unspecified mapping cannot become official merely because the caller says to finish; using arbitrary weights would violate the supplied source-only and no-unregistered-rule requirements.

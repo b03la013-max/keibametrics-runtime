@@ -76,13 +76,16 @@ def _key(ticket):
     return bt, tuple(sorted(selection)) if bt == 'TRIO' else selection
 
 
-def verify_aki_ticket_binding(request, mec):
+def verify_aki_ticket_binding(request, mec, *, source=None, current_authority=None, root=None):
     """Stop a material PURCHASE Cartesian universe from bypassing width policy.
 
     Applies to the authorized Static Owner, whose policy selects the actual
     PURCHASE rows. General PROTECT/tail coverage remains owned by Common MEC.
     """
     static = request.get('static_prediction') or {}
+    if static.get('aki_jra_v21') is not None:
+        return _verify_v21_ticket_binding(request, mec, source=source,
+                                          current_authority=current_authority, root=root)
     aki = static.get('aki_jra_v2')
     if not isinstance(aki, dict) or not aki.get('formation'):
         raise AKICapitalError('AKI_WIDTH_DECISION_MISSING')
@@ -130,4 +133,43 @@ def verify_aki_ticket_binding(request, mec):
             'column_widths': {c: len(v) for c, v in active.items()},
             'exacta_count': len(pairs), 'trifecta_count': len(thirds),
             'ticket_count': len(tickets), 'required_capital': total,
+            'probability_or_ev_claim': False, 'budget_fill': False}
+
+
+def _verify_v21_ticket_binding(request, mec, *, source, current_authority, root):
+    if source is None or current_authority is None or root is None:
+        raise AKICapitalError('OFFICIAL_AKI_TRUST_CONTEXT_REQUIRED')
+    if request.get('aki_calculation_requirement') != 'OFFICIAL_V2_1':
+        raise AKICapitalError('OFFICIAL_AKI_REQUIREMENT_MISSING')
+    from jra_aki_v21 import apply_authorized_v21
+    independently_rebuilt = apply_authorized_v21(request, source, current_authority, root=root)
+    for field in ('official_aki_package', 'official_aki_verification', 'aki_column_selection',
+                  'role_registry', 'pair_dispositions', 'third_dispositions', 'purchased_heads'):
+        if independently_rebuilt.get(field) != request.get(field):
+            raise AKICapitalError('OFFICIAL_AKI_RECOMPUTATION_MISMATCH:' + field)
+    package = request.get('official_aki_package') or {}
+    verified = request.get('official_aki_verification') or {}
+    calculated = verified.get('calculation') or {}
+    if (verified.get('status') != 'PASS' or not verified.get('activation_sha256')
+            or package.get('race_id') != request.get('race_id')
+            or package.get('source_snapshot_sha256') != request.get('source_snapshot_sha256')
+            or package.get('sha256') != sha({k: v for k, v in package.items() if k != 'sha256'})
+            or calculated.get('package_sha256') != package.get('sha256')
+            or calculated != request['static_prediction']['aki_jra_v21']):
+        raise AKICapitalError('OFFICIAL_AKI_V21_BINDING_INVALID')
+    selected = request.get('aki_column_selection') or {}
+    if selected.get('sha256') != sha({k: v for k, v in selected.items() if k != 'sha256'}):
+        raise AKICapitalError('OFFICIAL_AKI_COLUMN_SELECTION_DIGEST_INVALID')
+    # Validate Common MEC independently using its complete semantic coverage
+    # rather than applying the old fixed-formation Cartesian assertion.
+    from minimum_efficient_coverage import build_mec_plan, validate_mec_plan
+    expected = build_mec_plan(request)
+    validate_mec_plan(mec)
+    if mec.get('tickets') != expected['tickets'] or mec.get('coverage_units') != expected['coverage_units']:
+        raise AKICapitalError('OFFICIAL_AKI_ACTUAL_TICKET_SET_MISMATCH')
+    return {'profile': PROFILE, 'status': 'PASS', 'official_v21_verified': True,
+            'calculation_class': 'REGISTERED_OFFICIAL_AKI_V2_1',
+            'package_sha256': package['sha256'], 'selection_sha256': selected['sha256'],
+            'ticket_set_sha256': sha(mec['tickets']), 'ticket_count': mec['ticket_count'],
+            'required_capital': mec['minimum_required_capital'],
             'probability_or_ev_claim': False, 'budget_fill': False}

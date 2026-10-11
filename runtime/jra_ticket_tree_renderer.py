@@ -93,6 +93,13 @@ def render_ticket_tree(final_artifact: dict) -> dict:
     decision = (final_artifact.get("capital_policy_decision") or {}).get("decision")
     fpp = final_artifact.get("final_prediction_package") or {}
     lines = ["買い目"]
+    official = (final_artifact.get("static_prediction") or {}).get("aki_jra_v21") or {}
+    if official:
+        axes = official["axes"]
+        lines.append("荒れ構造（AKI-JRA v2.1）")
+        lines.append(f"総合 {official['total']:.3f}／W-AKI {axes['W-AKI']:.3f}")
+        lines.append(f"P2-AKI {axes['P2-AKI']:.3f}／P3-AKI {axes['P3-AKI']:.3f}")
+        lines.append(f"ASI {axes['ASI']:.3f}／RSI {axes['RSI']:.3f}")
     aki = (final_artifact.get("static_prediction") or {}).get("aki_jra_v2") or {}
     if aki:
         f = aki.get("formation") or {}

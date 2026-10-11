@@ -14,6 +14,7 @@ from pathlib import Path
 from jra_static_owner_executable import PROFILE as OWNER_PROFILE, compile_static_owner
 from jra_krs_input_builder_production import build_krs_input
 from capital_policy import load_family_default_capital_policy
+from jra_aki_v21 import apply_authorized_v21
 from formal_request_validator import (
     validate_pre_krs_request, validate_production_authority,
     validate_orchestration_ref,
@@ -215,6 +216,7 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     req["head_nonselection_reasons"] = {}
     req["orientation_exclusions"] = []
     req["available_bet_types"] = ["EXACTA", "TRIO", "TRIFECTA"]
+    req = apply_authorized_v21(req, official, current_authority, root=root)
     # Keep explicit owner overrides; absence is not an explicit budget opt-out.
     # The family default is a ceiling, never a target or a width selector.
     if req.get("capital_policy") is None:
