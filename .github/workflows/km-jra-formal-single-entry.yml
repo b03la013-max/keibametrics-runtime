@@ -193,6 +193,10 @@ jobs:
         shell: bash
         env:
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          # The point-in-time pedigree corpus admits official harvest files only
+          # after verifying their GitHub OIDC attestation; without a token every
+          # harvest is rejected and BVI silently loses its corpus.
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
