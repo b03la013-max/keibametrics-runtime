@@ -111,13 +111,67 @@ def _clean_runs(runs: list[dict], race_day: date) -> list[dict]:
                 continue
         except (KeyError, TypeError, ValueError):
             continue
+        # Preserve an actually observed JRA race-day body weight. Dropping it
+        # made the existing physical_pedigree_fit rule unconditionally MISSING,
+        # even when the signed JRA history supplied genuine weight evidence.
+        weight = r.get("body_weight")
+        try:
+            weight = int(weight) if weight is not None else None
+        except (TypeError, ValueError):
+            weight = None
+        if weight is not None and not 250 <= weight <= 850:
+            weight = None
         out.append({
             "date": d.isoformat(), "venue": str(r.get("venue") or ""),
             "surface": _norm_surface(r.get("surface")),
             "distance_m": int(r["distance_m"]) if r.get("distance_m") is not None else None,
             "race_name": str(r.get("race_name") or r.get("race_class_text") or ""),
             "finish": finish, "field_size": field,
+            "body_weight": weight,
         })
+    return out
+
+
+def _source_horses_from_verified_artifact(art: dict) -> list[dict]:
+    """Derive pedigree-identified horses from one already verified JRA SOURCE.
+
+    The race card and per-runner official history may each contain pedigree
+    fields. Accept complementary values only for the same horse number. A
+    contradictory parent (or horse name) excludes the horse, not just the
+    conflicting field: pooling a false sire/dam creates contaminated offspring
+    statistics and misleading Production BVI coverage.
+    """
+    detail = (art.get("jra_official_race_card_detail") or {}).get("runners") or []
+    history = (art.get("jra_official_horse_history") or {}).get("runners") or {}
+    out = []
+    for x in detail:
+        if not isinstance(x, dict):
+            continue
+        rid = str(x.get("runner_id") or x.get("horse_no") or "")
+        if not rid:
+            continue
+        past = history.get(rid) or {}
+        hped = past.get("pedigree") or {}
+        name = str(x.get("horse_name") or "").strip()
+        official_history_name = str(past.get("horse_name") or "").strip()
+        if official_history_name and official_history_name != name:
+            continue
+        parents = {}
+        conflict = False
+        for key in ("sire", "dam", "damsire"):
+            card = str(x.get(key) or "").strip()
+            profile = str(hped.get(key) or "").strip()
+            if card and profile and card != profile:
+                conflict = True
+                break
+            parents[key] = card or profile
+        if conflict:
+            continue
+        h = {"horse_name": name, **parents}
+        if not _horse_identity(h):
+            continue
+        h["runs"] = past.get("runs") or x.get("recent_runs") or []
+        out.append(h)
     return out
 
 
@@ -154,22 +208,10 @@ def _verified_source(path: Path) -> dict | None:
             "horses": [],
             "signed_source_crypto_verified": True,
         }
-        detail = (art.get("jra_official_race_card_detail") or {}).get("runners") or []
-        history = (art.get("jra_official_horse_history") or {}).get("runners") or {}
-        for x in detail:
-            if not isinstance(x, dict):
-                continue
-            rid = str(x.get("runner_id") or x.get("horse_no") or "")
-            h = {
-                "horse_name": str(x.get("horse_name") or "").strip(),
-                "sire": str(x.get("sire") or "").strip(),
-                "dam": str(x.get("dam") or "").strip(),
-                "damsire": str(x.get("damsire") or "").strip(),
-            }
-            if not _horse_identity(h):
-                continue
-            h["runs"] = (history.get(rid) or {}).get("runs") or x.get("recent_runs") or []
-            summary["horses"].append(h)
+        # This helper may consult the *same verified signed SOURCE* horse
+        # history for parents missing on the race card; no external or
+        # unattested parent identity is introduced.
+        summary["horses"] = _source_horses_from_verified_artifact(art)
         _CACHE[key] = summary
         return summary
     except (OSError, ValueError, TypeError, KeyError, ImportError):
