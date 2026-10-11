@@ -58,6 +58,7 @@ def verify_official_v21(package, *, race_id, source_hash, rule_registry):
              + .20 * values['P3-AKI'] + .20 * values['RSI']
              + .10 * values['external_change'] - values['solid_finish_correction'])
     return {'version': 'AKI-JRA v2.1', 'axes': values, 'total': total,
+            'axis_failure_risk': 100 - values['ASI'],
             'P-AKI_compatibility_only': .45 * values['P2-AKI'] + .55 * values['P3-AKI'],
             'axis_candidate_rule': ('SINGLE_AXIS_CANDIDATE' if values['ASI'] >= 80 else
                                     'SINGLE_AXIS_WITH_FAILURE_REVIEW' if values['ASI'] >= 65 else
@@ -143,7 +144,7 @@ def _verify_v21_ticket_binding(request, mec, *, source, current_authority, root)
         raise AKICapitalError('OFFICIAL_AKI_REQUIREMENT_MISSING')
     from jra_aki_v21 import apply_authorized_v21
     independently_rebuilt = apply_authorized_v21(request, source, current_authority, root=root)
-    for field in ('official_aki_package', 'official_aki_verification', 'aki_column_selection',
+    for field in ('official_aki_package', 'official_aki_verification', 'aki_compiler_receipt', 'aki_information_gate', 'aki_column_selection',
                   'role_registry', 'pair_dispositions', 'third_dispositions', 'purchased_heads'):
         if independently_rebuilt.get(field) != request.get(field):
             raise AKICapitalError('OFFICIAL_AKI_RECOMPUTATION_MISMATCH:' + field)

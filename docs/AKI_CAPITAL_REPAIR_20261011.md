@@ -1,46 +1,88 @@
-# AKI Capital closure repair, 2026-10-11
+# JRA AKI v2.1 正式mapping・列別選定規則 v1.0
 
-## Reproduced cause
+制定根拠：所有者が「正本は無いのでゼロから作成しなさい」と明示したため、新規の規則として制定する。既存文書に書かれていた係数と新たに設計した加減点・閾値を区別する。これは **OWNER AUTHORIZED / UNVALIDATED** の実行規則であり、的中率・回収率・確率の検証済みモデルではない。
 
-Tokyo 11R (`KM-JRA-TKY-20261011-R11`) signed FINAL preserves the old Static Owner (`JRA-STATIC-PREDICTION-OWNER-EXECUTABLE-CANDIDATE-20261010`). Its actual ticket set is 132 EXACTA plus 1,452 TRIFECTA tickets. Each of 132 pairs has 11 purchased thirds. The old score-cluster selector created the purchased Cartesian universe before MEC; MEC faithfully closed those asserted material units. Capital used RECOMMENDATION_ONLY and no ceiling. All-stage PASS therefore did not establish sensible purchase width.
+機械実行の正本は `profiles/jra_aki_v21_components_20261011_v1.json` と `profiles/jra_aki_v21_columns_20261011_v1.json`。Current Authority R50が両正本と実行コード・特徴コンパイラのSHAを固定する。要求側が正本を差し替えることはできない。過去の署名付きFINALは変更しない。
 
-The race intent specified R48. Main now contains R49 and the existing Full20-derived AKI v2 width policy. Replaying the same frozen request with that existing policy yields 4 EXACTA + 16 TRIFECTA = 20 tickets / 2,000 yen. This is an unsigned post-freeze REFERENCE; this change does not rewrite the immutable FINAL, change settlement, or treat this replay as forward OOS.
+## 発生原因と修正
 
-## Actual changes
+東京11Rの旧Staticは馬単132組の各組へ三連単11通りをPURCHASE指定し、MECが指定通り132+1,452=1,584点を生成した。CapitalはRECOMMENDATION_ONLYで上限を検査していなかった。工程PASSは点数の合理性を保証していなかった。
 
-* Add `jra_aki_capital_preflight.py`. Bind the existing authorized owner's AKI width decision to frozen W/P2/P3 roles, purchased pairs/thirds, actual MEC tickets, legal stake increments, count and capital. Reject missing decisions, re-expansion, duplicate/invalid tickets and false official-v2.1 requirements. Persist the report in the Formal Runner's stage manifest and FINAL prediction package before capital and signing.
-* Use the recorded Family 10,000-yen ceiling when the intent has no capital policy. Preserve an explicit owner override, including RECOMMENDATION_ONLY. The ceiling never selects runners, changes semantic coverage, or fills unused funds. Excess required capital goes to PAPER according to the existing Family default. Existing signed FINALs remain untouched.
-* Implement an independent official-v2.1 component verification function. It consumes externally verified source-bound, registered W-AKI, P2-AKI, P3-AKI, ASI, RSI, external-change and solid-finish-correction components. It reproduces Central v2.3 article 36 exactly: `.30 W + .20 P2 + .20 P3 + .20 RSI + .10 external - correction`; ASI stays separate. Article 35's `.45 P2 + .55 P3` is compatibility display only. No numerical mapping, fallback scores, probability, EV, fixed ticket-count policy or clamp is invented.
+R49のFull20代理AKIはP2/P3を分離せず、古い総合AKIの帯から固定列数を選ぶ方式だった。新規則は既存Full20・順位を保ち、以下の独立したAKI材料と列別規則で実券面を生成する。総合AKIによる固定フォーメーション選択は行わない。Formal RunnerがKRS前とMEC後に独立再計算する。新規Formalが代理AKIへ降格することも拒否する。
 
-## Formal v2.1 is still not complete
+旧列選定は弱い下位馬を含む全馬の標準偏差で候補の範囲を広げていた。新規則は上位半数の標準偏差を使い、弱い外れ値による候補拡大を抑える。券面は従来の羅列ではなく、列のツリーで表示する。KRSの5,000回やFull20の計算を省略して高速化したとは主張しない。
 
-The attached Central v2.3 requires separate P2/P3 components, evidence-based column decisions and explicitly forbids AKI-total-only fixed ticket counts (articles 423, 440, 453). R49's `aki_capital_bridge_restoration` explicitly states `NOT_IMPLEMENTED_IN_CURRENT_20-INDEX MATERIALIZATION` and `EXPLICIT_GAP / NO_SYNTHETIC_AKI`.
+## 入力と分類の定義
 
-The existing R49 owner uses a Full20-derived proxy labelled UNVALIDATED, pooled P-AKI, and old v1.1 fixed formation bands. Its coefficient formula is not official v2.1. It is not changed or promoted by this PR. The new official verification function is a reusable gate, not a completed official evidence-to-AKI calculator or a live v2.1 selector. Official rule IDs, term mappings, complete evidence and evidence-based reviewed column decisions still need a separately authorized implementation. Supplying a signed component package alone does not implement that selector. Explicitly requiring OFFICIAL_V2_1 while using the proxy blocks rather than silently downgrading.
+13基礎+7派生の全20指数が必要。数値は有限の0〜100、rule ID・mapping version・source fact・evidence refsが必要で、元の正式数値台帳は上流で照合する。欠損・NaN・重複馬・発走後の資料で補完しない。コンパイラは署名済みSOURCEを書き換えず、SOURCE SHAとFull20 SHAに結び付く派生特徴・受領書を生成する。
 
-A retained synthetic counterexample proves the existing proxy does not guarantee increasing valid point counts with more heads: a stable nine-runner case produces 10 tickets; a flat sixteen-runner case with shared column ranks produces 8, because heads overlap rows 2/3. This must not be hidden by claiming all stable/volatile cases are solved. Central's column-specific requirement is stronger than a single band table.
+各列の主指数はW=ZAI_WIN、P2=ZAI_PLACE、P3=T3I。指数降順（同値はrunner ID順）で上位ceil(n/2)頭の母標準偏差を求め、最低1.0として尺度sを定義する。順位表そのものは既存Production順位を保持する。
 
-## Validation
+| 特徴 | LOW | MID | HIGH |
+|---|---|---|---|
+| 各主指数の1位と2位の差 / s | <0.25 | 0.25〜<0.75 | ≥0.75 |
+| 1位との差 / s ≤0.5の他馬数 | <2 | 2〜<5 | ≥5 |
+| 軸の各証拠群の最小指数 | <60 | 60〜<75 | ≥75 |
+| 裏付けのあるP2/P3外側候補数 | 0 | 1〜2 | ≥3 |
+| W順位とP3順位の逆転組率 | <0.10 | 0.10〜<0.30 | ≥0.30 |
 
-45 focused tests plus 20 unittest subtests passed, covering official formula arithmetic, separate ASI, missing/forged component rejection, real 1,584-to-20 replay, immutable old input, budget/PAPER routing, no budget fill, width re-expansion rejection, existing Static/handoff/MEC mechanics and tree rendering. Full20 index values, rankings, KRS settings and engine are unchanged.
+軸はW主指数1位。証拠群は信頼性=DCR、状態=min(RFI,BWI)、適合=min(CFI,GCI)、戦術=min(PRI,TPI)。外側候補は、その列の1位との差/s≤1.5、Wの1位との差/s>0.5、下記の列別裏付け群のうち2群以上が65以上の馬。裏付け群は複数の指数系列を求める規則であり、統計的独立を証明したものではない。
 
-The workflow's embedded Python is syntax-checked. No live race execution, signing, Authority activation or empirical accuracy/PFS claim is made. This is a reviewable change on a repair branch; default budget behavior changes only when that branch is merged and deployed. The capital-policy acceptance script also passed.
+## 材料別の正式加減点
 
-## Follow-up implementation: registered v2.1 route
+以下は今回新規制定した加減点。LOW/MID/HIGHの順で記載する。同じ軸内で同名特徴を二重計上しない。相関する特徴を独立した成功確率として扱わない。記載された和が範囲内に収まるため、暗黙のクリップは行わない。
 
-The owner's 2026-10-11 16:47 JST instruction was to finish formal implementation. `runtime/jra_aki_v21.py` now supplies an executable registered-mapping path, without inventing Production coefficients:
+| 材料 | 加減点規則 |
+|---|---|
+| W-AKI | W先頭差40/20/0 + W密集0/15/30 + 軸状態10/5/0 + 軸適合10/5/0 + 軸戦術10/5/0 |
+| P2-AKI | P2先頭差40/20/0 + P2密集0/15/30 + P2外側候補0/15/30 |
+| P3-AKI | P3先頭差40/20/0 + P3密集0/15/30 + P3外側候補0/15/30 |
+| 軸飛びリスク | W先頭差40/20/0 + 軸信頼性20/10/0 + 軸状態15/7.5/0 + 軸適合15/7.5/0 + 軸戦術10/5/0 |
+| ASI | 100 − 軸飛びリスク。総合AKIには足さない |
+| RSI | W/P3逆転組率0/25/50 + W密集0/15/30 + SOURCE矛盾あり20／なし0 |
+| 外部変動 | 実測最大単勝オッズ相対変化 <10%=0、10〜<30%=50、≥30%=100。馬場状態変化は100。比較観測不足=UNOBSERVABLE、保守的リスク加算100かつPAPER |
+| 堅決着補正 | W先頭差HIGH、軸4証拠群すべてHIGH、実測外部変動LOW、SOURCE矛盾なしを全て満たす場合10。それ以外0 |
 
-1. Current Authority must explicitly activate exact runtime and component/column registry hashes. Requests cannot supply their own Production rule authority.
-2. Signed SOURCE must carry compiler-observed `aki_evidence_features` and `aki_selection_features`, matching race, cutoff and source digest. Every rule-required fact is present and observed before cutoff. Missing and unknown facts block.
-3. Each component executes only the enacted category-to-contribution table and declared SUM / 100_MINUS_SUM formula. Bounds apply only when enacted. Complete contribution/evidence lineage is saved. The source-defined official v2.1 aggregate and compatibility formulas then execute.
-4. Separate W, P2 and P3 review triggers use the documented initial operational thresholds. ASI and RSI participate in their prescribed reviews. Base and review selection rules are separately enacted and evidence-based; no numerical axis directly sets a count. Each runner gets a role disposition, each selected Head its own pair decisions, and each purchased pair its own third decisions.
-5. Auto-handoff connects the activated registry path before KRS. Formal Runner independently recomputes it from signed SOURCE and resolved Authority before KRS; actual MEC tickets are recomputed/compared before Capital. Contribution package, selection, verification and ticket binding are preserved in FINAL's signed stage/package route. The renderer displays independent P2/P3 axes.
-6. Family budget compatibility is downstream. It cannot change the selected prediction structure. Missing official activation or mapping does not fall back to the Full20 proxy when OFFICIAL_V2_1 is required.
+既存Central v2.3第36条の総合式を維持する：
 
-57 focused tests and 20 subtests passed. New tests cover formula→column review→Pair/Third→MEC→Capital, independent P2/P3 changes, preserved ranking, all-runner dispositions, nonexpansion to fill budget, and rejection of missing facts, late facts, false source identity, registry changes, code changes, missing activation and forged verification. Successful v2.1 examples use explicit synthetic test registries; they are not source-established race calculations or empirical performance evidence.
+`AKI = .30W + .20P2 + .20P3 + .20RSI + .10外部変動 − 堅決着補正`
 
-### Concrete remaining normative/data dependency
+`P-AKI = .45P2 + .55P3` は互換表示のみ。軸飛びリスクは失敗確率ではない。観測不足に付ける外部100も、実測変動が大きかったという意味ではない。総合式の結果を独自に0〜100へ丸めない。
 
-No formal Production AKI component registry or column-selection registry is present in the provided sources/current repository. The Central specification lists relevant positive/negative factors and coefficients for combining the axes, but it does not supply the per-factor point tables or all individual-column selection predicates. The source compiler also does not produce the new registered AKI feature sets. Therefore the route is implemented and tested but not activated; no live official-v2.1 numerical completion or formal deployment is claimed.
+外部の比較には、同じ署名済みSOURCE内の `aki_external_observations` を用いる。各観測はJRA_OFFICIAL、全出走馬の正の単勝オッズ、馬場状態、証拠参照・事実・timezone付き観測時刻を持つ。2時点以上、最初と最後の差60秒以上、時系列順、SOURCE freezeとcutoff以前を必須とする。JMA/TSLのSHADOWを昇格させない。通常の単発公式市場スナップショットだけではこの比較を成立させない。系列が無い場合はPAPER、系列が不正な場合は計算を拒否する。
 
-To activate without inventing official calculations, the actual authoritative mapping must specify each W/P2/P3/axis-failure/RSI/external-change/solid-finish factor's source feature, categories, numerical contribution, formula/bounds, rule ID and mapping version; the column registry must specify the evidence predicates for BASE/REVIEW runner roles and head-local/pair-local eligibility. Those enacted rules then need matching signed-SOURCE feature extraction and a new verified Current Authority activation. An unspecified mapping cannot become official merely because the caller says to finish; using arbitrary weights would violate the supplied source-only and no-unregistered-rule requirements.
+## 列別選定の正本
+
+W比較基準はW1位。P2比較基準はW1位を除いたP2最高馬。P3比較基準はW1位とP2比較基準馬を除いたP3最高馬。それぞれ `g=max(0,(比較基準指数−当該馬指数)/s)` とする。この基準は列数を固定する指定ではない。比較基準馬でも証拠・水準を満たさなければ選ばない。
+
+全列で主指数60以上、次の3群中2群以上が65以上を必須とする。
+
+| 列 | 裏付け群 | BASEのg上限 | REVIEWのg上限 | REVIEW開始条件 |
+|---|---|---:|---:|---|
+| W | RFI・CFI・PRI | 0.35 | 1.0 | W-AKI≥50 または ASI<65 |
+| P2 | RFI・CFI・TPI | 0.8 | 1.5 | P2-AKI≥50 または RSI≥60 |
+| P3 | RFI・CFI・F3S | 1.2 | 2.0 | P3-AKI≥50 または RSI≥60 |
+
+BASE合格はMAIN/CORE、REVIEWで追加合格はALTERNATIVE/PROTECTED。それ以外も全馬・全列でEXCLUDED理由を保存する。空の列は拒否する。W-AKI≥60またはASI<65で1頭しかW選定されなかった場合も拒否する。証拠がない馬を頭数合わせで追加しない。
+
+Head別Pairは異なるW/P2支持馬の組のみ。両列MAINならPURCHASE、追加候補を含む場合PROTECT。Pair別Thirdも別馬のP3支持を要し、PairとP3がMAINならPURCHASE、追加候補を含む場合PROTECT。全Wは物質的Pairへ接続する必要がある。選定されなかった候補の予想順位・Full20は消さない。
+
+Common MECが本線の順序証拠を馬単・三連単で、保護の集合証拠を馬単・重複排除した三連複で表現する。P3の意味的範囲は保持する。予算に合わせた恣意的な候補削除や、余った資金による追加を禁止する。
+
+## 資金・FINAL・検証
+
+要求に資金指定が無い場合は既存Family既定の1万円上限を適用する。明示されたRECOMMENDATION_ONLYは保持する。ただし、外部観測不足・SOURCE矛盾の情報ゲートはどちらのモードでもPAPERを要求する。資金不足は既存のPAPER/NO_BETへ分岐し、選定構造は変えない。
+
+Formal Runnerは署名済みSOURCEと最新Current AuthorityからAKI・選定をKRS前に独立再計算し、MEC後には実券面・カバー単位を再計算して照合する。材料寄与、選定、コンパイラ受領書、情報ゲート、券面照合報告をFINAL署名の対象パッケージへ保存する。
+
+70テスト+20 subtests、Capital acceptance scriptが通過。堅い合成入力は小点数、密集した合成入力は拡大・予算超過PAPER、独立P2/P3見直し、情報不足、遅延・SHADOW観測、コード・正本・券面改変、資金による候補不変を検証した。合成試験は精度検証ではない。
+
+東京11Rの同一凍結Full20を使った署名なし事後再実行では、W=16、P2=16/15/11/3、P3=16/15/11/10、馬単3点+三連単7点=10点・1,000円。W-AKI10、P2/P3各35、ASI77.5、軸飛びリスク22.5、RSI0、外部UNOBSERVABLE、補正0、総合27。外部比較不足のため **PAPER**。1,584点の過去正式FINALはそのまま保存する。この10点を発走前に確定した正式FINAL・購入推奨・OOS成績とは表示しない。
+
+再実行コマンド：
+
+```bash
+python runtime/jra_aki_v21_replay.py --request runtime/requests/KM-JRA-TKY-20261011-R11-LIVE-R1-FORMAL.json --authority profiles/KM_FAMILY_CURRENT_AUTHORITY_20261011_R50.json --output research/common/JRA_AKI_V21_TKY11_MECHANICAL_REPLAY_20261011.json
+```
+
+この測定でAKI→列選定→MEC→独立照合→Capitalは約0.08秒。SOURCE取得・全20指数・外部KRS・チャット生成を含む総時間の測定ではない。

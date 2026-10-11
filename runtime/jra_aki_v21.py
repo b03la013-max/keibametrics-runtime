@@ -39,6 +39,13 @@ def apply_authorized_v21(request, source, current_authority, *, root):
         registries[key] = json.loads(path.read_text())
         if sha(registries[key]) != spec.get('sha256'):
             raise AKICapitalError('OFFICIAL_AKI_REGISTRY_FINGERPRINT_MISMATCH:' + key)
+    policy = registries['components'].get('feature_compiler_policy')
+    if policy is not None:
+        compiler = root / 'runtime/jra_aki_v21_features.py'
+        if activation.get('feature_compiler_sha256') != hashlib.sha256(compiler.read_bytes()).hexdigest():
+            raise AKICapitalError('OFFICIAL_AKI_COMPILER_FINGERPRINT_MISMATCH')
+        from jra_aki_v21_features import compile_features
+        source = compile_features(request, source, policy)
     package, calculation = materialize(source, registries['components'],
                                       registry_hash=activation['components']['sha256'])
     out = select_columns(request, source, calculation, registries['columns'],
@@ -47,6 +54,9 @@ def apply_authorized_v21(request, source, current_authority, *, root):
     out['official_aki_verification'] = {'status': 'PASS', 'profile': PROFILE,
                                        'calculation': calculation,
                                        'activation_sha256': sha(activation)}
+    if policy is not None:
+        out['aki_compiler_receipt'] = source['aki_compiler_receipt']
+        out['aki_information_gate'] = source['aki_compiler_receipt']['information_gate']
     out['aki_calculation_requirement'] = 'OFFICIAL_V2_1'
     for name in ('role_registry', 'pair_dispositions', 'third_dispositions'):
         for row in out[name]:
@@ -201,6 +211,8 @@ def select_columns(request, source, calculation, registry, *, registry_hash):
         raise AKICapitalError('AKI_SELECTION_RUNNER_FEATURES_INCOMPLETE')
     columns = {c: [] for c in triggers}
     ledger = []
+    main = {c: set() for c in triggers}
+    tiered = registry.get('disposition_policy') == 'MAIN_ORDERED_ALTERNATIVE_SET_PROTECTION'
     for c, mode in triggers.items():
         spec = (registry.get('columns') or {}).get(c) or {}
         rules = spec.get('BASE')
@@ -214,14 +226,17 @@ def select_columns(request, source, calculation, registry, *, registry_hash):
             chosen_rules.extend(extension)
         for rid in rank:
             matches = _select(compiled['runners'][rid], chosen_rules, cutoff=cutoff, source_hash=source_hash)
+            base_matches = _select(compiled['runners'][rid], rules, cutoff=cutoff, source_hash=source_hash)
+            if base_matches:
+                main[c].add(rid)
             if matches:
                 columns[c].append(rid)
-            ledger.append({'runner_id': rid, 'column': c, 'status': 'CORE' if matches else 'EXCLUDED',
+            ledger.append({'runner_id': rid, 'column': c, 'status': ('CORE' if not tiered or base_matches else 'PROTECTED') if matches else 'EXCLUDED',
                            'reason': 'REGISTERED_POSITIVE_EVIDENCE' if matches else 'REGISTERED_RULES_NOT_SATISFIED',
                            'rule_matches': matches, 'review_mode': mode})
     if any(not v for v in columns.values()):
         raise AKICapitalError('AKI_EVIDENCE_SELECTED_COLUMN_EMPTY')
-    if len(columns['W']) == 1 and (axes['W-AKI'] >= 60 or axes['ASI'] <= 49):
+    if len(columns['W']) == 1 and (axes['W-AKI'] >= 60 or axes['ASI'] < 65):
         raise AKICapitalError('AKI_SINGLE_HEAD_FORBIDDEN')
     pairs, thirds = [], []
     for h in columns['W']:
@@ -235,7 +250,8 @@ def select_columns(request, source, calculation, registry, *, registry_hash):
             matches = _select(facts, registry.get('pairs') or [], cutoff=cutoff, source_hash=source_hash)
             if not registry.get('pairs'):
                 raise AKICapitalError('AKI_PAIR_RULES_MISSING')
-            pairs.append({'head': h, 'second': s, 'status': 'PURCHASE' if matches else 'SEMANTIC_ONLY',
+            ordered_pair = not tiered or (h in main['W'] and s in main['P2'])
+            pairs.append({'head': h, 'second': s, 'status': ('PURCHASE' if ordered_pair else 'PROTECT') if matches else 'SEMANTIC_ONLY',
                           'reason': 'REGISTERED_PAIR_EVIDENCE' if matches else 'NO_MATERIAL_PAIR_EVIDENCE',
                           'rule_matches': matches})
             if not matches:
@@ -251,10 +267,10 @@ def select_columns(request, source, calculation, registry, *, registry_hash):
                 if not registry.get('thirds'):
                     raise AKICapitalError('AKI_THIRD_RULES_MISSING')
                 thirds.append({'head': h, 'second': s, 'third': t,
-                               'status': 'PURCHASE' if tmatches else 'SEMANTIC_ONLY',
+                               'status': ('PURCHASE' if not tiered or (ordered_pair and t in main['P3']) else 'PROTECT') if tmatches else 'SEMANTIC_ONLY',
                                'reason': 'REGISTERED_THIRD_EVIDENCE' if tmatches else 'GLOBAL_P3_SEMANTIC_ONLY',
                                'rule_matches': tmatches})
-    if set(columns['W']) != {x['head'] for x in pairs if x['status'] == 'PURCHASE'}:
+    if set(columns['W']) != {x['head'] for x in pairs if x['status'] in {'PURCHASE','PROTECT'}}:
         raise AKICapitalError('AKI_SELECTED_HEAD_WITHOUT_MATERIAL_PAIR')
     result = deepcopy(request)
     result['role_registry'] = ledger

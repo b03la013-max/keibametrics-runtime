@@ -31,11 +31,39 @@ def aki_reference(root: Path, race_id: str) -> dict | None:
     if not fpath.exists():
         return None
     final = json.loads(fpath.read_text(encoding="utf-8"))
-    if (final.get("static_prediction") or {}).get("aki_jra_v2"):
+    if ((final.get("static_prediction") or {}).get("aki_jra_v2")
+            or (final.get("static_prediction") or {}).get("aki_jra_v21")):
         return None  # already decided by AKI in the signed FINAL
     req = _formal_request(root, race_id)
     if not req:
         return {"status": "FORMAL_REQUEST_MISSING"}
+    # Prefer the newly enacted official route for references when activated.
+    candidates=[]
+    for path in (root / "profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json"):
+        authority=json.loads(path.read_text(encoding="utf-8"))
+        if ((authority.get("family_scoped_authority") or {}).get("JRA") or {}).get("aki_v21_activation"):
+            candidates.append((authority.get("effective_at", ""),authority))
+    if candidates:
+        from jra_aki_v21 import apply_authorized_v21, PROFILE
+        from jra_aki_capital_preflight import verify_aki_ticket_binding
+        from minimum_efficient_coverage import build_mec_plan
+        from capital_policy import resolve_capital_policy
+        authority=max(candidates,key=lambda row:row[0])[1]
+        source={**req["source_snapshot"],"source_snapshot_sha256":req["source_snapshot_sha256"]}
+        selected=apply_authorized_v21(req,source,authority,root=root)
+        mec=build_mec_plan(selected)
+        binding=verify_aki_ticket_binding(selected,mec,source=source,current_authority=authority,root=root)
+        capital=resolve_capital_policy(selected,mec)
+        tree=render_ticket_tree({"static_prediction":selected["static_prediction"],
+                "capital_policy_decision":capital,"aki_information_gate":selected.get("aki_information_gate"),"final_prediction_package":{"validation_status":"UNVALIDATED"},
+                "final_ticket":{"tickets":mec["tickets"],"no_bet":capital["no_bet"]}})
+        return {"status":"AKI_REFERENCE_ONLY","label":LABEL,"policy_profile":PROFILE,
+                "computed_at":datetime.now(timezone.utc).isoformat(),
+                "inputs":"same frozen pre-race Full20; unsigned mechanical replay, no OOS",
+                "signed_final_ticket_count":len((final.get("final_ticket") or {}).get("tickets") or []),
+                "reference_ticket_count":mec["ticket_count"],"reference_total_investment":mec["minimum_required_capital"],
+                "aki_jra_v21":selected["static_prediction"]["aki_jra_v21"],
+                "capital_policy_decision":capital,"binding":binding,"tree":LABEL+"\n"+tree["text"]}
     owner = compile_static_owner(
         copy.deepcopy(req), source_snapshot_sha256=req["source_snapshot_sha256"],
         source_receipt_sha256=str(req.get("source_snapshot_sha256")),
