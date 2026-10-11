@@ -2,7 +2,7 @@
 
 制定根拠：所有者が「正本は無いのでゼロから作成しなさい」と明示したため、新規の規則として制定する。既存文書に書かれていた係数と新たに設計した加減点・閾値を区別する。これは **OWNER AUTHORIZED / UNVALIDATED** の実行規則であり、的中率・回収率・確率の検証済みモデルではない。
 
-機械実行の正本は `profiles/jra_aki_v21_components_20261011_v1.json` と `profiles/jra_aki_v21_columns_20261011_v1.json`。Current Authority R50が両正本と実行コード・特徴コンパイラのSHAを固定する。要求側が正本を差し替えることはできない。過去の署名付きFINALは変更しない。
+機械実行の正本は `profiles/jra_aki_v21_components_20261011_v1.json` と `profiles/jra_aki_v21_columns_20261011_v1.json`。Current Authority R50が両正本と実行コード・特徴コンパイラのSHAを固定する。Family gatewayとLOCAL suiteの現行Authority参照もR50へ同期する。要求側が正本を差し替えることはできない。過去の署名付きFINALは変更しない。
 
 ## 発生原因と修正
 
