@@ -663,7 +663,11 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
         from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
         # Art.3 DCR: officially unpublished information lowers reliability
         # (recorded) instead of blocking formal base readiness.
-        ok = covered + 1e-12 >= min_weight or DCR_INFORMATION_POLICY_ENABLED
+        # R48 Art.3 may AUTHORIZE a low-evidence index calculation, but it
+        # does not manufacture its missing observations. Keep the production
+        # execution policy unchanged while exposing actual observed coverage.
+        observed_ok = covered + 1e-12 >= min_weight
+        ok = observed_ok or DCR_INFORMATION_POLICY_ENABLED
         ready = ready and ok
         if not ok:
             for x in missing:
@@ -672,6 +676,12 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
             "covered_weight": round(covered, 6),
             "minimum_required_weight": min_weight,
             "pass": ok,
+            "observed_evidence_pass": observed_ok,
+            "coverage_decision_mode": (
+                "OBSERVED_EVIDENCE_SUFFICIENT" if observed_ok
+                else "ART3_INFORMATION_INSUFFICIENT_DCR" if DCR_INFORMATION_POLICY_ENABLED
+                else "INSUFFICIENT_EVIDENCE_BLOCKED"
+            ),
             "missing_features": missing,
         }
     dcr_missing = []
@@ -696,6 +706,17 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
     return {
         "profile": profile,
         "formal_base_ready": ready,
+        # Orthogonal to the R48 DCR-authorized formal readiness. In particular,
+        # BVI=50 with 0 observed pedigree features must never be described as
+        # 'BVI evidence shortage resolved'.
+        "observed_base_coverage_ready": all(
+            v["observed_evidence_pass"] for v in indices.values()),
+        "observed_index_coverage_gaps": [
+            {"index": idx, "covered_weight": info["covered_weight"],
+             "minimum_required_weight": info["minimum_required_weight"],
+             "missing_features": info["missing_features"]}
+            for idx, info in indices.items() if not info["observed_evidence_pass"]
+        ],
         "dcr_art3_information_insufficient": bool(DCR_INFORMATION_POLICY_ENABLED) and bool(
             dcr_missing or any(not v["covered_weight"] + 1e-12 >= v["minimum_required_weight"]
                                for v in indices.values())),
