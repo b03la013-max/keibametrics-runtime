@@ -113,7 +113,7 @@ def resolve_day(race_date: str, venue: str):
     from source_acquisition import _html_tables
     code = venue_code(venue)
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
-    c = _Client(delay=0.3)
+    c = _Client(delay=1.0)  # harvest client enforces >=0.7s politeness
     cal = c.get(_calendar(race_date))
     m = re.search(r"doAction\('/JRADB/accessD\.html'\s*,\s*'([^']+)'\)", cal)
     if not m:
