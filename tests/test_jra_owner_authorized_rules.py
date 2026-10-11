@@ -413,3 +413,37 @@ class TestOwnerRulesV11(unittest.TestCase):
         out = owner_authorized_observations(self.art, REGISTRY, corpus=c)[str(target["runner_id"])]
         self.assertNotIn("pedigree_distance", out)
         self.assertNotIn("physical_pedigree_fit", out)
+
+
+class TestPedigreeIdentityFallback(unittest.TestCase):
+    def test_race_card_foreign_names_with_spaces(self):
+        from jra_race_card_detail import _parse_identity
+        x = _parse_identity("ジャスティンダラス 12.3 (5番人気) (1.1.0.2) 父：Into Mischief 母：Lady Of Dallas (母の父：Tapit)")
+        self.assertEqual((x["sire"], x["dam"], x["damsire"]), ("Into Mischief", "Lady Of Dallas", "Tapit"))
+        y = _parse_identity("アパレイユ 父：ヴァンゴッホ 母：マイスウィート (母の父：アドマイヤマックス)")
+        self.assertEqual((y["sire"], y["dam"], y["damsire"]), ("ヴァンゴッホ", "マイスウィート", "アドマイヤマックス"))
+
+    def test_history_profile_pedigree_used_when_card_lacks_it(self):
+        art = deepcopy(real_artifact())
+        row = [x for x in art["jra_official_race_card_detail"]["runners"] if x.get("sire")][0]
+        rid, sire = str(row["runner_id"]), row["sire"]
+        surface = art["jra_race_context"]["surface"]
+        corpus = TestOwnerRulesV11.corpus(TestOwnerRulesV11(), "sire", sire, 5, surface) \
+            if False else None
+        horses = {}
+        for j in range(5):
+            runs = {(f"2026-0{i+5}-01", "東京", j): {"date": f"2026-0{i+5}-01", "venue": "東京", "surface": surface,
+                    "distance_m": art["jra_race_context"]["distance_m"], "race_name": "3勝クラス",
+                    "field_size": 12, "finish": 2, "body_weight": 480} for i in range(4)}
+            horses[str(j)] = {"horse_name": f"観測{j}", "sire": sire, "dam": f"母{j}", "damsire": "x", "runs": runs}
+        corpus = {"manifest_sha256": "c" * 64, "horses": horses}
+        base = owner_authorized_observations(art, REGISTRY, corpus=corpus)[rid]
+        self.assertIn("pedigree_surface", base)
+        row["sire"] = None
+        art.setdefault("jra_official_horse_history", {}).setdefault("runners", {}).setdefault(rid, {})["pedigree"] = {
+            "sire": sire, "dam": row.get("dam"), "damsire": row.get("damsire"), "source": "JRA_OFFICIAL_HORSE_PROFILE"}
+        again = owner_authorized_observations(art, REGISTRY, corpus=corpus)[rid]
+        self.assertEqual(again["pedigree_surface"]["category"], base["pedigree_surface"]["category"])
+        del art["jra_official_horse_history"]["runners"][rid]["pedigree"]
+        none = owner_authorized_observations(art, REGISTRY, corpus=corpus)[rid]
+        self.assertNotIn("pedigree_surface", none)

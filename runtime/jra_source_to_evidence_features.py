@@ -744,8 +744,10 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
                         or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
         target_rows = (source_artifact.get("jra_official_race_card_detail") or {}).get("runners") or []
-        relevant_sires = {str(x.get("sire") or "").strip() for x in target_rows if x.get("sire")}
-        relevant_damsires = {str(x.get("damsire") or "").strip() for x in target_rows if x.get("damsire")}
+        hist_ped = [((source_artifact.get("jra_official_horse_history") or {}).get("runners") or {}).get(
+            str(x.get("runner_id") or x.get("horse_no")), {}).get("pedigree") or {} for x in target_rows]
+        relevant_sires = {str(x.get("sire") or "").strip() for x in list(target_rows) + hist_ped if x.get("sire")}
+        relevant_damsires = {str(x.get("damsire") or "").strip() for x in list(target_rows) + hist_ped if x.get("damsire")}
         corpus = build_corpus(Path(__file__).resolve().parents[1],
                               prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
                               race_date=race_date, exclude_race_id=source_artifact.get("race_id"),

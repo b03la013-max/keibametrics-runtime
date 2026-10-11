@@ -117,7 +117,9 @@ def _parse_identity(cell:str)->Dict[str,Any]:
     m3=re.search(r"([\d,]+)\s*万円",s)
     if m3: prize=int(m3.group(1).replace(",",""))
     sire=dam=damsire=None
-    m4=re.search(r"父[:：]\s*([^\s]+)\s+母[:：]\s*([^\s(]+)\s*\(母の父[:：]\s*([^)]+)\)",s)
+    # Names may contain spaces (foreign-bred: "Into Mischief"); match lazily
+    # between the official labels instead of stopping at the first space.
+    m4=re.search(r"父[:：]\s*(.+?)\s+母[:：]\s*(.+?)\s*\(母の父[:：]\s*([^)]+)\)",s)
     if m4: sire,dam,damsire=[x.strip() for x in m4.groups()]
     trainer=None; trainer_base=None
     before=s.split("父：",1)[0]
