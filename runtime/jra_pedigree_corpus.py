@@ -305,7 +305,7 @@ def _signed_source_might_match_target(path: Path, *,
             if (not sire or not damsire or sire in sires or damsire in damsires):
                 return True
         return False
-    except (OSError, ValueError, TypeError, KeyError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return True
 
 
