@@ -148,5 +148,76 @@ class CorpusRelevanceSecurityTests(unittest.TestCase):
                 archive_file, required_sires={"Mor Spirit"}, required_damsires=set()))
 
 
+class SignedSourceRelevanceSecurityTests(unittest.TestCase):
+    def source(self, root, *, sire="別父", damsire="別母父",
+               card_sire=None, card_damsire=None):
+        import json
+        d = Path(root) / "runtime" / "executions" / "E1" / "SOURCE" / "runs" / "001"
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / "source_receipt_envelope.json"
+        profile = {"sire": sire, "dam": "母馬", "damsire": damsire}
+        row = {"horse_no": 1, "horse_name": "テスト競走馬",
+               "sire": card_sire if card_sire is not None else sire,
+               "dam": "母馬",
+               "damsire": card_damsire if card_damsire is not None else damsire}
+        path.write_text(json.dumps({"artifact": {
+            "family_id": "JRA",
+            "jra_official_race_card_detail": {"runners": [row]},
+            "jra_official_horse_history": {
+                "runners": {"1": {"pedigree": profile}}}
+        }}, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def test_unrelated_signed_source_not_expensively_verified_or_pooled(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            self.source(root)
+            with patch("jra_pedigree_corpus._verified_source",
+                       side_effect=AssertionError("unrelated source verified")):
+                result = build_corpus(root,
+                     prediction_cutoff="2026-10-11T14:10:00+09:00",
+                     race_date="2026-10-11",
+                     required_sires={"Mor Spirit"},
+                     required_damsires={"Liam's Map"})
+            self.assertEqual(result["horse_count"], 0)
+            self.assertEqual(result["snapshot_count"], 0)
+
+    def test_potentially_relevant_source_must_pass_signature_verification(self):
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as root:
+            self.source(root, sire="Mor Spirit")
+            with patch("jra_pedigree_corpus._verified_source",
+                       return_value=None) as checked:
+                result = build_corpus(root,
+                     prediction_cutoff="2026-10-11T14:10:00+09:00",
+                     race_date="2026-10-11",
+                     required_sires={"Mor Spirit"},
+                     required_damsires={"Liam's Map"})
+            checked.assert_called_once()
+            self.assertEqual(result["horse_count"], 0)
+            self.assertEqual(result["rejected_untrusted_inputs"], 1)
+
+    def test_profile_parent_fallback_and_unknown_parent_fail_open_to_verifier(self):
+        from jra_pedigree_corpus import _signed_source_might_match_target
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            path = self.source(root, sire="Mor Spirit",
+                               card_sire="", card_damsire="")
+            self.assertTrue(_signed_source_might_match_target(
+                path, required_sires={"Mor Spirit"},
+                required_damsires=set()))
+            path = self.source(root, sire="", damsire="",
+                               card_sire="", card_damsire="")
+            self.assertTrue(_signed_source_might_match_target(
+                path, required_sires={"Mor Spirit"},
+                required_damsires=set()))
+            path.write_text("{malformed", encoding="utf-8")
+            self.assertTrue(_signed_source_might_match_target(
+                path, required_sires={"Mor Spirit"},
+                required_damsires=set()))
+
+
 if __name__ == "__main__":
     unittest.main()
