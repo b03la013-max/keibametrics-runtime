@@ -660,7 +660,10 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
             {"feature":f,"weight":float(w),"source_family":FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY")}
             for f,w in sorted(weights.items(), key=lambda kv:-float(kv[1])) if f not in feats
         ]
-        ok = covered + 1e-12 >= min_weight
+        from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
+        # Art.3 DCR: officially unpublished information lowers reliability
+        # (recorded) instead of blocking formal base readiness.
+        ok = covered + 1e-12 >= min_weight or DCR_INFORMATION_POLICY_ENABLED
         ready = ready and ok
         if not ok:
             for x in missing:
@@ -687,11 +690,15 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
         dcr_missing.append({"component":name,"feature":f,"source_family":FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY") if f else "EXPLICIT_DCR_INPUT"})
         if f:
             missing_sources.add(FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY"))
-    if dcr_missing:
+    from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
+    if dcr_missing and not DCR_INFORMATION_POLICY_ENABLED:
         ready = False
     return {
         "profile": profile,
         "formal_base_ready": ready,
+        "dcr_art3_information_insufficient": bool(DCR_INFORMATION_POLICY_ENABLED) and bool(
+            dcr_missing or any(not v["covered_weight"] + 1e-12 >= v["minimum_required_weight"]
+                               for v in indices.values())),
         "indices": indices,
         "dcr_missing": dcr_missing,
         "present_feature_count": len(feats),

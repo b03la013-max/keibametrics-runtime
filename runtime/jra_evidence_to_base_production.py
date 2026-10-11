@@ -13,6 +13,13 @@ class ProductionMappingError(ValueError):
     pass
 
 
+# Owner-authorized (2026-10-11, Current Authority R48): Art.3 DCR handling of
+# officially unpublished information instead of the coverage hard stop.
+DCR_POLICY_ID = "KM-JRA-DCR-ART3-INFORMATION-POLICY-20261011"
+# Strict-mode switch for regression tests / owner revocation drills only.
+DCR_INFORMATION_POLICY_ENABLED = __import__("os").environ.get("KM_JRA_DCR_ART3_POLICY", "1") != "0"
+
+
 def _sha(obj):
     raw = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
@@ -110,9 +117,37 @@ def _weighted_index(index, profile, features, mapping):
 
     minimum = float(mapping["profiles"][profile]["minimum_index_coverage_weight"])
     if covered + 1e-12 < minimum:
-        raise ProductionMappingError(
-            f"INDEX_EVIDENCE_COVERAGE_LOW:{profile}:{index}:{covered:.6f}<{minimum:.6f}"
-        )
+        if not DCR_INFORMATION_POLICY_ENABLED:
+            raise ProductionMappingError(
+                f"INDEX_EVIDENCE_COVERAGE_LOW:{profile}:{index}:{covered:.6f}<{minimum:.6f}"
+            )
+        # ケイバメトリクス中央版 v1.1 第3条 (DCR), owner-authorized 2026-10-11:
+        # information that the official sources do not publish is "unknown =
+        # 50" scaled by the acquired-information share, i.e. reliability loss,
+        # never ability loss and never an invented observation. Only ABSENT
+        # features qualify; an invalid / non-Production feature already raised.
+        total = sum(float(w) for w in weights.values())
+        dcr = covered / total if total > 0 else 0.0
+        raw = numerator / covered if covered > 0 else 50.0
+        value = 50.0 + (raw - 50.0) * dcr
+        missing = [f for f in weights if features.get(f) is None]
+        return {
+            "value": round(value, 6),
+            "rule_id": f"KM-JRA-DCR-ART3-INFORMATION-INSUFFICIENT-{profile}-{index}-v1",
+            "mapping_version": mapping["mapping_id"],
+            "evidence_refs": sorted(set(evidence_refs)) + [
+                f"{DCR_POLICY_ID}:{index}:OFFICIALLY_UNPUBLISHED:" + ",".join(missing)],
+            "source_fact": (" | ".join(source_facts) + " | " if source_facts else "")
+                           + f"ART3_DCR: acquired_share={dcr:.3f}; raw={raw:.3f}; "
+                             f"value=50+(raw-50)*DCR; unpublished={','.join(missing)}",
+            "adjustments": [{"type": "ART3_DCR_INFORMATION_INSUFFICIENT", "dcr": round(dcr, 6),
+                             "raw_value": round(raw, 6), "unpublished_features": missing}],
+            "components": components,
+            "coverage_weight": round(covered, 6),
+            "profile": profile,
+            "information_status": "INFORMATION_INSUFFICIENT_DCR_ART3",
+            "dcr": round(dcr, 6),
+        }
 
     value = numerator / covered
     return {
@@ -190,6 +225,15 @@ def _dcr_for_runner(runner, profile, features, mapping):
             )
             continue
 
+        if DCR_INFORMATION_POLICY_ENABLED:
+            # DCR is the weighted share of ACQUIRED information (第3条): a
+            # component whose information was not published earns 0 points.
+            out[name] = _dcr_component(
+                0, maximum, [f"{runner.get('runner_id')}:{DCR_POLICY_ID}:{name}:NOT_ACQUIRED"],
+                "Information for this DCR component was not published pre-race; 0 reliability points (Art.3).",
+                "KM-JRA-DCR-ART3-COMPONENT-NOT-ACQUIRED-v1"
+            )
+            continue
         raise ProductionMappingError(f"DCR_COMPONENT_UNRESOLVED:{runner.get('runner_id')}:{name}")
     return out
 

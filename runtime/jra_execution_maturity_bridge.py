@@ -257,13 +257,18 @@ def _production_index_coverage_diagnostic(runners: list[dict], mapping: dict) ->
                         "weight": float(weight),
                         "validation_reason": str(exc),
                     })
+            from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
+            low = covered + 1e-12 < minimum
+            invalid = any(m["validation_reason"] != "FEATURE_MISSING" for m in missing)
             rows.append({"runner_id":rid,"index_id":index,"profile":profile,
-                         "status":"COVERAGE_THRESHOLD_MET" if covered + 1e-12 >= minimum else "BLOCKED",
+                         "status":("COVERAGE_THRESHOLD_MET" if not low
+                                   else "DCR_ART3_INFORMATION_INSUFFICIENT"
+                                   if DCR_INFORMATION_POLICY_ENABLED and not invalid else "BLOCKED"),
                          "coverage_weight":round(covered,6),"required_weight":minimum,
                          "required_features":list(weights),
                          "available_features":available,
                          "missing_features":missing,
-                         "reason":None if covered + 1e-12 >= minimum else "INDEX_EVIDENCE_COVERAGE_LOW"})
+                         "reason":None if not low else "INDEX_EVIDENCE_COVERAGE_LOW"})
     blocked = [row for row in rows if row["status"]=="BLOCKED"]
     return {"schema":"KM-JRA-PRODUCTION-BASE13-INDEX-COVERAGE-DIAGNOSTIC-v1",
             "rows":rows, "required":len(rows), "blocked":len(blocked),
