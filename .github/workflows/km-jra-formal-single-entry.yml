@@ -651,3 +651,66 @@ jobs:
           print("JRA_SIGNED_SOURCE_ZERO_CAPITAL_DECISION_COMPLETE",result)
           print("JRA_FORMAL_FULL_PREDICTION_COMPLETE=false")
           PY
+
+  pedigree-forward-shadow:
+    needs: orchestrate
+    if: ${{ always() && needs.orchestrate.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q cryptography beautifulsoup4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: km-jra-single-entry-*-${{ github.run_id }}
+          path: runtime_out/pedigree_forward_input
+          merge-multiple: true
+      - name: Freeze current-policy bloodline comparison only while cutoff remains open
+        id: freeze
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE=runtime_out/pedigree_forward_input
+          test -f "$BASE/jra_formal_completion_verification.json" || exit 0
+          REQUEST="$BASE/jra_single_entry_formal_request.json"
+          SOURCE="$BASE/jra_single_entry_source_checkpoint/source_receipt_envelope.json"
+          RID="$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["race_id"])' "$REQUEST")"
+          SAFE="$(printf '%s' "$RID" | tr -c 'A-Za-z0-9._-' '-')"
+          OUTPUT="runtime/jra_static_owner_forward_oos/$SAFE/pedigree_pipeline_pre_result.json"
+          test ! -f "$OUTPUT" || exit 0
+          python scripts/jra_bvi_pipeline_forward_shadow.py freeze --request "$REQUEST" --source "$SOURCE" --output "$OUTPUT"
+          echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
+      - name: Commit immutable comparison before cutoff without delaying Production
+        if: steps.freeze.outputs.output != ''
+        env:
+          OUTPUT: ${{ steps.freeze.outputs.output }}
+        run: |
+          set -euo pipefail
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add "$OUTPUT"
+          git commit -m "shadow: freeze current-policy BVI A B C before result [skip ci]"
+          git pull --rebase origin main
+          python - <<'PY'
+          import json,os,subprocess
+          from datetime import datetime
+          frozen=json.load(open(os.environ['OUTPUT']))
+          cutoff=datetime.fromisoformat(frozen['prediction_cutoff'])
+          committed=datetime.fromisoformat(subprocess.check_output(['git','log','-1','--format=%cI','--',os.environ['OUTPUT']],text=True).strip())
+          if committed>cutoff or datetime.now(cutoff.tzinfo)>cutoff:
+              raise SystemExit('BVI_FORWARD_COMMIT_OR_PUBLICATION_CUTOFF_EXPIRED')
+          PY
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-pedigree-forward-shadow-${{ github.run_id }}
+          path: runtime/jra_static_owner_forward_oos/**/pedigree_pipeline_pre_result.json
+          if-no-files-found: warn
