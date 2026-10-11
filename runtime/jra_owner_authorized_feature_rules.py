@@ -649,7 +649,9 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         # -- pedigree (point-in-time corpus)
         if corpus and corpus.get("horses"):
             name = str(d.get("horse_name") or official[rid].get("name") or "")
-            sire, damsire = str(d.get("sire") or "").strip(), str(d.get("damsire") or "").strip()
+            hped = (history.get(rid) or {}).get("pedigree") or {}
+            sire = str(d.get("sire") or hped.get("sire") or "").strip()
+            damsire = str(d.get("damsire") or hped.get("damsire") or "").strip()
             cref = [f"JRA_PEDIGREE_CORPUS:{corpus.get('manifest_sha256')}"]
 
             def pool(key, value, pred):

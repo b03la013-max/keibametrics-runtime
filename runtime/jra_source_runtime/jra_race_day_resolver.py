@@ -183,6 +183,15 @@ if __name__ == "__main__":
                           "minutes_to_post": round(lead, 1), "required_minutes": a.min_lead_minutes,
                           "status_index": f"runtime/jra_race_day_status/{a.date}.json"}, ensure_ascii=False))
         raise SystemExit(0)
+    # Bind the intent to the Current Authority in force at resolution time:
+    # every downstream lane (Production Formal, Candidate Parallel) refuses a
+    # request that does not declare the current manifest.
+    import sys as _sys
+    _root = Path(__file__).resolve().parents[2]
+    _sys.path.insert(0, str(_root / "runtime"))
+    from family_authority_guard import resolve_current_authority
+    _, _current = resolve_current_authority(root=_root, now=_dt.datetime.now(_dt.timezone.utc))
+    intent["current_authority_manifest"] = _current["manifest_id"]
     p = Path(a.out_dir) / (intent["execution_id"] + ".json")
     if p.exists():
         raise SystemExit("INTENT_ALREADY_EXISTS:" + str(p))
