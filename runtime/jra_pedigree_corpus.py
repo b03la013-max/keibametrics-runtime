@@ -261,6 +261,35 @@ def _verified_harvest(path: Path, *, not_after: datetime,
         return None
 
 
+def _harvest_might_match_target(path: Path, *, required_sires: set[str] | None,
+                                required_damsires: set[str] | None) -> bool:
+    """Cheap *negative-only* relevance hint before costly GitHub OIDC verification.
+
+    Never use this JSON to create pedigree evidence: any potentially relevant
+    file still passes _verified_harvest's content hash, workflow identity and
+    timestamp attestation. Malformed input is sent to the verifier for
+    fail-closed rejection, not silently treated as a valid sample.
+    """
+    if required_sires is None and required_damsires is None:
+        return True
+    try:
+        blob = json.loads(path.read_text(encoding="utf-8"))
+        horses = blob.get("horses")
+        if not isinstance(horses, list):
+            return True
+        sires = required_sires or set()
+        damsires = required_damsires or set()
+        for h in horses:
+            if not isinstance(h, dict):
+                return True
+            if (str(h.get("sire") or "").strip() in sires
+                    or str(h.get("damsire") or "").strip() in damsires):
+                return True
+        return False
+    except (OSError, ValueError, TypeError):
+        return True
+
+
 def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                  exclude_race_id: str | None = None,
                  attestation_verifier=None,
@@ -338,6 +367,14 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             add(h, "SIGNED_SOURCE")
 
     for path in sorted(Path(root).glob("runtime/pedigree_corpus/*.json")):
+        # Most archive batches have no offspring of the specific target sire
+        # or damsire. Do not perform a networked GitHub OIDC verification for
+        # those files; a negative hint never contributes to the corpus.
+        # Potentially relevant files must still pass full _verified_harvest.
+        if not _harvest_might_match_target(
+                path, required_sires=required_sires,
+                required_damsires=required_damsires):
+            continue
         hv = _verified_harvest(path, not_after=cutoff,
                                attestation_verifier=attestation_verifier)
         if not hv:
