@@ -104,6 +104,24 @@ class TestAllRacesAndStatus(unittest.TestCase):
         self.assertEqual(tick(tmp, "2026-10-11", now, meetings=lambda d: ["東京"],
                               resolve=lambda d, v: ("x", RACES), dispatch=lambda *a: None), [])
 
+    def test_non_race_day_stops_without_writing(self):
+        tmp = Path(tempfile.mkdtemp())
+        now = dt.datetime(2026, 10, 13, 8, 30, tzinfo=JST)
+        sent = []
+        for cache in (None, {}):
+            out = tick(tmp, "2026-10-13", now, meetings=lambda d: [], resolve=lambda d, v: ("x", RACES),
+                       dispatch=lambda *a: sent.append(a), default_all=True, cache=cache)
+            self.assertEqual(out, [{"race_id": "2026-10-13", "status": "NO_OFFICIAL_MEETINGS"}])
+        self.assertEqual(sent, [])
+        self.assertFalse((tmp / "runtime/jra_race_day_status").exists())
+        self.assertFalse((tmp / "runtime/jra_race_day_plan/2026-10-13.state.json").exists())
+
+    def test_loop_pulls_autostash_dirty_status(self):
+        src = (Path(__file__).resolve().parents[1] / "runtime/jra_source_runtime/jra_race_day_autopilot.py").read_text()
+        self.assertNotIn('"pull", "--rebase", "origin"', src)
+        self.assertNotIn('"pull", "--rebase", "-q"', src)
+        self.assertEqual(src.count('"--autostash"'), 3)
+
     def test_calendar_failure_is_reported_not_raised(self):
         tmp = Path(tempfile.mkdtemp())
         def boom(d):
