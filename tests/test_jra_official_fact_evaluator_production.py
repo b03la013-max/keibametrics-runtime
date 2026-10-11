@@ -15,6 +15,32 @@ from jra_source_to_evidence_features import compile_source_to_features
 from jra_evidence_to_base_production import load_mapping
 
 
+
+# These cases pin the STRICT coverage gate (Art.3 DCR information policy OFF):
+# the strict mode must keep failing closed exactly as before.
+_ART3_PREV = None
+
+
+def setUpModule():
+    global _ART3_PREV
+    import sys as _s
+    from pathlib import Path as _P
+    _s.path.insert(0, str(_P(__file__).resolve().parents[1] / "runtime"))
+    import jra_evidence_to_base_production as _m
+    _ART3_PREV = _m.DCR_INFORMATION_POLICY_ENABLED
+    _m.DCR_INFORMATION_POLICY_ENABLED = False
+    __import__("os").environ["KM_JRA_DCR_ART3_POLICY"] = "0"  # CLI subprocesses
+
+
+def tearDownModule():
+    import jra_evidence_to_base_production as _m
+    _m.DCR_INFORMATION_POLICY_ENABLED = _ART3_PREV
+    __import__("os").environ.pop("KM_JRA_DCR_ART3_POLICY", None)
+
+
+setup_module = setUpModule
+teardown_module = tearDownModule
+
 def source():
     histories = [
         {"date": "2026-09-10", "finish": 1, "field_size": 10, "venue": "東京", "distance_m": 1800, "surface": "芝", "going": "良", "rating": 94},

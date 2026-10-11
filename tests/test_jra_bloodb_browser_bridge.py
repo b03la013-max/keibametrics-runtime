@@ -39,6 +39,28 @@ def html():
     return "<table><tbody>" + top + sub + body + "</tbody></table>"
 
 
+
+# These cases pin the STRICT coverage gate (Art.3 DCR information policy OFF):
+# the strict mode must keep failing closed exactly as before.
+_ART3_PREV = None
+
+
+def setUpModule():
+    global _ART3_PREV
+    import sys as _s
+    from pathlib import Path as _P
+    _s.path.insert(0, str(_P(__file__).resolve().parents[1] / "runtime"))
+    import jra_evidence_to_base_production as _m
+    _ART3_PREV = _m.DCR_INFORMATION_POLICY_ENABLED
+    _m.DCR_INFORMATION_POLICY_ENABLED = False
+    __import__("os").environ["KM_JRA_DCR_ART3_POLICY"] = "0"  # CLI subprocesses
+
+
+def tearDownModule():
+    import jra_evidence_to_base_production as _m
+    _m.DCR_INFORMATION_POLICY_ENABLED = _ART3_PREV
+    __import__("os").environ.pop("KM_JRA_DCR_ART3_POLICY", None)
+
 class BridgeTests(unittest.TestCase):
     def test_observed_td_two_tier_header(self):
         result = parse_rendered(html(), OFFICIAL)
