@@ -465,7 +465,12 @@ jobs:
             sleep 3
           done
           test -n "$RUN_ID"
-          gh run watch "$RUN_ID" --exit-status
+          if ! gh run watch "$RUN_ID" --exit-status; then
+            # Candidate Parallel is a separate, non-Production lane; its failure
+            # must not mask the Production evidence terminal or its verification.
+            echo "candidate_failed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Candidate Parallel run $RUN_ID failed; Production terminal unaffected"
+          fi
           {
             echo "run_id=$RUN_ID"
             echo "gap_path=$GAP_TARGET"
@@ -625,7 +630,7 @@ jobs:
           retention-days: 90
 
       - name: Verify source-attested zero-exposure decision terminal
-        if: steps.build_formal.outcome != 'success'
+        if: always() && steps.build_formal.outcome != 'success'
         shell: bash
         run: |
           set -euo pipefail
