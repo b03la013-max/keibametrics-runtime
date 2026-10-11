@@ -310,10 +310,7 @@ jobs:
           spec=spec_from_file_location("intake","scripts/jra_weekend_bvi_intake.py")
           mod=module_from_spec(spec);spec.loader.exec_module(mod)
           plan=json.loads(Path("runtime/pedigree_weekend_intake/20261010-11.json").read_text())
-          windows=mod.windows(plan)
-          # Existing receipt is checked again in acquisition; never overwrite bytes.
-          pending=[w for w in windows if not Path(
-            f"runtime/pedigree_intake_receipts/{w['date'].replace('-','')}-race{w['start']}.json").exists()]
+          pending=mod.pending_windows(plan)
           with open(os.environ["GITHUB_OUTPUT"],"a") as out:
             out.write("matrix="+json.dumps({"include":pending},separators=(",",":"))+"\n")
             out.write("pending="+str(bool(pending)).lower()+"\n")
@@ -359,16 +356,25 @@ jobs:
           set -euo pipefail
           DAY_CODE="$(printf %s "$DAY" | tr -d '-')"
           FILE="runtime/pedigree_corpus/$DAY_CODE-results-race$START-r3.json"
-          echo "file=$FILE" >> "$GITHUB_OUTPUT"
           if [ -f "$FILE" ]; then
-            echo "new=false" >> "$GITHUB_OUTPUT"
+            # A retry creates new immutable bytes; the original partial cohort
+            # and its capture time remain available for historical cutoffs.
+            FILE="runtime/pedigree_corpus/$DAY_CODE-results-race$START-r3-retry-$GITHUB_RUN_ID.json"
+            RETRY_DIR="$(mktemp -d)"
+            PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_source_runtime/jra_pedigree_harvest.py \
+              --date "$DAY" --mode results --start-race "$START" --max-races 3 --delay 1.3 \
+              --out-dir "$RETRY_DIR"
+            mv "$RETRY_DIR/$DAY_CODE-results-race$START-r3.json" "$FILE"
+            echo "receipt=runtime/pedigree_intake_receipts/$DAY_CODE-race$START-retry-$GITHUB_RUN_ID.json" >> "$GITHUB_OUTPUT"
           else
             PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_source_runtime/jra_pedigree_harvest.py \
               --date "$DAY" --mode results --start-race "$START" --max-races 3 --delay 1.3 \
               --out-dir runtime/pedigree_corpus
-            test -f "$FILE"
-            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "receipt=runtime/pedigree_intake_receipts/$DAY_CODE-race$START.json" >> "$GITHUB_OUTPUT"
           fi
+          test -f "$FILE"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          echo "new=true" >> "$GITHUB_OUTPUT"
       - name: Attest exact JRA bytes using original trusted workflow identity
         if: steps.collect.outputs.new == 'true'
         uses: actions/attest@v4
@@ -378,13 +384,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FILE: ${{ steps.collect.outputs.file }}
+          RECEIPT: ${{ steps.collect.outputs.receipt }}
           DAY: ${{ matrix.date }}
           START: ${{ matrix.start }}
         run: |
           set -euo pipefail
           DAY_CODE="$(printf %s "$DAY" | tr -d '-')"
           python scripts/jra_weekend_bvi_intake.py admit --file "$FILE" \
-            --receipt "runtime/pedigree_intake_receipts/$DAY_CODE-race$START.json"
+            --receipt "$RECEIPT"
       - name: Persist independently verified facts for subsequent formal BVI runs
         env:
           FILE: ${{ steps.collect.outputs.file }}

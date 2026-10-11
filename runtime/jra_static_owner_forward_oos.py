@@ -30,7 +30,10 @@ def time(value):
 
 
 def fingerprint(root=ROOT):
-    paths=("runtime/jra_static_owner_executable.py","runtime/jra_official_fact_evaluator_production.py",
+    paths=("runtime/jra_static_owner_executable.py","runtime/jra_bvi_shadow_comparison.py",
+           "runtime/jra_owner_authorized_feature_rules.py","runtime/jra_pedigree_corpus.py",
+           "mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json",
+           "runtime/jra_official_fact_evaluator_production.py",
            "runtime/jra_source_to_evidence_features.py","runtime/jra_source_runtime/jra_observed_context.py",
            "runtime/jra_source_runtime/jra_race_card_detail.py",
            "runtime/jra_evidence_to_base_production.py","runtime/jra_index_provenance_builder.py",
@@ -85,6 +88,17 @@ def freeze(intent, envelope, report, *, source_verified, created_at=None, root=R
             "numeric_provenance_hash":prepared["index_provenance_hash"],
             "full_index_count":owner["full_index_count"],"candidate_only":True,
             "production_authority":False,"purchase_authority":False,"signed_final_issued":False}
+    if all(isinstance(r.get("evidence_features"),dict) and r.get("career_starts") is not None
+           for r in prepared["runners"]):
+        from jra_bvi_shadow_comparison import compare
+        mapping=json.loads((Path(root)/"mapping/jra_base_index_evidence_mapping_v1.0_20260921.json").read_text())
+        result["pedigree_comparison"] = compare(prepared, mapping,
+            source_sha=source["source_snapshot_sha256"], receipt_sha=envelope["receipt_sha256"],
+            algorithm_freeze_at=now.isoformat(), cutoff=intent["prediction_cutoff"])
+        result["pedigree_comparison"]["status"] = "FROZEN_UNKNOWN_FUTURE_SHADOW / B_EQUALS_A_UNTIL_DISTINCT_INPUT"
+    else:
+        result["pedigree_comparison"] = {"status":"BLOCKED_FEATURE_LEDGER_UNAVAILABLE",
+            "production_effect":"NONE", "oos_eligible":False}
     result["sha256"]=sha(result)
     return result
 
@@ -110,6 +124,36 @@ def evaluate(pre, top3, *, result_sha256, observed_at, git_commit_at):
          "winner_rank_gain":market[0]-static[0],
          "top3_mean_rank_gain":sum(m-s for m,s in zip(market,static))/3,
          "oos_eligible":True,"production_effect":"NONE"}
+    comparison = pre.get("pedigree_comparison") or {}
+    arms = comparison.get("arms") or {}
+    if arms:
+        measured = {}
+        for name, arm in arms.items():
+            owner = arm["owner"]
+            ranking = owner["static_prediction"]["ranking"]
+            columns = owner["active_columns"]
+            candidates = set().union(*(set(x) for x in columns.values()))
+            measured[name] = {
+                "winner_rank": ranking.index(actual[0]) + 1,
+                "winner_discovery_recall": int(actual[0] in columns["W"]),
+                "p2_capture": actual[1] in columns["P2"],
+                "p3_capture": actual[2] in columns["P3"],
+                "top3_mean_rank": sum(ranking.index(x)+1 for x in actual)/3,
+                "ordered_pair_capture": any((x["head"],x["second"]) == tuple(actual[:2])
+                    for x in owner["pair_dispositions"]),
+                "exact_semantic_capture": any((x["head"],x["second"],x["third"]) == tuple(actual)
+                    for x in owner["third_dispositions"]),
+                "candidate_width": len(candidates),
+                "false_positive_candidates": len(candidates-set(actual)),
+                "low_popularity_top3_discovered": [x for x in actual if x in candidates
+                    and pre["market_ranking"].index(x)+1 >= 6],
+                "krs_input_changed_vs_current": arm["krs_input"] != arms["A_CURRENT"]["krs_input"],
+                "krs_result_utility": None, "ticket_count": None, "capital_required": None,
+                "investment_weighted_pfs": None, "robust_pfs": None,
+                "downstream_blocker": "SHADOW_KRS_MEC_SETTLEMENT_NOT_EXECUTED",
+            }
+        out["pedigree_arm_metrics"] = measured
+        out["pedigree_enhanced_input_distinct"] = comparison["enhanced_input_distinct"]
     out["sha256"]=sha(out); return out
 
 

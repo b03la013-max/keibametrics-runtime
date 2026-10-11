@@ -66,13 +66,38 @@ def verify_admission(path, *, now=None):
     return {'profile':PROFILE,'status':'OFFICIAL_BVI_CORPUS_ADMITTED',
             'file':path.name,'harvest_sha256':obj['sha256'],
             'verified_at':now.isoformat(),'harvested_at':obj['harvested_at'],
-            'horse_count':obj['horse_count'],'prior_run_count':corpus['run_count'],
+            'horse_count':obj['horse_count'],'horse_token_count':obj['horse_token_count'],
+            'all_observed_profiles_collected':obj['horse_count']==obj['horse_token_count'],
+            'prior_run_count':corpus['run_count'],
             'coverage_class':obj['coverage_class'],
             'earliest_eligible_target_race_date':target_day.isoformat(),
             'consumer':'runtime/jra_pedigree_corpus.py::build_corpus',
             'automatic_future_bvi_feature_compilation':True,
             'bvi_formula_changed':False,'historical_prediction_rewritten':False,
             'future_race_bvi_values_verified':False}
+
+
+def pending_windows(plan, root=ROOT, now=None):
+    """Partial admission is not collection completion; keep old bytes immutable."""
+    pending=[]
+    for window in windows(plan, now=now):
+        stem=f"{window['date'].replace('-','')}-race{window['start']}"
+        complete=False
+        for receipt in (Path(root)/'runtime/pedigree_intake_receipts').glob(stem+'*.json'):
+            record=json.loads(receipt.read_text())
+            file=Path(root)/'runtime/pedigree_corpus'/record['file']
+            if not file.is_file():
+                continue
+            raw=json.loads(file.read_text())
+            if (record.get('status')=='OFFICIAL_BVI_CORPUS_ADMITTED'
+                    and record.get('harvest_sha256')==raw.get('sha256')
+                    and raw.get('horse_count',0)>0
+                    and raw.get('horse_count')==raw.get('horse_token_count')):
+                complete=True
+                break
+        if not complete:
+            pending.append(window)
+    return pending
 
 
 def main():
