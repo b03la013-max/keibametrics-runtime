@@ -64,14 +64,16 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day, 
             try:
                 days[venue] = resolve(race_date, venue)
             except Exception as exc:  # official card not available: report, never guess
-                days[venue] = exc
+                days[venue] = ValueError(type(exc).__name__ + ":" + str(exc))
         if isinstance(days[venue], Exception):
-            out.append({"race_id": rid, "status": "OFFICIAL_CARD_UNAVAILABLE:" + str(days[venue])[:120]})
+            out.append({"race_id": rid, "status": "OFFICIAL_CARD_UNAVAILABLE:" + str(days[venue])[:200]})
+            schedule[rid] = {"status": out[-1]["status"]}
             continue
         _, races = days[venue]
         race = next((r for r in races if r["race_no"] == race_no), None)
         if race is None:
             out.append({"race_id": rid, "status": "NOT_ON_OFFICIAL_CARD"})
+            schedule[rid] = {"status": "NOT_ON_OFFICIAL_CARD"}
             continue
         hh, mm = map(int, race["post_time"].split(":"))
         d = _dt.date.fromisoformat(race_date)
