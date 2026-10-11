@@ -53,6 +53,8 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day, 
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     days = {}
     out = []
+    schedule_path = plan_path.with_suffix(".schedule.json")
+    schedule = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else {}
     for venue, race_no, run_count in plan_entries(plan):
         rid = race_id_for(race_date, venue, race_no)
         if rid in state or list((root / "runtime" / "jra_formal_intents").glob(rid + "-LIVE-*.json")):
@@ -76,10 +78,17 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day, 
         post = _dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
         decision = due(post, now, window)
         row = {"race_id": rid, "post": post.isoformat(), "status": decision, "title": race.get("title")}
+        schedule[rid] = {"post": post.isoformat(), "title": race.get("title"),
+                         "official_day_row": race.get("raw"),
+                         "dispatch_window_open": (post - _dt.timedelta(minutes=window[0])).isoformat(),
+                         "dispatch_window_close": (post - _dt.timedelta(minutes=window[1])).isoformat()}
         if decision == "DISPATCH":
             (dispatch or _gh_dispatch)(venue, race_no, race_date, run_count)
             state[rid] = {"dispatched_at": now.isoformat(), "post": post.isoformat(), "profile": PROFILE}
         out.append(row)
+    # Official schedule ledger (stable content; committed once) so the resolved
+    # post times and windows are auditable without reading CI logs.
+    schedule_path.write_text(json.dumps(schedule, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return out
 

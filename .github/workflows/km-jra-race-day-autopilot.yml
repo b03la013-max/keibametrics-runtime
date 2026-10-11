@@ -57,7 +57,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "runtime/jra_race_day_plan/$D.state.json"
+          git add "runtime/jra_race_day_plan/$D.state.json" "runtime/jra_race_day_plan/$D.schedule.json"
           git diff --cached --quiet && exit 0
           git commit -m "autopilot: race-day dispatch state $D [skip ci]"
           for i in 1 2 3 4 5; do
