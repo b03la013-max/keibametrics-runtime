@@ -322,7 +322,7 @@ jobs:
 
   weekend-official-bvi-intake:
     needs: weekend-plan
-    if: needs.weekend-plan.outputs.pending == 'true'
+    if: ${{ always() && needs.weekend-plan.result == 'success' && needs.weekend-plan.outputs.pending == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
