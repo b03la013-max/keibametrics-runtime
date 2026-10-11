@@ -14,7 +14,7 @@ permissions:
 
 on:
   schedule:
-    # Day loop: start 08:30 JST, tick every 2 min until 17:00 JST.
+    # Day loop: start 08:30 JST, tick every 2 min until 17:30 JST (dispatch + post-result).
     - cron: "30 23 * * *"
     # Backup single ticks 09:00-16:55 JST, and status refresh until 21:55 JST.
     - cron: "*/5 0-12 * * *"
@@ -56,7 +56,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           LOOP=()
           if [ "${MODE:-}" = "loop" ] || [ "${SCHEDULE:-}" = "30 23 * * *" ]; then
-            LOOP=(--loop-until 17:00 --interval 120)
+            LOOP=(--loop-until 17:30 --interval 120)
           fi
           cd runtime/jra_source_runtime
           python jra_race_day_autopilot.py --repo-root ../.. --date "$D" --all-races-default "${LOOP[@]}"
