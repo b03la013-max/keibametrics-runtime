@@ -186,7 +186,8 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         if result_p.exists():
             res = json.loads(result_p.read_text(encoding="utf-8"))
             st = res.get("settlement") or {}
-            row["state"] = "SETTLED"
+            row["state"] = ("SETTLED_SIGNED_RESULT_LEARNED"
+                            if (root / "runtime" / "learning_states" / (rid + ".json")).exists() else "SETTLED")
             row["official_top3"] = (res.get("official_result") or {}).get("top3")
             row["settlement"] = {k: st.get(k) for k in ("total_investment", "total_payout", "profit_loss", "actual_purchase_status")}
     elif no_bet:
@@ -245,27 +246,45 @@ def _gh_dispatch(venue, race_no, race_date, run_count):
                     "-f", f"run_count={run_count}"], check=True)
 
 
-def _post_result_closed_loop(root: Path) -> None:
-    """Settle due Production FINALs (official result) and hand each new RESULT
-    request to the canonical Result Runner. Scheduled cron alone proved
-    unreliable, so the day loop drives it; idempotent per race."""
+def _post_result_closed_loop(root: Path, race_date: str) -> None:
+    """Settle due Production FINALs (official result) and hand each RESULT
+    request to the canonical Result Runner exactly once, only after the request
+    is published on main. Scheduled cron alone proved unreliable, so the day
+    loop drives it; idempotent per race (state: <date>.state.json)."""
     run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True)
     r = run(sys.executable, "runtime/jra_production_postresult.py", "--days", "1")
     print(r.stdout.strip()[-2000:], flush=True)
+    d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
     new = [x for x in run("git", "ls-files", "--others", "--exclude-standard",
                           "runtime/results").stdout.split() if x.startswith("runtime/results/KM-JRA-")]
-    if not new:
-        return
-    run("git", "add", *new)
-    run("git", "commit", "-m", "result: JRA Production official result request [skip ci]")
+    if new:
+        run("git", "add", *new)
+        run("git", "commit", "-m", "result: JRA Production official result request [skip ci]")
+    pushed = False
     for i in range(5):
         if run("git", "pull", "--rebase", "origin", "main").returncode == 0 and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:
+            pushed = True
             break
         run("git", "rebase", "--abort")
         time.sleep(3 * (i + 1))
-    for path in new:
-        run("gh", "workflow", "run", "km-formal-result-runner.yml", "--ref", "main", "-f", f"request_path={path}")
+    if not pushed:
+        return  # retried next tick; never dispatch an unpublished request
+    state_path = root / "runtime" / "jra_race_day_plan" / f"{race_date}.state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    done = set(state.get("_result_runner_dispatched") or [])
+    published = sorted(Path(p).relative_to(root).as_posix() for p in
+                       glob.glob(str(root / "runtime" / "results" / f"KM-JRA-*-{d8}-R*.json")))
+    for path in published:
+        rid = Path(path).stem
+        if path in done or (root / "runtime" / "learning_states" / f"{rid}.json").exists():
+            done.add(path)  # Result Runner already completed (learning state persisted)
+            continue
+        if run("gh", "workflow", "run", "km-formal-result-runner.yml", "--ref", "main",
+               "-f", f"request_path={path}").returncode == 0:
+            done.add(path)
+    state["_result_runner_dispatched"] = sorted(done)
+    state_path.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _commit(root: Path, race_date: str) -> None:
@@ -309,7 +328,7 @@ if __name__ == "__main__":
         except Exception as exc:  # keep the day running; the index shows the last good state
             print(json.dumps({"profile": PROFILE, "error": type(exc).__name__ + ":" + str(exc)}, ensure_ascii=False), flush=True)
         if a.loop_until:
-            _post_result_closed_loop(root)
+            _post_result_closed_loop(root, a.date)
         if not a.loop_until:
             break
         _commit(root, a.date)

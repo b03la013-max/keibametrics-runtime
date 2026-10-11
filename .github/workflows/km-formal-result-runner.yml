@@ -37,6 +37,11 @@ jobs:
               runtime/results/KM-*.json|runtime/source_candidate_results/KM-*.json) ;;
               *) echo "INVALID_RESULT_REQUEST_PATH" >&2; exit 2 ;;
             esac
+            # The request may be pushed moments before this dispatch: wait for it.
+            for i in 1 2 3 4 5 6; do
+              [ -f "$REQUEST_PATH" ] && break
+              sleep $((i*5)); git fetch -q origin main && git checkout -q origin/main -- "$REQUEST_PATH" 2>/dev/null || true
+            done
             test -f "$REQUEST_PATH"
             REQ="$REQUEST_PATH"
           fi
