@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_bvi_postcapture_real_closure.py"
       - "runtime/jra_pedigree_corpus.py"
       - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
       - "runtime/pedigree_corpus/**"
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_bvi_postcapture_real_closure.py"
       - "runtime/jra_pedigree_corpus.py"
       - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
       - "runtime/pedigree_corpus/**"
@@ -28,6 +30,10 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -q cryptography
+      - name: Verify actual rare-sire BVI feature coverage without retroactive race use
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/jra_bvi_postcapture_real_closure.py
       - name: Verify real stored official JRA corpus OIDC and cutoff gating in Base feature loader
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,5 +42,7 @@ jobs:
         if: always()
         with:
           name: jra-real-signed-pedigree-corpus-intake
-          path: runtime_out/jra_pedigree_verified_acceptance.json
+          path: |
+            runtime_out/jra_pedigree_verified_acceptance.json
+            runtime_out/jra_bvi_postcapture_real_closure.json
           if-no-files-found: warn
