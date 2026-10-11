@@ -156,6 +156,7 @@ def render_ticket_tree(final_artifact: dict) -> dict:
     lines += _branch(["見送り" if ft.get("no_bet") else
                       "ペーパー" if decision == "PAPER" else
                       "推奨（資金上限判定なし）" if decision == "EXECUTE_RECOMMENDATION_PORTFOLIO" else
+                      "参考のみ（正式FINALではない・購入根拠にしない）" if decision == "AKI_REFERENCE_ONLY" else
                       "実購入"])
     lines.append("確率状態")
     lines += _branch(["未較正"])
