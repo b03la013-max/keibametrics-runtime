@@ -219,5 +219,59 @@ class SignedSourceRelevanceSecurityTests(unittest.TestCase):
                 required_damsires=set()))
 
 
+class ProductionBVIEvidenceVersusDCRTests(unittest.TestCase):
+    """R48 permits Art.3 DCR, but that is not an observed sire sample."""
+
+    @staticmethod
+    def mapping():
+        from jra_source_to_evidence_features import BASE_INDICES
+        return {
+            "profiles": {"ESTABLISHED": {"minimum_index_coverage_weight": 0.42}},
+            "index_profiles": {
+                "ESTABLISHED": {idx: {"observed_parent_population": 1.0}
+                                for idx in BASE_INDICES}
+            },
+            "dcr": {},
+        }
+
+    def test_r48_dcr_authorization_does_not_falsify_observed_bvi_coverage(self):
+        from unittest.mock import patch
+        from jra_source_to_evidence_features import _coverage_for_runner
+        runner = {"runner_id": "7", "career_starts": 8, "evidence_features": {}}
+        with patch("jra_evidence_to_base_production.DCR_INFORMATION_POLICY_ENABLED", True):
+            report = _coverage_for_runner(runner, self.mapping())
+        self.assertTrue(report["formal_base_ready"])
+        self.assertFalse(report["observed_base_coverage_ready"])
+        bvi = report["indices"]["BVI"]
+        self.assertTrue(bvi["pass"])  # existing owner-authorized policy unchanged
+        self.assertFalse(bvi["observed_evidence_pass"])
+        self.assertEqual(bvi["covered_weight"], 0)
+        self.assertEqual(bvi["coverage_decision_mode"], "ART3_INFORMATION_INSUFFICIENT_DCR")
+        self.assertTrue(any(r["index"] == "BVI" for r in report["observed_index_coverage_gaps"]))
+
+    def test_strict_mode_still_rejects_missing_bvi_evidence(self):
+        from unittest.mock import patch
+        from jra_source_to_evidence_features import _coverage_for_runner
+        runner = {"runner_id": "7", "career_starts": 8, "evidence_features": {}}
+        with patch("jra_evidence_to_base_production.DCR_INFORMATION_POLICY_ENABLED", False):
+            report = _coverage_for_runner(runner, self.mapping())
+        self.assertFalse(report["formal_base_ready"])
+        self.assertFalse(report["indices"]["BVI"]["pass"])
+        self.assertEqual(report["indices"]["BVI"]["coverage_decision_mode"],
+                         "INSUFFICIENT_EVIDENCE_BLOCKED")
+
+    def test_genuine_official_evidence_reports_observed_pass(self):
+        from unittest.mock import patch
+        from jra_source_to_evidence_features import _coverage_for_runner
+        runner = {"runner_id": "7", "career_starts": 8,
+                  "evidence_features": {"observed_parent_population": {"category": "POSITIVE"}}}
+        with patch("jra_evidence_to_base_production.DCR_INFORMATION_POLICY_ENABLED", True):
+            report = _coverage_for_runner(runner, self.mapping())
+        self.assertTrue(report["observed_base_coverage_ready"])
+        self.assertTrue(report["indices"]["BVI"]["observed_evidence_pass"])
+        self.assertEqual(report["indices"]["BVI"]["coverage_decision_mode"],
+                         "OBSERVED_EVIDENCE_SUFFICIENT")
+
+
 if __name__ == "__main__":
     unittest.main()
