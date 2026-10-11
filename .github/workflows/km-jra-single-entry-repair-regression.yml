@@ -57,15 +57,16 @@ jobs:
                        ".github/workflows/km-jra-pedigree-verified-backfill.yml"):
               text=Path(path).read_text(encoding="utf-8")
               obj=yaml.safe_load(text)
-              assert len(obj["jobs"])==1 and obj["permissions"]["id-token"]=="write"
-              job=next(iter(obj["jobs"].values()))
-              steps=job["steps"]
-              attest=[i for i,s in enumerate(steps) if s.get("uses","").startswith("actions/attest@")]
-              assert len(attest)==1, path
-              verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
-              persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]
-              assert attest[0]<verified[0]<persisted[0],path
-              print("JRA_PEDIGREE_WORKFLOW_VALID",path)
+              assert obj["jobs"] and obj["permissions"]["id-token"]=="write"
+              for job_name,job in obj["jobs"].items():
+                  steps=job["steps"]
+                  attest=[i for i,s in enumerate(steps) if s.get("uses","").startswith("actions/attest@")]
+                  assert len(attest)==1, (path,job_name)
+                  verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
+                  persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]
+                  assert verified and persisted, (path,job_name)
+                  assert attest[0]<verified[0]<persisted[0],(path,job_name)
+                  print("JRA_PEDIGREE_SIGN_VERIFY_PERSIST_VALID",path,job_name)
           PY
       - name: Recompute immutable real SOURCE as historical diagnostics
         run: python scripts/audit_jra_formal_repair.py --output runtime_out/repair_audit
