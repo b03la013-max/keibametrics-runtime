@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - "runtime/pedigree_backfill_cursor.json"
+      # Re-run one bounded OFFICIAL historical collection after the corpus
+      # retention/identity repair lands; never backdate a race prediction.
+      - "runtime/jra_pedigree_corpus.py"
   schedule:
     # 07:15 / 22:15 JST daily. Each run is limited to three JRA races;
     # single concurrency key serializes collection and prevents load bursts.
