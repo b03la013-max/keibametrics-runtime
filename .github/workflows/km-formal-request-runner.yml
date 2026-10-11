@@ -99,6 +99,10 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+          # AKI v2.1 binds its Full20 dependency hash to the runners exactly as
+          # handed off. Later runner annotations (source shadow observations,
+          # rule-evaluator inputs) must not alter that recomputation input.
+          aki_signed_runners=json.loads(json.dumps(req.get("runners")))
           fallback_validation=validate_fallback_request(req)
           maturity_binding=None
 
@@ -291,7 +295,7 @@ jobs:
           if req.get("aki_calculation_requirement")=="OFFICIAL_V2_1" or (req.get("static_prediction") or {}).get("aki_jra_v21"):
               assert req.get("aki_calculation_requirement")=="OFFICIAL_V2_1", "OFFICIAL_AKI_REQUIREMENT_MISSING"
               assert req.get("source_snapshot_sha256") and "source_artifact" in globals(), "OFFICIAL_AKI_SIGNED_SOURCE_REQUIRED"
-              rebuilt_aki=apply_authorized_v21(req,source_artifact,resolved_authority_obj,root=".")
+              rebuilt_aki=apply_authorized_v21({**req,"runners":aki_signed_runners},source_artifact,resolved_authority_obj,root=".")
               for field in ("official_aki_package","official_aki_verification","aki_compiler_receipt","aki_information_gate","aki_column_selection",
                             "role_registry","pair_dispositions","third_dispositions","purchased_heads"):
                   assert rebuilt_aki.get(field)==req.get(field), "OFFICIAL_AKI_PRE_KRS_RECOMPUTATION_MISMATCH:"+field
@@ -576,7 +580,7 @@ jobs:
               mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
               mec_check=validate_mec_plan(mec)
               if req.get("static_owner_activation_binding") or req.get("aki_calculation_requirement")=="OFFICIAL_V2_1" or (req.get("static_prediction") or {}).get("aki_jra_v21"):
-                  aki_binding=verify_aki_ticket_binding(req,mec,source=source_artifact,
+                  aki_binding=verify_aki_ticket_binding({**req,"runners":aki_signed_runners},mec,source=source_artifact,
                       current_authority=resolved_authority_obj,root=".")
                   with open(os.path.join(artifact_dir,"aki_capital_preflight.json"),"w",encoding="utf-8") as fh:
                       json.dump(aki_binding,fh,ensure_ascii=False,sort_keys=True,indent=2)
