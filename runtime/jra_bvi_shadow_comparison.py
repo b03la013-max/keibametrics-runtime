@@ -49,4 +49,54 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
             'ticket_count': None, 'capital_required': None}
     return {'arms': arms, 'enhanced_input_distinct': enhanced_features is not None,
         'same_runner_universe': True, 'same_mapping_and_cutoff': True,
-        'production_effect': 'NONE', 'predictive_improvement_demonstrated': False}
+        'production_effect': 'NONE', 'predictive_improvement_demonstrated': False,
+        'policy_scope': 'CURRENT_NUMERICAL_MAPPING / EXISTING_STATIC_OWNER_EXECUTABLE_SHADOW; NOT A NEW PRODUCTION FINAL'}
+
+
+def execute_diagnostic_downstream(comparison, prepared, official, call):
+    """Real external candidate KRS plus existing MEC/Capital, never a FINAL.
+
+    `call` must execute /krs/execute and independently verify /verify. Historical
+    payout use is explicitly virtual diagnosis, never a forward-OOS result.
+    """
+    from jra_candidate_krs_plan import (build_candidate_krs_payload,
+        verify_candidate_krs_execution, ACCEPTANCE_INPUT_CLASS)
+    from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
+    from minimum_efficient_coverage import build_mec_plan, validate_mec_plan
+    from capital_policy import resolve_capital_policy
+    from mec_r4_shadow import settle_ticket_list
+    for name, arm in comparison['arms'].items():
+        req=copy.deepcopy(prepared)
+        req.update({k:copy.deepcopy(arm['owner'][k]) for k in
+            ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')})
+        # A distinct diagnostic identity cannot overwrite the real race's runs.
+        req['race_id']=prepared['race_id']+'-BVI-POSTCAPTURE-DIAGNOSTIC'
+        req['candidate_only']=True;req['production_authority']=False
+        req['krs_input_data']=copy.deepcopy(arm['krs_input'])
+        req['krs_input_data']['race']['race_id']=req['race_id']
+        for r in req['runners']:
+            r['static_roles']=req['static_prediction']['roles'][str(r['runner_id'])]
+        payload=build_candidate_krs_payload(req,input_class=ACCEPTANCE_INPUT_CLASS)
+        response=call('/krs/execute',payload,420)
+        receipt=verify_candidate_krs_execution(payload,response)
+        verified=call('/verify',response['run_receipt'],30)
+        if verified.get('valid') is not True:raise ValueError('BVI_SHADOW_KRS_SIGNATURE_INVALID')
+        utility=build_krs_prediction_utility(req,response)
+        mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
+        validate_mec_plan(mec)
+        capital=resolve_capital_policy(req,mec)
+        tickets=mec['tickets'] if not capital['no_bet'] else []
+        payout_result={'official_result':{'top3':official['top3'],
+            'payouts':{k:v['per_100_yen'] for k,v in official['payouts'].items()}}}
+        settlement=settle_ticket_list(tickets,payout_result)
+        arm.update(krs_simulation_executed=True,mec_executed=True,
+            krs_signed_run_receipt=response['run_receipt'],krs_output=response['output'],
+            krs_receipt_verified=True,krs_utility=utility,
+            krs_result_utility=evaluate_against_result(utility,official['top3'],
+                static_ranking=arm['owner']['static_prediction']['ranking']),
+            mec=mec,capital_policy_decision=capital,ticket_count=len(tickets),
+            capital_required=capital['required_capital'],diagnostic_tickets=tickets,
+            diagnostic_virtual_settlement=settlement,
+            settlement_classification='POSTCAPTURE VIRTUAL DIAGNOSTIC / NOT FROZEN FORWARD OOS / NO PURCHASE',
+            purchase_authority=False,production_authority=False)
+    return comparison

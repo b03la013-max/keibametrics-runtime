@@ -4,17 +4,25 @@ Stored historical FINALs are read only. Postcapture B is never forward OOS.
 """
 from datetime import datetime, timezone
 from pathlib import Path
-import hashlib, json, sys
+import hashlib, json, sys, os, urllib.request
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'runtime'))
 from jra_pedigree_corpus import _verified_source, _attested, build_corpus
 from jra_owner_authorized_feature_rules import owner_authorized_observations
-from jra_bvi_shadow_comparison import compare
+from jra_bvi_shadow_comparison import compare, execute_diagnostic_downstream
 from jra_evidence_to_base_production import _weighted_index, _profile_for_runner
 from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
 
 
 def sha_file(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+
+def external_call(path, payload, timeout):
+    base=os.environ.get('KRS_BASE','https://quorumprobe-production.up.railway.app').rstrip('/')
+    rq=urllib.request.Request(base+path,data=json.dumps(payload,ensure_ascii=False).encode(),
+        headers={'Content-Type':'application/json'},method='POST')
+    with urllib.request.urlopen(rq,timeout=timeout) as response:
+        return json.loads(response.read())
+
 
 def evaluate():
     now=datetime.now(timezone.utc).isoformat()
@@ -54,6 +62,7 @@ def evaluate():
         finalpath=ROOT/'runtime/final_artifacts'/f"{req['race_id']}.json"
         final=json.loads(finalpath.read_text());result=json.loads((ROOT/'runtime/results'/f"{req['race_id']}.json").read_text())
         top3=[str(x) for x in result['official_result']['top3']]
+        execute_diagnostic_downstream(comparison,req,result['official_result'],external_call)
         for arm in comparison['arms'].values():
             owner=arm['owner'];ranking=owner['static_prediction']['ranking'];cols=owner['active_columns']
             arm['historical_diagnostic_metrics']={'winner_rank':ranking.index(top3[0])+1,
@@ -101,6 +110,19 @@ def evaluate():
         'static_krs_ticket_lineage':'NOT ESTABLISHED',
         'historical_prediction_rewritten':False}
     report={'created_at':now,'reports':reports,'kyoto_r08':r08,'gate_c':'FORWARD OOS PENDING','policy_change':'NONE'}
+    from pfs_grand_review import _aggregate, _robustness
+    pooled={}
+    for name in reports[0]['comparison']['arms']:
+        samples=[]
+        for r in reports:
+            settlement=r['comparison']['arms'][name]['diagnostic_virtual_settlement']
+            samples.append({'race_id':r['race_id'],'date':'2026-10-11',
+                'investment':settlement['investment'],'return':settlement['return'],
+                'profit_loss':settlement['profit_loss'],
+                'hit_but_loss':bool(settlement['return'] and settlement['profit_loss']<0)})
+        pooled[name]={'aggregate':_aggregate(samples),'robustness':_robustness(samples),
+            'classification':'2-RACE POSTCAPTURE VIRTUAL DIAGNOSTIC / NO FORWARD OOS / INSUFFICIENT EVIDENCE'}
+    report['diagnostic_pooled_pfs']=pooled
     out=ROOT/'runtime_out/jra_bvi_pipeline_real_acceptance.json';out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print('REAL_BVI_PIPELINE_ACCEPTANCE='+json.dumps({'races':[r['race_id'] for r in reports],
