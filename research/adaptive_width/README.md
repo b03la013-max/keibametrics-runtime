@@ -72,3 +72,9 @@ python research/adaptive_width/run_shadow.py --request runtime/requests/KM-JRA-T
 11テスト：数値不正、同日結果漏洩、重複競走、モデル別較正、Candidate拒否、20指数証拠欠落、券面重複/同一馬重複、二桁馬番の三連複正規化、予算を変えても候補不変、点数可変、正式AKI一致。既存SOURCE/KRS/FINALを再実行する必要はない。selector自体は東京11Rで約0.3ms。SOURCE取得・KRS全体の速度改善がこの数値で証明されたわけではない。
 
 次段階は、この係数とSHAを結果前に凍結し、別日・別会場で旧R50と対にして追跡すること。旧的中喪失、追加捕捉、券種変換、点数、仮想損益を同時に記録し、結果を見た係数変更は別候補へ分ける。UNKNOWN-OOSの追加実績は本作業で0。自動本番昇格なし。
+
+## 追加照合：過去の最適化スプレッドシート
+
+KeibaMetrics_MEC_Optimization_Phase1_20260922.xlsxの全15シートを確認し、Master_Race_Ledgerの189記録（個別175、日次7、Subset7）も収録。JRA132、LOCAL52、BANEI5。既存CSV・GitHubと重なる記録、RECON、日次集計を二重加算しない。Full20と当時の正本券面に結び付かない金額集計を、新係数の較正件数へ追加しない。
+
+過去の6競走MEC比較もCORE_ONLYが的中5→3、CORE_PROTECTIONが5→5となり、低点数化に保護層が必要な反例を支持する。一方、その表のRace_ID列A2:A7はPFS計算式で上書きされて数値になっている。正本レース識別子として使わず、セル値・式・出典を別記録へ保存し、元のブックは変更しない。v0.2 Independent-Witness git.bundleも確認：小規模な証明用コードで、実レース予想台帳としては加算しない。
