@@ -61,6 +61,11 @@ jobs:
               for job_name,job in obj["jobs"].items():
                   steps=job["steps"]
                   attest=[i for i,s in enumerate(steps) if s.get("uses","").startswith("actions/attest@")]
+                  if job_name=="weekend-plan":
+                      assert not attest
+                      assert not any("git push origin" in s.get("run","") or "jra_pedigree_harvest.py" in s.get("run","") for s in steps)
+                      print("JRA_PEDIGREE_READ_ONLY_PLAN_VALID",path,job_name)
+                      continue
                   assert len(attest)==1, (path,job_name)
                   verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
                   persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]

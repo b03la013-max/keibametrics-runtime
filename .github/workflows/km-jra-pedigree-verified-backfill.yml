@@ -390,6 +390,8 @@ jobs:
         run: |
           set -euo pipefail
           DAY_CODE="$(printf %s "$DAY" | tr -d '-')"
+          gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-verified-backfill.yml"
           python scripts/jra_weekend_bvi_intake.py admit --file "$FILE" \
             --receipt "$RECEIPT"
       - name: Persist independently verified facts for subsequent formal BVI runs
