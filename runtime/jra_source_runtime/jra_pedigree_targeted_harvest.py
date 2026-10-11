@@ -69,7 +69,10 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
         "profile": PROFILE, "official": True, "source": "www.jra.go.jp",
         "race_date": cohort_date, "mode": "targeted_official_horse_profiles",
         "cohort_id": manifest["cohort_id"], "target_sires": sorted(parent_set),
-        "harvested_at": current.astimezone(timezone.utc).isoformat(),
+        # A cohort's usable time is after the LAST horse fetch, never the
+        # initial queue dispatch time. This prevents late page data being
+        # treated as available before an earlier race cutoff.
+        "harvested_at": max(current, datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(),
         "horse_token_count": len(tokens), "selected_token_count": len(tokens),
         "horse_count": len(horses), "horses": horses,
         "errors": errors,
