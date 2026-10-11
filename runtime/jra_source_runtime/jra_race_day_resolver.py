@@ -107,6 +107,20 @@ def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, 
     return intent
 
 
+def resolve_meetings(race_date: str) -> List[str]:
+    """Official JRA venues (canonical names) holding races on race_date."""
+    from jra_pedigree_harvest import _Client, _calendar
+    d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
+    c = _Client(delay=1.0)
+    cal = c.get(_calendar(race_date))
+    m = re.search(r"doAction\('/JRADB/accessD\.html'\s*,\s*'([^']+)'\)", cal)
+    if not m:
+        raise ValueError("JRA_RESOLVER_ENTRY_TOKEN_NOT_FOUND")
+    s1 = c.post("/JRADB/accessD.html", m.group(1))
+    codes = sorted(set(re.findall(r"pw01drl00(\d{2})\d{8}" + d8 + r"/[0-9A-Fa-f]{2}", s1)))
+    return [VENUES[c_][1] for c_ in codes if c_ in VENUES]
+
+
 def resolve_day(race_date: str, venue: str):
     """Official JRA day race list for one venue: (meeting_key, races)."""
     from jra_pedigree_harvest import _Client, _calendar
@@ -154,9 +168,21 @@ if __name__ == "__main__":
     ap.add_argument("--revision", type=int, default=1)
     ap.add_argument("--out-dir", default="runtime/jra_formal_intents")
     ap.add_argument("--orchestration-session-id")
+    ap.add_argument("--min-lead-minutes", type=float, default=15.0)
     a = ap.parse_args()
     intent = resolve_and_build(a.date, a.venue, a.race, run_count=a.run_count, revision=a.revision,
                                orchestration_session_id=a.orchestration_session_id)
+    # A Formal pre-race prediction needs SOURCE + Full20 + KRS + MEC + signed
+    # FINAL before the cutoff. Too close to post: no intent, no error, and no
+    # late or backdated FINAL; the day's status index holds the real state.
+    post_at = _dt.datetime.fromisoformat(intent["scheduled_post_at"])
+    lead = (post_at - _dt.datetime.now(JST)).total_seconds() / 60
+    if lead < a.min_lead_minutes:
+        print(json.dumps({"status": "TOO_LATE_FOR_PRE_RACE_FINAL", "race_id": intent["race_id"],
+                          "scheduled_post_at": intent["scheduled_post_at"],
+                          "minutes_to_post": round(lead, 1), "required_minutes": a.min_lead_minutes,
+                          "status_index": f"runtime/jra_race_day_status/{a.date}.json"}, ensure_ascii=False))
+        raise SystemExit(0)
     p = Path(a.out_dir) / (intent["execution_id"] + ".json")
     if p.exists():
         raise SystemExit("INTENT_ALREADY_EXISTS:" + str(p))
