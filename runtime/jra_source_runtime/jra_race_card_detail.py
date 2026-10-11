@@ -364,6 +364,26 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     return bind_observed_context(artifact)
 
 
+def fetch_race_card_reobservation(prediction_cutoff:str,*,race_date:str,meeting_key:str,race_no:int)->Tuple[Dict[str,Any],Dict[str,Any]]:
+    """Second, later fetch of the same official JRADB detailed card.
+
+    Used only for the temporally ordered market/going re-observation (AKI-JRA
+    v2.1 external_state). Kept under its own source_id so the primary detail
+    snapshot that binds race context and the Runner Universe stays unique.
+    """
+    raw,headers,final,_tokens=_discover_and_fetch(race_date,meeting_key,race_no)
+    spec={"source_id":"JRA-OFFICIAL-RACE-CARD-DETAIL-REOBSERVATION","source_class":"OFFICIAL_JRA_RACE_CARD_DETAIL",
+          "authority":"JRA_OFFICIAL","priority":125,"official":True,"required":False,
+          "url":BASE+"/JRADB/accessD.html","extract":[]}
+    snap,errs=snapshot_from_bytes(spec,raw,final_url=final,status_code=200,headers=headers,fetched_at=utcnow(),prediction_cutoff=prediction_cutoff)
+    if snap.get("cutoff_relation")=="POST_CUTOFF":
+        raise ValueError("JRA_DETAIL_REOBSERVATION_POST_CUTOFF")
+    if errs: raise ValueError("JRA_DETAIL_REOBSERVATION_SNAPSHOT_ERROR:"+"|".join(errs))
+    detail=parse_race_card_detail(raw,headers.get("content-type",""))
+    detail["source_snapshot_sha256"]=snap["snapshot_sha256"]
+    return detail,snap
+
+
 def runner_universes_from_detail(detail:Dict[str,Any])->Tuple[Dict[str,Any],Dict[str,Any]]:
     runners=[]
     for x in detail.get("runners") or []:
