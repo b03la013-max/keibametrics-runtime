@@ -236,10 +236,29 @@ def run_one(context, spec: dict, *, private_root: Path = PRIVATE,
         race_id=race_id, output_root=private_root, now=clock,
         source_binding=source,
     )
+    bvi_summary = {}
+    if spec.get("calculate_bvi_diagnostic"):
+        if not spec.get("signed_source_envelope_path"):
+            raise BloodBError("BVI_DIAGNOSTIC_SIGNED_SOURCE_REQUIRED")
+        from jra_bloodb_browser_bridge import evaluate_private_capture
+        from jra_bloodb_mac_collector import private_write, json_bytes
+        try:
+            bvi = evaluate_private_capture(private_root / race_id,
+                root=Path(__file__).resolve().parents[1],
+                source_path=Path(spec["signed_source_envelope_path"]))
+        except BloodBError as exc:
+            # Retain successful acquisition; fail closed independently for BVI.
+            bvi = {"status": "BLOCKED", "reason": str(exc), "bvi_authority": False,
+                   "bvi": {str(row["horse_no"]): {"status": "BLOCKED", "value": None,
+                            "reason": str(exc)} for row in official}}
+        private_write(private_root / race_id / "bvi_diagnostic.json", json_bytes(bvi))
+        bvi_summary = {"bvi_status": bvi["status"],
+                       "calculated_bvi_count": sum(row["status"] == "CALCULATED" for row in bvi["bvi"].values()),
+                       "bvi_authority": False}
     return {"race_id":race_id,"status":"PRIVATE_DIAGNOSTIC_CAPTURED",
             "runner_count":data["runner_count"],"raw_sha256":data["raw_sha256"],
             "source_binding":source["level"],
-            "production_authority":False,"oos_increment":0}
+            "production_authority":False,"oos_increment":0, **bvi_summary}
 
 def process_queue(context, queue_path: Path, *,
                   private_root: Path = PRIVATE,
