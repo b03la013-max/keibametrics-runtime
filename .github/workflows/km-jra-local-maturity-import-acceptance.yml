@@ -262,17 +262,35 @@ jobs:
           # keys an Authority explicitly declares as its owner-authorized JRA
           # delta. Every other JRA key and the entire BAN scope must still be
           # identical, and an activation can never self-promote.
+          # R50 additionally enacts only the explicit AKI activation/bridge keys.
           # R46 (owner-approved audit fix): the stale status LABEL may change only
           # to restate the same activation; it can never claim READY/VALIDATED.
           R45_ALLOWED_JRA_DELTA={"evidence_rule_registry","owner_authorized_feature_rules",
                                  "pedigree_corpus","production_static_owner_activation",
-                                 "production_static_prediction_owner_status"}
+                                 "production_static_prediction_owner_status",
+                                 "aki_v21_activation","aki_capital_bridge_restoration"}
           for family in ["JRA","BAN"]:
               delta=set()
               if family=="JRA":
                   declared=current.get("jra_owner_authorized_delta") or {}
                   delta=set(declared.get("keys") or [])
                   assert delta<=R45_ALLOWED_JRA_DELTA,sorted(delta-R45_ALLOWED_JRA_DELTA)
+              if "aki_v21_activation" in delta:
+                  # R50 is an explicit owner enactment, not automatic model promotion.
+                  import hashlib
+                  from runtime.jra_aki_capital_preflight import sha
+                  act=current["family_scoped_authority"]["JRA"]["aki_v21_activation"]
+                  assert act["automatic_promotion"] is False
+                  assert act["validation_status"]=="OWNER_AUTHORIZED / UNVALIDATED"
+                  assert Path(act["owner_authorization"]).is_file()
+                  for key,path in [("runtime_sha256","runtime/jra_aki_v21.py"),
+                                   ("feature_compiler_sha256","runtime/jra_aki_v21_features.py")]:
+                      assert act[key]==hashlib.sha256(Path(path).read_bytes()).hexdigest(),key
+                  for key in ["components","columns"]:
+                      assert act[key]["sha256"]==sha(load(act[key]["path"])),key
+                  assert "aki_capital_bridge_restoration" in delta
+                  bridge=current["family_scoped_authority"]["JRA"]["aki_capital_bridge_restoration"]
+                  assert bridge["aki_direct_ticket_count_control"] is False
               cur={k:v for k,v in current["family_scoped_authority"][family].items() if k not in delta}
               ref={k:v for k,v in r39["family_scoped_authority"][family].items() if k not in delta}
               assert cur==ref,family
@@ -366,7 +384,8 @@ jobs:
             "jra_fast_path":fast["profile_id"],
             "jra_venue_count":len(jra_venues),
             "historical_maturity_import_local_scope_unchanged":True,
-            "current_jra_scoped_authority_unchanged":True,
+            "current_jra_scoped_authority_outside_authorized_delta_unchanged":True,
+            "claim_scope":"Historical maturity import only; current owner-authorized AKI delta validated separately",
             "ban_scoped_authority_unchanged":True,
             "jra_numerical_cache_imported":False,
             "local_numerical_model_imported":False,
