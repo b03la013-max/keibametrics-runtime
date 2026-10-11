@@ -309,13 +309,13 @@ class TestOwnerAuthorizedActivation(unittest.TestCase):
         shutil.copy(ROOT / "runtime/jra_static_owner_executable.py", self.root / "runtime/")
         (self.root / "governance").mkdir()
         rec = {"decision": "AUTHORIZE_PRODUCTION_STATIC_OWNER_UNVALIDATED",
-               "policy_profile": "JRA-STATIC-PREDICTION-OWNER-EXECUTABLE-CANDIDATE-20261010",
+               "policy_profile": __import__("jra_static_owner_executable").PROFILE,
                "authorized_by": "TEST OWNER", "authorized_at": "2026-10-10T16:14:00+09:00"}
         p = self.root / "governance/rec.json"
         p.write_text(json.dumps(rec))
         self.activation = {
             "status": "OWNER_AUTHORIZED_UNVALIDATED",
-            "profile": "JRA-STATIC-PREDICTION-OWNER-EXECUTABLE-CANDIDATE-20261010",
+            "profile": __import__("jra_static_owner_executable").PROFILE,
             "validation_status": "UNVALIDATED", "automatic_promotion": False,
             "forward_oos_eligible_races_at_authorization": 0,
             "market_baseline_superiority_proven": False,
@@ -447,3 +447,36 @@ class TestPedigreeIdentityFallback(unittest.TestCase):
         del art["jra_official_horse_history"]["runners"][rid]["pedigree"]
         none = owner_authorized_observations(art, REGISTRY, corpus=corpus)[rid]
         self.assertNotIn("pedigree_surface", none)
+
+
+class TestAkiJraV2Formation(unittest.TestCase):
+    def runners(self, zw, zp, t3, n=None):
+        n = n or len(zw)
+        rs = []
+        for i in range(n):
+            cc = {k: {"value": 60.0} for k in ("DCR", "RFI", "CFI", "KGI", "SRI")}
+            cc["ZAI_WIN"] = {"value": zw[i]}
+            cc["ZAI_PLACE"] = {"value": zp[i]}
+            cc["T3I"] = {"value": t3[i]}
+            cc["SRI"] = {"value": zp[i]}
+            rs.append({"runner_id": str(i + 1), "canonical_components": cc})
+        return rs
+
+    def test_clear_favourite_small_field_is_narrow(self):
+        from jra_static_owner_executable import aki_jra_v2
+        zw = [90, 70, 68, 66, 64, 62, 60, 58, 56]
+        a = aki_jra_v2(self.runners(zw, zw, zw))
+        self.assertLess(a["AKI_JRA_v2"], 50)
+        self.assertEqual(a["formation"]["heads"], 1)
+        self.assertLessEqual(a["formation"]["thirds"], 7)
+
+    def test_flat_large_field_widens_and_never_single_head_when_contested(self):
+        from jra_static_owner_executable import aki_jra_v2
+        zw = [75.0 - 0.1 * i for i in range(16)]
+        zp = [75.0 - 0.1 * ((i * 7) % 16) for i in range(16)]
+        a = aki_jra_v2(self.runners(zw, zp, zp))
+        self.assertGreaterEqual(a["W_AKI"], 45)
+        self.assertGreaterEqual(a["formation"]["heads"], 2)
+        self.assertFalse(a["big_upset_mode"])
+        for key in ("W_AKI_parts", "P_AKI_parts", "ASI_parts", "RSI_parts"):
+            self.assertIn(key, a)

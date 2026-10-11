@@ -93,6 +93,14 @@ def render_ticket_tree(final_artifact: dict) -> dict:
     decision = (final_artifact.get("capital_policy_decision") or {}).get("decision")
     fpp = final_artifact.get("final_prediction_package") or {}
     lines = ["買い目"]
+    aki = (final_artifact.get("static_prediction") or {}).get("aki_jra_v2") or {}
+    if aki:
+        f = aki.get("formation") or {}
+        lines.append("荒れ構造（AKI-JRA v2）")
+        lines += _branch([
+            f"{aki.get('AKI_JRA_v2'):.0f}・{aki.get('band')}・型 {f.get('heads')}-{f.get('seconds')}-{f.get('thirds')}",
+            f"W-AKI {aki.get('W_AKI'):.0f}／P-AKI {aki.get('P_AKI'):.0f}／ASI {aki.get('ASI'):.0f}／RSI {aki.get('RSI'):.0f}",
+        ])
     counts = OrderedDict()
     stake_total = 0
     if ft.get("no_bet") or not tickets:
