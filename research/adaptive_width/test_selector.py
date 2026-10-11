@@ -20,6 +20,10 @@ class WidthTests(unittest.TestCase):
         self.assertEqual(a['decision'],'PAPER')
 
     def test_set_identity_double_digit_horses(self):
+        from selector import features
+        keys=next(iter(self.production[0]['frozen_scores'].values())).keys()
+        tied={h:{k:75.0 for k in keys} for h in ['2','10','15']}
+        self.assertEqual(features(tied)['ranks']['W'],['10','15','2'])
         t=[{'bet_type':'TRIO','selection':[2,10,15],'stake':100}]
         self.assertTrue(hit(t,[15,2,10])['TRIO'])
         for row in self.production:

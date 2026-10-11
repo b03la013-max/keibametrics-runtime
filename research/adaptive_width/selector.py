@@ -17,7 +17,7 @@ def features(scores):
     if any(isinstance(v,bool) or not isinstance(v,(float,int)) or not math.isfinite(v) or not 0<=v<=100 for r in scores.values() for v in r.values()):
         raise ValueError('INVALID_INDEX')
     scores={str(h):v for h,v in scores.items()}
-    ranks={c:sorted(scores,key=lambda h:(-scores[h][k],int(h))) for c,k in METRIC.items()}
+    ranks={c:sorted(scores,key=lambda h:(-scores[h][k],str(h))) for c,k in METRIC.items()}
     scales={c:max(1.,pstdev([scores[h][k] for h in ranks[c][:(len(scores)+1)//2]])) for c,k in METRIC.items()}
     h=ranks['W'][0];s=next(x for x in ranks['P2'] if x!=h);t=next(x for x in ranks['P3'] if x not in {h,s})
     anchors={'W':h,'P2':s,'P3':t}
