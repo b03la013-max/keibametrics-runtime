@@ -28,7 +28,7 @@ from pathlib import Path
 
 from jra_race_day_resolver import JST, VENUES, resolve_day, resolve_meetings, venue_code
 
-PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.1-20261011"
+PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.2-20261011"
 DEFAULT_WINDOW = (55, 30)
 
 
@@ -93,13 +93,18 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
     days: dict = cache.setdefault("days", {}) if cache is not None else {}
-    if cache is not None and plan.get("all_races"):
-        if "meetings" not in cache:
+    if plan.get("all_races"):
+        memo = cache if cache is not None else {}
+        if "meetings" not in memo:
             try:
-                cache["meetings"] = meetings(race_date)
+                memo["meetings"] = meetings(race_date)
             except Exception as exc:
-                cache["meetings"] = exc
-        cached = cache["meetings"]
+                memo["meetings"] = exc
+        cached = memo["meetings"]
+        if isinstance(cached, (list, tuple)) and not cached:
+            # Official calendar answered: no JRA meeting on this date. Nothing
+            # to plan, dispatch or publish (no empty state/status files).
+            return [{"race_id": race_date, "status": "NO_OFFICIAL_MEETINGS"}]
         def meetings(_d, _c=cached):
             if isinstance(_c, Exception):
                 raise _c
@@ -272,7 +277,7 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
         run("git", "commit", "-m", "result: JRA Production official result request [skip ci]")
     pushed = False
     for i in range(5):
-        if run("git", "pull", "--rebase", "origin", "main").returncode == 0 and \
+        if run("git", "pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:
             pushed = True
             break
@@ -306,7 +311,7 @@ def _commit(root: Path, race_date: str) -> None:
         return
     run("git", "commit", "-m", f"autopilot: race-day state and status {race_date} [skip ci]")
     for i in range(5):
-        if run("git", "pull", "--rebase", "origin", "main").returncode == 0 and \
+        if run("git", "pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:
             return
         run("git", "rebase", "--abort")
@@ -328,13 +333,15 @@ if __name__ == "__main__":
     while True:
         now = _dt.datetime.now(JST)
         if a.loop_until:
-            subprocess.run(["git", "pull", "--rebase", "-q", "origin", "main"], cwd=root, capture_output=True)
+            subprocess.run(["git", "pull", "--rebase", "--autostash", "-q", "origin", "main"], cwd=root, capture_output=True)
         if cache_at is None or (now - cache_at).total_seconds() > 1800 or any(
                 isinstance(v, Exception) for v in list(cache.get("days", {}).values()) + [cache.get("meetings")]):
             cache, cache_at = {}, now
         try:
             res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache)
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
+            if [r.get("status") for r in res] == ["NO_OFFICIAL_MEETINGS"]:
+                break  # non-race day: stop at once instead of idling until the loop end
         except Exception as exc:  # keep the day running; the index shows the last good state
             print(json.dumps({"profile": PROFILE, "error": type(exc).__name__ + ":" + str(exc)}, ensure_ascii=False), flush=True)
         if a.loop_until:
