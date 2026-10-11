@@ -28,10 +28,14 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
     if manifest.get("source") != "JRA_OFFICIAL" or not COHORT_PATTERN.fullmatch(
             str(manifest.get("cohort_id") or "")):
         raise ValueError("JRA_TARGETED_COHORT_MANIFEST_INVALID")
-    parents = manifest.get("target_sires")
+    parents = manifest.get("target_sires", [])
+    maternal_parents = manifest.get("target_damsires", [])
     tokens = manifest.get("official_horse_profile_tokens")
-    if not isinstance(parents, list) or not parents or len(parents) > 10 or any(
-            not isinstance(p, str) or not p.strip() or len(p) > 90 for p in parents):
+    def valid_scope(xs):
+        return (isinstance(xs, list) and len(xs) <= 10
+                and all(isinstance(p, str) and p.strip() and len(p) <= 90 for p in xs)
+                and len(set(xs)) == len(xs))
+    if not valid_scope(parents) or not valid_scope(maternal_parents) or not (parents or maternal_parents):
         raise ValueError("JRA_TARGETED_PARENT_SCOPE_INVALID")
     if not isinstance(tokens, list) or not 1 <= len(tokens) <= MAX_PROFILES or any(
             not isinstance(t, str) or not TOKEN_PATTERN.fullmatch(t) for t in tokens
@@ -48,6 +52,7 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
     if current.tzinfo is None or current.astimezone(timezone.utc).date().isoformat() < cohort_date:
         raise ValueError("JRA_TARGETED_FUTURE_COHORT_FORBIDDEN")
     parent_set = set(parents)
+    damsire_set = set(maternal_parents)
     horses, errors = [], []
     for tok in tokens:
         try:
@@ -57,8 +62,11 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
             ped = parse_horse_pedigree(page)
             if not ped.get("horse_name") or not ped.get("sire") or not ped.get("dam"):
                 raise ValueError("JRA_TARGETED_PARENT_IDENTITY_MISSING")
-            if ped["sire"] not in parent_set:
-                raise ValueError("JRA_TARGETED_SIRE_UNEXPECTED")
+            # An independently verified official sire OR damsire cohort may
+            # satisfy the EXISTING Production BVI maternal/distance/class
+            # fallback rules. No change to those rules or sample thresholds.
+            if not (ped["sire"] in parent_set or ped.get("damsire") in damsire_set):
+                raise ValueError("JRA_TARGETED_PARENT_NOT_MATCHED")
             parsed = parse_horse_history(raw, content_type)
             horses.append({**ped, "runs": parsed.get("runs") or [],
                            "raw_sha256": _sha(raw),
@@ -69,6 +77,7 @@ def acquire(manifest: dict, *, client=None, now=None) -> dict:
         "profile": PROFILE, "official": True, "source": "www.jra.go.jp",
         "race_date": cohort_date, "mode": "targeted_official_horse_profiles",
         "cohort_id": manifest["cohort_id"], "target_sires": sorted(parent_set),
+        "target_damsires": sorted(damsire_set),
         # A cohort's usable time is after the LAST horse fetch, never the
         # initial queue dispatch time. This prevents late page data being
         # treated as available before an earlier race cutoff.
