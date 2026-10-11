@@ -261,6 +261,54 @@ def _verified_harvest(path: Path, *, not_after: datetime,
         return None
 
 
+def _signed_source_might_match_target(path: Path, *,
+                                      required_sires: set[str] | None,
+                                      required_damsires: set[str] | None) -> bool:
+    """Negative-only relevance filter for archived signed JRA SOURCE envelopes.
+
+    A matching or incomplete/malformed file ALWAYS enters the existing
+    cryptographic _verified_source gate; prefilter JSON is never admitted as
+    evidence. Non-matching fully-identified official runner cards need not
+    incur expensive Ed25519/SHA verification on every future race.
+    """
+    if required_sires is None and required_damsires is None:
+        return True
+    try:
+        root = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(root, dict):
+            return True
+        art = root.get("artifact")
+        if not isinstance(art, dict):
+            return True
+        detail = (art.get("jra_official_race_card_detail") or {}).get("runners")
+        history = (art.get("jra_official_horse_history") or {}).get("runners") or {}
+        if not isinstance(detail, list) or not detail or not isinstance(history, dict):
+            return True
+        sires = required_sires or set()
+        damsires = required_damsires or set()
+        for x in detail:
+            if not isinstance(x, dict):
+                return True
+            rid = str(x.get("runner_id") or x.get("horse_no") or "")
+            if not rid:
+                return True
+            past = history.get(rid) or {}
+            if not isinstance(past, dict):
+                return True
+            ped = past.get("pedigree") or {}
+            if not isinstance(ped, dict):
+                return True
+            sire = str(x.get("sire") or ped.get("sire") or "").strip()
+            damsire = str(x.get("damsire") or ped.get("damsire") or "").strip()
+            # An absent parent may have further evidence in verified upstream
+            # ingestion; do not silently discard uncertain source files.
+            if (not sire or not damsire or sire in sires or damsire in damsires):
+                return True
+        return False
+    except (OSError, ValueError, TypeError, KeyError):
+        return True
+
+
 def _harvest_might_match_target(path: Path, *, required_sires: set[str] | None,
                                 required_damsires: set[str] | None) -> bool:
     """Cheap *negative-only* relevance hint before costly GitHub OIDC verification.
@@ -339,6 +387,13 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                 row["runs"][key] = run
 
     for path in sorted(Path(root).glob("runtime/executions/*/SOURCE/runs/*/source_receipt_envelope.json")):
+        # Signed SOURCE envelopes can be multi-megabyte. Filter only files
+        # proven irrelevant by the untrusted negative hint; every potentially
+        # useful source still passes full Ed25519 and snapshot hash verification.
+        if not _signed_source_might_match_target(
+                path, required_sires=required_sires,
+                required_damsires=required_damsires):
+            continue
         summary = _verified_source(path)
         if not summary:
             rejected += 1
