@@ -36,6 +36,8 @@ class TestAutopilot(unittest.TestCase):
         again = self.run_at(13, 35)
         self.assertTrue(all(o["status"] != "DISPATCH" for o in again if o["race_id"].endswith("R11")))
         self.assertEqual(len(self.sent), 2)
+        sched = json.loads((self.tmp / "runtime/jra_race_day_plan/2026-10-11.schedule.json").read_text())
+        self.assertEqual(sched["KM-JRA-TKY-20261011-R11"]["post"], "2026-10-11T14:30:00+09:00")
 
     def test_missed_window_never_dispatches_late(self):
         out = self.run_at(14, 40)
