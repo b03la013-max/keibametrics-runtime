@@ -37,3 +37,21 @@ class IntakeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'OIDC'):intake.verify_admission(p)
 
 if __name__=='__main__':unittest.main()
+
+
+def test_partial_admission_remains_pending_and_full_retry_preserves_original(tmp_path):
+    import json
+    plan={'profile':intake.PROFILE,'input_policy':'JRA_OFFICIAL_REACQUISITION_ONLY',
+          'historical_prediction_rewrite':False,'dates':[{'date':'2026-10-10','expected_races':12}]}
+    corpus=tmp_path/'runtime/pedigree_corpus';receipts=tmp_path/'runtime/pedigree_intake_receipts'
+    corpus.mkdir(parents=True);receipts.mkdir(parents=True)
+    old=corpus/'old.json';old.write_text(json.dumps({'sha256':'old','horse_count':47,'horse_token_count':48}))
+    receipt={'status':'OFFICIAL_BVI_CORPUS_ADMITTED','file':'old.json','harvest_sha256':'old'}
+    (receipts/'20261010-race0.json').write_text(json.dumps(receipt))
+    before=old.read_bytes();now=datetime(2026,10,11,12,tzinfo=timezone.utc)
+    assert {'date':'2026-10-10','start':0} in intake.pending_windows(plan,tmp_path,now)
+    (corpus/'retry.json').write_text(json.dumps({'sha256':'new','horse_count':48,'horse_token_count':48}))
+    receipt.update(file='retry.json',harvest_sha256='new')
+    (receipts/'20261010-race0-retry-1.json').write_text(json.dumps(receipt))
+    assert {'date':'2026-10-10','start':0} not in intake.pending_windows(plan,tmp_path,now)
+    assert old.read_bytes()==before

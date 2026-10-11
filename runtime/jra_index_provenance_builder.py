@@ -51,7 +51,7 @@ def _base_component(index, spec, runner_id):
         raise IndexLedgerError(f"BASE_INDEX_EVIDENCE_MISSING:{runner_id}:{index}")
     if not source_fact:
         raise IndexLedgerError(f"BASE_INDEX_SOURCE_FACT_MISSING:{runner_id}:{index}")
-    return {
+    component = {
         "value": value,
         "rule_id": rule_id,
         "mapping_version": mapping_version,
@@ -59,6 +59,12 @@ def _base_component(index, spec, runner_id):
         "source_fact": source_fact,
         "adjustments": copy.deepcopy(spec.get("adjustments") or []),
     }
+    # Preserve the calculator's observed/DCR audit through Full20 and Static.
+    # These fields do not participate in any numerical formula.
+    for key in ("components", "coverage_weight", "profile", "information_status", "dcr"):
+        if key in spec:
+            component[key] = copy.deepcopy(spec[key])
+    return component
 
 
 def _derived(value, rule_id, evidence_refs, source_fact):
@@ -207,6 +213,9 @@ def materialize_index_provenance(req: dict) -> dict:
                 "evidence_refs": copy.deepcopy(canonical[idx]["evidence_refs"]),
                 "source_fact": canonical[idx]["source_fact"],
             }
+            for key in ("profile", "information_status", "dcr"):
+                if key in raw:
+                    base_index_trace[idx][key] = copy.deepcopy(raw[key])
 
         derived_index_trace = {
             "DCR": copy.deepcopy(canonical["DCR"]),
