@@ -183,6 +183,14 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
             row["total_investment"] = tree["total_investment"]
         except Exception as exc:
             row["ticket_tree_error"] = type(exc).__name__ + ":" + str(exc)
+        try:
+            sys.path.insert(0, str(root / "runtime"))
+            from jra_aki_reference import aki_reference
+            ref = aki_reference(root, rid)
+            if ref:
+                row["aki_reference"] = ref
+        except Exception as exc:
+            row["aki_reference_error"] = type(exc).__name__ + ":" + str(exc)
         if result_p.exists():
             res = json.loads(result_p.read_text(encoding="utf-8"))
             st = res.get("settlement") or {}
@@ -231,6 +239,8 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
         md.append(head)
         if r.get("ticket_tree"):
             md += ["```", r["ticket_tree"], "```"]
+        if (r.get("aki_reference") or {}).get("tree"):
+            md += ["```", r["aki_reference"]["tree"], "```"]
         if r.get("unclosed_cells"):
             md.append(f"Full20 {r.get('full20')} 未成立: " + "、".join(r["unclosed_cells"]))
         if r.get("settlement"):
