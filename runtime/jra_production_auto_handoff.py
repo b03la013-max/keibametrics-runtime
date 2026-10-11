@@ -13,6 +13,7 @@ from pathlib import Path
 
 from jra_static_owner_executable import PROFILE as OWNER_PROFILE, compile_static_owner
 from jra_krs_input_builder_production import build_krs_input
+from capital_policy import load_family_default_capital_policy
 from formal_request_validator import (
     validate_pre_krs_request, validate_production_authority,
     validate_orchestration_ref,
@@ -21,14 +22,6 @@ from formal_request_validator import (
 
 # Production KRS-Engine v1.1.0 (Runtime Contracts / Formal Runner ENGINE_SHA).
 KRS_ENGINE_SHA256 = "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
-
-
-JRA_PRODUCTION_DEFAULT_CAPITAL_POLICY = {
-    "mode": "RECOMMENDATION_ONLY",
-    "decided_by": "OWNER",
-    "decided_at": "2026-10-10",
-    "reason": "Owner chose recommendation-only so the MEC ticket tree is emitted instead of PAPER when it exceeds the family default race budget.",
-}
 
 
 class JRAProductionAutoHandoffError(ValueError):
@@ -222,11 +215,10 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     req["head_nonselection_reasons"] = {}
     req["orientation_exclusions"] = []
     req["available_bet_types"] = ["EXACTA", "TRIO", "TRIFECTA"]
-    # Owner decision 2026-10-10 (上濵): JRA Production issues the MEC 買い目Tree
-    # as a recommendation portfolio without a race-budget compatibility cut.
-    # An explicit capital_policy on the intent always wins.
+    # Keep explicit owner overrides; absence is not an explicit budget opt-out.
+    # The family default is a ceiling, never a target or a width selector.
     if req.get("capital_policy") is None:
-        req["capital_policy"] = deepcopy(JRA_PRODUCTION_DEFAULT_CAPITAL_POLICY)
+        req["capital_policy"] = load_family_default_capital_policy()
     req["static_owner_activation_binding"] = {
         "policy_id": OWNER_PROFILE,
         "activation_status": activation.get("status"),

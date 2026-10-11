@@ -82,6 +82,7 @@ jobs:
           from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
           from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
           from capital_policy import resolve_capital_policy
+          from jra_aki_capital_preflight import verify_aki_ticket_binding
           from mec_r4_shadow import build_mec_r4_shadow
           from jra_execution_maturity_bridge import verify_formal_request_binding
           from entry_transport_fallback import validate_fallback_request
@@ -553,8 +554,14 @@ jobs:
               assert req.get("jra_parameter_map_sha256")==JRA_V02_SHA
 
           if mec_required:
+              aki_binding=None
               mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
               mec_check=validate_mec_plan(mec)
+              if req.get("static_owner_activation_binding"):
+                  aki_binding=verify_aki_ticket_binding(req,mec)
+                  with open(os.path.join(artifact_dir,"aki_capital_preflight.json"),"w",encoding="utf-8") as fh:
+                      json.dump(aki_binding,fh,ensure_ascii=False,sort_keys=True,indent=2)
+                  stage("AKI_ACTUAL_TICKET_BINDING_VERIFIED",**aki_binding)
               capital_decision=resolve_capital_policy(req,mec)
               final_freeze_timestamp=datetime.now(timezone.utc).isoformat()
               if temporal_mode=="FORMAL-PRE-RACE":
@@ -610,6 +617,8 @@ jobs:
               final_freeze_timestamp=req["final_freeze_timestamp"]
 
           final_package=dict(req["final_prediction_package"])
+          if mec_required and aki_binding is not None:
+              final_package["aki_capital_preflight"]=aki_binding
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["evidence_feature_compiler_attestation"]=evidence_compiler
           final_package["source_to_evidence_feature_compiler"]=req.get("source_to_evidence_feature_compiler")
