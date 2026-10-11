@@ -186,6 +186,12 @@ def process(root: Path, race_id: str, *, now=None) -> str:
     ranking = [str(x) for x in (final.get("static_prediction") or {}).get("ranking") or []]
     official = verify_official_result(evidence["parsed"], evidence["text"], ranking)
     req = build_result_request(final, official, evidence)
+    cpre = root / "runtime" / "source_candidate_oos" / race_id / "pre_result.json"
+    if cpre.exists():
+        c = json.loads(cpre.read_text(encoding="utf-8"))
+        req["candidate_shadow_ref"] = {"final_receipt_sha256": c.get("candidate_final_receipt_sha256"),
+                                       "pre_result_sha256": c.get("sha256"),
+                                       "production_effect": "NONE"}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(req, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return "RESULT_REQUEST_WRITTEN"

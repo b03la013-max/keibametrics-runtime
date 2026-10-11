@@ -145,11 +145,18 @@ jobs:
           candidate_pre_path=os.path.join("runtime","source_candidate_oos",p["race_id"],"pre_result.json")
           if candidate_only:
               assert os.path.exists(candidate_pre_path), f"SOURCE_CANDIDATE_PRE_RESULT_MISSING:{candidate_pre_path}"
-          if os.path.exists(candidate_pre_path):
+          # A Production RESULT never depends on the Candidate lane: Candidate
+          # sidecars are settled by their own closed loop
+          # (km-jra-candidate-auto-postresult-closedloop), so a Candidate
+          # integrity problem cannot block the Production closed loop.
+          if os.path.exists(candidate_pre_path) and candidate_only:
               with open(candidate_pre_path,encoding="utf-8") as fh:
                   candidate_pre=json.load(fh)
               assert candidate_pre.get("race_id")==p["race_id"], "SOURCE_CANDIDATE_RACE_ID_MISMATCH"
-              declared_candidate_receipt=str((p.get("frozen_prediction_ref") or {}).get("final_receipt_sha256") or "")
+              # Production lane: frozen_prediction_ref is the PRODUCTION FINAL; the
+              # Candidate shadow is bound through candidate_shadow_ref instead.
+              ref_key="frozen_prediction_ref" if candidate_only else "candidate_shadow_ref"
+              declared_candidate_receipt=str((p.get(ref_key) or {}).get("final_receipt_sha256") or "")
               frozen_candidate_receipt=str(candidate_pre.get("candidate_final_receipt_sha256") or "")
               if declared_candidate_receipt:
                   assert declared_candidate_receipt==frozen_candidate_receipt, "SOURCE_CANDIDATE_FINAL_RECEIPT_MISMATCH"

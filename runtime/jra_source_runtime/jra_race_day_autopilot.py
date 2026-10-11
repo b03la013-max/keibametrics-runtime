@@ -245,6 +245,29 @@ def _gh_dispatch(venue, race_no, race_date, run_count):
                     "-f", f"run_count={run_count}"], check=True)
 
 
+def _post_result_closed_loop(root: Path) -> None:
+    """Settle due Production FINALs (official result) and hand each new RESULT
+    request to the canonical Result Runner. Scheduled cron alone proved
+    unreliable, so the day loop drives it; idempotent per race."""
+    run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True)
+    r = run(sys.executable, "runtime/jra_production_postresult.py", "--days", "1")
+    print(r.stdout.strip()[-2000:], flush=True)
+    new = [x for x in run("git", "ls-files", "--others", "--exclude-standard",
+                          "runtime/results").stdout.split() if x.startswith("runtime/results/KM-JRA-")]
+    if not new:
+        return
+    run("git", "add", *new)
+    run("git", "commit", "-m", "result: JRA Production official result request [skip ci]")
+    for i in range(5):
+        if run("git", "pull", "--rebase", "origin", "main").returncode == 0 and \
+                run("git", "push", "origin", "HEAD:main").returncode == 0:
+            break
+        run("git", "rebase", "--abort")
+        time.sleep(3 * (i + 1))
+    for path in new:
+        run("gh", "workflow", "run", "km-formal-result-runner.yml", "--ref", "main", "-f", f"request_path={path}")
+
+
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
@@ -285,6 +308,8 @@ if __name__ == "__main__":
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
         except Exception as exc:  # keep the day running; the index shows the last good state
             print(json.dumps({"profile": PROFILE, "error": type(exc).__name__ + ":" + str(exc)}, ensure_ascii=False), flush=True)
+        if a.loop_until:
+            _post_result_closed_loop(root)
         if not a.loop_until:
             break
         _commit(root, a.date)
