@@ -91,7 +91,14 @@ def evaluate():
         'source_snapshot_sha256':r08checked['source_snapshot_sha256'],'source_freeze_at':r08source['source_freeze_at'],
         'prediction_cutoff':r08source['prediction_cutoff'],'runners':r08rows,
         'formal_closure':'BLOCKED / HISTORICAL EVIDENCE_NO_BET; NO FROZEN FORMAL REQUEST',
-        'corpus_manifest_sha256':r08corpus['manifest_sha256'],'static_krs_ticket_lineage':'NOT ESTABLISHED',
+        'corpus_manifest_sha256':r08corpus['manifest_sha256'],
+        'corpus_horse_count':r08corpus['horse_count'],'corpus_run_count':r08corpus['run_count'],
+        'corpus_snapshots':r08corpus['snapshots'],
+        'corpus_run_identity_hashes':sorted({hashlib.sha256(json.dumps(
+            [h['horse_name'],h['sire'],h['dam'],r['date'],r['venue'],r['surface'],r.get('distance_m'),r['race_name']],
+            ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+            for h in r08corpus['horses'].values() for r in h['runs'].values()}),
+        'static_krs_ticket_lineage':'NOT ESTABLISHED',
         'historical_prediction_rewritten':False}
     report={'created_at':now,'reports':reports,'kyoto_r08':r08,'gate_c':'FORWARD OOS PENDING','policy_change':'NONE'}
     out=ROOT/'runtime_out/jra_bvi_pipeline_real_acceptance.json';out.parent.mkdir(exist_ok=True)
