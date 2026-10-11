@@ -40,7 +40,10 @@ jobs:
             # The request may be pushed moments before this dispatch: wait for it.
             for i in 1 2 3 4 5 6; do
               [ -f "$REQUEST_PATH" ] && break
-              sleep $((i*5)); git fetch -q origin main && git checkout -q origin/main -- "$REQUEST_PATH" 2>/dev/null || true
+              sleep $((i*5))
+              if git fetch -q origin main; then
+                git checkout -q origin/main -- "$REQUEST_PATH" 2>/dev/null || true
+              fi
             done
             test -f "$REQUEST_PATH"
             REQ="$REQUEST_PATH"
