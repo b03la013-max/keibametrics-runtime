@@ -54,3 +54,26 @@ class TestAutopilot(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestResolverClientRate(unittest.TestCase):
+    def test_resolver_uses_a_permitted_polite_rate(self):
+        import jra_pedigree_harvest as h
+        import jra_race_day_resolver as r
+        seen = []
+        class Stop(Exception):
+            pass
+        class Fake(h._Client):
+            def __init__(self, delay=1.0):
+                super().__init__(delay=delay)  # raises if too fast
+                seen.append(delay)
+            def get(self, *a, **k):
+                raise Stop()
+        orig = h._Client
+        h._Client = Fake
+        try:
+            with self.assertRaises(Stop):
+                r.resolve_day("2026-10-11", "東京")
+        finally:
+            h._Client = orig
+        self.assertTrue(seen and seen[0] >= 0.7)
