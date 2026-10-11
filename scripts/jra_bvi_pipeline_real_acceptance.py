@@ -12,6 +12,7 @@ from jra_owner_authorized_feature_rules import owner_authorized_observations
 from jra_bvi_shadow_comparison import compare, execute_diagnostic_downstream
 from jra_evidence_to_base_production import _weighted_index, _profile_for_runner
 from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
+from family_authority_guard import resolve_current_authority
 
 
 def sha_file(p): return hashlib.sha256(p.read_bytes()).hexdigest()
@@ -28,6 +29,7 @@ def evaluate():
     now=datetime.now(timezone.utc).isoformat()
     mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
     registry=json.loads((ROOT/'mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json').read_text())
+    authority_path,authority=resolve_current_authority(ROOT)
     reports=[]
     for no in ('07','12'):
         path=sorted((ROOT/'runtime/requests').glob(f'*KYO-20261011-R{no}*FORMAL.json'))[-1]
@@ -49,7 +51,8 @@ def evaluate():
             raise RuntimeError('ACTUAL_OIDC_CORPUS_NOT_CONSUMED')
         enriched=owner_authorized_observations(source,registry,corpus=corpus)
         comparison=compare(req,mapping,source_sha=checked['source_snapshot_sha256'],receipt_sha=env['receipt_sha256'],
-            algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],enhanced_features=enriched)
+            algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],enhanced_features=enriched,
+            source_artifact=source,current_authority=authority,root=ROOT)
         a=comparison['arms']['A_CURRENT']; b=comparison['arms']['B_PEDIGREE_ENHANCED_SHADOW'];c=comparison['arms']['C_BLOODLINE_ABLATION']
         rows=[]
         for r in req['runners']:
@@ -73,7 +76,11 @@ def evaluate():
         reports.append({'race_id':req['race_id'],'classification':'POST-CAPTURE DIAGNOSTIC / NOT FORWARD OOS',
             'source_path':str(sp.relative_to(ROOT)),'source_file_sha256':sha_file(sp),'source_snapshot_sha256':checked['source_snapshot_sha256'],
             'original_source_freeze_at':source['source_freeze_at'],'original_prediction_cutoff':req['prediction_cutoff'],
-            'diagnostic_created_at':now,'mapping_id':mapping['mapping_id'],'mapping_file_sha256':sha_file(ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json'),
+            'diagnostic_created_at':now,
+            'diagnostic_current_authority':authority['manifest_id'],
+            'diagnostic_authority_effective_at':authority['effective_at'],
+            'authority_use':'CURRENT POLICY COUNTERFACTUAL ONLY; NOT HISTORICAL PRE-CUTOFF AUTHORITY',
+            'mapping_id':mapping['mapping_id'],'mapping_file_sha256':sha_file(ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json'),
             'postcapture_corpus':{k:corpus.get(k) for k in ('manifest_sha256','horse_count','run_count','snapshot_count','identity_collision_count','run_conflict_count','snapshots','rejected_untrusted_inputs')},
             'runners':rows,'comparison':comparison,'frozen_lineage':{'request_sha256':sha_file(path),
                 'final_sha256':sha_file(finalpath),'source_binding_matches':final['source_snapshot_sha256']==checked['source_snapshot_sha256'],
