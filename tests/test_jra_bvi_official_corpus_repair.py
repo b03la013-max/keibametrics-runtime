@@ -13,7 +13,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
-from jra_pedigree_corpus import (_clean_runs, _source_horses_from_verified_artifact,\n                                 _harvest_might_match_target, build_corpus)
+from jra_pedigree_corpus import (
+    _clean_runs, _source_horses_from_verified_artifact,
+    _harvest_might_match_target, build_corpus,
+)
 
 
 def run(*, weight=478, when="2026-09-22", surface="ダ"):
