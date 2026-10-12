@@ -1384,6 +1384,10 @@ def main() -> int:
     ap.add_argument("--run-id", default=os.environ.get("GITHUB_RUN_ID") or "manual")
     ap.add_argument("--github-sha", default=os.environ.get("GITHUB_SHA"))
     ap.add_argument("--plan-only", action="store_true")
+    ap.add_argument("--aki-paper-replay", action="store_true",
+                    help="Explicit LOCAL research replay; never Production or pre-race completion")
+    ap.add_argument("--frozen-source", help="Existing canonical signed SOURCE for AKI PAPER replay")
+    ap.add_argument("--replay-result", help="Existing signed official RESULT for optional PAPER postresult")
     ap.add_argument("--phase", choices=["SOURCE", "RESULT"])
     ap.add_argument("--resume-official-result", action="store_true")
     ap.add_argument("--result-wait-seconds", type=int, default=0)
@@ -1391,6 +1395,42 @@ def main() -> int:
     args = ap.parse_args()
 
     intent = _load(args.intent)
+    if args.aki_paper_replay:
+        try:
+            if intent.get("family_id") != "LOCAL" or not args.frozen_source:
+                raise FormalOrchestrationError("LOCAL_AKI_REPLAY_SIGNED_SOURCE_REQUIRED")
+            if args.phase or args.resume_official_result or args.plan_only:
+                raise FormalOrchestrationError("LOCAL_AKI_REPLAY_MODE_CONFLICT")
+            source_path = pathlib.Path(args.frozen_source).resolve()
+            if not source_path.is_relative_to((ROOT / "runtime/executions").resolve()):
+                raise FormalOrchestrationError("LOCAL_AKI_REPLAY_CANONICAL_SOURCE_PATH_REQUIRED")
+            _authority_path, authority = load_authority()
+            if "CURRENT-AUTHORITY" not in str(authority.get("status")):
+                raise FormalOrchestrationError("LOCAL_AKI_REPLAY_CURRENT_AUTHORITY_REQUIRED")
+            sys.path.insert(0,str(ROOT))
+            from tools.local_aki_external_acceptance import run as run_paper
+            accepted = run_paper(args.intent,str(source_path),"evidence/local_aki_columns_20261012/external")
+            postresult = None
+            if args.replay_result:
+                result_path = pathlib.Path(args.replay_result).resolve()
+                if not result_path.is_relative_to((ROOT / "runtime/executions").resolve()):
+                    raise FormalOrchestrationError("LOCAL_AKI_REPLAY_CANONICAL_RESULT_PATH_REQUIRED")
+                from tools.local_aki_external_postresult import run as review_paper
+                postresult = review_paper(str(ROOT / accepted["path"] / "acceptance.json"),str(result_path))
+            report = {"status":"LOCAL_AKI_SINGLE_ENTRY_REPLAY_PAPER_PASS",
+                      "profile":current_single_entry_profile(),"entry_run_id":args.run_id,
+                      "current_authority_manifest":authority["manifest_id"],
+                      "execution_id":accepted["execution_id"],"external_acceptance":accepted,
+                      "postresult_acceptance":postresult,"unknown_future_oos_count":0,
+                      "production_formal_completion":False,"purchase_authority":False,
+                      "completion_scope":"REPLAY_PAPER_COMPANION / VERIFIED_CACHED_RECEIPTS_MAY_RESUME"}
+            _write(pathlib.Path(args.output),report)
+            print("KM_FORMAL_SINGLE_ENTRY_RESULT=" + json.dumps(report,ensure_ascii=False))
+            return 0
+        except (FormalOrchestrationError,ValueError,RuntimeError) as exc:
+            _write(pathlib.Path(args.output),{"status":"LOCAL_AKI_REPLAY_FAIL_CLOSED",
+                "code":str(exc),"production_formal_completion":False,"purchase_authority":False})
+            return 2
     if args.phase:
         intent["execution_phase"] = args.phase
     runtime_out = DEFAULT_RUNTIME_OUT

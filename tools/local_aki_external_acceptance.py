@@ -35,7 +35,33 @@ def run(intent_path, source_path, out_root, reuse_krs_from=None):
     out = Path(out_root).resolve() / req["race_id"] / digest[:16]
     out.mkdir(parents=True, exist_ok=True)
     if (out / "acceptance.json").exists():
-        return json.loads((out / "acceptance.json").read_text())
+        # A success JSON is not sufficient for reuse: reverify signatures,
+        # SOURCE-derived numerics/selection and actual transport dependencies.
+        a = json.loads((out / "acceptance.json").read_text())
+        attestation = json.loads((ROOT / "evidence/local_aki_columns_20261012/destination_verification.json").read_text())
+        if attestation["endpoint"] != endpoint:
+            raise RuntimeError("CACHED_DESTINATION_MISMATCH")
+        key = Ed25519PublicKey.from_public_bytes(base64.b64decode(attestation["health"]["receipt_public_key_b64"]))
+        envelopes = [source] + [json.loads((out / name).read_text()) for name in
+                    ("pre_krs_receipt.json", "krs_receipt.json", "final_receipt.json")]
+        for e in envelopes:
+            raw = json.dumps(e["receipt"],ensure_ascii=False,sort_keys=True,separators=(",", ":")).encode()
+            key.verify(base64.b64decode(e["signature"]),raw)
+            if (sha(e["artifact"]) != e["receipt"]["artifact_sha256"]
+                    or hashlib.sha256(raw).hexdigest() != e["receipt_sha256"]
+                    or e["receipt"]["race_id"] != req["race_id"]):
+                raise RuntimeError("CACHED_RECEIPT_BINDING_INVALID")
+        original = dict(req,source_snapshot_sha256=source["artifact"]["source_snapshot_sha256"])
+        independent = materialize_production(source["artifact"],original,original["required_indices"])
+        selected = json.loads((out / "selection.json").read_text())
+        verify(independent,source["artifact"],selected)
+        inp = json.loads((out / "krs_input.json").read_text())
+        if (sha(inp) != envelopes[1]["artifact"]["input_sha256"]
+                or sha(inp) != envelopes[2]["artifact"]["input_sha256"]
+                or envelopes[3]["artifact"]["final_prediction_package"]["aki_selection"] != selected
+                or a["final_receipt_sha256"] != envelopes[3]["receipt_sha256"]):
+            raise RuntimeError("CACHED_INPUT_OR_FINAL_MISMATCH")
+        return a
     def save(name, obj):
         path = out / (name + ".json")
         text = json.dumps(obj, ensure_ascii=False, indent=2) + "\n"
