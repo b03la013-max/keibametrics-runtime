@@ -144,3 +144,22 @@ def test_internal_handoff_failure_never_reports_formal_route():
     c = classify_production_blockers(report, owner_status={'authorized': True})
     assert c['first_actual_blocked_stage'] == 'PRODUCTION_FORMAL_HANDOFF'
     assert c['terminal_route'] == ROUTE_FAIL_CLOSED
+
+
+def test_aki_no_bet_closes_result_learning_without_pfs_credit():
+    intent, report = inputs()
+    terminal = build(intent, report)
+    from jra_no_bet_postresult_learning import build_no_bet_learning, _hash
+    result = {'official': True, 'result_derived': True,
+              'runners': [{'runner_id': '2', 'finish': 1},
+                          {'runner_id': '3', 'finish': 2},
+                          {'runner_id': '1', 'finish': 3}]}
+    result['sha256'] = _hash(result)
+    result.update(race_no=5, source_snapshot_sha256='d'*64)
+    learning = build_no_bet_learning(terminal, result, race_no=5,
+        acquired_at='2026-10-11T10:15:00+09:00', result_source_snapshot_sha256='d'*64,
+        official_capture_verified=True)
+    assert learning['official_top3'] == ['2', '3', '1']
+    assert learning['investment'] == learning['payout'] == 0 and learning['pfs'] is None
+    assert learning['learning_class'] == 'AKI_POSITIVE_EVIDENCE_AND_OPPORTUNITY_COST_ONLY'
+    assert not learning['eligible_for_production_prediction_kpi']

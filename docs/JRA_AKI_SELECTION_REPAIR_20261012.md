@@ -12,4 +12,4 @@ R50、AKI Runtime/Compiler、閾値、mapping、KRS Physics、MEC、Capitalは�
 
 京都5RのRecovery Workflowは原Signed SOURCEのEd25519/OIDCを検証し、承認済みProduction数値を再計算する。新しい決定の作成時刻がCutoffを超えれば`HISTORICAL_DIAGNOSTIC`とし、事前FINALやLIVE OOSへ遡及しない。原Exact Gapや旧署名Artifactは書き換えない。
 
-検証：新規11テストで空列・単頭禁止・不正proof/source/ledger/authority・成功例のNO_BET化拒否・非ゼロ投資・時点違反・実京都5R SOURCE再現・未知内部エラーを確認。関連するAKI、Handoff、Classifier、NO_BET、Learning、Autopilot、Maturity Bridgeの回帰テストも実行する。未知未来の予測性能を実証する変更ではない。
+検証：新規12テストで空列・単頭禁止・不正proof/source/ledger/authority・成功例のNO_BET化拒否・非ゼロ投資・時点違反・実京都5R SOURCE再現・未知内部エラー・ゼロ投資の結果後Learningを確認。関連するAKI、Handoff、Classifier、NO_BET、Learning、Autopilot、Maturity Bridgeの回帰テストも実行する。未知未来の予測性能を実証する変更ではない。
