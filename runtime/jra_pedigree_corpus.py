@@ -421,7 +421,28 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
         for h in summary["horses"]:
             add(h, "SIGNED_SOURCE")
 
-    for path in sorted(Path(root).glob("runtime/pedigree_corpus/*.json")):
+    harvest_paths = [p for p in sorted(Path(root).glob("runtime/pedigree_corpus/*.json"))
+                     if _harvest_might_match_target(p, required_sires=required_sires,
+                                                  required_damsires=required_damsires)]
+    # Verification is independent per immutable artifact. Parallelize only
+    # verification; merge in canonical path order so collision semantics and
+    # every sample/threshold/hash remain identical to the sequential path.
+    import time, sys
+    from concurrent.futures import ThreadPoolExecutor
+    started = time.monotonic()
+    workers = 4 if (attestation_verifier is None and len(harvest_paths) > 1
+                    and (os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN'))) else 1
+    print(f'PEDIGREE_VERIFY_START artifacts={len(harvest_paths)} workers={workers}', file=sys.stderr, flush=True)
+    def verify_harvest(path):
+        return _verified_harvest(path, not_after=cutoff, attestation_verifier=attestation_verifier)
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        verified_harvests = list(pool.map(verify_harvest, harvest_paths))
+    finally:
+        pool.shutdown(wait=True)
+    print(f'PEDIGREE_VERIFY_DONE artifacts={len(harvest_paths)} seconds={time.monotonic()-started:.3f}',
+          file=sys.stderr, flush=True)
+    for path, hv in zip(harvest_paths, verified_harvests):
         # Most archive batches have no offspring of the specific target sire
         # or damsire. Do not perform a networked GitHub OIDC verification for
         # those files; a negative hint never contributes to the corpus.
@@ -430,8 +451,6 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                 path, required_sires=required_sires,
                 required_damsires=required_damsires):
             continue
-        hv = _verified_harvest(path, not_after=cutoff,
-                               attestation_verifier=attestation_verifier)
         if not hv:
             rejected += 1
             continue

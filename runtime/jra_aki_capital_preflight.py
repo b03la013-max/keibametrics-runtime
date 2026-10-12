@@ -142,7 +142,7 @@ def _verify_v21_ticket_binding(request, mec, *, source, current_authority, root)
         raise AKICapitalError('OFFICIAL_AKI_TRUST_CONTEXT_REQUIRED')
     if request.get('aki_calculation_requirement') != 'OFFICIAL_V2_1':
         raise AKICapitalError('OFFICIAL_AKI_REQUIREMENT_MISSING')
-    from jra_aki_v21 import apply_authorized_v21
+    from jra_aki_dispatch import apply_authorized_v21
     independently_rebuilt = apply_authorized_v21(request, source, current_authority, root=root)
     for field in ('official_aki_package', 'official_aki_verification', 'aki_compiler_receipt', 'aki_information_gate', 'aki_column_selection',
                   'role_registry', 'pair_dispositions', 'third_dispositions', 'purchased_heads'):
