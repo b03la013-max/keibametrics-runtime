@@ -1,8 +1,8 @@
 # LOCAL AKI列選定 — 実装・検証報告（2026-10-12）
 
-**判定：実装候補・Replay検証済み／外部実行未成立／Production昇格不可。**
+**更新判定：川崎11Rの外部Replay/PAPERはRESULT・Reflection・Learningまで成立。全場完成・Production昇格は未成立。**
 
-これは完成したProduction機構の報告ではない。新規の実KRS、署名FINAL、未知未来OOS、全14場の実証は未成立。実購入権限は常にfalse。
+これは完成したProduction機構の報告ではない。ユーザー承認後、川崎11Rで実KRS20,000回・Signed FINAL/RESULT・Reflection/Learningが成立した。詳細は `docs/LOCAL_AKI_KAW_R11_EXTERNAL_VERIFICATION_20261012.md`。未知未来OOSと全14場実証は未成立。実購入権限は常にfalse。
 
 ## 正本の解決
 
@@ -71,7 +71,7 @@ SOURCE原文のArtifact hash、Receipt hash、Ed25519署名をローカルで検
 
 `tools/local_aki_external_acceptance.py`は実際の川崎11R Signed SOURCEを使い、既存LOCALの `/verify`→`/pre-krs`→`/krs/execute`（SIM-HIGH20,000）→`/final`→`/verify`へ送る具体的なReplay/PAPER試験。候補全指数と券面を保存し、入力hash、署名Artifact hash、Signed FINAL round-tripを照合する。実購入は送らず、実FINALの購入券は空。既存Production Receiptは上書きしない。内容hash別の保存先で再開する。
 
-外部試験は自動承認審査が「SOURCE由来情報を当該Railway宛先へ送る承認未確認」と拒否した。宛先がR51とGatewayに一致し、実Healthが凍結配備束と一致し、公開鍵が既存Signed SOURCEの鍵と一致することを別のread-only検査で確認したが、再審査でも送信は拒否された。`destination_verification.json`に確認結果を保存。外部実行ID・新実KRS回数・新署名FINALは**なし／0／未成立**。実行コードの記載は実行証明ではない。
+承認前の外部試験は自動承認審査が「SOURCE由来情報を当該Railway宛先へ送る承認未確認」と拒否した。宛先がR51とGatewayに一致し、実Healthが凍結配備束と一致し、公開鍵が既存Signed SOURCEの鍵と一致することを別のread-only検査で確認したが、再審査でも送信は拒否された。`destination_verification.json`に確認結果を保存。承認後、川崎11Rでは `LOCAL-AKI-REPLAY-39f06c07ee208cf9`／20,000回／Signed FINAL・RESULT成立へ更新。他場のSOURCE送信は審査が承認範囲外と判定し拒否。実行コードの記載は実行証明ではない。
 
 ## CIで見つかった既存回帰の修正
 
@@ -81,6 +81,6 @@ PR CIの2系列は、旧大井10月9日7戦のテストが全台帳を走査し�
 
 137 tests PASS（新規18＋関連119）。小頭数3・6、多頭数12・18、Parity、堅い得点構造と高リスク幅、軸不安、情報不足、欠測、取消Universe、重複、非有限値、SOURCE不一致、予算分離、SOURCEからの独立再計算、既存Worker／Git競合の回帰を含む。
 
-残条件：外部送信の明示承認→既存正式入口で候補Signed SOURCE→KRS→MEC→Capital→FINAL→RESULT／Settlement／Reflection／Learningの通し実証、外部変動・堅決着補正mapping、実証されたPair/Third順序規則、39戦以外の欠落解消、公平券面比較、全14場の適用・場別検証、登録済み未来計画の継続実測。30戦到達は審査の開始条件にすぎず自動昇格しない。
+残条件：他LOCALレースの外部送信範囲の明示承認→既存正式入口で候補Signed SOURCE→KRS→MEC→Capital→FINAL→RESULT／Settlement／Reflection／Learningの通し実証、外部変動・堅決着補正mapping、実証されたPair/Third順序規則、39戦以外の欠落解消、公平券面比較、全14場の適用・場別検証、登録済み未来計画の継続実測。30戦到達は審査の開始条件にすぎず自動昇格しない。
 
 **現時点で「全地方競馬場で実装完成」「正式FINAL成立」「予測改善実証済み」とは報告しない。**

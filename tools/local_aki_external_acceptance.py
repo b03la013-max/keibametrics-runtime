@@ -23,12 +23,13 @@ from local_krs_input_builder_production import build as krs_input
 from krs_prediction_utility import build_krs_prediction_utility
 
 
-def run(intent_path, source_path, out_root):
+def run(intent_path, source_path, out_root, reuse_krs_from=None):
     req = json.loads(Path(intent_path).read_text())
     source = json.loads(Path(source_path).read_text())
     gateway = json.loads((ROOT / "profiles/current_execution_gateway.json").read_text())
     endpoint = gateway["families"]["LOCAL"]["external_endpoint"]
     digest = sha({"intent": req, "source_receipt": source["receipt_sha256"],
+                  "transport_schema_revision": "PAPER_FINAL_ROLE_REFLECTION_V2",
                   "implementation": Path(ROOT / "runtime/local_aki_columns.py").read_text(),
                   "policy": (ROOT / "profiles/local_aki_columns_20261012_R1.json").read_text()})
     out = Path(out_root).resolve() / req["race_id"] / digest[:16]
@@ -78,6 +79,14 @@ def run(intent_path, source_path, out_root):
     save("numerical_runners", q["runners"])
     selected = save("selection", build(q, art))
     save("pre_krs_recomputation", verify(q, art, selected))
+    # The standard Reflection reader consumes ranking/roles from the signed
+    # FPP. Keep these projections identical to the frozen AKI columns, rather
+    # than leaving only a nested selection that the reader cannot interpret.
+    ranking = [str(r["runner_id"]) for r in sorted(q["runners"],
+        key=lambda r: (-r["canonical_components"]["TPI-L"]["value"], int(r["runner_id"])))]
+    roles = {r: [c for c, v in selected["columns"].items() if r in v["selected"]] for r in ranking}
+    q["static_prediction"] = {"ranking": ranking, "roles": roles, "profile": selected["profile"],
+                               "production_authority": False, "selection_sha256": selected["sha256"]}
     # The enacted KRS proxy remains in force; numerical-to-KRS authority is
     # not granted by this PAPER experiment. Only candidate role labels change.
     q["local_krs_bridge"] = proxy(q, art)
@@ -99,9 +108,17 @@ def run(intent_path, source_path, out_root):
                "static_prediction_frozen": True, "krs_input_data": inp}, "pre_krs_receipt")
     signed(pre, "pre_krs", "PASS")
     # High uncertainty acceptance uses SIM-HIGH; no invented local run counts.
-    run_receipt = call("/krs/execute", {"family_id": "LOCAL", "race_id": req["race_id"],
-                        "krs_input_data": inp, "run_count": count, "seed": int(req.get("seed", 1))},
-                       "krs_receipt", 600)
+    if reuse_krs_from:
+        old = json.loads(Path(reuse_krs_from).read_text())
+        if (old["artifact"]["input_sha256"] != sha(inp)
+                or old["artifact"]["actual_run_count"] < count):
+            raise RuntimeError("REUSE_KRS_DEPENDENCY_MISMATCH")
+        signed(old, "reused_krs", "EXECUTED")
+        run_receipt = save("krs_receipt", old)
+    else:
+        run_receipt = call("/krs/execute", {"family_id": "LOCAL", "race_id": req["race_id"],
+                            "krs_input_data": inp, "run_count": count, "seed": int(req.get("seed", 1))},
+                           "krs_receipt", 600)
     signed(run_receipt, "krs", "EXECUTED")
     if run_receipt["artifact"]["actual_run_count"] < count:
         raise RuntimeError("KRS_RUN_SHORT")
@@ -114,7 +131,9 @@ def run(intent_path, source_path, out_root):
     fpp = {"profile": selected["profile"], "temporal_mode": "REPLAY", "production_authority": False,
            "purchase_authority": False, "validation_status": "UNVALIDATED_RULE_BASED",
            "aki_selection": selected, "paper_tickets": d["paper_tickets"],
-           "krs_utility": utility, "source_snapshot_sha256": art["source_snapshot_sha256"]}
+           "ranking": ranking, "roles": roles,
+           "krs_prediction_utility_shadow": utility,
+           "source_snapshot_sha256": art["source_snapshot_sha256"]}
     trace = {"fpp_sha256": sha(fpp), "mec_sha256": d["mec"]["sha256"],
              "candidate_count": d["mec"]["ticket_count"], "selected_count": 0,
              "capital_decision_sha256": d["capital"]["sha256"],
@@ -124,12 +143,17 @@ def run(intent_path, source_path, out_root):
     stages = [{"stage": x, "timestamp": now, "temporal_mode": "REPLAY"} for x in
               ("SOURCE_FREEZE", "RUNNER_UNIVERSE", "NUMERICAL_MATERIALIZATION", "INDEX_PROVENANCE",
                "STATIC_FREEZE", "PRE_KRS", "KRS", "KRS_UTILITY", "MEC", "CAPITAL", "FINAL_TICKET_FREEZE")]
-    payload = save("final_payload", {"family_id": "LOCAL", "race_id": req["race_id"],
+    proposed_payload = {"family_id": "LOCAL", "race_id": req["race_id"],
                "source_receipt": source, "krs_run_receipt": run_receipt, "final_prediction_package": fpp,
                "final_ticket": {"finalized": True, "no_bet": True, "total_investment": 0,
                                 "tickets": [], "frozen_at": now},
                "minimum_efficient_coverage": d["mec"], "capital_policy_decision": d["capital"],
-               "ticket_transport_trace": trace, "execution_stage_manifest": stages, "final_freeze_timestamp": now})
+               "ticket_transport_trace": trace, "execution_stage_manifest": stages, "final_freeze_timestamp": now}
+    # A retry preserves the original FINAL freeze timestamp and exact payload.
+    existing_payload = out / "final_payload.json"
+    payload = json.loads(existing_payload.read_text()) if existing_payload.exists() else save("final_payload", proposed_payload)
+    if (payload["final_prediction_package"] != fpp or payload["ticket_transport_trace"] != trace):
+        raise RuntimeError("FINAL_RESUME_DEPENDENCY_MISMATCH")
     final = call("/final", payload, "final_receipt", 180)
     signed(final, "final", "PASS")
     final_art = final["artifact"]
@@ -148,5 +172,6 @@ if __name__ == "__main__":
     p.add_argument("--intent", required=True)
     p.add_argument("--source", required=True)
     p.add_argument("--out", default="evidence/local_aki_columns_20261012/external")
+    p.add_argument("--reuse-krs-from")
     a = p.parse_args()
-    print(json.dumps(run(a.intent, a.source, a.out), ensure_ascii=False))
+    print(json.dumps(run(a.intent, a.source, a.out, a.reuse_krs_from), ensure_ascii=False))
