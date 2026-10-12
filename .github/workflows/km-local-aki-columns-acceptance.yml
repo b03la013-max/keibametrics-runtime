@@ -10,6 +10,11 @@ on:
       - 'tools/local_aki_external_postresult.py'
       - 'tests/test_local_aki_external_receipts.py'
       - 'evidence/local_aki_columns_20261012/kaw_r11_external_receipts.tar.gz'
+      - 'evidence/local_aki_columns_20261012/**'
+      - 'runtime/formal_execution_orchestrator.py'
+      - 'tools/local_aki_matched_comparison.py'
+      - 'tools/local_aki_venue_readiness.py'
+      - 'tests/test_local_aki_matched_comparison.py'
       - '.github/workflows/km-local-aki-columns-acceptance.yml'
   workflow_dispatch:
 permissions:
@@ -29,6 +34,7 @@ jobs:
           python -m pytest -q
           tests/test_local_aki_columns.py
           tests/test_local_aki_external_receipts.py
+          tests/test_local_aki_matched_comparison.py
           tests/test_local_production_numerical_v1.py
           tests/test_local_production_numerical_closure.py
           tests/test_aki_adaptive_purchase_shadow.py

@@ -12,6 +12,9 @@ import sys
 import urllib.request
 import base64
 import hashlib
+import os
+import fcntl
+import tarfile
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +26,47 @@ from local_krs_input_builder_production import build as krs_input
 from krs_prediction_utility import build_krs_prediction_utility
 
 
-def run(intent_path, source_path, out_root, reuse_krs_from=None):
+def restore_archived_receipts(out, race_id, digest):
+    """Resume committed hash-verified archives without another KRS dispatch."""
+    evidence=ROOT/"evidence/local_aki_columns_20261012"
+    prefix="external/"+race_id+"/"+digest[:16]+"/"
+    candidates=[("multi_venue_manifest.json","multi_venue_external_receipts.tar.gz"),
+                ("external_acceptance_manifest.json","kaw_r11_external_receipts.tar.gz"),
+                ("fnb_r06_postresult_manifest.json","fnb_r06_postresult_receipts.tar.gz")]
+    for metadata, archive_name in candidates:
+        mp=evidence/metadata;ap=evidence/archive_name
+        if not mp.exists() or not ap.exists():continue
+        manifest=json.loads(mp.read_text());flat=False;hashes={}
+        if "cases" in manifest:
+            case=next((c for c in manifest["cases"] if c["prefix"]+"/"==prefix),None)
+            if not case:continue
+            hashes={prefix+n:h for n,h in case["files"].items()}
+        elif "artifact_files" in manifest:
+            hashes={f["path"]:f["sha256"] for f in manifest["artifact_files"] if f["path"].startswith(prefix)}
+            if not hashes:continue
+        else:
+            if (manifest["acceptance"]["race_id"]!=race_id or
+                    not manifest["acceptance"]["execution_id"].endswith(digest[:16])):continue
+            hashes=manifest["files"];flat=True
+        if hashlib.sha256(ap.read_bytes()).hexdigest()!=manifest["archive_sha256"]:
+            raise RuntimeError("ARCHIVED_RECEIPT_CONTAINER_HASH_MISMATCH")
+        with tarfile.open(ap,"r:gz") as archive:
+            for member in archive.getmembers():
+                if member.name not in hashes:continue
+                name=member.name if flat else member.name[len(prefix):]
+                if (not member.isfile() or Path(name).name!=name or not name.endswith(".json")
+                        or member.size>32*1024*1024):raise RuntimeError("ARCHIVED_RECEIPT_MEMBER_INVALID")
+                raw=archive.extractfile(member).read()
+                if hashlib.sha256(raw).hexdigest()!=hashes[member.name]:
+                    raise RuntimeError("ARCHIVED_RECEIPT_FILE_HASH_MISMATCH")
+                dest=out/name
+                if dest.exists():
+                    if dest.read_bytes()!=raw:raise RuntimeError("ARCHIVED_RECEIPT_CHECKPOINT_CONFLICT:"+name)
+                    continue
+                temp=dest.with_suffix(".json.tmp");temp.write_bytes(raw);temp.replace(dest)
+
+
+def _run(intent_path, source_path, out_root, reuse_krs_from=None):
     req = json.loads(Path(intent_path).read_text())
     source = json.loads(Path(source_path).read_text())
     gateway = json.loads((ROOT / "profiles/current_execution_gateway.json").read_text())
@@ -34,6 +77,10 @@ def run(intent_path, source_path, out_root, reuse_krs_from=None):
                   "policy": (ROOT / "profiles/local_aki_columns_20261012_R1.json").read_text()})
     out = Path(out_root).resolve() / req["race_id"] / digest[:16]
     out.mkdir(parents=True, exist_ok=True)
+    restore_archived_receipts(out,req["race_id"],digest)
+    if (out/"acceptance.json").exists() and not (out/"signed_source_input.json").exists():
+        temporary=out/"signed_source_input.json.tmp"
+        temporary.write_bytes(Path(source_path).read_bytes());temporary.replace(out/"signed_source_input.json")
     if (out / "acceptance.json").exists():
         # A success JSON is not sufficient for reuse: reverify signatures,
         # SOURCE-derived numerics/selection and actual transport dependencies.
@@ -44,12 +91,15 @@ def run(intent_path, source_path, out_root, reuse_krs_from=None):
         key = Ed25519PublicKey.from_public_bytes(base64.b64decode(attestation["health"]["receipt_public_key_b64"]))
         envelopes = [source] + [json.loads((out / name).read_text()) for name in
                     ("pre_krs_receipt.json", "krs_receipt.json", "final_receipt.json")]
-        for e in envelopes:
+        for e, phase in zip(envelopes, ("SOURCE", "PRE_KRS", "KRS_RUN", "FINAL")):
             raw = json.dumps(e["receipt"],ensure_ascii=False,sort_keys=True,separators=(",", ":")).encode()
             key.verify(base64.b64decode(e["signature"]),raw)
             if (sha(e["artifact"]) != e["receipt"]["artifact_sha256"]
                     or hashlib.sha256(raw).hexdigest() != e["receipt_sha256"]
-                    or e["receipt"]["race_id"] != req["race_id"]):
+                    or e["receipt"]["race_id"] != req["race_id"]
+                    or e["receipt"]["phase"] != phase
+                    or e["receipt"]["status"] != {"SOURCE":"SOURCE_FROZEN", "PRE_KRS":"PASS",
+                                                     "KRS_RUN":"EXECUTED", "FINAL":"PASS"}[phase]):
                 raise RuntimeError("CACHED_RECEIPT_BINDING_INVALID")
         original = dict(req,source_snapshot_sha256=source["artifact"]["source_snapshot_sha256"])
         independent = materialize_production(source["artifact"],original,original["required_indices"])
@@ -67,13 +117,23 @@ def run(intent_path, source_path, out_root, reuse_krs_from=None):
         text = json.dumps(obj, ensure_ascii=False, indent=2) + "\n"
         if path.exists() and path.read_text() != text:
             raise RuntimeError("IMMUTABLE_CHECKPOINT_CONFLICT:" + name)
-        path.write_text(text)
+        temporary = path.with_suffix(".json.tmp")
+        with temporary.open("w") as handle:
+            handle.write(text); handle.flush(); os.fsync(handle.fileno())
+        temporary.replace(path)
         return obj
     def call(path, payload, name, timeout=60):
         checkpoint = out / (name + ".json")
         # Cache only signed responses; all dependency hashes enter out's key.
         if checkpoint.exists():
             return json.loads(checkpoint.read_text())
+        if path == "/krs/execute":
+            dispatched = out / "krs_dispatch_state.json"
+            if dispatched.exists():
+                raise RuntimeError("EXTERNAL_KRS_INDETERMINATE / DISPATCHED_WITHOUT_SAVED_RECEIPT / NO_AUTOMATIC_RERUN")
+            save("krs_dispatch_state", {"status":"DISPATCHED / WAITING_EXTERNAL_RECEIPT",
+                 "request_sha256":sha(payload),"dispatched_at":dt.datetime.now(dt.timezone.utc).isoformat(),
+                 "race_id":req["race_id"],"automatic_rerun":False})
         data = json.dumps(payload, ensure_ascii=False).encode()
         request = urllib.request.Request(endpoint + path, data=data,
                                          headers={"Content-Type": "application/json"})
@@ -191,6 +251,31 @@ def run(intent_path, source_path, out_root, reuse_krs_from=None):
                "final_receipt_sha256": final["receipt_sha256"], "selection_sha256": selected["sha256"],
                "paper_ticket_count": d["mec"]["ticket_count"], "capital_decision": d["capital"]["decision"],
                "purchase_authority": False, "unknown_future_oos_count": 0, "path": str(out.relative_to(ROOT))})
+
+
+def run(intent_path, source_path, out_root, reuse_krs_from=None):
+    request=json.loads(Path(intent_path).read_text())
+    source=json.loads(Path(source_path).read_text())
+    token=sha({"race_id":request["race_id"],"source_receipt":source["receipt_sha256"]})
+    locks=Path(out_root).resolve()/"worker_locks";locks.mkdir(parents=True,exist_ok=True)
+    with (locks/(token+".lock")).open("a+") as lock:
+        try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("EXTERNAL_EXECUTION_WAIT / SAME_RACE_SOURCE_WORKER_ACTIVE") from None
+        progress=locks/(token+".json")
+        def checkpoint(value):
+            temp=progress.with_suffix(".tmp")
+            temp.write_text(json.dumps(value,ensure_ascii=False,indent=2)+"\n");temp.replace(progress)
+        checkpoint({"status":"RUNNING_EXTERNAL","race_id":request["race_id"],
+                    "updated_at":dt.datetime.now(dt.timezone.utc).isoformat(),"source_receipt_sha256":source["receipt_sha256"]})
+        try:
+            accepted=_run(intent_path,source_path,out_root,reuse_krs_from)
+            checkpoint({"status":"VERIFIED_FINAL_SAVED","acceptance":accepted})
+            return accepted
+        except Exception as exc:
+            checkpoint({"status":"WAITING_EXTERNAL_RECEIPT" if "INDETERMINATE" in str(exc) else "FAILED_EXPLICIT",
+                        "race_id":request["race_id"],"code":str(exc),"success":False})
+            raise
 
 
 if __name__ == "__main__":

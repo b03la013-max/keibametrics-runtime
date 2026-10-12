@@ -1,0 +1,103 @@
+{
+  "status": "EXTERNAL_MANIFEST_CONTRACT_PASS",
+  "request": {
+    "family_id": "LOCAL",
+    "race_id": "LOCAL-AKI-MANIFEST-CAPABILITY-OHI-20261013",
+    "venue_id": "OHI",
+    "race_date": "2026-10-13",
+    "race_no": 1,
+    "prediction_cutoff": "2026-10-13T01:00:00+09:00",
+    "include_same_day_results": true,
+    "include_odds": true,
+    "require_active_runner_universe": true
+  },
+  "response": {
+    "manifest_profile": "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923",
+    "family_id": "LOCAL",
+    "race_id": "LOCAL-AKI-MANIFEST-CAPABILITY-OHI-20261013",
+    "venue_id": "OHI",
+    "venue_name": "大井",
+    "nar_baba_code": "20",
+    "race_date": "2026/10/13",
+    "race_no": 1,
+    "prediction_cutoff": "2026-10-13T01:00:00+09:00",
+    "sources": [
+      {
+        "source_id": "NAR-OHI-20261013-R01-RACE-CARD",
+        "source_class": "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT",
+        "authority": "NAR_OFFICIAL",
+        "priority": 100,
+        "official": true,
+        "required": true,
+        "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/DebaTable?k_babaCode=20&k_raceDate=2026%2F10%2F13&k_raceNo=1",
+        "max_bytes": 900000,
+        "extract": [
+          {
+            "field": "race_card_tables",
+            "type": "html_tables",
+            "required": true
+          },
+          {
+            "field": "weather",
+            "type": "regex",
+            "scope": "html_text",
+            "pattern": "天候[:：]\\s*([^\\s]+)",
+            "group": 1,
+            "cast": "str",
+            "required": false
+          },
+          {
+            "field": "track_condition",
+            "type": "regex",
+            "scope": "html_text",
+            "pattern": "馬場[:：]\\s*([^\\s]+)",
+            "group": 1,
+            "cast": "str",
+            "required": false
+          },
+          {
+            "field": "start_time",
+            "type": "regex",
+            "scope": "html_text",
+            "pattern": "(\\d{1,2}:\\d{2})\\s*発走",
+            "group": 1,
+            "cast": "str",
+            "required": false
+          }
+        ]
+      },
+      {
+        "source_id": "NAR-OHI-20261013-R01-ODDS-TANFUKU",
+        "source_class": "OFFICIAL_ACTIVE_BETTING_UNIVERSE",
+        "authority": "NAR_OFFICIAL",
+        "priority": 100,
+        "official": true,
+        "required": true,
+        "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_babaCode=20&k_raceDate=2026%2F10%2F13&k_raceNo=1",
+        "max_bytes": 600000,
+        "extract": [
+          {
+            "field": "odds_tables",
+            "type": "html_tables",
+            "required": false
+          }
+        ]
+      }
+    ],
+    "source_policy": {
+      "race_card_required": true,
+      "same_day_results": "OPTIONAL_AVAILABLE_PREVIOUS_RACES",
+      "odds": "REQUIRED_FOR_ACTIVE_RUNNER_UNIVERSE",
+      "runner_universe_model": "DECLARED_RACE_CARD_PLUS_ACTIVE_OFFICIAL_BETTING_UNIVERSE",
+      "body_weight_and_change_info": "CAPTURED_IN_RACE_CARD_RAW_AND_TABLES",
+      "track_weather_current_state": "CAPTURED_FROM_RACE_CARD_WHEN_PUBLISHED",
+      "official_entity_profiles": "AUTO_OPTIONAL_HORSE_RIDER_TRAINER_DATAROOM",
+      "same_day_position_bias": "DERIVED_SHADOW_FROM_PREVIOUS_OFFICIAL_RESULTS",
+      "auxiliary_production_authority": false
+    }
+  },
+  "source_acquired": false,
+  "race_existence_verified": false,
+  "prestart_source_acceptance": false,
+  "unknown_future_oos_count": 0
+}

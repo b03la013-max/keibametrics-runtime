@@ -41,7 +41,8 @@ def run(acceptance_path, original_result_path):
         if (sha(envelope["artifact"]) != envelope["receipt"]["artifact_sha256"]
                 or hashlib.sha256(raw).hexdigest() != envelope["receipt_sha256"]
                 or envelope["receipt"]["race_id"] != acceptance["race_id"]
-                or envelope["receipt"]["phase"] != phase or envelope["receipt"]["status"] != "PASS"):
+                or envelope["receipt"]["phase"] != phase
+                or envelope["receipt"]["status"] != ("SOURCE_FROZEN" if phase == "SOURCE" else "PASS")):
             raise RuntimeError("POSTRESULT_RECEIPT_BINDING_INVALID")
     def call(path, payload, name):
         p = directory / (name + ".json")
@@ -51,10 +52,36 @@ def run(acceptance_path, original_result_path):
         with urllib.request.urlopen(request,timeout=120) as response:
             return save(name,json.load(response))
     signed(final, "FINAL")
-    signed(original, "RESULT")
-    save("original_official_result_receipt", original)
-    # Use only official facts in the verified prior receipt, not caller guesses.
-    official = original["artifact"]["official_result"]
+    phase = original["receipt"]["phase"]
+    if phase == "SOURCE":
+        signed(original, "SOURCE")
+        from formal_execution_orchestrator import parse_official_result_snapshot
+        from local_physical.nar_source_manifest import _result_source, LOCAL_BABA_CODES
+        artifact = original["artifact"]
+        context = artifact["source_race_context"]
+        expected = _result_source(context["venue_id"],LOCAL_BABA_CODES[context["venue_id"]],
+                                 context["race_date"].replace("-","/"),int(context["race_no"]))
+        sources = artifact["sources"]
+        if len(sources) != 1 or sources[0]["final_url"] != expected["url"]:
+            raise RuntimeError("OFFICIAL_RESULT_SOURCE_SCOPE_MISMATCH")
+        # Result-only raw acquisition is never reused as pre-start evidence.
+        saved_input = json.loads((directory / "signed_source_input.json").read_text())
+        frozen_context = saved_input["artifact"]["source_race_context"]
+        if any(str(context[k]).replace("/","-") != str(frozen_context[k]).replace("/","-")
+               for k in ("venue_id","race_date","race_no")):
+            raise RuntimeError("OFFICIAL_RESULT_FROZEN_RACE_MISMATCH")
+        runners = saved_input["artifact"]["active_runner_universe"]["runners"]
+        order, payouts = parse_official_result_snapshot(sources[0],context,[r["runner_id"] for r in runners])
+        official = {"finish_order":order,"payouts":payouts,"source":expected["url"],
+                    "official_result_verified":True,
+                    "official_result_verification_ref":expected["url"]+"#sha256="+sources[0]["raw_sha256"]}
+        available_at = sources[0]["fetched_at"]
+        save("official_result_source_receipt",original)
+    else:
+        signed(original, "RESULT")
+        save("original_official_result_receipt", original)
+        official = original["artifact"]["official_result"]
+        available_at = original["artifact"]["result_available_at"]
     fpp = final["artifact"]["final_prediction_package"]
     selected = fpp["aki_selection"]["columns"]
     for rid, roles in fpp["roles"].items():
@@ -62,7 +89,7 @@ def run(acceptance_path, original_result_path):
         if roles != expected: raise RuntimeError("FINAL_ROLE_PROJECTION_MISMATCH")
     payload = save("replay_result_payload", {
         "family_id":"LOCAL", "race_id":acceptance["race_id"], "final_receipt":final,
-        "official_result":official, "result_available_at":original["artifact"]["result_available_at"],
+        "official_result":official, "result_available_at":available_at,
         "settlement":{"status":"COMPLETE", "investment":0, "return":0, "actual_purchase":False},
         "pfs_authority":"REPLAY_ZERO_CAPITAL / NO_ACTUAL_PURCHASE / NOT_OOS",
         "krs_prediction_utility":fpp["krs_prediction_utility_shadow"]})
