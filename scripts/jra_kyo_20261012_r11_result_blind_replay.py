@@ -242,8 +242,22 @@ def main(out):
     }
     for k in ("jra_official_race_card_detail","jra_official_horse_history","jra_registered_common",
               "jra_official_same_day_results","jra_point_in_time_population_seed","jra_race_context",
-              "normalized_evidence","jma_weather_evidence"):
+              "normalized_evidence","jma_weather_evidence","source_race_context"):
         if live.get(k) is not None:source[k]=copy.deepcopy(live[k])
+    # Preserve the exact official DETAIL raw-byte binding, observed after the
+    # race (not an asserted pre-race SOURCE). The legacy Production evaluator
+    # rejects a parsed context if its raw snapshot is missing.
+    detail_orig=live.get("jra_official_race_card_detail") or {}
+    detail_snap_sha=detail_orig.get("source_snapshot_sha256")
+    post_detail_snaps=[x for x in (live.get("sources") or [])
+         if x.get("source_id")=="JRA-OFFICIAL-RACE-CARD-DETAIL"
+         and x.get("snapshot_sha256")==detail_snap_sha]
+    if len(post_detail_snaps)==1:
+        source["sources"].append(copy.deepcopy(post_detail_snaps[0]))
+        source["replay_provenance"]["post_start_detail_raw_bound"]=True
+        source["replay_provenance"]["post_start_detail_snapshot_sha256"]=detail_snap_sha
+    else:
+        source["replay_provenance"]["post_start_detail_raw_bound"]=False
     detail=sanitize_detail(source.get("jra_official_race_card_detail"))
     if detail:
         # Fail rather than associate a different race's horse history.
