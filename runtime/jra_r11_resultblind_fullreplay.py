@@ -169,7 +169,7 @@ def main():
              "temporal_mode":"POST-START-REPLAY","prediction_cutoff":CUTOFF.isoformat(),
              "scheduled_post_at":"2026-10-12T15:45:00+09:00","run_count":5000,"seed":2026101211,
              "acceptance_only":True,"oos_eligible":False,
-             "capital_policy":{"mode":"RECOMMENDATION_ONLY"},
+             # Family-wide user default (hard 10,000 JPY, PAPER if MEC exceeds) applies.
              "orchestration_ref":{"authority":"BASE44","execution_session_id":"github-kyo-r11-resultblind-replay",
              "session_nonce":RID+"-SOURCE-REPLAY", "created_at":now},
              "source_snapshot":{k:v for k,v in projection.items() if k!="source_snapshot_sha256"},
@@ -237,7 +237,7 @@ def main():
         validate_mec_plan(mec)
         capital=resolve_capital_policy(req,mec)
         status.update(mec_ticket_count=mec["ticket_count"],mec_required_capital_yen=mec["minimum_required_capital"],
-            capital_decision=capital.get("decision"),actual_purchase_status="UNVERIFIED / NOT_EXECUTED")
+            capital_decision=capital.get("decision"),capital_limit_yen=capital.get("capital_limit"),paper_only=capital.get("paper_only"),actual_purchase_status="UNVERIFIED / NOT_EXECUTED")
         status["completed"].append(phase)
         dump("07_mec_capital.json",{"utility":utility,"mec":mec,"capital":capital})
 
