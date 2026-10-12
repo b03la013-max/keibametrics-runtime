@@ -78,9 +78,24 @@ def test_higher_risk_widens_observed_columns_without_fixed_count(real):
     for r in q["runners"]:
         for i in ("W-AKI", "P2-AKI", "P3-AKI", "RSI"): r["canonical_components"][i]["value"] = 75
     high = build(q, s)
+    # A changed head universe can change structural exclusions in later
+    # columns. Compare breadth, not identical conditional membership.
     for c in ("W", "P2", "P3"):
-        assert set(low["columns"][c]["selected"]) <= set(high["columns"][c]["selected"])
+        assert len(low["columns"][c]["selected"]) <= len(high["columns"][c]["selected"])
     assert any(len(high["columns"][c]["selected"]) > len(low["columns"][c]["selected"]) for c in ("W", "P2", "P3"))
+
+
+def test_quiet_race_anchors_are_distinct_observed_roles(real):
+    q, s = real
+    for r in q["runners"]:
+        for i in ("W-AKI", "P2-AKI", "P3-AKI", "RSI"): r["canonical_components"][i]["value"] = 0
+        r["canonical_components"]["ASI"]["value"] = 100
+    x = build(q, s)
+    assert x["status"] == "PAPER"
+    selected = [x["columns"][c]["selected"] for c in ("W", "P2", "P3")]
+    assert all(len(c) == 1 for c in selected)
+    assert len({c[0] for c in selected}) == 3
+    assert decision(q, x)["mec"]["ticket_count"] == 2
 
 
 def test_axis_failure_is_no_bet_and_preserves_supported_head(real):

@@ -98,6 +98,15 @@ def build(request, source, *, policy=None):
 
     columns, diagnostics = {}, {}
     for c, values in scores.items():
+        # A sole W cannot finish second/third in its own path. Use the best
+        # eligible remaining role score as anchor, rather than leaving all
+        # three quiet-race columns on the same horse or adding a rank floor.
+        structural_exclusions = set()
+        if c != "W" and len(columns["W"]["selected"]) == 1:
+            structural_exclusions.update(columns["W"]["selected"])
+            if c == "P3" and len(columns["P2"]["selected"]) == 1:
+                structural_exclusions.update(columns["P2"]["selected"])
+        values = {r: v for r, v in values.items() if r not in structural_exclusions}
         if not values:
             columns[c] = {"main": [], "additional": [], "selected": []}
             diagnostics[c] = {"status": "NO_OBSERVED_ELIGIBLE_ROLE"}
@@ -124,6 +133,7 @@ def build(request, source, *, policy=None):
         columns[c] = {"main": main, "additional": additional, "selected": selected}
         diagnostics[c] = {"leader": leader, "risk": risk, "score_span": span,
                           "gap_limit": span * risk / 100, "status": gate,
+                          "structural_exclusions": sorted(structural_exclusions),
                           "information_uncertainty": 100 - number(by_id[leader]["canonical_components"]["DCR"]["value"]),
                           "score_parity": span == 0, "budget_used": False}
 
