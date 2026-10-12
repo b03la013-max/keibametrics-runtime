@@ -48,8 +48,8 @@ class TestTree(unittest.TestCase):
         tickets = [t("EXACTA", 5, 2)]
         for decision in ("EXECUTE_FULL_MEC", "EXECUTE", None):
             text = render_ticket_tree(art(tickets, decision=decision))["text"]
-            self.assertIn("購入判定\\n└─ 推奨（実購入未確認）", text)
-            self.assertNotIn("購入判定\\n└─ 実購入", text)
+            self.assertIn("購入判定\n└─ 推奨（実購入未確認）", text)
+            self.assertNotIn("購入判定\n└─ 実購入", text)
 
     def test_duplicate_rejected(self):
         with self.assertRaises(TicketTreeError):
