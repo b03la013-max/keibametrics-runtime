@@ -24,6 +24,8 @@ from execution_gateway import load_gateway, normalize_request, family_config, ar
 from execution_store import materialize_phase, verify_result_reuse
 from race_day_fast_reflection import build_fast_reflection
 
+RUNTIME_OUT = os.environ.get("KM_RUNTIME_OUT", "runtime_out")
+
 raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
 gateway=load_gateway()
 req,execution_context=normalize_request(raw_req,gateway)
@@ -31,7 +33,7 @@ execution_id=str(execution_context["execution_id"])
 acceptance_only=bool(req.get("acceptance_only"))
 shutil.rmtree("runtime_result_in",ignore_errors=True)
 os.makedirs("runtime_result_in",exist_ok=True)
-os.makedirs("runtime_out",exist_ok=True)
+os.makedirs(RUNTIME_OUT,exist_ok=True)
 
 # Explicit run/artifact references remain backward compatible. New
 # executions first resolve the immutable FORMAL phase from the canonical
@@ -96,7 +98,7 @@ json.dump({
     "artifact_id":(chosen or {}).get("id"),
     "created_at":(chosen or {}).get("created_at"),
     "execution_store_manifest_sha256":((canonical or {}).get("latest") or {}).get("manifest_sha256"),
-},open("runtime_out/artifact_resolution.json","w",encoding="utf-8"),
+},open(os.path.join(RUNTIME_OUT, "artifact_resolution.json"),"w",encoding="utf-8"),
   ensure_ascii=False,sort_keys=True,indent=2)
 
 if resolution_mode!="CANONICAL_EXECUTION_STORE":
@@ -171,16 +173,16 @@ if reuse_path:
     res=json.load(open(reuse_path,encoding="utf-8"))
     ver=post("/verify",res)
     recovery=verify_result_reuse(res,fin,result_payload,ver)
-    json.dump(recovery,open("runtime_out/result_recovery.json","w",encoding="utf-8"),
+    json.dump(recovery,open(os.path.join(RUNTIME_OUT, "result_recovery.json"),"w",encoding="utf-8"),
               ensure_ascii=False,sort_keys=True)
 else:
     res=post("/result",result_payload)
     # Preserve the response before /verify transport can fail. An unverified
     # receipt is not completion, but must never trigger another /result call.
-    json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),
+    json.dump(res,open(os.path.join(RUNTIME_OUT, "result_receipt_envelope.json"),"w",encoding="utf-8"),
               ensure_ascii=False,sort_keys=True,separators=(",",":"))
     json.dump({"FINAL":True,"RESULT":False},
-              open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),
+              open(os.path.join(RUNTIME_OUT, "receipt_verifications.json"),"w",encoding="utf-8"),
               ensure_ascii=False,sort_keys=True)
     ver=post("/verify",res)
 if (res.get("receipt") or {}).get("status")!="PASS":
@@ -189,12 +191,12 @@ if not ver.get("verified"):
     raise SystemExit("RESULT_SIGNATURE_VERIFY_FAILED")
 
 art=res.get("artifact") or {}
-os.makedirs("runtime_out",exist_ok=True)
-json.dump(res,open("runtime_out/result_receipt_envelope.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+os.makedirs(RUNTIME_OUT,exist_ok=True)
+json.dump(res,open(os.path.join(RUNTIME_OUT, "result_receipt_envelope.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
 # Persist verified terminal evidence before optional reflection/research work.
 # A later failure must not cause the same signed outcome to be settled twice.
 json.dump({"FINAL":bool(final_ver.get("verified") or final_ver.get("valid")),"RESULT":True},
-          open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+          open(os.path.join(RUNTIME_OUT, "receipt_verifications.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 
 # Measurement authority is stronger than the operator confirmation flag alone.
 def _runtime_result_authority_compat(obj,result,request,envelope,verification):
@@ -239,7 +241,7 @@ except Exception as authority_error:
 # Deep candidate/MEC research continues below but is not required to understand
 # the first material failure before preparing the next race.
 fast_reflection=build_fast_reflection(art,race_id=rid)
-json.dump(fast_reflection,open("runtime_out/race_day_fast_reflection.json","w",encoding="utf-8"),
+json.dump(fast_reflection,open(os.path.join(RUNTIME_OUT, "race_day_fast_reflection.json"),"w",encoding="utf-8"),
           ensure_ascii=False,sort_keys=True,separators=(",",":"))
 print("KM_RACE_DAY_FAST_REFLECTION="+json.dumps(fast_reflection,ensure_ascii=False,separators=(",",":")))
 
@@ -250,10 +252,10 @@ try:
     actual_rows,actual_held=actual_purchase_records(result_overrides={rid:actual_result})
     json.dump({"status":"VERIFIED_DATA" if actual_rows else "UNKNOWN / NO VERIFIED PURCHASE",
         "records":actual_rows,"held":actual_held,"production_effect":"NONE"},
-        open("runtime_out/actual_purchase_pfs.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        open(os.path.join(RUNTIME_OUT, "actual_purchase_pfs.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 except Exception as actual_error:
     json.dump({"status":"UNKNOWN / MEASUREMENT_ERROR","error":str(actual_error),"production_effect":"NONE"},
-        open("runtime_out/actual_purchase_pfs.json","w",encoding="utf-8"),ensure_ascii=False)
+        open(os.path.join(RUNTIME_OUT, "actual_purchase_pfs.json"),"w",encoding="utf-8"),ensure_ascii=False)
 
 # LOCAL MEC-R4 forward OOS: only a Shadow whose digest was bound into
 # the signed pre-result FINAL may enter the preregistered tracker.
@@ -303,13 +305,13 @@ try:
             ).hexdigest()
         counts_before=forward_status()
         persist_forward_settlement(forward,forward_measurement)
-        json.dump(forward_measurement,open("runtime_out/local_forward_measurement_settlement.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(forward_measurement,open(os.path.join(RUNTIME_OUT, "local_forward_measurement_settlement.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
         status=forward_status()
         json.dump(status,open("runtime/local_candidate_forward_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
-        json.dump(status,open("runtime_out/local_candidate_forward_status.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(status,open(os.path.join(RUNTIME_OUT, "local_candidate_forward_status.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 except (Exception,SystemExit) as forward_error:
     json.dump({"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE","error":str(forward_error)},
-        open("runtime_out/local_forward_measurement_failure.json","w",encoding="utf-8"),ensure_ascii=False)
+        open(os.path.join(RUNTIME_OUT, "local_forward_measurement_failure.json"),"w",encoding="utf-8"),ensure_ascii=False)
 
 mec_r4_binding=None
 mec_r4_oos_status=None
@@ -366,18 +368,18 @@ try:
         json.dump(lineage,open(os.path.join("runtime","mec_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,indent=2)
         mec_r4_oos_status=write_mec_r4_oos_status()
-        json.dump(mec_r4_shadow_settlement,open("runtime_out/mec_r4_shadow_settlement.json","w",encoding="utf-8"),
+        json.dump(mec_r4_shadow_settlement,open(os.path.join(RUNTIME_OUT, "mec_r4_shadow_settlement.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(mec_r4_binding,open("runtime_out/mec_r4_shadow_binding.json","w",encoding="utf-8"),
+        json.dump(mec_r4_binding,open(os.path.join(RUNTIME_OUT, "mec_r4_shadow_binding.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(mec_r4_oos_status,open("runtime_out/mec_r4_oos_status.json","w",encoding="utf-8"),
+        json.dump(mec_r4_oos_status,open(os.path.join(RUNTIME_OUT, "mec_r4_oos_status.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if (not acceptance_only) and os.path.exists(mec_r4_shadow_path)'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_192.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_192.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -442,18 +444,18 @@ try:
         json.dump(r5_lineage,open(os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,indent=2)
         local_mec_r5_oos_status=write_local_mec_r5_oos_status()
-        json.dump(local_mec_r5_shadow_settlement,open("runtime_out/local_mec_r5_shadow_settlement.json","w",encoding="utf-8"),
+        json.dump(local_mec_r5_shadow_settlement,open(os.path.join(RUNTIME_OUT, "local_mec_r5_shadow_settlement.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(local_mec_r5_binding,open("runtime_out/local_mec_r5_shadow_binding.json","w",encoding="utf-8"),
+        json.dump(local_mec_r5_binding,open(os.path.join(RUNTIME_OUT, "local_mec_r5_shadow_binding.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(local_mec_r5_oos_status,open("runtime_out/local_mec_r5_oos_status.json","w",encoding="utf-8"),
+        json.dump(local_mec_r5_oos_status,open(os.path.join(RUNTIME_OUT, "local_mec_r5_oos_status.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if (not acceptance_only) and os.path.exists(local_mec_r5_shadow_path)'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_256.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_256.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -500,18 +502,18 @@ try:
         json.dump(common_lineage,open(os.path.join("runtime","common_exact_continuity_shadow_lineage",rid+".json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,indent=2)
         common_exact_continuity_oos_status=write_common_exact_continuity_oos_status()
-        json.dump(common_exact_continuity_settlement,open("runtime_out/common_exact_continuity_shadow_settlement.json","w",encoding="utf-8"),
+        json.dump(common_exact_continuity_settlement,open(os.path.join(RUNTIME_OUT, "common_exact_continuity_shadow_settlement.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(common_exact_continuity_binding,open("runtime_out/common_exact_continuity_shadow_binding.json","w",encoding="utf-8"),
+        json.dump(common_exact_continuity_binding,open(os.path.join(RUNTIME_OUT, "common_exact_continuity_shadow_binding.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(common_exact_continuity_oos_status,open("runtime_out/common_exact_continuity_oos_status.json","w",encoding="utf-8"),
+        json.dump(common_exact_continuity_oos_status,open(os.path.join(RUNTIME_OUT, "common_exact_continuity_oos_status.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":("SHADOW_HOLD" if "PAYOUT_REQUIRED" in str(shadow_error) else "SHADOW_REJECTED"),"production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if (not acceptance_only) and os.path.exists(common_exact_path)'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/common_exact_continuity_shadow_failure.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "common_exact_continuity_shadow_failure.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -536,14 +538,14 @@ try:
             calibration_training_race_ids=cal.get("training_race_ids") or [],
             dual_krs_envelopes=envs
         )
-        json.dump(candidate_dual_postresult,open("runtime_out/candidate_dual_shadow_postresult.json","w",encoding="utf-8"),
+        json.dump(candidate_dual_postresult,open(os.path.join(RUNTIME_OUT, "candidate_dual_shadow_postresult.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if (not acceptance_only) and os.path.exists(dual_path)'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_370.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_370.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -579,7 +581,7 @@ try:
             krs_envelope=v03_env,
             signed_final_binding_valid=candidate_v03_binding_valid,
         )
-        json.dump(candidate_v03_postresult,open("runtime_out/candidate_v03_shadow_postresult.json","w",encoding="utf-8"),
+        json.dump(candidate_v03_postresult,open(os.path.join(RUNTIME_OUT, "candidate_v03_shadow_postresult.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
         json.dump({
             "race_id":rid,
@@ -587,14 +589,14 @@ try:
             "signed_final_bound":bound,
             "shadow_sha256":candidate_v03_summary.get("sha256"),
             "production_effect":"NONE","result_authority":shared_result_authority,
-        },open("runtime_out/candidate_v03_signed_final_binding.json","w",encoding="utf-8"),
+        },open(os.path.join(RUNTIME_OUT, "candidate_v03_signed_final_binding.json"),"w",encoding="utf-8"),
           ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if (not acceptance_only) and os.path.exists(v03_path)'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_396.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_396.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -611,16 +613,16 @@ try:
         candidate_oos_status=write_status(
             mdir,os.path.join("runtime","local_candidate_dual_oos_status.json")
         )
-        json.dump(candidate_oos_measurement,open("runtime_out/candidate_dual_oos_measurement.json","w",encoding="utf-8"),
+        json.dump(candidate_oos_measurement,open(os.path.join(RUNTIME_OUT, "candidate_dual_oos_measurement.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(candidate_oos_status,open("runtime_out/candidate_dual_oos_status.json","w",encoding="utf-8"),
+        json.dump(candidate_oos_status,open(os.path.join(RUNTIME_OUT, "candidate_dual_oos_status.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if candidate_dual_postresult is not None'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_433.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_433.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -638,28 +640,28 @@ try:
         candidate_v03_oos_status=write_v03_status(
             v03dir,os.path.join("runtime","local_candidate_v03_oos_status.json")
         )
-        json.dump(candidate_v03_oos_measurement,open("runtime_out/candidate_v03_oos_measurement.json","w",encoding="utf-8"),
+        json.dump(candidate_v03_oos_measurement,open(os.path.join(RUNTIME_OUT, "candidate_v03_oos_measurement.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
-        json.dump(candidate_v03_oos_status,open("runtime_out/candidate_v03_oos_status.json","w",encoding="utf-8"),
+        json.dump(candidate_v03_oos_status,open(os.path.join(RUNTIME_OUT, "candidate_v03_oos_status.json"),"w",encoding="utf-8"),
                   ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if candidate_v03_postresult is not None'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_450.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_450.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
 try:
     if acceptance_only:
-        open("runtime_out/acceptance_only.flag","w",encoding="utf-8").write("true\n")
+        open(os.path.join(RUNTIME_OUT, "acceptance_only.flag"),"w",encoding="utf-8").write("true\n")
 
 except (Exception, SystemExit) as shadow_error:
     shadow_diagnostic={"status":"SHADOW_HOLD_OR_REJECTED","production_effect":"NONE",
                        "error":type(shadow_error).__name__+":"+str(shadow_error),"stage":'if acceptance_only'}
     try:
-        json.dump(shadow_diagnostic,open("runtime_out/shadow_failure_466.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+        json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "shadow_failure_466.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
@@ -693,7 +695,7 @@ summary={
   "local_mec_r5_signed_final_binding":local_mec_r5_binding,
   "local_mec_r5_oos_status":local_mec_r5_oos_status
 }
-json.dump(summary,open("runtime_out/result_summary.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
+json.dump(summary,open(os.path.join(RUNTIME_OUT, "result_summary.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True,separators=(",",":"))
 print("KM_LOCAL_RESULT="+json.dumps(summary,ensure_ascii=False,separators=(",",":")))
 
 # Initial live acceptance summarizes existing artifacts only; it does not generate predictions.
@@ -703,16 +705,16 @@ try:
         acceptance=initial_forward_acceptance(forward,forward_measurement,counts_before,forward_status())
         extra={}
         for name in ['mec_r4_shadow_settlement.json','local_mec_r5_shadow_settlement.json','common_exact_continuity_shadow_settlement.json']:
-            path=os.path.join('runtime_out',name)
+            path=os.path.join(RUNTIME_OUT,name)
             if os.path.exists(path):extra[name]=json.load(open(path,encoding='utf-8'))
             else:extra[name]={'status':'MISSING_NOT_ZERO'}
         acceptance['existing_shadow_settlements']=extra
         if any(x.get('status')=='MISSING_NOT_ZERO' or not x.get('arms') or any(a.get('status') not in {None,'SETTLED'} for a in x.get('arms',{}).values()) for x in extra.values()) or any(x.get('oos_eligible') is False for x in extra.values()):
             acceptance['status']='PENDING_OR_HELD';acceptance['post_result_settlement']='HOLD_MISSING_EXISTING_SHADOW_SETTLEMENT'
-        json.dump(acceptance,open('runtime_out/local_initial_forward_acceptance.json','w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
+        json.dump(acceptance,open(os.path.join(RUNTIME_OUT, 'local_initial_forward_acceptance.json'),'w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
         json.dump(acceptance,open('runtime/local_initial_forward_acceptance.json','w',encoding='utf-8'),ensure_ascii=False,sort_keys=True)
 except Exception as error:
-    json.dump({'status':'PENDING_OR_HELD','error':str(error),'production_effect':'NONE'},open('runtime_out/local_initial_forward_acceptance_failure.json','w',encoding='utf-8'),ensure_ascii=False)
+    json.dump({'status':'PENDING_OR_HELD','error':str(error),'production_effect':'NONE'},open(os.path.join(RUNTIME_OUT, 'local_initial_forward_acceptance_failure.json'),'w',encoding='utf-8'),ensure_ascii=False)
 
 # Durable learning closure has a direct immutable FINAL/RESULT lineage.
 # Research HOLD is retained as a terminal, never counted or used to stop Production.
@@ -721,11 +723,11 @@ learning_state={"race_id":rid,"execution_id":execution_id,
     "learning_event":art.get("learning_event"),"failure_localization":art.get("failure_localization"),
     "automatic_post_result_review":art.get("automatic_post_result_review"),
     "production_policy_change":False,"actual_purchase_pfs":"UNKNOWN_UNLESS_VERIFIED"}
-json.dump(learning_state,open("runtime_out/learning_state.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+json.dump(learning_state,open(os.path.join(RUNTIME_OUT, "learning_state.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 receipt_verifications={"FINAL":bool(final_ver.get("verified") or final_ver.get("valid")),"RESULT":bool(ver.get("verified"))}
-json.dump(receipt_verifications,open("runtime_out/receipt_verifications.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+json.dump(receipt_verifications,open(os.path.join(RUNTIME_OUT, "receipt_verifications.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
 tracker_terminal={"race_id":rid,"execution_id":execution_id,
     "status":"PASS" if 'forward_measurement' in globals() and forward_measurement.get("eligible") is True else "HOLD",
     "research_failure_nonblocking":True,"production_effect":"NONE",
     "reason":None if 'forward_measurement' in globals() else "FORWARD_CAPTURE_OR_SETTLEMENT_MISSING"}
-json.dump(tracker_terminal,open("runtime_out/forward_tracker_terminal.json","w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
+json.dump(tracker_terminal,open(os.path.join(RUNTIME_OUT, "forward_tracker_terminal.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)

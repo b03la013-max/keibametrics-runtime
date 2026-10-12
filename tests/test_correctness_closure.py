@@ -35,7 +35,7 @@ def execute_common(tmp_path,monkeypatch,rid='R1',failure=None):
     if failure=='binding':fin['artifact']['ticket_transport_trace']={}
     path=tmp_path/'runtime_result_in/common_exact_continuity_shadow_pre_result.json';path.write_text(json.dumps(sh))
     production={'receipt':{'status':'PASS'},'artifact':{'pfs':80}}
-    ns={'acceptance_only':False,'os':os,'json':json,'common_exact_path':str(path),
+    ns={'acceptance_only':False,'os':os,'json':json,'RUNTIME_OUT':str(tmp_path/'runtime_out'),'common_exact_path':str(path),
         'verify_common_exact_continuity_binding':verify_signed_final_binding,
         'settle_common_exact_continuity_shadow':settle_shadow,
         'write_common_exact_continuity_oos_status':lambda:build_status(),
