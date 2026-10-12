@@ -46,3 +46,7 @@ python -m runtime.local_race_entry --request race-request.json --output entry-ou
 PR #257は11 workflows全成功後にmain `3403dfe9d477bd0f7eff1cdb1008c8b3efc4bc0a`へ反映。実行基盤を導入し、Production suite/Authority/Venue/係数/モデル/Capital方針は維持。
 
 続いて同一Signed SOURCEを外部`/source/verify`で再検証し、signature_valid/artifact_valid/verified/valid=trueを確認。SOURCE-only Intentは`runtime/source_intents/`に置き、正式FULL Intentの自動実行を発生させない。実行台帳には初回不完全runと回復runを両方保持し、既存ローカルmanifest/receiptのバイト列を変更せず登録する。これにより圧縮証跡だけでなくcanonical SOURCE解決・再開が可能。SOURCE再取得・予測再計算・RESULT精算は行わない。
+
+## Static入力探索の調査結果（追記）
+
+地方の既存CHAT-OWNED Frozen入力経路を発見・署名再検証した。C2はこの経路の必須条件ではない。川崎8Rで欠けているのは同一レースの事前Staticである。詳細は`LOCAL_STATIC_INPUT_DISCOVERY_20261012.md`。修正入口はcanonical Intentを自ら探索し、利用者へ保存先を質問する代わりに真正なSOURCEから既存Owner用の入力packetを保存する。期限経過後は生成許可false・DEADLINE_HOLD。

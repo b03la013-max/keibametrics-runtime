@@ -58,7 +58,7 @@ def test_race_entry_without_static_stops_after_source_and_numerical(monkeypatch,
     monkeypatch.setattr(o, 'resolve_phase', lambda *a: {'run_dir': tmp_path})
     monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: None)
     monkeypatch.setattr(o, '_load_checkpoint_json', lambda *a: {
-        'receipt_sha256': 'signed', 'artifact': {'official_runner_universe': {'runners': [{'horse_no': 1}]}}})
+        'receipt_sha256': 'signed', 'artifact': {'source_snapshot_sha256': 'snapshot', 'official_runner_universe': {'runners': [{'runner_id': '1'}]}}})
     phases = []
     def run_source(req, **kwargs):
         phases.append(req['execution_phase'])
@@ -67,10 +67,11 @@ def test_race_entry_without_static_stops_after_source_and_numerical(monkeypatch,
     monkeypatch.setattr(o, 'orchestrate', run_source)
     monkeypatch.setattr(e, 'assess', lambda: {'status': 'READY', 'required_indices': ['SSI']})
     monkeypatch.setattr(e, 'materialize_production', lambda *a: {'strict_full_numerical_ready': True})
-    report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'},
+    report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race',
+                    'scheduled_post_at': '2099-01-01T12:10:00+09:00', 'prediction_cutoff': '2099-01-01T12:00:00+09:00'},
                    output=tmp_path/'out', run_id='test')
     assert phases == ['SOURCE']
-    assert report['code'] == 'PRODUCTION_STATIC_OWNER_REQUIRED'
+    assert report['code'] == 'STATIC_PREDICTION_FREEZE_REQUIRED'
     assert report['no_bet_decision'] is False
     assert report['formal_final_proven'] is False
 
@@ -80,3 +81,60 @@ def test_race_entry_rejects_cross_family_and_conflicting_identity(tmp_path, inte
     from runtime.local_race_entry import run
     with pytest.raises(ValueError, match='RACE_ENTRY_'):
         run(intent, output=tmp_path, run_id='test')
+
+
+def test_race_only_entry_derives_stable_identity(monkeypatch, tmp_path):
+    from runtime import local_race_entry as e
+    expected = 'KM-LOCAL-KAW-20990101-R08-LIVE-R1'
+    monkeypatch.setattr(o, 'validate_request_context', lambda *a: {'current_authority_manifest': 'current'})
+    monkeypatch.setattr(o, 'resolve_phase', lambda *a: {'run_dir': tmp_path})
+    monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: None)
+    monkeypatch.setattr(o, '_load_checkpoint_json', lambda *a: {
+        'receipt_sha256': 'signed', 'artifact': {'source_snapshot_sha256': 'snapshot',
+        'official_runner_universe': {'runners': [{'runner_id': '1'}]}}})
+    def source(req, **kwargs):
+        assert req['execution_id'] == req['race_id'] == expected
+        assert req['current_authority_manifest'] == 'current'
+        return {'status': 'SOURCE_PASS', 'completion': False}
+    monkeypatch.setattr(o, 'orchestrate', source)
+    monkeypatch.setattr(e, 'assess', lambda: {'status': 'READY', 'required_indices': ['SSI']})
+    monkeypatch.setattr(e, 'materialize_production', lambda *a: {'strict_full_numerical_ready': True})
+    report = e.run({'venue_id': 'kaw', 'race_date': '2099-01-01', 'race_no': 8,
+                    'prediction_cutoff': '2099-01-01T12:00:00+09:00',
+                    'scheduled_post_at': '2099-01-01T12:10:00+09:00'}, output=tmp_path/'out', run_id='test')
+    assert report['execution_id'] == expected
+    assert report['owner_resolution']['c2_owner_required'] is False
+
+
+@pytest.mark.parametrize("analysis_only", [False, True])
+def test_entry_connects_discovered_canonical_static_to_existing_formal(monkeypatch, tmp_path, analysis_only):
+    from runtime import local_race_entry as e
+    from tests.test_local_static_input_resolver import request, source, frozen, put
+    put(tmp_path, frozen())
+    monkeypatch.setattr(o, 'ROOT', tmp_path)
+    monkeypatch.setattr(o, 'validate_request_context', lambda *a: {'current_authority_manifest': 'current'})
+    monkeypatch.setattr(o, 'resolve_phase', lambda *a: {'run_dir': tmp_path})
+    monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: None)
+    monkeypatch.setattr(o, '_load_checkpoint_json', lambda *a: source())
+    calls = []
+    def orchestration(q, **kwargs):
+        if q.get('analysis_only'):
+            calls.append('SOURCE')
+            return {'status': 'SOURCE_PASS', 'completion': False}
+        calls.append('FORMAL')
+        assert q['static_prediction_frozen'] is True
+        assert q['static_prediction']['ranking'] == ['1', '2']
+        assert q['race_id'] == 'race'
+        return {'status': 'FULL_LIFECYCLE_EXECUTION_PASS', 'completion': {'complete': True}}
+    monkeypatch.setattr(o, 'orchestrate', orchestration)
+    monkeypatch.setattr(e, 'assess', lambda: {'status': 'READY', 'required_indices': ['SSI']})
+    monkeypatch.setattr(e, 'materialize_production', lambda *a: {'strict_full_numerical_ready': True})
+    report = e.run({**request(), 'analysis_only': analysis_only}, output=tmp_path/'out', run_id='test')
+    if analysis_only:
+        assert calls == ['SOURCE']
+        assert report['code'] == 'ANALYSIS_ONLY_SOURCE_COMPLETE'
+        assert json.loads((tmp_path/'out/static_owner_input.json').read_text())['static_generation_allowed'] is False
+    else:
+        assert calls == ['SOURCE', 'FORMAL']
+        assert report['completion']['complete'] is True
+    assert report['owner_resolution']['input_mode'] == 'CANONICAL_FORMAL_INTENT'
