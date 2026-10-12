@@ -36,3 +36,7 @@ python -m runtime.local_race_entry --request race-request.json --output entry-ou
 ## 完全解消の未達条件
 
 正式FINALまでの完全解消には、現行Authorityで受入済みのStatic Ownerが発走前にFrozen Staticを供給する必要がある。入口修正をProductionへ反映するには独立PRの受入・配備も必要。川崎8Rの期限は経過しており、その正式事前FINALは今から作れない。次の対象レースで上記Owner条件を満たしたうえで、署名付きSOURCE→Static→KRS→MEC/Capital→FINALを通し実証する必要がある。
+
+## GitHub CIの追加修復
+
+更新コミット3dd5b101の11 workflows中、10成功・MEC-R5分類1失敗。MEC-R5の3 testsは成功しており、失敗は既存30戦完了状態`COMPLETE_30_HUMAN_REVIEW_REQUIRED`をworkflowが許容しない不一致だった。完了状態とtarget達成/remaining=0の対応を確認するよう検証側のみ修正し、台帳・精算値・自動昇格の設定は変更しない。main `6f63a834`も候補branchへ統合した。
