@@ -43,6 +43,14 @@ class TestTree(unittest.TestCase):
         nb = render_ticket_tree(art([], decision="PAPER", no_bet=True))["text"]
         self.assertIn("見送り", nb)
 
+    def test_live_final_never_asserts_actual_purchase_without_evidence(self):
+        # FINAL is a pre-race recommendation, never evidence of a JRA bet slip.
+        tickets = [t("EXACTA", 5, 2)]
+        for decision in ("EXECUTE_FULL_MEC", "EXECUTE", None):
+            text = render_ticket_tree(art(tickets, decision=decision))["text"]
+            self.assertIn("購入判定\n└─ 推奨（実購入未確認）", text)
+            self.assertNotIn("購入判定\n└─ 実購入", text)
+
     def test_duplicate_rejected(self):
         with self.assertRaises(TicketTreeError):
             render_ticket_tree(art([t("EXACTA", 4, 2), t("EXACTA", 4, 2)]))
