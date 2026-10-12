@@ -418,6 +418,75 @@ def main(out):
         mark("CANDIDATE_FULL20_STATIC","FAIL",error=repr(e))
         raise
 
+    # If registered JRA Production mapping actually closes all 360 cells,
+    # test the more faithful Production-NUMERICS -> Static Owner -> AKI -> KRS
+    # pathway. This stays POSTSTART/PAPER since live original SOURCE was absent.
+    if prod.get("production_full_numerical_ready") is True:
+        try:
+            from jra_krs_input_builder_production import build_krs_input
+            prepared=prod.get("prepared_numerical_request") or {}
+            owner=prod.get("static_owner_executable_diagnostic") or {}
+            assert len(prepared.get("runners") or [])==18
+            assert len(owner.get("static_prediction",{}).get("ranking") or [])==18
+            previous_candidate=req
+            replay_full=copy.deepcopy(req)
+            replay_full["runners"]=copy.deepcopy(prepared["runners"])
+            replay_full["base_index_mapping_authority"]=copy.deepcopy(prepared["base_index_mapping_authority"])
+            replay_full["index_provenance_hash"]=prepared["index_provenance_hash"]
+            replay_full["index_provenance_ledger"]=copy.deepcopy(prepared["index_provenance_ledger"])
+            replay_full["numeric_calculation_requirement"]="FULL_REQUIRED"
+            replay_full["static_prediction"]=copy.deepcopy(owner["static_prediction"])
+            replay_full["role_registry"]=copy.deepcopy(owner["role_registry"])
+            replay_full["pair_dispositions"]=copy.deepcopy(owner["pair_dispositions"])
+            replay_full["third_dispositions"]=copy.deepcopy(owner["third_dispositions"])
+            replay_full["purchased_heads"]=copy.deepcopy(owner["purchased_heads"])
+            replay_full["orientation_exclusions"]=[]
+            replay_full["head_nonselection_reasons"]={}
+            replay_full["available_bet_types"]=["EXACTA","TRIO","TRIFECTA"]
+            replay_full["candidate_numerical_summary"]={
+                "profile":"JRA-REGISTERED-PRODUCTION-FORMULA-POSTSTART-REPLAY",
+                "required_count":360,"calculated_count":360,
+                "ruled_hold_count":0,"unresolved_count":0,
+                "full_numerical_complete":True,
+                "temporal_authority":"POSTSTART_REPLAY_NOT_ORIGINAL_CUTOFF",
+                "production_effect":"NONE"}
+            freeze={
+                "profile":owner["profile"],
+                "ranking":owner["static_prediction"]["ranking"],
+                "w_active":owner["active_columns"]["W"],
+                "p2_active":owner["active_columns"]["P2"],
+                "p3_active":owner["active_columns"]["P3"],
+                "original_owner_receipt_sha256":owner["sha256"],
+                "production_effect":"NONE / HISTORICAL_REPLAY"
+            }
+            freeze["sha256"]=sha(freeze)
+            replay_full["candidate_semantic_freeze"]=freeze
+            replay_full["replay_numeric_basis"]="JRA_REGISTERED_PRODUCTION_FORMULA_REPLAY"
+            replay_full=build_krs_input(replay_full)
+            prevalid=validate_pre_krs_request(replay_full)
+            assert prevalid["canonical_component_count"]==360
+            save("all_runner_20_index_production_formula_replay.json",{
+              "classification":"REGISTERED PRODUCTION FORMULA / POSTSTART-NOT-PRODUCTION-FINAL",
+              "required_count":360,"calculated_count":360,
+              "mapping_id":prepared["base_index_mapping_authority"]["mapping_id"],
+              "static_prediction":replay_full["static_prediction"],
+              "runners":[{
+                 "runner_id":r["runner_id"],"name":r["name"],
+                 "indices":{k:r["canonical_components"][k]["value"] for k in REQUIRED},
+                 "provenance":{k:r["canonical_components"][k]["rule_id"] for k in REQUIRED}
+              } for r in replay_full["runners"]]
+            })
+            req=replay_full
+            report["numeric_pipeline_basis"]="JRA_REGISTERED_PRODUCTION_FORMULA_REPLAY"
+            mark("PRODUCTION_FORMULA_STATIC_KRS_BINDING","PASS",
+                 count=360,ranking=replay_full["static_prediction"]["ranking"][:8])
+        except Exception as e:
+            req=previous_candidate
+            report["numeric_pipeline_basis"]="CANDIDATE_SOURCE_DERIVED"
+            mark("PRODUCTION_FORMULA_STATIC_KRS_BINDING","GAP",error=repr(e))
+    else:
+        report["numeric_pipeline_basis"]="CANDIDATE_SOURCE_DERIVED"
+
     # Official AKI registered program requires verified Production evidence and
     # original time relation; call it as an exploratory only and preserve failure.
     try:
