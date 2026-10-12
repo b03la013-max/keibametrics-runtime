@@ -130,7 +130,7 @@ def main(out):
             import re
             p=pdf[2]
             clipped=p.get_text("text",clip=fitz.Rect(600,185,895,780))
-            flat=re.sub(r"\\s+","",clipped)
+            flat=re.sub(r"\s+","",clipped)
             names=[
               "ダイヤモンドノット","ショウナンザナドゥ","レイベリング",
               "スズハローム","ビッグシーザー","ウインマーベル",
@@ -155,7 +155,7 @@ def main(out):
               "parse_fallback":"R11_COLUMN_CLIP_JAPANESE_AND_ENGLISH_DOUBLE_VERIFIED",
               "runners":[{
                  "horse_no":i+1,"runner_id":str(i+1),"name":names[i],
-                 "canonical_name":names[i],"status":"ACTIVE","frame_no":1+(i+1)//3,
+                 "canonical_name":names[i],"status":"ACTIVE","frame_no":[1,1,2,2,3,3,4,4,5,5,6,6,7,7,7,8,8,8][i],
                  "sex":sexes[i],"age":ages[i],"assigned_weight":weights[i],
                  "jockey":jockeys[i],"body_weight":None,"body_weight_change":None,
                  "source":"JRA_OFFICIAL_RACE_PDF"
