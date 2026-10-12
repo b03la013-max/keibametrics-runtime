@@ -60,7 +60,14 @@ def main():
         raw=gzip.decompress(base64.b64decode(snap["raw_gzip_b64"]))
         assert hashlib.sha256(raw).hexdigest()==snap["raw_sha256"]
         import fitz
-        universe=parse_runner_universe_from_doc(fitz.open(stream=raw,filetype="pdf"),11)
+        doc=fitz.open(stream=raw,filetype="pdf")
+        from jra_official_pdf import parse_runner_universe_from_pages
+        try:
+            universe=parse_runner_universe_from_doc(doc,11)
+        except ValueError:
+            # Some 2026 Kyoto dual-column PDF headers fall outside column clip;
+            # parse original signed meeting PDF full text instead.
+            universe=parse_runner_universe_from_pages([p.get_text("text") for p in doc],11)
         assert len(universe["runners"])==18
         status.update(parent_signed_source_receipt_sha256=env["receipt_sha256"],parent_source_race_id=a["race_id"],
                       prerace_pdf_raw_sha256=snap["raw_sha256"],prerace_pdf_captured_at=snap["fetched_at"],runner_count=18)
