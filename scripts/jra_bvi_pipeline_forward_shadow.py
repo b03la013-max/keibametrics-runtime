@@ -65,12 +65,18 @@ def freeze(request, source_path, output):
     mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
     card=source['jra_official_race_card_detail']['runners']
     registry=json.loads((ROOT/'mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json').read_text())
-    corpus=build_corpus(ROOT,prediction_cutoff=req['prediction_cutoff'],race_date=req['race_date'],
+    corpus=build_corpus(ROOT,prediction_cutoff=now.isoformat(),race_date=req['race_date'],
         exclude_race_id=req['race_id'],required_sires={r['sire'] for r in card if r.get('sire')},
         required_damsires={r['damsire'] for r in card if r.get('damsire')})
     enriched=owner_authorized_observations(source,registry,corpus=corpus)
+    # Do not stamp a later-read corpus observation with the earlier card time.
+    from jra_bvi_shadow_comparison import PEDIGREE_FEATURES
+    comparison_time=require_open_window(req)
+    for features in enriched.values():
+        for key,spec in features.items():
+            if key in PEDIGREE_FEATURES:spec['observed_at']=comparison_time.isoformat()
     comparison=compare(req,mapping,source_sha=source['source_snapshot_sha256'],receipt_sha=env['receipt_sha256'],
-        algorithm_freeze_at=now.isoformat(),cutoff=req['prediction_cutoff'],
+        algorithm_freeze_at=comparison_time.isoformat(),cutoff=req['prediction_cutoff'],
         source_artifact=source,current_authority=authority,root=ROOT,enhanced_features=enriched)
     actual=comparison['arms']['A_CURRENT']['owner']
     numerical={str(r['runner_id']):r for r in comparison['arms']['A_CURRENT']['numerical_runners']}
@@ -103,6 +109,7 @@ def freeze(request, source_path, output):
                  if str(x.get('runner_id') or x.get('horse_no'))==rid))
             if {x.get('popularity_rank') for x in source['jra_official_race_card_detail']['runners']}
                ==set(range(1,len(req['runners'])+1)) else None),
+        'corpus_availability_cutoff':now.isoformat(),'enhanced_observed_at':comparison_time.isoformat(),
         'corpus':{k:corpus.get(k) for k in ('manifest_sha256','horse_count','run_count','snapshot_count','identity_collision_count','run_conflict_count')},
         'candidate_only':True,'production_authority':False,'purchase_authority':False,
         'oos_status':'PRE_RESULT_FROZEN / REQUIRES_PRE_CUTOFF_GIT_WITNESS_AND_OFFICIAL_RESULT'}
