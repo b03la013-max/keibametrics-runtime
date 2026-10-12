@@ -2,11 +2,14 @@
 from __future__ import annotations
 import argparse
 import copy
+from datetime import date
+import re
 import json
 from pathlib import Path
 from runtime import formal_execution_orchestrator as o
 from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
+from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
 
 
 def run(intent, *, output, run_id, github_sha=None):
@@ -14,11 +17,23 @@ def run(intent, *, output, run_id, github_sha=None):
     if request.get('family_id', 'LOCAL') != 'LOCAL':
         raise ValueError('RACE_ENTRY_FAMILY_NOT_LOCAL')
     request['family_id'] = 'LOCAL'
+    if not request.get('execution_id') and not request.get('race_id'):
+        venue = str(request.get('venue_id') or '').upper()
+        day = date.fromisoformat(str(request.get('race_date') or '').replace('/', '-'))
+        number = request.get('race_no')
+        if not re.fullmatch(r'[A-Z]{3}', venue) or isinstance(number, bool) or not isinstance(number, int) or not 1 <= number <= 99:
+            raise ValueError('RACE_ENTRY_IDENTITY_INVALID')
+        request['venue_id'] = venue
+        request['race_date'] = day.isoformat()
+        request['race_id'] = request['execution_id'] = f'KM-LOCAL-{venue}-{day:%Y%m%d}-R{number:02d}-LIVE-R1'
     request['execution_id'] = o.derive_execution_id(request)
     if request.get('race_id') not in (None, request['execution_id']):
         raise ValueError('RACE_ENTRY_IDENTITY_MISMATCH')
     request['race_id'] = request['execution_id']
-    o.validate_request_context(request)
+    authority_context = o.validate_request_context(request)
+    if isinstance(authority_context, dict):
+        if not request.get("current_authority_manifest"):
+            request["current_authority_manifest"] = authority_context["current_authority_manifest"]
     # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
     # cutoff is forbidden. A late entry never creates a historical prediction.
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
@@ -39,7 +54,7 @@ def run(intent, *, output, run_id, github_sha=None):
     numerical = materialize_production(source['artifact'], numeric_request, authority['required_indices'])
     o._write(output/'numerical_materialization.json', numerical)
     report = {'status': 'HOLD', 'first_failed_phase': 'STATIC_FREEZE',
-              'code': 'PRODUCTION_STATIC_OWNER_REQUIRED', 'completion': False,
+              'code': 'STATIC_PREDICTION_FREEZE_REQUIRED', 'completion': False,
               'execution_id': request['execution_id'], 'source': source_report,
               'source_receipt_sha256': source['receipt_sha256'],
               'numerical_diagnostic_only': True, 'prediction_reexecution': False,
@@ -48,15 +63,29 @@ def run(intent, *, output, run_id, github_sha=None):
         report.update(first_failed_phase='NUMERICAL', code='FULL_NUMERICAL_CLOSURE_REQUIRED')
         o._write(output/'entry_report.json', report)
         return report
-    # Approved frozen Static is the only route into the original formal owner.
-    if intent.get('static_prediction_frozen') is True and isinstance(intent.get('static_prediction'), dict):
-        formal = copy.deepcopy(intent)
-        formal.update(family_id='LOCAL', execution_id=request['execution_id'], race_id=request['race_id'])
+    # Look up the exact canonical race ourselves; C2 is not a prerequisite
+    # for the existing chat-owned frozen-input path.
+    discovery_request = copy.deepcopy(request)
+    for key in ('family_id', 'execution_id', 'race_id', 'current_authority_manifest'):
+        discovery_request.setdefault(key, request.get(key))
+    formal, resolution = resolve_static_input(discovery_request, source)
+    report['owner_resolution'] = resolution
+    generation_allowed = True
+    try:
+        o.check_deadline(request, phase='FORMAL')
+    except o.FormalOrchestrationError as exc:
+        generation_allowed = False
+        report.update(code=str(exc), prestart_deadline_expired=True)
+    o._write(output/'static_owner_input.json', input_packet(request, source, resolution,
+                                                          generation_allowed=generation_allowed))
+    if formal is not None and intent.get('analysis_only') is True:
+        report.update(code='ANALYSIS_ONLY_SOURCE_COMPLETE', first_failed_phase=None)
+    if formal is not None and generation_allowed and intent.get('analysis_only') is not True:
         formal.pop('execution_phase', None)
         formal.pop('analysis_only', None)
-        o.check_deadline(formal, phase='FORMAL')
         report = o.orchestrate(formal, run_id=run_id, github_sha=github_sha,
                               runtime_out=output/'formal', tmp_root=output/'tmp')
+        report['owner_resolution'] = resolution
     o._write(output/'entry_report.json', report)
     return report
 
