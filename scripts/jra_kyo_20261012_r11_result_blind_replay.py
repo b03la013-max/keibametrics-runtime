@@ -258,6 +258,21 @@ def main(out):
         source["replay_provenance"]["post_start_detail_snapshot_sha256"]=detail_snap_sha
     else:
         source["replay_provenance"]["post_start_detail_raw_bound"]=False
+    # Strict temporal hygiene: even though the registered owner evaluator
+    # ignores R11 and later results, remove those bytes from the projected
+    # numerical SOURCE altogether. Only completed races R1-R10 can influence
+    # same-day track bias. Post-R11 outcome/settlement is never an input.
+    earlier = source.get("jra_official_same_day_results")
+    if isinstance(earlier,dict):
+        raw_races=earlier.get("races") or []
+        if isinstance(raw_races,dict): raw_races=list(raw_races.values())
+        clean=[r for r in raw_races if isinstance(r,dict) and
+               str(r.get("race_no") or "").isdigit() and int(r["race_no"])<11]
+        earlier["races"]=clean
+        earlier["race_count"]=len(clean)
+        source["replay_provenance"]["same_day_results_scope"]="R01_R10_ONLY"
+        source["replay_provenance"]["same_day_current_or_later_excluded"]=len(raw_races)-len(clean)
+        source["jra_official_same_day_results"]=earlier
     detail=sanitize_detail(source.get("jra_official_race_card_detail"))
     if detail:
         # Fail rather than associate a different race's horse history.
