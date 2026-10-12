@@ -84,6 +84,10 @@ def freeze(request, source_path, output):
         if semantics(actual[field])!=semantics(req[field]):raise ValueError('BVI_FORWARD_A_CURRENT_POLICY_REPLAY_MISMATCH:'+field)
     execute_diagnostic_downstream(comparison,req,None,call)
     completed=require_open_window(req)
+    for arm in comparison['arms'].values():
+        executed=time(arm['krs_signed_run_receipt']['receipt']['timestamp'])
+        if not now<=executed<=completed:
+            raise ValueError('BVI_FORWARD_KRS_TIME_OUTSIDE_PRE_CUTOFF_FREEZE')
     record={'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),
         'computation_started_at':now.isoformat(),'prediction_cutoff':req['prediction_cutoff'],
         'scheduled_post_at':req['scheduled_post_at'],'policy_fingerprint':policy_fingerprint(),
@@ -219,7 +223,15 @@ def settle(root=ROOT):
             s=r['arms'][name]['settlement'];rows.append({'race_id':r['race_id'],'date':r['result_captured_at'],
                 'investment':s['investment'],'return':s['return'],'profit_loss':s['profit_loss'],
                 'hit_but_loss':bool(s['return'] and s['profit_loss']<0)})
-        metrics[name]={'aggregate':_aggregate(rows),'robustness':_robustness(rows)}
+        arm_records=[r['arms'][name] for r in eligible]
+        fields=('winner_rank','winner_discovery_recall','p2_capture','p3_capture','top3_mean_rank',
+            'ordered_pair_capture','exact_capture','candidate_width','false_positive_candidates',
+            'market_winner_rank','market_top3_mean_rank')
+        accuracy={}
+        for field in fields:
+            observed=[float(x[field]) for x in arm_records if x.get(field) is not None]
+            accuracy[field]={'n':len(observed),'mean':sum(observed)/len(observed) if observed else None}
+        metrics[name]={'aggregate':_aggregate(rows),'robustness':_robustness(rows),'prediction':accuracy}
     scorecard={'profile':PROFILE,'eligible_settled_races':len(eligible),'arms':metrics,
         'status':'FORWARD OOS PENDING' if len(eligible)<30 else 'INDEPENDENT_REVIEW_REQUIRED',
         'required_forward_races':30,'automatic_promotion':False,'production_effect':'NONE',
