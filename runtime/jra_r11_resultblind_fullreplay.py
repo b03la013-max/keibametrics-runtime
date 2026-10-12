@@ -110,6 +110,24 @@ def main():
                 assert dateval and datetime.date.fromisoformat(dateval)<RACEDAY,("POST_RACE_HISTORY_LEAK",horse["name"],dateval)
                 filtered.append(run)
             d["recent_runs"]=filtered
+            # The post-start JRADB screen drops the lifetime W/2nd/3rd/other
+            # cell. Restore it ONLY from the signed 14:17 JRA official PDF,
+            # never by treating 4 recent runs as the horse's career.
+            signed_pdf_career = {
+              "1":(3,2,1,3),"2":(3,2,1,10),"3":(6,1,1,18),
+              "4":(6,1,3,12),"5":(7,2,3,12),"6":(7,5,4,13),
+              "7":(15,None,None,None),"8":(2,0,0,4),
+              "9":(4,4,2,9),"10":(4,1,1,8),"11":(2,1,0,5),
+              "12":(5,1,1,7),"13":(3,5,2,4),"14":(4,1,0,12),
+              "15":(4,4,0,0),"16":(3,0,0,10),
+              "17":(4,1,2,5),"18":(2,1,0,7)}
+            rid=horse["runner_id"]
+            counts=signed_pdf_career[rid]
+            career_total=35 if rid=="7" else sum(counts)
+            d["career_record"]={"starts":career_total,
+                "wins":counts[0],"seconds":counts[1],"thirds":counts[2],"others":counts[3],
+                "derived_from":"PRESTART_20261012_1417_JRA_OFFICIAL_PDF",
+                "parent_signed_source_receipt_sha256":env["receipt_sha256"]}
             # Current odds/popularity are not point-in-time provable after the start.
             d.pop("popularity_rank",None)
             d.pop("win_odds",None)
