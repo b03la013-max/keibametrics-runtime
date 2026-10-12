@@ -77,7 +77,7 @@ def run(intent, *, output, run_id, github_sha=None):
         generation_allowed = False
         report.update(code=str(exc), prestart_deadline_expired=True)
     o._write(output/'static_owner_input.json', input_packet(request, source, resolution,
-                                                          generation_allowed=generation_allowed))
+                                                          generation_allowed=generation_allowed and intent.get('analysis_only') is not True))
     if formal is not None and intent.get('analysis_only') is True:
         report.update(code='ANALYSIS_ONLY_SOURCE_COMPLETE', first_failed_phase=None)
     if formal is not None and generation_allowed and intent.get('analysis_only') is not True:

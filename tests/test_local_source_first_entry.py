@@ -133,6 +133,7 @@ def test_entry_connects_discovered_canonical_static_to_existing_formal(monkeypat
     if analysis_only:
         assert calls == ['SOURCE']
         assert report['code'] == 'ANALYSIS_ONLY_SOURCE_COMPLETE'
+        assert json.loads((tmp_path/'out/static_owner_input.json').read_text())['static_generation_allowed'] is False
     else:
         assert calls == ['SOURCE', 'FORMAL']
         assert report['completion']['complete'] is True
