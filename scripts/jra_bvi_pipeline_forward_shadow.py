@@ -106,6 +106,27 @@ def freeze(request, source_path, output):
     return record
 
 
+def persist_result_receipt(result_request, receipt, root=ROOT):
+    """Called only after canonical Result Runner /verify succeeds.
+
+    Preserve its unchanged signed response in the existing forward cohort;
+    never create, resubmit or modify a historical RESULT or learning event.
+    """
+    if result_request.get('result_lane')!='PRODUCTION':return
+    directory=root/'runtime/jra_static_owner_forward_oos'/result_request['race_id']
+    if not (directory/'pedigree_pipeline_pre_result.json').exists():return
+    target=directory/'production_result_receipt.json'
+    record={'race_id':result_request['race_id'],'result_request_sha256':sha(result_request),
+        'signed_result_envelope':receipt,'verified_by_canonical_result_runner':True}
+    record['sha256']=sha(record)
+    if target.exists():
+        prior=json.loads(target.read_text())
+        if prior.get('result_request_sha256')!=record['result_request_sha256']:
+            raise ValueError('BVI_FORWARD_SIGNED_RESULT_REQUEST_CHANGED')
+        return
+    save_immutable(target,record)
+
+
 def settle(root=ROOT):
     from mec_r4_shadow import settle_ticket_list
     from krs_prediction_utility import evaluate_against_result
@@ -129,10 +150,27 @@ def settle(root=ROOT):
             result_path=root/'runtime/results'/f"{pre['race_id']}.json"
             if not result_path.exists() or existing['official_result_file_sha256']!=hashlib.sha256(result_path.read_bytes()).hexdigest():
                 raise ValueError('BVI_FORWARD_RESULT_CHANGED')
+            receipt_path=path.with_name('production_result_receipt.json')
+            if not receipt_path.exists() or existing['production_result_receipt_file_sha256']!=hashlib.sha256(receipt_path.read_bytes()).hexdigest():
+                raise ValueError('BVI_FORWARD_SIGNED_RESULT_CHANGED')
             records.append(existing);continue
         result_path=root/'runtime/results'/f"{pre['race_id']}.json"
         if not result_path.exists():continue
         result=json.loads(result_path.read_text());official=result['official_result']
+        receipt_path=path.with_name('production_result_receipt.json')
+        if not receipt_path.exists():continue
+        bound=json.loads(receipt_path.read_text());envelope=bound['signed_result_envelope'];receipt=envelope['receipt']
+        if (bound.get('sha256')!=sha({k:v for k,v in bound.items() if k!='sha256'})
+                or bound.get('result_request_sha256')!=sha(result)
+                or receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS'
+                or receipt.get('race_id')!=pre['race_id'] or receipt.get('family')!='JRA'
+                or receipt.get('artifact_sha256')!=sha(envelope['artifact'])
+                or call('/verify',envelope,30).get('valid') is not True):
+            raise ValueError('BVI_FORWARD_SIGNED_RESULT_BINDING_INVALID')
+        signed_official=envelope['artifact']['official_result']
+        signed_top3=signed_official.get('top3') or signed_official.get('finish_order',[])[:3]
+        if [str(x) for x in signed_top3]!=[str(x) for x in official['top3']]:
+            raise ValueError('BVI_FORWARD_SIGNED_RESULT_ORDER_MISMATCH')
         if (result.get('race_id')!=pre['race_id'] or result.get('result_lane')!='PRODUCTION'
                 or official.get('status')!='OFFICIAL'
                 or (result.get('frozen_prediction_ref') or {}).get('source_cutoff')!=pre['prediction_cutoff']
@@ -168,6 +206,8 @@ def settle(root=ROOT):
                 'krs_utility':evaluate_against_result(arm['krs_utility'],official['top3'],static_ranking=ranking)}
         record={'profile':PROFILE,'race_id':pre['race_id'],'policy_fingerprint':pre['policy_fingerprint'],
             'frozen_sha256':pre['sha256'],'git_commit_at':witness,'official_result_file_sha256':hashlib.sha256(result_path.read_bytes()).hexdigest(),
+            'production_result_receipt_file_sha256':hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            'signed_result_receipt_sha256':envelope['receipt_sha256'],'signed_result_verified':True,
             'official_result_raw_sha256':official['raw_sha256'],'result_captured_at':official['captured_at'],
             'arms':arms,'oos_eligible':True,'production_effect':'NONE','actual_purchase_inferred':False}
         record['sha256']=sha(record);save_immutable(target,record);records.append(record)

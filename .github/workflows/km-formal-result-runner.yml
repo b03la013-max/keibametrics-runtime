@@ -330,6 +330,14 @@ jobs:
             "race_day_fast_reflection_sha256":fast_reflection.get("sha256") if fast_reflection else None,
             "race_day_first_material_failure":fast_reflection.get("first_material_failure") if fast_reflection else None
           }
+          # Reuse the already verified signed response for separately frozen
+          # bloodline OOS. No RESULT is reissued and no prior artifact is edited.
+          from scripts.jra_bvi_pipeline_forward_shadow import persist_result_receipt
+          try:
+              persist_result_receipt(p,res)
+          except (ValueError,OSError) as exc:
+              # Shadow failure cannot change the completed Production result.
+              print("BVI_FORWARD_RESULT_RECEIPT_BLOCKED="+str(exc))
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 
@@ -339,6 +347,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/jra_static_owner_forward_oos ]; then git add runtime/jra_static_owner_forward_oos; fi
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json runtime/mec_r4_oos_status.json
           if [ -d runtime/jra_fast_reflections ]; then git add runtime/jra_fast_reflections/*.json 2>/dev/null || true; fi
           if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi

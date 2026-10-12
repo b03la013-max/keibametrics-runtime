@@ -77,3 +77,21 @@ def test_mec_receives_each_arms_actual_materialized_numbers(monkeypatch):
     with pytest.raises(ValueError,match='PAYLOAD_BOUNDARY_CHECKED'):
         execute_diagnostic_downstream(comparison,req,None,lambda *args:pytest.fail('No engine call expected'))
     assert len(checked)==1
+
+
+def test_result_receipt_cannot_create_a_historical_oos_cohort(tmp_path):
+    f.persist_result_receipt({'race_id':'KM-JRA-OLD-RACE','result_lane':'PRODUCTION'},{},tmp_path)
+    assert not (tmp_path/'runtime/jra_static_owner_forward_oos').exists()
+
+
+def test_signed_result_write_is_immutable_and_request_bound(tmp_path):
+    directory=tmp_path/'runtime/jra_static_owner_forward_oos/KM-JRA-FUTURE-RACE'
+    directory.mkdir(parents=True)
+    (directory/'pedigree_pipeline_pre_result.json').write_text('{}')
+    req={'race_id':'KM-JRA-FUTURE-RACE','result_lane':'PRODUCTION','official_result':{'top3':[1,2,3]}}
+    f.persist_result_receipt(req,{'receipt':'FIRST_VERIFIED_RESPONSE'},tmp_path)
+    saved=(directory/'production_result_receipt.json').read_bytes()
+    f.persist_result_receipt(req,{'receipt':'SECOND_VERIFIED_RESPONSE'},tmp_path)
+    assert (directory/'production_result_receipt.json').read_bytes()==saved
+    req['official_result']['top3']=[3,2,1]
+    with pytest.raises(ValueError,match='REQUEST_CHANGED'):f.persist_result_receipt(req,{},tmp_path)

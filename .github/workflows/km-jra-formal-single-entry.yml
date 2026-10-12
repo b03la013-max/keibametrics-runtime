@@ -653,6 +653,7 @@ jobs:
           PY
 
   pedigree-forward-shadow:
+    continue-on-error: true
     needs: orchestrate
     if: ${{ always() && needs.orchestrate.result == 'success' }}
     runs-on: ubuntu-latest
