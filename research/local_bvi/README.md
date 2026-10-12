@@ -3,6 +3,7 @@
 地方版 Production numerical materializer に収集データの照合を接続する。
 各馬の `bloodline_bvi_research` に父・母父の一致行、出典、研究用BVI、期間と欠測を返す。
 レース全体の `bloodline_bvi_connection` にデータ識別子、ハッシュ、接続頭数を返す。
+正式実行の `numerical_materialization_summary.json` にも接続監査と各馬の研究値・出典を残す。
 
 ## 収録範囲
 

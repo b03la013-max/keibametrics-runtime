@@ -250,6 +250,13 @@ def materialize_production(
         "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION_NUMERICAL",
         "missing_semantics": "RULED-NEUTRAL is a transport value for UNKNOWN/INCOMPARABLE evidence, not an ability estimate.",
         "prediction_consumption_authorized": False,
+        "bloodline_bvi_connection": out.get("bloodline_bvi_connection"),
+        "bloodline_bvi_research": [
+            {"runner_id": r["runner_id"], **{
+                k: v for k, v in r["bloodline_bvi_research"].items()
+                if k not in {"research_components", "venue_reference_rows"}
+            }} for r in out["runners"]
+        ],
         "sha256": None,
     }
     out["production_numerical_summary"]["sha256"] = _sha(out["production_numerical_summary"])

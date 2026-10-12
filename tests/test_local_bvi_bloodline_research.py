@@ -85,6 +85,9 @@ def test_connection_with_simulated_post_collection_freeze_is_research_only():
     simulated["source_freeze_at"] = NOW  # Integration simulation, not a genuine new source receipt.
     after = materialize_production(simulated, request, request["required_indices"])
     assert after["bloodline_bvi_connection"]["connected_runners"] == 12
+    audit = after["production_numerical_summary"]["bloodline_bvi_research"]
+    assert len(audit) == 12
+    assert audit[0]["research_value"] == after["runners"][0]["bloodline_bvi_research"]["research_value"]
     assert any(r["bloodline_bvi_research"]["research_observed_weight"] for r in after["runners"])
     assert [r["canonical_components"]["BVIg-L"]["value"] for r in before["runners"]] == [
         r["canonical_components"]["BVIg-L"]["value"] for r in after["runners"]]
