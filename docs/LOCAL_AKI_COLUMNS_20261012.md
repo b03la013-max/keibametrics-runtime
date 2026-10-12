@@ -73,6 +73,10 @@ SOURCE原文のArtifact hash、Receipt hash、Ed25519署名をローカルで検
 
 外部試験は自動承認審査が「SOURCE由来情報を当該Railway宛先へ送る承認未確認」と拒否した。宛先がR51とGatewayに一致し、実Healthが凍結配備束と一致し、公開鍵が既存Signed SOURCEの鍵と一致することを別のread-only検査で確認したが、再審査でも送信は拒否された。`destination_verification.json`に確認結果を保存。外部実行ID・新実KRS回数・新署名FINALは**なし／0／未成立**。実行コードの記載は実行証明ではない。
 
+## CIで見つかった既存回帰の修正
+
+PR CIの2系列は、旧大井10月9日7戦のテストが全台帳を走査し、川崎2戦の追加で9戦になったため失敗した。テストをその7戦の実署名済み保存先へ限定し、期待精算・署名束縛・OOS不変の検査は維持した。新規AKI列CIは成功。追加で既存実行保証の201 testsとAKI/MEC/Capitalの27 testsがローカルでPASS（重複を含む別suite件数）。
+
 ## 回帰と残条件
 
 136 tests PASS（新規17＋関連119）。小頭数3・6、多頭数12・18、Parity、堅い得点構造と高リスク幅、軸不安、情報不足、欠測、取消Universe、重複、非有限値、SOURCE不一致、予算分離、SOURCEからの独立再計算、既存Worker／Git競合の回帰を含む。
