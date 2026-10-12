@@ -68,6 +68,9 @@ def evaluate():
         execute_diagnostic_downstream(comparison,req,result['official_result'],external_call)
         for arm in comparison['arms'].values():
             owner=arm['owner'];ranking=owner['static_prediction']['ranking'];cols=owner['active_columns']
+            for rank_row in arm['krs_result_utility']['rank_comparison']:
+                if rank_row['static_role_hit']!=(str(rank_row['horse']) in cols[rank_row['role']]):
+                    raise RuntimeError('REAL_KRS_STATIC_ROLE_LINEAGE_MISMATCH')
             arm['historical_diagnostic_metrics']={'winner_rank':ranking.index(top3[0])+1,
                 'winner_discovery':top3[0] in cols['W'],'p2_capture':top3[1] in cols['P2'],'p3_capture':top3[2] in cols['P3'],
                 'top3_mean_rank':sum(ranking.index(x)+1 for x in top3)/3,

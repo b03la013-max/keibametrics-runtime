@@ -273,7 +273,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
           "SSR-W":x.get("SSR-W"),"SSR-P2":x.get("SSR-P2"),"SSR-P3":x.get("SSR-P3"),"SSR-T3":x.get("SSR-T3"),
           "LSR":x.get("LSR"),"Z4R-W":x.get("Z4R-W"),"Z4R-P2":x.get("Z4R-P2"),"Z4R-P3":x.get("Z4R-P3"),
           "Robustness":x.get("Robustness"),"ranks":{k:ranks[k][int(x["horse_no"])] for k in ranks},
-          "positions":copy.deepcopy(x.get("positions") or {}),"static_roles":copy.deepcopy(x.get("static_roles") or []),
+          "positions":copy.deepcopy(x.get("positions") or {}),"static_roles":sorted(resolved_roles.get(int(x["horse_no"]),set())),
       } for x in summary],
       "non_probability_notice":"SSR/LSR/Z4R and occurrence frequencies are uncalibrated simulation support, not real-world probabilities or EV.",
       "production_effect":"NONE",
