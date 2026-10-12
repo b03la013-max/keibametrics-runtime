@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, "runtime")
 
 from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
+from local_prestart_gate import validate_window, PrestartError
 from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
 from formal_import_closure import FormalImportClosureError, build_closure
 from family_authority_guard import load_authority, validate_request_context, verify_execution_completion
@@ -1047,7 +1048,8 @@ def orchestrate(
         return report
 
     try:
-        check_deadline(intent)
+        current_phase = "SOURCE" if plan["action"] == "RUN_SOURCE_THEN_FORMAL" else "FORMAL"
+        check_deadline(intent, phase=current_phase)
         if plan["action"] == "RUN_SOURCE_THEN_FORMAL":
             source_req = build_phase_request(intent, "SOURCE")
             report["phases"].append(run_phase(
@@ -1065,8 +1067,8 @@ def orchestrate(
                 "checkpoint": plan["checkpoints"]["source"],
             })
 
-        check_deadline(intent)
         current_phase = "FORMAL"
+        check_deadline(intent)
         formal_req = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
         if formal_req.get("source_authoritative_reconciliation"):
             report["source_authoritative_reconciliation"] = formal_req[
@@ -1099,6 +1101,11 @@ def orchestrate(
                 "detail": str(exc),
                 "resume_hint": "RETRY_SAME_EXECUTION_ID",
             }
+        if not isinstance(failure, dict):
+            failure = {"detail": str(failure)}
+        failure["phase"] = failure.get("phase") or locals().get("current_phase", "SOURCE")
+        failure["code"] = failure.get("code") or failure.get("detail") or "ORCHESTRATION_FAILED"
+        failure["failure_class"] = failure.get("failure_class") or "ORCHESTRATION"
         code = str(failure.get("code") or failure.get("detail") or "")
         if "OWNER" in code:
             report["dependency_failure"] = failure.get("detail") or code
@@ -1124,17 +1131,11 @@ def completion_exit_code(report: Dict[str, Any]) -> int:
     return 2
 
 
-def check_deadline(intent: Dict[str, Any]) -> None:
-    if str(intent.get("temporal_mode") or "FORMAL-PRE-RACE").upper() != "FORMAL-PRE-RACE":
-        return
-    post = intent.get("scheduled_post_at")
-    if not post:
-        raise FormalOrchestrationError("SCHEDULED_POST_AT_REQUIRED")
-    deadline = intent.get("release_deadline_at")
-    end = _parse_iso(deadline) if deadline else _parse_iso(post) - dt.timedelta(
-        seconds=int(intent.get("release_buffer_seconds") or 120))
-    if dt.datetime.now(dt.timezone.utc) >= end.astimezone(dt.timezone.utc):
-        raise FormalOrchestrationError("DEADLINE_HOLD:FORMAL_INCOMPLETE")
+def check_deadline(intent: Dict[str, Any], *, phase: str = "FORMAL") -> None:
+    try:
+        validate_window(intent, phase=phase)
+    except PrestartError as exc:
+        raise FormalOrchestrationError(str(exc)) from exc
 
 
 def run_formal_with_fallback(request, phase, **kwargs):

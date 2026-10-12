@@ -13,6 +13,7 @@ from local_evidence_acquisition_roundtrip import enforce_before_numerical, Evide
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
 from formal_oos_policy import request_oos_policy
 from capital_policy import load_family_default_capital_policy
+from local_prestart_gate import validate_window, PrestartError
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -311,6 +312,11 @@ formal_release_deadline_utc=None
 if temporal_mode=="FORMAL-PRE-RACE":
     if not scheduled:
         fail_closed("SCHEDULED_POST_AT_REQUIRED")
+    if fam == "LOCAL":
+        try:
+            validate_window(req, phase="SOURCE" if phase == "SOURCE" else "FORMAL")
+        except PrestartError as exc:
+            fail_closed(str(exc))
     post_dt=parse_dt(scheduled).astimezone(datetime.timezone.utc)
     if release_deadline:
         deadline_dt=parse_dt(release_deadline).astimezone(datetime.timezone.utc)
