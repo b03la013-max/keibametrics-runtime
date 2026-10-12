@@ -28,7 +28,7 @@ from pathlib import Path
 
 from jra_race_day_resolver import JST, VENUES, resolve_day, resolve_meetings, venue_code
 
-PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.2-20261011"
+PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012"
 DEFAULT_WINDOW = (55, 30)
 
 
@@ -144,7 +144,13 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             continue
         decision = due(post, now, window)
         if decision == "DISPATCH":
-            (dispatch or _gh_dispatch)(venue, race_no, race_date, run_count)
+            try:
+                (dispatch or _gh_dispatch)(venue, race_no, race_date, run_count)
+            except Exception as exc:
+                # One resolver/API failure must not prevent other due races.
+                out.append({"race_id":rid,"status":"DISPATCH_FAILED",
+                            "error":type(exc).__name__+":"+str(exc)[:200]})
+                continue
             state[rid] = {"dispatched_at": now.isoformat(), "post": post.isoformat(), "profile": PROFILE}
         out.append({"race_id": rid, "post": post.isoformat(), "status": decision, "title": race.get("title")})
     schedule_path.write_text(json.dumps(schedule, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -274,7 +280,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
 def _gh_dispatch(venue, race_no, race_date, run_count):
     subprocess.run(["gh", "workflow", "run", "km-jra-race-intent-resolver.yml", "--ref", "main",
                     "-f", f"venue={venue}", "-f", f"race_no={race_no}", "-f", f"race_date={race_date}",
-                    "-f", f"run_count={run_count}"], check=True)
+                    "-f", f"run_count={run_count}"], check=True, timeout=30)
 
 
 def _post_result_closed_loop(root: Path, race_date: str) -> None:
@@ -282,8 +288,9 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
     request to the canonical Result Runner exactly once, only after the request
     is published on main. Scheduled cron alone proved unreliable, so the day
     loop drives it; idempotent per race (state: <date>.state.json)."""
-    run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True)
-    r = run(sys.executable, "runtime/jra_production_postresult.py", "--days", "1")
+    run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
+    r = subprocess.run([sys.executable, "runtime/jra_production_postresult.py", "--days", "1"],
+                       cwd=root, text=True, capture_output=True, timeout=180)
     print(r.stdout.strip()[-2000:], flush=True)
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
     new = [x for x in run("git", "ls-files", "--others", "--exclude-standard",
@@ -293,7 +300,7 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
         run("git", "commit", "-m", "result: JRA Production official result request [skip ci]")
     pushed = False
     for i in range(5):
-        if run("git", "pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and \
+        if _rebase_generated(root, race_date) and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:
             pushed = True
             break
@@ -318,20 +325,72 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def merge_dispatch_state(remote: dict, local: dict) -> dict:
+    """Monotonic union: never lose an acknowledged dispatch or result handoff."""
+    out = dict(remote)
+    for key, value in local.items():
+        if key == "_result_runner_dispatched":
+            out[key] = sorted(set(remote.get(key) or []) | set(value or []))
+        elif key not in out:
+            out[key] = value
+        elif isinstance(value, dict) and isinstance(out[key], dict):
+            # Preserve the first acknowledged dispatch rather than a newer retry.
+            a, b = out[key], value
+            out[key] = min([a,b], key=lambda x:str(x.get("dispatched_at") or "9999"))
+    return out
+
+
+def _rebase_generated(root: Path, race_date: str) -> bool:
+    """Resolve ONLY derived race-day files; other conflicts remain failures."""
+    def run(*args):
+        return subprocess.run(list(args),cwd=root,text=True,capture_output=True,timeout=30)
+    r=run("git","pull","--rebase","--autostash","origin","main")
+    if r.returncode == 0:
+        return True
+    conflicts=run("git","diff","--name-only","--diff-filter=U").stdout.splitlines()
+    state_path=f"runtime/jra_race_day_plan/{race_date}.state.json"
+    schedule_path=f"runtime/jra_race_day_plan/{race_date}.schedule.json"
+    index_paths={f"runtime/jra_race_day_status/{race_date}.json",f"runtime/jra_race_day_status/{race_date}.md"}
+    allowed={state_path,schedule_path}|index_paths
+    if not conflicts or not set(conflicts)<=allowed:
+        return False
+    for path in conflicts:
+        if path in index_paths:
+            continue  # Rebuild from merged truth below, never pick a stale index.
+        remote=json.loads(run("git","show",f":2:{path}").stdout)
+        local=json.loads(run("git","show",f":3:{path}").stdout)
+        value=merge_dispatch_state(remote,local) if path==state_path else {**remote,**local}
+        (root/path).write_text(json.dumps(value,ensure_ascii=False,indent=1,sort_keys=True)+"\n")
+    state=json.loads((root/state_path).read_text())
+    schedule=json.loads((root/schedule_path).read_text())
+    write_status(root,race_date,_dt.datetime.now(JST),schedule,state)
+    run("git","add",*sorted(allowed))
+    r=run("git","-c","core.editor=true","rebase","--continue")
+    return r.returncode==0
+
+
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
-    run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True)
+    run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
     run("git", "add", *paths)
-    if run("git", "diff", "--cached", "--quiet").returncode == 0:
+    if run("git", "diff", "--cached", "--quiet").returncode != 0:
+        run("git", "commit", "-m", f"autopilot: race-day state and status {race_date} [skip ci]")
+    elif not run("git","rev-list","origin/main..HEAD").stdout.strip():
         return
-    run("git", "commit", "-m", f"autopilot: race-day state and status {race_date} [skip ci]")
     for i in range(5):
-        if run("git", "pull", "--rebase", "--autostash", "origin", "main").returncode == 0 and \
+        if _rebase_generated(root, race_date) and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:
             return
         run("git", "rebase", "--abort")
         time.sleep(3 * (i + 1))
+    raise RuntimeError("AUTOPILOT_STATE_PUBLISH_RETRIES_EXHAUSTED")
+
+
+def loop_finished(now, until, started, maximum_seconds):
+    hh,mm=map(int,until.split(":"))
+    return (now>=now.replace(hour=hh,minute=mm,second=0,microsecond=0)
+            or time.monotonic()-started>=maximum_seconds)
 
 
 if __name__ == "__main__":
@@ -342,14 +401,25 @@ if __name__ == "__main__":
                     help="plan every official race when no plan file exists for the date")
     ap.add_argument("--loop-until", help="HH:MM JST; tick every --interval seconds until then, committing state")
     ap.add_argument("--interval", type=int, default=120)
+    ap.add_argument("--max-loop-seconds", type=int, default=1800)
+    ap.add_argument("--publish-only", action="store_true")
     a = ap.parse_args()
     root = Path(a.repo_root).resolve()
+    if a.publish_only:
+        _commit(root,a.date)
+        raise SystemExit(0)
+    started=time.monotonic()
     cache: dict = {}
     cache_at = None
     while True:
         now = _dt.datetime.now(JST)
         if a.loop_until:
-            subprocess.run(["git", "pull", "--rebase", "--autostash", "-q", "origin", "main"], cwd=root, capture_output=True)
+            try:
+                if not _rebase_generated(root,a.date):
+                    subprocess.run(["git","rebase","--abort"],cwd=root,capture_output=True,timeout=30)
+                    print("AUTOPILOT_PULL_RETRY_NEXT_TICK",flush=True)
+            except (subprocess.SubprocessError,OSError,ValueError) as exc:
+                print("AUTOPILOT_PULL_ERROR:"+str(exc)[:200],flush=True)
         if cache_at is None or (now - cache_at).total_seconds() > 1800 or any(
                 isinstance(v, Exception) for v in list(cache.get("days", {}).values()) + [cache.get("meetings")]):
             cache, cache_at = {}, now
@@ -361,11 +431,17 @@ if __name__ == "__main__":
         except Exception as exc:  # keep the day running; the index shows the last good state
             print(json.dumps({"profile": PROFILE, "error": type(exc).__name__ + ":" + str(exc)}, ensure_ascii=False), flush=True)
         if a.loop_until:
-            _post_result_closed_loop(root, a.date)
+            try:
+                _post_result_closed_loop(root, a.date)
+            except (subprocess.SubprocessError, OSError, RuntimeError) as exc:
+                print(json.dumps({"stage":"POSTRESULT","error":str(exc)[:300]}),flush=True)
         if not a.loop_until:
             break
-        _commit(root, a.date)
+        try:
+            _commit(root, a.date)
+        except (subprocess.SubprocessError, OSError, RuntimeError) as exc:
+            print(json.dumps({"stage":"PUBLISH","error":str(exc)[:300]}),flush=True)
         hh, mm = map(int, a.loop_until.split(":"))
-        if now >= now.replace(hour=hh, minute=mm, second=0, microsecond=0):
+        if loop_finished(_dt.datetime.now(JST),a.loop_until,started,a.max_loop_seconds):
             break
         time.sleep(max(30, a.interval))
