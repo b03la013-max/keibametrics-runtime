@@ -252,6 +252,23 @@ def main(out):
             if n in dmap:
                 assert str(dmap[n].get("horse_name") or "").replace(" ","")==str(name).replace(" ",""),(n,name,dmap[n].get("horse_name"))
         detail["runners"]=[r for r in detail.get("runners",[]) if str(r.get("horse_no")) in names]
+        # Exact pre-race career tallies printed alongside each horse in the
+        # 14:17 signed official PDF. This fixes missing POST-race detail starts
+        # without counting the just-completed race.
+        pdf_career=[
+          (3,2,1,3),(3,2,1,10),(6,1,1,18),(6,1,3,12),
+          (7,2,3,12),(7,5,4,13),None,(2,0,0,4),
+          (4,4,2,9),(4,1,1,8),(2,1,0,5),(5,1,1,7),
+          (3,5,2,4),(4,1,0,12),(4,4,0,0),(3,0,0,10),
+          (4,1,2,5),(2,1,0,7)]
+        for r in detail["runners"]:
+            i=int(r["horse_no"])-1
+            if pdf_career[i] is None:
+                r["career_record"]={"wins":15,"seconds":None,"thirds":None,"others":None,"starts":35}
+            else:
+                w,sec,third,other=pdf_career[i]
+                r["career_record"]={"wins":w,"seconds":sec,"thirds":third,"others":other,
+                                    "starts":w+sec+third+other}
         source["jra_official_race_card_detail"]=detail
     if source.get("jra_official_horse_history"):
         history,removed=sanitize_history(source["jra_official_horse_history"])
@@ -314,7 +331,8 @@ def main(out):
        "run_count":5000,"seed":2026101211,
     }
     source_env={"artifact":source,"receipt_sha256":sha(source["replay_provenance"]),
-                "receipt":{"status":"DERIVED_REPLAY_NOT_SIGNED_R11"}}
+                "receipt":{"status":"DERIVED_REPLAY_NOT_SIGNED_R11",
+                           "runtime_revision":"KM-JRA-HISTORICAL-DERIVED-REPLAY-v1"}}
     try:
         prod=prepare_production_numerical(intent,source_env,
           source_execution_id=RACE+"-RESULT-BLIND-REPLAY-R1",
