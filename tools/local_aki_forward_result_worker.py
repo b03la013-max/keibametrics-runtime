@@ -95,7 +95,25 @@ def run_case(terminal,plan,now=None):
         q=validate_forward_freeze(intent,source,final,selection,plan)
         validate_krs_chain(directory,intent,final)
         finished=directory/'forward_evaluation.json'
-        if finished.exists():return json.loads(finished.read_text())
+        if finished.exists():
+            proof=json.loads(finished.read_text())
+            result=json.loads((directory/'replay_result_receipt.json').read_text())
+            att=json.loads((ROOT/'evidence/local_aki_columns_20261012/destination_verification.json').read_text())
+            key=Ed25519PublicKey.from_public_bytes(base64.b64decode(att['health']['receipt_public_key_b64']))
+            raw=json.dumps(result['receipt'],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+            key.verify(base64.b64decode(result['signature']),raw)
+            if (sha(result['artifact'])!=result['receipt']['artifact_sha256'] or
+                hashlib.sha256(raw).hexdigest()!=result['receipt_sha256'] or
+                result['receipt']['phase']!='RESULT' or result['receipt']['status']!='PASS' or
+                result['receipt']['race_id']!=intent['race_id'] or
+                result['artifact']['frozen_refs']['final_receipt_sha256']!=final['receipt_sha256'] or
+                proof['result_receipt_sha256']!=result['receipt_sha256'] or
+                proof['final_receipt_sha256']!=final['receipt_sha256'] or
+                proof['source_receipt_sha256']!=source['receipt_sha256'] or
+                proof['plan_sha256']!=sha(plan) or proof['unknown_future_oos_count']!=1 or
+                proof['paper_settlement']!=json.loads((directory/'paper_settlement.json').read_text())):
+                raise ValueError('FORWARD_CACHED_RESULT_LINEAGE_INVALID')
+            return proof
         att=json.loads((ROOT/'evidence/local_aki_columns_20261012/destination_verification.json').read_text());endpoint=att['endpoint']
         context=source['artifact']['source_race_context'];spec=_result_source(context['venue_id'],LOCAL_BABA_CODES[context['venue_id']],str(context['race_date']).replace('-','/'),int(context['race_no']))
         spec['required']=True

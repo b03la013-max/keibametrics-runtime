@@ -64,3 +64,25 @@ def test_not_yet_post_is_waiting_not_success_failure_or_oos(monkeypatch):
         r=run_case(t,plan,now=dt.datetime.fromisoformat('2026-10-13T02:00:00+09:00'))
         assert r['status']=='WAITING_OFFICIAL_RESULT / NOT_YET_POST'
         assert r['unknown_future_oos_count']==0
+
+
+def test_cached_result_cannot_skip_signature_verification(unpacked,monkeypatch):
+    import tools.local_aki_forward_result_worker as worker
+    target,m=unpacked;c=m['cases'][0];t=c['terminal'];d=target/c['output_path']
+    (d/'forward_evaluation.json').write_text('{}')
+    (d/'replay_result_receipt.json').write_text(json.dumps({'receipt':{},'signature':'bad'}))
+    att=target/'evidence/local_aki_columns_20261012/destination_verification.json'
+    att.parent.mkdir(parents=True,exist_ok=True)
+    att.write_bytes((ROOT/'evidence/local_aki_columns_20261012/destination_verification.json').read_bytes())
+    monkeypatch.setattr(worker,'ROOT',target)
+    # Frozen SOURCE/FINAL validations have separate real-evidence tests above.
+    monkeypatch.setattr(worker,'validate_forward_freeze',lambda *a:{})
+    monkeypatch.setattr(worker,'validate_krs_chain',lambda *a:None)
+    import urllib.request
+    monkeypatch.setattr(urllib.request,'urlopen',lambda *a,**k:pytest.fail('cached result must not call runtime'))
+    plan=json.loads((target/'profiles/local_aki_prospective_evaluation_20261013_R2.json').read_text())
+    result=run_case(t,plan,now=dt.datetime(2026,10,14,tzinfo=dt.timezone.utc))
+    assert result['unknown_future_oos_count']==0
+    assert result['status']=='WAITING_OR_HOLD_OFFICIAL_RESULT'
+    assert result['error_type']=='Error'
+    (d/'forward_evaluation.json').unlink();(d/'replay_result_receipt.json').unlink()
