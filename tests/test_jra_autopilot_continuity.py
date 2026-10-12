@@ -66,3 +66,22 @@ def test_real_git_status_conflict_is_rebuilt_without_losing_dispatches(tmp_path)
     value=json.loads((a/state).read_text())
     assert set(value)=={'R1','R2'}
     assert not (b/'.git/rebase-merge').exists()
+
+
+def test_index_reports_actual_handoff_error_and_does_not_block_ready_request(tmp_path):
+    from jra_race_day_autopilot import race_status
+    rid='KM-JRA-TKY-20261012-R03';eid=rid+'-LIVE-R1'
+    intent=tmp_path/'runtime/jra_formal_intents'/f'{eid}.json';intent.parent.mkdir(parents=True);intent.write_text('{}')
+    gap=tmp_path/'runtime/exact_gaps'/f'{eid}.json';gap.parent.mkdir(parents=True)
+    q={'first_blocked_stage':None,'auto_handoff_error':'AKI_SINGLE_HEAD_FORBIDDEN',
+       'verified_full_index_count':220,'required_index_count':220,'production_full_pipeline_ready':True}
+    gap.write_text(json.dumps(q))
+    now=dt.datetime(2026,10,12,10,0,tzinfo=JST)
+    out=race_status(tmp_path,rid,{}, {},now)
+    assert out['state']=='PRODUCTION_BLOCKED'
+    assert out['first_blocked_stage']=='PRODUCTION_AKI_COLUMN_SELECTION'
+    assert out['execution_error']=='AKI_SINGLE_HEAD_FORBIDDEN'
+    q['auto_handoff_error']=None;gap.write_text(json.dumps(q))
+    out=race_status(tmp_path,rid,{}, {},now)
+    assert out['state']=='DISPATCHED_RUNNING'
+    assert out['awaiting_stage']=='EXTERNAL_FORMAL_FINAL'

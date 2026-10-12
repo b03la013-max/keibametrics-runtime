@@ -230,7 +230,15 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     elif gaps:
         gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
         row["state"] = "PRODUCTION_BLOCKED"
-        row["first_blocked_stage"] = gap.get("first_blocked_stage")
+        error=gap.get("auto_handoff_error")
+        stage=gap.get("first_blocked_stage") or (gap.get("production_blocker_classification") or {}).get("first_actual_blocked_stage")
+        if error:
+            stage=stage or ("PRODUCTION_AKI_COLUMN_SELECTION" if str(error).startswith("AKI_") else "PRODUCTION_AUTO_HANDOFF")
+            row["execution_error"]=error
+        elif gap.get("production_full_pipeline_ready") is True:
+            row["state"]="DISPATCHED_RUNNING"
+            row["awaiting_stage"]="EXTERNAL_FORMAL_FINAL"
+        row["first_blocked_stage"] = stage
         row["full20"] = f"{gap.get('verified_full_index_count')}/{gap.get('required_index_count')}"
         row["unclosed_cells"] = _blocked_cells(gap)
     elif eids or rid in state:
@@ -247,7 +255,7 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
 def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict) -> dict:
     rows = [race_status(root, rid, s, state, now) for rid, s in schedule.items()]
     rows.sort(key=lambda r: (r.get("post") or "", r["race_id"]))
-    idx = {"profile": PROFILE, "race_date": race_date, "races": rows,
+    idx = {"profile": PROFILE, "race_date": race_date, "generated_at":now.isoformat(), "races": rows,
            "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race "
                           "Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal "
                           "because some runner x index cells could not be closed from official evidence; "

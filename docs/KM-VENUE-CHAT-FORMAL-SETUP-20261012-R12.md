@@ -73,3 +73,5 @@ PRE_KRS・KRS・MEC・Capital・FINAL各Receiptの署名、Race/Source/index/tim
 停止：First Failed Stage、具体的な理由、未成立工程、保存済みCheckpoint、修復/再開可否を示す。Candidate順位を正式買い目へ変換しない。UNVALIDATEDを隠さず、未較正確率・EV、実購入・性能改善を捏造しない。
 
 本改定の実装・検証詳細は `docs/JRA_SMOOTH_EXECUTION_20261012.md`、GitHub PR #251を参照する。全工程の成立は対象Raceの実Artifactで判断する。
+
+2026-10-12起動継続追補（PR #254）：全日常駐を最大30分のWorker交代へ変更し、17:30まで明示的に次Workerを起動する。予備cronも短時間方式。確認済みdispatchと結果handoffのstateは競合時にunion、表示indexは再生成する。起動失敗はRace単位で再試行し、他Raceを止めない。署名不足や証拠不足を成功表示へ置換しない。修復後の京都12Rは全320指数・KRS5,000回・34必須工程PASS、16:06:27 JSTに事前署名FINAL成立（Run 38215742882）。
