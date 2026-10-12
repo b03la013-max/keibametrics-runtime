@@ -208,7 +208,13 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
             row["state"] = ("SETTLED_SIGNED_RESULT_LEARNED"
                             if (root / "runtime" / "learning_states" / (rid + ".json")).exists() else "SETTLED")
             row["official_top3"] = (res.get("official_result") or {}).get("top3")
-            row["settlement"] = {k: st.get(k) for k in ("total_investment", "total_payout", "profit_loss", "actual_purchase_status")}
+            # Display exactly the RESULT-owned virtual PFS and winning tickets.
+            # Do not silently recompute, drop the winning selection, or imply an actual bet.
+            row["settlement"] = {k: st.get(k) for k in (
+                "pfs_authority", "pfs", "total_investment", "total_payout",
+                "profit_loss", "winning_tickets", "actual_purchase_status",
+                "actual_pfs_status",
+            )}
     elif no_bet:
         row["state"] = "EVIDENCE_NO_BET"
         row["no_bet_terminal"] = Path(no_bet[-1]).relative_to(root).as_posix()
