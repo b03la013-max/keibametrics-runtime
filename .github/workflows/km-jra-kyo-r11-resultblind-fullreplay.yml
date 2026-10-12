@@ -1,0 +1,55 @@
+name: Kyoto R11 result-blind candidate full-pipeline replay
+run-name: Kyoto R11 2026-10-12 result-blind FULL20 KRS5000 MEC PAPER
+on:
+  push:
+    branches: [main]
+    paths:
+      - "runtime/jra_resultblind_replay_requests/*.json"
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install real JRA Python dependencies
+        run: python -m pip install -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Verify genuine pre-race R10 SOURCE OIDC and extract R11 official PDF
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify runtime/executions/KM-JRA-KYO-20261012-R10-LIVE-R1/SOURCE/runs/38207250686/source_receipt_envelope.json --repo "${{ github.repository }}"
+      - name: Execute all calculable result-blind candidate stages with external KRS
+        id: execute
+        continue-on-error: true
+        run: |
+          python runtime/jra_r11_resultblind_fullreplay.py
+      - name: Attest result-blind computation evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: runtime_out/kyo_r11_resultblind/00_status.json
+      - name: Upload every completed stage and exact failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kyo-r11-resultblind-fullstage-${{ github.run_id }}
+          path: runtime_out/kyo_r11_resultblind/
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Return real full-stage verdict
+        if: always()
+        run: |
+          test -f runtime_out/kyo_r11_resultblind/00_status.json
+          python - <<'PY'
+          import json
+          x=json.load(open("runtime_out/kyo_r11_resultblind/00_status.json"))
+          print(json.dumps(x,ensure_ascii=False,sort_keys=True,indent=2))
+          assert x.get("complete"), "REPLAY_FULL_STAGE_INCOMPLETE"
+          PY
