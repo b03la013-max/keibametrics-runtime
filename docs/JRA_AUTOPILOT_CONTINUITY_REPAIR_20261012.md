@@ -1,0 +1,11 @@
+# 全レース起動の継続修復
+
+京都11Rの事前起動未成立は、AKI計算以前の起動系統の欠落。Run 38183925579は08:20:44 JSTに開始し14:21:01にcancelled。600分のtimeout指定でも約6時間で終了した。全日ループと予備tickは同じconcurrency groupを占有し、朝の別Run 38196327573はjob開始前にcancelled。予備Run 38202630135は14:21:04まで待たされ、state/status JSON/MDのrebase競合で14:22:46に失敗。その後の京都11R起動窓14:50～15:15に継続Workerがなかった。
+
+修復：Workerのループを最大30分、jobを45分へ制限。台帳保存後、17:30まで新しいmainのWorkerを明示dispatchする。予備cronも同じ短時間方式にし、古い六時間常駐による全日占有を解消する。単一の起動所有者を維持し、予備との無制限な並行dispatchを増やさない。
+
+一つのRaceのdispatch API失敗をそのRaceへ局所化し、他Raceの起動を継続する。未成功をdispatch済みへ記録しない。ネットワークと結果後処理には待機上限を設け、結果後処理の失敗が予測起動を終了させない。
+
+stateの競合は確認済みdispatchの単調union、Result Runner handoffはset union。statusは署名成果物とmerged stateから再生成し、古い表示を選ばない。既知のgenerated日次ファイルだけを自動解決し、他ファイルの競合を無理に解消しない。push失敗後に新規差分がなくても未送信commitを再送する。失敗の事実をstdoutへ記録し、証拠不成立をPASSへ変更しない。
+
+検証：3会場36Race、全日2分刻み、起動APIのTimeout注入、再試行、一度だけの起動、Git bare remoteを使った実rebase競合と双方dispatch保存、30分でのWorker交代、既存autopilot回帰を確認。過去の京都11Rを発走前FINALへ改変しない。署名SOURCE取得・Full20・AKI・KRS・MEC・Capital・FINALの適格性規則は維持する。未計算や署名不足を隠して「全レース成功」と表示しない。

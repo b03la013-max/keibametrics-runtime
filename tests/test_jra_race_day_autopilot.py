@@ -116,12 +116,6 @@ class TestAllRacesAndStatus(unittest.TestCase):
         self.assertFalse((tmp / "runtime/jra_race_day_status").exists())
         self.assertFalse((tmp / "runtime/jra_race_day_plan/2026-10-13.state.json").exists())
 
-    def test_loop_pulls_autostash_dirty_status(self):
-        src = (Path(__file__).resolve().parents[1] / "runtime/jra_source_runtime/jra_race_day_autopilot.py").read_text()
-        self.assertNotIn('"pull", "--rebase", "origin"', src)
-        self.assertNotIn('"pull", "--rebase", "-q"', src)
-        self.assertEqual(src.count('"--autostash"'), 3)
-
     def test_calendar_failure_is_reported_not_raised(self):
         tmp = Path(tempfile.mkdtemp())
         def boom(d):
