@@ -40,7 +40,7 @@ jobs:
               changed = subprocess.check_output(
                   ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', os.environ['GITHUB_SHA']],
                   text=True).splitlines()
-              matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\\.json', p)]
+              matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\.json', p)]
               if len(matches) != 1:
                   raise SystemExit('SOURCE_INTENT_PUSH_REQUIRES_EXACTLY_ONE_FILE')
               raw = Path(matches[0]).read_text(encoding='utf-8')
