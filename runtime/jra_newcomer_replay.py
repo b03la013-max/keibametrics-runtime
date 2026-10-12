@@ -12,9 +12,10 @@ from jra_production_auto_handoff import compile_production_auto_handoff
 def build(intent, envelope):
     original = intent['execution_id']
     q = dict(intent)
-    q.update(execution_id=original+'-NEWCOMER-REPLAY-R51',
-             prediction_id=original+'-NEWCOMER-REPLAY-R51',
+    q.update(execution_id=original+'-NEWCOMER-REPLAY-R51-R2',
+             prediction_id=original+'-NEWCOMER-REPLAY-R51-R2',
              temporal_mode='POST-START-REPLAY', acceptance_only=True,
+             mec_profile='KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3',
              current_authority_manifest=load_current_authority()['manifest_id'],
              replay_computed_at=datetime.now(timezone.utc).isoformat(),
              original_pre_race_execution_id=original)

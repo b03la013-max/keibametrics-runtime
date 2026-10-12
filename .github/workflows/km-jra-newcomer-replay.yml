@@ -25,7 +25,7 @@ jobs:
             read -r EID RUN < <(python -c 'import json,sys;x=json.load(open(sys.argv[1]));print(x["execution_id"],x["source_run_id"])' "$FILE")
             [[ "$EID" =~ ^KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}-LIVE-R[0-9]+$ ]]
             [[ "$RUN" =~ ^[0-9]+$ ]]
-            TARGET="runtime/requests/$EID-NEWCOMER-REPLAY-R51.json"
+            TARGET="runtime/requests/$EID-NEWCOMER-REPLAY-R51-R2.json"
             [ ! -f "$TARGET" ] || continue
             SOURCE="runtime/executions/$EID/SOURCE/runs/$RUN/source_receipt_envelope.json"
             gh attestation verify "$SOURCE" --repo "$GITHUB_REPOSITORY"
