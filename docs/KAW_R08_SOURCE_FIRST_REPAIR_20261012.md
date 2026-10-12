@@ -40,3 +40,9 @@ python -m runtime.local_race_entry --request race-request.json --output entry-ou
 ## GitHub CIの追加修復
 
 更新コミット3dd5b101の11 workflows中、10成功・MEC-R5分類1失敗。MEC-R5の3 testsは成功しており、失敗は既存30戦完了状態`COMPLETE_30_HUMAN_REVIEW_REQUIRED`をworkflowが許容しない不一致だった。完了状態とtarget達成/remaining=0の対応を確認するよう検証側のみ修正し、台帳・精算値・自動昇格の設定は変更しない。main `6f63a834`も候補branchへ統合した。
+
+## 実導入とcanonical SOURCE登録
+
+PR #257は11 workflows全成功後にmain `3403dfe9d477bd0f7eff1cdb1008c8b3efc4bc0a`へ反映。実行基盤を導入し、Production suite/Authority/Venue/係数/モデル/Capital方針は維持。
+
+続いて同一Signed SOURCEを外部`/source/verify`で再検証し、signature_valid/artifact_valid/verified/valid=trueを確認。SOURCE-only Intentは`runtime/source_intents/`に置き、正式FULL Intentの自動実行を発生させない。実行台帳には初回不完全runと回復runを両方保持し、既存ローカルmanifest/receiptのバイト列を変更せず登録する。これにより圧縮証跡だけでなくcanonical SOURCE解決・再開が可能。SOURCE再取得・予測再計算・RESULT精算は行わない。
