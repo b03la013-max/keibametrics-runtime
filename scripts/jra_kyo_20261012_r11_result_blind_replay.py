@@ -423,10 +423,27 @@ def main(out):
     try:
         from jra_aki_v21 import apply_authorized_v21
         aki=apply_authorized_v21(req,source,authority,root=Path.cwd())
+        aki_selection=aki.get("aki_column_selection") or {}
+        # The earlier mechanical candidate replay reported AKI yet left MEC
+        # connected to its unrelated six-head cluster. Bind AKI to downstream
+        # semantics only if the canonical full PRE_KRS validator accepts it.
+        try:
+            aki_semantic_validation=validate_pre_krs_request(aki)
+            req=aki
+            report["aki_bound_to_mec"]=True
+            report["aki_semantic_columns"]=aki_selection["columns"]
+            report["aki_semantic_validation"]=True
+            bound="AKI_V21_BOUND"
+        except Exception as validation_error:
+            report["aki_bound_to_mec"]=False
+            report["aki_binding_error"]=repr(validation_error)
+            bound="AKI_DIAGNOSTIC_ONLY"
         save("aki_v21_replay_diagnostic.json",{"aki":aki.get("static_prediction",{}).get("aki_jra_v21"),
-                                            "selection":aki.get("aki_column_selection"),
-                                            "information_gate":aki.get("aki_information_gate")})
-        mark("AKI_V21_DIAGNOSTIC","PASS",selection_columns=list((aki.get("aki_column_selection") or {}).get("columns") or {}))
+                                            "selection":aki_selection,
+                                            "information_gate":aki.get("aki_information_gate"),
+                                            "downstream_binding":bound})
+        mark("AKI_V21_DIAGNOSTIC","PASS",selection_columns=list(aki_selection.get("columns") or {}),
+             downstream_binding=bound)
     except Exception as e:
         mark("AKI_V21_DIAGNOSTIC","GAP",error=repr(e))
     try:
@@ -542,9 +559,12 @@ def main(out):
         report["all_stages_complete"]=True
         report["final_receipt_sha256"]=f.get("receipt_sha256")
         report["candidate_ranking"]=req["static_prediction"]["ranking"]
-        report["w_active"]=req["candidate_semantic_freeze"]["w_active"]
-        report["p2_active"]=req["candidate_semantic_freeze"]["p2_active"]
-        report["p3_active"]=req["candidate_semantic_freeze"]["p3_active"]
+        report["w_active"]=(req.get("aki_column_selection") or {}).get("columns",{}).get("W",
+               req["candidate_semantic_freeze"]["w_active"])
+        report["p2_active"]=(req.get("aki_column_selection") or {}).get("columns",{}).get("P2",
+               req["candidate_semantic_freeze"]["p2_active"])
+        report["p3_active"]=(req.get("aki_column_selection") or {}).get("columns",{}).get("P3",
+               req["candidate_semantic_freeze"]["p3_active"])
         report["ticket_count"]=mec["ticket_count"]
         report["reference_capital"]=mec["minimum_required_capital"]
         report["actual_capital"]=0
