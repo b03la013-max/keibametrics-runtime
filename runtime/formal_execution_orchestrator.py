@@ -1387,6 +1387,7 @@ def main() -> int:
     ap.add_argument("--aki-paper-replay", action="store_true",
                     help="Explicit LOCAL research replay; never Production or pre-race completion")
     ap.add_argument("--frozen-source", help="Existing canonical signed SOURCE for AKI PAPER replay")
+    ap.add_argument("--aki-paper-forward", action="store_true", help="Preregistered pre-start LOCAL AKI PAPER experiment; no Production promotion")
     ap.add_argument("--replay-result", help="Existing signed official RESULT for optional PAPER postresult")
     ap.add_argument("--replay-official-result-source", help="Signed result-only raw SOURCE acquired by canonical external Runtime")
     ap.add_argument("--phase", choices=["SOURCE", "RESULT"])
@@ -1396,12 +1397,16 @@ def main() -> int:
     args = ap.parse_args()
 
     intent = _load(args.intent)
-    if args.aki_paper_replay:
+    if args.aki_paper_replay or args.aki_paper_forward:
         try:
             if intent.get("family_id") != "LOCAL" or not args.frozen_source:
                 raise FormalOrchestrationError("LOCAL_AKI_REPLAY_SIGNED_SOURCE_REQUIRED")
             if args.phase or args.resume_official_result or args.plan_only:
                 raise FormalOrchestrationError("LOCAL_AKI_REPLAY_MODE_CONFLICT")
+            if args.aki_paper_forward and (args.aki_paper_replay or intent.get("aki_temporal_mode") != "FORWARD_PAPER"):
+                raise FormalOrchestrationError("LOCAL_AKI_FORWARD_MODE_CONFLICT")
+            if args.aki_paper_replay and intent.get("aki_temporal_mode") == "FORWARD_PAPER":
+                raise FormalOrchestrationError("LOCAL_AKI_FORWARD_EXPLICIT_ENTRY_REQUIRED")
             if args.replay_result and args.replay_official_result_source:
                 raise FormalOrchestrationError("LOCAL_AKI_REPLAY_RESULT_MODE_CONFLICT")
             source_path = pathlib.Path(args.frozen_source).resolve()
@@ -1422,7 +1427,7 @@ def main() -> int:
                     raise FormalOrchestrationError("LOCAL_AKI_REPLAY_CANONICAL_RESULT_PATH_REQUIRED")
                 from tools.local_aki_external_postresult import run as review_paper
                 postresult = review_paper(str(ROOT / accepted["path"] / "acceptance.json"),str(result_path))
-            report = {"status":"LOCAL_AKI_SINGLE_ENTRY_REPLAY_PAPER_PASS",
+            report = {"status":"LOCAL_AKI_SINGLE_ENTRY_FORWARD_PAPER_FROZEN_RESULT_PENDING" if args.aki_paper_forward else "LOCAL_AKI_SINGLE_ENTRY_REPLAY_PAPER_PASS",
                       "profile":current_single_entry_profile(),"entry_run_id":args.run_id,
                       "current_authority_manifest":authority["manifest_id"],
                       "execution_id":accepted["execution_id"],"external_acceptance":accepted,

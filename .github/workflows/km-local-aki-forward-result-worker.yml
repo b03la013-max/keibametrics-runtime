@@ -1,0 +1,66 @@
+name: LOCAL AKI frozen forward PAPER result worker
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: km-local-aki-forward-result-20261013
+  cancel-in-progress: false
+jobs:
+  result:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography PyYAML
+      - name: Restore frozen inputs without another KRS
+        run: python tools/local_aki_forward_archive.py restore
+      - name: Official result, PAPER settlement and independent temporal classification
+        run: python tools/local_aki_forward_result_worker.py
+      - name: Persist result evidence without changing prediction archive
+        env:
+          RESULT_BRANCH: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import pathlib,subprocess,tarfile,json,hashlib
+          root=pathlib.Path('evidence/local_aki_columns_20261012/external')
+          files=[]
+          for case in root.glob('KM-LOCAL-AKI-FORWARD-*/*'):
+              for p in case.rglob('*.json'):
+                  if p.name in {'forward_evaluation.json','postresult_acceptance.json','replay_result_receipt.json',
+                                'replay_result_payload.json','replay_result_verification.json','paper_settlement.json',
+                                'paper_projection.json','paper_reflection.json','paper_learning.json','official_result_source_receipt.json'} or 'result_attempts' in p.parts:
+                      files.append(p)
+          dest=pathlib.Path('evidence/local_aki_columns_20261012/forward_result_checkpoint.tar.gz')
+          with tarfile.open(dest,'w:gz') as archive:
+              for p in sorted(files):archive.add(p,arcname=str(p),recursive=False)
+          manifest={'archive_sha256':hashlib.sha256(dest.read_bytes()).hexdigest(),
+                    'files':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)},
+                    'prediction_archive_changed':False,'additional_krs_runs':0,'purchase_authority':False}
+          dest.with_name('forward_result_checkpoint_manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          subprocess.run(['git','add',str(dest),str(dest.with_name('forward_result_checkpoint_manifest.json')),
+                          'research/local_aki_forward_20261013/result_worker_status.json'],check=True)
+          PY
+          git config user.name 'keibametrics-runtime'
+          git config user.email 'keibametrics-runtime@users.noreply.github.com'
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'LOCAL AKI frozen forward PAPER result checkpoint [skip ci]'
+          for attempt in 1 2 3; do
+            git fetch origin "$RESULT_BRANCH"
+            git rebase "origin/$RESULT_BRANCH" || { git rebase --abort; exit 2; }
+            if git push origin "HEAD:$RESULT_BRANCH"; then exit 0; fi
+          done
+          exit 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-aki-forward-result-${{ github.run_id }}
+          path: |
+            research/local_aki_forward_20261013/result_worker_status.json
+            evidence/local_aki_columns_20261012/forward_result_checkpoint*
+          retention-days: 90

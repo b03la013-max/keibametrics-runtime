@@ -69,10 +69,38 @@ def restore_archived_receipts(out, race_id, digest):
 def _run(intent_path, source_path, out_root, reuse_krs_from=None):
     req = json.loads(Path(intent_path).read_text())
     source = json.loads(Path(source_path).read_text())
+    forward = req.get("aki_temporal_mode") == "FORWARD_PAPER"
+    mode = "FORWARD_PAPER" if forward else "REPLAY"
+    registration = None
+    if forward:
+        plan_path = (ROOT / req["prospective_evaluation_plan"]).resolve()
+        if not plan_path.is_relative_to((ROOT / "profiles").resolve()):
+            raise RuntimeError("FORWARD_PLAN_CANONICAL_PATH_REQUIRED")
+        plan = json.loads(plan_path.read_text())
+        for path, expected in plan["implementation_hashes"].items():
+            if hashlib.sha256((ROOT / path).read_bytes()).hexdigest() != expected:
+                raise RuntimeError("FORWARD_FROZEN_IMPLEMENTATION_CHANGED:" + path)
+        parse = lambda x: dt.datetime.fromisoformat(x.replace("Z", "+00:00"))
+        post = parse(req["scheduled_post_at"])
+        cutoff = parse(req["prediction_cutoff"])
+        artifact = source["artifact"]
+        if not (parse(plan["registered_at"]) < parse(artifact["source_freeze_at"]) <= cutoff < post):
+            raise RuntimeError("FORWARD_REGISTRATION_SOURCE_CUTOFF_POST_ORDER_INVALID")
+        if artifact["prediction_cutoff"] != req["prediction_cutoff"] or artifact.get("formal_ready") is not True:
+            raise RuntimeError("FORWARD_SOURCE_NOT_FORMAL_READY_OR_CUTOFF_MISMATCH")
+        if any(parse(s["fetched_at"]) > cutoff for s in artifact["sources"]):
+            raise RuntimeError("FORWARD_POST_CUTOFF_OBSERVATION")
+        context = artifact["source_race_context"]
+        if any(str(context[k]).replace("/", "-") != str(req[k]).replace("/", "-")
+               for k in ("venue_id", "race_date", "race_no")):
+            raise RuntimeError("FORWARD_SOURCE_RACE_IDENTITY_MISMATCH")
+        registration = {"profile":plan["profile"],"registered_at":plan["registered_at"],
+            "plan_sha256":sha(plan),"scheduled_post_at":req["scheduled_post_at"],
+            "prediction_cutoff":req["prediction_cutoff"],"source_freeze_at":artifact["source_freeze_at"]}
     gateway = json.loads((ROOT / "profiles/current_execution_gateway.json").read_text())
     endpoint = gateway["families"]["LOCAL"]["external_endpoint"]
     digest = sha({"intent": req, "source_receipt": source["receipt_sha256"],
-                  "transport_schema_revision": "PAPER_FINAL_ROLE_REFLECTION_V2",
+                  "transport_schema_revision": "PAPER_FORWARD_ROLE_REFLECTION_V1" if forward else "PAPER_FINAL_ROLE_REFLECTION_V2",
                   "implementation": Path(ROOT / "runtime/local_aki_columns.py").read_text(),
                   "policy": (ROOT / "profiles/local_aki_columns_20261012_R1.json").read_text()})
     out = Path(out_root).resolve() / req["race_id"] / digest[:16]
@@ -111,7 +139,13 @@ def _run(intent_path, source_path, out_root, reuse_krs_from=None):
                 or envelopes[3]["artifact"]["final_prediction_package"]["aki_selection"] != selected
                 or a["final_receipt_sha256"] != envelopes[3]["receipt_sha256"]):
             raise RuntimeError("CACHED_INPUT_OR_FINAL_MISMATCH")
+        if forward:
+            fpp=envelopes[3]["artifact"]["final_prediction_package"]
+            if fpp.get("prospective_registration")!=registration or parse(envelopes[3]["receipt"]["timestamp"])>=post:
+                raise RuntimeError("CACHED_FORWARD_FREEZE_BINDING_INVALID")
         return a
+    if forward and dt.datetime.now(dt.timezone.utc) >= post:
+        raise RuntimeError("FORWARD_POST_ALREADY_PASSED_NO_RECONSTRUCTION")
     def save(name, obj):
         path = out / (name + ".json")
         text = json.dumps(obj, ensure_ascii=False, indent=2) + "\n"
@@ -185,7 +219,7 @@ def _run(intent_path, source_path, out_root, reuse_krs_from=None):
         rid = str(h["horse_no"])
         h["static_roles"] = [c for c, v in selected["columns"].items() if rid in v["selected"]]
     inp["aki_column_experiment"] = {"profile": selected["profile"], "selection_sha256": selected["sha256"],
-                                    "production_authority": False, "temporal_mode": "REPLAY"}
+                                    "production_authority": False, "temporal_mode": mode}
     save("krs_input", inp)
     pre = call("/pre-krs", {"family_id": "LOCAL", "race_id": req["race_id"],
                "source_receipt": source, "required_index_unresolved": 0,
@@ -214,19 +248,20 @@ def _run(intent_path, source_path, out_root, reuse_krs_from=None):
                            "output": run_receipt["artifact"]["raw_output"]}))
     d = save("decision", decision(q, selected, utility))
     save("post_ticket_recomputation", verify(q, art, selected))
-    fpp = {"profile": selected["profile"], "temporal_mode": "REPLAY", "production_authority": False,
+    fpp = {"profile": selected["profile"], "temporal_mode": mode, "production_authority": False,
            "purchase_authority": False, "validation_status": "UNVALIDATED_RULE_BASED",
            "aki_selection": selected, "paper_tickets": d["paper_tickets"],
            "ranking": ranking, "roles": roles,
            "krs_prediction_utility_shadow": utility,
            "source_snapshot_sha256": art["source_snapshot_sha256"]}
+    if forward: fpp["prospective_registration"] = registration
     trace = {"fpp_sha256": sha(fpp), "mec_sha256": d["mec"]["sha256"],
              "candidate_count": d["mec"]["ticket_count"], "selected_count": 0,
              "capital_decision_sha256": d["capital"]["sha256"],
              "aki_columns_sha256": selected["sha256"], "temporal_mode": "REPLAY",
-             "purchase_authority": False, "execution_id": "LOCAL-AKI-REPLAY-" + digest[:16]}
+             "purchase_authority": False, "execution_id": ("LOCAL-AKI-FORWARD-" if forward else "LOCAL-AKI-REPLAY-") + digest[:16]}
     now = dt.datetime.now(dt.timezone.utc).isoformat()
-    stages = [{"stage": x, "timestamp": now, "temporal_mode": "REPLAY"} for x in
+    stages = [{"stage": x, "timestamp": now, "temporal_mode": mode} for x in
               ("SOURCE_FREEZE", "RUNNER_UNIVERSE", "NUMERICAL_MATERIALIZATION", "INDEX_PROVENANCE",
                "STATIC_FREEZE", "PRE_KRS", "KRS", "KRS_UTILITY", "MEC", "CAPITAL", "FINAL_TICKET_FREEZE")]
     proposed_payload = {"family_id": "LOCAL", "race_id": req["race_id"],
@@ -240,13 +275,17 @@ def _run(intent_path, source_path, out_root, reuse_krs_from=None):
     payload = json.loads(existing_payload.read_text()) if existing_payload.exists() else save("final_payload", proposed_payload)
     if (payload["final_prediction_package"] != fpp or payload["ticket_transport_trace"] != trace):
         raise RuntimeError("FINAL_RESUME_DEPENDENCY_MISMATCH")
+    if forward and dt.datetime.now(dt.timezone.utc) >= post:
+        raise RuntimeError("FORWARD_FINAL_DEADLINE_PASSED")
     final = call("/final", payload, "final_receipt", 180)
     signed(final, "final", "PASS")
+    if forward and parse(final["receipt"]["timestamp"]) >= post:
+        raise RuntimeError("FORWARD_SIGNED_FINAL_NOT_PRESTART")
     final_art = final["artifact"]
     if (final_art["ticket_transport_trace"] != trace or final_art["final_prediction_package"] != fpp
             or final_art["minimum_efficient_coverage"]["sha256"] != d["mec"]["sha256"]):
         raise RuntimeError("SIGNED_FINAL_ROUNDTRIP_MISMATCH")
-    return save("acceptance", {"status": "EXTERNAL_REPLAY_PAPER_PASS", "execution_id": trace["execution_id"],
+    return save("acceptance", {"status": "EXTERNAL_FORWARD_PAPER_FROZEN / RESULT_PENDING" if forward else "EXTERNAL_REPLAY_PAPER_PASS", "execution_id": trace["execution_id"],
                "actual_run_count": run_receipt["artifact"]["actual_run_count"], "race_id": req["race_id"],
                "final_receipt_sha256": final["receipt_sha256"], "selection_sha256": selected["sha256"],
                "paper_ticket_count": d["mec"]["ticket_count"], "capital_decision": d["capital"]["decision"],
