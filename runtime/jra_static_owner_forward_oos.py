@@ -92,7 +92,9 @@ def freeze(intent, envelope, report, *, source_verified, created_at=None, root=R
            for r in prepared["runners"]):
         from jra_bvi_shadow_comparison import compare
         mapping=json.loads((Path(root)/"mapping/jra_base_index_evidence_mapping_v1.0_20260921.json").read_text())
-        result["pedigree_comparison"] = compare(prepared, mapping,
+        comparison_request = dict(intent)
+        comparison_request.update(prepared)
+        result["pedigree_comparison"] = compare(comparison_request, mapping,
             source_sha=source["source_snapshot_sha256"], receipt_sha=envelope["receipt_sha256"],
             algorithm_freeze_at=now.isoformat(), cutoff=intent["prediction_cutoff"])
         result["pedigree_comparison"]["status"] = "FROZEN_UNKNOWN_FUTURE_SHADOW / B_EQUALS_A_UNTIL_DISTINCT_INPUT"
