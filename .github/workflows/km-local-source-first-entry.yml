@@ -1,0 +1,42 @@
+name: LOCAL source-first candidate entry
+on:
+  workflow_dispatch:
+    inputs:
+      request_json:
+        description: 'LOCAL race identity, venue/date/number, aware post and cutoff, current authority. Optional approved frozen Static.'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: local-source-first-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q cryptography
+      - name: Execute SOURCE-first entry with explicit hold reporting
+        env:
+          RACE_REQUEST_JSON: ${{ inputs.request_json }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          request = json.loads(os.environ['RACE_REQUEST_JSON'])
+          Path('race-request.json').write_text(json.dumps(request))
+          PY
+          python -m runtime.local_race_entry --request race-request.json --output entry-out --run-id "source-first-${{ github.run_id }}" --github-sha "${{ github.sha }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-source-first-${{ github.run_id }}
+          path: |
+            entry-out/
+            runtime/executions/
+          retention-days: 90

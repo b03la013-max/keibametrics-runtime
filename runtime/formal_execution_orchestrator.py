@@ -735,6 +735,22 @@ def _validate_explicit_result_revision(
     }
 
 
+def validate_source_checkpoint(directory: pathlib.Path, request: Dict[str, Any]) -> None:
+    envelope_path = pathlib.Path(directory) / "source_receipt_envelope.json"
+    verification_path = pathlib.Path(directory) / "source_verification.json"
+    if not envelope_path.is_file() or not verification_path.is_file():
+        raise FormalOrchestrationError("SOURCE_CHECKPOINT_RECEIPT_OR_VERIFICATION_MISSING")
+    envelope, verification = _load(envelope_path), _load(verification_path)
+    receipt = envelope.get("receipt") or {}
+    if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+            or receipt.get("family") != "LOCAL" or receipt.get("race_id") != request.get("race_id")
+            or not envelope.get("receipt_sha256") or not envelope.get("signature")
+            or verification.get("valid") is not True or verification.get("verified") is not True
+            or verification.get("signature_valid") is not True or verification.get("artifact_valid") is not True
+            or (envelope.get("artifact") or {}).get("formal_ready") is not True):
+        raise FormalOrchestrationError("SOURCE_CHECKPOINT_RECEIPT_OR_VERIFICATION_INVALID")
+
+
 def run_phase(
     request: Dict[str, Any],
     phase: str,
@@ -770,6 +786,7 @@ def run_phase(
             raise FormalOrchestrationError("RESULT_RECOVERY_MANIFEST_REQUIRED")
         store_run_id += "-recovery-" + manifest_sha[:12]
     env["REQUEST_FILE"] = str(request_path.resolve())
+    env["KM_RUNTIME_OUT"] = str(runtime_out.resolve())
     proc = subprocess.run(
         ([sys.executable, "-m", "runtime.local_result_from_signed_final", str(request_path)]
          if str(phase).upper() == "RESULT" else
@@ -808,6 +825,8 @@ def run_phase(
             sort_keys=True,
         ))
 
+    if str(phase).upper() == "SOURCE":
+        validate_source_checkpoint(runtime_out, request)
     phase_copy = tmp_root / execution_id / f"{phase.lower()}_out"
     _copy_json_dir(runtime_out, phase_copy)
     if str(phase).upper() == "SOURCE":
@@ -859,9 +878,11 @@ def orchestrate(
         if saved is not None:
             if source_checkpoint_compatibility(intent, saved).get("status") != "PASS":
                 raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE")
+            validate_source_checkpoint(pathlib.Path(saved["run_dir"]), intent)
             return {"status": "SOURCE_PASS", "execution_id": execution_id, "completion": False}
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"]}
+        check_deadline(intent, phase="SOURCE")
         acquired = run_phase(build_phase_request(intent, "SOURCE"), "SOURCE", run_id=run_id,
                              github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
         return {"status": "SOURCE_PASS", "execution_id": execution_id,
