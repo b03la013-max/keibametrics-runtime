@@ -252,6 +252,7 @@ jobs:
           import json, os
           from pathlib import Path
           from jra_single_entry_outcome import evidence_terminal_eligible
+          from jra_aki_no_bet_terminal import terminal_eligible as aki_terminal_eligible
           path=Path("runtime_out/jra_single_entry_exact_gap.json")
           report=json.loads(path.read_text()) if path.exists() else {}
           eligible=evidence_terminal_eligible(report)
@@ -262,13 +263,14 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
               fh.write("evidence_terminal="+str(eligible).lower()+"\n")
               fh.write("static_terminal="+str(static_terminal).lower()+"\n")
+              fh.write("aki_terminal="+str(aki_terminal_eligible(report)).lower()+"\n")
           print({"first_blocked_stage":report.get("first_blocked_stage"),
                  "handoff_error":report.get("auto_handoff_error"),
                  "evidence_terminal_eligible":eligible})
           PY
 
-      - name: Produce verified zero-exposure Production terminal when Full20 is blocked
-        if: steps.failure_class.outputs.evidence_terminal == 'true' || steps.failure_class.outputs.static_terminal == 'true'
+      - name: Produce verified zero-exposure Production terminal for an admissible stop
+        if: steps.failure_class.outputs.evidence_terminal == 'true' || steps.failure_class.outputs.static_terminal == 'true' || steps.failure_class.outputs.aki_terminal == 'true'
         id: blocked_terminal
         # Fail-closed routes must still persist the exact gap and run the
         # Candidate lane; the final verification step owns the job verdict.
@@ -290,8 +292,9 @@ jobs:
           from jra_production_no_bet_terminal import (
               build_no_bet_terminal, build_static_unauthorized_no_bet_terminal,
           )
+          from jra_aki_no_bet_terminal import build_aki_no_bet_terminal
           from jra_production_blocker_classifier import (
-              classify_production_blockers, ROUTE_EVIDENCE_NO_BET, ROUTE_STATIC_NO_BET,
+              classify_production_blockers, ROUTE_EVIDENCE_NO_BET, ROUTE_STATIC_NO_BET, ROUTE_AKI_NO_BET,
           )
           source_path=Path("runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json")
           result=verify(str(source_path))
@@ -325,6 +328,10 @@ jobs:
                     owner_status=owner_status,source_receipt_verified=True,
                     created_at=ts.isoformat(),lineage=lineage)
               status="PRODUCTION_NO_BET_STATIC_OWNER_UNAUTHORIZED_TERMINAL"
+          elif route==ROUTE_AKI_NO_BET:
+              receipt=build_aki_no_bet_terminal(intent,report,source_receipt_verified=True,
+                    created_at=ts.isoformat(),lineage=lineage)
+              status="PRODUCTION_NO_BET_AKI_SELECTION_TERMINAL"
           else:
               raise SystemExit("JRA_PRODUCTION_FAIL_CLOSED_NO_TERMINAL:"+route+":"
                                +str(classification["first_actual_blocked_stage"]))

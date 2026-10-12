@@ -359,6 +359,9 @@ def verify_no_bet_terminal(terminal, *, race_id=None, require_live=False):
     """
     if not isinstance(terminal, dict):
         raise JRANoBetTerminalError("NO_BET_TERMINAL_REQUIRED")
+    from jra_aki_no_bet_terminal import PROFILE as AKI_PROFILE, verify_aki_no_bet_terminal
+    if terminal.get("profile") == AKI_PROFILE:
+        return verify_aki_no_bet_terminal(terminal, race_id=race_id, require_live=require_live)
     if terminal.get("profile") not in (PROFILE, STATIC_PROFILE) or terminal.get("family_id") != "JRA":
         raise JRANoBetTerminalError("NO_BET_PROFILE_OR_FAMILY_INVALID")
     if terminal.get("profile") == STATIC_PROFILE:

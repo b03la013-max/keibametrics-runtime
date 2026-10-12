@@ -216,7 +216,13 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     req["head_nonselection_reasons"] = {}
     req["orientation_exclusions"] = []
     req["available_bet_types"] = ["EXACTA", "TRIO", "TRIFECTA"]
-    req = apply_authorized_v21(req, official, current_authority, root=root)
+    try:
+        req = apply_authorized_v21(req, official, current_authority, root=root)
+    except ValueError as exc:
+        from jra_aki_no_bet_terminal import ADMISSIBLE, record_selection_failure
+        if str(exc) in ADMISSIBLE:
+            record_selection_failure(report, req, official, current_authority, root=root)
+        raise
     # Keep explicit owner overrides; absence is not an explicit budget opt-out.
     # The family default is a ceiling, never a target or a width selector.
     if req.get("capital_policy") is None:

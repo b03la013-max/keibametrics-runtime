@@ -796,6 +796,19 @@ def main() -> int:
                 # Persist the actual failure before raising. An unapproved
                 # Static owner or invalid transport is not missing evidence.
                 report["auto_handoff_error"] = str(exc)
+                from jra_production_blocker_classifier import classify_production_blockers
+                classification = classify_production_blockers(
+                    report, owner_status=report.get("static_owner_activation_status") or {},
+                    feasibility=report.get("structural_closure_feasibility"))
+                report["production_blocker_classification"] = classification
+                report["first_blocked_stage"] = classification["first_actual_blocked_stage"]
+                report["independent_blockers"] = classification["independent_blockers"]
+                report["production_auto_handoff_ready"] = False
+                report["production_full_pipeline_ready"] = False
+                report["status"] = "PRODUCTION_HANDOFF_BLOCKED"
+                diag = ("FIRST=" + str(classification["first_actual_blocked_stage"])
+                        + ":INDEPENDENT=" + ",".join(classification["independent_blocker_stages"])
+                        + ":ROUTE=" + classification["terminal_route"])
                 from jra_single_entry_outcome import evidence_terminal_eligible
                 report["evidence_no_bet_eligible"] = evidence_terminal_eligible(report)
                 report["sha256"] = _sha({k: v for k, v in report.items() if k != "sha256"})

@@ -100,7 +100,9 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
         "pfs":None,
         "eligible_for_production_prediction_kpi":False,
         "eligible_for_market_superiority_promotion":False,
-        "learning_class":"EVIDENCE_AVAILABILITY_AND_OPPORTUNITY_COST_ONLY",
+        "learning_class":("AKI_POSITIVE_EVIDENCE_AND_OPPORTUNITY_COST_ONLY"
+                          if str(terminal.get("decision_reason") or "").startswith("AKI_")
+                          else "EVIDENCE_AVAILABILITY_AND_OPPORTUNITY_COST_ONLY"),
         "first_blocked_stage":terminal.get("first_blocked_stage"),
         "terminal_index_count":decision["terminal_index_count"],
         "base_calculated_count":decision["calculated_base_count"],
