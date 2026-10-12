@@ -9,7 +9,8 @@ from pathlib import Path
 import json
 
 from jra_aki_capital_preflight import AKICapitalError, sha
-from jra_aki_v21 import apply_authorized_v21, materialize, _select, _time
+from jra_aki_v21 import materialize, _select, _time
+from jra_aki_dispatch import apply_authorized_v21
 from jra_aki_v21_features import compile_features
 
 PROFILE = "KM-JRA-PRODUCTION-AKI-SELECTION-NO-BET-TERMINAL-v1-20261012"

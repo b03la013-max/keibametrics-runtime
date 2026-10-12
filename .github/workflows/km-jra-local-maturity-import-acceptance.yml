@@ -268,7 +268,7 @@ jobs:
           R45_ALLOWED_JRA_DELTA={"evidence_rule_registry","owner_authorized_feature_rules",
                                  "pedigree_corpus","production_static_owner_activation",
                                  "production_static_prediction_owner_status",
-                                 "aki_v21_activation","aki_capital_bridge_restoration"}
+                                 "aki_v21_activation","aki_capital_bridge_restoration","newcomer_aki_paper_activation"}
           for family in ["JRA","BAN"]:
               delta=set()
               if family=="JRA":
@@ -291,6 +291,16 @@ jobs:
                   assert "aki_capital_bridge_restoration" in delta
                   bridge=current["family_scoped_authority"]["JRA"]["aki_capital_bridge_restoration"]
                   assert bridge["aki_direct_ticket_count_control"] is False
+              if "newcomer_aki_paper_activation" in delta:
+                  import hashlib
+                  from runtime.jra_aki_capital_preflight import sha
+                  act=current["family_scoped_authority"]["JRA"]["newcomer_aki_paper_activation"]
+                  assert act["purchase_authority"] is False
+                  assert act["automatic_promotion"] is False
+                  assert act["status"]=="OWNER_AUTHORIZED_UNVALIDATED"
+                  assert act["runtime_sha256"]==hashlib.sha256(Path("runtime/jra_aki_dispatch.py").read_bytes()).hexdigest()
+                  assert act["policy_sha256"]==sha(load(act["policy_path"]))
+                  assert act["owner_authorization_record_sha256"]==hashlib.sha256(Path(act["owner_authorization_record"]).read_bytes()).hexdigest()
               cur={k:v for k,v in current["family_scoped_authority"][family].items() if k not in delta}
               ref={k:v for k,v in r39["family_scoped_authority"][family].items() if k not in delta}
               assert cur==ref,family

@@ -71,6 +71,14 @@ jobs:
           # Current LOCAL pointers must resolve directly from the latest
           # authority once a LOCAL-scoped authority change is enacted.
           expected_local_parent=auth["manifest_id"]
+          # R51 changes only JRA NEWCOMER PAPER execution. LOCAL pointers
+          # retain R50, with exact scoped/common equality checked here.
+          if auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261012-R51":
+              parent=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261011_R50.json")
+              assert auth["predecessor"]==parent["manifest_id"]
+              assert auth["family_scoped_authority"]["LOCAL"]==parent["family_scoped_authority"]["LOCAL"]
+              assert cc==parent["common_family_components"]
+              expected_local_parent=parent["manifest_id"]
           expected_local_route=route["profile_id"]
           assert gateway["parent_current_authority"]==expected_local_parent
           assert gateway["venue_routing"]==expected_local_route
