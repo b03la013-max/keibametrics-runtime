@@ -1,5 +1,9 @@
 name: LOCAL source-first candidate entry
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/source_intents/*.json'
   workflow_dispatch:
     inputs:
       request_json:
@@ -17,6 +21,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -24,11 +30,25 @@ jobs:
       - name: Execute SOURCE-first entry with explicit hold reporting
         env:
           RACE_REQUEST_JSON: ${{ inputs.request_json }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           python - <<'PY'
-          import json, os
+          import json, os, re, subprocess
           from pathlib import Path
-          request = json.loads(os.environ['RACE_REQUEST_JSON'])
+          if os.environ.get('GITHUB_EVENT_NAME') == 'push':
+              changed = subprocess.check_output(
+                  ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', os.environ['GITHUB_SHA']],
+                  text=True).splitlines()
+              matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\\.json', p)]
+              if len(matches) != 1:
+                  raise SystemExit('SOURCE_INTENT_PUSH_REQUIRES_EXACTLY_ONE_FILE')
+              raw = Path(matches[0]).read_text(encoding='utf-8')
+          else:
+              raw = os.environ['RACE_REQUEST_JSON']
+          request = json.loads(raw)
+          if request.get('family_id') != 'LOCAL' or request.get('execution_phase') != 'SOURCE':
+              raise SystemExit('SOURCE_INTENT_FAMILY_OR_PHASE_MISMATCH')
           Path('race-request.json').write_text(json.dumps(request))
           PY
           python -m runtime.local_race_entry --request race-request.json --output entry-out --run-id "source-first-${{ github.run_id }}" --github-sha "${{ github.sha }}"
