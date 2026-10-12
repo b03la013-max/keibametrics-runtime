@@ -1,6 +1,6 @@
 {
- "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; MISSED_WINDOW = never predicted (no late or backdated FINAL).",
- "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.2-20261011",
+ "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; MISSED_WINDOW = never predicted (no late or backdated FINAL).",
+ "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012",
  "race_date": "2026-10-12",
  "races": [
   {
@@ -45,10 +45,8 @@
     "total_payout": 1720
    },
    "state": "SETTLED_SIGNED_RESULT_LEARNED",
-   "ticket_count": 23,
-   "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 43.000／W-AKI 50.000\nP2-AKI 70.000／P3-AKI 70.000\nASI 27.500／軸飛びリスク 72.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 1\n├─ 8\n└─ 10\n2着\n├─ 1\n├─ 8\n├─ 10\n└─ 14\n三連複（本線）\n1列目\n└─ 1\n2列目\n└─ 8\n3列目\n└─ 10\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 8\n3列目\n└─ 14\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 8\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 10\n3列目\n└─ 14\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 10\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 14\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 10\n3列目\n└─ 14\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 10\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 14\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 14\n3列目\n└─ 6\n三連単（頭入替）\n1着\n├─ 1\n└─ 8\n2着\n├─ 1\n├─ 8\n└─ 10\n3着\n├─ 1\n├─ 8\n└─ 10\n点数\n├─ 馬単　9点\n├─ 三連複　10点\n├─ 三連単　4点\n└─ 合計　23点\n1点当たり\n└─ 100円\n投資額\n└─ 2,300円\n購入判定\n└─ 実購入\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
+   "ticket_tree_error": "ModuleNotFoundError:No module named 'jra_ticket_tree_renderer'",
    "title": "2歳未勝利牝［指定］",
-   "total_investment": 2300,
    "venue": "京都"
   },
   {
@@ -168,13 +166,710 @@
    "venue": "東京"
   },
   {
+   "aki_selection_failure": {
+    "code": "AKI_EVIDENCE_SELECTED_COLUMN_EMPTY",
+    "columns": {
+     "P2": [],
+     "P3": [],
+     "W": []
+    },
+    "empty_columns": [
+     "W",
+     "P2",
+     "P3"
+    ],
+    "selection_ledger": [
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 0,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "3",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 82.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 63.360838
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 0.2225779999999986,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "3",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 82.0,
+       "RFI": 50.0,
+       "TPI": 55.289828
+      },
+      "value": 62.312725
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 0.6105250000000026,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "3",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 82.0,
+       "F3S": 60.195986,
+       "RFI": 50.0
+      },
+      "value": 58.921819
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 0.168091000000004,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "4",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 63.192747
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 0,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "4",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "RFI": 50.0,
+       "TPI": 55.616539
+      },
+      "value": 62.535303
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 0,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "4",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "F3S": 60.431504,
+       "RFI": 50.0
+      },
+      "value": 60.071464
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 0.5416489999999996,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "5",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 62.819189
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 0.4047909999999959,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "5",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "RFI": 50.0,
+       "TPI": 55.173447
+      },
+      "value": 62.130512
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 0.1911750000000012,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "5",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "F3S": 60.06961,
+       "RFI": 50.0
+      },
+      "value": 59.341169
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 0.6717179999999985,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "9",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 86.090909,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 62.68912
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 0.5939750000000004,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "9",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 86.090909,
+       "RFI": 50.0,
+       "TPI": 55.060578
+      },
+      "value": 61.941328
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 0,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "9",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 86.090909,
+       "F3S": 59.87956,
+       "RFI": 50.0
+      },
+      "value": 59.532344
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 1.0849000000000046,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "6",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 62.275938
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 0.8416519999999963,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "6",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "RFI": 50.0,
+       "TPI": 54.860892
+      },
+      "value": 61.693651
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 0.4065879999999993,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "6",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "F3S": 59.640681,
+       "RFI": 50.0
+      },
+      "value": 59.125756
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 1.7364570000000015,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "7",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 61.624381
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 1.6654479999999978,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "7",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "RFI": 50.0,
+       "TPI": 54.103049
+      },
+      "value": 60.869855
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 2.5384850000000014,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "7",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "F3S": 58.916206,
+       "RFI": 50.0
+      },
+      "value": 56.993859
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 2.3787110000000027,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "2",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 0,
+      "support_indices": {
+       "CFI": 64.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 60.982127
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 2.363709,
+      "reasons": [
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "2",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 0,
+      "support_indices": {
+       "CFI": 64.0,
+       "RFI": 50.0,
+       "TPI": 53.273874
+      },
+      "value": 60.171594
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 2.0823110000000042,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "2",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 0,
+      "support_indices": {
+       "CFI": 64.0,
+       "F3S": 57.954158,
+       "RFI": 50.0
+      },
+      "value": 57.450033
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 3.429223999999998,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "8",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 59.931614
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 3.1326910000000012,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "8",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "RFI": 50.0,
+       "TPI": 52.938709
+      },
+      "value": 59.402612
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 3.092888000000002,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "8",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 88.0,
+       "F3S": 57.622634,
+       "RFI": 50.0
+      },
+      "value": 56.439456
+     },
+     {
+      "anchor_runner": "3",
+      "category": "OTHER",
+      "column": "W",
+      "gap_limit": 1.0,
+      "metric": "ZAI_WIN",
+      "normalized_gap": 7.0859900000000025,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "1",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 70.818182,
+       "PRI": 50.0,
+       "RFI": 50.0
+      },
+      "value": 56.274848
+     },
+     {
+      "anchor_runner": "4",
+      "category": "OTHER",
+      "column": "P2",
+      "gap_limit": 1.5,
+      "metric": "ZAI_PLACE",
+      "normalized_gap": 6.656320999999998,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "REVIEW",
+      "role_quality_floor": 60,
+      "runner_id": "1",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 70.818182,
+       "RFI": 50.0,
+       "TPI": 49.747968
+      },
+      "value": 55.878982
+     },
+     {
+      "anchor_runner": "9",
+      "category": "OTHER",
+      "column": "P3",
+      "gap_limit": 1.2,
+      "metric": "T3I",
+      "normalized_gap": 5.704633999999999,
+      "reasons": [
+       "ROLE_INDEX_BELOW_FLOOR",
+       "SUPPORT_GROUP_COUNT_BELOW_TWO",
+       "ROLE_GAP_OUTSIDE_REGISTERED_RANGE"
+      ],
+      "review_mode": "BASE",
+      "role_quality_floor": 60,
+      "runner_id": "1",
+      "scale": 1.0,
+      "selected": false,
+      "support_floor": 65,
+      "support_group_count": 1,
+      "support_indices": {
+       "CFI": 70.818182,
+       "F3S": 54.126434,
+       "RFI": 50.0
+      },
+      "value": 53.82771
+     }
+    ],
+    "triggers": {
+     "P2": "REVIEW",
+     "P3": "BASE",
+     "W": "REVIEW"
+    }
+   },
+   "decision_reason": "AKI_EVIDENCE_SELECTED_COLUMN_EMPTY",
+   "first_blocked_stage": "PRODUCTION_AKI_COLUMN_SELECTION",
    "full20": "180/180",
    "no_bet_terminal": "runtime/jra_no_bet_terminals/KM-JRA-KYO-20261012-R05-LIVE-R1.json",
    "post": "2026-10-12T12:25:00+09:00",
    "race_id": "KM-JRA-KYO-20261012-R05",
    "race_no": 5,
-   "state": "EVIDENCE_NO_BET",
+   "state": "AKI_NO_BET",
+   "ticket_count": 0,
    "title": "メイクデビュー京都 2歳新馬[指定]",
+   "total_investment": 0,
    "unclosed_cells": [],
    "venue": "京都"
   },
@@ -336,12 +1031,16 @@
    "venue": "東京"
   },
   {
-   "dispatched_at": "2026-10-12T14:15:25.022406+09:00",
+   "final_receipt_sha256": "079ccf98d323580a4c40e3c8e3fa3fb859ce874bac59b9cf9160dac9cff20188",
+   "immutable_final_sha256": "0db9564c4342519400d4ebdb177f9496efd5a6734b1502b0d194a158ce1cd1d9",
    "post": "2026-10-12T15:10:00+09:00",
    "race_id": "KM-JRA-KYO-20261012-R10",
    "race_no": 10,
-   "state": "DISPATCHED_RUNNING",
+   "state": "FINAL",
+   "ticket_count": 7,
+   "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 23.000／W-AKI 30.000\nP2-AKI 55.000／P3-AKI 15.000\nASI 57.500／軸飛びリスク 42.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 7\n└─ 5\n2着\n├─ 7\n├─ 5\n└─ 2\n三連複（本線）\n1列目\n└─ 7\n2列目\n└─ 5\n3列目\n└─ 2\n三連単（本線）\n1着\n└─ 7\n2着\n├─ 5\n└─ 2\n3着\n├─ 5\n└─ 2\n点数\n├─ 馬単　4点\n├─ 三連複　1点\n├─ 三連単　2点\n└─ 合計　7点\n1点当たり\n└─ 100円\n投資額\n└─ 700円\n購入判定\n└─ 実購入\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "堀川特別 3歳以上2勝クラス（混合）［指定］",
+   "total_investment": 700,
    "venue": "京都"
   },
   {
@@ -349,7 +1048,7 @@
    "post": "2026-10-12T15:30:00+09:00",
    "race_id": "KM-JRA-TKY-20261012-R11",
    "race_no": 11,
-   "state": "WAITING",
+   "state": "MISSED_WINDOW",
    "title": "オクトーバーS 3歳以上オープン（国際）（特指）",
    "venue": "東京"
   },
@@ -358,7 +1057,7 @@
    "post": "2026-10-12T15:45:00+09:00",
    "race_id": "KM-JRA-KYO-20261012-R11",
    "race_no": 11,
-   "state": "WAITING",
+   "state": "MISSED_WINDOW",
    "title": "MBS賞スワンS 3歳以上オープン（国際）（指定）",
    "venue": "京都"
   },
@@ -367,16 +1066,16 @@
    "post": "2026-10-12T16:15:00+09:00",
    "race_id": "KM-JRA-TKY-20261012-R12",
    "race_no": 12,
-   "state": "WAITING",
+   "state": "MISSED_WINDOW",
    "title": "3歳以上1勝クラス[指定]",
    "venue": "東京"
   },
   {
-   "dispatch_window_open": "2026-10-12T15:35:00+09:00",
+   "dispatched_at": "2026-10-12T15:58:51.917527+09:00",
    "post": "2026-10-12T16:30:00+09:00",
    "race_id": "KM-JRA-KYO-20261012-R12",
    "race_no": 12,
-   "state": "WAITING",
+   "state": "DISPATCHED_RUNNING",
    "title": "3歳以上1勝クラス（混合）［指定］",
    "venue": "京都"
   }
