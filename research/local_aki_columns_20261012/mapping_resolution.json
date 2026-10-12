@@ -1,0 +1,155 @@
+{
+  "status": "EXISTING_29_INDEX_MAPPING_REUSED / TWO_UNREGISTERED_NUMERIC_AXES_NOT_INVENTED",
+  "entries": {
+    "W-AKI": {
+      "inputs": [
+        "DCR",
+        "URP",
+        "PRI",
+        "running_style_repro",
+        "front_candidate_count"
+      ],
+      "formula": "equal-risk aggregation of uncertainty, promotion pressure, front pressure, market/internal divergence, path narrowness",
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_UNCERTAINTY",
+      "missing_policy": {
+        "policy": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "ability_interpretation": "52 IS NOT ABILITY NEUTRAL; IT IS A RULE-BOUND TRANSPORT VALUE FOR UNKNOWN/INCOMPARABLE EVIDENCE",
+        "strict_full_numeric_acceptance": "RULED-NEUTRAL WITH A FINITE VALUE AND PROVENANCE COUNTS AS NUMERICAL CLOSURE, BUT IS NOT REPORTED AS CALCULATED."
+      },
+      "source": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json + runtime/local_fullnumerical_candidate.py (production transform-equivalence)",
+      "validation_status": "ENACTED_NUMERICAL / UNCALIBRATED / DOWNSTREAM_CONSUMPTION_GATED",
+      "double_counting": "Inherited numeric formula unchanged; selector combines correlated risk axes with max rather than adding. Observation groups share race-history sources and are not statistically independent."
+    },
+    "P2-AKI": {
+      "inputs": [
+        "DCR",
+        "PRI",
+        "URP",
+        "runner_count"
+      ],
+      "formula": "equal-risk aggregation of uncertainty, role competition, market divergence, URP",
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_UNCERTAINTY",
+      "missing_policy": {
+        "policy": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "ability_interpretation": "52 IS NOT ABILITY NEUTRAL; IT IS A RULE-BOUND TRANSPORT VALUE FOR UNKNOWN/INCOMPARABLE EVIDENCE",
+        "strict_full_numeric_acceptance": "RULED-NEUTRAL WITH A FINITE VALUE AND PROVENANCE COUNTS AS NUMERICAL CLOSURE, BUT IS NOT REPORTED AS CALCULATED."
+      },
+      "source": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json + runtime/local_fullnumerical_candidate.py (production transform-equivalence)",
+      "validation_status": "ENACTED_NUMERICAL / UNCALIBRATED / DOWNSTREAM_CONSUMPTION_GATED",
+      "double_counting": "Inherited numeric formula unchanged; selector combines correlated risk axes with max rather than adding. Observation groups share race-history sources and are not statistically independent."
+    },
+    "P3-AKI": {
+      "inputs": [
+        "DCR",
+        "PRI",
+        "URP",
+        "runner_count"
+      ],
+      "formula": "equal-risk aggregation of uncertainty, tail competition, market divergence, URP",
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_UNCERTAINTY",
+      "missing_policy": {
+        "policy": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "ability_interpretation": "52 IS NOT ABILITY NEUTRAL; IT IS A RULE-BOUND TRANSPORT VALUE FOR UNKNOWN/INCOMPARABLE EVIDENCE",
+        "strict_full_numeric_acceptance": "RULED-NEUTRAL WITH A FINITE VALUE AND PROVENANCE COUNTS AS NUMERICAL CLOSURE, BUT IS NOT REPORTED AS CALCULATED."
+      },
+      "source": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json + runtime/local_fullnumerical_candidate.py (production transform-equivalence)",
+      "validation_status": "ENACTED_NUMERICAL / UNCALIBRATED / DOWNSTREAM_CONSUMPTION_GATED",
+      "double_counting": "Inherited numeric formula unchanged; selector combines correlated risk axes with max rather than adding. Observation groups share race-history sources and are not statistically independent."
+    },
+    "ASI": {
+      "inputs": [
+        "W-AKI",
+        "DCR",
+        "position_maintenance"
+      ],
+      "formula": "100 - mean(W-AKI, uncertainty risk, front-friction risk)",
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_AXIS_RELIABILITY",
+      "missing_policy": {
+        "policy": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "ability_interpretation": "52 IS NOT ABILITY NEUTRAL; IT IS A RULE-BOUND TRANSPORT VALUE FOR UNKNOWN/INCOMPARABLE EVIDENCE",
+        "strict_full_numeric_acceptance": "RULED-NEUTRAL WITH A FINITE VALUE AND PROVENANCE COUNTS AS NUMERICAL CLOSURE, BUT IS NOT REPORTED AS CALCULATED."
+      },
+      "source": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json + runtime/local_fullnumerical_candidate.py (production transform-equivalence)",
+      "validation_status": "ENACTED_NUMERICAL / UNCALIBRATED / DOWNSTREAM_CONSUMPTION_GATED",
+      "double_counting": "Inherited numeric formula unchanged; selector combines correlated risk axes with max rather than adding. Observation groups share race-history sources and are not statistically independent."
+    },
+    "RSI": {
+      "inputs": [
+        "ZAI-WIN",
+        "ZAI-PLACE",
+        "T3I-L",
+        "PRI",
+        "DCR"
+      ],
+      "formula": "mean(role-score dispersion risk, market/internal divergence, uncertainty risk)",
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_UNCERTAINTY",
+      "missing_policy": {
+        "policy": "CANONICAL_NEUTRAL_52_WITH_EXPLICIT_MISSINGNESS_AND_DCR_CONSEQUENCE",
+        "ability_interpretation": "52 IS NOT ABILITY NEUTRAL; IT IS A RULE-BOUND TRANSPORT VALUE FOR UNKNOWN/INCOMPARABLE EVIDENCE",
+        "strict_full_numeric_acceptance": "RULED-NEUTRAL WITH A FINITE VALUE AND PROVENANCE COUNTS AS NUMERICAL CLOSURE, BUT IS NOT REPORTED AS CALCULATED."
+      },
+      "source": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json + runtime/local_fullnumerical_candidate.py (production transform-equivalence)",
+      "validation_status": "ENACTED_NUMERICAL / UNCALIBRATED / DOWNSTREAM_CONSUMPTION_GATED",
+      "double_counting": "Inherited numeric formula unchanged; selector combines correlated risk axes with max rather than adding. Observation groups share race-history sources and are not statistically independent."
+    },
+    "axis_failure_risk": {
+      "formula": "100-ASI",
+      "inputs": [
+        "ASI"
+      ],
+      "scale": [
+        0,
+        100
+      ],
+      "direction": "HIGHER_FAILURE_RISK",
+      "validation_status": "RULE_COMPLEMENT_NOT_PROBABILITY",
+      "source": "LOCAL article 39"
+    },
+    "external_change": {
+      "status": "NOT_NUMERICALLY_DEFINED_IN_CURRENT_29_INDEX_REGISTRY",
+      "action": "record source revisions; source/universe change invalidates selection, recompute; never infer unchanged from missing"
+    },
+    "solid_finish_correction": {
+      "status": "NO_REGISTERED_NUMERIC_CORRECTION",
+      "action": "not subtracted; missing != zero proven correction"
+    }
+  },
+  "total_aki": "NOT_EMITTED_WITH_MISSING_EXTERNAL_CHANGE_OR_SOLID_CORRECTION",
+  "local_venues": [
+    "OHI",
+    "KAW",
+    "FNB",
+    "URW",
+    "SON",
+    "HIM",
+    "NGY",
+    "KSM",
+    "KNZ",
+    "KCH",
+    "SAG",
+    "MOR",
+    "MIZ",
+    "MON"
+  ],
+  "BAN": "EXCLUDED"
+}
