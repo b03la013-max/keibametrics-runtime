@@ -29,12 +29,15 @@ STAGE_SOURCE = "SIGNED_SOURCE_OR_PREPARATION"
 STAGE_NUMERICAL = "PRODUCTION_FEATURE_INDEX_CLOSURE"
 STAGE_OWNER_AUTH = "PRODUCTION_STATIC_OWNER_AUTHORIZATION"
 STAGE_OWNER_EXEC = "PRODUCTION_STATIC_OWNER_EXECUTION"
+STAGE_AKI = "PRODUCTION_AKI_COLUMN_SELECTION"
+STAGE_HANDOFF = "PRODUCTION_FORMAL_HANDOFF"
 STAGE_TEMPORAL = "PREDICTION_CUTOFF_OR_DISPATCH_DEADLINE"
 
 ROUTE_FORMAL = "FORMAL_PRE_KRS_HANDOFF"
 ROUTE_EVIDENCE_NO_BET = "EVIDENCE_INSUFFICIENT_NO_BET"
 ROUTE_STATIC_NO_BET = "STATIC_OWNER_UNAUTHORIZED_NO_BET"
 ROUTE_FAIL_CLOSED = "FAIL_CLOSED_NO_TERMINAL"
+ROUTE_AKI_NO_BET = "AKI_SELECTION_INSUFFICIENT_NO_BET"
 
 
 def _time(value: Any):
@@ -176,6 +179,17 @@ def classify_production_blockers(report: dict, *, owner_status: dict,
             "code": "JRA_STATIC_OWNER_EXECUTION_NOT_AVAILABLE",
             "error": report.get("static_owner_executable_error"),
         })
+    handoff_error = str(report.get("auto_handoff_error") or "")
+    if handoff_error.startswith("AKI_"):
+        from jra_aki_no_bet_terminal import ADMISSIBLE
+        # A classified error is not itself sufficient proof for NO_BET. The
+        # terminal builder independently replays the fingerprint-bound selector.
+        blockers.append({"stage": STAGE_AKI, "code": handoff_error,
+                         "diagnostic": (report.get("aki_selection_failure") or {}).get("diagnostic"),
+                         "positive_evidence_stop": handoff_error in ADMISSIBLE})
+    elif handoff_error and not blockers:
+        blockers.append({"stage": STAGE_HANDOFF, "code": handoff_error,
+                         "positive_evidence_stop": False})
     if intent is not None:
         current = _time(now or datetime.now(timezone.utc).isoformat())
         cutoff = _time(intent.get("prediction_cutoff"))
@@ -183,7 +197,7 @@ def classify_production_blockers(report: dict, *, owner_status: dict,
             blockers.append({"stage": STAGE_TEMPORAL,
                              "code": "PREDICTION_CUTOFF_EXPIRED" if cutoff else "CUTOFF_INVALID",
                              "evaluated_at": current.isoformat() if current else None})
-    order = (STAGE_SOURCE, STAGE_NUMERICAL, STAGE_OWNER_AUTH, STAGE_OWNER_EXEC, STAGE_TEMPORAL)
+    order = (STAGE_SOURCE, STAGE_NUMERICAL, STAGE_OWNER_AUTH, STAGE_OWNER_EXEC, STAGE_AKI, STAGE_HANDOFF, STAGE_TEMPORAL)
     blockers.sort(key=lambda b: order.index(b["stage"]))
     stages = [b["stage"] for b in blockers]
     if not blockers:
@@ -192,6 +206,9 @@ def classify_production_blockers(report: dict, *, owner_status: dict,
         route = ROUTE_EVIDENCE_NO_BET
     elif stages[0] == STAGE_OWNER_AUTH:
         route = ROUTE_STATIC_NO_BET
+    elif stages[0] == STAGE_AKI and blockers[0].get("positive_evidence_stop"):
+        from jra_aki_no_bet_terminal import terminal_eligible
+        route = ROUTE_AKI_NO_BET if terminal_eligible(report) else ROUTE_FAIL_CLOSED
     else:
         route = ROUTE_FAIL_CLOSED
     return {

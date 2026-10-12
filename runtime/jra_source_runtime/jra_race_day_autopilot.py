@@ -206,6 +206,17 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     elif no_bet:
         row["state"] = "EVIDENCE_NO_BET"
         row["no_bet_terminal"] = Path(no_bet[-1]).relative_to(root).as_posix()
+        terminal = json.loads(Path(no_bet[-1]).read_text(encoding="utf-8"))
+        if terminal.get("profile") == "KM-JRA-PRODUCTION-AKI-SELECTION-NO-BET-TERMINAL-v1-20261012":
+            row["state"] = ("AKI_NO_BET" if terminal.get("lineage") == "LIVE"
+                            else "AKI_NO_BET_HISTORICAL")
+            row["first_blocked_stage"] = terminal.get("first_blocked_stage")
+            row["decision_reason"] = terminal.get("decision_reason")
+            diagnostic = ((terminal.get("failure_report") or {}).get("aki_selection_failure") or {}).get("diagnostic") or {}
+            row["aki_selection_failure"] = {k: diagnostic.get(k) for k in
+                                              ("code", "empty_columns", "columns", "triggers", "selection_ledger")}
+            row["ticket_count"] = 0
+            row["total_investment"] = 0
         if gaps:
             gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
             row["full20"] = f"{gap.get('verified_full_index_count')}/{gap.get('required_index_count')}"
@@ -234,6 +245,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
            "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race "
                           "Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal "
                           "because some runner x index cells could not be closed from official evidence; "
+                          "AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; "
                           "MISSED_WINDOW = never predicted (no late or backdated FINAL)."}
     d = root / "runtime" / "jra_race_day_status"
     d.mkdir(parents=True, exist_ok=True)
@@ -248,6 +260,10 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
             md += ["```", r["aki_reference"]["tree"], "```"]
         if r.get("unclosed_cells"):
             md.append(f"Full20 {r.get('full20')} 未成立: " + "、".join(r["unclosed_cells"]))
+        if r.get("aki_selection_failure"):
+            md.append(f"Full20 {r.get('full20')} 計算済み。AKI選定停止: {r.get('decision_reason')}。"
+                      + "空列: " + "、".join(r["aki_selection_failure"].get("empty_columns") or [])
+                      + "。投資0円・買い目なし。正式FINALとは別の見送り決定。")
         if r.get("settlement"):
             md.append(f"結果 {r.get('official_top3')} 精算 {r['settlement']}")
         md.append("")
