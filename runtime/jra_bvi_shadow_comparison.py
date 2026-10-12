@@ -72,6 +72,19 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
         'policy_scope': ('CURRENT_AUTHORITY_REGISTERED_COLUMNS / CURRENT_PRODUCTION_POLICY_SHADOW' if current_authority is not None else 'CURRENT_NUMERICAL_MAPPING / EXISTING_STATIC_OWNER_EXECUTABLE_SHADOW; NOT A NEW PRODUCTION FINAL')}
 
 
+def bind_jra_static_role_trace(utility, request):
+    """JRA measurement consumer repair; Common/LOCAL definitions stay frozen."""
+    if request.get('family_id')!='JRA':raise ValueError('JRA_STATIC_TRACE_FAMILY_MISMATCH')
+    from krs_prediction_utility import _request_static_roles
+    from jra_static_owner_forward_oos import sha
+    bound=copy.deepcopy(utility);roles=_request_static_roles(request)
+    for row in bound['summary']:
+        row['static_roles']=sorted(roles.get(int(row['horse_no']),set()))
+    bound['static_role_binding']='JRA_COMPARISON_FORMAL_ROLE_REGISTRY / NO PRODUCTION CHANGE'
+    bound['sha256']=sha({k:v for k,v in bound.items() if k!='sha256'})
+    return bound
+
+
 def execute_diagnostic_downstream(comparison, prepared, official, call):
     """Real external candidate KRS plus existing MEC/Capital, never a FINAL.
 
@@ -101,7 +114,7 @@ def execute_diagnostic_downstream(comparison, prepared, official, call):
         receipt=verify_candidate_krs_execution(payload,response)
         verified=call('/verify',response['run_receipt'],30)
         if verified.get('valid') is not True:raise ValueError('BVI_SHADOW_KRS_SIGNATURE_INVALID')
-        utility=build_krs_prediction_utility(req,response)
+        utility=bind_jra_static_role_trace(build_krs_prediction_utility(req,response),req)
         mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
         validate_mec_plan(mec)
         capital=resolve_capital_policy(req,mec)

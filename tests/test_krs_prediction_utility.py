@@ -72,15 +72,3 @@ assert "P3_ROLE_RESCUE" not in e2["rescues"]
 assert "ORDERED_PAIR_CONFIRMED" in e2["supports"]
 assert "ORDERED_PAIR_RESCUE" not in e2["rescues"]
 print("PASS_FORMAL_BINDING",e2["classification"])
-
-
-def test_result_attribution_uses_formal_roles_when_engine_summary_omits_them():
-    from copy import deepcopy
-    formal=deepcopy(req);response=deepcopy(out)
-    for row in response['output']['summary']:row.pop('static_roles',None)
-    formal['static_prediction']={'roles':{'1':['W'],'2':['P2'],'3':['P3']}}
-    for row in formal['runners']:row.pop('static_roles',None)
-    utility=build_krs_prediction_utility(formal,response)
-    measured=evaluate_against_result(utility,[1,2,3],static_ranking=[1,2,3])
-    assert all(row['static_role_hit'] for row in measured['rank_comparison'])
-    assert measured['unique_rescue_role_count']==0

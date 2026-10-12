@@ -95,3 +95,20 @@ def test_signed_result_write_is_immutable_and_request_bound(tmp_path):
     assert (directory/'production_result_receipt.json').read_bytes()==saved
     req['official_result']['top3']=[3,2,1]
     with pytest.raises(ValueError,match='REQUEST_CHANGED'):f.persist_result_receipt(req,{},tmp_path)
+
+
+def test_jra_result_attribution_binds_static_roles_without_changing_common_definitions():
+    from jra_bvi_shadow_comparison import bind_jra_static_role_trace
+    from krs_prediction_utility import evaluate_against_result
+    request={'family_id':'JRA','runners':[{'runner_id':'1'},{'runner_id':'2'},{'runner_id':'3'}],
+        'static_prediction':{'roles':{'1':['W'],'2':['P2'],'3':['P3']}}}
+    utility={'summary':[{'horse_no':i,'static_roles':[],
+        'ranks':{'SSR-W':i,'SSR-P2':i,'SSR-P3':i}} for i in (1,2,3)],
+        'snapshot':{'role_zones':{'W':3,'P2':3,'P3':3}},'sha256':'old'}
+    fixed=bind_jra_static_role_trace(utility,request)
+    result=evaluate_against_result(fixed,[1,2,3],static_ranking=[1,2,3])
+    assert all(x['static_role_hit'] for x in result['rank_comparison'])
+    assert result['unique_rescue_role_count']==0
+    assert all(not x['static_roles'] for x in utility['summary'])
+    request['family_id']='LOCAL'
+    with pytest.raises(ValueError,match='FAMILY_MISMATCH'):bind_jra_static_role_trace(utility,request)
