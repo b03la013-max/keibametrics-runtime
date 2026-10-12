@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable
 
 from local_nar_evidence_candidate import compile_candidate_evidence
 from local_fullnumerical_candidate import materialize_candidate, REQUIRED
+from local_bvi_bloodline_research import attach_research
 
 PROFILE = "KM-LOCAL-PRODUCTION-NUMERICAL-MATERIALIZER-v1.0-20261008"
 PRODUCTION_EVIDENCE_REGISTRY = "mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json"
@@ -143,6 +144,7 @@ def materialize_production(
         copy.deepcopy(request),
         PRODUCTION_EVIDENCE_REGISTRY,
     )
+    attach_research(compiled, source_artifact)
 
     # Reuse the already regression-tested deterministic arithmetic engine. Its
     # implementation registries are transform-equivalent to the promoted
