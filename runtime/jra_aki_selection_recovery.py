@@ -28,6 +28,20 @@ def recover(intent, source_env, *, source_receipt_verified=False):
                                           current_authority=authority)
     if report.get('production_full_numerical_ready') is not True:
         raise ValueError('RECOVERY_FULL20_NOT_CLOSED')
+    if not report.get('static_owner_executable_diagnostic'):
+        # Preparation may cross the cutoff after starting in LIVE mode. Do
+        # not backdate a live Static. Reconstruct only a labelled historical
+        # diagnostic basis over the original pre-cutoff SOURCE and Full20.
+        if datetime.now(timezone.utc) <= cutoff:
+            raise ValueError('RECOVERY_STATIC_OWNER_NOT_EXECUTABLE')
+        from jra_static_owner_executable import compile_static_owner
+        checkpoint = report['source_checkpoint_manifest']
+        report['static_owner_executable_diagnostic'] = compile_static_owner(
+            report['prepared_numerical_request'],
+            source_snapshot_sha256=checkpoint['source_snapshot_sha256'],
+            source_receipt_sha256=checkpoint['receipt_sha256'],
+            frozen_at=checkpoint['source_freeze_at'], prediction_cutoff=intent['prediction_cutoff'])
+        report['recovery_static_basis'] = 'HISTORICAL_DIAGNOSTIC_ONLY / NOT_LIVE_STATIC_FREEZE'
     q = dict(report['prepared_numerical_request'])
     source = source_env['artifact']
     q.update(family_id='JRA', race_id=intent['race_id'], prediction_cutoff=intent['prediction_cutoff'],
