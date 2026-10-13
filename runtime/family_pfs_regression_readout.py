@@ -35,6 +35,17 @@ def _load(path: Path) -> dict[str, Any]:
     return obj
 
 
+def _frozen_status_source(root: Path, binding: dict, canonical_path: str) -> Path:
+    # A historical regression pins the historical aggregate, not today's live
+    # growing OOS view. Its exact original Git blob remains mandatory below.
+    snapshot=binding.get("frozen_status_path")
+    if snapshot is None:return root / canonical_path
+    path=(root / snapshot).resolve()
+    if not path.is_relative_to((root / "research/common").resolve()) or path.suffix!=".json":
+        raise RegressionEvidenceError("FROZEN_STATUS_PATH_INVALID")
+    return path
+
+
 def _git_blob_sha(raw: bytes) -> str:
     return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + bytes([0]) + raw).hexdigest()
 
@@ -172,7 +183,7 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         aki_path = pinned.get("status_path")
         if aki_path != "runtime/aki_adaptive_oos_status.json":
             raise RegressionEvidenceError("AKI_PATH_NOT_CANONICAL")
-        source = (root / aki_path)
+        source = _frozen_status_source(root, pinned, aki_path)
         try:
             aki_raw = source.read_bytes()
         except OSError as exc:
@@ -247,7 +258,7 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         pinned = bindings["mec_r5"]
         if pinned.get("status_path") != "runtime/local_mec_r5_oos_status.json":
             raise RegressionEvidenceError("R5_PATH_NOT_CANONICAL")
-        r5_source = root / pinned["status_path"]
+        r5_source = _frozen_status_source(root, pinned, pinned["status_path"])
         try:
             r5_raw = r5_source.read_bytes()
         except OSError as exc:

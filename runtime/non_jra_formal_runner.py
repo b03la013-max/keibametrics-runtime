@@ -1440,6 +1440,8 @@ if temporal_mode=="FORMAL-PRE-RACE":
             req,shadow_ticket,final_package,utility,
             generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             basis_sha256=common_mec_shadow_basis["sha256"],
+            candidate_tickets=((aki_adaptive_purchase_shadow or {}).get("candidate_tickets")
+                if req.get("family_capital_conversion_measurement") is True else None),
         )
         trace=bind_family_conversion_diagnostics_to_trace(
             trace,family_conversion_diagnostics
