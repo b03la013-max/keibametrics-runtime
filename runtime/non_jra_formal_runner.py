@@ -274,6 +274,7 @@ from minimum_efficient_coverage import (
     MEC_PROFILE,
 )
 from capital_policy import resolve_capital_policy
+from local_aki_columns import build as build_local_aki_columns, verify as verify_local_aki_columns, decision as local_aki_decision, LocalAKIError
 from local_numerical_authority_gate import assess as assess_numerical_authority
 from local_candidate_numerical_authority import assess as assess_candidate_numerical
 from local_nar_evidence_candidate import compile_candidate_evidence
@@ -1140,6 +1141,20 @@ pre_payload={
   "static_prediction_frozen":True,
   "krs_input_data":req["krs_input_data"]
 }
+# PAPER companion: implementation permission does not promote consumption.
+local_aki_columns_companion = None
+try:
+    local_aki_columns_companion = build_local_aki_columns(req, source_artifact)
+    persist("local_aki_columns_pre_krs.json", local_aki_columns_companion)
+    persist("local_aki_columns_pre_krs_verification.json",
+            verify_local_aki_columns(req, source_artifact, local_aki_columns_companion))
+    stage("LOCAL_AKI_COLUMNS_PAPER", status=local_aki_columns_companion["status"],
+          selection_sha256=local_aki_columns_companion["sha256"], production_authority=False)
+except ValueError as exc:
+    local_aki_columns_companion = None
+    persist("local_aki_columns_terminal.json", {"status":"NO_BET_COMPANION", "error":str(exc),
+            "production_authority":False, "purchase_authority":False})
+
 deadline_guard("BEFORE_PRE_KRS")
 pc,pre=call("/pre-krs",pre_payload,120)
 persist("pre_krs_receipt_envelope.json",pre)
@@ -1251,6 +1266,22 @@ trace={
   "selection_source":"CAPITAL_COMPATIBILITY_POLICY",
   "bet_type_dispositions":copy.deepcopy(mec.get("bet_type_dispositions") or [])
 }
+
+if local_aki_columns_companion is not None:
+    try:
+        local_aki_columns_decision = local_aki_decision(req, local_aki_columns_companion, utility)
+        persist("local_aki_columns_paper_decision.json", local_aki_columns_decision)
+        persist("local_aki_columns_post_ticket_verification.json",
+                verify_local_aki_columns(req, source_artifact, local_aki_columns_companion))
+        trace["local_aki_columns_paper"] = {
+            "selection_sha256":local_aki_columns_companion["sha256"],
+            "decision_sha256":sha_obj(local_aki_columns_decision),
+            "paper_ticket_count":local_aki_columns_decision["mec"]["ticket_count"],
+            "production_authority":False, "purchase_authority":False,
+            "validation_status":"UNVALIDATED_RULE_BASED"}
+    except (ValueError, MECError) as exc:
+        persist("local_aki_columns_terminal.json", {"status":"NO_BET_COMPANION", "error":str(exc),
+                "production_authority":False, "purchase_authority":False})
 
 if candidate_shadow_future is not None:
     try:

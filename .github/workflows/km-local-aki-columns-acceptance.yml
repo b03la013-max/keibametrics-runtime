@@ -1,0 +1,52 @@
+name: LOCAL AKI column PAPER regression
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_aki_columns.py'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'profiles/local_aki_columns_20261012_R1.json'
+      - 'tests/test_local_aki_columns.py'
+      - 'tools/local_aki_external_acceptance.py'
+      - 'tools/local_aki_external_postresult.py'
+      - 'tests/test_local_aki_external_receipts.py'
+      - 'evidence/local_aki_columns_20261012/kaw_r11_external_receipts.tar.gz'
+      - 'evidence/local_aki_columns_20261012/**'
+      - 'runtime/formal_execution_orchestrator.py'
+      - 'tools/local_aki_matched_comparison.py'
+      - 'tools/local_aki_venue_readiness.py'
+      - 'tests/test_local_aki_matched_comparison.py'
+      - 'tests/test_local_aki_forward_paper.py'
+      - 'tests/test_local_aki_post_event_venue_probe.py'
+      - 'tools/local_aki_forward_*.py'
+      - 'profiles/local_aki_prospective_evaluation_*.json'
+      - '.github/workflows/km-local-aki-columns-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest PyYAML cryptography
+      - name: LOCAL column, authority and existing lifecycle regression
+        run: >-
+          python -m pytest -q
+          tests/test_local_aki_columns.py
+          tests/test_local_aki_external_receipts.py
+          tests/test_local_aki_matched_comparison.py
+          tests/test_local_aki_forward_paper.py
+          tests/test_local_aki_forward_checkpoint.py
+          tests/test_local_aki_post_event_venue_probe.py
+          tests/test_local_production_numerical_v1.py
+          tests/test_local_production_numerical_closure.py
+          tests/test_aki_adaptive_purchase_shadow.py
+          tests/test_family_authority_guard.py
+          tests/test_execution_workflow_contract.py
+          tests/test_local_jra_execution_guarantees.py
+          tests/test_formal_execution_orchestrator.py
+          tests/test_local_source_first_entry.py

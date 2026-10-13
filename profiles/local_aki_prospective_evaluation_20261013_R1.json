@@ -1,0 +1,64 @@
+{
+  "profile": "LOCAL-AKI-PROSPECTIVE-EVALUATION-20261013-R1",
+  "registered_at": "2026-10-12T15:43:50.955892+00:00",
+  "status": "PREREGISTERED / PAPER_ONLY / UNKNOWN_FUTURE_NOT_YET_OBSERVED",
+  "implementation_hashes": {
+    "runtime/local_aki_columns.py": "340a7c9bc55a7267317a8c19c5ed3754458f0fec3be34cc9c885b0a1ee97015a",
+    "profiles/local_aki_columns_20261012_R1.json": "257a4661dbf9cb87606c757db74a1a0195811fb8747427a8452fd948bde2ef06",
+    "mapping/local_full_numerical_mapping_v1.0_production_20261008.json": "79d54fb904700e0714d0da7c6d9d75fdaff6f0a8c0e4b796220da629a2b198de",
+    "mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json": "5ffba3ab3270d4ce0bc2c05da17f6bd4062f23e242a2d8fa5bfebff415aa54d4",
+    "tools/local_aki_matched_comparison.py": "859b2960c03837cc3ccf3dfd53f8e077908e7a993899110ce6a796cf41910a4b",
+    "tools/local_aki_external_acceptance.py": "a3ce9f076e1c6e1395e93bcdcbfcdc15de3196cb42897ec65abf25039e03c8f7",
+    "tools/local_aki_external_postresult.py": "76210a60f42ed76878e55a504490a786b363d509611e429aa692e7abb11ebdd9",
+    "runtime/formal_execution_orchestrator.py": "b6c3e4cab5bf255b0a0da4d336920d5bd61ea696d369ec423ce223fade49f380"
+  },
+  "inclusion": "ALL consecutive LOCAL flat race intents after registration; retain holds, no-bets, failures and duplicates as attempts; deduplicate financial statistics by venue/date/race_no",
+  "required_venues": [
+    "MON",
+    "MOR",
+    "MIZ",
+    "URW",
+    "FNB",
+    "OHI",
+    "KAW",
+    "KNZ",
+    "KSM",
+    "NGY",
+    "SON",
+    "HIM",
+    "KCH",
+    "SAG"
+  ],
+  "ban_excluded": true,
+  "eligibility": [
+    "signed SOURCE observed before cutoff and scheduled post",
+    "all required indices/provenance and full active Universe",
+    "current frozen policy/hash exact match",
+    "signed PRE_KRS,KRS,FINAL before post",
+    "separate actual vs PAPER stake and result lineage",
+    "RESULT acquired after FINAL without changing prediction"
+  ],
+  "research_split": "All outcomes available before registration are REPLAY; neither chronological holdout nor rebuilt prestart SOURCE counts as unknown future OOS",
+  "comparison_modes": [
+    "original full portfolios",
+    "100-yen integer equal-budget full coverage",
+    "outcome-independent namespace equal-budget equal-count counterfactual research"
+  ],
+  "review_trigger": "30 eligible future races triggers human review only; require venue/field/class/distance/going disclosure; no automatic promotion; all-14 applicability requires actual per-venue evidence",
+  "required_metrics": [
+    "W/P2/P3/order capture",
+    "reachable tickets",
+    "counts/investment/hit-but-loss",
+    "undercoverage and oversized portfolio",
+    "bet type/venue/condition strata",
+    "equal budget/count",
+    "exclude-largest-and-top3 payouts",
+    "loss concentration/streak/drawdown",
+    "missingness holds and opportunity cost"
+  ],
+  "withdrawal": "Do not tune from isolated large wins; simplification/withdrawal reviewed against frozen baseline and concentration sensitivity",
+  "future_oos_count": 0,
+  "production_authority": false,
+  "purchase_authority": false,
+  "prerequisite": "Merge/deploy reviewed companion and collect new prestart signed records; historical records cannot satisfy this prerequisite"
+}
