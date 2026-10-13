@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
+import math
 
 PROFILE_ID = "KM-FAMILY-PFS-PROMOTION-GATE-20261007-R1"
 
@@ -14,7 +15,9 @@ DEFAULT_REQUIREMENTS = {
 
 def _num(v: Any) -> float | None:
     try:
-        return None if v is None else float(v)
+        if v is None or isinstance(v,bool):return None
+        number=float(v)
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 
