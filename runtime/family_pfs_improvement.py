@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any, Dict, Iterable, Mapping
 
 PROFILE_ID = "KM-FAMILY-OWNER-UTILITY-PFS-CONTINUOUS-IMPROVEMENT-20261007-R1"
@@ -83,9 +84,10 @@ def _unique(values: Iterable[str]) -> list[str]:
 
 def _float_or_none(value: Any) -> float | None:
     try:
-        if value is None:
+        if value is None or isinstance(value,bool):
             return None
-        return float(value)
+        number=float(value)
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 

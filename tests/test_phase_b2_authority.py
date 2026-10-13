@@ -20,6 +20,12 @@ def test_result_authority_holds_research_not_production(defect):
     assert m['status']=='HOLD_RESULT_AUTHORITY' and not m['krs_eligible'] and not m['eligible']
     assert fin==before and m['production_effect']=='NONE'
 
+@pytest.fixture(autouse=True)
+def mechanical_definition_registration(monkeypatch):
+    from phase_b_mechanical_fixture import register
+    register(monkeypatch)
+
+
 def test_frozen_candidate_outcome_preserves_disadvantage():
     req,fin,pre=capture();pre['static_prediction'].update(W=['1'],P2=['2'],P3=['3']);pre['candidate']={'candidate_static_prediction':{'ranking':['4','3','2','1'],'W':['4'],'P2':['3'],'P3':['2']}}
     pre['sha256']=f._sha({k:v for k,v in pre.items() if k!='sha256'})

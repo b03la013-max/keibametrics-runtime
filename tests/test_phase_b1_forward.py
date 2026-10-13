@@ -8,6 +8,12 @@ import local_candidate_postresult as f
 from krs_prediction_utility import build_krs_prediction_utility
 from pfs_grand_review import actual_purchase_records
 
+@pytest.fixture(autouse=True)
+def mechanical_definition_registration(monkeypatch):
+    from phase_b_mechanical_fixture import register
+    register(monkeypatch)
+
+
 def inputs(family='LOCAL',race='FNB-20261002-R01'):
     req={'family_id':family,'race_id':race,'execution_id':race+'-EXEC','temporal_mode':'FORMAL-PRE-RACE','scheduled_post_at':'2026-10-02T02:00:00+00:00','runners':[{'runner_id':str(i),'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'static_prediction':{'ranking':['1','2','3','4']}}
     utility={'summary':[{'horse_no':i,'ranks':{'SSR-W':i,'SSR-P2':i,'SSR-P3':i},'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'snapshot':{'role_zones':{'W':1,'P2':2,'P3':3}}}
@@ -43,7 +49,7 @@ def test_capture_immutable_and_fresh_process(tmp_path):
     result_art,rreq=result(req);settled=settle(pre,fin,result_art,rreq)
     assert settled['status']=='SETTLED' and not settled['eligible'] and not settled['krs_eligible']
     f.persist_forward_settlement(pre,settled,root)
-    subprocess.run([sys.executable,'-c',f"import sys;sys.path.insert(0,{str(ROOT/'runtime')!r});from local_candidate_postresult import forward_status; assert forward_status({root!r})['families']['LOCAL']['captured_races']==1"],cwd=ROOT,check=True)
+    subprocess.run([sys.executable,'-c',f"import sys,json;sys.path.insert(0,{str(ROOT/'runtime')!r});import local_candidate_postresult as f;f._forward_protocol=lambda:json.loads({json.dumps(f._forward_protocol())!r});assert f.forward_status({root!r})['families']['LOCAL']['captured_races']==1"],cwd=ROOT,check=True)
     _,_,second=capture(race='FNB-20261002-R02');f.persist_forward_capture(second,root)
     assert f.forward_status(root)['families']['LOCAL']['captured_races']==2
     changed=copy.deepcopy(pre);changed['generated_at']='2026-10-02T01:01:00+00:00';changed['sha256']=f._sha({k:v for k,v in changed.items() if k!='sha256'})
@@ -101,3 +107,13 @@ def test_actual_optional_reader_consumes_current_verified_result(tmp_path,monkey
     Path('runtime/actual_purchases/test.json').write_text(json.dumps(ledger))
     rows,held=actual_purchase_records(result_overrides={rid:official})
     assert len(rows)==1 and not held and rows[0]['return']==12080
+
+def test_registered_test_definition_still_rejects_hash_drift(monkeypatch):
+    protocol=copy.deepcopy(f._forward_protocol());original=json.loads((ROOT/'research/utility/forward_protocol.json').read_text())
+    assert protocol['version']!=original['version']
+    protocol['definition_sha256'][next(iter(protocol['definition_sha256']))]='0'*64
+    monkeypatch.setattr(f,'_forward_protocol',lambda:protocol)
+    req,fin,u=inputs()
+    with pytest.raises(ValueError,match='DEFINITION_NOT_PREREGISTERED'):
+        f.build_forward_capture(req,fin,u,generated_at='2026-10-02T01:00:00+00:00',candidate={'race_source_snapshot_sha256':'source-test'},classification='MECHANICAL_ACCEPTANCE')
+    assert json.loads((ROOT/'research/utility/forward_protocol.json').read_text())==original

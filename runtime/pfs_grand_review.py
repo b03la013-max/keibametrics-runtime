@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, re, hashlib, glob, copy
+import json, os, re, hashlib, glob, copy, math
 from collections import defaultdict
 from mec_r4_shadow import settle_ticket_list
 
@@ -17,20 +17,22 @@ def _sha(x):
 
 def _num(v):
     try:
-        return float(v)
+        if isinstance(v,bool):return None
+        n=float(v)
+        return n if math.isfinite(n) else None
     except Exception:
         return None
 
 def _venue(race_id):
     u=str(race_id).upper()
-    for v in ("FNB","KAW","URW","OHI","SON","KOC","SAG","MOR","MON","NGY","KSM","NKY","HSN","TKY","KYO","CHK","SPP","NGT","KKR","FKS","HKD"):
+    for v in ("FNB","KAW","URW","OHI","SON","KOC","KCH","KNZ","MIZ","HIM","SAG","MOR","MON","NGY","KSM","NKY","HSN","TKY","KYO","CHK","SPP","NGT","KKR","FKS","HKD"):
         if ("-"+v+"-" in u) or (u.startswith(v+"-")):
             return v
     return "UNKNOWN"
 
 def _family(race_id):
     venue=_venue(race_id)
-    if venue in {"FNB","KAW","URW","OHI","SON","KOC","SAG","MOR","MON","NGY","KSM"}:return "LOCAL"
+    if venue in {"FNB","KAW","URW","OHI","SON","KOC","KCH","KNZ","MIZ","HIM","SAG","MOR","MON","NGY","KSM"}:return "LOCAL"
     if "BAN" in str(race_id) or "OBI" in str(race_id):return "BAN"
     return "JRA" if venue!="UNKNOWN" else "UNKNOWN"
 

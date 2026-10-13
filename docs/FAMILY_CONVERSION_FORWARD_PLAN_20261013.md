@@ -1,0 +1,5 @@
+# Next Unknown Race Plan
+
+profiles/family_conversion_forward_20261013_candidate.jsonを結果前計画とする。既存正式Runnerの明示opt-inで診断hashをFINALへ束縛。Deployment/Activationは未実施。元AKI・Productionの券面を同SOURCEで保持し、未解決は診断HOLD。新購入方針を試す場合は別Arm固定後に実行する。
+
+R43全条件とHuman Reviewが必要。30件だけで昇格しない。改善とはPair/Exact保持とPFS/DD/Hit-but-Loss/期限成功率の未知未来での改善。現時点は新Arm0戦、JRA/BAN実レース実証PENDING。
