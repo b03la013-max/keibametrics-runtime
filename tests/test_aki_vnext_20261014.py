@@ -120,3 +120,18 @@ def test_capital_external_archive_restores_without_network_and_stake_only(tmp_pa
  assert f['capital_paper_arm']['virtual_time_is_prestart_evidence'] is False
  assert f['temporal_mode']=='REPLAY' and f['purchase_authority'] is False
  assert json.loads((tmp_path/'capital_arm_settlement.json').read_text())['return']==80460
+
+
+@pytest.mark.parametrize('race',[1,3,6,7,9,10,12])
+def test_every_original_pair_and_world_has_pre_result_transport_reason(race):
+ q,src=real(race);selected=build(q,src);d=decision(q,selected)
+ cells=d['conversion_audit']['pair_cells']
+ assert len(cells)==len(q['pair_dispositions'])
+ assert all(x['decision_reason'] for x in cells)
+ for cell in cells:
+  worlds=[x for x in q['third_dispositions'] if (str(x['head']),str(x['second']))==(str(cell['head']),str(cell['second']))]
+  assert len(cell['third_worlds'])==len(worlds)
+  assert all(x['decision_reason'] for x in cell['third_worlds'])
+  if cell['decision_reason']=='HEAD_COLUMN_NONSELECTED':
+   assert all(not x['retained'] for x in cell['third_worlds'])
+ assert build(q,src)==selected # audit never feeds back into selection

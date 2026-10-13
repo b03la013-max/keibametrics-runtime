@@ -283,6 +283,8 @@ def _run(intent_path, source_path, out_root, reuse_krs_from=None):
            "ranking": ranking, "roles": roles,
            "krs_prediction_utility_shadow": utility,
            "source_snapshot_sha256": art["source_snapshot_sha256"]}
+    if d.get("conversion_audit") is not None:
+        fpp["conversion_audit"] = d["conversion_audit"]
     if capital_paper_arm is not None:
         fpp["capital_paper_arm"] = capital_paper_arm
     if selected.get("candidate_arm"):

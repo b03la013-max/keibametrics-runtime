@@ -283,7 +283,41 @@ def decision(request, selection, utility=None):
                        terminal_reasons=selection["terminal_reasons"])
         capital.pop("sha256", None)
         capital["sha256"] = sha(capital)
-    return {"selection_sha256": selection["sha256"], "mec": mec, "mec_verification": check,
-            "capital": capital, "paper_tickets": ([] if selection.get("candidate_arm") and
-                selection["status"] == "NO_BET" else deepcopy(mec["tickets"])),
-            "purchase_tickets": [], "purchase_authority": False}
+    out = {"selection_sha256": selection["sha256"], "mec": mec, "mec_verification": check,
+           "capital": capital, "paper_tickets": ([] if selection.get("candidate_arm") and
+               selection["status"] == "NO_BET" else deepcopy(mec["tickets"])),
+           "purchase_tickets": [], "purchase_authority": False}
+    if selection.get("candidate_arm"):
+        pair_keys = {(str(x["head"]), str(x["second"])) for x in selection["pair_dispositions"]}
+        third_keys = {(str(x["head"]), str(x["second"]), str(x["third"])) for x in selection["third_dispositions"]}
+        cells = []
+        for row in request.get("pair_dispositions") or []:
+            h, s = str(row["head"]), str(row["second"])
+            kept = (h, s) in pair_keys and selection["status"] != "NO_BET"
+            reason = ("KEPT_ORIGINAL_MATERIALITY" if kept else "NO_BET" if selection["status"] == "NO_BET"
+                      else "NON_MATERIAL_PAIR" if row.get("status") not in {"PURCHASE", "PROTECT"}
+                      else "HEAD_COLUMN_NONSELECTED" if h not in selection["columns"]["W"]["selected"]
+                      else "P2_OBSERVED_SUPPORT_MISSING" if s not in selection["eligible_role_scores"]["P2"]
+                      else "HEAD_LOCAL_P2_SCORE_GAP")
+            worlds = []
+            for third in request.get("third_dispositions") or []:
+                if (str(third["head"]), str(third["second"])) != (h, s):
+                    continue
+                t = str(third["third"])
+                retained = kept and (h, s, t) in third_keys
+                worlds.append({**deepcopy(third), "retained": retained,
+                    "decision_reason": "KEPT_ORIGINAL_ORIENTATION" if retained else "PAIR_NONSELECTED" if not kept
+                    else "NON_MATERIAL_THIRD" if third.get("status") not in {"PURCHASE", "PROTECT"}
+                    else "P3_OBSERVED_SUPPORT_MISSING" if t not in selection["eligible_role_scores"]["P3"]
+                    else "PAIR_LOCAL_P3_SCORE_GAP"})
+            cells.append({**deepcopy(row), "retained": kept, "decision_reason": reason,
+                          "third_worlds": worlds, "removed_capital": None,
+                          "capital_measurement_status": "BASELINE_SIGNED_TICKET_BINDING_REQUIRED",
+                          "market_support": "UNKNOWN / VERIFIED_PRESTART_PRICE_PANEL_NOT_SUPPLIED",
+                          "krs_support": [deepcopy(x) for x in (utility or {}).get("actionable_ordered_pair_proposals", [])
+                                          if (str(x["head"]), str(x["second"])) == (h, s)]})
+        out["conversion_audit"] = {"status": "PAPER_MEASUREMENT / NOT_SELECTION_INPUT",
+                                   "selection_sha256": selection["sha256"], "pair_cells": cells,
+                                   "prediction_universe_sha256": selection["conditional_audit"]["prediction_universe_sha256"]}
+        out["conversion_audit"]["sha256"] = sha(out["conversion_audit"])
+    return out
