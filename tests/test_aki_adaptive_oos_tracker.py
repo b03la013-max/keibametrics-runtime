@@ -120,7 +120,7 @@ def test_history_is_not_silently_backfilled(tmp_path):
     assert r["actual_purchase_pfs"] is None
 
 
-def test_real_ohi_20261009_seven_receipt_bound_replay():
+def test_real_ohi_20261009_seven_receipt_bound_replay(tmp_path):
     """Read-only 7-race actual Signed FINAL/RESULT replay, not synthetic evidence.
 
     This must NOT mutate the original 2026-10-09 OOS status. If any real
@@ -143,7 +143,14 @@ def test_real_ohi_20261009_seven_receipt_bound_replay():
 
     original_status = ROOT / "runtime" / "aki_adaptive_oos_status.json"
     original_bytes = original_status.read_bytes()
-    report = scan_execution_store(root)
+    # Scope this historical regression to its frozen seven real executions.
+    # New future races legitimately enter the global tracker and must not
+    # change the historical fixture's expected race/day counts.
+    scoped_store = tmp_path / "ohi_20261009_frozen_store"
+    scoped_store.mkdir()
+    for race_id in expected:
+        (scoped_store / race_id).symlink_to(root / race_id, target_is_directory=True)
+    report = scan_execution_store(scoped_store)
     assert report["errors"] == [], report["errors"]
     assert report["eligible_races"] == 7, report
     assert report["days"] == 1, report
