@@ -9,3 +9,7 @@ Correctness修復：非有限値/boolのPFS・Promotion・Learning入力除外�
 tests.log、production_tests.log、external_verification_status.json、runtime_health.json、production_freeze.jsonを参照。CIは専用PR作成後に確認。Authority/Selector/MEC/Capital/旧Signed FINAL/RESULT/17戦OOS台帳は変更なし。
 
 Historical Measurement Acceptance != Forward Performance Acceptance。新候補Forward OOS0、配備/価格評価/等予算・等点数・No-Bet機会費用/全Family外部実行/Human ReviewはPENDING又はBLOCKED。
+
+積み重ねPR：PR263をbaseにして既存のDeadline保存・旧7戦fixture修復を継承。共通PRに同じ修復コードを二重追加しない。
+旧Phase B.2の本物のforward_protocol.jsonは変更しない。候補コードでは定義hashが異なるため旧研究captureはHOLDが正しい。pytestの機械試験だけはテスト用Protocol/一時Ledgerで結果前登録し、別版・別hashを使う。ドリフト拒否も回帰確認し、新研究OOSとして加算しない。
+JRAの登録Runtime /healthはREADYだがEngine/parameter SHAを公開していない。BANはCurrent Runtime ContractでBLOCKED-PHYSICAL-RUNTIME-UNVERIFIED、登録外部endpointなし。共通schema成功を両Familyの外部正式受入れへ読み替えない。
