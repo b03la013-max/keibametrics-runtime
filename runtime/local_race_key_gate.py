@@ -1,10 +1,12 @@
 """Verify minimal race-key handoff without conflating SOURCE with signed FINAL."""
 from __future__ import annotations
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 
 from runtime import formal_execution_orchestrator as o
+from runtime.local_race_key_intake import aware
 
 
 class RaceKeyGateError(ValueError):
@@ -20,6 +22,30 @@ def certify(request: dict, entry_report: dict) -> dict:
     signed_source = o._load_checkpoint_json(source, "source_receipt_envelope.json")
     if not signed_source or not signed_source.get("receipt_sha256"):
         raise RaceKeyGateError("SIGNED_SOURCE_RECEIPT_MISSING")
+
+    # A signed, coherent race universe can still be the WRONG start time if
+    # the manual five-field trigger was supplied incorrectly. Never turn such
+    # a SOURCE into a formal pre-race basis.
+    artifact = signed_source.get("artifact") or {}
+    official = artifact.get("source_race_context") or {}
+    official_day = str(official.get("race_date") or "").replace("/", "-")
+    if (official.get("venue_id") != request.get("venue_id")
+            or official_day != request.get("race_date")
+            or str(official.get("race_no")) != str(request.get("race_no"))):
+        raise RaceKeyGateError("SIGNED_SOURCE_OFFICIAL_RACE_IDENTITY_MISMATCH")
+    start = (artifact.get("normalized_evidence") or {}).get("start_time") or {}
+    expected = aware(request.get("scheduled_post_at"), "SCHEDULED_POST")
+    cutoff = aware(request.get("prediction_cutoff"), "PREDICTION_CUTOFF")
+    if (start.get("authority") != "NAR_OFFICIAL" or start.get("cutoff_relation") != "PRE_CUTOFF"
+            or str(start.get("value") or "") != expected.strftime("%H:%M")):
+        raise RaceKeyGateError("SIGNED_SOURCE_OFFICIAL_POST_TIME_MISMATCH")
+    try:
+        frozen = datetime.fromisoformat(str(artifact["source_freeze_at"]).replace("Z", "+00:00"))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RaceKeyGateError("SOURCE_FREEZE_TIMESTAMP_INVALID") from exc
+    if frozen.tzinfo is None or frozen.astimezone(timezone.utc) >= cutoff.astimezone(timezone.utc):
+        raise RaceKeyGateError("SIGNED_SOURCE_FROZEN_AFTER_CUTOFF")
+
     status = str(entry_report.get("status") or "")
     report = {
         "execution_id": eid,
