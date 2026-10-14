@@ -33,6 +33,7 @@ jobs:
         run: |
           mkdir -p runtime_out
           mode=--historical-comparison
+          if python -c 'import json,sys; sys.exit(0 if json.load(open("research/execution/C2_REAL_API_ACCEPTANCE_TRIGGER_20261009.json")).get("authentication_only") is True else 1)'; then mode=--authentication-only; fi
           if [ "${{ inputs.authentication_only }}" = "true" ]; then mode=--authentication-only; fi
           python runtime/openai_prediction_owner_candidate.py \
             "$mode" \
