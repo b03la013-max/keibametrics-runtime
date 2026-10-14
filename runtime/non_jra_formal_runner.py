@@ -1404,6 +1404,24 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
         })
 
+    # Explicit candidate review only; existing AKI selector and Production unchanged.
+    if req.get("kaw_v25_conversion_review") is True:
+        try:
+            from kaw_v25_conversion_review import build_review
+            review=build_review(req,{
+                "final_ticket":copy.deepcopy(shadow_ticket),
+                "final_prediction_package":copy.deepcopy(final_package)},
+                aki_adaptive_purchase_shadow,
+                generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                decisions=req.get("kaw_v25_review_decisions",[]),
+                market=req.get("kaw_v25_market_snapshot"))
+            persist("kaw_v25_conversion_review_pre_result.json",review)
+            trace["kaw_v25_conversion_review_sha256"]=review["sha256"]
+        except Exception as exc:
+            persist("kaw_v25_conversion_review_hold.json",{
+                "status":"CANDIDATE_HOLD / PRODUCTION_UNCHANGED",
+                "reason":type(exc).__name__+":"+str(exc),"production_effect":"NONE"})
+
     # Common C2 Decision Policy shadow: freeze the exact-continuity audit
     # candidate set before FINAL. This never alters Production tickets or Capital.
     try:

@@ -1,0 +1,5 @@
+# 次回川崎未知未来検証計画
+
+公式開催カレンダーでは2026-10-14も川崎開催。profiles/kaw_v25_forward_review_20261013_R1.jsonを事前登録計画とする。全R・全Failureを母集団へ保存。受入済みFrozen Static Ownerを使用し、同SOURCE・同CutoffでProduction・元AKI・v2.5 Reviewを凍結。PR262は固定依存の任意別Arm。
+
+予測Behavior変更は未導入。まずPair/Third除外根拠が結果前に終端できるか、予測Universeを失わずCapital非選択へ接続できるかを測る。未解決はCandidate HOLD。全署名・hash・Deadlineを保存。30レース/3日一次審査後も統計的改善未実証なら昇格しない。実購入なし。配備・Activation・未知未来実行はPENDING。

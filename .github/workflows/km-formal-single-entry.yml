@@ -146,14 +146,14 @@ jobs:
           PERSIST_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          test -d "runtime/executions/$EXECUTION_ID" || exit 0
           mkdir -p "runtime/execution_reports/$EXECUTION_ID"
           if [ -f runtime_out/orchestration_report.json ]; then
             cp runtime_out/orchestration_report.json "runtime/execution_reports/$EXECUTION_ID/${{ github.run_id }}-formal.json"
           fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
+          if [ -d "runtime/executions/$EXECUTION_ID" ]; then git add "runtime/executions/$EXECUTION_ID"; fi
+          if [ -f "runtime/execution_reports/$EXECUTION_ID/${{ github.run_id }}-formal.json" ]; then git add "runtime/execution_reports/$EXECUTION_ID"; fi
           git diff --cached --quiet && exit 0
           git commit -m "execution: pre-result freeze $EXECUTION_ID [skip ci]"
           python tools/persist_local_checkpoints.py --branch "$PERSIST_BRANCH"

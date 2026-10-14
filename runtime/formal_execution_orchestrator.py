@@ -1201,7 +1201,7 @@ def _official_result_identity_matches(page_text: str, race_context: Dict[str, An
     return re.search(pattern, normalized) is not None
 
 
-def parse_official_result_snapshot(snapshot, race_context, runner_ids):
+def parse_official_result_snapshot(snapshot, race_context, runner_ids, *, top3_only=False):
     """NAR official finish/payout verification; unsupported outcomes HOLD.
 
     Uses the existing factual SOURCE decoder/table parser, never Prediction.
@@ -1240,6 +1240,12 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     rows = sorted(finish_tables[0], key=lambda row: row["finish"])
     positions = [row["finish"] for row in rows]
     order = [row["horse_no"] for row in rows]
+    # Opt-in audit supports ties below payout positions, without inventing a
+    # unique lower finish order. Default formal RESULT behavior stays unchanged.
+    if top3_only and len(rows) >= 3 and positions[:3] == [1, 2, 3] and all(p > 3 for p in positions[3:]):
+        if len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids))):
+            raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
+        order=order[:3];positions=positions[:3];rows=rows[:3]
     if (len(rows) < 3 or positions != list(range(1, len(rows) + 1))
             or len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids)))):
         raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
