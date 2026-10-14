@@ -138,3 +138,29 @@ def test_entry_connects_discovered_canonical_static_to_existing_formal(monkeypat
         assert calls == ['SOURCE', 'FORMAL']
         assert report['completion']['complete'] is True
     assert report['owner_resolution']['input_mode'] == 'CANONICAL_FORMAL_INTENT'
+
+@pytest.mark.parametrize('complete', [True, False])
+def test_existing_final_readback_never_reacquires_or_regenerates(monkeypatch, tmp_path, complete):
+    from runtime import local_race_entry as e
+    monkeypatch.setattr(o, 'ROOT', tmp_path)
+    monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+    monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {
+        'manifest': {'files': {'final_receipt_envelope.json': 'hash'}}} if phase == 'FORMAL' else None)
+    monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: pytest.fail('readback is not generation'))
+    monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no new Static'))
+    monkeypatch.setattr(e, 'materialize_production', lambda *a, **k: pytest.fail('no new numerical'))
+    path = tmp_path/'runtime/formal_intents/race.json'
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({'execution_id': 'race', 'race_id': 'race',
+        'static_prediction': {'ranking': ['1']}, 'prediction_cutoff': '2000-01-01T00:00:00Z'}))
+    def readback(q, **kwargs):
+        assert q['execution_phase'] == 'FORMAL'
+        assert q['static_prediction']['ranking'] == ['1']
+        assert 'analysis_only' not in q
+        return {'status': 'ALREADY_COMPLETE' if complete else 'HOLD',
+                'completion': {'complete': complete}}
+    monkeypatch.setattr(o, 'orchestrate', readback)
+    result = e.run({'execution_id': 'race'}, output=tmp_path/'out', run_id='retry')
+    assert result['readback_only'] is True
+    assert result['prediction_reexecution'] is False
+    assert result['completion']['complete'] is complete

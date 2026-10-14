@@ -59,3 +59,19 @@ def test_candidate_settlement_rejects_unverified_or_wrong_final_lineage():
     result={'artifact':{'frozen_refs':{'final_receipt_sha256':'wrong'}}}
     with pytest.raises(ValueError,match='SIGNATURE'):settle_ticket_capital_portfolios(final,result,signatures_verified=False)
     with pytest.raises(ValueError,match='LINEAGE'):settle_ticket_capital_portfolios(final,result,signatures_verified=True)
+
+
+def test_saved_final_flags_cannot_override_fresh_signature_failure(monkeypatch):
+    from runtime import local_race_key_gate as gate
+    from runtime import execution_gateway as gateway
+    monkeypatch.setattr(gate.o, 'resolve_phase', lambda *a: {'run_dir': 'unused'})
+    values = {'final_receipt_envelope.json': {'receipt': {'status': 'PASS', 'race_id': 'race'}},
+              'receipt_verifications.json': {'FINAL': True},
+              'final_before_post_verification.json': {'verified': True}}
+    monkeypatch.setattr(gate.o, '_load_checkpoint_json', lambda p, name: values[name])
+    monkeypatch.setattr(gateway, 'request_json', lambda *a, **k: (200, {'valid': False}))
+    result = gate.terminal_state('race', 'success')
+    assert result['status'] == 'HOLD'
+    assert result['signed_final_pass'] is False
+    assert result['render_available'] is False
+    assert result['prestart_delivery_pass'] is False

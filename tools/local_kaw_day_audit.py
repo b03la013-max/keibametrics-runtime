@@ -77,4 +77,80 @@ def audit():
  root=ROOT/'research/kaw_day_20261014';root.mkdir(exist_ok=True)
  (root/'execution_audit.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n');(root/'performance.json.gz').write_bytes(gzip.compress(json.dumps(performance,ensure_ascii=False,indent=2).encode(),mtime=0))
  print(json.dumps(out['summary']));print('External receipt verification',len(checks),sum(x.get('offline_signature') is True for x in checks))
-if __name__=='__main__':audit()
+def audit_family():
+ """Inventory all saved executions, retaining research and missing intents separately.
+ Rates describe persisted execution IDs, not unobservable chat requests or races.
+ """
+ from execution_store import resolve_phase
+ from collections import Counter
+ root=ROOT/'runtime'; intents={p.stem:p for directory in ['formal_intents','jra_formal_intents'] for p in (root/directory).glob('*.json')}
+ ids=sorted(set(intents)|{p.name for p in (root/'executions').iterdir() if p.is_dir()})
+ rows=[]
+ for eid in ids:
+  request=load(intents[eid]) if eid in intents else {}
+  row={'execution_id':eid,'family':request.get('family_id') or next((token for token in eid.split('-') if token in {'LOCAL','JRA','BAN'}), 'UNKNOWN'),
+       'intent_ref':str(intents[eid].relative_to(ROOT)) if eid in intents else None,
+       'request_received_at':None,'delivery_received_at':None,'verified_delivery':False,
+       'population':'LIVE_LABELED_SAVED_EXECUTION' if '-LIVE-' in eid else 'RESEARCH_OR_OTHER_NOT_LIVE_DENOMINATOR',
+       'scheduled_post_at':request.get('scheduled_post_at'),'prediction_cutoff':request.get('prediction_cutoff'),
+       'phases':{},'attempts':[],'errors':[]}
+  for phase in ['SOURCE','FORMAL','RESULT']:
+   runs=root/'executions'/eid/phase/'runs'
+   for attempt in sorted(runs.glob('*')):
+    if not attempt.is_dir():continue
+    row['attempts'].append({'phase':phase,'run_id':attempt.name})
+   try:r=resolve_phase(eid,phase,root=root/'executions')
+   except Exception as exc:
+    row['errors'].append({'phase':phase,'code':str(exc)});continue
+   if not r:continue
+   folder=Path(r['run_dir']);names={'SOURCE':'source','FORMAL':'final','RESULT':'result'}
+   envpath=folder/(names[phase]+'_receipt_envelope.json');env=load(envpath) if envpath.exists() else {}
+   rec=env.get('receipt') or {};art=env.get('artifact') or {}
+   row['phases'][phase]={'run_id':r['manifest'].get('run_id'),'code_sha':r['manifest'].get('github_sha'),
+    'manifest_integrity':'PASS','receipt_ref':env.get('receipt_sha256'),'signed_at':rec.get('timestamp'),
+    'receipt_status':rec.get('status'),'signature_reverified':False,'receipt_path':str(envpath.relative_to(ROOT)) if envpath.exists() else None}
+   if phase=='FORMAL':
+    temporal=load(folder/'final_before_post_verification.json') if (folder/'final_before_post_verification.json').exists() else {}
+    row['prestart_final_recorded']=temporal.get('verified') is True
+    row['prestart_proof_authority']='SAVED_TEMPORAL_CHECK; NOT_FRESH_SIGNATURE_ACCEPTANCE'
+    row['static_frozen_at']=art.get('final_prediction_package',{}).get('frozen_at')
+    row['krs_ref']=art.get('krs_receipt_sha256')
+   if phase=='RESULT':
+    row['settlement_present']=bool(art.get('settlement') or art.get('automatic_post_result_review'))
+    row['learning_present']=bool(art.get('automatic_next_race_learning_state'))
+  for reportpath in sorted((root/'execution_reports'/eid).glob('*.json')):
+   try:report=load(reportpath)
+   except (ValueError,OSError):continue
+   code=report.get('first_failed_code') or report.get('code')
+   if code:row['errors'].append({'code':code,'phase':report.get('first_failed_phase'),
+       'ref':str(reportpath.relative_to(ROOT)),'resume_hint':report.get('resume_hint')})
+  row['first_unproven_stage']=next((p for p in ['SOURCE','FORMAL','RESULT'] if p not in row['phases']),None)
+  row['root_cause']='RECORDED_ERROR' if row['errors'] else ('INSUFFICIENT_EVIDENCE' if row['first_unproven_stage'] else 'NO_MISSING_SAVED_PHASE')
+  row['alias_warning']='Transport EXEC aliases and versioned retries are retained; not distinct races.'
+  rows.append(row)
+ live=[r for r in rows if r['population']=='LIVE_LABELED_SAVED_EXECUTION']
+ score={}
+ for family in sorted({r['family'] for r in live}):
+  subset=[r for r in live if r['family']==family];n=len(subset)
+  score[family]={'saved_live_execution_ids':n,'saved_intents':sum(bool(r['intent_ref']) for r in subset),
+    **{p.lower()+'_saved':sum(p in r['phases'] for r in subset) for p in ['SOURCE','FORMAL','RESULT']},
+    'prestart_final_recorded':sum(r.get('prestart_final_recorded',False) for r in subset),
+    'verified_delivery':0,'request_acceptance_rate':None,'automatic_recovery_success_rate':None,
+    'denominator_warning':'Execution IDs include retries; chat requests and absent intents are not fully observable; no Race/Family reliability claim.'}
+ auxiliary=[]
+ for directory in ['jra_no_bet_terminals','jra_no_bet_learning','jra_race_day_status','learning_states','race_key_requests']:
+  for p in sorted((root/directory).glob('*.json')):
+   obj=load(p)
+   auxiliary.append({'ref':str(p.relative_to(ROOT)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'status':obj.get('status'),'execution_id':obj.get('execution_id') or obj.get('race_id'),'authority':'SEPARATE_LEDGER_NOT_INFERRED_AS_SIGNED_FORMAL'})
+ out={'auxiliary_ledgers':auxiliary,'status':'COMPLETED_INVENTORY_NOT_LIVE_ACCEPTANCE','observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+      'rows':rows,'scorecard':score,'all_saved_execution_ids':len(ids),'research_or_other_count':len(rows)-len(live),
+      'unobserved_requests':'UNKNOWN_NOT_ZERO','new_forward_acceptance_count':0,
+      'first_unproven_stage_counts':dict(Counter(r['first_unproven_stage'] or 'NONE' for r in live))}
+ target=ROOT/'research/family_reliability_20261015';target.mkdir(parents=True,exist_ok=True)
+ (target/'execution_inventory.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+ print(json.dumps({k:v for k,v in out.items() if k!='rows'},ensure_ascii=False,indent=2))
+
+if __name__=='__main__':
+ if '--family' in sys.argv:audit_family()
+ else:audit()
+

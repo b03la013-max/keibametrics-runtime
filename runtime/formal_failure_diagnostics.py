@@ -5,6 +5,8 @@ from typing import Optional
 
 def failure_class_for(code: object) -> str:
     code = str(code or "")
+    if code in {"PRODUCTION_STATIC_OWNER_REQUIRED", "STATIC_PREDICTION_FREEZE_REQUIRED", "STATIC_PREDICTION_NOT_FROZEN"}:
+        return "PREDICTION_OWNER_INPUT_REQUIRED"
     if code == "OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED":
         return "CURRENT_STATE_REFORECAST"
     if code in {"OFFICIAL_POST_TIME_MISMATCH", "RACE_IDENTITY_MISMATCH"}:
@@ -32,6 +34,8 @@ def failure_class_for(code: object) -> str:
 
 def resume_hint_for(code: object) -> str:
     klass = failure_class_for(code)
+    if klass == "PREDICTION_OWNER_INPUT_REQUIRED":
+        return "AWAIT_AUTHORIZED_FROZEN_STATIC_INPUT_NO_AUTOMATIC_OWNER_PROMOTION"
     if klass == "CURRENT_STATE_REFORECAST":
         return "REUSE_DURABLE_SOURCE_REFRESH_CURRENT_STATE_REBUILD_STATIC_THEN_RETRY_FORMAL"
     if klass == "RACE_IDENTITY_REFORECAST":
