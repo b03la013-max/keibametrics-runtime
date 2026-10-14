@@ -60,6 +60,7 @@ def persist(*, cwd, branch, refresh=rebuild, attempts=5):
     if stashed and git('stash', 'push', '--include-untracked', '-m', 'km-local-persist-scratch', cwd=cwd).returncode:
         raise RuntimeError('PERSIST_SCRATCH_STASH_FAILED')
     touched = set(git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD', cwd=cwd).stdout.splitlines()) & SNAPSHOTS
+    pushed = False
     try:
         for attempt in range(attempts):
             if git('fetch', 'origin', branch, cwd=cwd).returncode:
@@ -86,14 +87,26 @@ def persist(*, cwd, branch, refresh=rebuild, attempts=5):
                     if git('commit', '-m', 'measurement: rebuild merged LOCAL views [skip ci]', cwd=cwd).returncode:
                         raise RuntimeError('PERSIST_VIEW_COMMIT_FAILED')
             if git('push', 'origin', 'HEAD:' + branch, cwd=cwd).returncode == 0:
+                pushed = True
                 return
             time.sleep(min(2 * (attempt + 1), 10))
         raise RuntimeError('PERSIST_PUSH_RETRY_EXHAUSTED')
     finally:
         # Always retain pending records in commits/stash; fail visibly if scratch
         # restoration conflicts. Never force push or drop a conflicting stash.
-        if stashed and git('stash', 'pop', cwd=cwd).returncode:
-            raise RuntimeError('PERSIST_SCRATCH_RESTORE_HOLD_STASH_PRESERVED')
+        if stashed:
+            restore = git('stash', 'pop', cwd=cwd)
+            if restore.returncode:
+                # Once the verified RESULT commit is durably pushed, local
+                # scratch cannot retroactively invalidate that receipt. Git
+                # retains a conflicting stash for inspection; state the hold
+                # explicitly instead of reporting a false failed lifecycle.
+                if pushed:
+                    print('PERSIST_SCRATCH_RESTORE_WARNING_STASH_PRESERVED:'
+                          'SIGNED_RECORDS_ALREADY_PUSHED',
+                          file=sys.stderr)
+                else:
+                    raise RuntimeError('PERSIST_SCRATCH_RESTORE_HOLD_STASH_PRESERVED')
 
 
 if __name__ == '__main__':
