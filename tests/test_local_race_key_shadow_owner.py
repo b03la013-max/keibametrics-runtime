@@ -54,7 +54,7 @@ def fixture():
     numeric = {
         "strict_full_numerical_ready": True,
         "production_numerical_authority": {"prediction_consumption_authorized": False},
-        "required_indices": INDEXES,
+        "required_indices": list(INDEXES),
         "runners": rows,
         "index_provenance_hash": "numeric-sha",
     }
