@@ -1,0 +1,127 @@
+# KeibaMetrics Family 本番実行完成・Owner Review — 2026-10-15
+
+総合：CANDIDATE / PRODUCTION-FROZEN / OWNER-API-BLOCKED / LIVE-ACCEPTANCE-PENDING。
+真正未知未来の新規受入れ0戦。完成条件は未成立。
+
+## 最新確認と継承
+
+mainを実取得：`58292e05804b1c515f6c428fb29663b1a1f8360f`。
+依頼文の`f34c4b2a`の後にAutopilot状態保存が進んでいる。
+Current Authority：R51。LOCAL Suite：`KM-LOCAL-RENDERED-INTEGRITY-20260827-R3`。
+Scope Ownership R1、Maturity Promotion R1、Prediction Utility R1を読み直した。
+#257 MERGED。#124・#265・#276・#279はDraft／Unmerged。
+本資料は#279 `d4423efb85ff8423abe926db28488b5db198c01c`を継承する。
+Immutable FINAL read-back、Canonical Ticket Tree、SOURCE/Static/KRS再実行防止を再実装しない。
+
+## A — C2 API Root Cause：VERIFIED、復旧BLOCKED
+
+旧generic HOLDの再実行は原因証明として使わない。
+新診断の既存Run `37895628668`を同じHEAD `1033c818...`で1回再確認した。
+Job `116161030222`、2026-10-15 08:31:02 JST、実Responses API事前認証にて
+`OPENAI_API_429_CREDIT_BALANCE_EXHAUSTED_HOLD`。
+実APIプロバイダーがクレジット残高枯渇を返した。DNS/TLS/5xxが今回の原因という証拠はない。
+Artifact `11935769337`、サニタイズ済みログ抜粋を保存。
+課金停止は一時通信障害に分類せず、無限再試行しない。
+
+所有者操作：現在のService Accountが属するProject／組織のAPI課金画面で残高を確認し、
+必要なクレジット補充を本人が実施する。続いてProjectの利用制限・同じModelへの権限を確認。
+資格情報変更、別Project／Model／Providerへの切替はこの作業で行っていない。
+401/403/404の有無、Model権限・利用枠が正常かは成功応答まで未証明。
+課金エラーから、それら全てが正常だと断定しない。
+
+PR124修復HEAD：`dae9a4bec577f1d0a227b3c484e178c3d057d991`。
+401/403を分離し、直接・URLError内部のDNS/TLS/Timeoutを型で分類する。
+API本文・HTTP header・例外本文・秘密鍵・API Keyは記録しない。
+認証／予測Responses呼出し／Validation／Freezeのwall-clockを分離して保存。
+プロバイダー内部の生成時間は取得不能のためnull。API往復時間を生成時間と偽装しない。
+失敗時は認証Stageと時間のみ、未実行Stageはnullを保存する。
+Model／Prompt／Policyは不変。Code SHA pinのみ同期。
+関連ローカル101 tests PASS。旧429テストはdummy資格情報がなくHTTP境界に到達しなかったため修正。
+修復HEADの新規実API・remote CIはこの確認時点ではPENDING。旧HEAD実証と混ぜない。
+
+## B — C2 Real API Acceptance：BLOCKED
+
+Staging guardと秘密情報を含まないProject／Service Account設定が以前の実行で通過し、
+今回もService Account secret欠落ではなく実HTTP429に到達した。
+これはProvisioning／secret presenceの証拠であり、成功認証の証拠ではない。
+認証PASS、R07/R08/R12 Frozen Historical Comparison、fresh-process Two-Race Isolation、
+Signed Shadow Receiptはいずれも未成立。Historicalは実行できてもNOT OOS。
+同じ既存workflow／Model／Projectで、課金解消後に事前認証から再開する。
+生成していない予測をMock／Historicalで埋めてPASSにしない。
+
+## C — Production Promotion Review：COMPLETED資料、昇格HOLD
+
+| 必須条件 | C2現状・必要証拠 |
+|---|---|
+| SOURCE完全性／署名／Cutoff | 実比較前に外部verifyを要する。今回新規受入れなし |
+| Full Runner Universe／全馬Prediction | schemaと集合検証は実装済み、実API出力未取得 |
+| W/P2/P3 | 実装済み、実生成・意味妥当性未証明 |
+| Head-local Pair／Pair-conditioned Third | schema／重複・自己組合せ検査あり、実生成・効用未証明 |
+| Static Freeze | deadline後Freezeを禁止、実API Freeze未取得 |
+| Model／Prompt／Output SHA | version pin／lineageあり、今回Outputなし |
+| 実行時間 | 今回旧HEADのworkflow時間はAPI時間ではない。修復HEAD計測は未実証 |
+| 未知未来有効性／Prediction Utility | genuine forward evidence、false promotion/demotion、幅・捕捉・PFS review未達 |
+| Human Review／権限登録 | 未承認。Shadowを維持。昇格に賛成する証拠が不足 |
+
+Shadow infrastructureの安全なmerge gateとC2 Production promotion gateは独立。
+Scope OwnershipのONE_SCOPE_ONE_PRODUCTION_OWNERとCANDIDATE非Productionを維持する。
+不足証拠のまま承認を求める「昇格READY」資料にはしない。
+
+既存LOCAL Staticは、mainにある明示ユーザー指示によるKAW限定initial activationを確認した。
+これは未検証のordinal evidence-only Ownerであり、C2を承認した記録ではない。
+29指数値のPrediction／KRS／Ticket／Capital利用はR51で引き続き非承認。
+他Venueへの拡大、未マージ候補Ownerの本番有効化、数値・MEC・AKI・Capital変更は行わない。
+
+## D — Single-Race LIVE Acceptance：PENDING／外部検証BLOCKED
+
+本作業で未知未来Signed FINALと発走前Deliveryは成立していない。
+発走・Cutoff・Runner Universe・正式Owner・Authorityの確定なしに新規Intentを捏造しない。
+既存KAW限定Ownerの実行可能性と、C2のAPI依存は別に扱う。
+正本RuntimeへのReceipt送信が自動承認審査で停止されたため、その操作を迂回しない。
+SOURCE→FINAL→Deliveryや新規LIVE成功を計上しない。
+実レース受入れは既存のRace別Deadlineと正式SOURCEを使い、FINAL VerifyとDeliveryの実時刻を残す必要がある。
+
+## E — Multi-Race Reliability：PENDING
+
+#257／#276／#279のrace-scoped workers、SOURCE checkpoint resume、immutable event range、
+Git conflict persistence、重複Dispatch防止、RESULT worker分離、FINAL再生成防止を継承。
+新Scheduler／Validator／Selectorを作って代用しない。
+複数未知未来Raceのdeadline遵守・Worker障害回復・Delivery retryの外部実証は未成立。
+保存済み2Race読戻しは未知未来連続運用の証明ではない。
+Authority不一致、Runner mismatch、署名不正、期限超過、未承認Owner、公式欠落はFail-Closed。
+
+## F — Result Closed Loop：PENDING（新規LIVE）
+
+新規LIVEが0戦のため、新規Official RESULT／Signed Settlement／PFS／Learningも0件。
+保存済みRESULT／旧PFS／OOSを編集・再署名していない。
+RESULT待機で次Raceを塞がない既存分離経路を保持する。
+Actual購入情報はUNKNOWNであり、推奨券PFSをActual PFSとして表示しない。
+
+## G — GitHub／Regression／外部Receipt
+
+C2修復はPR124に保存。Production merge／deployなし。
+#279のコード差分は今回増やさず、本Reviewと新しい読み取り証拠を追加する。
+#279既存remote CI3件成功は既存HEADの証拠。今回の文書更新／C2修復HEADのCI成功とは呼ばない。
+新規外部Receipt Verify試行はBLOCKED。過去のPASS証拠は履歴として保持。
+LOCAL healthは08:31:52 JSTにcanonical bundle fingerprint完全一致／PASS。
+JRA healthは08:35:41 JSTに200／READY、専用Engine／parameter／Signer情報取得。
+HealthだけではSingle-Race／全日運用受入れにならない。
+
+## H — Family別受入れ
+
+| Family | Runtime確認 | 未知未来の今回受入れ |
+|---|---|---|
+| LOCAL | Health／Gateway bundle照合VERIFIED。凍結Physical `f0d23766...` | PENDING。KAW限定既存Owner、他会場Ownerは別途必要 |
+| JRA | 独立Endpoint Health 200／READY | PENDING。LOCALの成果を移植・計上しない |
+| BAN | 現行契約external_endpoint=null、BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED | BLOCKED。専用Adapter／Engine／parameter／Signer attestationが必要 |
+
+## 自動承認審査の停止
+
+保存済みSOURCE／PRE_KRS／KRS／FINAL／RESULT envelopeを
+`https://witnessstrictimage-production.up.railway.app/verify`へPOSTする操作が拒否された。
+審査理由：内部予測・実行データについて、具体的な送信先とPayloadの承認が確認できない。
+別Tool／workflowを用いる迂回は行わない。Health GETとローカル検査は独立して完了した。
+再開にはこのcanonical Endpointへの該当Receipt送信の明示承認が必要。
+課金補充、Production昇格、候補merge／deployの承認とは分離する。
+
+最終完成判定：NOT COMPLETE。API課金・Receipt送信承認・Owner受入れ・真正未来の正式全工程と結果閉ループが残る。
