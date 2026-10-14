@@ -1,4 +1,4 @@
-import json,os,shutil,subprocess,sys,urllib.request,urllib.parse
+import json,os,shutil,subprocess,sys,urllib.request,urllib.parse,copy
 sys.path.insert(0,"runtime")
 from local_candidate_postresult import evaluate_dual
 from local_candidate_dual_oos_tracker import build_measurement, write_status
@@ -516,6 +516,30 @@ except (Exception, SystemExit) as shadow_error:
         json.dump(shadow_diagnostic,open(os.path.join(RUNTIME_OUT, "common_exact_continuity_shadow_failure.json"),"w",encoding="utf-8"),ensure_ascii=False,sort_keys=True)
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
+
+from local_race_key_shadow_owner import settle_ticket_capital_portfolios
+try:
+    paper_settlement=settle_ticket_capital_portfolios(fin,res,signatures_verified=True)
+    if paper_settlement is not None:
+        json.dump(paper_settlement,open(os.path.join(RUNTIME_OUT,'candidate_ticket_capital_shadow_settlement.json'),'w',encoding='utf-8'),ensure_ascii=False,indent=2)
+except Exception as exc:
+    json.dump({'status':'SHADOW_HOLD','reason':str(exc),'production_effect':'NONE'},open(os.path.join(RUNTIME_OUT,'candidate_ticket_capital_shadow_failure.json'),'w',encoding='utf-8'),ensure_ascii=False,indent=2)
+
+shadow_final_path=os.path.join("runtime_result_in","candidate_ticket_capital_shadow_final_receipt.json")
+if os.path.exists(shadow_final_path):
+    try:
+        shadow_fin=json.load(open(shadow_final_path,encoding="utf-8"))
+        sv=post("/verify",shadow_fin)
+        if not (sv.get("valid") or sv.get("verified")):raise ValueError("SHADOW_FINAL_SIGNATURE_INVALID")
+        shadow_payload=copy.deepcopy(result_payload)
+        shadow_payload.update(final_receipt=shadow_fin,pfs_authority="PAPER",settlement={"status":"COMPLETE","investment":0,"settled_investment":0,"return":0,"winning_tickets":[]})
+        sr=post("/result",shadow_payload);rv=post("/verify",sr)
+        if sr.get("receipt",{}).get("status")!="PASS" or not (rv.get("valid") or rv.get("verified")):raise ValueError("SHADOW_RESULT_VERIFICATION_FAILED")
+        ss=settle_ticket_capital_portfolios(shadow_fin,sr,signatures_verified=True)
+        json.dump(sr,open(os.path.join(RUNTIME_OUT,"candidate_ticket_capital_shadow_result_receipt.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=2)
+        json.dump(ss,open(os.path.join(RUNTIME_OUT,"candidate_ticket_capital_shadow_settlement.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=2)
+    except Exception as exc:
+        json.dump({"status":"SHADOW_HOLD","reason":str(exc),"production_effect":"NONE"},open(os.path.join(RUNTIME_OUT,"candidate_ticket_capital_shadow_failure.json"),"w",encoding="utf-8"),ensure_ascii=False,indent=2)
 
 candidate_dual_postresult=None
 dual_path=os.path.join("runtime_result_in","candidate_numerical_dual_shadow_summary.json")

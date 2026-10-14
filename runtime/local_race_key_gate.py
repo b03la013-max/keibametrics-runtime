@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import hashlib
 from pathlib import Path
 
 from runtime import formal_execution_orchestrator as o
@@ -54,6 +55,9 @@ def certify(request: dict, entry_report: dict) -> dict:
         "formal_final_proven": False,
         "completion": False,
         "production_prediction_changed": False,
+        "prestart_delivery_pass": False,
+        "service_completion": False,
+        "user_received_at": None,
     }
     if status == "HOLD":
         code = str(entry_report.get("code") or "")
@@ -89,13 +93,56 @@ def certify(request: dict, entry_report: dict) -> dict:
             "final_receipt_sha256": final["receipt_sha256"]}
 
 
+def terminal_state(execution_id: str, job_status: str) -> dict:
+    """Receipt state is independent of Actions exit and user delivery evidence."""
+    now=datetime.now(timezone.utc)
+    report={'execution_id':execution_id,'observed_at':now.isoformat(),'workflow_job_status':job_status,
+            'signed_final_pass':False,'prestart_final_pass':False,'render_available':False,
+            'prestart_delivery_pass':False,'user_received_at':None,'delivery_authority':'UNPROVEN',
+            'actual_purchase_pfs':None,'production_changed':False}
+    phase=o.resolve_phase(execution_id,'FORMAL')
+    if phase is None:
+        return {**report,'status':'TERMINAL_ERROR' if job_status=='failure' else 'NO_SIGNED_FINAL',
+                'reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
+    final=o._load_checkpoint_json(phase,'final_receipt_envelope.json') or {}
+    flags=o._load_checkpoint_json(phase,'receipt_verifications.json') or {}
+    temporal=o._load_checkpoint_json(phase,'final_before_post_verification.json') or {}
+    if final.get('receipt',{}).get('status')!='PASS' or flags.get('FINAL') is not True:
+        return {**report,'status':'HOLD','reason':'FINAL_VERIFICATION_REQUIRED'}
+    from runtime.jra_ticket_tree_renderer import render_ticket_tree
+    tree=render_ticket_tree(final['artifact'])
+    target=o.ROOT/'runtime/execution_reports'/execution_id/'delivery'
+    target.mkdir(parents=True,exist_ok=True)
+    (target/'canonical_tree.txt').write_text(tree['text']+'\n',encoding='utf-8')
+    report.update(signed_final_pass=True,prestart_final_pass=temporal.get('verified') is True,
+                  render_available=True,render_generated_at=now.isoformat(),
+                  rendered_ticket_count=tree['ticket_count'],rendered_investment=tree['total_investment'],
+                  tree_sha256=hashlib.sha256(tree['text'].encode()).hexdigest(),
+                  final_receipt_sha256=final['receipt_sha256'],
+                  capital_compatibility=final['artifact'].get('capital_policy_decision',{}).get('compatibility'),
+                  status='SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN')
+    return report
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--request", required=True)
-    parser.add_argument("--report", required=True)
+    parser.add_argument("--request")
+    parser.add_argument("--terminal-only",action="store_true")
+    parser.add_argument("--execution-id")
+    parser.add_argument("--job-status")
+    parser.add_argument("--report")
     parser.add_argument("--output", required=True)
     parser.add_argument("--github-output")
     args = parser.parse_args()
+    if args.terminal_only:
+        try:
+            result=terminal_state(args.execution_id,args.job_status)
+        except Exception as exc:
+            result={'execution_id':args.execution_id,'status':'TERMINAL_ERROR','reason':str(exc),
+                    'prestart_delivery_pass':False,'observed_at':datetime.now(timezone.utc).isoformat()}
+        target=Path(args.output);target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+        print(json.dumps(result,ensure_ascii=False))
+        return 0
     req = json.loads(Path(args.request).read_text(encoding="utf-8"))
     entry = json.loads(Path(args.report).read_text(encoding="utf-8"))
     result = certify(req, entry)

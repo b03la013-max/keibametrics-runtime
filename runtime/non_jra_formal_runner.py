@@ -1281,6 +1281,40 @@ if candidate_shadow_future is not None:
         candidate_shadow_executor=None
         candidate_shadow_future=None
 
+if req.get("candidate_ticket_conversion_paper") is True:
+    from local_race_key_shadow_owner import compile_candidate_portfolio, compact_portfolio
+    portfolios={}
+    candidate_market = req.get("candidate_market_source_receipt")
+    candidate_market_verified = False
+    candidate_market_error = None
+    if candidate_market is not None:
+        try:
+            verify_envelope(candidate_market,"CANDIDATE_MARKET_SOURCE")
+            persist("candidate_market_source_receipt.json",candidate_market)
+            candidate_market_verified = True
+        except Exception as exc:
+            candidate_market_error = str(exc)
+            persist("candidate_market_source_failure.json",{"status":"HOLD","reason":candidate_market_error,"production_effect":"NONE"})
+    for arm,candidate in [("v0.1",candidate_shadow_q),("v0.2",candidate_shadow_q_v02),("v0.3",candidate_shadow_q_v03)]:
+        if candidate is not None:
+            try:
+                if candidate_market_error:
+                    raise ValueError("CANDIDATE_MARKET_SOURCE_UNVERIFIED:"+candidate_market_error)
+                portfolios[arm]=compile_candidate_portfolio(candidate,source_artifact,budget=req.get("candidate_paper_budget"),
+                    market=candidate_market, market_signatures_verified=candidate_market_verified,
+                    frozen_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+            except Exception as exc:
+                portfolios[arm]={"status":"HOLD","reason":str(exc),"production_authority":False}
+    final_package["candidate_ticket_capital_paper"]={"status":"NON_PRODUCTION_PAPER",
+        "generated_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "scheduled_post_at":scheduled,"source_snapshot_sha256":source_artifact["source_snapshot_sha256"],
+        "code_binding_sha256":sha_obj({name:pathlib.Path(name).read_text() for name in
+            ["runtime/local_race_key_shadow_owner.py","runtime/local_aki_columns.py","runtime/local_production_static_owner.py"]}),
+        "portfolios":{k:compact_portfolio(v) for k,v in portfolios.items()},"production_authority":False,"actual_purchase":False,
+        "candidate_krs_binding":"PENDING_SEPARATE_SHADOW_FINAL"}
+    trace["fpp_sha256"]=sha_obj(final_package)
+    persist("candidate_ticket_capital_shadow_preresult.json",final_package["candidate_ticket_capital_paper"])
+
 if isinstance(candidate_v03_summary,dict) and candidate_v03_summary.get("status")=="FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW":
     trace["numerical_candidate_v03_shadow"]={
         "profile":candidate_v03_summary.get("profile"),
@@ -1642,11 +1676,14 @@ def run_candidate_krs_arm(label,q,legacy=False):
         cand_seed=int(req.get("seed") or 1)+900001
         cand_input.setdefault("simulation",{})["run_count"]=cand_runs
         cand_input["simulation"]["master_seed"]=cand_seed
+        persist("candidate_krs_"+label.lower()+"_effective_input.json",cand_input)
         cc,crun=call("/krs/execute",{
             "family_id":"LOCAL","race_id":candidate_rid,
             "krs_input_data":cand_input,"run_count":cand_runs,"seed":cand_seed
         },600)
         persist("candidate_krs_"+label.lower()+"_receipt_envelope.json",crun)
+        if cc<300 and (crun.get("artifact") or {}).get("input_sha256")!=sha_obj(cand_input):
+            return {"status":"INPUT_HASH_HOLD","label":label,"production_authority":False,"oos_temporal_eligible":False,"reason":"EFFECTIVE_CANDIDATE_KRS_INPUT_MISMATCH"}
         if legacy:
             persist("candidate_krs_receipt_envelope.json",crun)
         if cc<300 and (crun.get("receipt") or {}).get("status")=="EXECUTED":
@@ -1738,6 +1775,36 @@ for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelop
 
 result_summary=None
 post_result=req.get("post_result_after_final")
+# Production FINAL already exists. Candidate KRS cannot be silently treated as
+# bound to it: sign a separate zero-purchase PAPER freeze after those real runs.
+if req.get("candidate_ticket_conversion_paper") is True:
+    try:
+        summaries={"v0.1":candidate_krs_summary,"v0.2":candidate_krs_v02_summary,"v0.3":candidate_krs_v03_summary}
+        if temporal_mode!="FORMAL-PRE-RACE" or any(not isinstance(x,dict) or x.get("status")!="EXECUTED" or x.get("pre_post_complete") is not True for x in summaries.values()):
+            raise ValueError("CANDIDATE_KRS_PRESTART_BINDING_INCOMPLETE")
+        if datetime.datetime.now(datetime.timezone.utc)>=parse_dt(scheduled).astimezone(datetime.timezone.utc):
+            raise ValueError("SHADOW_FINAL_DEADLINE_EXPIRED")
+        packet=copy.deepcopy(final_payload)
+        packet["final_prediction_package"]=copy.deepcopy(final_package)
+        pp=packet["final_prediction_package"]["candidate_ticket_capital_paper"]
+        pp["candidate_krs_binding"]="VERIFIED_EFFECTIVE_INPUTS_AND_REAL_EXECUTIONS"
+        pp["candidate_krs_evidence"]={k:{name:v[name] for name in ["receipt_sha256","actual_run_count","candidate_input_sha256","completed_at"]} for k,v in summaries.items()}
+        packet["final_ticket"]={**copy.deepcopy(final_payload["final_ticket"]),"tickets":[],"no_bet":True,"total_investment":0}
+        cap=copy.deepcopy(capital);cap.update(decision="PAPER",no_bet=True,paper_only=True)
+        cap.pop("sha256",None);cap["sha256"]=sha_obj(cap)
+        packet["capital_policy_decision"]=cap
+        packet["final_prediction_package"]["capital_policy_decision"]=copy.deepcopy(cap)
+        packet["ticket_transport_trace"]={**copy.deepcopy(trace),"fpp_sha256":sha_obj(packet["final_prediction_package"]),"capital_decision_sha256":cap["sha256"],"selected_count":0,"no_bet":True}
+        packet["final_freeze_timestamp"]=datetime.datetime.now(datetime.timezone.utc).isoformat()
+        hc,hfinal=call("/final",packet,180)
+        persist("candidate_ticket_capital_shadow_final_receipt.json",hfinal)
+        if hc>=300 or hfinal.get("receipt",{}).get("status")!="PASS":raise ValueError("SHADOW_FINAL_NOT_PASS")
+        verify_envelope(hfinal,"CANDIDATE_TICKET_CAPITAL_FINAL")
+        if parse_dt(hfinal['receipt']['timestamp'])>=parse_dt(scheduled):raise ValueError("SHADOW_FINAL_SIGNED_AFTER_POST")
+        persist("candidate_ticket_capital_shadow_binding.json",{"status":"SIGNED_PRESTART_PAPER","final_ref":hfinal['receipt_sha256'],"production_final_ref":fin['receipt_sha256'],"new_purchases":0,"automatic_oos_admission":False})
+    except Exception as exc:
+        persist("candidate_ticket_capital_shadow_failure.json",{"status":"HOLD","reason":str(exc),"production_effect":"NONE","forward_oos_eligible":False})
+
 if isinstance(post_result,dict):
     order=[int(x) for x in (post_result.get("finish_order") or [])]
     assert len(order)>=3,"POST_RESULT_FINISH_ORDER_REQUIRED"
