@@ -56,12 +56,19 @@ def certify(request: dict, entry_report: dict) -> dict:
         "production_prediction_changed": False,
     }
     if status == "HOLD":
-        allowed = {"STATIC_PREDICTION_FREEZE_REQUIRED", "ANALYSIS_ONLY_SOURCE_COMPLETE"}
-        if entry_report.get("code") not in allowed:
-            raise RaceKeyGateError("UNEXPECTED_FORMAL_HOLD:" + str(entry_report.get("code")))
+        code = str(entry_report.get("code") or "")
+        normal_source_holds = {"STATIC_PREDICTION_FREEZE_REQUIRED", "ANALYSIS_ONLY_SOURCE_COMPLETE"}
+        deadline_hold = (code == "DEADLINE_HOLD:FORMAL_INCOMPLETE"
+                         and entry_report.get("prestart_deadline_expired") is True)
+        if code not in normal_source_holds and not deadline_hold:
+            raise RaceKeyGateError("UNEXPECTED_FORMAL_HOLD:" + code)
         if entry_report.get("formal_final_proven") is True:
             raise RaceKeyGateError("SOURCE_ONLY_FALSE_FINAL_CLAIM")
-        return {**report, "status": "SOURCE_VERIFIED_STATIC_PENDING", "reason": entry_report.get("code")}
+        # The SOURCE signature, official race clock, and pre-cutoff freeze
+        # were verified above. Missing FORMAL must not falsify signed SOURCE.
+        state = ("SOURCE_VERIFIED_FORMAL_DEADLINE_HOLD" if deadline_hold
+                 else "SOURCE_VERIFIED_STATIC_PENDING")
+        return {**report, "status": state, "reason": code}
     if o.completion_exit_code(entry_report) != 0:
         raise RaceKeyGateError("FORMAL_EXECUTION_NOT_COMPLETE:" + status)
     formal = o.resolve_phase(eid, "FORMAL")
