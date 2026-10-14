@@ -27,6 +27,10 @@ on:
         required: true
   repository_dispatch:
     types: [km_local_race_key]
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/race_key_requests/*.json'
 
 permissions:
   contents: write
@@ -60,14 +64,55 @@ jobs:
           python-version: '3.13'
       - name: Install existing runtime dependency
         run: python -m pip install -q cryptography
+      - name: Resolve authorized five-field race request
+        id: fields
+        env:
+          INPUT_VENUE: ${{ inputs.venue_id || github.event.client_payload.venue_id }}
+          INPUT_DAY: ${{ inputs.race_date || github.event.client_payload.race_date }}
+          INPUT_NO: ${{ inputs.race_no || github.event.client_payload.race_no }}
+          INPUT_POST: ${{ inputs.scheduled_post_at || github.event.client_payload.scheduled_post_at }}
+          INPUT_CUTOFF: ${{ inputs.prediction_cutoff || github.event.client_payload.prediction_cutoff }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            python - <<'PY'
+          import json, os, pathlib, subprocess
+          paths = subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], text=True
+          ).splitlines()
+          candidates = [p for p in paths if p.startswith("runtime/race_key_requests/")
+                        and p.endswith(".json")]
+          if len(candidates) != 1:
+              raise SystemExit("RACE_KEY_PUSH_EXACTLY_ONE_NEW_FILE_REQUIRED")
+          path = pathlib.Path(candidates[0])
+          data = json.loads(path.read_text(encoding="utf-8"))
+          keys = ("venue_id", "race_date", "race_no", "scheduled_post_at", "prediction_cutoff")
+          if set(data) != set(keys):
+              raise SystemExit("RACE_KEY_PUSH_ONLY_FIVE_SCALAR_FIELDS")
+          items = {k: data[k] for k in keys}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              for k,v in items.items():
+                  if not isinstance(v, (str,int)) or isinstance(v,bool):
+                      raise SystemExit("RACE_KEY_VALUE_TYPE_INVALID")
+                  f.write(f"{k}={v}\n")
+          PY
+          else
+            {
+              echo "venue_id=$INPUT_VENUE"
+              echo "race_date=$INPUT_DAY"
+              echo "race_no=$INPUT_NO"
+              echo "scheduled_post_at=$INPUT_POST"
+              echo "prediction_cutoff=$INPUT_CUTOFF"
+            } >> "$GITHUB_OUTPUT"
+          fi
       - name: Build race-key SOURCE request from Current Authority
         id: intake
         env:
-          VENUE_ID: ${{ inputs.venue_id || github.event.client_payload.venue_id }}
-          RACE_DATE: ${{ inputs.race_date || github.event.client_payload.race_date }}
-          RACE_NO: ${{ inputs.race_no || github.event.client_payload.race_no }}
-          POST_AT: ${{ inputs.scheduled_post_at || github.event.client_payload.scheduled_post_at }}
-          CUTOFF_AT: ${{ inputs.prediction_cutoff || github.event.client_payload.prediction_cutoff }}
+          VENUE_ID: ${{ steps.fields.outputs.venue_id }}
+          RACE_DATE: ${{ steps.fields.outputs.race_date }}
+          RACE_NO: ${{ steps.fields.outputs.race_no }}
+          POST_AT: ${{ steps.fields.outputs.scheduled_post_at }}
+          CUTOFF_AT: ${{ steps.fields.outputs.prediction_cutoff }}
         run: |
           set -euo pipefail
           mkdir -p entry-out
@@ -113,6 +158,13 @@ jobs:
           git config user.email actions@users.noreply.github.com
           test -f "runtime/executions/$EXECUTION_ID/SOURCE/LATEST.json"
           git add "runtime/executions/$EXECUTION_ID/SOURCE" "runtime/execution_reports/$EXECUTION_ID"
+          if [ -f entry-out/generated_formal_intent.json ] && [ -f entry-out/production_static_owner.json ]; then
+            test -f "runtime/formal_intents/$EXECUTION_ID.json"
+            git add "runtime/formal_intents/$EXECUTION_ID.json"
+            mkdir -p "runtime/local_production_static_owner_records"
+            cp entry-out/production_static_owner.json "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+            git add "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+          fi
           if [ "${{ steps.gate.outputs.formal_ready }}" = "true" ]; then
             test -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json"
             git add "runtime/executions/$EXECUTION_ID/FORMAL"
