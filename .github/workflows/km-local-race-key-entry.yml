@@ -112,6 +112,19 @@ jobs:
             test -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json"
             git add "runtime/executions/$EXECUTION_ID/FORMAL"
           fi
+          # Candidate Static is PRE-RESULT evidence only; persist separately
+          # from canonical Signed FINAL and never overwrite a frozen shadow.
+          if [ -f entry-out/shadow_prediction.json ]; then
+            SHADOW_PATH="runtime/local_race_key_shadow/$EXECUTION_ID.json"
+            mkdir -p runtime/local_race_key_shadow
+            if [ -f "$SHADOW_PATH" ]; then
+              # A race-key retry cannot silently rewrite its forward prediction.
+              echo "SHADOW_ALREADY_FROZEN: $SHADOW_PATH"
+            else
+              cp entry-out/shadow_prediction.json "$SHADOW_PATH"
+              git add "$SHADOW_PATH"
+            fi
+          fi
           if ! git diff --cached --quiet; then
             git commit -m "execution: race-key signed checkpoints $EXECUTION_ID [skip ci]"
             python tools/persist_local_checkpoints.py --branch main
