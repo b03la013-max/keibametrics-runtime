@@ -18,6 +18,7 @@ on:
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
+      - 'tests/test_execution_gateway_canary_status.py'
       - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
       - 'tests/test_formal_execution_orchestrator.py'
@@ -41,6 +42,7 @@ on:
       - 'runtime/local_result_from_signed_final.py'
       - 'runtime/local_physical/**'
       - 'tests/test_execution_gateway.py'
+      - 'tests/test_execution_gateway_canary_status.py'
       - 'tests/test_execution_store.py'
       - 'tests/test_execution_workflow_contract.py'
       - 'tests/test_formal_execution_orchestrator.py'
@@ -87,6 +89,7 @@ jobs:
           python -m pip install --disable-pip-version-check -q pytest
           python -m pytest -q \
             tests/test_execution_gateway.py \
+            tests/test_execution_gateway_canary_status.py \
             tests/test_execution_store.py \
             tests/test_execution_workflow_contract.py \
             tests/test_formal_execution_orchestrator.py \
@@ -135,9 +138,14 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import datetime,json,os
+          from runtime.family_authority_guard import resolve_current_authority
+          authority_path, authority = resolve_current_authority()
+          local_authority = (authority.get("family_scoped_authority") or {}).get("LOCAL") or {}
           pre=json.load(open("runtime_out/execution_gateway_canary.json",encoding="utf-8"))
           gw=json.load(open("profiles/current_execution_gateway.json",encoding="utf-8"))
           a=pre.get("assessment") or {}
+          if a.get("status") != "PASS":
+              raise ValueError("CANARY_ASSESSMENT_NOT_PASS")
           h=pre.get("health") or {}
           out={
             "schema":"KM-LOCAL-EXECUTION-GATEWAY-CANARY-STATUS-v1",
@@ -158,8 +166,12 @@ jobs:
             "bundle_mismatches":a.get("bundle_mismatches"),
             "missing_capabilities":a.get("missing_capabilities"),
             "assessment_status":a.get("status"),
-            "production_numerical_authority":"NOT_READY / 63 REQUIRED COMPONENT SCORE RULES UNBOUND",
-            "strict_formal_full_numerical_readiness":"NO"
+            "current_authority_manifest":authority.get("manifest_id"),
+            "current_authority_effective_at":authority.get("effective_at"),
+            "production_numerical_authority":local_authority.get("numerical_authority_status", "UNKNOWN"),
+            "numerical_consumption_boundary":local_authority.get("numerical_consumption_boundary", {}),
+            "strict_formal_full_numerical_readiness":"NO",
+            "strict_formal_readiness_basis":"NOT_PROVEN_BY_RUNTIME_HEALTH"
           }
           json.dump(out,open("runtime/execution_gateway_canary_status.json","w",encoding="utf-8"),
                     ensure_ascii=False,sort_keys=True,indent=2)
@@ -192,3 +204,4 @@ jobs:
           path: runtime_out/*.json
           if-no-files-found: warn
           retention-days: 30
+
