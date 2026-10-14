@@ -71,9 +71,9 @@ def build(request, source, *, policy=None):
     if official_ids != set(ids):
         raise LocalAKIError("OFFICIAL_UNIVERSE_MISMATCH")
     mode = request.get("aki_column_candidate")
-    if mode is not None and mode != "HEAD_LOCAL_VNEXT_R1":
+    if mode is not None and mode not in {"HEAD_LOCAL_VNEXT_R1", "HEAD_LOCAL_VNEXT_R2"}:
         raise LocalAKIError("UNKNOWN_CANDIDATE_MODE")
-    candidate = mode == "HEAD_LOCAL_VNEXT_R1"
+    candidate = mode in {"HEAD_LOCAL_VNEXT_R1", "HEAD_LOCAL_VNEXT_R2"}
     original_roles = request.get("role_registry") or []
     allowed = {c: {str(r["runner_id"]) for r in original_roles
                     if r.get("column") == c and r.get("status") in
@@ -85,6 +85,7 @@ def build(request, source, *, policy=None):
     audit = {}
     scores = {c: {} for c in ("W", "P2", "P3")}
     axes = {}
+    observed_field_scores = {c: {} for c in ("W", "P2", "P3")}
     for rid, r in by_id.items():
         cc = r.get("canonical_components") or {}
         for idx in required:
@@ -104,8 +105,10 @@ def build(request, source, *, policy=None):
         for c, index in p["role_indices"].items():
             # Composite scores carry transport neutrals. Fully neutral composites
             # cannot admit a horse even when unrelated observations are present.
-            if (not candidate or rid in allowed[c]) and supported and cc[index].get("terminal_status") == "CALCULATED" and cc[index].get("missingness_fraction", 0) < 1:
-                scores[c][rid] = number(cc[index]["value"])
+            if supported and cc[index].get("terminal_status") == "CALCULATED" and cc[index].get("missingness_fraction", 0) < 1:
+                observed_field_scores[c][rid] = number(cc[index]["value"])
+                if not candidate or rid in allowed[c]:
+                    scores[c][rid] = observed_field_scores[c][rid]
 
     columns, diagnostics = {}, {}
     for c, values in scores.items():
@@ -132,7 +135,13 @@ def build(request, source, *, policy=None):
             risk = max(risk, 100 - axes[leader]["ASI"])
         else:
             risk = max(risk, axes[leader]["RSI"])
-        span = high - low
+        role_span = high - low
+        span = role_span
+        if mode == "HEAD_LOCAL_VNEXT_R2" and c == "W":
+            field = observed_field_scores[c]
+            # Preserve the existing FIELD-relative reference scale. Role
+            # admission limits who may be selected, not the score unit.
+            span = max(field.values()) - min(field.values())
         main = [rid for rid in order if values[rid] == high]
         additional = [rid for rid in order if rid not in main and high - values[rid] <= span * risk / 100]
         selected = main + additional
@@ -148,6 +157,11 @@ def build(request, source, *, policy=None):
                           "information_uncertainty": 100 - number(by_id[leader]["canonical_components"]["DCR"]["value"]),
                           "score_parity": span == 0, "budget_used": False}
 
+    if mode == "HEAD_LOCAL_VNEXT_R2":
+        diagnostics["W"]["normalization_scope"] = "FULL_OBSERVED_ACTIVE_FIELD"
+        diagnostics["W"]["admission_scope"] = "FROZEN_W_ROLE_UNIVERSE"
+        diagnostics["W"]["role_score_span"] = (max(scores["W"].values()) - min(scores["W"].values())) if scores["W"] else None
+        diagnostics["W"]["normalization_scores"] = observed_field_scores["W"]
     pairs, thirds = [], []
     for h in columns["W"]["selected"]:
         for s in columns["P2"]["selected"]:
@@ -244,9 +258,9 @@ def build(request, source, *, policy=None):
            "purchase_authority": False, "validation_status": "UNVALIDATED_RULE_BASED",
            "oos_effect": "NONE_UNLESS_NEW_PRE_RESULT_PREREGISTERED_RUN"}
     if candidate:
-        out["candidate_arm"] = "HEAD_LOCAL_VNEXT_R1"
+        out["candidate_arm"] = mode
         out["conditional_audit"] = conditional_audit
-        out["policy_sha256"] = sha({"original_policy": p, "candidate_mode": "HEAD_LOCAL_VNEXT_R1"})
+        out["policy_sha256"] = sha({"original_policy": p, "candidate_mode": mode})
     out["sha256"] = sha(out)
     return out
 
