@@ -510,30 +510,3 @@ def forward_tracker_result_authority(race_id, lineage_root, *, local_only=False)
     auth=(json.loads(path.read_text()).get('result_authority') or {}) if path.exists() else {}
     ok=auth.get('status')=='PASS' and auth.get('verified_signed_result') is True and all(auth.get(k) for k in ['verification_ref','result_receipt_sha256','result_artifact_sha256'])
     return {'verified':bool(ok),'oos_admissible':bool(ok),'refs':[auth] if ok else [],'status':'PASS' if ok else 'HOLD_RESULT_AUTHORITY'}
-
-
-def settle_ticket_capital_portfolios(final_envelope, result_envelope, *, signatures_verified):
-    """Separate PAPER settlements with exact FINAL->RESULT binding; no OOS mutation."""
-    if signatures_verified is not True:
-        raise ValueError('EXTERNAL_SIGNATURE_VERIFICATION_REQUIRED')
-    final=final_envelope['artifact'];result=result_envelope['artifact']
-    if result['frozen_refs']['final_receipt_sha256']!=final_envelope['receipt_sha256']:
-        raise ValueError('RESULT_FINAL_LINEAGE_MISMATCH')
-    paper=final['final_prediction_package'].get('candidate_ticket_capital_paper')
-    if not paper:return None
-    if paper.get('candidate_krs_binding')!='VERIFIED_EFFECTIVE_INPUTS_AND_REAL_EXECUTIONS':
-        return {'status':'HOLD','reason':'CANDIDATE_KRS_NOT_BOUND_TO_THIS_FINAL','production_authority':False}
-    from mec_r4_shadow import settle_ticket_list
-    facts={'official_result':result['official_result']}
-    top=result['automatic_post_result_review']['official_top3'];facts['official_result']={**facts['official_result'],'top3':top}
-    rows={}
-    for name,portfolio in paper['portfolios'].items():
-        if 'capital_variants' not in portfolio:
-            rows[name]={'status':'HOLD','reason':portfolio.get('reason')};continue
-        rows[name]={variant:{'settlement':settle_ticket_list(arm['tickets'],facts),
-                    'capital':arm['capital'],'material_coverage_ratio':arm['material_coverage_ratio_against_full_graph']}
-                    for variant,arm in portfolio['capital_variants'].items()}
-    return {'status':'PAPER_SETTLED','rows':rows,'final_ref':final_envelope['receipt_sha256'],
-            'result_ref':result_envelope['receipt_sha256'],'source_snapshot_sha256':paper['source_snapshot_sha256'],
-            'code_binding_sha256':paper['code_binding_sha256'],'production_authority':False,'actual_purchase_pfs':None,
-            'forward_oos_admission':'PENDING_SEPARATE_PREREGISTRATION_AND_TEMPORAL_REVIEW'}

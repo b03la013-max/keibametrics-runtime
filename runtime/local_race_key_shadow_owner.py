@@ -250,3 +250,30 @@ def compact_portfolio(portfolio):
     return {k:copy.deepcopy(portfolio[k]) for k in ['status','source_snapshot_sha256','prediction_sha256',
         'role_graph_sha256','selection_sha256','variable_r5_width','capital_variants','budget',
         'budget_authority','prediction','production_authority','actual_purchase','sha256']}
+
+
+def settle_ticket_capital_portfolios(final_envelope, result_envelope, *, signatures_verified):
+    """Separate PAPER settlements with exact FINAL->RESULT binding; no OOS mutation."""
+    if signatures_verified is not True:
+        raise ValueError('EXTERNAL_SIGNATURE_VERIFICATION_REQUIRED')
+    final=final_envelope['artifact'];result=result_envelope['artifact']
+    if result['frozen_refs']['final_receipt_sha256']!=final_envelope['receipt_sha256']:
+        raise ValueError('RESULT_FINAL_LINEAGE_MISMATCH')
+    paper=final['final_prediction_package'].get('candidate_ticket_capital_paper')
+    if not paper:return None
+    if paper.get('candidate_krs_binding')!='VERIFIED_EFFECTIVE_INPUTS_AND_REAL_EXECUTIONS':
+        return {'status':'HOLD','reason':'CANDIDATE_KRS_NOT_BOUND_TO_THIS_FINAL','production_authority':False}
+    from mec_r4_shadow import settle_ticket_list
+    facts={'official_result':result['official_result']}
+    top=result['automatic_post_result_review']['official_top3'];facts['official_result']={**facts['official_result'],'top3':top}
+    rows={}
+    for name,portfolio in paper['portfolios'].items():
+        if 'capital_variants' not in portfolio:
+            rows[name]={'status':'HOLD','reason':portfolio.get('reason')};continue
+        rows[name]={variant:{'settlement':settle_ticket_list(arm['tickets'],facts),
+                    'capital':arm['capital'],'material_coverage_ratio':arm['material_coverage_ratio_against_full_graph']}
+                    for variant,arm in portfolio['capital_variants'].items()}
+    return {'status':'PAPER_SETTLED','rows':rows,'final_ref':final_envelope['receipt_sha256'],
+            'result_ref':result_envelope['receipt_sha256'],'source_snapshot_sha256':paper['source_snapshot_sha256'],
+            'code_binding_sha256':paper['code_binding_sha256'],'production_authority':False,'actual_purchase_pfs':None,
+            'forward_oos_admission':'PENDING_SEPARATE_PREREGISTRATION_AND_TEMPORAL_REVIEW'}

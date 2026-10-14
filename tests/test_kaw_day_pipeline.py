@@ -5,7 +5,7 @@ import pytest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'runtime'))
 from runtime.local_race_key_shadow_owner import compile_candidate_portfolio
-from runtime.local_candidate_postresult import settle_ticket_capital_portfolios
+from runtime.local_race_key_shadow_owner import settle_ticket_capital_portfolios
 ROOT=Path(__file__).resolve().parents[1]
 
 def report():return json.loads(gzip.decompress((ROOT/'research/kaw_day_20261014/candidate_comparison.json.gz').read_bytes()))

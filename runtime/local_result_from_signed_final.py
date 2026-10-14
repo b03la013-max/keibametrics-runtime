@@ -517,7 +517,7 @@ except (Exception, SystemExit) as shadow_error:
     except Exception:
         print("KM_SHADOW_DIAGNOSTIC="+json.dumps(shadow_diagnostic,ensure_ascii=False))
 
-from local_candidate_postresult import settle_ticket_capital_portfolios
+from local_race_key_shadow_owner import settle_ticket_capital_portfolios
 try:
     paper_settlement=settle_ticket_capital_portfolios(fin,res,signatures_verified=True)
     if paper_settlement is not None:

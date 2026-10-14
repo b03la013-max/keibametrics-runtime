@@ -93,3 +93,7 @@ v0.1/v0.2/v0.3を同じ凍結SOURCEから再計算し、当時のPrediction obje
 残る具体的操作：Candidate PRのCorrectness差分をOwnerレビュー後に適用し、次の依頼で発走前delivery ACKまで実試験する。Base44のdirect sandboxはBuilder権限が必要、GitHub OAuth接続はOwnerの明示承認が必要。独自直結の実装を読み取れる状態にしてからConsole→GitHub/Runtime→署名→Tree→受取ACKを検証する。Issue268の自動審査拒否はプラットフォーム側の原因詳細が未提供で、Support対応が必要。予算はユーザーが明示した値だけを実運用へ結合する。
 
 Production Suite/Authority/Engine/parameter/数値式/AKI閾値/MEC-R3/Capital政策/過去FINAL・RESULT/元OOSの変更なし。Ownerコードは出力維持の抽出のみ。買い付け・課金・配備・無断Merge/Promotionなし。全12Rの未確認原因、受取証拠、未知未来性能をPASSにしていない。
+
+## CI integration follow-up
+
+Initial CI detected `DEFINITION_NOT_PREREGISTERED`: the historical Forward protocol freezes the entire post-result owner file. The PAPER-only extension was moved to the existing Race-Key Shadow owner; the frozen post-result owner and old protocol hashes remain unchanged. Targeted Forward and lineage regression: 24 PASS. Latest main was incorporated without Production changes; the only concurrent main change was the JRA race-day status ledger.
