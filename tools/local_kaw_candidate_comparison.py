@@ -63,4 +63,64 @@ def run(external=False):
  summary=[{k:v for k,v in r.items() if k!='arms'}|{'arms':{v:{'settlements':a['settlements'],'width':a['portfolio']['variable_r5_width'],'portfolio_sha256':a['portfolio']['sha256']} for v,a in r['arms'].items()}} for r in rows]
  (out/'candidate_summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n')
  print(json.dumps(summary,ensure_ascii=False))
-if __name__=='__main__':run('--external' in sys.argv)
+def market_probe(request_path, out_path):
+    """Capture prices only; no candidate admission, prediction/KRS or bet."""
+    from runtime.local_race_key_shadow_owner import market_source_manifest, bind_market_evidence
+    q=load(Path(request_path));out=Path(out_path).resolve();out.mkdir(parents=True,exist_ok=True)
+    if (out/'terminal.json').exists():
+        # A cached terminal is not signature verification. Revalidate SOURCE
+        # without reacquisition/KRS and preserve the original observation.
+        from runtime.local_race_key_shadow_owner import _sha
+        prior=load(out/'terminal.json');envelope=load(out/'source_receipt.json');binding=load(out/'market_binding.json')
+        checked=verify((out/'source_receipt.json',envelope))
+        if (checked.get('offline_signature') is not True or checked.get('external_verify',{}).get('valid') is not True
+                or prior['source_ref']!=envelope['receipt_sha256']
+                or binding['source_receipt_sha256']!=envelope['receipt_sha256']
+                or binding['race_id']!=q['race_id'] or binding['ticket_sha256']!=_sha(q.get('paper_tickets',[]))
+                or binding['selection_sha256']!=q.get('selection_sha256')
+                or binding['prediction_cutoff']!=q['prediction_cutoff']
+                or binding['runner_ids']!=sorted({str(x['runner_id']) for x in q['runners']},key=int)
+                or _sha({k:v for k,v in binding.items() if k!='sha256'})!=prior['binding_sha256']):
+            raise ValueError('MARKET_CACHED_SIGNATURE_OR_BINDING_INVALID')
+        recompiled=bind_market_evidence(q,envelope,signatures_verified=True,tickets=q.get('paper_tickets',[]),
+            frozen_at=binding['frozen_at'],selection_sha256=q.get('selection_sha256'))
+        if recompiled['ticket_price_coverage']!=binding['ticket_price_coverage']:
+            raise ValueError('MARKET_CACHED_PRICE_BINDING_MISMATCH')
+        name=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        target=out/'revalidations';target.mkdir(exist_ok=True)
+        (target/(name+'.json')).write_text(json.dumps({'status':'VERIFIED_CACHED_MARKET_SOURCE',
+            'source_verification':checked,'binding_sha256':prior['binding_sha256'],
+            'source_reacquisition':False,'new_krs_runs':0,'new_forward_count':0},indent=2)+'\n')
+        print(json.dumps({'status':'VERIFIED_CACHED_MARKET_SOURCE','source_ref':prior['source_ref'],'new_forward_count':0}));return
+    def save(name,obj):
+        p=out/(name+'.json');encoded=json.dumps(obj,ensure_ascii=False,indent=2)+'\n'
+        if p.exists() and p.read_text()!=encoded:raise ValueError('IMMUTABLE_MARKET_PROBE_CONFLICT:'+name)
+        p.write_text(encoded);return obj
+    manifest=save('manifest',market_source_manifest(q))
+    endpoint=json.loads((ROOT/'profiles/current_execution_gateway.json').read_text())['families']['LOCAL']['external_endpoint']
+    request=urllib.request.Request(endpoint+'/source/acquire',data=json.dumps(manifest).encode(),headers={'Content-Type':'application/json'})
+    if (out/'source_receipt.json').exists():envelope=load(out/'source_receipt.json')
+    else:
+        with urllib.request.urlopen(request,timeout=180) as response:envelope=save('source_receipt',json.load(response))
+    checked=save('source_verification',verify((out/'source_receipt.json',envelope)))
+    if checked.get('offline_signature') is not True or checked.get('external_verify',{}).get('valid') is not True:
+        raise ValueError('MARKET_SOURCE_VERIFY_FAILED')
+    frozen=datetime.datetime.now(datetime.timezone.utc).isoformat()
+    binding=bind_market_evidence(q,envelope,signatures_verified=True,tickets=q.get('paper_tickets',[]),
+                                frozen_at=frozen,selection_sha256=q.get('selection_sha256'))
+    save('market_binding',binding)
+    save('terminal',{'status':'MARKET_OBSERVATION_ONLY','source_ref':envelope['receipt_sha256'],
+        'binding_sha256':binding['sha256'],'market_payout_sufficiency':binding['market_payout_sufficiency'],
+        'new_krs_runs':0,'new_candidate_count':0,'new_forward_count':0,'actual_purchase':False,
+        'cutoff_authority':'EXPLICIT_OBSERVATION_CUTOFF_NOT_A_PREDICTION_OR_TICKET_FREEZE',
+        'code_file_sha256':{p:__import__('hashlib').sha256((ROOT/p).read_bytes()).hexdigest() for p in
+            ['runtime/local_race_key_shadow_owner.py','tools/local_kaw_candidate_comparison.py']}})
+    print(json.dumps({'source_ref':envelope['receipt_sha256'],'panels':{k:v['status'] for k,v in binding['panels'].items()},'new_forward_count':0}))
+
+
+if __name__=='__main__':
+    if '--market-probe' in sys.argv:
+        import argparse
+        p=argparse.ArgumentParser();p.add_argument('--market-probe',required=True);p.add_argument('--market-out',required=True)
+        a=p.parse_args();market_probe(a.market_probe,a.market_out)
+    else:run('--external' in sys.argv)

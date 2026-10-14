@@ -1284,10 +1284,25 @@ if candidate_shadow_future is not None:
 if req.get("candidate_ticket_conversion_paper") is True:
     from local_race_key_shadow_owner import compile_candidate_portfolio, compact_portfolio
     portfolios={}
+    candidate_market = req.get("candidate_market_source_receipt")
+    candidate_market_verified = False
+    candidate_market_error = None
+    if candidate_market is not None:
+        try:
+            verify_envelope(candidate_market,"CANDIDATE_MARKET_SOURCE")
+            persist("candidate_market_source_receipt.json",candidate_market)
+            candidate_market_verified = True
+        except Exception as exc:
+            candidate_market_error = str(exc)
+            persist("candidate_market_source_failure.json",{"status":"HOLD","reason":candidate_market_error,"production_effect":"NONE"})
     for arm,candidate in [("v0.1",candidate_shadow_q),("v0.2",candidate_shadow_q_v02),("v0.3",candidate_shadow_q_v03)]:
         if candidate is not None:
             try:
-                portfolios[arm]=compile_candidate_portfolio(candidate,source_artifact,budget=req.get("candidate_paper_budget"))
+                if candidate_market_error:
+                    raise ValueError("CANDIDATE_MARKET_SOURCE_UNVERIFIED:"+candidate_market_error)
+                portfolios[arm]=compile_candidate_portfolio(candidate,source_artifact,budget=req.get("candidate_paper_budget"),
+                    market=candidate_market, market_signatures_verified=candidate_market_verified,
+                    frozen_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
             except Exception as exc:
                 portfolios[arm]={"status":"HOLD","reason":str(exc),"production_authority":False}
     final_package["candidate_ticket_capital_paper"]={"status":"NON_PRODUCTION_PAPER",
