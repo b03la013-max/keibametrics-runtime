@@ -871,26 +871,27 @@ def orchestrate(
     # RESULT is a later invocation of the same entry, never an attempt to
     # reacquire SOURCE or recompute a historical prediction.
     phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
-    # SOURCE-only is explicit analysis/prewarm work, never full completion.
-    if phase in {"SOURCE", "SOURCE_ACQUIRE"} and intent.get("analysis_only") is True:
+    # An explicitly requested SOURCE phase must never silently become FORMAL.
+    # Its signed receipt is reusable, but it is NOT a full lifecycle FINAL.
+    if phase in {"SOURCE", "SOURCE_ONLY", "SOURCE_ACQUIRE", "SOURCE-FREEZE", "SOURCE_FREEZE"}:
         execution_id = derive_execution_id(intent)
         saved = resolve_phase(execution_id, "SOURCE")
         if saved is not None:
             if source_checkpoint_compatibility(intent, saved).get("status") != "PASS":
                 raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE")
             validate_source_checkpoint(pathlib.Path(saved["run_dir"]), intent)
-            return {"status": "SOURCE_PASS", "execution_id": execution_id, "completion": False}
+            return {"status": "SOURCE_PASS", "execution_id": execution_id,
+                    "phase": "SOURCE", "execution_class": "SOURCE_ONLY",
+                    "signed_source_verified": True, "completion": False}
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"]}
         check_deadline(intent, phase="SOURCE")
         acquired = run_phase(build_phase_request(intent, "SOURCE"), "SOURCE", run_id=run_id,
                              github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
         return {"status": "SOURCE_PASS", "execution_id": execution_id,
+                "phase": "SOURCE", "execution_class": "SOURCE_ONLY",
+                "signed_source_verified": True,
                 "phases": [acquired], "completion": False}
-    if phase in {"SOURCE", "SOURCE_ACQUIRE"}:
-        intent = copy.deepcopy(intent)
-        intent.pop("execution_phase", None)
-        intent.pop("phase", None)
 
     if phase in {"RESULT", "POST_RACE", "POST-RACE", "SETTLEMENT"}:
         execution_id = derive_execution_id(intent)
@@ -1152,6 +1153,24 @@ def completion_exit_code(report: Dict[str, Any]) -> int:
     return 2
 
 
+def phase_exit_code(report: Dict[str, Any], intent: Dict[str, Any]) -> int:
+    """An explicitly requested verified SOURCE succeeds as a phase, never a FINAL.
+
+    Keep completion_exit_code strict for formal consumers and any non-SOURCE path.
+    A returned SOURCE_PASS must be the orchestrator's externally verified receipt,
+    not an unverified report or a forged full-lifecycle completion.
+    """
+    phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
+    source_phases = {"SOURCE", "SOURCE_ONLY", "SOURCE_ACQUIRE", "SOURCE-FREEZE", "SOURCE_FREEZE"}
+    if (phase in source_phases and report.get("status") == "SOURCE_PASS"
+            and report.get("phase") == "SOURCE"
+            and report.get("execution_class") == "SOURCE_ONLY"
+            and report.get("signed_source_verified") is True
+            and report.get("completion") is False):
+        return 0
+    return completion_exit_code(report)
+
+
 def check_deadline(intent: Dict[str, Any], *, phase: str = "FORMAL") -> None:
     try:
         validate_window(intent, phase=phase)
@@ -1411,7 +1430,7 @@ def main() -> int:
                   "execution_id": derive_execution_id(intent), "first_failed_code": str(exc)}
     _write(pathlib.Path(args.output), report)
     print("KM_FORMAL_SINGLE_ENTRY_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    return completion_exit_code(report)
+    return phase_exit_code(report, intent)
 
 
 if __name__ == "__main__":
