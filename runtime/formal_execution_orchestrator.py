@@ -1253,6 +1253,26 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if not _official_result_identity_matches(page_text, race_context):
         raise FormalOrchestrationError("OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD")
     tables = _html_tables(html)
+    # Cancellation/exclusion rows have no numeric finishing position and are
+    # omitted by the shared finish parser. Do not silently settle their frozen
+    # exposure as a loss: this flat payout path has no refund accounting.
+    # Use the result table's explicit status, not incidental page text. A horse
+    # already excluded from the frozen active universe cannot create exposure.
+    frozen_runners = set(map(str, runner_ids))
+    for table in tables:
+        if not table or not {"着順", "馬番", "馬名"}.issubset(set(table[0])):
+            continue
+        status_index, horse_index = table[0].index("着順"), table[0].index("馬番")
+        for row in table[1:]:
+            if len(row) <= status_index:
+                continue
+            status = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[status_index]))
+            if status not in {"取消", "除外", "出走取消", "競走除外"}:
+                continue
+            horse = (re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[horse_index]))
+                     if len(row) > horse_index else "")
+            if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
+                raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
