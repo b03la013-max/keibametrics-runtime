@@ -42,13 +42,19 @@ def _aware(value: str, name: str) -> datetime:
 def _ranking(rows: list[dict], name: str) -> list[str]:
     # RULED-NEUTRAL is unknown/incomparable, NOT an estimate of weak ability.
     # Keep all runners and label neutral values; no negative missingness scores.
-    return [rid for _, rid in sorted(
-        (
-            (-float(row["canonical_components"][name]["value"]), str(row["runner_id"]))
-            for row in rows
-        ),
-        key=lambda x: (x[0], int(x[1]) if x[1].isdigit() else x[1]),
-    )]
+    # Unknowns are not compared numerically with CALCULATED estimates.
+    def identifier_key(rid: str):
+        return (0, int(rid)) if rid.isdigit() else (1, rid)
+
+    calculated, unknown = [], []
+    for row in rows:
+        spec = row["canonical_components"][name]
+        rid = str(row["runner_id"])
+        (unknown if spec["terminal_status"] == "RULED-NEUTRAL" else calculated).append(
+            (float(spec["value"]), rid)
+        )
+    return ([rid for _, rid in sorted(calculated, key=lambda v: (-v[0], identifier_key(v[1])))]
+            + [rid for _, rid in sorted(unknown, key=lambda v: identifier_key(v[1]))])
 
 
 def compile_shadow(
@@ -133,6 +139,13 @@ def compile_shadow(
             thirds.append(rid)
         if len(thirds) >= widths[2]:
             break
+    p3_unknown = [rid for rid in ids if "T3I-L" in neutrals[rid]]
+    # One unknown third is protected in this paper baseline rather than being
+    # silently equated to a low score. Never promote to Production.
+    protected_unknown = None
+    if p3_unknown and not any(rid in thirds for rid in p3_unknown) and thirds:
+        protected_unknown = p3_unknown[0]
+        thirds[-1] = protected_unknown
     roles = {rid: [col for col, pool in
                    (("W", heads), ("P2", seconds), ("P3", thirds))
                    if rid in pool] for rid in ids}
@@ -156,6 +169,7 @@ def compile_shadow(
         "role_columns": roles,
         "winner_head_local_pairs": [{"head": h, "second": p} for h, p in pairs],
         "neutral_index_registry": neutrals,
+        "p3_unknown_protection": protected_unknown,
         "paper_ticket_count": len(exacta) + len(trifecta),
         "paper_capital_yen": 100 * (len(exacta) + len(trifecta)),
         "paper_tickets": exacta + trifecta,
