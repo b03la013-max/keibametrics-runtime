@@ -1,0 +1,887 @@
+{
+  "receipt": {
+    "schema": "KM-LOCAL-SIGNED-RECEIPT-v1",
+    "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+    "family": "LOCAL",
+    "phase": "SOURCE",
+    "race_id": "KM-LOCAL-KAW-20261014-R11-LIVE-R1-OFFICIAL-RESULT-AUDIT",
+    "status": "SOURCE_FROZEN",
+    "errors": [],
+    "artifact_sha256": "9b4bc6f608089488f5f17f3ef6ab3f20dcbb34fd2bda82721b672f34f3fb6772",
+    "timestamp": "2026-10-14T14:23:45.073814+00:00",
+    "engine_version": "1.1.0",
+    "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+    "parameter_map_version": "0.1-provisional",
+    "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+    "calibration_status": "PROVISIONAL_UNCALIBRATED",
+    "github_revision": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+    "runtime_hashes": {
+      "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+      "runtime_wrapper_sha256": "e54ae7ad31a1959df113568f6d1591e9753971f30fccac5325e627e07e52f12b",
+      "source_acquisition_sha256": "3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df",
+      "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+      "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+      "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+      "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+      "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+      "sbo_public_shadow_evidence_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53"
+    }
+  },
+  "receipt_sha256": "79c178f59ed0b1b7b1c4f765ed72e4758e3fb7b9fae4f271eda5acd60780cf9d",
+  "signature": "6IX23oxsaojMxW5gBgZxGyIqdiEsdLX1H4DEUHSw/iL/EQJTOVpJp7NnKiDy0sKUAs+eRAoK18RyBS0qEOLOBQ==",
+  "signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+  "signature_alg": "Ed25519",
+  "artifact": {
+    "schema": "KM-SOURCE-SNAPSHOT-v1",
+    "profile": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
+    "race_id": "KM-LOCAL-KAW-20261014-R11-LIVE-R1-OFFICIAL-RESULT-AUDIT",
+    "prediction_cutoff": "2026-10-14T14:28:39.695935+00:00",
+    "source_freeze_at": "2026-10-14T14:23:45.073088+00:00",
+    "source_fetch_execution": {
+      "mode": "SERIAL",
+      "worker_limit": 6,
+      "workers_used": 1,
+      "source_count": 1,
+      "manifest_order_restored_before_merge": true,
+      "prediction_authority": false
+    },
+    "required_source_manifest": [
+      {
+        "source_id": "NAR-KAW-20261014-R11-RESULT",
+        "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F14&k_raceNo=11",
+        "source_class": "OFFICIAL_SAME_DAY_RACE_RESULT_PASSING_ORDER",
+        "authority": "NAR_OFFICIAL",
+        "priority": 100,
+        "official": true,
+        "required": false,
+        "extract": [
+          {
+            "field": "same_day_r11_result_tables",
+            "type": "html_tables",
+            "required": false
+          },
+          {
+            "field": "same_day_r11_weather",
+            "type": "regex",
+            "scope": "html_text",
+            "pattern": "天候[:：]\\s*([^\\s]+)",
+            "group": 1,
+            "cast": "str",
+            "required": false
+          },
+          {
+            "field": "same_day_r11_track_condition",
+            "type": "regex",
+            "scope": "html_text",
+            "pattern": "馬場[:：]\\s*([^\\s]+)",
+            "group": 1,
+            "cast": "str",
+            "required": false
+          }
+        ]
+      }
+    ],
+    "required_source_manifest_sha256": "6856edf04caa44e7730d976dea926ef9c4df7273483604421a6652fb1912a5d0",
+    "sources": [
+      {
+        "schema": "KM-SOURCE-SNAPSHOT-v1",
+        "source_id": "NAR-KAW-20261014-R11-RESULT",
+        "source_class": "OFFICIAL_SAME_DAY_RACE_RESULT_PASSING_ORDER",
+        "authority": "NAR_OFFICIAL",
+        "authority_priority": 100,
+        "official": true,
+        "required": false,
+        "requested_url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F14&k_raceNo=11",
+        "final_url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F14&k_raceNo=11",
+        "http_status": 200,
+        "content_type": "text/html; charset=UTF-8",
+        "etag": null,
+        "last_modified": null,
+        "last_modified_age_seconds": null,
+        "fetched_at": "2026-10-14T14:23:44.889661+00:00",
+        "cutoff_relation": "PRE_CUTOFF",
+        "current": true,
+        "stale": false,
+        "raw_sha256": "ab2f12fbb4b6080c040f85bf12c6f8241e979520feea9736bac3b57828e0345b",
+        "byte_count": 92656,
+        "raw_encoding": "gzip+base64",
+        "raw_gzip_b64": "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",
+        "extracted_evidence": {
+          "same_day_r11_result_tables": [
+            [
+              [
+                "着順",
+                "枠",
+                "馬番",
+                "馬名",
+                "所属",
+                "性齢",
+                "負担 重量",
+                "騎手（所属）",
+                "調教師",
+                "馬体重 （増減）",
+                "タイム",
+                "着差",
+                "上がり 3F",
+                "コーナー 通過順",
+                "人気",
+                "単勝 オッズ"
+              ],
+              [
+                "1",
+                "6",
+                "7",
+                "ブラフキャッチ",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "野畑凌 （川崎）",
+                "高月賢",
+                "476(0)",
+                "1:44.3",
+                "",
+                "40.9",
+                "",
+                "6",
+                "17.8"
+              ],
+              [
+                "2",
+                "6",
+                "6",
+                "エイシンフロイデ",
+                "北海道",
+                "牡 2",
+                "55.0",
+                "西啓太 （大井）",
+                "村上正",
+                "514(-6)",
+                "1:45.0",
+                "3",
+                "41.1",
+                "",
+                "9",
+                "36.4"
+              ],
+              [
+                "3",
+                "8",
+                "10",
+                "ウノキボンバイエ",
+                "浦和",
+                "牡 2",
+                "55.0",
+                "室陽一 （浦和）",
+                "宇野博",
+                "467(0)",
+                "1:45.2",
+                "1",
+                "42.2",
+                "",
+                "4",
+                "5.9"
+              ],
+              [
+                "4",
+                "4",
+                "4",
+                "ナイトムーブ",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "本田重 （船橋）",
+                "酒井忍",
+                "482(8)",
+                "1:45.7",
+                "2.1/2",
+                "42.3",
+                "",
+                "3",
+                "5.8"
+              ],
+              [
+                "5",
+                "1",
+                "1",
+                "シゲキング",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "御神訓 （大井）",
+                "高月賢",
+                "484(22)",
+                "1:45.9",
+                "1",
+                "42.5",
+                "",
+                "7",
+                "18.3"
+              ],
+              [
+                "6",
+                "2",
+                "2",
+                "ソラニネガイヲ",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "櫻井光 （川崎）",
+                "甲田悟",
+                "529(5)",
+                "1:46.0",
+                "1/2",
+                "42.4",
+                "",
+                "8",
+                "21.5"
+              ],
+              [
+                "7",
+                "3",
+                "3",
+                "ブエンディア",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "古岡勇 （川崎）",
+                "山崎尋",
+                "441(2)",
+                "1:46.3",
+                "1.1/2",
+                "42.0",
+                "",
+                "11",
+                "207.0"
+              ],
+              [
+                "8",
+                "7",
+                "9",
+                "ルースアグレッシブ",
+                "浦和",
+                "牡 2",
+                "55.0",
+                "笹川翼 （大井）",
+                "小久智",
+                "520(3)",
+                "1:46.4",
+                "1/2",
+                "43.2",
+                "",
+                "1",
+                "2.3"
+              ],
+              [
+                "9",
+                "7",
+                "8",
+                "コパノシチリア",
+                "北海道",
+                "牡 2",
+                "55.0",
+                "町田直 （川崎）",
+                "角川秀",
+                "511(-5)",
+                "1:47.9",
+                "7",
+                "44.9",
+                "",
+                "5",
+                "12.6"
+              ],
+              [
+                "10",
+                "8",
+                "11",
+                "ブエラグランデ",
+                "川崎",
+                "牡 2",
+                "55.0",
+                "和田譲 （大井）",
+                "高月賢",
+                "439(1)",
+                "1:48.2",
+                "1.1/2",
+                "44.8",
+                "",
+                "10",
+                "62.9"
+              ],
+              [
+                "11",
+                "5",
+                "5",
+                "プレミアムチーム",
+                "船橋",
+                "牡 2",
+                "55.0",
+                "矢野貴 （大井）",
+                "森泰斗",
+                "477(-3)",
+                "1:52.4",
+                "大差",
+                "48.1",
+                "",
+                "2",
+                "5.2"
+              ]
+            ],
+            [
+              [
+                "単勝",
+                "7",
+                "1,780円",
+                "6人気"
+              ],
+              [
+                "複勝",
+                "7",
+                "400円",
+                "6人気"
+              ],
+              [
+                "6",
+                "840円",
+                "9人気"
+              ],
+              [
+                "10",
+                "220円",
+                "3人気"
+              ],
+              [
+                "枠連複",
+                "6-6",
+                "14,870円",
+                "24人気"
+              ],
+              [
+                "馬連複",
+                "6-7",
+                "14,990円",
+                "36人気"
+              ],
+              [
+                "枠連単",
+                "6-6",
+                "13,530円",
+                "41人気"
+              ]
+            ],
+            [
+              [
+                "馬連単",
+                "7-6",
+                "35,090円",
+                "76人気"
+              ],
+              [
+                "ワイド",
+                "6-7",
+                "3,490円",
+                "35人気"
+              ],
+              [
+                "7-10",
+                "910円",
+                "10人気"
+              ],
+              [
+                "6-10",
+                "2,250円",
+                "27人気"
+              ],
+              [
+                "三連複",
+                "6-7-10",
+                "21,850円",
+                "69人気"
+              ],
+              [
+                "三連単",
+                "7-6-10",
+                "256,060円",
+                "502人気"
+              ]
+            ],
+            [
+              [
+                "",
+                "4F",
+                "3F"
+              ],
+              [
+                "上がりタイム",
+                "53.9",
+                "41.3"
+              ]
+            ],
+            [
+              [
+                "",
+                "200m",
+                "400m",
+                "600m",
+                "800m",
+                "1000m",
+                "1200m",
+                "1400m",
+                "1600m"
+              ],
+              [
+                "ハロンタイム",
+                "12.3",
+                "11.1",
+                "13.0",
+                "14.0",
+                "12.6",
+                "13.1",
+                "14.4",
+                "13.8"
+              ],
+              [
+                "通過タイム",
+                "12.3",
+                "23.4",
+                "36.4",
+                "50.4",
+                "63.0",
+                "76.1",
+                "90.5",
+                "104.3"
+              ]
+            ],
+            [
+              [
+                "１角",
+                "( 8 , 10 ) , 9 , 11 , 1 , 4 , ( 2 , 7 ) , ( 6 , 5 ) , 3"
+              ],
+              [
+                "２角",
+                "( 8 , 10 ) , 9 , ( 1 , 11 ) , 4 , 2 , 7 , ( 6 , 5 )- 3"
+              ],
+              [
+                "３角",
+                "10 , ( 8 , 9 ) , 7 , 4 , 11 , ( 1 , 2 ) , 6 - 3 , 5"
+              ],
+              [
+                "４角",
+                "10 , ( 8 , 9 , 7 ) , ( 2 , 4 ) , 1 , ( 3 , 6 ) , 11 = 5"
+              ]
+            ]
+          ],
+          "same_day_r11_weather": "曇",
+          "same_day_r11_track_condition": "良"
+        },
+        "extraction_errors": [],
+        "snapshot_sha256": "40f6dd9712093de0ec742668ab28bbea3a74b9064629ef8c20a8bfeb6752d8be"
+      }
+    ],
+    "raw_source_bundle_sha256": "f5572cc2ec74ba48a1cf60f91eac2c38b6748b60ef2b779c7a5f6d58fc777bd8",
+    "normalized_evidence": {
+      "same_day_r11_result_tables": {
+        "value": [
+          [
+            [
+              "着順",
+              "枠",
+              "馬番",
+              "馬名",
+              "所属",
+              "性齢",
+              "負担 重量",
+              "騎手（所属）",
+              "調教師",
+              "馬体重 （増減）",
+              "タイム",
+              "着差",
+              "上がり 3F",
+              "コーナー 通過順",
+              "人気",
+              "単勝 オッズ"
+            ],
+            [
+              "1",
+              "6",
+              "7",
+              "ブラフキャッチ",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "野畑凌 （川崎）",
+              "高月賢",
+              "476(0)",
+              "1:44.3",
+              "",
+              "40.9",
+              "",
+              "6",
+              "17.8"
+            ],
+            [
+              "2",
+              "6",
+              "6",
+              "エイシンフロイデ",
+              "北海道",
+              "牡 2",
+              "55.0",
+              "西啓太 （大井）",
+              "村上正",
+              "514(-6)",
+              "1:45.0",
+              "3",
+              "41.1",
+              "",
+              "9",
+              "36.4"
+            ],
+            [
+              "3",
+              "8",
+              "10",
+              "ウノキボンバイエ",
+              "浦和",
+              "牡 2",
+              "55.0",
+              "室陽一 （浦和）",
+              "宇野博",
+              "467(0)",
+              "1:45.2",
+              "1",
+              "42.2",
+              "",
+              "4",
+              "5.9"
+            ],
+            [
+              "4",
+              "4",
+              "4",
+              "ナイトムーブ",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "本田重 （船橋）",
+              "酒井忍",
+              "482(8)",
+              "1:45.7",
+              "2.1/2",
+              "42.3",
+              "",
+              "3",
+              "5.8"
+            ],
+            [
+              "5",
+              "1",
+              "1",
+              "シゲキング",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "御神訓 （大井）",
+              "高月賢",
+              "484(22)",
+              "1:45.9",
+              "1",
+              "42.5",
+              "",
+              "7",
+              "18.3"
+            ],
+            [
+              "6",
+              "2",
+              "2",
+              "ソラニネガイヲ",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "櫻井光 （川崎）",
+              "甲田悟",
+              "529(5)",
+              "1:46.0",
+              "1/2",
+              "42.4",
+              "",
+              "8",
+              "21.5"
+            ],
+            [
+              "7",
+              "3",
+              "3",
+              "ブエンディア",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "古岡勇 （川崎）",
+              "山崎尋",
+              "441(2)",
+              "1:46.3",
+              "1.1/2",
+              "42.0",
+              "",
+              "11",
+              "207.0"
+            ],
+            [
+              "8",
+              "7",
+              "9",
+              "ルースアグレッシブ",
+              "浦和",
+              "牡 2",
+              "55.0",
+              "笹川翼 （大井）",
+              "小久智",
+              "520(3)",
+              "1:46.4",
+              "1/2",
+              "43.2",
+              "",
+              "1",
+              "2.3"
+            ],
+            [
+              "9",
+              "7",
+              "8",
+              "コパノシチリア",
+              "北海道",
+              "牡 2",
+              "55.0",
+              "町田直 （川崎）",
+              "角川秀",
+              "511(-5)",
+              "1:47.9",
+              "7",
+              "44.9",
+              "",
+              "5",
+              "12.6"
+            ],
+            [
+              "10",
+              "8",
+              "11",
+              "ブエラグランデ",
+              "川崎",
+              "牡 2",
+              "55.0",
+              "和田譲 （大井）",
+              "高月賢",
+              "439(1)",
+              "1:48.2",
+              "1.1/2",
+              "44.8",
+              "",
+              "10",
+              "62.9"
+            ],
+            [
+              "11",
+              "5",
+              "5",
+              "プレミアムチーム",
+              "船橋",
+              "牡 2",
+              "55.0",
+              "矢野貴 （大井）",
+              "森泰斗",
+              "477(-3)",
+              "1:52.4",
+              "大差",
+              "48.1",
+              "",
+              "2",
+              "5.2"
+            ]
+          ],
+          [
+            [
+              "単勝",
+              "7",
+              "1,780円",
+              "6人気"
+            ],
+            [
+              "複勝",
+              "7",
+              "400円",
+              "6人気"
+            ],
+            [
+              "6",
+              "840円",
+              "9人気"
+            ],
+            [
+              "10",
+              "220円",
+              "3人気"
+            ],
+            [
+              "枠連複",
+              "6-6",
+              "14,870円",
+              "24人気"
+            ],
+            [
+              "馬連複",
+              "6-7",
+              "14,990円",
+              "36人気"
+            ],
+            [
+              "枠連単",
+              "6-6",
+              "13,530円",
+              "41人気"
+            ]
+          ],
+          [
+            [
+              "馬連単",
+              "7-6",
+              "35,090円",
+              "76人気"
+            ],
+            [
+              "ワイド",
+              "6-7",
+              "3,490円",
+              "35人気"
+            ],
+            [
+              "7-10",
+              "910円",
+              "10人気"
+            ],
+            [
+              "6-10",
+              "2,250円",
+              "27人気"
+            ],
+            [
+              "三連複",
+              "6-7-10",
+              "21,850円",
+              "69人気"
+            ],
+            [
+              "三連単",
+              "7-6-10",
+              "256,060円",
+              "502人気"
+            ]
+          ],
+          [
+            [
+              "",
+              "4F",
+              "3F"
+            ],
+            [
+              "上がりタイム",
+              "53.9",
+              "41.3"
+            ]
+          ],
+          [
+            [
+              "",
+              "200m",
+              "400m",
+              "600m",
+              "800m",
+              "1000m",
+              "1200m",
+              "1400m",
+              "1600m"
+            ],
+            [
+              "ハロンタイム",
+              "12.3",
+              "11.1",
+              "13.0",
+              "14.0",
+              "12.6",
+              "13.1",
+              "14.4",
+              "13.8"
+            ],
+            [
+              "通過タイム",
+              "12.3",
+              "23.4",
+              "36.4",
+              "50.4",
+              "63.0",
+              "76.1",
+              "90.5",
+              "104.3"
+            ]
+          ],
+          [
+            [
+              "１角",
+              "( 8 , 10 ) , 9 , 11 , 1 , 4 , ( 2 , 7 ) , ( 6 , 5 ) , 3"
+            ],
+            [
+              "２角",
+              "( 8 , 10 ) , 9 , ( 1 , 11 ) , 4 , 2 , 7 , ( 6 , 5 )- 3"
+            ],
+            [
+              "３角",
+              "10 , ( 8 , 9 ) , 7 , 4 , 11 , ( 1 , 2 ) , 6 - 3 , 5"
+            ],
+            [
+              "４角",
+              "10 , ( 8 , 9 , 7 ) , ( 2 , 4 ) , 1 , ( 3 , 6 ) , 11 = 5"
+            ]
+          ]
+        ],
+        "source_id": "NAR-KAW-20261014-R11-RESULT",
+        "authority": "NAR_OFFICIAL",
+        "authority_priority": 100,
+        "snapshot_sha256": "40f6dd9712093de0ec742668ab28bbea3a74b9064629ef8c20a8bfeb6752d8be",
+        "fetched_at": "2026-10-14T14:23:44.889661+00:00",
+        "cutoff_relation": "PRE_CUTOFF"
+      },
+      "same_day_r11_weather": {
+        "value": "曇",
+        "source_id": "NAR-KAW-20261014-R11-RESULT",
+        "authority": "NAR_OFFICIAL",
+        "authority_priority": 100,
+        "snapshot_sha256": "40f6dd9712093de0ec742668ab28bbea3a74b9064629ef8c20a8bfeb6752d8be",
+        "fetched_at": "2026-10-14T14:23:44.889661+00:00",
+        "cutoff_relation": "PRE_CUTOFF"
+      },
+      "same_day_r11_track_condition": {
+        "value": "良",
+        "source_id": "NAR-KAW-20261014-R11-RESULT",
+        "authority": "NAR_OFFICIAL",
+        "authority_priority": 100,
+        "snapshot_sha256": "40f6dd9712093de0ec742668ab28bbea3a74b9064629ef8c20a8bfeb6752d8be",
+        "fetched_at": "2026-10-14T14:23:44.889661+00:00",
+        "cutoff_relation": "PRE_CUTOFF"
+      }
+    },
+    "normalized_evidence_sha256": "58c208ae9ef033f6f8797f61169adee7392986bcffab0e7d2807611314c45f94",
+    "conflicts": [],
+    "missing_required_sources": [],
+    "stale_sources": [],
+    "post_cutoff_sources": [],
+    "formal_ready": true,
+    "errors": [],
+    "source_snapshot_sha256": "75bd707eda0e910f92fab0853069262e717a1b511967d1734debcb27a8b67b40",
+    "source_manifest_profile": null,
+    "source_race_context": {
+      "venue_id": "KAW",
+      "race_date": "2026-10-14",
+      "race_no": 11
+    }
+  }
+}

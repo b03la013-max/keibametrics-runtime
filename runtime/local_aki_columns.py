@@ -74,6 +74,11 @@ def build(request, source, *, policy=None):
     if mode is not None and mode not in {"HEAD_LOCAL_VNEXT_R1", "HEAD_LOCAL_VNEXT_R2"}:
         raise LocalAKIError("UNKNOWN_CANDIDATE_MODE")
     candidate = mode in {"HEAD_LOCAL_VNEXT_R1", "HEAD_LOCAL_VNEXT_R2"}
+    # These historical policies failed performance acceptance. Keep their
+    # exact replay calculations available, but never admit a new forward arm
+    # merely because a caller supplies a future plan or changes its label.
+    if candidate and request.get("aki_temporal_mode") == "FORWARD_PAPER":
+        raise LocalAKIError("PERFORMANCE_REJECTED_ARM_FORWARD_FORBIDDEN:" + mode)
     original_roles = request.get("role_registry") or []
     allowed = {c: {str(r["runner_id"]) for r in original_roles
                     if r.get("column") == c and r.get("status") in
@@ -292,14 +297,18 @@ def decision(request, selection, utility=None):
     q["aki_information_gate"] = {"action": "PAPER", "status": "UNVALIDATED",
                                  "reason": "LOCAL_NUMERICAL_CONSUMPTION_NOT_PROMOTED"}
     capital = resolve_capital_policy(q, mec)
-    if selection["status"] == "NO_BET":
+    requested_capital = q.get("capital_policy") or {}
+    budget_abstention = (capital.get("compatibility") == "INCOMPATIBLE"
+        and str(requested_capital.get("insufficient_action") or "NO_BET").upper() == "NO_BET")
+    abstain = selection["status"] == "NO_BET" or budget_abstention
+    if abstain:
         capital.update(decision="NO_BET", no_bet=True, paper_only=True,
-                       terminal_reasons=selection["terminal_reasons"])
+                       terminal_reasons=selection["terminal_reasons"] +
+                           (["REGISTERED_RACE_BUDGET_INSUFFICIENT"] if budget_abstention else []))
         capital.pop("sha256", None)
         capital["sha256"] = sha(capital)
     out = {"selection_sha256": selection["sha256"], "mec": mec, "mec_verification": check,
-           "capital": capital, "paper_tickets": ([] if selection.get("candidate_arm") and
-               selection["status"] == "NO_BET" else deepcopy(mec["tickets"])),
+           "capital": capital, "paper_tickets": ([] if abstain else deepcopy(mec["tickets"])),
            "purchase_tickets": [], "purchase_authority": False}
     if selection.get("candidate_arm"):
         pair_keys = {(str(x["head"]), str(x["second"])) for x in selection["pair_dispositions"]}
@@ -307,8 +316,8 @@ def decision(request, selection, utility=None):
         cells = []
         for row in request.get("pair_dispositions") or []:
             h, s = str(row["head"]), str(row["second"])
-            kept = (h, s) in pair_keys and selection["status"] != "NO_BET"
-            reason = ("KEPT_ORIGINAL_MATERIALITY" if kept else "NO_BET" if selection["status"] == "NO_BET"
+            kept = (h, s) in pair_keys and not abstain
+            reason = ("KEPT_ORIGINAL_MATERIALITY" if kept else "NO_BET" if abstain
                       else "NON_MATERIAL_PAIR" if row.get("status") not in {"PURCHASE", "PROTECT"}
                       else "HEAD_COLUMN_NONSELECTED" if h not in selection["columns"]["W"]["selected"]
                       else "P2_OBSERVED_SUPPORT_MISSING" if s not in selection["eligible_role_scores"]["P2"]

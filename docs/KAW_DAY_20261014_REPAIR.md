@@ -97,3 +97,13 @@ Production Suite/Authority/Engine/parameter/数値式/AKI閾値/MEC-R3/Capital�
 ## CI integration follow-up
 
 Initial CI detected `DEFINITION_NOT_PREREGISTERED`: the historical Forward protocol freezes the entire post-result owner file. The PAPER-only extension was moved to the existing Race-Key Shadow owner; the frozen post-result owner and old protocol hashes remain unchanged. Targeted Forward and lineage regression: 24 PASS. Latest main was incorporated without Production changes; the only concurrent main change was the JRA race-day status ledger.
+
+## 2026-10-15残存Checkpointの閉鎖
+
+PR265@77f849f7の既存Selectorを同じpathへ更新し、棄却R1/R2のForward拒否とNO-BET伝播修復を継承。別Selectorは増設しない。Candidate準備profileはPERFORMANCE-ACCEPTANCE-FAILED / FORWARD-NOT-ADMITTEDへ明示し、新Selection Policyを登録しない。
+
+10R/11R/12Rの当時GHA RESULT Artifact3件をdownloadし、GitHub公開digestとZIP hash及び元RESULT bytes一致を確認。原公式CheckpointはZIPにも欠落。旧Checkpointの再現とは称さず、保存済み正本Runtime署名付き公式原文をoffline/live再検証し、日付・場・R・全着順・一意Top3・全3券種払戻を既存Signed RESULTと照合した新しいpost-result corroborationを既存execution_storeへ永続化した。元SOURCE/Static/FINAL/RESULT/Stake/時刻は変更していない。新Prediction/KRS/RESULT署名0。
+
+mainの元AKI台帳は19戦のまま。このCandidate branchの復旧台帳は22戦・4開催日、errors0/held0。Production456,300→274,490円、PFS60.1556%、損益−181,810円。元AKI24,700→11,920円、PFS48.2591%、損益−12,780円。10RのProductionには正解Trio払戻62,140円があり、3件追加で元AKIの相対優位も消失する。22戦は旧方式の結果Checkpoint復旧であり、新Candidate Forward0を増やさない。元17戦比較も変更しない。
+
+資料：official_checkpoint_recovery.json、original_artifact_recovery_search.json、recovered_original_aki_oos.json、各OFFICIAL_RESULT新runの署名原文・request・manifest。復旧日を旧観測日に偽装しない。Stageの再発防止は既存WorkflowのOFFICIAL_RESULT保存差分へ集約。Prediction/Capital性能、価格panel、配送ACK、真正Forward30以上とOwner審査はPENDING。
