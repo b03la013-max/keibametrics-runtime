@@ -139,8 +139,9 @@ def test_invalid_formal_checkpoint_or_blocked_pipeline_cannot_pass(monkeypatch):
     with pytest.raises(gate.RaceKeyGateError, match="FORMAL_EXECUTION_NOT_COMPLETE"):
         gate.certify(signed_request(),
                      {"status": "BLOCKED", "completion": False})
+    original = o._load_checkpoint_json
     monkeypatch.setattr(o, "_load_checkpoint_json",
-                        lambda resolved, key: {"receipt_sha256": "source"}
+                        lambda resolved, key: original(resolved, key)
                         if key == "source_receipt_envelope.json" else {"FINAL": False})
     with pytest.raises(gate.RaceKeyGateError, match="SIGNED_FINAL_VERIFICATION_REQUIRED"):
         gate.certify(signed_request(),
