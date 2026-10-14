@@ -77,7 +77,10 @@ def _card_heading(source_artifact: dict) -> dict:
         raise StaticOwnerError("SIGNED_OFFICIAL_RACE_CARD_RAW_REQUIRED")
     try:
         raw = gzip.decompress(base64.b64decode(main["raw_gzip_b64"], validate=True))
-        page = raw.decode("utf-8") if "utf-8" in str(main.get("content_type") or "").lower() else raw.decode("cp932")
+        try:
+            page = raw.decode("utf-8")
+        except UnicodeError:
+            page = raw.decode("cp932")
     except (ValueError, OSError, UnicodeError) as exc:
         raise StaticOwnerError("OFFICIAL_RACE_CARD_DECODE_FAILED") from exc
     parser = _VisibleText()
@@ -233,8 +236,8 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         thirds = thirds[:-1] + [unknown[0]]
     # Maintain complete 3rd-role information; no horse is discarded from
     # analysis because it lacks exact venue/distance experience.
-    roles = {rid: ([col for col, pool_ in (("W", heads), ("P2", seconds), ("P3", thirds))
-                    if rid in pool_] or ["UNKNOWN_PROTECTED"]) for rid in ranked}
+    roles = {rid: [col for col, pool_ in (("W", heads), ("P2", seconds))
+                    if rid in pool_] + ["P3"] for rid in ranked}
     role_registry = [
         {"runner_id": rid, "column": col, "status": ("CORE" if rid in heads else "PROTECTED")}
         for rid in ranked for col in ("W", "P2", "P3")
@@ -259,9 +262,6 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
                 continue
             pairs.append({"head": h, "second": p, "status": "SEMANTIC_ONLY",
                           "reason": "FULL_P2_UNIVERSE_AUDIT / NOT_PURCHASED"})
-    for rid in ids:
-        if "P3" not in roles[rid]:
-            role_registry.append({"runner_id": rid, "column": "P3", "status": "PROTECTED"})
     marks = {rid: "◎" if i == 0 else "○" if i == 1 else "▲" if i == 2 else "△"
              for i, rid in enumerate(ranked)}
     enriched = []
