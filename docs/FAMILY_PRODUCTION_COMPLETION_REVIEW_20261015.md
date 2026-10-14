@@ -157,3 +157,16 @@ PR279 review HEAD0d0053bfのremote CI3/3 SUCCESSを終端確認：
 Runtime Correctness38655323155、Gateway Canary38655323136、
 LOCAL/JRA Guarantees38655323175。C2実APIのHOLDとは独立。
 新規未知未来LIVE0、実API比較／Two-Race／Promotion／新規RESULT/PFS/Learning未成立を維持。
+
+
+## 明示承認後の外部Verify — 2026-10-15
+
+ユーザーが保存済みSOURCE／PRE_KRS／KRS／FINAL／RESULT署名Envelopeの
+正本 https://witnessstrictimage-production.up.railway.app/verify への送信を明示承認。
+KAW20261014 R11／R12のunique10 receiptsについて実POSTを実施し、
+10/10がHTTP200かつverified=true。原文／過去署名は変更なし。
+結果・実時刻・Receipt SHAはevidence/family_completion_20261015/receipt_verification.json。
+過去の自動承認拒否は履歴として保存し、現在の送信承認ブロックは解消。
+これは保存済みReceiptの外部再検証VERIFIED。新規Prediction／KRS／未知未来LIVEは0。
+C2課金残高枯渇、Owner昇格未達、複数未知未来Race運用、新規RESULT/PFS/Learningの
+未成立は独立して残る。Production merge／deploy／Policy変更なし。
