@@ -143,7 +143,13 @@ def test_real_ohi_20261009_seven_receipt_bound_replay():
 
     original_status = ROOT / "runtime" / "aki_adaptive_oos_status.json"
     original_bytes = original_status.read_bytes()
-    report = scan_execution_store(root)
+    # Keep the full live OOS ledger growing; isolate just the seven immutable
+    # Oct-09 Signed FINAL/RESULT executions for the historical regression.
+    live = scan_execution_store(root)
+    assert live["errors"] == [], live["errors"]
+    assert set(expected).issubset({x["race_id"] for x in live["settled_rows"]})
+    assert live["eligible_races"] >= len(expected)
+    report = scan_execution_store(root, execution_ids=set(expected))
     assert report["errors"] == [], report["errors"]
     assert report["eligible_races"] == 7, report
     assert report["days"] == 1, report
