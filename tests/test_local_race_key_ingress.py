@@ -179,6 +179,39 @@ def test_signed_source_after_cutoff_does_not_retroactively_pass(monkeypatch):
             "status": "HOLD", "code": "STATIC_PREDICTION_FREEZE_REQUIRED"})
 
 
+
+def test_signed_source_survives_formal_release_deadline(monkeypatch):
+    patch_source(monkeypatch)
+    result = gate.certify(
+        signed_request(),
+        {"status": "HOLD", "code": "DEADLINE_HOLD:FORMAL_INCOMPLETE",
+         "prestart_deadline_expired": True,
+         "formal_final_proven": False, "completion": False},
+    )
+    assert result["source_verified"] is True
+    assert result["formal_final_proven"] is False
+    assert result["completion"] is False
+    assert result["status"] == "SOURCE_VERIFIED_FORMAL_DEADLINE_HOLD"
+
+
+def test_forged_deadline_hold_without_actual_expiry_rejected(monkeypatch):
+    patch_source(monkeypatch)
+    with pytest.raises(gate.RaceKeyGateError, match="UNEXPECTED_FORMAL_HOLD"):
+        gate.certify(signed_request(), {
+            "status": "HOLD", "code": "DEADLINE_HOLD:FORMAL_INCOMPLETE",
+            "prestart_deadline_expired": False,
+            "formal_final_proven": False, "completion": False})
+
+
+def test_workflow_supplies_python_roots_and_result_dependencies():
+    wf = (Path(__file__).resolve().parents[1] /
+          ".github/workflows/km-local-race-key-entry.yml").read_text(encoding="utf-8")
+    assert "PYTHONPATH:" in wf
+    assert "github.workspace }}/runtime" in wf
+    assert "name: Install RESULT runtime dependencies" in wf
+    assert "python -m runtime.local_race_entry" in wf
+
+
 def test_dispatch_is_minimal_and_requires_signed_final_for_result():
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/km-local-race-key-entry.yml").read_text(encoding="utf-8")
