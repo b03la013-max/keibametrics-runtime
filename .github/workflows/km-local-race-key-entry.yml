@@ -42,7 +42,10 @@ env:
   PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
 
 concurrency:
-  group: km-local-race-key-${{ inputs.venue_id || github.event.client_payload.venue_id }}-${{ inputs.race_date || github.event.client_payload.race_date }}-${{ inputs.race_no || github.event.client_payload.race_no }}
+  # Push has no workflow_dispatch inputs or repository_dispatch payload; scope it
+  # to its immutable commit SHA so RESULT wait for another race cannot block
+  # the next race's SOURCE acquisition before its prediction cutoff.
+  group: km-local-race-key-${{ github.event_name == 'push' && github.sha || format('{0}-{1}-{2}', inputs.venue_id || github.event.client_payload.venue_id, inputs.race_date || github.event.client_payload.race_date, inputs.race_no || github.event.client_payload.race_no) }}
   cancel-in-progress: false
 
 jobs:

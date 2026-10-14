@@ -223,3 +223,13 @@ def test_dispatch_is_minimal_and_requires_signed_final_for_result():
         assert name in workflow
     assert "source_verified" in workflow
     assert "contents: write" in workflow
+
+
+def test_push_concurrency_independent_of_result_wait():
+    """A previous race's live RESULT cannot hold the next push race's SOURCE."""
+    wf = (Path(__file__).resolve().parents[1] /
+          ".github/workflows/km-local-race-key-entry.yml").read_text(encoding="utf-8")
+    assert "github.event_name == 'push' && github.sha" in wf
+    assert "format('{0}-{1}-{2}'" in wf
+    assert "cancel-in-progress: false" in wf
+    assert "km-local-race-key-result-" in wf
