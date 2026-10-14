@@ -38,7 +38,7 @@ jobs:
           assert w["on"]["repository_dispatch"]["types"] == ["km_local_race_key"]
           assert w["permissions"]["contents"] == "write"
           assert set(w["jobs"]) == {"entry", "result"}
-          assert "steps.gate.outputs.formal_ready" in w["jobs"]["result"]["if"]
+          assert "needs.entry.outputs.formal_ready" in w["jobs"]["result"]["if"]
           assert w["jobs"]["entry"]["if"] == "github.ref == 'refs/heads/main'"
           PY
       - name: LOCAL race-key and existing formal regression
