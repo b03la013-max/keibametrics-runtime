@@ -377,11 +377,12 @@ def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
     monkeypatch.setattr(owner.urllib.request,'urlopen',forbidden)
     with pytest.raises(owner.CandidateHold) as exc:
         owner.responses_call({},timeout=1,project_id='proj-test')
-    assert str(exc.value)=='OPENAI_API_AUTHENTICATION_HOLD'
+    assert str(exc.value)=='OPENAI_API_HTTP_401_HOLD'
     assert observed==['proj-test']
     # Existing credential boundary test also covers the formerly opaque HTTP
     # failure family; retain status codes only, never provider body/headers.
-    for status, expected in [(400, 'OPENAI_API_HTTP_400_HOLD'),
+    for status, expected in [(403, 'OPENAI_API_HTTP_403_HOLD'),
+                             (400, 'OPENAI_API_HTTP_400_HOLD'),
                              (404, 'OPENAI_API_HTTP_404_HOLD'),
                              (429, 'OPENAI_API_HTTP_429_HOLD'),
                              (503, 'OPENAI_API_HTTP_5XX_HOLD')]:
@@ -395,6 +396,7 @@ def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
 
 
 def test_c2_real_429_error_class_is_allowlisted_without_provider_leakage(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-credential-do-not-print")
     import io
     import urllib.error
     for provider_code, expected in [
@@ -413,3 +415,20 @@ def test_c2_real_429_error_class_is_allowlisted_without_provider_leakage(monkeyp
             owner.responses_call({}, timeout=1, project_id="proj-test")
         assert str(exc.value) == expected
         assert "SECRET" not in str(exc.value)
+
+
+def test_transport_reason_types_are_sanitized(monkeypatch):
+    import socket
+    import ssl
+    import urllib.error
+    monkeypatch.setenv("OPENAI_API_KEY", "test-credential-do-not-print")
+    for reason, expected in [(socket.gaierror("SECRET DNS"), "OPENAI_API_DNS_HOLD"),
+                             (ssl.SSLError("SECRET TLS"), "OPENAI_API_TLS_HOLD"),
+                             (TimeoutError("SECRET TIMEOUT"), "OPENAI_API_TIMEOUT_HOLD"),
+                             (OSError("SECRET NETWORK"), "OPENAI_API_NETWORK_HOLD")]:
+        def reject(req, timeout):
+            raise urllib.error.URLError(reason)
+        monkeypatch.setattr(owner.urllib.request, "urlopen", reject)
+        with pytest.raises(owner.CandidateHold) as exc:
+            owner.responses_call({}, timeout=1, project_id="proj-test")
+        assert str(exc.value) == expected

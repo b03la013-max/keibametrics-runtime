@@ -12,6 +12,9 @@ import json
 import os
 import pathlib
 import re
+import socket
+import ssl
+import time
 import urllib.request
 import urllib.error
 
@@ -183,7 +186,7 @@ def responses_call(payload, *, timeout, project_id=None):
         # are not preserved. Distinguish request/account/rate failures from
         # transport failures without exposing credentials or changing policy.
         if exc.code in (401, 403):
-            code = "OPENAI_API_AUTHENTICATION_HOLD"
+            code = f"OPENAI_API_HTTP_{exc.code}_HOLD"
         elif exc.code == 429:
             # Only fixed, approved enum tokens may leave the provider boundary.
             # Never echo the provider message, raw response body or headers.
@@ -213,8 +216,17 @@ def responses_call(payload, *, timeout, project_id=None):
         raise CandidateHold(code) from None
     except (TimeoutError,):
         raise CandidateHold("OPENAI_API_TIMEOUT_HOLD") from None
-    except urllib.error.URLError:
-        raise CandidateHold("OPENAI_API_NETWORK_HOLD") from None
+    except ssl.SSLError:
+        raise CandidateHold("OPENAI_API_TLS_HOLD") from None
+    except socket.gaierror:
+        raise CandidateHold("OPENAI_API_DNS_HOLD") from None
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        code = ("OPENAI_API_TIMEOUT_HOLD" if isinstance(reason, TimeoutError) else
+                "OPENAI_API_TLS_HOLD" if isinstance(reason, ssl.SSLError) else
+                "OPENAI_API_DNS_HOLD" if isinstance(reason, socket.gaierror) else
+                "OPENAI_API_NETWORK_HOLD")
+        raise CandidateHold(code) from None
     except (ValueError, UnicodeDecodeError):
         raise CandidateHold("OPENAI_API_RESPONSE_DECODE_HOLD") from None
     except Exception:
@@ -303,10 +315,24 @@ def execute(context, config, *, root, call=responses_call, now=None):
         raise CandidateHold("SHADOW_DEFERRED_TO_PROTECT_PRODUCTION_DEADLINE")
     timeout = min(int(config.get("timeout_seconds", 90)), remaining - reserve)
     authentication_response_id = None
+    phase_timings = {"authentication_seconds": None, "response_api_seconds": None,
+                     "provider_generation_seconds": None, "validation_seconds": None,
+                     "freeze_seconds": None}
+    def measured_call(stage, payload, **kwargs):
+        started = time.monotonic()
+        try:
+            return (responses_call(payload, **kwargs) if call is responses_call
+                    else call(payload, timeout=kwargs["timeout"]))
+        except CandidateHold as exc:
+            exc.phase_timings = phase_timings
+            exc.failed_stage = stage
+            raise
+        finally:
+            phase_timings[stage + "_seconds"] = time.monotonic() - started
     if call is responses_call:
         # Authenticate the exact project/model before sending race evidence.
         # No models.read scope, alternate model or factual input is required.
-        probe = responses_call({"model": model, "store": False, "max_output_tokens": 32,
+        probe = measured_call("authentication", {"model": model, "store": False, "max_output_tokens": 32,
                                 "input": "Return OK for credential authentication only."},
                                timeout=min(15, timeout), project_id=config["project_id"])
         ensure_clean(probe)
@@ -318,8 +344,8 @@ def execute(context, config, *, root, call=responses_call, now=None):
             if available <= 0:
                 raise CandidateHold("SHADOW_DEFERRED_TO_PROTECT_PRODUCTION_DEADLINE")
             timeout = min(timeout, available)
-    result = (responses_call(payload, timeout=timeout, project_id=config["project_id"])
-              if call is responses_call else call(payload, timeout=timeout))
+    result = measured_call("response_api", payload, timeout=timeout, project_id=config["project_id"])
+    validation_started = time.monotonic()
     ensure_clean(result)
     if result.get("status") != "completed" or result.get("model") != model or not result.get("id"):
         raise CandidateHold("INCOMPLETE_OR_MODEL_MISMATCH")
@@ -352,6 +378,8 @@ def execute(context, config, *, root, call=responses_call, now=None):
     for key in ("ties", "partial_order"):
         if any(len(group) < 2 or len(group) != len(set(group)) for group in prediction[key]):
             raise CandidateHold("INVALID_PARTIAL_ORDER_OR_TIE_GROUP")
+    phase_timings["validation_seconds"] = time.monotonic() - validation_started
+    freeze_started = time.monotonic()
     frozen = dt.datetime.now(dt.timezone.utc) if now is None else now
     # Check wall clock after an actual call; test-injected clocks are deterministic.
     if call is responses_call:
@@ -402,6 +430,9 @@ def execute(context, config, *, root, call=responses_call, now=None):
                  "final_prediction_package": {key: static[key] for key in (
                      "ranking", "roles", "uncertainty", "venue_state")}}
     lineage["prediction_semantics_sha256"] = digest(semantics)
+    phase_timings["freeze_seconds"] = time.monotonic() - freeze_started
+    lineage["phase_timings"] = phase_timings
+    lineage["timing_semantics"] = "WALL_CLOCK; response_api includes provider generation; provider generation alone unavailable"
     return {"status": "HISTORICAL_COMPARISON_FROZEN" if historical else "SHADOW_FROZEN", "production_effect": "NONE",
             "production_authorized": False, "automatic_promotion": False, "promotion": "HOLD",
             "prediction": prediction, "prediction_semantics": semantics, "lineage": lineage}
@@ -586,7 +617,9 @@ def main():
         code = 0
     except Exception as exc:
         report = {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD",
-                  "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0}
+                  "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0,
+                  "failed_stage": getattr(exc, "failed_stage", None),
+                  "phase_timings": getattr(exc, "phase_timings", None)}
         code = 2
     dest = pathlib.Path(args.output)
     dest.parent.mkdir(parents=True, exist_ok=True)
