@@ -133,6 +133,8 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
         'krs_receipt': (o._load_checkpoint_json(phase, 'krs_receipt_envelope.json') or {}).get('receipt_sha256'),
         'missing_display_fields_are_unknown': True,
     }
+    report['canonical_tree'] = tree['text']
+    report['canonical_tree_ref'] = str((target/'canonical_tree.txt').relative_to(o.ROOT))
     report['fresh_external_verify'] = verification
     report.update(signed_final_pass=True,prestart_final_pass=temporal.get('verified') is True,
                   render_available=True,render_generated_at=now.isoformat(),
