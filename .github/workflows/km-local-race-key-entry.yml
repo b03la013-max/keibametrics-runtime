@@ -113,6 +113,13 @@ jobs:
           git config user.email actions@users.noreply.github.com
           test -f "runtime/executions/$EXECUTION_ID/SOURCE/LATEST.json"
           git add "runtime/executions/$EXECUTION_ID/SOURCE" "runtime/execution_reports/$EXECUTION_ID"
+          if [ -f entry-out/generated_formal_intent.json ] && [ -f entry-out/production_static_owner.json ]; then
+            test -f "runtime/formal_intents/$EXECUTION_ID.json"
+            git add "runtime/formal_intents/$EXECUTION_ID.json"
+            mkdir -p "runtime/local_production_static_owner_records"
+            cp entry-out/production_static_owner.json "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+            git add "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+          fi
           if [ "${{ steps.gate.outputs.formal_ready }}" = "true" ]; then
             test -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json"
             git add "runtime/executions/$EXECUTION_ID/FORMAL"
