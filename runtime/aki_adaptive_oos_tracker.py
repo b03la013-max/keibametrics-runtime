@@ -137,14 +137,24 @@ def evaluate_canonical(
     }
 
 
-def scan_execution_store(root: Path) -> dict:
+def scan_execution_store(root: Path, *, execution_ids: set[str] | None = None) -> dict:
+    """Scan all live races, or an explicitly frozen historical test cohort.
+
+    The CLI/default always scans the complete evolving ledger. A named cohort
+    is read-only and does not alter eligibility/receipt/settlement verification.
+    """
     from execution_store import resolve_phase
     if not root.exists():
-        return _summary([], [], [])
+        return _summary([], [], [{"reason": "FROZEN_COHORT_STORE_MISSING"}] if execution_ids else [])
+    selected = None if execution_ids is None else set(execution_ids)
     rows, held, errors = [], [], []
+    observed = set()
     for execution in sorted(root.iterdir()):
         if not execution.is_dir():
             continue
+        if selected is not None and execution.name not in selected:
+            continue
+        observed.add(execution.name)
         try:
             formal = resolve_phase(execution.name, "FORMAL", root=root)
             if not formal:
@@ -181,6 +191,9 @@ def scan_execution_store(root: Path) -> dict:
             rows.append(row)
         except (AdaptivePurchaseError, AssertionError, KeyError, ValueError) as exc:
             errors.append({"execution_id": execution.name, "reason": type(exc).__name__ + ":" + str(exc)})
+    if selected is not None and selected != observed:
+        errors.append({"reason": "FROZEN_COHORT_EXECUTION_MISSING",
+                       "missing": sorted(selected - observed)})
     race_ids = [x["race_id"] for x in rows]
     if len(race_ids) != len(set(race_ids)):
         errors.append({"reason": "DUPLICATE_OOS_RACE_ID"})
