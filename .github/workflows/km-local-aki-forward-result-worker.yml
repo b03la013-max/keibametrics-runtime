@@ -1,0 +1,50 @@
+name: LOCAL AKI frozen forward PAPER result worker
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: km-local-aki-forward-result-20261013
+  cancel-in-progress: false
+jobs:
+  result:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install cryptography PyYAML
+      - name: Restore frozen inputs without another KRS
+        run: |
+          python tools/local_aki_forward_archive.py restore
+          python tools/local_aki_forward_checkpoint.py restore
+      - name: Official result, PAPER settlement and independent temporal classification
+        run: python tools/local_aki_forward_result_worker.py
+      - name: Persist result evidence without changing prediction archive
+        env:
+          RESULT_BRANCH: ${{ github.ref_name }}
+        run: |
+          python tools/local_aki_forward_checkpoint.py pack
+          git add evidence/local_aki_columns_20261012/forward_result_checkpoint.tar.gz evidence/local_aki_columns_20261012/forward_result_checkpoint_manifest.json research/local_aki_forward_20261013/result_worker_status.json
+          git config user.name 'keibametrics-runtime'
+          git config user.email 'keibametrics-runtime@users.noreply.github.com'
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'LOCAL AKI frozen forward PAPER result checkpoint [skip ci]'
+          for attempt in 1 2 3; do
+            git fetch origin "$RESULT_BRANCH"
+            git rebase "origin/$RESULT_BRANCH" || { git rebase --abort; exit 2; }
+            if git push origin "HEAD:$RESULT_BRANCH"; then exit 0; fi
+          done
+          exit 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-aki-forward-result-${{ github.run_id }}
+          path: |
+            research/local_aki_forward_20261013/result_worker_status.json
+            evidence/local_aki_columns_20261012/forward_result_checkpoint*
+          retention-days: 90

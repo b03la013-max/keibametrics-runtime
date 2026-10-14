@@ -690,3 +690,22 @@ def test_explicit_result_revision_requires_identical_signed_outcome():
         bad=dict(request);bad["finish_order"]=[8,1,5]
         with pytest.raises(FormalOrchestrationError,match="OUTCOME_MISMATCH"):
             _validate_explicit_result_revision(bad,previous,formal)
+
+
+@pytest.mark.parametrize('family,extra,code',[
+    ('BAN',[], 'LOCAL_AKI_REPLAY_SIGNED_SOURCE_REQUIRED'),
+    ('LOCAL',['--phase','SOURCE'], 'LOCAL_AKI_REPLAY_MODE_CONFLICT'),
+    ('LOCAL',[], 'LOCAL_AKI_REPLAY_CANONICAL_SOURCE_PATH_REQUIRED'),
+])
+def test_aki_replay_entry_fails_closed_before_transport(tmp_path,monkeypatch,family,extra,code):
+    import sys
+    intent = tmp_path / 'intent.json'
+    intent.write_text(json.dumps(dict(base_intent(),family_id=family)))
+    output = tmp_path / 'report.json'
+    monkeypatch.setattr(sys,'argv',['runner','--intent',str(intent),'--aki-paper-replay',
+        '--frozen-source',str(tmp_path/'source.json'),'--output',str(output),*extra])
+    assert o.main() == 2
+    report=json.loads(output.read_text())
+    assert report['code'] == code
+    assert report['purchase_authority'] is False
+    assert report['production_formal_completion'] is False
