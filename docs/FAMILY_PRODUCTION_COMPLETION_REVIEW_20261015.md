@@ -125,3 +125,35 @@ HealthだけではSingle-Race／全日運用受入れにならない。
 課金補充、Production昇格、候補merge／deployの承認とは分離する。
 
 最終完成判定：NOT COMPLETE。API課金・Receipt送信承認・Owner受入れ・真正未来の正式全工程と結果閉ループが残る。
+
+
+## 続行後の終端確認 — 2026-10-15 08:44 JST
+
+C2修復HEAD dae9a4beの実試験Run38654977808／Job116162479810を回収。
+認証1.076720293秒後にCREDIT_BALANCE_EXHAUSTED HOLD。Artifact11935909768、
+ZIP SHA1691b74529c64cb434e4adac0458d7d159c6e68dbc0083da61704b9b7be3b5b8を照合。
+旧HEADの結果と混同せず、最新診断の失敗Stageと計測実在を確認した。
+
+既存C2 one-shot workflowに認証単独モードを追加し、同じModel／Project／staging secretで
+SOURCE／Race／Receiptを一切読み込まず、固定のno-race事前認証のみを実行した。
+Run38655791094／Job116165112510、HEAD28adc8b72e7eb9d545e854136f29d37ba9d9c222。
+08:43:20 JST、認証1.565860298秒後に同じHTTP429 CREDIT_BALANCE_EXHAUSTED HOLD。
+Artifact11936342194／ZIP SHA15cf69abd745efa12c1dfe84e4d46cf05496d34f600efe2803b39bb4f1e88b71を照合。
+後続API生成／Validation／Freezeはnull。Signed Shadow Receiptは生成していない。
+課金は外部条件であり、これ以上の同一失敗再試行を止める。
+現行PR124 HEAD9205ee84ceed4fece8c65ae19320a807038a4456では
+push認証単独と明示historical dispatchを分離し、既存比較経路を保持する。
+コード101 tests PASS、workflow shell syntax PASS。Production／Model／Policy不変。
+
+続行指示後の正本/verify再試行も自動承認審査で拒否された。
+理由は「最後まで実行」では具体的Payloadと送信先の明示承認にならないという判定。
+この送信を別Tool／workflowで再試行・迂回していない。
+安全な代替として、fresh canonical Healthから取得した公開鍵で
+既存KAW R11／R12の署名・Receipt SHA・Artifact SHA・Race IDをローカル照合した。
+12保存箇所（SOURCEコピー重複を含む）、unique10 receipts、すべてPASS。
+これはOFFLINE検証であり、新規外部verify PASSではない。
+
+PR279 review HEAD0d0053bfのremote CI3/3 SUCCESSを終端確認：
+Runtime Correctness38655323155、Gateway Canary38655323136、
+LOCAL/JRA Guarantees38655323175。C2実APIのHOLDとは独立。
+新規未知未来LIVE0、実API比較／Two-Race／Promotion／新規RESULT/PFS/Learning未成立を維持。
