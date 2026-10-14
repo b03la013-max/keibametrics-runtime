@@ -126,3 +126,15 @@ def test_candidate_ranking_not_a_probability():
     assert "probability" not in p
     assert p["promotable_without_forward_oos"] is False
     assert p["pair_conditioning_statement"].startswith("Provisional")
+
+
+def test_unknown_p3_is_protected_without_treating_neutral_as_weak():
+    req, source, numeric, now = fixture()
+    # Wide winner separation narrows the candidate's third row to five.
+    numeric["runners"][0]["canonical_components"]["ZAI-WIN"]["value"] = 96
+    shadow = compile_shadow(req, source, numeric, now=now)
+    assert shadow["shadow_width"]["band"] == "SHADOW_NARROW"
+    assert shadow["p3_unknown_protection"] == "6"
+    assert "P3" in shadow["role_columns"]["6"]
+    assert shadow["neutral_index_registry"]["6"] == ["T3I-L"]
+    assert shadow["prediction_consumption_authorized"] is False
