@@ -1,0 +1,78 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+___________ test_explicit_budget_no_bet_reaches_paper_ticket_output ____________
+
+    def test_explicit_budget_no_bet_reaches_paper_ticket_output():
+        q, src = real(6)
+        selected = build(q, src)
+        before = decision(q, selected)
+        assert before['paper_tickets']
+        q['capital_policy'] = {'mode': 'HARD_RACE_BUDGET', 'max_race_capital': 100,
+                               'insufficient_action': 'NO_BET'}
+        after = decision(q, selected)
+        assert build(q, src) == selected
+        assert after['mec'] == before['mec']  # semantic graph is not budget-pruned
+        assert after['capital']['compatibility'] == 'INCOMPATIBLE'
+>       assert after['capital']['decision'] == 'NO_BET'
+E       AssertionError: assert 'PAPER' == 'NO_BET'
+E         
+E         - NO_BET
+E         + PAPER
+
+tests/test_aki_winner_repair_20261014.py:74: AssertionError
+___________ test_selector_no_bet_cannot_emit_reference_paper_tickets ___________
+
+    def test_selector_no_bet_cannot_emit_reference_paper_tickets():
+        q, src = real(6)
+        q.pop('aki_column_candidate')
+        for runner in q['runners']:
+            runner['canonical_components']['ZAI-WIN']['value'] = 100 if str(runner['runner_id']) == '2' else 0
+            runner['canonical_components']['W-AKI']['value'] = 0
+            runner['canonical_components']['ASI']['value'] = 49
+        selected = build(q, src)
+        assert selected['status'] == 'NO_BET'
+        result = decision(q, selected)
+        assert result['mec']['tickets']  # evidence remains available for diagnostics
+>       assert result['paper_tickets'] == []
+E       AssertionError: assert [{'bet_type':...ECTION', ...}] == []
+E         
+E         Left contains 5 more items, first extra item: {'bet_type': 'EXACTA', 'selection': [2, 1], 'orientation': '2>1', 'stake': 100, ...}
+E         Use -v to get more diff
+
+tests/test_aki_winner_repair_20261014.py:89: AssertionError
+___ test_rejected_selection_policy_cannot_enter_forward[HEAD_LOCAL_VNEXT_R1] ___
+
+mode = 'HEAD_LOCAL_VNEXT_R1'
+
+    @pytest.mark.parametrize('mode', ['HEAD_LOCAL_VNEXT_R1', 'HEAD_LOCAL_VNEXT_R2'])
+    def test_rejected_selection_policy_cannot_enter_forward(mode):
+        from local_aki_columns import LocalAKIError
+        q, src = real(6)
+        q['aki_column_candidate'] = mode
+        q['aki_temporal_mode'] = 'FORWARD_PAPER'
+>       with pytest.raises(LocalAKIError, match='PERFORMANCE_REJECTED_ARM_FORWARD_FORBIDDEN'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE LocalAKIError
+
+tests/test_aki_winner_repair_20261014.py:98: Failed
+___ test_rejected_selection_policy_cannot_enter_forward[HEAD_LOCAL_VNEXT_R2] ___
+
+mode = 'HEAD_LOCAL_VNEXT_R2'
+
+    @pytest.mark.parametrize('mode', ['HEAD_LOCAL_VNEXT_R1', 'HEAD_LOCAL_VNEXT_R2'])
+    def test_rejected_selection_policy_cannot_enter_forward(mode):
+        from local_aki_columns import LocalAKIError
+        q, src = real(6)
+        q['aki_column_candidate'] = mode
+        q['aki_temporal_mode'] = 'FORWARD_PAPER'
+>       with pytest.raises(LocalAKIError, match='PERFORMANCE_REJECTED_ARM_FORWARD_FORBIDDEN'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE LocalAKIError
+
+tests/test_aki_winner_repair_20261014.py:98: Failed
+=========================== short test summary info ============================
+FAILED tests/test_aki_winner_repair_20261014.py::test_explicit_budget_no_bet_reaches_paper_ticket_output
+FAILED tests/test_aki_winner_repair_20261014.py::test_selector_no_bet_cannot_emit_reference_paper_tickets
+FAILED tests/test_aki_winner_repair_20261014.py::test_rejected_selection_policy_cannot_enter_forward[HEAD_LOCAL_VNEXT_R1]
+FAILED tests/test_aki_winner_repair_20261014.py::test_rejected_selection_policy_cannot_enter_forward[HEAD_LOCAL_VNEXT_R2]
+4 failed, 7 deselected in 4.26s

@@ -3,7 +3,7 @@ New arms are post-event regression, never edits to original OOS.
 """
 import json, sys, gzip, hashlib, copy, argparse
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'runtime'))
+ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'runtime'))
 from aki_adaptive_oos_tracker import scan_execution_store
 from local_fullnumerical_production import materialize_production
 from local_aki_columns import build,decision,verify,sha
@@ -13,7 +13,11 @@ from pfs_grand_review import _aggregate,_robustness,capital_arms
 parser=argparse.ArgumentParser()
 parser.add_argument('--candidate-mode',choices=['HEAD_LOCAL_VNEXT_R1','HEAD_LOCAL_VNEXT_R2'],default='HEAD_LOCAL_VNEXT_R1')
 parser.add_argument('--out',default='research/aki_vnext_20261014')
+parser.add_argument('--residual-audit',action='store_true',help='Audit all four frozen/replay selections; no new policy or Forward registration')
+parser.add_argument('--verify-external',action='store_true',help='Reverify original 17 SOURCE/PRE_KRS/KRS/FINAL/RESULT on the current canonical Runtime')
 args=parser.parse_args()
+if args.residual_audit and args.out in {'research/aki_vnext_20261014','research/aki_winner_repair_20261014'}:
+ parser.error('RESIDUAL_AUDIT_REQUIRES_SEPARATE_OUTPUT; historical observations immutable')
 if args.candidate_mode!='HEAD_LOCAL_VNEXT_R1' and args.out=='research/aki_vnext_20261014':
  parser.error('NEW_ARM_REQUIRES_SEPARATE_OUTPUT; original observations immutable')
 OUT=ROOT/args.out;OUT.mkdir(parents=True,exist_ok=True)
@@ -50,7 +54,8 @@ for old in tracker['settled_rows']:
   settlement=settle_ticket_list(tickets,facts);settlement['hit_but_loss']=settlement['return']>0 and settlement['profit_loss']<0;settlement.update(capture(tickets,top));settlement['tickets']=tickets;settlement['ticket_count']=len(tickets)
   settlement['measurement']=measure_capital_conversion(req,f['artifact']['final_ticket'],f['artifact']['final_prediction_package'],f['artifact']['final_prediction_package']['krs_prediction_utility_shadow'],candidate_tickets=tickets)
   arms[name]=settlement
- for x in selected['conditional_audit']['excluded_pairs']:
+ capital_pair_losses=copy.deepcopy(selected['conditional_audit']['excluded_pairs'])
+ for x in capital_pair_losses:
   x['removed_capital']=sum(t['stake'] for t in a if t['bet_type']!='TRIO' and [str(v) for v in t['selection'][:2]]==[str(x['head']),str(x['second'])])
  rows.append({'race_id':rid,'date':old['race_day'],'venue':'KAW' if '-KAW-' in rid else 'OHI','top3':top,'conditional_capture':{'head_local_pair':any((str(x['head']),str(x['second']))==tuple(map(str,top[:2])) for x in selected['pair_dispositions']), 'pair_conditioned_third':any((str(x['head']),str(x['second']),str(x['third']))==tuple(map(str,top)) for x in selected['third_dispositions'])}, 'selection':selected,'conversion_audit':d.get('conversion_audit'),'arms':arms,
   'distance':(req.get('race') or {}).get('distance'), 'column_capture':{c:str(top[i]) in selected['columns'][c]['selected'] for i,c in enumerate(['W','P2','P3'])}, 'candidate_policy_sha256':selected['policy_sha256'], 'candidate_selection_sha256':selected['sha256'], 'static_freeze_preserved':q['static_prediction']==req['static_prediction'], 'signed_final_time_A_B':f['receipt']['timestamp'], 'signed_final_time_C_D':None, 'capital_virtual_timestamp_not_candidate_final':True, 'source_sha256':source['source_snapshot_sha256'],'original_final_ref':f['receipt_sha256'],'original_result_ref':result['receipt_sha256'],
@@ -59,6 +64,7 @@ for old in tracker['settled_rows']:
  if args.candidate_mode=='HEAD_LOCAL_VNEXT_R2':
   rows[-1]['reference_selection']=old262
   rows[-1]['original_aki_shadow']=load(fp.parent/'aki_adaptive_purchase_shadow_pre_result.json')
+ rows[-1]['post_result_capital_pair_losses']=capital_pair_losses
 def cohort(rr):
  out={}
  for name in ['A_PRODUCTION','B_ORIGINAL_AKI','PR262_REFERENCE','C_SELECTION','D_CAPITAL_ONLY']:
@@ -121,3 +127,168 @@ if args.candidate_mode=='HEAD_LOCAL_VNEXT_R2':
   'no_bet_opportunity_cost':'ALL_17_BET; NO_ABSTENTION_COUNTERFACTUAL_POLICY',
   'next_step':'Resolve residual P2/model-choice evidence before any new forward admission; retain original AKI comparator.'}
  (OUT/'comparison.json.gz').write_bytes(gzip.compress((json.dumps(comparison,ensure_ascii=False,indent=2)+'\n').encode(),mtime=0))
+
+if args.residual_audit:
+ if args.candidate_mode!='HEAD_LOCAL_VNEXT_R2':
+  raise ValueError('RESIDUAL_AUDIT_REQUIRES_R2_COMPARISON_NOT_FORWARD_ADMISSION')
+ previous=json.loads(gzip.decompress((ROOT/'research/aki_vnext_20261014/full_report.json.gz').read_bytes()))
+ old_rows={r['race_id']:r for r in previous['rows']}
+ def failure(req, selected, tickets, top, arm):
+  h,s,t=map(str,top)
+  role_ids={c:{str(x['runner_id']) for x in req['role_registry'] if x['column']==c}
+            for c in ['W','P2','P3']}
+  upstream={c:v in role_ids[c] for c,v in zip(['W','P2','P3'],[h,s,t])}
+  pair=next((x for x in req['pair_dispositions'] if (str(x['head']),str(x['second']))==(h,s)),None)
+  third=next((x for x in req['third_dispositions'] if (str(x['head']),str(x['second']),str(x['third']))==(h,s,t)),None)
+  if arm=='ORIGINAL_AKI':
+   columns=selected['selected_role_columns'];pairs=selected['pair_local_columns']['seconds_by_head']
+   thirds=selected['pair_local_columns']['thirds_by_pair']
+   local_pair=s in {str(x) for x in pairs.get(h,[])}
+   local_third=t in {str(x) for x in thirds.get(h+'>'+s,[])}
+  else:
+   columns={c:x['selected'] for c,x in selected['columns'].items()}
+   local_pair=any((str(x['head']),str(x['second']))==(h,s) for x in selected['pair_dispositions'])
+   local_third=any((str(x['head']),str(x['second']),str(x['third']))==(h,s,t) for x in selected['third_dispositions'])
+  selected_third=(next((x for x in selected.get('third_dispositions',[]) if
+      (str(x['head']),str(x['second']),str(x['third']))==(h,s,t)),None) if arm!='ORIGINAL_AKI' else None)
+  column={c:v in {str(x) for x in columns.get(c,[])} for c,v in zip(['W','P2','P3'],[h,s,t])}
+  purchased=capture(tickets,top)
+  if not upstream['W']:first='PREDICTION_WINNER_ROLE_MISSING'
+  elif not column['W']:first='AKI_WINNER_SELECTION_LOSS'
+  elif not upstream['P2']:first='PREDICTION_P2_ROLE_MISSING'
+  elif not pair or pair.get('status') not in {'PURCHASE','PROTECT'}:first='UPSTREAM_ORDERED_PAIR_NOT_MATERIAL'
+  elif not local_pair:first='HEAD_LOCAL_P2_SELECTION_LOSS'
+  elif not upstream['P3']:first='PREDICTION_P3_ROLE_MISSING'
+  elif not local_third:first='PAIR_CONDITIONED_THIRD_SELECTION_LOSS'
+  elif not purchased['exact'] and third and third.get('status')=='PURCHASE' and selected_third and selected_third.get('status')!='PURCHASE':first='EXACT_ORIENTATION_DOWNGRADED_BY_SELECTOR'
+  elif not purchased['exact'] and third and third.get('status')=='PROTECT':first='PROTECT_NOT_EXACT_ORIENTED'
+  elif not purchased['pair'] or not purchased['exact']:first='MEC_TICKET_CONVERSION_LOSS'
+  else:first='CORRECT_ORDER_CAPTURED'
+  return {'upstream_role_capture':upstream,'selected_column_capture':column,
+          'selected_outside_upstream_role_universe':{c:sorted({str(x) for x in columns.get(c,[])}-role_ids[c],key=int) for c in ['W','P2','P3']},
+          'head_local_pair_capture':local_pair,'pair_conditioned_third_capture':local_third,
+          'ticket_capture':purchased,'first_material_selection_failure':first,
+          'pre_result_pair_evidence':pair,'pre_result_third_evidence':third,
+          'selected_third_disposition':selected_third,
+          'no_result_input_to_selector':True,'market_price_authority':'HOLD_MISSING_PRESTART_TICKET_PRICE_PANEL',
+          'false_addition_measurement':'NONWINNING_TICKETS_POST_RESULT_OBSERVATION_NOT_PROVEN_PRESTART_ERROR'}
+ audited=[]
+ for row in rows:
+  rid=row['race_id'];req=load(ROOT/'runtime/formal_intents'/f'{rid}.json');old=old_rows[rid]
+  arms={}
+  for name,selected,tickets,settled in [
+      ('ORIGINAL_AKI',row['original_aki_shadow'],row['arms']['B_ORIGINAL_AKI']['tickets'],row['arms']['B_ORIGINAL_AKI']),
+      ('PR262_REFERENCE',row['reference_selection'],row['arms']['PR262_REFERENCE']['tickets'],row['arms']['PR262_REFERENCE']),
+      ('PR265_R1',old['selection'],old['arms']['C_SELECTION']['tickets'],old['arms']['C_SELECTION']),
+      ('PR265_R2',row['selection'],row['arms']['C_SELECTION']['tickets'],row['arms']['C_SELECTION'])]:
+   arms[name]=failure(req,selected,tickets,row['top3'],name)
+   arms[name]['economic_outcome']={k:settled[k] for k in ['investment','return','profit_loss','pfs','hit_but_loss','ticket_count','nonwinning_tickets']}
+   arms[name]['dominant_loss_owner']=('CAPITAL_DILUTION' if settled['hit_but_loss'] else
+       arms[name]['first_material_selection_failure'] if settled['return']==0 else 'NO_LOSS_OBSERVED')
+   arms[name]['capital_exposure']=settled['measurement']
+  audited.append({'race_id':rid,'source_sha256':row['source_sha256'],'static_prediction_sha256':sha(req['static_prediction']),
+      'original_final_ref':row['original_final_ref'],'original_result_ref':row['original_result_ref'],
+      'post_result_top3_observation':row['top3'],'date':row['date'],'venue':row['venue'],'distance':row['distance'],
+      'arms':arms,'scope':'FROZEN_HISTORICAL_OOS_A_B; REFERENCE_R1_R2_POST_EVENT_REPLAY',
+      'actual_purchase_pfs':None,'forward_count_for_new_code':0})
+ audit={'status':'VERIFIED_HISTORICAL_RESIDUAL_AUDIT','rows':audited,'genuine_forward_count':0,
+        'new_selection_candidate':'NONE / EVIDENCE_INSUFFICIENT','R1_forward_admission':'REJECTED','R2_forward_admission':'REJECTED',
+        'selector_code_sha256':hashlib.sha256((ROOT/'runtime/local_aki_columns.py').read_bytes()).hexdigest(),
+        'required_new_evidence':['PRESTART_TICKET_PRICE_PANEL','INDEPENDENT_CONDITIONAL_STAGE_PATH_DISCRIMINATION',
+          'SAME_SOURCE_PRODUCTION_AND_ORIGINAL_AKI_COMPARATORS','FROZEN_LEGAL_EQUAL_BUDGET_EQUAL_TICKET_POLICY'],
+        'production_effect':'NONE'}
+ # Reuse the existing outcome-independent integer matched comparator. These
+ # are retrospective experimental controls, never modified historical FINALs
+ # or a claim that randomly ranked subsets are economically optimal.
+ from tools.local_aki_matched_comparison import portfolio,NAMESPACE
+ matched={name:[] for name in ['equal_budget_full_coverage','equal_budget_equal_count']}
+ budget_rows=[]
+ for row in rows:
+  old=old_rows[row['race_id']];top=row['top3']
+  arms={'PRODUCTION':row['arms']['A_PRODUCTION']['tickets'],
+        'ORIGINAL_AKI':row['arms']['B_ORIGINAL_AKI']['tickets'],
+        'PR262_REFERENCE':row['arms']['PR262_REFERENCE']['tickets'],
+        'PR265_R1':old['arms']['C_SELECTION']['tickets'],'PR265_R2':row['arms']['C_SELECTION']['tickets']}
+  req=load(ROOT/'runtime/formal_intents'/f"{row['race_id']}.json")
+  result=load(next((ROOT/'runtime/executions'/row['race_id']/'RESULT').rglob('result_receipt_envelope.json')))
+  facts={'official_result':{**result['artifact']['official_result'],'top3':top}}
+  identity=(req['venue_id'],row['date'],req['race_no'])
+  for mode in matched:
+   units=(max if mode=='equal_budget_full_coverage' else min)(len(t) for t in arms.values())
+   if units<=0:
+    matched[mode].append({'race_id':row['race_id'],'status':'HOLD_EMPTY_ARM'});continue
+   observations={}
+   for name,tickets in arms.items():
+    controlled=portfolio(tickets,identity,units,count=units if mode=='equal_budget_equal_count' else None)
+    settled=settle_ticket_list(controlled,facts);settled['hit_but_loss']=settled['return']>0 and settled['profit_loss']<0
+    observations[name]={'tickets':controlled,'settlement':settled,
+                        'capture':capture(controlled,top)}
+   matched[mode].append({'race_id':row['race_id'],'date':row['date'],'budget':100*units,'arms':observations})
+  scenarios=[]
+  for name,selected in [('PR262_REFERENCE',row['reference_selection']),('PR265_R1',old['selection']),('PR265_R2',row['selection'])]:
+   for budget in [0,2000,5000,10000]:
+    scenario=copy.deepcopy(req);scenario['capital_policy']={'mode':'HARD_RACE_BUDGET','max_race_capital':budget,'insufficient_action':'NO_BET'}
+    d=decision(scenario,selected);settled=settle_ticket_list(d['paper_tickets'],facts)
+    baseline=settle_ticket_list(arms[name],facts)
+    scenarios.append({'arm':name,'budget':budget,'authority':'EXPLICIT_PAPER_SCENARIO_NOT_USER_BUDGET',
+                      'capital':d['capital'],'paper_tickets':d['paper_tickets'],'settlement':settled,
+                      'foregone_return_post_result':baseline['return'] if not d['paper_tickets'] else 0,
+                      'avoided_stake_post_result':baseline['investment'] if not d['paper_tickets'] else 0,
+                      'no_price_or_probability_optimality_claim':True})
+  budget_rows.append({'race_id':row['race_id'],'scenarios':scenarios})
+ audit['matched_comparison']={'scope':'POST_EVENT_COUNTERFACTUAL_ONLY_NOT_SELECTION_POLICY_OR_FORWARD',
+       'existing_namespace':NAMESPACE,'no_proportional_scaling':True,'modes':matched,'aggregate':{}}
+ for mode,controlled in matched.items():
+  audit['matched_comparison']['aggregate'][mode]={}
+  for name in arms:
+   rec=[{'race_id':r['race_id'],'date':r['date'],**r['arms'][name]['settlement']} for r in controlled if 'arms' in r]
+   audit['matched_comparison']['aggregate'][mode][name]={'aggregate':_aggregate(rec),'robustness':_robustness(rec)}
+ audit['capital_paper_budget_scenarios']=budget_rows
+ (OUT/'residual_audit.json.gz').write_bytes(gzip.compress(json.dumps(audit,ensure_ascii=False,indent=2).encode(),mtime=0))
+ print('RESIDUAL_AUDIT_17; NEW_SELECTION_CANDIDATES=0; FORWARD=0')
+
+if args.verify_external:
+ if not args.residual_audit:raise ValueError('EXTERNAL_VERIFICATION_REQUIRES_SEPARATE_RESIDUAL_AUDIT_OUTPUT')
+ import base64,datetime as dt,urllib.request
+ from concurrent.futures import ThreadPoolExecutor
+ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ endpoint=load(ROOT/'profiles/current_execution_gateway.json')['families']['LOCAL']['external_endpoint']
+ anchor=load(ROOT/'evidence/local_aki_columns_20261012/destination_verification.json')['health']['receipt_public_key_b64']
+ public=Ed25519PublicKey.from_public_bytes(base64.b64decode(anchor))
+ def verify_envelope(job):
+  rid,phase,path=job;e=load(path);rec=e['receipt'];raw=json.dumps(rec,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
+  public.verify(base64.b64decode(e['signature']),raw)
+  if hashlib.sha256(raw).hexdigest()!=e['receipt_sha256'] or sha(e['artifact'])!=rec['artifact_sha256']:
+   raise ValueError('SIGNED_DIGEST_MISMATCH:'+rid+':'+phase)
+  if rec['race_id']!=rid or rec['phase']!=phase:raise ValueError('SIGNED_IDENTITY_MISMATCH')
+  raw_count=0
+  if phase=='SOURCE':
+   for source in e['artifact']['sources']:
+    if source.get('raw_gzip_b64'):
+     if hashlib.sha256(gzip.decompress(base64.b64decode(source['raw_gzip_b64']))).hexdigest()!=source['raw_sha256']:
+      raise ValueError('OFFICIAL_RAW_HASH_MISMATCH')
+     raw_count+=1
+  request=urllib.request.Request(endpoint+'/verify',data=json.dumps(e,ensure_ascii=False).encode(),headers={'Content-Type':'application/json'})
+  with urllib.request.urlopen(request,timeout=120) as response:result=json.load(response)
+  if result.get('valid') is not True:raise ValueError('CURRENT_RUNTIME_VERIFY_FAILED:'+rid+':'+phase)
+  return {'race_id':rid,'phase':phase,'receipt_ref':e['receipt_sha256'],'artifact_sha256':rec['artifact_sha256'],
+          'offline_signature_verified':True,'official_raw_hash_count':raw_count,'live_verify':result,
+          'observed_at':dt.datetime.now(dt.timezone.utc).isoformat()}
+ jobs=[]
+ for row in rows:
+  rid=row['race_id'];formal=next((ROOT/'runtime/executions'/rid/'FORMAL').rglob('final_receipt_envelope.json')).parent
+  for phase,name in [('SOURCE','source'),('PRE_KRS','pre_krs'),('KRS_RUN','krs'),('FINAL','final')]:
+   jobs.append((rid,phase,formal/(name+'_receipt_envelope.json')))
+  jobs.append((rid,'RESULT',next((ROOT/'runtime/executions'/rid/'RESULT').rglob('result_receipt_envelope.json'))))
+ verified=[]
+ try:
+  with ThreadPoolExecutor(max_workers=4) as pool:
+   for result in pool.map(verify_envelope,jobs):verified.append(result)
+  result={'status':'PASS','verified_envelopes':len(verified),'rows':verified,'endpoint':endpoint,
+          'public_trust_anchor_b64':anchor,'new_krs_runs':0,'old_original_krs_runs':sum(r['original_actual_krs_runs'] for r in rows),
+          'new_forward_count':0}
+ except Exception as error:
+  result={'status':'BLOCKED_OR_PARTIAL','verified_envelopes':len(verified),'rows':verified,'error':str(error),'new_forward_count':0}
+ (OUT/'current_external_verification.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+ if result['status']!='PASS':raise RuntimeError('EXTERNAL_VERIFICATION_PARTIAL:'+str(result['error']))
+ print('ORIGINAL_17_LIVE_VERIFY_85_PASS; NEW_KRS=0_IN_VERIFICATION')

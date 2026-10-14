@@ -58,3 +58,84 @@ def test_default_and_r1_selection_hashes_match_all_17_saved_observations():
   q['aki_column_candidate']='HEAD_LOCAL_VNEXT_R1';selected=build(q,src)
   assert selected['sha256']==row['selection']['sha256']
   assert decision(q,selected)['paper_tickets']==row['arms']['C_SELECTION']['tickets']
+
+
+def test_explicit_budget_no_bet_reaches_paper_ticket_output():
+    q, src = real(6)
+    selected = build(q, src)
+    before = decision(q, selected)
+    assert before['paper_tickets']
+    q['capital_policy'] = {'mode': 'HARD_RACE_BUDGET', 'max_race_capital': 100,
+                           'insufficient_action': 'NO_BET'}
+    after = decision(q, selected)
+    assert build(q, src) == selected
+    assert after['mec'] == before['mec']  # semantic graph is not budget-pruned
+    assert after['capital']['compatibility'] == 'INCOMPATIBLE'
+    assert after['capital']['decision'] == 'NO_BET'
+    assert after['paper_tickets'] == after['purchase_tickets'] == []
+
+
+def test_selector_no_bet_cannot_emit_reference_paper_tickets():
+    q, src = real(6)
+    q.pop('aki_column_candidate')
+    for runner in q['runners']:
+        runner['canonical_components']['ZAI-WIN']['value'] = 100 if str(runner['runner_id']) == '2' else 0
+        runner['canonical_components']['W-AKI']['value'] = 0
+        runner['canonical_components']['ASI']['value'] = 49
+    selected = build(q, src)
+    assert selected['status'] == 'NO_BET'
+    result = decision(q, selected)
+    assert result['mec']['tickets']  # evidence remains available for diagnostics
+    assert result['paper_tickets'] == []
+
+
+@pytest.mark.parametrize('mode', ['HEAD_LOCAL_VNEXT_R1', 'HEAD_LOCAL_VNEXT_R2'])
+def test_rejected_selection_policy_cannot_enter_forward(mode):
+    from local_aki_columns import LocalAKIError
+    q, src = real(6)
+    q['aki_column_candidate'] = mode
+    q['aki_temporal_mode'] = 'FORWARD_PAPER'
+    with pytest.raises(LocalAKIError, match='PERFORMANCE_REJECTED_ARM_FORWARD_FORBIDDEN'):
+        build(q, src)
+
+
+def test_budget_paper_is_diagnostic_and_never_purchase_authority():
+    q, src = real(6)
+    selected = build(q, src)
+    q['capital_policy'] = {'mode': 'HARD_RACE_BUDGET', 'max_race_capital': 100,
+                           'insufficient_action': 'PAPER'}
+    result = decision(q, selected)
+    assert result['capital']['compatibility'] == 'INCOMPATIBLE'
+    assert result['capital']['decision'] == 'PAPER'
+    assert result['paper_tickets']  # counterfactual audit, not funded tickets
+    assert result['purchase_tickets'] == [] and result['purchase_authority'] is False
+    assert result['capital']['no_bet'] and result['capital']['paper_only']
+
+
+def test_all_17_r2_observations_remain_exact_replay_without_budget_change():
+    from local_fullnumerical_production import materialize_production
+    saved=json.loads(gzip.decompress((ROOT/'research/aki_winner_repair_20261014/full_report.json.gz').read_bytes()))
+    for row in saved['rows']:
+        rid=row['race_id'];req=json.loads((ROOT/'runtime/formal_intents'/f'{rid}.json').read_text())
+        source=json.loads(next((ROOT/'runtime/executions'/rid/'FORMAL').rglob('source_receipt_envelope.json')).read_text())['artifact']
+        req['source_snapshot_sha256']=source['source_snapshot_sha256']
+        q=materialize_production(source,req,req['required_indices']);q['aki_column_candidate']='HEAD_LOCAL_VNEXT_R2'
+        selected=build(q,source)
+        historical=copy.deepcopy(row['selection'])
+        # The old analysis tool inserted post-result capital measurements
+        # after hashing selection. Preserve that historical report, while
+        # comparing its actual pre-measurement selection and signed hash.
+        for pair in historical['conditional_audit']['excluded_pairs']:
+            pair['removed_capital']=None
+        assert selected==historical
+        assert decision(q,selected)['paper_tickets']==row['arms']['C_SELECTION']['tickets']
+
+
+def test_residual_analysis_keeps_hashed_selection_separate_from_capital_measurement():
+    from local_aki_columns import sha
+    report=json.loads(gzip.decompress((ROOT/'research/aki_residual_20261015/full_report.json.gz').read_bytes()))
+    for row in report['rows']:
+        selected=copy.deepcopy(row['selection']);digest=selected.pop('sha256')
+        assert sha(selected)==digest
+        assert all(x['removed_capital'] is None for x in selected['conditional_audit']['excluded_pairs'])
+        assert all(x['removed_capital'] is not None for x in row['post_result_capital_pair_losses'])
