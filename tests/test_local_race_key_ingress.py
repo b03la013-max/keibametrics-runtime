@@ -78,6 +78,15 @@ def test_authority_unavailable_holds():
         valid_build(resolver=unavailable)
 
 
+def signed_request():
+    return {
+        "execution_id": "RACE", "race_id": "RACE",
+        "venue_id": "KAW", "race_date": "2099-01-01", "race_no": 6,
+        "scheduled_post_at": "2099-01-01T17:15:00+09:00",
+        "prediction_cutoff": "2099-01-01T17:10:00+09:00",
+    }
+
+
 def patch_source(monkeypatch):
     from runtime import formal_execution_orchestrator as o
     monkeypatch.setattr(o, "resolve_phase", lambda eid, phase: {"run_dir": Path("/source")}
@@ -85,7 +94,16 @@ def patch_source(monkeypatch):
     monkeypatch.setattr(o, "validate_source_checkpoint", lambda p, request: None)
     def load(resolved, key):
         if key == "source_receipt_envelope.json":
-            return {"receipt_sha256": "signed_source"}
+            return {
+                "receipt_sha256": "signed_source",
+                "artifact": {
+                    "source_freeze_at": "2099-01-01T08:00:00+00:00",
+                    "source_race_context": {"venue_id": "KAW", "race_date": "2099/01/01", "race_no": 6},
+                    "normalized_evidence": {"start_time": {
+                        "value": "17:15", "authority": "NAR_OFFICIAL",
+                        "cutoff_relation": "PRE_CUTOFF"}},
+                },
+            }
         if key == "receipt_verifications.json":
             return {"SOURCE": True, "PRE_KRS": True, "KRS_RUN": True, "FINAL": True}
         if key == "final_before_post_verification.json":
@@ -98,7 +116,7 @@ def patch_source(monkeypatch):
 
 def test_signed_source_without_static_is_not_formal_completion(monkeypatch):
     patch_source(monkeypatch)
-    result = gate.certify({"execution_id": "RACE", "race_id": "RACE"},
+    result = gate.certify(signed_request(),
                           {"status": "HOLD", "code": "STATIC_PREDICTION_FREEZE_REQUIRED",
                            "formal_final_proven": False, "completion": False})
     assert result["source_verified"] is True
@@ -108,7 +126,7 @@ def test_signed_source_without_static_is_not_formal_completion(monkeypatch):
 
 def test_signed_source_with_frozen_formal_verification(monkeypatch):
     patch_source(monkeypatch)
-    result = gate.certify({"execution_id": "RACE", "race_id": "RACE"},
+    result = gate.certify(signed_request(),
                           {"status": "FULL_LIFECYCLE_EXECUTION_PASS",
                            "completion": {"complete": True}})
     assert result["formal_final_proven"] is True
@@ -119,13 +137,13 @@ def test_invalid_formal_checkpoint_or_blocked_pipeline_cannot_pass(monkeypatch):
     from runtime import formal_execution_orchestrator as o
     patch_source(monkeypatch)
     with pytest.raises(gate.RaceKeyGateError, match="FORMAL_EXECUTION_NOT_COMPLETE"):
-        gate.certify({"execution_id": "RACE", "race_id": "RACE"},
+        gate.certify(signed_request(),
                      {"status": "BLOCKED", "completion": False})
     monkeypatch.setattr(o, "_load_checkpoint_json",
                         lambda resolved, key: {"receipt_sha256": "source"}
                         if key == "source_receipt_envelope.json" else {"FINAL": False})
     with pytest.raises(gate.RaceKeyGateError, match="SIGNED_FINAL_VERIFICATION_REQUIRED"):
-        gate.certify({"execution_id": "RACE", "race_id": "RACE"},
+        gate.certify(signed_request(),
                      {"status": "FULL_LIFECYCLE_EXECUTION_PASS", "completion": {"complete": True}})
 
 
@@ -134,6 +152,30 @@ def test_source_verification_missing_blocks(monkeypatch):
     monkeypatch.setattr(o, "resolve_phase", lambda *args: None)
     with pytest.raises(gate.RaceKeyGateError, match="SIGNED_SOURCE_CHECKPOINT_MISSING"):
         gate.certify({"execution_id": "RACE"}, {"status": "HOLD", "code": "STATIC_PREDICTION_FREEZE_REQUIRED"})
+
+
+def test_signed_source_disagrees_with_official_post_time(monkeypatch):
+    patch_source(monkeypatch)
+    req = signed_request()
+    req["scheduled_post_at"] = "2099-01-01T17:20:00+09:00"
+    with pytest.raises(gate.RaceKeyGateError, match="SIGNED_SOURCE_OFFICIAL_POST_TIME_MISMATCH"):
+        gate.certify(req, {"status": "HOLD", "code": "STATIC_PREDICTION_FREEZE_REQUIRED"})
+
+
+def test_signed_source_after_cutoff_does_not_retroactively_pass(monkeypatch):
+    from runtime import formal_execution_orchestrator as o
+    patch_source(monkeypatch)
+    original = o._load_checkpoint_json
+    def altered(resolved, key):
+        value = original(resolved, key)
+        if key == "source_receipt_envelope.json":
+            value = {**value, "artifact": {**value["artifact"],
+                     "source_freeze_at": "2099-01-01T08:11:00+00:00"}}
+        return value
+    monkeypatch.setattr(o, "_load_checkpoint_json", altered)
+    with pytest.raises(gate.RaceKeyGateError, match="SIGNED_SOURCE_FROZEN_AFTER_CUTOFF"):
+        gate.certify(signed_request(), {
+            "status": "HOLD", "code": "STATIC_PREDICTION_FREEZE_REQUIRED"})
 
 
 def test_dispatch_is_minimal_and_requires_signed_final_for_result():
