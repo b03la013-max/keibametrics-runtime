@@ -602,7 +602,9 @@ def historical_behavioral_comparison(config, *, root, verify=None, call=response
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--historical-comparison", action="store_true", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--historical-comparison", action="store_true")
+    mode.add_argument("--authentication-only", action="store_true")
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -613,7 +615,40 @@ def main():
             raise CandidateHold("PINNED_INPUT_PATH_INVALID")
         config = json.loads(path.read_text())
         ensure_clean(config)
-        report = historical_behavioral_comparison(config, root=root)
+        if args.authentication_only:
+            # No SOURCE, baseline, receipt, race data or external /verify is
+            # loaded or transmitted in this credential-only acceptance mode.
+            if (config.get("mode") != "SHADOW" or config.get("production_authorized") is not False
+                    or config.get("credential_owner_type") != "service_account"
+                    or not config.get("project_id") or not config.get("service_account_id")
+                    or config.get("credential_attestation_verified") is not True
+                    or config.get("credential_environment") != "keibametrics-staging"
+                    or os.environ.get("KM_CREDENTIAL_ENVIRONMENT") != "keibametrics-staging"
+                    or os.environ.get("GITHUB_ACTIONS") != "true"):
+                raise CandidateHold("STAGING_CREDENTIAL_ATTESTATION_REQUIRED")
+            pinned_text(root, config["owner_entrypoint"])
+            model = config["model_identifier"]
+            started = time.monotonic()
+            try:
+                probe = responses_call({"model": model, "store": False, "max_output_tokens": 32,
+                                        "input": "Return OK for credential authentication only."},
+                                       timeout=15, project_id=config["project_id"])
+                ensure_clean(probe)
+                if probe.get("status") != "completed" or probe.get("model") != model or not probe.get("id"):
+                    raise CandidateHold("API_AUTHENTICATION_PREFLIGHT_HOLD")
+            except CandidateHold as exc:
+                exc.failed_stage = "authentication"
+                exc.phase_timings = {"authentication_seconds": time.monotonic() - started,
+                                     "response_api_seconds": None, "provider_generation_seconds": None,
+                                     "validation_seconds": None, "freeze_seconds": None}
+                raise
+            report = {"status": "AUTHENTICATION_PASS", "model_identifier": model,
+                      "api_response_identifier": probe["id"],
+                      "authentication_seconds": time.monotonic() - started,
+                      "race_data_transmitted": False, "external_verify_called": False,
+                      "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0}
+        else:
+            report = historical_behavioral_comparison(config, root=root)
         code = 0
     except Exception as exc:
         report = {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD",

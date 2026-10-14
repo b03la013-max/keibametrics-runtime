@@ -1,6 +1,12 @@
 name: C2 Candidate real API one-shot acceptance
 
 on:
+  workflow_dispatch:
+    inputs:
+      authentication_only:
+        description: 'No-race pinned-model credential preflight only; no external receipt transfer'
+        type: boolean
+        default: true
   push:
     branches:
       - candidate/result-learning-resume-r3
@@ -26,8 +32,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           mkdir -p runtime_out
+          mode=--historical-comparison
+          if [ "${{ inputs.authentication_only }}" = "true" ]; then mode=--authentication-only; fi
           python runtime/openai_prediction_owner_candidate.py \
-            --historical-comparison \
+            "$mode" \
             --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
             --output runtime_out/owner_behavioral_comparison.json
       - name: Preserve sanitized result
