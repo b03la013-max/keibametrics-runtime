@@ -149,10 +149,17 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--github-sha')
+    parser.add_argument('--candidate-ticket-paper',action='store_true')
+    parser.add_argument('--candidate-paper-budget',type=int)
     args = parser.parse_args()
     output = Path(args.output).resolve()
     try:
-        report = run(json.loads(Path(args.request).read_text()), output=output,
+        incoming=json.loads(Path(args.request).read_text())
+        if args.candidate_ticket_paper:
+            incoming['candidate_ticket_conversion_paper']=True
+            if args.candidate_paper_budget is not None:
+                incoming['candidate_paper_budget']=args.candidate_paper_budget
+        report = run(incoming, output=output,
                      run_id=args.run_id, github_sha=args.github_sha)
     except (o.FormalOrchestrationError, ValueError, KeyError) as exc:
         report = {'status': 'HOLD', 'completion': False, 'code': str(exc), 'formal_final_proven': False}

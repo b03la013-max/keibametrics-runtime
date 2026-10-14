@@ -160,6 +160,34 @@ def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: dateti
     }
 
 
+def role_graph(ranked, ids, heads, seconds, thirds, roles):
+    role_registry = [
+        {"runner_id": rid, "column": col, "status": ("CORE" if rid in heads else "PROTECTED")}
+        for rid in ranked for col in ("W", "P2", "P3")
+        if col in roles[rid]
+    ]
+    pairs, thirds_matrix = [], []
+    for h in heads:
+        for p in seconds:
+            if h == p:
+                continue
+            pairs.append({"head": h, "second": p, "status": "PURCHASE",
+                          "reason": "OFFICIAL_PRESTART_ORDINAL_HEAD_LOCAL_PAIR / SAME_CARD_SOURCE"})
+            for third in thirds:
+                if third in {h, p}:
+                    continue
+                thirds_matrix.append({"head": h, "second": p, "third": third,
+                                      "status": "PURCHASE",
+                                      "reason": "OFFICIAL_PRESTART_THIRD_ROW / UNKNOWN_PROTECTED"})
+    for h in heads:
+        for p in ids:
+            if h == p or p in seconds:
+                continue
+            pairs.append({"head": h, "second": p, "status": "SEMANTIC_ONLY",
+                          "reason": "FULL_P2_UNIVERSE_AUDIT / NOT_PURCHASED"})
+    return role_registry, pairs, thirds_matrix
+
+
 def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
                         policy: dict, now: datetime | None = None) -> tuple[dict, dict]:
     now = now or datetime.now(timezone.utc)
@@ -238,30 +266,7 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
     # analysis because it lacks exact venue/distance experience.
     roles = {rid: [col for col, pool_ in (("W", heads), ("P2", seconds))
                     if rid in pool_] + ["P3"] for rid in ranked}
-    role_registry = [
-        {"runner_id": rid, "column": col, "status": ("CORE" if rid in heads else "PROTECTED")}
-        for rid in ranked for col in ("W", "P2", "P3")
-        if col in roles[rid]
-    ]
-    pairs, thirds_matrix = [], []
-    for h in heads:
-        for p in seconds:
-            if h == p:
-                continue
-            pairs.append({"head": h, "second": p, "status": "PURCHASE",
-                          "reason": "OFFICIAL_PRESTART_ORDINAL_HEAD_LOCAL_PAIR / SAME_CARD_SOURCE"})
-            for third in thirds:
-                if third in {h, p}:
-                    continue
-                thirds_matrix.append({"head": h, "second": p, "third": third,
-                                      "status": "PURCHASE",
-                                      "reason": "OFFICIAL_PRESTART_THIRD_ROW / UNKNOWN_PROTECTED"})
-    for h in heads:
-        for p in ids:
-            if h == p or p in seconds:
-                continue
-            pairs.append({"head": h, "second": p, "status": "SEMANTIC_ONLY",
-                          "reason": "FULL_P2_UNIVERSE_AUDIT / NOT_PURCHASED"})
+    role_registry, pairs, thirds_matrix = role_graph(ranked, ids, heads, seconds, thirds, roles)
     marks = {rid: "◎" if i == 0 else "○" if i == 1 else "▲" if i == 2 else "△"
              for i, rid in enumerate(ranked)}
     enriched = []

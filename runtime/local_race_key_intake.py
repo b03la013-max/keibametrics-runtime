@@ -11,6 +11,8 @@ from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+import subprocess
+import os
 
 from runtime.family_authority_guard import resolve_current_authority
 from runtime.local_physical.nar_source_manifest import VENUE_NAMES
@@ -95,15 +97,79 @@ def build(fields: dict, *, now: datetime | None = None, authority_resolver=None)
     }
 
 
+FIELDS = ("venue_id", "race_date", "race_no", "scheduled_post_at", "prediction_cutoff")
+
+def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
+    """Resolve immutable event range, never moving checkout HEAD. One cell per race."""
+    requests, errors, seen = [], [], set()
+    candidates = []
+    def git_read(*args):
+        return subprocess.check_output(["git", *args], cwd=cwd, text=True)
+    if event_name == "push":
+        before, after = event.get("before", ""), event.get("after", "")
+        if not all(re.fullmatch(r"[0-9a-f]{40}", x) for x in (before, after)):
+            raise IntakeError("PUSH_EVENT_SHA_REQUIRED")
+        if event.get("deleted"):
+            raise IntakeError("DELETED_PUSH_NOT_EXECUTABLE")
+        paths = (git_read("ls-tree", "-r", "--name-only", after, "runtime/race_key_requests/")
+                 if before == "0" * 40 else git_read("diff", "--name-only", "--diff-filter=AMR", before, after, "--", "runtime/race_key_requests/"))
+        for path in paths.splitlines():
+            if re.fullmatch(r"runtime/race_key_requests/[A-Za-z0-9_.-]+\.json", path):
+                candidates.append((path, git_read("show", after + ":" + path)))
+    elif event_name in {"workflow_dispatch", "repository_dispatch"}:
+        candidates = [(event_name, json.dumps(event.get("inputs") if event_name == "workflow_dispatch" else event.get("client_payload")))]
+    else:
+        raise IntakeError("UNSUPPORTED_RACE_KEY_EVENT")
+    for origin, raw in candidates:
+        try:
+            data = json.loads(raw)
+            if not isinstance(data, dict) or set(data) != set(FIELDS):
+                raise IntakeError("RACE_KEY_ONLY_FIVE_SCALAR_FIELDS")
+            if any(isinstance(v, bool) or not isinstance(v, (str,int)) or "\n" in str(v) or "\r" in str(v) for v in data.values()):
+                raise IntakeError("RACE_KEY_VALUE_TYPE_INVALID")
+            # Shape validation uses the same intake gate; the real wall-clock
+            # cutoff is rechecked immediately inside each entry job.
+            post = aware(data['scheduled_post_at'], 'SCHEDULED_POST')
+            cutoff = aware(data['prediction_cutoff'], 'PREDICTION_CUTOFF')
+            probe = build(data, now=min(cutoff,post)-timedelta(days=1))
+            eid = probe['execution_id']
+            if eid in seen:
+                raise IntakeError("DUPLICATE_RACE_KEY_IN_EVENT")
+            seen.add(eid)
+            requests.append({**data,'execution_id':eid,'ingress_origin':origin})
+        except (ValueError, TypeError, KeyError) as exc:
+            errors.append({'origin':origin,'status':'TERMINAL_ERROR','reason':str(exc)})
+    if not candidates:
+        errors.append({'status':'TERMINAL_ERROR','reason':'EVENT_HAS_NO_RACE_KEY'})
+    return {'event_name':event_name,'before':event.get('before'),'after':event.get('after'),
+            'requests':requests,'errors':errors,'status':'PARTIAL' if errors and requests else 'PASS' if requests else 'TERMINAL_ERROR',
+            'received_at':datetime.now(timezone.utc).isoformat(),'prestart_delivery_proven':False}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--venue-id", required=True)
-    parser.add_argument("--race-date", required=True)
-    parser.add_argument("--race-no", required=True)
-    parser.add_argument("--scheduled-post-at", required=True)
-    parser.add_argument("--prediction-cutoff", required=True)
+    parser.add_argument("--event-file")
+    parser.add_argument("--event-name")
+    parser.add_argument("--github-output")
+    parser.add_argument("--venue-id")
+    parser.add_argument("--race-date")
+    parser.add_argument("--race-no")
+    parser.add_argument("--scheduled-post-at")
+    parser.add_argument("--prediction-cutoff")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+    if args.event_file:
+        try:
+            report = resolve_event(json.loads(Path(args.event_file).read_text()), args.event_name, cwd=Path.cwd())
+        except Exception as exc:
+            report = {'requests':[],'errors':[{'status':'TERMINAL_ERROR','reason':str(exc)}],'status':'TERMINAL_ERROR'}
+        target=Path(args.output);target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+        if args.github_output:
+            with Path(args.github_output).open('a') as f:
+                f.write('matrix='+json.dumps({'include':report['requests']},separators=(',',':'))+'\n')
+                f.write('has_requests='+str(bool(report['requests'])).lower()+'\n')
+        return 0
     fields = {
         "venue_id": args.venue_id,
         "race_date": args.race_date,

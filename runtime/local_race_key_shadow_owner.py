@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import copy
 import json
 import math
 from typing import Any
@@ -186,3 +187,66 @@ def compile_shadow(
     }
     output["sha256"] = _sha(output)
     return output
+
+
+def compile_candidate_portfolio(materialized, source, *, prediction=None, budget=None):
+    """Reuse the frozen candidate owner, existing MEC/selector/capital in PAPER.
+
+    No result argument is accepted. A new ticket conversion is a new arm even
+    when its earlier role prediction was genuinely frozen before the race.
+    """
+    from runtime.local_production_static_owner import role_graph
+    from runtime.minimum_efficient_coverage import build_mec_plan
+    from runtime.local_aki_columns import build,decision
+    from runtime.local_mec_r5_shadow import build_arm
+    from runtime.capital_policy import resolve_capital_policy
+    q=copy.deepcopy(materialized)
+    pred=copy.deepcopy(prediction or q.get('candidate_static_prediction') or {})
+    if pred.get('production_authority') is not False:
+        raise ShadowOwnerError('NON_PRODUCTION_PREDICTION_REQUIRED')
+    ranking=[str(x) for x in pred['ranking']];roles=pred['roles']
+    heads=[str(x) for x in pred['W']];seconds=[str(x) for x in pred['P2']];thirds=[str(x) for x in pred['P3']]
+    registry,pairs,third_graph=role_graph(ranking,[str(r['runner_id']) for r in q['runners']],heads,seconds,thirds,roles)
+    q.update(static_prediction=pred,role_registry=registry,pair_dispositions=pairs,third_dispositions=third_graph,
+             source_snapshot_sha256=source['source_snapshot_sha256'],aki_column_candidate='HEAD_LOCAL_VNEXT_R1')
+    mec=build_mec_plan(q)
+    selected=build(q,source);d=decision(q,selected)
+    # Existing column-selected role universe defines a field-relative R5
+    # orientation boundary. It is not selected by realized payouts.
+    selected_ids={x for c in selected['columns'].values() for x in c['selected']}
+    position={x:i+1 for i,x in enumerate(ranking)}
+    width=max((position[x] for x in selected_ids),default=0)
+    f={'final_ticket':{'tickets':mec['tickets']},'final_prediction_package':pred}
+    r5=build_arm(q,f,'SET_PAIR_EXACT_TOP'+str(width))
+    if selected['status']=='NO_BET':
+        r5['tickets']=[]
+    variants={'CANDIDATE_MEC_R3':mec['tickets'],'HEAD_LOCAL_COLUMNS':d['paper_tickets'],'MEC_R5_AKI_VARIABLE':r5['tickets']}
+    from runtime.family_conversion_diagnostics import measure_capital_conversion
+    measurements={name:measure_capital_conversion(q,{"tickets":mec["tickets"]},pred,{},candidate_tickets=ts) for name,ts in variants.items()}
+    capital={}
+    key=lambda t:(t['bet_type'],tuple(sorted(t['selection'])) if t['bet_type']=='TRIO' else tuple(t['selection']))
+    baseline={key(t):set(t.get('coverage_ids') or []) for t in mec['tickets']}
+    units={u['id'] for u in mec['coverage_units']}
+    for name,ts in variants.items():
+        retained=set().union(*(baseline.get(key(t),set()) for t in ts)) if ts else set()
+        coverage=len(retained & units)/len(units) if units else 1.0
+        basis={'profile':mec['profile'],'sha256':_sha(ts),'material_coverage_ratio':coverage,'minimum_required_capital':sum(t['stake'] for t in ts)}
+        cq={**q,'capital_policy':{'mode':'RECOMMENDATION_ONLY'} if budget is None else {'mode':'HARD_RACE_BUDGET','max_race_capital':budget}}
+        cap=resolve_capital_policy(cq,basis)
+        capital[name]={'material_coverage_ratio_against_full_graph':coverage,'missing_material_units':sorted(units-retained),'capital':cap,'tickets':[] if cap['no_bet'] else ts,'shadow_capital_only':True}
+    out={'status':'NON_PRODUCTION_PAPER_CONVERSION_CANDIDATE','source_snapshot_sha256':source['source_snapshot_sha256'],
+         'prediction_sha256':pred['sha256'],'role_graph_sha256':_sha({'roles':registry,'pairs':pairs,'thirds':third_graph}),
+         'selection_sha256':selected['sha256'],'selection':selected,'conversion_audit':d.get('conversion_audit'),
+         'capital_measurements':measurements,'mec':mec,'variable_r5_width':width,'variants':variants,'capital_variants':capital,
+         'budget':budget,'budget_authority':'UNSPECIFIED' if budget is None else 'EXPLICIT_PAPER_SCENARIO',
+         'prediction':pred,'production_authority':False,'actual_purchase':False,'forward_oos_authority':False}
+    out['sha256']=_sha(out)
+    return out
+
+
+def compact_portfolio(portfolio):
+    """Sign essential tickets/stakes and hashes; keep large audit worlds off transport."""
+    if 'capital_variants' not in portfolio:return portfolio
+    return {k:copy.deepcopy(portfolio[k]) for k in ['status','source_snapshot_sha256','prediction_sha256',
+        'role_graph_sha256','selection_sha256','variable_r5_width','capital_variants','budget',
+        'budget_authority','prediction','production_authority','actual_purchase','sha256']}
