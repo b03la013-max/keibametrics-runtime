@@ -10,6 +10,7 @@ from runtime import formal_execution_orchestrator as o
 from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
 from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
+from runtime.local_race_key_shadow_owner import compile_shadow, ShadowOwnerError
 
 
 def run(intent, *, output, run_id, github_sha=None):
@@ -78,6 +79,28 @@ def run(intent, *, output, run_id, github_sha=None):
         report.update(code=str(exc), prestart_deadline_expired=True)
     o._write(output/'static_owner_input.json', input_packet(request, source, resolution,
                                                           generation_allowed=generation_allowed and intent.get('analysis_only') is not True))
+    # A deterministic, explicitly NON-PRODUCTION candidate can be frozen for
+    # forward OOS while the authoritative chat-owned Static is absent. It may
+    # never fill formal, final_prediction_package, or any Production ticket.
+    if formal is None and generation_allowed and intent.get('analysis_only') is not True:
+        try:
+            shadow = compile_shadow(request, source, numerical)
+            o._write(output/'shadow_prediction.json', shadow)
+            report['shadow_owner'] = {
+                'status': 'FROZEN_NON_PRODUCTION',
+                'profile': shadow['profile'],
+                'sha256': shadow['sha256'],
+                'paper_ticket_count': shadow['paper_ticket_count'],
+                'production_prediction_changed': False,
+                'formal_final_proven': False,
+            }
+        except (ShadowOwnerError, KeyError, ValueError) as exc:
+            report['shadow_owner'] = {
+                'status': 'HOLD',
+                'reason': str(exc),
+                'formal_final_proven': False,
+                'production_prediction_changed': False,
+            }
     if formal is not None and intent.get('analysis_only') is True:
         report.update(code='ANALYSIS_ONLY_SOURCE_COMPLETE', first_failed_phase=None)
     if formal is not None and generation_allowed and intent.get('analysis_only') is not True:
