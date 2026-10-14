@@ -53,6 +53,39 @@ def _get_existing_file(root: Path, path: str) -> Path:
         raise RegressionEvidenceError(f"EVIDENCE_PATH_REJECTED:{path}") from exc
 
 
+def _historical_candidate_status(root: Path, pinned: dict, *,
+                                 kind: str, expected_live: str) -> dict[str, Any]:
+    """Load the archived exact Git blob, not the ever-growing live status.
+
+    The original live status path and exact blob SHA remain pinned, and the
+    archive must be confined to an explicit runtime/frozen_regression folder.
+    A mismatched archived blob is an integrity failure, never a fallback to
+    current mutable measurement counts.
+    """
+    if pinned.get("status_path") != expected_live:
+        raise RegressionEvidenceError(kind + "_PATH_NOT_CANONICAL")
+    frozen_path = pinned.get("status_frozen_path") or expected_live
+    rel = Path(str(frozen_path))
+    root_dir = root.resolve()
+    resolved = (root_dir / rel).resolve()
+    try:
+        resolved.relative_to(root_dir)
+    except ValueError as exc:
+        raise RegressionEvidenceError(kind + "_FROZEN_STATUS_PATH_INVALID") from exc
+    if pinned.get("status_frozen_path"):
+        if not (str(rel).startswith("runtime/frozen_regression/")
+                and rel.name == Path(expected_live).name
+                and rel.suffix == ".json"):
+            raise RegressionEvidenceError(kind + "_FROZEN_STATUS_PATH_INVALID")
+    try:
+        raw = resolved.read_bytes()
+    except OSError as exc:
+        raise RegressionEvidenceError(kind + "_STATUS_UNAVAILABLE") from exc
+    if _git_blob_sha(raw) != pinned.get("status_git_blob_sha"):
+        raise RegressionEvidenceError(kind + "_STATUS_BLOB_CHANGED")
+    return _load(resolved)
+
+
 def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
     """Fail-closed *historical* evaluation of a pre-existing frozen result set."""
     root = root.resolve()
@@ -169,17 +202,9 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
     bindings = manifest.get("candidate_measurement_bindings") or {}
     if "aki" in bindings:
         pinned = bindings["aki"]
-        aki_path = pinned.get("status_path")
-        if aki_path != "runtime/aki_adaptive_oos_status.json":
-            raise RegressionEvidenceError("AKI_PATH_NOT_CANONICAL")
-        source = (root / aki_path)
-        try:
-            aki_raw = source.read_bytes()
-        except OSError as exc:
-            raise RegressionEvidenceError("AKI_STATUS_UNAVAILABLE") from exc
-        if _git_blob_sha(aki_raw) != pinned.get("status_git_blob_sha"):
-            raise RegressionEvidenceError("AKI_STATUS_BLOB_CHANGED")
-        aki = _load(source)
+        aki = _historical_candidate_status(
+            root, pinned, kind="AKI",
+            expected_live="runtime/aki_adaptive_oos_status.json")
         if (aki.get("sha256") != pinned.get("reported_sha256")
                 or aki.get("status") != "WAITING_FORWARD_OOS"
                 or aki.get("errors") != []
@@ -245,16 +270,9 @@ def build_regression_readout(root: Path, manifest_path: Path) -> dict[str, Any]:
         }
     if "mec_r5" in bindings:
         pinned = bindings["mec_r5"]
-        if pinned.get("status_path") != "runtime/local_mec_r5_oos_status.json":
-            raise RegressionEvidenceError("R5_PATH_NOT_CANONICAL")
-        r5_source = root / pinned["status_path"]
-        try:
-            r5_raw = r5_source.read_bytes()
-        except OSError as exc:
-            raise RegressionEvidenceError("R5_STATUS_UNAVAILABLE") from exc
-        if _git_blob_sha(r5_raw) != pinned.get("status_git_blob_sha"):
-            raise RegressionEvidenceError("R5_STATUS_BLOB_CHANGED")
-        r5 = _load(r5_source)
+        r5 = _historical_candidate_status(
+            root, pinned, kind="R5",
+            expected_live="runtime/local_mec_r5_oos_status.json")
         prod30 = (r5.get("aggregates") or {}).get("PRODUCTION_BASELINE_R3") or {}
         cand30 = (r5.get("aggregates") or {}).get("SET_PAIR_EXACT_TOP4") or {}
         if (r5.get("status") != "COMPLETE_30_HUMAN_REVIEW_REQUIRED"
