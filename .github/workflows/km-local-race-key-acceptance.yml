@@ -71,6 +71,7 @@ jobs:
           from runtime.local_race_day_dispatcher import discover
           try:
               plan=discover('KAW','2026-10-15',120,now=datetime.now(timezone.utc))
+              Path('historical-discovery-plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2))
               result={'status':'PASS_HISTORICAL_READ_ONLY','race_count':len(plan['races']),
                       'plan_sha256':plan['plan_sha256'],'races':[r['fields'] for r in plan['races']],
                       'new_live_send':False,'forward_oos':False}
@@ -84,5 +85,7 @@ jobs:
         if: always()
         with:
           name: local-historical-discovery
-          path: historical-discovery.json
+          path: |
+            historical-discovery.json
+            historical-discovery-plan.json
           if-no-files-found: ignore
