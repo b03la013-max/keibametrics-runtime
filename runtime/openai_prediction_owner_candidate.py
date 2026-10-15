@@ -279,6 +279,50 @@ def responses_call(payload, *, timeout, project_id=None):
         raise CandidateHold("OPENAI_API_CLIENT_RUNTIME_HOLD") from None
 
 
+def build_prediction_request(context, config, *, root):
+    envelope = context["signed_source"]
+    artifact = envelope["artifact"]
+    universe = artifact["active_runner_universe"]
+    ids = [str(row["runner_id"]) for row in universe["runners"]]
+    authority_input = prediction_authority_input(context["current_authority"], timestamp(context["prediction_cutoff"]))
+    instruction = pinned_text(root, config["instruction"])
+    canon = pinned_text(root, config["venue_canon"])
+    policy = pinned_text(root, config["policy"])
+    if config.get("owner_entrypoint"):
+        pinned_text(root, config["owner_entrypoint"])
+    normative_sources = {spec["path"]: pinned_text(root, spec)
+                         for spec in config.get("normative_sources", [])}
+    if not all(isinstance(config.get(key), str) and config[key].strip()
+               for key in ("prompt_id", "prompt_version", "venue_canon_id", "policy_id")):
+        raise CandidateHold("VERSIONED_PROMPT_POLICY_METADATA_REQUIRED")
+    # Never send the baseline Prediction, intent-derived scores, KRS or RESULT.
+    source_input = prediction_source_input(envelope)
+    data = {"race_id": context["race_id"], "signed_source": source_input,
+            "current_authority": authority_input, "venue_canon": canon,
+            "policy": policy, "normative_sources": normative_sources, "runner_universe": universe,
+            "numerical_authority": context["production_numerical_authority"],
+            "current_state_evidence": artifact.get("normalized_evidence", {}),
+            "missingness": {"required_sources": artifact.get("missing_required_sources", []),
+                            "stale_sources": artifact.get("stale_sources", []),
+                            "conflicts": artifact.get("conflicts", []),
+                            "policy": "UNKNOWN_NO_PROXY"},
+            "prediction_cutoff": context["prediction_cutoff"]}
+    ensure_clean(data)
+    ensure_clean(instruction)
+    schema = prediction_schema(ids)
+    input_schema = obj({key: {"type": "object"} if isinstance(value, dict) else {"type": "string"}
+                        for key, value in data.items()})
+    model = config.get("model_identifier")
+    if not isinstance(model, str) or not model:
+        raise CandidateHold("PINNED_MODEL_REQUIRED")
+    payload = {"model": model, "instructions": instruction,
+               "input": json.dumps(data, ensure_ascii=False), "store": False,
+               "max_output_tokens": int(config.get("max_output_tokens", 8000)),
+               "text": {"format": {"type": "json_schema", "name": "km_static_prediction",
+                                    "strict": True, "schema": schema}}}
+    return data, payload, input_schema, source_input
+
+
 def execute(context, config, *, root, call=responses_call, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     ensure_clean(config)
@@ -320,41 +364,9 @@ def execute(context, config, *, root, call=responses_call, now=None):
     ids = [str(row["runner_id"]) for row in universe["runners"]]
     if not ids or len(set(ids)) != len(ids) or len(ids) != universe["runner_count"]:
         raise CandidateHold("RUNNER_UNIVERSE_INVALID")
-    instruction = pinned_text(root, config["instruction"])
-    canon = pinned_text(root, config["venue_canon"])
-    policy = pinned_text(root, config["policy"])
-    if config.get("owner_entrypoint"):
-        pinned_text(root, config["owner_entrypoint"])
-    normative_sources = {spec["path"]: pinned_text(root, spec)
-                         for spec in config.get("normative_sources", [])}
-    if not all(isinstance(config.get(key), str) and config[key].strip()
-               for key in ("prompt_id", "prompt_version", "venue_canon_id", "policy_id")):
-        raise CandidateHold("VERSIONED_PROMPT_POLICY_METADATA_REQUIRED")
-    # Never send the baseline Prediction, intent-derived scores, KRS or RESULT.
-    source_input = prediction_source_input(envelope)
-    data = {"race_id": context["race_id"], "signed_source": source_input,
-            "current_authority": authority_input, "venue_canon": canon,
-            "policy": policy, "normative_sources": normative_sources, "runner_universe": universe,
-            "numerical_authority": context["production_numerical_authority"],
-            "current_state_evidence": artifact.get("normalized_evidence", {}),
-            "missingness": {"required_sources": artifact.get("missing_required_sources", []),
-                            "stale_sources": artifact.get("stale_sources", []),
-                            "conflicts": artifact.get("conflicts", []),
-                            "policy": "UNKNOWN_NO_PROXY"},
-            "prediction_cutoff": context["prediction_cutoff"]}
-    ensure_clean(data)
-    ensure_clean(instruction)
-    schema = prediction_schema(ids)
-    input_schema = obj({key: {"type": "object"} if isinstance(value, dict) else {"type": "string"}
-                        for key, value in data.items()})
-    model = config.get("model_identifier")
-    if not isinstance(model, str) or not model:
-        raise CandidateHold("PINNED_MODEL_REQUIRED")
-    payload = {"model": model, "instructions": instruction,
-               "input": json.dumps(data, ensure_ascii=False), "store": False,
-               "max_output_tokens": int(config.get("max_output_tokens", 8000)),
-               "text": {"format": {"type": "json_schema", "name": "km_static_prediction",
-                                    "strict": True, "schema": schema}}}
+    data, payload, input_schema, source_input = build_prediction_request(context, config, root=root)
+    schema = payload["text"]["format"]["schema"]
+    model = payload["model"]
     reserve = max(120, int(config.get("production_reserve_seconds", 120)))
     remaining = (reserve + int(config.get("timeout_seconds", 90))
                  if historical else (deadline - now).total_seconds())
@@ -522,6 +534,68 @@ def execute(context, config, *, root, call=responses_call, now=None):
             "prediction": prediction, "prediction_semantics": semantics, "lineage": lineage}
 
 
+def resume_historical_candidate(candidate, context, config, *, root):
+    """Read immutable historical output, never issue a request or re-freeze it.
+
+    Caller must supply SOURCE verified using the existing trusted verifier.
+    Latest-native schema remains mandatory; legacy ambiguous states HOLD.
+    """
+    ensure_clean(candidate)
+    if (candidate.get("status") != "HISTORICAL_COMPARISON_FROZEN"
+            or candidate.get("production_authorized") is not False
+            or candidate.get("production_effect") != "NONE"
+            or context.get("execution_class") != "HISTORICAL_BEHAVIORAL_COMPARISON"
+            or context["source_verification"].get("verified") is not True):
+        raise CandidateHold("HISTORICAL_RESUME_CONTRACT_HOLD")
+    data, payload, _, _ = build_prediction_request(context, config, root=root)
+    lineage = candidate["lineage"]
+    expected = {"race_id": context["race_id"], "execution_id": context["execution_id"],
+                "prediction_cutoff": context["prediction_cutoff"],
+                "release_deadline_at": context["release_deadline_at"],
+                "source_binding": context["source_binding"],
+                "source_sha256": digest(context["signed_source"]),
+                "current_authority_sha256": digest(context["current_authority"]),
+                "candidate_config_sha256": digest(config), "model_identifier": payload["model"],
+                "input_sha256": digest(data), "schema_sha256": digest(payload["text"]["format"]["schema"]),
+                "instruction_sha256": config["instruction"]["sha256"],
+                "policy_sha256": config["policy"]["sha256"],
+                "prediction_output_sha256": digest(candidate["prediction"]),
+                "prediction_semantics_sha256": digest(candidate["prediction_semantics"])}
+    if any(lineage.get(k) != v for k, v in expected.items()):
+        raise CandidateHold("HISTORICAL_RESUME_BASIS_MISMATCH")
+    if (timestamp(context["signed_source"]["artifact"]["source_freeze_at"]) > timestamp(context["prediction_cutoff"])
+            or timestamp(lineage["freeze_timestamp"]).tzinfo is None):
+        raise CandidateHold("HISTORICAL_RESUME_TIME_HOLD")
+    validate_schema(candidate["prediction"], payload["text"]["format"]["schema"])
+    return {"status": "HISTORICAL_REUSED", "api_requests": 0,
+            "new_prediction_generated": False, "signed_shadow": False,
+            "oos_eligible": False, "count_increment": 0, "candidate": candidate}
+
+
+def prepare_shadow_receipt(candidate, context, config, *, root):
+    """Unsigned artifact for the EXISTING receipt signer; never a signature.
+
+    Current scope is historical replay only. Caller must not substitute this
+    artifact for signed SOURCE/FINAL or claim new API/Forward acceptance.
+    """
+    resume_historical_candidate(candidate, context, config, root=root)
+    lineage = candidate["lineage"]
+    return {"race_id": lineage["race_id"], "execution_id": lineage["execution_id"],
+            "input_sha256": lineage["input_sha256"],
+            "output_sha256": lineage["prediction_output_sha256"],
+            "model_identifier": lineage["model_identifier"],
+            "policy_sha256": lineage["policy_sha256"],
+            "instruction_sha256": lineage["instruction_sha256"],
+            "source_basis": lineage["source_binding"],
+            "source_sha256": lineage["source_sha256"],
+            "static_freeze_time": lineage["freeze_timestamp"],
+            "prediction": candidate["prediction"],
+            "prediction_semantics": candidate["prediction_semantics"],
+            "candidate_artifact_sha256": digest(candidate),
+            "shadow_status": "HISTORICAL_REPLAY / NON-PRODUCTION / UNSIGNED",
+            "production_effect": "NONE", "count_increment": 0}
+
+
 def compare(candidate, baseline, baseline_source_binding):
     if candidate["lineage"]["source_binding"] != baseline_source_binding:
         raise CandidateHold("COMPARISON_SOURCE_BASIS_MISMATCH")
@@ -637,12 +711,14 @@ def post_result_prediction_utility(candidate, baseline, source_binding, final, r
             "promotion": "HOLD", "automatic_promotion": False, "production_effect": "NONE"}
 
 
-def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call, race_id=None):
+def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call, race_id=None, cached_candidates=None):
     """Read only audited frozen SOURCE/intent; never open RESULT artifacts."""
-    if call is responses_call:
+    if cached_candidates is None and call is responses_call:
         require_api_budget()
-    if call is responses_call and not os.environ.get("OPENAI_API_KEY"):
+    if cached_candidates is None and call is responses_call and not os.environ.get("OPENAI_API_KEY"):
         raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
+    if cached_candidates is not None and verify is None:
+        raise CandidateHold("OFFLINE_TRUSTED_SOURCE_VERIFIER_REQUIRED")
     if verify is None:
         from execution_gateway import family_config, request_json
         endpoint = family_config("LOCAL")["external_endpoint"].rstrip("/")
@@ -683,7 +759,13 @@ def historical_behavioral_comparison(config, *, root, verify=None, call=response
                    "release_deadline_at": baseline.get("scheduled_post_at") or envelope["artifact"]["prediction_cutoff"],
                    "execution_class": "HISTORICAL_BEHAVIORAL_COMPARISON"}
         try:
-            candidate = execute(context, config, root=root, call=call)
+            if cached_candidates is not None:
+                candidate = cached_candidates.get(record["race_id"])
+                if candidate is None:
+                    raise CandidateHold("HISTORICAL_CHECKPOINT_MISSING_HOLD")
+                candidate = resume_historical_candidate(candidate, context, config, root=root)["candidate"]
+            else:
+                candidate = execute(context, config, root=root, call=call)
         except CandidateHold as exc:
             exc.completed_comparisons = reports
             raise
@@ -700,6 +782,11 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--historical-comparison", action="store_true")
     mode.add_argument("--authentication-only", action="store_true")
+    mode.add_argument("--resume-only", action="store_true")
+    parser.add_argument("--resume-from")
+    parser.add_argument("--resume-sha256")
+    parser.add_argument("--trust-anchor", help="Digest-pinned previously attested Runtime health JSON")
+    parser.add_argument("--trust-anchor-sha256")
     parser.add_argument("--race-id", help="One existing audited historical race; never a new race context")
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", required=True)
@@ -711,8 +798,29 @@ def main():
             raise CandidateHold("PINNED_INPUT_PATH_INVALID")
         config = json.loads(path.read_text())
         ensure_clean(config)
-        require_api_budget()
-        if args.authentication_only:
+        if not args.resume_only:
+            require_api_budget()
+        if args.resume_only:
+            cached = json.loads(pinned_text(root, {"path": args.resume_from, "sha256": args.resume_sha256}))
+            anchor = json.loads(pinned_text(root, {"path": args.trust_anchor, "sha256": args.trust_anchor_sha256}))
+            anchor = anchor.get("health", anchor)
+            from jra_source_runtime.verify_source_envelope import verify as verify_saved
+            def offline_verify(envelope):
+                import tempfile
+                with tempfile.TemporaryDirectory() as temp:
+                    source_file = pathlib.Path(temp) / "source.json"
+                    source_file.write_text(json.dumps(envelope))
+                    result = verify_saved(source_file,
+                        trusted_public_key_b64=anchor["receipt_public_key_b64"],
+                        trusted_signer_key_id=anchor["receipt_signer_key_id"])
+                if result["family"] != "LOCAL" or envelope["receipt"]["phase"] != "SOURCE":
+                    raise CandidateHold("SOURCE_TRUST_ANCHOR_MISMATCH")
+                return {"verified": result["valid"]}
+            report = historical_behavioral_comparison(config, root=root, verify=offline_verify,
+                cached_candidates={r["race_id"]: r["candidate"] for r in cached["comparisons"]}, race_id=args.race_id)
+            report.update(status="HISTORICAL_CHECKPOINTS_REUSED", api_requests=0,
+                          new_prediction_generated=False, signed_shadow=False)
+        elif args.authentication_only:
             # No SOURCE, baseline, receipt, race data or external /verify is
             # loaded or transmitted in this credential-only acceptance mode.
             if (config.get("mode") != "SHADOW" or config.get("production_authorized") is not False

@@ -286,3 +286,84 @@ def _cli() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_cli())
+
+
+def update_api_reservation(root, *, month, race_id, request_sha, amount,
+                           monthly_limit, race_limit, action="RESERVE", actual=None):
+    """Atomic Candidate ledger on ONE shared durable POSIX store.
+
+    Units are integer budget units, not measured charges. Isolated GitHub
+    checkouts must not use this as cross-workflow paid budget enforcement.
+    Started/uncertain reservations never auto-release, including after crash.
+    """
+    if (not re.fullmatch(r"\d{4}-\d{2}", str(month))
+            or not re.fullmatch(r"[0-9a-f]{64}", str(request_sha))
+            or not race_id or any(type(v) is not int or v < 0
+                                  for v in (amount, monthly_limit, race_limit))):
+        raise ExecutionStoreError("BUDGET-HOLD")
+    if action == "RESERVE" and (amount <= 0 or monthly_limit == 0 or race_limit == 0):
+        raise ExecutionStoreError("BUDGET-HOLD")
+    base = pathlib.Path(root)
+    base.mkdir(parents=True, exist_ok=True)
+    with (base / ".api-budget.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        path = base / "api-budget.json"
+        try:
+            ledger = json.loads(path.read_text()) if path.exists() else {"schema": "KM-CANDIDATE-API-RESERVATIONS-v1", "requests": {}, "limits": {}}
+            rows = ledger["requests"]
+            limits = ledger["limits"]
+            if not isinstance(limits, dict): raise ValueError()
+            if ledger["schema"] != "KM-CANDIDATE-API-RESERVATIONS-v1" or not isinstance(rows, dict):
+                raise ValueError()
+            for row in rows.values():
+                if (row["state"] not in {"RESERVED", "STARTED", "UNKNOWN", "SETTLED"}
+                        or type(row["reserved"]) is not int or row["reserved"] <= 0
+                        or (row["actual"] is not None and (type(row["actual"]) is not int or row["actual"] < 0))):
+                    raise ValueError()
+        except (OSError, ValueError, KeyError, TypeError):
+            raise ExecutionStoreError("BUDGET_LEDGER_INCONSISTENT_HOLD") from None
+        month_key = month
+        race_key = month + ":" + race_id
+        if ((month_key in limits and limits[month_key] != monthly_limit)
+                or (race_key in limits and limits[race_key] != race_limit)):
+            raise ExecutionStoreError("BUDGET_LIMIT_BASIS_MISMATCH")
+        limits[month_key] = monthly_limit
+        limits[race_key] = race_limit
+        existing = rows.get(request_sha)
+        if existing and (existing["month"] != month or existing["race_id"] != race_id or existing["reserved"] != amount):
+            raise ExecutionStoreError("BUDGET_REQUEST_IDENTITY_MISMATCH")
+        if action == "RESERVE":
+            if existing:
+                raise ExecutionStoreError("DUPLICATE_REQUEST_HOLD")
+            used = lambda r: r["reserved"] if r["actual"] is None else max(r["reserved"], r["actual"])
+            monthly = sum(used(r) for r in rows.values() if r["month"] == month)
+            race = sum(used(r) for r in rows.values() if r["month"] == month and r["race_id"] == race_id)
+            if monthly + amount > monthly_limit or race + amount > race_limit:
+                raise ExecutionStoreError("BUDGET-HOLD")
+            rows[request_sha] = {"month": month, "race_id": race_id, "reserved": amount,
+                                 "state": "RESERVED", "actual": None}
+        else:
+            if not existing:
+                raise ExecutionStoreError("BUDGET_RESERVATION_MISSING")
+            if action == "START" and existing["state"] == "RESERVED":
+                existing["state"] = "STARTED"
+            elif action == "UNKNOWN" and existing["state"] == "STARTED":
+                existing["state"] = "UNKNOWN"
+            elif (action == "SETTLE" and existing["state"] in {"STARTED", "UNKNOWN"}
+                  and type(actual) is int and 0 <= actual <= existing["reserved"]):
+                existing.update(state="SETTLED", actual=actual)
+            else:
+                raise ExecutionStoreError("BUDGET_TRANSITION_HOLD")
+        fd, temp = tempfile.mkstemp(prefix=".api-budget-", dir=base)
+        try:
+            with os.fdopen(fd, "w") as fh:
+                json.dump(ledger, fh, sort_keys=True)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temp, path)
+            directory = os.open(base, os.O_DIRECTORY)
+            try: os.fsync(directory)
+            finally: os.close(directory)
+        finally:
+            if os.path.exists(temp): os.unlink(temp)
+        return dict(rows[request_sha])
