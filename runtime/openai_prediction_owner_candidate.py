@@ -369,7 +369,20 @@ def execute(context, config, *, root, call=responses_call, now=None):
     assigned = {(row["runner_id"], column) for row in prediction["roles"] for column in row["columns"]}
     registered = {(row["runner_id"], row["column"]) for row in prediction["role_registry"]}
     if assigned != registered or len(registered) != len(prediction["role_registry"]):
-        raise CandidateHold("ROLE_REGISTRY_INCONSISTENT")
+        exc = CandidateHold("ROLE_REGISTRY_INCONSISTENT")
+        exc.failed_stage = "validation"
+        phase_timings["validation_seconds"] = time.monotonic() - validation_started
+        exc.phase_timings = phase_timings
+        exc.validation_evidence = {
+            "race_id": context["race_id"], "execution_id": context["execution_id"],
+            "model_identifier": model, "api_response_identifier": result["id"],
+            "input_sha256": digest(data), "prediction_output_sha256": digest(prediction),
+            "prediction": prediction,
+            "missing_registry_pairs": sorted(assigned - registered),
+            "unassigned_registry_pairs": sorted(registered - assigned),
+            "duplicate_registry_rows": len(prediction["role_registry"]) - len(registered),
+            "production_effect": "NONE", "freeze_accepted": False}
+        raise exc
     for key in ("pair_dispositions", "third_dispositions"):
         fields = ["head", "second"] + (["third"] if key == "third_dispositions" else [])
         selections = [tuple(row[f] for f in fields) for row in prediction[key]]
@@ -553,7 +566,7 @@ def post_result_prediction_utility(candidate, baseline, source_binding, final, r
             "promotion": "HOLD", "automatic_promotion": False, "production_effect": "NONE"}
 
 
-def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call):
+def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call, race_id=None):
     """Read only audited frozen SOURCE/intent; never open RESULT artifacts."""
     if call is responses_call and not os.environ.get("OPENAI_API_KEY"):
         raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
@@ -567,7 +580,12 @@ def historical_behavioral_comparison(config, *, root, verify=None, call=response
             return result
     audit = json.loads((root / "research/execution/OWNER_REALITY_AUDIT_20261002.json").read_text())
     reports = []
-    for record in audit["findings"]:
+    records = audit["findings"]
+    if race_id is not None:
+        records = [r for r in records if r["race_id"] == race_id]
+        if len(records) != 1:
+            raise CandidateHold("AUDITED_HISTORICAL_RACE_ID_REQUIRED")
+    for record in records:
         evidence = record["evidence"]
         source_spec = evidence["SOURCE/source_receipt_envelope.json"]
         envelope = json.loads(pinned_text(root, {"path": source_spec["path"], "sha256": source_spec["file_sha256"]}))
@@ -605,6 +623,7 @@ def main():
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--historical-comparison", action="store_true")
     mode.add_argument("--authentication-only", action="store_true")
+    parser.add_argument("--race-id", help="One existing audited historical race; never a new race context")
     parser.add_argument("--config", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -648,13 +667,14 @@ def main():
                       "race_data_transmitted": False, "external_verify_called": False,
                       "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0}
         else:
-            report = historical_behavioral_comparison(config, root=root)
+            report = historical_behavioral_comparison(config, root=root, race_id=args.race_id)
         code = 0
     except Exception as exc:
         report = {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD",
                   "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0,
                   "failed_stage": getattr(exc, "failed_stage", None),
-                  "phase_timings": getattr(exc, "phase_timings", None)}
+                  "phase_timings": getattr(exc, "phase_timings", None),
+                  "validation_evidence": getattr(exc, "validation_evidence", None)}
         code = 2
     dest = pathlib.Path(args.output)
     dest.parent.mkdir(parents=True, exist_ok=True)
