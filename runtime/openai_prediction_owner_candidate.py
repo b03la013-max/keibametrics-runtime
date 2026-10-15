@@ -152,6 +152,14 @@ def prediction_schema(ids):
         "Exactly one row for each (runner_id,column) assigned in roles.columns, and no other rows. "
         "Do not include NOT_SELECTED, EXCLUDE or unassigned role rows here; disclose rejected or "
         "unresolved possibilities in unresolved instead. This is serialization consistency only.")
+    from minimum_efficient_coverage import ROLE_ACTIVE
+    schema["properties"]["role_registry"]["items"]["properties"]["status"] = {
+        "type": "string", "enum": sorted(ROLE_ACTIVE),
+        "description": "Use the existing Common active-role status token only; put rationale in unresolved or venue interpretation, not in status."}
+    for key in ("pair_dispositions", "third_dispositions"):
+        schema["properties"][key]["items"]["properties"]["status"] = {
+            "type": "string", "enum": ["PURCHASE", "PROTECT", "SEMANTIC_ONLY", "EXCLUDE", "REJECT", "REMOVED_JUSTIFIED", "UNKNOWN"],
+            "description": "Existing Common semantic disposition token only; reason holds rationale. PURCHASE/PROTECT express semantic materiality, not actual purchase or capital allocation. Unsupported disposition stays UNKNOWN."}
     for key in ("ties", "partial_order"):
         schema["properties"][key]["items"]["minItems"] = 2
         schema["properties"][key]["description"] = (
