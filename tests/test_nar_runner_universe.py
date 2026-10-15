@@ -127,7 +127,7 @@ def sample_tables_with_explicit_cancel_2():
     return rows
 
 
-def test_odds_absence_without_explicit_cancellation_holds_and_retains_evidence():
+def test_declared_and_active_universe_are_separate_when_odds_omits_cancelled_runner():
     art={
       "normalized_evidence":{
         "race_card_tables":{
@@ -142,8 +142,7 @@ def test_odds_absence_without_explicit_cancellation_holds_and_retains_evidence()
         }
       }
     }
-    with pytest.raises(ValueError, match="NAR_INACTIVE_RUNNER_WITHOUT_EXPLICIT_STATUS"):
-        enrich_source_artifact(art)
+    enrich_source_artifact(art)
     declared=art["declared_runner_universe"]
     active=art["active_runner_universe"]
     assert [x["runner_id"] for x in declared["runners"]]==["1","2","3"]

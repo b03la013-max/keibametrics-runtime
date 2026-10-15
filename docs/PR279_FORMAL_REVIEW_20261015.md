@@ -1,3 +1,5 @@
+> 更新：昇格判定とA/B分離は PR279_PROMOTION_REVIEW_20261015.md を優先。以下は24af時点の履歴。SOURCE受理範囲縮小は非実行Candidate patchへ分離済み。
+
 # PR #279 正式受入れのためのHuman Review資料
 
 判定：CODE CANDIDATE / OFFLINE REGRESSION VERIFIED / PRODUCTION NOT APPLIED / FORWARD LIVE PENDING。
