@@ -125,7 +125,7 @@ def prediction_source_input(envelope):
 def prediction_schema(ids):
     runner = {"type": "string", "enum": ids}
     text = {"type": "string"}
-    return obj({
+    schema = obj({
         "ranking": arr(runner),
         "roles": arr(obj({"runner_id": runner,
                           "columns": arr({"type": "string", "enum": ["W", "P2", "P3"]})})),
@@ -147,6 +147,12 @@ def prediction_schema(ids):
         "market_conflict": text,
         "venue_prediction_context": obj({"interpretation": text, "evidence_refs": arr(text)}),
     })
+
+    schema["properties"]["role_registry"]["description"] = (
+        "Exactly one row for each (runner_id,column) assigned in roles.columns, and no other rows. "
+        "Do not include NOT_SELECTED, EXCLUDE or unassigned role rows here; disclose rejected or "
+        "unresolved possibilities in unresolved instead. This is serialization consistency only.")
+    return schema
 
 
 def validate_schema(value, schema):

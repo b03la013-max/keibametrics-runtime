@@ -39,10 +39,21 @@ jobs:
             "$mode" \
             --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
             --output runtime_out/owner_behavioral_comparison.json
+      - name: Existing Owner in two fresh historical processes
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if ! python -c 'import json,sys; sys.exit(0 if json.load(open("runtime_out/owner_behavioral_comparison.json")).get("status")=="HISTORICAL_BEHAVIORAL_COMPARISON_RECORDED" else 1)'; then exit 0; fi
+          set +e
+          python runtime/openai_prediction_owner_candidate.py --historical-comparison --race-id KM-LOCAL-FNB-20261001-R07-LIVE-R2 --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json --output runtime_out/isolation_r07.json
+          a=$?
+          python runtime/openai_prediction_owner_candidate.py --historical-comparison --race-id KM-LOCAL-FNB-20261001-R08-LIVE-R1 --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json --output runtime_out/isolation_r08.json
+          b=$?
+          test "$a" = 0 && test "$b" = 0
       - name: Preserve sanitized result
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: c2-one-shot-real-api-${{ github.run_id }}
-          path: runtime_out/owner_behavioral_comparison.json
+          path: runtime_out/*.json
           if-no-files-found: warn
