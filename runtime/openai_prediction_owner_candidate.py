@@ -1,0 +1,884 @@
+"""Responses API prediction owner, SHADOW only; no Production authorization.
+
+Credentials are supplied exclusively by the calling runtime's environment.
+The NEW C2 Candidate prompt/canon are supplied as digest-pinned files.
+This adapter never substitutes Candidate indices, market order or KRS order.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import json
+import os
+import pathlib
+import re
+import socket
+import ssl
+import time
+import urllib.request
+import urllib.error
+
+INPUT_CONTRACT_VERSION = "KM-OPENAI-OWNER-PRE-RACE-INPUT-v3-C2"
+CANDIDATE_ID = "KM-LOCAL-OPENAI-PREDICTION-OWNER-CANDIDATE-v1"
+
+
+class CandidateHold(ValueError):
+    pass
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                    separators=(",", ":")).encode()).hexdigest()
+
+
+def timestamp(value):
+    parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise CandidateHold("TIMEZONE_REQUIRED")
+    return parsed
+
+
+def pinned_text(root, spec):
+    path = (root / spec["path"]).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
+        raise CandidateHold("PINNED_INPUT_PATH_INVALID")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != spec["sha256"]:
+        raise CandidateHold("PINNED_INPUT_DIGEST_MISMATCH")
+    return raw.decode("utf-8")
+
+
+def ensure_clean(value):
+    """No outcome state, substitute ranks or credentials in API input/artifacts."""
+    forbidden = {"official_result", "finish_order", "payouts", "settlement",
+                 "api_key", "openai_api_key", "authorization", "candidate_indices",
+                 "krs_ranking", "popularity_ranking", "odds_ranking"}
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if str(key).lower() in forbidden:
+                raise CandidateHold("FORBIDDEN_INPUT_OR_OUTPUT_FIELD")
+            ensure_clean(child)
+    elif isinstance(value, list):
+        for child in value:
+            ensure_clean(child)
+    elif isinstance(value, str):
+        secret = os.environ.get("OPENAI_API_KEY")
+        if re.search(r"sk-[A-Za-z0-9_-]{16,}", value) or (secret and secret in value):
+            raise CandidateHold("SECRET_IN_INPUT_OR_OUTPUT")
+
+
+def obj(properties):
+    return {"type": "object", "properties": properties,
+            "required": list(properties), "additionalProperties": False}
+
+
+def arr(items):
+    return {"type": "array", "items": items}
+
+
+def prediction_authority_input(authority, cutoff):
+    """Expose normative pre-race authority, never acceptance/research ledgers.
+
+    The full immutable manifest remains digest-bound in lineage. Its operational
+    and measurement snapshots are not Prediction evidence. Historical comparison
+    must supply the authority effective at that historical prediction cutoff.
+    """
+    effective = authority.get("effective_at")
+    if not effective:
+        raise CandidateHold("AUTHORITY_EFFECTIVE_AT_REQUIRED")
+    if timestamp(effective) > cutoff:
+        raise CandidateHold("POST_CUTOFF_AUTHORITY_HOLD")
+    common = authority.get("common_family_components", {})
+    local = authority.get("family_scoped_authority", {}).get("LOCAL", {})
+    common_keys = ("prediction_utility_contract", "scope_ownership_contract",
+                   "formal_lifecycle_contract", "fnb_venue_canon")
+    local_keys = ("production_suite", "production_numeric_status", "common_canon",
+                  "common_canon_profile", "common_canon_compiled_sha256",
+                  "information_source_registry", "base_index_registry",
+                  "evidence_rule_registry", "numerical_authority_status",
+                  "current_venue_canons", "production_prediction_owner")
+    return {"manifest_id": authority["manifest_id"], "effective_at": effective,
+            "common_family_components": {k: common[k] for k in common_keys if k in common},
+            "family_scoped_authority": {"LOCAL": {k: local[k] for k in local_keys if k in local}}}
+
+
+def prediction_source_input(envelope):
+    """Preserve signed SOURCE references and factual inputs, exclude shadow state."""
+    artifact = envelope["artifact"]
+    # Validate before projection so an injected target outcome cannot be silently
+    # discarded and the corrupt source treated as clean.
+    ensure_clean(envelope)
+    keys = ("race_id", "formal_ready", "source_freeze_at", "prediction_cutoff",
+            "source_snapshot_sha256", "raw_source_bundle_sha256",
+            "active_runner_universe", "source_race_context", "normalized_evidence",
+            "normalized_evidence_sha256", "auxiliary_evidence", "auxiliary_evidence_sha256",
+            "jma_weather_evidence", "jma_weather_evidence_sha256",
+            "point_in_time_population_ledger", "point_in_time_population_ledger_sha256",
+            "sources", "missing_required_sources", "stale_sources", "conflicts")
+    return {"receipt": envelope["receipt"], "signed_envelope_sha256": digest(envelope),
+            "source_receipt_sha256": envelope.get("receipt_sha256"),
+            "source_snapshot_sha256": artifact.get("source_snapshot_sha256"),
+            "artifact_projection": {k: artifact[k] for k in keys if k in artifact},
+            "projection_is_signed_artifact": False}
+
+
+def prediction_schema(ids):
+    runner = {"type": "string", "enum": ids}
+    text = {"type": "string"}
+    schema = obj({
+        "ranking": arr(runner),
+        "roles": arr(obj({"runner_id": runner,
+                          "columns": arr({"type": "string", "enum": ["W", "P2", "P3"]})})),
+        "role_registry": arr(obj({"runner_id": runner,
+                                  "column": {"type": "string", "enum": ["W", "P2", "P3"]},
+                                  "status": text})),
+        "pair_dispositions": arr(obj({"head": runner, "second": runner,
+                                      "status": text, "reason": text})),
+        "third_dispositions": arr(obj({"head": runner, "second": runner, "third": runner,
+                                       "status": text, "reason": text})),
+        "uncertainty": obj({"level": text, "reasons": arr(text)}),
+        # These are disclosure fields, not new ranking rules. Unsupported
+        # Production concepts must remain UNKNOWN/unresolved in SHADOW.
+        "alternative_winner": {"type": "string", "enum": ids + ["UNKNOWN"]},
+        "partial_order": arr(arr(runner)),
+        "ties": arr(arr(runner)),
+        "unresolved": arr(text),
+        "evidence_conflict": text,
+        "market_conflict": text,
+        "venue_prediction_context": obj({"interpretation": text, "evidence_refs": arr(text)}),
+    })
+
+    schema["properties"]["role_registry"]["description"] = (
+        "Exactly one row for each (runner_id,column) assigned in roles.columns, and no other rows. "
+        "Do not include NOT_SELECTED, EXCLUDE or unassigned role rows here; disclose rejected or "
+        "unresolved possibilities in unresolved instead. This is serialization consistency only.")
+    for key in ("ranking", "roles"):
+        schema["properties"][key]["minItems"] = len(ids)
+        schema["properties"][key]["maxItems"] = len(ids)
+    schema["properties"]["roles"]["description"] = (
+        "Exactly one row for EVERY active runner ID, including runners with no assigned roles. "
+        "For such runners emit columns:[], never omit the runner. Each runner ID occurs once.")
+    from minimum_efficient_coverage import ROLE_ACTIVE
+    schema["properties"]["role_registry"]["items"]["properties"]["status"] = {
+        "type": "string", "enum": sorted(ROLE_ACTIVE),
+        "description": "Use the existing Common active-role status token only; put rationale in unresolved or venue interpretation, not in status."}
+    for key in ("pair_dispositions", "third_dispositions"):
+        schema["properties"][key]["items"]["properties"]["status"] = {
+            "type": "string", "enum": ["PURCHASE", "PROTECT", "SEMANTIC_ONLY", "EXCLUDE", "REJECT", "REMOVED_JUSTIFIED", "UNKNOWN"],
+            "description": "Existing Common semantic disposition token only; reason holds rationale. PURCHASE/PROTECT express semantic materiality, not actual purchase or capital allocation. Unsupported disposition stays UNKNOWN."}
+    for key in ("ties", "partial_order"):
+        schema["properties"][key]["items"]["minItems"] = 2
+        schema["properties"][key]["description"] = (
+            "Every group must contain at least two distinct runner IDs. "
+            "Use an empty outer array if no such group is supported; never emit singleton groups.")
+    return schema
+
+
+def validate_schema(value, schema):
+    kind = schema["type"]
+    if kind == "object":
+        if not isinstance(value, dict) or set(value) != set(schema["properties"]):
+            raise CandidateHold("OUTPUT_SCHEMA_INVALID")
+        for key, item in value.items():
+            validate_schema(item, schema["properties"][key])
+    elif kind == "array":
+        if not isinstance(value, list):
+            raise CandidateHold("OUTPUT_SCHEMA_INVALID")
+        for item in value:
+            validate_schema(item, schema["items"])
+    elif kind == "string":
+        if not isinstance(value, str) or ("enum" in schema and value not in schema["enum"]):
+            raise CandidateHold("OUTPUT_SCHEMA_INVALID")
+    else:
+        raise CandidateHold("UNSUPPORTED_SCHEMA_TYPE")
+
+
+def require_api_budget():
+    """Fail closed before any provider request; no price estimates or secrets.
+
+    Paid reopening needs a reviewed budget reservation implementation and
+    explicit owner authorization. Merely changing a positive limit cannot
+    enable spending in this zero-budget Candidate.
+    """
+    path = pathlib.Path(__file__).resolve().parents[1] / "research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json"
+    try:
+        budget = json.loads(path.read_text()).get("api_budget", {})
+    except (OSError, ValueError, TypeError):
+        raise CandidateHold("BUDGET-HOLD") from None
+    if not isinstance(budget, dict) or budget.get("api_use_authorized") is not True:
+        raise CandidateHold("API-BILLING-HOLD")
+    # No shared monthly/race reservation ledger exists yet. Never pretend
+    # that a positive config number constitutes enforced available budget.
+    raise CandidateHold("BUDGET-HOLD")
+
+
+def responses_call(payload, *, timeout, project_id=None):
+    require_api_budget()
+    key = os.environ.get("OPENAI_API_KEY")
+    if not key:
+        raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
+    headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
+    if project_id:
+        headers["OpenAI-Project"] = project_id
+    req = urllib.request.Request("https://api.openai.com/v1/responses",
+                                 data=json.dumps(payload).encode(),
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        # HTTP status is non-secret; provider bodies, headers and error messages
+        # are not preserved. Distinguish request/account/rate failures from
+        # transport failures without exposing credentials or changing policy.
+        if exc.code in (401, 403):
+            code = f"OPENAI_API_HTTP_{exc.code}_HOLD"
+        elif exc.code == 429:
+            # Only fixed, approved enum tokens may leave the provider boundary.
+            # Never echo the provider message, raw response body or headers.
+            allow = {
+                "insufficient_quota": "OPENAI_API_429_INSUFFICIENT_QUOTA_HOLD",
+                "credit_balance_exhausted": "OPENAI_API_429_CREDIT_BALANCE_EXHAUSTED_HOLD",
+                "project_spend_limit_exceeded": "OPENAI_API_429_PROJECT_SPEND_LIMIT_HOLD",
+                "organization_spend_limit_exceeded": "OPENAI_API_429_ORG_SPEND_LIMIT_HOLD",
+                "organization_usage_limit_exceeded": "OPENAI_API_429_ORG_USAGE_LIMIT_HOLD",
+                "rate_limit_exceeded": "OPENAI_API_429_RATE_LIMIT_HOLD",
+            }
+            provider_code = None
+            try:
+                error_object = json.loads(exc.read(4096).decode("utf-8"))
+                error_block = error_object.get("error") if isinstance(error_object, dict) else None
+                if isinstance(error_block, dict):
+                    provider_code = error_block.get("code") or error_block.get("type")
+            except (ValueError, UnicodeDecodeError, AttributeError, TypeError):
+                pass
+            code = allow.get(provider_code, "OPENAI_API_HTTP_429_HOLD") if isinstance(provider_code, str) else "OPENAI_API_HTTP_429_HOLD"
+        elif exc.code in (400, 404, 408, 409, 422):
+            code = f"OPENAI_API_HTTP_{exc.code}_HOLD"
+        elif 500 <= exc.code < 600:
+            code = "OPENAI_API_HTTP_5XX_HOLD"
+        else:
+            code = "OPENAI_API_HTTP_UNCLASSIFIED_HOLD"
+        raise CandidateHold(code) from None
+    except (TimeoutError,):
+        raise CandidateHold("OPENAI_API_TIMEOUT_HOLD") from None
+    except ssl.SSLError:
+        raise CandidateHold("OPENAI_API_TLS_HOLD") from None
+    except socket.gaierror:
+        raise CandidateHold("OPENAI_API_DNS_HOLD") from None
+    except urllib.error.URLError as exc:
+        reason = exc.reason
+        code = ("OPENAI_API_TIMEOUT_HOLD" if isinstance(reason, TimeoutError) else
+                "OPENAI_API_TLS_HOLD" if isinstance(reason, ssl.SSLError) else
+                "OPENAI_API_DNS_HOLD" if isinstance(reason, socket.gaierror) else
+                "OPENAI_API_NETWORK_HOLD")
+        raise CandidateHold(code) from None
+    except (ValueError, UnicodeDecodeError):
+        raise CandidateHold("OPENAI_API_RESPONSE_DECODE_HOLD") from None
+    except Exception:
+        # Never retain provider response bodies/headers or credentials.
+        raise CandidateHold("OPENAI_API_CLIENT_RUNTIME_HOLD") from None
+
+
+def build_prediction_request(context, config, *, root):
+    envelope = context["signed_source"]
+    artifact = envelope["artifact"]
+    universe = artifact["active_runner_universe"]
+    ids = [str(row["runner_id"]) for row in universe["runners"]]
+    authority_input = prediction_authority_input(context["current_authority"], timestamp(context["prediction_cutoff"]))
+    instruction = pinned_text(root, config["instruction"])
+    canon = pinned_text(root, config["venue_canon"])
+    policy = pinned_text(root, config["policy"])
+    if config.get("owner_entrypoint"):
+        pinned_text(root, config["owner_entrypoint"])
+    normative_sources = {spec["path"]: pinned_text(root, spec)
+                         for spec in config.get("normative_sources", [])}
+    if not all(isinstance(config.get(key), str) and config[key].strip()
+               for key in ("prompt_id", "prompt_version", "venue_canon_id", "policy_id")):
+        raise CandidateHold("VERSIONED_PROMPT_POLICY_METADATA_REQUIRED")
+    # Never send the baseline Prediction, intent-derived scores, KRS or RESULT.
+    source_input = prediction_source_input(envelope)
+    data = {"race_id": context["race_id"], "signed_source": source_input,
+            "current_authority": authority_input, "venue_canon": canon,
+            "policy": policy, "normative_sources": normative_sources, "runner_universe": universe,
+            "numerical_authority": context["production_numerical_authority"],
+            "current_state_evidence": artifact.get("normalized_evidence", {}),
+            "missingness": {"required_sources": artifact.get("missing_required_sources", []),
+                            "stale_sources": artifact.get("stale_sources", []),
+                            "conflicts": artifact.get("conflicts", []),
+                            "policy": "UNKNOWN_NO_PROXY"},
+            "prediction_cutoff": context["prediction_cutoff"]}
+    ensure_clean(data)
+    ensure_clean(instruction)
+    schema = prediction_schema(ids)
+    input_schema = obj({key: {"type": "object"} if isinstance(value, dict) else {"type": "string"}
+                        for key, value in data.items()})
+    model = config.get("model_identifier")
+    if not isinstance(model, str) or not model:
+        raise CandidateHold("PINNED_MODEL_REQUIRED")
+    payload = {"model": model, "instructions": instruction,
+               "input": json.dumps(data, ensure_ascii=False), "store": False,
+               "max_output_tokens": int(config.get("max_output_tokens", 8000)),
+               "text": {"format": {"type": "json_schema", "name": "km_static_prediction",
+                                    "strict": True, "schema": schema}}}
+    return data, payload, input_schema, source_input
+
+
+def execute(context, config, *, root, call=responses_call, now=None):
+    now = now or dt.datetime.now(dt.timezone.utc)
+    ensure_clean(config)
+    if config.get("mode") != "SHADOW" or config.get("production_authorized") is not False:
+        raise CandidateHold("CANDIDATE_PROMOTION_FORBIDDEN")
+    if call is responses_call:
+        require_api_budget()
+    if call is responses_call and not os.environ.get("OPENAI_API_KEY"):
+        raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
+    if config.get("credential_owner_type") != "service_account" or not config.get("project_id"):
+        raise CandidateHold("SERVICE_ACCOUNT_PROJECT_METADATA_REQUIRED")
+    # Metadata is not evidence of credential ownership. Provisioning must verify
+    # this externally before enabling live API calls.
+    if call is responses_call and config.get("credential_attestation_verified") is not True:
+        raise CandidateHold("SERVICE_ACCOUNT_ATTESTATION_REQUIRED")
+    if call is responses_call:
+        if (config.get("credential_environment") != "keibametrics-staging"
+                or os.environ.get("KM_CREDENTIAL_ENVIRONMENT") != "keibametrics-staging"
+                or os.environ.get("GITHUB_ACTIONS") != "true"):
+            raise CandidateHold("STAGING_ENVIRONMENT_REQUIRED")
+        if not config.get("service_account_id"):
+            raise CandidateHold("SERVICE_ACCOUNT_ID_REQUIRED")
+    envelope = context["signed_source"]
+    artifact = envelope["artifact"]
+    receipt = envelope["receipt"]
+    if context["source_verification"].get("verified") is not True or artifact.get("formal_ready") is not True:
+        raise CandidateHold("SOURCE_NOT_VERIFIED_OR_PARTIAL")
+    if receipt.get("race_id") != context["race_id"] or receipt.get("phase") != "SOURCE":
+        raise CandidateHold("SOURCE_RACE_LINEAGE_MISMATCH")
+    cutoff = timestamp(context["prediction_cutoff"])
+    authority_input = prediction_authority_input(context["current_authority"], cutoff)
+    deadline = timestamp(context["release_deadline_at"])
+    historical = context.get("execution_class") == "HISTORICAL_BEHAVIORAL_COMPARISON"
+    if timestamp(artifact["source_freeze_at"]) > cutoff or (not historical and now >= deadline):
+        raise CandidateHold("DEADLINE_OR_POST_CUTOFF_SOURCE_HOLD")
+    if artifact.get("post_cutoff_sources"):
+        raise CandidateHold("POST_CUTOFF_SOURCE_HOLD")
+    universe = artifact["active_runner_universe"]
+    ids = [str(row["runner_id"]) for row in universe["runners"]]
+    if not ids or len(set(ids)) != len(ids) or len(ids) != universe["runner_count"]:
+        raise CandidateHold("RUNNER_UNIVERSE_INVALID")
+    data, payload, input_schema, source_input = build_prediction_request(context, config, root=root)
+    schema = payload["text"]["format"]["schema"]
+    model = payload["model"]
+    reserve = max(120, int(config.get("production_reserve_seconds", 120)))
+    remaining = (reserve + int(config.get("timeout_seconds", 90))
+                 if historical else (deadline - now).total_seconds())
+    if remaining <= reserve:
+        raise CandidateHold("SHADOW_DEFERRED_TO_PROTECT_PRODUCTION_DEADLINE")
+    timeout = min(int(config.get("timeout_seconds", 90)), remaining - reserve)
+    authentication_response_id = None
+    phase_timings = {"authentication_seconds": None, "response_api_seconds": None,
+                     "provider_generation_seconds": None, "validation_seconds": None,
+                     "freeze_seconds": None}
+    phase_usage = {}
+    def measured_call(stage, payload, **kwargs):
+        started = time.monotonic()
+        try:
+            response = (responses_call(payload, **kwargs) if call is responses_call
+                        else call(payload, timeout=kwargs["timeout"]))
+            usage = response.get("usage") if isinstance(response, dict) else None
+            phase_usage[stage] = ({k: v for k, v in usage.items()
+                                   if k in ("input_tokens", "output_tokens", "total_tokens")
+                                   and type(v) is int} if isinstance(usage, dict) else None)
+            return response
+        except CandidateHold as exc:
+            exc.phase_timings = phase_timings
+            exc.phase_usage = phase_usage
+            exc.failed_stage = stage
+            raise
+        finally:
+            phase_timings[stage + "_seconds"] = time.monotonic() - started
+    if call is responses_call:
+        # Authenticate the exact project/model before sending race evidence.
+        # No models.read scope, alternate model or factual input is required.
+        probe = measured_call("authentication", {"model": model, "store": False, "max_output_tokens": 32,
+                                "input": "Return OK for credential authentication only."},
+                               timeout=min(15, timeout), project_id=config["project_id"])
+        ensure_clean(probe)
+        if probe.get("status") != "completed" or probe.get("model") != model or not probe.get("id"):
+            raise CandidateHold("API_AUTHENTICATION_PREFLIGHT_HOLD")
+        authentication_response_id = probe["id"]
+        if not historical:
+            available = (deadline - dt.datetime.now(dt.timezone.utc)).total_seconds() - reserve
+            if available <= 0:
+                raise CandidateHold("SHADOW_DEFERRED_TO_PROTECT_PRODUCTION_DEADLINE")
+            timeout = min(timeout, available)
+    result = measured_call("response_api", payload, timeout=timeout, project_id=config["project_id"])
+    validation_started = time.monotonic()
+    ensure_clean(result)
+    if result.get("status") != "completed" or result.get("model") != model or not result.get("id"):
+        raise CandidateHold("INCOMPLETE_OR_MODEL_MISMATCH")
+    blocks = [part for item in result.get("output", []) for part in item.get("content", [])]
+    if any(part.get("type") == "refusal" for part in blocks):
+        raise CandidateHold("MODEL_REFUSAL")
+    texts = [part["text"] for part in blocks if part.get("type") == "output_text"]
+    if len(texts) != 1:
+        raise CandidateHold("OUTPUT_TEXT_CARDINALITY_INVALID")
+    try:
+        prediction = json.loads(texts[0])
+    except (ValueError, TypeError):
+        raise CandidateHold("OUTPUT_JSON_INVALID") from None
+    ensure_clean(prediction)
+    def output_hold(code):
+        exc = CandidateHold(code)
+        exc.failed_stage = "validation"
+        phase_timings["validation_seconds"] = time.monotonic() - validation_started
+        exc.phase_timings = phase_timings
+        exc.phase_usage = phase_usage
+        exc.validation_evidence = {
+            "race_id": context["race_id"], "execution_id": context["execution_id"],
+            "model_identifier": model, "api_response_identifier": result["id"],
+            "input_sha256": digest(data), "prediction_output_sha256": digest(prediction),
+            "prediction": prediction, "production_effect": "NONE", "freeze_accepted": False}
+        return exc
+    try:
+        validate_schema(prediction, schema)
+    except CandidateHold as exc:
+        raise output_hold(str(exc)) from None
+    if len(prediction["ranking"]) != len(ids) or set(prediction["ranking"]) != set(ids):
+        raise output_hold("RANKING_UNIVERSE_INVALID")
+    role_ids = [row["runner_id"] for row in prediction["roles"]]
+    if len(role_ids) != len(ids) or set(role_ids) != set(ids):
+        raise output_hold("ROLES_UNIVERSE_INVALID")
+    assigned = {(row["runner_id"], column) for row in prediction["roles"] for column in row["columns"]}
+    registered = {(row["runner_id"], row["column"]) for row in prediction["role_registry"]}
+    if assigned != registered or len(registered) != len(prediction["role_registry"]):
+        exc = CandidateHold("ROLE_REGISTRY_INCONSISTENT")
+        exc.failed_stage = "validation"
+        phase_timings["validation_seconds"] = time.monotonic() - validation_started
+        exc.phase_timings = phase_timings
+        exc.phase_usage = phase_usage
+        exc.validation_evidence = {
+            "race_id": context["race_id"], "execution_id": context["execution_id"],
+            "model_identifier": model, "api_response_identifier": result["id"],
+            "input_sha256": digest(data), "prediction_output_sha256": digest(prediction),
+            "prediction": prediction,
+            "missing_registry_pairs": sorted(assigned - registered),
+            "unassigned_registry_pairs": sorted(registered - assigned),
+            "duplicate_registry_rows": len(prediction["role_registry"]) - len(registered),
+            "production_effect": "NONE", "freeze_accepted": False}
+        raise exc
+    for key in ("pair_dispositions", "third_dispositions"):
+        fields = ["head", "second"] + (["third"] if key == "third_dispositions" else [])
+        selections = [tuple(row[f] for f in fields) for row in prediction[key]]
+        if len(set(selections)) != len(selections) or any(len(set(s)) != len(s) for s in selections):
+            raise CandidateHold("DUPLICATE_OR_SELF_SELECTION")
+    for key in ("ties", "partial_order"):
+        if any(len(group) < 2 or len(group) != len(set(group)) for group in prediction[key]):
+            raise output_hold("INVALID_PARTIAL_ORDER_OR_TIE_GROUP")
+    phase_timings["validation_seconds"] = time.monotonic() - validation_started
+    freeze_started = time.monotonic()
+    frozen = dt.datetime.now(dt.timezone.utc) if now is None else now
+    # Check wall clock after an actual call; test-injected clocks are deterministic.
+    if call is responses_call:
+        frozen = dt.datetime.now(dt.timezone.utc)
+    if not historical and frozen >= deadline:
+        raise CandidateHold("DEADLINE_HOLD_AFTER_RESPONSE")
+    lineage = {"execution_id": context["execution_id"], "race_id": context["race_id"],
+               "candidate_id": config.get("candidate_id", CANDIDATE_ID),
+               "owner_entrypoint_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+               "execution_class": "HISTORICAL_BEHAVIORAL_COMPARISON" if historical else "PRE_RACE_SHADOW",
+               "prediction_cutoff": context["prediction_cutoff"],
+               "release_deadline_at": context["release_deadline_at"],
+               "historical_oos_eligible": False,
+               "change_class": "C2 DECISION POLICY FORMALIZATION",
+               "normative_source_digests": config.get("normative_sources", []),
+               "credential_attestation": {
+                   "expected_project_id": config["project_id"],
+                   "owner_type": config["credential_owner_type"],
+                   "service_account_id": config.get("service_account_id"),
+                   "expected_environment": config.get("credential_environment"),
+                   "secret_presence": True if call is responses_call else "NOT_TESTED",
+                   "api_authentication": "SUCCESS" if call is responses_call else "NOT_TESTED",
+                   "api_authentication_response_identifier": authentication_response_id,
+                   "identity_attestation": "EXTERNAL_PROVISIONING_ATTESTATION" if call is responses_call else "NOT_TESTED"},
+               "input_contract_version": INPUT_CONTRACT_VERSION,
+               "source_binding": context["source_binding"], "source_sha256": digest(envelope),
+               "venue_canon_sha256": config["venue_canon"]["sha256"],
+               "venue_canon_id": config["venue_canon_id"],
+               "policy_id": config["policy_id"], "policy_sha256": config["policy"]["sha256"],
+               "prompt_id": config["prompt_id"], "prompt_version": config["prompt_version"],
+               "authority_id": context["current_authority"]["manifest_id"],
+               "input_schema_sha256": digest(input_schema), "output_schema_sha256": digest(schema),
+               "current_authority_sha256": digest(context["current_authority"]),
+               "prediction_authority_input_sha256": digest(authority_input),
+               "prediction_source_input_sha256": digest(source_input),
+               "instruction_sha256": config["instruction"]["sha256"], "schema_sha256": digest(schema),
+               "model_identifier": model, "api_response_identifier": result["id"],
+               "prediction_output_sha256": digest(prediction), "freeze_timestamp": frozen.isoformat(),
+               "input_sha256": digest(data), "candidate_config_sha256": digest(config)}
+    static = {"ranking": prediction["ranking"],
+              "roles": {row["runner_id"]: row["columns"] for row in prediction["roles"] if row["columns"]},
+              "uncertainty": prediction["uncertainty"], "venue_state": prediction["venue_prediction_context"],
+              "status": "FROZEN / SHADOW / API-OWNER-CANDIDATE / NOT-PRODUCTION",
+              "frozen_at": frozen.isoformat()}
+    semantics = {"static_prediction": static,
+                 **{key: prediction[key] for key in ("role_registry", "pair_dispositions",
+                                                     "third_dispositions", "venue_prediction_context")},
+                 "final_prediction_package": {key: static[key] for key in (
+                     "ranking", "roles", "uncertainty", "venue_state")}}
+    lineage["prediction_semantics_sha256"] = digest(semantics)
+    phase_timings["freeze_seconds"] = time.monotonic() - freeze_started
+    lineage["phase_timings"] = phase_timings
+    lineage["api_usage"] = phase_usage
+    lineage["timing_semantics"] = "WALL_CLOCK; response_api includes provider generation; provider generation alone unavailable"
+    return {"status": "HISTORICAL_COMPARISON_FROZEN" if historical else "SHADOW_FROZEN", "production_effect": "NONE",
+            "production_authorized": False, "automatic_promotion": False, "promotion": "HOLD",
+            "prediction": prediction, "prediction_semantics": semantics, "lineage": lineage}
+
+
+def resume_historical_candidate(candidate, context, config, *, root):
+    """Read immutable historical output, never issue a request or re-freeze it.
+
+    Caller must supply SOURCE verified using the existing trusted verifier.
+    Latest-native schema remains mandatory; legacy ambiguous states HOLD.
+    """
+    ensure_clean(candidate)
+    if (candidate.get("status") != "HISTORICAL_COMPARISON_FROZEN"
+            or candidate.get("production_authorized") is not False
+            or candidate.get("production_effect") != "NONE"
+            or context.get("execution_class") != "HISTORICAL_BEHAVIORAL_COMPARISON"
+            or context["source_verification"].get("verified") is not True):
+        raise CandidateHold("HISTORICAL_RESUME_CONTRACT_HOLD")
+    data, payload, _, _ = build_prediction_request(context, config, root=root)
+    lineage = candidate["lineage"]
+    expected = {"race_id": context["race_id"], "execution_id": context["execution_id"],
+                "prediction_cutoff": context["prediction_cutoff"],
+                "release_deadline_at": context["release_deadline_at"],
+                "source_binding": context["source_binding"],
+                "source_sha256": digest(context["signed_source"]),
+                "current_authority_sha256": digest(context["current_authority"]),
+                "candidate_config_sha256": digest(config), "model_identifier": payload["model"],
+                "input_sha256": digest(data), "schema_sha256": digest(payload["text"]["format"]["schema"]),
+                "instruction_sha256": config["instruction"]["sha256"],
+                "policy_sha256": config["policy"]["sha256"],
+                "prediction_output_sha256": digest(candidate["prediction"]),
+                "prediction_semantics_sha256": digest(candidate["prediction_semantics"])}
+    if any(lineage.get(k) != v for k, v in expected.items()):
+        raise CandidateHold("HISTORICAL_RESUME_BASIS_MISMATCH")
+    if (timestamp(context["signed_source"]["artifact"]["source_freeze_at"]) > timestamp(context["prediction_cutoff"])
+            or timestamp(lineage["freeze_timestamp"]).tzinfo is None):
+        raise CandidateHold("HISTORICAL_RESUME_TIME_HOLD")
+    # Reuse the existing complete output validator with an in-memory response.
+    # No provider transport, new response ID, signature or freeze is created.
+    def frozen_response(request, timeout):
+        return {"id": lineage["api_response_identifier"], "model": lineage["model_identifier"],
+                "status": "completed", "output": [{"content": [{"type": "output_text",
+                    "text": json.dumps(candidate["prediction"])}]}]}
+    validated = execute(context, config, root=root, call=frozen_response,
+                        now=timestamp(lineage["freeze_timestamp"]))
+    if validated["prediction_semantics"] != candidate["prediction_semantics"]:
+        raise CandidateHold("HISTORICAL_RESUME_SEMANTICS_MISMATCH")
+    return {"status": "HISTORICAL_REUSED", "api_requests": 0,
+            "new_prediction_generated": False, "signed_shadow": False,
+            "oos_eligible": False, "count_increment": 0, "candidate": candidate}
+
+
+def prepare_shadow_receipt(candidate, context, config, *, root):
+    """Unsigned artifact for the EXISTING receipt signer; never a signature.
+
+    Current scope is historical replay only. Caller must not substitute this
+    artifact for signed SOURCE/FINAL or claim new API/Forward acceptance.
+    """
+    resume_historical_candidate(candidate, context, config, root=root)
+    lineage = candidate["lineage"]
+    return {"race_id": lineage["race_id"], "execution_id": lineage["execution_id"],
+            "input_sha256": lineage["input_sha256"],
+            "output_sha256": lineage["prediction_output_sha256"],
+            "model_identifier": lineage["model_identifier"],
+            "policy_sha256": lineage["policy_sha256"],
+            "instruction_sha256": lineage["instruction_sha256"],
+            "source_basis": lineage["source_binding"],
+            "source_sha256": lineage["source_sha256"],
+            "static_freeze_time": lineage["freeze_timestamp"],
+            "prediction": candidate["prediction"],
+            "prediction_semantics": candidate["prediction_semantics"],
+            "candidate_artifact_sha256": digest(candidate),
+            "shadow_status": "HISTORICAL_REPLAY / NON-PRODUCTION / UNSIGNED",
+            "production_effect": "NONE", "count_increment": 0}
+
+
+def compare(candidate, baseline, baseline_source_binding):
+    if candidate["lineage"]["source_binding"] != baseline_source_binding:
+        raise CandidateHold("COMPARISON_SOURCE_BASIS_MISMATCH")
+    prediction = candidate["prediction"]
+    static = baseline.get("static_prediction") or {}
+    roles = {row["runner_id"]: row["columns"] for row in prediction["roles"] if row["columns"]}
+    checks = {"ranking": prediction["ranking"] == static.get("ranking"),
+              "roles": roles == static.get("roles"),
+              "role_registry": prediction["role_registry"] == baseline.get("role_registry"),
+              "pair_dispositions": prediction["pair_dispositions"] == baseline.get("pair_dispositions"),
+              "third_dispositions": prediction["third_dispositions"] == baseline.get("third_dispositions"),
+              "uncertainty": prediction["uncertainty"] == static.get("uncertainty"),
+              "venue_prediction_context": prediction["venue_prediction_context"] == baseline.get("venue_prediction_context")}
+    def metric(left, right):
+        unknown = left is None or right is None or left == "UNKNOWN" or right == "UNKNOWN"
+        return {"status": "UNKNOWN" if unknown else ("MATCH" if left == right else "DIFFERENCE")}
+    metrics = {key: metric(prediction.get(key), baseline.get(key, static.get(key)))
+               for key in ("alternative_winner", "unresolved", "uncertainty")}
+    metrics["ranking"] = metric(prediction["ranking"], static.get("ranking"))
+    if static.get("ranking") and set(static["ranking"]) == set(prediction["ranking"]):
+        metrics["ranking"]["position_agreement"] = sum(
+            a == b for a, b in zip(prediction["ranking"], static["ranking"])) / len(prediction["ranking"])
+    for column in ("W", "P2", "P3"):
+        left = sorted(k for k, v in roles.items() if column in v)
+        baseline_roles = static.get("roles")
+        right = sorted(str(k) for k, v in baseline_roles.items() if column in v) if isinstance(baseline_roles, dict) else None
+        metrics[column] = metric(left, right)
+        if right is not None:
+            metrics[column]["intersection"] = len(set(left) & set(right))
+            metrics[column]["union"] = len(set(left) | set(right))
+    for key, name in (("pair_dispositions", "Pair"), ("third_dispositions", "Third"),
+                      ("venue_prediction_context", "venue_interpretation")):
+        metrics[name] = metric(prediction.get(key), baseline.get(key))
+    statuses = [m["status"] for m in metrics.values()]
+    status = "DIFFERENCE" if "DIFFERENCE" in statuses else ("UNKNOWN" if "UNKNOWN" in statuses else "MATCH")
+    return {"status": status, "comparison_class": "HISTORICAL_BEHAVIORAL_COMPARISON",
+            "metrics": metrics,
+            "checks": checks, "baseline_sha256": digest(baseline),
+            "difference_classification": "NOT_AUTOMATICALLY_A_BUG",
+            "unverified_concepts": ["alternative_winner", "partial_order", "ties", "unresolved",
+                                    "evidence_conflict", "market_conflict"],
+            "candidate_sha256": digest(candidate), "production_equivalence": "NOT_CLAIMED",
+            "promotion": "HOLD", "production_effect": "NONE"}
+
+
+def post_result_prediction_utility(candidate, baseline, source_binding, final, result, verification,
+                                   *, expected_execution_id=None):
+    """Prediction-only measurement; verified RESULT stays outside Owner inputs.
+
+    This function does not settle money, create a new counter or authorize OOS.
+    Existing Family governance and human review own any later promotion.
+    """
+    lineage = candidate["lineage"]
+    if (verification.get("verified") is not True
+            or result.get("receipt", {}).get("phase") != "RESULT"
+            or result.get("receipt", {}).get("status") != "PASS"):
+        raise CandidateHold("RESULT_UTILITY_VERIFICATION_REQUIRED")
+    if (lineage["source_binding"] != source_binding
+            or final["artifact"].get("source_receipt_sha256") != source_binding.get("source_receipt_sha256")
+            or final["artifact"].get("source_snapshot_sha256") != source_binding.get("source_snapshot_sha256")
+            or result["artifact"].get("frozen_refs", {}).get("final_receipt_sha256") != final.get("receipt_sha256")):
+        raise CandidateHold("RESULT_UTILITY_FROZEN_LINEAGE_MISMATCH")
+    if (result["receipt"]["race_id"] != lineage["race_id"]
+            or final["receipt"]["race_id"] != lineage["race_id"]
+            or (expected_execution_id or source_binding.get("execution_id")) != lineage["execution_id"]
+            or digest(candidate["prediction"]) != lineage["prediction_output_sha256"]):
+        raise CandidateHold("RESULT_UTILITY_RACE_OR_PREDICTION_MISMATCH")
+    if lineage["execution_class"] == "PRE_RACE_SHADOW":
+        if timestamp(lineage["freeze_timestamp"]) >= timestamp(lineage["release_deadline_at"]):
+            raise CandidateHold("RESULT_UTILITY_POST_DEADLINE_FREEZE")
+    order = [str(r) for r in result["artifact"]["official_result"]["finish_order"][:3]]
+    if len(order) != 3 or len(set(order)) != 3:
+        raise CandidateHold("RESULT_UTILITY_TOP3_REQUIRED")
+    prediction = candidate["prediction"]
+    legacy = baseline["static_prediction"]
+    def metrics(rank, roles, pairs, thirds, alternative):
+        if any(r not in rank for r in order):
+            raise CandidateHold("RESULT_UTILITY_UNIVERSE_MISMATCH")
+        ranks = [rank.index(r) + 1 for r in order]
+        def supported(rows, fields, selection):
+            statuses = [p.get("status") for p in (rows or []) if [str(p[k]) for k in fields] == selection]
+            if any(s in ("PURCHASE", "PROTECT") for s in statuses):
+                return True
+            return "UNKNOWN" if any(s not in ("EXCLUDE", "REJECT", "REMOVED_JUSTIFIED") for s in statuses) else False
+        return {"Winner_rank": ranks[0], "P2_rank": ranks[1], "P3_rank": ranks[2],
+                "Top3_mean_rank": sum(ranks) / 3,
+                "role_capture": {c: order[i] in roles.get(c, []) for i, c in enumerate(("W", "P2", "P3"))},
+                "width": {c: len(roles.get(c, [])) for c in ("W", "P2", "P3")},
+                "Alternative_Winner": "UNKNOWN" if alternative in (None, "UNKNOWN") else alternative == order[0],
+                "Ordered_Pair": supported(pairs, ("head", "second"), order[:2]),
+                "Pair_conditioned_Third": supported(thirds, ("head", "second", "third"), order)}
+    candidate_roles = {c: [r["runner_id"] for r in prediction["roles"] if c in r["columns"]] for c in ("W", "P2", "P3")}
+    legacy_roles = {c: [str(k) for k, v in legacy["roles"].items() if c in v] for c in ("W", "P2", "P3")}
+    changes = {}
+    for i, c in enumerate(("W", "P2", "P3")):
+        added = set(candidate_roles[c]) - set(legacy_roles[c])
+        removed = set(legacy_roles[c]) - set(candidate_roles[c])
+        changes[c] = {"promotions": sorted(added), "demotions": sorted(removed),
+                      "false_promotions": sorted(added - {order[i]}),
+                      "false_demotions": sorted(removed & {order[i]})}
+    return {"status": "PREDICTION_UTILITY_MEASURED", "candidate_id": lineage["candidate_id"],
+            "race_id": lineage["race_id"], "execution_id": lineage["execution_id"],
+            "execution_class": lineage["execution_class"], "source_binding": source_binding,
+            "final_receipt_sha256": final["receipt_sha256"], "result_receipt_sha256": result.get("receipt_sha256"),
+            "candidate_prediction_sha256": lineage["prediction_output_sha256"],
+            "candidate": metrics(prediction["ranking"], candidate_roles, prediction["pair_dispositions"], prediction["third_dispositions"], prediction["alternative_winner"]),
+            "legacy": metrics([str(r) for r in legacy["ranking"]], legacy_roles, baseline.get("pair_dispositions"), baseline.get("third_dispositions"), legacy.get("alternative_winner")),
+            "role_changes": changes, "uncertainty_quality": "UNKNOWN / NO_CALIBRATED_QUALITY_MAPPING",
+            "economic_evaluation": "SEPARATE / MEC_TICKET_CAPITAL_PFS_NOT_OWNER_EQUIVALENCE",
+            "actual_purchase_pfs": "UNKNOWN", "count_increment": 0,
+            "oos_authorization": "EXISTING_FORWARD_GOVERNANCE_REQUIRED",
+            "maturity_promotion_contract": "KM-FAMILY-CROSS-FAMILY-MATURITY-PROMOTION-20260928-R1",
+            "promotion": "HOLD", "automatic_promotion": False, "production_effect": "NONE"}
+
+
+def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call, race_id=None, cached_candidates=None):
+    """Read only audited frozen SOURCE/intent; never open RESULT artifacts."""
+    if cached_candidates is None and call is responses_call:
+        require_api_budget()
+    if cached_candidates is None and call is responses_call and not os.environ.get("OPENAI_API_KEY"):
+        raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
+    if cached_candidates is not None and verify is None:
+        raise CandidateHold("OFFLINE_TRUSTED_SOURCE_VERIFIER_REQUIRED")
+    if verify is None:
+        from execution_gateway import family_config, request_json
+        endpoint = family_config("LOCAL")["external_endpoint"].rstrip("/")
+        def verify(envelope):
+            status, result = request_json(endpoint + "/verify", method="POST", payload=envelope)
+            if status != 200 or result.get("verified") is not True:
+                raise CandidateHold("SOURCE_FRESH_VERIFICATION_HOLD")
+            return result
+    audit = json.loads((root / "research/execution/OWNER_REALITY_AUDIT_20261002.json").read_text())
+    reports = []
+    records = audit["findings"]
+    if race_id is not None:
+        records = [r for r in records if r["race_id"] == race_id]
+        if len(records) != 1:
+            raise CandidateHold("AUDITED_HISTORICAL_RACE_ID_REQUIRED")
+    for record in records:
+        evidence = record["evidence"]
+        source_spec = evidence["SOURCE/source_receipt_envelope.json"]
+        envelope = json.loads(pinned_text(root, {"path": source_spec["path"], "sha256": source_spec["file_sha256"]}))
+        baseline = json.loads(pinned_text(root, {"path": record["intent_path"], "sha256": record["intent_file_sha256"]}))
+        authority_paths = [p for p in (root / "profiles").glob("KM_FAMILY_CURRENT_AUTHORITY_*.json")
+                           if json.loads(p.read_text()).get("manifest_id") == record["declared_authority"]]
+        if len(authority_paths) != 1:
+            raise CandidateHold("HISTORICAL_AUTHORITY_UNRESOLVED")
+        authority = json.loads(authority_paths[0].read_text())
+        binding_spec = evidence["FORMAL/static_source_basis_binding.json"]
+        binding = json.loads(pinned_text(root, {"path": binding_spec["path"], "sha256": binding_spec["file_sha256"]}))
+        if (binding.get("source_receipt_sha256") != envelope.get("receipt_sha256")
+                or binding.get("source_snapshot_sha256") != envelope["artifact"].get("source_snapshot_sha256")
+                or binding.get("execution_id") != record["execution_id"]):
+            raise CandidateHold("COMPARISON_SOURCE_BASIS_MISMATCH")
+        from local_numerical_authority_gate import assess
+        context = {"execution_id": record["execution_id"], "race_id": record["race_id"],
+                   "signed_source": envelope, "source_verification": verify(envelope),
+                   "source_binding": binding, "current_authority": authority,
+                   "production_numerical_authority": assess(),
+                   "prediction_cutoff": envelope["artifact"]["prediction_cutoff"],
+                   "release_deadline_at": baseline.get("scheduled_post_at") or envelope["artifact"]["prediction_cutoff"],
+                   "execution_class": "HISTORICAL_BEHAVIORAL_COMPARISON"}
+        try:
+            if cached_candidates is not None:
+                candidate = cached_candidates.get(record["race_id"])
+                if candidate is None:
+                    raise CandidateHold("HISTORICAL_CHECKPOINT_MISSING_HOLD")
+                candidate = resume_historical_candidate(candidate, context, config, root=root)["candidate"]
+            else:
+                candidate = execute(context, config, root=root, call=call)
+        except CandidateHold as exc:
+            exc.completed_comparisons = reports
+            raise
+        reports.append({"race_id": record["race_id"], "candidate": candidate,
+                        "behavioral_comparison": compare(candidate, baseline, binding)})
+    return {"status": "HISTORICAL_BEHAVIORAL_COMPARISON_RECORDED", "candidate_id": CANDIDATE_ID,
+            "oos_eligible": False, "count_increment": 0, "production_effect": "NONE",
+            "automatic_promotion": False, "promotion": "HOLD", "comparisons": reports}
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--historical-comparison", action="store_true")
+    mode.add_argument("--authentication-only", action="store_true")
+    mode.add_argument("--resume-only", action="store_true")
+    parser.add_argument("--resume-from")
+    parser.add_argument("--resume-sha256")
+    parser.add_argument("--trust-anchor", help="Digest-pinned previously attested Runtime health JSON")
+    parser.add_argument("--trust-anchor-sha256")
+    parser.add_argument("--race-id", help="One existing audited historical race; never a new race context")
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+    root = pathlib.Path(__file__).resolve().parents[1]
+    try:
+        path = (root / args.config).resolve()
+        if not path.is_relative_to(root):
+            raise CandidateHold("PINNED_INPUT_PATH_INVALID")
+        config = json.loads(path.read_text())
+        ensure_clean(config)
+        if not args.resume_only:
+            require_api_budget()
+        if args.resume_only:
+            cached = json.loads(pinned_text(root, {"path": args.resume_from, "sha256": args.resume_sha256}))
+            anchor = json.loads(pinned_text(root, {"path": args.trust_anchor, "sha256": args.trust_anchor_sha256}))
+            anchor = anchor.get("health", anchor)
+            from jra_source_runtime.verify_source_envelope import verify as verify_saved
+            def offline_verify(envelope):
+                import tempfile
+                with tempfile.TemporaryDirectory() as temp:
+                    source_file = pathlib.Path(temp) / "source.json"
+                    source_file.write_text(json.dumps(envelope))
+                    result = verify_saved(source_file,
+                        trusted_public_key_b64=anchor["receipt_public_key_b64"],
+                        trusted_signer_key_id=anchor["receipt_signer_key_id"])
+                if result["family"] != "LOCAL" or envelope["receipt"]["phase"] != "SOURCE":
+                    raise CandidateHold("SOURCE_TRUST_ANCHOR_MISMATCH")
+                return {"verified": result["valid"]}
+            report = historical_behavioral_comparison(config, root=root, verify=offline_verify,
+                cached_candidates={r["race_id"]: r["candidate"] for r in cached["comparisons"]}, race_id=args.race_id)
+            report.update(status="HISTORICAL_CHECKPOINTS_REUSED", api_requests=0,
+                          new_prediction_generated=False, signed_shadow=False)
+        elif args.authentication_only:
+            # No SOURCE, baseline, receipt, race data or external /verify is
+            # loaded or transmitted in this credential-only acceptance mode.
+            if (config.get("mode") != "SHADOW" or config.get("production_authorized") is not False
+                    or config.get("credential_owner_type") != "service_account"
+                    or not config.get("project_id") or not config.get("service_account_id")
+                    or config.get("credential_attestation_verified") is not True
+                    or config.get("credential_environment") != "keibametrics-staging"
+                    or os.environ.get("KM_CREDENTIAL_ENVIRONMENT") != "keibametrics-staging"
+                    or os.environ.get("GITHUB_ACTIONS") != "true"):
+                raise CandidateHold("STAGING_CREDENTIAL_ATTESTATION_REQUIRED")
+            pinned_text(root, config["owner_entrypoint"])
+            model = config["model_identifier"]
+            started = time.monotonic()
+            try:
+                probe = responses_call({"model": model, "store": False, "max_output_tokens": 32,
+                                        "input": "Return OK for credential authentication only."},
+                                       timeout=15, project_id=config["project_id"])
+                ensure_clean(probe)
+                if probe.get("status") != "completed" or probe.get("model") != model or not probe.get("id"):
+                    raise CandidateHold("API_AUTHENTICATION_PREFLIGHT_HOLD")
+            except CandidateHold as exc:
+                exc.failed_stage = "authentication"
+                exc.phase_timings = {"authentication_seconds": time.monotonic() - started,
+                                     "response_api_seconds": None, "provider_generation_seconds": None,
+                                     "validation_seconds": None, "freeze_seconds": None}
+                raise
+            report = {"status": "AUTHENTICATION_PASS", "model_identifier": model,
+                      "api_response_identifier": probe["id"],
+                      "authentication_seconds": time.monotonic() - started,
+                      "race_data_transmitted": False, "external_verify_called": False,
+                      "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0}
+        else:
+            report = historical_behavioral_comparison(config, root=root, race_id=args.race_id)
+        code = 0
+    except Exception as exc:
+        report = {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD",
+                  "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0,
+                  "failed_stage": getattr(exc, "failed_stage", None),
+                  "phase_timings": getattr(exc, "phase_timings", None),
+                  "validation_evidence": getattr(exc, "validation_evidence", None),
+                  "api_usage": getattr(exc, "phase_usage", None),
+                  "completed_comparisons": getattr(exc, "completed_comparisons", [])}
+        code = 2
+    dest = pathlib.Path(args.output)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    print(json.dumps({"status": report["status"], "code": report.get("code"), "production_effect": "NONE"}))
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

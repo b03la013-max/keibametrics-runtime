@@ -1178,6 +1178,215 @@ def check_deadline(intent: Dict[str, Any], *, phase: str = "FORMAL") -> None:
         raise FormalOrchestrationError(str(exc)) from exc
 
 
+def prediction_checkpoint_basis(intent, source):
+    binding = _source_binding_from_resolved(source)
+    if not binding:
+        raise FormalOrchestrationError("PREDICTION_REQUIRES_VERIFIED_SOURCE_CHECKPOINT")
+    _, authority = load_authority()
+    return {"intent_sha256": _sha_obj(_formal_semantic_payload(intent)),
+            "source_binding": binding, "authority": authority["manifest_id"]}
+
+
+def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
+    """Automatically observe a Candidate without authorizing Production reuse."""
+    from openai_prediction_owner_candidate import (execute, compare, digest, pinned_text,
+                                                  ensure_clean, INPUT_CONTRACT_VERSION)
+    try:
+        config_spec = intent["openai_prediction_owner_candidate_config"]
+        config = json.loads(pinned_text(ROOT, config_spec))
+        ensure_clean(config)
+        if config.get("owner_entrypoint"):
+            pinned_text(ROOT, config["owner_entrypoint"])
+        pinned_text(ROOT, config["instruction"])
+        pinned_text(ROOT, config["venue_canon"])
+        pinned_text(ROOT, config["policy"])
+        for spec in config.get("normative_sources", []):
+            pinned_text(ROOT, spec)
+        execution_id = derive_execution_id(intent)
+        source = resolve_phase(execution_id, "SOURCE")
+        binding = _source_binding_from_resolved(source)
+        _, authority = load_authority()
+        existing = resolve_phase(execution_id, "PREDICTION_OWNER_SHADOW")
+        if existing:
+            candidate = _load_checkpoint_json(existing, "openai_owner_shadow.json")
+            lineage = candidate["lineage"]
+            if (lineage.get("input_contract_version") != INPUT_CONTRACT_VERSION
+                    or lineage.get("owner_entrypoint_sha256") != hashlib.sha256(
+                        (ROOT / "runtime/openai_prediction_owner_candidate.py").read_bytes()).hexdigest()
+                    or lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
+                    or lineage["current_authority_sha256"] != digest(authority)
+                    or lineage.get("race_id") != intent["race_id"]
+                    or lineage.get("execution_id") != execution_id
+                    or lineage.get("prediction_cutoff") != intent["prediction_cutoff"]):
+                raise ValueError("SHADOW_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
+        else:
+            deadline = intent.get("release_deadline_at") or (
+                _parse_iso(intent["scheduled_post_at"]) - dt.timedelta(
+                    seconds=int(intent.get("release_buffer_seconds") or 120))).isoformat()
+            context = {"execution_id": execution_id, "race_id": intent["race_id"],
+                       "signed_source": _load_checkpoint_json(source, "source_receipt_envelope.json"),
+                       "source_verification": _load_checkpoint_json(source, "source_verification.json"),
+                       "source_binding": binding, "current_authority": authority,
+                       "prediction_cutoff": intent["prediction_cutoff"], "release_deadline_at": deadline}
+            from local_numerical_authority_gate import assess as assess_numerical_authority
+            context["production_numerical_authority"] = assess_numerical_authority()
+            candidate = execute(context, config, root=ROOT)
+            dest = tmp_root / execution_id / "openai_owner_shadow_out"
+            _write(dest / "openai_owner_shadow.json", candidate)
+            if intent.get("static_prediction"):
+                baseline = {key: intent.get(key) for key in (
+                    "static_prediction", "role_registry", "pair_dispositions",
+                    "third_dispositions", "venue_prediction_context")}
+                # Same SOURCE must be explicitly bound by the canonical binder.
+                bound = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
+                static = bound["static_prediction"]
+                if static["source_basis_receipt_sha256"] != binding["source_receipt_sha256"]:
+                    raise ValueError("SHADOW_BASELINE_SOURCE_MISMATCH")
+                _write(dest / "openai_owner_equivalence.json", compare(candidate, baseline, binding))
+                _write(dest / "openai_owner_legacy_baseline.json", baseline)
+            persist_phase(execution_id, "PREDICTION_OWNER_SHADOW", f"{run_id}-openai-shadow",
+                          dest, github_sha=github_sha)
+        return {"status": candidate["status"], "production_effect": "NONE",
+                "promotion": "HOLD", "lineage": candidate["lineage"]}
+    except Exception as exc:
+        # Only audited fixed CandidateHold codes may enter durable diagnostics.
+        from openai_prediction_owner_candidate import CandidateHold
+        code = str(exc) if isinstance(exc, CandidateHold) else "SHADOW_RUNTIME_HOLD"
+        return {"status": "HOLD", "code": code, "production_effect": "NONE", "promotion": "HOLD"}
+
+
+def measure_prediction_owner_shadow(execution_id, *, run_id, github_sha, runtime_out, tmp_root):
+    """Research-only post-result persistence; never blocks Production closure."""
+    from openai_prediction_owner_candidate import post_result_prediction_utility, CandidateHold
+    try:
+        shadow = resolve_phase(execution_id, "PREDICTION_OWNER_SHADOW")
+        if shadow is None:
+            return {"status": "NOT-APPLICABLE", "production_effect": "NONE"}
+        candidate = _load_checkpoint_json(shadow, "openai_owner_shadow.json")
+        baseline = _load_checkpoint_json(shadow, "openai_owner_legacy_baseline.json")
+        formal = resolve_phase(execution_id, "FORMAL")
+        final = _load_checkpoint_json(formal, "final_receipt_envelope.json")
+        result = _load(runtime_out / "result_receipt_envelope.json")
+        flags = _load(runtime_out / "receipt_verifications.json")
+        report = post_result_prediction_utility(candidate, baseline, candidate["lineage"]["source_binding"],
+                                               final, result, {"verified": flags.get("RESULT") is True},
+                                               expected_execution_id=execution_id)
+        phase = "PREDICTION_OWNER_MEASUREMENT"
+        existing = resolve_phase(execution_id, phase)
+        if existing is not None:
+            previous = _load_checkpoint_json(existing, "openai_owner_prediction_utility.json")
+            if previous == report:
+                return {"status": "ALREADY_MEASURED", "count_increment": 0, "production_effect": "NONE"}
+        dest = tmp_root / execution_id / "openai_owner_measurement_out"
+        _write(dest / "openai_owner_prediction_utility.json", report)
+        persist_phase(execution_id, phase, f"{run_id}-owner-{str(result['receipt_sha256'])[:12]}",
+                      dest, github_sha=github_sha)
+        return {"status": report["status"], "count_increment": 0, "production_effect": "NONE", "promotion": "HOLD"}
+    except Exception as exc:
+        return {"status": "HOLD", "code": str(exc) if isinstance(exc, CandidateHold) else "SHADOW_MEASUREMENT_HOLD",
+                "production_effect": "NONE", "promotion": "HOLD"}
+
+
+def execute_prediction_owner(intent, *, run_id, github_sha, tmp_root):
+    """Invoke ONLY an authority-pinned existing Production implementation.
+
+    No Candidate fallback, new score, market sort, or operator supplied executable.
+    The current R36 authority has no executable prediction owner. That is an
+    explicit BLOCKED dependency; registering one requires a policy-equivalence
+    review outside this C1 patch.
+    """
+    check_deadline(intent)
+    execution_id = derive_execution_id(intent)
+    source = resolve_phase(execution_id, "SOURCE")
+    basis = prediction_checkpoint_basis(intent, source)
+    env = _load_checkpoint_json(source, "source_receipt_envelope.json") or {}
+    verification = _load_checkpoint_json(source, "source_verification.json") or {}
+    artifact = env.get("artifact") or {}
+    if verification.get("verified") is not True or artifact.get("formal_ready") is not True:
+        raise FormalOrchestrationError("PREDICTION_SOURCE_NOT_VERIFIED_OR_PARTIAL")
+    if (env.get("receipt") or {}).get("race_id") != intent.get("race_id"):
+        raise FormalOrchestrationError("PREDICTION_SOURCE_RACE_MISMATCH")
+    universe = artifact.get("active_runner_universe") or {}
+    runners = universe.get("runners") or []
+    if not runners or len(runners) != universe.get("runner_count"):
+        raise FormalOrchestrationError("PREDICTION_RUNNER_UNIVERSE_INCOMPLETE")
+    _, authority = load_authority()
+    owner = (authority.get("family_scoped_authority", {}).get("LOCAL", {})
+             .get("production_prediction_owner"))
+    if not isinstance(owner, dict) or owner.get("production_authorized") is not True:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_NOT_REGISTERED")
+    path = (ROOT / str(owner.get("entrypoint") or "")).resolve()
+    if not path.is_relative_to(ROOT) or not path.is_file():
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_PATH_INVALID")
+    if hashlib.sha256(path.read_bytes()).hexdigest() != owner.get("sha256"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_HASH_MISMATCH")
+    if not owner.get("production_policy_sha256"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_POLICY_BINDING_MISSING")
+    # Existing Production materializer runs before prediction. The default index
+    # manifest is read from the current Production registry, never from Candidate.
+    from local_numerical_authority_gate import assess as assess_numerical_authority
+    from race_day_fast_path import materialize_request_fast
+    from local_index_provenance_builder import build as build_provenance
+    registry = _load(ROOT / "mapping/local_base_index_mapping_registry_v1.0_20260922.json")
+    current_local = authority["family_scoped_authority"]["LOCAL"]
+    if registry["registry_id"] != current_local.get("base_index_registry"):
+        raise FormalOrchestrationError("PREDICTION_PRODUCTION_MAPPING_AUTHORITY_MISMATCH")
+    required = intent.get("required_indices") or intent.get("required_index_names") or (
+        registry["exact_common_indices"] + registry["externally_rule_bound_indices"])
+    if any(isinstance(x, dict) for x in required):
+        required = [str(x.get("index") or x.get("index_name") or x.get("name") or "") for x in required]
+    prepared = {**copy.deepcopy(intent), "runners": copy.deepcopy(runners)}
+    numerical_authority = assess_numerical_authority()
+    if intent.get("require_full_numerical_authority") is True and not numerical_authority["full_numerical_authority"]:
+        raise FormalOrchestrationError("FULL_NUMERICAL_AUTHORITY_NOT_READY")
+    degraded_allowed = "DEGRADED-EXECUTION-ONLY" in str(current_local.get("status"))
+    prepared.setdefault("degraded_execution", degraded_allowed)
+    prepared.setdefault("allow_base_index_rule_hold", degraded_allowed)
+    prepared, numerical_cache = materialize_request_fast(prepared, required)
+    if prepared.get("full_terminalization") is not True:
+        raise FormalOrchestrationError("PREDICTION_NUMERICAL_TERMINALIZATION_INCOMPLETE")
+    prepared = build_provenance(prepared)
+    prepared["numerical_authority_preflight"] = numerical_authority
+    context = {"intent": prepared, "signed_source": env,
+               "official_runner_universe": universe, "current_authority": authority,
+               "production_numerical_authority": numerical_authority,
+               "production_numeric_coverage": prepared["numeric_coverage"],
+               "missing_evidence_policy": "UNKNOWN_NO_PROXY", "basis": basis}
+    proc = subprocess.run([sys.executable, str(path)], input=json.dumps(context),
+                          capture_output=True, text=True, cwd=ROOT,
+                          timeout=int(owner.get("timeout_seconds") or 120))
+    if proc.returncode != 0:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_FAILED")
+    response = json.loads(proc.stdout)
+    if response.get("basis") != basis:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_BASIS_MISMATCH")
+    semantic = response.get("prediction_semantics")
+    allowed = {"static_prediction", "role_registry", "pair_dispositions", "third_dispositions",
+               "venue_prediction_context", "final_prediction_package"}
+    if not isinstance(semantic, dict) or set(semantic) - allowed:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_OWNER_PAYLOAD_INVALID")
+    static = semantic.get("static_prediction") or {}
+    if set(map(str, static.get("ranking") or [])) != {str(r["runner_id"]) for r in runners}:
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_RANK_UNIVERSE_MISMATCH")
+    if not semantic.get("venue_prediction_context") or not semantic.get("role_registry"):
+        raise FormalOrchestrationError("PRODUCTION_PREDICTION_CONTEXT_OR_ROLES_MISSING")
+    check_deadline(intent)
+    out = {**prepared, **semantic}
+    # Freeze ownership is execution, not a claim that all indices are calculated.
+    out["static_prediction"] = {**static, "status": "FROZEN",
+                                "frozen_at": dt.datetime.now(dt.timezone.utc).isoformat()}
+    out["static_prediction_frozen"] = True
+    out["temporal_separation"] = {"static_prediction_freeze_at": out["static_prediction"]["frozen_at"]}
+    out, _ = normalize_single_entry_intent(out)
+    dest = tmp_root / execution_id / "prediction_out"
+    _write(dest / "prediction_checkpoint_basis.json", basis)
+    _write(dest / "prediction_intent.json", out)
+    _write(dest / "prediction_owner_context.json", context)
+    persist_phase(execution_id, "PREDICTION", f"{run_id}-prediction", dest, github_sha=github_sha)
+    return out
+
+
+
 def run_formal_with_fallback(request, phase, **kwargs):
     try:
         check_deadline(request)

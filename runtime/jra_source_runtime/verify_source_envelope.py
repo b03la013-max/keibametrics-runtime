@@ -8,12 +8,14 @@ def _jdump(x):
 def sha_obj(x):
     return hashlib.sha256(_jdump(x)).hexdigest()
 
-def verify(path):
+def verify(path, *, trusted_public_key_b64=None, trusted_signer_key_id=None):
     p=pathlib.Path(path)
     env=json.loads(p.read_text(encoding="utf-8"))
     rec=env.get("receipt") or {}
     art=env.get("artifact") or {}
-    pub_b64=str(env.get("receipt_public_key_b64") or "")
+    if trusted_public_key_b64 is not None and (not isinstance(trusted_public_key_b64, str) or not trusted_public_key_b64 or not trusted_signer_key_id or env.get("signer_key_id") != trusted_signer_key_id):
+        raise ValueError("SOURCE_TRUST_ANCHOR_MISMATCH")
+    pub_b64=str(trusted_public_key_b64 or env.get("receipt_public_key_b64") or "")
     sig_b64=str(env.get("signature") or "")
     if not pub_b64: raise ValueError("SOURCE_RECEIPT_PUBLIC_KEY_MISSING")
     if not sig_b64: raise ValueError("SOURCE_RECEIPT_SIGNATURE_MISSING")
@@ -24,7 +26,7 @@ def verify(path):
         raise ValueError("SOURCE_ARTIFACT_SHA_MISMATCH")
     Ed25519PublicKey.from_public_bytes(base64.b64decode(pub_b64)).verify(base64.b64decode(sig_b64),rb)
     trust=str(env.get("signer_trust_class") or "")
-    if trust!="GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION":
+    if trusted_public_key_b64 is None and trust!="GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION":
         raise ValueError("SOURCE_TRUST_CLASS_INVALID:"+trust)
     out={
       "valid":True,

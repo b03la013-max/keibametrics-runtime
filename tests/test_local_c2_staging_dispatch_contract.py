@@ -7,6 +7,7 @@ RUNBOOK = ROOT / 'tools/LOCAL_FORMAL_RESTART.md'
 
 def test_staging_acceptance_is_manual_and_unprivileged():
     s = WORKFLOW.read_text(encoding='utf-8')
+    assert 'if: ${{ false }}' in s  # Archived pre-budget paid route must never execute.
     assert '\n  workflow_dispatch:' in s
     assert '\n  push:' not in s
     assert '\n  schedule:' not in s

@@ -12,6 +12,8 @@ concurrency:
 
 jobs:
   c2-staging-acceptance:
+    # Archived paid route pins pre-budget code; never rerun it for zero-cost work.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: keibametrics-staging
     timeout-minutes: 15
