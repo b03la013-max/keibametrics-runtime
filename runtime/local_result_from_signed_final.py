@@ -126,6 +126,10 @@ for t in tickets:
     b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
     b["investment"]+=st
     hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
+    if hit and (bt not in payouts or payouts[bt] <= 0):
+        # An unpublished winning payout is unknown, never a zero return.
+        # Stop before sending or signing a COMPLETE settlement.
+        raise SystemExit("RESULT_WINNING_PAYOUT_NOT_READY:"+bt)
     if hit and bt in payouts:
         r=st*payouts[bt]//100
         total_return+=r; b["return"]+=r

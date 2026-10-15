@@ -36,6 +36,22 @@ def run(intent, *, output, run_id, github_sha=None):
     if isinstance(authority_context, dict):
         if not request.get("current_authority_manifest"):
             request["current_authority_manifest"] = authority_context["current_authority_manifest"]
+    # Readback is not a new prediction and must remain possible after cutoff.
+    # Never enter SOURCE/Owner generation when a FINAL checkpoint exists. The
+    # existing orchestrator checks immutable manifests and semantic/source basis.
+    final_checkpoint = o.resolve_phase(request['execution_id'], 'FORMAL')
+    if final_checkpoint and 'final_receipt_envelope.json' in ((final_checkpoint.get('manifest') or {}).get('files') or {}):
+        canonical_path = o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json"
+        canonical = o._load(canonical_path) if canonical_path.is_file() else {}
+        readback = {**canonical, **request, 'execution_phase': 'FORMAL'}
+        readback.pop('analysis_only', None)
+        # A changed request must fail closed, never fall through to generation.
+        report = o.orchestrate(readback, run_id=run_id, github_sha=github_sha,
+                               runtime_out=output/'formal', tmp_root=output/'tmp')
+        report.update(execution_id=request['execution_id'], prediction_reexecution=False,
+                      readback_only=True)
+        o._write(output/'entry_report.json', report)
+        return report
     # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
     # cutoff is forbidden. A late entry never creates a historical prediction.
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
@@ -46,6 +62,17 @@ def run(intent, *, output, run_id, github_sha=None):
     source_report = o.orchestrate(request, run_id=run_id, github_sha=github_sha,
                                   runtime_out=output/'source', tmp_root=output/'tmp')
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+    if source_report.get('status') != 'SOURCE_PASS' or saved is None:
+        failure = source_report.get('failure') or {}
+        code = (source_report.get('first_failed_code') or source_report.get('code')
+                or failure.get('code') or 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN')
+        report = {'status': 'HOLD', 'first_failed_phase': 'SOURCE',
+                  'first_failed_code': code, 'code': code,
+                  'completion': False, 'formal_final_proven': False,
+                  'prediction_reexecution': False, 'no_bet_decision': False,
+                  'execution_id': request['execution_id'], 'source': source_report}
+        o._write(output/'entry_report.json', report)
+        return report
     o.validate_source_checkpoint(saved['run_dir'], request)
     source = o._load_checkpoint_json(saved, 'source_receipt_envelope.json')
     numeric_request = copy.deepcopy(request)
@@ -156,6 +183,16 @@ def main():
                      run_id=args.run_id, github_sha=args.github_sha)
     except (o.FormalOrchestrationError, ValueError, KeyError) as exc:
         report = {'status': 'HOLD', 'completion': False, 'code': str(exc), 'formal_final_proven': False}
+        o._write(output/'entry_report.json', report)
+    completion = report.get('completion')
+    if isinstance(completion, dict) and completion.get('complete') is True:
+        from runtime.local_race_key_gate import terminal_state
+        try:
+            report['delivery'] = terminal_state(report['execution_id'], 'success')
+        except Exception as exc:
+            # FINAL truth survives a delivery/verification transport failure.
+            report['delivery'] = {'status': 'DELIVERY_HOLD', 'reason': str(exc),
+                                  'prestart_delivery_pass': False}
         o._write(output/'entry_report.json', report)
     print(json.dumps(report, ensure_ascii=False, default=str))
     return o.completion_exit_code(report)
