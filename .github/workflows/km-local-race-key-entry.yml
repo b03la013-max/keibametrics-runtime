@@ -1,8 +1,11 @@
 name: KM LOCAL Race-Key Single Entry (candidate)
+run-name: LOCAL ${{ inputs.venue_id || github.event_name }} ${{ inputs.race_date }} R${{ inputs.race_no }}
 
 # Authenticated GitHub Actions ingress with five scalar fields. No per-race
 # GitHub file write is needed to START the signed SOURCE process.
 on:
+  schedule:
+    - cron: "*/5 0-12 * * *"
   workflow_dispatch:
     inputs:
       venue_id:
@@ -43,7 +46,7 @@ env:
 
 jobs:
   resolve:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
@@ -287,3 +290,51 @@ jobs:
         env:
           RC: ${{ steps.settle.outputs.rc }}
         run: test "${RC:-2}" = "0"
+
+  local-day:
+    # Inert until an owner separately approves activation, dated scope and cost.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    permissions:
+      contents: write
+      actions: write
+    concurrency:
+      group: km-local-day-dispatcher
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check -q cryptography
+      - name: Dispatch only explicitly approved dated LOCAL plans
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KM_LOCAL_AUTONOMOUS_ENABLED: ${{ vars.KM_LOCAL_AUTONOMOUS_ENABLED }}
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          from datetime import datetime, timezone, timedelta
+          day = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+          subprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)
+          subprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)
+          for path in sorted(Path('profiles/local_autonomous_approvals').glob(day+'-*.json')):
+              approval=json.loads(path.read_text())
+              if approval.get('enabled') is not True:
+                  continue
+              subprocess.run(['python','-m','runtime.local_race_day_dispatcher',
+                  '--venue',approval['venue_id'],'--date',day,
+                  '--cutoff-seconds',str(approval['cutoff_seconds']),'--execute'],check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-day-${{ github.run_id }}
+          path: runtime/local_race_day_plan/
+          if-no-files-found: ignore
+          retention-days: 90

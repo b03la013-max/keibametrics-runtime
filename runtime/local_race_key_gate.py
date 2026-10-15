@@ -140,6 +140,13 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
                   render_available=True,render_generated_at=now.isoformat(),
                   rendered_ticket_count=tree['ticket_count'],rendered_investment=tree['total_investment'],
                   tree_sha256=hashlib.sha256(tree['text'].encode()).hexdigest(),
+                  persisted_tree_sha256=hashlib.sha256((tree['text']+'\n').encode()).hexdigest(),
+                  original_final_artifact_sha256=final['receipt'].get('artifact_sha256'),
+                  freeze_time=final['receipt'].get('timestamp'),
+                  rendered_stakes=sorted({t['stake'] for t in tree['reflattened_tickets']}),
+                  readback_time=now.isoformat(),
+                  delivered_content_sha256=None,
+                  delivery_time=None,
                   final_receipt_sha256=final['receipt_sha256'],
                   capital_compatibility=final['artifact'].get('capital_policy_decision',{}).get('compatibility'),
                   status='SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN')
