@@ -1,0 +1,211 @@
+{
+  "checked_at": "2026-10-15T08:50:37.546Z",
+  "main": "887c07fe4585426718b32a4f9342ccf0ed2e5e87",
+  "authority": "KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+  "authority_effective_at": "2026-10-12T05:05:14.161540+00:00",
+  "suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "owner_scope": "KAW-only enabled authorized-unvalidated",
+  "venue_canon": "川崎競馬攻略条項 v2.4-KAW",
+  "single_entry": {
+    "path": ".github/workflows/km-local-race-key-entry.yml",
+    "workflow_id": 384129317,
+    "branch": "main",
+    "permissions": {
+      "contents": "write",
+      "actions": "read"
+    },
+    "inputs": {
+      "venue_id": "required string; known uppercase LOCAL venue",
+      "race_date": "required string YYYY-MM-DD",
+      "race_no": "required string 1..12 without zero prefix",
+      "scheduled_post_at": "required aware JST timestamp same race day",
+      "prediction_cutoff": "required aware JST timestamp same race day, before post"
+    },
+    "execution_id": "KM-LOCAL-{VENUE}-{YYYYMMDD}-R{NN}-LIVE-R1",
+    "deadline": "now < prediction_cutoff AND now < post-120sec"
+  },
+  "connection": {
+    "repository_read": "VERIFIED",
+    "workflow_contents_and_logs": "VERIFIED",
+    "actions_rerun": "VERIFIED via supported operation; effective Actions-write for rerun established",
+    "new_dispatch": "BLOCKED: no workflow_dispatch or repository_dispatch tool exposed; unsupported API not invoked",
+    "contents_branch_pr_write": "VERIFIED evidence commits/PR282",
+    "administration": "403 Resource not accessible by integration on protection GET; not proof Actions-write absent",
+    "runtime_formal_send": "No new LIVE payload; only existing authorized R02 receipt verification",
+    "permission_changes": false,
+    "correction": "Earlier App Actions-write uncertainty is narrowed by successful current rerun. Rerun support does not establish new workflow_dispatch tool availability."
+  },
+  "nonproduction": {
+    "operation": "Supported re-run existing LOCAL Race-Key Ingress Acceptance",
+    "run": {
+      "id": 38684269703,
+      "attempt": 2,
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+      "created_at": "2026-10-15T04:58:22Z",
+      "run_started_at": "2026-10-15T08:47:36Z",
+      "updated_at": "2026-10-15T08:48:09Z",
+      "workflow_id": 384103927
+    },
+    "original_job": 116255439054,
+    "new_job": 116332796768,
+    "tests": "157 passed in 2.59s",
+    "workflow_id": 384103927,
+    "workflow": ".github/workflows/km-local-race-key-acceptance.yml",
+    "new_live_payloads": 0,
+    "formal_intents_created": 0,
+    "note": "This is nonproduction rerun, not new workflow_dispatch or unknown-future LIVE acceptance."
+  },
+  "runtime": {
+    "deployment": [
+      {
+        "id": "acf63364-0235-42ea-b68d-fbe931fcf51f",
+        "status": "SUCCESS",
+        "createdAt": "2026-10-14T06:12:53.477Z",
+        "updatedAt": "2026-10-14T06:13:07.003Z"
+      }
+    ],
+    "health": {
+      "assessment": {
+        "bundle_fingerprint_actual": "2141fd66d2417c6488ac10349dca55820f45e7354d43e33f8fa4317969d3fa2e",
+        "bundle_fingerprint_expected": "2141fd66d2417c6488ac10349dca55820f45e7354d43e33f8fa4317969d3fa2e",
+        "bundle_mismatches": {},
+        "checked_at": "2026-10-15T08:47:32.976551+00:00",
+        "errors": [],
+        "family_id": "LOCAL",
+        "gateway_profile": "KM-LOCAL-EXECUTION-GATEWAY-v1.6-20261008",
+        "git_revision_is_compatibility_authority": false,
+        "git_revision_match": true,
+        "missing_capabilities": [],
+        "runtime_git_revision_actual": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+        "runtime_git_revision_pointer": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+        "runtime_profile_actual": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+        "runtime_profile_expected": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+        "status": "PASS",
+        "warnings": []
+      },
+      "health": {
+        "calibration_status": "PROVISIONAL_UNCALIBRATED",
+        "capabilities": [
+          "SOURCE_MANIFEST_LOCAL_NAR",
+          "SOURCE_RUNNER_UNIVERSE",
+          "SOURCE_SAME_DAY_POSITION_BIAS",
+          "SOURCE_NAR_ENTITY_PROFILES",
+          "SOURCE_POINT_IN_TIME_POPULATION_SEED",
+          "SOURCE_JMA_WEATHER",
+          "SOURCE_SBO_PUBLIC_SHADOW",
+          "SOURCE_FREEZE",
+          "SOURCE_VERIFY",
+          "SOURCE_ACQUIRE",
+          "PRE_KRS",
+          "KRS_EXECUTE",
+          "FINAL",
+          "FORMAL",
+          "RESULT",
+          "VERIFY"
+        ],
+        "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+        "engine_version": "1.1.0",
+        "expected_engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+        "expected_parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+        "family": "LOCAL",
+        "github_revision": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+        "jma_weather_evidence_profile": "KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",
+        "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+        "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+        "nar_auxiliary_evidence_profile": "KM-LOCAL-NAR-AUXILIARY-EVIDENCE-v1.0-20260924",
+        "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+        "nar_runner_universe_profile": "KM-LOCAL-NAR-RUNNER-UNIVERSE-v1.0-20260923",
+        "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+        "nar_source_manifest_profile": "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923",
+        "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+        "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+        "parameter_map_version": "0.1-provisional",
+        "point_in_time_population_profile": "KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924",
+        "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+        "receipt_public_key_b64": "jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE=",
+        "receipt_signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+        "runtime_app_sha256": "e54ae7ad31a1959df113568f6d1591e9753971f30fccac5325e627e07e52f12b",
+        "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+        "sbo_public_shadow_profile": "KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",
+        "sbo_public_shadow_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53",
+        "source_acquisition_profile": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
+        "source_acquisition_required": true,
+        "source_acquisition_sha256": "3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df",
+        "status": "READY"
+      }
+    },
+    "existing_receipt_verify": {
+      "checked_at": "2026-10-15T08:48:56.248614+00:00",
+      "existing_receipt_path": "runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json",
+      "race_id": "KM-LOCAL-KAW-20261015-R02-LIVE-R1",
+      "receipt_sha256": "2c5211e39ae1b4e04c242c3233b37930af67ba2105500ae0fb3d0254b9eed4ff",
+      "http_status": 200,
+      "response": {
+        "valid": true,
+        "verified": true,
+        "signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+        "family": "LOCAL"
+      },
+      "new_signed_receipts": 0
+    },
+    "metered_cost": "UNKNOWN; no new paid resource/billing change"
+  },
+  "original_failures": {
+    "r06": "First observed pre-registration; original denied operation/error unavailable",
+    "r07": "Same observed boundary; original denied operation/error unavailable",
+    "replay": "BLOCKED missing inputs/error; preserved as failure evidence, not passing live regression",
+    "schema_duplicate_scope_cutoff_runners": "No original payload or signed SOURCE: cannot attribute original denial to these gates",
+    "final_delivery": "No verified R06/R07 FINAL/Delivery; no new forecast created"
+  },
+  "sbo": {
+    "run": 38684269564,
+    "failed_job": 116255712719,
+    "unit_tests": "4 passed",
+    "error": "SBO_PUBLIC_SHADOW_REQUIRED_FAILED:SBO_ROBOTS_DISALLOWED:ROBOTS_HTTP_502",
+    "fixture": "URW 2025-07-21 R01 historical public page; post-start not OOS eligible",
+    "causality": "Independent external robots transport error; candidate app_v15/source_acquisition paths trigger this check; not Race-Key parser failure. Not waived.",
+    "candidate_ci": "13/14 workflows success; this current ingress rerun SUCCESS"
+  },
+  "repair": {
+    "new_code": false,
+    "existing_candidate_pr": 280,
+    "code_subject": "9d38b8cc03f185944e794d55c1afea8f864f856d",
+    "head": "f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+    "evidence_pr": 282,
+    "relationship": "PR280 code candidate and PR282 incident/evidence only; no duplicate implementation",
+    "production_applied": false
+  },
+  "deliverables": {
+    "A": "VERIFIED",
+    "B": "VERIFIED listed operation capabilities; full App permission manifest unavailable",
+    "C": "BLOCKED original error missing",
+    "D": "BLOCKED new dispatch; nonproduction supported rerun VERIFIED",
+    "E": "PENDING new registration; existing parser regressions verified",
+    "F": "PENDING new FORMAL dispatch; health/verify VERIFIED",
+    "G": "VERIFIED",
+    "H": "COMPLETED current nonproduction evidence; CI not fully green",
+    "I": "PENDING no race-specific approved future target; new dispatch not exposed",
+    "J": "COMPLETED concrete owner actions"
+  },
+  "owner_actions": [
+    "For an explicitly authorized unknown future race before cutoff: native GitHub Actions Single Entry / Run workflow on main, official five fields, preserve run ID, gate receipt and signed FINAL/Delivery.",
+    "For ChatGPT-operated new dispatch: connection owner/provider must expose supported workflow_dispatch operation. Effective rerun write permission is now demonstrated; increasing Scope alone cannot create a missing tool.",
+    "Inspect existing selected-repository installation at https://github.com/settings/installations/163127386 . Permission changes require explicit owner action; do not assume administration Scope is needed for dispatch; never send tokens in chat.",
+    "Provide original rejected tool/error/operation/non-secret payload to close R06/R07 refusal ownership. Current diagnostic 400/403 are not original errors."
+  ],
+  "constraints": {
+    "paid_openai_api_requests": 0,
+    "new_paid_resources": 0,
+    "billing_change": 0,
+    "bets": 0,
+    "merge": 0,
+    "deploy": 0,
+    "activation": 0,
+    "new_signed_receipts": 0,
+    "new_live_payloads": 0,
+    "safety_bypass": 0,
+    "signed_artifact_changes": 0
+  }
+}
