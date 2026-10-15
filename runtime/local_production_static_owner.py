@@ -217,11 +217,16 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         raise StaticOwnerError("OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH")
     if {rid for rid, v in registered.items() if v.get("status") == "ACTIVE"} != set(ids):
         raise StaticOwnerError("OFFICIAL_ACTIVE_STATUS_UNIVERSE_MISMATCH")
+    official_ids = {str(s.get("source_id")) for s in source.get("sources") or []
+                    if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"}
     for rid in set(declared_ids) - set(ids):
         entry = registered[rid]
         if (entry.get("status") != "CANCELLED"
                 or entry.get("reason") != "EXPLICIT_OFFICIAL_ODDS_CANCELLATION"):
             raise StaticOwnerError("OFFICIAL_CANCELLATION_NOT_VERIFIED:" + rid)
+        if (not entry.get("evidence_sources")
+                or not set(entry["evidence_sources"]).issubset(official_ids)):
+            raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
     # NAR race-card HTML may still include withdrawn runners. Only the
     # official signed ACTIVE universe receives Production prediction roles.
     parsed = {rid: row for rid, row in parsed.items() if rid in set(ids)}

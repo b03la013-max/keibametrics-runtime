@@ -1,8 +1,15 @@
 name: KM LOCAL Race-Key Single Entry (candidate)
+run-name: LOCAL ${{ inputs.venue_id || github.event_name }} ${{ inputs.race_date }} R${{ inputs.race_no }}
 
 # Authenticated GitHub Actions ingress with five scalar fields. No per-race
 # GitHub file write is needed to START the signed SOURCE process.
 on:
+  schedule:
+    # Phase B only: 2026-10-16 KAW R01 (15:00 JST), three bounded
+    # opportunities at 14:00/14:05/14:10 JST. Cron has no year field;
+    # the existing exact dated approval gate still prevents later reuse.
+    # Phase C/D scheduling requires a separately reviewed configuration.
+    - cron: "0,5,10 5 16 10 *"
   workflow_dispatch:
     inputs:
       venue_id:
@@ -41,16 +48,49 @@ permissions:
 env:
   PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
 
-concurrency:
-  # Push has no workflow_dispatch inputs or repository_dispatch payload; scope it
-  # to its immutable commit SHA so RESULT wait for another race cannot block
-  # the next race's SOURCE acquisition before its prediction cutoff.
-  group: km-local-race-key-${{ github.event_name == 'push' && github.sha || format('{0}-{1}-{2}', inputs.venue_id || github.event.client_payload.venue_id, inputs.race_date || github.event.client_payload.race_date, inputs.race_no || github.event.client_payload.race_no) }}
-  cancel-in-progress: false
-
 jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      has_requests: ${{ steps.resolve.outputs.has_requests }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Resolve immutable event range and every race key
+        id: resolve
+        run: |
+          python -m runtime.local_race_key_intake --event-file "$GITHUB_EVENT_PATH" \
+            --event-name "$GITHUB_EVENT_NAME" --output ingress-out/intake.json \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Persist ingress terminal errors
+        if: always()
+        run: |
+          mkdir -p runtime/execution_reports/INGRESS
+          cp ingress-out/intake.json "runtime/execution_reports/INGRESS/${{ github.run_id }}.json"
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add runtime/execution_reports/INGRESS
+          git commit -m "execution: immutable ingress ${{ github.run_id }} [skip ci]"
+          python tools/persist_local_checkpoints.py --branch main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: km-local-ingress-${{ github.run_id }}
+          path: ingress-out/
+          retention-days: 90
   entry:
-    if: github.ref == 'refs/heads/main'
+    needs: resolve
+    if: needs.resolve.outputs.has_requests == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: km-formal-${{ matrix.execution_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 35
     outputs:
@@ -67,55 +107,14 @@ jobs:
           python-version: '3.13'
       - name: Install existing runtime dependency
         run: python -m pip install -q cryptography
-      - name: Resolve authorized five-field race request
-        id: fields
-        env:
-          INPUT_VENUE: ${{ inputs.venue_id || github.event.client_payload.venue_id }}
-          INPUT_DAY: ${{ inputs.race_date || github.event.client_payload.race_date }}
-          INPUT_NO: ${{ inputs.race_no || github.event.client_payload.race_no }}
-          INPUT_POST: ${{ inputs.scheduled_post_at || github.event.client_payload.scheduled_post_at }}
-          INPUT_CUTOFF: ${{ inputs.prediction_cutoff || github.event.client_payload.prediction_cutoff }}
-        run: |
-          set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            python - <<'PY'
-          import json, os, pathlib, subprocess
-          paths = subprocess.check_output(
-              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], text=True
-          ).splitlines()
-          candidates = [p for p in paths if p.startswith("runtime/race_key_requests/")
-                        and p.endswith(".json")]
-          if len(candidates) != 1:
-              raise SystemExit("RACE_KEY_PUSH_EXACTLY_ONE_NEW_FILE_REQUIRED")
-          path = pathlib.Path(candidates[0])
-          data = json.loads(path.read_text(encoding="utf-8"))
-          keys = ("venue_id", "race_date", "race_no", "scheduled_post_at", "prediction_cutoff")
-          if set(data) != set(keys):
-              raise SystemExit("RACE_KEY_PUSH_ONLY_FIVE_SCALAR_FIELDS")
-          items = {k: data[k] for k in keys}
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
-              for k,v in items.items():
-                  if not isinstance(v, (str,int)) or isinstance(v,bool):
-                      raise SystemExit("RACE_KEY_VALUE_TYPE_INVALID")
-                  f.write(f"{k}={v}\n")
-          PY
-          else
-            {
-              echo "venue_id=$INPUT_VENUE"
-              echo "race_date=$INPUT_DAY"
-              echo "race_no=$INPUT_NO"
-              echo "scheduled_post_at=$INPUT_POST"
-              echo "prediction_cutoff=$INPUT_CUTOFF"
-            } >> "$GITHUB_OUTPUT"
-          fi
       - name: Build race-key SOURCE request from Current Authority
         id: intake
         env:
-          VENUE_ID: ${{ steps.fields.outputs.venue_id }}
-          RACE_DATE: ${{ steps.fields.outputs.race_date }}
-          RACE_NO: ${{ steps.fields.outputs.race_no }}
-          POST_AT: ${{ steps.fields.outputs.scheduled_post_at }}
-          CUTOFF_AT: ${{ steps.fields.outputs.prediction_cutoff }}
+          VENUE_ID: ${{ matrix.venue_id }}
+          RACE_DATE: ${{ matrix.race_date }}
+          RACE_NO: ${{ matrix.race_no }}
+          POST_AT: ${{ matrix.scheduled_post_at }}
+          CUTOFF_AT: ${{ matrix.prediction_cutoff }}
         run: |
           set -euo pipefail
           mkdir -p entry-out
@@ -189,22 +188,43 @@ jobs:
             git commit -m "execution: race-key signed checkpoints $EXECUTION_ID [skip ci]"
             python tools/persist_local_checkpoints.py --branch main
           fi
+      - name: Persist terminal execution and delivery state
+        if: always()
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p entry-out
+          python -m runtime.local_race_key_gate --terminal-only \
+            --execution-id "$EXECUTION_ID" --job-status "$JOB_STATUS" \
+            --output "runtime/execution_reports/$EXECUTION_ID/terminal-${{ github.run_id }}.json"
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add "runtime/execution_reports/$EXECUTION_ID"
+          cat "runtime/execution_reports/$EXECUTION_ID/delivery/canonical_tree.txt" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: terminal state $EXECUTION_ID [skip ci]"
+            python tools/persist_local_checkpoints.py --branch main
+          fi
       - name: Upload Source/Static owner handoff evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: km-local-race-key-${{ github.run_id }}
+          name: km-local-race-key-${{ github.run_id }}-${{ matrix.execution_id }}
           path: entry-out/
           if-no-files-found: warn
           retention-days: 90
 
   result:
-    needs: entry
-    if: needs.entry.outputs.formal_ready == 'true'
+    needs: [resolve, entry]
+    if: always() && needs.resolve.outputs.has_requests == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     runs-on: ubuntu-latest
     timeout-minutes: 190
     concurrency:
-      group: km-local-race-key-result-${{ needs.entry.outputs.execution_id }}
+      group: km-formal-${{ matrix.execution_id }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -217,16 +237,22 @@ jobs:
       - name: Install RESULT runtime dependencies
         run: python -m pip install --disable-pip-version-check -q cryptography
       - name: Verify durable FINAL before any RESULT polling
+        id: final_ready
         env:
-          EXECUTION_ID: ${{ needs.entry.outputs.execution_id }}
+          EXECUTION_ID: ${{ matrix.execution_id }}
         run: |
           set -euo pipefail
-          test -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json"
-          test -f "runtime/formal_intents/$EXECUTION_ID.json"
+          if [ -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json" ] && [ -f "runtime/formal_intents/$EXECUTION_ID.json" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "NO_SIGNED_FINAL: $EXECUTION_ID" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Continue signed FINAL to official RESULT and Learning
+        if: steps.final_ready.outputs.ready == 'true'
         id: settle
         env:
-          EXECUTION_ID: ${{ needs.entry.outputs.execution_id }}
+          EXECUTION_ID: ${{ matrix.execution_id }}
         run: |
           set +e
           python runtime/formal_execution_orchestrator.py \
@@ -239,13 +265,14 @@ jobs:
       - name: Persist verified RESULT and forward measurement ledgers
         if: always()
         env:
-          EXECUTION_ID: ${{ needs.entry.outputs.execution_id }}
+          EXECUTION_ID: ${{ matrix.execution_id }}
         run: |
           set -euo pipefail
           if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
             git config user.name keibametrics-runtime
             git config user.email actions@users.noreply.github.com
             git add "runtime/executions/$EXECUTION_ID/RESULT"
+            if [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT"; fi
             for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
               if [ -e "$path" ]; then git add "$path"; fi
             done
@@ -258,12 +285,60 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: km-local-race-key-result-${{ github.run_id }}
+          name: km-local-race-key-result-${{ github.run_id }}-${{ matrix.execution_id }}
           path: runtime_out/*.json
           if-no-files-found: warn
           retention-days: 90
       - name: Enforce RESULT completion
-        if: always()
+        if: always() && steps.final_ready.outputs.ready == 'true'
         env:
           RC: ${{ steps.settle.outputs.rc }}
         run: test "${RC:-2}" = "0"
+
+  local-day:
+    # Inert until an owner separately approves activation, dated scope and cost.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    permissions:
+      contents: write
+      actions: write
+    concurrency:
+      group: km-local-day-dispatcher
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check -q cryptography
+      - name: Dispatch only explicitly approved dated LOCAL plans
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KM_LOCAL_AUTONOMOUS_ENABLED: ${{ vars.KM_LOCAL_AUTONOMOUS_ENABLED }}
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          from datetime import datetime, timezone, timedelta
+          day = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+          subprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)
+          subprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)
+          for path in sorted(Path('profiles/local_autonomous_approvals').glob(day+'-*.json')):
+              approval=json.loads(path.read_text())
+              if approval.get('enabled') is not True:
+                  continue
+              subprocess.run(['python','-m','runtime.local_race_day_dispatcher',
+                  '--venue',approval['venue_id'],'--date',day,
+                  '--cutoff-seconds',str(approval['cutoff_seconds']),'--execute'],check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-day-${{ github.run_id }}
+          path: runtime/local_race_day_plan/
+          if-no-files-found: ignore
+          retention-days: 90

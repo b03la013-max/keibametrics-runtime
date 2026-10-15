@@ -58,3 +58,11 @@ class TestTree(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_mixed_stakes_are_shown_and_reflattened_with_exact_amounts():
+    tickets=[t('TRIFECTA',1,2,3,stake=100),t('TRIFECTA',1,2,4,stake=300)]
+    rendered=render_ticket_tree(art(tickets))
+    assert rendered['canonical_roundtrip_verified']
+    assert rendered['reflattened_tickets']==tickets
+    assert '1→2→3　100円' in rendered['text'] and '1→2→4　300円' in rendered['text']

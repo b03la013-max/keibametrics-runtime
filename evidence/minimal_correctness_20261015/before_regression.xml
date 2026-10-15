@@ -1,0 +1,1032 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="29" skipped="0" tests="30" time="0.549" timestamp="2026-10-15T12:52:11.052931+08:00" hostname="80bd7b60bd9d"><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts0]" time="0.002"><failure message="Failed: DID NOT RAISE SystemExit">payouts = {}
+
+    @pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
+    def test_winning_payout_unknown_stops_before_complete_result(payouts):
+&gt;       with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SystemExit
+
+tests/test_formal_execution_orchestrator.py:28: Failed</failure></testcase><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts1]" time="0.001"><failure message="Failed: DID NOT RAISE SystemExit">payouts = {'TRIO': 500}
+
+    @pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
+    def test_winning_payout_unknown_stops_before_complete_result(payouts):
+&gt;       with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SystemExit
+
+tests/test_formal_execution_orchestrator.py:28: Failed</failure></testcase><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts2]" time="0.001"><failure message="Failed: DID NOT RAISE SystemExit">payouts = {'EXACTA': 0}
+
+    @pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
+    def test_winning_payout_unknown_stops_before_complete_result(payouts):
+&gt;       with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SystemExit
+
+tests/test_formal_execution_orchestrator.py:28: Failed</failure></testcase><testcase classname="tests.test_formal_execution_orchestrator" name="test_published_winning_payout_preserves_existing_settlement" time="0.001" /><testcase classname="tests.test_jra_ticket_tree_renderer" name="test_mixed_stakes_are_shown_and_reflattened_with_exact_amounts" time="0.000"><failure message="KeyError: 'canonical_roundtrip_verified'">def test_mixed_stakes_are_shown_and_reflattened_with_exact_amounts():
+        tickets=[t('TRIFECTA',1,2,3,stake=100),t('TRIFECTA',1,2,4,stake=300)]
+        rendered=render_ticket_tree(art(tickets))
+&gt;       assert rendered['canonical_roundtrip_verified']
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'canonical_roundtrip_verified'
+
+tests/test_jra_ticket_tree_renderer.py:66: KeyError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_cancelled_card_rows_do_not_enter_static" time="0.014"><failure message="runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH">def test_explicit_cancelled_card_rows_do_not_enter_static():
+        # Synthetic parser contract fixture; this is not a new signed SOURCE.
+        req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+&gt;       intent, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = {'family_id': 'LOCAL', 'race_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'execution_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'venue_id': 'KAW', ...}
+envelope = {'artifact': {'active_runner_universe': {'runners': [{'body_weight': 494, 'body_weight_change': 1, 'canonical_name': '...87c1012', 'signature': 'SUeHaFb+qqEOxOr8qksu1VhjFYkXnqmJgb7glO6aiZ1wZ+xpaAz1+TBjfJdOUrcG4kd4xBNggh+Owut0cdIqDA==', ...}
+numerical = {'strict_full_numerical_ready': True, 'production_numerical_authority': {'prediction_consumption_authorized': False}, ...components': {'ZAI-WIN': {'value': 82}}}, {'runner_id': '8', 'canonical_components': {'ZAI-WIN': {'value': 76}}}, ...]}
+policy = {'profile': 'KM-LOCAL-PRODUCTION-STATIC-EVIDENCE-OWNER-v1.0-20261014', 'status': 'OWNER-REQUESTED / INITIAL-ACTIVATION...CE-ONLY / REQUIRES-LIVE-ACCEPTANCE', 'owner_authorization': 'EXPLICIT_USER_INSTRUCTION_20261014', 'enabled': True, ...}
+now = datetime.datetime(2026, 10, 14, 7, 34, tzinfo=datetime.timezone.utc)
+
+    def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
+                            policy: dict, now: datetime | None = None) -&gt; tuple[dict, dict]:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise StaticOwnerError("STATIC_FREEZE_NAIVE")
+        now = now.astimezone(timezone.utc)
+        if (policy.get("profile") != PROFILE or policy.get("enabled") is not True
+                or policy.get("owner_authorization") != "EXPLICIT_USER_INSTRUCTION_20261014"
+                or policy.get("numerical_prediction_consumption") is not False):
+            raise StaticOwnerError("STATIC_OWNER_AUTHORIZATION_MISSING")
+        if request.get("family_id") != "LOCAL":
+            raise StaticOwnerError("LOCAL_ONLY")
+        venue = str(request.get("venue_id") or "")
+        if venue not in set(policy.get("venues") or []) or venue not in VENUE_NAMES:
+            raise StaticOwnerError("VENUE_OWNER_NOT_AUTHORIZED")
+        cutoff = _dt(request.get("prediction_cutoff"))
+        release = _dt(request.get("release_deadline_at"))
+        if now &gt;= cutoff or now &gt;= release:
+            raise StaticOwnerError("PRESTART_STATIC_OWNER_DEADLINE_HOLD")
+        if not isinstance(envelope, dict) or not envelope.get("signature") or not envelope.get("receipt_sha256"):
+            raise StaticOwnerError("SOURCE_SIGNATURE_REQUIRED")
+        receipt = envelope.get("receipt") or {}
+        if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+                or receipt.get("race_id") != request.get("race_id")):
+            raise StaticOwnerError("SIGNED_SOURCE_RACE_MISMATCH")
+        source = envelope.get("artifact") or {}
+        if source.get("formal_ready") is not True or _dt(source.get("source_freeze_at")) &gt;= cutoff:
+            raise StaticOwnerError("OFFICIAL_SOURCE_NOT_PRESTART_FROZEN")
+        official = source.get("source_race_context") or {}
+        if (official.get("venue_id") != venue
+                or str(official.get("race_date") or "").replace("/", "-") != request.get("race_date")
+                or int(official.get("race_no") or 0) != int(request.get("race_no") or 0)):
+            raise StaticOwnerError("OFFICIAL_SOURCE_IDENTITY_MISMATCH")
+        official_post = (source.get("normalized_evidence") or {}).get("start_time") or {}
+        if (official_post.get("authority") != "NAR_OFFICIAL"
+                or official_post.get("cutoff_relation") != "PRE_CUTOFF"
+                or official_post.get("value") != _dt(request.get("scheduled_post_at")).astimezone(JST).strftime("%H:%M")):
+            raise StaticOwnerError("OFFICIAL_SOURCE_POST_MISMATCH")
+        if (numerical.get("strict_full_numerical_ready") is not True
+                or (numerical.get("production_numerical_authority") or {}).get("prediction_consumption_authorized") is not False
+                or len(numerical.get("required_indices") or []) != 29):
+            raise StaticOwnerError("NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE")
+        pool = (source.get("active_runner_universe") or source.get("official_runner_universe") or {}).get("runners") or []
+        ids = [str(r.get("runner_id")) for r in pool]
+        if len(pool) &lt; 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
+            raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
+        parsed = parse_race_card(source)
+        if set(ids) != set(parsed):
+&gt;           raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+E           runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH
+
+runtime/local_production_static_owner.py:211: StaticOwnerError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_single_scratch_including_prior_top_candidate_is_removed[False]" time="0.036"><failure message="runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH">cancel_top = False
+
+    @pytest.mark.parametrize("cancel_top", [False, True])
+    def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
+        req, source, numeric, policy, now = replay_fixture()
+        original, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+        removed = original["static_prediction"]["ranking"][0] if cancel_top else "3"
+        req, source, numeric, policy, now = _cancelled_runner_contract_fixture((removed,))
+&gt;       out, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = {'family_id': 'LOCAL', 'race_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'execution_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'venue_id': 'KAW', ...}
+envelope = {'artifact': {'active_runner_universe': {'runners': [{'body_weight': 494, 'body_weight_change': 1, 'canonical_name': '...87c1012', 'signature': 'SUeHaFb+qqEOxOr8qksu1VhjFYkXnqmJgb7glO6aiZ1wZ+xpaAz1+TBjfJdOUrcG4kd4xBNggh+Owut0cdIqDA==', ...}
+numerical = {'strict_full_numerical_ready': True, 'production_numerical_authority': {'prediction_consumption_authorized': False}, ...components': {'ZAI-WIN': {'value': 82}}}, {'runner_id': '7', 'canonical_components': {'ZAI-WIN': {'value': 79}}}, ...]}
+policy = {'profile': 'KM-LOCAL-PRODUCTION-STATIC-EVIDENCE-OWNER-v1.0-20261014', 'status': 'OWNER-REQUESTED / INITIAL-ACTIVATION...CE-ONLY / REQUIRES-LIVE-ACCEPTANCE', 'owner_authorization': 'EXPLICIT_USER_INSTRUCTION_20261014', 'enabled': True, ...}
+now = datetime.datetime(2026, 10, 14, 7, 34, tzinfo=datetime.timezone.utc)
+
+    def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
+                            policy: dict, now: datetime | None = None) -&gt; tuple[dict, dict]:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise StaticOwnerError("STATIC_FREEZE_NAIVE")
+        now = now.astimezone(timezone.utc)
+        if (policy.get("profile") != PROFILE or policy.get("enabled") is not True
+                or policy.get("owner_authorization") != "EXPLICIT_USER_INSTRUCTION_20261014"
+                or policy.get("numerical_prediction_consumption") is not False):
+            raise StaticOwnerError("STATIC_OWNER_AUTHORIZATION_MISSING")
+        if request.get("family_id") != "LOCAL":
+            raise StaticOwnerError("LOCAL_ONLY")
+        venue = str(request.get("venue_id") or "")
+        if venue not in set(policy.get("venues") or []) or venue not in VENUE_NAMES:
+            raise StaticOwnerError("VENUE_OWNER_NOT_AUTHORIZED")
+        cutoff = _dt(request.get("prediction_cutoff"))
+        release = _dt(request.get("release_deadline_at"))
+        if now &gt;= cutoff or now &gt;= release:
+            raise StaticOwnerError("PRESTART_STATIC_OWNER_DEADLINE_HOLD")
+        if not isinstance(envelope, dict) or not envelope.get("signature") or not envelope.get("receipt_sha256"):
+            raise StaticOwnerError("SOURCE_SIGNATURE_REQUIRED")
+        receipt = envelope.get("receipt") or {}
+        if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+                or receipt.get("race_id") != request.get("race_id")):
+            raise StaticOwnerError("SIGNED_SOURCE_RACE_MISMATCH")
+        source = envelope.get("artifact") or {}
+        if source.get("formal_ready") is not True or _dt(source.get("source_freeze_at")) &gt;= cutoff:
+            raise StaticOwnerError("OFFICIAL_SOURCE_NOT_PRESTART_FROZEN")
+        official = source.get("source_race_context") or {}
+        if (official.get("venue_id") != venue
+                or str(official.get("race_date") or "").replace("/", "-") != request.get("race_date")
+                or int(official.get("race_no") or 0) != int(request.get("race_no") or 0)):
+            raise StaticOwnerError("OFFICIAL_SOURCE_IDENTITY_MISMATCH")
+        official_post = (source.get("normalized_evidence") or {}).get("start_time") or {}
+        if (official_post.get("authority") != "NAR_OFFICIAL"
+                or official_post.get("cutoff_relation") != "PRE_CUTOFF"
+                or official_post.get("value") != _dt(request.get("scheduled_post_at")).astimezone(JST).strftime("%H:%M")):
+            raise StaticOwnerError("OFFICIAL_SOURCE_POST_MISMATCH")
+        if (numerical.get("strict_full_numerical_ready") is not True
+                or (numerical.get("production_numerical_authority") or {}).get("prediction_consumption_authorized") is not False
+                or len(numerical.get("required_indices") or []) != 29):
+            raise StaticOwnerError("NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE")
+        pool = (source.get("active_runner_universe") or source.get("official_runner_universe") or {}).get("runners") or []
+        ids = [str(r.get("runner_id")) for r in pool]
+        if len(pool) &lt; 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
+            raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
+        parsed = parse_race_card(source)
+        if set(ids) != set(parsed):
+&gt;           raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+E           runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH
+
+runtime/local_production_static_owner.py:211: StaticOwnerError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_single_scratch_including_prior_top_candidate_is_removed[True]" time="0.033"><failure message="runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH">cancel_top = True
+
+    @pytest.mark.parametrize("cancel_top", [False, True])
+    def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
+        req, source, numeric, policy, now = replay_fixture()
+        original, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+        removed = original["static_prediction"]["ranking"][0] if cancel_top else "3"
+        req, source, numeric, policy, now = _cancelled_runner_contract_fixture((removed,))
+&gt;       out, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = {'family_id': 'LOCAL', 'race_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'execution_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'venue_id': 'KAW', ...}
+envelope = {'artifact': {'active_runner_universe': {'runners': [{'body_weight': 494, 'body_weight_change': 1, 'canonical_name': '...87c1012', 'signature': 'SUeHaFb+qqEOxOr8qksu1VhjFYkXnqmJgb7glO6aiZ1wZ+xpaAz1+TBjfJdOUrcG4kd4xBNggh+Owut0cdIqDA==', ...}
+numerical = {'strict_full_numerical_ready': True, 'production_numerical_authority': {'prediction_consumption_authorized': False}, ...components': {'ZAI-WIN': {'value': 85}}}, {'runner_id': '7', 'canonical_components': {'ZAI-WIN': {'value': 79}}}, ...]}
+policy = {'profile': 'KM-LOCAL-PRODUCTION-STATIC-EVIDENCE-OWNER-v1.0-20261014', 'status': 'OWNER-REQUESTED / INITIAL-ACTIVATION...CE-ONLY / REQUIRES-LIVE-ACCEPTANCE', 'owner_authorization': 'EXPLICIT_USER_INSTRUCTION_20261014', 'enabled': True, ...}
+now = datetime.datetime(2026, 10, 14, 7, 34, tzinfo=datetime.timezone.utc)
+
+    def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
+                            policy: dict, now: datetime | None = None) -&gt; tuple[dict, dict]:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise StaticOwnerError("STATIC_FREEZE_NAIVE")
+        now = now.astimezone(timezone.utc)
+        if (policy.get("profile") != PROFILE or policy.get("enabled") is not True
+                or policy.get("owner_authorization") != "EXPLICIT_USER_INSTRUCTION_20261014"
+                or policy.get("numerical_prediction_consumption") is not False):
+            raise StaticOwnerError("STATIC_OWNER_AUTHORIZATION_MISSING")
+        if request.get("family_id") != "LOCAL":
+            raise StaticOwnerError("LOCAL_ONLY")
+        venue = str(request.get("venue_id") or "")
+        if venue not in set(policy.get("venues") or []) or venue not in VENUE_NAMES:
+            raise StaticOwnerError("VENUE_OWNER_NOT_AUTHORIZED")
+        cutoff = _dt(request.get("prediction_cutoff"))
+        release = _dt(request.get("release_deadline_at"))
+        if now &gt;= cutoff or now &gt;= release:
+            raise StaticOwnerError("PRESTART_STATIC_OWNER_DEADLINE_HOLD")
+        if not isinstance(envelope, dict) or not envelope.get("signature") or not envelope.get("receipt_sha256"):
+            raise StaticOwnerError("SOURCE_SIGNATURE_REQUIRED")
+        receipt = envelope.get("receipt") or {}
+        if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+                or receipt.get("race_id") != request.get("race_id")):
+            raise StaticOwnerError("SIGNED_SOURCE_RACE_MISMATCH")
+        source = envelope.get("artifact") or {}
+        if source.get("formal_ready") is not True or _dt(source.get("source_freeze_at")) &gt;= cutoff:
+            raise StaticOwnerError("OFFICIAL_SOURCE_NOT_PRESTART_FROZEN")
+        official = source.get("source_race_context") or {}
+        if (official.get("venue_id") != venue
+                or str(official.get("race_date") or "").replace("/", "-") != request.get("race_date")
+                or int(official.get("race_no") or 0) != int(request.get("race_no") or 0)):
+            raise StaticOwnerError("OFFICIAL_SOURCE_IDENTITY_MISMATCH")
+        official_post = (source.get("normalized_evidence") or {}).get("start_time") or {}
+        if (official_post.get("authority") != "NAR_OFFICIAL"
+                or official_post.get("cutoff_relation") != "PRE_CUTOFF"
+                or official_post.get("value") != _dt(request.get("scheduled_post_at")).astimezone(JST).strftime("%H:%M")):
+            raise StaticOwnerError("OFFICIAL_SOURCE_POST_MISMATCH")
+        if (numerical.get("strict_full_numerical_ready") is not True
+                or (numerical.get("production_numerical_authority") or {}).get("prediction_consumption_authorized") is not False
+                or len(numerical.get("required_indices") or []) != 29):
+            raise StaticOwnerError("NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE")
+        pool = (source.get("active_runner_universe") or source.get("official_runner_universe") or {}).get("runners") or []
+        ids = [str(r.get("runner_id")) for r in pool]
+        if len(pool) &lt; 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
+            raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
+        parsed = parse_race_card(source)
+        if set(ids) != set(parsed):
+&gt;           raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+E           runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH
+
+runtime/local_production_static_owner.py:211: StaticOwnerError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_push_concurrency_independent_of_result_wait" time="0.000"><failure message="assert 'ref: ${{ github.sha }}' in 'name: KM LOCAL Race-Key Single Entry (candidate)\n\n# Authenticated GitHub Actions ingress with five scalar fields. N...        if: always()\n        env:\n          RC: ${{ steps.settle.outputs.rc }}\n        run: test &quot;${RC:-2}&quot; = &quot;0&quot;\n'">def test_push_concurrency_independent_of_result_wait():
+        """A previous race's live RESULT cannot hold the next push race's SOURCE."""
+        wf = (Path(__file__).resolve().parents[1] /
+              ".github/workflows/km-local-race-key-entry.yml").read_text(encoding="utf-8")
+&gt;       assert "ref: ${{ github.sha }}" in wf
+E       assert 'ref: ${{ github.sha }}' in 'name: KM LOCAL Race-Key Single Entry (candidate)\n\n# Authenticated GitHub Actions ingress with five scalar fields. N...        if: always()\n        env:\n          RC: ${{ steps.settle.outputs.rc }}\n        run: test "${RC:-2}" = "0"\n'
+
+tests/test_local_race_key_ingress.py:232: AssertionError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_saved_r12_event_survives_main_moving_to_measurement_commit" time="0.035"><failure message="AttributeError: module 'runtime.local_race_key_intake' has no attribute 'resolve_event'">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_saved_r12_event_survives_0')
+
+    def test_saved_r12_event_survives_main_moving_to_measurement_commit(tmp_path):
+        """Historical R12 request in synthetic Git history; no remote history needed."""
+        import subprocess
+        root=Path(__file__).resolve().parents[1]
+        def git(*args):
+            return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+        git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+        (tmp_path/'initial').write_text('initial');git('add','.');git('commit','-m','initial')
+        before=git('rev-parse','HEAD')
+        name='runtime/race_key_requests/KAW-20261014-R12-LIVE-R1.json'
+        request=tmp_path/name;request.parent.mkdir(parents=True)
+        request.write_bytes((root/name).read_bytes())
+        git('add','.');git('commit','-m','saved R12 request');after=git('rev-parse','HEAD')
+        (tmp_path/'measurement').write_text('later unrelated state');git('add','.');git('commit','-m','measurement')
+        old=git('diff-tree','--no-commit-id','--name-only','-r','HEAD')
+        assert not any(x.startswith('runtime/race_key_requests/') for x in old.splitlines())
+&gt;       new=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+            ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'runtime.local_race_key_intake' has no attribute 'resolve_event'
+
+tests/test_local_race_key_ingress.py:254: AttributeError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved" time="0.031"><failure message="AttributeError: module 'runtime.local_race_key_intake' has no attribute 'resolve_event'">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_multi_race_event_has_inde0')
+
+    def test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved(tmp_path):
+        import json,subprocess
+        def git(*args):return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+        git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+        (tmp_path/'initial').write_text('first');git('add','.');git('commit','-m','initial');before=git('rev-parse','HEAD')
+        folder=tmp_path/'runtime/race_key_requests';folder.mkdir(parents=True)
+        for number in [1,2]:
+            d=future_fields();d['race_no']=number;(folder/f'R{number}.json').write_text(json.dumps(d))
+        (folder/'bad.json').write_text('{"extra":"invalid"}')
+        git('add','.');git('commit','-m','two keys and bad cell');after=git('rev-parse','HEAD')
+        (tmp_path/'later').write_text('moving head');git('add','.');git('commit','-m','unrelated later')
+&gt;       r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+          ^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'runtime.local_race_key_intake' has no attribute 'resolve_event'
+
+tests/test_local_race_key_ingress.py:270: AttributeError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_no_signed_final_or_delivery_inferred_from_successful_job" time="0.000"><failure message="AttributeError: module 'runtime.local_race_key_gate' has no attribute 'terminal_state'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb864180470&gt;
+
+    def test_no_signed_final_or_delivery_inferred_from_successful_job(monkeypatch):
+        from runtime import local_race_key_gate as gate
+        monkeypatch.setattr(gate.o,'resolve_phase',lambda *args:None)
+&gt;       state=gate.terminal_state('MISSING','success')
+              ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'runtime.local_race_key_gate' has no attribute 'terminal_state'
+
+tests/test_local_race_key_ingress.py:278: AttributeError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_saved_final_flags_cannot_override_fresh_signature_failure" time="0.001"><failure message="AttributeError: module 'runtime.local_race_key_gate' has no attribute 'terminal_state'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb864180650&gt;
+
+    def test_saved_final_flags_cannot_override_fresh_signature_failure(monkeypatch):
+        from runtime import local_race_key_gate as gate
+        from runtime import execution_gateway as gateway
+        monkeypatch.setattr(gate.o, 'resolve_phase', lambda *a: {'run_dir': 'unused'})
+        values = {'final_receipt_envelope.json': {'receipt': {'status': 'PASS', 'race_id': 'race'}},
+                  'receipt_verifications.json': {'FINAL': True},
+                  'final_before_post_verification.json': {'verified': True}}
+        monkeypatch.setattr(gate.o, '_load_checkpoint_json', lambda p, name: values[name])
+        monkeypatch.setattr(gateway, 'request_json', lambda *a, **k: (200, {'valid': False}))
+&gt;       result = gate.terminal_state('race', 'success')
+                 ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'runtime.local_race_key_gate' has no attribute 'terminal_state'
+
+tests/test_local_race_key_ingress.py:292: AttributeError</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_existing_final_readback_never_reacquires_or_regenerates[True]" time="0.004"><failure message="Failed: readback is not generation">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb864182630&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_existing_final_readback_n0')
+complete = True
+
+    @pytest.mark.parametrize('complete', [True, False])
+    def test_existing_final_readback_never_reacquires_or_regenerates(monkeypatch, tmp_path, complete):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o, 'ROOT', tmp_path)
+        monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+        monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {
+            'manifest': {'files': {'final_receipt_envelope.json': 'hash'}}} if phase == 'FORMAL' else None)
+        monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: pytest.fail('readback is not generation'))
+        monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no new Static'))
+        monkeypatch.setattr(e, 'materialize_production', lambda *a, **k: pytest.fail('no new numerical'))
+        path = tmp_path/'runtime/formal_intents/race.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'execution_id': 'race', 'race_id': 'race',
+            'static_prediction': {'ranking': ['1']}, 'prediction_cutoff': '2000-01-01T00:00:00Z'}))
+        def readback(q, **kwargs):
+            assert q['execution_phase'] == 'FORMAL'
+            assert q['static_prediction']['ranking'] == ['1']
+            assert 'analysis_only' not in q
+            return {'status': 'ALREADY_COMPLETE' if complete else 'HOLD',
+                    'completion': {'complete': complete}}
+        monkeypatch.setattr(o, 'orchestrate', readback)
+&gt;       result = e.run({'execution_id': 'race'}, output=tmp_path/'out', run_id='retry')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_source_first_entry.py:163: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/local_race_entry.py:43: in run
+    o.check_deadline(request, phase='SOURCE')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = ({'execution_id': 'race', 'family_id': 'LOCAL', 'race_id': 'race'},)
+k = {'phase': 'SOURCE'}
+
+&gt;   monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: pytest.fail('readback is not generation'))
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: readback is not generation
+
+tests/test_local_source_first_entry.py:149: Failed</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_existing_final_readback_never_reacquires_or_regenerates[False]" time="0.001"><failure message="Failed: readback is not generation">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb86417c530&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_existing_final_readback_n1')
+complete = False
+
+    @pytest.mark.parametrize('complete', [True, False])
+    def test_existing_final_readback_never_reacquires_or_regenerates(monkeypatch, tmp_path, complete):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o, 'ROOT', tmp_path)
+        monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+        monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {
+            'manifest': {'files': {'final_receipt_envelope.json': 'hash'}}} if phase == 'FORMAL' else None)
+        monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: pytest.fail('readback is not generation'))
+        monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no new Static'))
+        monkeypatch.setattr(e, 'materialize_production', lambda *a, **k: pytest.fail('no new numerical'))
+        path = tmp_path/'runtime/formal_intents/race.json'
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({'execution_id': 'race', 'race_id': 'race',
+            'static_prediction': {'ranking': ['1']}, 'prediction_cutoff': '2000-01-01T00:00:00Z'}))
+        def readback(q, **kwargs):
+            assert q['execution_phase'] == 'FORMAL'
+            assert q['static_prediction']['ranking'] == ['1']
+            assert 'analysis_only' not in q
+            return {'status': 'ALREADY_COMPLETE' if complete else 'HOLD',
+                    'completion': {'complete': complete}}
+        monkeypatch.setattr(o, 'orchestrate', readback)
+&gt;       result = e.run({'execution_id': 'race'}, output=tmp_path/'out', run_id='retry')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_source_first_entry.py:163: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/local_race_entry.py:43: in run
+    o.check_deadline(request, phase='SOURCE')
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = ({'execution_id': 'race', 'family_id': 'LOCAL', 'race_id': 'race'},)
+k = {'phase': 'SOURCE'}
+
+&gt;   monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: pytest.fail('readback is not generation'))
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: readback is not generation
+
+tests/test_local_source_first_entry.py:149: Failed</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[BLOCKED-False-SOURCE_TRANSPORT_HOLD]" time="0.001"><failure message="TypeError: 'NoneType' object is not subscriptable">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb86417db50&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai0')
+source_status = 'BLOCKED', checkpoint = False
+expected = 'SOURCE_TRANSPORT_HOLD'
+
+    @pytest.mark.parametrize('source_status,checkpoint,expected', [
+        ('BLOCKED', False, 'SOURCE_TRANSPORT_HOLD'),
+        ('BLOCKED', True, 'SOURCE_TRANSPORT_HOLD'),
+        ('SOURCE_PASS', False, 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN'),
+    ])
+    def test_source_hold_preserves_failure_and_never_enters_prediction(monkeypatch, tmp_path, source_status, checkpoint, expected):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+        monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {'run_dir': tmp_path} if checkpoint and phase == 'SOURCE' else None)
+        monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: None)
+        monkeypatch.setattr(o, 'orchestrate', lambda *a, **k: {
+            'status': source_status, 'first_failed_phase': 'SOURCE',
+            'first_failed_code': 'SOURCE_TRANSPORT_HOLD' if source_status == 'BLOCKED' else None})
+        monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: pytest.fail('failed SOURCE must stop before loading checkpoint'))
+        monkeypatch.setattr(e, 'materialize_production', lambda *a: pytest.fail('no numerical after SOURCE HOLD'))
+        monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no Static after SOURCE HOLD'))
+&gt;       report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'},
+                       output=tmp_path/'out', run_id='source-hold')
+
+tests/test_local_source_first_entry.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+intent = {'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'}
+output = PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai0/out')
+run_id = 'source-hold', github_sha = None
+
+    def run(intent, *, output, run_id, github_sha=None):
+        request = copy.deepcopy(intent)
+        if request.get('family_id', 'LOCAL') != 'LOCAL':
+            raise ValueError('RACE_ENTRY_FAMILY_NOT_LOCAL')
+        request['family_id'] = 'LOCAL'
+        if not request.get('execution_id') and not request.get('race_id'):
+            venue = str(request.get('venue_id') or '').upper()
+            day = date.fromisoformat(str(request.get('race_date') or '').replace('/', '-'))
+            number = request.get('race_no')
+            if not re.fullmatch(r'[A-Z]{3}', venue) or isinstance(number, bool) or not isinstance(number, int) or not 1 &lt;= number &lt;= 99:
+                raise ValueError('RACE_ENTRY_IDENTITY_INVALID')
+            request['venue_id'] = venue
+            request['race_date'] = day.isoformat()
+            request['race_id'] = request['execution_id'] = f'KM-LOCAL-{venue}-{day:%Y%m%d}-R{number:02d}-LIVE-R1'
+        request['execution_id'] = o.derive_execution_id(request)
+        if request.get('race_id') not in (None, request['execution_id']):
+            raise ValueError('RACE_ENTRY_IDENTITY_MISMATCH')
+        request['race_id'] = request['execution_id']
+        authority_context = o.validate_request_context(request)
+        if isinstance(authority_context, dict):
+            if not request.get("current_authority_manifest"):
+                request["current_authority_manifest"] = authority_context["current_authority_manifest"]
+        # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
+        # cutoff is forbidden. A late entry never creates a historical prediction.
+        saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+        if saved is None:
+            o.check_deadline(request, phase='SOURCE')
+        request.update(execution_phase='SOURCE', analysis_only=True)
+        o._write(output/'race_intent.json', request)
+        source_report = o.orchestrate(request, run_id=run_id, github_sha=github_sha,
+                                      runtime_out=output/'source', tmp_root=output/'tmp')
+        saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+&gt;       o.validate_source_checkpoint(saved['run_dir'], request)
+                                     ^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+runtime/local_race_entry.py:49: TypeError</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[BLOCKED-True-SOURCE_TRANSPORT_HOLD]" time="0.001"><failure message="Failed: failed SOURCE must stop before loading checkpoint">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb864183950&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai1')
+source_status = 'BLOCKED', checkpoint = True, expected = 'SOURCE_TRANSPORT_HOLD'
+
+    @pytest.mark.parametrize('source_status,checkpoint,expected', [
+        ('BLOCKED', False, 'SOURCE_TRANSPORT_HOLD'),
+        ('BLOCKED', True, 'SOURCE_TRANSPORT_HOLD'),
+        ('SOURCE_PASS', False, 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN'),
+    ])
+    def test_source_hold_preserves_failure_and_never_enters_prediction(monkeypatch, tmp_path, source_status, checkpoint, expected):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+        monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {'run_dir': tmp_path} if checkpoint and phase == 'SOURCE' else None)
+        monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: None)
+        monkeypatch.setattr(o, 'orchestrate', lambda *a, **k: {
+            'status': source_status, 'first_failed_phase': 'SOURCE',
+            'first_failed_code': 'SOURCE_TRANSPORT_HOLD' if source_status == 'BLOCKED' else None})
+        monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: pytest.fail('failed SOURCE must stop before loading checkpoint'))
+        monkeypatch.setattr(e, 'materialize_production', lambda *a: pytest.fail('no numerical after SOURCE HOLD'))
+        monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no Static after SOURCE HOLD'))
+&gt;       report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'},
+                       output=tmp_path/'out', run_id='source-hold')
+
+tests/test_local_source_first_entry.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/local_race_entry.py:49: in run
+    o.validate_source_checkpoint(saved['run_dir'], request)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = (PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai1'), {'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race', 'execution_phase': 'SOURCE', ...})
+
+&gt;   monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: pytest.fail('failed SOURCE must stop before loading checkpoint'))
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: failed SOURCE must stop before loading checkpoint
+
+tests/test_local_source_first_entry.py:182: Failed</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[SOURCE_PASS-False-SOURCE_CHECKPOINT_MISSING_AFTER_RUN]" time="0.001"><failure message="TypeError: 'NoneType' object is not subscriptable">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb863df83b0&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai2')
+source_status = 'SOURCE_PASS', checkpoint = False
+expected = 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN'
+
+    @pytest.mark.parametrize('source_status,checkpoint,expected', [
+        ('BLOCKED', False, 'SOURCE_TRANSPORT_HOLD'),
+        ('BLOCKED', True, 'SOURCE_TRANSPORT_HOLD'),
+        ('SOURCE_PASS', False, 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN'),
+    ])
+    def test_source_hold_preserves_failure_and_never_enters_prediction(monkeypatch, tmp_path, source_status, checkpoint, expected):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+        monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {'run_dir': tmp_path} if checkpoint and phase == 'SOURCE' else None)
+        monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: None)
+        monkeypatch.setattr(o, 'orchestrate', lambda *a, **k: {
+            'status': source_status, 'first_failed_phase': 'SOURCE',
+            'first_failed_code': 'SOURCE_TRANSPORT_HOLD' if source_status == 'BLOCKED' else None})
+        monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: pytest.fail('failed SOURCE must stop before loading checkpoint'))
+        monkeypatch.setattr(e, 'materialize_production', lambda *a: pytest.fail('no numerical after SOURCE HOLD'))
+        monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no Static after SOURCE HOLD'))
+&gt;       report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'},
+                       output=tmp_path/'out', run_id='source-hold')
+
+tests/test_local_source_first_entry.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+intent = {'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'}
+output = PosixPath('/tmp/pytest-of-root/pytest-64/test_source_hold_preserves_fai2/out')
+run_id = 'source-hold', github_sha = None
+
+    def run(intent, *, output, run_id, github_sha=None):
+        request = copy.deepcopy(intent)
+        if request.get('family_id', 'LOCAL') != 'LOCAL':
+            raise ValueError('RACE_ENTRY_FAMILY_NOT_LOCAL')
+        request['family_id'] = 'LOCAL'
+        if not request.get('execution_id') and not request.get('race_id'):
+            venue = str(request.get('venue_id') or '').upper()
+            day = date.fromisoformat(str(request.get('race_date') or '').replace('/', '-'))
+            number = request.get('race_no')
+            if not re.fullmatch(r'[A-Z]{3}', venue) or isinstance(number, bool) or not isinstance(number, int) or not 1 &lt;= number &lt;= 99:
+                raise ValueError('RACE_ENTRY_IDENTITY_INVALID')
+            request['venue_id'] = venue
+            request['race_date'] = day.isoformat()
+            request['race_id'] = request['execution_id'] = f'KM-LOCAL-{venue}-{day:%Y%m%d}-R{number:02d}-LIVE-R1'
+        request['execution_id'] = o.derive_execution_id(request)
+        if request.get('race_id') not in (None, request['execution_id']):
+            raise ValueError('RACE_ENTRY_IDENTITY_MISMATCH')
+        request['race_id'] = request['execution_id']
+        authority_context = o.validate_request_context(request)
+        if isinstance(authority_context, dict):
+            if not request.get("current_authority_manifest"):
+                request["current_authority_manifest"] = authority_context["current_authority_manifest"]
+        # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
+        # cutoff is forbidden. A late entry never creates a historical prediction.
+        saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+        if saved is None:
+            o.check_deadline(request, phase='SOURCE')
+        request.update(execution_phase='SOURCE', analysis_only=True)
+        o._write(output/'race_intent.json', request)
+        source_report = o.orchestrate(request, run_id=run_id, github_sha=github_sha,
+                                      runtime_out=output/'source', tmp_root=output/'tmp')
+        saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+&gt;       o.validate_source_checkpoint(saved['run_dir'], request)
+                                     ^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+runtime/local_race_entry.py:49: TypeError</failure></testcase><testcase classname="tests.test_minimum_efficient_coverage" name="test_active_runner_boundary_rejects_cancelled_references[ranking]" time="0.001"><failure message="Failed: DID NOT RAISE MECError">where = 'ranking'
+
+    @pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+    def test_active_runner_boundary_rejects_cancelled_references(where):
+        req = base_req("LOCAL")
+        req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+        if where == "ranking":
+            req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+        elif where == "roles":
+            req["static_prediction"] = {"roles": {"9": ["W"]}}
+        elif where == "registry":
+            req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+        elif where == "pair":
+            req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+        else:
+            req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+&gt;       with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MECError
+
+tests/test_minimum_efficient_coverage.py:21: Failed</failure></testcase><testcase classname="tests.test_minimum_efficient_coverage" name="test_active_runner_boundary_rejects_cancelled_references[roles]" time="0.000"><failure message="Failed: DID NOT RAISE MECError">where = 'roles'
+
+    @pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+    def test_active_runner_boundary_rejects_cancelled_references(where):
+        req = base_req("LOCAL")
+        req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+        if where == "ranking":
+            req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+        elif where == "roles":
+            req["static_prediction"] = {"roles": {"9": ["W"]}}
+        elif where == "registry":
+            req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+        elif where == "pair":
+            req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+        else:
+            req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+&gt;       with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MECError
+
+tests/test_minimum_efficient_coverage.py:21: Failed</failure></testcase><testcase classname="tests.test_minimum_efficient_coverage" name="test_active_runner_boundary_rejects_cancelled_references[registry]" time="0.000"><failure message="Failed: DID NOT RAISE MECError">where = 'registry'
+
+    @pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+    def test_active_runner_boundary_rejects_cancelled_references(where):
+        req = base_req("LOCAL")
+        req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+        if where == "ranking":
+            req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+        elif where == "roles":
+            req["static_prediction"] = {"roles": {"9": ["W"]}}
+        elif where == "registry":
+            req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+        elif where == "pair":
+            req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+        else:
+            req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+&gt;       with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MECError
+
+tests/test_minimum_efficient_coverage.py:21: Failed</failure></testcase><testcase classname="tests.test_minimum_efficient_coverage" name="test_active_runner_boundary_rejects_cancelled_references[pair]" time="0.001"><failure message="Failed: DID NOT RAISE MECError">where = 'pair'
+
+    @pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+    def test_active_runner_boundary_rejects_cancelled_references(where):
+        req = base_req("LOCAL")
+        req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+        if where == "ranking":
+            req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+        elif where == "roles":
+            req["static_prediction"] = {"roles": {"9": ["W"]}}
+        elif where == "registry":
+            req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+        elif where == "pair":
+            req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+        else:
+            req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+&gt;       with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MECError
+
+tests/test_minimum_efficient_coverage.py:21: Failed</failure></testcase><testcase classname="tests.test_minimum_efficient_coverage" name="test_active_runner_boundary_rejects_cancelled_references[third]" time="0.001"><failure message="Failed: DID NOT RAISE MECError">where = 'third'
+
+    @pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+    def test_active_runner_boundary_rejects_cancelled_references(where):
+        req = base_req("LOCAL")
+        req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+        if where == "ranking":
+            req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+        elif where == "roles":
+            req["static_prediction"] = {"roles": {"9": ["W"]}}
+        elif where == "registry":
+            req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+        elif where == "pair":
+            req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+        else:
+            req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+&gt;       with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE MECError
+
+tests/test_minimum_efficient_coverage.py:21: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[final_ticket]" time="0.003"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'final_ticket'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'final_ticket'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[minimum_efficient_coverage]" time="0.002"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'minimum_efficient_coverage'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'minimum_efficient_coverage'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[ranking]" time="0.003"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'ranking'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'ranking'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[nested_mec]" time="0.003"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'nested_mec'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'nested_mec'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[malformed_ticket]" time="0.002"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'malformed_ticket'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'malformed_ticket'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[malformed_ranking]" time="0.003"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'malformed_ranking'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'malformed_ranking'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase><testcase classname="tests.test_nar_runner_universe" name="test_runtime_final_stops_scratched_references_before_signing[malformed_fpp]" time="0.003"><failure message="Failed: DID NOT RAISE EndpointHold">where = 'malformed_fpp'
+
+    @pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                       "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+    def test_runtime_final_stops_scratched_references_before_signing(where):
+&gt;       _runtime_final_boundary(where)
+
+tests/test_nar_runner_universe.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+where = 'malformed_fpp'
+
+    def _runtime_final_boundary(where):
+        # Execute the existing endpoint body with a non-signing legacy stub.
+        # No private key or app import is needed; signature validation is separate.
+        import ast, copy, types
+        code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+        node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+        node.decorator_list = []
+        node.args.args[0].annotation = None
+        artifact = {"normalized_evidence": {"race_card_tables": {
+            "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+        enrich_source_artifact(artifact)
+        artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+        called = []
+        legacy = types.SimpleNamespace(validate_family=lambda p: None,
+            final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+        class EndpointHold(Exception):
+            def __init__(self, status, detail):
+                super().__init__(detail)
+        scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+                 "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+        payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+                   "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+                   "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+        if where == "malformed_ticket":
+            payload["final_ticket"]["tickets"] = ["invalid"]
+        elif where == "malformed_ranking":
+            payload["final_prediction_package"]["ranking"] = 9
+        elif where == "malformed_fpp":
+            payload["final_prediction_package"] = ["invalid"]
+        elif where == "ranking":
+            payload["final_prediction_package"]["ranking"].append(2)
+        elif where == "nested_mec":
+            payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+        elif where:
+            payload[where]["tickets"][0]["selection"] = [1, 2]
+        if where:
+&gt;           with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE EndpointHold
+
+tests/test_nar_runner_universe.py:273: Failed</failure></testcase></testsuite></testsuites>
