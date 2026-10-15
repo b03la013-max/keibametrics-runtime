@@ -36,8 +36,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --quiet pyyaml
-          python tests/test_minimum_efficient_coverage.py
+          python -m pip install --quiet pyyaml pytest
+          python -m pytest -q tests/test_minimum_efficient_coverage.py
           python tests/test_mec_r3_precompression_tail_floor.py
           python tests/test_evidence_feature_compiler.py
           python tests/test_capital_policy.py
