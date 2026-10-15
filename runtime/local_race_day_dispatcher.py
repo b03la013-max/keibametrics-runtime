@@ -20,7 +20,7 @@ import subprocess
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from runtime.local_race_key_intake import FIELDS, JST, build
-from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES, VENUE_NAMES, _url, _race_card_source
+from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES, VENUE_NAMES, _url, _race_card_source, _odds_source
 from runtime.local_physical.source_acquisition import fetch_source, _decode, _html_text
 from runtime.local_physical.nar_runner_universe import enrich_source_artifact
 
@@ -112,15 +112,30 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         # Shape/authority only: past races may be observed in a day plan, never dispatched.
         request = build(fields, now=min(now, post-timedelta(days=1)), authority_resolver=lambda **kw: authority)
         tables = card.get('extracted_evidence', {}).get('race_card_tables')
-        universe = enrich_source_artifact({'normalized_evidence': {'race_card_tables': {
-            'value': tables, 'source_id': card['source_id'], 'snapshot_sha256': card['snapshot_sha256']}}})
+        normalized = {'race_card_tables': {'value': tables, 'source_id': card['source_id'],
+                                           'snapshot_sha256': card['snapshot_sha256']}}
+        odds_error = None
+        try:
+            odds, odds_errors = fetch(_odds_source(venue, LOCAL_BABA_CODES[venue],day.replace('-','/'),number), '')
+            raw_html(odds)
+            if odds_errors:
+                raise ValueError(';'.join(odds_errors))
+            normalized['odds_tables']={'value':odds.get('extracted_evidence',{}).get('odds_tables'),
+                                      'source_id':odds['source_id'],'snapshot_sha256':odds['snapshot_sha256']}
+            snapshots.append(odds)
+        except Exception as exc:
+            odds_error=str(exc)
+        universe = enrich_source_artifact({'normalized_evidence': normalized})
         if not universe['declared_runner_universe']['runners']:
             raise ValueError('OFFICIAL_RUNNER_UNIVERSE_EMPTY')
+        active_proven = not any(s['status']=='ACTIVE_DECLARED' for s in universe['runner_status_registry'])
         records.append({'race_key': f'{venue}-{d:%Y%m%d}-R{number:02d}-LIVE-R1',
                         'execution_id': request['execution_id'], 'fields': fields,
                         'current_authority_at_observation': request['current_authority_manifest'],
                         'declared_runner_universe': universe['declared_runner_universe'],
-                        'observed_active_runner_universe': universe['active_runner_universe'],
+                        'observed_active_runner_universe': universe['active_runner_universe'] if active_proven else None,
+                        'active_universe_status':'OFFICIAL_OBSERVATION_REQUIRES_DISPATCH_RECHECK' if active_proven else 'UNKNOWN_PENDING_FRESH_SIGNED_SOURCE',
+                        'odds_observation_error':odds_error,
                         'runner_status_registry': universe['runner_status_registry'],
                         'source_basis_sha256': card['snapshot_sha256'],
                         'freeze': False, 'dispatch_requires_fresh_signed_source': True})

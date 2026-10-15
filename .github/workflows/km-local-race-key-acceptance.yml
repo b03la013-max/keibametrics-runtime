@@ -74,6 +74,8 @@ jobs:
               Path('historical-discovery-plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2))
               result={'status':'PASS_HISTORICAL_READ_ONLY','race_count':len(plan['races']),
                       'plan_sha256':plan['plan_sha256'],'races':[r['fields'] for r in plan['races']],
+                      'runner_counts':[{'race_no':r['fields']['race_no'],'declared':r['declared_runner_universe']['runner_count'],
+                        'active':(r['observed_active_runner_universe'] or {}).get('runner_count'),'status':r['active_universe_status']} for r in plan['races']],
                       'new_live_send':False,'forward_oos':False}
           except Exception as exc:
               result={'status':'HOLD_OFFICIAL_DISCOVERY_UNAVAILABLE','reason':str(exc),

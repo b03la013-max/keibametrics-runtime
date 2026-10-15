@@ -20,10 +20,12 @@ def snapshot(spec, html):
 def fake_fetch(spec, cutoff):
     if spec['source_class'] == 'OFFICIAL_DAY_MENU':
         html = ''.join(f'<a href="DebaTable?k_babaCode=21&amp;k_raceDate=2026%2F10%2F15&amp;k_raceNo={n}">{n}R</a>' for n in (1,2))
+    elif spec['source_class']=='OFFICIAL_ACTIVE_BETTING_UNIVERSE':
+        html='<table><tr><td>テスト</td><td>テスト二</td></tr></table>'
     else:
         n = 1 if spec['url'].endswith('No=1') else 2
         html = ''.join(f'<a href="DebaTable?k_babaCode=21&amp;k_raceDate=2026%2F10%2F15&amp;k_raceNo={x}">{x}R</a>' for x in (1,2))
-        html += f'2026年10月15日（木） 川　崎 第{n}競走 18:{"15" if n==1 else "45"}発走<table><tr><td>枠番</td><td>馬番</td><td>競走馬</td></tr><tr><td>1</td><td>1</td><td>テスト</td></tr></table>'
+        html += f'2026年10月15日（木） 川　崎 第{n}競走 18:{"15" if n==1 else "45"}発走<table><tr><td>枠番</td><td>馬番</td><td>競走馬</td></tr><tr><td>1</td><td>1</td><td>テスト</td></tr><tr><td>2</td><td>2</td><td>テスト二</td></tr></table>'
     return snapshot(spec, html)
 
 
@@ -52,7 +54,7 @@ def test_official_all_races_identity_runners_and_no_freeze():
     p=plan()
     assert len(p['races'])==2 and not p['prediction_freeze']
     assert p['races'][0]['execution_id']=='KM-LOCAL-KAW-20261015-R01-LIVE-R1'
-    assert p['races'][0]['observed_active_runner_universe']['runner_count']==1
+    assert p['races'][0]['observed_active_runner_universe']['runner_count']==2
     assert p['races'][0]['fields']['prediction_cutoff']=='2026-10-15T18:13:00+09:00'
 
 
@@ -176,3 +178,24 @@ def test_same_race_key_in_noncanonical_filename_not_redispatched(tmp_path):
     (folder/'previous-owner-name.json').write_text(json.dumps(p['races'][0]['fields']))
     state=run(tmp_path,p,approval(p),{},execute=False)
     assert state['races'][p['races'][0]['execution_id']]['status'].startswith('EXISTING_RACE')
+
+
+def test_missing_odds_never_labels_declared_runners_official_active():
+    def fetch(spec,cutoff):
+        if spec['source_class']=='OFFICIAL_ACTIVE_BETTING_UNIVERSE':
+            raise ValueError('OFFICIAL_ODDS_UNAVAILABLE')
+        return fake_fetch(spec,cutoff)
+    p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    assert all(r['observed_active_runner_universe'] is None for r in p['races'])
+    assert all(r['active_universe_status']=='UNKNOWN_PENDING_FRESH_SIGNED_SOURCE' for r in p['races'])
+    assert all(r['dispatch_requires_fresh_signed_source'] for r in p['races'])
+
+
+def test_official_odds_cancellation_reuses_existing_runner_parser():
+    def fetch(spec,cutoff):
+        if spec['source_class']=='OFFICIAL_ACTIVE_BETTING_UNIVERSE':
+            return snapshot(spec,'<table><tr><td>1</td><td>1</td><td>テスト</td></tr><tr><td>2</td><td>2</td><td>テスト二 出走取消</td></tr></table>')
+        return fake_fetch(spec,cutoff)
+    p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    assert all(r['observed_active_runner_universe']['runner_count']==1 for r in p['races'])
+    assert all(r['declared_runner_universe']['runner_count']==2 for r in p['races'])
