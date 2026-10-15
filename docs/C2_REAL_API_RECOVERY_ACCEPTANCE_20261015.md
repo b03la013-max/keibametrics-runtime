@@ -112,3 +112,59 @@ Artifact11937294884、ZIP SHAe2e460ef245fc288c8bcfe314538c0be421441267690e3eb0ee
 旧API-BILLING-BLOCKEDは現行障害から除去する。C2は実API稼働済みShadow。
 残条件を課金不足と誤分類せず、Production未承認・署名Shadow transport・真正Forward・
 new LIVE送信承認・全Lifecycle閉ループへ正確に更新した。
+
+
+## 正式Semantic接続を別判定
+
+041fd9dの実API構造受入れ後、RoleRegistry.statusが説明文、Pair/Third.statusが
+SELECTED／SUPPORTED等の自由文で、既存CommonのROLE_ACTIVE／PURCHASE・PROTECTへ
+直接接続できないことを実出力から確認した。構造PASSを正式接続PASSと混同しない。
+候補Schemaを既存Common ROLE_ACTIVE={CORE,PROTECTED,CONDITIONAL,RESIDUAL}と
+既存Pair/Third terminal tokenへ接続する修復をPR124へ保存。
+自由文の自動alias変換、UNKNOWNの勝手なpromotion、Common MEC自体の変更はしない。
+Model／Promptファイル／数値／予測係数は不変だが、API Output Schema指示は変更された。
+この差分をCandidate review対象とし、既存Outputを書き換えない。
+最新Semantic-bound実API結果は独立cohortとして追記する。
+
+041fd9d出力に対する独立post-result utility測定も実施した。
+元FNB R07/R08/R12のSaved Signed FINAL／RESULTを外部/verifyで再検証後、
+既存post_result_prediction_utilityを使用。OutcomeはPrediction入力へ渡していない。
+Winner rank Candidate1/8/6、Legacy1/8/2。Top3平均rank Candidate4.333/5.000/3.333、
+Legacy3.667/5.333/2.333。三戦だけのHistoricalで、性能改善を受入れていない。
+Pair/Third free-text状態はCommon解釈の不足があり、旧cohortのPair/Third捕捉を
+新Semantic-bound候補の指標に転用しない。新規Settlement／Actual PFS／Forwardは0。
+測定値・Source/FINAL/RESULT SHAはhistorical_prediction_utility.jsonで保持する。
+
+
+Common-native状態値HEADd7f8bbfのRun38658878107はROLES_UNIVERSE_INVALIDで停止。
+最新HEAD088681505ba1d3d0fd7b7787fc1632349fd65355では、既存の全馬ranking／roles
+要件をAPI Schemaの出走頭数min/maxItemsと未選定columns:[]説明へ直接反映する。
+未選定馬を勝手に追加生成・代理スコア化せず、モデルに全Universeの原出力を要求する。
+構造PASSの041fd9dとNative Semantic-ready候補を別cohortで保存する。
+この最新候補の判定は実APIの終端結果を追記する。
+
+
+## 現行終端状態（成功版と未受入れ版を分離）
+
+最新Native Schema試験HEAD0886815／Run38659043629／Job116175644988は
+CREDIT_BALANCE_EXHAUSTEDで再停止。失敗Stage authentication、1.353044426秒。
+Artifact11938231850／ZIP SHAfb7a23aa06a41feb907a293329a0669ba77bca46d586f78092b7c1db55142e5e。
+補充後一度復旧したことはVERIFIEDだが、現在の利用可能残高は再びBLOCKED。
+同一課金失敗の追加試験を止めた。今回の旧成果物にusage token数が保存されていないため、
+今回消費額・必要な補充金額は確定できない。Workflow経過時間から費用を推定しない。
+
+C2最新修復ac9328160d58167cc952af06c0078349c60b3405には、後続RaceでHOLDしても
+完了済み比較を同じ失敗Reportに残し、allowlisted input/output/total token整数を
+認証／生成別に保存する最小修復を追加。秘密情報を保存せず、再試行／新Adapterは追加しない。
+Billing-block中の新HEAD実APIは未実行。Latest local101 PASS。
+既存成功版041fd9dの3+2 real acceptanceを最新Native Schemaの成功に転記しない。
+最新Native Semantic Pipeline接続はPENDING／API-BILLING-BLOCKED。
+旧3レースUtilityはHistorical独立測定であり、最新Schemaの性能証明ではない。
+
+PR279証拠HEADd2e25c08のremote CI3/3 SUCCESSを終端確認。
+Runtime Correctness38658545658、LOCAL/JRA Guarantees38658545772、Gateway Canary38658545669。
+このCIをC2最新API認証／Production／未知未来成功と混同しない。
+
+残存：現行API残高、最新Common状態値Schema実比較／分離再受入れ、Signed Shadow Receipt、
+Shadow merge conflict／最新汎用CI、genuine Forward、Human Review、new LIVE送信承認、
+真正未来のFINAL/Deliveryと結果閉ループ。既存CanonicalReceipt10/10 Verifyは引き続きVERIFIED。
