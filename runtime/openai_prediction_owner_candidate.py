@@ -343,14 +343,21 @@ def execute(context, config, *, root, call=responses_call, now=None):
     phase_timings = {"authentication_seconds": None, "response_api_seconds": None,
                      "provider_generation_seconds": None, "validation_seconds": None,
                      "freeze_seconds": None}
+    phase_usage = {}
     def measured_call(stage, payload, **kwargs):
         started = time.monotonic()
         try:
-            return (responses_call(payload, **kwargs) if call is responses_call
-                    else call(payload, timeout=kwargs["timeout"]))
+            response = (responses_call(payload, **kwargs) if call is responses_call
+                        else call(payload, timeout=kwargs["timeout"]))
+            usage = response.get("usage") if isinstance(response, dict) else None
+            phase_usage[stage] = ({k: v for k, v in usage.items()
+                                   if k in ("input_tokens", "output_tokens", "total_tokens")
+                                   and type(v) is int} if isinstance(usage, dict) else None)
+            return response
         except CandidateHold as exc:
             exc.phase_timings = phase_timings
             exc.failed_stage = stage
+            exc.phase_usage = phase_usage
             raise
         finally:
             phase_timings[stage + "_seconds"] = time.monotonic() - started
@@ -484,6 +491,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
     lineage["prediction_semantics_sha256"] = digest(semantics)
     phase_timings["freeze_seconds"] = time.monotonic() - freeze_started
     lineage["phase_timings"] = phase_timings
+    lineage["api_usage"] = phase_usage
     lineage["timing_semantics"] = "WALL_CLOCK; response_api includes provider generation; provider generation alone unavailable"
     return {"status": "HISTORICAL_COMPARISON_FROZEN" if historical else "SHADOW_FROZEN", "production_effect": "NONE",
             "production_authorized": False, "automatic_promotion": False, "promotion": "HOLD",
@@ -648,7 +656,11 @@ def historical_behavioral_comparison(config, *, root, verify=None, call=response
                    "prediction_cutoff": envelope["artifact"]["prediction_cutoff"],
                    "release_deadline_at": baseline.get("scheduled_post_at") or envelope["artifact"]["prediction_cutoff"],
                    "execution_class": "HISTORICAL_BEHAVIORAL_COMPARISON"}
-        candidate = execute(context, config, root=root, call=call)
+        try:
+            candidate = execute(context, config, root=root, call=call)
+        except CandidateHold as exc:
+            exc.completed_comparisons = reports
+            raise
         reports.append({"race_id": record["race_id"], "candidate": candidate,
                         "behavioral_comparison": compare(candidate, baseline, binding)})
     return {"status": "HISTORICAL_BEHAVIORAL_COMPARISON_RECORDED", "candidate_id": CANDIDATE_ID,
@@ -713,7 +725,9 @@ def main():
                   "production_effect": "NONE", "promotion": "HOLD", "count_increment": 0,
                   "failed_stage": getattr(exc, "failed_stage", None),
                   "phase_timings": getattr(exc, "phase_timings", None),
-                  "validation_evidence": getattr(exc, "validation_evidence", None)}
+                  "validation_evidence": getattr(exc, "validation_evidence", None),
+                  "api_usage": getattr(exc, "phase_usage", None),
+                  "completed_comparisons": getattr(exc, "completed_comparisons", [])}
         code = 2
     dest = pathlib.Path(args.output)
     dest.parent.mkdir(parents=True, exist_ok=True)
