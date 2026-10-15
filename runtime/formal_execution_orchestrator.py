@@ -1198,7 +1198,10 @@ def execute_prediction_owner_shadow(intent, *, run_id, github_sha, tmp_root):
                     or lineage.get("owner_entrypoint_sha256") != hashlib.sha256(
                         (ROOT / "runtime/openai_prediction_owner_candidate.py").read_bytes()).hexdigest()
                     or lineage["source_binding"] != binding or lineage["candidate_config_sha256"] != digest(config)
-                    or lineage["current_authority_sha256"] != digest(authority)):
+                    or lineage["current_authority_sha256"] != digest(authority)
+                    or lineage.get("race_id") != intent["race_id"]
+                    or lineage.get("execution_id") != execution_id
+                    or lineage.get("prediction_cutoff") != intent["prediction_cutoff"]):
                 raise ValueError("SHADOW_BASIS_CHANGED_NEW_EXECUTION_REQUIRED")
         else:
             deadline = intent.get("release_deadline_at") or (

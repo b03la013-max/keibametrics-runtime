@@ -7,11 +7,6 @@ on:
         description: 'No-race pinned-model credential preflight only; no external receipt transfer'
         type: boolean
         default: true
-  push:
-    branches:
-      - candidate/result-learning-resume-r3
-    paths:
-      - research/execution/C2_REAL_API_ACCEPTANCE_TRIGGER_20261009.json
 
 permissions:
   contents: read
@@ -33,7 +28,6 @@ jobs:
         run: |
           mkdir -p runtime_out
           mode=--historical-comparison
-          if [ "${{ github.event_name }}" = "push" ] && python -c 'import json,sys; sys.exit(0 if json.load(open("research/execution/C2_REAL_API_ACCEPTANCE_TRIGGER_20261009.json")).get("authentication_only") is True else 1)'; then mode=--authentication-only; fi
           if [ "${{ inputs.authentication_only }}" = "true" ]; then mode=--authentication-only; fi
           python runtime/openai_prediction_owner_candidate.py \
             "$mode" \

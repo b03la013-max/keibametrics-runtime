@@ -153,6 +153,7 @@ def test_comparison_requires_identical_source_and_never_promotes(sample, tmp_pat
 
 
 def test_runtime_secret_absent_does_not_create_personal_key_or_leak(monkeypatch):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(owner.CandidateHold, match="SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING"):
         owner.responses_call({}, timeout=1)
@@ -268,6 +269,7 @@ def test_new_c2_prompt_pins_and_legacy_provenance_terminalization():
 
 
 def test_live_secret_absent_precedes_metadata_and_no_api(sample,tmp_path,monkeypatch):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     monkeypatch.delenv('OPENAI_API_KEY',raising=False)
     sample[1]['project_id']=None
     with pytest.raises(owner.CandidateHold,match='SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING'):
@@ -287,6 +289,7 @@ def test_historical_comparison_cannot_become_forward_oos(sample,tmp_path):
 
 @pytest.mark.parametrize('case,code',[('attestation','SERVICE_ACCOUNT_ATTESTATION_REQUIRED'),('environment','STAGING_ENVIRONMENT_REQUIRED'),('identity','SERVICE_ACCOUNT_ID_REQUIRED')])
 def test_real_api_activation_requires_staging_identity(sample,tmp_path,monkeypatch,case,code):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     monkeypatch.setenv('OPENAI_API_KEY','credential-not-printed')
     monkeypatch.setenv('GITHUB_ACTIONS','true')
     monkeypatch.setenv('KM_CREDENTIAL_ENVIRONMENT','keibametrics-staging')
@@ -368,6 +371,7 @@ def test_owner_measurement_failure_does_not_block_production(tmp_path,monkeypatc
 
 
 def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     import urllib.error
     monkeypatch.setenv('OPENAI_API_KEY','test-credential-do-not-print')
     observed=[]
@@ -396,6 +400,7 @@ def test_project_scoped_auth_request_never_logs_provider_body(monkeypatch):
 
 
 def test_c2_real_429_error_class_is_allowlisted_without_provider_leakage(monkeypatch):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     monkeypatch.setenv("OPENAI_API_KEY", "test-credential-do-not-print")
     import io
     import urllib.error
@@ -418,6 +423,7 @@ def test_c2_real_429_error_class_is_allowlisted_without_provider_leakage(monkeyp
 
 
 def test_transport_reason_types_are_sanitized(monkeypatch):
+    monkeypatch.setattr(owner, "require_api_budget", lambda: None)
     import socket
     import ssl
     import urllib.error
@@ -432,3 +438,16 @@ def test_transport_reason_types_are_sanitized(monkeypatch):
         with pytest.raises(owner.CandidateHold) as exc:
             owner.responses_call({}, timeout=1, project_id="proj-test")
         assert str(exc.value) == expected
+
+
+def test_zero_budget_blocks_all_real_entrypoints_without_transport(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "dummy-never-transmitted")
+    def forbidden(*args, **kwargs):
+        pytest.fail("zero budget must stop before any network request")
+    monkeypatch.setattr(owner.urllib.request, "urlopen", forbidden)
+    with pytest.raises(owner.CandidateHold, match="API-BILLING-HOLD"):
+        owner.responses_call({}, timeout=1)
+    with pytest.raises(owner.CandidateHold, match="API-BILLING-HOLD"):
+        owner.execute({}, {"mode": "SHADOW", "production_authorized": False}, root=pathlib.Path(__file__).resolve().parents[1])
+    with pytest.raises(owner.CandidateHold, match="API-BILLING-HOLD"):
+        owner.historical_behavioral_comparison({}, root=pathlib.Path(__file__).resolve().parents[1], verify=forbidden)

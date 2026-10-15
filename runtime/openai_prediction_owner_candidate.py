@@ -193,7 +193,27 @@ def validate_schema(value, schema):
         raise CandidateHold("UNSUPPORTED_SCHEMA_TYPE")
 
 
+def require_api_budget():
+    """Fail closed before any provider request; no price estimates or secrets.
+
+    Paid reopening needs a reviewed budget reservation implementation and
+    explicit owner authorization. Merely changing a positive limit cannot
+    enable spending in this zero-budget Candidate.
+    """
+    path = pathlib.Path(__file__).resolve().parents[1] / "research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json"
+    try:
+        budget = json.loads(path.read_text()).get("api_budget", {})
+    except (OSError, ValueError, TypeError):
+        raise CandidateHold("BUDGET-HOLD") from None
+    if not isinstance(budget, dict) or budget.get("api_use_authorized") is not True:
+        raise CandidateHold("API-BILLING-HOLD")
+    # No shared monthly/race reservation ledger exists yet. Never pretend
+    # that a positive config number constitutes enforced available budget.
+    raise CandidateHold("BUDGET-HOLD")
+
+
 def responses_call(payload, *, timeout, project_id=None):
+    require_api_budget()
     key = os.environ.get("OPENAI_API_KEY")
     if not key:
         raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
@@ -264,6 +284,8 @@ def execute(context, config, *, root, call=responses_call, now=None):
     ensure_clean(config)
     if config.get("mode") != "SHADOW" or config.get("production_authorized") is not False:
         raise CandidateHold("CANDIDATE_PROMOTION_FORBIDDEN")
+    if call is responses_call:
+        require_api_budget()
     if call is responses_call and not os.environ.get("OPENAI_API_KEY"):
         raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
     if config.get("credential_owner_type") != "service_account" or not config.get("project_id"):
@@ -617,6 +639,8 @@ def post_result_prediction_utility(candidate, baseline, source_binding, final, r
 
 def historical_behavioral_comparison(config, *, root, verify=None, call=responses_call, race_id=None):
     """Read only audited frozen SOURCE/intent; never open RESULT artifacts."""
+    if call is responses_call:
+        require_api_budget()
     if call is responses_call and not os.environ.get("OPENAI_API_KEY"):
         raise CandidateHold("SERVICE_ACCOUNT_RUNTIME_SECRET_MISSING")
     if verify is None:
@@ -687,6 +711,7 @@ def main():
             raise CandidateHold("PINNED_INPUT_PATH_INVALID")
         config = json.loads(path.read_text())
         ensure_clean(config)
+        require_api_budget()
         if args.authentication_only:
             # No SOURCE, baseline, receipt, race data or external /verify is
             # loaded or transmitted in this credential-only acceptance mode.
