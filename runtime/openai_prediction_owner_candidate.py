@@ -152,6 +152,12 @@ def prediction_schema(ids):
         "Exactly one row for each (runner_id,column) assigned in roles.columns, and no other rows. "
         "Do not include NOT_SELECTED, EXCLUDE or unassigned role rows here; disclose rejected or "
         "unresolved possibilities in unresolved instead. This is serialization consistency only.")
+    for key in ("ranking", "roles"):
+        schema["properties"][key]["minItems"] = len(ids)
+        schema["properties"][key]["maxItems"] = len(ids)
+    schema["properties"]["roles"]["description"] = (
+        "Exactly one row for EVERY active runner ID, including runners with no assigned roles. "
+        "For such runners emit columns:[], never omit the runner. Each runner ID occurs once.")
     from minimum_efficient_coverage import ROLE_ACTIVE
     schema["properties"]["role_registry"]["items"]["properties"]["status"] = {
         "type": "string", "enum": sorted(ROLE_ACTIVE),
@@ -395,10 +401,10 @@ def execute(context, config, *, root, call=responses_call, now=None):
     except CandidateHold as exc:
         raise output_hold(str(exc)) from None
     if len(prediction["ranking"]) != len(ids) or set(prediction["ranking"]) != set(ids):
-        raise CandidateHold("RANKING_UNIVERSE_INVALID")
+        raise output_hold("RANKING_UNIVERSE_INVALID")
     role_ids = [row["runner_id"] for row in prediction["roles"]]
     if len(role_ids) != len(ids) or set(role_ids) != set(ids):
-        raise CandidateHold("ROLES_UNIVERSE_INVALID")
+        raise output_hold("ROLES_UNIVERSE_INVALID")
     assigned = {(row["runner_id"], column) for row in prediction["roles"] for column in row["columns"]}
     registered = {(row["runner_id"], row["column"]) for row in prediction["role_registry"]}
     if assigned != registered or len(registered) != len(prediction["role_registry"]):
