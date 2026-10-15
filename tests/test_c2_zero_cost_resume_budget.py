@@ -117,3 +117,44 @@ def test_workers_cannot_change_shared_limits(tmp_path):
     with pytest.raises(store.ExecutionStoreError, match="LIMIT_BASIS_MISMATCH"):
         store.update_api_reservation(**{**args, "monthly_limit": 20, "race_limit": 20,
                                         "request_sha": hashlib.sha256(b"second").hexdigest()})
+
+
+def test_saved_source_signature_anchor_and_tamper(tmp_path):
+    from jra_source_runtime.verify_source_envelope import verify
+    root = pathlib.Path(__file__).resolve().parents[1]
+    source = root / "runtime/executions/LOCAL-KM-LOCAL-FNB-20261001-R08-LIVE-R1-EXEC/SOURCE/runs/36840937924/source_receipt_envelope.json"
+    envelope = json.loads(source.read_text())
+    anchor = "jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE="
+    signer = "KM-LOCAL-RUNTIME-ED25519-20260922"
+    assert verify(source, trusted_public_key_b64=anchor, trusted_signer_key_id=signer)["valid"]
+    with pytest.raises(ValueError, match="TRUST_ANCHOR"):
+        verify(source, trusted_public_key_b64="", trusted_signer_key_id=signer)
+    with pytest.raises(ValueError, match="TRUST_ANCHOR"):
+        verify(source, trusted_public_key_b64=anchor, trusted_signer_key_id="wrong")
+    envelope["artifact"]["formal_ready"] = False
+    changed = tmp_path / "changed.json"
+    changed.write_text(json.dumps(envelope))
+    with pytest.raises(ValueError, match="ARTIFACT_SHA"):
+        verify(changed, trusted_public_key_b64=anchor, trusted_signer_key_id=signer)
+
+
+def crash_worker(root, started):
+    import os
+    args = dict(root=root, month="2026-10", race_id="A", request_sha=hashlib.sha256(b"crash").hexdigest(),
+                amount=1, monthly_limit=1, race_limit=1)
+    store.update_api_reservation(**args)
+    if started:
+        store.update_api_reservation(**args, action="START")
+    os._exit(17)
+
+
+@pytest.mark.parametrize("started,state", [(False, "RESERVED"), (True, "STARTED")])
+def test_actual_worker_exit_keeps_durable_reservation(tmp_path, started, state):
+    child = multiprocessing.get_context("fork").Process(target=crash_worker, args=(str(tmp_path), started))
+    child.start()
+    child.join(timeout=5)
+    assert child.exitcode == 17
+    key = hashlib.sha256(b"crash").hexdigest()
+    row = json.loads((tmp_path / "api-budget.json").read_text())["requests"][key]
+    assert row["state"] == state and row["actual"] is None
+    assert reserve_worker((str(tmp_path), key, 1)) == "DUPLICATE_REQUEST_HOLD"

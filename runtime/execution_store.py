@@ -312,11 +312,12 @@ def update_api_reservation(root, *, month, race_id, request_sha, amount,
             ledger = json.loads(path.read_text()) if path.exists() else {"schema": "KM-CANDIDATE-API-RESERVATIONS-v1", "requests": {}, "limits": {}}
             rows = ledger["requests"]
             limits = ledger["limits"]
-            if not isinstance(limits, dict): raise ValueError()
+            if not isinstance(limits, dict) or any(type(v) is not int or v < 0 for v in limits.values()): raise ValueError()
             if ledger["schema"] != "KM-CANDIDATE-API-RESERVATIONS-v1" or not isinstance(rows, dict):
                 raise ValueError()
             for row in rows.values():
-                if (row["state"] not in {"RESERVED", "STARTED", "UNKNOWN", "SETTLED"}
+                if (not isinstance(row["month"], str) or not isinstance(row["race_id"], str)
+                        or row["state"] not in {"RESERVED", "STARTED", "UNKNOWN", "SETTLED"}
                         or type(row["reserved"]) is not int or row["reserved"] <= 0
                         or (row["actual"] is not None and (type(row["actual"]) is not int or row["actual"] < 0))):
                     raise ValueError()

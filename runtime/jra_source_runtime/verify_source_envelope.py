@@ -13,7 +13,7 @@ def verify(path, *, trusted_public_key_b64=None, trusted_signer_key_id=None):
     env=json.loads(p.read_text(encoding="utf-8"))
     rec=env.get("receipt") or {}
     art=env.get("artifact") or {}
-    if trusted_public_key_b64 is not None and (not trusted_signer_key_id or env.get("signer_key_id") != trusted_signer_key_id):
+    if trusted_public_key_b64 is not None and (not isinstance(trusted_public_key_b64, str) or not trusted_public_key_b64 or not trusted_signer_key_id or env.get("signer_key_id") != trusted_signer_key_id):
         raise ValueError("SOURCE_TRUST_ANCHOR_MISMATCH")
     pub_b64=str(trusted_public_key_b64 or env.get("receipt_public_key_b64") or "")
     sig_b64=str(env.get("signature") or "")

@@ -566,7 +566,16 @@ def resume_historical_candidate(candidate, context, config, *, root):
     if (timestamp(context["signed_source"]["artifact"]["source_freeze_at"]) > timestamp(context["prediction_cutoff"])
             or timestamp(lineage["freeze_timestamp"]).tzinfo is None):
         raise CandidateHold("HISTORICAL_RESUME_TIME_HOLD")
-    validate_schema(candidate["prediction"], payload["text"]["format"]["schema"])
+    # Reuse the existing complete output validator with an in-memory response.
+    # No provider transport, new response ID, signature or freeze is created.
+    def frozen_response(request, timeout):
+        return {"id": lineage["api_response_identifier"], "model": lineage["model_identifier"],
+                "status": "completed", "output": [{"content": [{"type": "output_text",
+                    "text": json.dumps(candidate["prediction"])}]}]}
+    validated = execute(context, config, root=root, call=frozen_response,
+                        now=timestamp(lineage["freeze_timestamp"]))
+    if validated["prediction_semantics"] != candidate["prediction_semantics"]:
+        raise CandidateHold("HISTORICAL_RESUME_SEMANTICS_MISMATCH")
     return {"status": "HISTORICAL_REUSED", "api_requests": 0,
             "new_prediction_generated": False, "signed_shadow": False,
             "oos_eligible": False, "count_increment": 0, "candidate": candidate}
