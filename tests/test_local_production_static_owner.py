@@ -79,6 +79,7 @@ def _cancelled_runner_contract_fixture(cancelled=("3", "7")):
     artifact["runner_status_registry"] = [
         {"runner_id": r["runner_id"], "status":
          "CANCELLED" if r["runner_id"] in set(cancelled) else "ACTIVE",
+         "reason": "EXPLICIT_OFFICIAL_ODDS_CANCELLATION" if r["runner_id"] in set(cancelled) else "OFFICIAL_CARD_ACTIVE",
          "evidence_sources": [next(s["source_id"] for s in artifact["sources"]
                                     if s.get("official") and "RACE-CARD" in s["source_id"])]}
         for r in declared["runners"]]
@@ -119,8 +120,13 @@ def test_poststart_clock_cannot_create_formal_static_from_saved_source():
         build_formal_static(req, source, numeric, policy=policy, now=post)
 
 
-@pytest.mark.parametrize("case", ["missing_declared", "unexplained_removal", "missing_evidence", "nonofficial_evidence"])
-def test_card_universe_removal_without_exact_official_basis_holds(case):
+@pytest.mark.parametrize("case,code", [
+    ("missing_declared", "OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH"),
+    ("unexplained_removal", "OFFICIAL_CANCELLATION_NOT_VERIFIED"),
+    ("missing_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+    ("nonofficial_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+])
+def test_card_universe_removal_without_exact_official_basis_holds(case, code):
     req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
     if case == "missing_declared":
         source["artifact"]["declared_runner_universe"]["runners"].pop()
@@ -130,7 +136,7 @@ def test_card_universe_removal_without_exact_official_basis_holds(case):
         source["artifact"]["runner_status_registry"][2].pop("evidence_sources")
     else:
         source["artifact"]["runner_status_registry"][2]["evidence_sources"] = ["UNVERIFIED"]
-    with pytest.raises(StaticOwnerError, match="OFFICIAL_CARD_RUNNER_MISMATCH"):
+    with pytest.raises(StaticOwnerError, match=code):
         build_formal_static(req, source, numeric, policy=policy, now=now)
 
 
@@ -175,3 +181,32 @@ def test_auto_owner_intent_can_be_normalized_by_existing_formal():
     assert normalized["final_prediction_package"]
     assert normalized["static_prediction"]["ranking"] == intent["static_prediction"]["ranking"]
     assert normalized["current_authority_manifest"] == request["current_authority_manifest"]
+
+
+def test_oct15_r02_signed_cancelled_two_runners_reconciled_result_blind():
+    """Real signed prestart 20261015 R02 SOURCE; only contract fixture, not OOS."""
+    src = ROOT / "runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json"
+    signed = json.loads(src.read_text(encoding="utf-8"))
+    active = signed["artifact"]["active_runner_universe"]["runners"]
+    req, _, old_numeric, policy, _ = replay_fixture()
+    eid = "KM-LOCAL-KAW-20261015-R02-LIVE-R1"
+    req.update(
+        race_id=eid, execution_id=eid, race_date="2026-10-15", race_no=2,
+        prediction_cutoff="2026-10-15T15:10:00+09:00",
+        scheduled_post_at="2026-10-15T15:15:00+09:00",
+        release_deadline_at="2026-10-15T15:13:00+09:00",
+    )
+    numeric = {**old_numeric,
+        "runners": [{"runner_id": row["runner_id"]} for row in active]}
+    intent, ledger = build_formal_static(
+        req, signed, numeric, policy=policy,
+        now=datetime.fromisoformat("2026-10-15T15:01:00+09:00"))
+    assert set(intent["static_prediction"]["ranking"]) == {"1","2","4","5","6","8"}
+    assert len(intent["runners"]) == 6
+    assert set(str(x["runner_id"]) for x in intent["runners"]).isdisjoint({"3","7"})
+    assert all(q["head"] not in {"3","7"} for q in intent["pair_dispositions"])
+    assert ledger["source_receipt_sha256"] == signed["receipt_sha256"]
+    signed["artifact"]["runner_status_registry"][2]["reason"] = "UNVERIFIED"
+    with pytest.raises(StaticOwnerError, match="OFFICIAL_CANCELLATION_NOT_VERIFIED"):
+        build_formal_static(req, signed, numeric, policy=policy,
+                            now=datetime.fromisoformat("2026-10-15T15:01:00+09:00"))

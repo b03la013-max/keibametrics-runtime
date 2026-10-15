@@ -207,23 +207,31 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
     if len(pool) < 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
         raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
     parsed = parse_race_card(source)
-    if set(ids) != set(parsed):
-        declared = {str(r.get("runner_id")) for r in
-                    (source.get("declared_runner_universe") or {}).get("runners") or []}
-        inactive = {str(r.get("runner_id")) for r in source.get("runner_status_registry") or []
-                    if r.get("status") in {"CANCELLED", "EXCLUDED"}}
-        official_ids = {str(s.get("source_id")) for s in source.get("sources") or []
-                        if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"}
-        unsupported = any(not r.get("evidence_sources")
-                          or not set(r["evidence_sources"]).issubset(official_ids)
-                          for r in source.get("runner_status_registry") or []
-                          if str(r.get("runner_id")) in inactive)
-        # Official cards retain scratched rows. Omit only the exact declared
-        # rows explicitly excluded by the signed SOURCE status registry.
-        if (unsupported or set(parsed) != declared or set(ids) - set(parsed)
-                or set(parsed) - set(ids) != inactive):
+    declared = (source.get("declared_runner_universe") or {}).get("runners") or []
+    declared_ids = [str(x.get("runner_id")) for x in declared]
+    status_rows = source.get("runner_status_registry") or []
+    registered = {str(x.get("runner_id")): x for x in status_rows}
+    if (len(registered) != len(status_rows) or len(declared_ids) != len(set(declared_ids))
+            or set(declared_ids) != set(parsed) or set(declared_ids) != set(registered)
+            or not set(ids).issubset(set(declared_ids))):
+        raise StaticOwnerError("OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH")
+    if {rid for rid, v in registered.items() if v.get("status") == "ACTIVE"} != set(ids):
+        raise StaticOwnerError("OFFICIAL_ACTIVE_STATUS_UNIVERSE_MISMATCH")
+    official_ids = {str(s.get("source_id")) for s in source.get("sources") or []
+                    if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"}
+    for rid in set(declared_ids) - set(ids):
+        entry = registered[rid]
+        if (entry.get("status") != "CANCELLED"
+                or entry.get("reason") != "EXPLICIT_OFFICIAL_ODDS_CANCELLATION"):
+            raise StaticOwnerError("OFFICIAL_CANCELLATION_NOT_VERIFIED:" + rid)
+        if (not entry.get("evidence_sources")
+                or not set(entry["evidence_sources"]).issubset(official_ids)):
             raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
-        parsed = {rid: parsed[rid] for rid in ids}
+    # NAR race-card HTML may still include withdrawn runners. Only the
+    # official signed ACTIVE universe receives Production prediction roles.
+    parsed = {rid: row for rid, row in parsed.items() if rid in set(ids)}
+    if set(ids) != set(parsed):
+        raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
     for row in pool:
         rid = str(row["runner_id"])
         if str(parsed[rid]["name"]) != str(row["name"]):
