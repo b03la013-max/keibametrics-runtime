@@ -6,6 +6,40 @@ import pytest
 from runtime import formal_execution_orchestrator as o
 
 
+def _result_settlement_from_existing_runner(payouts):
+    path = Path(o.__file__).with_name("local_result_from_signed_final.py")
+    code = path.read_text().split('tickets=((fin.get("artifact")', 1)[1]
+    code = 'tickets=((fin.get("artifact")' + code.split('\ndef post(', 1)[0]
+    scope = {
+        "fin": {"artifact": {"final_ticket": {"tickets": [
+            {"bet_type": "EXACTA", "selection": [7, 5], "stake": 100},
+            {"bet_type": "TRIO", "selection": [1, 2, 3], "stake": 100},
+        ]}}},
+        "rid": "KAW-RESULT-REGRESSION",
+        "req": {"finish_order": [7, 5, 6], "payouts": payouts,
+                "result_available_at": "2026-10-15T15:00:00+09:00"},
+    }
+    exec(compile(code, str(path), "exec"), scope)
+    return scope["result_payload"]["settlement"]
+
+
+@pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
+def test_winning_payout_unknown_stops_before_complete_result(payouts):
+    with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+        _result_settlement_from_existing_runner(payouts)
+
+
+def test_published_winning_payout_preserves_existing_settlement():
+    settlement = _result_settlement_from_existing_runner({"EXACTA": 1230})
+    assert settlement["status"] == "COMPLETE"
+    assert settlement["investment"] == 200
+    assert settlement["return"] == 1230
+    assert settlement["winning_tickets"] == [{
+        "bet_type": "EXACTA", "selection": [7, 5], "stake": 100,
+        "payout_per_100": 1230, "return": 1230,
+    }]
+
+
 def base_intent():
     return {
         "family_id": "LOCAL",
