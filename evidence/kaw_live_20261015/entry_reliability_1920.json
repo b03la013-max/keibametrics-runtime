@@ -184,14 +184,16 @@
         "venue_prediction_context"
       ],
       "source_basis": "Nested static_prediction source_basis_receipt_sha256/source_basis_snapshot_sha256; execution-store source_binding. These are resolved, not extra five-field user inputs.",
-      "implementation_policy": "Current Authority/Gateway/Owner policy resolved through existing profiles; do not invent new mandatory raw-key fields"
+      "implementation_policy": "Current Authority/Gateway/Owner policy resolved through existing profiles; do not invent new mandatory raw-key fields",
+      "execution": "local_race_entry.run directly calls formal_execution_orchestrator.orchestrate(formal) inside the SAME Race-Key entry job. R08 did not dispatch km-formal-single-entry.yml as a second workflow."
     },
     "formal_workflow": {
       "path": ".github/workflows/km-formal-single-entry.yml",
       "direct_input": "intent_path",
       "push_path": "runtime/formal_intents/*.json",
       "registry": "tools.local_intent_matrix.resolve",
-      "normalization": "formal_execution_orchestrator.normalize_single_entry_intent adds final_prediction_package from existing canonical frozen Static; do not invent it manually"
+      "normalization": "formal_execution_orchestrator.normalize_single_entry_intent adds final_prediction_package from existing canonical frozen Static; do not invent it manually",
+      "relationship": "Separate alternate inlet for an already-existing canonical full Formal intent, not the automatic next Workflow after five-field ingress."
     },
     "warning": "Five-field JSON, SOURCE request, and frozen Formal intent are distinct schemas. Intake CLI default --output is SOURCE request, not a five-field registry serializer."
   },
@@ -790,5 +792,9 @@
     "policy_physics_mec_capital_change": 0,
     "signed_original_mutation": 0,
     "railway_metered_cost": "UNKNOWN"
+  },
+  "canonical_status": {
+    "LOCAL": "runtime/execution_reports/{execution_id}/race-key-{run_id}.json and execution phase LATEST.json/checkpoints; no LOCAL official-race-discovery index activation found",
+    "JRA": "runtime/jra_race_day_status/<date>.json; separate JRA scheduled autopilot, official calendar403 previously observed"
   }
 }
