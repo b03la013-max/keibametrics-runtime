@@ -163,10 +163,33 @@ def authorization(approval, plan, root, now):
             or approval.get('scheduled_execution_authorized') is not True
             or approval.get('existing_runtime_usage_cost_authorized') is not True
             or approval.get('data_scope') != 'INTENT_SOURCE_STATIC_PRE_KRS_KRS_FINAL_RESULT_SETTLEMENT'
-            or sorted(approval.get('race_numbers', [])) != [r['fields']['race_no'] for r in plan['races']]
             or not owner.get('enabled') or plan['venue_id'] not in owner.get('venues', [])
             or owner.get('family_authority_basis') != current['manifest_id']):
         raise ValueError('OWNER_SCOPE_SCHEDULE_OR_COST_APPROVAL_REQUIRED')
+    selected = approval.get('race_numbers', [])
+    available = {r['fields']['race_no'] for r in plan['races']}
+    if (not selected or any(type(n) is not int for n in selected)
+            or len(set(selected)) != len(selected) or not set(selected) <= available):
+        raise ValueError('EXPLICIT_RACE_SUBSET_REQUIRED')
+    phase = approval.get('activation_phase')
+    if phase not in {'B', 'C', 'D'}:
+        raise ValueError('EXPLICIT_ACTIVATION_PHASE_REQUIRED')
+    if phase == 'B' and len(selected) != 1:
+        raise ValueError('PHASE_B_SINGLE_RACE_REQUIRED')
+    if phase == 'C' and not 2 <= len(selected) < len(available):
+        raise ValueError('PHASE_C_LIMITED_MULTIPLE_RACES_REQUIRED')
+    if phase in {'C', 'D'} and not approval.get('phase_b_acceptance_ref'):
+        raise ValueError('PHASE_B_ACCEPTANCE_REQUIRED')
+    if phase == 'D' and (set(selected) != available or not approval.get('phase_c_acceptance_ref')
+                         or not approval.get('human_review_ref') or not approval.get('full_day_activation_ref')):
+        raise ValueError('FULL_DAY_PROMOTION_APPROVAL_REQUIRED')
+    cap = approval.get('max_dispatches')
+    if type(cap) is not int or not 1 <= cap <= len(selected):
+        raise ValueError('BOUNDED_DISPATCH_BUDGET_REQUIRED')
+    # A dispatch count is not a monetary cap. Require a separately reviewed cost
+    # control reference; this client cannot infer provider prices or free usage.
+    if not approval.get('cost_control_ref'):
+        raise ValueError('REVIEWED_PROVIDER_COST_CONTROL_REQUIRED')
     lead, margin = approval.get('start_lead_seconds'), approval.get('minimum_remaining_seconds')
     if type(lead) is not int or type(margin) is not int or not 1800 <= lead <= 7200 or not 300 <= margin < lead:
         raise ValueError('OWNER_DISPATCH_WINDOW_REQUIRED')
@@ -227,6 +250,32 @@ def reconcile_run(fields, claimed_at):
     return matches[0] if matches else None
 
 
+def inspect_plan(root, plan, now):
+    """Phase A: observe every race without authorization, dispatch, or verification POST."""
+    if sha({k:v for k,v in plan.items() if k != 'plan_sha256'}) != plan.get('plan_sha256'):
+        raise ValueError('DAY_PLAN_SHA_MISMATCH')
+    from runtime.family_authority_guard import resolve_current_authority
+    current = resolve_current_authority(root=root, now=now)[1]['manifest_id']
+    rows = []
+    for race in plan['races']:
+        fields, eid = race['fields'], race['execution_id']
+        prefix = eid.rsplit('-R1', 1)[0]
+        existing = list((root/'runtime/executions').glob(prefix+'-R*'))
+        existing += list((root/'runtime/formal_intents').glob(prefix+'-R*.json'))
+        for key in (root/'runtime/race_key_requests').glob('*.json'):
+            value = json.loads(key.read_text())
+            if all(str(value.get(k)) == str(fields[k]) for k in ('venue_id','race_date','race_no')):
+                existing.append(key)
+        rows.append({'execution_id':eid, 'fields':fields,
+                     'existing_refs':sorted(str(p.relative_to(root)) for p in existing),
+                     'remaining_seconds':(datetime.fromisoformat(fields['prediction_cutoff'])-now).total_seconds(),
+                     'observed_active_runner_universe':race.get('observed_active_runner_universe'),
+                     'checkpoints':checkpoint_status(root,eid), 'live_eligibility':'NOT_EVALUATED_NO_AUTHORIZATION'})
+    return {'phase':'A', 'status':'READ_ONLY_NO_LIVE_SEND', 'current_authority_manifest':current,
+            'observed_at':now.isoformat(), 'plan_sha256':plan['plan_sha256'], 'target_races':len(rows),
+            'races':rows, 'dispatch_count':0, 'new_signed_artifacts':0}
+
+
 def runtime_ready():
     from runtime.execution_gateway import family_config, fetch_health, assess_runtime_health
     health = fetch_health(family_config('LOCAL')['external_endpoint'])
@@ -261,6 +310,9 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
         eid, fields = race['execution_id'], race['fields']
         cell = state['races'].setdefault(eid, {})
         cell.update(checkpoint_status(root, eid))
+        if fields['race_no'] not in approval['race_numbers']:
+            cell['status'] = 'NOT_AUTHORIZED_FOR_THIS_PHASE'
+            continue
         post, cutoff = (datetime.fromisoformat(fields[k]) for k in ('scheduled_post_at','prediction_cutoff'))
         cell['remaining_seconds'] = (cutoff-now).total_seconds()
         if cell.get('claimed_at'):
@@ -303,6 +355,9 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             continue
         if cell.get('preflight_attempts',0) >= 3:
             cell['status']='HOLD_PREFLIGHT_RETRY_LIMIT_OWNER_RECOVERY_REQUIRED'
+            continue
+        if sum(bool(c.get('claimed_at')) for c in state['races'].values()) >= approval['max_dispatches']:
+            cell['status'] = 'HOLD_DISPATCH_BUDGET_EXHAUSTED'
             continue
         try:
             request = build(fields, now=now)
@@ -373,7 +428,9 @@ def main():
         raise ValueError('DAY_PLAN_IDENTITY_MISMATCH')
     write(plan_path, plan)
     if not args.execute:
-        print(json.dumps({'status': 'PREREGISTRATION_ONLY', 'races': len(plan['races']), 'plan_sha256': plan['plan_sha256']}))
+        report = inspect_plan(root, plan, now)
+        write(folder/(name+'.dry-run.json'), report)
+        print(json.dumps(report))
         return
     approval = json.loads(approval_path.read_text())
     state = json.loads(state_path.read_text()) if state_path.exists() else {}

@@ -42,7 +42,10 @@ def approval(p):
                 plan_sha256=p['plan_sha256'], enabled=True, owner_approval_ref='SYNTHETIC_TEST_ONLY',
                 scheduled_execution_authorized=True, existing_runtime_usage_cost_authorized=True,
                 data_scope='INTENT_SOURCE_STATIC_PRE_KRS_KRS_FINAL_RESULT_SETTLEMENT',race_numbers=[1,2],
-                start_lead_seconds=3600, minimum_remaining_seconds=300)
+                start_lead_seconds=3600, minimum_remaining_seconds=300,
+                activation_phase='D', max_dispatches=2, cost_control_ref='SYNTHETIC_NOT_BILLING_APPROVAL',
+                phase_b_acceptance_ref='SYNTHETIC',phase_c_acceptance_ref='SYNTHETIC',
+                human_review_ref='SYNTHETIC',full_day_activation_ref='SYNTHETIC')
 
 
 def run(root,p,a,state,**kwargs):
@@ -77,7 +80,7 @@ def test_discovery_fail_closed(kind):
 
 @pytest.mark.parametrize('key,value',[('family_id','JRA'),('venue_id','OHI'),('race_date','2026-10-16'),
     ('destination','https://example.org'),('plan_sha256','bad'),('scheduled_execution_authorized',False),
-    ('existing_runtime_usage_cost_authorized',False),('race_numbers',[1]),('enabled',False)])
+    ('existing_runtime_usage_cost_authorized',False),('race_numbers',[3]),('enabled',False)])
 def test_no_scope_or_cost_approval_inference(tmp_path,key,value):
     p=plan();a=approval(p);a[key]=value
     with pytest.raises(ValueError): run(tmp_path,p,a,{})
@@ -199,3 +202,41 @@ def test_official_odds_cancellation_reuses_existing_runner_parser():
     p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
     assert all(r['observed_active_runner_universe']['runner_count']==1 for r in p['races'])
     assert all(r['declared_runner_universe']['runner_count']==2 for r in p['races'])
+
+
+def test_limited_phase_does_not_dispatch_unapproved_race(tmp_path):
+    p=plan(); a=approval(p); a.update(race_numbers=[2],max_dispatches=1,activation_phase='B')
+    send=Mock(return_value={'acknowledged':True})
+    state=run(tmp_path,p,a,{},execute=True,publish=lambda:None,health=lambda:{'status':'PASS'},send=send)
+    assert send.call_count==1 and send.call_args.args[0]['race_no']==2
+    assert state['races'][p['races'][0]['execution_id']]['status']=='NOT_AUTHORIZED_FOR_THIS_PHASE'
+
+
+@pytest.mark.parametrize('changes',[
+    {'activation_phase':None}, {'activation_phase':'C'}, {'activation_phase':'B'},
+    {'activation_phase':'D','phase_b_acceptance_ref':None,'phase_c_acceptance_ref':None},
+    {'max_dispatches':0}, {'max_dispatches':True}, {'max_dispatches':3},
+    {'cost_control_ref':None}, {'race_numbers':[1,1]}, {'race_numbers':[True,2]}])
+def test_phase_or_cost_gap_blocks_before_side_effect(tmp_path,changes):
+    p=plan(); a=approval(p); a.update(changes); send=Mock(); publish=Mock()
+    with pytest.raises(ValueError):
+        run(tmp_path,p,a,{},execute=True,publish=publish,send=send,health=lambda:{'status':'PASS'})
+    send.assert_not_called(); publish.assert_not_called()
+
+
+def test_ambiguous_claim_consumes_budget_across_ticks(tmp_path):
+    p=plan(); a=approval(p); a['max_dispatches']=1; send=Mock(side_effect=TimeoutError())
+    state=run(tmp_path,p,a,{},execute=True,publish=lambda:None,health=lambda:{'status':'PASS'},send=send)
+    assert send.call_count==1
+    assert state['races'][p['races'][1]['execution_id']]['status']=='HOLD_DISPATCH_BUDGET_EXHAUSTED'
+    run(tmp_path,p,a,state,execute=True,publish=lambda:None,reconcile=lambda *args:None,send=send)
+    assert send.call_count==1
+
+
+def test_phase_a_requires_no_live_approval_or_runtime(monkeypatch):
+    p=plan()
+    monkeypatch.setattr(d,'dispatch',Mock(side_effect=AssertionError('NO DISPATCH')))
+    monkeypatch.setattr(d,'runtime_ready',Mock(side_effect=AssertionError('NO RUNTIME')))
+    report=d.inspect_plan(d.ROOT,p,NOW)
+    assert report['target_races']==2 and report['dispatch_count']==0
+    assert report['new_signed_artifacts']==0
