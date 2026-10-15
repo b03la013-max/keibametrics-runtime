@@ -207,6 +207,24 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
     if len(pool) < 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
         raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
     parsed = parse_race_card(source)
+    declared = (source.get("declared_runner_universe") or {}).get("runners") or []
+    declared_ids = [str(x.get("runner_id")) for x in declared]
+    status_rows = source.get("runner_status_registry") or []
+    registered = {str(x.get("runner_id")): x for x in status_rows}
+    if (len(registered) != len(status_rows) or len(declared_ids) != len(set(declared_ids))
+            or set(declared_ids) != set(parsed) or set(declared_ids) != set(registered)
+            or not set(ids).issubset(set(declared_ids))):
+        raise StaticOwnerError("OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH")
+    if {rid for rid, v in registered.items() if v.get("status") == "ACTIVE"} != set(ids):
+        raise StaticOwnerError("OFFICIAL_ACTIVE_STATUS_UNIVERSE_MISMATCH")
+    for rid in set(declared_ids) - set(ids):
+        entry = registered[rid]
+        if (entry.get("status") != "CANCELLED"
+                or entry.get("reason") != "EXPLICIT_OFFICIAL_ODDS_CANCELLATION"):
+            raise StaticOwnerError("OFFICIAL_CANCELLATION_NOT_VERIFIED:" + rid)
+    # NAR race-card HTML may still include withdrawn runners. Only the
+    # official signed ACTIVE universe receives Production prediction roles.
+    parsed = {rid: row for rid, row in parsed.items() if rid in set(ids)}
     if set(ids) != set(parsed):
         raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
     for row in pool:

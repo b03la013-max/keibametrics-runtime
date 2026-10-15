@@ -110,3 +110,32 @@ def test_auto_owner_intent_can_be_normalized_by_existing_formal():
     assert normalized["final_prediction_package"]
     assert normalized["static_prediction"]["ranking"] == intent["static_prediction"]["ranking"]
     assert normalized["current_authority_manifest"] == request["current_authority_manifest"]
+
+
+def test_oct15_r02_signed_cancelled_two_runners_reconciled_result_blind():
+    """Real signed prestart 20261015 R02 SOURCE; only contract fixture, not OOS."""
+    src = ROOT / "runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json"
+    signed = json.loads(src.read_text(encoding="utf-8"))
+    active = signed["artifact"]["active_runner_universe"]["runners"]
+    req, _, old_numeric, policy, _ = replay_fixture()
+    eid = "KM-LOCAL-KAW-20261015-R02-LIVE-R1"
+    req.update(
+        race_id=eid, execution_id=eid, race_date="2026-10-15", race_no=2,
+        prediction_cutoff="2026-10-15T15:10:00+09:00",
+        scheduled_post_at="2026-10-15T15:15:00+09:00",
+        release_deadline_at="2026-10-15T15:13:00+09:00",
+    )
+    numeric = {**old_numeric,
+        "runners": [{"runner_id": row["runner_id"]} for row in active]}
+    intent, ledger = build_formal_static(
+        req, signed, numeric, policy=policy,
+        now=datetime.fromisoformat("2026-10-15T15:01:00+09:00"))
+    assert set(intent["static_prediction"]["ranking"]) == {"1","2","4","5","6","8"}
+    assert len(intent["runners"]) == 6
+    assert set(str(x["runner_id"]) for x in intent["runners"]).isdisjoint({"3","7"})
+    assert all(q["head"] not in {"3","7"} for q in intent["pair_dispositions"])
+    assert ledger["source_receipt_sha256"] == signed["receipt_sha256"]
+    signed["artifact"]["runner_status_registry"][2]["reason"] = "UNVERIFIED"
+    with pytest.raises(StaticOwnerError, match="OFFICIAL_CANCELLATION_NOT_VERIFIED"):
+        build_formal_static(req, signed, numeric, policy=policy,
+                            now=datetime.fromisoformat("2026-10-15T15:01:00+09:00"))
