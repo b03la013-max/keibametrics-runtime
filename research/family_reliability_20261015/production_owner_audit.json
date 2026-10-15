@@ -1,0 +1,67 @@
+{
+  "observed_at": "2026-10-15T01:47:04.778667+00:00",
+  "main": "b5fc8170cd351cbcc99416f2aa1e7a15e9156e5e",
+  "authority": "KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+  "new_openai_requests": 0,
+  "new_live_payloads": 0,
+  "owners": {
+    "LOCAL_KAW": {
+      "classification": "OWNER_AUTHORIZED_UNVALIDATED",
+      "policy": "profiles/local_production_static_owner_20261014_v1.json",
+      "openai_api_required": false,
+      "full_runner": true,
+      "W_P2_P3": true,
+      "head_local_pair": true,
+      "pair_conditioned_third": true,
+      "numeric_consumption_authorized": false,
+      "required_numerical_closure": 29,
+      "scope": [
+        "KAW"
+      ],
+      "retained_signed_races": [
+        "KM-LOCAL-KAW-20261014-R10-LIVE-R1",
+        "KM-LOCAL-KAW-20261014-R11-LIVE-R1",
+        "KM-LOCAL-KAW-20261014-R12-LIVE-R1"
+      ],
+      "new_live_acceptance": 0
+    },
+    "LOCAL_OTHER": {
+      "classification": "CHAT_OWNED_FROZEN_INPUT / NO_GENERIC_AUTONOMOUS_AUTHORIZED_OWNER",
+      "c2_required": false,
+      "unapproved_venue_fallback": false
+    },
+    "JRA": {
+      "classification": "OWNER_AUTHORIZED_UNVALIDATED",
+      "policy_sha256": "8f47f72d0bac49c57ec06193685da47b7c7abb917a23eec065ea8672bb680ec8",
+      "authority_sha_matches_code": true,
+      "authorization_record": "governance/JRA_STATIC_OWNER_OWNER_AUTHORIZATION_20261011_AKI.json",
+      "openai_api_required": false,
+      "required_numerical_closure": 20,
+      "full_runner": true,
+      "scope": "JRA_ONLY",
+      "performance_validated": false,
+      "formal_allowed_if_all_gates_pass": true
+    },
+    "BAN": {
+      "classification": "NO_AUTHORIZED_AUTONOMOUS_OWNER_CONFIRMED",
+      "external_endpoint": null,
+      "runtime": "BLOCKED"
+    },
+    "C2": {
+      "classification": "SHADOW / NON_PRODUCTION",
+      "positive_paid_path": "BLOCKED",
+      "signed_shadow_receipts": 0
+    }
+  },
+  "source_bug": {
+    "before": "3 regression failures: None checkpoint dereference or continued execution after SOURCE BLOCKED",
+    "after": "3 PASS; preserve SOURCE first failure and stop before Numerical/Static",
+    "candidate_pr": 279
+  },
+  "future_live": {
+    "status": "BLOCKED",
+    "reason": "NEW_LIVE_PAYLOAD_EGRESS_NOT_AUTHORIZED",
+    "external_destination": "https://witnessstrictimage-production.up.railway.app",
+    "no_historical_oos_increment": true
+  }
+}

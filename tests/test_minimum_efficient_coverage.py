@@ -1,6 +1,32 @@
 import json, sys
+import pytest
 sys.path.insert(0,"runtime")
 from minimum_efficient_coverage import build_mec_plan, validate_mec_plan, MECError, MEC_PROFILE
+
+
+@pytest.mark.parametrize("where", ["ranking", "roles", "registry", "pair", "third"])
+def test_active_runner_boundary_rejects_cancelled_references(where):
+    req = base_req("LOCAL")
+    req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+    if where == "ranking":
+        req["static_prediction"] = {"ranking": [1, 2, 3, 4, 9]}
+    elif where == "roles":
+        req["static_prediction"] = {"roles": {"9": ["W"]}}
+    elif where == "registry":
+        req["role_registry"].append({"runner_id": "9", "column": "P3", "status": "CORE"})
+    elif where == "pair":
+        req["pair_dispositions"].append({"head": "1", "second": "9", "status": "PURCHASE"})
+    else:
+        req.setdefault("third_dispositions", []).append({"head": "1", "second": "2", "third": "9", "status": "PURCHASE"})
+    with pytest.raises(MECError, match="RUNNER_UNIVERSE_REFERENCE_MISMATCH:9"):
+        build_mec_plan(req)
+
+
+def test_active_boundary_keeps_existing_ticket_and_capital_calculation():
+    req = base_req("LOCAL")
+    baseline = build_mec_plan(req)
+    req["runners"] = [{"runner_id": str(i)} for i in range(1, 5)]
+    assert build_mec_plan(req) == baseline
 
 def base_req(family):
     return {

@@ -109,11 +109,33 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
     temporal=o._load_checkpoint_json(phase,'final_before_post_verification.json') or {}
     if final.get('receipt',{}).get('status')!='PASS' or flags.get('FINAL') is not True:
         return {**report,'status':'HOLD','reason':'FINAL_VERIFICATION_REQUIRED'}
+    # Persisted boolean flags are historical observations, not a fresh proof.
+    # Reuse the canonical Gateway verifier; never accept an envelope's own key.
+    from runtime.execution_gateway import family_config, request_json
+    endpoint = family_config('LOCAL')['external_endpoint'].rstrip('/')
+    http, verification = request_json(endpoint+'/verify', method='POST', payload=final,
+                                      timeout=20, attempts=1)
+    if (http >= 300 or verification.get('valid') is not True
+            or final.get('receipt', {}).get('race_id') != execution_id):
+        return {**report, 'status': 'HOLD', 'reason': 'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED'}
     from runtime.jra_ticket_tree_renderer import render_ticket_tree
     tree=render_ticket_tree(final['artifact'])
     target=o.ROOT/'runtime/execution_reports'/execution_id/'delivery'
     target.mkdir(parents=True,exist_ok=True)
     (target/'canonical_tree.txt').write_text(tree['text']+'\n',encoding='utf-8')
+    package = final['artifact'].get('final_prediction_package') or {}
+    report['canonical_prediction'] = {
+        'current_authority': final['artifact'].get('current_authority_manifest'),
+        'formal_grade': final['artifact'].get('formal_grade'),
+        'prediction_package': package,
+        'final_ticket': final['artifact'].get('final_ticket'),
+        'actual_purchase': 'UNKNOWN',
+        'krs_receipt': (o._load_checkpoint_json(phase, 'krs_receipt_envelope.json') or {}).get('receipt_sha256'),
+        'missing_display_fields_are_unknown': True,
+    }
+    report['canonical_tree'] = tree['text']
+    report['canonical_tree_ref'] = str((target/'canonical_tree.txt').relative_to(o.ROOT))
+    report['fresh_external_verify'] = verification
     report.update(signed_final_pass=True,prestart_final_pass=temporal.get('verified') is True,
                   render_available=True,render_generated_at=now.isoformat(),
                   rendered_ticket_count=tree['ticket_count'],rendered_investment=tree['total_investment'],
