@@ -1,0 +1,290 @@
+{
+  "checked_at": "2026-10-15T09:01:32.596Z",
+  "main": "887c07fe4585426718b32a4f9342ccf0ed2e5e87",
+  "current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+  "local_suite": "KM-LOCAL-RENDERED-INTEGRITY-20260827-R3",
+  "kaw_canon": "v2.4-KAW",
+  "owner_scope": "KAW-only enabled authorized-unvalidated; no broader scope activation",
+  "routes": [
+    {
+      "id": "A",
+      "route": "Owner-native existing Race-Key workflow_dispatch on main",
+      "workflow": ".github/workflows/km-local-race-key-entry.yml",
+      "workflow_id": 384129317,
+      "status": "PENDING fresh native dispatch",
+      "requirements": "Official five-field request, target-specific valid external submission approval, pre-cutoff; owner Actions Run workflow. This assistant did not exercise new dispatch."
+    },
+    {
+      "id": "B1",
+      "route": "Existing JRA Race-Day Autopilot",
+      "workflow": ".github/workflows/km-jra-race-day-autopilot.yml",
+      "implementation": "runtime/jra_source_runtime/jra_race_day_autopilot.py",
+      "schedule": [
+        "30 23 * * *",
+        "*/5 0-12 * * *"
+      ],
+      "runtime_permissions": {
+        "contents": "write",
+        "actions": "write"
+      },
+      "scope": "JRA only; resolver km-jra-race-intent-resolver.yml; not KAW",
+      "implementation_status": "VERIFIED exists and actually scheduled/dispatched",
+      "current_status": "BLOCKED before race discovery: OFFICIAL_CALENDAR_UNAVAILABLE:HTTPError:HTTP Error 403: Forbidden",
+      "run_id": 38705665091,
+      "job": 116324344489,
+      "run_conclusion": "success",
+      "observed_log_times": [
+        "2026-10-15T08:27:04Z",
+        "2026-10-15T08:29:10Z",
+        "2026-10-15T08:31:16Z"
+      ],
+      "correctness": "Do not equate success with formal forecast; do not infer no meetings from denied official calendar. No site restrictions bypassed."
+    },
+    {
+      "id": "B2",
+      "route": "LOCAL automatic official-race discovery/registration",
+      "status": "NOT_FOUND in tracked runtime/tools/profiles/workflows searched on main",
+      "activation": "No LOCAL scheduled discovery dispatcher or activation found; JRA activation cannot be extended to LOCAL"
+    },
+    {
+      "id": "B3",
+      "route": "Existing LOCAL push Race-Key intake",
+      "workflow": ".github/workflows/km-local-race-key-entry.yml",
+      "trigger": "main runtime/race_key_requests/*.json",
+      "status": "VERIFIED existing operational ingress via saved R03/R05 runs; no new registration this run",
+      "note": "Does not need ChatGPT workflow_dispatch, but still requires permitted authorized Contents Write. Original R06/R07 denial unresolved; do not use alternate write operation to bypass refusal."
+    },
+    {
+      "id": "B4",
+      "route": "Existing LOCAL full Formal Intent registry push",
+      "workflow": ".github/workflows/km-formal-single-entry.yml",
+      "trigger": "main runtime/formal_intents/*.json",
+      "implementation": "tools/local_intent_matrix.py",
+      "status": "VERIFIED implementation; existing canonical frozen-intent prerequisites",
+      "note": "Not automatic race discovery. Do not fabricate full intent/Static to satisfy it."
+    },
+    {
+      "id": "C",
+      "route": "ChatGPT new workflow_dispatch",
+      "status": "BLOCKED operation not exposed",
+      "existing_rerun": "VERIFIED prior run38684269703 attempt2 157PASS; not used as replacement for new race dispatch in this run"
+    }
+  ],
+  "validation": {
+    "current_regressions": {
+      "command": "PYTHONPATH=runtime:. python -m pytest -q tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_continuity.py tests/test_jra_autopilot_failure_recovery.py tests/test_local_race_key_ingress.py tests/test_recovery_result_entry.py tests/test_formal_single_entry_intent_completeness.py",
+      "result": "61 passed in 1.58s",
+      "scope": "Offline existing tests, no live signing or remote dispatch"
+    },
+    "existing_receipt_checks": [
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R03-LIVE-R1/SOURCE/runs/race-key-38692904537-source/source_receipt_envelope.json",
+        "phase": "SOURCE",
+        "receipt_sha256": "1af7e429fadd82881e3969dffa73bc6a16fbee9998a9d816ae13d97eb553e539",
+        "timestamp": "2026-10-15T06:31:55.246432+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R03-LIVE-R1/FORMAL/runs/race-key-38692904537-formal/pre_krs_receipt_envelope.json",
+        "phase": "PRE_KRS",
+        "receipt_sha256": "5ded1dab50b9780755e1a1577575e49108a1c14d7ecb4ec110a91c22b55e5d6a",
+        "timestamp": "2026-10-15T06:31:57.514540+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R03-LIVE-R1/FORMAL/runs/race-key-38692904537-formal/krs_receipt_envelope.json",
+        "phase": "KRS_RUN",
+        "receipt_sha256": "2b4c3d1dfd25b6d154c06d71e0fc278e1d6e84cc4f1c53ffafb2e2000ae6e80c",
+        "timestamp": "2026-10-15T06:32:03.781051+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R03-LIVE-R1/FORMAL/runs/race-key-38692904537-formal/final_receipt_envelope.json",
+        "phase": "FINAL",
+        "receipt_sha256": "27e46c006f1225f0e9adb50efb2e21bd75909fb4e93faa22e48d15511fc1afd3",
+        "timestamp": "2026-10-15T06:32:04.620436+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R03-LIVE-R1/FORMAL/runs/race-key-38692904537-formal/source_receipt_envelope.json",
+        "phase": "SOURCE",
+        "receipt_sha256": "1af7e429fadd82881e3969dffa73bc6a16fbee9998a9d816ae13d97eb553e539",
+        "timestamp": "2026-10-15T06:31:55.246432+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/SOURCE/runs/race-key-38700540987-source/source_receipt_envelope.json",
+        "phase": "SOURCE",
+        "receipt_sha256": "d4372e3b1bc696b1709539e00deb8cd66a6edb6393d4e2c18a746b912f2b2a34",
+        "timestamp": "2026-10-15T07:42:47.617474+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/FORMAL/runs/race-key-38700540987-formal/pre_krs_receipt_envelope.json",
+        "phase": "PRE_KRS",
+        "receipt_sha256": "8b4018cde22d7087622509695612940aec17228e68a417e9571e797b9efcc11e",
+        "timestamp": "2026-10-15T07:42:50.533644+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/FORMAL/runs/race-key-38700540987-formal/krs_receipt_envelope.json",
+        "phase": "KRS_RUN",
+        "receipt_sha256": "34fadf93a5fc0a4eded2adfa1b068f28c776803d0b08db17444b324d521c268b",
+        "timestamp": "2026-10-15T07:42:58.187287+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/FORMAL/runs/race-key-38700540987-formal/final_receipt_envelope.json",
+        "phase": "FINAL",
+        "receipt_sha256": "7a6fe3f84ecc99675101c2805503579b09c71a50169b1a5e842bd4471e490984",
+        "timestamp": "2026-10-15T07:42:59.086577+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/FORMAL/runs/race-key-38700540987-formal/source_receipt_envelope.json",
+        "phase": "SOURCE",
+        "receipt_sha256": "d4372e3b1bc696b1709539e00deb8cd66a6edb6393d4e2c18a746b912f2b2a34",
+        "timestamp": "2026-10-15T07:42:47.617474+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      },
+      {
+        "path": "runtime/executions/KM-LOCAL-KAW-20261015-R05-LIVE-R1/RESULT/runs/race-key-38700540987-result/result_receipt_envelope.json",
+        "phase": "RESULT",
+        "receipt_sha256": "8efecc0957711d3bc51d0ea58f34f2c7f94d391b91d2511941e0e4950fe8a9f7",
+        "timestamp": "2026-10-15T08:02:37.950973+00:00",
+        "signature_and_receipt_and_artifact_sha": "PASS"
+      }
+    ],
+    "trust_anchor": "jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE=",
+    "receipt_notes": "R03/R05 read-only local Ed25519 checks plus canonical receipt/artifact SHA and race_id. Excluded candidate receipts. No remote payload. Not a fresh LIVE acceptance."
+  },
+  "multi_race_evidence": {
+    "r03": {
+      "run_id": 38692904537,
+      "entry": "SUCCESS",
+      "result_job": 116283070856,
+      "result_state": "in_progress waiting official result at query",
+      "final_receipt": "27e46c006f1225f0e9adb50efb2e21bd75909fb4e93faa22e48d15511fc1afd3",
+      "final_at": "2026-10-15T06:32:04.620436+00:00",
+      "cutoff": "2026-10-15T15:53:00+09:00"
+    },
+    "r05": {
+      "run_id": 38700540987,
+      "created_at": "2026-10-15T07:42:17Z",
+      "entry": "SUCCESS",
+      "final_receipt": "7a6fe3f84ecc99675101c2805503579b09c71a50169b1a5e842bd4471e490984",
+      "final_at": "2026-10-15T07:42:59.086577+00:00",
+      "cutoff": "2026-10-15T16:53:00+09:00",
+      "signed_result_receipt": "8efecc0957711d3bc51d0ea58f34f2c7f94d391b91d2511941e0e4950fe8a9f7",
+      "result_at": "2026-10-15T08:02:37.950973+00:00",
+      "learning_state_present": true
+    },
+    "conclusion": "Saved actual evidence shows R03 RESULT waiting did not stop R05 formal/result progress. R05 settlement financial correctness not independently reaudited here. No Delivery receipt found for either. Not full multi-race acceptance."
+  },
+  "runtime": {
+    "assessment": {
+      "bundle_fingerprint_actual": "2141fd66d2417c6488ac10349dca55820f45e7354d43e33f8fa4317969d3fa2e",
+      "bundle_fingerprint_expected": "2141fd66d2417c6488ac10349dca55820f45e7354d43e33f8fa4317969d3fa2e",
+      "bundle_mismatches": {},
+      "checked_at": "2026-10-15T09:00:09.500863+00:00",
+      "errors": [],
+      "family_id": "LOCAL",
+      "gateway_profile": "KM-LOCAL-EXECUTION-GATEWAY-v1.6-20261008",
+      "git_revision_is_compatibility_authority": false,
+      "git_revision_match": true,
+      "missing_capabilities": [],
+      "runtime_git_revision_actual": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+      "runtime_git_revision_pointer": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+      "runtime_profile_actual": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+      "runtime_profile_expected": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+      "status": "PASS",
+      "warnings": []
+    },
+    "health": {
+      "calibration_status": "PROVISIONAL_UNCALIBRATED",
+      "capabilities": [
+        "SOURCE_MANIFEST_LOCAL_NAR",
+        "SOURCE_RUNNER_UNIVERSE",
+        "SOURCE_SAME_DAY_POSITION_BIAS",
+        "SOURCE_NAR_ENTITY_PROFILES",
+        "SOURCE_POINT_IN_TIME_POPULATION_SEED",
+        "SOURCE_JMA_WEATHER",
+        "SOURCE_SBO_PUBLIC_SHADOW",
+        "SOURCE_FREEZE",
+        "SOURCE_VERIFY",
+        "SOURCE_ACQUIRE",
+        "PRE_KRS",
+        "KRS_EXECUTE",
+        "FINAL",
+        "FORMAL",
+        "RESULT",
+        "VERIFY"
+      ],
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "engine_version": "1.1.0",
+      "expected_engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "expected_parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+      "family": "LOCAL",
+      "github_revision": "f0d23766b1d2e4cefc6194458b0e9141d5479cbc",
+      "jma_weather_evidence_profile": "KM-LOCAL-JMA-WEATHER-EVIDENCE-v1.0-20260924",
+      "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+      "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+      "nar_auxiliary_evidence_profile": "KM-LOCAL-NAR-AUXILIARY-EVIDENCE-v1.0-20260924",
+      "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+      "nar_runner_universe_profile": "KM-LOCAL-NAR-RUNNER-UNIVERSE-v1.0-20260923",
+      "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+      "nar_source_manifest_profile": "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923",
+      "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+      "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+      "parameter_map_version": "0.1-provisional",
+      "point_in_time_population_profile": "KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924",
+      "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+      "receipt_public_key_b64": "jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE=",
+      "receipt_signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+      "runtime_app_sha256": "e54ae7ad31a1959df113568f6d1591e9753971f30fccac5325e627e07e52f12b",
+      "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+      "sbo_public_shadow_profile": "KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",
+      "sbo_public_shadow_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53",
+      "source_acquisition_profile": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
+      "source_acquisition_required": true,
+      "source_acquisition_sha256": "3311af0423ba6e8bdf5d427da7b4a9d36a76c20daa682f3ddc7523ee1545a2df",
+      "status": "READY"
+    }
+  },
+  "prs": {
+    "code_candidate": 280,
+    "code_subject": "9d38b8cc03f185944e794d55c1afea8f864f856d",
+    "head": "f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+    "evidence": 282,
+    "new_code": 0,
+    "reason": "Existing PR280 already holds immutable event-range/multi-race repairs. No reproduced new repository defect warrants duplicate code. Missing LOCAL discovery is not activated by JRA scheduler.",
+    "sbo": "Separate historical URW public fixture robots HTTP502; 4 unit PASS, existing CI13/14 workflows success; no exemption or bypass",
+    "required_checks": {
+      "main_protected": false,
+      "rulesets": [],
+      "branch_protection_detail": "403 Resource not accessible by integration previously observed",
+      "sbo_required": "UNCONFIRMED exact check enforcement; owner must inspect branch/ruleset UI, no check relaxed"
+    },
+    "production": "No merge/deploy/activation. Existing wrapper rollback package remains candidate; Human Review/owner approval and fresh compatibility checks needed."
+  },
+  "deliverables": {
+    "A": "VERIFIED route inventory; operational completion not claimed",
+    "B": "VERIFIED exposed operations; new dispatch BLOCKED",
+    "C": "PENDING native owner path; ChatGPT new dispatch BLOCKED",
+    "D": "VERIFIED JRA implementation/active schedule but official calendar BLOCKED; LOCAL discovery not found",
+    "E": "COMPLETED no duplicate code; existing PR280 repair candidate retained",
+    "F": "VERIFIED",
+    "G": "VERIFIED current61PASS and saved CI not all green",
+    "H": "BLOCKED no target-specific new future-race approval",
+    "I": "PENDING Delivery and both closed loops incomplete; partial concurrency evidence VERIFIED",
+    "J": "BLOCKED Production application lacks owner approval; no automatic changes"
+  },
+  "owner_blockers": [
+    "Explicit future race/date/post/cutoff and external Runtime endpoint/data-scope approval before any new LIVE registration; no R06/R07 retry.",
+    "Owner-native Run workflow is the existing direct entry; obtain actual new run ID. ChatGPT full auto remains blocked until a supported dispatch operation is available.",
+    "Recover original R06/R07 tool rejection to resolve its owner; supported Contents Write must not be used as a bypass.",
+    "JRA official calendar403 needs permitted official access recovery; no meeting guessing or restriction bypass.",
+    "LOCAL discovery dispatcher not found; introducing or activating one exceeds this frozen existing-mechanism scope.",
+    "Confirm exact Required Checks in owner settings; review PR280, then explicit merge/deploy approval; no delivery completion from job SUCCESS."
+  ]
+}
