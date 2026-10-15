@@ -236,7 +236,16 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
     parsed = parse_race_card(source)
     if set(ids) != set(parsed):
-        raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+        declared = {str(r.get("runner_id")) for r in
+                    (source.get("declared_runner_universe") or {}).get("runners") or []}
+        inactive = {str(r.get("runner_id")) for r in source.get("runner_status_registry") or []
+                    if r.get("status") in {"CANCELLED", "EXCLUDED"}}
+        # Official cards retain scratched rows. Omit only the exact declared
+        # rows explicitly excluded by the signed SOURCE status registry.
+        if (set(parsed) != declared or set(ids) - set(parsed)
+                or set(parsed) - set(ids) != inactive):
+            raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+        parsed = {rid: parsed[rid] for rid in ids}
     for row in pool:
         rid = str(row["runner_id"])
         if str(parsed[rid]["name"]) != str(row["name"]):

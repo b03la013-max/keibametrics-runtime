@@ -69,6 +69,44 @@ def test_numeric_values_cannot_influence_evidence_only_production_static():
     assert i1 == i2
 
 
+def _cancelled_runner_contract_fixture():
+    req, source, numeric, policy, now = replay_fixture()
+    artifact = source["artifact"]
+    declared = copy.deepcopy(artifact["official_runner_universe"])
+    artifact["declared_runner_universe"] = declared
+    artifact["active_runner_universe"] = {
+        "runners": [r for r in declared["runners"] if r["runner_id"] not in {"3", "7"}]}
+    artifact["runner_status_registry"] = [
+        {"runner_id": r["runner_id"], "status":
+         "CANCELLED" if r["runner_id"] in {"3", "7"} else "ACTIVE"}
+        for r in declared["runners"]]
+    numeric["runners"] = [r for r in numeric["runners"] if r["runner_id"] not in {"3", "7"}]
+    return req, source, numeric, policy, now
+
+
+def test_explicit_cancelled_card_rows_do_not_enter_static():
+    # Synthetic parser contract fixture; this is not a new signed SOURCE.
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+    intent, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+    assert set(intent["static_prediction"]["ranking"]) == {
+        r["runner_id"] for r in source["artifact"]["active_runner_universe"]["runners"]}
+    assert not ({"3", "7"} & set(intent["static_prediction"]["ranking"]))
+    assert all(not ({"3", "7"} & {p["head"], p["second"]}) for p in intent["pair_dispositions"])
+    assert all(not ({"3", "7"} & {p["head"], p["second"], p["third"]})
+               for p in intent["third_dispositions"])
+
+
+@pytest.mark.parametrize("case", ["missing_declared", "unexplained_removal"])
+def test_card_universe_removal_without_exact_official_basis_holds(case):
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+    if case == "missing_declared":
+        source["artifact"]["declared_runner_universe"]["runners"].pop()
+    else:
+        source["artifact"]["runner_status_registry"][2]["status"] = "UNKNOWN"
+    with pytest.raises(StaticOwnerError, match="OFFICIAL_CARD_RUNNER_MISMATCH"):
+        build_formal_static(req, source, numeric, policy=policy, now=now)
+
+
 @pytest.mark.parametrize("case,code", [
     ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
     ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),

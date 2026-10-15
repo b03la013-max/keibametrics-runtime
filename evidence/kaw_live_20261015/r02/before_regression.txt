@@ -1,0 +1,74 @@
+..F...........                                                           [100%]
+=================================== FAILURES ===================================
+____________ test_explicit_cancelled_card_rows_do_not_enter_static _____________
+
+    def test_explicit_cancelled_card_rows_do_not_enter_static():
+        # Synthetic parser contract fixture; this is not a new signed SOURCE.
+        req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+>       intent, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+candidate_changes/tests/test_local_production_static_owner.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+request = {'family_id': 'LOCAL', 'race_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'execution_id': 'KM-LOCAL-KAW-20261014-R05-LIVE-R1', 'venue_id': 'KAW', ...}
+envelope = {'artifact': {'active_runner_universe': {'runners': [{'body_weight': 494, 'body_weight_change': 1, 'canonical_name': '...87c1012', 'signature': 'SUeHaFb+qqEOxOr8qksu1VhjFYkXnqmJgb7glO6aiZ1wZ+xpaAz1+TBjfJdOUrcG4kd4xBNggh+Owut0cdIqDA==', ...}
+numerical = {'strict_full_numerical_ready': True, 'production_numerical_authority': {'prediction_consumption_authorized': False}, ...components': {'ZAI-WIN': {'value': 82}}}, {'runner_id': '8', 'canonical_components': {'ZAI-WIN': {'value': 76}}}, ...]}
+policy = {'profile': 'KM-LOCAL-PRODUCTION-STATIC-EVIDENCE-OWNER-v1.0-20261014', 'status': 'OWNER-REQUESTED / INITIAL-ACTIVATION...CE-ONLY / REQUIRES-LIVE-ACCEPTANCE', 'owner_authorization': 'EXPLICIT_USER_INSTRUCTION_20261014', 'enabled': True, ...}
+now = datetime.datetime(2026, 10, 14, 7, 34, tzinfo=datetime.timezone.utc)
+
+    def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
+                            policy: dict, now: datetime | None = None) -> tuple[dict, dict]:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise StaticOwnerError("STATIC_FREEZE_NAIVE")
+        now = now.astimezone(timezone.utc)
+        if (policy.get("profile") != PROFILE or policy.get("enabled") is not True
+                or policy.get("owner_authorization") != "EXPLICIT_USER_INSTRUCTION_20261014"
+                or policy.get("numerical_prediction_consumption") is not False):
+            raise StaticOwnerError("STATIC_OWNER_AUTHORIZATION_MISSING")
+        if request.get("family_id") != "LOCAL":
+            raise StaticOwnerError("LOCAL_ONLY")
+        venue = str(request.get("venue_id") or "")
+        if venue not in set(policy.get("venues") or []) or venue not in VENUE_NAMES:
+            raise StaticOwnerError("VENUE_OWNER_NOT_AUTHORIZED")
+        cutoff = _dt(request.get("prediction_cutoff"))
+        release = _dt(request.get("release_deadline_at"))
+        if now >= cutoff or now >= release:
+            raise StaticOwnerError("PRESTART_STATIC_OWNER_DEADLINE_HOLD")
+        if not isinstance(envelope, dict) or not envelope.get("signature") or not envelope.get("receipt_sha256"):
+            raise StaticOwnerError("SOURCE_SIGNATURE_REQUIRED")
+        receipt = envelope.get("receipt") or {}
+        if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+                or receipt.get("race_id") != request.get("race_id")):
+            raise StaticOwnerError("SIGNED_SOURCE_RACE_MISMATCH")
+        source = envelope.get("artifact") or {}
+        if source.get("formal_ready") is not True or _dt(source.get("source_freeze_at")) >= cutoff:
+            raise StaticOwnerError("OFFICIAL_SOURCE_NOT_PRESTART_FROZEN")
+        official = source.get("source_race_context") or {}
+        if (official.get("venue_id") != venue
+                or str(official.get("race_date") or "").replace("/", "-") != request.get("race_date")
+                or int(official.get("race_no") or 0) != int(request.get("race_no") or 0)):
+            raise StaticOwnerError("OFFICIAL_SOURCE_IDENTITY_MISMATCH")
+        official_post = (source.get("normalized_evidence") or {}).get("start_time") or {}
+        if (official_post.get("authority") != "NAR_OFFICIAL"
+                or official_post.get("cutoff_relation") != "PRE_CUTOFF"
+                or official_post.get("value") != _dt(request.get("scheduled_post_at")).astimezone(JST).strftime("%H:%M")):
+            raise StaticOwnerError("OFFICIAL_SOURCE_POST_MISMATCH")
+        if (numerical.get("strict_full_numerical_ready") is not True
+                or (numerical.get("production_numerical_authority") or {}).get("prediction_consumption_authorized") is not False
+                or len(numerical.get("required_indices") or []) != 29):
+            raise StaticOwnerError("NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE")
+        pool = (source.get("active_runner_universe") or source.get("official_runner_universe") or {}).get("runners") or []
+        ids = [str(r.get("runner_id")) for r in pool]
+        if len(pool) < 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
+            raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
+        parsed = parse_race_card(source)
+        if set(ids) != set(parsed):
+>           raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
+E           runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CARD_RUNNER_MISMATCH
+
+candidate_changes/runtime/local_production_static_owner.py:239: StaticOwnerError
+=========================== short test summary info ============================
+FAILED candidate_changes/tests/test_local_production_static_owner.py::test_explicit_cancelled_card_rows_do_not_enter_static
+1 failed, 13 passed in 0.28s
