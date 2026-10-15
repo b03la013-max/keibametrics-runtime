@@ -1,0 +1,143 @@
+{
+  "status": "PREPARED_FOR_OWNER_REVIEW_NOT_LIVE_READY",
+  "proposed_race": {
+    "execution_id": "KM-LOCAL-KAW-20261016-R01-LIVE-R1",
+    "venue": "KAW",
+    "date": "2026-10-16",
+    "race": 1,
+    "scheduled_post": "2026-10-16T15:00:00+09:00",
+    "proposed_cutoff": "2026-10-16T14:58:00+09:00",
+    "post_is_official": true,
+    "cutoff_is_proposal_not_owner_approved": true,
+    "official_card_url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/DebaTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=1",
+    "source_status": "OFFICIAL_WEB_OBSERVATION_NOT_SIGNED_SOURCE",
+    "runner_recheck": "REQUIRED_BEFORE_SOURCE_AND_FINAL",
+    "future_day_raw_plan_sha": null
+  },
+  "send_destination": "https://witnessstrictimage-production.up.railway.app",
+  "data_scope": "INTENT_SOURCE_STATIC_PRE_KRS_KRS_FINAL_RESULT_SETTLEMENT",
+  "production_owner": "profiles/local_production_static_owner_20261014_v1.json",
+  "bounded_execution": {
+    "phase": "B",
+    "race_numbers": [
+      1
+    ],
+    "max_dispatches": 1,
+    "maximum_autonomous_race_entries_in_flight": 1,
+    "scope_of_concurrency_bound": "THIS_DATED_PHASE_B_APPROVAL_ONLY_NOT_OTHER_MANUAL_WORKFLOWS_OR_SHARED_RUNTIME",
+    "scheduler_concurrency": 1,
+    "cron_utc": "*/5 0-12 * * *",
+    "maximum_scheduled_events_per_day": 156,
+    "scheduler_job_timeout_minutes": 10,
+    "entry_job_timeout_minutes": 35,
+    "result_job_timeout_minutes": 190,
+    "resolve_job_timeout_minutes": "GITHUB_DEFAULT_360_NOT_EXPLICITLY_OVERRIDDEN",
+    "preflight_ticks_max": 3,
+    "health_transport_attempts_per_tick": 4,
+    "maximum_health_transport_attempts": 12,
+    "ambiguous_dispatch_retry": 0,
+    "persistence_attempts_per_call": 5,
+    "start_lead_seconds": 3600,
+    "minimum_remaining_seconds": 600,
+    "proposed_window_jst": "14:00 <= dispatch < 14:48 on 2026-10-16",
+    "result_wait_blocks_next_entry": false,
+    "monetary_ceiling": null
+  },
+  "gates": {
+    "MERGE_READY": false,
+    "DEPLOY_READY": false,
+    "PHASE_B_LIVE_READY": false,
+    "phase_a_saved_official_day": "VERIFIED",
+    "phase_b_offline_trial": "VERIFIED_SYNTHETIC_ONLY",
+    "human_review": "PENDING",
+    "effective_required_checks": "OWNER_CONFIRMATION_REQUIRED",
+    "future_plan_sha": "PENDING_FRESH_SAFE_OFFICIAL_ACQUISITION",
+    "cost_cap": "OWNER_VALUE_AND_PROVIDER_CONTROL_EVIDENCE_REQUIRED",
+    "live_egress": "NOT_APPROVED",
+    "activation": "NOT_APPROVED"
+  },
+  "owner_operations": [
+    {
+      "order": 1,
+      "operation": "Human Review",
+      "target": "PR280@9130c563",
+      "ui": "https://github.com/b03la013-max/keibametrics-runtime/pull/280/files",
+      "scope": "Review full59-path classification and exact executable diff; AI does not submit human approval"
+    },
+    {
+      "order": 2,
+      "operation": "Effective Required Checks",
+      "ui": [
+        "https://github.com/b03la013-max/keibametrics-runtime/settings/rules",
+        "https://github.com/b03la013-max/keibametrics-runtime/settings/branches"
+      ],
+      "scope": "Confirm applicable branch/ruleset enforcement and exact check/app. Observed duplicate check names acceptance/live/unit; successful workflows do not prove enforcement. Do not remove checks"
+    },
+    {
+      "order": 3,
+      "operation": "Cost observation and ceiling approval",
+      "target": "GitHub account Billing and licensing / Usage and Budgets; Railway workspace75f69a6e-8a26-48d1-b470-ed3ea45e216b Usage",
+      "scope": "Confirm current plan, incurred usage, remaining credit, artifact storage, compute+egress and numeric monetary ceiling; set or retain provider control only with separate explicit authorization. Railway hard limit is workspace compute-wide and may take shared workloads offline; agent limit does not cap compute"
+    },
+    {
+      "order": 4,
+      "operation": "Production Merge",
+      "target": "PR280 exact reviewed head",
+      "scope": "Explicit Merge approval after current CI/Authority/check review; no other PR auto-merge"
+    },
+    {
+      "order": 5,
+      "operation": "Separate Runtime Deploy",
+      "target": "servicec0c4d3df-1d7b-476b-bc05-1870d19ca871 / environment8af4a037-975f-4c15-8005-7bcde494022b",
+      "scope": "Apply reviewed wrapper-only start command pinned to9130c563 and separately aligned Gateway patch. Preserve Engine, parameter, signer, key and all other deployed root modules. Recheck fingerprint/Canary/existing receipt/readback before LIVE"
+    },
+    {
+      "order": 6,
+      "operation": "Dated Phase B egress and schedule approval",
+      "target": "KAW2026-10-16R01 ONLY",
+      "scope": "Approve proposed five fields, existing KAW Owner, canonical endpoint, listed payload scope, one Dispatch, scheduler156events/day upper bound, retries, cost control, rollback. Do not approve other races by implication; no secrets or purchase"
+    },
+    {
+      "order": 7,
+      "operation": "Plan binding and Activation",
+      "target": "profiles/local_autonomous_approvals/2026-10-16-KAW.json and repository variableKM_LOCAL_AUTONOMOUS_ENABLED",
+      "scope": "First acquire fresh official full-day plan and check selected race time/Authority/duplicates; fill exact plan SHA and real approval/cost refs, then approved enabled record plus true variable. Disabled draft in evidence is not read by Scheduler. Stop if post/cutoff/authority changes"
+    },
+    {
+      "order": 8,
+      "operation": "Future acceptance",
+      "scope": "Record actual RunID, SOURCE/numerical/static/PRE_KRS/KRS/FINAL receipts and canonical tree; independent Delivery time/content hash; official RESULT/Settlement/PFS/Learning. Actual Purchase PFS UNKNOWN. No Phase C/D until separate genuine acceptance and approval"
+    }
+  ],
+  "rollback_triggers": [
+    "Fingerprint/Signer/Engine/parameter mismatch",
+    "Receipt/identity mismatch",
+    "Unexplained Runner Universe mismatch",
+    "Preflight retry exhausted or ambiguous dispatch",
+    "Approaching/exceeded deadline",
+    "Unavailable required official payout/refund information",
+    "Owner-approved cost ceiling or provider control reached",
+    "Delivery failure: retain FINAL and report separate Delivery Failure"
+  ],
+  "rollback_sequence": [
+    "Disable new autonomous受付 first; preserve claims, checkpoints and original signed artifacts",
+    "If Runtime rollback authorized, restore saved known-good start command/deployment and matching Gateway rollback patch",
+    "Fresh health/fingerprint/canary and saved-receipt verification; no blind re-dispatch or past-race FINAL",
+    "Old cancellation bug returns after Runtime rollback; affected race HOLD"
+  ],
+  "statuses": {
+    "A": "VERIFIED_CURRENT_RUNTIME_CANDIDATE_NOT_DEPLOYED",
+    "B": "PENDING",
+    "C": "BLOCKED",
+    "D": "VERIFIED_COUNT_BOUNDS_BILLING_CAP_PENDING",
+    "E": "BLOCKED",
+    "F": "BLOCKED",
+    "G": "PENDING_OWNER_APPROVAL_AND_FRESH_PLAN_BINDING",
+    "H": "READY_OWNER_OPERATIONS_SPECIFIED",
+    "I": "READY_PACKAGE_NOT_EXECUTED",
+    "J": "BLOCKED"
+  },
+  "production_changes": 0,
+  "new_live_payloads": 0,
+  "openai_paid_requests": 0
+}
