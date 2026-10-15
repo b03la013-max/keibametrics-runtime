@@ -89,3 +89,5 @@ Family C1契約の独立性は実装独立性であり、第三者Human Reviewer
 採用後に限り、C0/C1証拠条件＋Owner本人の差分確認＋exact-head Merge承認を用いる。Discovery/Schedulingとwrapper Deploy、KAW限定Activationはそれぞれ明示承認対象。AI監査/CI/Owner包括方針を独立Human Reviewとは表示しない。予測Policy昇格のOOS/Human Review条件、既存数値・KRS・MEC・Capital・Signer/Anchor・Artifactを維持する。
 
 Owner採用指示更新：2026-10-15 23:27 JSTの正式化依頼を上記Governance第9.5節へ記録した。以前の第三者レビュー探索HOLDは、Owner本人の差分・リスク確認HOLDへ移る。独立Human Reviewは未実施のままとし、Workの監査で代替しない。正本追記はPR282上で保存し、PR280の実行コードHEAD/CIを動かさない。Owner確認未成立のためMerge/Deploy/Activationは未実行。
+
+2026-10-15 23:42 JST更新：Owner本人の差分確認・Merge承認を受領。PR280 Merge SHA552700f26a4b1b8c321a8b5b2321a1c87df41237。旧Owner確認HOLDは解消。wrapper限定Deployは単一startCommand差分をステージ後、Deployツール承認がキャンセルされ停止。Activation/新LIVEは未実行。既存f0d23766/旧Gatewayを維持し、次操作は保留1件の正規Deploy承認。

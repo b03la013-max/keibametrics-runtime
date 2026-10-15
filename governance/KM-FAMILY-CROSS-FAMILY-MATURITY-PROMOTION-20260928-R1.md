@@ -140,3 +140,9 @@ Ownerは本チャットの「PR #280 個人開発限定承認方式の正式採�
 ただし同指示は「Owner本人による差分・リスク確認が必要な場合、その確認をWork自身が代行したと偽装してはいけません」と明記している。Owner本人が差分・リスクを確認済みという申告はまだ得られていない。従って9.3の対象コードへのOwner本人の実レビュー・リリース承認条件は未充足であり、PR280 Merge、wrapper Deploy、Phase B ActivationはHOLD。方式採用記録とコードのリリース承認を混同しない。
 
 本追記はPR282上の正本反映差分であり、main未反映。既存Current Authority pointer/Profile/Dispatcherの実行ゲートを変更せず、Production効力・成功を自動付与しない。
+
+### 9.6 Owner本人確認と実Merge記録（2026-10-15 23:42 JST）
+
+Owner本人は対象HEADの実質差分を確認済みと明言しMergeを承認した。第9.5節のOwner本人確認HOLDはこの時点で解消した。独立Human Reviewを実施したという意味ではない。HEAD655530735f24cce78605dd1bd34843bdb2ea253dに対しCI14/14を再照合し、Merge552700f26a4b1b8c321a8b5b2321a1c87df41237を実行した（2026-10-15T14:42:53Z）。
+
+その後wrapper-only startCommand1件をRailway既存productionへステージしたが、accept-deployが「Cancelled — the user did not approve this action. No changes were made.」を返した。Deploy/Activationは未実行、稼働中Runtime/Gatewayは旧まま。別経路での適用を試みない。mainへの本Governance追記は未実施で、Owner承認原文と実操作記録をPR282に保存する。
