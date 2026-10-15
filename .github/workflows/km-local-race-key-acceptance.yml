@@ -62,26 +62,27 @@ jobs:
       - name: LOCAL race-key and existing formal regression
         run: python -m pytest -q tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py
 
-      - name: Record historical NAR day discovery availability (no LIVE/OOS execution)
+      - name: Record official NAR day discovery availability (read-only, no LIVE/OOS execution)
         run: |
           python - <<'PY'
           import json
           from datetime import datetime, timezone
           from pathlib import Path
           from runtime.local_race_day_dispatcher import discover
-          try:
-              plan=discover('KAW','2026-10-15',120,now=datetime.now(timezone.utc))
-              Path('historical-discovery-plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2))
-              result={'status':'PASS_HISTORICAL_READ_ONLY','race_count':len(plan['races']),
-                      'plan_sha256':plan['plan_sha256'],'races':[r['fields'] for r in plan['races']],
-                      'runner_counts':[{'race_no':r['fields']['race_no'],'declared':r['declared_runner_universe']['runner_count'],
-                        'active':(r['observed_active_runner_universe'] or {}).get('runner_count'),'status':r['active_universe_status']} for r in plan['races']],
-                      'new_live_send':False,'forward_oos':False}
-          except Exception as exc:
-              result={'status':'HOLD_OFFICIAL_DISCOVERY_UNAVAILABLE','reason':str(exc),
-                      'new_live_send':False,'forward_oos':False}
-          Path('historical-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
-          print(json.dumps(result,ensure_ascii=False))
+          for day,prefix in [('2026-10-15','historical'),('2026-10-16','phase-b')]:
+              try:
+                  plan=discover('KAW',day,120,now=datetime.now(timezone.utc))
+                  Path(prefix+'-discovery-plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2))
+                  result={'status':'PASS_HISTORICAL_READ_ONLY' if prefix=='historical' else 'PASS_FUTURE_PLAN_READ_ONLY_NOT_LIVE_ACCEPTANCE','race_date':day,'race_count':len(plan['races']),
+                          'plan_sha256':plan['plan_sha256'],'races':[r['fields'] for r in plan['races']],
+                          'runner_counts':[{'race_no':r['fields']['race_no'],'declared':r['declared_runner_universe']['runner_count'],
+                            'active':(r['observed_active_runner_universe'] or {}).get('runner_count'),'status':r['active_universe_status']} for r in plan['races']],
+                          'new_live_send':False,'forward_oos':False}
+              except Exception as exc:
+                  result={'status':'HOLD_OFFICIAL_DISCOVERY_UNAVAILABLE','race_date':day,'reason':str(exc),
+                          'new_live_send':False,'forward_oos':False}
+              Path(prefix+'-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+              print(json.dumps(result,ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -90,4 +91,6 @@ jobs:
           path: |
             historical-discovery.json
             historical-discovery-plan.json
+            phase-b-discovery.json
+            phase-b-discovery-plan.json
           if-no-files-found: ignore

@@ -5,7 +5,11 @@ run-name: LOCAL ${{ inputs.venue_id || github.event_name }} ${{ inputs.race_date
 # GitHub file write is needed to START the signed SOURCE process.
 on:
   schedule:
-    - cron: "*/5 0-12 * * *"
+    # Phase B only: 2026-10-16 KAW R01 (15:00 JST), three bounded
+    # opportunities at 14:00/14:05/14:10 JST. Cron has no year field;
+    # the existing exact dated approval gate still prevents later reuse.
+    # Phase C/D scheduling requires a separately reviewed configuration.
+    - cron: "0,5,10 5 16 10 *"
   workflow_dispatch:
     inputs:
       venue_id:
