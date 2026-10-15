@@ -17,13 +17,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Wait for Rev.7 and verify automatic SBO capture in signed SOURCE
+      - name: Wait for canonical runtime and verify automatic SBO capture in signed SOURCE
         run: |
           python - <<'PY'
           import copy,json,time,urllib.request,urllib.error
 
-          BASE="https://witnessstrictimage-production.up.railway.app"
-          EXPECTED="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.7-20260924-SBO-PUBLIC-SHADOW-EVIDENCE"
+          from runtime.execution_gateway import assess_runtime_health, family_config, load_gateway
+
+          gateway=load_gateway()
+          BASE=family_config("LOCAL",gateway)["external_endpoint"].rstrip("/")
           RID="KM-LOCAL-SBO-PUBLIC-SHADOW-PROD-ACCEPT-20250921-URW-R01"
 
           def call(path,payload=None,method="POST",timeout=180):
@@ -41,16 +43,18 @@ jobs:
                   return e.code,body
 
           health=None
+          assessment=None
           for _ in range(90):
               try:
                   hc,h=call("/health",None,"GET",30)
-                  if hc==200 and h.get("runtime_revision")==EXPECTED and h.get("status")=="READY":
+                  assessment=assess_runtime_health(h,"LOCAL",gateway)
+                  if hc==200 and assessment["status"]=="PASS":
                       health=h
                       break
               except Exception:
                   pass
               time.sleep(5)
-          assert health is not None,"Rev.7 production runtime did not become READY"
+          assert health is not None,("Canonical production runtime did not become compatible and READY",assessment)
           assert health["sbo_public_shadow_profile"]=="KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",health
           assert "SOURCE_SBO_PUBLIC_SHADOW" in health["capabilities"],health
 
@@ -106,3 +110,4 @@ jobs:
             "tamper_rejected":True,
           },ensure_ascii=False,separators=(",",":")))
           PY
+
