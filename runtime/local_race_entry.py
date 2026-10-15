@@ -62,6 +62,17 @@ def run(intent, *, output, run_id, github_sha=None):
     source_report = o.orchestrate(request, run_id=run_id, github_sha=github_sha,
                                   runtime_out=output/'source', tmp_root=output/'tmp')
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
+    if source_report.get('status') != 'SOURCE_PASS' or saved is None:
+        failure = source_report.get('failure') or {}
+        code = (source_report.get('first_failed_code') or source_report.get('code')
+                or failure.get('code') or 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN')
+        report = {'status': 'HOLD', 'first_failed_phase': 'SOURCE',
+                  'first_failed_code': code, 'code': code,
+                  'completion': False, 'formal_final_proven': False,
+                  'prediction_reexecution': False, 'no_bet_decision': False,
+                  'execution_id': request['execution_id'], 'source': source_report}
+        o._write(output/'entry_report.json', report)
+        return report
     o.validate_source_checkpoint(saved['run_dir'], request)
     source = o._load_checkpoint_json(saved, 'source_receipt_envelope.json')
     numeric_request = copy.deepcopy(request)

@@ -164,3 +164,28 @@ def test_existing_final_readback_never_reacquires_or_regenerates(monkeypatch, tm
     assert result['readback_only'] is True
     assert result['prediction_reexecution'] is False
     assert result['completion']['complete'] is complete
+
+
+@pytest.mark.parametrize('source_status,checkpoint,expected', [
+    ('BLOCKED', False, 'SOURCE_TRANSPORT_HOLD'),
+    ('BLOCKED', True, 'SOURCE_TRANSPORT_HOLD'),
+    ('SOURCE_PASS', False, 'SOURCE_CHECKPOINT_MISSING_AFTER_RUN'),
+])
+def test_source_hold_preserves_failure_and_never_enters_prediction(monkeypatch, tmp_path, source_status, checkpoint, expected):
+    from runtime import local_race_entry as e
+    monkeypatch.setattr(o, 'validate_request_context', lambda *a: None)
+    monkeypatch.setattr(o, 'resolve_phase', lambda eid, phase: {'run_dir': tmp_path} if checkpoint and phase == 'SOURCE' else None)
+    monkeypatch.setattr(o, 'check_deadline', lambda *a, **k: None)
+    monkeypatch.setattr(o, 'orchestrate', lambda *a, **k: {
+        'status': source_status, 'first_failed_phase': 'SOURCE',
+        'first_failed_code': 'SOURCE_TRANSPORT_HOLD' if source_status == 'BLOCKED' else None})
+    monkeypatch.setattr(o, 'validate_source_checkpoint', lambda *a: pytest.fail('failed SOURCE must stop before loading checkpoint'))
+    monkeypatch.setattr(e, 'materialize_production', lambda *a: pytest.fail('no numerical after SOURCE HOLD'))
+    monkeypatch.setattr(e, 'build_formal_static', lambda *a, **k: pytest.fail('no Static after SOURCE HOLD'))
+    report = e.run({'family_id': 'LOCAL', 'execution_id': 'race', 'race_id': 'race'},
+                   output=tmp_path/'out', run_id='source-hold')
+    assert report['code'] == report['first_failed_code'] == expected
+    assert report['first_failed_phase'] == 'SOURCE'
+    assert report['completion'] is False and report['formal_final_proven'] is False
+    assert report['prediction_reexecution'] is False
+    assert json.loads((tmp_path/'out/entry_report.json').read_text()) == report
