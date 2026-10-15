@@ -69,18 +69,20 @@ def test_numeric_values_cannot_influence_evidence_only_production_static():
     assert i1 == i2
 
 
-def _cancelled_runner_contract_fixture():
+def _cancelled_runner_contract_fixture(cancelled=("3", "7")):
     req, source, numeric, policy, now = replay_fixture()
     artifact = source["artifact"]
     declared = copy.deepcopy(artifact["official_runner_universe"])
     artifact["declared_runner_universe"] = declared
     artifact["active_runner_universe"] = {
-        "runners": [r for r in declared["runners"] if r["runner_id"] not in {"3", "7"}]}
+        "runners": [r for r in declared["runners"] if r["runner_id"] not in set(cancelled)]}
     artifact["runner_status_registry"] = [
         {"runner_id": r["runner_id"], "status":
-         "CANCELLED" if r["runner_id"] in {"3", "7"} else "ACTIVE"}
+         "CANCELLED" if r["runner_id"] in set(cancelled) else "ACTIVE",
+         "evidence_sources": [next(s["source_id"] for s in artifact["sources"]
+                                    if s.get("official") and "RACE-CARD" in s["source_id"])]}
         for r in declared["runners"]]
-    numeric["runners"] = [r for r in numeric["runners"] if r["runner_id"] not in {"3", "7"}]
+    numeric["runners"] = [r for r in numeric["runners"] if r["runner_id"] not in set(cancelled)]
     return req, source, numeric, policy, now
 
 
@@ -96,13 +98,38 @@ def test_explicit_cancelled_card_rows_do_not_enter_static():
                for p in intent["third_dispositions"])
 
 
-@pytest.mark.parametrize("case", ["missing_declared", "unexplained_removal"])
+@pytest.mark.parametrize("cancel_top", [False, True])
+def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
+    req, source, numeric, policy, now = replay_fixture()
+    original, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+    removed = original["static_prediction"]["ranking"][0] if cancel_top else "3"
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture((removed,))
+    out, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+    assert len(out["static_prediction"]["ranking"]) == 11
+    assert removed not in out["static_prediction"]["ranking"]
+    assert all(removed not in {x["head"], x["second"]} for x in out["pair_dispositions"])
+    assert all(removed not in {x["head"], x["second"], x["third"]} for x in out["third_dispositions"])
+
+
+def test_poststart_clock_cannot_create_formal_static_from_saved_source():
+    req, source, numeric, policy, _ = replay_fixture()
+    from datetime import timedelta
+    post = datetime.fromisoformat(req["scheduled_post_at"]) + timedelta(seconds=1)
+    with pytest.raises(StaticOwnerError, match="PRESTART_STATIC_OWNER_DEADLINE_HOLD"):
+        build_formal_static(req, source, numeric, policy=policy, now=post)
+
+
+@pytest.mark.parametrize("case", ["missing_declared", "unexplained_removal", "missing_evidence", "nonofficial_evidence"])
 def test_card_universe_removal_without_exact_official_basis_holds(case):
     req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
     if case == "missing_declared":
         source["artifact"]["declared_runner_universe"]["runners"].pop()
-    else:
+    elif case == "unexplained_removal":
         source["artifact"]["runner_status_registry"][2]["status"] = "UNKNOWN"
+    elif case == "missing_evidence":
+        source["artifact"]["runner_status_registry"][2].pop("evidence_sources")
+    else:
+        source["artifact"]["runner_status_registry"][2]["evidence_sources"] = ["UNVERIFIED"]
     with pytest.raises(StaticOwnerError, match="OFFICIAL_CARD_RUNNER_MISMATCH"):
         build_formal_static(req, source, numeric, policy=policy, now=now)
 

@@ -1,4 +1,5 @@
 import sys
+import pytest
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -126,7 +127,7 @@ def sample_tables_with_explicit_cancel_2():
     return rows
 
 
-def test_declared_and_active_universe_are_separate_when_odds_omits_cancelled_runner():
+def test_odds_absence_without_explicit_cancellation_holds_and_retains_evidence():
     art={
       "normalized_evidence":{
         "race_card_tables":{
@@ -141,7 +142,8 @@ def test_declared_and_active_universe_are_separate_when_odds_omits_cancelled_run
         }
       }
     }
-    enrich_source_artifact(art)
+    with pytest.raises(ValueError, match="NAR_INACTIVE_RUNNER_WITHOUT_EXPLICIT_STATUS"):
+        enrich_source_artifact(art)
     declared=art["declared_runner_universe"]
     active=art["active_runner_universe"]
     assert [x["runner_id"] for x in declared["runners"]]==["1","2","3"]
@@ -176,7 +178,7 @@ def test_request_validation_uses_active_not_declared_universe():
     art={
       "normalized_evidence":{
         "race_card_tables":{
-          "value":sample_tables(),
+          "value":sample_tables_with_explicit_cancel_2(),
           "source_id":"NAR-KCH-R03-RACE-CARD",
           "snapshot_sha256":"abc"
         },
@@ -207,7 +209,7 @@ def test_noncontiguous_active_numbers_are_preserved_after_scratch():
     art={
       "normalized_evidence":{
         "race_card_tables":{
-          "value":sample_tables(),
+          "value":sample_tables_with_explicit_cancel_2(),
           "source_id":"NAR-KCH-R03-RACE-CARD",
           "snapshot_sha256":"abc"
         },

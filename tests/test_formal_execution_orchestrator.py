@@ -442,6 +442,23 @@ def test_bind_formal_request_to_source_rejects_preexisting_mismatch(monkeypatch,
         o.bind_formal_request_to_source(o.build_phase_request(intent, "FORMAL"))
 
 
+def test_late_scratch_source_revision_cannot_rebind_frozen_static(monkeypatch, tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": [1, 2, 3], "source_basis_receipt_sha256": "source-receipt-sha"}
+    original = json.dumps(intent, sort_keys=True)
+    source = _source_resolved_for_basis(tmp_path, intent)
+    path = source["run_dir"] / "source_receipt_envelope.json"
+    revised = json.loads(path.read_text())
+    revised["receipt_sha256"] = "new-source-with-late-official-scratch"
+    revised["artifact"]["runner_status_registry"] = [{"runner_id": "3", "status": "CANCELLED"}]
+    path.write_text(json.dumps(revised))  # Synthetic revision fixture, not a signed artifact.
+    monkeypatch.setattr(o, "resolve_phase", lambda *_: source)
+    with pytest.raises(o.FormalOrchestrationError, match="STATIC_SOURCE_BASIS_RECEIPT_MISMATCH_BEFORE_FORMAL"):
+        o.bind_formal_request_to_source(o.build_phase_request(intent, "FORMAL"))
+    assert json.dumps(intent, sort_keys=True) == original
+
+
 def test_formal_semantic_basis_is_independent_of_derived_source_binding_fields(tmp_path):
     intent = base_intent()
     intent["static_prediction"] = {"ranking": [1, 2, 3]}

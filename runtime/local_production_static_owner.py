@@ -240,9 +240,15 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
                     (source.get("declared_runner_universe") or {}).get("runners") or []}
         inactive = {str(r.get("runner_id")) for r in source.get("runner_status_registry") or []
                     if r.get("status") in {"CANCELLED", "EXCLUDED"}}
+        official_ids = {str(s.get("source_id")) for s in source.get("sources") or []
+                        if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"}
+        unsupported = any(not r.get("evidence_sources")
+                          or not set(r["evidence_sources"]).issubset(official_ids)
+                          for r in source.get("runner_status_registry") or []
+                          if str(r.get("runner_id")) in inactive)
         # Official cards retain scratched rows. Omit only the exact declared
         # rows explicitly excluded by the signed SOURCE status registry.
-        if (set(parsed) != declared or set(ids) - set(parsed)
+        if (unsupported or set(parsed) != declared or set(ids) - set(parsed)
                 or set(parsed) - set(ids) != inactive):
             raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
         parsed = {rid: parsed[rid] for rid in ids}

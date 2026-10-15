@@ -240,6 +240,11 @@ def enrich_source_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
     artifact["official_runner_universe"]=active_universe
     artifact["official_runner_universe_sha256"]=active_universe["runner_universe_sha256"]
     artifact["official_declared_runner_universe_sha256"]=declared_universe["runner_universe_sha256"]
+    if any(r["status"] == "INACTIVE" for r in statuses):
+        # Absence from an odds table does not establish an official scratch.
+        # Preserve the declared/status evidence, but the existing SOURCE
+        # boundary must not freeze a formal active set from that inference.
+        raise ValueError("NAR_INACTIVE_RUNNER_WITHOUT_EXPLICIT_STATUS")
     return artifact
 
 
