@@ -1,0 +1,61 @@
+name: JRA Pedigree Official Live Smoke
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_runtime/jra_pedigree_harvest.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - "runtime/jra_owner_authorized_feature_rules.py"
+      - ".github/workflows/km-jra-pedigree-live-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  official-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install parser only
+        run: python -m pip install --disable-pip-version-check -q beautifulsoup4 cryptography
+      - name: Verify official robot instructions and perform bounded live acquisition
+        env:
+          PYTHONPATH: runtime:runtime/jra_source_runtime
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import urllib.request
+          from urllib.robotparser import RobotFileParser
+          try:
+              req=urllib.request.Request("https://www.jra.go.jp/robots.txt",
+                headers={"User-Agent":"KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0"})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  data=response.read(100000).decode("utf-8",errors="replace")
+                  status=response.status
+          except Exception as exc:
+              print("JRA_OFFICIAL_ROBOTS_FETCH_FAILED=",type(exc).__name__,str(exc))
+              raise
+          print("JRA_OFFICIAL_ROBOTS_HTTP=",status,"body=",repr(data[:200]))
+          p=RobotFileParser()
+          p.parse(data.splitlines())
+          paths=("/JRADB/accessS.html","/JRADB/accessU.html")
+          assert all(p.can_fetch("KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0",x) for x in paths), "JRA_ROBOTS_DISALLOW"
+          print("JRA_OFFICIAL_ROBOTS_CHECK=PASS")
+          PY
+          python runtime/jra_source_runtime/jra_pedigree_harvest.py \
+            --date 2026-10-04 --mode results --max-horses 3 --delay 1.2 \
+            --out-dir runtime_out/pedigree_smoke
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=next(Path("runtime_out/pedigree_smoke").glob("*-results-offset0-n3.json"))
+          j=json.loads(p.read_text(encoding="utf-8"))
+          assert j["horse_token_count"]==3 and j["horse_count"]==3 and not j["errors"]
+          assert len({h["horse_name"] for h in j["horses"]})==3
+          assert all(h.get("dam") and h.get("sire") for h in j["horses"])
+          print("JRA_OFFICIAL_PEDIGREE_LIVE_SMOKE=PASS",
+                "horses=",j["horse_count"],"historical_runs=",sum(len(x["runs"]) for x in j["horses"]))
+          PY

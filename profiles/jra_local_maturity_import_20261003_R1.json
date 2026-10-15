@@ -1,0 +1,81 @@
+{
+  "profile_id": "KM-JRA-LOCAL-MATURITY-IMPORT-20261003-R1",
+  "status": "ACTIVE / JRA / CROSS-FAMILY-MATURITY-IMPORT / C0-C1-PRODUCTION-EXECUTION / C2-SHADOW-ONLY / C3-FORBIDDEN / NON-NUMERICAL / NO-AUTO-PROMOTION",
+  "effective_at": "2026-10-03T01:30:00+09:00",
+  "source_family": "LOCAL",
+  "target_family": "JRA",
+  "promotion_contract": "KM-FAMILY-CROSS-FAMILY-MATURITY-PROMOTION-20260928-R1",
+  "scope_ownership_contract": "KM-FAMILY-SCOPE-OWNERSHIP-CONTRACT-20260928-R1",
+  "purpose": "Import mature family-independent execution and measurement mechanisms demonstrated in LOCAL into JRA while preserving JRA source, numerical, prediction and venue authority.",
+  "production_imports": {
+    "C0_SCHEMA_INTERFACE": [
+      "STABLE_EXECUTION_ID",
+      "SOURCE_CHECKPOINT_MANIFEST",
+      "STATIC_SIGNED_SOURCE_BINDING_FIELDS",
+      "FORMAL_SEMANTIC_BASIS_SHA256",
+      "ENTRY_TRANSPORT_SEMANTIC_SHA256",
+      "FAST_REFLECTION_ARTIFACT_SHAPE"
+    ],
+    "C1_EXECUTION_CORRECTNESS": [
+      "SINGLE_ENTRY_SOURCE_TO_FORMAL_CONTINUATION",
+      "DURABLE_SOURCE_CHECKPOINT_REUSE",
+      "FAIL_CLOSED_CHECKPOINT_BASIS_MISMATCH",
+      "FAIL_CLOSED_STATIC_SOURCE_BINDING_MISMATCH",
+      "TRANSPORT_FALLBACK_WITH_IDENTICAL_SEMANTICS",
+      "POST_RESULT_FAST_REFLECTION"
+    ]
+  },
+  "jra_implementation": {
+    "bridge": "runtime/jra_execution_maturity_bridge.py",
+    "single_entry_workflow": ".github/workflows/km-jra-formal-single-entry.yml",
+    "source_workflow": ".github/workflows/km-jra-source-first-runner.yml",
+    "formal_workflow": ".github/workflows/km-formal-request-runner.yml",
+    "result_workflow": ".github/workflows/km-formal-result-runner.yml",
+    "execution_store": "runtime/execution_store.py",
+    "entry_fallback": "runtime/entry_transport_fallback.py",
+    "fast_reflection": "runtime/race_day_fast_reflection.py",
+    "source_intent_root": "runtime/jra_formal_intents",
+    "source_request_root": "runtime/jra_source_requests",
+    "formal_request_root": "runtime/requests",
+    "fast_reflection_root": "runtime/jra_fast_reflections"
+  },
+  "C2_decision_policy": {
+    "status": "SHADOW_ONLY / JRA UNKNOWN-OOS REQUIRED",
+    "local_mature_references": [
+      "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1"
+    ],
+    "direct_production_import": false,
+    "reason": "Decision policies require target-family frozen unknown-OOS and explicit promotion.",
+    "jra_existing_parallel_measurement": [
+      "KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1",
+      "KM-JRA-KRS-PREDICTION-UTILITY-GATE-v0.2-SHADOW-20260921"
+    ]
+  },
+  "C3_numerical_model": {
+    "status": "CROSS-FAMILY-DIRECT-PROMOTION-FORBIDDEN",
+    "prohibited": [
+      "LOCAL_PARAMETER_MAP",
+      "LOCAL_NUMERICAL_WEIGHTS",
+      "LOCAL_FIXED_THRESHOLDS",
+      "LOCAL_EVIDENCE_RULE_REGISTRY",
+      "LOCAL_NUMERICAL_MAPPING",
+      "LOCAL_KRS_INPUT_ADAPTER",
+      "LOCAL_PREDICTION_COEFFICIENTS",
+      "LOCAL_VENUE_FIXED_BONUSES"
+    ]
+  },
+  "invariants": [
+    "JRA_OFFICIAL_SOURCE_AUTHORITY_UNCHANGED",
+    "JRA_PRODUCTION_NUMERICAL_MAPPING_UNCHANGED",
+    "JRA_KRS_ENGINE_PHYSICS_UNCHANGED",
+    "JRA_MEC_R3_UNCHANGED",
+    "JRA_CAPITAL_POLICY_UNCHANGED",
+    "JRA_VENUE_CANONS_UNCHANGED",
+    "SOURCE_SUCCESS_MAY_SURVIVE_FORMAL_FAILURE",
+    "STATIC_MUST_BIND_EXACT_SIGNED_SOURCE_CHECKPOINT",
+    "FALLBACK_MUST_PRESERVE_SEMANTIC_HASH",
+    "RESULT_FAST_REFLECTION_MAY_NOT_AUTHORIZE_PRODUCTION_CHANGE"
+  ],
+  "production_effect": "EXECUTION_CORRECTNESS_ONLY / NO PREDICTIVE OR NUMERICAL CHANGE",
+  "automatic_promotion": false
+}

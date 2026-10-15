@@ -1,0 +1,47 @@
+{
+  "profile_id": "KM-LOCAL-PRODUCTION-NUMERICAL-v1.0-ACCEPTANCE-20261008-R1",
+  "status": "ACCEPTANCE-CONTRACT / LOCAL / C1-NUMERICAL-EXECUTION-CLOSURE / NON-PREDICTIVE-PERFORMANCE",
+  "authority_under_test": "KM-FAMILY-CURRENT-AUTHORITY-20261008-R44",
+  "production_numerical_authority": {
+    "evidence_registry": "LOCAL-EVIDENCE-FEATURE-RULE-REGISTRY-v1.1-PRODUCTION-NUMERICAL-20261008",
+    "mapping": "LOCAL-FULL-NUMERICAL-MAPPING-v1.0-PRODUCTION-20261008",
+    "materializer": "runtime/local_fullnumerical_production.py",
+    "component_rules_bound": "63/63",
+    "required_indices": "29/29",
+    "terminal_policy": "CALCULATED_OR_RULED_NEUTRAL",
+    "ruled_hold_allowed": false
+  },
+  "mechanical_replay": {
+    "race_id": "KM-LOCAL-OHI-20261007-R01-LIVE-R1",
+    "purpose": "MECHANICAL NUMERICAL CLOSURE ONLY / NO RETROACTIVE PRODUCTION OR OOS CREDIT",
+    "expected_runner_count": 12,
+    "expected_required_cells": 348,
+    "expected_unresolved": 0,
+    "expected_ruled_hold": 0,
+    "expected_numeric_value_cells": 348
+  },
+  "downstream_boundaries": {
+    "production_prediction_change": false,
+    "predictive_weight_change": false,
+    "krs_consumption_change": false,
+    "ticket_change": false,
+    "capital_change": false,
+    "mec_r3_change": false,
+    "venue_canon_change": false
+  },
+  "tests": [
+    "tests/test_local_production_numerical_v1.py",
+    "tests/test_local_fullnumerical_candidate_v01.py",
+    "tests/test_family_authority_guard.py"
+  ],
+  "compile": [
+    "runtime/local_fullnumerical_production.py",
+    "runtime/local_numerical_authority_gate.py",
+    "runtime/non_jra_formal_runner.py",
+    "runtime/family_authority_guard.py"
+  ],
+  "automatic_prediction_promotion": false,
+  "automatic_krs_promotion": false,
+  "automatic_ticket_promotion": false,
+  "automatic_capital_promotion": false
+}

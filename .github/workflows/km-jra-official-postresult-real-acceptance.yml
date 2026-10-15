@@ -1,0 +1,68 @@
+name: JRA Tokyo R05 Real Official Postresult Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-official-postresult-real-acceptance.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+jobs:
+  actual-postresult:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Fetch actual historical Tokyo R05 JRA official finish order
+        env:
+          PYTHONPATH: runtime/jra_source_runtime
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from datetime import datetime,timezone,timedelta
+          from jra_same_day_results import _open_day,_fetch_race
+          # HISTORICAL / POST-RACE / NO-OOS. This does not overwrite the
+          # original 12:18 JST prediction cutoff.
+          race_date="2026-10-10"
+          meeting_key="0520260403"
+          race_no=5
+          opener,referer,html,key,day=_open_day(race_date,meeting_key)
+          snap,out=_fetch_race(opener,referer,html,key,day,race_no,
+              (datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat())
+          assert out["official"] is True
+          assert out["result_derived"] is True
+          assert out["race_no"] == race_no
+          assert out["source_snapshot_sha256"] == snap["snapshot_sha256"]
+          ranks={int(x["finish"]):str(x["runner_id"]) for x in out["runners"]}
+          assert len(out["runners"]) >= 3
+          assert all(i in ranks for i in (1,2,3))
+          result={
+             "race_id":"KM-JRA-TKY-20261010-R05",
+             "status":"OFFICIAL_POSTRESULT_CAPTURED",
+             "classification":"HISTORICAL_POSTSTART_ONLY / NO_OOS / NO_BET / NO_PRODUCTION_FINAL",
+             "official_top3":[ranks[i] for i in (1,2,3)],
+             "official_runner_count":len(out["runners"]),
+             "source_snapshot_sha256":snap["snapshot_sha256"],
+             "source_cutoff_semantics":"POSTRESULT_ACQUISITION_ONLY",
+             "prediction_cutoff_immutable":"2026-10-10T12:18:00+09:00",
+             "official_detail_sha256":out["sha256"],
+          }
+          p=Path("runtime_out/jra-tokyo-r05-official-postresult-proof.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          p.write_text(json.dumps(result,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: runtime_out/jra-tokyo-r05-official-postresult-proof.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jra-tokyo-r05-official-postresult-proof
+          path: runtime_out/jra-tokyo-r05-official-postresult-proof.json
+          if-no-files-found: error

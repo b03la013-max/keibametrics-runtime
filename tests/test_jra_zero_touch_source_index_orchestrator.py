@@ -5,6 +5,32 @@ sys.path.insert(0,str(ROOT/"runtime"))
 sys.path.insert(0,str(ROOT/"runtime"/"jra_source_runtime"))
 from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report,build_source_runner_stubs
 
+
+# These cases pin the STRICT coverage gate (Art.3 DCR information policy OFF):
+# the strict mode must keep failing closed exactly as before.
+_ART3_PREV = None
+
+
+def setUpModule():
+    global _ART3_PREV
+    import sys as _s
+    from pathlib import Path as _P
+    _s.path.insert(0, str(_P(__file__).resolve().parents[1] / "runtime"))
+    import jra_evidence_to_base_production as _m
+    _ART3_PREV = _m.DCR_INFORMATION_POLICY_ENABLED
+    _m.DCR_INFORMATION_POLICY_ENABLED = False
+    __import__("os").environ["KM_JRA_DCR_ART3_POLICY"] = "0"  # CLI subprocesses
+
+
+def tearDownModule():
+    import jra_evidence_to_base_production as _m
+    _m.DCR_INFORMATION_POLICY_ENABLED = _ART3_PREV
+    __import__("os").environ.pop("KM_JRA_DCR_ART3_POLICY", None)
+
+
+setup_module = setUpModule
+teardown_module = tearDownModule
+
 def mapping():
     return json.load(open(ROOT/"mapping"/"jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
 
@@ -43,3 +69,36 @@ def test_zero_touch_report_is_truthful_and_fail_closed():
     t=r["per_runner_coverage"]["1"]["source_feature_trace"]
     assert t["summary"]["feature_count"]==71
     assert t["features"]["weight_load_fit"]["production_feature_state"]=="SOURCE_GENERATED_PRODUCTION_FEATURE"
+
+
+def test_unverified_detail_runner_cannot_enlarge_official_universe():
+    a=source()
+    a["jra_official_race_card_detail"]["runners"].append(
+      {"runner_id":"99","horse_no":99,"horse_name":"EXTRA",
+       "career_record":{"starts":8}})
+    rows=build_source_runner_stubs(a)
+    assert [r["runner_id"] for r in rows]==["1","2"]
+    assert "99" not in {r["runner_id"] for r in rows}
+
+
+def test_missing_career_count_is_not_inferred_from_partial_history():
+    a=source()
+    a["jra_official_race_card_detail"]["runners"][0].pop("career_record")
+    a["jra_official_horse_history"]={"runners":{
+      "1":{"run_count":2,"runs":[{"date":"2026-09-01"},{"date":"2026-08-01"}]}}}
+    rows=build_source_runner_stubs(a)
+    assert rows[0]["career_starts"] is None
+    assert rows[0]["newcomer"] is None
+    a["jra_official_horse_history"]["runners"]["1"]["total_starts"]=11
+    rows=build_source_runner_stubs(a)
+    assert rows[0]["career_starts"]==11
+    assert rows[0]["newcomer"] is False
+
+
+def test_duplicate_official_id_rejected_before_shadow_index_generation():
+    a=source()
+    a["jra_official_runner_universe"]["runners"].append(
+      {"runner_id":"1","horse_no":1,"name":"CLONE"})
+    import pytest
+    with pytest.raises(ValueError,match="JRA_OFFICIAL_RUNNER_UNIVERSE_INVALID"):
+        build_zero_touch_source_index_report(a,mapping())

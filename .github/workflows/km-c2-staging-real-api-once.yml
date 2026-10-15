@@ -1,53 +1,115 @@
-name: C2 Candidate real API one-shot acceptance
+name: C2 Candidate offline resume and zero-cost acceptance
 
 on:
+  push:
+    branches: [candidate/result-learning-resume-r3]
+    paths:
+      - '.github/workflows/km-c2-staging-real-api-once.yml'
+      - 'runtime/openai_prediction_owner_candidate.py'
+      - 'docs/C2_EXECUTION_INTEGRATION_20261015.md'
   workflow_dispatch:
     inputs:
-      authentication_only:
-        description: 'No-race pinned-model credential preflight only; no external receipt transfer'
-        type: boolean
-        default: true
+      cache_ref:
+        description: Frozen repository commit containing the historical comparison
+        type: string
+        default: '5729e735c99746c589b68dc4a18bb6612cf5e539'
+      cache_path:
+        description: Existing immutable comparison artifact path
+        type: string
+        default: evidence/c2_billing_restored_20261015/actual/owner_behavioral_comparison.json
+      cache_sha256:
+        description: Independently reviewed comparison file SHA256
+        type: string
+        default: '360e73c9adbb88a2c0a9fafdab06318c9651272358254237a7f8108c9b73c54b'
+      anchor_sha256:
+        description: Reviewed saved Runtime trust-anchor file SHA256 in the same frozen commit
+        type: string
+        default: 'c76245e4aa01466797cb534a2d306b04d3f9876e014ce04cf79bbd330221d946'
+      race_id:
+        description: Optional exact audited historical Race ID
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
-env:
-  KM_CREDENTIAL_ENVIRONMENT: keibametrics-staging
+concurrency:
+  group: km-c2-shadow-zero-budget
+  cancel-in-progress: false
 
 jobs:
-  c2-real-api:
+  historical-resume:
     if: github.ref == 'refs/heads/candidate/result-learning-resume-r3'
     runs-on: ubuntu-latest
-    environment: keibametrics-staging
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Verify frozen C2 Candidate and execute existing real API comparison
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prepare frozen artifacts and assert zero paid authorization
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CACHE_REF: ${{ inputs.cache_ref || '5729e735c99746c589b68dc4a18bb6612cf5e539' }}
+          CACHE_PATH: ${{ inputs.cache_path || 'evidence/c2_billing_restored_20261015/actual/owner_behavioral_comparison.json' }}
+          CACHE_SHA: ${{ inputs.cache_sha256 || '360e73c9adbb88a2c0a9fafdab06318c9651272358254237a7f8108c9b73c54b' }}
+          ANCHOR_SHA: ${{ inputs.anchor_sha256 || 'c76245e4aa01466797cb534a2d306b04d3f9876e014ce04cf79bbd330221d946' }}
         run: |
+          python -m pip install --disable-pip-version-check -q cryptography
           mkdir -p runtime_out
-          mode=--historical-comparison
-          if [ "${{ inputs.authentication_only }}" = "true" ]; then mode=--authentication-only; fi
-          python runtime/openai_prediction_owner_candidate.py \
-            "$mode" \
-            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
-            --output runtime_out/owner_behavioral_comparison.json
-      - name: Existing Owner in two fresh historical processes
+          python - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          config=json.loads(pathlib.Path('research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json').read_text())
+          assert config['production_authorized'] is False and config['mode']=='SHADOW'
+          budget=config['api_budget']
+          assert budget['api_use_authorized'] is False
+          assert budget['monthly_budget_jpy']==budget['race_budget_jpy']==budget['retry_budget']==0
+          ref=os.environ['CACHE_REF']; path=os.environ['CACHE_PATH']
+          assert re.fullmatch('[0-9a-f]{40}',ref)
+          assert path.startswith(('evidence/','research/','runtime/')) and '..' not in pathlib.PurePosixPath(path).parts
+          for source,target,expected in [(path,'resume_cache.json',os.environ['CACHE_SHA']),('evidence/family_completion_20261015/gateway_health.json','resume_anchor.json',os.environ['ANCHOR_SHA'])]:
+              assert re.fullmatch('[0-9a-f]{64}',expected)
+              raw=subprocess.check_output(['git','show',ref+':'+source])
+              assert hashlib.sha256(raw).hexdigest()==expected
+              pathlib.Path('runtime_out',target).write_bytes(raw)
+          pathlib.Path('runtime_out/budget_preflight.json').write_text(json.dumps({'status':'ZERO_PAID_PATH_ONLY','shared_paid_store':'UNAVAILABLE / BLOCKED','new_openai_requests':0,'production_effect':'NONE'}))
+          PY
+      - name: Resume through existing Owner CLI without provider fallback
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CACHE_SHA: ${{ inputs.cache_sha256 || '360e73c9adbb88a2c0a9fafdab06318c9651272358254237a7f8108c9b73c54b' }}
+          ANCHOR_SHA: ${{ inputs.anchor_sha256 || 'c76245e4aa01466797cb534a2d306b04d3f9876e014ce04cf79bbd330221d946' }}
+          RACE_ID: ${{ inputs.race_id }}
         run: |
-          if ! python -c 'import json,sys; sys.exit(0 if json.load(open("runtime_out/owner_behavioral_comparison.json")).get("status")=="HISTORICAL_BEHAVIORAL_COMPARISON_RECORDED" else 1)'; then exit 0; fi
           set +e
-          python runtime/openai_prediction_owner_candidate.py --historical-comparison --race-id KM-LOCAL-FNB-20261001-R07-LIVE-R2 --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json --output runtime_out/isolation_r07.json
-          a=$?
-          python runtime/openai_prediction_owner_candidate.py --historical-comparison --race-id KM-LOCAL-FNB-20261001-R08-LIVE-R1 --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json --output runtime_out/isolation_r08.json
-          b=$?
-          test "$a" = 0 && test "$b" = 0
-      - name: Preserve sanitized result
+          args=()
+          if [ -n "$RACE_ID" ]; then args+=(--race-id "$RACE_ID"); fi
+          python runtime/openai_prediction_owner_candidate.py --resume-only \
+            --resume-from runtime_out/resume_cache.json --resume-sha256 "$CACHE_SHA" \
+            --trust-anchor runtime_out/resume_anchor.json --trust-anchor-sha256 "$ANCHOR_SHA" \
+            --config research/owner_candidate/KM_LOCAL_OPENAI_OWNER_CANDIDATE_v1.json \
+            --output runtime_out/historical_resume.json "${args[@]}"
+          rc=$?
+          RESUME_RC="$rc" python - <<'PY'
+          import json,os,pathlib
+          result=json.loads(pathlib.Path('runtime_out/historical_resume.json').read_text())
+          assert result['production_effect']=='NONE' and result['count_increment']==0
+          if os.environ['RESUME_RC']=='0':
+              assert result['status']=='HISTORICAL_CHECKPOINTS_REUSED' and result['api_requests']==0
+              terminal='CACHED_REUSE / NOT_NEW_GENERATION'
+          else:
+              assert os.environ['RESUME_RC']=='2' and result['status']=='HOLD'
+              assert result['code'] in {'HISTORICAL_RESUME_BASIS_MISMATCH','OUTPUT_SCHEMA_INVALID','HISTORICAL_CHECKPOINT_MISSING_HOLD'}
+              terminal='SAFE_HOLD / NOT_ACCEPTANCE'
+          pathlib.Path('runtime_out/resume_workflow_terminal.json').write_text(json.dumps({'status':terminal,'cli_exit_code':int(os.environ['RESUME_RC']),'new_openai_requests':0,'real_api_verified':False,'signed_shadow_verified':False,'production_effect':'NONE'}))
+          PY
+      - name: Preserve read-only resume evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: c2-one-shot-real-api-${{ github.run_id }}
-          path: runtime_out/*.json
-          if-no-files-found: warn
+          name: c2-offline-resume-${{ github.sha }}
+          path: |
+            runtime_out/historical_resume.json
+            runtime_out/resume_workflow_terminal.json
+            runtime_out/budget_preflight.json

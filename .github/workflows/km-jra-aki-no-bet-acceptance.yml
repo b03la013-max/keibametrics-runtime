@@ -1,0 +1,30 @@
+name: JRA AKI selection zero-exposure acceptance
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_aki_no_bet_terminal.py'
+      - 'runtime/jra_aki_selection_recovery.py'
+      - 'runtime/jra_production_auto_handoff.py'
+      - 'runtime/jra_production_blocker_classifier.py'
+      - 'runtime/jra_execution_maturity_bridge.py'
+      - 'runtime/jra_production_no_bet_terminal.py'
+      - 'runtime/jra_no_bet_postresult_learning.py'
+      - 'runtime/jra_source_runtime/jra_race_day_autopilot.py'
+      - 'tests/test_jra_aki_no_bet_terminal.py'
+      - 'tests/test_jra_aki_selection_recovery.py'
+      - '.github/workflows/km-jra-aki-selection-recovery.yml'
+      - '.github/workflows/km-jra-formal-single-entry.yml'
+      - '.github/workflows/km-jra-aki-no-bet-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selection-terminal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q pytest beautifulsoup4 cryptography pyyaml
+      - run: python -m pytest -q tests/test_jra_aki_no_bet_terminal.py tests/test_jra_aki_selection_recovery.py tests/test_jra_aki_v21_enacted.py tests/test_jra_production_auto_handoff.py tests/test_jra_production_blocker_routing.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_no_bet_postresult_learning.py tests/test_jra_race_day_autopilot.py

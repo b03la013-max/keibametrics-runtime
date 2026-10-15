@@ -383,6 +383,34 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
     type_order={"EXACTA":0,"TRIO":1,"TRIFECTA":2}
     tickets.sort(key=lambda x:(tier_order.get(x["mec_tier"],9),type_order.get(x["bet_type"],9),tuple(str(z) for z in x["selection"])))
 
+    # Cross-ticket continuity is diagnostic-only.  Do not auto-buy a TRIO
+    # merely because a TRIFECTA exists; surface the round-trip gap so Forward
+    # measurement can decide whether closing it improves PFS.
+    trifecta_sets={
+        tuple(sorted((str(x) for x in t["selection"]),key=lambda z:int(z) if z.isdigit() else z))
+        for t in tickets if str(t.get("bet_type") or "").upper()=="TRIFECTA"
+    }
+    trio_sets={
+        tuple(sorted((str(x) for x in t["selection"]),key=lambda z:int(z) if z.isdigit() else z))
+        for t in tickets if str(t.get("bet_type") or "").upper()=="TRIO"
+    }
+    exact_without_trio=sorted(
+        trifecta_sets-trio_sets,
+        key=lambda ss:tuple(int(x) if x.isdigit() else x for x in ss)
+    )
+    cross_ticket_continuity={
+        "profile":"KM-COMMON-CROSS-TICKET-CONTINUITY-DIAGNOSTIC-v1-20261005",
+        "status":"GAP_DETECTED" if exact_without_trio else "PASS",
+        "purchased_or_material_trifecta_set_count":len(trifecta_sets),
+        "trio_set_count":len(trio_sets),
+        "exact_set_without_equivalent_trio_count":len(exact_without_trio),
+        "exact_sets_without_equivalent_trio":[list(x) for x in exact_without_trio],
+        "automatic_ticket_addition":False,
+        "capital_change":False,
+        "production_prediction_change":False,
+        "note":"Diagnostic imported from JRA weekend cross-ticket continuity learning; equivalent-set purchase requires separate Forward evidence.",
+    }
+
     covered=set()
     curve=[]
     capital=0
@@ -441,6 +469,7 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
       "material_coverage_ratio":1.0 if not coverage else round(len(covered)/len(coverage),6),
       "tickets":tickets,
       "bet_type_dispositions":dispositions,
+      "cross_ticket_continuity_diagnostic":cross_ticket_continuity,
       "coverage_saturation_curve":curve,
       "semantic_pair_count":len(pairs),
       "semantic_third_count":len(third_rows),

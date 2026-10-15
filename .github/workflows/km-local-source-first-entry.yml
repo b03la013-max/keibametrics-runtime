@@ -1,0 +1,90 @@
+name: LOCAL source-first candidate entry
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/source_intents/*.json'
+  workflow_dispatch:
+    inputs:
+      request_json:
+        description: 'LOCAL race identity, venue/date/number, aware post and cutoff, current authority. Optional approved frozen Static.'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: local-source-first-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q cryptography
+      - name: Execute SOURCE-first entry with explicit hold reporting
+        id: entry
+        env:
+          RACE_REQUEST_JSON: ${{ inputs.request_json }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          if os.environ.get('GITHUB_EVENT_NAME') == 'push':
+              changed = subprocess.check_output(
+                  ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', os.environ['GITHUB_SHA']],
+                  text=True).splitlines()
+              matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\.json', p)]
+              if len(matches) != 1:
+                  raise SystemExit('SOURCE_INTENT_PUSH_REQUIRES_EXACTLY_ONE_FILE')
+              raw = Path(matches[0]).read_text(encoding='utf-8')
+          else:
+              raw = os.environ['RACE_REQUEST_JSON']
+          request = json.loads(raw)
+          if request.get('family_id') != 'LOCAL' or request.get('execution_phase') != 'SOURCE':
+              raise SystemExit('SOURCE_INTENT_FAMILY_OR_PHASE_MISMATCH')
+          Path('race-request.json').write_text(json.dumps(request))
+          eid = str(request.get('execution_id') or request.get('race_id') or '')
+          if not re.fullmatch(r'KM-LOCAL-[A-Z0-9-]+', eid):
+              raise SystemExit('SOURCE_EXECUTION_ID_INVALID')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('execution_id=' + eid + '\\n')
+          PY
+          set +e
+          python -m runtime.local_race_entry --request race-request.json --output entry-out --run-id "source-first-${{ github.run_id }}" --github-sha "${{ github.sha }}"
+          rc=$?
+          set -e
+          SOURCE_ENTRY_RC="$rc" python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path('entry-out/entry_report.json')
+          if not p.is_file():
+              raise SystemExit('SOURCE_ENTRY_REPORT_MISSING')
+          r = json.loads(p.read_text())
+          phases = r.get('source', {}).get('phases', [])
+          verified = r.get('source', {}).get('status') == 'SOURCE_PASS' and any(
+              p.get('phase') == 'SOURCE' and p.get('status') == 'PASS' for p in phases)
+          if not verified:
+              raise SystemExit('SIGNED_SOURCE_STAGE_NOT_VERIFIED')
+          if r.get('formal_final_proven') is True:
+              raise SystemExit('SOURCE_ONLY_WORKFLOW_MUST_NOT_CLAIM_FINAL')
+          if int(os.environ['SOURCE_ENTRY_RC']) and r.get('code') not in (
+              'STATIC_PREDICTION_FREEZE_REQUIRED', 'ANALYSIS_ONLY_SOURCE_COMPLETE'):
+              raise SystemExit('UNEXPECTED_SOURCE_FIRST_FAILURE:' + str(r.get('code')))
+          print('SIGNED_SOURCE_ONLY_PASS / FORMAL_FINAL_NOT_CLAIMED / ' + str(r.get('code')))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-source-first-${{ github.run_id }}
+          path: |
+            entry-out/
+            runtime/executions/${{ steps.entry.outputs.execution_id }}/SOURCE/
+          retention-days: 90

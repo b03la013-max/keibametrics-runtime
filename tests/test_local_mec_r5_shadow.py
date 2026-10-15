@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0,"runtime")
 from local_mec_r5_shadow import build_shadow, settle_shadow, bind_shadow_to_trace, verify_signed_final_binding
+from local_mec_r5_oos_tracker import _normalized_comparison
 
 req={
  "race_id":"X",
@@ -102,3 +103,17 @@ accept_settle=settle_shadow(
 )
 assert accept_settle["oos_eligible"] is False
 assert accept_settle["status"]=="NON-FORWARD-SETTLEMENT / NOT-OOS"
+
+
+norm=_normalized_comparison({
+    "PRODUCTION_BASELINE_R3":{"investment":1000,"return":500,"ticket_count_total":10},
+    "SET_ONLY":{"investment":600,"return":720,"ticket_count_total":6},
+    "SET_PAIR":{"investment":800,"return":800,"ticket_count_total":8},
+})
+assert norm["status"].startswith("NORMALIZED-COMPARISON")
+assert norm["common_budget_reference"]==600
+assert norm["common_ticket_count_reference"]==6
+assert norm["by_arm"]["SET_ONLY"]["equal_budget_scaled_return"]==720
+assert norm["by_arm"]["PRODUCTION_BASELINE_R3"]["equal_budget_scaled_return"]==300
+assert norm["by_arm"]["PRODUCTION_BASELINE_R3"]["equal_ticket_count_scaled_return"]==300
+assert norm["production_effect"]=="NONE"

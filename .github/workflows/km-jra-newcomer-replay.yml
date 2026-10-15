@@ -1,0 +1,49 @@
+name: JRA newcomer full-pipeline PAPER replay
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_newcomer_replay_requests/*.json'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+jobs:
+  submit-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -q beautifulsoup4 cryptography
+      - name: Verify SOURCE and build isolated historical request
+        run: |
+          set -euo pipefail
+          : > /tmp/newcomer-replay-targets
+          for FILE in runtime/jra_newcomer_replay_requests/*.json; do
+            read -r EID RUN < <(python -c 'import json,sys;x=json.load(open(sys.argv[1]));print(x["execution_id"],x["source_run_id"])' "$FILE")
+            [[ "$EID" =~ ^KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}-LIVE-R[0-9]+$ ]]
+            [[ "$RUN" =~ ^[0-9]+$ ]]
+            TARGET="runtime/requests/$EID-NEWCOMER-REPLAY-R51-R2.json"
+            [ ! -f "$TARGET" ] || continue
+            SOURCE="runtime/executions/$EID/SOURCE/runs/$RUN/source_receipt_envelope.json"
+            gh attestation verify "$SOURCE" --repo "$GITHUB_REPOSITORY"
+            PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_newcomer_replay.py \
+              --intent "runtime/jra_formal_intents/$EID.json" --source-envelope "$SOURCE" --output "$TARGET"
+            git add "$TARGET"
+            echo "$TARGET" >> /tmp/newcomer-replay-targets
+          done
+          git diff --cached --quiet && exit 0
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git commit -m "acceptance: source-bound newcomer PAPER replay request"
+          PUSHED=false
+          for I in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then PUSHED=true; break; fi
+            git rebase --abort 2>/dev/null || true
+          done
+          [ "$PUSHED" = true ] || exit 1
+          while IFS= read -r TARGET; do
+            gh workflow run km-formal-request-runner.yml --ref main -f request_path="$TARGET"
+          done < /tmp/newcomer-replay-targets

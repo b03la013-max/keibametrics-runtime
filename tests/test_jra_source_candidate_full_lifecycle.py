@@ -74,7 +74,10 @@ def test_candidate_full_numerical_transport_semantic_mec():
     check=validate_mec_plan(mec)
     cap=resolve_capital_policy(req,mec)
     assert check["material_coverage_ratio"]==1.0
-    assert cap["decision"]=="EXECUTE_RECOMMENDATION_PORTFOLIO"
+    assert cap["decision"]=="EXECUTE_FULL_MEC"
+    assert cap["capital_limit"]==10000
+    assert cap["budget_source"]=="FAMILY_USER_DEFAULT"
+    assert cap["unused_budget_must_not_expand_tickets"] is True
     req["candidate_frozen_at"]="2026-09-26T15:59:00+09:00"
     rec=pre_result_record(req)
     assert rec["production_effect"]=="NONE"

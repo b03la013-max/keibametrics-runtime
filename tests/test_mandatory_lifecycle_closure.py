@@ -122,7 +122,7 @@ def test_shadow_missing_nonblocking_production(tmp_path):
 
 
 def test_deadline_hold_explicit():
-    req=intent();req['scheduled_post_at']='2000-01-01T12:00:00+09:00'
+    req=intent();req['scheduled_post_at']='2000-01-01T12:00:00+09:00';req['prediction_cutoff']='2000-01-01T11:58:00+09:00'
     with pytest.raises(o.FormalOrchestrationError,match='DEADLINE_HOLD'):
         o.check_deadline(req)
 
@@ -205,7 +205,7 @@ print(gate['execution_class'])
         store.persist_phase(req['execution_id'],'RESULT','fixture-RESULT',changed,root=root)
 
 
-def test_one_intent_invokes_internal_owner_then_formal_without_static_operator_input(monkeypatch,tmp_path):
+def test_main_formal_path_does_not_replace_missing_static_with_candidate_owner(monkeypatch,tmp_path):
     # Orchestrator contract unit test with an explicitly mechanical owner stub.
     req=intent();calls=[]
     monkeypatch.setattr(o,'resume_plan',lambda *args:{'action':'RUN_SOURCE_THEN_FORMAL','resume_from':'SOURCE','checkpoints':{}})
@@ -219,13 +219,13 @@ def test_one_intent_invokes_internal_owner_then_formal_without_static_operator_i
     monkeypatch.setattr(o,'bind_formal_request_to_source',lambda r:r)
     monkeypatch.setattr(o,'run_formal_with_fallback',lambda r,phase,**kw:calls.append(phase) or {'status':'PASS','phase':phase})
     monkeypatch.setattr(o,'verify_execution_completion',lambda *args,**kw:{'complete':True,'execution_class':'FULL-LIFECYCLE-DEGRADED-NUMERICAL'})
-    report=o.orchestrate(req,run_id='mechanical',github_sha='fixture',runtime_out=tmp_path/'out',tmp_root=tmp_path/'tmp')
-    assert calls==['SOURCE','PREDICTION_OWNER','FORMAL']
-    assert report['status']=='FULL_LIFECYCLE_EXECUTION_PASS'
+    with pytest.raises(o.FormalOrchestrationError,match='SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED'):
+        o.orchestrate(req,run_id='mechanical',github_sha='fixture',runtime_out=tmp_path/'out',tmp_root=tmp_path/'tmp')
+    assert calls==[]
     assert 'static_prediction' not in req
 
 
-def test_source_checkpoint_auto_resume_calls_owner_without_reacquisition(monkeypatch,tmp_path):
+def test_missing_static_does_not_reacquire_source_or_fallback_to_candidate(monkeypatch,tmp_path):
     req=intent();calls=[]
     monkeypatch.setattr(o,'resume_plan',lambda *args:{'action':'RESUME_FORMAL','resume_from':'FORMAL','checkpoints':{'source':{'status':'COMPLETE'}}})
     monkeypatch.setattr(o,'resolve_phase',lambda *args:None)
@@ -235,10 +235,9 @@ def test_source_checkpoint_auto_resume_calls_owner_without_reacquisition(monkeyp
         raise o.FormalOrchestrationError('PRODUCTION_PREDICTION_OWNER_NOT_REGISTERED')
     monkeypatch.setattr(o,'execute_prediction_owner',owner)
     monkeypatch.setattr(o,'run_phase',lambda *args,**kw:pytest.fail('SOURCE reacquired'))
-    report=o.orchestrate(req,run_id='mechanical',github_sha='fixture',runtime_out=tmp_path/'out',tmp_root=tmp_path/'tmp')
-    assert calls==['OWNER']
-    assert report['status']=='BLOCKED'
-    assert report['resume_from']=='PREDICTION'
+    with pytest.raises(o.FormalOrchestrationError,match='SINGLE_ENTRY_STATIC_PREDICTION_REQUIRED'):
+        o.orchestrate(req,run_id='mechanical',github_sha='fixture',runtime_out=tmp_path/'out',tmp_root=tmp_path/'tmp')
+    assert calls==[]
 
 
 def test_authority_pinned_owner_protocol_uses_real_production_materializer(monkeypatch,tmp_path):
@@ -261,7 +260,7 @@ print(json.dumps({'basis':x['basis'],'prediction_semantics':{
  'venue_prediction_context':{'fixture':'NOT_PRODUCTION'},
  'role_registry':[{'runner_id':'1','column':'W','status':'CORE'}]}}))
 ''')
-    _,authority=g.load_authority();authority=copy.deepcopy(authority)
+    authority=json.loads((o.ROOT/'profiles/KM_FAMILY_CURRENT_AUTHORITY_20261001_R36.json').read_text())
     authority['family_scoped_authority']['LOCAL']['production_prediction_owner']={
         'production_authorized':True,'entrypoint':'owner.py',
         'sha256':hashlib.sha256(owner.read_bytes()).hexdigest(),
@@ -277,7 +276,8 @@ print(json.dumps({'basis':x['basis'],'prediction_semantics':{
     assert result['static_prediction_frozen'] is True
     assert result['numeric_coverage']['calculated_count']==0
     assert result['numeric_coverage']['ruled_hold_count']==87
-    assert result['numerical_authority_preflight']['full_numerical_authority'] is False
+    # Current R51 capability preflight is READY; fixture cells remain HOLD.
+    assert result['numerical_authority_preflight']['full_numerical_authority'] is True
     assert store.resolve_phase(req['execution_id'],'PREDICTION',root=tmp_path/'store')
     owner.write_text('CHANGED_IMPLEMENTATION')
     with pytest.raises(o.FormalOrchestrationError,match='HASH_MISMATCH'):

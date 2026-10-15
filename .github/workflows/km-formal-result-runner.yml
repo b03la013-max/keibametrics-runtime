@@ -10,6 +10,11 @@ on:
       - "runtime/results/*.json"
       - "runtime/source_candidate_results/*.json"
   workflow_dispatch:
+    inputs:
+      request_path:
+        description: "Exact result request path (runtime/results/<race_id>.json)"
+        required: false
+        type: string
 
 jobs:
   result-run:
@@ -22,9 +27,28 @@ jobs:
       - name: Resolve result request
         id: result
         shell: bash
+        env:
+          REQUEST_PATH: ${{ inputs.request_path }}
         run: |
           set -euo pipefail
-          REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' 'runtime/source_candidate_results/*.json' | tail -1)"
+          REQ=""
+          if [ -n "${REQUEST_PATH:-}" ]; then
+            case "$REQUEST_PATH" in
+              runtime/results/KM-*.json|runtime/source_candidate_results/KM-*.json) ;;
+              *) echo "INVALID_RESULT_REQUEST_PATH" >&2; exit 2 ;;
+            esac
+            # The request may be pushed moments before this dispatch: wait for it.
+            for i in 1 2 3 4 5 6; do
+              [ -f "$REQUEST_PATH" ] && break
+              sleep $((i*5))
+              if git fetch -q origin main; then
+                git checkout -q origin/main -- "$REQUEST_PATH" 2>/dev/null || true
+              fi
+            done
+            test -f "$REQUEST_PATH"
+            REQ="$REQUEST_PATH"
+          fi
+          [ -n "$REQ" ] || REQ="$(git diff --name-only HEAD^ HEAD -- 'runtime/results/*.json' 'runtime/source_candidate_results/*.json' | tail -1)"
           if [ -z "$REQ" ]; then
             REQ="$(find runtime/results runtime/source_candidate_results -maxdepth 1 -type f -name '*.json' 2>/dev/null | sort | tail -1)"
           fi
@@ -45,7 +69,9 @@ jobs:
           from mec_r4_oos_tracker import write_status as write_mec_r4_oos_status
           from pfs_grand_review import write_report as write_pfs_grand_review
           from family_prediction_utility import write_snapshot as write_family_prediction_utility_snapshot
+          from race_day_fast_reflection import build_fast_reflection
           from jra_source_candidate_oos import evaluate_result as evaluate_source_candidate_result
+          from jra_local_week_transfer_shadow import evaluate_jra_week_transfer_shadow_result
           from jra_source_candidate_promotion_gate import bind_result as bind_source_candidate_result, evaluate as evaluate_source_candidate_gate
           BASE="https://quorumprobe-production.up.railway.app"
           with open(os.environ["RESULT_FILE"],encoding="utf-8") as f:
@@ -88,6 +114,7 @@ jobs:
           review=None
           learning=None
           oos=None
+          fast_reflection=None
 
           final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
           if not candidate_only:
@@ -110,6 +137,13 @@ jobs:
               review=build_post_result_review(p,final_artifact)
               learning=build_learning_state(review)
               oos=build_oos_measurement(review,final_artifact,p)
+              fast_reflection=build_fast_reflection({
+                  "race_id":p["race_id"],
+                  "settlement":p.get("settlement") or {},
+                  "automatic_post_result_review":review,
+                  "failure_localization":review.get("failure_localization") or {},
+                  "learning_event":learning,
+              },race_id=p["race_id"])
 
           # Source-derived Candidate closed loop. This branch is independent
           # of Production FINAL availability and uses only the immutable
@@ -119,11 +153,18 @@ jobs:
           candidate_pre_path=os.path.join("runtime","source_candidate_oos",p["race_id"],"pre_result.json")
           if candidate_only:
               assert os.path.exists(candidate_pre_path), f"SOURCE_CANDIDATE_PRE_RESULT_MISSING:{candidate_pre_path}"
-          if os.path.exists(candidate_pre_path):
+          # A Production RESULT never depends on the Candidate lane: Candidate
+          # sidecars are settled by their own closed loop
+          # (km-jra-candidate-auto-postresult-closedloop), so a Candidate
+          # integrity problem cannot block the Production closed loop.
+          if os.path.exists(candidate_pre_path) and candidate_only:
               with open(candidate_pre_path,encoding="utf-8") as fh:
                   candidate_pre=json.load(fh)
               assert candidate_pre.get("race_id")==p["race_id"], "SOURCE_CANDIDATE_RACE_ID_MISMATCH"
-              declared_candidate_receipt=str((p.get("frozen_prediction_ref") or {}).get("final_receipt_sha256") or "")
+              # Production lane: frozen_prediction_ref is the PRODUCTION FINAL; the
+              # Candidate shadow is bound through candidate_shadow_ref instead.
+              ref_key="frozen_prediction_ref" if candidate_only else "candidate_shadow_ref"
+              declared_candidate_receipt=str((p.get(ref_key) or {}).get("final_receipt_sha256") or "")
               frozen_candidate_receipt=str(candidate_pre.get("candidate_final_receipt_sha256") or "")
               if declared_candidate_receipt:
                   assert declared_candidate_receipt==frozen_candidate_receipt, "SOURCE_CANDIDATE_FINAL_RECEIPT_MISMATCH"
@@ -133,6 +174,29 @@ jobs:
                   top3=finish[:3]
               assert isinstance(top3,list) and len(top3)>=3, "SOURCE_CANDIDATE_TOP3_MISSING"
               candidate_eval=evaluate_source_candidate_result(candidate_pre,[int(x) for x in top3[:3]])
+              # Attribute observed result only to the immutable pre-result trace.
+              frozen_transfer_sha=candidate_pre.get("jra_local_week_transfer_shadow_sha256")
+              if frozen_transfer_sha:
+                  transfer_path=os.path.join(os.path.dirname(candidate_pre_path),"jra_local_week_transfer_shadow_pre_result.json")
+                  assert os.path.isfile(transfer_path), "JRA_TRANSFER_FROZEN_PRE_RESULT_SHADOW_MISSING"
+                  signed_candidate_path=os.path.join(os.path.dirname(candidate_pre_path),"candidate_final.json")
+                  assert os.path.isfile(signed_candidate_path), "JRA_TRANSFER_SIGNED_CANDIDATE_FINAL_MISSING"
+                  with open(signed_candidate_path,encoding="utf-8") as fh:
+                      candidate_final_frozen=json.load(fh)
+                  final_transfer_binding=candidate_final_frozen.get("jra_local_week_transfer_shadow_binding") or {}
+                  assert final_transfer_binding.get("sha256")==frozen_transfer_sha, "JRA_TRANSFER_FINAL_BINDING_MISMATCH"
+                  assert final_transfer_binding.get("source_basis_sha256")==candidate_pre.get("source_snapshot_sha256"), "JRA_TRANSFER_FINAL_SOURCE_MISMATCH"
+                  assert final_transfer_binding.get("semantic_freeze_sha256")==candidate_pre.get("candidate_semantic_freeze_sha256"), "JRA_TRANSFER_FINAL_SEMANTIC_MISMATCH"
+                  assert candidate_final_frozen.get("oos_pre_result_record_sha256")==candidate_pre.get("sha256"), "JRA_TRANSFER_FINAL_OOS_RECORD_MISMATCH"
+                  with open(transfer_path,encoding="utf-8") as fh:
+                      frozen_transfer=json.load(fh)
+                  transfer_eval=evaluate_jra_week_transfer_shadow_result(
+                      frozen_transfer,candidate_pre,[int(x) for x in top3[:3]])
+                  candidate_eval["jra_local_week_transfer_shadow_result"]=transfer_eval
+                  candidate_eval["sha256"]=__import__("hashlib").sha256(
+                      json.dumps({k:v for k,v in candidate_eval.items() if k!="sha256"},
+                                 ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+                  ).hexdigest()
               source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)
               source_candidate_result["result_receipt_sha256"]=res.get("receipt_sha256")
               source_candidate_result["result_receipt_verified"]=True
@@ -181,12 +245,15 @@ jobs:
               os.makedirs("runtime/reviews_auto",exist_ok=True)
               os.makedirs("runtime/learning_states",exist_ok=True)
               os.makedirs("runtime/krs_oos_measurements",exist_ok=True)
+              os.makedirs("runtime/jra_fast_reflections",exist_ok=True)
               with open(os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json"),"w",encoding="utf-8") as fh:
                   json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              with open(os.path.join("runtime","jra_fast_reflections",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                  json.dump(fast_reflection,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
               measurements=[]
               for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
@@ -244,6 +311,10 @@ jobs:
             "source_candidate_result_sha256":(
                 source_candidate_result.get("sha256") if source_candidate_result else None
             ),
+            "jra_local_week_transfer_result_sha256":(
+                (((source_candidate_result or {}).get("result_evaluation") or {})
+                 .get("jra_local_week_transfer_shadow_result") or {}).get("sha256")
+            ),
             "source_candidate_r30_status":(
                 source_candidate_gate.get("status") if source_candidate_gate else None
             ),
@@ -255,8 +326,18 @@ jobs:
             ),
             "family_prediction_utility_contract":family_utility.get("contract_id"),
             "family_prediction_utility_status":family_utility.get("status"),
-            "family_prediction_utility_sha256":family_utility.get("sha256")
+            "family_prediction_utility_sha256":family_utility.get("sha256"),
+            "race_day_fast_reflection_sha256":fast_reflection.get("sha256") if fast_reflection else None,
+            "race_day_first_material_failure":fast_reflection.get("first_material_failure") if fast_reflection else None
           }
+          # Reuse the already verified signed response for separately frozen
+          # bloodline OOS. No RESULT is reissued and no prior artifact is edited.
+          from scripts.jra_bvi_pipeline_forward_shadow import persist_result_receipt
+          try:
+              persist_result_receipt(p,res)
+          except (ValueError,OSError) as exc:
+              # Shadow failure cannot change the completed Production result.
+              print("BVI_FORWARD_RESULT_RECEIPT_BLOCKED="+str(exc))
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 
@@ -266,7 +347,9 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ -d runtime/jra_static_owner_forward_oos ]; then git add runtime/jra_static_owner_forward_oos; fi
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json runtime/mec_r4_oos_status.json
+          if [ -d runtime/jra_fast_reflections ]; then git add runtime/jra_fast_reflections/*.json 2>/dev/null || true; fi
           if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
           if [ -f runtime/source_candidate_oos_status.json ]; then git add runtime/source_candidate_oos_status.json; fi
           if [ -f runtime/pfs_grand_review/current.json ]; then git add runtime/pfs_grand_review/current.json; fi

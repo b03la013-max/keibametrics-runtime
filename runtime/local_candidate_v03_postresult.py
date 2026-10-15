@@ -80,6 +80,49 @@ def evaluate_v03(
         base["candidate_krs_support_count"]=ev.get("support_count")
         base["candidate_krs_miss_count"]=len(ev.get("misses") or []) if isinstance(ev.get("misses"),list) else None
 
+    paired_v04=None
+    paired_v04_summary=s.get("paired_structure_derived_shadow")
+    if isinstance(paired_v04_summary,dict):
+        try:
+            v04_arm=paired_v04_summary.get("arm") or {}
+            paired_v04=evaluate(
+                v04_arm,actual_finish_order,
+                result_available_at=result_available_at,
+                candidate_krs_summary={},
+                race_id=race_id,
+                arm_label="v0.4-STRUCTURE-DERIVED-PAIRED-SHADOW",
+                frozen_pre_result=True,
+                calibration_training_race_ids=[],
+            )
+            # This is a newly preregistered paired measurement. It must never
+            # inherit v0.3's existing OOS count or promotion readiness.
+            paired_v04["candidate_oos_temporal_eligible"]=False
+            paired_v04["candidate_oos_event_eligible"]=False
+            paired_v04["production_effect"]="NONE"
+            paired_v04["promotion_effect"]="NONE / SEPARATE FUTURE CONTRACT REQUIRED"
+            def _gain(key):
+                a=base.get(key); b=paired_v04.get(key)
+                return None if a is None or b is None else round(float(a)-float(b),6)
+            paired_v04["comparison_vs_v03"]={
+                "winner_rank_gain":_gain("winner_rank"),
+                "second_rank_gain":_gain("second_rank"),
+                "third_rank_gain":_gain("third_rank"),
+                "top3_mean_rank_gain":_gain("top3_mean_rank"),
+                "winner_capture_delta":int(bool(paired_v04.get("winner_capture")))-int(bool(base.get("winner_capture"))),
+                "p2_capture_delta":int(bool(paired_v04.get("p2_capture")))-int(bool(base.get("p2_capture"))),
+                "p3_capture_delta":int(bool(paired_v04.get("p3_capture")))-int(bool(base.get("p3_capture"))),
+                "same_source":v04_arm.get("source_snapshot_sha256")==arm.get("source_snapshot_sha256"),
+                "v03_tracker_effect":"NONE",
+            }
+        except Exception as e:
+            paired_v04={
+                "status":"V04_PAIRED_POSTRESULT_EVAL_FAIL",
+                "error_type":type(e).__name__,
+                "error":str(e),
+                "production_effect":"NONE",
+                "candidate_oos_event_eligible":False,
+            }
+
     out={
         "profile":PROFILE,
         "race_id":race_id,
@@ -89,6 +132,7 @@ def evaluate_v03(
         "v03_shadow_sha256":s.get("sha256"),
         "arm":base,
         "candidate_krs_postresult":krs_post,
+        "paired_structure_derived_v04":paired_v04,
         "design_freeze_date":DESIGN_FREEZE_DATE,
         "future_oos_candidate":future_eligible,
         "signed_final_binding_valid":bool(signed_final_binding_valid),

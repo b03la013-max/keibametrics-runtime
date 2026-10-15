@@ -12,6 +12,8 @@ from race_day_fast_path import materialize_request_fast, StageTimer, PROFILE_ID 
 from local_evidence_acquisition_roundtrip import enforce_before_numerical, EvidenceRoundTripError
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
 from formal_oos_policy import request_oos_policy
+from capital_policy import load_family_default_capital_policy
+from local_prestart_gate import validate_window, PrestartError
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -19,8 +21,15 @@ def sha_obj(x):
 def parse_dt(s):
     return datetime.datetime.fromisoformat(str(s).replace("Z","+00:00"))
 
+RUNTIME_OUT = os.environ.get("KM_RUNTIME_OUT", "runtime_out")
+
 with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
     raw_req=json.load(f)
+
+# Family-wide user operating preference: inject the shared race-budget default
+# only when the request did not explicitly provide a capital policy.
+if raw_req.get("capital_policy") is None:
+    raw_req["capital_policy"]=load_family_default_capital_policy()
 
 fam=str(raw_req.get("family_id") or "").upper()
 assert fam in {"LOCAL","BAN"}, f"NON_JRA_BRIDGE_FAMILY_INVALID:{fam}"
@@ -56,9 +65,9 @@ resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
 
-os.makedirs("runtime_out",exist_ok=True)
+os.makedirs(RUNTIME_OUT,exist_ok=True)
 def persist(name,obj):
-    with open(os.path.join("runtime_out",name),"w",encoding="utf-8") as wf:
+    with open(os.path.join(RUNTIME_OUT,name),"w",encoding="utf-8") as wf:
         json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 def fail_closed(code,details=None):
@@ -70,7 +79,10 @@ def fail_closed(code,details=None):
       "execution_id":execution_id,
       "execution_phase":phase,
       "last_successful_stage":(stage_manifest[-1]["stage"] if stage_manifest else None),
-      "resume_hint":resume_hint_for(code),
+      "resume_hint":("NEW_EXECUTION_ID_IF_CUTOFF_CHANGES_KEEP_PRIOR_SOURCE_BASIS" if (
+          code=="SOURCE_ACQUISITION_NOT_FROZEN" and isinstance(details,dict)
+          and any(str(e).startswith("SOURCE_POST_CUTOFF:") for e in (details.get("source_errors") or []))
+      ) else resume_hint_for(code)),
       "request_file":os.environ.get("REQUEST_FILE"),
       "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
@@ -160,7 +172,26 @@ def acquire_verified_source(req, rid):
     sc,source=call("/source/acquire",source_req,180)
     persist("source_receipt_envelope.json",source)
     if sc>=300 or (source.get("receipt") or {}).get("status")!="SOURCE_FROZEN":
-        fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{"http":sc,"source":source})
+        # The full signed SOURCE envelope is already persisted above.
+        # Preserve the original Fail-Closed decision but surface bounded,
+        # actionable causal details instead of dumping hundreds of KB of
+        # official SOURCE into Actions logs.
+        source_artifact=source.get("artifact") if isinstance(source.get("artifact"),dict) else {}
+        source_errors=list(source_artifact.get("errors") or [])
+        fail_closed("SOURCE_ACQUISITION_NOT_FROZEN",{
+            "http":sc,
+            "receipt_status":(source.get("receipt") or {}).get("status"),
+            "source_errors":source_errors[:50],
+            "source_errors_truncated":len(source_errors)>50,
+            "required_post_cutoff_sources":[
+                str(e).split(":",1)[1] for e in source_errors
+                if str(e).startswith("SOURCE_POST_CUTOFF:")
+            ][:50],
+            "prediction_cutoff":source_req.get("prediction_cutoff"),
+            "source_freeze_at":source_artifact.get("source_freeze_at"),
+            "receipt_sha256":source.get("receipt_sha256"),
+            "source_evidence_retained_as_artifact":True,
+        })
     svc,sv=call("/source/verify",source,60)
     persist("source_verification.json",sv)
     if svc>=300 or sv.get("valid") is not True:
@@ -230,6 +261,7 @@ if fam=="BAN":
 
 # LOCAL staged full-pipeline execution.
 from local_evidence_to_base_production import materialize_request
+from local_fullnumerical_production import materialize_production as materialize_production_numerical
 from local_index_provenance_builder import build as build_local_provenance
 from local_krs_input_builder_production import build as build_local_krs
 from local_krs_technical_proxy_from_source import build as build_source_derived_krs_proxy, LocalSourceDerivedProxyError
@@ -247,7 +279,7 @@ from local_candidate_numerical_authority import assess as assess_candidate_numer
 from local_nar_evidence_candidate import compile_candidate_evidence
 from local_evidence_routing_candidate_v03 import compile_candidate_evidence_v03
 from local_fullnumerical_candidate import materialize_candidate
-from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_krs
+from local_krs_bridge_candidate import build_candidate_prediction, build_candidate_prediction_structure_derived, build_candidate_krs
 from local_candidate_postresult import evaluate_dual
 from local_candidate_v03_postresult import evaluate_v03
 from local_mec_r4_bridge import build_pre_result_shadow, bind_shadow_to_trace, verify_signed_final_binding, build_basis as build_mec_shadow_basis
@@ -256,10 +288,20 @@ from local_mec_r5_shadow import (
     bind_shadow_to_trace as bind_local_mec_r5_shadow_to_trace,
     verify_signed_final_binding as verify_local_mec_r5_signed_final_binding,
 )
+from aki_adaptive_purchase_shadow import (
+    build_shadow as build_aki_adaptive_purchase_shadow,
+    bind_to_trace as bind_aki_adaptive_purchase_to_trace,
+    verify_signed_final_binding as verify_aki_adaptive_purchase_signed_final,
+)
 from common_exact_continuity_shadow import (
     build_shadow as build_common_exact_continuity_shadow,
     bind_shadow_to_trace as bind_common_exact_continuity_shadow_to_trace,
     verify_signed_final_binding as verify_common_exact_continuity_signed_final_binding,
+)
+from family_conversion_diagnostics import (
+    build_diagnostics as build_family_conversion_diagnostics,
+    bind_to_trace as bind_family_conversion_diagnostics_to_trace,
+    verify_signed_final_binding as verify_family_conversion_diagnostics_signed_final_binding,
 )
 
 rid=str(req.get("race_id") or "")
@@ -272,6 +314,11 @@ formal_release_deadline_utc=None
 if temporal_mode=="FORMAL-PRE-RACE":
     if not scheduled:
         fail_closed("SCHEDULED_POST_AT_REQUIRED")
+    if fam == "LOCAL":
+        try:
+            validate_window(req, phase="SOURCE" if phase == "SOURCE" else "FORMAL")
+        except PrestartError as exc:
+            fail_closed(str(exc))
     post_dt=parse_dt(scheduled).astimezone(datetime.timezone.utc)
     if release_deadline:
         deadline_dt=parse_dt(release_deadline).astimezone(datetime.timezone.utc)
@@ -816,12 +863,16 @@ def compute_candidate_shadows():
             source_artifact,req,
             "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json"
         )
-        cq3=materialize_candidate(
+        cq3_num=materialize_candidate(
             copy.deepcopy(ce3),
             "mapping/local_evidence_feature_rule_registry_v0.3_candidate_20260925_evidence_routing.json",
             "mapping/local_full_numerical_mapping_v0.3_candidate_20260925_evidence_routing.json"
         )
-        cq3=build_candidate_prediction(cq3)
+        # Preserve the existing v0.3 candidate definition and tracker exactly.
+        cq3=build_candidate_prediction(copy.deepcopy(cq3_num))
+        # Weekend JRA R39 learning is measured only as a paired LOCAL shadow:
+        # same evidence/numerics, structure-derived role widths, no budget input.
+        cq4=build_candidate_prediction_structure_derived(copy.deepcopy(cq3_num))
         cq3=build_candidate_krs(cq3)
         candidate_shadow_q_v03=cq3
         race_date_v03=str(req.get("race_date") or (req.get("race") or {}).get("race_date") or "")
@@ -854,6 +905,46 @@ def compute_candidate_shadows():
                 for r in (cq3.get("runners") or [])
             },
         }
+        v04_arm={
+            "label":"v0.4-STRUCTURE-DERIVED-PAIRED-SHADOW",
+            "production_authority":False,
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "candidate_full_numerical_summary":cq4.get("candidate_full_numerical_summary"),
+            "candidate_static_prediction":cq4.get("candidate_static_prediction"),
+            "candidate_structure_derived_shadow":cq4.get("candidate_structure_derived_shadow"),
+            "runner_component_coverage":{
+                str(r.get("runner_id")):{
+                    "real_component_coverage_ratio":r.get("candidate_feature_coverage_ratio"),
+                    "missing_component_count":r.get("candidate_missing_count"),
+                    "missing_components":r.get("candidate_missing_components"),
+                    "missing_policy":r.get("candidate_missing_policy"),
+                } for r in (cq4.get("runners") or [])
+            },
+        }
+        paired_v04_summary={
+            "status":"FROZEN_PRE_RESULT_LOCAL_STRUCTURE_DERIVED_V04_PAIRED_SHADOW",
+            "profile":"KM-LOCAL-CANDIDATE-STRUCTURE-DERIVED-WIDTH-v0.4-20261005",
+            "production_authority":False,
+            "automatic_promotion":False,
+            "race_id":rid,
+            "race_date":race_date_v03,
+            "source_receipt_sha256":source_receipt_sha,
+            "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
+            "parent_v03_mapping_id":(cq3_num.get("candidate_full_numerical_summary") or {}).get("mapping_id"),
+            "arm":v04_arm,
+            "oos_tracker_effect":"NONE / DOES NOT INHERIT OR MUTATE V0.3 COUNT",
+            "note":"Paired static-role measurement imported from JRA R39. Capital is downstream and never determines W/P2/P3 width.",
+        }
+        paired_v04_summary["sha256"]=sha_obj(paired_v04_summary)
+        persist("candidate_numerical_v04_structure_shadow_summary.json",paired_v04_summary)
+        stage("NUMERICAL_CANDIDATE_V04_STRUCTURE_SHADOW",
+              status="PASS",production_authority=False,
+              shadow_sha256=paired_v04_summary.get("sha256"),
+              prediction_sha256=(cq4.get("candidate_static_prediction") or {}).get("sha256"),
+              future_multiplicity=((cq4.get("candidate_static_prediction") or {}).get("role_width_policy") or {}).get("future_multiplicity"),
+              v03_tracker_effect="NONE")
+
         candidate_v03_summary={
             "status":"FROZEN_PRE_RESULT_NUMERICAL_CANDIDATE_V03_SHADOW",
             "profile":"KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925",
@@ -865,6 +956,7 @@ def compute_candidate_shadows():
             "source_receipt_sha256":source_receipt_sha,
             "source_snapshot_sha256":source_artifact.get("source_snapshot_sha256"),
             "arm":v03_arm,
+            "paired_structure_derived_shadow":paired_v04_summary,
             "baseline_v01_prediction_sha256":((candidate_shadow_q or {}).get("candidate_static_prediction") or {}).get("sha256"),
             "policy":{
                 "production_mutation":False,
@@ -942,31 +1034,49 @@ if req_indices and isinstance(req_indices[0],dict):
 req_indices=[str(x) for x in req_indices if str(x)]
 assert req_indices,"LOCAL_REQUIRED_INDEX_NAMES_EMPTY"
 
-if fast_enabled:
-    try:
-        req,fast_mat_report=materialize_request_fast(
-            req,req_indices,
-            cache_root=os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"),
-            workers=int((fast_cfg or {}).get("materialization_workers") or 4),
-        )
-        fast_path_runtime_report["materialization"]=fast_mat_report
-    except Exception as fast_exc:
-        # Quality is never sacrificed for speed. Any Fast Path uncertainty
-        # immediately falls back to the canonical Full Path implementation.
-        fast_path_runtime_report["fallback"]={
-            "stage":"LOCAL_NUMERICAL_MATERIALIZATION",
-            "reason":type(fast_exc).__name__+":"+str(fast_exc),
-            "action":"CANONICAL_FULL_PATH",
-        }
-        req=materialize_request(req,req_indices)
+if numerical_authority.get("full_numerical_authority") is True:
+    # Current Production numerical authority is a deterministic rule-bound
+    # materialization layer. It is intentionally independent from Prediction
+    # and KRS decision authority.
+    req=materialize_production_numerical(source_artifact,req,req_indices)
+    fast_path_runtime_report["materialization"]={
+        "mode":"PRODUCTION_FULL_NUMERICAL_V1",
+        "profile":(req.get("production_numerical_authority") or {}).get("profile"),
+        "mapping_registry":req.get("local_mapping_registry"),
+        "strict_full_numerical_ready":req.get("strict_full_numerical_ready"),
+        "prediction_consumption_authorized":False,
+        "krs_consumption_authorized":False,
+    }
 else:
-    req=materialize_request(req,req_indices)
+    if fast_enabled:
+        try:
+            req,fast_mat_report=materialize_request_fast(
+                req,req_indices,
+                cache_root=os.environ.get("KM_FAST_CACHE_ROOT",".km_fast_cache"),
+                workers=int((fast_cfg or {}).get("materialization_workers") or 4),
+            )
+            fast_path_runtime_report["materialization"]=fast_mat_report
+        except Exception as fast_exc:
+            # Quality is never sacrificed for speed. Any Fast Path uncertainty
+            # immediately falls back to the canonical Full Path implementation.
+            fast_path_runtime_report["fallback"]={
+                "stage":"LOCAL_NUMERICAL_MATERIALIZATION",
+                "reason":type(fast_exc).__name__+":"+str(fast_exc),
+                "action":"CANONICAL_FULL_PATH",
+            }
+            req=materialize_request(req,req_indices)
+    else:
+        req=materialize_request(req,req_indices)
 cov=req["numeric_coverage"]
 persist("numerical_materialization_summary.json",{
     "numeric_coverage":cov,
     "full_terminalization":req.get("full_terminalization"),
     "full_numerical_calculation":req.get("full_numerical_calculation"),
+    "full_numerical_closure":req.get("full_numerical_closure"),
+    "strict_full_numerical_ready":req.get("strict_full_numerical_ready"),
     "mapping_registry":req.get("local_mapping_registry"),
+    "evidence_registry":req.get("numerical_evidence_registry"),
+    "production_numerical_summary":req.get("production_numerical_summary"),
     "numerical_authority_preflight":numerical_authority,
 })
 if req.get("full_terminalization") is not True or int(cov.get("unresolved_count",0))!=0:
@@ -990,16 +1100,12 @@ persist("index_provenance_manifest.json",req.get("index_provenance_ledger") or {
 stage("INDEX_PROVENANCE",index_provenance_hash=req["index_provenance_hash"],
       row_count=len((req.get("index_provenance_ledger") or {}).get("rows") or []))
 
-# When Production numerical authority is not ready, do not require callers to
-# inject a synthetic acceptance bridge. Derive a provenance-bearing technical
-# proxy from this race's verified signed SOURCE. It remains explicitly
-# non-Production and cannot upgrade held Production indices to CALCULATED.
-if req.get("full_numerical_calculation") is not True and not isinstance(req.get("local_krs_bridge"),dict):
-    if req.get("degraded_execution") is not True:
-        fail_closed("LOCAL_KRS_BRIDGE_REQUIRED_WHEN_NUMERICAL_HELD",{
-            "full_numerical_calculation":False,
-            "degraded_execution":req.get("degraded_execution"),
-        })
+# Production Numerical closure and KRS consumption authority are deliberately
+# separate. Until the numerical->KRS bridge passes its own forward-OOS gate,
+# keep the existing source-derived KRS technical proxy even when all 29
+# Production indices are numerically closed.
+numerical_krs_authorized = numerical_authority.get("krs_consumption_authorized") is True
+if not numerical_krs_authorized and not isinstance(req.get("local_krs_bridge"),dict):
     try:
         req["local_krs_bridge"]=build_source_derived_krs_proxy(req,source_artifact)
     except LocalSourceDerivedProxyError as e:
@@ -1009,7 +1115,8 @@ if req.get("full_numerical_calculation") is not True and not isinstance(req.get(
           bridge_id=req["local_krs_bridge"].get("bridge_id"),
           bridge_sha256=req["local_krs_bridge"].get("sha256"),
           source_snapshot_sha256=req["local_krs_bridge"].get("source_snapshot_sha256"),
-          production_authority=False)
+          production_authority=False,
+          reason="NUMERICAL_TO_KRS_CONSUMPTION_NOT_YET_AUTHORIZED")
 
 req=build_local_krs(req)
 assert isinstance(req.get("krs_input_data"),dict),"LOCAL_KRS_INPUT_MISSING"
@@ -1027,6 +1134,8 @@ pre_payload={
   "required_index_unresolved":0,
   "full_terminalization":bool(req.get("full_terminalization")),
   "full_numerical_calculation":bool(req.get("full_numerical_calculation")),
+  "full_numerical_closure":bool(req.get("full_numerical_closure")),
+  "strict_full_numerical_ready":bool(req.get("strict_full_numerical_ready")),
   "krs_input_mode":req.get("krs_input_mode"),
   "static_prediction_frozen":True,
   "krs_input_data":req["krs_input_data"]
@@ -1195,8 +1304,12 @@ mec_r4_basis=None
 mec_r4_shadow_error=None
 local_mec_r5_shadow=None
 local_mec_r5_shadow_error=None
+aki_adaptive_purchase_shadow=None
+aki_adaptive_purchase_shadow_error=None
 common_exact_continuity_shadow=None
 common_exact_continuity_shadow_error=None
+family_conversion_diagnostics=None
+family_conversion_diagnostics_error=None
 common_mec_shadow_basis=None
 shadow_ticket=None
 if temporal_mode=="FORMAL-PRE-RACE":
@@ -1261,6 +1374,36 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+    # AKI-aware PAPER selector: existing R3 tickets only, frozen before FINAL,
+    # zero purchase authority. Does not mutate MEC, Capital or ranked roles.
+    try:
+        aki_adaptive_purchase_shadow=build_aki_adaptive_purchase_shadow(
+            req,
+            {"artifact":{
+                "final_ticket":copy.deepcopy(shadow_ticket),
+                "minimum_efficient_coverage":copy.deepcopy(mec),
+                "final_prediction_package":copy.deepcopy(final_package),
+            }},
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            basis_sha256=common_mec_shadow_basis["sha256"],
+        )
+        trace=bind_aki_adaptive_purchase_to_trace(trace,aki_adaptive_purchase_shadow)
+        persist("aki_adaptive_purchase_shadow_pre_result.json",aki_adaptive_purchase_shadow)
+        stage("AKI_ADAPTIVE_PURCHASE_PRE_RESULT_FREEZE",
+              profile=aki_adaptive_purchase_shadow["profile"],
+              shadow_sha256=aki_adaptive_purchase_shadow["sha256"],
+              candidate_ticket_count=aki_adaptive_purchase_shadow["candidate_ticket_count"],
+              candidate_action=aki_adaptive_purchase_shadow["candidate_action"],
+              production_effect="NONE")
+    except Exception as e:
+        aki_adaptive_purchase_shadow_error=type(e).__name__+":"+str(e)
+        persist("aki_adaptive_purchase_shadow_error.json",{
+            "status":"NON_BLOCKING_SHADOW_HOLD",
+            "error":aki_adaptive_purchase_shadow_error,
+            "production_effect":"NONE",
+            "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        })
+
     # Common C2 Decision Policy shadow: freeze the exact-continuity audit
     # candidate set before FINAL. This never alters Production tickets or Capital.
     try:
@@ -1289,11 +1432,42 @@ if temporal_mode=="FORMAL-PRE-RACE":
             "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+    # Companion diagnostic: result-blind Role -> Pair -> Exact continuity
+    # observations. This is deliberately separate from the preregistered
+    # Common Exact OOS arm so its definition hash and OOS contract stay frozen.
+    try:
+        family_conversion_diagnostics=build_family_conversion_diagnostics(
+            req,shadow_ticket,final_package,utility,
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            basis_sha256=common_mec_shadow_basis["sha256"],
+        )
+        trace=bind_family_conversion_diagnostics_to_trace(
+            trace,family_conversion_diagnostics
+        )
+        persist("family_conversion_diagnostics_pre_result.json",
+                family_conversion_diagnostics)
+        stage("FAMILY_CONVERSION_DIAGNOSTICS_PRE_RESULT_FREEZE",
+              profile=family_conversion_diagnostics.get("profile"),
+              diagnostic_sha256=family_conversion_diagnostics.get("sha256"),
+              basis_sha256=family_conversion_diagnostics.get("source_basis_sha256"),
+              winner_migration_count=len(family_conversion_diagnostics.get("winner_role_migration_candidates") or []),
+              pair_residual_count=len(family_conversion_diagnostics.get("pair_residual_candidates") or []),
+              selective_exact_count=len(family_conversion_diagnostics.get("selective_exact_candidates") or []),
+              production_effect="NONE")
+    except Exception as e:
+        family_conversion_diagnostics_error=type(e).__name__+":"+str(e)
+        persist("family_conversion_diagnostics_error.json",{
+            "status":"NON_BLOCKING_DIAGNOSTIC_FAILURE",
+            "error":family_conversion_diagnostics_error,
+            "production_effect":"NONE",
+            "timestamp":datetime.datetime.now(datetime.timezone.utc).isoformat()
+        })
+
 persist("canonical_ticket.json",{
     "finalized":True,"no_bet":no_bet,"total_investment":total,"tickets":tickets,
     "frozen_at":final_freeze,"execution_id":execution_id,"race_id":rid})
 if req.get("mandatory_lifecycle_completion_required") is True:
-    gate=verify_execution_completion(pathlib.Path("runtime_out"),req,before_final=True)
+    gate=verify_execution_completion(pathlib.Path(RUNTIME_OUT),req,before_final=True)
     persist("mandatory_stage_manifest.json",gate)
     if gate["complete"] is not True:
         fail_closed("MANDATORY_STAGE_INCOMPLETE_BEFORE_FINAL",gate)
@@ -1331,7 +1505,7 @@ persist("final_before_post_verification.json",{
     "final_receipt_sha256":final_sha,"final_timestamp":final_time.isoformat(),
     "scheduled_post_at":scheduled,"temporal_mode":temporal_mode})
 if req.get("mandatory_lifecycle_completion_required") is True:
-    gate=verify_execution_completion(pathlib.Path("runtime_out"),req)
+    gate=verify_execution_completion(pathlib.Path(RUNTIME_OUT),req)
     persist("lifecycle_completion.json",gate)
     if gate["complete"] is not True:
         fail_closed("MANDATORY_STAGE_INCOMPLETE_AFTER_FINAL",gate)
@@ -1344,8 +1518,8 @@ acceptance_only=bool(request_oos_policy(req)["acceptance_only"])
 try:
     from local_candidate_postresult import build_forward_capture
     inventory={}
-    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json"]:
-        path=os.path.join("runtime_out",name)
+    for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","aki_adaptive_purchase_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json","family_conversion_diagnostics_pre_result.json"]:
+        path=os.path.join(RUNTIME_OUT,name)
         if os.path.isfile(path):
             with open(path,"rb") as frozen_file:inventory[name]={"sha256":hashlib.sha256(frozen_file.read()).hexdigest()}
         else:inventory[name]={"status":"MISSING_NOT_ZERO"}
@@ -1395,6 +1569,22 @@ if local_mec_r5_shadow is not None:
             "final_receipt_sha256":final_sha
         })
 
+aki_adaptive_purchase_binding=None
+if aki_adaptive_purchase_shadow is not None:
+    try:
+        aki_adaptive_purchase_binding=verify_aki_adaptive_purchase_signed_final(
+            fin,aki_adaptive_purchase_shadow
+        )
+        persist("aki_adaptive_purchase_binding_attestation.json",aki_adaptive_purchase_binding)
+    except Exception as e:
+        aki_adaptive_purchase_shadow_error=type(e).__name__+":"+str(e)
+        persist("aki_adaptive_purchase_binding_error.json",{
+            "status":"INVALID_FOR_OOS_NON_BLOCKING",
+            "error":aki_adaptive_purchase_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha,
+        })
+
 common_exact_continuity_binding=None
 if common_exact_continuity_shadow is not None:
     try:
@@ -1408,6 +1598,23 @@ if common_exact_continuity_shadow is not None:
         persist("common_exact_continuity_shadow_binding_error.json",{
             "status":"INVALID_FOR_OOS_NON_BLOCKING",
             "error":common_exact_continuity_shadow_error,
+            "production_effect":"NONE",
+            "final_receipt_sha256":final_sha
+        })
+
+family_conversion_diagnostics_binding=None
+if family_conversion_diagnostics is not None:
+    try:
+        family_conversion_diagnostics_binding=verify_family_conversion_diagnostics_signed_final_binding(
+            fin,family_conversion_diagnostics
+        )
+        persist("family_conversion_diagnostics_binding_attestation.json",
+                family_conversion_diagnostics_binding)
+    except Exception as e:
+        family_conversion_diagnostics_error=type(e).__name__+":"+str(e)
+        persist("family_conversion_diagnostics_binding_error.json",{
+            "status":"INVALID_DIAGNOSTIC_BINDING_NON_BLOCKING",
+            "error":family_conversion_diagnostics_error,
             "production_effect":"NONE",
             "final_receipt_sha256":final_sha
         })
@@ -1523,10 +1730,10 @@ if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None or candi
     })
 
 # Persist complete signed envelopes for immutable post-race RESULT linkage.
-os.makedirs("runtime_out",exist_ok=True)
+os.makedirs(RUNTIME_OUT,exist_ok=True)
 for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelope.json",pre),
                ("krs_receipt_envelope.json",run),("final_receipt_envelope.json",fin)):
-    with open(os.path.join("runtime_out",nm),"w",encoding="utf-8") as wf:
+    with open(os.path.join(RUNTIME_OUT,nm),"w",encoding="utf-8") as wf:
         json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 result_summary=None

@@ -1,0 +1,29 @@
+{
+  "profile": "KM-FAMILY-USER-CAPITAL-DEFAULT-20261003-R1",
+  "status": "ACTIVE / FAMILY-WIDE / USER-OPERATING-PREFERENCE / CAPITAL-ONLY / NON-PREDICTION / NON-NUMERICAL-PREDICTION",
+  "effective_at": "2026-10-03T15:26:00+09:00",
+  "scope": "ALL_KEIBAMETRICS_CHATS / ALL_RACES / ALL_FAMILIES_WHERE_COMMON_CAPITAL_POLICY_IS_APPLIED",
+  "default_capital_policy": {
+    "mode": "HARD_RACE_BUDGET",
+    "max_race_capital": 10000,
+    "insufficient_action": "PAPER",
+    "budget_fill_required": false,
+    "final_ticket_stake_unit_yen": 100,
+    "internal_allocation_precision": "DECIMAL_ALLOWED",
+    "derived_max_ticket_count_at_minimum_stake": 100
+  },
+  "interpretation": {
+    "target_semantics": "10,000 yen is a race-level ceiling/available budget, not a spending target.",
+    "unused_budget": "MUST_NOT create extra tickets or enlarge semantic width merely to consume unused budget.",
+    "below_budget": "Execute the complete MEC recommendation at its required capital; do not scale to 10,000 yen by default.",
+    "above_budget": "Do not delete material semantics to fit. Route to PAPER by default.",
+    "point_explosion_guard": "The 10,000 yen cap plus 100 yen final ticket unit bounds a minimum-stake portfolio to at most 100 tickets; MEC should normally be far narrower.",
+    "decimal_rule": "Internal stake weights/ratios may use decimals; final purchasable JRA/NAR ticket stakes remain in legal 100-yen increments unless a family-specific rule requires otherwise.",
+    "explicit_override": "A later explicit user instruction for a specific race/day/chat may override this default."
+  },
+  "prediction_effect": "NONE",
+  "krs_effect": "NONE",
+  "mec_semantic_effect": "NONE",
+  "capital_effect": "DEFAULT_INPUT_ONLY",
+  "production_numerical_change": false
+}

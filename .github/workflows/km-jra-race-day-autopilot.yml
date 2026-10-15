@@ -1,0 +1,86 @@
+name: KeibaMetrics JRA Race-Day Autopilot
+run-name: JRA race-day autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || github.event.schedule }}
+
+# Runs EVERY official JRA race of the day through the canonical Formal pipeline:
+# the canonical race-intent resolver is dispatched exactly once per race when it
+# enters the dispatch window (55..30 min before the OFFICIAL post time, after
+# body weights, before the 5-minute cutoff). Publishes the per-race status index
+# runtime/jra_race_day_status/<date>.{json,md} (FINAL tree / EVIDENCE_NO_BET
+# cells / MISSED_WINDOW). Bounded 30-minute workers hand off explicitly;
+# scheduled runs are backup starts and cannot hold a six-hour worker.
+permissions:
+  contents: write
+  actions: write
+
+on:
+  push:
+    branches: [main]
+    paths: ['runtime/jra_autopilot_start_requests/*.json']
+  schedule:
+    # Day loop: start 08:30 JST, tick every 2 min until 17:30 JST (dispatch + post-result).
+    - cron: "30 23 * * *"
+    # Backup bounded workers 09:00-16:55 JST, and status refresh until 21:55 JST.
+    - cron: "*/5 0-12 * * *"
+  workflow_dispatch:
+    inputs:
+      race_date:
+        description: "YYYY-MM-DD (empty = today JST)"
+        required: false
+        type: string
+      mode:
+        description: "bounded loop (until 17:30 JST) or tick"
+        required: false
+        default: loop
+        type: choice
+        options: [loop, tick]
+
+concurrency:
+  group: km-jra-race-day-autopilot
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install JRA SOURCE runtime dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Plan every official race, dispatch due races, publish status index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_DATE: ${{ inputs.race_date }}
+          MODE: ${{ inputs.mode }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          LOOP=()
+          if [ "${MODE:-}" != "tick" ]; then
+            LOOP=(--loop-until 17:30 --interval 120 --max-loop-seconds 1800)
+          fi
+          cd runtime/jra_source_runtime
+          python jra_race_day_autopilot.py --repo-root ../.. --date "$D" --all-races-default "${LOOP[@]}"
+      - name: Persist final state and status index
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_DATE: ${{ inputs.race_date }}
+        run: |
+          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          python runtime/jra_source_runtime/jra_race_day_autopilot.py --repo-root . --date "$D" --publish-only
+      - name: Continue with fresh worker before hosted job limit
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_DATE: ${{ inputs.race_date }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          if [ "${MODE:-}" != "tick" ] && [ "$D" = "$(TZ=Asia/Tokyo date +%F)" ] && \
+             [ "$(TZ=Asia/Tokyo date +%H%M)" -lt 1730 ] && [ -f "runtime/jra_race_day_plan/$D.schedule.json" ]; then
+            gh workflow run km-jra-race-day-autopilot.yml --ref main -f race_date="$D" -f mode=loop
+          fi

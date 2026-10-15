@@ -103,6 +103,16 @@ def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
     out={"profile":PROFILE,"official":True,"production_fact_authority":True,
          "status":"PASS" if runs else "NO_PRIOR_RUNS",
          "run_count":len(runs),"runs":runs,"person_profile_tokens":_person_tokens(decoded)}
+    # Official profile pedigree (父 / 母 / 母の父) from the same page. The race
+    # card omits it for some horses (e.g. foreign-bred names); never guessed.
+    try:
+        from jra_pedigree_harvest import parse_horse_pedigree
+        ped=parse_horse_pedigree(decoded)
+        if ped.get("sire"):
+            out["pedigree"]={"sire":ped.get("sire"),"dam":ped.get("dam"),"damsire":ped.get("damsire"),
+                             "source":"JRA_OFFICIAL_HORSE_PROFILE"}
+    except Exception:
+        pass
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 

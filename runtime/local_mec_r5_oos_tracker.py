@@ -20,6 +20,90 @@ def _dt(s):
 def _load(p):
     with open(p,encoding="utf-8") as f:return json.load(f)
 
+def canonical_capture(race_id):
+    """Read verified immutable execution checkpoints; never regenerate an arm."""
+    from pathlib import Path
+    from execution_store import resolve_phase
+    from local_mec_r5_shadow import verify_signed_final_binding, settle_shadow
+    root=Path("runtime/executions")
+    matches=[]
+    if not root.exists():return None
+    for execution in sorted(root.iterdir()):
+        if race_id not in execution.name:continue
+        formal=resolve_phase(execution.name,"FORMAL",root=root)
+        if not formal:continue
+        directory=formal["run_dir"]
+        fp=directory/"final_receipt_envelope.json"
+        if not fp.exists():continue
+        final=_load(fp)
+        if (final.get("receipt") or {}).get("race_id")!=race_id:continue
+        result_phase=resolve_phase(execution.name,"RESULT",root=root)
+        if not result_phase:continue
+        rd=result_phase["run_dir"]
+        if not all(p.exists() for p in (directory/"local_mec_r5_shadow_binding_attestation.json",directory/"receipt_verifications.json",rd/"receipt_verifications.json")):
+            continue  # Older verified legacy protocol remains compatible.
+        shadow=_load(directory/"local_mec_r5_shadow_pre_result.json")
+        attestation=_load(directory/"local_mec_r5_shadow_binding_attestation.json")
+        checked=verify_signed_final_binding(final,shadow)
+        if shadow.get("sha256")!=_sha({k:v for k,v in shadow.items() if k!="sha256"}):
+            raise AssertionError("R5_CANONICAL_SHADOW_CONTENT_HASH_MISMATCH")
+        if any(attestation.get(k)!=v for k,v in checked.items()):
+            raise AssertionError("R5_CANONICAL_ATTESTATION_MISMATCH")
+        envelope=_load(rd/"result_receipt_envelope.json")
+        fv=_load(directory/"receipt_verifications.json")
+        rv=_load(rd/"receipt_verifications.json")
+        if fv.get("FINAL") is not True or rv.get("FINAL") is not True or rv.get("RESULT") is not True:
+            raise AssertionError("R5_CANONICAL_SIGNATURE_VERIFICATION_MISSING")
+        for env in (final,envelope):
+            receipt=env.get("receipt") or {}
+            if (_sha(env.get("artifact"))!=receipt.get("artifact_sha256")
+                    or _sha(receipt)!=env.get("receipt_sha256") or receipt.get("status")!="PASS"
+                    or receipt.get("race_id")!=race_id):
+                raise AssertionError("R5_CANONICAL_RECEIPT_INTEGRITY_FAILURE")
+        if envelope["receipt"].get("phase")!="RESULT" or final["receipt"].get("phase")!="FINAL":
+            raise AssertionError("R5_CANONICAL_RECEIPT_PHASE_MISMATCH")
+        official_phase=resolve_phase(execution.name,"OFFICIAL_RESULT",root=root)
+        if not official_phase:continue  # Legacy authority remains fail-closed.
+        official_request=_load(official_phase["run_dir"]/"official_result_request.json")
+        if (official_request.get("official_result_verified") is not True or official_request.get("acceptance_only")
+                or not official_request.get("official_result_verification_ref")):
+            raise AssertionError("R5_CANONICAL_OFFICIAL_AUTHORITY_FAILURE")
+        if not (_dt(shadow["generated_at"])<=_dt(final["receipt"]["timestamp"])<_dt(shadow["scheduled_post_at"])):
+            raise AssertionError("R5_CANONICAL_FINAL_AFTER_POST")
+        artifact=envelope["artifact"]
+        if (artifact.get("frozen_refs") or {}).get("final_receipt_sha256")!=final.get("receipt_sha256"):
+            raise AssertionError("R5_CANONICAL_RESULT_FINAL_MISMATCH")
+        official=artifact["official_result"]
+        if official_request.get("race_id")!=race_id or any(
+                official_request.get(k)!=official.get(k) for k in ("finish_order","payouts")):
+            raise AssertionError("R5_CANONICAL_OFFICIAL_OUTCOME_MISMATCH")
+        available=artifact.get("result_available_at")
+        if not available or not _dt(shadow["generated_at"])<_dt(shadow["scheduled_post_at"])<=_dt(available):
+            raise AssertionError("R5_CANONICAL_CHRONOLOGY_FAILURE")
+        authority={"status":"PASS","verified_signed_result":True,
+            "verification_ref":official_request["official_result_verification_ref"],
+            "result_receipt_sha256":envelope.get("receipt_sha256"),
+            "result_artifact_sha256":envelope["receipt"]["artifact_sha256"]}
+        if not authority["verification_ref"]:raise AssertionError("R5_CANONICAL_OFFICIAL_SOURCE_MISSING")
+        request={"finish_order":official["finish_order"],"payouts":official.get("payouts") or {},
+            "winning_selections":official.get("winning_selections"),
+            "refund_runner_ids":official.get("refund_runner_ids") or [],"refund_authority":official.get("refund_authority")}
+        result=settle_shadow(shadow,request,signed_final_binding_valid=True)
+        settlement=artifact["settlement"]
+        line={"lineage_type":"LOCAL_MEC_R5_SIGNED_FINAL_BOUND","binding_valid":True,
+            "shadow_sha256":shadow["sha256"],"basis_sha256":shadow["source_basis_sha256"],
+            "final_receipt_sha256":final.get("receipt_sha256"),
+            "final_artifact_sha256":final["receipt"]["artifact_sha256"],
+            "production_tickets":final["artifact"]["final_ticket"]["tickets"],
+            "production_result":{"official_result":{**official,"top3":official["finish_order"][:3]}},
+            "production_settlement":{"status":"SETTLED","total_investment":settlement["investment"],"total_payout":settlement["return"]},
+            "capture_source":"CANONICAL_FORMAL_PRE_RESULT_ATTESTATION",
+            "result_authority":authority,"execution_id":execution.name}
+        matches.append((shadow,line,result,{"verified":True,"oos_admissible":True,"refs":[authority]}))
+    if len(matches)>1:raise AssertionError("R5_CANONICAL_RACE_AMBIGUOUS")
+    return matches[0] if matches else None
+
+
 def _official_result_authority(race_id):
     from local_candidate_postresult import forward_tracker_result_authority
     forward=forward_tracker_result_authority(race_id,'runtime/local_mec_r5_shadow_lineage',local_only=False)
@@ -68,6 +152,42 @@ def _aggregate(rows):
       "max_drawdown":_max_drawdown(rows)
     }
 
+
+def _normalized_comparison(aggregates):
+    positive_budget=[float(x.get("investment") or 0) for x in aggregates.values()
+                     if float(x.get("investment") or 0)>0]
+    positive_tickets=[int(x.get("ticket_count_total") or 0) for x in aggregates.values()
+                      if int(x.get("ticket_count_total") or 0)>0]
+    common_budget=min(positive_budget) if positive_budget else 0.0
+    common_tickets=min(positive_tickets) if positive_tickets else 0
+    by_arm={}
+    for arm,x in aggregates.items():
+        inv=float(x.get("investment") or 0)
+        ret=float(x.get("return") or 0)
+        tickets=int(x.get("ticket_count_total") or 0)
+        pfs=(ret/inv*100) if inv else None
+        return_per_ticket=(ret/tickets) if tickets else None
+        scaled_return=(common_budget*pfs/100) if pfs is not None else None
+        scaled_ticket_return=(return_per_ticket*common_tickets) if return_per_ticket is not None else None
+        by_arm[arm]={
+          "observed_investment":round(inv,2),
+          "observed_ticket_count":tickets,
+          "equal_budget_reference":round(common_budget,2),
+          "equal_budget_scaled_return":round(scaled_return,2) if scaled_return is not None else None,
+          "equal_budget_scaled_profit_loss":round(scaled_return-common_budget,2) if scaled_return is not None else None,
+          "return_per_ticket":round(return_per_ticket,9) if return_per_ticket is not None else None,
+          "equal_ticket_count_reference":common_tickets,
+          "equal_ticket_count_scaled_return":round(scaled_ticket_return,2) if scaled_ticket_return is not None else None,
+        }
+    return {
+      "status":"NORMALIZED-COMPARISON / MEASUREMENT-ONLY / NO-RESELECTION / NON-PRODUCTION",
+      "method":"Linear exposure normalization of already frozen/settled arms; does not claim a realizable reselected portfolio.",
+      "common_budget_reference":round(common_budget,2),
+      "common_ticket_count_reference":common_tickets,
+      "by_arm":by_arm,
+      "production_effect":"NONE",
+    }
+
 def build_status():
     activation=_dt(ACTIVATION_AT)
     entries=[]; held=[]; errors=[]
@@ -77,19 +197,23 @@ def build_status():
             if not fn.endswith(".json"): continue
             rid=fn[:-5]
             try:
-                result=_load(os.path.join(root,fn))
-                result_authority=_official_result_authority(rid)
+                canonical=canonical_capture(rid)
+                if canonical:
+                    sh,line,result,result_authority=canonical
+                else:
+                    result=_load(os.path.join(root,fn))
+                    result_authority=_official_result_authority(rid)
+                    sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
+                    lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
+                    if not os.path.exists(sp) or not os.path.exists(lp):
+                        errors.append({"race_id":rid,"reason":"R5_LINEAGE_MISSING"}); continue
+                    sh=_load(sp); line=_load(lp)
                 if result_authority.get("verified") is not True:
                     held.append({"race_id":rid,"reason":"RESULT_AUTHORITY_NOT_VERIFIED"})
                     continue
                 if result_authority.get("oos_admissible") is not True:
                     held.append({"race_id":rid,"reason":"ACCEPTANCE_ONLY_RESULT_NOT_OOS"})
                     continue
-                sp=os.path.join("runtime","local_mec_r5_shadow_artifacts",rid+".json")
-                lp=os.path.join("runtime","local_mec_r5_shadow_lineage",rid+".json")
-                if not os.path.exists(sp) or not os.path.exists(lp):
-                    errors.append({"race_id":rid,"reason":"R5_LINEAGE_MISSING"}); continue
-                sh=_load(sp); line=_load(lp)
                 if sh.get("profile")!=CANDIDATE_PROFILE or sh.get("candidate_id")!=CANDIDATE_ID:
                     continue
                 if sh.get("production_effect")!="NONE":
@@ -172,7 +296,8 @@ def build_status():
       "production_baseline":"KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3",
       "production_effect":"NONE","automatic_promotion":False,"human_review_required":True,
       "rule_change_during_window":"FORBIDDEN except correctness repair",
-      "entries":entries,"aggregates":agg,"comparison_vs_production":cmp,"errors":errors
+      "entries":entries,"aggregates":agg,"comparison_vs_production":cmp,
+      "normalized_comparison":_normalized_comparison(agg),"errors":errors
     }
     out["sha256"]=_sha(out)
     return out

@@ -24,8 +24,6 @@ jobs:
   result-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      PERSIST_BRANCH: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git pull --ff-only origin "$PERSIST_BRANCH"
+          git pull --ff-only origin main
 
       - name: Resolve RESULT execution metadata
         id: execution_meta
@@ -126,7 +124,7 @@ jobs:
 
           PUSHED=0
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
+            if git pull --rebase origin main && git push origin HEAD:main; then
               PUSHED=1
               break
             fi
@@ -156,7 +154,7 @@ jobs:
             git stash push --include-untracked -m "km-forward-ledger-pending"
             STASHED=1
           fi
-          git pull --ff-only origin "$PERSIST_BRANCH"
+          git pull --ff-only origin main
           if [ "$STASHED" = "1" ]; then
             git stash pop
           fi
@@ -185,7 +183,7 @@ jobs:
           fi
           git commit -m "measurement: persist LOCAL forward OOS state [skip ci]"
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
+            if git pull --rebase origin main && git push origin HEAD:main; then
               exit 0
             fi
             git rebase --abort 2>/dev/null || true

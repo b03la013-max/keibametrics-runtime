@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib, json
 from typing import Any
 from krs_prediction_utility import evaluate_against_result
+from family_pfs_improvement import build_pfs_improvement_assessment
 
 LEARNING_PROFILE="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
 
@@ -30,25 +31,32 @@ def _coverage(final_artifact, top3):
     tickets=ft.get("tickets") or []
     a,b,c=map(str,top3)
     exacta=False
+    purchased_exacta=False
+    purchased_trio=False
+    exact_oriented_set=False
     top3set=False
     exact=False
     hit_types=[]
     for t in tickets:
         bt,sel=_ticket_key(t)
         if bt=="EXACTA" and sel==(a,b):
-            exacta=True; hit_types.append("EXACTA")
+            exacta=True; purchased_exacta=True; hit_types.append("EXACTA")
         elif bt=="TRIO" and set(sel)=={a,b,c}:
-            top3set=True; hit_types.append("TRIO")
+            top3set=True; purchased_trio=True; hit_types.append("TRIO")
         elif bt=="TRIFECTA":
             if len(sel)>=2 and sel[:2]==(a,b):
                 exacta=True
-            if set(sel)=={a,b,c}:
+            if len(sel)==3 and set(sel)=={a,b,c}:
                 top3set=True
+                exact_oriented_set=True
             if sel==(a,b,c):
                 exact=True; hit_types.append("TRIFECTA")
     return {
       "ordered_pair_ticket_coverage":exacta,
       "top3_set_ticket_coverage":top3set,
+      "purchased_trio_ticket_coverage":purchased_trio,
+      "exact_oriented_top3_set_coverage":exact_oriented_set,
+      "purchased_exacta_ticket_coverage":purchased_exacta,
       "ordered_exact_ticket_coverage":exact,
       "matching_ticket_types":sorted(set(hit_types)),
       "ticket_count":len(tickets),
@@ -198,11 +206,13 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "production_change_authorized":False,
       "prequential_only":True,
     }
+    review["pfs_improvement"]=build_pfs_improvement_assessment(review)
     review["sha256"]=_sha(review)
     return review
 
 def build_learning_state(review:dict)->dict:
     ff=(review.get("failure_localization") or {}).get("first_material_failure")
+    pfs_improvement=review.get("pfs_improvement") or build_pfs_improvement_assessment(review)
     shadow=[]
     immediate=[]
     if ff=="THIRD_SET_COVERAGE":
@@ -221,6 +231,7 @@ def build_learning_state(review:dict)->dict:
         shadow.append("KRS_RESCUE_PROMOTION_EVIDENCE")
     if review.get("mec",{}).get("available") and review["mec"].get("precompression_semantic_universe") is not True:
         immediate.append("MEC_PRECOMPRESSION_SEMANTIC_UNIVERSE_REQUIRED")
+    shadow.extend(pfs_improvement.get("test_next_tracks") or [])
 
     state={
       "profile":LEARNING_PROFILE,
@@ -233,9 +244,14 @@ def build_learning_state(review:dict)->dict:
       "reference_metrics":{
         "pfs":review.get("capital",{}).get("pfs"),
         "first_material_failure":ff,
+        "dominant_pfs_loss_owner":(pfs_improvement.get("dominant_pfs_loss_owner") or {}).get("owner"),
+        "hit_but_loss":pfs_improvement.get("hit_but_loss"),
         "krs_classification":krs.get("classification"),
         "mec_profile":review.get("mec",{}).get("profile"),
       },
+      "pfs_improvement_profile":pfs_improvement.get("profile"),
+      "improvement_routes":pfs_improvement.get("learning_routes") or [],
+      "no_stagnation_satisfied":bool(pfs_improvement.get("no_stagnation_satisfied")),
       "forbidden":["RETROACTIVE_PREDICTION_REWRITE","AUTOMATIC_NUMERIC_WEIGHT_CHANGE","RESULT_DERIVED_FEATURE_REWRITE"],
       "production_change_authorized":False,
     }

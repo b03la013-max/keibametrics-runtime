@@ -1,0 +1,20 @@
+name: JRA Autopilot continuity acceptance
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_source_runtime/jra_race_day_autopilot.py'
+      - '.github/workflows/km-jra-race-day-autopilot.yml'
+      - '.github/workflows/km-jra-autopilot-failure-recovery.yml'
+      - 'tests/test_jra*autopilot*'
+      - 'tests/test_jra_real_race_failure_regressions.py'
+      - 'tests/test_jra_day_status_settlement_pfs_delivery.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  continuity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -q pytest beautifulsoup4 cryptography
+      - run: python -m pytest -q tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_continuity.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_real_race_failure_regressions.py tests/test_jra_day_status_settlement_pfs_delivery.py

@@ -1,0 +1,71 @@
+{
+  "profile_id": "KM-FAMILY-LOCAL-CORRECTNESS-MEASUREMENT-20261005-R1",
+  "effective_at": "2026-10-05T22:50:00+09:00",
+  "parent_current_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261004-R39",
+  "status": "C1-CORRECTNESS-REPAIR / C2-SHADOW-MEASUREMENT-HARDENING / NON-NUMERICAL / PRODUCTION-POLICY-UNCHANGED",
+  "evidence": "KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1",
+  "principle": "ABSORB / SIMPLIFY / FIX. Do not add a new prediction architecture for same-day result patterns.",
+  "changes": {
+    "result_acquisition_correctness": {
+      "action": "RETRY",
+      "code": "OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD",
+      "rationale": "NAR may temporarily expose a non-target/provisional result page before the target race result identity appears. The existing 3-hour result wait loop must treat this as a retryable publication-state hold, not a terminal block.",
+      "safety": "Identity verification remains fail-closed; no mismatched page is accepted and no prediction is regenerated."
+    },
+    "common_exact_continuity": {
+      "existing_profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
+      "implementation": "runtime/common_exact_continuity_shadow.py",
+      "definition_and_oos_arms": "BYTE-SEMANTIC FROZEN / UNCHANGED",
+      "change": "NONE",
+      "production_effect": "NONE"
+    },
+    "local_mec_r5": {
+      "existing_profile": "KM-LOCAL-MEC-R5-SET-PAIR-ORIENTATION-SHADOW-CANDIDATE-20260924-R1",
+      "arm_definitions": "FROZEN / UNCHANGED",
+      "added_measurement": [
+        "Linear equal-budget normalization across already frozen/settled arms",
+        "Linear equal-ticket-count normalization across already frozen/settled arms"
+      ],
+      "caveat": "Normalization is measurement-only and does not claim a realizable reselected portfolio.",
+      "production_effect": "NONE"
+    },
+    "regression": {
+      "profile": "KM-FAMILY-OHI-20261005-DAY-REGRESSION-R1",
+      "oos_credit": false,
+      "venue_canon_revision": false
+    },
+    "family_conversion_diagnostics": {
+      "profile": "KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1",
+      "profile_path": "research/common/KM-FAMILY-CONVERSION-DIAGNOSTICS-SHADOW-20261005-R1.json",
+      "runtime": "runtime/family_conversion_diagnostics.py",
+      "measurements": [
+        "Winner role migration candidates: W absent + lower P2/P3 CORE/PROTECTED retained",
+        "Pair residual candidates: Active W x P2 CORE/PROTECTED with no material pair and no hard structural pair exclusion",
+        "Selective exact candidates: material pair x active P3 with independent static/pair-local/KRS re-audit protection"
+      ],
+      "signed_final_binding_required": true,
+      "oos_arm": false,
+      "automatic_purchase": false,
+      "production_effect": "NONE"
+    }
+  },
+  "invariants": {
+    "core_principles": "UNCHANGED",
+    "local_production_prediction": "UNCHANGED",
+    "krs_engine": "UNCHANGED",
+    "parameter_map": "UNCHANGED",
+    "production_mec": "KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3 / ACTIVE / UNCHANGED",
+    "production_capital": "KM-FAMILY-CAPITAL-COMPATIBILITY-v1.0-20260921 / UNCHANGED",
+    "probability_ev_kelly_authority": "UNCHANGED",
+    "same_day_promotion": "FORBIDDEN",
+    "automatic_promotion": false
+  },
+  "acceptance_requirements": [
+    "Temporary NAR result identity HOLD is retryable while identity verification remains fail-closed.",
+    "Common Exact Continuity existing arm set remains byte-semantic in names and rules.",
+    "New conversion diagnostics never add Production tickets or roles.",
+    "MEC-R5 existing arms remain unchanged.",
+    "Normalized comparisons are explicitly measurement-only.",
+    "2026-10-05 OHI races receive regression evidence only, not Forward-OOS credit."
+  ]
+}

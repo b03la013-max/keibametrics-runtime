@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from jra_source_runtime.jra_observed_context import resolve_observed_context
+
 import copy
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from jra_official_fact_evaluator_production import official_production_observations, _observed_runs
 
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
 
@@ -47,7 +51,7 @@ def _tsl_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def _detail_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     d = artifact.get("jra_official_race_card_detail") or {}
-    return {str(x.get("runner_id") or x.get("horse_no")): x for x in (d.get("runners") or []) if x.get("horse_no") is not None}
+    return {str(x.get("runner_id") or x.get("horse_no")): x for x in (d.get("runners") or []) if (x.get("runner_id") is not None or x.get("horse_no") is not None)}
 
 def _history_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     d=artifact.get("jra_official_horse_history") or {}
@@ -63,8 +67,13 @@ def _detail_rule_inputs(rid: str, detail: Dict[str, Dict[str, Any]], artifact: D
         return {"available":False,"source_family_inputs":{},"feature_inputs":{}}
     recent_runs=list(x.get("recent_runs") or [])
     history=_history_runner_map(artifact).get(rid) or {}
-    runs=list(history.get("runs") or recent_runs)
-    ctx=artifact.get("jra_race_context") or {}
+    from datetime import date
+    try:
+        race_day=date.fromisoformat((artifact.get("source_race_context") or {}).get("race_date", ""))
+        runs=_observed_runs(history, x, race_day)
+    except (ValueError, TypeError):
+        runs=[]
+    ctx=resolve_observed_context(artifact)
     venue_name=str(ctx.get("venue_name") or "")
     target_distance=ctx.get("distance_m")
     target_surface=ctx.get("surface")
@@ -175,9 +184,12 @@ def _official_detail_production_features(rid: str, artifact: Dict[str, Any]) -> 
         )
     rank=x.get("popularity_rank")
     if rank is not None:
-        active=[z for z in detail.values() if str(z.get("status") or "ACTIVE")=="ACTIVE"]
+        # The verified official runner universe, not a possibly partial detail
+        # page, determines the population for a market-rank band.
+        official=_official_runner_map(artifact)
+        active=[z for z in official.values() if str(z.get("status") or "ACTIVE")=="ACTIVE"]
         n=len(active)
-        if n>=2:
+        if rid in official and n>=2 and 1 <= int(rank) <= n:
             cat=market_rank_band(rank,n)
             out["market_rank"]=_feature(
                 cat,"JRA-MARKET-RANK-BAND-v1",refs,
@@ -190,10 +202,17 @@ def _official_detail_production_features(rid: str, artifact: Dict[str, Any]) -> 
 def _registered_common_runner_map(artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     rc=artifact.get("jra_registered_common") or {}
     w=(rc.get("workout") or {}).get("runners") or []
-    return {str(x.get("runner_id") or x.get("horse_no")):x for x in w if x.get("horse_no") is not None}
+    return {str(x.get("runner_id") or x.get("horse_no")):x for x in w if (x.get("runner_id") is not None or x.get("horse_no") is not None)}
 
 def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    x=_registered_common_runner_map(artifact).get(rid)
+    official=_official_runner_map(artifact)
+    workout=_registered_common_runner_map(artifact)
+    # Registered common workout assessments must cover exactly the verified
+    # official active runner universe; partial feeds cannot become Production.
+    active={no for no,z in official.items() if str(z.get("status") or "ACTIVE")=="ACTIVE"}
+    if len(active)<2 or set(workout)!=active:
+        return {}
+    x=workout.get(rid)
     if not x:return {}
     rc=artifact.get("jra_registered_common") or {}
     w=rc.get("workout") or {}
@@ -641,7 +660,14 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
             {"feature":f,"weight":float(w),"source_family":FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY")}
             for f,w in sorted(weights.items(), key=lambda kv:-float(kv[1])) if f not in feats
         ]
-        ok = covered + 1e-12 >= min_weight
+        from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
+        # Art.3 DCR: officially unpublished information lowers reliability
+        # (recorded) instead of blocking formal base readiness.
+        # R48 Art.3 may AUTHORIZE a low-evidence index calculation, but it
+        # does not manufacture its missing observations. Keep the production
+        # execution policy unchanged while exposing actual observed coverage.
+        observed_ok = covered + 1e-12 >= min_weight
+        ok = observed_ok or DCR_INFORMATION_POLICY_ENABLED
         ready = ready and ok
         if not ok:
             for x in missing:
@@ -650,6 +676,12 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
             "covered_weight": round(covered, 6),
             "minimum_required_weight": min_weight,
             "pass": ok,
+            "observed_evidence_pass": observed_ok,
+            "coverage_decision_mode": (
+                "OBSERVED_EVIDENCE_SUFFICIENT" if observed_ok
+                else "ART3_INFORMATION_INSUFFICIENT_DCR" if DCR_INFORMATION_POLICY_ENABLED
+                else "INSUFFICIENT_EVIDENCE_BLOCKED"
+            ),
             "missing_features": missing,
         }
     dcr_missing = []
@@ -668,11 +700,26 @@ def _coverage_for_runner(runner: Dict[str, Any], mapping: Dict[str, Any]) -> Dic
         dcr_missing.append({"component":name,"feature":f,"source_family":FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY") if f else "EXPLICIT_DCR_INPUT"})
         if f:
             missing_sources.add(FEATURE_SOURCE_FAMILY.get(f,"UNMAPPED_SOURCE_FAMILY"))
-    if dcr_missing:
+    from jra_evidence_to_base_production import DCR_INFORMATION_POLICY_ENABLED
+    if dcr_missing and not DCR_INFORMATION_POLICY_ENABLED:
         ready = False
     return {
         "profile": profile,
         "formal_base_ready": ready,
+        # Orthogonal to the R48 DCR-authorized formal readiness. In particular,
+        # BVI=50 with 0 observed pedigree features must never be described as
+        # 'BVI evidence shortage resolved'.
+        "observed_base_coverage_ready": all(
+            v["observed_evidence_pass"] for v in indices.values()),
+        "observed_index_coverage_gaps": [
+            {"index": idx, "covered_weight": info["covered_weight"],
+             "minimum_required_weight": info["minimum_required_weight"],
+             "missing_features": info["missing_features"]}
+            for idx, info in indices.items() if not info["observed_evidence_pass"]
+        ],
+        "dcr_art3_information_insufficient": bool(DCR_INFORMATION_POLICY_ENABLED) and bool(
+            dcr_missing or any(not v["covered_weight"] + 1e-12 >= v["minimum_required_weight"]
+                               for v in indices.values())),
         "indices": indices,
         "dcr_missing": dcr_missing,
         "present_feature_count": len(feats),
@@ -709,6 +756,36 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     detail = _detail_runner_map(source_artifact)
     allowed = _allowed_features(mapping)
     contract = validate_feature_contract(mapping)
+    registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json"
+    official_fact_registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    official_observations = official_production_observations(source_artifact, official_fact_registry)
+    # Owner-authorized (2026-10-10) deterministic rules over the same signed
+    # JRA official SOURCE plus a point-in-time pedigree corpus of earlier
+    # signed SOURCEs. They only fill features still missing after the rules
+    # above, never overwrite, and keep thresholds/weights unchanged.
+    owner_registry_path = Path(__file__).resolve().parents[1] / "mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json"
+    owner_observations = {}
+    owner_corpus_manifest = None
+    if owner_registry_path.exists():
+        from jra_owner_authorized_feature_rules import owner_authorized_observations
+        from jra_pedigree_corpus import build_corpus
+        race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
+                        or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
+        target_rows = (source_artifact.get("jra_official_race_card_detail") or {}).get("runners") or []
+        hist_ped = [((source_artifact.get("jra_official_horse_history") or {}).get("runners") or {}).get(
+            str(x.get("runner_id") or x.get("horse_no")), {}).get("pedigree") or {} for x in target_rows]
+        relevant_sires = {str(x.get("sire") or "").strip() for x in list(target_rows) + hist_ped if x.get("sire")}
+        relevant_damsires = {str(x.get("damsire") or "").strip() for x in list(target_rows) + hist_ped if x.get("damsire")}
+        corpus = build_corpus(Path(__file__).resolve().parents[1],
+                              prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
+                              race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
+                              required_sires=relevant_sires,
+                              required_damsires=relevant_damsires)
+        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "horse_count", "run_count", "manifest_sha256",
+                                                                        "identity_collision_count", "run_conflict_count",
+                                                                        "rejected_untrusted_inputs", "source_signature_level")}
+        owner_observations = owner_authorized_observations(
+            source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
     runners_out = {}
     all_missing_sources = set()
     # Empty runner universes must fail closed. A vacuous all([])==True is not
@@ -731,6 +808,11 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             generated["weight_load_fit"] = w
         generated.update(_official_detail_production_features(rid,source_artifact))
         generated.update(_registered_common_workout_features(rid,source_artifact))
+        # Only signed, pre-cutoff JRA history/person facts and registered
+        # Production normalizers; no fallback for missing sample evidence.
+        generated.update(official_observations.get(rid, {}))
+        for name, value in (owner_observations.get(rid) or {}).items():
+            generated.setdefault(name, value)
         generated = {k:v for k,v in generated.items() if k in allowed}
         existing_features = copy.deepcopy(r.get("evidence_features") or {})
         merged, conflicts = _merge_generated(existing_features, generated)
@@ -780,6 +862,8 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         "source_only_formal_base_ready": all(bool(x.get("source_only_formal_base_ready")) for x in runners_out.values()) if runners_out else False,
         "production_feature_principle": "ONLY_DETERMINISTIC_RULE_BOUND_FACTS_FROM_PRODUCTION_AUTHORIZED_SOURCES; NO_TSL_OR_JMA_SHADOW_INJECTION",
         "shadow_isolation": True,
+        "owner_authorized_rules_profile": "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.0-20261010" if owner_observations else None,
+        "pedigree_corpus_manifest": owner_corpus_manifest,
         "runner_count": len(runners_out),
         "runners": runners_out,
         "formal_base_ready_after_merge": all_ready,

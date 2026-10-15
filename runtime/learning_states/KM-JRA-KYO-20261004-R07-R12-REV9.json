@@ -1,0 +1,121 @@
+{
+  "profile": "KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921",
+  "state_id": "KM-JRA-KYO-20261004-R07-R12-REV9-LEARNING-NEXT",
+  "venue": "KYO",
+  "source_scope": "2026-10-04 R07-R12",
+  "status": "PREQUENTIAL-NEXT-RACE-ONLY / NO-PRODUCTION-RULE-CHANGE / R39-ALIGNED",
+  "source_review": "runtime/daily_reviews/KM-JRA-KYO-20261004-R07-R12-REV9.json",
+  "source_canon_audit": "runtime/venue_audits/KM-JRA-KYO-20261005-REV9-CANON-AUDIT.json",
+  "production_change_authorized": false,
+  "canon_revision_authorized": false,
+  "next_race_mandatory_checks": [
+    {
+      "id": "KYO-P2-INDEPENDENT-REAUDIT",
+      "owner": "COMMON PREDICTION / P2",
+      "instruction": "After Winner review, independently ask whether each evidence-supported P3/Alternative/Tail runner can finish second even if it is not a strong winner. W weakness must not automatically propagate to P2.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R11",
+        "KM-JRA-KYO-20261004-R12"
+      ],
+      "production_effect": "NONE / MEASUREMENT-FIRST"
+    },
+    {
+      "id": "KYO-DISCOVERED-MATERIAL-ROLE-SEPARATION",
+      "owner": "COMMON PREDICTION / MATERIALITY",
+      "instruction": "Preserve discovered W/P2/P3 coverage but distinguish Material Winner Head, Alternative Winner and Protection rather than treating every active role runner as equal purchase material.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R07"
+      ],
+      "production_effect": "NONE / SHADOW-OOS"
+    },
+    {
+      "id": "KYO-SCORE-CONFIDENCE-SEPARATION",
+      "owner": "COMMON EVIDENCE / PREDICTION",
+      "instruction": "Report evidence completeness and critical UNKNOWN separately from score. Do not convert missing evidence into weakness or automatic score penalties.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R07",
+        "KM-JRA-KYO-20261004-R11"
+      ],
+      "production_effect": "NONE / MEASUREMENT"
+    },
+    {
+      "id": "KYO-PAIR-CROSS-TICKET-CONTINUITY",
+      "owner": "TICKET CONVERSION CORRECTNESS",
+      "instruction": "Before FINAL, verify that a purchased ordered pair with a material third does not disappear silently from trifecta construction.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R10"
+      ],
+      "production_effect": "NONE / CORRECTNESS"
+    },
+    {
+      "id": "JRA-AKI-BRIDGE-RESTORATION",
+      "owner": "COMMON PREDICTION / AKI",
+      "instruction": "Keep formal W-AKI/P2-AKI/P3-AKI bridge restoration as an explicit gap. Do not synthesize or freehand AKI values.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R07"
+      ],
+      "production_effect": "NONE UNTIL AUTHORIZED"
+    },
+    {
+      "id": "KYO-PFS-AUTHORITY-SEPARATION",
+      "owner": "MEASUREMENT",
+      "instruction": "Keep Actual, Frozen Recommendation, Paper and No-Bet/Abstention PFS separate in every review.",
+      "evidence_fixtures": [
+        "KM-JRA-KYO-20261004-R07",
+        "KM-JRA-KYO-20261004-R08",
+        "KM-JRA-KYO-20261004-R09",
+        "KM-JRA-KYO-20261004-R10",
+        "KM-JRA-KYO-20261004-R11",
+        "KM-JRA-KYO-20261004-R12"
+      ],
+      "production_effect": "NONE / CORRECTNESS"
+    }
+  ],
+  "next_race_measurement_priorities": [
+    "Material Winner Head discrimination without deleting discovered alternatives",
+    "Independent P2 discrimination",
+    "Ordered Pair reachability",
+    "Pair-conditioned Third continuity across bet types",
+    "Evidence Confidence versus score",
+    "KRS Rescue versus Harm",
+    "Semantic retention versus required capital",
+    "Robust PFS rather than headline PFS"
+  ],
+  "do_not_change": [
+    "Production Base Index weights",
+    "Derived formulas",
+    "Probability mapping",
+    "KRS physics",
+    "parameter_map",
+    "KRS Production authority",
+    "Production MEC-R3",
+    "Capital formula",
+    "Kyoto permanent bias",
+    "Fixed W/P2/P3 width",
+    "Fixed ticket count"
+  ],
+  "current_reference_metrics": {
+    "candidate_oos_count": 21,
+    "krs_oos_count": 4,
+    "mec_r4_oos_count": 7,
+    "global_candidate_pfs_pct": 162.37804878,
+    "global_candidate_largest_win_excluded_pfs_pct": 39.770491803,
+    "global_candidate_top3_excluded_pfs_pct": 5.096525097,
+    "kyoto_day_winner_awareness_rate": 1,
+    "kyoto_day_winner_w_capture_rate": 0.833333,
+    "kyoto_day_p2_capture_rate": 0.666667,
+    "kyoto_day_p3_capture_rate": 1,
+    "kyoto_day_ordered_pair_reachability_rate": 0.666667
+  },
+  "frozen_learning_label": "KYO-NEXT-RACE-P2-MATERIALITY-ORDER-DISCRIMINATION-CROSS-TICKET-CONTINUITY",
+  "forbidden": [
+    "RETROACTIVE_PREDICTION_REWRITE",
+    "RESULT-DERIVED NUMERIC WEIGHT CHANGE",
+    "AUTOMATIC P2 WIDENING",
+    "BUDGET-DRIVEN ROLE WIDTH",
+    "FAKE AKI SYNTHESIS",
+    "KRS-TOP-ONLY HEAD DELETION",
+    "POST-RESULT TICKET INSERTION INTO LIVE PFS",
+    "NEW KYOTO VALIDATOR FOR COMMON FAILURE"
+  ]
+}

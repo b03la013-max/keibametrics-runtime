@@ -1,0 +1,188 @@
+name: JRA Official Postrace Zero-Bet Learning
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-no-bet-postresult-learning.yml"
+      - "runtime/jra_no_bet_postresult_learning.py"
+      - "tests/test_jra_no_bet_postresult_learning.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-no-bet-postresult-learning.yml"
+  schedule:
+    - cron: "25 8-15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+jobs:
+  zero-bet-learning-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify source-bound zero-stake result-learning invariants
+        run: |
+          python -m pip install -q pytest
+          python -m pytest -q tests/test_jra_production_no_bet_terminal.py tests/test_jra_no_bet_postresult_learning.py
+
+  official-result-ingest:
+    if: github.event_name != 'pull_request'
+    needs: zero-bet-learning-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    concurrency:
+      group: jra-official-zero-stake-postresult
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Acquire actual JRA post-result facts, only after posted start
+        id: capture
+        env:
+          PYTHONPATH: runtime:runtime/jra_source_runtime
+        run: |
+          python - <<'PY'
+          from datetime import datetime,timezone,timedelta
+          from pathlib import Path
+          from jra_production_no_bet_terminal import verify_no_bet_terminal
+          from jra_same_day_results import _open_day,_fetch_race
+          import json
+          now=datetime.now(timezone.utc)
+          files=sorted(Path("runtime/jra_no_bet_terminals").glob("*.json"))
+          pending=[]
+          for path in files:
+              target=Path("runtime/jra_no_bet_learning")/path.name
+              if target.exists():continue
+              intent=Path("runtime/jra_formal_intents")/path.name
+              if not intent.exists():continue
+              try:
+                  t=json.loads(path.read_text(encoding="utf-8"))
+                  verify_no_bet_terminal(t,require_live=True)
+                  i=json.loads(intent.read_text(encoding="utf-8"))
+                  post=datetime.fromisoformat(i["scheduled_post_at"].replace("Z","+00:00"))
+                  if not (post+timedelta(minutes=10)<=now<=post+timedelta(days=7)):continue
+                  key=((i.get("jra_source") or {}).get("jra_meeting_key") or "")
+                  rn=int(i["race_no"])
+                  if len(str(key))!=10 or not 1<=rn<=12:continue
+                  pending.append((post,path,i,t,key,rn))
+              except (ValueError,KeyError,TypeError):
+                  continue
+          # Bounded official traffic; never request a future or missing result.
+          pending.sort(key=lambda p:p[0])
+          captures=0
+          for _,path,intent,t,key,rn in pending[:4]:
+              try:
+                  opener,referer,day_html,k,d=_open_day(intent["race_date"],key)
+                  snap,parsed=_fetch_race(
+                      opener,referer,day_html,k,d,rn,
+                      (now+timedelta(minutes=10)).isoformat(),
+                  )
+                  if parsed.get("official") is not True or len(parsed.get("runners") or [])<3:
+                      continue
+                  captured={
+                      "profile":"KM-JRA-OFFICIAL-POSTRESULT-OIDC-CAPTURE-v1-20261010",
+                      "race_id":intent["race_id"],
+                      "execution_id":path.stem,
+                      "race_no":rn,
+                      "original_prediction_cutoff":intent["prediction_cutoff"],
+                      "result_capture_deadline":(now+timedelta(minutes=10)).isoformat(),
+                      "result_capture_timestamp":now.isoformat(),
+                      "classification":"POST_RACE_RESULT_ONLY / NOT_PREDICTION_EVIDENCE",
+                      "source_snapshot":snap,
+                      "official_result_detail":parsed,
+                  }
+                  out=Path("runtime_out/capture")/(path.stem+".json")
+                  out.parent.mkdir(parents=True,exist_ok=True)
+                  out.write_text(json.dumps(captured,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+                  captures+=1
+              except Exception as exc:
+                  print("JRA_OFFICIAL_POSTRESULT_NOT_READY",path.stem,str(exc)[:300])
+                  continue
+          with open(__import__("os").environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("captured="+("true" if captures else "false")+"\n")
+          print("JRA_POSTRESULT_OFFICIAL_CAPTURED",captures)
+          PY
+      - uses: actions/attest-build-provenance@v2
+        if: steps.capture.outputs.captured == 'true'
+        with:
+          subject-path: runtime_out/capture/*.json
+      - name: Verify OIDC capture and NO_BET decision before learning
+        id: settle
+        if: steps.capture.outputs.captured == 'true'
+        env:
+          PYTHONPATH: runtime
+        run: |
+          set -euo pipefail
+          for path in runtime_out/capture/*.json; do
+            test -f "$path"
+            gh attestation verify "$path" --repo "$GITHUB_REPOSITORY" >/dev/null
+            BASE="$(basename "$path")"
+            TERMINAL="runtime/jra_no_bet_terminals/$BASE"
+            test -f "$TERMINAL"
+            gh attestation verify "$TERMINAL" --repo "$GITHUB_REPOSITORY" >/dev/null
+          done
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from jra_no_bet_postresult_learning import build_no_bet_learning
+          count=0
+          for path in sorted(Path("runtime_out/capture").glob("*.json")):
+              source=json.loads(path.read_text(encoding="utf-8"))
+              terminal=json.loads((Path("runtime/jra_no_bet_terminals")/path.name).read_text(encoding="utf-8"))
+              result=source["official_result_detail"]
+              out=build_no_bet_learning(
+                  terminal,result,
+                  race_no=source["race_no"],
+                  acquired_at=source["result_capture_timestamp"],
+                  result_source_snapshot_sha256=source["source_snapshot"]["snapshot_sha256"],
+                  official_capture_verified=True,
+              )
+              dest=Path("runtime_out/learning")/path.name
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              dest.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+              count+=1
+          assert count>0
+          print("JRA_SIGNED_ZERO_EXPOSURE_RESULT_LEARNING",count)
+          PY
+      - uses: actions/attest-build-provenance@v2
+        if: steps.capture.outputs.captured == 'true'
+        with:
+          subject-path: runtime_out/learning/*.json
+      - uses: actions/upload-artifact@v4
+        if: steps.capture.outputs.captured == 'true'
+        with:
+          name: jra-zero-bet-official-result-learning-oidc
+          path: |
+            runtime_out/capture/*.json
+            runtime_out/learning/*.json
+          if-no-files-found: error
+      - name: Persist immutable zero-bet Learning, exclude from PFS and OOS
+        if: steps.capture.outputs.captured == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p runtime/jra_no_bet_learning
+          cp runtime_out/learning/*.json runtime/jra_no_bet_learning/
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_no_bet_learning
+          if ! git diff --cached --quiet; then
+            git commit -m "learning: JRA OIDC attested zero-bet official result [skip ci]"
+            for attempt in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              git rebase --abort || true
+              sleep $((attempt*2))
+            done
+            exit 1
+          fi

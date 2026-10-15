@@ -1,0 +1,85 @@
+name: JRA AKI selection source-verified recovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_aki_recovery_requests/*.json'
+  workflow_dispatch:
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+concurrency:
+  group: jra-aki-selection-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -q beautifulsoup4 cryptography
+      - name: Verify original SOURCE and recompute exact selection failure
+        id: build
+        run: |
+          set -euo pipefail
+          mkdir -p runtime_out/aki_recovery
+          for REQUEST in runtime/jra_aki_recovery_requests/*.json; do
+            read -r EID SOURCE_RUN < <(python -c 'import json,sys;r=json.load(open(sys.argv[1]));print(r["execution_id"],r["source_run_id"])' "$REQUEST")
+            [[ "$EID" =~ ^KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}-LIVE-R[0-9]+$ ]]
+            [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+            TARGET="runtime/jra_no_bet_terminals/$EID.json"
+            [ ! -f "$TARGET" ] || continue
+            RID="${EID%-LIVE-*}"
+            if [ -f "runtime/final_artifacts/$RID.json" ]; then
+              echo "Immutable FINAL already exists; no recovery override: $RID"
+              continue
+            fi
+            SOURCE="runtime/executions/$EID/SOURCE/runs/$SOURCE_RUN/source_receipt_envelope.json"
+            gh attestation verify "$SOURCE" --repo "$GITHUB_REPOSITORY"
+            PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_aki_selection_recovery.py \
+              --intent "runtime/jra_formal_intents/$EID.json" --source-envelope "$SOURCE" \
+              --output "runtime_out/aki_recovery/$EID.json"
+          done
+          if compgen -G 'runtime_out/aki_recovery/*.json' >/dev/null; then
+            echo 'created=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/attest-build-provenance@v2
+        if: steps.build.outputs.created == 'true'
+        with:
+          subject-path: runtime_out/aki_recovery/*.json
+      - name: Verify terminal OIDC and persist immutable zero-exposure decisions
+        if: steps.build.outputs.created == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p runtime/jra_no_bet_terminals
+          for FILE in runtime_out/aki_recovery/*.json; do
+            gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY"
+            PYTHONPATH=runtime python -c 'import json,sys;from jra_production_no_bet_terminal import verify_no_bet_terminal;print(verify_no_bet_terminal(json.load(open(sys.argv[1]))))' "$FILE"
+            TARGET="runtime/jra_no_bet_terminals/$(basename "$FILE")"
+            test ! -f "$TARGET"
+            cp "$FILE" "$TARGET"
+            git add "$TARGET"
+          done
+          git diff --cached --quiet && exit 0
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git commit -m "execution: source-verified AKI zero-exposure recovery"
+          for ATTEMPT in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+          done
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-aki-selection-recovery-${{ github.run_id }}
+          path: runtime_out/aki_recovery
+          retention-days: 90

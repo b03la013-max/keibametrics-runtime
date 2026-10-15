@@ -68,12 +68,27 @@ jobs:
           closure=j("governance/KM-LOCAL-MEC-FORWARD-MEASUREMENT-CLOSURE-20260924-R1.json")
           r5status=j("runtime/local_mec_r5_oos_status.json")
 
-          assert gateway["parent_current_authority"]==auth["manifest_id"]
-          assert gateway["venue_routing"]==route["profile_id"]
+          # Current LOCAL pointers must resolve directly from the latest
+          # authority once a LOCAL-scoped authority change is enacted.
+          expected_local_parent=auth["manifest_id"]
+          # R51 changes only JRA NEWCOMER PAPER execution. LOCAL pointers
+          # retain R50, with exact scoped/common equality checked here.
+          if auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261012-R51":
+              parent=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261011_R50.json")
+              assert auth["predecessor"]==parent["manifest_id"]
+              assert auth["family_scoped_authority"]["LOCAL"]==parent["family_scoped_authority"]["LOCAL"]
+              assert cc==parent["common_family_components"]
+              expected_local_parent=parent["manifest_id"]
+          expected_local_route=route["profile_id"]
+          assert gateway["parent_current_authority"]==expected_local_parent
+          assert gateway["venue_routing"]==expected_local_route
           assert gateway["policy"]["production_prediction_policy_changed"] is False
-          assert gateway["policy"]["production_numerical_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_policy_changed"] is True
           assert gateway["policy"]["production_mec_policy_changed"] is False
           assert gateway["policy"]["capital_policy_changed"] is False
+          assert gateway["policy"]["production_numerical_authority_ready"] is True
+          assert gateway["policy"]["numerical_to_prediction_consumption_authorized"] is False
+          assert gateway["policy"]["numerical_to_krs_consumption_authorized"] is False
 
           assert cc["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert cc["venue_routing"]==route["profile_id"]
@@ -82,17 +97,23 @@ jobs:
           assert L["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
           assert L["mec_status"]=="ACTIVE / PRODUCTION / UNCHANGED"
           assert L["production_suite"]=="KM-LOCAL-RENDERED-INTEGRITY-20260827-R3"
-          assert L["production_numeric_status"]=="FROZEN / NO NUMERICAL CHANGE"
+          assert "PRODUCTION NUMERICAL MATERIALIZATION v1.0" in L["production_numeric_status"]
           assert L["suite_manifest"]==suite["manifest_id"]
-          assert L["numerical_authority_status"].startswith("NOT_READY")
+          assert L["numerical_authority_status"].startswith("READY")
+          assert L["numerical_consumption_boundary"]["prediction_authority"] is False
+          assert L["numerical_consumption_boundary"]["krs_input_authority"] is False
           assert L["mec_measurement"]["r4_local"]["result"]=="LOCAL_PROMOTION_REJECTED"
           assert L["mec_measurement"]["r5_local"]["automatic_promotion"] is False
           assert L["mec_measurement"]["r5_local"]["target_eligible_races"]==30
 
-          assert suite["family_current_authority"]==auth["manifest_id"]
+          assert suite["family_current_authority"]==expected_local_parent
           assert suite["decision_execution"]["mec"]=="KM-FAMILY-MINIMUM-EFFICIENT-COVERAGE-20260921-R3"
-          assert suite["production_numeric_suite"]["status"]=="FROZEN"
-          assert suite["production_numeric_suite"]["numerical_change"] is False
+          assert "PRODUCTION NUMERICAL EXECUTION CLOSURE v1.0 ACTIVE" in suite["production_numeric_suite"]["status"]
+          assert suite["production_numeric_suite"]["numerical_execution_change"] is True
+          assert suite["production_numeric_suite"]["predictive_weight_change"] is False
+          assert suite["numerical"]["status"].startswith("READY")
+          assert suite["numerical"]["prediction_consumption_authorized"] is False
+          assert suite["numerical"]["krs_consumption_authorized"] is False
           assert suite["decision_execution"]["mec_forward_measurement"]["signed_final_binding_required"] is True
 
           lr=route["family_routes"]["LOCAL"]
@@ -124,7 +145,7 @@ jobs:
           assert closure["r5"]["automatic_promotion"] is False
 
           assert r5status["profile"]=="KM-LOCAL-MEC-R5-FORWARD-OOS-TRACKER-v1.0-20260924"
-          assert r5status["status"] in {"WAITING_30","HUMAN_REVIEW_REQUIRED"}
+          assert r5status["status"] in {"WAITING_30","HUMAN_REVIEW_REQUIRED","COMPLETE_30_HUMAN_REVIEW_REQUIRED"}
           # Authority carries an enactment snapshot, not the mutable OOS ledger.
           # Rebuild with the unchanged tracker/eligibility rules instead of
           # requiring live observations to equal the historical snapshot count.
@@ -132,11 +153,23 @@ jobs:
           sys.path.insert(0,"runtime")
           from local_mec_r5_oos_tracker import build_status
           rebuilt=build_status()
-          assert r5status["eligible_races"]==rebuilt["eligible_races"]
-          assert 0<=L["mec_measurement"]["r5_local"]["current_oos_count"]<=r5status["target_eligible_races"]
-          assert r5status["remaining_races"]==max(0,r5status["target_eligible_races"]-r5status["eligible_races"])
+          # The committed JSON is an immutable/latest-written snapshot. Canonical
+          # execution records may be newer; the runtime rebuild is authoritative
+          # for current measurement and must never move backwards.
+          assert rebuilt["eligible_races"]>=r5status["eligible_races"]
+          assert 0<=rebuilt["eligible_races"]<=rebuilt["target_eligible_races"]
+          assert 0<=L["mec_measurement"]["r5_local"]["current_oos_count"]<=rebuilt["target_eligible_races"]
+          assert rebuilt["remaining_races"]==max(0,rebuilt["target_eligible_races"]-rebuilt["eligible_races"])
+          assert rebuilt["production_effect"]=="NONE"
+          assert rebuilt["automatic_promotion"] is False
           assert r5status["production_effect"]=="NONE"
           assert r5status["automatic_promotion"] is False
+          print("R5_CURRENT_REBUILT",json.dumps({
+              "snapshot_eligible":r5status["eligible_races"],
+              "rebuilt_eligible":rebuilt["eligible_races"],
+              "rebuilt_remaining":rebuilt["remaining_races"],
+              "errors":rebuilt.get("errors") or []
+          },ensure_ascii=False))
           assert set(r5status["training_exclusion"])=={
               "URW-20260923-R07-FORMAL-R1","URW-20260923-R10-FORMAL-R1",
               "URW-20260923-R11-FORMAL-R1","URW-20260923-R12-FORMAL-R1"

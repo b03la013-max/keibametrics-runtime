@@ -12,12 +12,12 @@ from tsl_public_shadow_evidence import build_tsl_shadow_evidence,discover_tsl_ra
 from jma_weather_evidence import build_jma_weather_evidence
 from jra_auxiliary_evidence import enrich_with_auxiliary_evidence
 from jra_population_seed import enrich_with_population_seed
-from jra_official_pdf import fetch_and_enrich_official_pdf
+from jra_official_pdf import fetch_and_enrich_official_pdf, reconcile_pdf_column_with_detail
 from jra_race_context import enrich_with_race_context
 from jra_horse_history import enrich_with_horse_histories
 from jra_person_stats import enrich_with_person_stats
-from jra_race_card_detail import fetch_and_enrich_race_card_detail,runner_universes_from_detail
-from jra_market_observation import enrich_with_market_observation
+from jra_race_card_detail import fetch_and_enrich_race_card_detail,fetch_race_card_reobservation,runner_universes_from_detail
+from jra_market_observation import enrich_with_market_observation, attach_aki_external_observations
 from jra_registered_common import enrich_with_registered_common
 from jra_same_day_results import enrich_with_same_day_results
 
@@ -104,11 +104,7 @@ def _append_jra_card_specs(p:Dict[str,Any],meeting_key:str)->Dict[str,Any]:
     q["sources"]=existing+[x for x in m["sources"] if str(x.get("source_id")) not in ids]
     return q
 
-def _bind_source_identity(artifact:Dict[str,Any], race_id:str, ctx:Dict[str,Any])->Dict[str,Any]:
-    artifact["family_id"]="JRA"
-    artifact["race_id"]=str(race_id)
-    artifact["source_race_context"]=dict(ctx)
-    return artifact
+from jra_source_identity import bind_source_identity as _bind_source_identity
 
 def _rehash(artifact:Dict[str,Any]):
     raw_bundle=[{"source_id":s.get("source_id"),"raw_sha256":s.get("raw_sha256"),
@@ -217,7 +213,31 @@ def source_acquire(p:Dict[str,Any]):
                 "pdf_count":len(p),"detail_count":len(h),"diffs":diffs
             }
             if mismatch:
-                errors.append("JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"+json.dumps(diffs,ensure_ascii=False,separators=(",",":")))
+                try:
+                    reconciled_u,recon_diag=reconcile_pdf_column_with_detail(
+                        artifact,ctx["race_no"],detail_active
+                    )
+                    artifact["jra_declared_runner_universe"]={**reconciled_u,"universe_type":"DECLARED"}
+                    artifact["jra_official_runner_universe"]=reconciled_u
+                    artifact["jra_official_runner_universe_sha256"]=sha_obj(reconciled_u)
+                    artifact["official_runner_universe"]=reconciled_u
+                    artifact["official_runner_universe_sha256"]=reconciled_u["runner_universe_sha256"]
+                    artifact["official_runner_source"]="JRA_OFFICIAL_PDF_STRICT_COLUMN_PROOF_RECONCILED_WITH_JRADB_DETAIL"
+                    artifact["official_runner_universe_reconciliation"]={
+                        "status":"PASS / LEGACY PDF PARSE MISMATCH RECOVERED BY STRICT TARGET-COLUMN PROOF",
+                        "legacy_pdf_count":len(p),
+                        "detail_count":len(h),
+                        "legacy_diffs":diffs,
+                        "strict_reconciliation":recon_diag,
+                    }
+                except Exception as recon_exc:
+                    errors.append(
+                        "JRA_OFFICIAL_RUNNER_UNIVERSE_PDF_DETAIL_MISMATCH:"
+                        +json.dumps(diffs,ensure_ascii=False,separators=(",",":"))
+                    )
+                    artifact["official_runner_universe_reconciliation"]["strict_recovery_error"]=(
+                        type(recon_exc).__name__+":"+str(recon_exc)
+                    )
             else:
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
         except Exception as e:
@@ -297,6 +317,17 @@ def source_acquire(p:Dict[str,Any]):
 
     try: artifact=enrich_with_population_seed(artifact)
     except Exception as e: artifact.setdefault("warnings",[]).append("JRA_POPULATION_SEED_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+
+    # AKI-JRA v2.1 external_state: a second official observation of win odds
+    # and going, >=75 s after the primary detail fetch and before freeze.
+    if meeting_key and artifact.get("jra_official_race_card_detail") and cutoff and q.get("aki_external_two_point",True):
+        try:
+            artifact=attach_aki_external_observations(
+                artifact,cutoff,
+                refetch=lambda:fetch_race_card_reobservation(cutoff,race_date=ctx["race_date"],meeting_key=meeting_key,race_no=ctx["race_no"]))
+        except Exception as e:
+            artifact.pop("aki_external_observations",None); artifact.pop("aki_external_observations_sha256",None)
+            artifact.setdefault("warnings",[]).append("AKI_EXTERNAL_OBSERVATION_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     artifact["prediction_cutoff"]=cutoff or None
     artifact["source_freeze_at"]=utcnow()

@@ -1,0 +1,45 @@
+name: AKI Adaptive Purchase Shadow Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'runtime/aki_adaptive_purchase_shadow.py'
+      - 'runtime/aki_adaptive_oos_tracker.py'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'runtime/formal_execution_orchestrator.py'
+      - 'tests/test_aki_adaptive_purchase_shadow.py'
+      - 'tests/test_aki_adaptive_oos_tracker.py'
+      - '.github/workflows/aki-adaptive-purchase-shadow-acceptance.yml'
+      - '.github/workflows/km-formal-single-entry.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q pytest cryptography PyMuPDF fastapi httpx pyyaml
+      - name: AKI adaptive and original MEC R5 regressions
+        run: >-
+          python -m pytest -q
+          tests/test_aki_adaptive_purchase_shadow.py
+          tests/test_aki_adaptive_oos_tracker.py
+          tests/test_local_mec_r5_shadow.py
+          tests/test_capital_policy.py
+          tests/test_mec_r3_precompression_tail_floor.py
+      - name: Compile production formal runner and paper adaptive modules
+        run: >-
+          python -m py_compile
+          runtime/non_jra_formal_runner.py
+          runtime/aki_adaptive_purchase_shadow.py
+          runtime/aki_adaptive_oos_tracker.py
+          runtime/formal_execution_orchestrator.py
+      - name: Test formal import closure
+        run: python runtime/formal_import_closure.py --entry runtime/non_jra_formal_runner.py --output /tmp/aki-import-closure.json
