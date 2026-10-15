@@ -356,8 +356,8 @@ def execute(context, config, *, root, call=responses_call, now=None):
             return response
         except CandidateHold as exc:
             exc.phase_timings = phase_timings
-            exc.failed_stage = stage
             exc.phase_usage = phase_usage
+            exc.failed_stage = stage
             raise
         finally:
             phase_timings[stage + "_seconds"] = time.monotonic() - started
@@ -397,6 +397,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
         exc.failed_stage = "validation"
         phase_timings["validation_seconds"] = time.monotonic() - validation_started
         exc.phase_timings = phase_timings
+        exc.phase_usage = phase_usage
         exc.validation_evidence = {
             "race_id": context["race_id"], "execution_id": context["execution_id"],
             "model_identifier": model, "api_response_identifier": result["id"],
@@ -419,6 +420,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
         exc.failed_stage = "validation"
         phase_timings["validation_seconds"] = time.monotonic() - validation_started
         exc.phase_timings = phase_timings
+        exc.phase_usage = phase_usage
         exc.validation_evidence = {
             "race_id": context["race_id"], "execution_id": context["execution_id"],
             "model_identifier": model, "api_response_identifier": result["id"],
