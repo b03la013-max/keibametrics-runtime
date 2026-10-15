@@ -233,6 +233,28 @@ def final(payload: Dict[str, Any]):
     legacy.validate_family(payload)
     race_id = str(payload.get("race_id") or "")
     source = _require_source_receipt(payload, race_id)
+    source_artifact = source.get("artifact") or {}
+    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+        allowed = {str(r.get("runner_id") or r.get("horse_no")) for r in
+                   (source_artifact.get("official_runner_universe") or {}).get("runners") or []}
+        fpp = payload.get("final_prediction_package") or {}
+        if (not isinstance(fpp, dict) or not isinstance(fpp.get("ranking") or [], list)
+                or not isinstance(fpp.get("roles") or {}, dict)):
+            raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+        references = set(map(str, fpp.get("ranking") or [])) | set(map(str, fpp.get("roles") or {}))
+        for part in (payload.get("final_ticket") or {}, payload.get("minimum_efficient_coverage") or {},
+                     fpp.get("minimum_efficient_coverage") or {}):
+            if not isinstance(part, dict):
+                raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+            tickets = part.get("tickets") or []
+            if not isinstance(tickets, list):
+                raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+            for ticket in tickets:
+                if not isinstance(ticket, dict) or not isinstance(ticket.get("selection"), list):
+                    raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+                references.update(map(str, ticket["selection"]))
+        if not allowed or references - allowed:
+            raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
     out = legacy.final(payload)
     if (out.get("receipt") or {}).get("status") == "PASS":
         art = dict(out.get("artifact") or {})

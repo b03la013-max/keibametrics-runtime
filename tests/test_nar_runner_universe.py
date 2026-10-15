@@ -222,3 +222,58 @@ def test_noncontiguous_active_numbers_are_preserved_after_scratch():
     }
     enrich_source_artifact(art)
     assert [x["horse_no"] for x in art["active_runner_universe"]["runners"]]==[1,3]
+
+
+@pytest.mark.parametrize("where", ["final_ticket", "minimum_efficient_coverage", "ranking", "nested_mec",
+                                   "malformed_ticket", "malformed_ranking", "malformed_fpp"])
+def test_runtime_final_stops_scratched_references_before_signing(where):
+    _runtime_final_boundary(where)
+
+
+def test_runtime_final_active_tickets_reach_existing_handler_without_new_signer():
+    _runtime_final_boundary(None)
+
+
+def _runtime_final_boundary(where):
+    # Execute the existing endpoint body with a non-signing legacy stub.
+    # No private key or app import is needed; signature validation is separate.
+    import ast, copy, types
+    code = (ROOT / "runtime/local_physical/app_v15.py").read_text()
+    node = next(n for n in ast.parse(code).body if isinstance(n, ast.FunctionDef) and n.name == "final")
+    node.decorator_list = []
+    node.args.args[0].annotation = None
+    artifact = {"normalized_evidence": {"race_card_tables": {
+        "value": sample_tables_with_explicit_cancel_2(), "source_id": "OFFICIAL_CARD"}}}
+    enrich_source_artifact(artifact)
+    artifact["source_manifest_profile"] = "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923"
+    called = []
+    legacy = types.SimpleNamespace(validate_family=lambda p: None,
+        final=lambda p: called.append(copy.deepcopy(p)) or {"receipt": {"status": "NO_SIGNING_TEST"}})
+    class EndpointHold(Exception):
+        def __init__(self, status, detail):
+            super().__init__(detail)
+    scope = {"legacy": legacy, "_require_source_receipt": lambda *a: {"artifact": artifact},
+             "HTTPException": EndpointHold, "NAR_MANIFEST_PROFILE": artifact["source_manifest_profile"]}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "existing_final_endpoint", "exec"), scope)
+    payload = {"race_id": "CONTRACT_FIXTURE", "final_prediction_package": {"ranking": [1, 3]},
+               "final_ticket": {"tickets": [{"selection": [1, 3], "stake": 100}]},
+               "minimum_efficient_coverage": {"tickets": [{"selection": [1, 3], "stake": 100}]}}
+    if where == "malformed_ticket":
+        payload["final_ticket"]["tickets"] = ["invalid"]
+    elif where == "malformed_ranking":
+        payload["final_prediction_package"]["ranking"] = 9
+    elif where == "malformed_fpp":
+        payload["final_prediction_package"] = ["invalid"]
+    elif where == "ranking":
+        payload["final_prediction_package"]["ranking"].append(2)
+    elif where == "nested_mec":
+        payload["final_prediction_package"]["minimum_efficient_coverage"] = {"tickets": [{"selection": [1, 2]}]}
+    elif where:
+        payload[where]["tickets"][0]["selection"] = [1, 2]
+    if where:
+        with pytest.raises(EndpointHold, match="SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH"):
+            scope["final"](payload)
+        assert called == []
+    else:
+        scope["final"](payload)
+        assert called == [payload]

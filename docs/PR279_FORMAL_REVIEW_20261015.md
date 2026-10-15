@@ -5,7 +5,7 @@
 
 ## 正本と権限
 
-最新取得main：0c98b731bf8a7e4448e2c7b1b208fbb710768a59。Family Authority R51、LOCAL R3、KAW v2.4-KAW。KAW OwnerはKAW限定の明示承認済み・性能未検証Owner。R01実行main f3048ace、R02実行main b07ec98ca。PR279親 a29a8260 / baseは未マージDraft PR276@4e3c71fc。PR257は既存統合済み。C2は今回の実行条件ではない。
+最新取得main：0c98b731bf8a7e4448e2c7b1b208fbb710768a59。Family Authority R51、LOCAL R3、KAW v2.4-KAW。KAW OwnerはKAW限定の明示承認済み・性能未検証Owner。R01実行main f3048ace、R02実行main b07ec98ca。今回の取消修復継承元 a29a8260 / baseは未マージDraft PR276@4e3c71fc。PR257は既存統合済み。C2は今回の実行条件ではない。
 現行Runtimeの読み取り専用Health：200 READY、物理revision f0d23766。Health成功はCandidateコードのRuntime受入れを意味しない。キー・秘密鍵を取得/生成/回転していない。
 
 ## A/B Root Causeと修復
@@ -16,6 +16,8 @@ R02 2026-10-15、Listed8、公式取消3/7、Active6(1,2,4,5,6,8)。Signed SOURC
 1. local_production_static_owner：a29修復を継承。parsedとListedが一致し、除外差分がSigned SOURCEの明示CANCELLED/EXCLUDEDと一致する場合だけActive行を使う。今回さらに取消根拠のevidence_sourcesが公式・PRE_CUTOFFの保存SOURCEへ結び付くことを要求。根拠欠落・非公式根拠・不明除去はHOLD。
 2. nar_runner_universe.enrich_source_artifact：オッズ表への単なる名前欠落だけでINACTIVEとした場合、既存SOURCE例外境界でHOLD。Listed/状態台帳/取得原文は残す。旧source_policyは公式betting universeをActive判定へ利用するため、この追加Fail-Closedは旧版より受理範囲を狭めるCandidate変更としてHuman Review対象。Productionのポリシーや署名済み過去SOURCEを無断変更していない。
 3. minimum_efficient_coverage._active_roles：既存Role/Pair/Third入口で、実際のrequest.runners外の順位・Role・purchased_heads・Pair・Third参照を拒否。既存SOURCE→request一致検査を前提に、取消馬を買い目へ流さない。削除や勝手な代替馬追加はせずHOLD。MEC配分、券種選択、金額計算・Capital Policyは不変。
+
+4. app_v15.final：既存SOURCE署名検証後・既存Signer呼出前に、FINAL券面、MEC券面、Prediction Packageの順位/Role/内部MECがSigned Active外を参照していないか拒否。入力構造不正も422で停止し500へ落とさない。新しいSigner/鍵/Receipt権限は作らず、正常R01 payloadは同じ既存handlerへ未変更で渡る。
 
 ## C Stage別Universe
 
@@ -46,10 +48,11 @@ Material Observerの実際の近接運用・配信停止/再配信は未受入�
 
 ## F Regression
 
-関連141PASS、JUnit保存。初回の4失敗は疎チェックアウトで既存Fixtureを未復元だったため、既存ファイル復元後に全件実行。実装修正でテストを回避していない。
-追加ガード前の同じ対象テストでは8FAIL/24PASS：公式根拠欠落2件、オッズ欠落推測1件、Active外参照5件。修正後にこれらは既存HOLD境界で停止。a29の取消整合は以前の1FAIL/13PASS→14PASSを引き継ぐ。
+関連149PASS、JUnit保存。初回の4失敗は疎チェックアウトで既存Fixtureを未復元だったため、既存ファイル復元後に全件実行。実装修正でテストを回避していない。
+追加ガード前の同じ対象テストでは12FAIL/26PASS（後から追加したmalformed shape検査3件はこの比較外）：公式根拠欠落2件、オッズ欠落推測1件、Active外参照5件、Runtime FINAL署名前の取消参照4件。修正後にこれらは既存HOLD境界で停止。a29の取消整合は以前の1FAIL/13PASS→14PASSを引き継ぐ。
 指定14ケースは research/family_reliability_20261015/runner_universe_review/regression_case_map.json にProof名とオフライン/LIVEの区別を保存。
 SOURCE失敗/Checkpoint欠落、安定Execution ID、相違時Resume拒否、Worker/一時Git競合の回復・Immutable競合HOLD、Race別並列・RESULT待機分離、FINAL再生成禁止、未知払戻HOLDも既存回帰を実施。
+CI名にLiveを含むLOCAL Official Source Enrichmentは、既存2026-09-13高知Fixtureの公式情報取得・ローカル検証であり、新規未来RaceのRuntime受入れやForward OOSではない。
 
 ## G PR279累積修復の受入れ表
 
@@ -67,7 +70,7 @@ SOURCE失敗/Checkpoint欠落、安定Execution ID、相違時Resume拒否、Wor
 - PR276依存とPR279累積Correctness差分を確認。PRのbaseへのclean状態をmain統合済みと混同しない。
 - KAWの既存Owner権限内のCorrectness修復であり、予測政策/実証成熟度を昇格しない。
 - SOURCEのより厳しい曖昧欠落HOLDを明示審査。Active公式情報不整合を無理に補完しない。
-- Runtime側nar_runner_universe変更はSource bundle SHAが変わる。現行R51/Gatewayのfingerprintとの整合を、別途承認されたリリース手順でレビューする。今回Authority/Gateway pointerを書き換えず、Deployしない。
+- Runtime側nar_runner_universeとapp_v15.final変更はSource/Runtime wrapper bundle SHAが変わる。現行R51/Gatewayのfingerprintとの整合を、別途承認されたリリース手順でレビューする。今回Authority/Gateway pointerを書き換えず、Deployしない。
 - Client側Owner/MEC境界、依存PR、Runtime側SOURCE修復を実行経路へ反映する承認が必要。CIだけで配置済みとは扱わない。
 - 承認後、Cutoff前の正規Race、正本Runtime、指定データの送信承認、最新取消/時刻/馬体重/Runner再確認、同一basisでCheckpoint再開。新Material情報なら旧SOURCE/FINALを書換えず契約上のRevisionへ進む。R02の過去失敗は残す。
 - 複数未知未来のSOURCE→Signed FINAL→発走前Deliveryと結果後Closed Loopを取得するまでは本番信頼性完成・全Family成功を宣言しない。
