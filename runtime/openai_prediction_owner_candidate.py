@@ -152,6 +152,11 @@ def prediction_schema(ids):
         "Exactly one row for each (runner_id,column) assigned in roles.columns, and no other rows. "
         "Do not include NOT_SELECTED, EXCLUDE or unassigned role rows here; disclose rejected or "
         "unresolved possibilities in unresolved instead. This is serialization consistency only.")
+    for key in ("ties", "partial_order"):
+        schema["properties"][key]["items"]["minItems"] = 2
+        schema["properties"][key]["description"] = (
+            "Every group must contain at least two distinct runner IDs. "
+            "Use an empty outer array if no such group is supported; never emit singleton groups.")
     return schema
 
 
@@ -366,7 +371,21 @@ def execute(context, config, *, root, call=responses_call, now=None):
     except (ValueError, TypeError):
         raise CandidateHold("OUTPUT_JSON_INVALID") from None
     ensure_clean(prediction)
-    validate_schema(prediction, schema)
+    def output_hold(code):
+        exc = CandidateHold(code)
+        exc.failed_stage = "validation"
+        phase_timings["validation_seconds"] = time.monotonic() - validation_started
+        exc.phase_timings = phase_timings
+        exc.validation_evidence = {
+            "race_id": context["race_id"], "execution_id": context["execution_id"],
+            "model_identifier": model, "api_response_identifier": result["id"],
+            "input_sha256": digest(data), "prediction_output_sha256": digest(prediction),
+            "prediction": prediction, "production_effect": "NONE", "freeze_accepted": False}
+        return exc
+    try:
+        validate_schema(prediction, schema)
+    except CandidateHold as exc:
+        raise output_hold(str(exc)) from None
     if len(prediction["ranking"]) != len(ids) or set(prediction["ranking"]) != set(ids):
         raise CandidateHold("RANKING_UNIVERSE_INVALID")
     role_ids = [row["runner_id"] for row in prediction["roles"]]
@@ -396,7 +415,7 @@ def execute(context, config, *, root, call=responses_call, now=None):
             raise CandidateHold("DUPLICATE_OR_SELF_SELECTION")
     for key in ("ties", "partial_order"):
         if any(len(group) < 2 or len(group) != len(set(group)) for group in prediction[key]):
-            raise CandidateHold("INVALID_PARTIAL_ORDER_OR_TIE_GROUP")
+            raise output_hold("INVALID_PARTIAL_ORDER_OR_TIE_GROUP")
     phase_timings["validation_seconds"] = time.monotonic() - validation_started
     freeze_started = time.monotonic()
     frozen = dt.datetime.now(dt.timezone.utc) if now is None else now
