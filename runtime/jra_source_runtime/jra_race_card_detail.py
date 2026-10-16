@@ -305,7 +305,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         person=_parse_current_person(row[person_i] if person_i<len(row) else "")
         frame_no=_num(row[0]) if len(row)>0 else None
         joined=" ".join(str(z or "") for z in row)
-        status="CANCELLED" if ("出走取消" in joined or "競走除外" in joined) else "ACTIVE"
+        status="CANCELLED" if "出走取消" in joined else "EXCLUDED" if "競走除外" in joined else "ACTIVE"
         recent=[]
         for i in run_indices:
             x=_parse_recent(row[i] if i<len(row) else "")

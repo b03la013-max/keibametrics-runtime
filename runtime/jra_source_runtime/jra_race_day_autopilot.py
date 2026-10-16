@@ -73,7 +73,8 @@ def race_id_for(race_date: str, venue: str, race_no: int) -> str:
 
 
 def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
-         meetings=resolve_meetings, dispatch=None, default_all=False, cache=None) -> list[dict]:
+         meetings=resolve_meetings, dispatch=None, default_all=False, cache=None,
+         publish=None) -> list[dict]:
     plan_dir = root / "runtime" / "jra_race_day_plan"
     plan_path = plan_dir / f"{race_date}.json"
     if plan_path.exists():
@@ -139,19 +140,56 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
                          "race_no": race_no, "official_day_row": race.get("raw"),
                          "dispatch_window_open": (post - _dt.timedelta(minutes=window[0])).isoformat(),
                          "dispatch_window_close": (post - _dt.timedelta(minutes=window[1])).isoformat()}
+        if plan.get('cohort'):
+            try:
+                sys.path.insert(0,str(root/'runtime'))
+                from jra_race_day_registration import verify_registration
+                record=json.loads((root/'runtime/jra_race_registrations'/race_date/(rid+'.json')).read_text())
+                schedule[rid]['registration_reconciliation']=verify_registration(record,plan,race_id=rid,official_post=post)
+                schedule[rid]['registered_intake']=True
+            except (ValueError,OSError,KeyError,TypeError) as exc:
+                schedule[rid]['status']='HOLD_PREREGISTRATION_INTEGRITY'
+                out.append({'race_id':rid,'status':'HOLD_PREREGISTRATION_INTEGRITY','error':str(exc)[:300]})
+                continue
         if rid in state or list((root / "runtime" / "jra_formal_intents").glob(rid + "-LIVE-*.json")):
             out.append({"race_id": rid, "status": "ALREADY_DISPATCHED"})
             continue
         decision = due(post, now, window)
         if decision == "DISPATCH":
+            if dispatch is None and publish is None:
+                raise ValueError('DURABLE_DISPATCH_PUBLISH_REQUIRED')
+            if publish is not None:
+                state[rid]={'claimed_at':now.isoformat(),'post':post.isoformat(),
+                            'profile':PROFILE,'dispatch_state':'CLAIMED_NOT_ACKNOWLEDGED',
+                            'cohort_sha256':(plan.get('cohort') or {}).get('sha256')}
+                schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+                state_path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+                write_status(root,race_date,now,schedule,state)
+                try:
+                    publish()  # The claim must exist on main BEFORE the API call.
+                    merged=json.loads(state_path.read_text())
+                    state.clear();state.update(merged)
+                except Exception as exc:
+                    state[rid]['dispatch_state']='CLAIM_PUBLISH_FAILED_NO_SEND'
+                    state[rid]['first_failure']={'stage':'CLAIM_PUBLICATION','error':str(exc)[:300]}
+                    out.append({'race_id':rid,'status':'CLAIM_PUBLISH_FAILED_NO_SEND'})
+                    continue
             try:
-                (dispatch or _gh_dispatch)(venue, race_no, race_date, run_count)
+                acknowledgement=(dispatch or _gh_dispatch)(venue, race_no, race_date, run_count)
             except Exception as exc:
                 # One resolver/API failure must not prevent other due races.
                 out.append({"race_id":rid,"status":"DISPATCH_FAILED",
                             "error":type(exc).__name__+":"+str(exc)[:200]})
+                if publish is not None:
+                    state[rid]['dispatch_state']='HOLD_AMBIGUOUS_DISPATCH_NO_AUTOMATIC_RETRY'
+                    state[rid]['first_failure']={'stage':'INTENT_WORKFLOW_DISPATCH',
+                        'observed_at':now.isoformat(),'error':str(exc)[:300],
+                        'returncode':getattr(exc,'returncode',None),
+                        'response':str(getattr(exc,'stderr','') or '')[:500]}
                 continue
-            state[rid] = {"dispatched_at": now.isoformat(), "post": post.isoformat(), "profile": PROFILE}
+            state[rid] = {**state.get(rid,{}),"dispatched_at": now.isoformat(), "post": post.isoformat(),
+                          "profile": PROFILE,'dispatch_state':'DISPATCH_ACKNOWLEDGED',
+                          'acknowledgement':acknowledgement}
         out.append({"race_id": rid, "post": post.isoformat(), "status": decision, "title": race.get("title")})
     schedule_path.write_text(json.dumps(schedule, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -172,6 +210,7 @@ def _blocked_cells(gap: dict) -> list[str]:
 def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime) -> dict:
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
+    row["registered_intake"]=sched.get("registered_intake",False)
     if sched.get("status"):
         row["state"] = sched["status"]
         return row
@@ -186,6 +225,21 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         row["state"] = "FINAL"
         row["final_receipt_sha256"] = final.get("final_receipt_sha256")
         row["immutable_final_sha256"] = final.get("sha256")
+        row["actual_numerical_calculation"]=(final.get("final_prediction_package") or {}).get("actual_numerical_calculation")
+        row["krs_actual_run_count"]=((final.get("krs_run_receipt") or {}).get("receipt") or {}).get("actual_run_count")
+        delivery=root/"runtime/jra_delivery"/rid/"availability_receipt.json"
+        row["canonical_availability_verified_before_post"]=False
+        row["user_delivery_verified"]=False
+        if delivery.exists():
+            proof=json.loads(delivery.read_text())
+            from jra_production_postresult import _sha
+            if (proof.get("sha256")!=_sha({k:v for k,v in proof.items() if k!="sha256"})
+                    or proof.get("final_sha256")!=final.get("sha256")):
+                raise ValueError("JRA_DELIVERY_STATUS_PROOF_INVALID")
+            row["canonical_availability_verified_before_post"]=proof.get("availability_verified_before_post") is True
+            row["availability_receipt"]=delivery.relative_to(root).as_posix()
+            # Canonical publication never proves that a human received the tickets.
+            row["user_received_at"]=None
         try:
             from jra_ticket_tree_renderer import render_ticket_tree
             tree = render_ticket_tree(final)
@@ -250,6 +304,10 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     elif eids or rid in state:
         row["state"] = "DISPATCHED_RUNNING"
         row["dispatched_at"] = (state.get(rid) or {}).get("dispatched_at")
+        cell=state.get(rid) or {}
+        if cell.get('claimed_at') and not cell.get('dispatched_at'):
+            row['state']=cell.get('dispatch_state','CLAIMED_NOT_ACKNOWLEDGED')
+            row['first_failure']=cell.get('first_failure')
     else:
         post = _dt.datetime.fromisoformat(sched["post"]) if sched.get("post") else None
         close = _dt.datetime.fromisoformat(sched["dispatch_window_close"]) if sched.get("dispatch_window_close") else None
@@ -259,7 +317,12 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
 
 
 def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict) -> dict:
-    rows = [race_status(root, rid, s, state, now) for rid, s in schedule.items()]
+    rows=[]
+    for rid,s in schedule.items():
+        try:rows.append(race_status(root,rid,s,state,now))
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
+                         'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
     rows.sort(key=lambda r: (r.get("post") or "", r["race_id"]))
     idx = {"profile": PROFILE, "race_date": race_date, "generated_at":now.isoformat(), "races": rows,
            "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race "
@@ -267,6 +330,23 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
                           "because some runner x index cells could not be closed from official evidence; "
                           "AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; "
                           "MISSED_WINDOW = never predicted (no late or backdated FINAL)."}
+    plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
+    plan=json.loads(plan_path.read_text()) if plan_path.exists() else {}
+    cohort=(plan.get('cohort') or {})
+    if cohort:
+        indexed={r['race_id']:r for r in rows}
+        # Missing races remain in the denominator; never count only successes.
+        cohort_rows=[indexed.get(rid,{}) for rid in cohort['race_ids']]
+        idx['cohort_metrics']={'denominator':cohort['race_count'],'cohort_sha256':cohort['sha256'],
+            'registered_intakes':sum(r.get('registered_intake') is True for r in cohort_rows),
+            'dispatch_acknowledged':sum(bool((state.get(rid) or {}).get('dispatched_at')) for rid in cohort['race_ids']),
+            'final_artifacts_present':sum(bool(r.get('immutable_final_sha256')) for r in cohort_rows),
+            'canonical_available_before_post':sum(r.get('canonical_availability_verified_before_post') is True for r in cohort_rows),
+            'user_delivery_verified':sum(r.get('user_delivery_verified') is True for r in cohort_rows),
+            'full20_calculated_cells':sum((r.get('actual_numerical_calculation') or {}).get('calculated_count',0) for r in cohort_rows),
+            'external_krs_recorded':sum((r.get('krs_actual_run_count') or 0)>=5000 for r in cohort_rows),
+            'learning_records_present':sum((root/'runtime/learning_states'/(rid+'.json')).exists() for rid in cohort['race_ids']),
+            'actual_purchase_status':'UNVERIFIED','prediction_quality':'FORWARD_OOS_PENDING'}
     d = root / "runtime" / "jra_race_day_status"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{race_date}.json").write_text(json.dumps(idx, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -292,9 +372,12 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
 
 
 def _gh_dispatch(venue, race_no, race_date, run_count):
-    subprocess.run(["gh", "workflow", "run", "km-jra-race-intent-resolver.yml", "--ref", "main",
+    result=subprocess.run(["gh", "workflow", "run", "km-jra-race-intent-resolver.yml", "--ref", "main",
                     "-f", f"venue={venue}", "-f", f"race_no={race_no}", "-f", f"race_date={race_date}",
-                    "-f", f"run_count={run_count}"], check=True, timeout=30)
+                    "-f", f"run_count={run_count}"], check=True, timeout=30,capture_output=True,text=True)
+    return {'transport':'GITHUB_CLI_WORKFLOW_DISPATCH','returncode':result.returncode,
+            'observed_at':_dt.datetime.now(_dt.timezone.utc).isoformat(),
+            'response':result.stdout.strip()[:500],'http_status':None}
 
 
 def _post_result_closed_loop(root: Path, race_date: str) -> None:
@@ -339,18 +422,62 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def request_postresult_worker(root, race_date, now, *, publish, send=None):
+    """Hand results to the existing independent workflow, never wait for RESULT."""
+    path=root/'runtime/jra_race_day_plan'/f'{race_date}.state.json'
+    state=json.loads(path.read_text()) if path.exists() else {}
+    previous=state.get('_postresult_worker') or {}
+    if previous.get('requested_at') and (now-_dt.datetime.fromisoformat(previous['requested_at'])).total_seconds()<1800:
+        return 'RECENT_RESULT_WORKER_REQUEST'
+    d8=_dt.date.fromisoformat(race_date).strftime('%Y%m%d')
+    finals=list((root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'))
+    due_final=False
+    for final_path in finals:
+        if (root/'runtime/learning_states'/final_path.name).exists():continue
+        try:
+            due_final |= _dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])<now
+        except (OSError,ValueError,KeyError,TypeError):
+            continue  # Status index owns this race's checkpoint integrity failure.
+    if not due_final:
+        return 'NO_DUE_FINAL'
+    state['_postresult_worker']={'requested_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
+    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+    publish()
+    try:
+        if send is None:
+            subprocess.run(['gh','workflow','run','km-jra-production-postresult.yml','--ref','main'],
+                           check=True,cwd=root,capture_output=True,text=True,timeout=30)
+        else:send()
+        result='ACKNOWLEDGED'
+    except (subprocess.SubprocessError,OSError):
+        result='UNKNOWN_NO_IMMEDIATE_RETRY'
+    state=json.loads(path.read_text());state['_postresult_worker']['state']=result
+    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+    return result
+
+
 def merge_dispatch_state(remote: dict, local: dict) -> dict:
     """Monotonic union: never lose an acknowledged dispatch or result handoff."""
     out = dict(remote)
     for key, value in local.items():
         if key == "_result_runner_dispatched":
             out[key] = sorted(set(remote.get(key) or []) | set(value or []))
+        elif key=='_postresult_worker' and key in out:
+            out[key]=max([out[key],value],key=lambda x:x.get('requested_at',''))
         elif key not in out:
             out[key] = value
         elif isinstance(value, dict) and isinstance(out[key], dict):
-            # Preserve the first acknowledged dispatch rather than a newer retry.
             a, b = out[key], value
-            out[key] = min([a,b], key=lambda x:str(x.get("dispatched_at") or "9999"))
+            merged={**a,**b}
+            for stamp in ('claimed_at','dispatched_at'):
+                observed=[x[stamp] for x in (a,b) if x.get(stamp)]
+                if observed:merged[stamp]=min(observed)
+            if a.get('first_failure'):merged['first_failure']=a['first_failure']
+            if merged.get('dispatched_at'):
+                merged['dispatch_state']='DISPATCH_ACKNOWLEDGED'
+                acknowledged=next((x for x in (a,b) if x.get('dispatched_at')),merged)
+                if acknowledged.get('acknowledgement'):merged['acknowledgement']=acknowledged['acknowledgement']
+            out[key]=merged
     return out
 
 
@@ -438,7 +565,8 @@ if __name__ == "__main__":
                 isinstance(v, Exception) for v in list(cache.get("days", {}).values()) + [cache.get("meetings")]):
             cache, cache_at = {}, now
         try:
-            res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache)
+            res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache,
+                       publish=lambda:_commit(root,a.date))
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
             if [r.get("status") for r in res] == ["NO_OFFICIAL_MEETINGS"]:
                 break  # non-race day: stop at once instead of idling until the loop end
@@ -446,8 +574,9 @@ if __name__ == "__main__":
             print(json.dumps({"profile": PROFILE, "error": type(exc).__name__ + ":" + str(exc)}, ensure_ascii=False), flush=True)
         if a.loop_until:
             try:
-                _post_result_closed_loop(root, a.date)
-            except (subprocess.SubprocessError, OSError, RuntimeError) as exc:
+                request_postresult_worker(root,a.date,_dt.datetime.now(JST),
+                                         publish=lambda:_commit(root,a.date))
+            except (subprocess.SubprocessError, OSError, RuntimeError, ValueError, KeyError, TypeError) as exc:
                 print(json.dumps({"stage":"POSTRESULT","error":str(exc)[:300]}),flush=True)
         if not a.loop_until:
             break
