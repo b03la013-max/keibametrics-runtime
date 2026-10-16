@@ -2,6 +2,9 @@ name: JRA HSN12 v1.7 Frozen Source Adapter Coverage
 permissions:
   contents: write
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/km-jra-hsn12-v17-adapter-coverage.yml"
   push:
     branches: [main]
     paths:
@@ -38,7 +41,29 @@ jobs:
           art,perr=enrich_with_person_stats(art,diag_cutoff,require_person_stats=False,max_workers=3)
           mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
           runners=build_source_runner_stubs(art)
-          rep=compile_source_to_features(art,runners,mapping)
+          try:
+              rep=compile_source_to_features(art,runners,mapping)
+          except ValueError as exc:
+              if str(exc) != "JRA_DETAIL_CONTEXT_AFTER_CUTOFF":
+                  raise
+              # A historical adapter diagnostic cannot certify post-cutoff inputs.
+              # Preserve the historical coverage snapshot used by R28 acceptance.
+              out={
+                "profile":"KM-JRA-HSN12-FROZEN-ADAPTER-TEMPORAL-GUARD",
+                "classification":"POST-START / MECHANICAL / NO-PRODUCTION / NO-OOS",
+                "status":"BLOCKED_HISTORICAL_CONTEXT_AFTER_CUTOFF",
+                "temporal_guard":"PASS_REJECTED_POST_CUTOFF_CONTEXT",
+                "coverage_evaluation":"NOT_EXECUTED",
+                "error_code":str(exc),
+                "diagnostic_cutoff":diag_cutoff,
+                "original_signed_source_snapshot_sha256":original_sha,
+                "original_signed_source_modified":False,
+                "production_effect":"NONE"
+              }
+              p=Path("runtime/diagnostics/hsn12_v17_adapter_temporal_guard.json")
+              p.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+              print(json.dumps(out,ensure_ascii=False))
+              sys.exit(0)
           rc=art.get("jra_registered_common") or {}
           ps=art.get("jra_official_person_stats") or {}
           out={
@@ -83,10 +108,14 @@ jobs:
           print(json.dumps(out,ensure_ascii=False))
           PY
       - name: Persist diagnostic
+        if: github.event_name == 'push'
         run: |
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/diagnostics/hsn12_v17_frozen_adapter_coverage.json
+          if test -f runtime/diagnostics/hsn12_v17_adapter_temporal_guard.json; then
+            git add runtime/diagnostics/hsn12_v17_adapter_temporal_guard.json
+          fi
           git commit -m "diagnostic: persist HSN12 v1.7 adapter coverage [skip ci]" || exit 0
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0
