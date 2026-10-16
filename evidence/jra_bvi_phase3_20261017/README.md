@@ -96,3 +96,12 @@ No runtime code repair was necessary in this phase. The new script only reproduc
 offline recovery inventory. Local passing tests do not establish new CI, OIDC admission,
 all-race success, predictive improvement or promotion. PR/CI and immutable head references
 are reported separately after publication.
+
+## Publication verification
+
+PR295 data head `dceb0a08823116ec3b4a93a976fa7245f6e71e14` preserves17 files;
+all17 uploaded Git blob identities match local bytes. GitHub reports0 check runs
+and0 workflow runs for that head because the changed paths do not trigger existing
+CI. This is NOT_TRIGGERED, not CI PASS; the existing runtime code and its prior
+passing main checks are unchanged. The PR is cleanly mergeable. Merge receipt is
+reported externally after this evidence commit; no self-referential SHA is invented.
