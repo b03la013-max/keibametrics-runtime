@@ -71,3 +71,39 @@ witness, equal-budget/equal-ticket preregistration and no-auto-promotion gates r
 Current repaired-policy prospective settled count is0/30. Prediction and Capital
 utility are INCONCLUSIVE. Actual purchases remain UNVERIFIED. Five-year data
 completeness and source admission remain PARTIAL. No future result is settled.
+
+
+## Verified pull-request closure
+
+PR293 head006b19aebcc5dd69529d27f6d5627056e9dd172b passed8 checks and merged
+as3f0b8ae54b93e8129f6721b63e3d082b02a089ee. All18 uploaded files were byte-compared
+to the local reviewed files. No profiles, mappings, historical signed execution,
+FINAL, RESULT or LOCAL research files changed. The local selected regression
+passed96 tests and36 subtests; the actual CI acceptance ran93 tests and36 subtests
+(the3 private-intake tests run separately in the local selected suite).
+
+The official-read-only CI job117129431236 independently acquired2022-01-05
+profiles3/3 and55 history runs. Artifact12067586317 SHA256 is
+ b44dad36c90dbe1eae0f3465c013449336a8f50a7cc601090211dbb807e7defb.
+The new signed downstream acceptance artifact12066173529 SHA256 is
+ e8811f601d7c7408668366294a272b648cececf13f321260e1197ae44f54b45a.
+It contains actual per-arm consumption: A measured27, B measured27, C intentionally
+ablated/DCR-only27; six independent candidate KRS runs of5000 each, MEC and Capital.
+Each arm's Static and executed-input/output/receipt/ticket hashes are retained.
+These are postcapture diagnostics, not a new prospective sample.
+
+The preserved9-horse profile sample has149 distinct runs under the documented
+horse-parent/date/venue/surface/distance/race-name key, with no repeated run keys
+or damsire conflict. Its run-year counts are2021:12,2022:33,2023:45,2024:37,
+2025:14,2026:8. These are sample/run identities, not independently resolved official
+horse IDs or proven additions beyond every prior corpus. The2025 race-date probe
+was interrupted;14 observed2025 history rows in other captured profiles do not
+certify that probe or2025 completeness.
+
+Existing preflight and race-day task prompts were updated in place; schedules,
+activation, purchase authority and external notification routes were preserved.
+They explicitly check canonical A equality, all arm lineages, freeze failure
+artifacts, research quarantine, separate policy cohorts and no early settlement.
+
+Postmerge main checks:7/7 passed,0 failures. The source-closure and actual
+signed-corpus/KRS acceptance were rerun on the merged main code.
