@@ -1,0 +1,133 @@
+diff --git a/.github/workflows/km-local-race-key-entry.yml b/.github/workflows/km-local-race-key-entry.yml
+index f2f2ec4c..7bb2b7a1 100644
+--- a/.github/workflows/km-local-race-key-entry.yml
++++ b/.github/workflows/km-local-race-key-entry.yml
+@@ -268,14 +268,16 @@ jobs:
+           EXECUTION_ID: ${{ matrix.execution_id }}
+         run: |
+           set -euo pipefail
+-          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
++          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ] || [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then
+             git config user.name keibametrics-runtime
+             git config user.email actions@users.noreply.github.com
+-            git add "runtime/executions/$EXECUTION_ID/RESULT"
++            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/RESULT"; fi
+             if [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT"; fi
++            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
+             for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
+               if [ -e "$path" ]; then git add "$path"; fi
+             done
++            fi
+             if ! git diff --cached --quiet; then
+               git commit -m "execution: race-key RESULT $EXECUTION_ID [skip ci]"
+               python tools/persist_local_checkpoints.py --branch main
+diff --git a/runtime/aki_adaptive_oos_tracker.py b/runtime/aki_adaptive_oos_tracker.py
+index d644023c..3fb7d7d6 100644
+--- a/runtime/aki_adaptive_oos_tracker.py
++++ b/runtime/aki_adaptive_oos_tracker.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ import argparse
+ import datetime as dt
+ import json
++import math
+ from pathlib import Path
+ from typing import Any
+ 
+@@ -51,9 +52,14 @@ def _verify_production_signed_settlement(signed: dict, recalculated: dict) -> No
+             or not all(k in signed for k in ("investment", "return"))):
+         raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID")
+     try:
++        if any(isinstance(signed[k], bool) or not isinstance(signed[k], (int, float))
++               for k in ("investment", "return")):
++            raise ValueError("settlement amounts must be JSON numbers")
+         investment = float(signed["investment"])
+         payout = float(signed["return"])
+-    except (TypeError, ValueError) as exc:
++        if not all(math.isfinite(value) and value >= 0 for value in (investment, payout)):
++            raise ValueError("settlement amounts must be finite and nonnegative")
++    except (TypeError, ValueError, OverflowError) as exc:
+         raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID") from exc
+     if (abs(investment - recalculated["investment"]) > 0.001
+             or abs(payout - recalculated["return"]) > 0.001):
+diff --git a/tests/test_aki_adaptive_oos_tracker.py b/tests/test_aki_adaptive_oos_tracker.py
+index d22fa7bf..75840c80 100644
+--- a/tests/test_aki_adaptive_oos_tracker.py
++++ b/tests/test_aki_adaptive_oos_tracker.py
+@@ -112,6 +112,21 @@ def test_signed_settlement_mismatch_is_not_hidden():
+         evaluate_canonical(*x)
+ 
+ 
++@pytest.mark.parametrize("field", ["investment", "return"])
++@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
++def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
++    inputs = canonical_fixture()
++    result = inputs[3]
++    settlement = result["artifact"]["settlement"]
++    settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
++    # Model a provider-signed malformed settlement after verification, not a
++    # tampered artifact: the independent monetary reconciliation must reject it.
++    result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
++    result["receipt_sha256"] = _sha(result["receipt"])
++    with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
++        evaluate_canonical(*inputs)
++
++
+ def test_history_is_not_silently_backfilled(tmp_path):
+     r = scan_execution_store(tmp_path / "nonexistent")
+     assert r["eligible_races"] == 0
+diff --git a/tests/test_local_race_key_ingress.py b/tests/test_local_race_key_ingress.py
+index a9bf7135..eea021f4 100644
+--- a/tests/test_local_race_key_ingress.py
++++ b/tests/test_local_race_key_ingress.py
+@@ -8,6 +8,51 @@ from runtime import local_race_key_intake as intake
+ from runtime import local_race_key_gate as gate
+ 
+ 
++@pytest.mark.parametrize("official,result", [(True, False), (True, True), (False, False)])
++def test_result_workflow_preserves_official_checkpoint_before_signed_result(tmp_path, official, result):
++    """Exercise the real persistence shell after a RESULT worker interruption."""
++    import os
++    import subprocess
++    import yaml
++    workflow = yaml.load((Path(__file__).resolve().parents[1] /
++        ".github/workflows/km-local-race-key-entry.yml").read_text(), Loader=yaml.BaseLoader)
++    command = next(s["run"] for s in workflow["jobs"]["result"]["steps"]
++        if s.get("name") == "Persist verified RESULT and forward measurement ledgers")
++    def git(*args):
++        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
++    git("init", "-q")
++    git("config", "user.name", "fixture")
++    git("config", "user.email", "fixture@example.invalid")
++    git("commit", "--allow-empty", "-qm", "fixture")
++    before = git("rev-parse", "HEAD")
++    eid = "KM-LOCAL-KAW-20990101-R01-LIVE-R1"
++    for phase, present in (("OFFICIAL_RESULT", official), ("RESULT", result)):
++        if present:
++            target = tmp_path / "runtime/executions" / eid / phase / "fixture.json"
++            target.parent.mkdir(parents=True, exist_ok=True)
++            target.write_text('{"synthetic_regression":true}\n')
++    # Block network publishing; verify that the unchanged existing publisher is called.
++    bin_dir = tmp_path / "fixture-bin"
++    bin_dir.mkdir()
++    stub = bin_dir / "python"
++    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n')
++    stub.chmod(0o755)
++    log = tmp_path / "publish.log"
++    env = {**os.environ, "EXECUTION_ID": eid, "PUBLISH_LOG": str(log),
++           "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"]}
++    subprocess.run(["bash", "-c", command], cwd=tmp_path, env=env, check=True,
++                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
++    tracked = git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
++    if official:
++        assert f"runtime/executions/{eid}/OFFICIAL_RESULT/fixture.json" in tracked
++        assert log.read_text().strip() == "tools/persist_local_checkpoints.py --branch main"
++    if result:
++        assert f"runtime/executions/{eid}/RESULT/fixture.json" in tracked
++    if not official and not result:
++        assert git("rev-parse", "HEAD") == before
++        assert not log.exists()
++
++
+ def authority(*, now):
+     return Path("profiles/authority.json"), {
+         "manifest_id": "KM-FAMILY-CURRENT-AUTHORITY-20990101-R100",
