@@ -1,0 +1,40 @@
+{
+  "initial_merge": "37cc5651139436ee4b74e7371dde9ef7a506b105",
+  "main_check_results": {
+    "success": 18,
+    "failure": 1
+  },
+  "first_material_failure": {
+    "workflow": "km-jra-person-stats-v11-acceptance.yml",
+    "run_id": 38927802994,
+    "job_id": 117063727812,
+    "error": "JRA_DETAIL_DAY_TOKEN_NOT_FOUND",
+    "fixed_target_date": "2026-09-26",
+    "fixed_cutoff": "2026-09-27T00:00:00+09:00",
+    "cause": "Live mechanical acceptance requests a retired fixed race through current-card navigation and uses an expired capture cutoff."
+  },
+  "scope": "Current official-card mechanical test only. No Production source fallback, no prediction/capital/authority changes, no backdating.",
+  "local_probe": {
+    "observed_at": "2026-10-16T15:55:46.960988+00:00",
+    "race_id": "KM-JRA-NGT-20261018-R01",
+    "error": "SOURCE_DNS_RESOLUTION_FAILED:[Errno -3] Temporary failure in name resolution",
+    "inference": "Local network observation, not evidence GitHub race-day SOURCE is unavailable."
+  },
+  "future_tasks": [
+    {
+      "title": "JRA全36レース事前点検",
+      "enabled": true,
+      "timezone": "Asia/Tokyo",
+      "schedule": "2026-10-17 12:00"
+    },
+    {
+      "title": "JRA全レース稼働と完走確認",
+      "enabled": true,
+      "timezone": "Asia/Tokyo",
+      "schedule": "2026-10-18 08:00 to 20:00 hourly, 13 bounded checks"
+    }
+  ],
+  "actual_race_day_full20_executed": 0,
+  "actual_race_day_final": 0,
+  "user_delivery_proven": false
+}
