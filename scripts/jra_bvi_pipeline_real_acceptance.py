@@ -79,6 +79,18 @@ def evaluate():
         final=json.loads(finalpath.read_text());result=json.loads((ROOT/'runtime/results'/f"{req['race_id']}.json").read_text())
         top3=[str(x) for x in result['official_result']['top3']]
         execute_diagnostic_downstream(comparison,req,result['official_result'],external_call)
+        from scripts.jra_bvi_pipeline_forward_shadow import arm_consumption,bind_production_reference
+        from jra_delivery import verify_signed_final
+        contracts=json.loads((ROOT/authority['common_family_components']['family_runtime_contracts_profile']).read_text())
+        contract=contracts['families']['JRA']
+        with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:
+            health=json.load(response)
+        verify_signed_final(final,health,contract)
+        # Historical current-policy replay must not impersonate the original
+        # Production recommendation. Prospective freeze requires exact matching.
+        phase2_production=bind_production_reference(comparison,req,final,require_match=False)
+        phase2_consumption=arm_consumption(comparison,req,source,mapping,authority,
+            execution_class='POSTCAPTURE_REPLAY_NOT_FORMAL_PREDICTION')
         for arm in comparison['arms'].values():
             owner=arm['owner'];ranking=owner['static_prediction']['ranking'];cols=owner['active_columns']
             for rank_row in arm['krs_result_utility']['rank_comparison']:
@@ -101,7 +113,9 @@ def evaluate():
             'postcapture_static_execution_proof':static_proof,
             'postcapture_static_proof_classification':'POSTCAPTURE_REPLAY_NOT_ORIGINAL_PRE_RACE_EXECUTION',
             'bvi_consumption_ledger':build_bvi_consumption(req,mapping,source_artifact=source),
-            'runners':rows,'comparison':comparison,'frozen_lineage':{'request_sha256':sha_file(path),
+            'runners':rows,'comparison':comparison,
+            'phase2_production_baseline':phase2_production,'phase2_arm_consumption':phase2_consumption,
+            'frozen_lineage':{'request_sha256':sha_file(path),
                 'final_sha256':sha_file(finalpath),'source_binding_matches':final['source_snapshot_sha256']==checked['source_snapshot_sha256'],
                 'static_prediction':final['static_prediction'],'krs_run_receipt':final['krs_run_receipt'],
                 'minimum_efficient_coverage':final['minimum_efficient_coverage'],'capital_policy_decision':final['capital_policy_decision'],

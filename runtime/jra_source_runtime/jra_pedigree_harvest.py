@@ -145,6 +145,29 @@ def parse_horse_pedigree(decoded: str) -> Dict[str, str | None]:
             "damsire": parent("母の父")}
 
 
+def archive_month_token(decoded: str, race_date: str) -> str:
+    """Follow the official archive form's published month/checksum mapping.
+
+    Race/day/horse tokens still come only from observed official responses.
+    Refuse changed markup or an unavailable year rather than guessing a URL.
+    """
+    day = _dt.date.fromisoformat(race_date)
+    soup = BeautifulSoup(decoded, "html.parser")
+    years = {x.get("value") for x in soup.select('select[name="kaisaiY_list"] option')}
+    months = {x.get("value") for x in soup.select('select[name="kaisaiM_list"] option')}
+    current = re.search(r'var\s+yearMonth\s*=\s*"(\d{6})"', decoded)
+    checksums = dict(re.findall(r'objParam\["(\d{4})"\]="([0-9A-Fa-f]{2})"', decoded))
+    target = day.strftime("%Y%m")
+    required = ("pw01skl00", "pw01skl10", "Number(arg) >= yearMonth",
+                "objParam[String(arg).substring(2,6)]")
+    if (str(day.year) not in years or day.strftime("%m") not in months
+            or current is None or target[2:] not in checksums
+            or any(value not in decoded for value in required)):
+        raise ValueError("JRA_HARVEST_ARCHIVE_FORM_NOT_OBSERVED")
+    prefix = "pw01skl00" if target >= current.group(1) else "pw01skl10"
+    return prefix + target + "/" + checksums[target[2:]]
+
+
 def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
                          stop_after: int | None = None,
                          start_race: int = 0, max_races: int | None = None) -> List[str]:
@@ -160,14 +183,24 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
     m = re.search(entry_pat, cal)
     if not m:
         raise ValueError("JRA_HARVEST_ENTRY_TOKEN_NOT_FOUND")
-    s1 = client.post(page, m.group(1))
+    entry_token = m.group(1)
+    s1 = client.post(page, entry_token)
     days = sorted(set(re.findall(day_pat, s1)))
+    if not days and mode == "results":
+        entries = re.findall(entry_pat, cal)
+        archive = next((token for token in entries if token.startswith("pw01skl")), None)
+        if archive is None:
+            raise ValueError("JRA_HARVEST_ARCHIVE_ENTRY_NOT_OBSERVED")
+        selector = client.post(page, archive)
+        entry_token = archive_month_token(selector, race_date)
+        s1 = client.post(page, entry_token)
+        days = sorted(set(re.findall(day_pat, s1)))
     out: List[str] = []
     race_index = 0
     client.scanned_race_count = 0
     completed = False
     for day in days:
-        client.post(page, m.group(1))
+        client.post(page, entry_token)
         s2 = client.post(page, day)
         day_races = sorted(set(re.findall(race_pat, s2)))
         client.scanned_race_count += len(day_races)
@@ -182,7 +215,7 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
                 completed = True
                 break
             race_index += 1
-            client.post(page, m.group(1))
+            client.post(page, entry_token)
             client.post(page, day)
             s3 = client.post(page, race)
             for tok in re.findall(r"accessU\.html\?CNAME=(pw01dud[^\"'&<>\s]+)", s3):

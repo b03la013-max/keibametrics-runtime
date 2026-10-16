@@ -14,7 +14,7 @@ sys.path.insert(0,str(ROOT/"runtime"))
 sys.path.insert(0,str(ROOT/"runtime/jra_source_runtime"))
 
 from jra_pedigree_harvest import (
-    horse_tokens_for_day, parse_horse_pedigree, _Client)
+    horse_tokens_for_day, parse_horse_pedigree, archive_month_token, _Client)
 from scripts.jra_pedigree_backfill_cursor import advance
 from jra_pedigree_corpus import _attested, _ATTEST_CACHE
 
@@ -43,6 +43,18 @@ class FakeOfficial:
         raise ValueError("UNEXPECTED_POST_TOKEN")
 
 class TestBoundedOfficialNavigation(unittest.TestCase):
+    def test_archive_requires_observed_form_and_retains_observed_checksum(self):
+        form=('var yearMonth = "202610"; objParam["2201"]="9B"; '
+              'pw01skl00 pw01skl10 Number(arg) >= yearMonth '
+              'objParam[String(arg).substring(2,6)] '
+              '<select name="kaisaiY_list"><option value="2022"></option></select>'
+              '<select name="kaisaiM_list"><option value="01"></option></select>')
+        self.assertEqual(archive_month_token(form,'2022-01-05'),'pw01skl10202201/9B')
+        with self.assertRaisesRegex(ValueError,'FORM_NOT_OBSERVED'):
+            archive_month_token(form,'2023-01-05')
+        with self.assertRaisesRegex(ValueError,'FORM_NOT_OBSERVED'):
+            archive_month_token(form.replace('objParam["2201"]="9B"',''),'2022-01-05')
+
     def test_quota_stops_before_second_race(self):
         c=FakeOfficial()
         got=horse_tokens_for_day(c,"2026-10-04",mode="results",stop_after=2)

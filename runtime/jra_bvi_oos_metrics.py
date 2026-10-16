@@ -56,7 +56,21 @@ def evaluate(pre, official, settled):
         other_base_changes={key:ids for key,ids in other_base_changes.items() if ids}
         bvi_changes=sum(current[rid]['canonical_components']['BVI']['value']!=base[rid]['canonical_components']['BVI']['value'] for rid in profiles)
         s=settled['arms'][name]['settlement'];cost=s['investment']
+        base_rank=list(map(str,arms['A_CURRENT']['owner']['static_prediction']['ranking']))
+        base_cols=arms['A_CURRENT']['owner']['active_columns']
+        role_delta={role:{'added':sorted(set(map(str,cols[role]))-set(map(str,base_cols[role]))),
+            'removed':sorted(set(map(str,base_cols[role]))-set(map(str,cols[role])))} for role in ('W','P2','P3')}
+        capital=arm.get('capital_policy_decision') or {}
         output[name]={'profiles':groups,'non_bvi_feature_changes_vs_a':changes,
+            'role_changes_vs_a':role_delta,
+            'new_correct_role_targets_vs_a':{role:top[i] for i,role in enumerate(('W','P2','P3')) if top[i] in role_delta[role]['added']},
+            'false_positive_rank_promotions_vs_a':[rid for rid in ranking if rid not in top and ranking.index(rid)<base_rank.index(rid)],
+            'top3_predicted_set':sorted(ranking[:3]),'top3_set_exact':set(ranking[:3])==set(top),
+            'finish_role_ranks':{role:ranking.index(top[i])+1 for i,role in enumerate(('W','P2','P3'))},
+            'no_bet':capital.get('no_bet'),'paper_only':capital.get('paper_only'),
+            'ticket_conversion':{key:settled['arms'][name].get(key) for key in
+                ('ordered_pair_semantic_capture','exact_semantic_capture','ordered_pair_capture','exact_capture')},
+            'krs_result_utility':settled['arms'][name].get('krs_utility'),
             'pedigree_features_only_comparison':not changes,
             'other_base_index_changes_vs_a':other_base_changes,
             'bvi_only_causal_comparison':bool(bvi_changes and not changes and not other_base_changes),
@@ -96,6 +110,10 @@ def aggregate(evaluations):
                 if e['arms'][name]['equal_budget_protocol_preregistered'] and e['arms'][name]['equal_budget_return_per_yen'] is not None]
         normalized[name]={'n':len(values),'mean_return_per_common_budget_unit':sum(values)/len(values) if values else None}
     return {'preregistered_equal_budget':normalized,'race_count':len(evaluations),'arms':result,
+        'capital_modes':{name:{'observed':sum(e['arms'][name].get('no_bet') is not None for e in evaluations),
+            'no_bet_count':sum(e['arms'][name].get('no_bet') is True for e in evaluations),
+            'paper_count':sum(e['arms'][name].get('paper_only') is True for e in evaluations),
+            'legacy_unknown':sum(e['arms'][name].get('no_bet') is None for e in evaluations)} for name in ARMS},
         'race_profile_counts':dict(Counter(e['race_profile'] for e in evaluations)),
         'equal_ticket_preregistered_races':sum(e['equal_ticket']['status']=='FROZEN_PREFIX_DIAGNOSTIC' for e in evaluations),
         'mixed_race_capital_attribution':'NOT_ALLOCATED_TO_INDIVIDUAL_HORSE_PROFILES',

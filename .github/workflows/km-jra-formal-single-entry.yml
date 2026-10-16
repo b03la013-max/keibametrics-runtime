@@ -776,5 +776,7 @@ jobs:
         if: always()
         with:
           name: jra-pedigree-forward-shadow-${{ github.run_id }}
-          path: runtime/jra_static_owner_forward_oos/**/pedigree_pipeline_pre_result.json
+          path: |
+            runtime/jra_static_owner_forward_oos/**/pedigree_pipeline_pre_result.json
+            runtime_out/jra_bvi_forward_freeze_failure.json
           if-no-files-found: warn

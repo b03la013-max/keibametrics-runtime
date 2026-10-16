@@ -50,6 +50,7 @@ jobs:
             --out-dir runtime_out/pedigree_smoke
           python - <<'PY'
           import json
+          from datetime import datetime,timezone
           from pathlib import Path
           p=next(Path("runtime_out/pedigree_smoke").glob("*-results-offset0-n3.json"))
           j=json.loads(p.read_text(encoding="utf-8"))
@@ -59,3 +60,28 @@ jobs:
           print("JRA_OFFICIAL_PEDIGREE_LIVE_SMOKE=PASS",
                 "horses=",j["horse_count"],"historical_runs=",sum(len(x["runs"]) for x in j["horses"]))
           PY
+      - name: Verify bounded historical archive recovery on real 2022 official data
+        env:
+          PYTHONPATH: runtime:runtime/jra_source_runtime
+        run: |
+          python runtime/jra_source_runtime/jra_pedigree_harvest.py \
+            --date 2022-01-05 --mode results --max-races 1 --max-horses 3 \
+            --delay 1.2 --out-dir runtime_out/pedigree_archive_smoke
+          python - <<'PY'
+          import json
+          from datetime import datetime,timezone
+          from pathlib import Path
+          p=next(Path("runtime_out/pedigree_archive_smoke").glob("*.json"))
+          d=json.loads(p.read_text())
+          assert d["race_date"]=="2022-01-05" and d["horse_count"]==3 and not d["errors"]
+          assert all(h.get("sire") and h.get("dam") and h.get("damsire") for h in d["horses"])
+          assert datetime.fromisoformat(d["harvested_at"]).date()==datetime.now(timezone.utc).date()
+          print("JRA_ARCHIVE_LIVE_RECOVERY_PASS",d["horse_count"],sum(len(h["runs"]) for h in d["horses"]))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-official-pedigree-live-recovery
+          path: |
+            runtime_out/pedigree_smoke/*.json
+            runtime_out/pedigree_archive_smoke/*.json

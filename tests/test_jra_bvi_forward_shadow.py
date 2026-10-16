@@ -144,3 +144,32 @@ def test_corrupt_race_is_held_without_blocking_other_races(tmp_path):
     out=f.settle(tmp_path)
     assert out['eligible_settled_races']==0
     assert out['race_failures']==[{'race_id':'broken','status':'HOLD','reason':'BVI_FORWARD_FROZEN_HASH_INVALID'}]
+
+
+def test_canonical_production_baseline_binds_actual_tickets_and_rejects_changed_direction():
+    from copy import deepcopy
+    req=real_request()
+    final=json.loads((ROOT/'runtime/final_artifacts'/f"{req['race_id']}.json").read_text())
+    comparison={'arms':{'A_CURRENT':{'owner':{k:deepcopy(final[k]) for k in
+        ('static_prediction','role_registry','pair_dispositions','third_dispositions')},
+        'diagnostic_tickets':deepcopy(final['final_ticket']['tickets'])}}}
+    proof=f.bind_production_reference(comparison,req,final)
+    assert proof['final_sha256']==final['sha256']
+    assert proof['pfs_basis'].endswith('ACTUAL_PURCHASE_UNVERIFIED')
+    comparison['arms']['A_CURRENT']['diagnostic_tickets'][0]['selection'].reverse()
+    with pytest.raises(ValueError,match='CANONICAL_TICKET_REPLAY_MISMATCH'):
+        f.bind_production_reference(comparison,req,final)
+
+
+def test_metadata_only_enrichment_is_not_a_changed_bvi_value():
+    from copy import deepcopy
+    from jra_bvi_shadow_comparison import compare,PEDIGREE_FEATURES
+    req=real_request();enriched={}
+    for runner in req['runners']:
+        enriched[str(runner['runner_id'])]={key:{**deepcopy(value),'observed_at':'2026-10-11T03:30:00+00:00'}
+            for key,value in runner['evidence_features'].items() if key in PEDIGREE_FEATURES}
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    out=compare(req,mapping,source_sha=req['source_snapshot_sha256'],receipt_sha='0'*64,
+        algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],enhanced_features=enriched)
+    assert out['enhanced_bvi_distinct'] is False
+    assert out['enhanced_ranking_distinct'] is False
