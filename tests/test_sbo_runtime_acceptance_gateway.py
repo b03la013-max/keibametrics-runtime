@@ -7,6 +7,8 @@ import textwrap
 import unittest
 from unittest import mock
 
+import yaml
+
 from runtime.execution_gateway import family_config, load_gateway
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -29,6 +31,32 @@ def preflight(health, status=200):
 
 
 class RuntimeAcceptanceGatewayTests(unittest.TestCase):
+    def test_historical_signing_requires_explicit_manual_owner_authorization(self):
+        workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
+        inputs = workflow['on']['workflow_dispatch']['inputs']
+        self.assertEqual(inputs['authorize_historical_source']['default'], 'false')
+        gate = workflow['jobs']['production-runtime']['if']
+        for event, branch, authorized, reference, expected in (
+            ('push', 'refs/heads/main', True, 'owner-confirmed', False),
+            ('pull_request', 'refs/heads/main', True, 'owner-confirmed', False),
+            ('workflow_dispatch', 'refs/heads/main', False, '', False),
+            ('workflow_dispatch', 'refs/heads/main', True, '', False),
+            ('workflow_dispatch', 'refs/heads/candidate', True, 'owner-confirmed', False),
+            ('workflow_dispatch', 'refs/heads/main', True, 'owner-confirmed', True),
+        ):
+            with self.subTest(event=event, branch=branch, authorized=authorized, reference=reference):
+                expression = gate
+                for field, value in {'github.event_name': event, 'github.ref': branch,
+                    'inputs.authorize_historical_source': authorized,
+                    'inputs.owner_approval_ref': reference}.items():
+                    expression = expression.replace(field, repr(value))
+                expression = expression.replace('&&', ' and ').replace('true', 'True')
+                self.assertEqual(bool(eval(expression, {'__builtins__': {}}, {})), expected)
+        self.assertIn('push', workflow['on'])
+        offline = workflow['jobs']['offline-regression']
+        self.assertNotIn('if', offline)
+        self.assertIn('tests/test_sbo_runtime_acceptance_gateway.py', str(offline))
+
     def setUp(self):
         self.cfg = family_config('LOCAL', load_gateway())
         self.health = dict(self.cfg['active_bundle_sha256'])

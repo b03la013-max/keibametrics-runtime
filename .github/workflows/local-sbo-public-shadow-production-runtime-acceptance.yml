@@ -10,9 +10,38 @@ on:
       - 'runtime/local_physical/app.py'
       - '.github/workflows/local-sbo-public-shadow-production-runtime-acceptance.yml'
   workflow_dispatch:
+    inputs:
+      authorize_historical_source:
+        description: 'Explicitly authorize NEW SOURCE acquisition/signing for historical URW 2025-07-21 R01 (not LIVE/OOS)'
+        type: boolean
+        required: true
+        default: false
+      owner_approval_ref:
+        description: 'Owner approval reference covering this historical payload and canonical LOCAL runtime'
+        type: string
+        required: false
+
+permissions:
+  contents: read
 
 jobs:
+  offline-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify canonical gate and historical-send authorization offline
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest PyYAML
+          python -m pytest -q tests/test_sbo_runtime_acceptance_gateway.py tests/test_execution_gateway.py
   production-runtime:
+    # Push/merge runs real offline checks, never historical acquisition/signing.
+    # A skipped external job is NOT external SBO acceptance.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.authorize_historical_source == true && inputs.owner_approval_ref != ''
+    needs: offline-regression
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
