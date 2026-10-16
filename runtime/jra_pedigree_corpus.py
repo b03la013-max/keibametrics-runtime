@@ -360,6 +360,7 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
     rejected = 0
     conflicts = set()
     names: dict[str, set[str]] = {}
+    maternal_conflicts = set()
 
     def add(h: dict, source_key: str):
         identity = _horse_identity(h)
@@ -372,6 +373,19 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             "sire": h["sire"], "dam": h["dam"],
             "damsire": h.get("damsire") or "", "runs": {},
         })
+        row.setdefault("identity_kind", "NAME_SIRE_DAM_COMPOSITE_NOT_OFFICIAL_HORSE_ID")
+        row.setdefault("source_references", [])
+        if source_key not in row["source_references"]:
+            row["source_references"].append(source_key)
+        incoming = str(h.get("damsire") or "").strip()
+        if identity not in maternal_conflicts:
+            if incoming and row["damsire"] and incoming != row["damsire"]:
+                maternal_conflicts.add(identity)
+                row["damsire"] = ""
+                row["maternal_identity_status"] = "CONFLICT_QUARANTINED"
+            elif incoming:
+                row["damsire"] = incoming
+                row["maternal_identity_status"] = "OBSERVED"
         for run in _clean_runs(h.get("runs") or [], day):
             # A date + course alone is not a unique race identity. Do not
             # silently overwrite contradictory same-key historical results.
@@ -419,7 +433,7 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             continue
         snaps.add(str(summary["source_snapshot_sha256"]))
         for h in summary["horses"]:
-            add(h, "SIGNED_SOURCE")
+            add(h, str(summary["source_snapshot_sha256"]))
 
     harvest_paths = [p for p in sorted(Path(root).glob("runtime/pedigree_corpus/*.json"))
                      if _harvest_might_match_target(p, required_sires=required_sires,
@@ -462,7 +476,7 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             if required_sires is not None or required_damsires is not None:
                 if h.get("sire") not in (required_sires or set()) and h.get("damsire") not in (required_damsires or set()):
                     continue
-            add(h, "ATTESTED_HARVEST")
+            add(h, "ATTESTED_HARVEST:" + hv["sha256"])
     manifest = sorted(snaps)
     return {
         "profile": PROFILE, "horses": horses,
@@ -472,6 +486,7 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
         "manifest_sha256": _sha(manifest),
         "identity_collision_count": sum(len(ids)-1 for ids in names.values() if len(ids)>1),
         "run_conflict_count": len(conflicts),
+        "maternal_identity_conflict_count": len(maternal_conflicts),
         "rejected_untrusted_inputs": rejected,
         "production_harvest_rule": "OIDC_ATTESTED_JRA_HARVEST_OR_SIGNED_SOURCE_ONLY",
         "source_signature_level": "ENVELOPE_ED25519_VERIFIED / LEGACY_SOURCE_OIDC_AT_INGRESS_NOT_REVERIFIED_HERE",

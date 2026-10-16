@@ -683,6 +683,20 @@ jobs:
               })
               final_package["minimum_efficient_coverage"]=mec
           final_package["source_snapshot_sha256"]=conformance["source_snapshot_sha256"]
+          if req.get("family_id")=="JRA":
+              from jra_bvi_consumption import build_bvi_consumption
+              bvi_mapping=json.load(open("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json",encoding="utf-8"))
+              bvi_proof=build_bvi_consumption(req,bvi_mapping,source_artifact=source_artifact)
+              # Bind the proof to the actual KRS/MEC/Capital and final ticket
+              # objects included in this same signed FINAL package.
+              from jra_bvi_consumption import sha as bvi_sha
+              bvi_proof["final_downstream_hashes"]={
+                  "krs_run_receipt":bvi_sha(run),
+                  "mec":bvi_sha(mec),"capital":bvi_sha(capital_decision),
+                  "ticket_transport":bvi_sha(tickets),
+              }
+              bvi_proof["sha256"]=bvi_sha({k:v for k,v in bvi_proof.items() if k!="sha256"})
+              final_package["bvi_consumption_ledger"]=bvi_proof
           final_package["index_provenance_hash"]=req.get("index_provenance_hash")
           final_package["index_provenance_replay"]=req.get("index_provenance_replay")
           final_package["orchestration_ref"]=req["orchestration_ref"]

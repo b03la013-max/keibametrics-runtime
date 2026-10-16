@@ -66,7 +66,12 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
             'candidate_only': True, 'production_authority': False, 'purchase_authority': False,
             'krs_simulation_executed': False, 'mec_executed': False,
             'ticket_count': None, 'capital_required': None}
-    return {'arms': arms, 'enhanced_input_distinct': enhanced_features is not None,
+    from jra_static_owner_forward_oos import sha
+    a,b=arms['A_CURRENT'],arms['B_PEDIGREE_ENHANCED_SHADOW']
+    return {'arms': arms, 'enhanced_input_supplied': enhanced_features is not None,
+        'enhanced_input_distinct':sha([r['evidence_features'] for r in a['numerical_runners']])!=sha([r['evidence_features'] for r in b['numerical_runners']]),
+        'enhanced_bvi_distinct':sha(a['bvi'])!=sha(b['bvi']),
+        'enhanced_ranking_distinct':a['owner']['static_prediction']['ranking']!=b['owner']['static_prediction']['ranking'],
         'same_runner_universe': True, 'same_mapping_and_cutoff': True,
         'production_effect': 'NONE', 'predictive_improvement_demonstrated': False,
         'policy_scope': ('CURRENT_AUTHORITY_REGISTERED_COLUMNS / CURRENT_PRODUCTION_POLICY_SHADOW' if current_authority is not None else 'CURRENT_NUMERICAL_MAPPING / EXISTING_STATIC_OWNER_EXECUTABLE_SHADOW; NOT A NEW PRODUCTION FINAL')}

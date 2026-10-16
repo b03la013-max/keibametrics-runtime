@@ -138,91 +138,80 @@ def persist_result_receipt(result_request, receipt, root=ROOT):
     save_immutable(target,record)
 
 
-def settle(root=ROOT):
+def _settle_record(path, root):
     from mec_r4_shadow import settle_ticket_list
     from krs_prediction_utility import evaluate_against_result
+    pre=json.loads(path.read_text());target=path.with_name('pedigree_pipeline_result.json')
+    if pre.get('profile')!=PROFILE or pre.get('sha256')!=sha({k:v for k,v in pre.items() if k!='sha256'}):
+        raise ValueError('BVI_FORWARD_FROZEN_HASH_INVALID')
+    witness=subprocess.check_output(['git','log','-1','--format=%cI','--',str(path.relative_to(root))],cwd=root,text=True).strip()
+    if not witness or not time(pre['frozen_at'])<=time(witness)<=time(pre['prediction_cutoff']):
+        raise ValueError('BVI_FORWARD_NOT_PRE_CUTOFF_COMMITTED')
+    result_path=root/'runtime/results'/f"{pre['race_id']}.json"
+    if not result_path.exists():return None
+    result=json.loads(result_path.read_text());official=result['official_result']
+    receipt_path=path.with_name('production_result_receipt.json')
+    if not receipt_path.exists():return None
+    bound=json.loads(receipt_path.read_text());envelope=bound['signed_result_envelope'];receipt=envelope['receipt']
+    if (bound.get('sha256')!=sha({k:v for k,v in bound.items() if k!='sha256'})
+            or bound.get('result_request_sha256')!=sha(result)
+            or receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS'
+            or bound.get('race_id')!=pre['race_id']
+            or not str(result.get('race_id','')).startswith('KM-JRA-')
+            or result.get('family_id','JRA')!='JRA'
+            or receipt.get('race_id')!=pre['race_id']
+            or receipt.get('artifact_sha256')!=sha(result)
+            or call('/verify',envelope,30).get('valid') is not True):
+        raise ValueError('BVI_FORWARD_SIGNED_RESULT_BINDING_INVALID')
+    # RESULT signs the unchanged request hash; it does not embed an artifact.
+    signed_official=result['official_result']
+    signed_top3=signed_official.get('top3') or signed_official.get('finish_order',[])[:3]
+    if [str(x) for x in signed_top3]!=[str(x) for x in official['top3']]:
+        raise ValueError('BVI_FORWARD_SIGNED_RESULT_ORDER_MISMATCH')
+    if (result.get('race_id')!=pre['race_id'] or result.get('result_lane')!='PRODUCTION'
+            or official.get('status')!='OFFICIAL'
+            or (result.get('frozen_prediction_ref') or {}).get('source_cutoff')!=pre['prediction_cutoff']
+            or not str(official.get('source_url','')).startswith('https://www.jra.go.jp/')
+            or len(str(official.get('raw_sha256','')))!=64):
+        raise ValueError('BVI_FORWARD_OFFICIAL_RESULT_LANE_REQUIRED')
+    if not time(pre['scheduled_post_at'])<time(official['captured_at']):
+        raise ValueError('BVI_FORWARD_RESULT_NOT_POST_RACE')
+    payout={'official_result':{'top3':official['top3'],'payouts':{k:v['per_100_yen'] for k,v in official['payouts'].items()}}}
+    if len(official['top3'])!=3 or len(set(official['top3']))!=3:
+        raise ValueError('BVI_FORWARD_RESULT_UNIVERSE_INVALID')
+    arms={}
+    for name,arm in pre['comparison']['arms'].items():
+        settlement=settle_ticket_list(arm['diagnostic_tickets'],payout)
+        if settlement['status']!='SETTLED':raise ValueError('BVI_FORWARD_PAYOUT_INCOMPLETE')
+        ranking=arm['owner']['static_prediction']['ranking'];top3=[str(x) for x in official['top3']];cols=arm['owner']['active_columns']
+        arms[name]={'settlement':settlement,'winner_rank':ranking.index(top3[0])+1,
+            'winner_discovery_recall':int(top3[0] in cols['W']),'p2_capture':top3[1] in cols['P2'],
+            'p3_capture':top3[2] in cols['P3'],
+            'ordered_pair_semantic_capture':any(str(x['head'])==top3[0] and str(x['second'])==top3[1] and x['status']!='EXCLUDE' for x in arm['owner']['pair_dispositions']),
+            'exact_semantic_capture':any((str(x['head']),str(x['second']),str(x['third']))==tuple(top3) and x['status']!='EXCLUDE' for x in arm['owner']['third_dispositions']),
+            'top3_mean_rank':sum(ranking.index(x)+1 for x in top3)/3,
+            'market_winner_rank':pre['market_ranking'].index(top3[0])+1 if pre.get('market_ranking') else None,
+            'market_top3_mean_rank':sum(pre['market_ranking'].index(x)+1 for x in top3)/3 if pre.get('market_ranking') else None,
+            'candidate_width':len(set().union(*(set(v) for v in cols.values()))),
+            'role_widths':{k:len(v) for k,v in cols.items()},
+            'ticket_count':len(arm['diagnostic_tickets']),'capital_required':arm['capital_required'],
+            'low_popularity_top3_discovered':([rid for rid in top3 if pre['market_ranking'].index(rid)+1>=6
+                and rid in set().union(*(set(v) for v in cols.values()))] if pre.get('market_ranking') else None),
+            'false_positive_candidates':len(set().union(*(set(v) for v in cols.values()))-set(top3)),
+            'ordered_pair_capture':'EXACTA' in settlement['hit_types'],
+            'exact_capture':'TRIFECTA' in settlement['hit_types'],
+            'krs_utility':evaluate_against_result(arm['krs_utility'],official['top3'],static_ranking=ranking)}
+    record={'profile':PROFILE,'race_id':pre['race_id'],'policy_fingerprint':pre['policy_fingerprint'],
+        'frozen_sha256':pre['sha256'],'git_commit_at':witness,'official_result_file_sha256':hashlib.sha256(result_path.read_bytes()).hexdigest(),
+        'production_result_receipt_file_sha256':hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+        'signed_result_receipt_sha256':envelope['receipt_sha256'],'signed_result_verified':True,
+        'official_result_raw_sha256':official['raw_sha256'],'result_captured_at':official['captured_at'],
+        'arms':arms,'oos_eligible':True,'production_effect':'NONE','actual_purchase_inferred':False}
+    record['sha256']=sha(record);save_immutable(target,record);return record
+
+
+def cohort_metrics(eligible):
     from pfs_grand_review import _aggregate, _robustness
-    records=[]
-    for path in (root/'runtime/jra_static_owner_forward_oos').glob('*/pedigree_pipeline_pre_result.json'):
-        pre=json.loads(path.read_text());target=path.with_name('pedigree_pipeline_result.json')
-        if pre.get('profile')!=PROFILE or pre.get('sha256')!=sha({k:v for k,v in pre.items() if k!='sha256'}):
-            raise ValueError('BVI_FORWARD_FROZEN_HASH_INVALID')
-        witness=subprocess.check_output(['git','log','-1','--format=%cI','--',str(path.relative_to(root))],cwd=root,text=True).strip()
-        if not witness or not time(pre['frozen_at'])<=time(witness)<=time(pre['prediction_cutoff']):
-            raise ValueError('BVI_FORWARD_NOT_PRE_CUTOFF_COMMITTED')
-        if target.exists():
-            existing=json.loads(target.read_text())
-            if (existing.get('sha256')!=sha({k:v for k,v in existing.items() if k!='sha256'})
-                    or existing.get('frozen_sha256')!=pre['sha256']
-                    or existing.get('policy_fingerprint')!=pre['policy_fingerprint']
-                    or existing.get('race_id')!=pre['race_id']
-                    or existing.get('oos_eligible') is not True):
-                raise ValueError('BVI_FORWARD_RESULT_BINDING_INVALID')
-            result_path=root/'runtime/results'/f"{pre['race_id']}.json"
-            if not result_path.exists() or existing['official_result_file_sha256']!=hashlib.sha256(result_path.read_bytes()).hexdigest():
-                raise ValueError('BVI_FORWARD_RESULT_CHANGED')
-            receipt_path=path.with_name('production_result_receipt.json')
-            if not receipt_path.exists() or existing['production_result_receipt_file_sha256']!=hashlib.sha256(receipt_path.read_bytes()).hexdigest():
-                raise ValueError('BVI_FORWARD_SIGNED_RESULT_CHANGED')
-            records.append(existing);continue
-        result_path=root/'runtime/results'/f"{pre['race_id']}.json"
-        if not result_path.exists():continue
-        result=json.loads(result_path.read_text());official=result['official_result']
-        receipt_path=path.with_name('production_result_receipt.json')
-        if not receipt_path.exists():continue
-        bound=json.loads(receipt_path.read_text());envelope=bound['signed_result_envelope'];receipt=envelope['receipt']
-        if (bound.get('sha256')!=sha({k:v for k,v in bound.items() if k!='sha256'})
-                or bound.get('result_request_sha256')!=sha(result)
-                or receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS'
-                or receipt.get('race_id')!=pre['race_id'] or receipt.get('family')!='JRA'
-                or receipt.get('artifact_sha256')!=sha(envelope['artifact'])
-                or call('/verify',envelope,30).get('valid') is not True):
-            raise ValueError('BVI_FORWARD_SIGNED_RESULT_BINDING_INVALID')
-        signed_official=envelope['artifact']['official_result']
-        signed_top3=signed_official.get('top3') or signed_official.get('finish_order',[])[:3]
-        if [str(x) for x in signed_top3]!=[str(x) for x in official['top3']]:
-            raise ValueError('BVI_FORWARD_SIGNED_RESULT_ORDER_MISMATCH')
-        if (result.get('race_id')!=pre['race_id'] or result.get('result_lane')!='PRODUCTION'
-                or official.get('status')!='OFFICIAL'
-                or (result.get('frozen_prediction_ref') or {}).get('source_cutoff')!=pre['prediction_cutoff']
-                or not str(official.get('source_url','')).startswith('https://www.jra.go.jp/')
-                or len(str(official.get('raw_sha256','')))!=64):
-            raise ValueError('BVI_FORWARD_OFFICIAL_RESULT_LANE_REQUIRED')
-        if not time(pre['scheduled_post_at'])<time(official['captured_at']):
-            raise ValueError('BVI_FORWARD_RESULT_NOT_POST_RACE')
-        payout={'official_result':{'top3':official['top3'],'payouts':{k:v['per_100_yen'] for k,v in official['payouts'].items()}}}
-        if len(official['top3'])!=3 or len(set(official['top3']))!=3:
-            raise ValueError('BVI_FORWARD_RESULT_UNIVERSE_INVALID')
-        arms={}
-        for name,arm in pre['comparison']['arms'].items():
-            settlement=settle_ticket_list(arm['diagnostic_tickets'],payout)
-            if settlement['status']!='SETTLED':raise ValueError('BVI_FORWARD_PAYOUT_INCOMPLETE')
-            ranking=arm['owner']['static_prediction']['ranking'];top3=[str(x) for x in official['top3']];cols=arm['owner']['active_columns']
-            arms[name]={'settlement':settlement,'winner_rank':ranking.index(top3[0])+1,
-                'winner_discovery_recall':int(top3[0] in cols['W']),'p2_capture':top3[1] in cols['P2'],
-                'p3_capture':top3[2] in cols['P3'],
-                'ordered_pair_semantic_capture':any(str(x['head'])==top3[0] and str(x['second'])==top3[1] and x['status']!='EXCLUDE' for x in arm['owner']['pair_dispositions']),
-                'exact_semantic_capture':any((str(x['head']),str(x['second']),str(x['third']))==tuple(top3) and x['status']!='EXCLUDE' for x in arm['owner']['third_dispositions']),
-                'top3_mean_rank':sum(ranking.index(x)+1 for x in top3)/3,
-                'market_winner_rank':pre['market_ranking'].index(top3[0])+1 if pre.get('market_ranking') else None,
-                'market_top3_mean_rank':sum(pre['market_ranking'].index(x)+1 for x in top3)/3 if pre.get('market_ranking') else None,
-                'candidate_width':len(set().union(*(set(v) for v in cols.values()))),
-                'role_widths':{k:len(v) for k,v in cols.items()},
-                'ticket_count':len(arm['diagnostic_tickets']),'capital_required':arm['capital_required'],
-                'low_popularity_top3_discovered':([rid for rid in top3 if pre['market_ranking'].index(rid)+1>=6
-                    and rid in set().union(*(set(v) for v in cols.values()))] if pre.get('market_ranking') else None),
-                'false_positive_candidates':len(set().union(*(set(v) for v in cols.values()))-set(top3)),
-                'ordered_pair_capture':'EXACTA' in settlement['hit_types'],
-                'exact_capture':'TRIFECTA' in settlement['hit_types'],
-                'krs_utility':evaluate_against_result(arm['krs_utility'],official['top3'],static_ranking=ranking)}
-        record={'profile':PROFILE,'race_id':pre['race_id'],'policy_fingerprint':pre['policy_fingerprint'],
-            'frozen_sha256':pre['sha256'],'git_commit_at':witness,'official_result_file_sha256':hashlib.sha256(result_path.read_bytes()).hexdigest(),
-            'production_result_receipt_file_sha256':hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
-            'signed_result_receipt_sha256':envelope['receipt_sha256'],'signed_result_verified':True,
-            'official_result_raw_sha256':official['raw_sha256'],'result_captured_at':official['captured_at'],
-            'arms':arms,'oos_eligible':True,'production_effect':'NONE','actual_purchase_inferred':False}
-        record['sha256']=sha(record);save_immutable(target,record);records.append(record)
-    eligible=[x for x in records if x['policy_fingerprint']==policy_fingerprint()]
     metrics={}
     for name in ('A_CURRENT','B_PEDIGREE_ENHANCED_SHADOW','C_BLOODLINE_ABLATION'):
         rows=[]
@@ -239,7 +228,25 @@ def settle(root=ROOT):
             observed=[float(x[field]) for x in arm_records if x.get(field) is not None]
             accuracy[field]={'n':len(observed),'mean':sum(observed)/len(observed) if observed else None}
         metrics[name]={'aggregate':_aggregate(rows),'robustness':_robustness(rows),'prediction':accuracy}
-    scorecard={'profile':PROFILE,'eligible_settled_races':len(eligible),'arms':metrics,
+    return metrics
+
+
+def settle(root=ROOT):
+    records=[]
+    failures=[]
+    for path in sorted((root/'runtime/jra_static_owner_forward_oos').glob('*/pedigree_pipeline_pre_result.json')):
+        try:
+            record=_settle_record(path,root)
+            if record is not None:records.append(record)
+        except (ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
+            failures.append({'race_id':path.parent.name,'status':'HOLD','reason':str(exc)})
+    eligible=[x for x in records if x['policy_fingerprint']==policy_fingerprint()]
+    metrics=cohort_metrics(eligible)
+    cohorts={}
+    for record in records:
+        cohorts.setdefault(record['policy_fingerprint'], []).append(record['race_id'])
+    scorecard={'race_failures':failures,'policy_cohorts':{key:{'eligible_settled_races':len(ids), 'race_ids':sorted(ids), 'current_policy':key==policy_fingerprint(), 'arms':cohort_metrics([r for r in records if r['policy_fingerprint']==key])} for key,ids in cohorts.items()},
+        'profile':PROFILE,'eligible_settled_races':len(eligible),'arms':metrics,
         'status':'FORWARD OOS PENDING' if len(eligible)<30 else 'INDEPENDENT_REVIEW_REQUIRED',
         'required_forward_races':30,'automatic_promotion':False,'production_effect':'NONE',
         'predictive_improvement_demonstrated':False}

@@ -430,6 +430,11 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
             "calibration_status": mapping.get("calibration_status"),
         }
         req = materialize_index_provenance(req)
+        try:
+            from .jra_bvi_consumption import build_bvi_consumption
+        except ImportError:
+            from jra_bvi_consumption import build_bvi_consumption
+        req["bvi_consumption_ledger"] = build_bvi_consumption(req, mapping, source_artifact=source)
         numerical_ready = all(len(r.get("canonical_components") or {}) == 20 for r in req["runners"])
     except ValueError as exc:
         numerical_ready = False
