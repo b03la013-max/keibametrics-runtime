@@ -26,8 +26,23 @@ The recovered Blood-B archive contains only 2026-10-10/11 Tokyo/Kyoto: 48 races,
 659 listed rows, 573 payout rows. It is post-result descriptive data. Its permission
 statement does not establish public redistribution or JRA Production admission.
 No private provider records were copied into GitHub or granted formal authority.
-A separate complete five-year Blood-B raw corpus was not located in the discovered
-Library files; it must not be invented from these exports.
+A later broader filename search recovered BloodB_5year_collection_checkpoint.zip
+and the prior one-year partial export. Actual checkpoint ZIP member hashes and
+SQLite counts verify 528 races / 7,059 runner rows / 5,204 provider horse IDs,
+from 20 result dates. The 539-day inventory contains 17,340 observed race links;
+only about 3.05% have result captures. Rows by year: 2021=204, 2026=6,855;
+2022–2025=0. The one-year partial's 6,855 rows are already included, with provider
+horse IDs agreeing 6,855/6,855: adding it again would double-count them.
+Sire/damsire are present in all 7,059 rows, dam in none; provider IDs are not
+independently resolved official horse IDs, and names may be abbreviated.
+The separate BVI_BloodB export is 24 pre-race cards / 344 runners, SHADOW only.
+The offline private normalizer preserves actual observation times, checks member
+hashes, namespaces provider IDs and leaves official IDs/dams UNKNOWN. It never
+backdates observed Oct2026 information into 2021 forecasts or admits third-party
+rows to the official-only Production registry. Full private normalized records
+are retained outside the public repository. The original collector stopped with
+BACKGROUND_BROWSER_EXEC_CONTEXT_NOT_FOUND; it is not running. No credential
+restriction is bypassed and no historical forecast is rewritten.
 
 LOCAL PR253 is merged. Its 2021–25 reference is 750 annual top-50 rows plus 726
 partial overlapping venue supplements, not complete runner-level history. Its
@@ -89,3 +104,12 @@ production-intake CI rechecks real GitHub OIDC and external KRS (5,000 per arm),
 then MEC/Capital, using historical diagnostic inputs explicitly outside OOS.
 Future official source availability, full five-year completeness, human delivery,
 forward predictive improvement and long-run capital improvement remain unproven.
+
+PR #288 merged as a64c841a63fa803b6ea55d29bd69fd2f8af8f6ba after 10/10
+PR checks passed. Real acceptance at run38934637824 verified official corpus
+OIDC and 27 runners in Kyoto Oct11 R07/R12, then three arms each with 5,000
+external KRS trials and verified receipts, MEC, Capital and diagnostic tickets.
+This is actual post-capture pipeline verification, not forward predictive gain.
+The full output is GitHub artifact12060661673; hashes/receipts are indexed in
+real_acceptance_summary.json. Existing Oct17/18 monitoring tasks now include
+BVI consumption, missingness and fingerprint-separated forward result closure.
