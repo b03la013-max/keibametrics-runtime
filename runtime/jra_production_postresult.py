@@ -63,7 +63,9 @@ def settle_final(final: dict, official: dict) -> dict:
         kind = str(t.get("bet_type") or "").upper()
         if kind not in BET_N:
             raise ProductionPostResultError("UNKNOWN_BET_TYPE:" + kind)
-        sel = [int(x) for x in t.get("selection") or []]
+        sel = list(t.get("selection") or [])
+        if any(type(x) is not int or not 1 <= x <= 18 for x in sel):
+            raise ProductionPostResultError("FROZEN_SELECTION_INVALID")
         stake = t.get("stake")
         if (len(sel) != BET_N[kind] or len(set(sel)) != len(sel) or not isinstance(stake, int)
                 or isinstance(stake, bool) or stake <= 0 or stake % 100):
@@ -73,6 +75,12 @@ def settle_final(final: dict, official: dict) -> dict:
             raise ProductionPostResultError("DUPLICATE_FROZEN_TICKET")
         seen.add(key)
         pay = prices[kind]
+        if (type(pay.get("per_100_yen")) is not int or pay["per_100_yen"] < 0
+                or not isinstance(pay.get("selection"), list)
+                or len(pay["selection"]) != BET_N[kind]
+                or any(type(x) is not int or not 1 <= x <= 18 for x in pay["selection"])
+                or len(set(pay["selection"])) != BET_N[kind]):
+            raise ProductionPostResultError("OFFICIAL_PAYOUT_INVALID")
         win_sel = sorted(pay["selection"]) if kind == "TRIO" else list(pay["selection"])
         obs = sorted(sel) if kind == "TRIO" else sel
         amount = (stake // 100) * int(pay["per_100_yen"]) if obs == win_sel else 0
@@ -81,7 +89,7 @@ def settle_final(final: dict, official: dict) -> dict:
         if amount:
             wins.append({"bet_type": kind, "selection": sel, "stake": stake,
                          "payout_per_100": int(pay["per_100_yen"]), "return": amount})
-    if stake_total != int(ft.get("total_investment") or 0):
+    if type(ft.get("total_investment")) is not int or stake_total != ft["total_investment"]:
         raise ProductionPostResultError("FROZEN_TOTAL_INVESTMENT_MISMATCH")
     decision = (final.get("capital_policy_decision") or {}).get("decision")
     recommendation_only = decision == "EXECUTE_RECOMMENDATION_PORTFOLIO"

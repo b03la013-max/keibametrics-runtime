@@ -344,6 +344,42 @@ def reconcile_pdf_column_with_detail(
     return out,diag
 
 
+def apply_official_detail_status(artifact, declared, active):
+    """PDF proves every listed identity; fresh official detail owns scratches."""
+    pdf=artifact['jra_official_runner_universe']
+    def identities(rows):
+        out={}
+        for row in rows:
+            no=int(row['horse_no'])
+            if no in out:raise ValueError('JRA_DECLARED_RUNNER_DUPLICATED')
+            out[no]=re.sub(r'\s+','',str(row.get('name') or ''))
+        return out
+    if identities(pdf['runners'])!=identities(declared['runners']):
+        raise ValueError('JRA_DECLARED_PDF_DETAIL_IDENTITY_MISMATCH')
+    statuses={int(r['horse_no']):r.get('status') for r in declared['runners']}
+    if any(v not in {'ACTIVE','CANCELLED','EXCLUDED'} for v in statuses.values()):
+        raise ValueError('JRA_OFFICIAL_RUNNER_STATUS_UNKNOWN')
+    expected={n for n,s in statuses.items() if s=='ACTIVE'}
+    if identities(active['runners'])!={n:name for n,name in identities(declared['runners']).items() if n in expected}:
+        raise ValueError('JRA_DETAIL_ACTIVE_DECLARED_STATUS_MISMATCH')
+    rows=[{**r,'status':statuses[int(r['horse_no'])],
+           'status_source_id':declared['source_id'],
+           'status_source_snapshot_sha256':declared.get('source_snapshot_sha256')}
+          for r in pdf['runners']]
+    listed={**pdf,'universe_type':'DECLARED','runners':rows,'runner_count':len(rows)}
+    listed['runner_universe_sha256']=sha_obj({k:v for k,v in listed.items() if k!='runner_universe_sha256'})
+    selected=[r for r in rows if r['status']=='ACTIVE']
+    live={**listed,'universe_type':'ACTIVE','runners':selected,'runner_count':len(selected),
+          'declared_runner_count':len(rows)}
+    live['runner_universe_sha256']=sha_obj({k:v for k,v in live.items() if k!='runner_universe_sha256'})
+    artifact['jra_declared_runner_universe']=listed
+    artifact['jra_official_runner_universe']=live
+    artifact['jra_official_runner_universe_sha256']=sha_obj(live)
+    artifact['official_runner_universe']=live
+    artifact['official_runner_universe_sha256']=live['runner_universe_sha256']
+    return artifact
+
+
 def fetch_and_enrich_official_pdf(
     artifact:Dict[str,Any], prediction_cutoff:str, *,
     race_date:str, venue_id:str, race_no:int, meeting_key:str

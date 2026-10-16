@@ -44,13 +44,21 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Resolve existing start request date and mode
+        id: start
+        env:
+          REQUEST_DATE: ${{ inputs.race_date }}
+          REQUEST_MODE: ${{ inputs.mode }}
+        run: python runtime/jra_autopilot_start.py --event "${{ github.event_name }}" --date "$REQUEST_DATE" --mode "$REQUEST_MODE"
       - name: Install JRA SOURCE runtime dependencies
         run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
       - name: Plan every official race, dispatch due races, publish status index
         env:
           GH_TOKEN: ${{ github.token }}
-          RACE_DATE: ${{ inputs.race_date }}
-          MODE: ${{ inputs.mode }}
+          RACE_DATE: ${{ steps.start.outputs.race_date }}
+          MODE: ${{ steps.start.outputs.mode }}
           SCHEDULE: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
@@ -64,19 +72,19 @@ jobs:
           cd runtime/jra_source_runtime
           python jra_race_day_autopilot.py --repo-root ../.. --date "$D" --all-races-default "${LOOP[@]}"
       - name: Persist final state and status index
-        if: always()
+        if: always() && steps.start.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
-          RACE_DATE: ${{ inputs.race_date }}
+          RACE_DATE: ${{ steps.start.outputs.race_date }}
         run: |
           D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
           python runtime/jra_source_runtime/jra_race_day_autopilot.py --repo-root . --date "$D" --publish-only
       - name: Continue with fresh worker before hosted job limit
-        if: always()
+        if: always() && steps.start.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
-          RACE_DATE: ${{ inputs.race_date }}
-          MODE: ${{ inputs.mode }}
+          RACE_DATE: ${{ steps.start.outputs.race_date }}
+          MODE: ${{ steps.start.outputs.mode }}
         run: |
           set -euo pipefail
           D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"

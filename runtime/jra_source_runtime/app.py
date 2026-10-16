@@ -202,9 +202,9 @@ def source_acquire(p:Dict[str,Any]):
             errors.append("JRA_DETAIL_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
     elif artifact.get("jra_official_runner_universe") and detail_u:
         try:
-            _,detail_active=runner_universes_from_detail(detail_u)
+            detail_declared,detail_active=runner_universes_from_detail(detail_u)
             p={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (artifact["jra_official_runner_universe"].get("runners") or [])}
-            h={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (detail_active.get("runners") or [])}
+            h={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (detail_declared.get("runners") or [])}
             mismatch=(p!=h)
             diffs=[{"horse_no":no,"pdf_name":p.get(no),"detail_name":h.get(no)}
                    for no in sorted(set(p)|set(h)) if p.get(no)!=h.get(no)]
@@ -215,7 +215,7 @@ def source_acquire(p:Dict[str,Any]):
             if mismatch:
                 try:
                     reconciled_u,recon_diag=reconcile_pdf_column_with_detail(
-                        artifact,ctx["race_no"],detail_active
+                        artifact,ctx["race_no"],detail_declared
                     )
                     artifact["jra_declared_runner_universe"]={**reconciled_u,"universe_type":"DECLARED"}
                     artifact["jra_official_runner_universe"]=reconciled_u
@@ -240,6 +240,9 @@ def source_acquire(p:Dict[str,Any]):
                     )
             else:
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
+            if not mismatch or "strict_reconciliation" in artifact.get("official_runner_universe_reconciliation",{}):
+                from jra_official_pdf import apply_official_detail_status
+                artifact=apply_official_detail_status(artifact,detail_declared,detail_active)
         except Exception as e:
             errors.append("JRA_OFFICIAL_RUNNER_RECONCILIATION_FAILED:"+type(e).__name__+":"+str(e))
     if not artifact.get("jra_official_runner_universe"):

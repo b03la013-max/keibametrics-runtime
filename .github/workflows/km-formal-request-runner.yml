@@ -917,6 +917,23 @@ jobs:
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 
+      - name: Verify signed JRA FINAL and prepare exact canonical publication
+        continue-on-error: true
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
+          if [ -f "runtime/final_artifacts/$RID.json" ]; then
+            python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+              --output-dir "runtime/jra_delivery/$RID" \
+              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              > krs-artifacts/canonical_tree.txt
+            { echo '## Signed FINAL canonical tickets'; echo '```'; cat krs-artifacts/canonical_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Persist immutable FINAL or acceptance artifact
         if: steps.request.outputs.candidate_parallel != 'true'
         shell: bash
@@ -927,14 +944,37 @@ jobs:
           if [ -d runtime/final_artifacts ]; then git add runtime/final_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/acceptance_artifacts ]; then git add runtime/acceptance_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/jra_delivery ]; then git add runtime/jra_delivery; fi
           if ! git diff --cached --quiet; then
             git commit -m "runtime: persist immutable FINAL/acceptance artifact [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            python tools/persist_local_checkpoints.py --branch main
+          fi
+
+      - name: Verify canonical FINAL availability after publication
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
+          if [ -f "runtime/final_artifacts/$RID.json" ] && [ ! -f "runtime/jra_delivery/$RID/publication.json" ]; then
+            echo "JRA_CANONICAL_PUBLICATION_FAILED_SIGNED_FINAL_PRESERVED" >&2; exit 1
+          fi
+          if [ -f "runtime/jra_delivery/$RID/publication.json" ]; then
+            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+              --output-dir "runtime/jra_delivery/$RID" --published-ref "$(git rev-parse HEAD)" \
+              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              > krs-artifacts/canonical_tree.txt
+            cp "runtime/jra_delivery/$RID/availability_receipt.json" krs-artifacts/
+            git add "runtime/jra_delivery/$RID"
+            if ! git diff --cached --quiet; then
+              git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"
+              python tools/persist_local_checkpoints.py --branch main
+            fi
           fi
 
       - name: Upload KRS structured output and utility delta
-        if: steps.request.outputs.candidate_parallel != 'true'
+        if: always() && steps.request.outputs.candidate_parallel != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: krs-utility-${{ github.run_id }}
