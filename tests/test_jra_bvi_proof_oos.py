@@ -27,6 +27,10 @@ def test_newcomer_no_prior_runs_and_unknown_missingness_are_not_fetch_failures()
     runner={'runner_id':'7','career_starts':0,'newcomer':True,'evidence_features':{}}
     source={'jra_official_horse_history':{'status':'NO_PRIOR_RUNS','runners':{'7':{'status':'NO_PRIOR_RUNS'}}}}
     assert acquisition_failure('7',source,runner,{},MAPPING) is None
+    source['jra_official_horse_history']={'status':'UNAVAILABLE','errors':['JRA_HORSE_HISTORY_PROFILE_TOKENS_MISSING']}
+    assert acquisition_failure('7',source,runner,{},MAPPING) is None
+    source['jra_official_horse_history']={'status':'UNAVAILABLE','errors':['JRA_HORSE_HISTORY_FAILED:8:HTTPError:403']}
+    assert acquisition_failure('7',source,runner,{},MAPPING) is None
     rows=[{**runner,'runner_id':str(i)} for i in (7,8)]
     out=summarize(evaluate_partial_production_base_indices('test',rows,MAPPING))
     assert out['counts']['DCR_ONLY_CAUSE_UNDETERMINED']==2

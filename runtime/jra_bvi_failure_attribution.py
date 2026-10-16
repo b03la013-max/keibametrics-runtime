@@ -12,7 +12,8 @@ def acquisition_failure(rid, source, runner, features, mapping):
     # A sparse pool, an absent legacy field, or NO_PRIOR_RUNS is not a fetch failure.
     errors=[str(x) for x in payload.get('errors') or []]
     failed=any(x.startswith('JRA_HORSE_HISTORY_FAILED:'+str(rid)+':') for x in errors)
-    failed=failed or (payload.get('status')=='UNAVAILABLE' and bool(errors))
+    # Missing profile tokens alone cannot distinguish parser failure from an
+    # officially unlinked/unpublished profile; never certify either cause.
     if not failed:return None
     from jra_evidence_to_base_production import _profile_for_runner
     profile=_profile_for_runner(runner)

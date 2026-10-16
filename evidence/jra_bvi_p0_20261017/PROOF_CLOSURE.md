@@ -30,8 +30,8 @@ No new signing path, Owner, production authority or purchase permission is added
 
 ## DCR source-failure separation
 
-A positive JRA_HORSE_HISTORY_FAILED:<runner>:... error (or an explicitly failed
-unavailable profile), missing target sire/damsire and insufficient required BVI
+A positive JRA_HORSE_HISTORY_FAILED:<runner>:... error for that exact runner,
+missing target sire/damsire and insufficient required BVI
 feature weight is a source acquisition failure. It cannot become an Art3 neutral
 DCR value. The guard executes both in the full ledger and partial diagnostics.
 Enough already-authorized BVI features retain their existing result; NO_PRIOR_RUNS
