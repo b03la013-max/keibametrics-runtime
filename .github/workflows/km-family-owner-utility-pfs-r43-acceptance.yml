@@ -13,6 +13,15 @@ on:
       - 'tests/test_family_pfs_regression_readout.py'
       - 'research/common/KM-FAMILY-OHI-20261008-DAY-REGRESSION-R1.json'
       - 'runtime/post_result_learning.py'
+      - 'runtime/local_aki_columns.py'
+      - 'runtime/family_conversion_diagnostics.py'
+      - 'tools/kaw_v25_day_regression.py'
+      - 'tools/kaw_v25_official_acquire.py'
+      - 'tools/local_aki_matched_comparison.py'
+      - 'tools/local_aki_comparison.py'
+      - 'profiles/local_aki_columns_20261012_R1.json'
+      - 'profiles/family_integrated_shadow_20261016_R1.json'
+      - 'tests/test_kaw_v26_integrated.py'
       - 'runtime/race_day_fast_reflection.py'
       - 'runtime/acceptance/family_owner_utility_pfs_r43.json'
       - 'tests/test_family_pfs_improvement.py'
@@ -52,5 +61,17 @@ jobs:
           runtime/family_pfs_regression_readout.py
           runtime/post_result_learning.py
           runtime/race_day_fast_reflection.py
+      - name: Signed KAW integrated regression and rejected-arm boundaries
+        run: python -m pytest -q tests/test_kaw_v26_integrated.py tests/test_family_conversion_diagnostics.py tests/test_capital_policy.py tests/test_krs_prediction_utility.py
+      - name: Preserve all portfolios without new signatures
+        run: python tools/kaw_v25_day_regression.py --out evidence/kaw_v26_20261016/ci_regression.json
+      - name: Read-only official 12-race result corroboration
+        if: github.event_name == 'pull_request'
+        run: python tools/kaw_v25_official_acquire.py --date 2026-10-16 --out evidence/kaw_v26_20261016/official_readonly
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kaw-v26-integrated-audit
+          path: evidence/kaw_v26_20261016/
       - name: R43 authority selftest
         run: python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json
