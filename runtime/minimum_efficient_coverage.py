@@ -27,6 +27,18 @@ def _hard_semantic_exclusion(reason:str)->bool:
     return any(x in u for x in HARD_SEMANTIC_EXCLUSION_MARKERS)
 
 def _active_roles(req):
+    if isinstance(req.get("runners"), list):
+        allowed = {_s(r.get("runner_id")) for r in req["runners"]}
+        static = req.get("static_prediction") or {}
+        references = set(map(_s, static.get("ranking") or [])) | set(map(_s, static.get("roles") or {}))
+        references.update(map(_s, req.get("purchased_heads") or []))
+        references.update(_s(r.get("runner_id")) for r in req.get("role_registry") or [])
+        for rows, fields in ((req.get("pair_dispositions") or [], ("head", "second")),
+                             (req.get("third_dispositions") or [], ("head", "second", "third"))):
+            references.update(_s(r.get(k)) for r in rows for k in fields)
+        outside = references - allowed
+        if outside:
+            raise MECError("RUNNER_UNIVERSE_REFERENCE_MISMATCH:" + ",".join(sorted(outside)))
     out=defaultdict(set)
     for x in req.get("role_registry") or []:
         status=ROLE_STATUS_ALIASES.get(str(x.get("status")),str(x.get("status")))

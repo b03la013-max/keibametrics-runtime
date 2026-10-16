@@ -1,0 +1,255 @@
+{
+  "observed_at": "2026-10-15T10:18:43.350853+00:00",
+  "main": "f2144c8faede33b591dd56c44dab7c3037661b06",
+  "prior_candidate": "f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+  "unreconciled_merge_tree": "65c656e35d58a28cae28d7ad6b3763e6d6056aab",
+  "scope": "CANDIDATE_ONLY_NO_PRODUCTION_CHANGE",
+  "initial_integration": "7 failed /417 passed /13 subtests",
+  "aligned_contract_before": "2 failed /18 passed; missing/nonofficial evidence incorrectly accepted",
+  "after": "424 passed /13 subtests",
+  "repair": "Keep current-main declared/ACTIVE/reason gates; check existing candidate evidence_sources against official pre-cutoff source IDs BEFORE filtering withdrawn card rows. Remove unreachable duplicate block. Align synthetic cancellation fixtures to real main reason contract. No Source Behavior B or numeric policy changes.",
+  "xml": {
+    "initial": {
+      "sha256": "ef61f669dcf4dd584926dca13944847bde9f41d54d5337b69837f1ffe51c15cf",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "7",
+          "skipped": "0",
+          "tests": "437",
+          "time": "7.758",
+          "timestamp": "2026-10-15T18:14:51.040422+08:00",
+          "hostname": "80bd7b60bd9d"
+        }
+      ],
+      "failures": [
+        {
+          "name": "test_explicit_cancelled_card_rows_do_not_enter_static",
+          "class": "tests.test_local_production_static_owner",
+          "message": "runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CANCELLATION_NOT_VERIFIED:3"
+        },
+        {
+          "name": "test_single_scratch_including_prior_top_candidate_is_removed[False]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CANCELLATION_NOT_VERIFIED:3"
+        },
+        {
+          "name": "test_single_scratch_including_prior_top_candidate_is_removed[True]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "runtime.local_production_static_owner.StaticOwnerError: OFFICIAL_CANCELLATION_NOT_VERIFIED:6"
+        },
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[missing_declared]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "AssertionError: Regex pattern did not match.\n  Expected regex: 'OFFICIAL_CARD_RUNNER_MISMATCH'\n  Actual message: 'OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH'"
+        },
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[unexplained_removal]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "AssertionError: Regex pattern did not match.\n  Expected regex: 'OFFICIAL_CARD_RUNNER_MISMATCH'\n  Actual message: 'OFFICIAL_CANCELLATION_NOT_VERIFIED:3'"
+        },
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[missing_evidence]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "AssertionError: Regex pattern did not match.\n  Expected regex: 'OFFICIAL_CARD_RUNNER_MISMATCH'\n  Actual message: 'OFFICIAL_CANCELLATION_NOT_VERIFIED:3'"
+        },
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[nonofficial_evidence]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "AssertionError: Regex pattern did not match.\n  Expected regex: 'OFFICIAL_CARD_RUNNER_MISMATCH'\n  Actual message: 'OFFICIAL_CANCELLATION_NOT_VERIFIED:3'"
+        }
+      ]
+    },
+    "before": {
+      "sha256": "c3dd64fef744a6bc7801edf15f784d5721f976c4591122ad81ad65930bc30ac0",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "2",
+          "skipped": "0",
+          "tests": "20",
+          "time": "0.538",
+          "timestamp": "2026-10-15T18:16:35.308678+08:00",
+          "hostname": "80bd7b60bd9d"
+        }
+      ],
+      "failures": [
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[missing_evidence-OFFICIAL_CARD_RUNNER_MISMATCH]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "Failed: DID NOT RAISE StaticOwnerError"
+        },
+        {
+          "name": "test_card_universe_removal_without_exact_official_basis_holds[nonofficial_evidence-OFFICIAL_CARD_RUNNER_MISMATCH]",
+          "class": "tests.test_local_production_static_owner",
+          "message": "Failed: DID NOT RAISE StaticOwnerError"
+        }
+      ]
+    },
+    "after": {
+      "sha256": "7520197cbbc3f1ff4508b3dd6f43c051814f3e2ea14a179096b664db392c09ba",
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "437",
+          "time": "6.361",
+          "timestamp": "2026-10-15T18:16:37.464806+08:00",
+          "hostname": "80bd7b60bd9d"
+        }
+      ],
+      "failures": []
+    }
+  },
+  "positive_control": {
+    "kind": "EXPLICIT_OFFLINE_POSITIVE_CONTROL_NOT_LIVE_NOT_OOS",
+    "race_id": "KM-LOCAL-KAW-20261015-R08-LIVE-R1",
+    "five_field_keys": [
+      "prediction_cutoff",
+      "race_date",
+      "race_no",
+      "scheduled_post_at",
+      "venue_id"
+    ],
+    "source_intent_keys": [
+      "analysis_only",
+      "collect_official_odds",
+      "current_authority_manifest",
+      "degraded_execution",
+      "execution_id",
+      "execution_phase",
+      "family_id",
+      "prediction_cutoff",
+      "race_date",
+      "race_id",
+      "race_no",
+      "release_buffer_seconds",
+      "release_deadline_at",
+      "require_full_numerical_authority",
+      "resolved_current_authority_manifest",
+      "scheduled_post_at",
+      "source_policy",
+      "temporal_mode",
+      "venue_id"
+    ],
+    "frozen_formal_intent_keys": [
+      "capital_policy",
+      "collect_official_odds",
+      "current_authority_manifest",
+      "degraded_execution",
+      "execution_id",
+      "execution_phase",
+      "family_id",
+      "pair_dispositions",
+      "prediction_cutoff",
+      "production_numerical_claim",
+      "race",
+      "race_date",
+      "race_id",
+      "race_no",
+      "release_buffer_seconds",
+      "release_deadline_at",
+      "require_full_numerical_authority",
+      "required_indices",
+      "resolved_current_authority_manifest",
+      "role_registry",
+      "run_count",
+      "runners",
+      "scheduled_post_at",
+      "seed",
+      "source_policy",
+      "static_prediction",
+      "static_prediction_frozen",
+      "temporal_mode",
+      "third_dispositions",
+      "venue_canon",
+      "venue_id",
+      "venue_prediction_context"
+    ],
+    "SOURCE_execution_phase": "SOURCE",
+    "formal_execution_phase": "AUTO",
+    "transformation": "local_race_key_intake.build -> local_race_entry.run -> signed SOURCE -> build_formal_static -> formal_intents/{execution_id}.json -> normalize_single_entry_intent -> FINAL checkpoint",
+    "comparisons": {
+      "ranking": true,
+      "roles": true,
+      "pair_dispositions": true,
+      "third_dispositions": true
+    },
+    "original72_unchanged": true,
+    "network_requests": 0,
+    "krs_calls": 0,
+    "signer_calls": 0,
+    "new_final": 0,
+    "registry_writes": 0
+  },
+  "registry_contract": {
+    "matrix": {
+      "include": [
+        {
+          "intent_path": "runtime/formal_intents/KM-LOCAL-KAW-20261015-R08-LIVE-R1.json",
+          "execution_id": "KM-LOCAL-KAW-20261015-R08-LIVE-R1"
+        }
+      ]
+    },
+    "owner_submit_preflight": [
+      "runtime/formal_intents/KM-LOCAL-KAW-20261015-R08-LIVE-R1.json",
+      "935af9e432214ad78c6ee72a1ee82d3f6ef5df3ed3a74ea447f536c5705b6185"
+    ],
+    "normalization_adds_final_prediction_package": true,
+    "external_requests": 0,
+    "registry_writes": 0,
+    "live_claim": false
+  },
+  "test_files": [
+    "tests/test_local_source_first_entry.py",
+    "tests/test_local_production_static_owner.py",
+    "tests/test_minimum_efficient_coverage.py",
+    "tests/test_jra_static_owner_executable.py",
+    "tests/test_jra_production_auto_handoff.py",
+    "tests/test_nar_runner_universe.py",
+    "tests/test_nar_source_manifest.py",
+    "tests/test_local_numerical_authority_gate.py",
+    "tests/test_local_production_numerical_closure.py",
+    "tests/test_phase_b_utility.py",
+    "tests/test_phase_b1_forward.py",
+    "tests/test_phase_b2_authority.py",
+    "tests/test_local_fullnumerical_candidate_v01.py",
+    "tests/test_pfs_grand_review.py",
+    "tests/test_krs_prediction_utility.py",
+    "tests/test_krs_oos_promotion_gate.py",
+    "tests/test_common_exact_continuity_shadow.py",
+    "tests/test_family_pfs_improvement.py",
+    "tests/test_ohi_20261008_result_reflection_regression.py",
+    "tests/test_nar_auxiliary_evidence.py",
+    "tests/test_jra_ticket_tree_renderer.py",
+    "tests/test_persist_local_checkpoints_scratch.py",
+    "tests/test_local_race_key_shadow_owner.py",
+    "tests/test_local_race_key_ingress.py",
+    "tests/test_formal_execution_orchestrator.py",
+    "tests/test_recovery_result_entry.py",
+    "tests/test_local_static_input_resolver.py",
+    "tests/test_local_jra_execution_guarantees.py",
+    "tests/test_formal_single_entry_intent_completeness.py",
+    "tests/test_local_formal_owner_submitter.py",
+    "tests/test_local_production_numerical_v1.py",
+    "tests/test_family_authority_guard.py",
+    "tests/test_execution_store.py",
+    "tests/test_family_runtime_contract.py",
+    "tests/test_entry_transport_fallback.py",
+    "tests/test_aki_adaptive_oos_tracker.py",
+    "tests/test_correctness_closure.py",
+    "tests/test_execution_workflow_contract.py",
+    "tests/test_local_krs_technical_proxy_from_source.py",
+    "tests/test_formal_import_closure.py",
+    "tests/test_source_acquisition_consolidation.py",
+    "tests/test_local_dual_shadow_workflow_contract.py",
+    "tests/test_execution_gateway.py",
+    "tests/test_execution_gateway_canary_status.py",
+    "tests/test_formal_failure_diagnostics.py",
+    "tests/test_local_evidence_acquisition_roundtrip.py"
+  ]
+}

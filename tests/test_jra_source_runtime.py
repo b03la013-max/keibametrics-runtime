@@ -34,7 +34,10 @@ def test_tsl_parser():
     assert x["runners"][0]["win_vote"]["value"]==20.1
 
 def test_source_allowlist_is_jra_family_isolated_and_contains_tsl():
-    import source_acquisition as s
+    import importlib.util
+    spec=importlib.util.spec_from_file_location("jra_test_source_acquisition", ROOT/"source_acquisition.py")
+    s=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(s)
     assert s._host_allowed("www.jra.go.jp")
     assert s._host_allowed("www.jma.go.jp")
     assert s._host_allowed("jra.k-ba.net")
@@ -143,7 +146,7 @@ def test_jra_official_race_context_parser():
 
 
 def test_jra_source_identity_binding():
-    from app import _bind_source_identity
+    from runtime.jra_source_runtime.jra_source_identity import bind_source_identity as _bind_source_identity
     a={"profile":"X"}
     ctx={"family_id":"JRA","venue_id":"NKY","race_date":"2026-09-22","race_no":10}
     x=_bind_source_identity(a,"20260922-NKY-R10",ctx)

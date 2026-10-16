@@ -13,6 +13,13 @@ class ProductionMappingError(ValueError):
     pass
 
 
+# Owner-authorized (2026-10-11, Current Authority R48): Art.3 DCR handling of
+# officially unpublished information instead of the coverage hard stop.
+DCR_POLICY_ID = "KM-JRA-DCR-ART3-INFORMATION-POLICY-20261011"
+# Strict-mode switch for regression tests / owner revocation drills only.
+DCR_INFORMATION_POLICY_ENABLED = __import__("os").environ.get("KM_JRA_DCR_ART3_POLICY", "1") != "0"
+
+
 def _sha(obj):
     raw = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
@@ -48,6 +55,16 @@ def _feature_score(feature_name, features, mapping):
         return None
     if not isinstance(spec, dict):
         raise ProductionMappingError(f"FEATURE_NOT_OBJECT:{feature_name}")
+    # Authority firewall for inputs supplied outside the trusted source compiler.
+    # The absence of an optional authority annotation retains legacy authorized
+    # supplemental ledgers, but any explicit non-Production marker fails closed.
+    if spec.get("candidate_only") is True or spec.get("production_authority") is False:
+        raise ProductionMappingError(f"NON_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
+    if spec.get("result_derived") is True:
+        raise ProductionMappingError(f"RESULT_DERIVED_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
+    authority = str(spec.get("source_authority") or "").upper()
+    if authority and ("SHADOW" in authority or "TSL" in authority or "NON_PRODUCTION" in authority):
+        raise ProductionMappingError(f"SHADOW_SOURCE_PRODUCTION_FEATURE_FORBIDDEN:{feature_name}")
     category = str(spec.get("category") or "").strip().upper()
     scale = mapping["category_scale"]
     if category not in scale:
@@ -100,9 +117,37 @@ def _weighted_index(index, profile, features, mapping):
 
     minimum = float(mapping["profiles"][profile]["minimum_index_coverage_weight"])
     if covered + 1e-12 < minimum:
-        raise ProductionMappingError(
-            f"INDEX_EVIDENCE_COVERAGE_LOW:{profile}:{index}:{covered:.6f}<{minimum:.6f}"
-        )
+        if not DCR_INFORMATION_POLICY_ENABLED:
+            raise ProductionMappingError(
+                f"INDEX_EVIDENCE_COVERAGE_LOW:{profile}:{index}:{covered:.6f}<{minimum:.6f}"
+            )
+        # ケイバメトリクス中央版 v1.1 第3条 (DCR), owner-authorized 2026-10-11:
+        # information that the official sources do not publish is "unknown =
+        # 50" scaled by the acquired-information share, i.e. reliability loss,
+        # never ability loss and never an invented observation. Only ABSENT
+        # features qualify; an invalid / non-Production feature already raised.
+        total = sum(float(w) for w in weights.values())
+        dcr = covered / total if total > 0 else 0.0
+        raw = numerator / covered if covered > 0 else 50.0
+        value = 50.0 + (raw - 50.0) * dcr
+        missing = [f for f in weights if features.get(f) is None]
+        return {
+            "value": round(value, 6),
+            "rule_id": f"KM-JRA-DCR-ART3-INFORMATION-INSUFFICIENT-{profile}-{index}-v1",
+            "mapping_version": mapping["mapping_id"],
+            "evidence_refs": sorted(set(evidence_refs)) + [
+                f"{DCR_POLICY_ID}:{index}:OFFICIALLY_UNPUBLISHED:" + ",".join(missing)],
+            "source_fact": (" | ".join(source_facts) + " | " if source_facts else "")
+                           + f"ART3_DCR: acquired_share={dcr:.3f}; raw={raw:.3f}; "
+                             f"value=50+(raw-50)*DCR; unpublished={','.join(missing)}",
+            "adjustments": [{"type": "ART3_DCR_INFORMATION_INSUFFICIENT", "dcr": round(dcr, 6),
+                             "raw_value": round(raw, 6), "unpublished_features": missing}],
+            "components": components,
+            "coverage_weight": round(covered, 6),
+            "profile": profile,
+            "information_status": "INFORMATION_INSUFFICIENT_DCR_ART3",
+            "dcr": round(dcr, 6),
+        }
 
     value = numerator / covered
     return {
@@ -180,8 +225,89 @@ def _dcr_for_runner(runner, profile, features, mapping):
             )
             continue
 
+        if DCR_INFORMATION_POLICY_ENABLED:
+            # DCR is the weighted share of ACQUIRED information (第3条): a
+            # component whose information was not published earns 0 points.
+            out[name] = _dcr_component(
+                0, maximum, [f"{runner.get('runner_id')}:{DCR_POLICY_ID}:{name}:NOT_ACQUIRED"],
+                "Information for this DCR component was not published pre-race; 0 reliability points (Art.3).",
+                "KM-JRA-DCR-ART3-COMPONENT-NOT-ACQUIRED-v1"
+            )
+            continue
         raise ProductionMappingError(f"DCR_COMPONENT_UNRESOLVED:{runner.get('runner_id')}:{name}")
     return out
+
+
+def evaluate_partial_production_base_indices(race_id, runners, mapping):
+    """Run authorized *existing* Base13 evaluators independently, without fill.
+
+    A partial value is a diagnostic calculation, not a FULL_REQUIRED closure,
+    a Static Prediction, or an externally signed Production receipt.
+    """
+    if not race_id or not isinstance(runners, list) or len(runners) < 2:
+        raise ProductionMappingError("PARTIAL_BASE_RACE_OR_UNIVERSE_INVALID")
+    if not str(mapping.get("status") or "").startswith("PRODUCTION"):
+        raise ProductionMappingError("MAPPING_NOT_PRODUCTION")
+    if str(mapping.get("mapping_id") or "") == "":
+        raise ProductionMappingError("MAPPING_ID_MISSING")
+    seen = set()
+    rows = {}
+    calculated = blocked = 0
+    for runner in runners:
+        rid = str(runner.get("runner_id") or "")
+        if not rid or rid in seen:
+            raise ProductionMappingError("PARTIAL_BASE_RUNNER_ID_INVALID_OR_DUPLICATE")
+        seen.add(rid)
+        cells = {}
+        try:
+            profile = _profile_for_runner(runner)
+            profile_error = None
+        except (ProductionMappingError, ValueError, TypeError) as exc:
+            profile = None
+            profile_error = str(exc)
+        features = runner.get("evidence_features")
+        for idx in BASE:
+            if profile is None or not isinstance(features, dict):
+                calculated_cell = None
+                reason = profile_error or f"EVIDENCE_FEATURES_MISSING:{rid}"
+            else:
+                try:
+                    calculated_cell = _weighted_index(idx, profile, features, mapping)
+                    reason = None
+                except (ProductionMappingError, ValueError, TypeError) as exc:
+                    calculated_cell = None
+                    reason = str(exc)
+            if calculated_cell is not None:
+                calculated += 1
+                cells[idx] = {
+                    "status": "CALCULATED",
+                    "value": calculated_cell["value"],
+                    "rule_id": calculated_cell["rule_id"],
+                    "mapping_version": calculated_cell["mapping_version"],
+                    "evidence_refs": calculated_cell["evidence_refs"],
+                    "source_fact": calculated_cell["source_fact"],
+                    "components": calculated_cell["components"],
+                    "coverage_weight": calculated_cell["coverage_weight"],
+                }
+            else:
+                blocked += 1
+                cells[idx] = {"status": "BLOCKED", "value": None, "reason": reason}
+        rows[rid] = {"profile": profile, "indices": cells}
+    report = {
+        "race_id": race_id,
+        "schema": "KM-JRA-PRODUCTION-BASE13-PARTIAL-CALCULATION-DIAGNOSTIC-v1",
+        "mapping_id": mapping["mapping_id"],
+        "required_base_cells": len(runners) * len(BASE),
+        "calculated_base_cells": calculated,
+        "blocked_base_cells": blocked,
+        "runners": rows,
+        "full20_authority": False,
+        "static_prediction_authority": False,
+        "signed_receipt": False,
+        "never_substitute_missing": True,
+    }
+    report["sha256"] = _sha(report)
+    return report
 
 
 def build_production_ledger(race_id, runners, mapping):

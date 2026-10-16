@@ -13,12 +13,15 @@ from local_evidence_acquisition_roundtrip import enforce_before_numerical, Evide
 from formal_failure_diagnostics import failure_class_for, resume_hint_for
 from formal_oos_policy import request_oos_policy
 from capital_policy import load_family_default_capital_policy
+from local_prestart_gate import validate_window, PrestartError
 
 def sha_obj(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
 def parse_dt(s):
     return datetime.datetime.fromisoformat(str(s).replace("Z","+00:00"))
+
+RUNTIME_OUT = os.environ.get("KM_RUNTIME_OUT", "runtime_out")
 
 with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
     raw_req=json.load(f)
@@ -62,9 +65,9 @@ resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
 
-os.makedirs("runtime_out",exist_ok=True)
+os.makedirs(RUNTIME_OUT,exist_ok=True)
 def persist(name,obj):
-    with open(os.path.join("runtime_out",name),"w",encoding="utf-8") as wf:
+    with open(os.path.join(RUNTIME_OUT,name),"w",encoding="utf-8") as wf:
         json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 def fail_closed(code,details=None):
@@ -311,6 +314,11 @@ formal_release_deadline_utc=None
 if temporal_mode=="FORMAL-PRE-RACE":
     if not scheduled:
         fail_closed("SCHEDULED_POST_AT_REQUIRED")
+    if fam == "LOCAL":
+        try:
+            validate_window(req, phase="SOURCE" if phase == "SOURCE" else "FORMAL")
+        except PrestartError as exc:
+            fail_closed(str(exc))
     post_dt=parse_dt(scheduled).astimezone(datetime.timezone.utc)
     if release_deadline:
         deadline_dt=parse_dt(release_deadline).astimezone(datetime.timezone.utc)
@@ -1459,7 +1467,7 @@ persist("canonical_ticket.json",{
     "finalized":True,"no_bet":no_bet,"total_investment":total,"tickets":tickets,
     "frozen_at":final_freeze,"execution_id":execution_id,"race_id":rid})
 if req.get("mandatory_lifecycle_completion_required") is True:
-    gate=verify_execution_completion(pathlib.Path("runtime_out"),req,before_final=True)
+    gate=verify_execution_completion(pathlib.Path(RUNTIME_OUT),req,before_final=True)
     persist("mandatory_stage_manifest.json",gate)
     if gate["complete"] is not True:
         fail_closed("MANDATORY_STAGE_INCOMPLETE_BEFORE_FINAL",gate)
@@ -1497,7 +1505,7 @@ persist("final_before_post_verification.json",{
     "final_receipt_sha256":final_sha,"final_timestamp":final_time.isoformat(),
     "scheduled_post_at":scheduled,"temporal_mode":temporal_mode})
 if req.get("mandatory_lifecycle_completion_required") is True:
-    gate=verify_execution_completion(pathlib.Path("runtime_out"),req)
+    gate=verify_execution_completion(pathlib.Path(RUNTIME_OUT),req)
     persist("lifecycle_completion.json",gate)
     if gate["complete"] is not True:
         fail_closed("MANDATORY_STAGE_INCOMPLETE_AFTER_FINAL",gate)
@@ -1511,7 +1519,7 @@ try:
     from local_candidate_postresult import build_forward_capture
     inventory={}
     for name in ["source_receipt_envelope.json","final_receipt_envelope.json","candidate_numerical_shadow_summary.json","krs_prediction_utility.json","mec_r4_shadow_pre_result.json","local_mec_r5_shadow_pre_result.json","aki_adaptive_purchase_shadow_pre_result.json","common_exact_continuity_shadow_pre_result.json","family_conversion_diagnostics_pre_result.json"]:
-        path=os.path.join("runtime_out",name)
+        path=os.path.join(RUNTIME_OUT,name)
         if os.path.isfile(path):
             with open(path,"rb") as frozen_file:inventory[name]={"sha256":hashlib.sha256(frozen_file.read()).hexdigest()}
         else:inventory[name]={"status":"MISSING_NOT_ZERO"}
@@ -1722,10 +1730,10 @@ if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None or candi
     })
 
 # Persist complete signed envelopes for immutable post-race RESULT linkage.
-os.makedirs("runtime_out",exist_ok=True)
+os.makedirs(RUNTIME_OUT,exist_ok=True)
 for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelope.json",pre),
                ("krs_receipt_envelope.json",run),("final_receipt_envelope.json",fin)):
-    with open(os.path.join("runtime_out",nm),"w",encoding="utf-8") as wf:
+    with open(os.path.join(RUNTIME_OUT,nm),"w",encoding="utf-8") as wf:
         json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
 result_summary=None

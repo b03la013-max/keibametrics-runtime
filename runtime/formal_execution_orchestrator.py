@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, "runtime")
 
 from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
+from local_prestart_gate import validate_window, PrestartError
 from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
 from formal_import_closure import FormalImportClosureError, build_closure
 from family_authority_guard import load_authority, validate_request_context, verify_execution_completion
@@ -734,6 +735,22 @@ def _validate_explicit_result_revision(
     }
 
 
+def validate_source_checkpoint(directory: pathlib.Path, request: Dict[str, Any]) -> None:
+    envelope_path = pathlib.Path(directory) / "source_receipt_envelope.json"
+    verification_path = pathlib.Path(directory) / "source_verification.json"
+    if not envelope_path.is_file() or not verification_path.is_file():
+        raise FormalOrchestrationError("SOURCE_CHECKPOINT_RECEIPT_OR_VERIFICATION_MISSING")
+    envelope, verification = _load(envelope_path), _load(verification_path)
+    receipt = envelope.get("receipt") or {}
+    if (receipt.get("phase") != "SOURCE" or receipt.get("status") != "SOURCE_FROZEN"
+            or receipt.get("family") != "LOCAL" or receipt.get("race_id") != request.get("race_id")
+            or not envelope.get("receipt_sha256") or not envelope.get("signature")
+            or verification.get("valid") is not True or verification.get("verified") is not True
+            or verification.get("signature_valid") is not True or verification.get("artifact_valid") is not True
+            or (envelope.get("artifact") or {}).get("formal_ready") is not True):
+        raise FormalOrchestrationError("SOURCE_CHECKPOINT_RECEIPT_OR_VERIFICATION_INVALID")
+
+
 def run_phase(
     request: Dict[str, Any],
     phase: str,
@@ -769,6 +786,7 @@ def run_phase(
             raise FormalOrchestrationError("RESULT_RECOVERY_MANIFEST_REQUIRED")
         store_run_id += "-recovery-" + manifest_sha[:12]
     env["REQUEST_FILE"] = str(request_path.resolve())
+    env["KM_RUNTIME_OUT"] = str(runtime_out.resolve())
     proc = subprocess.run(
         ([sys.executable, "-m", "runtime.local_result_from_signed_final", str(request_path)]
          if str(phase).upper() == "RESULT" else
@@ -807,6 +825,8 @@ def run_phase(
             sort_keys=True,
         ))
 
+    if str(phase).upper() == "SOURCE":
+        validate_source_checkpoint(runtime_out, request)
     phase_copy = tmp_root / execution_id / f"{phase.lower()}_out"
     _copy_json_dir(runtime_out, phase_copy)
     if str(phase).upper() == "SOURCE":
@@ -851,24 +871,27 @@ def orchestrate(
     # RESULT is a later invocation of the same entry, never an attempt to
     # reacquire SOURCE or recompute a historical prediction.
     phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
-    # SOURCE-only is explicit analysis/prewarm work, never full completion.
-    if phase in {"SOURCE", "SOURCE_ACQUIRE"} and intent.get("analysis_only") is True:
+    # An explicitly requested SOURCE phase must never silently become FORMAL.
+    # Its signed receipt is reusable, but it is NOT a full lifecycle FINAL.
+    if phase in {"SOURCE", "SOURCE_ONLY", "SOURCE_ACQUIRE", "SOURCE-FREEZE", "SOURCE_FREEZE"}:
         execution_id = derive_execution_id(intent)
         saved = resolve_phase(execution_id, "SOURCE")
         if saved is not None:
             if source_checkpoint_compatibility(intent, saved).get("status") != "PASS":
                 raise FormalOrchestrationError("SOURCE_CHECKPOINT_INCOMPATIBLE")
-            return {"status": "SOURCE_PASS", "execution_id": execution_id, "completion": False}
+            validate_source_checkpoint(pathlib.Path(saved["run_dir"]), intent)
+            return {"status": "SOURCE_PASS", "execution_id": execution_id,
+                    "phase": "SOURCE", "execution_class": "SOURCE_ONLY",
+                    "signed_source_verified": True, "completion": False}
         if plan_only:
             return {"status": "PLANNED", "execution_id": execution_id, "phases": ["SOURCE"]}
+        check_deadline(intent, phase="SOURCE")
         acquired = run_phase(build_phase_request(intent, "SOURCE"), "SOURCE", run_id=run_id,
                              github_sha=github_sha, runtime_out=runtime_out, tmp_root=tmp_root)
         return {"status": "SOURCE_PASS", "execution_id": execution_id,
+                "phase": "SOURCE", "execution_class": "SOURCE_ONLY",
+                "signed_source_verified": True,
                 "phases": [acquired], "completion": False}
-    if phase in {"SOURCE", "SOURCE_ACQUIRE"}:
-        intent = copy.deepcopy(intent)
-        intent.pop("execution_phase", None)
-        intent.pop("phase", None)
 
     if phase in {"RESULT", "POST_RACE", "POST-RACE", "SETTLEMENT"}:
         execution_id = derive_execution_id(intent)
@@ -1047,7 +1070,8 @@ def orchestrate(
         return report
 
     try:
-        check_deadline(intent)
+        current_phase = "SOURCE" if plan["action"] == "RUN_SOURCE_THEN_FORMAL" else "FORMAL"
+        check_deadline(intent, phase=current_phase)
         if plan["action"] == "RUN_SOURCE_THEN_FORMAL":
             source_req = build_phase_request(intent, "SOURCE")
             report["phases"].append(run_phase(
@@ -1065,8 +1089,8 @@ def orchestrate(
                 "checkpoint": plan["checkpoints"]["source"],
             })
 
-        check_deadline(intent)
         current_phase = "FORMAL"
+        check_deadline(intent)
         formal_req = bind_formal_request_to_source(build_phase_request(intent, "FORMAL"))
         if formal_req.get("source_authoritative_reconciliation"):
             report["source_authoritative_reconciliation"] = formal_req[
@@ -1099,6 +1123,11 @@ def orchestrate(
                 "detail": str(exc),
                 "resume_hint": "RETRY_SAME_EXECUTION_ID",
             }
+        if not isinstance(failure, dict):
+            failure = {"detail": str(failure)}
+        failure["phase"] = failure.get("phase") or locals().get("current_phase", "SOURCE")
+        failure["code"] = failure.get("code") or failure.get("detail") or "ORCHESTRATION_FAILED"
+        failure["failure_class"] = failure.get("failure_class") or "ORCHESTRATION"
         code = str(failure.get("code") or failure.get("detail") or "")
         if "OWNER" in code:
             report["dependency_failure"] = failure.get("detail") or code
@@ -1124,17 +1153,29 @@ def completion_exit_code(report: Dict[str, Any]) -> int:
     return 2
 
 
-def check_deadline(intent: Dict[str, Any]) -> None:
-    if str(intent.get("temporal_mode") or "FORMAL-PRE-RACE").upper() != "FORMAL-PRE-RACE":
-        return
-    post = intent.get("scheduled_post_at")
-    if not post:
-        raise FormalOrchestrationError("SCHEDULED_POST_AT_REQUIRED")
-    deadline = intent.get("release_deadline_at")
-    end = _parse_iso(deadline) if deadline else _parse_iso(post) - dt.timedelta(
-        seconds=int(intent.get("release_buffer_seconds") or 120))
-    if dt.datetime.now(dt.timezone.utc) >= end.astimezone(dt.timezone.utc):
-        raise FormalOrchestrationError("DEADLINE_HOLD:FORMAL_INCOMPLETE")
+def phase_exit_code(report: Dict[str, Any], intent: Dict[str, Any]) -> int:
+    """An explicitly requested verified SOURCE succeeds as a phase, never a FINAL.
+
+    Keep completion_exit_code strict for formal consumers and any non-SOURCE path.
+    A returned SOURCE_PASS must be the orchestrator's externally verified receipt,
+    not an unverified report or a forged full-lifecycle completion.
+    """
+    phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
+    source_phases = {"SOURCE", "SOURCE_ONLY", "SOURCE_ACQUIRE", "SOURCE-FREEZE", "SOURCE_FREEZE"}
+    if (phase in source_phases and report.get("status") == "SOURCE_PASS"
+            and report.get("phase") == "SOURCE"
+            and report.get("execution_class") == "SOURCE_ONLY"
+            and report.get("signed_source_verified") is True
+            and report.get("completion") is False):
+        return 0
+    return completion_exit_code(report)
+
+
+def check_deadline(intent: Dict[str, Any], *, phase: str = "FORMAL") -> None:
+    try:
+        validate_window(intent, phase=phase)
+    except PrestartError as exc:
+        raise FormalOrchestrationError(str(exc)) from exc
 
 
 def run_formal_with_fallback(request, phase, **kwargs):
@@ -1212,6 +1253,26 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if not _official_result_identity_matches(page_text, race_context):
         raise FormalOrchestrationError("OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD")
     tables = _html_tables(html)
+    # Cancellation/exclusion rows have no numeric finishing position and are
+    # omitted by the shared finish parser. Do not silently settle their frozen
+    # exposure as a loss: this flat payout path has no refund accounting.
+    # Use the result table's explicit status, not incidental page text. A horse
+    # already excluded from the frozen active universe cannot create exposure.
+    frozen_runners = set(map(str, runner_ids))
+    for table in tables:
+        if not table or not {"着順", "馬番", "馬名"}.issubset(set(table[0])):
+            continue
+        status_index, horse_index = table[0].index("着順"), table[0].index("馬番")
+        for row in table[1:]:
+            if len(row) <= status_index:
+                continue
+            status = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[status_index]))
+            if status not in {"取消", "除外", "出走取消", "競走除外"}:
+                continue
+            horse = (re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[horse_index]))
+                     if len(row) > horse_index else "")
+            if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
+                raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
@@ -1389,7 +1450,7 @@ def main() -> int:
                   "execution_id": derive_execution_id(intent), "first_failed_code": str(exc)}
     _write(pathlib.Path(args.output), report)
     print("KM_FORMAL_SINGLE_ENTRY_RESULT=" + json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    return completion_exit_code(report)
+    return phase_exit_code(report, intent)
 
 
 if __name__ == "__main__":

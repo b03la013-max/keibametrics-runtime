@@ -1,0 +1,323 @@
+{
+  "kind": "AKI_COMPONENT_MAPPING",
+  "family_id": "JRA",
+  "production_authority": true,
+  "mapping_version": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011",
+  "validation_status": "OWNER_AUTHORIZED / UNVALIDATED",
+  "enactment_basis": "Owner explicitly requested creation from zero; new weights, not inherited empirical estimates.",
+  "feature_compiler_policy": {
+    "required_indices": [
+      "BVI",
+      "BWI",
+      "CFI",
+      "CSI",
+      "DCR",
+      "F3S",
+      "GCI",
+      "HPI",
+      "JTI",
+      "KGI",
+      "PRI",
+      "RFI",
+      "SRI",
+      "SSI",
+      "T3I",
+      "TPI",
+      "TRI",
+      "VMI",
+      "ZAI_PLACE",
+      "ZAI_WIN"
+    ],
+    "dispersion_floor": 1.0,
+    "near_gap": 0.5,
+    "separation_edges": [
+      0.25,
+      0.75
+    ],
+    "density_edges": [
+      2,
+      5
+    ],
+    "quality_edges": [
+      60,
+      75
+    ],
+    "support_floor": 65,
+    "role_quality_floor": 60,
+    "tail_threat_gap": 1.5,
+    "tail_threat_edges": [
+      1,
+      3
+    ],
+    "discordance_edges": [
+      0.1,
+      0.3
+    ],
+    "external_change_edges": [
+      0.1,
+      0.3
+    ],
+    "axis_evidence_groups": {
+      "axis_reliability": [
+        "DCR"
+      ],
+      "axis_condition": [
+        "RFI",
+        "BWI"
+      ],
+      "axis_fit": [
+        "CFI",
+        "GCI"
+      ],
+      "axis_tactics": [
+        "PRI",
+        "TPI"
+      ]
+    },
+    "support_groups": {
+      "W": [
+        "RFI",
+        "CFI",
+        "PRI"
+      ],
+      "P2": [
+        "RFI",
+        "CFI",
+        "TPI"
+      ],
+      "P3": [
+        "RFI",
+        "CFI",
+        "F3S"
+      ]
+    },
+    "column_gap": {
+      "W": {
+        "BASE": 0.35,
+        "REVIEW": 1.0
+      },
+      "P2": {
+        "BASE": 0.8,
+        "REVIEW": 1.5
+      },
+      "P3": {
+        "BASE": 1.2,
+        "REVIEW": 2.0
+      }
+    },
+    "scale_definition": "Upper half (ceil(n/2)) population SD, floor 1.0; W anchor top W, P2 anchor best P2 excluding top W, P3 anchor best P3 excluding both.",
+    "external_min_interval_seconds": 60
+  },
+  "axes": {
+    "W-AKI": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:W-AKI",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "W_separation",
+          "category_map": {
+            "LOW": 40,
+            "MID": 20,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "W_density",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        },
+        {
+          "feature": "axis_condition",
+          "category_map": {
+            "LOW": 10,
+            "MID": 5.0,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_fit",
+          "category_map": {
+            "LOW": 10,
+            "MID": 5.0,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_tactics",
+          "category_map": {
+            "LOW": 10,
+            "MID": 5.0,
+            "HIGH": 0
+          }
+        }
+      ]
+    },
+    "P2-AKI": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:P2-AKI",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "P2_separation",
+          "category_map": {
+            "LOW": 40,
+            "MID": 20,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "P2_density",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        },
+        {
+          "feature": "P2_tail_threats",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        }
+      ]
+    },
+    "P3-AKI": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:P3-AKI",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "P3_separation",
+          "category_map": {
+            "LOW": 40,
+            "MID": 20,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "P3_density",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        },
+        {
+          "feature": "P3_tail_threats",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        }
+      ]
+    },
+    "ASI": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:ASI",
+      "formula": "100_MINUS_SUM",
+      "terms": [
+        {
+          "feature": "W_separation",
+          "category_map": {
+            "LOW": 40,
+            "MID": 20,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_reliability",
+          "category_map": {
+            "LOW": 20,
+            "MID": 10.0,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_condition",
+          "category_map": {
+            "LOW": 15,
+            "MID": 7.5,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_fit",
+          "category_map": {
+            "LOW": 15,
+            "MID": 7.5,
+            "HIGH": 0
+          }
+        },
+        {
+          "feature": "axis_tactics",
+          "category_map": {
+            "LOW": 10,
+            "MID": 5.0,
+            "HIGH": 0
+          }
+        }
+      ]
+    },
+    "RSI": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:RSI",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "rank_discordance",
+          "category_map": {
+            "LOW": 0,
+            "MID": 25,
+            "HIGH": 50
+          }
+        },
+        {
+          "feature": "W_density",
+          "category_map": {
+            "LOW": 0,
+            "MID": 15,
+            "HIGH": 30
+          }
+        },
+        {
+          "feature": "source_conflict",
+          "category_map": {
+            "LOW": 0,
+            "MID": 20,
+            "HIGH": 20
+          }
+        }
+      ]
+    },
+    "external_change": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:external_change",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "external_state",
+          "category_map": {
+            "LOW": 0,
+            "MID": 50,
+            "HIGH": 100,
+            "UNOBSERVABLE": 100
+          }
+        }
+      ]
+    },
+    "solid_finish_correction": {
+      "rule_id": "JRA-AKI-V2.1-OWNER-ENACTED-v1.0-20261011:solid_finish_correction",
+      "formula": "SUM",
+      "terms": [
+        {
+          "feature": "solid_confirmation",
+          "category_map": {
+            "CONFIRMED": 10,
+            "NOT_CONFIRMED": 0
+          }
+        }
+      ]
+    }
+  }
+}

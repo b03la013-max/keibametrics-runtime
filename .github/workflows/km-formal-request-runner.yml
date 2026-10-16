@@ -74,6 +74,7 @@ jobs:
           from jra_index_provenance_builder import materialize_index_provenance
           from jra_evidence_to_base_production import load_mapping as load_production_mapping, attach_production_ledger_to_request
           from jra_krs_input_builder_production import build_krs_input
+          from jra_production_krs_contract import production_krs_payload, assert_production_krs_receipt
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import MEC_PROFILE, build_mec_plan, validate_mec_plan
           from evidence_feature_compiler import compile_evidence_feature_ledger
@@ -81,6 +82,8 @@ jobs:
           from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
           from jra_zero_touch_source_index_orchestrator import build_zero_touch_source_index_report
           from capital_policy import resolve_capital_policy
+          from jra_aki_capital_preflight import verify_aki_ticket_binding
+          from jra_aki_dispatch import apply_authorized_v21
           from mec_r4_shadow import build_mec_r4_shadow
           from jra_execution_maturity_bridge import verify_formal_request_binding
           from entry_transport_fallback import validate_fallback_request
@@ -96,6 +99,10 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+          # AKI v2.1 binds its Full20 dependency hash to the runners exactly as
+          # handed off. Later runner annotations (source shadow observations,
+          # rule-evaluator inputs) must not alter that recomputation input.
+          aki_signed_runners=json.loads(json.dumps(req.get("runners")))
           fallback_validation=validate_fallback_request(req)
           maturity_binding=None
 
@@ -280,6 +287,23 @@ jobs:
           stage_manifest={}
           def stage(name, **evidence):
               stage_manifest[name]={"status":"PASS", **evidence}
+
+          active_aki=(((resolved_authority_obj.get("family_scoped_authority") or {}).get("JRA") or {}).get("aki_v21_activation") or {})
+          if req.get("family_id")=="JRA" and active_aki and temporal_mode_early=="FORMAL-PRE-RACE":
+              assert req.get("aki_calculation_requirement")=="OFFICIAL_V2_1", "ACTIVE_OFFICIAL_AKI_CANNOT_DOWNGRADE_TO_PROXY"
+
+          if req.get("aki_calculation_requirement")=="OFFICIAL_V2_1" or (req.get("static_prediction") or {}).get("aki_jra_v21"):
+              assert req.get("aki_calculation_requirement")=="OFFICIAL_V2_1", "OFFICIAL_AKI_REQUIREMENT_MISSING"
+              assert req.get("source_snapshot_sha256") and "source_artifact" in globals(), "OFFICIAL_AKI_SIGNED_SOURCE_REQUIRED"
+              rebuilt_aki=apply_authorized_v21({**req,"runners":aki_signed_runners},source_artifact,resolved_authority_obj,root=".")
+              for field in ("official_aki_package","official_aki_verification","aki_compiler_receipt","aki_information_gate","aki_column_selection",
+                            "role_registry","pair_dispositions","third_dispositions","purchased_heads"):
+                  assert rebuilt_aki.get(field)==req.get(field), "OFFICIAL_AKI_PRE_KRS_RECOMPUTATION_MISMATCH:"+field
+              assert rebuilt_aki["static_prediction"]["roles"]==req["static_prediction"]["roles"], "OFFICIAL_AKI_STATIC_ROLES_MISMATCH"
+              assert rebuilt_aki["static_prediction"]["aki_jra_v21"]==req["static_prediction"]["aki_jra_v21"], "OFFICIAL_AKI_STATIC_AXES_MISMATCH"
+              stage("OFFICIAL_AKI_V21_PRE_KRS_VERIFIED",
+                    package_sha256=req["official_aki_package"]["sha256"],
+                    selection_sha256=req["aki_column_selection"]["sha256"])
 
           if fallback_validation.get("status")=="PASS":
               stage("ENTRY_TRANSPORT_FALLBACK_VERIFIED",
@@ -509,23 +533,13 @@ jobs:
 
           # Real KRS execution. The runtime's parameter_map_sha256 is Engine-side params,
           # not the JRA Static->HSV formal adapter identity.
-          kinput=req["krs_input_data"]
-          sim=kinput.setdefault("simulation",{})
-          sim["run_count"]=int(req.get("run_count",5000))
-          sim["master_seed"]=int(req["seed"])
-          kpayload={
-            "race_id":race_id,
-            "input_data":kinput,
-            "mode":req.get("mode","SIM-STD"),
-            "seed":int(req["seed"]),
-            "input_class":"FORMAL-LIVE-"+adapter_mode
-          }
+          kpayload=production_krs_payload(req)
           kcode,k=call(KRS,"/krs/execute",kpayload,timeout=360)
-          run=k.get("run_receipt",{})
-          rr=run.get("receipt",{})
-          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
-          assert rr.get("engine_sha256")==ENGINE_SHA, "ENGINE_SHA_RUNTIME_MISMATCH"
-          assert int(rr.get("actual_run_count",0))>=int(req.get("run_count",5000)),rr
+          assert kcode<300,(kcode,k)
+          rr=assert_production_krs_receipt(
+              kpayload,k,expected_engine_sha256=ENGINE_SHA
+          )
+          run=k["run_receipt"]
           kvcode,kv=call(KRS,"/verify",run,timeout=30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
           stage("KRS_EXECUTION_VERIFIED",
@@ -562,8 +576,15 @@ jobs:
               assert req.get("jra_parameter_map_sha256")==JRA_V02_SHA
 
           if mec_required:
+              aki_binding=None
               mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
               mec_check=validate_mec_plan(mec)
+              if req.get("static_owner_activation_binding") or req.get("aki_calculation_requirement")=="OFFICIAL_V2_1" or (req.get("static_prediction") or {}).get("aki_jra_v21"):
+                  aki_binding=verify_aki_ticket_binding({**req,"runners":aki_signed_runners},mec,source=source_artifact,
+                      current_authority=resolved_authority_obj,root=".")
+                  with open(os.path.join(artifact_dir,"aki_capital_preflight.json"),"w",encoding="utf-8") as fh:
+                      json.dump(aki_binding,fh,ensure_ascii=False,sort_keys=True,indent=2)
+                  stage("AKI_ACTUAL_TICKET_BINDING_VERIFIED",**aki_binding)
               capital_decision=resolve_capital_policy(req,mec)
               final_freeze_timestamp=datetime.now(timezone.utc).isoformat()
               if temporal_mode=="FORMAL-PRE-RACE":
@@ -619,6 +640,13 @@ jobs:
               final_freeze_timestamp=req["final_freeze_timestamp"]
 
           final_package=dict(req["final_prediction_package"])
+          if mec_required and aki_binding is not None:
+              final_package["aki_capital_preflight"]=aki_binding
+          for field in ("official_aki_package","official_aki_verification","aki_compiler_receipt","aki_information_gate","aki_column_selection"):
+              if field in req:
+                  final_package[field]=req[field]
+                  with open(os.path.join(artifact_dir,field+".json"),"w",encoding="utf-8") as fh:
+                      json.dump(req[field],fh,ensure_ascii=False,sort_keys=True,indent=2)
           final_package["jra_adapter_identity"]=adapter_identity
           final_package["evidence_feature_compiler_attestation"]=evidence_compiler
           final_package["source_to_evidence_feature_compiler"]=req.get("source_to_evidence_feature_compiler")
@@ -850,7 +878,7 @@ jobs:
               "prediction_utility_sha256":utility.get("sha256"),
               "material_shadow_delta":utility.get("material_shadow_delta")
             },
-            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"]},
+            "final":{"receipt_sha256":f.get("receipt_sha256"),"verified":True,"immutable_artifact_sha256":immutable_final_artifact["sha256"],"receipt_timestamp":f.get("receipt",{}).get("timestamp")},
             "ticket_count":len(tickets),
             "total_investment":expected_total,
             "no_bet":final_no_bet,
@@ -884,6 +912,8 @@ jobs:
             ),
             "entry_transport_fallback_status":fallback_validation.get("status")
           }
+          with open(os.path.join(artifact_dir,"formal_execution_summary.json"),"w",encoding="utf-8") as fh:
+              json.dump(summary,fh,ensure_ascii=False,sort_keys=True,indent=2)
           print("KM_FORMAL_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           PY
 

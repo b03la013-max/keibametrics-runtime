@@ -264,3 +264,22 @@ def test_paper_portfolio_settles_only_with_verified_outcome_and_known_prices():
         settle_shadow(sh, {**data, "refund_runner_ids": [5]},
                       signed_final_verified=True, signed_result_verified=True,
                       official_result_verified=True)
+
+
+
+@pytest.mark.parametrize("investment,payout", [
+    (16500, 3050), (46000, 36840), (70400, 39120),
+    (25400, 10310), (22800, 1370), (38000, 52800), (46000, 5240),
+])
+def test_aki_oos_signed_result_schema_regression_20261009(investment, payout):
+    """Historical regression fixtures, never counted as candidate OOS."""
+    from aki_adaptive_oos_tracker import _verify_production_signed_settlement
+    signed = {"status": "COMPLETE", "pfs_authority": "FROZEN-RECOMMENDATION",
+              "investment": investment, "return": payout}
+    recomputed = {"investment": investment, "return": payout}
+    _verify_production_signed_settlement(signed, recomputed)
+    with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_CONFLICT"):
+        _verify_production_signed_settlement(signed, {**recomputed, "return": payout + 100})
+    with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+        _verify_production_signed_settlement({"total_investment": investment,
+                                              "total_payout": payout}, recomputed)

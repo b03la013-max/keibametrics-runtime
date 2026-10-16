@@ -42,6 +42,7 @@ jobs:
           from krs_prediction_utility import build_krs_prediction_utility
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
+          from jra_candidate_krs_plan import build_candidate_krs_payload, verify_candidate_krs_execution, ACCEPTANCE_INPUT_CLASS
 
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           base=os.environ["KRS_BASE"].rstrip("/")
@@ -67,7 +68,7 @@ jobs:
             "temporal_mode":"POST-START-REPLAY",
             "prediction_cutoff":src.get("prediction_cutoff") or "2026-09-26T16:10:13+09:00",
             "scheduled_post_at":"2026-09-26T16:30:00+09:00",
-            "run_count":5000,"seed":2026092612,
+            "run_count":20000,"seed":2026092612,
             "capital_policy":{"mode":"RECOMMENDATION_ONLY"},
             "orchestration_ref":{
               "authority":"BASE44",
@@ -130,19 +131,13 @@ jobs:
           vcode,v=call("/verify",p,30)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
 
-          kinput=req["krs_input_data"]
-          kinput["simulation"]["run_count"]=5000
-          kinput["simulation"]["master_seed"]=req["seed"]
-          kpayload={
-            "race_id":req["race_id"],"input_data":kinput,"mode":"SIM-STD","seed":req["seed"],
-            "input_class":"CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
-          }
+          # Actual external SIM-HIGH acceptance; historical fixture is NO-OOS.
+          kpayload=build_candidate_krs_payload(req,input_class=ACCEPTANCE_INPUT_CLASS)
+          req["krs_input_data"]=kpayload["input_data"]
           kcode,k=call("/krs/execute",kpayload,420)
-          run=k.get("run_receipt") or {}
-          rr=run.get("receipt") or {}
-          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
-          assert rr.get("engine_sha256")==ENGINE_SHA,rr
-          assert int(rr.get("actual_run_count") or 0)>=5000,rr
+          assert kcode<300,(kcode,k)
+          rr=verify_candidate_krs_execution(kpayload,k,engine_sha256=ENGINE_SHA)
+          run=k["run_receipt"]
           kvcode,kv=call("/verify",run,30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
 
@@ -159,7 +154,7 @@ jobs:
             "CANDIDATE_FULL_NUMERICAL":{"status":"PASS","required_count":320,"calculated_count":320,"production_authority":False},
             "CANDIDATE_STATIC_SEMANTICS":{"status":"PASS","sha256":req["candidate_semantic_freeze"]["sha256"],"production_authority":False},
             "PRE_KRS_VERIFIED":{"status":"PASS","receipt_sha256":p.get("receipt_sha256")},
-            "KRS_EXECUTED_VERIFIED":{"status":"PASS","actual_run_count":rr.get("actual_run_count"),"receipt_sha256":run.get("receipt_sha256")},
+            "KRS_EXECUTED_VERIFIED":{"status":"PASS","mode":rr.get("mode"),"requested_run_count":20000,"actual_run_count":rr.get("actual_run_count"),"receipt_sha256":run.get("receipt_sha256")},
             "KRS_UTILITY_CAPTURED":{"status":"PASS","sha256":utility.get("sha256"),"production_effect":"NONE"},
             "MEC_VERIFIED":{"status":"PASS","sha256":mec.get("sha256"),"coverage":mec.get("material_coverage_ratio")},
             "CAPITAL_VERIFIED":{"status":"PASS","decision":capital.get("decision"),"required_capital":capital.get("required_capital")},
@@ -214,7 +209,7 @@ jobs:
             "required_count":320,"calculated_count":320,
             "pre_krs_receipt_sha256":p.get("receipt_sha256"),
             "krs_receipt_sha256":run.get("receipt_sha256"),
-            "krs_actual_run_count":rr.get("actual_run_count"),
+            "krs_mode":rr.get("mode"),"krs_requested_run_count":20000,"krs_actual_run_count":rr.get("actual_run_count"),
             "krs_engine_sha256":rr.get("engine_sha256"),
             "krs_utility_sha256":utility.get("sha256"),
             "mec_sha256":mec.get("sha256"),
@@ -230,7 +225,7 @@ jobs:
             "all_candidate_stages_pass":all(x.get("status")=="PASS" for x in stage_manifest.values()),
           }
           artifact["sha256"]=hashlib.sha256(json.dumps(artifact,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
-          out=Path("runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json")
+          out=Path("runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-SIMHIGH-20000-E2E-20261010.json")
           out.parent.mkdir(parents=True,exist_ok=True)
           out.write_text(json.dumps(artifact,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
           print(json.dumps(artifact,ensure_ascii=False,indent=2))
@@ -239,7 +234,7 @@ jobs:
         run: |
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          git add runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-E2E-20260926.json
+          git add runtime/acceptance_artifacts/KM-JRA-HSN12-SOURCE-CANDIDATE-SIMHIGH-20000-E2E-20261010.json
           git commit -m "ci: persist JRA source candidate full lifecycle PASS [skip ci]" || exit 0
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push origin HEAD:main && exit 0

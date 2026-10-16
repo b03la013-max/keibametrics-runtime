@@ -1,0 +1,85 @@
+name: JRA Single Entry Repair Regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "runtime/jra_source_runtime/**"
+      - "runtime/jra_pedigree_corpus.py"
+      - "runtime/jra_owner_authorized_feature_rules.py"
+      - "tests/test_jra_owner_authorized_rules.py"
+      - "tests/test_jra_pedigree_harvest_backfill.py"
+      - "tests/test_jra_pedigree_targeted_harvest.py"
+      - "tests/test_jra_bvi_official_corpus_repair.py"
+      - "runtime/jra_keibabook_private_intake.py"
+      - "runtime/jra_keibabook_mac_collector.py"
+      - "tests/test_jra_keibabook_mac_collector.py"
+      - "runtime/jra_keibabook_evaluator_conformance.py"
+      - "tests/test_jra_keibabook_evaluator_conformance.py"
+      - "tests/test_jra_keibabook_private_intake.py"
+      - "runtime/jra_static_owner_forward_oos.py"
+      - "runtime/jra_official_fact_evaluator_production.py"
+      - "runtime/jra_source_to_evidence_features.py"
+      - "tests/test_jra_evidence_acquisition_repair.py"
+      - "tests/test_jra_observed_context.py"
+      - "tests/test_jra_static_owner_forward_oos.py"
+      - "runtime/jra_ticket_tree_renderer.py"
+      - "tests/test_jra_ticket_tree_renderer.py"
+      - "runtime/jra_single_entry_outcome.py"
+      - "runtime/jra_execution_maturity_bridge.py"
+      - "runtime/jra_production_auto_handoff.py"
+      - "tests/test_jra_single_entry*.py"
+      - "tests/test_jra_production_auto_handoff.py"
+      - "scripts/audit_jra_formal_repair.py"
+      - ".github/workflows/km-jra-single-entry-repair-regression.yml"
+      - ".github/workflows/km-jra-formal-single-entry.yml"
+      - ".github/workflows/km-formal-request-runner.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install test dependencies
+        run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4
+      - name: Check Production boundaries and Single Entry outcomes
+        run: |
+          python -m pytest -q tests/test_jra_keibabook_evaluator_conformance.py tests/test_jra_keibabook_private_intake.py tests/test_jra_keibabook_mac_collector.py tests/test_jra_production_auto_handoff.py tests/test_jra_single_entry_outcome.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_static_owner_executable.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_production_no_bet_real_source.py tests/test_jra_candidate_dispatch_guard.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_ticket_tree_renderer.py tests/test_jra_production_krs_contract.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_observed_context.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_evidence_acquisition_repair.py tests/test_jra_source_to_evidence_features.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_pedigree_targeted_harvest.py tests/test_jra_bvi_official_corpus_repair.py
+      - name: Verify both OIDC pedigree collector workflows parse and preserve verification order
+        run: |
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          for path in (".github/workflows/km-jra-pedigree-corpus-harvest.yml",
+                       ".github/workflows/km-jra-pedigree-verified-backfill.yml"):
+              text=Path(path).read_text(encoding="utf-8")
+              obj=yaml.safe_load(text)
+              assert obj["jobs"] and obj["permissions"]["id-token"]=="write"
+              for job_name,job in obj["jobs"].items():
+                  steps=job["steps"]
+                  attest=[i for i,s in enumerate(steps) if s.get("uses","").startswith("actions/attest@")]
+                  if job_name=="weekend-plan":
+                      assert not attest
+                      assert not any("git push origin" in s.get("run","") or "jra_pedigree_harvest.py" in s.get("run","") for s in steps)
+                      print("JRA_PEDIGREE_READ_ONLY_PLAN_VALID",path,job_name)
+                      continue
+                  assert len(attest)==1, (path,job_name)
+                  verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
+                  persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]
+                  assert verified and persisted, (path,job_name)
+                  assert attest[0]<verified[0]<persisted[0],(path,job_name)
+                  print("JRA_PEDIGREE_SIGN_VERIFY_PERSIST_VALID",path,job_name)
+          PY
+      - name: Recompute immutable real SOURCE as historical diagnostics
+        run: python scripts/audit_jra_formal_repair.py --output runtime_out/repair_audit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-single-entry-repair-audit-${{ github.run_id }}
+          path: runtime_out/repair_audit/
+          if-no-files-found: error

@@ -17,12 +17,31 @@ on:
         type: string
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.batch.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve every LOCAL intent in the push
+        id: batch
+        env:
+          INTENT_INPUT_PATH: ${{ inputs.intent_path }}
+        run: python tools/local_intent_matrix.py
+
   orchestrate:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     concurrency:
-      group: km-formal-${{ inputs.intent_path || github.sha }}
+      group: km-formal-${{ matrix.execution_id }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 190
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +51,7 @@ jobs:
         id: meta
         shell: bash
         env:
-          INTENT_INPUT_PATH: ${{ inputs.intent_path }}
+          INTENT_INPUT_PATH: ${{ matrix.intent_path }}
         run: |
           set -euo pipefail
           INTENT="${INTENT_INPUT_PATH:-}"
@@ -78,7 +97,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .km_fast_cache
-          key: ${{ steps.meta.outputs.cache_prefix }}${{ github.run_id }}
+          key: ${{ steps.meta.outputs.cache_prefix }}${{ matrix.execution_id }}-${{ github.run_id }}
           restore-keys: |
             ${{ steps.meta.outputs.cache_prefix }}
 
@@ -137,23 +156,74 @@ jobs:
           git add "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
           git diff --cached --quiet && exit 0
           git commit -m "execution: pre-result freeze $EXECUTION_ID [skip ci]"
-          for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then exit 0; fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 2))
-          done
-          exit 1
+          python tools/persist_local_checkpoints.py --branch "$PERSIST_BRANCH"
 
+      - name: Save deterministic race-day cache
+        if: steps.execute.outputs.rc == '0'
+        uses: actions/cache/save@v4
+        with:
+          path: .km_fast_cache
+          key: ${{ steps.meta.outputs.cache_prefix }}${{ matrix.execution_id }}-${{ github.run_id }}
+
+      - name: Upload orchestration evidence
+        if: always() && hashFiles('runtime_out/*.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-formal-single-entry-${{ steps.meta.outputs.execution_id }}-${{ github.run_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Enforce orchestration result
+        if: always()
+        shell: bash
+        env:
+          RC: ${{ steps.execute.outputs.rc }}
+        run: |
+          set -euo pipefail
+          test "${RC:-2}" = "0"
+
+
+  result:
+    # RESULT waiting never consumes a SOURCE/FORMAL worker slot. Successful
+    # immutable FINALs continue even when another race in the batch fails.
+    needs: [resolve, orchestrate]
+    if: always() && needs.resolve.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: km-formal-${{ matrix.execution_id }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 2
+      - name: Locate the durable FINAL for this race
+        id: checkpoint
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          if [ -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "RESULT_NOT_STARTED: no durable FINAL for $EXECUTION_ID"
+          fi
       - name: Continue official RESULT to Settlement and Learning
         id: result
-        if: steps.execute.outputs.rc == '0'
+        if: steps.checkpoint.outputs.ready == 'true'
         shell: bash
         run: |
           set +e
           python runtime/formal_execution_orchestrator.py \
-            --intent "${{ steps.meta.outputs.intent_file }}" \
+            --intent "${{ matrix.intent_path }}" \
             --resume-official-result --result-wait-seconds 10800 \
-            --run-id "${{ github.run_id }}" --github-sha "${{ github.sha }}"
+            --run-id "${{ github.run_id }}" --github-sha "$(git rev-parse HEAD)"
           rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
@@ -171,10 +241,10 @@ jobs:
           exit 0
 
       - name: Persist durable successful phase checkpoints
-        if: always()
+        if: always() && steps.checkpoint.outputs.ready == 'true'
         shell: bash
         env:
-          EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
+          EXECUTION_ID: ${{ matrix.execution_id }}
           PERSIST_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -187,7 +257,7 @@ jobs:
           if [ -d "runtime/execution_reports/$EXECUTION_ID" ]; then git add "runtime/execution_reports/$EXECUTION_ID"; fi
           # Existing RESULT workflow owns the same forward ledgers. Preserve
           # its generated state when RESULT runs as an internal continuation.
-          for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_initial_forward_acceptance.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
+          for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
             if [ -e "$path" ]; then git add "$path"; fi
           done
           if [ -f runtime_out/orchestration_report.json ]; then
@@ -199,40 +269,17 @@ jobs:
             exit 0
           fi
           git commit -m "execution: checkpoint $EXECUTION_ID [skip ci]"
-          for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin "$PERSIST_BRANCH" && git push origin "HEAD:$PERSIST_BRANCH"; then
-              exit 0
-            fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 2))
-          done
-          echo "Unable to persist orchestration checkpoints" >&2
-          exit 1
+          python tools/persist_local_checkpoints.py --branch "$PERSIST_BRANCH"
 
-      - name: Save deterministic race-day cache
-        if: steps.execute.outputs.rc == '0'
-        uses: actions/cache/save@v4
-        with:
-          path: .km_fast_cache
-          key: ${{ steps.meta.outputs.cache_prefix }}${{ github.run_id }}
-
-      - name: Upload orchestration evidence
+      - name: Upload RESULT continuation evidence
         if: always() && hashFiles('runtime_out/*.json') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: km-formal-single-entry-${{ steps.meta.outputs.execution_id }}-${{ github.run_id }}
+          name: km-formal-result-${{ matrix.execution_id }}-${{ github.run_id }}
           path: runtime_out/*.json
-          if-no-files-found: warn
           retention-days: 90
-
-      - name: Enforce orchestration result
-        if: always()
-        shell: bash
+      - name: Enforce RESULT continuation
+        if: always() && steps.checkpoint.outputs.ready == 'true'
         env:
-          RC: ${{ steps.execute.outputs.rc }}
           RESULT_RC: ${{ steps.result.outputs.rc }}
-        run: |
-          set -euo pipefail
-          test "${RC:-2}" = "0"
-          test "${RESULT_RC:-2}" = "0"
-
+        run: test "${RESULT_RC:-2}" = "0"

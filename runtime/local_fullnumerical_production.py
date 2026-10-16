@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable
 
 from local_nar_evidence_candidate import compile_candidate_evidence
 from local_fullnumerical_candidate import materialize_candidate, REQUIRED
+from local_bvi_bloodline_research import attach_research
 
 PROFILE = "KM-LOCAL-PRODUCTION-NUMERICAL-MATERIALIZER-v1.0-20261008"
 PRODUCTION_EVIDENCE_REGISTRY = "mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json"
@@ -143,6 +144,7 @@ def materialize_production(
         copy.deepcopy(request),
         PRODUCTION_EVIDENCE_REGISTRY,
     )
+    attach_research(compiled, source_artifact)
 
     # Reuse the already regression-tested deterministic arithmetic engine. Its
     # implementation registries are transform-equivalent to the promoted
@@ -248,6 +250,13 @@ def materialize_production(
         "calibration_status": "UNCALIBRATED_RULE_BASED_PRODUCTION_NUMERICAL",
         "missing_semantics": "RULED-NEUTRAL is a transport value for UNKNOWN/INCOMPARABLE evidence, not an ability estimate.",
         "prediction_consumption_authorized": False,
+        "bloodline_bvi_connection": out.get("bloodline_bvi_connection"),
+        "bloodline_bvi_research": [
+            {"runner_id": r["runner_id"], **{
+                k: v for k, v in r["bloodline_bvi_research"].items()
+                if k not in {"research_components", "venue_reference_rows"}
+            }} for r in out["runners"]
+        ],
         "sha256": None,
     }
     out["production_numerical_summary"]["sha256"] = _sha(out["production_numerical_summary"])

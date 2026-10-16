@@ -1,0 +1,75 @@
+name: LOCAL JRA execution guarantees acceptance
+on:
+  pull_request:
+    paths:
+      - 'runtime/local_static_input_resolver.py'
+      - 'tests/test_local_static_input_resolver.py'
+      - 'runtime/local_race_entry.py'
+      - 'runtime/local_result_from_signed_final.py'
+      - 'tests/test_local_source_first_entry.py'
+      - 'runtime/local_prestart_gate.py'
+      - 'runtime/formal_execution_orchestrator.py'
+      - 'runtime/non_jra_formal_runner.py'
+      - 'tools/local_intent_matrix.py'
+      - 'tools/persist_local_checkpoints.py'
+      - 'tests/test_local_jra_execution_guarantees.py'
+      - '.github/workflows/km-formal-single-entry.yml'
+      - '.github/workflows/km-local-jra-execution-guarantees-acceptance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/local_static_input_resolver.py'
+      - 'tests/test_local_static_input_resolver.py'
+      - 'runtime/local_race_entry.py'
+      - 'runtime/local_result_from_signed_final.py'
+      - 'tests/test_local_source_first_entry.py'
+      - 'runtime/local_prestart_gate.py'
+      - 'runtime/formal_execution_orchestrator.py'
+      - 'tools/local_intent_matrix.py'
+      - 'tools/persist_local_checkpoints.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q pytest PyYAML cryptography
+      - name: Test LOCAL guards and actual Git persistence conflicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q \
+            tests/test_local_static_input_resolver.py \
+            tests/test_local_source_first_entry.py \
+            tests/test_local_jra_execution_guarantees.py \
+            tests/test_formal_execution_orchestrator.py \
+            tests/test_formal_single_entry_intent_completeness.py \
+            tests/test_local_formal_owner_submitter.py \
+            tests/test_local_production_numerical_closure.py \
+            tests/test_local_production_numerical_v1.py \
+            tests/test_local_numerical_authority_gate.py \
+            tests/test_family_authority_guard.py \
+            tests/test_execution_store.py \
+            tests/test_family_runtime_contract.py \
+            tests/test_entry_transport_fallback.py \
+            tests/test_aki_adaptive_oos_tracker.py \
+            tests/test_nar_runner_universe.py \
+            tests/test_correctness_closure.py \
+            tests/test_execution_workflow_contract.py \
+            tests/test_phase_b1_forward.py \
+            tests/test_recovery_result_entry.py \
+            tests/test_local_krs_technical_proxy_from_source.py \
+            tests/test_formal_import_closure.py \
+            tests/test_source_acquisition_consolidation.py \
+            tests/test_local_dual_shadow_workflow_contract.py | tee local-execution-guarantees-tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-execution-guarantees-${{ github.run_id }}
+          path: local-execution-guarantees-tests.log
+          retention-days: 90

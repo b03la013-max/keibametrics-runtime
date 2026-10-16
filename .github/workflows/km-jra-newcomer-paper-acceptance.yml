@@ -1,0 +1,25 @@
+name: JRA newcomer PAPER and bounded corpus verification
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_aki_dispatch.py'
+      - 'runtime/jra_newcomer_replay.py'
+      - 'runtime/jra_pedigree_corpus.py'
+      - 'runtime/jra_aki_capital_preflight.py'
+      - 'runtime/jra_production_auto_handoff.py'
+      - 'profiles/*20261012_R51.json'
+      - 'profiles/jra_newcomer*'
+      - 'tests/test_jra_newcomer_paper.py'
+      - 'tests/test_jra_newcomer_replay.py'
+      - 'tests/test_jra_corpus_parallel.py'
+      - '.github/workflows/km-jra-newcomer*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -q pytest beautifulsoup4 cryptography
+      - run: python -m pytest -q tests/test_jra_newcomer_replay.py tests/test_jra_newcomer_paper.py tests/test_jra_corpus_parallel.py tests/test_jra_aki_v21_enacted.py tests/test_jra_aki_no_bet_terminal.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py

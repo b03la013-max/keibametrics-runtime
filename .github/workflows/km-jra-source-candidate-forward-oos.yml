@@ -67,9 +67,12 @@ jobs:
           from formal_request_validator import validate_pre_krs_request
           from prekrs_terminal_compat import adapt_calculator_output
           from krs_prediction_utility import build_krs_prediction_utility
+          from jra_candidate_krs_plan import build_candidate_krs_payload, verify_candidate_krs_execution
+          from jra_practical_candidate_forecast import make_forecast_brief
           from minimum_efficient_coverage import build_mec_plan,validate_mec_plan
           from capital_policy import resolve_capital_policy
           from mec_r4_shadow import build_mec_r4_shadow
+          from jra_local_week_transfer_shadow import build_jra_week_transfer_shadow
 
           ENGINE_SHA="9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           BASE=os.environ["KRS_BASE"].rstrip("/")
@@ -191,6 +194,30 @@ jobs:
           req["candidate_frozen_at"]=datetime.now(timezone.utc).isoformat()
           assert dt(req["candidate_frozen_at"])<post_utc,"CANDIDATE_SEMANTIC_FREEZE_POST_START"
 
+          # Independently preserve the pre-result Static evidence before calls to
+          # external PRE_KRS/KRS/FINAL; no unsigned stage is a formal FINAL.
+          static_checkpoint={
+              "schema":"KM-JRA-CANDIDATE-PRE_KRS-STATIC-CHECKPOINT-v1",
+              "race_id":req["race_id"],"execution_id":source_execution_id,
+              "source_snapshot_sha256":source_sha,
+              "candidate_semantic_freeze":req["candidate_semantic_freeze"],
+              "candidate_frozen_at":req["candidate_frozen_at"],
+              "candidate_numerical_summary":req["candidate_numerical_summary"],
+              "static_prediction":req["static_prediction"],
+              "role_registry":req["role_registry"],
+              "pair_dispositions":req["pair_dispositions"],
+              "third_dispositions":req["third_dispositions"],
+              "stage":"STATIC_FREEZE_BEFORE_EXTERNAL_KRS",
+              "production_authority":False,
+              "signed_final_verified":False,"purchase_authority":False,
+              "oos_eligible":False,
+          }
+          static_checkpoint["sha256"]=hashlib.sha256(json.dumps(static_checkpoint,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          Path("runtime_out").mkdir(parents=True,exist_ok=True)
+          Path("runtime_out/jra_candidate_static_checkpoint.json").write_text(
+              json.dumps(static_checkpoint,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
+          )
+
           preflight=validate_pre_krs_request(req)
           expected=len(req["runners"])*20
           assert preflight["canonical_component_count"]==expected
@@ -233,18 +260,13 @@ jobs:
           pvcode,pv=call("/verify",p,30)
           assert pvcode<300 and pv.get("valid") is True,(pvcode,pv)
 
-          kinput=req["krs_input_data"]
-          kinput["simulation"]["run_count"]=int(req["run_count"])
-          kinput["simulation"]["master_seed"]=int(req["seed"])
-          kpayload={
-              "race_id":req["race_id"],"input_data":kinput,"mode":"SIM-STD","seed":req["seed"],
-              "input_class":"FORWARD-OOS-CANDIDATE-SOURCE-DERIVED-NON-PRODUCTION"
-          }
+          # Fail closed before transport on unsupported simulation contracts.
+          kpayload=build_candidate_krs_payload(req)
+          req["krs_input_data"]=kpayload["input_data"]
           kcode,k=call("/krs/execute",kpayload,360)
-          run=k.get("run_receipt") or {}; rr=run.get("receipt") or {}
-          assert kcode<300 and rr.get("status")=="EXECUTED",(kcode,k)
-          assert rr.get("engine_sha256")==ENGINE_SHA,rr
-          assert int(rr.get("actual_run_count") or 0)>=int(req["run_count"]),rr
+          assert kcode<300,(kcode,k)
+          rr=verify_candidate_krs_execution(kpayload,k,engine_sha256=ENGINE_SHA)
+          run=k["run_receipt"]
           kvcode,kv=call("/verify",run,30)
           assert kvcode<300 and kv.get("valid") is True,(kvcode,kv)
 
@@ -255,6 +277,12 @@ jobs:
           capital=resolve_capital_policy(req,mec)
           tickets=mec["tickets"] if not capital["no_bet"] else []
           total=int(mec["minimum_required_capital"]) if not capital["no_bet"] else 0
+          transfer_generated_at=datetime.now(timezone.utc).isoformat()
+          transfer_shadow=build_jra_week_transfer_shadow(req,tickets,utility,generated_at=transfer_generated_at)
+          assert transfer_shadow["production_effect"]=="NONE"
+          assert transfer_shadow["automatic_purchase"] is False
+          assert dt(transfer_generated_at)<post_utc,"JRA_TRANSFER_DIAGNOSTIC_AFTER_START"
+          req["jra_local_week_transfer_shadow"]=transfer_shadow
 
           final_package={
               "authority":"KM-JRA-SOURCE-DERIVED-CANDIDATE-FULL-LIFECYCLE-20260926-R1",
@@ -268,6 +296,14 @@ jobs:
               "third_dispositions":req["third_dispositions"],
               "krs_prediction_utility_shadow":utility,
               "minimum_efficient_coverage":mec,"capital_policy_decision":capital,
+              "jra_local_week_transfer_shadow_binding":{
+                  "profile":transfer_shadow["profile"],
+                  "sha256":transfer_shadow["sha256"],
+                  "source_basis_sha256":source_sha,
+                  "semantic_freeze_sha256":req["candidate_semantic_freeze"]["sha256"],
+                  "generated_at":transfer_generated_at,
+                  "production_effect":"NONE","purchase_authority":False,
+              },
               "family_prediction_utility_contract":utility_contract_id or None,
               "prediction_utility_objective_order":(
                   utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
@@ -331,6 +367,7 @@ jobs:
               "role_registry":req.get("role_registry"),
               "pair_dispositions":req.get("pair_dispositions"),
               "third_dispositions":req.get("third_dispositions"),
+              "jra_local_week_transfer_shadow_binding":final_package["jra_local_week_transfer_shadow_binding"],
               "scheduled_post_at":scheduled_post,
               "temporal_mode":"FORMAL-PRE-RACE",
               "family_prediction_utility_contract":utility_contract_id or None,
@@ -343,6 +380,19 @@ jobs:
           }
           final_art["sha256"]=hashlib.sha256(json.dumps(final_art,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
           (outdir/"candidate_final.json").write_text(json.dumps(final_art,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8")
+          # Narrow, budgeted PAPER subset of original immutable Candidate MEC.
+          brief=make_forecast_brief(record,final_art,
+              generated_at=datetime.now(timezone.utc).isoformat(),
+              maximum_paper_budget_yen=2000)
+          assert brief["production_effect"]=="NONE"
+          assert brief["new_final_generated"] is False
+          assert brief["display_temporal_class"]=="PRE_START_PREVIEW"
+          (outdir/"candidate_forecast_brief.json").write_text(
+              json.dumps(brief,ensure_ascii=False,sort_keys=True,indent=2),
+              encoding="utf-8")
+          (outdir/"jra_local_week_transfer_shadow_pre_result.json").write_text(
+              json.dumps(transfer_shadow,ensure_ascii=False,sort_keys=True,indent=2),encoding="utf-8"
+          )
           mec_r4_shadow=build_mec_r4_shadow(final_art,generated_at=freeze)
           assert mec_r4_shadow["production_effect"]=="NONE"
           assert mec_r4_shadow["source_lane"]=="SOURCE_DERIVED_CANDIDATE"
@@ -358,6 +408,7 @@ jobs:
               "final_receipt_sha256":final.get("receipt_sha256"),
               "pre_result_sha256":record["sha256"],
               "mec_r4_shadow_sha256":mec_r4_shadow.get("sha256"),
+              "jra_local_week_transfer_shadow_sha256":transfer_shadow["sha256"],
               "family_prediction_utility_contract":utility_contract_id or None,
               "production_effect":"NONE"
           },ensure_ascii=False,separators=(",",":")))
@@ -378,3 +429,55 @@ jobs:
             done
             exit 1
           fi
+
+      - name: Persist incomplete JRA Candidate and pre-KRS checkpoint
+        if: failure()
+        env:
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          p=pathlib.Path(os.environ.get("REQUEST_FILE") or "")
+          if not p.is_file():
+              raise SystemExit("JRA_INCOMPLETE_REQUEST_UNAVAILABLE")
+          q=json.loads(p.read_text(encoding="utf-8"))
+          if str(q.get("family_id") or "")!="JRA":
+              raise SystemExit(0)
+          f=pathlib.Path("runtime_out/jra_candidate_static_checkpoint.json")
+          checkpoint=json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+          target=pathlib.Path("runtime/candidate_attempt_status")/(str(q.get("execution_id") or q.get("race_id"))+".json")
+          target.parent.mkdir(parents=True,exist_ok=True)
+          report={
+              "schema":"KM-JRA-CANDIDATE-EXECUTION-ATTEMPT-v1",
+              "race_id":q.get("race_id"),
+              "execution_id":q.get("execution_id"),
+              "github_run_id":os.environ.get("GH_RUN_ID"),
+              "github_run_url":os.environ.get("GH_RUN_URL"),
+              "status":"INCOMPLETE / EXTERNAL-PIPELINE-FAILED",
+              "last_verified_stage":"CANDIDATE_STATIC_FREEZE" if checkpoint else "UNKNOWN_BEFORE_STATIC",
+              "static_checkpoint":checkpoint,
+              "production_authority":False,
+              "signed_final_verified":False,
+              "oos_eligible":False,
+              "purchase_authority":False,
+              "action":"Inspect GitHub failed step; do not issue formal tickets or backdate FINAL.",
+          }
+          report["sha256"]=hashlib.sha256(json.dumps(report,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+          target.write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          print("JRA_CANDIDATE_INCOMPLETE="+str(target))
+          PY
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/candidate_attempt_status
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "execution: preserve incomplete JRA Candidate checkpoint [skip ci]"
+          for i in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*2))
+          done
+          exit 1

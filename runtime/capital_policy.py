@@ -104,6 +104,11 @@ def resolve_capital_policy(request:dict, mec:dict)->dict:
     else:
         raise CapitalPolicyError(f"UNSUPPORTED_CAPITAL_POLICY_MODE:{mode}")
 
+    gate=request.get("aki_information_gate") or {}
+    if gate.get("action")=="PAPER":
+        out.update(decision="PAPER", no_bet=True, paper_only=True,
+                   information_gate=gate,
+                   reason="Registered AKI information gate requires PAPER: "+str(gate.get("reason")))
     out["default_profile"]=DEFAULT_PROFILE_ID if budget_source=="FAMILY_USER_DEFAULT" else None
     out["mec_profile"]=mec.get("profile")
     out["mec_sha256"]=mec.get("sha256")

@@ -9,7 +9,10 @@ class EvidenceCompilerError(ValueError):
 def _sha(x):
     return hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()).hexdigest()
 
-RULE_REGISTRY_PATH="mapping/jra_evidence_feature_rule_registry_v1.1_20260922.json"
+# v1.3 (Current Authority R47) is a strict superset of v1.2 (R45), which is a
+# strict superset of v1.1: earlier rule ids are kept and only owner-authorized
+# rule ids are added.
+RULE_REGISTRY_PATH="mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json"
 
 def _load_rule_registry(path=RULE_REGISTRY_PATH):
     with open(path,encoding="utf-8") as f:

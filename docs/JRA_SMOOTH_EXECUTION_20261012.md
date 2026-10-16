@@ -1,0 +1,17 @@
+# 新馬の全工程接続と、長時間処理の扱い
+
+京都6RのFull20は240/240だったが、既走馬向けのRFI/PRIとTPI/F3S裏付け閾値で全列が空になった。R51は全馬の正式Base13 profileがNEWCOMERの場合だけ専用PAPER規則を使う。CFI/BVIの血統証拠は一つの経路として数え、別の公式騎手調教師統計または馬体観測を必要とする。DCR中立・出典欠落を観測済みに数えない。
+
+新馬の比較用主指数下限は50、既存BASE幅を維持し、REVIEW幅へ軸リスク連動の最大0.5を加える。これは新しい未検証のモデル選定規則であり、実証済みの最適係数ではない。購入権限を与えず全件PAPER。既走馬のR50規則、AKIの各軸mapping、Base/Derived数式、KRS物理、MECは変更しない。無理な頭数補充はしない。
+
+京都6Rの元SOURCE・Full20による機械確認ではW=7/8/5、P2=7/8/5、P3=7/8/5/12/2/11、MEC24点・参考2,400円となった。実購入ではなく探索用PAPER。新規則は結果を知り得る時点で作られており、未知未来OOSの追加実績は0。
+
+外部Formal Runnerは新馬専用規則をPRE_KRSとMEC後に独立再計算する。京都6Rの全工程Acceptanceは元のEd25519/OIDC検証済みSOURCEだけを使い、POST-START-REPLAY / PAPERとしてKRS5,000回と署名Receiptまで実行する。元の事前FINALを後付けせず、acceptance_artifactsへ分離する。未来の適格な依頼はR51に束縛し、同じ経路で署名PAPER FINALを生成する。
+
+遅延の一因は、血統アーカイブの独立OIDC検証を逐次行っていたことだった。関連資料すべてを最大4並列で検証し、統合は元の固定順序を保つ。未検証資料、未来資料、破損資料を採用しない。入力byte hashと署名Workflowを鍵にした既存キャッシュを維持する。全体の実測速度は外部実行ログで確認し、並列化の理論倍率を実測値として表示しない。
+
+場別チャットの運用：依頼時に既存Signed Artifactと実行中Runを確認し、必要な正式入口を一度起動する。実行ID・Runリンク・現在工程を先に示す。長い実行は外部Runtimeが継続し、チャットの継続や再開を成立条件にしない。1回の状況読取りは小さいRun/Job metadataを使い、全SOURCE・Full20・全券面を会話へ繰り返し展開しない。
+
+`python runtime/jra_pipeline_progress.py --run-id <ID>`は小さい進捗要約を返す。API待ちには15秒の上限がある。チャットからは利用可能なGitHub Run/Jobコネクタでも同じmetadataを読む。長い一回待ちや重複Dispatchを避け、計算待ちの間は60秒以内に意味のある進捗を伝える。接続が切れてもSOURCE/Request/Receiptの保存済みCheckpointから確認・再開する。実行の再利用はhash・Authority・時点・Contractの一致が条件。
+
+Actions成功と全工程完走は別である。完了時は必須Stage、実KRS回数、Receipt、FINAL/Acceptanceの署名を検証する。表示は順位・AKI・列・券種別点数・資金判定・正本リンクを優先し、計算自体は省略しない。PAPERの参考額と実投資0円を区別する。結果後Learningの成立は別Artifactで確認し、自動係数更新や実PFSへ混入しない。

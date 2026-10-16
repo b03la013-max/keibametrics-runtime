@@ -1,0 +1,68 @@
+name: JRA Real Signed Pedigree Corpus Production Intake Acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_bvi_pipeline_real_acceptance.py"
+      - "runtime/jra_bvi_shadow_comparison.py"
+      - "scripts/jra_bvi_pipeline_forward_shadow.py"
+      - "tests/test_jra_bvi_forward_shadow.py"
+      - "runtime/jra_index_provenance_builder.py"
+      - "runtime/jra_static_owner_forward_oos.py"
+      - "scripts/jra_bvi_postcapture_real_closure.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
+      - "runtime/pedigree_corpus/**"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_bvi_pipeline_real_acceptance.py"
+      - "runtime/jra_bvi_shadow_comparison.py"
+      - "scripts/jra_bvi_pipeline_forward_shadow.py"
+      - "tests/test_jra_bvi_forward_shadow.py"
+      - "runtime/jra_index_provenance_builder.py"
+      - "runtime/jra_static_owner_forward_oos.py"
+      - "scripts/jra_bvi_postcapture_real_closure.py"
+      - "runtime/jra_pedigree_corpus.py"
+      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
+      - "runtime/pedigree_corpus/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+  attestations: read
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -q cryptography pytest beautifulsoup4
+      - name: Numerical lineage and temporal regression
+        run: python -m pytest -q tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py
+      - name: Verify real OIDC corpus, temporal gates and full BVI downstream diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PYCODE'
+          import runpy
+          # Reuse the existing digest-keyed OIDC cache in one process. Each
+          # cutoff is still checked against its verified witnessed timestamps.
+          for path in ("scripts/jra_bvi_postcapture_real_closure.py",
+                       "scripts/jra_pedigree_live_acceptance.py",
+                       "scripts/jra_bvi_pipeline_real_acceptance.py"):
+              runpy.run_path(path,run_name="__main__")
+          PYCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-real-signed-pedigree-corpus-intake
+          path: |
+            runtime_out/jra_pedigree_verified_acceptance.json
+            runtime_out/jra_bvi_postcapture_real_closure.json
+            runtime_out/jra_bvi_pipeline_real_acceptance.json
+          if-no-files-found: warn

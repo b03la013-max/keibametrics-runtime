@@ -65,3 +65,15 @@ def test_index_provenance_replay_preserves_feature_contributions_and_static_rank
     assert replay["trace_complete_runner_count"]==1
     assert replay["trace_incomplete_runner_count"]==0
     assert out["index_provenance_hash"]==replay["sha256"]
+
+
+def test_canonical_observed_and_dcr_metadata_survive_without_aliasing():
+    from jra_index_provenance_builder import _base_component
+    raw = _base_spec('BVI')
+    raw.update(profile='LOW_CAREER', information_status='INFORMATION_INSUFFICIENT_DCR_ART3', dcr=0.4)
+    out = _base_component('BVI', raw, '1')
+    assert out['value'] == raw['value']
+    for key in ('components', 'coverage_weight', 'profile', 'information_status', 'dcr'):
+        assert out[key] == raw[key]
+    out['components'][0]['weight'] = 99
+    assert raw['components'][0]['weight'] == 0.2

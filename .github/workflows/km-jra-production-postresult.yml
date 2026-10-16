@@ -1,0 +1,71 @@
+name: KeibaMetrics JRA Production Post-Result Closed Loop
+run-name: JRA Production post-result ${{ inputs.race_id || 'scheduled' }}
+
+# Signed Production FINAL -> official JRA result/payouts -> settlement of the
+# frozen tickets -> runtime/results/<race_id>.json -> canonical Formal Result
+# Runner (signed RESULT receipt, review, learning, OOS). A GITHUB_TOKEN push
+# does not trigger workflows, so the Result Runner is dispatched explicitly.
+permissions:
+  contents: write
+  actions: write
+
+on:
+  schedule:
+    # 10:00-21:30 JST every 30 minutes.
+    - cron: "10,40 1-12 * * *"
+  workflow_dispatch:
+    inputs:
+      race_id:
+        description: "Optional single Production FINAL Race ID"
+        required: false
+        type: string
+
+concurrency:
+  group: km-jra-production-postresult
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install official JRA HTTP/parser dependencies
+        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
+      - name: Settlement regression
+        run: python -m pytest -q tests/test_jra_production_postresult.py
+      - name: Fetch official result and write RESULT request for each due FINAL
+        env:
+          RACE_ID: ${{ inputs.race_id }}
+        run: |
+          set -euo pipefail
+          if [ -n "${RACE_ID:-}" ]; then
+            python runtime/jra_production_postresult.py --race-id "$RACE_ID"
+          else
+            python runtime/jra_production_postresult.py --days 3
+          fi
+      - name: Commit RESULT requests and dispatch the canonical Result Runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapfile -t NEW < <(git ls-files --others --exclude-standard 'runtime/results/KM-JRA-*.json')
+          [ "${#NEW[@]}" -eq 0 ] && { echo "NO_NEW_PRODUCTION_RESULT"; exit 0; }
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "${NEW[@]}"
+          git commit -m "result: JRA Production official result request [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true; sleep $((i*4))
+            [ "$i" -eq 3 ] && exit 1
+          done
+          for f in "${NEW[@]}"; do
+            gh workflow run km-formal-result-runner.yml --ref main -f request_path="$f"
+            sleep 5
+          done

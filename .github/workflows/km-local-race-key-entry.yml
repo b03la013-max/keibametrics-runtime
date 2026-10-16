@@ -1,0 +1,344 @@
+name: KM LOCAL Race-Key Single Entry (candidate)
+run-name: LOCAL ${{ inputs.venue_id || github.event_name }} ${{ inputs.race_date }} R${{ inputs.race_no }}
+
+# Authenticated GitHub Actions ingress with five scalar fields. No per-race
+# GitHub file write is needed to START the signed SOURCE process.
+on:
+  schedule:
+    # Phase B only: 2026-10-16 KAW R01 (15:00 JST), three bounded
+    # opportunities at 14:00/14:05/14:10 JST. Cron has no year field;
+    # the existing exact dated approval gate still prevents later reuse.
+    # Phase C/D scheduling requires a separately reviewed configuration.
+    - cron: "0,5,10 5 16 10 *"
+  workflow_dispatch:
+    inputs:
+      venue_id:
+        description: 'NAR venue code (KAW, OHI, FNB etc.)'
+        type: string
+        required: true
+      race_date:
+        description: 'Race local date YYYY-MM-DD'
+        type: string
+        required: true
+      race_no:
+        description: 'Race number 1-12'
+        type: string
+        required: true
+      scheduled_post_at:
+        description: 'Official post e.g. 2026-10-15T16:15:00+09:00'
+        type: string
+        required: true
+      prediction_cutoff:
+        description: 'Pre-race freeze e.g. 2026-10-15T16:10:00+09:00'
+        type: string
+        required: true
+  repository_dispatch:
+    types: [km_local_race_key]
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/race_key_requests/*.json'
+
+permissions:
+  contents: write
+  actions: read
+
+# runtime.local_fullnumerical_production imports existing legacy modules
+# from runtime/ as top-level names. Without both roots, python -m fails.
+env:
+  PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      has_requests: ${{ steps.resolve.outputs.has_requests }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Resolve immutable event range and every race key
+        id: resolve
+        run: |
+          python -m runtime.local_race_key_intake --event-file "$GITHUB_EVENT_PATH" \
+            --event-name "$GITHUB_EVENT_NAME" --output ingress-out/intake.json \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Persist ingress terminal errors
+        if: always()
+        run: |
+          mkdir -p runtime/execution_reports/INGRESS
+          cp ingress-out/intake.json "runtime/execution_reports/INGRESS/${{ github.run_id }}.json"
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add runtime/execution_reports/INGRESS
+          git commit -m "execution: immutable ingress ${{ github.run_id }} [skip ci]"
+          python tools/persist_local_checkpoints.py --branch main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: km-local-ingress-${{ github.run_id }}
+          path: ingress-out/
+          retention-days: 90
+  entry:
+    needs: resolve
+    if: needs.resolve.outputs.has_requests == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    concurrency:
+      group: km-formal-${{ matrix.execution_id }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      execution_id: ${{ steps.gate.outputs.execution_id }}
+      formal_ready: ${{ steps.gate.outputs.formal_ready }}
+      source_verified: ${{ steps.gate.outputs.source_verified }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install existing runtime dependency
+        run: python -m pip install -q cryptography
+      - name: Build race-key SOURCE request from Current Authority
+        id: intake
+        env:
+          VENUE_ID: ${{ matrix.venue_id }}
+          RACE_DATE: ${{ matrix.race_date }}
+          RACE_NO: ${{ matrix.race_no }}
+          POST_AT: ${{ matrix.scheduled_post_at }}
+          CUTOFF_AT: ${{ matrix.prediction_cutoff }}
+        run: |
+          set -euo pipefail
+          mkdir -p entry-out
+          python -m runtime.local_race_key_intake \
+            --venue-id "$VENUE_ID" --race-date "$RACE_DATE" --race-no "$RACE_NO" \
+            --scheduled-post-at "$POST_AT" --prediction-cutoff "$CUTOFF_AT" \
+            --output entry-out/race_request.json
+          python runtime/family_authority_guard.py --request entry-out/race_request.json
+      - name: Verify canonical external Runtime
+        run: |
+          set -euo pipefail
+          python runtime/execution_gateway.py health-check --family LOCAL --output entry-out/gateway_preflight.json
+      - name: Signed SOURCE and existing frozen-Static handoff
+        id: execute
+        shell: bash
+        run: |
+          set +e
+          python -m runtime.local_race_entry \
+            --request entry-out/race_request.json \
+            --output entry-out --run-id "race-key-${{ github.run_id }}" \
+            --github-sha "${{ github.sha }}"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Verify signed checkpoint and classify exact completion
+        id: gate
+        run: |
+          set -euo pipefail
+          python -m runtime.local_race_key_gate \
+            --request entry-out/race_request.json \
+            --report entry-out/entry_report.json \
+            --output entry-out/gate_receipt.json \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Persist only verified SOURCE/FORMAL canonical records
+        if: steps.gate.outputs.source_verified == 'true'
+        env:
+          EXECUTION_ID: ${{ steps.gate.outputs.execution_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "runtime/execution_reports/$EXECUTION_ID"
+          cp entry-out/gate_receipt.json "runtime/execution_reports/$EXECUTION_ID/race-key-${{ github.run_id }}.json"
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          test -f "runtime/executions/$EXECUTION_ID/SOURCE/LATEST.json"
+          git add "runtime/executions/$EXECUTION_ID/SOURCE" "runtime/execution_reports/$EXECUTION_ID"
+          if [ -f entry-out/generated_formal_intent.json ] && [ -f entry-out/production_static_owner.json ]; then
+            test -f "runtime/formal_intents/$EXECUTION_ID.json"
+            git add "runtime/formal_intents/$EXECUTION_ID.json"
+            mkdir -p "runtime/local_production_static_owner_records"
+            cp entry-out/production_static_owner.json "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+            git add "runtime/local_production_static_owner_records/$EXECUTION_ID.json"
+          fi
+          if [ "${{ steps.gate.outputs.formal_ready }}" = "true" ]; then
+            test -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json"
+            git add "runtime/executions/$EXECUTION_ID/FORMAL"
+          fi
+          # Candidate Static is PRE-RESULT evidence only; persist separately
+          # from canonical Signed FINAL and never overwrite a frozen shadow.
+          if [ -f entry-out/shadow_prediction.json ]; then
+            SHADOW_PATH="runtime/local_race_key_shadow/$EXECUTION_ID.json"
+            mkdir -p runtime/local_race_key_shadow
+            if [ -f "$SHADOW_PATH" ]; then
+              # A race-key retry cannot silently rewrite its forward prediction.
+              echo "SHADOW_ALREADY_FROZEN: $SHADOW_PATH"
+            else
+              cp entry-out/shadow_prediction.json "$SHADOW_PATH"
+              git add "$SHADOW_PATH"
+            fi
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: race-key signed checkpoints $EXECUTION_ID [skip ci]"
+            python tools/persist_local_checkpoints.py --branch main
+          fi
+      - name: Persist terminal execution and delivery state
+        if: always()
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          mkdir -p entry-out
+          python -m runtime.local_race_key_gate --terminal-only \
+            --execution-id "$EXECUTION_ID" --job-status "$JOB_STATUS" \
+            --output "runtime/execution_reports/$EXECUTION_ID/terminal-${{ github.run_id }}.json"
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add "runtime/execution_reports/$EXECUTION_ID"
+          cat "runtime/execution_reports/$EXECUTION_ID/delivery/canonical_tree.txt" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: terminal state $EXECUTION_ID [skip ci]"
+            python tools/persist_local_checkpoints.py --branch main
+          fi
+      - name: Upload Source/Static owner handoff evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-race-key-${{ github.run_id }}-${{ matrix.execution_id }}
+          path: entry-out/
+          if-no-files-found: warn
+          retention-days: 90
+
+  result:
+    needs: [resolve, entry]
+    if: always() && needs.resolve.outputs.has_requests == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 190
+    concurrency:
+      group: km-formal-${{ matrix.execution_id }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install RESULT runtime dependencies
+        run: python -m pip install --disable-pip-version-check -q cryptography
+      - name: Verify durable FINAL before any RESULT polling
+        id: final_ready
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          set -euo pipefail
+          if [ -f "runtime/executions/$EXECUTION_ID/FORMAL/LATEST.json" ] && [ -f "runtime/formal_intents/$EXECUTION_ID.json" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "NO_SIGNED_FINAL: $EXECUTION_ID" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Continue signed FINAL to official RESULT and Learning
+        if: steps.final_ready.outputs.ready == 'true'
+        id: settle
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          set +e
+          python runtime/formal_execution_orchestrator.py \
+            --intent "runtime/formal_intents/$EXECUTION_ID.json" \
+            --resume-official-result --result-wait-seconds 10800 \
+            --run-id "race-key-${{ github.run_id }}" --github-sha "$(git rev-parse HEAD)"
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Persist verified RESULT and forward measurement ledgers
+        if: always()
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          set -euo pipefail
+          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
+            git config user.name keibametrics-runtime
+            git config user.email actions@users.noreply.github.com
+            git add "runtime/executions/$EXECUTION_ID/RESULT"
+            if [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT"; fi
+            for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
+              if [ -e "$path" ]; then git add "$path"; fi
+            done
+            if ! git diff --cached --quiet; then
+              git commit -m "execution: race-key RESULT $EXECUTION_ID [skip ci]"
+              python tools/persist_local_checkpoints.py --branch main
+            fi
+          fi
+      - name: Publish Result evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: km-local-race-key-result-${{ github.run_id }}-${{ matrix.execution_id }}
+          path: runtime_out/*.json
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Enforce RESULT completion
+        if: always() && steps.final_ready.outputs.ready == 'true'
+        env:
+          RC: ${{ steps.settle.outputs.rc }}
+        run: test "${RC:-2}" = "0"
+
+  local-day:
+    # Inert until an owner separately approves activation, dated scope and cost.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    permissions:
+      contents: write
+      actions: write
+    concurrency:
+      group: km-local-day-dispatcher
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check -q cryptography
+      - name: Dispatch only explicitly approved dated LOCAL plans
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KM_LOCAL_AUTONOMOUS_ENABLED: ${{ vars.KM_LOCAL_AUTONOMOUS_ENABLED }}
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          from datetime import datetime, timezone, timedelta
+          day = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+          subprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)
+          subprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)
+          for path in sorted(Path('profiles/local_autonomous_approvals').glob(day+'-*.json')):
+              approval=json.loads(path.read_text())
+              if approval.get('enabled') is not True:
+                  continue
+              subprocess.run(['python','-m','runtime.local_race_day_dispatcher',
+                  '--venue',approval['venue_id'],'--date',day,
+                  '--cutoff-seconds',str(approval['cutoff_seconds']),'--execute'],check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-day-${{ github.run_id }}
+          path: runtime/local_race_day_plan/
+          if-no-files-found: ignore
+          retention-days: 90

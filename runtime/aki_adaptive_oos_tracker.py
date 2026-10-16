@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,31 @@ def _envelope(envelope: dict, phase: str, race: str):
         raise AdaptivePurchaseError(f"{phase}_ARTIFACT_HASH_INVALID")
     if _sha(rec) != envelope.get("receipt_sha256"):
         raise AdaptivePurchaseError(f"{phase}_RECEIPT_HASH_INVALID")
+
+
+def _verify_production_signed_settlement(signed: dict, recalculated: dict) -> None:
+    """Match the actual Signed RESULT settlement schema; never silently default to -1.
+
+    Production RESULT uses 'investment' and 'return', not the OOS-trackers'
+    historical 'total_investment' / 'total_payout' aliases.
+    """
+    if (signed.get("status") != "COMPLETE"
+            or signed.get("pfs_authority") != "FROZEN-RECOMMENDATION"
+            or not all(k in signed for k in ("investment", "return"))):
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID")
+    try:
+        if any(isinstance(signed[k], bool) or not isinstance(signed[k], (int, float))
+               for k in ("investment", "return")):
+            raise ValueError("settlement amounts must be JSON numbers")
+        investment = float(signed["investment"])
+        payout = float(signed["return"])
+        if not all(math.isfinite(value) and value >= 0 for value in (investment, payout)):
+            raise ValueError("settlement amounts must be finite and nonnegative")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID") from exc
+    if (abs(investment - recalculated["investment"]) > 0.001
+            or abs(payout - recalculated["return"]) > 0.001):
+        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_CONFLICT")
 
 
 def evaluate_canonical(
@@ -87,20 +113,7 @@ def evaluate_canonical(
     )
     if settled_production.get("status") != "SETTLED":
         raise AdaptivePurchaseError("PRODUCTION_PAYOUT_UNRESOLVED")
-    # The signed Production RESULT uses "investment" / "return" (not the
-    # synthetic "total_investment" / "total_payout" accepted by old tests).
-    # Missing or non-numeric fields must fail closed, not silently compare -1.
-    signed_settlement = ra.get("settlement") or {}
-    signed_investment = signed_settlement.get("investment")
-    signed_return = signed_settlement.get("return")
-    if (not isinstance(signed_investment, (int, float))
-            or isinstance(signed_investment, bool)
-            or not isinstance(signed_return, (int, float))
-            or isinstance(signed_return, bool)):
-        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_MISMATCH")
-    if (abs(float(signed_investment) - settled_production["investment"]) > 0.001
-            or abs(float(signed_return) - settled_production["return"]) > 0.001):
-        raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_CONFLICT")
+    _verify_production_signed_settlement(ra.get("settlement") or {}, settled_production)
 
     measured = settle_shadow(
         shadow, official,
@@ -130,14 +143,24 @@ def evaluate_canonical(
     }
 
 
-def scan_execution_store(root: Path) -> dict:
+def scan_execution_store(root: Path, *, execution_ids: set[str] | None = None) -> dict:
+    """Scan all live races, or an explicitly frozen historical test cohort.
+
+    The CLI/default always scans the complete evolving ledger. A named cohort
+    is read-only and does not alter eligibility/receipt/settlement verification.
+    """
     from execution_store import resolve_phase
     if not root.exists():
-        return _summary([], [], [])
+        return _summary([], [], [{"reason": "FROZEN_COHORT_STORE_MISSING"}] if execution_ids else [])
+    selected = None if execution_ids is None else set(execution_ids)
     rows, held, errors = [], [], []
+    observed = set()
     for execution in sorted(root.iterdir()):
         if not execution.is_dir():
             continue
+        if selected is not None and execution.name not in selected:
+            continue
+        observed.add(execution.name)
         try:
             formal = resolve_phase(execution.name, "FORMAL", root=root)
             if not formal:
@@ -174,6 +197,9 @@ def scan_execution_store(root: Path) -> dict:
             rows.append(row)
         except (AdaptivePurchaseError, AssertionError, KeyError, ValueError) as exc:
             errors.append({"execution_id": execution.name, "reason": type(exc).__name__ + ":" + str(exc)})
+    if selected is not None and selected != observed:
+        errors.append({"reason": "FROZEN_COHORT_EXECUTION_MISSING",
+                       "missing": sorted(selected - observed)})
     race_ids = [x["race_id"] for x in rows]
     if len(race_ids) != len(set(race_ids)):
         errors.append({"reason": "DUPLICATE_OOS_RACE_ID"})
