@@ -94,3 +94,34 @@ no production numerical values, weights, rankings or frozen evidence are changed
 Real hashes/receipts and all20 observed delta counts are recorded in
 static_proof_real_acceptance.json. The new evaluator gets a new code-hash filename;
 old evaluation versions remain preserved, while current references use the fix.
+
+
+## Merged execution and temporal diagnostic closure
+
+PR290 merged as24084d0773dfeee75099002c631f58d5c32e0dac after10 successful
+pull-request checks. PR291 merged asac12811622610daa30345d9ae32e728594e75429
+with regression and real signed-corpus/KRS/MEC/Capital acceptance passing.
+Its actual artifact12063199321 has SHA256
+ a5b9830f207ccfc67b2881b3259f42c33bc8383191c1b339ab7e04118637ee36.
+The underlying live corpus grew during the continuing intake: each acceptance
+report records its own verified corpus hash/counts. These are separate postcapture
+snapshots, never a single fixed national five-year population.
+The observed value-change counts remain11+9=20; metadata-only changes are excluded.
+A/B tickets and capital remain identical in both diagnostic races.
+The acceptance ran90 tests and36 subtests successfully. The23-race/313-runner
+archival guard replay left every BVI value unchanged.
+
+The main diagnostic job117112418697 exposed an unrelated historical adapter
+replay whose detailed context was already after its September diagnostic cutoff.
+PR292 preserves JRA_DETAIL_CONTEXT_AFTER_CUTOFF, records the expected refusal in a
+separate temporal-guard artifact with coverage NOT_EXECUTED, and leaves the old
+R28 coverage snapshot and signed SOURCE untouched. Its actual pull-request
+job117116469771 verified this exact blocked status. All other exceptions still fail.
+PR292 merged as0287d57f80b595aeec7f88577f927613b8abb261.
+
+Full five-year national coverage, independently resolved official provider IDs,
+and unknown-future predictive/Capital utility remain incomplete. The repaired
+policy's eligible settled prospective count is0. Existing Oct17 preflight and
+Oct18 race-day monitoring prompts retain their schedule and include the new proof,
+source-failure and shared-feature checks. No new policy promotion or purchase
+was performed.
