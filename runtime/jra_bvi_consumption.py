@@ -15,6 +15,7 @@ def sha(value):
 
 
 def build_bvi_consumption(request, mapping, source_artifact=None):
+    pedigree_features={feature for indices in mapping['index_profiles'].values() for feature in indices['BVI']}
     source_artifact=source_artifact or {}
     if source_artifact and (source_artifact.get('race_id')!=request['race_id'] or
             (request.get('source_snapshot_sha256') and request['source_snapshot_sha256']!=source_artifact.get('source_snapshot_sha256'))):
@@ -82,6 +83,10 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
         'downstream_artifact_hashes':{key:sha(request[key]) for key in ('static_prediction','role_registry','pair_dispositions','third_dispositions','krs_input_data') if key in request},
         'static_freeze_timestamp':request.get('static_freeze_timestamp'),
         'runners':rows,'counts':dict(Counter(x['consumption_class'] for x in rows)),
+        'shared_pedigree_feature_bindings':{profile:{index:{key:weight for key,weight in weights.items() if key in pedigree_features}
+            for index,weights in indices.items() if index!='BVI' and set(weights)&pedigree_features}
+            for profile,indices in mapping['index_profiles'].items()},
+        'shared_feature_effect_is_not_bvi_scalar_propagation':True,
         'propagation':{'direct_derived':['TPI'],'indirect_derived':['SRI','F3S','T3I'],
             'no_direct_bvi_term':['ZAI_WIN','ZAI_PLACE'],
             'static_winner_ranking':'ZAI_WIN; BVI-only change does not directly change W ranking'},

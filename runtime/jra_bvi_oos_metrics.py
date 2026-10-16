@@ -2,6 +2,7 @@
 from collections import Counter
 from jra_bvi_consumption import sha
 from jra_evidence_to_base_production import _profile_for_runner
+from jra_index_provenance_builder import BASE
 from jra_bvi_shadow_comparison import PEDIGREE_FEATURES
 
 ARMS=('A_CURRENT','B_PEDIGREE_ENHANCED_SHADOW','C_BLOODLINE_ABLATION')
@@ -50,9 +51,15 @@ def evaluate(pre, official, settled):
                 'target_roles':{role:{'n':1,'captured':rid in set(map(str,cols[role])),
                     'rank':ranking.index(rid)+1,'market_rank':list(map(str,pre['market_ranking'])).index(rid)+1 if pre.get('market_ranking') else None}
                     for role,rid in hit_targets.items()}}
+        other_base_changes={key:[rid for rid in profiles if current[rid]['canonical_components'][key]['value']!=base[rid]['canonical_components'][key]['value']]
+            for key in BASE if key!='BVI'}
+        other_base_changes={key:ids for key,ids in other_base_changes.items() if ids}
+        bvi_changes=sum(current[rid]['canonical_components']['BVI']['value']!=base[rid]['canonical_components']['BVI']['value'] for rid in profiles)
         s=settled['arms'][name]['settlement'];cost=s['investment']
         output[name]={'profiles':groups,'non_bvi_feature_changes_vs_a':changes,
-            'bvi_only_causal_comparison':not changes,
+            'pedigree_features_only_comparison':not changes,
+            'other_base_index_changes_vs_a':other_base_changes,
+            'bvi_only_causal_comparison':bool(bvi_changes and not changes and not other_base_changes),
             'equal_budget_protocol_preregistered':pre.get('comparison_protocol') is not None,
             'equal_budget_return_per_yen':s['return']/cost if cost else None,
             'equal_budget_status':'NORMALIZED_DIAGNOSTIC_NOT_PURCHASE' if cost else 'NO_BET_NO_NORMALIZATION'}
@@ -68,7 +75,7 @@ def evaluate(pre, official, settled):
         else:equal_ticket={'status':'COMMON_WIDTH_ZERO_NO_COMPARISON','ticket_count':0,'arms':{}}
     return {'race_id':pre['race_id'],'race_profile':next(iter(set(profiles.values()))) if len(set(profiles.values()))==1 else 'MIXED',
         'profiles':dict(Counter(profiles.values())),'arms':output,'equal_ticket':equal_ticket,
-        'causal_scope':'A_B_PEDIGREE_FEATURE_OVERLAY; C_REMOVES_ALL_CORPUS_DERIVED_FEATURES_INCLUDING_POSSIBLE_CFI',
+        'causal_scope':'PEDIGREE_FEATURES_CAN_FEED_MULTIPLE_BASE_INDICES; NEITHER_B_NOR_C_IS_AUTOMATICALLY_BVI_SCALAR_ONLY',
         'predictive_improvement_demonstrated':False,'automatic_promotion':False}
 
 
