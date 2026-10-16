@@ -1,0 +1,32 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_______ test_missing_odds_never_labels_declared_runners_official_active ________
+
+    def test_missing_odds_never_labels_declared_runners_official_active():
+        def fetch(spec,cutoff):
+            if spec['source_class']=='OFFICIAL_ACTIVE_BETTING_UNIVERSE':
+                raise ValueError('OFFICIAL_ODDS_UNAVAILABLE')
+            return fake_fetch(spec,cutoff)
+        p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+>       assert all(r['observed_active_runner_universe'] is None for r in p['races'])
+E       assert False
+E        +  where False = all(<generator object test_missing_odds_never_labels_declared_runners_official_active.<locals>.<genexpr> at 0x7f6da1c12330>)
+
+tests/test_local_race_day_dispatcher.py:189: AssertionError
+________ test_official_odds_cancellation_reuses_existing_runner_parser _________
+
+    def test_official_odds_cancellation_reuses_existing_runner_parser():
+        def fetch(spec,cutoff):
+            if spec['source_class']=='OFFICIAL_ACTIVE_BETTING_UNIVERSE':
+                return snapshot(spec,'<table><tr><td>1</td><td>1</td><td>テスト</td></tr><tr><td>2</td><td>2</td><td>テスト二 出走取消</td></tr></table>')
+            return fake_fetch(spec,cutoff)
+        p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+>       assert all(r['observed_active_runner_universe']['runner_count']==1 for r in p['races'])
+E       assert False
+E        +  where False = all(<generator object test_official_odds_cancellation_reuses_existing_runner_parser.<locals>.<genexpr> at 0x7f6da1c13370>)
+
+tests/test_local_race_day_dispatcher.py:200: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_local_race_day_dispatcher.py::test_missing_odds_never_labels_declared_runners_official_active
+FAILED tests/test_local_race_day_dispatcher.py::test_official_odds_cancellation_reuses_existing_runner_parser
+2 failed in 0.08s

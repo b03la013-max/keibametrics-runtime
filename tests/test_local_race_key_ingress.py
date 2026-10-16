@@ -229,7 +229,112 @@ def test_push_concurrency_independent_of_result_wait():
     """A previous race's live RESULT cannot hold the next push race's SOURCE."""
     wf = (Path(__file__).resolve().parents[1] /
           ".github/workflows/km-local-race-key-entry.yml").read_text(encoding="utf-8")
-    assert "github.event_name == 'push' && github.sha" in wf
-    assert "format('{0}-{1}-{2}'" in wf
+    assert "ref: ${{ github.sha }}" in wf
+    assert "group: km-formal-${{ matrix.execution_id }}" in wf
     assert "cancel-in-progress: false" in wf
-    assert "km-local-race-key-result-" in wf
+    assert wf.count("group: km-formal-${{ matrix.execution_id }}")==2
+
+
+def test_saved_r12_event_survives_main_moving_to_measurement_commit(tmp_path):
+    """Historical R12 request in synthetic Git history; no remote history needed."""
+    import subprocess
+    root=Path(__file__).resolve().parents[1]
+    def git(*args):
+        return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+    git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+    (tmp_path/'initial').write_text('initial');git('add','.');git('commit','-m','initial')
+    before=git('rev-parse','HEAD')
+    name='runtime/race_key_requests/KAW-20261014-R12-LIVE-R1.json'
+    request=tmp_path/name;request.parent.mkdir(parents=True)
+    request.write_bytes((root/name).read_bytes())
+    git('add','.');git('commit','-m','saved R12 request');after=git('rev-parse','HEAD')
+    (tmp_path/'measurement').write_text('later unrelated state');git('add','.');git('commit','-m','measurement')
+    old=git('diff-tree','--no-commit-id','--name-only','-r','HEAD')
+    assert not any(x.startswith('runtime/race_key_requests/') for x in old.splitlines())
+    new=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert len(new['requests'])==1 and int(new['requests'][0]['race_no'])==12
+    assert not new['errors']
+
+
+def test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved(tmp_path):
+    import json,subprocess
+    def git(*args):return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+    git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+    (tmp_path/'initial').write_text('first');git('add','.');git('commit','-m','initial');before=git('rev-parse','HEAD')
+    folder=tmp_path/'runtime/race_key_requests';folder.mkdir(parents=True)
+    for number in [1,2]:
+        d=future_fields();d['race_no']=number;(folder/f'R{number}.json').write_text(json.dumps(d))
+    (folder/'bad.json').write_text('{"extra":"invalid"}')
+    git('add','.');git('commit','-m','two keys and bad cell');after=git('rev-parse','HEAD')
+    (tmp_path/'later').write_text('moving head');git('add','.');git('commit','-m','unrelated later')
+    r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert len(r['requests'])==2 and len(r['errors'])==1 and r['status']=='PARTIAL'
+    assert len({x['execution_id'] for x in r['requests']})==2
+
+
+def test_no_signed_final_or_delivery_inferred_from_successful_job(monkeypatch):
+    from runtime import local_race_key_gate as gate
+    monkeypatch.setattr(gate.o,'resolve_phase',lambda *args:None)
+    state=gate.terminal_state('MISSING','success')
+    assert state['status']=='NO_SIGNED_FINAL'
+    assert not state['signed_final_pass'] and not state['prestart_delivery_pass']
+
+
+def test_saved_final_flags_cannot_override_fresh_signature_failure(monkeypatch):
+    from runtime import local_race_key_gate as gate
+    from runtime import execution_gateway as gateway
+    monkeypatch.setattr(gate.o, 'resolve_phase', lambda *a: {'run_dir': 'unused'})
+    values = {'final_receipt_envelope.json': {'receipt': {'status': 'PASS', 'race_id': 'race'}},
+              'receipt_verifications.json': {'FINAL': True},
+              'final_before_post_verification.json': {'verified': True}}
+    monkeypatch.setattr(gate.o, '_load_checkpoint_json', lambda p, name: values[name])
+    monkeypatch.setattr(gateway, 'request_json', lambda *a, **k: (200, {'valid': False}))
+    result = gate.terminal_state('race', 'success')
+    assert result['status'] == 'HOLD'
+    assert result['signed_final_pass'] is False
+    assert result['render_available'] is False
+    assert result['prestart_delivery_pass'] is False
+
+
+def test_terminal_summary_does_not_publish_stale_tree_on_verify_hold(monkeypatch,tmp_path):
+    from runtime import local_race_key_gate as gate
+    import sys,json
+    stale=tmp_path/'runtime/execution_reports/race/delivery/canonical_tree.txt'
+    stale.parent.mkdir(parents=True);stale.write_text('STALE TICKETS')
+    source_report=tmp_path/'entry_report.json'
+    source_report.write_text(json.dumps({'status':'HOLD','first_failed_phase':'SOURCE',
+                                       'first_failed_code':'HTTP_503','code':'HTTP_503'}))
+    monkeypatch.setattr(gate.o,'ROOT',tmp_path)
+    monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'HOLD',
+        'reason':'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED','render_available':False,'prestart_delivery_pass':False})
+    output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+    monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','failure',
+        '--report',str(source_report),'--output',str(output),'--github-summary',str(summary)])
+    assert gate.main()==0
+    assert 'STALE TICKETS' not in summary.read_text()
+    result=json.loads(output.read_text())
+    assert result['execution_failure']['first_failed_code']=='HTTP_503'
+    assert result['execution_failure']['first_failed_phase']=='SOURCE'
+    assert result['github_summary']['canonical_final_included'] is False
+    assert result['prestart_delivery_pass'] is False
+
+
+def test_terminal_summary_binds_exact_content_and_final_without_receipt_claim(monkeypatch,tmp_path):
+    from runtime import local_race_key_gate as gate
+    import sys,json,hashlib
+    tree='CANONICAL TICKETS\n'
+    monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
+        'prestart_delivery_pass':False,'user_received_at':None,'canonical_tree':tree,
+        'final_receipt_sha256':'receipt-sha','original_final_artifact_sha256':'artifact-sha'})
+    output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+    monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','success',
+        '--output',str(output),'--github-summary',str(summary)])
+    assert gate.main()==0
+    result=json.loads(output.read_text());record=result['github_summary']
+    assert tree in summary.read_text()
+    assert record['content_sha256']==hashlib.sha256(summary.read_bytes()).hexdigest()
+    assert record['final_receipt_sha256']=='receipt-sha'
+    assert record['final_artifact_sha256']=='artifact-sha'
+    assert record['written_at'] and record['canonical_final_included'] is True
+    assert result['prestart_delivery_pass'] is False and result['user_received_at'] is None

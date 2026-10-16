@@ -115,6 +115,7 @@ def render_ticket_tree(final_artifact: dict) -> dict:
         ])
     counts = OrderedDict()
     stake_total = 0
+    reflattened = []
     if ft.get("no_bet") or not tickets:
         lines += _branch(["見送り"])
     by_bet = OrderedDict((b, []) for b in ORDER)
@@ -122,7 +123,13 @@ def render_ticket_tree(final_artifact: dict) -> dict:
         b = str(t.get("bet_type") or "").upper()
         if b not in by_bet:
             raise TicketTreeError(f"UNKNOWN_BET_TYPE:{b}")
+        raw_stake=t.get('stake')
+        if isinstance(raw_stake,bool) or not isinstance(raw_stake,int) or raw_stake<=0 or raw_stake%100:
+            raise TicketTreeError('STAKE_UNIT_INVALID')
         sel = tuple(int(x) for x in t["selection"])
+        expected=1 if b in ('WIN','PLACE') else 2 if b in ('WIDE','QUINELLA','EXACTA') else 3
+        if len(sel)!=expected or len(set(sel))!=len(sel):
+            raise TicketTreeError('SELECTION_ARITY_OR_DUPLICATE_INVALID')
         by_bet[b].append((sel, int(t.get("stake") or 0)))
         stake_total += int(t.get("stake") or 0)
     for bet, rows in by_bet.items():
@@ -154,6 +161,16 @@ def render_ticket_tree(final_artifact: dict) -> dict:
             want = combos if bet in ("EXACTA", "TRIFECTA") else {tuple(sorted(c)) for c in combos}
             if covered != want:
                 raise TicketTreeError(f"TREE_EXPANSION_MISMATCH:{bet}")
+        # Stakes are explicitly recoverable from the displayed amount, or
+        # from a per-combination ledger when the portfolio has mixed stakes.
+        price={s if bet in ('EXACTA','TRIFECTA') else tuple(sorted(s)):st for s,st in rows}
+        expanded=combos if bet in ('WIN','PLACE') else covered
+        for combo in sorted(expanded):
+            norm=combo if bet in ('EXACTA','TRIFECTA') else tuple(sorted(combo))
+            reflattened.append({'bet_type':bet,'selection':list(norm),'stake':price[norm]})
+        if len(stakes)>1:
+            lines.append('券面別投資額')
+            lines += _branch([f"{'→'.join(map(str,x))}　{price[x]}円" for x in sorted(price)])
         counts[label] = (len(rows), stakes)
     if counts:
         lines.append("点数")
@@ -177,7 +194,10 @@ def render_ticket_tree(final_artifact: dict) -> dict:
     if str(fpp.get("validation_status") or "").upper() == "UNVALIDATED":
         lines.append("検証状態")
         lines += _branch(["未検証（オーナー承認・前向きOOS 0件）"])
-    return {"text": "\n".join(lines), "ticket_count": len(tickets), "total_investment": stake_total}
+    norm=lambda ts:sorted((str(t['bet_type']).upper(),tuple(t['selection']) if str(t['bet_type']).upper() in ('EXACTA','TRIFECTA') else tuple(sorted(t['selection'])),t['stake']) for t in ts)
+    if norm(reflattened)!=norm(tickets):
+        raise TicketTreeError('CANONICAL_TREE_STAKE_ROUNDTRIP_MISMATCH')
+    return {"canonical_roundtrip_verified":True,"reflattened_tickets":reflattened,"text": "\n".join(lines), "ticket_count": len(tickets), "total_investment": stake_total}
 
 
 if __name__ == "__main__":

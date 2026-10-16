@@ -6,6 +6,40 @@ import pytest
 from runtime import formal_execution_orchestrator as o
 
 
+def _result_settlement_from_existing_runner(payouts):
+    path = Path(o.__file__).with_name("local_result_from_signed_final.py")
+    code = path.read_text().split('tickets=((fin.get("artifact")', 1)[1]
+    code = 'tickets=((fin.get("artifact")' + code.split('\ndef post(', 1)[0]
+    scope = {
+        "fin": {"artifact": {"final_ticket": {"tickets": [
+            {"bet_type": "EXACTA", "selection": [7, 5], "stake": 100},
+            {"bet_type": "TRIO", "selection": [1, 2, 3], "stake": 100},
+        ]}}},
+        "rid": "KAW-RESULT-REGRESSION",
+        "req": {"finish_order": [7, 5, 6], "payouts": payouts,
+                "result_available_at": "2026-10-15T15:00:00+09:00"},
+    }
+    exec(compile(code, str(path), "exec"), scope)
+    return scope["result_payload"]["settlement"]
+
+
+@pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
+def test_winning_payout_unknown_stops_before_complete_result(payouts):
+    with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+        _result_settlement_from_existing_runner(payouts)
+
+
+def test_published_winning_payout_preserves_existing_settlement():
+    settlement = _result_settlement_from_existing_runner({"EXACTA": 1230})
+    assert settlement["status"] == "COMPLETE"
+    assert settlement["investment"] == 200
+    assert settlement["return"] == 1230
+    assert settlement["winning_tickets"] == [{
+        "bet_type": "EXACTA", "selection": [7, 5], "stake": 100,
+        "payout_per_100": 1230, "return": 1230,
+    }]
+
+
 def base_intent():
     return {
         "family_id": "LOCAL",
@@ -406,6 +440,23 @@ def test_bind_formal_request_to_source_rejects_preexisting_mismatch(monkeypatch,
 
     with pytest.raises(o.FormalOrchestrationError, match="STATIC_SOURCE_BASIS_RECEIPT_MISMATCH_BEFORE_FORMAL"):
         o.bind_formal_request_to_source(o.build_phase_request(intent, "FORMAL"))
+
+
+def test_late_scratch_source_revision_cannot_rebind_frozen_static(monkeypatch, tmp_path):
+    intent = base_intent()
+    intent["static_prediction"] = {
+        "ranking": [1, 2, 3], "source_basis_receipt_sha256": "source-receipt-sha"}
+    original = json.dumps(intent, sort_keys=True)
+    source = _source_resolved_for_basis(tmp_path, intent)
+    path = source["run_dir"] / "source_receipt_envelope.json"
+    revised = json.loads(path.read_text())
+    revised["receipt_sha256"] = "new-source-with-late-official-scratch"
+    revised["artifact"]["runner_status_registry"] = [{"runner_id": "3", "status": "CANCELLED"}]
+    path.write_text(json.dumps(revised))  # Synthetic revision fixture, not a signed artifact.
+    monkeypatch.setattr(o, "resolve_phase", lambda *_: source)
+    with pytest.raises(o.FormalOrchestrationError, match="STATIC_SOURCE_BASIS_RECEIPT_MISMATCH_BEFORE_FORMAL"):
+        o.bind_formal_request_to_source(o.build_phase_request(intent, "FORMAL"))
+    assert json.dumps(intent, sort_keys=True) == original
 
 
 def test_formal_semantic_basis_is_independent_of_derived_source_binding_fields(tmp_path):

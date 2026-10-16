@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "task_id": "6ad1ff712fc08191a98f18d056fd761d",
+  "title": "KeibaMetrics P0障害監査",
+  "schedule": "BEGIN:VEVENT\nDTSTART;TZID=Asia/Tokyo:20261016T204500\nRRULE:FREQ=HOURLY\nEND:VEVENT",
+  "is_enabled": true,
+  "timing_mode": "condition_watch",
+  "prompt": "b03la013-max/keibametrics-runtime の新しい正式受付・自律実行・Delivery障害を1回確認する。最初に main、既存 Draft PR #282、evidence/family_p0_20261016/、既存 incident 記録と対象日ごとの Owner 承認を読む。PR #280/#284 の実装を再利用し、同じ障害で重複 PR を作らない。既に報告済みの2026-10-15 KAW6/7/9/11、10/16 KAW7/10の原応答欠測を新規障害として繰り返し通知しない。\n承認済み対象Raceだけについて公式Discovery計画、Race-Key、Formal Intent、SOURCE、29指数、Static、PRE_KRS、KRS、MEC、Capital、署名FINAL、GitHub Summary/Canonical Delivery、RESULT/Settlement/PFS/Learning の実Receiptと時刻を確認する。固定分母から失敗Raceを除外しない。First-stopの原ログ・入力・実応答を保存し、欠測はUNKNOWNを維持する。FINAL成立とユーザー到達、履歴Replayと未知未来の実証を区別する。\n新しいコード由来障害が実証された場合だけ、第一停止工程特定→秘密値を除いた原証拠保存→オフライン再現→既存実装の最小Correctness修復→既存Regression/CI→同じ既存Draft PRへの保存を行う。安全に再現できない接続拒否は推測で修復せず、操作公開・ホスト承認・Connector・GitHub HTTP・Workflow・Runtimeを切り分ける。Railwayは既存 witnessstrictimage のHealth/Deploymentを読み取りで確認する。\n新規Race登録・Dispatch・再実行・Merge・Deploy・Activation・承認範囲拡張・外部通知先追加を行わない。接続側拒否を別経路で迂回しない。発走後の新規FINAL生成を禁止する。Prediction、29指数式、KRS Physics、MEC-R3、Capital、Venue Canon、既存署名Artifact、OOS台帳を変更しない。馬券購入なし。追加OpenAI有料API要求0。新規有料サービスなし。Railway Soft $5/Hard $10は変更しない。\n次の未知未来RaceのOwner承認・日付・Race集合・計画SHAが存在する場合は、その既存実行結果を観測する。承認がなければ実行せず未実証を維持する。新しい重大障害、修復結果、実証結果、又は新しい接続阻害がある場合だけ、このユーザーへ差分と証拠リンクを通知する。変化がなければ通知しない。このタスクは障害監査・Draft修復であり、Dispatcherや発走前Deliveryの時間保証ではない。",
+  "scope": "Hourly fault audit and existing-Draft-only repairs; NOT a new dispatcher or prestart delivery guarantee"
+}

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="7" time="0.470" timestamp="2026-10-16T03:30:42.874788-07:00" hostname="5bdbfcc75cc2"><testcase classname="tests.test_local_race_day_dispatcher" name="test_corrupt_race_checkpoint_does_not_abort_other_approved_race" time="0.039"><failure message="json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_corrupt_race_checkpoint_d0')
+
+    def test_corrupt_race_checkpoint_does_not_abort_other_approved_race(tmp_path):
+        p=plan(); first=p['races'][0]['execution_id']; sent=[]
+        pointer=tmp_path/'runtime/executions'/first/'SOURCE/LATEST.json'
+        pointer.parent.mkdir(parents=True); pointer.write_text('{broken')
+&gt;       state=run(tmp_path,p,approval(p),{},execute=True,publish=lambda:None,
+                  health=lambda:{'status':'PASS'},send=lambda f:sent.append(f['race_no']) or {'acknowledged':True})
+
+tests/test_local_race_day_dispatcher.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_race_day_dispatcher.py:52: in run
+    return d.tick(root,p,a,state,now=NOW,
+runtime/local_race_day_dispatcher.py:312: in tick
+    cell.update(checkpoint_status(root, eid))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+runtime/local_race_day_dispatcher.py:206: in checkpoint_status
+    latest[phase] = json.loads(pointer.read_text())
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py:338: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;json.decoder.JSONDecoder object at 0x7f56ea142c00&gt;, s = '{broken'
+idx = 0
+
+    def raw_decode(self, s, idx=0):
+        """Decode a JSON document from ``s`` (a ``str`` beginning with
+        a JSON document) and return a 2-tuple of the Python
+        representation and the index in ``s`` where the document ended.
+    
+        This can be used to decode a JSON document from a string that may
+        have extraneous data at the end.
+    
+        """
+        try:
+&gt;           obj, end = self.scan_once(s, idx)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+E           json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py:354: JSONDecodeError</failure></testcase><testcase classname="tests.test_local_race_day_dispatcher" name="test_checkpoint_observer_reuses_store_manifest_integrity" time="0.003"><failure message="Failed: DID NOT RAISE ExecutionStoreError">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_checkpoint_observer_reuse0')
+
+    def test_checkpoint_observer_reuses_store_manifest_integrity(tmp_path):
+        from runtime.execution_store import persist_phase, ExecutionStoreError
+        src=tmp_path/'src';src.mkdir()
+        (src/'source_receipt_envelope.json').write_text(json.dumps({'receipt_sha256':'original'}))
+        saved=persist_phase('race','SOURCE','one',src,root=tmp_path/'runtime/executions')
+        (Path(saved['path'])/'source_receipt_envelope.json').write_text(json.dumps({'receipt_sha256':'changed'}))
+&gt;       with pytest.raises(ExecutionStoreError,match='FILE_HASH_MISMATCH'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ExecutionStoreError
+
+tests/test_local_race_day_dispatcher.py:263: Failed</failure></testcase><testcase classname="tests.test_local_race_day_dispatcher" name="test_claim_without_final_becomes_deadline_terminal_without_resend" time="0.036"><failure message="AssertionError: assert 'DISPATCH_ACK...R_CHECKPOINTS' == 'FINAL_DEADLINE_EXPIRED'&#10;  &#10;  - FINAL_DEADLINE_EXPIRED&#10;  + DISPATCH_ACKNOWLEDGED_MONITOR_CHECKPOINTS">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_claim_without_final_becom0')
+
+    def test_claim_without_final_becomes_deadline_terminal_without_resend(tmp_path):
+        p=plan();a=approval(p);first=p['races'][0]['execution_id']
+        claim={'claimed_at':NOW.isoformat(),'acknowledgement':{'acknowledged':True}}
+        state={'races':{first:claim}};send=Mock()
+        d.tick(tmp_path,p,a,state,now=NOW+timedelta(hours=2),execute=True,
+               authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),publish=lambda:None,
+               reconcile=lambda *a:None,send=send)
+&gt;       assert state['races'][first]['status']=='FINAL_DEADLINE_EXPIRED'
+E       AssertionError: assert 'DISPATCH_ACK...R_CHECKPOINTS' == 'FINAL_DEADLINE_EXPIRED'
+E         
+E         - FINAL_DEADLINE_EXPIRED
+E         + DISPATCH_ACKNOWLEDGED_MONITOR_CHECKPOINTS
+
+tests/test_local_race_day_dispatcher.py:274: AssertionError</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_source_is_durable_before_worker_crash_in_numerical" time="0.032"><failure message="TypeError: run() got an unexpected keyword argument 'checkpoint_publisher'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f56e9c3bb90&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_source_is_durable_before_0')
+
+    def test_source_is_durable_before_worker_crash_in_numerical(monkeypatch,tmp_path):
+        from runtime import local_race_entry as e
+        events=[]
+        monkeypatch.setattr(o,'ROOT',tmp_path)
+        monkeypatch.setattr(o,'validate_request_context',lambda *a:None)
+        monkeypatch.setattr(o,'resolve_phase',lambda eid,phase:{'run_dir':tmp_path} if phase=='SOURCE' else None)
+        monkeypatch.setattr(o,'orchestrate',lambda *a,**k:{'status':'SOURCE_PASS'})
+        monkeypatch.setattr(o,'validate_source_checkpoint',lambda *a:events.append('verified-source'))
+        monkeypatch.setattr(o,'_load_checkpoint_json',lambda *a:{'artifact':{'official_runner_universe':{'runners':[]}}})
+        monkeypatch.setattr(e,'assess',lambda:{'status':'READY','required_indices':[]})
+        def crash(*a):
+            events.append('worker-crash');raise RuntimeError('WORKER_CRASH')
+        monkeypatch.setattr(e,'materialize_production',crash)
+        with pytest.raises(RuntimeError,match='WORKER_CRASH'):
+&gt;           e.run({'execution_id':'race','race_id':'race'},output=tmp_path/'out',run_id='test',
+                  checkpoint_publisher=lambda paths:events.append(('durable',paths)))
+E           TypeError: run() got an unexpected keyword argument 'checkpoint_publisher'
+
+tests/test_local_source_first_entry.py:208: TypeError</failure></testcase><testcase classname="tests.test_local_source_first_entry" name="test_source_publish_conflict_stops_before_prediction" time="0.001"><failure message="TypeError: run() got an unexpected keyword argument 'checkpoint_publisher'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f56e996e030&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_source_publish_conflict_s0')
+
+    def test_source_publish_conflict_stops_before_prediction(monkeypatch,tmp_path):
+        from runtime import local_race_entry as e
+        monkeypatch.setattr(o,'validate_request_context',lambda *a:None)
+        monkeypatch.setattr(o,'resolve_phase',lambda eid,phase:{'run_dir':tmp_path} if phase=='SOURCE' else None)
+        monkeypatch.setattr(o,'orchestrate',lambda *a,**k:{'status':'SOURCE_PASS'})
+        monkeypatch.setattr(o,'validate_source_checkpoint',lambda *a:None)
+        monkeypatch.setattr(e,'materialize_production',lambda *a:pytest.fail('no prediction before durable SOURCE'))
+        def conflict(paths):raise RuntimeError('PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT')
+        with pytest.raises(RuntimeError,match='PERSIST_IMMUTABLE'):
+&gt;           e.run({'execution_id':'race','race_id':'race'},output=tmp_path/'out',run_id='test',checkpoint_publisher=conflict)
+E           TypeError: run() got an unexpected keyword argument 'checkpoint_publisher'
+
+tests/test_local_source_first_entry.py:222: TypeError</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_terminal_summary_does_not_publish_stale_tree_on_verify_hold" time="0.002"><failure message="SystemExit: 2">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f56e9be6ea0&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_terminal_summary_does_not0')
+
+    def test_terminal_summary_does_not_publish_stale_tree_on_verify_hold(monkeypatch,tmp_path):
+        from runtime import local_race_key_gate as gate
+        import sys,json
+        stale=tmp_path/'runtime/execution_reports/race/delivery/canonical_tree.txt'
+        stale.parent.mkdir(parents=True);stale.write_text('STALE TICKETS')
+        source_report=tmp_path/'entry_report.json'
+        source_report.write_text(json.dumps({'status':'HOLD','first_failed_phase':'SOURCE',
+                                           'first_failed_code':'HTTP_503','code':'HTTP_503'}))
+        monkeypatch.setattr(gate.o,'ROOT',tmp_path)
+        monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'HOLD',
+            'reason':'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED','render_available':False,'prestart_delivery_pass':False})
+        output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+        monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','failure',
+            '--report',str(source_report),'--output',str(output),'--github-summary',str(summary)])
+&gt;       assert gate.main()==0
+               ^^^^^^^^^^^
+
+tests/test_local_race_key_ingress.py:313: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/local_race_key_gate.py:164: in main
+    args = parser.parse_args()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:1908: in parse_args
+    self.error(msg)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:2650: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ArgumentParser(prog='gate', usage=None, description=None, formatter_class=&lt;class 'argparse.HelpFormatter'&gt;, conflict_handler='error', add_help=True)
+status = 2
+message = 'gate: error: unrecognized arguments: --github-summary /tmp/pytest-of-root/pytest-11/test_terminal_summary_does_not0/summary.md\n'
+
+    def exit(self, status=0, message=None):
+        if message:
+            self._print_message(message, _sys.stderr)
+&gt;       _sys.exit(status)
+E       SystemExit: 2
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:2637: SystemExit</failure></testcase><testcase classname="tests.test_local_race_key_ingress" name="test_terminal_summary_binds_exact_content_and_final_without_receipt_claim" time="0.001"><failure message="SystemExit: 2">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f56e9be7710&gt;
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-11/test_terminal_summary_binds_ex0')
+
+    def test_terminal_summary_binds_exact_content_and_final_without_receipt_claim(monkeypatch,tmp_path):
+        from runtime import local_race_key_gate as gate
+        import sys,json,hashlib
+        tree='CANONICAL TICKETS\n'
+        monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+            'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
+            'prestart_delivery_pass':False,'user_received_at':None,'canonical_tree':tree,
+            'final_receipt_sha256':'receipt-sha','original_final_artifact_sha256':'artifact-sha'})
+        output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+        monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','success',
+            '--output',str(output),'--github-summary',str(summary)])
+&gt;       assert gate.main()==0
+               ^^^^^^^^^^^
+
+tests/test_local_race_key_ingress.py:333: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+runtime/local_race_key_gate.py:164: in main
+    args = parser.parse_args()
+           ^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:1908: in parse_args
+    self.error(msg)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:2650: in error
+    self.exit(2, _('%(prog)s: error: %(message)s\n') % args)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ArgumentParser(prog='gate', usage=None, description=None, formatter_class=&lt;class 'argparse.HelpFormatter'&gt;, conflict_handler='error', add_help=True)
+status = 2
+message = 'gate: error: unrecognized arguments: --github-summary /tmp/pytest-of-root/pytest-11/test_terminal_summary_binds_ex0/summary.md\n'
+
+    def exit(self, status=0, message=None):
+        if message:
+            self._print_message(message, _sys.stderr)
+&gt;       _sys.exit(status)
+E       SystemExit: 2
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/argparse.py:2637: SystemExit</failure></testcase></testsuite></testsuites>
