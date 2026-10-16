@@ -285,14 +285,16 @@ jobs:
           EXECUTION_ID: ${{ matrix.execution_id }}
         run: |
           set -euo pipefail
-          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
+          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ] || [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then
             git config user.name keibametrics-runtime
             git config user.email actions@users.noreply.github.com
-            git add "runtime/executions/$EXECUTION_ID/RESULT"
+            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/RESULT"; fi
             if [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT"; fi
+            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
             for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
               if [ -e "$path" ]; then git add "$path"; fi
             done
+            fi
             if ! git diff --cached --quiet; then
               git commit -m "execution: race-key RESULT $EXECUTION_ID [skip ci]"
               python tools/persist_local_checkpoints.py --branch main

@@ -8,6 +8,51 @@ from runtime import local_race_key_intake as intake
 from runtime import local_race_key_gate as gate
 
 
+@pytest.mark.parametrize("official,result", [(True, False), (True, True), (False, False)])
+def test_result_workflow_preserves_official_checkpoint_before_signed_result(tmp_path, official, result):
+    """Exercise the real persistence shell after a RESULT worker interruption."""
+    import os
+    import subprocess
+    import yaml
+    workflow = yaml.load((Path(__file__).resolve().parents[1] /
+        ".github/workflows/km-local-race-key-entry.yml").read_text(), Loader=yaml.BaseLoader)
+    command = next(s["run"] for s in workflow["jobs"]["result"]["steps"]
+        if s.get("name") == "Persist verified RESULT and forward measurement ledgers")
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "fixture")
+    git("config", "user.email", "fixture@example.invalid")
+    git("commit", "--allow-empty", "-qm", "fixture")
+    before = git("rev-parse", "HEAD")
+    eid = "KM-LOCAL-KAW-20990101-R01-LIVE-R1"
+    for phase, present in (("OFFICIAL_RESULT", official), ("RESULT", result)):
+        if present:
+            target = tmp_path / "runtime/executions" / eid / phase / "fixture.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('{"synthetic_regression":true}\n')
+    # Block network publishing; verify that the unchanged existing publisher is called.
+    bin_dir = tmp_path / "fixture-bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "python"
+    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n')
+    stub.chmod(0o755)
+    log = tmp_path / "publish.log"
+    env = {**os.environ, "EXECUTION_ID": eid, "PUBLISH_LOG": str(log),
+           "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"]}
+    subprocess.run(["bash", "-c", command], cwd=tmp_path, env=env, check=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    tracked = git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+    if official:
+        assert f"runtime/executions/{eid}/OFFICIAL_RESULT/fixture.json" in tracked
+        assert log.read_text().strip() == "tools/persist_local_checkpoints.py --branch main"
+    if result:
+        assert f"runtime/executions/{eid}/RESULT/fixture.json" in tracked
+    if not official and not result:
+        assert git("rev-parse", "HEAD") == before
+        assert not log.exists()
+
+
 def authority(*, now):
     return Path("profiles/authority.json"), {
         "manifest_id": "KM-FAMILY-CURRENT-AUTHORITY-20990101-R100",

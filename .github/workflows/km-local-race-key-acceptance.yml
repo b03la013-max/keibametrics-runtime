@@ -62,7 +62,7 @@ jobs:
           PYTHONPATH=runtime:. python -m runtime.local_race_entry --help >/dev/null
           PYTHONPATH=runtime:. python -m runtime.local_race_key_gate --help >/dev/null
       - name: LOCAL race-key and existing formal regression
-        run: python -m pytest -q tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py
+        run: python -m pytest -q tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py
 
       - name: Record official NAR day discovery availability (read-only, no LIVE/OOS execution)
         run: |

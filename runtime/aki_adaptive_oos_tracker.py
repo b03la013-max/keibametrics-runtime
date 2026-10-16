@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -51,9 +52,14 @@ def _verify_production_signed_settlement(signed: dict, recalculated: dict) -> No
             or not all(k in signed for k in ("investment", "return"))):
         raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID")
     try:
+        if any(isinstance(signed[k], bool) or not isinstance(signed[k], (int, float))
+               for k in ("investment", "return")):
+            raise ValueError("settlement amounts must be JSON numbers")
         investment = float(signed["investment"])
         payout = float(signed["return"])
-    except (TypeError, ValueError) as exc:
+        if not all(math.isfinite(value) and value >= 0 for value in (investment, payout)):
+            raise ValueError("settlement amounts must be finite and nonnegative")
+    except (TypeError, ValueError, OverflowError) as exc:
         raise AdaptivePurchaseError("PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID") from exc
     if (abs(investment - recalculated["investment"]) > 0.001
             or abs(payout - recalculated["return"]) > 0.001):

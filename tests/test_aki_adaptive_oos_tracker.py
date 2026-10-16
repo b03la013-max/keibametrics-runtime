@@ -112,6 +112,21 @@ def test_signed_settlement_mismatch_is_not_hidden():
         evaluate_canonical(*x)
 
 
+@pytest.mark.parametrize("field", ["investment", "return"])
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+    inputs = canonical_fixture()
+    result = inputs[3]
+    settlement = result["artifact"]["settlement"]
+    settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+    # Model a provider-signed malformed settlement after verification, not a
+    # tampered artifact: the independent monetary reconciliation must reject it.
+    result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+    result["receipt_sha256"] = _sha(result["receipt"])
+    with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+        evaluate_canonical(*inputs)
+
+
 def test_history_is_not_silently_backfilled(tmp_path):
     r = scan_execution_store(tmp_path / "nonexistent")
     assert r["eligible_races"] == 0
