@@ -102,7 +102,7 @@ FIELDS = ("venue_id", "race_date", "race_no", "scheduled_post_at", "prediction_c
 def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
     """Resolve immutable event range, never moving checkout HEAD. One cell per race."""
     requests, errors, seen = [], [], set()
-    candidates = []
+    candidates, day_plans = [], []
     def git_read(*args):
         return subprocess.check_output(["git", *args], cwd=cwd, text=True)
     if event_name == "push":
@@ -111,11 +111,17 @@ def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
             raise IntakeError("PUSH_EVENT_SHA_REQUIRED")
         if event.get("deleted"):
             raise IntakeError("DELETED_PUSH_NOT_EXECUTABLE")
-        paths = (git_read("ls-tree", "-r", "--name-only", after, "runtime/race_key_requests/")
-                 if before == "0" * 40 else git_read("diff", "--name-only", "--diff-filter=AMR", before, after, "--", "runtime/race_key_requests/"))
+        roots = ('runtime/race_key_requests/', 'runtime/local_race_day_plan/', 'profiles/local_autonomous_approvals/')
+        paths = (git_read("ls-tree", "-r", "--name-only", after, *roots)
+                 if before == "0" * 40 else git_read("diff", "--name-only", "--diff-filter=AMR", before, after, "--", *roots))
         for path in paths.splitlines():
             if re.fullmatch(r"runtime/race_key_requests/[A-Za-z0-9_.-]+\.json", path):
                 candidates.append((path, git_read("show", after + ":" + path)))
+            # Only exact dated official plans / owner approvals wake the same
+            # day dispatcher. State/diagnostic writes never create a new driver.
+            match = re.fullmatch(r'(?:runtime/local_race_day_plan|profiles/local_autonomous_approvals)/(\d{4}-\d{2}-\d{2})-([A-Z]{3})\.json',path)
+            if match:
+                day_plans.append({'race_date':match[1], 'venue_id':match[2], 'origin':path})
     elif event_name in {"workflow_dispatch", "repository_dispatch"}:
         candidates = [(event_name, json.dumps(event.get("inputs") if event_name == "workflow_dispatch" else event.get("client_payload")))]
     else:
@@ -139,10 +145,11 @@ def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
             requests.append({**data,'execution_id':eid,'ingress_origin':origin})
         except (ValueError, TypeError, KeyError) as exc:
             errors.append({'origin':origin,'status':'TERMINAL_ERROR','reason':str(exc)})
-    if not candidates:
+    if not candidates and not day_plans:
         errors.append({'status':'TERMINAL_ERROR','reason':'EVENT_HAS_NO_RACE_KEY'})
     return {'event_name':event_name,'before':event.get('before'),'after':event.get('after'),
-            'requests':requests,'errors':errors,'status':'PARTIAL' if errors and requests else 'PASS' if requests else 'TERMINAL_ERROR',
+            'requests':requests,'day_plans':day_plans,'errors':errors,
+            'status':'PARTIAL' if errors and (requests or day_plans) else 'PASS' if requests or day_plans else 'TERMINAL_ERROR',
             'received_at':datetime.now(timezone.utc).isoformat(),'prestart_delivery_proven':False}
 
 
@@ -169,6 +176,7 @@ def main() -> int:
             with Path(args.github_output).open('a') as f:
                 f.write('matrix='+json.dumps({'include':report['requests']},separators=(',',':'))+'\n')
                 f.write('has_requests='+str(bool(report['requests'])).lower()+'\n')
+                f.write('has_day_plans='+str(bool(report.get('day_plans'))).lower()+'\n')
         return 0
     fields = {
         "venue_id": args.venue_id,

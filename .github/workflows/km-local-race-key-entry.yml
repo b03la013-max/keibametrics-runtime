@@ -38,6 +38,10 @@ on:
     branches: [main]
     paths:
       - 'runtime/race_key_requests/*.json'
+      - 'runtime/local_race_day_plan/*.json'
+      - '!runtime/local_race_day_plan/*.state.json'
+      - '!runtime/local_race_day_plan/*.dry-run.json'
+      - 'profiles/local_autonomous_approvals/*.json'
 
 permissions:
   contents: write
@@ -55,6 +59,7 @@ jobs:
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       has_requests: ${{ steps.resolve.outputs.has_requests }}
+      has_day_plans: ${{ steps.resolve.outputs.has_day_plans }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -308,7 +313,10 @@ jobs:
 
   local-day:
     # Inert until an owner separately approves activation, dated scope and cost.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    # A reviewed dated-plan push can start the SAME driver ahead of the race.
+    # GITHUB_TOKEN persistence pushes do not recursively trigger this workflow.
+    needs: [resolve]
+    if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'push' && needs.resolve.outputs.has_day_plans == 'true')) && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
     permissions:
       contents: write
       actions: write
@@ -316,7 +324,9 @@ jobs:
       group: km-local-day-dispatcher
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # worker_seconds defaults to zero. A nonzero lease requires a separate
+    # duration/cost approval and is capped at 350 minutes by the existing driver.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:

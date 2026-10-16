@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from runtime.local_race_key_intake import FIELDS, JST, build
@@ -193,6 +194,13 @@ def authorization(approval, plan, root, now):
     lead, margin = approval.get('start_lead_seconds'), approval.get('minimum_remaining_seconds')
     if type(lead) is not int or type(margin) is not int or not 1800 <= lead <= 7200 or not 300 <= margin < lead:
         raise ValueError('OWNER_DISPATCH_WINDOW_REQUIRED')
+    if approval.get('preregister_authorized_races') is True and not approval.get('preregistration_approval_ref'):
+        raise ValueError('PREREGISTRATION_OWNER_APPROVAL_REQUIRED')
+    worker = approval.get('worker_seconds', 0)
+    if (type(worker) is not int or not 0 <= worker <= 21000
+            or worker and (approval.get('preregister_authorized_races') is not True
+                           or not approval.get('worker_duration_approval_ref'))):
+        raise ValueError('BOUNDED_WORKER_DURATION_APPROVAL_REQUIRED')
     return current['manifest_id']
 
 
@@ -298,6 +306,77 @@ def dispatch(fields):
             'run_id': None, 'signed_final_proven': False}
 
 
+def existing_race_refs(root, race):
+    """All revisions and aliases, including an owned preregistration key."""
+    prefix = race['execution_id'].rsplit('-R1', 1)[0]
+    refs = list((root/'runtime/executions').glob(prefix+'-R*'))
+    refs += list((root/'runtime/formal_intents').glob(prefix+'-R*.json'))
+    for key in (root/'runtime/race_key_requests').glob('*.json'):
+        candidate = json.loads(key.read_text())
+        if all(str(candidate.get(k)) == str(race['fields'][k]) for k in ('venue_id','race_date','race_no')):
+            refs.append(key)
+    return refs
+
+
+def owned_registration(root, race, cell, plan, current):
+    registration = cell.get('registration', {})
+    key = root/'runtime/race_key_requests'/(race['race_key']+'.json')
+    return (registration.get('status') == 'REGISTERED_REQUEST_INTENT_NOT_FROZEN_STATIC'
+            and registration.get('official_plan_sha256') == plan['plan_sha256']
+            and registration.get('current_authority_manifest') == current
+            and registration.get('fields_sha256') == sha(race['fields'])
+            and registration.get('request_intent_sha256') == sha(registration.get('request_intent'))
+            and key.exists() and json.loads(key.read_text()) == race['fields'])
+
+
+def preregister(root, plan, approval, state, *, now, current, publish):
+    """Persist approved request intents; never pretend they are frozen Static."""
+    target = {'official_plan_sha256':plan['plan_sha256'],
+              'approved_race_numbers':sorted(approval['race_numbers']),
+              'current_authority_manifest':current}
+    if state.get('registered_target') not in (None, target):
+        raise ValueError('REGISTERED_TARGET_CHANGED_RECONCILIATION_REQUIRED')
+    state['registered_target'] = target
+    changed = False
+    registered, missing = [], []
+    for race in plan['races']:
+        fields, eid = race['fields'], race['execution_id']
+        if fields['race_no'] not in approval['race_numbers']:
+            continue
+        cell = state['races'].setdefault(eid, {})
+        key = root/'runtime/race_key_requests'/(race['race_key']+'.json')
+        try:
+            if not owned_registration(root,race,cell,plan,current):
+                if cell.get('registration') or cell.get('claimed_at') or existing_race_refs(root,race) or key.exists():
+                    raise ValueError('EXISTING_RACE_OR_REGISTRATION_REQUIRES_READBACK')
+                request = build(fields, now=now)
+                if request['execution_id'] != eid or request['current_authority_manifest'] != current:
+                    raise ValueError('RACE_OR_AUTHORITY_BINDING_MISMATCH')
+                cell['registration'] = {
+                    'status':'REGISTERED_REQUEST_INTENT_NOT_FROZEN_STATIC',
+                    'registered_at':now.isoformat(), 'official_plan_sha256':plan['plan_sha256'],
+                    'current_authority_manifest':current, 'fields_sha256':sha(fields),
+                    'request_intent':request, 'request_intent_sha256':sha(request),
+                    'active_runner_status':'UNKNOWN_UNTIL_FRESH_SIGNED_SOURCE',
+                    'owner_approval_ref':approval['preregistration_approval_ref']}
+                write(key, fields)
+                changed = True
+            registered.append(eid)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            missing.append(eid)
+            cell['registration_error'] = str(exc)
+            cell.setdefault('first_failure_observation', {
+                'stage':'PREREGISTRATION', 'code':str(exc), 'observed_at':now.isoformat()})
+    state['registration_coverage'] = {
+        **target, 'discovered_count':len(plan['races']),
+        'approved_target_count':len(approval['race_numbers']),
+        'registered_count':len(registered), 'registered_execution_ids':registered,
+        'missing_execution_ids':missing, 'observed_at':now.isoformat(),
+        'frozen_formal_intent_proven':False, 'signed_source_proven':False}
+    if changed:
+        publish()  # All owned keys + request intents, BEFORE any runtime handoff.
+
+
 def tick(root, plan, approval, state, *, now, execute=False, authorize=authorization,
          health=runtime_ready, send=dispatch, publish=None, reconcile=reconcile_run, clock=None):
     if sha({k:v for k,v in plan.items() if k != 'plan_sha256'}) != plan.get('plan_sha256'):
@@ -308,6 +387,8 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
     if execute and publish is None:
         raise ValueError('DURABLE_CLAIM_PUBLISH_REQUIRED')
     state.setdefault('races', {})
+    if execute and approval.get('preregister_authorized_races') is True:
+        preregister(root,plan,approval,state,now=now,current=current,publish=publish)
     for race in plan['races']:
         eid, fields = race['execution_id'], race['fields']
         cell = state['races'].setdefault(eid, {})
@@ -346,14 +427,16 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
                     'observed_at':now.isoformat(), 'cutoff':cutoff.isoformat()})
             continue
         # Check ALL same-race execution revisions, not only the expected R1.
-        prefix = eid.rsplit('-R1', 1)[0]
-        existing = list((root/'runtime/executions').glob(prefix+'-R*')) + list((root/'runtime/formal_intents').glob(prefix+'-R*.json'))
         key = root/'runtime/race_key_requests'/f"{race['race_key']}.json"
-        for other in (root/'runtime/race_key_requests').glob('*.json'):
-            candidate=json.loads(other.read_text())
-            if all(str(candidate.get(k))==str(fields[k]) for k in ('venue_id','race_date','race_no')):
-                existing.append(other)
-        if existing or key.exists():
+        try:
+            owned = owned_registration(root,race,cell,plan,current)
+            existing = [ref for ref in existing_race_refs(root,race) if not (owned and ref == key)]
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            cell.update(status='HOLD_RACE_KEY_INTEGRITY', error=str(exc))
+            cell.setdefault('first_failure_observation', {
+                'stage':'RACE_KEY_READBACK', 'code':str(exc), 'observed_at':now.isoformat()})
+            continue
+        if existing or (key.exists() and not owned) or cell.get('registration_error'):
             cell['status'] = 'EXISTING_RACE_READ_BACK_OR_APPROVED_CHECKPOINT_RESUME_ONLY'
             if execute and cell['stages']['FINAL']['status']!='NOT_OBSERVED':
                 try:
@@ -364,12 +447,18 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             continue
         if now >= min(cutoff, post-timedelta(seconds=120))-timedelta(seconds=approval['minimum_remaining_seconds']):
             cell['status'] = 'DEADLINE_HOLD_NO_RETROACTIVE_START'
+            cell.setdefault('first_failure_observation', {
+                'stage':'DISPATCH_DEADLINE', 'code':'INSUFFICIENT_APPROVED_EXECUTION_WINDOW',
+                'observed_at':now.isoformat(), 'cutoff':cutoff.isoformat()})
             continue
         if now < post-timedelta(seconds=approval['start_lead_seconds']):
             cell['status'] = 'WAIT_DISPATCH_WINDOW'
             continue
         if cell.get('preflight_attempts',0) >= 3:
             cell['status']='HOLD_PREFLIGHT_RETRY_LIMIT_OWNER_RECOVERY_REQUIRED'
+            continue
+        if cell.get('manual_recovery_required'):
+            cell['status']='HOLD_GUARD_OWNER_RECOVERY_REQUIRED'
             continue
         if sum(bool(c.get('claimed_at')) for c in state['races'].values()) >= approval['max_dispatches']:
             cell['status'] = 'HOLD_DISPATCH_BUDGET_EXHAUSTED'
@@ -378,6 +467,8 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             request = build(fields, now=now)
             if request['execution_id'] != eid or request['current_authority_manifest'] != current:
                 raise ValueError('RACE_OR_AUTHORITY_BINDING_MISMATCH')
+            if owned and request != cell['registration']['request_intent']:
+                raise ValueError('PREREGISTERED_INTENT_CHANGED_REVIEW_REQUIRED')
             if execute:
                 cell['preflight_attempts']=cell.get('preflight_attempts',0)+1
             cell['runtime_health'] = health() if execute else {'status': 'NOT_CALLED_DRY_RUN'}
@@ -403,6 +494,17 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             cell['status'] = 'DISPATCH_ACKNOWLEDGED_MONITOR_CHECKPOINTS'
             publish()
         except Exception as exc:
+            # Only pre-send transport failures get bounded retry. A fingerprint,
+            # authority or input mismatch is not a temporary unavailable server.
+            from urllib.error import URLError, HTTPError
+            retryable = (isinstance(exc,(TimeoutError,ConnectionError,URLError))
+                         and (not isinstance(exc,HTTPError) or exc.code in {408,425,429,500,502,503,504}))
+            from runtime.execution_gateway import ExecutionGatewayError, RETRYABLE_HTTP_STATUS
+            match = re.match(r'^RUNTIME_HEALTH_HTTP_FAILED:(\d{3}):',str(exc))
+            retryable |= isinstance(exc,ExecutionGatewayError) and bool(match) and int(match[1]) in RETRYABLE_HTTP_STATUS
+            if not cell.get('claimed_at') and not retryable:
+                cell['manual_recovery_required'] = True
+            cell['retry_class'] = 'BOUNDED_PRE_SEND_TRANSPORT_ONLY' if retryable else 'HOLD_RECONCILE_OR_OWNER_REPAIR'
             cell.update(status='HOLD_AMBIGUOUS_DISPATCH_NO_AUTOMATIC_RETRY' if cell.get('claimed_at') else 'HOLD_PRE_DISPATCH',
                         error=str(exc), first_failure='ACTIONS_HANDOFF' if cell.get('claimed_at') else 'PRE_DISPATCH_GUARD')
             cell.setdefault('first_failure_observation', {
@@ -411,6 +513,24 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
     state.update(observed_at=now.isoformat(), plan_sha256=plan['plan_sha256'],
                  production_prediction_changed=False, chat_delivery_verified=False)
     return state
+
+
+def run_worker(approval, step, *, clock=lambda:datetime.now(timezone.utc), sleep=time.sleep):
+    """One existing dispatcher, bounded lease; no RESULT waits or self dispatch."""
+    seconds = approval.get('worker_seconds', 0)
+    if (type(seconds) is not int or not 0 <= seconds <= 21000
+            or seconds and not approval.get('worker_duration_approval_ref')):
+        raise ValueError('BOUNDED_WORKER_DURATION_APPROVAL_REQUIRED')
+    end = clock() + timedelta(seconds=seconds)
+    while True:
+        state = step()
+        pending = [c for c in state.get('races',{}).values()
+                   if c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
+                   and not c.get('manual_recovery_required') and not c.get('claimed_at')]
+        remaining = (end-clock()).total_seconds()
+        if not pending or remaining <= 0:
+            return state
+        sleep(min(60,remaining))
 
 
 def publish_state(root, paths):
@@ -458,8 +578,21 @@ def main():
         delivery_paths=[str(p.relative_to(root)) for r in plan['races']
                         if (p:=root/'runtime/execution_reports'/r['execution_id']/'delivery').exists()]
         publish_state(root, paths+delivery_paths)
-    tick(root,plan,approval,state,now=now,execute=True,publish=publish,clock=lambda:datetime.now(timezone.utc))
-    publish()
+        if sha(json.loads(approval_path.read_text())) != sha(approval):
+            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
+        if json.loads(plan_path.read_text()) != plan:
+            raise ValueError('DAY_PLAN_CHANGED_DURING_WORKER')
+    def step():
+        # publish_state rebases incoming race-local checkpoints; each iteration
+        # rereads approval, so revocation and authority drift stop the worker.
+        current_approval = json.loads(approval_path.read_text())
+        if sha(current_approval) != sha(approval):
+            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
+        tick(root,plan,current_approval,state,now=datetime.now(timezone.utc),execute=True,
+             publish=publish,clock=lambda:datetime.now(timezone.utc))
+        publish()
+        return state
+    run_worker(approval,step)
 
 
 if __name__ == '__main__':

@@ -272,6 +272,27 @@ def test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved(tmp_pa
     assert len({x['execution_id'] for x in r['requests']})==2
 
 
+def test_dated_plan_push_wakes_existing_driver_without_synthetic_race_request(tmp_path):
+    import subprocess
+    def git(*args):return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+    git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+    (tmp_path/'initial').write_text('first');git('add','.');git('commit','-m','initial');before=git('rev-parse','HEAD')
+    folder=tmp_path/'runtime/local_race_day_plan';folder.mkdir(parents=True)
+    (folder/'2099-01-01-KAW.json').write_text('{}')
+    (folder/'2099-01-01-KAW.state.json').write_text('{}')
+    git('add','.');git('commit','-m','official dated plan');after=git('rev-parse','HEAD')
+    r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert r['status']=='PASS' and not r['requests'] and not r['errors']
+    assert r['day_plans']==[{'race_date':'2099-01-01','venue_id':'KAW','origin':'runtime/local_race_day_plan/2099-01-01-KAW.json'}]
+    # The path only wakes the driver: its existing owner/plan/authority guards
+    # still reject this empty object; no authorization is inferred here.
+    before=after
+    (folder/'2099-01-01-KAW.state.json').write_text('{"changed":true}')
+    git('add','.');git('commit','-m','state only');after=git('rev-parse','HEAD')
+    r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert not r['day_plans'] and not r['requests']
+
+
 def test_no_signed_final_or_delivery_inferred_from_successful_job(monkeypatch):
     from runtime import local_race_key_gate as gate
     monkeypatch.setattr(gate.o,'resolve_phase',lambda *args:None)
