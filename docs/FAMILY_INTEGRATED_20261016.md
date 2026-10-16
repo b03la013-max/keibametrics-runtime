@@ -4,7 +4,7 @@ Draft / NON-PRODUCTION。既存PR #285を使用し、新PR・Dispatcher・Workfl
 
 ## 実行と金額
 
-最新main `fa8daf81fbac6ad4e183b042ff6af3fd7d93603f`。profiles全件の現行候補を再解決した結果、現在もFamily R51・KAW v2.4・LOCAL Production Suite R3。KAW OwnerはKAWのみ有効で数値のPrediction/KRS消費は無効。RailwayはDeployment `2f7ddb5d-6ebe-4de7-b3d5-c70833fd4460`、Online 1/1、失敗・保留差分なし。
+監査・CI基準main `fa8daf81fbac6ad4e183b042ff6af3fd7d93603f`。profiles全件の現行候補を再解決した結果、現在もFamily R51・KAW v2.4・LOCAL Production Suite R3。KAW OwnerはKAWのみ有効で数値のPrediction/KRS消費は無効。RailwayはDeployment `2f7ddb5d-6ebe-4de7-b3d5-c70833fd4460`、Online 1/1、失敗・保留差分なし。
 
 | R | Canonical正式実行 | FINAL JST | RESULT JST | 推奨額→精算払戻 | 第一重大失敗 | Dominant PFS Loss Owner |
 |---|---|---|---|---|---|---|
@@ -72,3 +72,11 @@ Candidate：PR #265の同一 `local_aki_columns` に、観測済み異条件好�
 追加OpenAI有料API0、購入0、新規有料Service0、Railway上限変更0。実課金増分はBilling未取得でUNKNOWN。公式結果の追加照合は既存CIからGETだけを行い、署名/Runtime呼出し/発走後FINALを一切発生させない。
 
 Rollback：Draftを採用しない。採用が別途承認された後も、このopt-in候補と測定差分のみをレビュー済みrevertで戻し、Original FINAL/Receipt/Intent/OOS/新しい監査証拠は削除しない。Future Activationは既存のOwner承認手順で停止し、曖昧なClaimは照合前に再送しない。
+
+## 検証完了
+
+ローカル関連回帰139 PASS。Code HEAD `96296652d19eda59f65bcd6a45c85c845853d4da` のGitHub CI3/3 PASS（38907123563、38907123401、38907123673）。Family CIでは既存39件＋追加対象19件がPASS。公式12RaceのResultページをGETで取得・Race Identity/着順/配当を検証し、Signed 5戦との一致を確認した。全12原応答とCI全Portfolioは `evidence/kaw_v26_20261016/ci_audit.zip` に保存。ZIP SHA256 `31c398eec7465cfc0fefd066b17e92ccfecadd62db1aabe5bf41a902cd44a899`。原レスポンスのgzip展開SHAも12/12一致。ローカルとCIの全Policy券面・Stakeが一致。新しいRuntime実行・署名は0。
+
+分離レビュー：`3decfb064defac5cc02deaa04042362a94160661` は有限値Correctness 2ファイル、`96296652d19eda59f65bcd6a45c85c845853d4da` はCandidate/監査/既存CIへの接続。後続の証拠更新は実行Codeを変えない。
+
+最終main再取得：`7997b4b860f76e4719a9d5bd65aa442f3bdf9afc`。差分はJRA当日状態1ファイルのみで、KAWのOwner/Authority/実行Code/保護Artifactは不変。PR #282は664d7612のDraft/未Mergeを再確認。正式な未来対象集合と改善Policy受入れは未成立のため、全Race保証や長期PFS改善の完成宣言はしない。
