@@ -1,0 +1,983 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="25" skipped="0" tests="284" time="9.591" timestamp="2026-10-16T06:39:48.668292-07:00" hostname="5bdbfcc75cc2"><testcase classname="tests.test_local_race_day_dispatcher" name="test_official_all_races_identity_runners_and_no_freeze" time="0.016" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[missing]" time="0.014" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[gap]" time="0.013" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[wrong_venue]" time="0.013" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[wrong_date]" time="0.012" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[wrong_time]" time="0.011" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[http]" time="3.013" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_discovery_fail_closed[sha]" time="0.015" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[family_id-JRA]" time="0.043" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[venue_id-OHI]" time="0.032" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[race_date-2026-10-16]" time="0.038" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[destination-https://example.org]" time="0.036" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[plan_sha256-bad]" time="0.036" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[scheduled_execution_authorized-False]" time="0.039" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[existing_runtime_usage_cost_authorized-False]" time="0.038" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[race_numbers-value7]" time="0.037" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_no_scope_or_cost_approval_inference[enabled-False]" time="0.051" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_durable_claim_precedes_dispatch_multiple_races_no_result_wait" time="0.162" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_uncertain_dispatch_never_retry_and_other_race_continues" time="0.113" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_publish_failure_no_dispatch" time="0.084" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_deadline_runtime_outage_dry_run_and_existing_checkpoint" time="0.136" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_plan_mutation_and_wrong_day_rejected" time="0.048" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_workflow_remains_opt_in_and_uses_existing_single_entry" time="0.022" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_deadline_crossed_while_persisting_never_sends" time="0.064" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_existing_result_wait_does_not_block_other_race" time="0.068" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_same_race_key_in_noncanonical_filename_not_redispatched" time="0.057" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_missing_odds_never_labels_declared_runners_official_active" time="0.013" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_official_odds_cancellation_reuses_existing_runner_parser" time="0.013" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_limited_phase_does_not_dispatch_unapproved_race" time="0.067" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes0]" time="0.040" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes1]" time="0.035" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes2]" time="0.038" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes3]" time="0.034" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes4]" time="0.037" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes5]" time="0.036" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes6]" time="0.036" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes7]" time="0.037" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes8]" time="0.037" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_or_cost_gap_blocks_before_side_effect[changes9]" time="0.033" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_ambiguous_claim_consumes_budget_across_ticks" time="0.086" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_phase_a_requires_no_live_approval_or_runtime" time="0.031" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_corrupt_race_checkpoint_does_not_abort_other_approved_race" time="0.083" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_checkpoint_observer_reuses_store_manifest_integrity" time="0.003" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_claim_without_final_becomes_deadline_terminal_without_resend" time="0.035" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_approved_races_register_before_window_without_source_or_dispatch" time="0.083" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_preregistered_race_can_dispatch_once_and_resume_without_duplicate" time="0.164" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_unapproved_race_is_discovered_but_not_registered" time="0.053" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_preregistration_key_tamper_is_held_without_overwrite_or_send" time="0.093" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_preregistration_publish_failure_prevents_every_dispatch" time="0.056" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_transient_preflight_recovers_but_fingerprint_mismatch_stays_held" time="0.114" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_bounded_worker_crosses_windows_with_independent_races" time="0.577" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_new_worker_and_registration_require_explicit_review[changes0]" time="0.035" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_new_worker_and_registration_require_explicit_review[changes1]" time="0.034" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_new_worker_and_registration_require_explicit_review[changes2]" time="0.036" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_new_worker_and_registration_require_explicit_review[changes3]" time="0.035" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_official_discovery_read_retries_dns_but_preserves_original_failure" time="1.014" /><testcase classname="tests.test_local_race_day_dispatcher" name="test_official_discovery_signature_guard_is_never_retried" time="0.015" /><testcase classname="tests.test_jra_ticket_tree_renderer.TestTree" name="test_duplicate_rejected" time="0.001" /><testcase classname="tests.test_jra_ticket_tree_renderer.TestTree" name="test_formation_exact_and_rank_order" time="0.001" /><testcase classname="tests.test_jra_ticket_tree_renderer.TestTree" name="test_head_swap_formation" time="0.000" /><testcase classname="tests.test_jra_ticket_tree_renderer.TestTree" name="test_live_final_never_asserts_actual_purchase_without_evidence" time="0.000" /><testcase classname="tests.test_jra_ticket_tree_renderer.TestTree" name="test_trio_unordered_and_no_bet" time="0.000" /><testcase classname="tests.test_jra_ticket_tree_renderer" name="test_mixed_stakes_are_shown_and_reflattened_with_exact_amounts" time="0.000" /><testcase classname="tests.test_persist_local_checkpoints_scratch" name="test_signed_push_survives_post_push_scratch_restore_conflict" time="0.001" /><testcase classname="tests.test_persist_local_checkpoints_scratch" name="test_no_successful_push_still_fails_closed" time="0.001" /><testcase classname="tests.test_local_production_static_owner" name="test_historical_official_card_parsed_only_for_contract" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">def test_historical_official_card_parsed_only_for_contract():
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_numeric_values_cannot_influence_evidence_only_production_static" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">def test_numeric_values_cannot_influence_evidence_only_production_static():
+&gt;       req, signed, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:65: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_cancelled_card_rows_do_not_enter_static" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">def test_explicit_cancelled_card_rows_do_not_enter_static():
+        # Synthetic parser contract fixture; this is not a new signed SOURCE.
+&gt;       req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:73: in _cancelled_runner_contract_fixture
+    req, source, numeric, policy, now = replay_fixture()
+                                        ^^^^^^^^^^^^^^^^
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_single_scratch_including_prior_top_candidate_is_removed[False]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">cancel_top = False
+
+    @pytest.mark.parametrize("cancel_top", [False, True])
+    def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_single_scratch_including_prior_top_candidate_is_removed[True]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">cancel_top = True
+
+    @pytest.mark.parametrize("cancel_top", [False, True])
+    def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_poststart_clock_cannot_create_formal_static_from_saved_source" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">def test_poststart_clock_cannot_create_formal_static_from_saved_source():
+&gt;       req, source, numeric, policy, _ = replay_fixture()
+                                          ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_card_universe_removal_without_exact_official_basis_holds[missing_declared-OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'missing_declared', code = 'OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("missing_declared", "OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH"),
+        ("unexplained_removal", "OFFICIAL_CANCELLATION_NOT_VERIFIED"),
+        ("missing_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+        ("nonofficial_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+    ])
+    def test_card_universe_removal_without_exact_official_basis_holds(case, code):
+&gt;       req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:73: in _cancelled_runner_contract_fixture
+    req, source, numeric, policy, now = replay_fixture()
+                                        ^^^^^^^^^^^^^^^^
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_card_universe_removal_without_exact_official_basis_holds[unexplained_removal-OFFICIAL_CANCELLATION_NOT_VERIFIED]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'unexplained_removal', code = 'OFFICIAL_CANCELLATION_NOT_VERIFIED'
+
+    @pytest.mark.parametrize("case,code", [
+        ("missing_declared", "OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH"),
+        ("unexplained_removal", "OFFICIAL_CANCELLATION_NOT_VERIFIED"),
+        ("missing_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+        ("nonofficial_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+    ])
+    def test_card_universe_removal_without_exact_official_basis_holds(case, code):
+&gt;       req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:73: in _cancelled_runner_contract_fixture
+    req, source, numeric, policy, now = replay_fixture()
+                                        ^^^^^^^^^^^^^^^^
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_card_universe_removal_without_exact_official_basis_holds[missing_evidence-OFFICIAL_CARD_RUNNER_MISMATCH]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'missing_evidence', code = 'OFFICIAL_CARD_RUNNER_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("missing_declared", "OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH"),
+        ("unexplained_removal", "OFFICIAL_CANCELLATION_NOT_VERIFIED"),
+        ("missing_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+        ("nonofficial_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+    ])
+    def test_card_universe_removal_without_exact_official_basis_holds(case, code):
+&gt;       req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:73: in _cancelled_runner_contract_fixture
+    req, source, numeric, policy, now = replay_fixture()
+                                        ^^^^^^^^^^^^^^^^
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_card_universe_removal_without_exact_official_basis_holds[nonofficial_evidence-OFFICIAL_CARD_RUNNER_MISMATCH]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'nonofficial_evidence', code = 'OFFICIAL_CARD_RUNNER_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("missing_declared", "OFFICIAL_DECLARED_UNIVERSE_STATUS_MISMATCH"),
+        ("unexplained_removal", "OFFICIAL_CANCELLATION_NOT_VERIFIED"),
+        ("missing_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+        ("nonofficial_evidence", "OFFICIAL_CARD_RUNNER_MISMATCH"),
+    ])
+    def test_card_universe_removal_without_exact_official_basis_holds(case, code):
+&gt;       req, source, numeric, policy, now = _cancelled_runner_contract_fixture()
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:73: in _cancelled_runner_contract_fixture
+    req, source, numeric, policy, now = replay_fixture()
+                                        ^^^^^^^^^^^^^^^^
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[expired-PRESTART_STATIC_OWNER_DEADLINE_HOLD]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'expired', code = 'PRESTART_STATIC_OWNER_DEADLINE_HOLD'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[wrong_race-SIGNED_SOURCE_RACE_MISMATCH]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'wrong_race', code = 'SIGNED_SOURCE_RACE_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[invalid_number-NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'invalid_number', code = 'NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[wrong_universe-FULL_RUNNER_UNIVERSE_MISMATCH]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'wrong_universe', code = 'FULL_RUNNER_UNIVERSE_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[unauthorized-STATIC_OWNER_AUTHORIZATION_MISSING]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'unauthorized', code = 'STATIC_OWNER_AUTHORIZATION_MISSING'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[unapproved_venue-VENUE_OWNER_NOT_AUTHORIZED]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'unapproved_venue', code = 'VENUE_OWNER_NOT_AUTHORIZED'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[unsigned-SOURCE_SIGNATURE_REQUIRED]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'unsigned', code = 'SOURCE_SIGNATURE_REQUIRED'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_explicit_owner_gate_and_signed_source_fail_closed[wrong_clock-OFFICIAL_SOURCE_POST_MISMATCH]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">case = 'wrong_clock', code = 'OFFICIAL_SOURCE_POST_MISMATCH'
+
+    @pytest.mark.parametrize("case,code", [
+        ("expired", "PRESTART_STATIC_OWNER_DEADLINE_HOLD"),
+        ("wrong_race", "SIGNED_SOURCE_RACE_MISMATCH"),
+        ("invalid_number", "NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE"),
+        ("wrong_universe", "FULL_RUNNER_UNIVERSE_MISMATCH"),
+        ("unauthorized", "STATIC_OWNER_AUTHORIZATION_MISSING"),
+        ("unapproved_venue", "VENUE_OWNER_NOT_AUTHORIZED"),
+        ("unsigned", "SOURCE_SIGNATURE_REQUIRED"),
+        ("wrong_clock", "OFFICIAL_SOURCE_POST_MISMATCH"),
+    ])
+    def test_explicit_owner_gate_and_signed_source_fail_closed(case,code):
+&gt;       req, source, numeric, policy, now = replay_fixture()
+                                            ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_auto_owner_intent_can_be_normalized_by_existing_formal" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'">def test_auto_owner_intent_can_be_normalized_by_existing_formal():
+        from runtime import formal_execution_orchestrator as o
+&gt;       request, source, numeric, policy, now = replay_fixture()
+                                                ^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_local_production_static_owner.py:23: in replay_fixture
+    signed = json.loads(SOURCE.read_text(encoding="utf-8"))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261014-R05-LIVE-R1/SOURCE/runs/38528949555-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_production_static_owner" name="test_oct15_r02_signed_cancelled_two_runners_reconciled_result_blind" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json'">def test_oct15_r02_signed_cancelled_two_runners_reconciled_result_blind():
+        """Real signed prestart 20261015 R02 SOURCE; only contract fixture, not OOS."""
+        src = ROOT / "runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json"
+&gt;       signed = json.loads(src.read_text(encoding="utf-8"))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_production_static_owner.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1027: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-KAW-20261015-R02-LIVE-R1/SOURCE/runs/38689698392-source/source_receipt_envelope.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError</failure></testcase><testcase classname="tests.test_local_race_key_shadow_owner" name="test_frozen_shadow_is_all_runner_result_blind_no_production_claim" time="0.001" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[SOURCE_AFTER_CUTOFF]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[NOW_AFTER_CUTOFF]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[UNSIGNED]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[UNKNOWN_NUMERIC]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[CHANGED_UNIVERSE]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[MISSING_INDEX]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[FAMILY]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[WRONG_RACE_ID]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[MISSING_REQUIRED]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_invalid_baselines_fail_closed[NUMERIC_PROMOTED]" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_repeatable_prestart_sha_when_freeze_instant_is_same" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_candidate_ranking_not_a_probability" time="0.000" /><testcase classname="tests.test_local_race_key_shadow_owner" name="test_unknown_p3_is_protected_without_treating_neutral_as_weak" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_result_workflow_preserves_official_checkpoint_before_signed_result[True-False]" time="0.044" /><testcase classname="tests.test_local_race_key_ingress" name="test_result_workflow_preserves_official_checkpoint_before_signed_result[True-True]" time="0.070" /><testcase classname="tests.test_local_race_key_ingress" name="test_result_workflow_preserves_official_checkpoint_before_signed_result[False-False]" time="0.036" /><testcase classname="tests.test_local_race_key_ingress" name="test_minimal_race_key_derives_identity_current_authority_and_no_static" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[venue_id-JRA-LOCAL_VENUE_NOT_SUPPORTED]" time="0.001" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[venue_id-KAW/../-LOCAL_VENUE_NOT_SUPPORTED]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[race_date-2099/01/01-RACE_DATE_INVALID]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[race_no-0-RACE_NO_INVALID]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[race_no-13-RACE_NO_INVALID]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[race_no-6;echo hacked-RACE_NO_INVALID]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[scheduled_post_at-2099-01-01T17:15:00-SCHEDULED_POST_TIMEZONE_REQUIRED]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[scheduled_post_at-2099-01-01T08:15:00+00:00-SCHEDULED_POST_JST_REQUIRED]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[scheduled_post_at-2099-01-02T17:15:00+09:00-RACE_DATE_AND_POST_MISMATCH]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_malformed_key_fail_closed[prediction_cutoff-2099-01-01T17:16:00+09:00-CUTOFF_NOT_BEFORE_POST]" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_cutoff_expired_never_backdates_race" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_authority_unavailable_holds" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_signed_source_without_static_is_not_formal_completion" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_signed_source_with_frozen_formal_verification" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_invalid_formal_checkpoint_or_blocked_pipeline_cannot_pass" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_source_verification_missing_blocks" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_signed_source_disagrees_with_official_post_time" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_signed_source_after_cutoff_does_not_retroactively_pass" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_signed_source_survives_formal_release_deadline" time="0.001" /><testcase classname="tests.test_local_race_key_ingress" name="test_forged_deadline_hold_without_actual_expiry_rejected" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_workflow_supplies_python_roots_and_result_dependencies" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_dispatch_is_minimal_and_requires_signed_final_for_result" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_push_concurrency_independent_of_result_wait" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_saved_r12_event_survives_main_moving_to_measurement_commit" time="0.048" /><testcase classname="tests.test_local_race_key_ingress" name="test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved" time="0.062" /><testcase classname="tests.test_local_race_key_ingress" name="test_dated_plan_push_wakes_existing_driver_without_synthetic_race_request" time="0.035" /><testcase classname="tests.test_local_race_key_ingress" name="test_no_signed_final_or_delivery_inferred_from_successful_job" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_saved_final_flags_cannot_override_fresh_signature_failure" time="0.000" /><testcase classname="tests.test_local_race_key_ingress" name="test_terminal_summary_does_not_publish_stale_tree_on_verify_hold" time="0.001" /><testcase classname="tests.test_local_race_key_ingress" name="test_terminal_summary_binds_exact_content_and_final_without_receipt_claim" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_checkpoint_must_have_verified_receipt_bound_to_race[absent]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_checkpoint_must_have_verified_receipt_bound_to_race[wrong-race]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_checkpoint_must_have_verified_receipt_bound_to_race[unverified]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_subprocess_writes_and_persists_requested_output" time="0.002" /><testcase classname="tests.test_local_source_first_entry" name="test_zero_exit_without_source_never_publishes_checkpoint" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_only_resume_rejects_bare_basis_checkpoint" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_race_entry_without_static_stops_after_source_and_numerical" time="0.018" /><testcase classname="tests.test_local_source_first_entry" name="test_race_entry_rejects_cross_family_and_conflicting_identity[intent0]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_race_entry_rejects_cross_family_and_conflicting_identity[intent1]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_race_only_entry_derives_stable_identity" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_entry_connects_discovered_canonical_static_to_existing_formal[False]" time="0.007" /><testcase classname="tests.test_local_source_first_entry" name="test_entry_connects_discovered_canonical_static_to_existing_formal[True]" time="0.002" /><testcase classname="tests.test_local_source_first_entry" name="test_existing_final_readback_never_reacquires_or_regenerates[True]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_existing_final_readback_never_reacquires_or_regenerates[False]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[BLOCKED-False-SOURCE_TRANSPORT_HOLD]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[BLOCKED-True-SOURCE_TRANSPORT_HOLD]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_hold_preserves_failure_and_never_enters_prediction[SOURCE_PASS-False-SOURCE_CHECKPOINT_MISSING_AFTER_RUN]" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_is_durable_before_worker_crash_in_numerical" time="0.001" /><testcase classname="tests.test_local_source_first_entry" name="test_source_publish_conflict_stops_before_prediction" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts0]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts1]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_winning_payout_unknown_stops_before_complete_result[payouts2]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_published_winning_payout_preserves_existing_settlement" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_build_phase_request_preserves_truthful_numerical_boundary" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_explicit_strict_numerical_request_is_not_silently_downgraded" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan[MISSING-MISSING-RUN_SOURCE_THEN_FORMAL-SOURCE]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan[COMPLETE-MISSING-RESUME_FORMAL-FORMAL]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan[COMPLETE-COMPLETE-RETURN_IMMUTABLE_FORMAL-COMPLETE]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan[CORRUPT-MISSING-FAIL_CLOSED-SOURCE_CHECKPOINT_REPAIR_REQUIRED]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_plan_only_has_no_production_policy_change" time="0.363" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_failure_diagnostic_is_exposed" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_import_closure_failure_is_classified_before_source" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_archived_acceptance_cannot_claim_formal_pre_race" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_source_checkpoint_basis_ignores_static_reforecast_fields" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_source_checkpoint_legacy_compatibility_passes_for_same_source_basis" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_source_checkpoint_reuse_rejects_changed_cutoff" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_source_checkpoint_reuse_rejects_changed_race_identity" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_ignores_retry_metadata_only" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_changes_for_semantic_execution_changes[&lt;lambda&gt;0]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_changes_for_semantic_execution_changes[&lt;lambda&gt;1]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_changes_for_semantic_execution_changes[&lt;lambda&gt;2]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_changes_for_semantic_execution_changes[&lt;lambda&gt;3]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_basis_changes_for_semantic_execution_changes[&lt;lambda&gt;4]" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_checkpoint_compatibility_passes_with_matching_basis" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_checkpoint_compatibility_rejects_changed_static" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_checkpoint_without_basis_is_legacy_unbound" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan_never_silently_reuses_unbound_or_changed_formal[UNBOUND_LEGACY-NEW_EXECUTION_ID_REQUIRED_FORMAL_LEGACY]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_resume_plan_never_silently_reuses_unbound_or_changed_formal[INCOMPATIBLE-NEW_EXECUTION_ID_REQUIRED_FORMAL_BASIS]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_bind_formal_request_to_source_injects_exact_signed_source" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_bind_formal_request_to_source_rejects_preexisting_mismatch" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_late_scratch_source_revision_cannot_rebind_frozen_static" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_semantic_basis_is_independent_of_derived_source_binding_fields" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_current_single_entry_profile_resolves_gateway_authority" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_single_entry_canonicalizes_explicit_frozen_static_status" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_single_entry_does_not_invent_freeze_for_unfrozen_static" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_single_entry_rejects_conflicting_explicit_false_freeze" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_signed_source_small_post_time_shift_is_reconciled_before_formal" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_signed_source_large_post_time_shift_still_fails_closed" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_r6_live_intent_regression_missing_duplicate_boolean_is_repaired" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_r7_live_identity_regression_one_minute_official_shift_is_repairable" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_final_prediction_package_is_losslessly_derived_from_frozen_static" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_explicit_final_prediction_package_is_preserved" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_r6_live_intent_also_derives_final_prediction_package" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_corrupt_formal_never_reruns_or_overwrites[COMPLETE]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_corrupt_formal_never_reruns_or_overwrites[MISSING]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_corrupt_formal_never_reruns_or_overwrites[CORRUPT]" time="0.000" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_formal_persistence_uses_original_intent_after_transport_and_time_rebase" time="0.001" /><testcase classname="tests.test_formal_execution_orchestrator" name="test_explicit_result_revision_requires_identical_signed_outcome" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_canonical_run_id_is_not_an_actions_integer" time="0.009" /><testcase classname="tests.test_recovery_result_entry" name="test_result_plan_never_requires_static_or_reacquires_source" time="0.000" /><testcase classname="tests.test_recovery_result_entry" name="test_result_dispatch_uses_existing_executor" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_immutable_retry" time="0.013" /><testcase classname="tests.test_recovery_result_entry" name="test_result_missing_final_cannot_recompute" time="0.000" /><testcase classname="tests.test_recovery_result_entry" name="test_result_override_cannot_switch_lineage" time="0.000" /><testcase classname="tests.test_recovery_result_entry" name="test_explicit_source_analysis_is_not_full_lifecycle_completion" time="0.000" /><testcase classname="tests.test_recovery_result_entry" name="test_source_resume_compatible" time="0.002" /><testcase classname="tests.test_recovery_result_entry" name="test_result_refundable_frozen_runner_cannot_silently_become_loss[\u53d6\u6d88]" time="0.009" /><testcase classname="tests.test_recovery_result_entry" name="test_result_refundable_frozen_runner_cannot_silently_become_loss[\u9664\u5916]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_refundable_frozen_runner_cannot_silently_become_loss[\u51fa\u8d70\u53d6\u6d88]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_refundable_frozen_runner_cannot_silently_become_loss[\u7af6\u8d70\u9664\u5916]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout[\u53d6\u6d88]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout[\u9664\u5916]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout[None]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout[\u4e2d\u6b62]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout[\u5931\u683c]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_result_missing_payout_and_full_cancel_remain_held" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_refund_hold_stops_before_settlement_learning_and_completion" time="0.002" /><testcase classname="tests.test_recovery_result_entry" name="test_refund_status_with_unreadable_runner_is_not_discarded[&lt;td&gt;\u53d6\u6d88&lt;/td&gt;&lt;td&gt;unknown&lt;/td&gt;-REFUND_REQUIRED]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_refund_status_with_unreadable_runner_is_not_discarded[&lt;td&gt;\u53d6\u6d88&lt;/td&gt;-REFUND_REQUIRED]" time="0.001" /><testcase classname="tests.test_recovery_result_entry" name="test_refund_guard_does_not_turn_absent_result_into_success" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_source_runner_mismatch_never_recommends_automatic_retry" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_track_condition_mismatch_requires_reforecast_not_generic_retry" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_official_post_mismatch_is_race_identity_reforecast" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_evidence_roundtrip_failure_has_specific_class" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_known_runtime_and_krs_classes_remain_stable" time="0.000" /><testcase classname="tests.test_formal_failure_diagnostics" name="test_static_source_binding_failure_has_actionable_resume" time="0.000" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_frozen_realistic_result_settlement_is_result_bound" time="0.002" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_no_bet_has_null_pfs_and_tracks_opportunity_cost" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_receipt_tampering_and_missing_authorities_fail_closed" time="0.003" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_mismatch_is_not_hidden" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[nan-investment]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[nan-return]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[inf-investment]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[inf-return]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[False-investment]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[False-return]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[AS_STRING-investment]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_signed_settlement_requires_finite_json_numbers[AS_STRING-return]" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_history_is_not_silently_backfilled" time="0.001" /><testcase classname="tests.test_aki_adaptive_oos_tracker" name="test_real_ohi_20261009_seven_receipt_bound_replay" time="0.000"><failure message="AssertionError: MISSING_REAL_EXECUTION:KM-LOCAL-OHI-20261009-R04-LIVE-R2&#10;assert False&#10; +  where False = is_dir()&#10; +    where is_dir = (PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions') / 'KM-LOCAL-OHI-20261009-R04-LIVE-R2').is_dir">def test_real_ohi_20261009_seven_receipt_bound_replay():
+        """Read-only 7-race actual Signed FINAL/RESULT replay, not synthetic evidence.
+    
+        This must NOT mutate the original 2026-10-09 OOS status. If any real
+        Receipt/official-result/settlement binding is broken, fail closed.
+        """
+        root = ROOT / "runtime" / "executions"
+        expected = {
+            "KM-LOCAL-OHI-20261009-R04-LIVE-R2": (16500, 3050),
+            "KM-LOCAL-OHI-20261009-R05-LIVE-R1": (46000, 36840),
+            "KM-LOCAL-OHI-20261009-R06-LIVE-R1": (70400, 39120),
+            "KM-LOCAL-OHI-20261009-R07-LIVE-R1": (25400, 10310),
+            "KM-LOCAL-OHI-20261009-R08-LIVE-R1": (22800, 1370),
+            "KM-LOCAL-OHI-20261009-R09-LIVE-R1": (38000, 52800),
+            "KM-LOCAL-OHI-20261009-R10-LIVE-R1": (46000, 5240),
+        }
+        # The historical Git-tracked execution store is the test's external
+        # evidence basis; do not silently PASS an empty or sparse checkout.
+        for race_id in expected:
+&gt;           assert (root / race_id).is_dir(), f"MISSING_REAL_EXECUTION:{race_id}"
+E           AssertionError: MISSING_REAL_EXECUTION:KM-LOCAL-OHI-20261009-R04-LIVE-R2
+E           assert False
+E            +  where False = is_dir()
+E            +    where is_dir = (PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions') / 'KM-LOCAL-OHI-20261009-R04-LIVE-R2').is_dir
+
+tests/test_aki_adaptive_oos_tracker.py:157: AssertionError</failure></testcase><testcase classname="tests.test_family_pfs_improvement" name="test_hit_but_loss_routes_to_capital_without_changing_production" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_prediction_role_failure_remains_prediction_owner_when_no_deeper_evidence" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_explicit_layer_loss_evidence_can_separate_first_failure_from_deep_pfs_loss" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_profitable_race_can_keep_behavior_while_still_testing_connection_failure" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_correctness_bug_routes_to_repair_now" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_promotion_review_never_auto_promotes" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_unknown_pfs_does_not_invent_capital_success_or_failure" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_semantic_purchase_and_unknown_purchase_principles_are_explicit" time="0.000" /><testcase classname="tests.test_family_pfs_improvement" name="test_invalid_pfs_cannot_claim_realized_profit" time="0.000" /><testcase classname="tests.test_family_owner_utility_r43" name="test_r43_activates_owner_utility_without_predictive_policy_change" time="0.001" /><testcase classname="tests.test_family_owner_utility_r43" name="test_r43_does_not_silently_promote_open_candidates" time="0.001" /><testcase classname="tests.test_family_owner_utility_r43" name="test_owner_utility_profile_requires_no_stagnation_and_semantic_purchase_separation" time="0.000" /><testcase classname="tests.test_family_owner_utility_r43" name="test_runtime_is_connected_to_postresult_learning" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_promotion_gate_requires_30_races_and_3_days" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_promotion_gate_only_allows_human_review_when_all_guards_pass" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_promotion_gate_rejects_or_simplifies_fragile_candidate" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_promotion_gate_holds_missing_metrics" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_owner_scorecard_separates_pfs_loss_owner_from_first_failure" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_owner_scorecard_reports_concentration_and_candidate_metrics" time="0.000" /><testcase classname="tests.test_family_pfs_governance_runtime" name="test_invalid_metric_cannot_enable_human_promotion_review" time="0.000" /><testcase classname="tests.test_family_pfs_regression_readout" name="test_real_ohi_regression_measures_pfs_not_only_hits" time="0.001"><failure message="family_pfs_regression_readout.RegressionEvidenceError: EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261008-R01-LIVE-R1/RESULT/runs/37729984523-result/result_summary.json">root = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration')
+manifest_path = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/research/common/KM-FAMILY-OHI-20261008-DAY-REGRESSION-R1.json')
+
+    def build_regression_readout(root: Path, manifest_path: Path) -&gt; dict[str, Any]:
+        """Fail-closed *historical* evaluation of a pre-existing frozen result set."""
+        root = root.resolve()
+        manifest = _load(manifest_path)
+        if "REGRESSION-EVIDENCE" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("NOT_REGRESSION_EVIDENCE")
+        if "NOT-NEW-OOS-CREDIT" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("OOS_CREDIT_BOUNDARY_MISSING")
+        cohort = manifest.get("verified_result_records")
+        if not isinstance(cohort, list) or not cohort:
+            raise RegressionEvidenceError("EMPTY_COHORT")
+    
+        learning_required = manifest.get("require_prequential_learning_binding") is True
+        learning_ids = []
+        reviews = []
+        rows = []
+        seen = set()
+        for item in cohort:
+            race_id = str(item.get("race_id") or "")
+            if not race_id or race_id in seen:
+                raise RegressionEvidenceError(f"DUPLICATE_OR_MISSING_RACE:{race_id}")
+            seen.add(race_id)
+    
+            src_path = _get_existing_file(root, str(item.get("result_summary_path") or ""))
+            try:
+&gt;               raw = src_path.read_bytes()
+                      ^^^^^^^^^^^^^^^^^^^^^
+
+runtime/family_pfs_regression_readout.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1019: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261008-R01-LIVE-R1/RESULT/runs/37729984523-result/result_summary.json')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261008-R01-LIVE-R1/RESULT/runs/37729984523-result/result_summary.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+    def test_real_ohi_regression_measures_pfs_not_only_hits():
+&gt;       readout = build_regression_readout(ROOT, MANIFEST)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_family_pfs_regression_readout.py:23: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration')
+manifest_path = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/research/common/KM-FAMILY-OHI-20261008-DAY-REGRESSION-R1.json')
+
+    def build_regression_readout(root: Path, manifest_path: Path) -&gt; dict[str, Any]:
+        """Fail-closed *historical* evaluation of a pre-existing frozen result set."""
+        root = root.resolve()
+        manifest = _load(manifest_path)
+        if "REGRESSION-EVIDENCE" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("NOT_REGRESSION_EVIDENCE")
+        if "NOT-NEW-OOS-CREDIT" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("OOS_CREDIT_BOUNDARY_MISSING")
+        cohort = manifest.get("verified_result_records")
+        if not isinstance(cohort, list) or not cohort:
+            raise RegressionEvidenceError("EMPTY_COHORT")
+    
+        learning_required = manifest.get("require_prequential_learning_binding") is True
+        learning_ids = []
+        reviews = []
+        rows = []
+        seen = set()
+        for item in cohort:
+            race_id = str(item.get("race_id") or "")
+            if not race_id or race_id in seen:
+                raise RegressionEvidenceError(f"DUPLICATE_OR_MISSING_RACE:{race_id}")
+            seen.add(race_id)
+    
+            src_path = _get_existing_file(root, str(item.get("result_summary_path") or ""))
+            try:
+                raw = src_path.read_bytes()
+            except OSError as exc:
+&gt;               raise RegressionEvidenceError(f"EVIDENCE_NOT_READABLE:{src_path}") from exc
+E               family_pfs_regression_readout.RegressionEvidenceError: EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261008-R01-LIVE-R1/RESULT/runs/37729984523-result/result_summary.json
+
+runtime/family_pfs_regression_readout.py:116: RegressionEvidenceError</failure></testcase><testcase classname="tests.test_family_pfs_regression_readout" name="test_missing_and_tampered_frozen_results_fail_closed" time="0.002" /><testcase classname="tests.test_family_pfs_regression_readout" name="test_no_double_count_no_result_time_ticket_reselection" time="0.002" /><testcase classname="tests.test_family_pfs_regression_readout" name="test_missing_result_binding_and_unsettled_amount_are_not_zero" time="0.002" /><testcase classname="tests.test_family_pfs_regression_readout" name="test_real_ohi_20261009_existing_r43_scorecard_and_paired_aki" time="0.001"><failure message="family_pfs_regression_readout.RegressionEvidenceError: EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json">root = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration')
+manifest_path = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/research/common/KM-FAMILY-OHI-20261009-DAY-R43-REGRESSION-R1.json')
+
+    def build_regression_readout(root: Path, manifest_path: Path) -&gt; dict[str, Any]:
+        """Fail-closed *historical* evaluation of a pre-existing frozen result set."""
+        root = root.resolve()
+        manifest = _load(manifest_path)
+        if "REGRESSION-EVIDENCE" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("NOT_REGRESSION_EVIDENCE")
+        if "NOT-NEW-OOS-CREDIT" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("OOS_CREDIT_BOUNDARY_MISSING")
+        cohort = manifest.get("verified_result_records")
+        if not isinstance(cohort, list) or not cohort:
+            raise RegressionEvidenceError("EMPTY_COHORT")
+    
+        learning_required = manifest.get("require_prequential_learning_binding") is True
+        learning_ids = []
+        reviews = []
+        rows = []
+        seen = set()
+        for item in cohort:
+            race_id = str(item.get("race_id") or "")
+            if not race_id or race_id in seen:
+                raise RegressionEvidenceError(f"DUPLICATE_OR_MISSING_RACE:{race_id}")
+            seen.add(race_id)
+    
+            src_path = _get_existing_file(root, str(item.get("result_summary_path") or ""))
+            try:
+&gt;               raw = src_path.read_bytes()
+                      ^^^^^^^^^^^^^^^^^^^^^
+
+runtime/family_pfs_regression_readout.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1019: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json')
+mode = 'rb', buffering = -1, encoding = None, errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json'
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/pathlib.py:1013: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+    def test_real_ohi_20261009_existing_r43_scorecard_and_paired_aki():
+        """Verify source-pinned RESULT+Learning and pre-existing adverse AKI OOS."""
+&gt;       report = build_regression_readout(ROOT, MANIFEST_20261009)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_family_pfs_regression_readout.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration')
+manifest_path = PosixPath('/workspace/scratch/b0653739d7f7/p0-integration/research/common/KM-FAMILY-OHI-20261009-DAY-R43-REGRESSION-R1.json')
+
+    def build_regression_readout(root: Path, manifest_path: Path) -&gt; dict[str, Any]:
+        """Fail-closed *historical* evaluation of a pre-existing frozen result set."""
+        root = root.resolve()
+        manifest = _load(manifest_path)
+        if "REGRESSION-EVIDENCE" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("NOT_REGRESSION_EVIDENCE")
+        if "NOT-NEW-OOS-CREDIT" not in str(manifest.get("status")):
+            raise RegressionEvidenceError("OOS_CREDIT_BOUNDARY_MISSING")
+        cohort = manifest.get("verified_result_records")
+        if not isinstance(cohort, list) or not cohort:
+            raise RegressionEvidenceError("EMPTY_COHORT")
+    
+        learning_required = manifest.get("require_prequential_learning_binding") is True
+        learning_ids = []
+        reviews = []
+        rows = []
+        seen = set()
+        for item in cohort:
+            race_id = str(item.get("race_id") or "")
+            if not race_id or race_id in seen:
+                raise RegressionEvidenceError(f"DUPLICATE_OR_MISSING_RACE:{race_id}")
+            seen.add(race_id)
+    
+            src_path = _get_existing_file(root, str(item.get("result_summary_path") or ""))
+            try:
+                raw = src_path.read_bytes()
+            except OSError as exc:
+&gt;               raise RegressionEvidenceError(f"EVIDENCE_NOT_READABLE:{src_path}") from exc
+E               family_pfs_regression_readout.RegressionEvidenceError: EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json
+
+runtime/family_pfs_regression_readout.py:116: RegressionEvidenceError</failure></testcase><testcase classname="tests.test_family_pfs_regression_readout" name="test_ohi_20261009_aki_and_r5_blob_conflicts_fail_closed" time="0.002"><failure message="AssertionError: Regex pattern did not match.&#10;  Expected regex: 'AKI_STATUS_BLOB_CHANGED'&#10;  Actual message: 'EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json'">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-25/test_ohi_20261009_aki_and_r5_b0')
+
+    def test_ohi_20261009_aki_and_r5_blob_conflicts_fail_closed(tmp_path):
+        manifest = json.loads(MANIFEST_20261009.read_text(encoding="utf-8"))
+        for source, code in [
+            ("aki", "AKI_STATUS_BLOB_CHANGED"),
+            ("mec_r5", "R5_STATUS_BLOB_CHANGED"),
+        ]:
+            broken = copy.deepcopy(manifest)
+            broken["candidate_measurement_bindings"][source]["status_git_blob_sha"] = "0" * 40
+            path = tmp_path / "broken.json"
+            path.write_text(json.dumps(broken), encoding="utf-8")
+&gt;           with pytest.raises(RegressionEvidenceError, match=code):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'AKI_STATUS_BLOB_CHANGED'
+E             Actual message: 'EVIDENCE_NOT_READABLE:/workspace/scratch/b0653739d7f7/p0-integration/runtime/executions/KM-LOCAL-OHI-20261009-R04-LIVE-R2/RESULT/runs/37898486286-result/result_summary.json'
+
+tests/test_family_pfs_regression_readout.py:236: AssertionError</failure></testcase><testcase classname="tests.test_family_pfs_regression_readout" name="test_r43_prequential_binding_is_required_not_recreated" time="0.002" /><testcase classname="tests.test_family_authority_guard" name="test_selftest_r31" time="0.003" /><testcase classname="tests.test_family_authority_guard" name="test_cross_family_parameter_map_is_rejected" time="0.001" /><testcase classname="tests.test_family_authority_guard" name="test_common_scope_cannot_be_reclaimed_by_venue" time="0.001" /><testcase classname="tests.test_family_authority_guard" name="test_candidate_parameter_cannot_enter_production_formal" time="0.001" /><testcase classname="tests.test_family_authority_guard" name="test_candidate_parameter_allowed_for_acceptance_only_same_family" time="0.001" /><testcase classname="tests.test_family_authority_guard" name="test_ban_production_formal_stays_blocked_until_runtime_verified" time="0.001" /><testcase classname="tests.test_family_authority_guard" name="test_r31_keeps_production_numerics_frozen" time="0.000" /><testcase classname="tests.test_race_day_fast_path" name="test_fast_materialization_is_exact_on_cold_and_warm_cache" time="0.088" /><testcase classname="tests.test_race_day_fast_path" name="test_cache_never_restores_unrelated_stale_runner_fields" time="0.059" /><testcase classname="tests.test_race_day_fast_path" name="test_required_index_change_invalidates_runner_cache" time="0.064" /><testcase classname="tests.test_race_day_fast_path" name="test_fast_reflection_is_small_and_preserves_first_material_failure" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'runtime/executions/LOCAL-GATEWAY-DURABLE-SMOKE-20260925-R1/RESULT/runs/36131389099/result_receipt_envelope.json'">def test_fast_reflection_is_small_and_preserves_first_material_failure():
+&gt;       env=load(RESULT_FIXTURE)
+            ^^^^^^^^^^^^^^^^^^^^
+
+tests/test_race_day_fast_path.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+p = PosixPath('runtime/executions/LOCAL-GATEWAY-DURABLE-SMOKE-20260925-R1/RESULT/runs/36131389099/result_receipt_envelope.json')
+
+    def load(p):
+&gt;       return json.load(open(p,encoding="utf-8"))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: 'runtime/executions/LOCAL-GATEWAY-DURABLE-SMOKE-20260925-R1/RESULT/runs/36131389099/result_receipt_envelope.json'
+
+tests/test_race_day_fast_path.py:19: FileNotFoundError</failure></testcase><testcase classname="tests.test_race_day_fast_path" name="test_production_equivalence_ignores_receipt_time_but_not_ticket_change" time="0.000" /><testcase classname="tests.test_race_day_fast_path" name="test_discover_next_three_requests" time="0.001" /><testcase classname="tests.test_race_day_fast_path" name="test_prewarm_nonready_is_nonblocking" time="0.001" /></testsuite></testsuites>

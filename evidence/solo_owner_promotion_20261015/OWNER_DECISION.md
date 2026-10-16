@@ -1,0 +1,13 @@
+# PR280 単独Ownerの限定リリース承認案（未採用）
+
+第一停止工程はOwnerによる本方式の正式採用とexact-headリリース承認。独立レビューの不存在はOwner本人の申告として記録する。AI監査による代替ではない。
+
+## 正式採用時にOwnerが明示する項目
+
+- 添付patch SHA 92b407588feecc1c7365d9d43b0d2fe828833e8fcfe5982ab7a86e5eb7601db0 の限定承認方式を採用し、PR280の従来の独立Human Review必須条件をその範囲で変更する。
+- PR280 HEAD 655530735f24cce78605dd1bd34843bdb2ea253d の差分、既存CI、Runtime固定、回帰、リスクとRollbackをOwner本人が確認し、Mergeを承認する。
+- 既存Runtimeのwrapper限定Deploy/Gateway更新、及びKAW2026-10-16R01だけのPhase B Activationは承認する場合に別項目で明示する。既存共有Workspace費用上限を維持し最大1Dispatch/同時1/Preflight3/曖昧再送0。送信先は既存Runtime、Payload範囲は既存disabled承認案の全必要種別。対象外11Race/他Venue/JRA/BAN送信なし。
+
+採用前にpatchを適用しない。採用後もCurrent Authority/最新HEAD/CI/費用上限/期限/配置SHAを再確認し、Runtimeのwrapper以外は保存SHAを維持する。既存のdisabled承認案は現状のまま。新たなValidator/Workflow/Registry/予測モデルは作らない。
+
+外部独立レビュー経路を選ぶ場合はOwnerが信頼する外部人間を選任し、正規のGitHub Reviewを受ける。現行設定でレビュー提出にwrite/admin権限は必要ない。選任・招待・権限付与は無断で実施しない。

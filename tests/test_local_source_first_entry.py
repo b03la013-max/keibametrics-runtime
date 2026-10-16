@@ -122,6 +122,7 @@ def test_entry_connects_discovered_canonical_static_to_existing_formal(monkeypat
             calls.append('SOURCE')
             return {'status': 'SOURCE_PASS', 'completion': False}
         calls.append('FORMAL')
+        assert calls[-2] == ('PUBLISHED', ['runtime/formal_intents/race.json'])
         assert q['static_prediction_frozen'] is True
         assert q['static_prediction']['ranking'] == ['1', '2']
         assert q['race_id'] == 'race'
@@ -129,13 +130,15 @@ def test_entry_connects_discovered_canonical_static_to_existing_formal(monkeypat
     monkeypatch.setattr(o, 'orchestrate', orchestration)
     monkeypatch.setattr(e, 'assess', lambda: {'status': 'READY', 'required_indices': ['SSI']})
     monkeypatch.setattr(e, 'materialize_production', lambda *a: {'strict_full_numerical_ready': True})
-    report = e.run({**request(), 'analysis_only': analysis_only}, output=tmp_path/'out', run_id='test')
+    report = e.run({**request(), 'analysis_only': analysis_only}, output=tmp_path/'out', run_id='test',
+                   checkpoint_publisher=lambda paths: calls.append(('PUBLISHED', paths)))
     if analysis_only:
-        assert calls == ['SOURCE']
+        assert calls == ['SOURCE', ('PUBLISHED', ['runtime/executions/race/SOURCE'])]
         assert report['code'] == 'ANALYSIS_ONLY_SOURCE_COMPLETE'
         assert json.loads((tmp_path/'out/static_owner_input.json').read_text())['static_generation_allowed'] is False
     else:
-        assert calls == ['SOURCE', 'FORMAL']
+        assert calls == ['SOURCE', ('PUBLISHED', ['runtime/executions/race/SOURCE']),
+                         ('PUBLISHED', ['runtime/formal_intents/race.json']), 'FORMAL']
         assert report['completion']['complete'] is True
     assert report['owner_resolution']['input_mode'] == 'CANONICAL_FORMAL_INTENT'
 
@@ -189,3 +192,34 @@ def test_source_hold_preserves_failure_and_never_enters_prediction(monkeypatch, 
     assert report['completion'] is False and report['formal_final_proven'] is False
     assert report['prediction_reexecution'] is False
     assert json.loads((tmp_path/'out/entry_report.json').read_text()) == report
+
+
+def test_source_is_durable_before_worker_crash_in_numerical(monkeypatch,tmp_path):
+    from runtime import local_race_entry as e
+    events=[]
+    monkeypatch.setattr(o,'ROOT',tmp_path)
+    monkeypatch.setattr(o,'validate_request_context',lambda *a:None)
+    monkeypatch.setattr(o,'resolve_phase',lambda eid,phase:{'run_dir':tmp_path} if phase=='SOURCE' else None)
+    monkeypatch.setattr(o,'orchestrate',lambda *a,**k:{'status':'SOURCE_PASS'})
+    monkeypatch.setattr(o,'validate_source_checkpoint',lambda *a:events.append('verified-source'))
+    monkeypatch.setattr(o,'_load_checkpoint_json',lambda *a:{'artifact':{'official_runner_universe':{'runners':[]}}})
+    monkeypatch.setattr(e,'assess',lambda:{'status':'READY','required_indices':[]})
+    def crash(*a):
+        events.append('worker-crash');raise RuntimeError('WORKER_CRASH')
+    monkeypatch.setattr(e,'materialize_production',crash)
+    with pytest.raises(RuntimeError,match='WORKER_CRASH'):
+        e.run({'execution_id':'race','race_id':'race'},output=tmp_path/'out',run_id='test',
+              checkpoint_publisher=lambda paths:events.append(('durable',paths)))
+    assert events==['verified-source',('durable',['runtime/executions/race/SOURCE']),'worker-crash']
+
+
+def test_source_publish_conflict_stops_before_prediction(monkeypatch,tmp_path):
+    from runtime import local_race_entry as e
+    monkeypatch.setattr(o,'validate_request_context',lambda *a:None)
+    monkeypatch.setattr(o,'resolve_phase',lambda eid,phase:{'run_dir':tmp_path} if phase=='SOURCE' else None)
+    monkeypatch.setattr(o,'orchestrate',lambda *a,**k:{'status':'SOURCE_PASS'})
+    monkeypatch.setattr(o,'validate_source_checkpoint',lambda *a:None)
+    monkeypatch.setattr(e,'materialize_production',lambda *a:pytest.fail('no prediction before durable SOURCE'))
+    def conflict(paths):raise RuntimeError('PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT')
+    with pytest.raises(RuntimeError,match='PERSIST_IMMUTABLE'):
+        e.run({'execution_id':'race','race_id':'race'},output=tmp_path/'out',run_id='test',checkpoint_publisher=conflict)

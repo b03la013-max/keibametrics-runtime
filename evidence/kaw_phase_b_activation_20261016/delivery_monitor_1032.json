@@ -1,0 +1,95 @@
+{
+  "observed_at": "2026-10-16T01:32:49.779935+00:00",
+  "execution_id": "KM-LOCAL-KAW-20261016-R01-LIVE-R1",
+  "race": {
+    "family": "LOCAL",
+    "venue": "KAW",
+    "date": "2026-10-16",
+    "race_no": 1,
+    "scheduled_post_at": "2026-10-16T15:00:00+09:00",
+    "prediction_cutoff": "2026-10-16T14:58:00+09:00"
+  },
+  "main_sha": "c8dab318c798acf748eb980069911059af6949cb",
+  "production_changed": false,
+  "additional_deploys": 0,
+  "new_dispatch_requests": 0,
+  "paid_openai_api_requests": 0,
+  "bet_purchase": false,
+  "existing_phase_b": {
+    "activation_config_changed": false,
+    "dispatch_opportunities_jst": [
+      "14:00",
+      "14:05",
+      "14:10"
+    ],
+    "max_dispatches": 1,
+    "concurrency": 1,
+    "max_preflights": 3,
+    "ambiguous_response_resends": 0,
+    "plan_sha256": "c316b452b4fba1bf40a334607469681442e56a1b4b7c80005955e48410ee60ba",
+    "authorized_race_numbers": [
+      1
+    ]
+  },
+  "observation": {
+    "first_pending_stage": "WAIT_DISPATCH_WINDOW",
+    "dispatch_at": null,
+    "actions_run_id": null,
+    "signed_source_at": null,
+    "signed_final_at": null,
+    "user_delivery_at": null,
+    "closed_loop": "PENDING",
+    "matching_main_runtime_artifact_paths": [],
+    "cutoff_remaining_seconds": 15910,
+    "post_remaining_seconds": 16030,
+    "live_success_rate": null
+  },
+  "delivery_implementation": {
+    "workflow": ".github/workflows/km-local-race-key-entry.yml",
+    "terminal_reader": "runtime/local_race_key_gate.py:terminal_state",
+    "source_pointer": "runtime/executions/KM-LOCAL-KAW-20261016-R01-LIVE-R1/FORMAL/LATEST.json",
+    "canonical_tree_path": "runtime/execution_reports/KM-LOCAL-KAW-20261016-R01-LIVE-R1/delivery/canonical_tree.txt",
+    "available_when_final_valid": [
+      "GitHub entry Job Step Summary",
+      "persisted canonical_tree.txt",
+      "terminal report with receipt/hash/freeze time"
+    ],
+    "prerequisites": [
+      "durable original FINAL",
+      "fresh canonical Runtime /verify valid=true",
+      "receipt race_id equals execution_id",
+      "temporal verification"
+    ],
+    "runtime_render_status": "SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN",
+    "persisted_tree_is_not_user_delivery": true,
+    "result_wait_is_separate_job": true,
+    "do_not_wait_for_result_or_whole_workflow_before_delivery": true,
+    "native_chat_final_event_hook_observed": false
+  },
+  "tracking_change": {
+    "requested_prestart_checks_jst": [
+      "14:15",
+      "14:30",
+      "14:45"
+    ],
+    "requested_three_checks_supported": false,
+    "reason": "Existing automation polling supports at most once per hour. Connected GitHub event schema supports pull_request events only; no main push, workflow completion or Signed FINAL event.",
+    "prior_start_jst": "2026-10-16T14:30:00+09:00",
+    "accepted_schedule": "BEGIN:VEVENT\nDTSTART;TZID=Asia/Tokyo:20261016T144500\nRRULE:FREQ=HOURLY;COUNT=4\nEND:VEVENT",
+    "enabled_readback": true,
+    "configuration_updated_at": "2026-10-16T01:32:27.731411+00:00",
+    "next_run_time_returned_by_service": null,
+    "configuration_verified": true,
+    "actual_monitor_execution_verified": false,
+    "actual_prestart_delivery_verified": false,
+    "changed_only_existing_tracking_task": true,
+    "no_additional_event_or_polling_tasks_created": true,
+    "before_post_delivery_guaranteed": false,
+    "prompt_priority": "Read original FINAL/terminal/tree and entry status first. Verify signature, identity, time and current official material observation; deliver complete canonical ticket tree without waiting for RESULT job. Never redispatch. After post, readback/RESULT only."
+  },
+  "source_evidence_refs": [
+    "https://github.com/b03la013-max/keibametrics-runtime/blob/c8dab318c798acf748eb980069911059af6949cb/.github/workflows/km-local-race-key-entry.yml",
+    "https://github.com/b03la013-max/keibametrics-runtime/blob/c8dab318c798acf748eb980069911059af6949cb/runtime/local_race_key_gate.py",
+    "https://github.com/b03la013-max/keibametrics-runtime/blob/c8dab318c798acf748eb980069911059af6949cb/runtime/local_race_day_dispatcher.py"
+  ]
+}

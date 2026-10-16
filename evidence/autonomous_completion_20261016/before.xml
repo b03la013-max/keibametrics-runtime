@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="0.228" timestamp="2026-10-16T04:12:08.813923-07:00" hostname="5bdbfcc75cc2"><testcase classname="tests.test_local_race_day_dispatcher" name="test_approved_races_register_before_window_without_source_or_dispatch" time="0.041"><failure message="AssertionError: assert 0 == 2&#10; +  where 0 = len([])&#10; +    where [] = list(&lt;generator object Path.glob at 0x7fd32416c480&gt;)&#10; +      where &lt;generator object Path.glob at 0x7fd32416c480&gt; = glob('*.json')&#10; +        where glob = (PosixPath('/tmp/pytest-of-root/pytest-16/test_approved_races_register_b0') / 'runtime/race_key_requests').glob">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-16/test_approved_races_register_b0')
+
+    def test_approved_races_register_before_window_without_source_or_dispatch(tmp_path):
+        p=plan(); a=prereg_approval(p); state={}; send=Mock(); health=Mock(); saved=[]
+        d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),execute=True,
+               authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),
+               publish=lambda:saved.append(json.loads(json.dumps(state))),send=send,health=health)
+&gt;       assert len(list((tmp_path/'runtime/race_key_requests').glob('*.json')))==2
+E       AssertionError: assert 0 == 2
+E        +  where 0 = len([])
+E        +    where [] = list(&lt;generator object Path.glob at 0x7fd32416c480&gt;)
+E        +      where &lt;generator object Path.glob at 0x7fd32416c480&gt; = glob('*.json')
+E        +        where glob = (PosixPath('/tmp/pytest-of-root/pytest-16/test_approved_races_register_b0') / 'runtime/race_key_requests').glob
+
+tests/test_local_race_day_dispatcher.py:290: AssertionError</failure></testcase><testcase classname="tests.test_local_race_day_dispatcher" name="test_preregistered_race_can_dispatch_once_and_resume_without_duplicate" time="0.037"><failure message="assert False&#10; +  where False = all(&lt;generator object test_preregistered_race_can_dispatch_once_and_resume_without_duplicate.&lt;locals&gt;.&lt;genexpr&gt; at 0x7fd3241693c0&gt;)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-16/test_preregistered_race_can_di0')
+
+    def test_preregistered_race_can_dispatch_once_and_resume_without_duplicate(tmp_path):
+        p=plan(); a=prereg_approval(p); state={}; send=Mock(return_value={'acknowledged':True})
+        kwargs=dict(authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),
+                    execute=True,publish=lambda:None,health=lambda:{'status':'PASS'},
+                    send=send,reconcile=lambda *a:None)
+        d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),**kwargs)
+&gt;       assert all(c.get('registration') for c in state['races'].values())
+E       assert False
+E        +  where False = all(&lt;generator object test_preregistered_race_can_dispatch_once_and_resume_without_duplicate.&lt;locals&gt;.&lt;genexpr&gt; at 0x7fd3241693c0&gt;)
+
+tests/test_local_race_day_dispatcher.py:307: AssertionError</failure></testcase><testcase classname="tests.test_local_race_day_dispatcher" name="test_unapproved_race_is_discovered_but_not_registered" time="0.033"><failure message="AssertionError: assert [] == ['KAW-2026101...LIVE-R1.json']&#10;  &#10;  Right contains one more item: 'KAW-20261015-R02-LIVE-R1.json'&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-16/test_unapproved_race_is_discov0')
+
+    def test_unapproved_race_is_discovered_but_not_registered(tmp_path):
+        p=plan(); a=prereg_approval(p); a.update(race_numbers=[2],max_dispatches=1,activation_phase='B')
+        state={}
+        d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),execute=True,
+               authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),publish=lambda:None)
+&gt;       assert [x.name for x in (tmp_path/'runtime/race_key_requests').glob('*.json')]==[p['races'][1]['race_key']+'.json']
+E       AssertionError: assert [] == ['KAW-2026101...LIVE-R1.json']
+E         
+E         Right contains one more item: 'KAW-20261015-R02-LIVE-R1.json'
+E         Use -v to get more diff
+
+tests/test_local_race_day_dispatcher.py:320: AssertionError</failure></testcase><testcase classname="tests.test_local_race_day_dispatcher" name="test_source_runner_mismatch_never_recommends_automatic_retry" time="0.000"><failure message="AssertionError: assert False&#10; +  where False = &lt;built-in method startswith of str object at 0x7fd323e98d00&gt;('HOLD')&#10; +    where &lt;built-in method startswith of str object at 0x7fd323e98d00&gt; = 'RETRY_SAME_EXECUTION_ID_FROM_SOURCE'.startswith&#10; +      where 'RETRY_SAME_EXECUTION_ID_FROM_SOURCE' = &lt;function resume_hint_for at 0x7fd323f58220&gt;('RUNNER_UNIVERSE_MISMATCH')">def test_source_runner_mismatch_never_recommends_automatic_retry():
+        from runtime.formal_failure_diagnostics import resume_hint_for
+&gt;       assert resume_hint_for('RUNNER_UNIVERSE_MISMATCH').startswith('HOLD')
+E       AssertionError: assert False
+E        +  where False = &lt;built-in method startswith of str object at 0x7fd323e98d00&gt;('HOLD')
+E        +    where &lt;built-in method startswith of str object at 0x7fd323e98d00&gt; = 'RETRY_SAME_EXECUTION_ID_FROM_SOURCE'.startswith
+E        +      where 'RETRY_SAME_EXECUTION_ID_FROM_SOURCE' = &lt;function resume_hint_for at 0x7fd323f58220&gt;('RUNNER_UNIVERSE_MISMATCH')
+
+tests/test_local_race_day_dispatcher.py:327: AssertionError</failure></testcase></testsuite></testsuites>

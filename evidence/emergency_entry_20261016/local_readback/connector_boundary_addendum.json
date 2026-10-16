@@ -1,0 +1,51 @@
+{
+  "observed_at": "2026-10-16T09:22:11.387Z",
+  "capabilities": {
+    "observed_at": "2026-10-16T09:18:03.179Z",
+    "surface": "CODEX_WORK_CURRENT_THREAD_ONLY",
+    "github_tool_count": 89,
+    "dedicated_new_dispatch_tools": [],
+    "create_file": true,
+    "git_data_write": [
+      "mcp__codex_apps__github_create_commit",
+      "mcp__codex_apps__github_create_tree",
+      "mcp__codex_apps__github_update_ref"
+    ],
+    "past_chat_tool_inventory_available": false
+  },
+  "plugin_permissions": {
+    "meta": null,
+    "content": [
+      {
+        "type": "text",
+        "text": "For GitHub: your default app permission is Allow low-risk actions. ChatGPT will automatically approve low-risk actions but may deny actions involving sensitive information. Learn more App-specific setting: Allow all actions. GitHub has a custom app-specific setting. ChatGPT won’t ask before reading or taking action. This comes with elevated risk. Learn more",
+        "annotations": null,
+        "meta": null
+      }
+    ],
+    "structuredContent": {
+      "app_id": "GitHub",
+      "app_name": "GitHub",
+      "status": "found",
+      "global_permission": "Allow low-risk actions",
+      "global_permission_description": "ChatGPT will automatically approve low-risk actions but may deny actions involving sensitive information. Learn more",
+      "app_permission": "Allow all actions",
+      "app_permission_description": "GitHub has a custom app-specific setting. ChatGPT won’t ask before reading or taking action. This comes with elevated risk. Learn more"
+    },
+    "isError": false
+  },
+  "read_probe": {
+    "tool": "mcp__codex_apps__github_fetch",
+    "input": {
+      "url": "https://api.github.com/repos/b03la013-max/keibametrics-runtime/actions/workflows/km-local-race-key-entry.yml"
+    },
+    "actual_response": {
+      "error": "HTTPError: 400: GitHub Fetch URL is not an allowed public GitHub repository or search endpoint. (Response: None)",
+      "error_code": "INVALID_ARGUMENT"
+    },
+    "interpretation": "CONNECTOR_URL_ALLOWLIST_RESTRICTION; NOT original race refusal; no dispatch attempted; GitHub server HTTP response not exposed"
+  },
+  "existing_preserved_audit_commit": "c17282755a30d9e5bd03c3c4785d55be2a5132bb",
+  "original_failed_race_tool_responses_recovered": false,
+  "dedicated_dispatch_is_not_github_api_absence": true
+}

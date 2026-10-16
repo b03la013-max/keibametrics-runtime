@@ -1,0 +1,107 @@
+{
+  "incident": "KAW-2026-10-15-R06",
+  "scheduled_post_at": "2026-10-15T17:25:00+09:00",
+  "original_prediction_cutoff": null,
+  "checked_at": "2026-10-15T08:33:42.244Z",
+  "main_sha": "887c07fe4585426718b32a4f9342ccf0ed2e5e87",
+  "tested_main_sha": "02aaeeb2fb624a1bedcc8d2c705a393133e1b30b",
+  "main_delta": "Only runtime/jra_race_day_status/2026-10-15.json changed between tested main and preservation base.",
+  "derived_execution_id": "KM-LOCAL-KAW-20261015-R06-LIVE-R1",
+  "derived_execution_id_is_observed": false,
+  "first_observed_stop": "BEFORE_GITHUB_REGISTRATION_OR_DISPATCH",
+  "root_cause_status": "BLOCKED_MISSING_ORIGINAL_CONNECTION_DENIAL",
+  "reported_denial": {
+    "source": "Prior assistant messages retrieved through Personal Context; original tool response unavailable",
+    "at": [
+      "2026-10-15T08:12:38Z",
+      "2026-10-15T08:15:55Z"
+    ],
+    "description": "Race-Key registration rejected by connection-side safety check; external execution not started"
+  },
+  "artifact_search": {
+    "scope": "Tracked files on main through preservation base; no remote Runtime artifact enumeration endpoint invoked",
+    "race_key": "NOT_FOUND",
+    "formal_intent": "NOT_FOUND",
+    "source_checkpoint": "NOT_FOUND",
+    "signed_receipt": "NOT_FOUND",
+    "signed_final": "NOT_FOUND",
+    "pattern": "20261015.*R06|2026-10-15.*[Rr]0?6"
+  },
+  "actions_search": {
+    "window_utc": "2026-10-15T08:00:00Z..2026-10-15T09:00:00Z",
+    "snapshot_total": 3,
+    "r06_run": "NOT_FOUND",
+    "workflow_runs": [
+      {
+        "id": 38705674655,
+        "name": "KeibaMetrics JRA Autopilot Failure Recovery",
+        "event": "workflow_run",
+        "status": "completed",
+        "conclusion": "skipped",
+        "created_at": "2026-10-15T08:26:31Z",
+        "head_sha": "f52049f947b3fd3a3655673ff64f88f19f283146",
+        "url": "https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38705674655"
+      },
+      {
+        "id": 38705665091,
+        "name": "JRA race-day autopilot 2026-10-15 loop",
+        "event": "workflow_dispatch",
+        "status": "in_progress",
+        "conclusion": null,
+        "created_at": "2026-10-15T08:26:26Z",
+        "head_sha": "f52049f947b3fd3a3655673ff64f88f19f283146",
+        "url": "https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38705665091"
+      },
+      {
+        "id": 38703907424,
+        "name": "JRA race-day autopilot today */5 0-12 * * *",
+        "event": "schedule",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "created_at": "2026-10-15T08:11:30Z",
+        "head_sha": "cc5fe041a9de71813fe91dc11582ea19d0866d87",
+        "url": "https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38703907424"
+      }
+    ]
+  },
+  "cause_categories": {
+    "race_identity": "UNDETERMINED_ORIGINAL_REQUEST_MISSING",
+    "duplicate_key": "NO_MAIN_DUPLICATE_FOUND; original attempted key unknown",
+    "authority_scope": "CURRENT_LOCAL_AUTHORITY_ACTIVE; original request unknown",
+    "cutoff": "ORIGINAL_CUTOFF_UNKNOWN; post passed during investigation; new execution prohibited",
+    "runner_universe": "NO_R06_SOURCE_AVAILABLE",
+    "implementation_sha": "LIVE_GATEWAY_COMPATIBILITY_PASS; no R06 execution SHA",
+    "connection_permission": "PRIOR_CHAT_REPORTED_CONNECTION_SAFETY_DENIAL; original error and policy reason missing"
+  },
+  "regression": {
+    "main": "24 passed, tests/test_local_race_key_ingress.py",
+    "candidate": "28 passed, same test file at f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+    "offline_expiry": "SOURCE_CUTOFF_EXPIRED; hypothetical cutoff 17:23, original cutoff unknown, no submission"
+  },
+  "repair": {
+    "new_root_cause_code_commit": null,
+    "reason": "Cannot establish repository defect from missing external denial. No safety bypass or speculative guard relaxation.",
+    "existing_candidate_pr": 280,
+    "code_subject": "9d38b8cc03f185944e794d55c1afea8f864f856d",
+    "head": "f0ec0532ac94ab1b5f79c92357a9c4a844a764d9",
+    "known_separate_risk": "main checks out moving main and reads HEAD rather than immutable push range; PR280 already fixes this. Not proven as R06 cause.",
+    "pr279_head": "2054bb18a17dd44a8f391b6225c43a2b34fa7ef2",
+    "production_applied": false
+  },
+  "constraints": {
+    "r06_new_payloads": 0,
+    "pre_race_execution": 0,
+    "paid_openai_api_requests": 0,
+    "merge": 0,
+    "deploy": 0,
+    "billing_changes": 0,
+    "bets": 0,
+    "signed_artifact_mutations": 0
+  },
+  "remaining_evidence": [
+    "Original rejected tool name, full error text, requested operation/path and payload (exclude secrets)",
+    "If an Actions run was created outside queried window or under another identity: exact run ID",
+    "If external durable R06 artifacts exist outside GitHub: same-race canonical read-back identifier; do not create artifacts to satisfy this request"
+  ],
+  "next_race_status": "RECURRENCE_NOT_CLEARED; original connection refusal unresolved; existing candidate code is not proof of connector authorization"
+}

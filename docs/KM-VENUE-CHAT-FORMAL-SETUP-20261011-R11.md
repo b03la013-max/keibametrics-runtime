@@ -24,15 +24,18 @@ Formal PASS != Prediction Success、Prediction Success != Capital Success、KRS 
 
 ## 0.5 R11 必須ルール：買い目の作成主体とAKIによる点数決定（最優先）
 
-1. **買い目はチャットで作らない。** 対象Raceの買い目・点数・印は、GitHub mainの次の順で読み、そのまま提示する。
-   1. `runtime/jra_race_day_status/<YYYY-MM-DD>.json`（全Race状況。`.md`は人間向け）
-   2. 該当Raceの `runtime/final_artifacts/<race_id>.json`（署名付きProduction FINAL）
+1. **買い目はチャットで作らない。** Current Authorityで対象Familyを解決し、そのFamilyの正本から対象Raceの買い目・点数・印を読み、そのまま提示する。
+   - JRA: `runtime/jra_race_day_status/<YYYY-MM-DD>.json`から該当Raceの`runtime/final_artifacts/<race_id>.json`へ進む。
+   - LOCAL: `runtime/executions/<execution_id>/FORMAL/LATEST.json`の`run_path`から、同じmanifestに結び付く`final_receipt_envelope.json`、`receipt_verifications.json`、`final_before_post_verification.json`を読む。`run_path`の基点は`runtime/executions/`。既存のmanifest/hash/署名/時刻検証を通し、`runtime/execution_reports/<execution_id>/delivery/canonical_tree.txt`がある場合はFINAL原本と照合する。既存`runtime.local_race_key_gate.terminal_state`は署名の再検証とCanonical再描画を実装済み（ローカル出力を伴い、Delivery到達は未証明のまま保持する）。JRA専用保存先の不在からLOCAL FINAL不在を推定しない。
+   - BAN: Current Authorityの実Runtime・正本・署名権限が確認できなければHOLD。別Familyの保存先を代用しない。
    チャットが独自に印・列・点数・フォーメーションを組み立てて「正式」と表示することを禁止する。
 2. **点数はAKI-JRA v2で決まる（R49以降）。** Production StaticはW-AKI／P-AKI／ASI／RSIと総合AKIから型を決める：0〜34 堅い 1-2-5／35〜49 標準 1-3-7（W-AKI≥45は2-3-6）／50〜64 紐荒れ 1-4-8（2-4-8）／65〜79 軸崩壊警戒 2-5-10（3-5-9）／80以上 大波乱 3-6-12。ASI<65またはW-AKI≥50は1着候補2頭以上、RSI≥60は3列目から1頭2列目へ昇格。大荒れ捕捉モードは自動発動しない。FINALの `static_prediction.aki_jra_v2` と買い目ツリー先頭の「荒れ構造（AKI-JRA v2）」をそのまま示す。
 3. **R49より前に確定したFINAL**（AKI欄がないもの）は署名済みのため変更しない。状況一覧の `aki_reference` に、同じ発走前Full20から現行AKI方式で再計算した**参考ツリー**がある。表示する場合は必ず「AKI再計算・参考（正式FINALではない／署名なし／購入根拠にしない）」と併記し、正式FINALの点数と両方を示す。
 4. **状態の読み方**：FINAL＝発走前署名済み／EVIDENCE_NO_BET＝未成立セルを列挙した正式見送り／MISSED_WINDOW＝自動実行窓の前に終了（後付けFINALなし）／SETTLED・SETTLED_SIGNED_RESULT_LEARNED＝結果・精算・学習済み。締切15分前を切った依頼は `TOO_LATE_FOR_PRE_RACE_FINAL` となり、新たな正式予測は作らない。
 5. **第3条DCR（R48）**：公式に情報が存在しない指数は「情報不足」と明記して50＋(実測−50)×DCRで計算済み。チャット側で一律50点補完や別の補完をしない。
 6. 全Production出力は OWNER-AUTHORIZED / UNVALIDATED。確率・EVは未較正のため表示しない。推奨は実購入ではない。
+
+この節のAKI-JRA・Full20・DCR及び15分前受付条件はJRAの規則である。LOCALの29指数、Cutoff、MEC、Capitalへ転用せず、それぞれのCurrent Contractを適用する。既存の発走前FINALの読み戻しは新規生成と区別し、現在時刻がCutoff後という理由だけで拒否しない。読み戻し時刻を発走前Delivery時刻に置き換えない。
 
 ## 1. Entry時のCurrent Authority解決
 
@@ -59,6 +62,14 @@ GitHub mainの更新は非常に頻繁である。上記SHA、R47及び本書の
 Intent受領は実行完了ではない。ユーザーに不要な資料転記・途中操作を要求しないが、必要な権限、公式情報又は稼働実行基盤がなければFirst Failed StageとExact Gapを示す。失敗を補うためのAI自由採点、Synthetic Evidence、Post-start改変は禁止する。
 
 レース発走後・結果判明後の再計算はPOST-START-REPLAYまたはResult Reviewへ振り分け、発走前の未知未来OOSへ加算しない。
+
+受付時は実際に公開されたConnector操作を確認する。通常ChatGPTのGitHub連携とCodex/Workの書込能力を同一視しない。既存FINALがあれば正本の読み戻しを優先し、既存Race-Key・Intent・claimがあれば同一Raceを重複登録しない。
+
+新規LOCAL登録の既存入口は、5項目（`venue_id`、`race_date`、`race_no`、`scheduled_post_at`、`prediction_cutoff`）による`.github/workflows/km-local-race-key-entry.yml`の`workflow_dispatch`又はmainの`runtime/race_key_requests/*.json`への認可済みpushである。実公開の書込操作、対象Raceの承認、公式時刻・Cutoffを満たす環境だけで使用する。専用dispatch操作が未公開でもGitHubのAPI自体がないとは報告しない。過去runのrerunは新規Raceの受付ではない。元の接続拒否がある場合、別の書込操作やBrowserへ切り替えて迂回しない。
+
+書込操作がない通常チャットでは、既存Autonomous Dispatcherが対象日・Raceを承認範囲内で事前受付し、チャットがそのCanonical FINALを読み戻す分担を使う。ただし`profiles/local_autonomous_approvals/<YYYY-MM-DD>-<VENUE>.json`の対象Race、計画SHA、Activation、Dispatch上限、起動時刻、実runを確認する。別Race・別日への承認流用、cronの存在だけによる実行済み判定、無断のPhase拡張は禁止。ユーザーの通常依頼文は変更不要だが、対象Raceの事前受付が未承認・未実行なら、その欠落を明示する。
+
+受付失敗はツール名、入力（秘密値を除く）、実応答、観測時刻、GitHub commit/run、最初に確認できた停止工程を既存障害記録へ残す。`操作未公開`、`ホスト承認拒否`、`ConnectorのURL制限`、`GitHub HTTP拒否`、`Workflow起動後の検証失敗`を混同しない。原応答がない場合は原文欠測とし、「安全チェック」という説明だけから拒否主体・HTTPコードを補完しない。
 
 ## 3. Venue / Family / Central Ownership
 

@@ -38,6 +38,11 @@ on:
     branches: [main]
     paths:
       - 'runtime/race_key_requests/*.json'
+      - 'runtime/local_race_day_plan/*.json'
+      - '!runtime/local_race_day_plan/*.state.json'
+      - '!runtime/local_race_day_plan/*.dry-run.json'
+      - '!runtime/local_race_day_plan/*.discovery-failure.json'
+      - 'profiles/local_autonomous_approvals/*.json'
 
 permissions:
   contents: write
@@ -55,6 +60,7 @@ jobs:
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       has_requests: ${{ steps.resolve.outputs.has_requests }}
+      has_day_plans: ${{ steps.resolve.outputs.has_day_plans }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,10 +138,12 @@ jobs:
         shell: bash
         run: |
           set +e
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
           python -m runtime.local_race_entry \
             --request entry-out/race_request.json \
             --output entry-out --run-id "race-key-${{ github.run_id }}" \
-            --github-sha "${{ github.sha }}"
+            --github-sha "${{ github.sha }}" --persist-checkpoints
           rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
@@ -195,13 +203,22 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           mkdir -p entry-out
+          mkdir -p "runtime/execution_reports/$EXECUTION_ID"
+          # Preserve original input/response diagnostics even when SOURCE or
+          # the formal gate failed; these are evidence, not signed checkpoints.
+          for item in race_request gateway_preflight entry_report; do
+            if [ -f "entry-out/$item.json" ]; then
+              cp "entry-out/$item.json" "runtime/execution_reports/$EXECUTION_ID/$item-${{ github.run_id }}.json"
+            fi
+          done
           python -m runtime.local_race_key_gate --terminal-only \
             --execution-id "$EXECUTION_ID" --job-status "$JOB_STATUS" \
+            --report "runtime/execution_reports/$EXECUTION_ID/entry_report-${{ github.run_id }}.json" \
+            --github-summary "$GITHUB_STEP_SUMMARY" \
             --output "runtime/execution_reports/$EXECUTION_ID/terminal-${{ github.run_id }}.json"
           git config user.name keibametrics-runtime
           git config user.email actions@users.noreply.github.com
           git add "runtime/execution_reports/$EXECUTION_ID"
-          cat "runtime/execution_reports/$EXECUTION_ID/delivery/canonical_tree.txt" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m "execution: terminal state $EXECUTION_ID [skip ci]"
             python tools/persist_local_checkpoints.py --branch main
@@ -268,14 +285,16 @@ jobs:
           EXECUTION_ID: ${{ matrix.execution_id }}
         run: |
           set -euo pipefail
-          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
+          if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ] || [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then
             git config user.name keibametrics-runtime
             git config user.email actions@users.noreply.github.com
-            git add "runtime/executions/$EXECUTION_ID/RESULT"
+            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/RESULT"; fi
             if [ -d "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT" ]; then git add "runtime/executions/$EXECUTION_ID/OFFICIAL_RESULT"; fi
+            if [ -d "runtime/executions/$EXECUTION_ID/RESULT" ]; then
             for path in runtime/local_candidate_forward_measurements runtime/local_candidate_forward_status.json runtime/local_candidate_dual_oos_measurements runtime/local_candidate_dual_oos_status.json runtime/local_candidate_v03_oos_measurements runtime/local_candidate_v03_oos_status.json runtime/mec_shadow_results runtime/mec_shadow_lineage runtime/mec_r4_oos_status.json runtime/local_mec_r5_shadow_results runtime/local_mec_r5_shadow_lineage runtime/local_mec_r5_oos_status.json runtime/aki_adaptive_oos_status.json runtime/common_exact_continuity_shadow_results runtime/common_exact_continuity_shadow_lineage runtime/common_exact_continuity_oos_status.json; do
               if [ -e "$path" ]; then git add "$path"; fi
             done
+            fi
             if ! git diff --cached --quiet; then
               git commit -m "execution: race-key RESULT $EXECUTION_ID [skip ci]"
               python tools/persist_local_checkpoints.py --branch main
@@ -297,7 +316,10 @@ jobs:
 
   local-day:
     # Inert until an owner separately approves activation, dated scope and cost.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'schedule' && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    # A reviewed dated-plan push can start the SAME driver ahead of the race.
+    # GITHUB_TOKEN persistence pushes do not recursively trigger this workflow.
+    needs: [resolve]
+    if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'push' && needs.resolve.outputs.has_day_plans == 'true')) && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
     permissions:
       contents: write
       actions: write
@@ -305,7 +327,9 @@ jobs:
       group: km-local-day-dispatcher
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # worker_seconds defaults to zero. A nonzero lease requires a separate
+    # duration/cost approval and is capped at 350 minutes by the existing driver.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
         with:

@@ -240,3 +240,169 @@ def test_phase_a_requires_no_live_approval_or_runtime(monkeypatch):
     report=d.inspect_plan(d.ROOT,p,NOW)
     assert report['target_races']==2 and report['dispatch_count']==0
     assert report['new_signed_artifacts']==0
+
+
+def test_corrupt_race_checkpoint_does_not_abort_other_approved_race(tmp_path):
+    p=plan(); first=p['races'][0]['execution_id']; sent=[]
+    pointer=tmp_path/'runtime/executions'/first/'SOURCE/LATEST.json'
+    pointer.parent.mkdir(parents=True); pointer.write_text('{broken')
+    state=run(tmp_path,p,approval(p),{},execute=True,publish=lambda:None,
+              health=lambda:{'status':'PASS'},send=lambda f:sent.append(f['race_no']) or {'acknowledged':True})
+    assert sent==[2]
+    assert state['races'][first]['status']=='HOLD_CHECKPOINT_INTEGRITY'
+    assert state['races'][first]['first_failure_observation']['code']=='EXECUTION_STORE_POINTER_INVALID'
+    assert state['races'][first]['first_failure_observation']['observed_at']==NOW.isoformat()
+
+
+def test_checkpoint_observer_reuses_store_manifest_integrity(tmp_path):
+    from runtime.execution_store import persist_phase, ExecutionStoreError
+    src=tmp_path/'src';src.mkdir()
+    (src/'source_receipt_envelope.json').write_text(json.dumps({'receipt_sha256':'original'}))
+    saved=persist_phase('race','SOURCE','one',src,root=tmp_path/'runtime/executions')
+    (Path(saved['path'])/'source_receipt_envelope.json').write_text(json.dumps({'receipt_sha256':'changed'}))
+    with pytest.raises(ExecutionStoreError,match='FILE_HASH_MISMATCH'):
+        d.checkpoint_status(tmp_path,'race')
+
+
+def test_claim_without_final_becomes_deadline_terminal_without_resend(tmp_path):
+    p=plan();a=approval(p);first=p['races'][0]['execution_id']
+    claim={'claimed_at':NOW.isoformat(),'acknowledgement':{'acknowledged':True}}
+    state={'races':{first:claim}};send=Mock()
+    d.tick(tmp_path,p,a,state,now=NOW+timedelta(hours=2),execute=True,
+           authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),publish=lambda:None,
+           reconcile=lambda *a:None,send=send)
+    assert state['races'][first]['status']=='FINAL_DEADLINE_EXPIRED'
+    assert state['races'][first]['claimed_at']==NOW.isoformat()
+    assert state['races'][first]['first_failure_observation']['stage']=='SIGNED_FINAL_DEADLINE'
+    send.assert_not_called()
+
+
+def prereg_approval(p):
+    return {**approval(p), 'preregister_authorized_races': True,
+            'preregistration_approval_ref': 'SYNTHETIC_OWNER_REVIEW'}
+
+
+def test_approved_races_register_before_window_without_source_or_dispatch(tmp_path):
+    p=plan(); a=prereg_approval(p); state={}; send=Mock(); health=Mock(); saved=[]
+    d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),execute=True,
+           authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),
+           publish=lambda:saved.append(json.loads(json.dumps(state))),send=send,health=health)
+    assert len(list((tmp_path/'runtime/race_key_requests').glob('*.json')))==2
+    assert len(saved)==1
+    for race in p['races']:
+        registration=state['races'][race['execution_id']]['registration']
+        assert registration['status']=='REGISTERED_REQUEST_INTENT_NOT_FROZEN_STATIC'
+        assert registration['request_intent']['execution_phase']=='SOURCE'
+        assert registration['official_plan_sha256']==p['plan_sha256']
+    assert not (tmp_path/'runtime/formal_intents').exists()
+    send.assert_not_called(); health.assert_not_called()
+
+
+def test_preregistered_race_can_dispatch_once_and_resume_without_duplicate(tmp_path):
+    p=plan(); a=prereg_approval(p); state={}; send=Mock(return_value={'acknowledged':True})
+    kwargs=dict(authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),
+                execute=True,publish=lambda:None,health=lambda:{'status':'PASS'},
+                send=send,reconcile=lambda *a:None)
+    d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),**kwargs)
+    assert all(c.get('registration') for c in state['races'].values())
+    # Simulate worker exit and a later worker reading its published state.
+    state=json.loads(json.dumps(state))
+    d.tick(tmp_path,p,a,state,now=NOW,**kwargs)
+    d.tick(tmp_path,p,a,state,now=NOW+timedelta(minutes=1),**kwargs)
+    assert send.call_count==2
+
+
+def test_unapproved_race_is_discovered_but_not_registered(tmp_path):
+    p=plan(); a=prereg_approval(p); a.update(race_numbers=[2],max_dispatches=1,activation_phase='B')
+    state={}
+    d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),execute=True,
+           authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),publish=lambda:None)
+    assert [x.name for x in (tmp_path/'runtime/race_key_requests').glob('*.json')]==[p['races'][1]['race_key']+'.json']
+    assert state['registration_coverage']['approved_target_count']==1
+    assert state['registration_coverage']['discovered_count']==2
+
+
+def test_preregistration_key_tamper_is_held_without_overwrite_or_send(tmp_path):
+    p=plan(); a=prereg_approval(p); state={}; send=Mock(return_value={'acknowledged':True})
+    kwargs=dict(authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),
+                execute=True,publish=lambda:None,health=lambda:{'status':'PASS'},send=send)
+    d.tick(tmp_path,p,a,state,now=NOW-timedelta(hours=3),**kwargs)
+    key=tmp_path/'runtime/race_key_requests'/(p['races'][0]['race_key']+'.json')
+    altered={**p['races'][0]['fields'],'prediction_cutoff':'2026-10-15T18:14:00+09:00'}
+    key.write_text(json.dumps(altered))
+    d.tick(tmp_path,p,a,state,now=NOW,**kwargs)
+    assert json.loads(key.read_text())==altered
+    assert send.call_count==1 and send.call_args.args[0]['race_no']==2
+    assert state['registration_coverage']['missing_execution_ids']==[p['races'][0]['execution_id']]
+
+
+def test_preregistration_publish_failure_prevents_every_dispatch(tmp_path):
+    p=plan(); send=Mock()
+    with pytest.raises(RuntimeError,match='IMMUTABLE_CONFLICT'):
+        run(tmp_path,p,prereg_approval(p),{},execute=True,
+            publish=Mock(side_effect=RuntimeError('IMMUTABLE_CONFLICT')),send=send)
+    send.assert_not_called()
+
+
+def test_transient_preflight_recovers_but_fingerprint_mismatch_stays_held(tmp_path):
+    p=plan(); a=prereg_approval(p); state={}; sent=[]; calls={1:0,2:0}
+    def health():
+        # R1: transient read failure; R2: incompatible deployment.
+        if not calls[1]:
+            calls[1]+=1; raise TimeoutError('DNS_TIMEOUT')
+        if not calls[2]:
+            calls[2]+=1; raise ValueError('RUNTIME_FINGERPRINT_HOLD:WRONG_SIGNER')
+        return {'status':'PASS'}
+    kwargs=dict(execute=True,publish=lambda:None,health=health,
+                send=lambda f:sent.append(f['race_no']) or {'acknowledged':True},reconcile=lambda *a:None)
+    run(tmp_path,p,a,state,**kwargs)
+    run(tmp_path,p,a,state,**kwargs)
+    assert sent==[1]
+    assert state['races'][p['races'][1]['execution_id']]['status']=='HOLD_GUARD_OWNER_RECOVERY_REQUIRED'
+    assert state['races'][p['races'][0]['execution_id']]['first_failure_observation']['code']=='DNS_TIMEOUT'
+
+
+def test_bounded_worker_crosses_windows_with_independent_races(tmp_path):
+    p=plan(); a=prereg_approval(p)
+    a.update(worker_seconds=3600,worker_duration_approval_ref='SYNTHETIC_DURATION')
+    clock=[NOW-timedelta(minutes=40)]; sent=[]; state={}
+    def step():
+        return d.tick(tmp_path,p,a,state,now=clock[0],execute=True,
+            authorize=lambda a,p,r,n:d.authorization(a,p,d.ROOT,n),publish=lambda:None,
+            health=lambda:{'status':'PASS'},send=lambda f:sent.append((f['race_no'],clock[0])) or {'acknowledged':True},
+            reconcile=lambda *a:None)
+    d.run_worker(a,step,clock=lambda:clock[0],sleep=lambda s:clock.__setitem__(0,clock[0]+timedelta(seconds=s)))
+    assert [n for n,t in sent]==[1,2]
+    assert sent[0][1]==NOW-timedelta(minutes=30) and sent[1][1]==NOW
+    assert all(c.get('claimed_at') for c in state['races'].values())
+
+
+@pytest.mark.parametrize('changes',[{'worker_seconds':True},{'worker_seconds':21001},
+    {'worker_seconds':60},{'preregistration_approval_ref':None}])
+def test_new_worker_and_registration_require_explicit_review(tmp_path,changes):
+    p=plan(); a=prereg_approval(p); a.update(changes); send=Mock(); publish=Mock()
+    with pytest.raises(ValueError):run(tmp_path,p,a,{},execute=True,send=send,publish=publish)
+    send.assert_not_called(); publish.assert_not_called()
+
+
+def test_official_discovery_read_retries_dns_but_preserves_original_failure():
+    calls=[]
+    def fetch(spec,cutoff):
+        calls.append(spec['source_id'])
+        if len(calls)==1:raise ValueError('SOURCE_DNS_RESOLUTION_FAILED:temporary test failure')
+        return fake_fetch(spec,cutoff)
+    p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    observed=p['discovery_read_attempts']
+    assert len(p['races'])==2 and calls[0]==calls[1]
+    assert observed[0]['error']=='SOURCE_DNS_RESOLUTION_FAILED:temporary test failure'
+    assert observed[0]['attempt']==1 and observed[1]['attempt']==2
+
+
+def test_official_discovery_signature_guard_is_never_retried():
+    calls=[]
+    def fetch(spec,cutoff):
+        calls.append(spec['source_id'])
+        raise ValueError('SOURCE_RAW_HASH_MISMATCH')
+    with pytest.raises(ValueError,match='HASH_MISMATCH'):
+        d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    assert len(calls)==1

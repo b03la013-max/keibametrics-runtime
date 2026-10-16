@@ -8,6 +8,51 @@ from runtime import local_race_key_intake as intake
 from runtime import local_race_key_gate as gate
 
 
+@pytest.mark.parametrize("official,result", [(True, False), (True, True), (False, False)])
+def test_result_workflow_preserves_official_checkpoint_before_signed_result(tmp_path, official, result):
+    """Exercise the real persistence shell after a RESULT worker interruption."""
+    import os
+    import subprocess
+    import yaml
+    workflow = yaml.load((Path(__file__).resolve().parents[1] /
+        ".github/workflows/km-local-race-key-entry.yml").read_text(), Loader=yaml.BaseLoader)
+    command = next(s["run"] for s in workflow["jobs"]["result"]["steps"]
+        if s.get("name") == "Persist verified RESULT and forward measurement ledgers")
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+    git("init", "-q")
+    git("config", "user.name", "fixture")
+    git("config", "user.email", "fixture@example.invalid")
+    git("commit", "--allow-empty", "-qm", "fixture")
+    before = git("rev-parse", "HEAD")
+    eid = "KM-LOCAL-KAW-20990101-R01-LIVE-R1"
+    for phase, present in (("OFFICIAL_RESULT", official), ("RESULT", result)):
+        if present:
+            target = tmp_path / "runtime/executions" / eid / phase / "fixture.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('{"synthetic_regression":true}\n')
+    # Block network publishing; verify that the unchanged existing publisher is called.
+    bin_dir = tmp_path / "fixture-bin"
+    bin_dir.mkdir()
+    stub = bin_dir / "python"
+    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n')
+    stub.chmod(0o755)
+    log = tmp_path / "publish.log"
+    env = {**os.environ, "EXECUTION_ID": eid, "PUBLISH_LOG": str(log),
+           "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"]}
+    subprocess.run(["bash", "-c", command], cwd=tmp_path, env=env, check=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    tracked = git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
+    if official:
+        assert f"runtime/executions/{eid}/OFFICIAL_RESULT/fixture.json" in tracked
+        assert log.read_text().strip() == "tools/persist_local_checkpoints.py --branch main"
+    if result:
+        assert f"runtime/executions/{eid}/RESULT/fixture.json" in tracked
+    if not official and not result:
+        assert git("rev-parse", "HEAD") == before
+        assert not log.exists()
+
+
 def authority(*, now):
     return Path("profiles/authority.json"), {
         "manifest_id": "KM-FAMILY-CURRENT-AUTHORITY-20990101-R100",
@@ -272,6 +317,27 @@ def test_multi_race_event_has_independent_cells_and_bad_cell_is_preserved(tmp_pa
     assert len({x['execution_id'] for x in r['requests']})==2
 
 
+def test_dated_plan_push_wakes_existing_driver_without_synthetic_race_request(tmp_path):
+    import subprocess
+    def git(*args):return subprocess.check_output(['git',*args],cwd=tmp_path,text=True).strip()
+    git('init');git('config','user.email','test@example.invalid');git('config','user.name','test')
+    (tmp_path/'initial').write_text('first');git('add','.');git('commit','-m','initial');before=git('rev-parse','HEAD')
+    folder=tmp_path/'runtime/local_race_day_plan';folder.mkdir(parents=True)
+    (folder/'2099-01-01-KAW.json').write_text('{}')
+    (folder/'2099-01-01-KAW.state.json').write_text('{}')
+    git('add','.');git('commit','-m','official dated plan');after=git('rev-parse','HEAD')
+    r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert r['status']=='PASS' and not r['requests'] and not r['errors']
+    assert r['day_plans']==[{'race_date':'2099-01-01','venue_id':'KAW','origin':'runtime/local_race_day_plan/2099-01-01-KAW.json'}]
+    # The path only wakes the driver: its existing owner/plan/authority guards
+    # still reject this empty object; no authorization is inferred here.
+    before=after
+    (folder/'2099-01-01-KAW.state.json').write_text('{"changed":true}')
+    git('add','.');git('commit','-m','state only');after=git('rev-parse','HEAD')
+    r=intake.resolve_event({'before':before,'after':after},'push',cwd=tmp_path)
+    assert not r['day_plans'] and not r['requests']
+
+
 def test_no_signed_final_or_delivery_inferred_from_successful_job(monkeypatch):
     from runtime import local_race_key_gate as gate
     monkeypatch.setattr(gate.o,'resolve_phase',lambda *args:None)
@@ -294,3 +360,47 @@ def test_saved_final_flags_cannot_override_fresh_signature_failure(monkeypatch):
     assert result['signed_final_pass'] is False
     assert result['render_available'] is False
     assert result['prestart_delivery_pass'] is False
+
+
+def test_terminal_summary_does_not_publish_stale_tree_on_verify_hold(monkeypatch,tmp_path):
+    from runtime import local_race_key_gate as gate
+    import sys,json
+    stale=tmp_path/'runtime/execution_reports/race/delivery/canonical_tree.txt'
+    stale.parent.mkdir(parents=True);stale.write_text('STALE TICKETS')
+    source_report=tmp_path/'entry_report.json'
+    source_report.write_text(json.dumps({'status':'HOLD','first_failed_phase':'SOURCE',
+                                       'first_failed_code':'HTTP_503','code':'HTTP_503'}))
+    monkeypatch.setattr(gate.o,'ROOT',tmp_path)
+    monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'HOLD',
+        'reason':'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED','render_available':False,'prestart_delivery_pass':False})
+    output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+    monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','failure',
+        '--report',str(source_report),'--output',str(output),'--github-summary',str(summary)])
+    assert gate.main()==0
+    assert 'STALE TICKETS' not in summary.read_text()
+    result=json.loads(output.read_text())
+    assert result['execution_failure']['first_failed_code']=='HTTP_503'
+    assert result['execution_failure']['first_failed_phase']=='SOURCE'
+    assert result['github_summary']['canonical_final_included'] is False
+    assert result['prestart_delivery_pass'] is False
+
+
+def test_terminal_summary_binds_exact_content_and_final_without_receipt_claim(monkeypatch,tmp_path):
+    from runtime import local_race_key_gate as gate
+    import sys,json,hashlib
+    tree='CANONICAL TICKETS\n'
+    monkeypatch.setattr(gate,'terminal_state',lambda *a:{'execution_id':'race','status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
+        'prestart_delivery_pass':False,'user_received_at':None,'canonical_tree':tree,
+        'final_receipt_sha256':'receipt-sha','original_final_artifact_sha256':'artifact-sha'})
+    output=tmp_path/'terminal.json';summary=tmp_path/'summary.md'
+    monkeypatch.setattr(sys,'argv',['gate','--terminal-only','--execution-id','race','--job-status','success',
+        '--output',str(output),'--github-summary',str(summary)])
+    assert gate.main()==0
+    result=json.loads(output.read_text());record=result['github_summary']
+    assert tree in summary.read_text()
+    assert record['content_sha256']==hashlib.sha256(summary.read_bytes()).hexdigest()
+    assert record['final_receipt_sha256']=='receipt-sha'
+    assert record['final_artifact_sha256']=='artifact-sha'
+    assert record['written_at'] and record['canonical_final_included'] is True
+    assert result['prestart_delivery_pass'] is False and result['user_received_at'] is None

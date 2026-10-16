@@ -1,6 +1,11 @@
 from runtime.formal_failure_diagnostics import failure_class_for, resume_hint_for
 
 
+def test_source_runner_mismatch_never_recommends_automatic_retry():
+    assert resume_hint_for('RUNNER_UNIVERSE_MISMATCH').startswith('HOLD')
+    assert resume_hint_for('SOURCE_RECEIPT_VERIFY_FAILED').startswith('HOLD')
+
+
 def test_track_condition_mismatch_requires_reforecast_not_generic_retry():
     code = "OFFICIAL_TRACK_CONDITION_MISMATCH_REFORECAST_REQUIRED"
     assert failure_class_for(code) == "CURRENT_STATE_REFORECAST"

@@ -1,0 +1,57 @@
+--- a/governance/KM-FAMILY-CROSS-FAMILY-MATURITY-PROMOTION-20260928-R1.md
++++ b/governance/KM-FAMILY-CROSS-FAMILY-MATURITY-PROMOTION-20260928-R1.md
+@@ -94,3 +94,41 @@
+ 
+ **Commonへ上げるのは「中央のやり方」ではなく「Familyを跨いでも同じ意味を持つ契約」である。**
+ 数値・Source実装・Venue因果はOwnerへ残し、未知未来に影響するPolicy変更はFrozen OOSなしに昇格させない。
++
++
++## 9. 個人開発の限定Executionリリース承認方式（Owner採用待ち）
++
++この追記は、Owner本人が本追記のSHAと対象コードSHAを指定して採用を明示するまで効力を持たない。GitHubへの保存、AIによる監査、CI成功、Ownerが単独開発者であるという事実だけでは採用としない。従来の個別リリース条件を維持する。
++
++### 9.1 適用範囲と承認主体
++
++C0/C1の非予測・非数値Correctness修復について、既存第4節の証拠条件をすべて満たす場合、Owner本人による実際の差分・リスク確認と明示リリース承認を人間の承認方式として選択できる。この方式は独立Human Reviewではない。C1のproof of implementation independenceは人間の独立性とは別の条件であり、削除しない。既存GitHub保護・Required Checks・上位規程の独立承認要求があれば、この方式で上書きしない。
++
++PRにDiscovery/Scheduling/Activationが含まれる場合、それをC1として一括承認しない。対象日・Venue・Race・送信先・Payload・時刻・費用制御・回数制御の運用変更として別途明示承認する。今回の対象はPR280 exact HEAD 655530735f24cce78605dd1bd34843bdb2ea253d、LOCAL KAW Phase B 1Raceのみ。Family全体への一般Activation権限は与えない。
++
++### 9.2 必須証拠
++
++- 全変更パスのCorrectness/運用Scheduling/予測Behavior/Security/Cost分類。分類不明・予測Behavior混入はHOLD。
++- 対象exact HEAD、最新main、差分、必要な全CI、既存回帰、失敗前後の証拠。新HEADではCIと審査を再確認。
++- Owning Family acceptance、第二Family互換性又は実装独立性の証明、negative tests、Authority collision absence。
++- Production Engine/parameter_map/Signer/Trust Anchor/MEC/Capital/数値式/Venue Canonの不変SHAと実Runtime Fingerprint。
++- 配置対象、既知の旧Deployment/startCommand/Gateway、受付停止条件、Rollback手順と復旧後検証。
++- 共有Workspaceの既存費用上限の実効確認。Dispatch回数は金額上限の代替にしない。追加OpenAI API有料要求0、上限引上げ・新課金・購入なし。
++- Owner本人の承認記録（チャット原文又は本人のGitHub操作）を改変せず参照し、AIがOwner/Reviewerとして承認を作成しない。
++
++### 9.3 段階別の明示承認
++
++1. 本方式の採用：Ownerは従来のPR280独立Human Review必須条件を、この限定Owner承認方式に変更することを明示する。対象追記SHA、対象コードSHA、例外範囲、残存リスクを記録する。
++2. Merge：Owner本人が差分・証拠・リスクを確認し、exact HEADのMergeを明示承認する。以前の条件付き指示は新方式採用の証拠には流用しない。
++3. Deploy：既存Runtimeへのwrapper限定配置とGateway整合を別の承認項目として記録する。Merge成功だけでは配備を許可しない。
++4. Activation：限定Race/時刻/送信先/Payload/既存費用上限/最大回数を別の承認項目として記録する。既存Dispatcherのdated approvalと環境ゲートを用い、新Registry/Validator/Workflowを追加しない。
++
++同一Ownerメッセージで複数項目を明示承認できるが、承認範囲は区別して記録する。コード・対象日・Race・上限・配備範囲の変更時は、該当承認を再確認する。AIのコード監査は補助証拠としてのみ記録し、独立レビュー欄はNOT_PERFORMEDのままとする。
++
++### 9.4 除外と停止
++
++C2 Decision Policy/C3 Numerical Model、予測数値・KRS Physics・MEC・Capital変更、Numericalの新たな予測消費、AKI等Shadow昇格、他Venue/JRA/BAN/Phase C/Dへの拡張は対象外。既存OOS/Human Review/明示Authority更新条件を維持する。
++
++独立レビューが上位条件として必要な変更は、Ownerが選任する外部人間の正規レビュー、又はその上位条件自体の正式改定が成立するまでHOLD。無限Retry、曖昧応答後再送、時刻遡及FINAL、既存Artifact/OOS改変は禁止。
++
++配置後はHealth/Gateway/Canary/既存Receipt Verify/既存FINAL Read-backを実測し、どれか不成立なら受付HOLD・既知配置へRollbackする。真正未来FINAL・Delivery・結果Closed Loopは別々に検証し、CI又は過去ReplayをLIVE完了としない。
+--- a/docs/MINIMAL_CORRECTNESS_RELEASE_20261015.md
++++ b/docs/MINIMAL_CORRECTNESS_RELEASE_20261015.md
+@@ -80,3 +80,10 @@
+ 個別card直接取得はDNS障害、web個別cardも取得不可。全Material Changeなしの宣言はしない。
+ 残る操作は①人間の差分レビュー、②管理者の保護設定確認/必要なら実check強制、③正確PRのMerge承認、④wrapper-only配置とGateway patchのDeploy承認。PR276/279の先行Mergeは不要。
+ OpenAI API要求0、新規有料リソース0、課金変更0、購入0、Production変更0。既存Railway従量費用UNKNOWN。
++
++
++## 個人開発の限定承認方式への移行案（2026-10-15・未採用）
++
++Family C1契約の独立性は実装独立性であり、第三者Human Reviewerの一律要求ではない。本資料の「人間によるレビュー」はOwner本人による実レビューと区別可能である。ただしPR280に対する従来のOwner依頼は独立Human Reviewを必須としていたため、Owner本人がGovernance追記のSHA・コードSHAを指定して限定方式を採用するまで、その条件を維持する。
++
++採用後に限り、C0/C1証拠条件＋Owner本人の差分確認＋exact-head Merge承認を用いる。Discovery/Schedulingとwrapper Deploy、KAW限定Activationはそれぞれ明示承認対象。AI監査/CI/Owner包括方針を独立Human Reviewとは表示しない。予測Policy昇格のOOS/Human Review条件、既存数値・KRS・MEC・Capital・Signer/Anchor・Artifactを維持する。

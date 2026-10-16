@@ -1,0 +1,180 @@
+FFFFFFFF                                                                 [100%]
+=================================== FAILURES ===================================
+_____ test_signed_settlement_requires_finite_json_numbers[nan-investment] ______
+
+field = 'investment', bad_value = nan
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE AdaptivePurchaseError
+
+tests/test_aki_adaptive_oos_tracker.py:126: Failed
+_______ test_signed_settlement_requires_finite_json_numbers[nan-return] ________
+
+field = 'return', bad_value = nan
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE AdaptivePurchaseError
+
+tests/test_aki_adaptive_oos_tracker.py:126: Failed
+_____ test_signed_settlement_requires_finite_json_numbers[inf-investment] ______
+
+field = 'investment', bad_value = inf
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID'
+E         Actual message: 'PRODUCTION_SIGNED_SETTLEMENT_CONFLICT'
+
+tests/test_aki_adaptive_oos_tracker.py:126: AssertionError
+_______ test_signed_settlement_requires_finite_json_numbers[inf-return] ________
+
+field = 'return', bad_value = inf
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID'
+E         Actual message: 'PRODUCTION_SIGNED_SETTLEMENT_CONFLICT'
+
+tests/test_aki_adaptive_oos_tracker.py:126: AssertionError
+____ test_signed_settlement_requires_finite_json_numbers[False-investment] _____
+
+field = 'investment', bad_value = False
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID'
+E         Actual message: 'PRODUCTION_SIGNED_SETTLEMENT_CONFLICT'
+
+tests/test_aki_adaptive_oos_tracker.py:126: AssertionError
+______ test_signed_settlement_requires_finite_json_numbers[False-return] _______
+
+field = 'return', bad_value = False
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID'
+E         Actual message: 'PRODUCTION_SIGNED_SETTLEMENT_CONFLICT'
+
+tests/test_aki_adaptive_oos_tracker.py:126: AssertionError
+__ test_signed_settlement_requires_finite_json_numbers[AS_STRING-investment] ___
+
+field = 'investment', bad_value = 'AS_STRING'
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE AdaptivePurchaseError
+
+tests/test_aki_adaptive_oos_tracker.py:126: Failed
+____ test_signed_settlement_requires_finite_json_numbers[AS_STRING-return] _____
+
+field = 'return', bad_value = 'AS_STRING'
+
+    @pytest.mark.parametrize("field", ["investment", "return"])
+    @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), False, "AS_STRING"])
+    def test_signed_settlement_requires_finite_json_numbers(field, bad_value):
+        inputs = canonical_fixture()
+        result = inputs[3]
+        settlement = result["artifact"]["settlement"]
+        settlement[field] = str(settlement[field]) if bad_value == "AS_STRING" else bad_value
+        # Model a provider-signed malformed settlement after verification, not a
+        # tampered artifact: the independent monetary reconciliation must reject it.
+        result["receipt"]["artifact_sha256"] = _sha(result["artifact"])
+        result["receipt_sha256"] = _sha(result["receipt"])
+>       with pytest.raises(AdaptivePurchaseError, match="PRODUCTION_SIGNED_SETTLEMENT_SCHEMA_INVALID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE AdaptivePurchaseError
+
+tests/test_aki_adaptive_oos_tracker.py:126: Failed
+=========================== short test summary info ============================
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[nan-investment]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[nan-return]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[inf-investment]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[inf-return]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[False-investment]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[False-return]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[AS_STRING-investment]
+FAILED tests/test_aki_adaptive_oos_tracker.py::test_signed_settlement_requires_finite_json_numbers[AS_STRING-return]
+8 failed, 6 deselected in 0.10s

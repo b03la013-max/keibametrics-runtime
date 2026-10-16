@@ -161,6 +161,7 @@ def main() -> int:
     parser.add_argument("--report")
     parser.add_argument("--output", required=True)
     parser.add_argument("--github-output")
+    parser.add_argument("--github-summary")
     args = parser.parse_args()
     if args.terminal_only:
         try:
@@ -168,6 +169,38 @@ def main() -> int:
         except Exception as exc:
             result={'execution_id':args.execution_id,'status':'TERMINAL_ERROR','reason':str(exc),
                     'prestart_delivery_pass':False,'observed_at':datetime.now(timezone.utc).isoformat()}
+        if args.report and Path(args.report).is_file():
+            try:
+                entry = json.loads(Path(args.report).read_text(encoding='utf-8'))
+                result['entry_report_ref'] = args.report
+                result['execution_failure'] = {k:entry.get(k) for k in (
+                    'status','first_failed_phase','first_failed_code','code','failure','first_failure_observed_at')}
+            except (OSError, ValueError, AttributeError) as exc:
+                result['entry_report_read_error'] = str(exc)
+        if args.github_summary:
+            # Use this invocation's freshly verified render, never a stale file
+            # left by an earlier successful verification.
+            included = (result.get('signed_final_pass') is True
+                        and result.get('prestart_final_pass') is True
+                        and result.get('render_available') is True
+                        and isinstance(result.get('canonical_tree'), str))
+            content = f"### {args.execution_id}\n\nStatus: {result['status']}\n\n"
+            if included:
+                content += (f"FINAL receipt: {result['final_receipt_sha256']}\n\n"
+                            f"FINAL artifact: {result.get('original_final_artifact_sha256')}\n\n"
+                            + result['canonical_tree'] + '\n')
+            else:
+                content += f"Canonical FINAL withheld: {result.get('reason') or result['status']}\n"
+            target = Path(args.github_summary)
+            with target.open('a', encoding='utf-8') as handle:
+                handle.write(content)
+            result['github_summary'] = {
+                'status':'WRITTEN_FOR_ACTIONS_JOB_SUMMARY_NOT_USER_RECEIPT',
+                'written_at':datetime.now(timezone.utc).isoformat(),
+                'content_sha256':hashlib.sha256(content.encode()).hexdigest(),
+                'canonical_final_included':included,
+                'final_receipt_sha256':result.get('final_receipt_sha256') if included else None,
+                'final_artifact_sha256':result.get('original_final_artifact_sha256') if included else None}
         target=Path(args.output);target.parent.mkdir(parents=True,exist_ok=True)
         target.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
         print(json.dumps(result,ensure_ascii=False))

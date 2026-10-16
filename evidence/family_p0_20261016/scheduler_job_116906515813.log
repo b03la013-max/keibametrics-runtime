@@ -1,0 +1,602 @@
+﻿2026-10-16T09:28:44.1142249Z Current runner version: '2.337.0'
+2026-10-16T09:28:44.1177585Z ##[group]Runner Image Provisioner
+2026-10-16T09:28:44.1179018Z Hosted Compute Agent
+2026-10-16T09:28:44.1180079Z Version: 20261012.601
+2026-10-16T09:28:44.1181421Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+2026-10-16T09:28:44.1183114Z Build Date: 2026-10-12T17:48:21Z
+2026-10-16T09:28:44.1184344Z Worker ID: {ebefa411-1ba2-4889-aad7-f6baa8426c73}
+2026-10-16T09:28:44.1185778Z Region: eastus
+2026-10-16T09:28:44.1186786Z Cloud: Azure
+2026-10-16T09:28:44.1188018Z ##[endgroup]
+2026-10-16T09:28:44.1190385Z ##[group]Operating System
+2026-10-16T09:28:44.1191734Z Ubuntu
+2026-10-16T09:28:44.1193091Z 24.04.5
+2026-10-16T09:28:44.1193999Z LTS
+2026-10-16T09:28:44.1194903Z ##[endgroup]
+2026-10-16T09:28:44.1195866Z ##[group]Runner Image
+2026-10-16T09:28:44.1196856Z Image: ubuntu-24.04
+2026-10-16T09:28:44.1197980Z Version: 20261012.334.1
+2026-10-16T09:28:44.1200082Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-16T09:28:44.1203347Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+2026-10-16T09:28:44.1205370Z ##[endgroup]
+2026-10-16T09:28:44.1207600Z ##[group]GITHUB_TOKEN Permissions
+2026-10-16T09:28:44.1211013Z Actions: write
+2026-10-16T09:28:44.1212103Z Contents: write
+2026-10-16T09:28:44.1213256Z Metadata: read
+2026-10-16T09:28:44.1214254Z ##[endgroup]
+2026-10-16T09:28:44.1217493Z Secret source: Actions
+2026-10-16T09:28:44.1219382Z Cache mode: write
+2026-10-16T09:28:44.1220603Z Prepare workflow directory
+2026-10-16T09:28:44.1957755Z Prepare all required actions
+2026-10-16T09:28:44.2008827Z Getting action download info
+2026-10-16T09:28:44.3685859Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-16T09:28:44.4988621Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-16T09:28:44.5732393Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-16T09:28:44.7807433Z Complete job name: local-day
+2026-10-16T09:28:44.8520972Z ##[group]Run actions/checkout@v4
+2026-10-16T09:28:44.8521875Z with:
+2026-10-16T09:28:44.8522316Z   ref: main
+2026-10-16T09:28:44.8523048Z   fetch-depth: 0
+2026-10-16T09:28:44.8523564Z   repository: b03la013-max/keibametrics-runtime
+2026-10-16T09:28:44.8527224Z   token: ***
+2026-10-16T09:28:44.8527668Z   ssh-strict: true
+2026-10-16T09:28:44.8528104Z   ssh-user: git
+2026-10-16T09:28:44.8528557Z   persist-credentials: true
+2026-10-16T09:28:44.8529049Z   clean: true
+2026-10-16T09:28:44.8529498Z   sparse-checkout-cone-mode: true
+2026-10-16T09:28:44.8530026Z   fetch-tags: false
+2026-10-16T09:28:44.8530477Z   show-progress: true
+2026-10-16T09:28:44.8530982Z   lfs: false
+2026-10-16T09:28:44.8531395Z   submodules: false
+2026-10-16T09:28:44.8531857Z   set-safe-directory: true
+2026-10-16T09:28:44.8532371Z   allow-unsafe-pr-checkout: false
+2026-10-16T09:28:44.8533418Z env:
+2026-10-16T09:28:44.8534568Z   PYTHONPATH: /home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime:/home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:28:44.8535764Z ##[endgroup]
+2026-10-16T09:28:44.9599319Z Syncing repository: b03la013-max/keibametrics-runtime
+2026-10-16T09:28:44.9601299Z ##[group]Getting Git version info
+2026-10-16T09:28:44.9602350Z Working directory is '/home/runner/work/keibametrics-runtime/keibametrics-runtime'
+2026-10-16T09:28:44.9603957Z [command]/usr/bin/git version
+2026-10-16T09:28:44.9667341Z git version 2.55.0
+2026-10-16T09:28:44.9689879Z ##[endgroup]
+2026-10-16T09:28:44.9715077Z Temporarily overriding HOME='/home/runner/work/_temp/9ea50613-8c70-4186-9613-79418ad3ca83' before making global git config changes
+2026-10-16T09:28:44.9717513Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-16T09:28:44.9721334Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:28:44.9776355Z Deleting the contents of '/home/runner/work/keibametrics-runtime/keibametrics-runtime'
+2026-10-16T09:28:44.9782006Z ##[group]Initializing the repository
+2026-10-16T09:28:44.9787704Z [command]/usr/bin/git init /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:28:44.9902322Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-16T09:28:44.9904491Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-16T09:28:44.9905512Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-16T09:28:44.9906281Z hint: call:
+2026-10-16T09:28:44.9906696Z hint:
+2026-10-16T09:28:44.9907290Z hint: 	git config --global init.defaultBranch <name>
+2026-10-16T09:28:44.9907969Z hint:
+2026-10-16T09:28:44.9908778Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-16T09:28:44.9909722Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-16T09:28:44.9910499Z hint:
+2026-10-16T09:28:44.9910936Z hint: 	git branch -m <name>
+2026-10-16T09:28:44.9911444Z hint:
+2026-10-16T09:28:44.9912087Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-16T09:28:44.9918609Z Initialized empty Git repository in /home/runner/work/keibametrics-runtime/keibametrics-runtime/.git/
+2026-10-16T09:28:44.9934005Z [command]/usr/bin/git remote add origin https://github.com/b03la013-max/keibametrics-runtime
+2026-10-16T09:28:44.9983628Z ##[endgroup]
+2026-10-16T09:28:44.9984981Z ##[group]Disabling automatic garbage collection
+2026-10-16T09:28:44.9988525Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-16T09:28:45.0023136Z ##[endgroup]
+2026-10-16T09:28:45.0024598Z ##[group]Setting up auth
+2026-10-16T09:28:45.0031644Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-16T09:28:45.0069682Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-16T09:28:45.0459352Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-16T09:28:45.0500665Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-16T09:28:45.0731170Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-16T09:28:45.0773830Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-16T09:28:45.1025997Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-16T09:28:45.1074100Z ##[endgroup]
+2026-10-16T09:28:45.1074940Z ##[group]Fetching the repository
+2026-10-16T09:28:45.1090920Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-10-16T09:28:53.9698149Z From https://github.com/b03la013-max/keibametrics-runtime
+2026-10-16T09:28:53.9701888Z  * [new branch]        accept/local-source-enrichment-v2-runtime-20260924 -> origin/accept/local-source-enrichment-v2-runtime-20260924
+2026-10-16T09:28:53.9706439Z  * [new branch]        audit/astra-recovery-rebaseline-20260930 -> origin/audit/astra-recovery-rebaseline-20260930
+2026-10-16T09:28:53.9708876Z  * [new branch]        audit/execution-recasting -> origin/audit/execution-recasting
+2026-10-16T09:28:53.9710898Z  * [new branch]        audit/hsn-rev7-venue-canon-20260927-r1 -> origin/audit/hsn-rev7-venue-canon-20260927-r1
+2026-10-16T09:28:53.9713585Z  * [new branch]        audit/kyo-20261011-regression-rev13 -> origin/audit/kyo-20261011-regression-rev13
+2026-10-16T09:28:53.9716538Z  * [new branch]        audit/local-static-owner-forward-acceptance-20261014 -> origin/audit/local-static-owner-forward-acceptance-20261014
+2026-10-16T09:28:53.9723186Z  * [new branch]        audit/nky-rev7-venue-canon-20260927-r1 -> origin/audit/nky-rev7-venue-canon-20260927-r1
+2026-10-16T09:28:53.9725882Z  * [new branch]        audit/recovery-rebaseline -> origin/audit/recovery-rebaseline
+2026-10-16T09:28:53.9728269Z  * [new branch]        authority/formal-single-entry-r2-r35 -> origin/authority/formal-single-entry-r2-r35
+2026-10-16T09:28:53.9730705Z  * [new branch]        c4/jra-base-evidence-mapping-v0.1-20260921 -> origin/c4/jra-base-evidence-mapping-v0.1-20260921
+2026-10-16T09:28:53.9733975Z  * [new branch]        candidate/bvi-collection-connection-20261011 -> origin/candidate/bvi-collection-connection-20261011
+2026-10-16T09:28:53.9737360Z  * [new branch]        candidate/bvi-forward-current-policy-20261012 -> origin/candidate/bvi-forward-current-policy-20261012
+2026-10-16T09:28:53.9739424Z  * [new branch]        candidate/bvi-real-pipeline-20261011 -> origin/candidate/bvi-real-pipeline-20261011
+2026-10-16T09:28:53.9741473Z  * [new branch]        candidate/bvi-real-source-audit-20261011 -> origin/candidate/bvi-real-source-audit-20261011
+2026-10-16T09:28:53.9743933Z  * [new branch]        candidate/common-exact-continuity-shadow-20260930 -> origin/candidate/common-exact-continuity-shadow-20260930
+2026-10-16T09:28:53.9745807Z  * [new branch]        candidate/fnb-v2.2-shadow-20260930 -> origin/candidate/fnb-v2.2-shadow-20260930
+2026-10-16T09:28:53.9747354Z  * [new branch]        candidate/full-lifecycle-owner-r2 -> origin/candidate/full-lifecycle-owner-r2
+2026-10-16T09:28:53.9750552Z  * [new branch]        candidate/jra-bloodb-mac-local-live-acceptance-20261010 -> origin/candidate/jra-bloodb-mac-local-live-acceptance-20261010
+2026-10-16T09:28:53.9753154Z  * [new branch]        candidate/jra-bloodb-member-dom-probe-20261010 -> origin/candidate/jra-bloodb-member-dom-probe-20261010
+2026-10-16T09:28:53.9755495Z  * [new branch]        candidate/jra-local-week-frozen-ticket-reachability-20261010 -> origin/candidate/jra-local-week-frozen-ticket-reachability-20261010
+2026-10-16T09:28:53.9757848Z  * [new branch]        candidate/local-central-weekend-import-r1 -> origin/candidate/local-central-weekend-import-r1
+2026-10-16T09:28:53.9759780Z  * [new branch]        candidate/local-jra-execution-guarantees-20261012 -> origin/candidate/local-jra-execution-guarantees-20261012
+2026-10-16T09:28:53.9761680Z  * [new branch]        candidate/ohi-v2.4-venue-refinement-20261007 -> origin/candidate/ohi-v2.4-venue-refinement-20261007
+2026-10-16T09:28:53.9763731Z  * [new branch]        candidate/openai-owner-lifecycle-c1 -> origin/candidate/openai-owner-lifecycle-c1
+2026-10-16T09:28:53.9765522Z  * [new branch]        candidate/prediction-utility-improvement-20261001 -> origin/candidate/prediction-utility-improvement-20261001
+2026-10-16T09:28:53.9767375Z  * [new branch]        candidate/result-learning-resume-r3 -> origin/candidate/result-learning-resume-r3
+2026-10-16T09:28:53.9769011Z  * [new branch]        chore/local-sbo-shadow-authority-20260924 -> origin/chore/local-sbo-shadow-authority-20260924
+2026-10-16T09:28:53.9770753Z  * [new branch]        claude/autopilot-autostash-no-meeting -> origin/claude/autopilot-autostash-no-meeting
+2026-10-16T09:28:53.9772743Z  * [new branch]        claude/formal-runner-aki-signed-runners -> origin/claude/formal-runner-aki-signed-runners
+2026-10-16T09:28:53.9774535Z  * [new branch]        claude/jra-aki-reference-and-chat-doc -> origin/claude/jra-aki-reference-and-chat-doc
+2026-10-16T09:28:53.9776039Z  * [new branch]        claude/jra-aki-v2-static-owner -> origin/claude/jra-aki-v2-static-owner
+2026-10-16T09:28:53.9777518Z  * [new branch]        claude/jra-art3-dcr-information-policy -> origin/claude/jra-art3-dcr-information-policy
+2026-10-16T09:28:53.9779071Z  * [new branch]        claude/jra-authority-r46-label-fix -> origin/claude/jra-authority-r46-label-fix
+2026-10-16T09:28:53.9780461Z  * [new branch]        claude/jra-autopilot-all-races -> origin/claude/jra-autopilot-all-races
+2026-10-16T09:28:53.9782057Z  * [new branch]        claude/jra-autopilot-ledger-errors -> origin/claude/jra-autopilot-ledger-errors
+2026-10-16T09:28:53.9783928Z  * [new branch]        claude/jra-autopilot-schedule-ledger -> origin/claude/jra-autopilot-schedule-ledger
+2026-10-16T09:28:53.9785508Z  * [new branch]        claude/jra-blocker-routing-static-nobet -> origin/claude/jra-blocker-routing-static-nobet
+2026-10-16T09:28:53.9787057Z  * [new branch]        claude/jra-derived-evidence-terminal -> origin/claude/jra-derived-evidence-terminal
+2026-10-16T09:28:53.9788508Z  * [new branch]        claude/jra-derived-terminal-tests -> origin/claude/jra-derived-terminal-tests
+2026-10-16T09:28:53.9789981Z  * [new branch]        claude/jra-formal-runner-contract-fixes -> origin/claude/jra-formal-runner-contract-fixes
+2026-10-16T09:28:53.9791355Z  * [new branch]        claude/jra-owner-rules-v1-1 -> origin/claude/jra-owner-rules-v1-1
+2026-10-16T09:28:53.9792970Z  * [new branch]        claude/jra-pedigree-identity-fallback -> origin/claude/jra-pedigree-identity-fallback
+2026-10-16T09:28:53.9794473Z  * [new branch]        claude/jra-production-postresult -> origin/claude/jra-production-postresult
+2026-10-16T09:28:53.9795918Z  * [new branch]        claude/jra-production-result-lane-fix -> origin/claude/jra-production-result-lane-fix
+2026-10-16T09:28:53.9797288Z  * [new branch]        claude/jra-race-day-autopilot -> origin/claude/jra-race-day-autopilot
+2026-10-16T09:28:53.9798703Z  * [new branch]        claude/jra-recommendation-only-capital -> origin/claude/jra-recommendation-only-capital
+2026-10-16T09:28:53.9800110Z  * [new branch]        claude/jra-resolver-rate-fix -> origin/claude/jra-resolver-rate-fix
+2026-10-16T09:28:53.9801571Z  * [new branch]        claude/jra-single-entry-corpus-attestation -> origin/claude/jra-single-entry-corpus-attestation
+2026-10-16T09:28:53.9803221Z  * [new branch]        claude/jra-static-owner-r45 -> origin/claude/jra-static-owner-r45
+2026-10-16T09:28:53.9804511Z  * [new branch]        claude/result-runner-request-wait -> origin/claude/result-runner-request-wait
+2026-10-16T09:28:53.9806150Z  * [new branch]        claude/source-aki-two-point-observation -> origin/claude/source-aki-two-point-observation
+2026-10-16T09:28:53.9807526Z  * [new branch]        codex/aki-vnext-20261014 -> origin/codex/aki-vnext-20261014
+2026-10-16T09:28:53.9808953Z  * [new branch]        codex/family-conversion-correctness-20261013 -> origin/codex/family-conversion-correctness-20261013
+2026-10-16T09:28:53.9811620Z  * [new branch]        codex/family-reliability-20261015 -> origin/codex/family-reliability-20261015
+2026-10-16T09:28:53.9814716Z  * [new branch]        codex/fix-sbo-canonical-runtime-gate -> origin/codex/fix-sbo-canonical-runtime-gate
+2026-10-16T09:28:53.9817748Z  * [new branch]        codex/jra-single-entry-exact-gap-20261003 -> origin/codex/jra-single-entry-exact-gap-20261003
+2026-10-16T09:28:53.9820713Z  * [new branch]        codex/kaw-day-execution-20261014 -> origin/codex/kaw-day-execution-20261014
+2026-10-16T09:28:53.9823635Z  * [new branch]        codex/kaw-r06-incident-20261015 -> origin/codex/kaw-r06-incident-20261015
+2026-10-16T09:28:53.9826291Z  * [new branch]        codex/kaw-v25-regression-20261013 -> origin/codex/kaw-v25-regression-20261013
+2026-10-16T09:28:53.9828984Z  * [new branch]        codex/local-aki-columns-20261012 -> origin/codex/local-aki-columns-20261012
+2026-10-16T09:28:53.9831358Z  * [new branch]        codex/local-bvi-bloodline-20261012 -> origin/codex/local-bvi-bloodline-20261012
+2026-10-16T09:28:53.9834357Z  * [new branch]        codex/maintenance-canary-status-20261015 -> origin/codex/maintenance-canary-status-20261015
+2026-10-16T09:28:53.9837498Z  * [new branch]        codex/maintenance-result-refund-guard-20261015 -> origin/codex/maintenance-result-refund-guard-20261015
+2026-10-16T09:28:53.9839202Z  * [new branch]        codex/minimal-correctness-20261015 -> origin/codex/minimal-correctness-20261015
+2026-10-16T09:28:53.9840684Z  * [new branch]        codex/pr280-postmerge-ci-bootstrap -> origin/codex/pr280-postmerge-ci-bootstrap
+2026-10-16T09:28:53.9842825Z  * [new branch]        diagnostic/local-formal-entry-20261014 -> origin/diagnostic/local-formal-entry-20261014
+2026-10-16T09:28:53.9844942Z  * [new branch]        docs/venue-chat-formal-setup-20261011-r10 -> origin/docs/venue-chat-formal-setup-20261011-r10
+2026-10-16T09:28:53.9846578Z  * [new branch]        evidence/formal-r2-pre-race-t03-acceptance -> origin/evidence/formal-r2-pre-race-t03-acceptance
+2026-10-16T09:28:53.9849277Z  * [new branch]        evidence/formal-r2-t04-oos-isolation -> origin/evidence/formal-r2-t04-oos-isolation
+2026-10-16T09:28:53.9850981Z  * [new branch]        family-health-local-executable-fix-20260923 -> origin/family-health-local-executable-fix-20260923
+2026-10-16T09:28:53.9852931Z  * [new branch]        family-r31-maturity-promotion-20260928 -> origin/family-r31-maturity-promotion-20260928
+2026-10-16T09:28:53.9854553Z  * [new branch]        family/local-nar-source-adapter-r1 -> origin/family/local-nar-source-adapter-r1
+2026-10-16T09:28:53.9856081Z  * [new branch]        family/nar-adapter-current-authority-r1 -> origin/family/nar-adapter-current-authority-r1
+2026-10-16T09:28:53.9860923Z  * [new branch]        family/nar-result-evidence-scope-r1 -> origin/family/nar-result-evidence-scope-r1
+2026-10-16T09:28:53.9863097Z  * [new branch]        family/nar-runner-universe-current-authority-r1 -> origin/family/nar-runner-universe-current-authority-r1
+2026-10-16T09:28:53.9864833Z  * [new branch]        family/nar-runner-universe-gate-r1 -> origin/family/nar-runner-universe-gate-r1
+2026-10-16T09:28:53.9866230Z  * [new branch]        family/runtime-contract-r7 -> origin/family/runtime-contract-r7
+2026-10-16T09:28:53.9867856Z  * [new branch]        family/source-acquisition-current-authority-r1 -> origin/family/source-acquisition-current-authority-r1
+2026-10-16T09:28:53.9869534Z  * [new branch]        family/source-acquisition-r1 -> origin/family/source-acquisition-r1
+2026-10-16T09:28:53.9871111Z  * [new branch]        family/source-optional-failclosed-correction-r1 -> origin/family/source-optional-failclosed-correction-r1
+2026-10-16T09:28:53.9874429Z  * [new branch]        feat/candidate-mec-pfs-measurement-20260927-r1 -> origin/feat/candidate-mec-pfs-measurement-20260927-r1
+2026-10-16T09:28:53.9878105Z  * [new branch]        feat/family-r30-prediction-utility-20260927-r1 -> origin/feat/family-r30-prediction-utility-20260927-r1
+2026-10-16T09:28:53.9881676Z  * [new branch]        feat/jra-bloodb-mac-queue-discovery-20261010 -> origin/feat/jra-bloodb-mac-queue-discovery-20261010
+2026-10-16T09:28:53.9885725Z  * [new branch]        feat/jra-bloodb-mac-readiness-report-20261010 -> origin/feat/jra-bloodb-mac-readiness-report-20261010
+2026-10-16T09:28:53.9889788Z  * [new branch]        feat/jra-bloodb-mac-subscriber-bridge-20261010 -> origin/feat/jra-bloodb-mac-subscriber-bridge-20261010
+2026-10-16T09:28:53.9894507Z  * [new branch]        feat/jra-bloodb-source-to-queue-and-live-inspection-20261010 -> origin/feat/jra-bloodb-source-to-queue-and-live-inspection-20261010
+2026-10-16T09:28:53.9899247Z  * [new branch]        feat/jra-candidate-simhigh-external-acceptance-20261010 -> origin/feat/jra-candidate-simhigh-external-acceptance-20261010
+2026-10-16T09:28:53.9903024Z  * [new branch]        feat/jra-import-local-maturity-20261003-r1 -> origin/feat/jra-import-local-maturity-20261003-r1
+2026-10-16T09:28:53.9906621Z  * [new branch]        feat/jra-import-local-week-observability-20261010 -> origin/feat/jra-import-local-week-observability-20261010
+2026-10-16T09:28:53.9911103Z  * [new branch]        feat/jra-keibabook-mac-authenticated-collector-20261010 -> origin/feat/jra-keibabook-mac-authenticated-collector-20261010
+2026-10-16T09:28:53.9915286Z  * [new branch]        feat/jra-local-week-result-utility-20261010-r2 -> origin/feat/jra-local-week-result-utility-20261010-r2
+2026-10-16T09:28:53.9919276Z  * [new branch]        feat/jra-official-historical-class-evaluator-20261010 -> origin/feat/jra-official-historical-class-evaluator-20261010
+2026-10-16T09:28:53.9923777Z  * [new branch]        feat/jra-official-observed-evaluator-coverage-r44 -> origin/feat/jra-official-observed-evaluator-coverage-r44
+2026-10-16T09:28:53.9928057Z  * [new branch]        feat/jra-official-rotation-bodyweight-evidence-20261010 -> origin/feat/jra-official-rotation-bodyweight-evidence-20261010
+2026-10-16T09:28:53.9930939Z  * [new branch]        feat/jra-practical-candidate-forecast-display-20261010 -> origin/feat/jra-practical-candidate-forecast-display-20261010
+2026-10-16T09:28:53.9933961Z  * [new branch]        feat/jra-production-official-evidence-evaluator-20261010 -> origin/feat/jra-production-official-evidence-evaluator-20261010
+2026-10-16T09:28:53.9937924Z  * [new branch]        feat/jra-production-static-authority-gated-auto-handoff-20261010 -> origin/feat/jra-production-static-authority-gated-auto-handoff-20261010
+2026-10-16T09:28:53.9940537Z  * [new branch]        feat/jra-signed-no-bet-terminal-20261010 -> origin/feat/jra-signed-no-bet-terminal-20261010
+2026-10-16T09:28:53.9943262Z  * [new branch]        feat/jra-source-only-evidence-and-static-owner-20261010 -> origin/feat/jra-source-only-evidence-and-static-owner-20261010
+2026-10-16T09:28:53.9945672Z  * [new branch]        feat/jra-static-owner-executable-20261010 -> origin/feat/jra-static-owner-executable-20261010
+2026-10-16T09:28:53.9947796Z  * [new branch]        feat/jra-zero-stake-result-learning-20261010 -> origin/feat/jra-zero-stake-result-learning-20261010
+2026-10-16T09:28:53.9950345Z  * [new branch]        feat/local-owner-operated-single-entry-20261009 -> origin/feat/local-owner-operated-single-entry-20261009
+2026-10-16T09:28:53.9954162Z  * [new branch]        feat/local-production-static-evidence-owner-20261014 -> origin/feat/local-production-static-evidence-owner-20261014
+2026-10-16T09:28:53.9958044Z  * [new branch]        feat/local-race-key-ingress-20261014 -> origin/feat/local-race-key-ingress-20261014
+2026-10-16T09:28:53.9961740Z  * [new branch]        feat/local-race-key-shadow-owner-20261014 -> origin/feat/local-race-key-shadow-owner-20261014
+2026-10-16T09:28:53.9966070Z  * [new branch]        feature/aki-adaptive-purchase-shadow-20261009 -> origin/feature/aki-adaptive-purchase-shadow-20261009
+2026-10-16T09:28:53.9970009Z  * [new branch]        feature/local-mec-r4-forward-capture-20260924 -> origin/feature/local-mec-r4-forward-capture-20260924
+2026-10-16T09:28:53.9974508Z  * [new branch]        feature/local-numerical-v03-evidence-routing-20260925 -> origin/feature/local-numerical-v03-evidence-routing-20260925
+2026-10-16T09:28:53.9977817Z  * [new branch]        feature/local-sbo-public-shadow-20260924 -> origin/feature/local-sbo-public-shadow-20260924
+2026-10-16T09:28:53.9981840Z  * [new branch]        feature/local-source-acquisition-v2-20260924 -> origin/feature/local-source-acquisition-v2-20260924
+2026-10-16T09:28:53.9985127Z  * [new branch]        fix/acceptance-oos-isolation-r1 -> origin/fix/acceptance-oos-isolation-r1
+2026-10-16T09:28:53.9987721Z  * [new branch]        fix/actionlint-execution-workflows-v1 -> origin/fix/actionlint-execution-workflows-v1
+2026-10-16T09:28:53.9990813Z  * [new branch]        fix/aki-oos-signed-settlement-schema-20261009 -> origin/fix/aki-oos-signed-settlement-schema-20261009
+2026-10-16T09:28:53.9994631Z  * [new branch]        fix/aki-signed-settlement-schema-20261009 -> origin/fix/aki-signed-settlement-schema-20261009
+2026-10-16T09:28:53.9997922Z  * [new branch]        fix/all-race-status-regression-20261012 -> origin/fix/all-race-status-regression-20261012
+2026-10-16T09:28:54.0000741Z  * [new branch]        fix/autopilot-continuity-20261012 -> origin/fix/autopilot-continuity-20261012
+2026-10-16T09:28:54.0003847Z  * [new branch]        fix/bloodb-observed-dom-bvi-bridge-20261010 -> origin/fix/bloodb-observed-dom-bvi-bridge-20261010
+2026-10-16T09:28:54.0006759Z  * [new branch]        fix/c1-full-lifecycle-local-20261002 -> origin/fix/c1-full-lifecycle-local-20261002
+2026-10-16T09:28:54.0009656Z  * [new branch]        fix/candidate-mec-payout-fallback-20260927-r1 -> origin/fix/candidate-mec-payout-fallback-20260927-r1
+2026-10-16T09:28:54.0013298Z  * [new branch]        fix/current-state-reforecast-diagnostics-r1 -> origin/fix/current-state-reforecast-diagnostics-r1
+2026-10-16T09:28:54.0016486Z  * [new branch]        fix/evidence-roundtrip-lifecycle-alignment-r1 -> origin/fix/evidence-roundtrip-lifecycle-alignment-r1
+2026-10-16T09:28:54.0019160Z  * [new branch]        fix/extract-workflow-python-v1 -> origin/fix/extract-workflow-python-v1
+2026-10-16T09:28:54.0021679Z  * [new branch]        fix/extracted-runner-module-entrypoint-v1 -> origin/fix/extracted-runner-module-entrypoint-v1
+2026-10-16T09:28:54.0025168Z  * [new branch]        fix/family-historical-oos-pinned-evidence-20261014 -> origin/fix/family-historical-oos-pinned-evidence-20261014
+2026-10-16T09:28:54.0028062Z  * [new branch]        fix/family-ooi-20261005-review-r1 -> origin/fix/family-ooi-20261005-review-r1
+2026-10-16T09:28:54.0030551Z  * [new branch]        fix/family-purpose-pfs-readout-20261008 -> origin/fix/family-purpose-pfs-readout-20261008
+2026-10-16T09:28:54.0033514Z  * [new branch]        fix/formal-checkpoint-semantic-basis-r1 -> origin/fix/formal-checkpoint-semantic-basis-r1
+2026-10-16T09:28:54.0036398Z  * [new branch]        fix/formal-intent-entry-reliability-20261009 -> origin/fix/formal-intent-entry-reliability-20261009
+2026-10-16T09:28:54.0039146Z  * [new branch]        fix/formal-intent-preflight-static-r1 -> origin/fix/formal-intent-preflight-static-r1
+2026-10-16T09:28:54.0041582Z  * [new branch]        fix/formal-runner-import-closure-r1 -> origin/fix/formal-runner-import-closure-r1
+2026-10-16T09:28:54.0044362Z  * [new branch]        fix/formal-single-entry-orchestration-r1 -> origin/fix/formal-single-entry-orchestration-r1
+2026-10-16T09:28:54.0046793Z  * [new branch]        fix/formal-workflow-definition-v1 -> origin/fix/formal-workflow-definition-v1
+2026-10-16T09:28:54.0048742Z  * [new branch]        fix/jra-aki-no-bet-20261012 -> origin/fix/jra-aki-no-bet-20261012
+2026-10-16T09:28:54.0050797Z  * [new branch]        fix/jra-aki-recovery-cutoff-20261012 -> origin/fix/jra-aki-recovery-cutoff-20261012
+2026-10-16T09:28:54.0053565Z  * [new branch]        fix/jra-aki-structure-width-20261004-r1 -> origin/fix/jra-aki-structure-width-20261004-r1
+2026-10-16T09:28:54.0056700Z  * [new branch]        fix/jra-automatic-official-postresult-closedloop-20261010 -> origin/fix/jra-automatic-official-postresult-closedloop-20261010
+2026-10-16T09:28:54.0060085Z  * [new branch]        fix/jra-autopilot-failure-recovery-20261012-r1 -> origin/fix/jra-autopilot-failure-recovery-20261012-r1
+2026-10-16T09:28:54.0063391Z  * [new branch]        fix/jra-bloodb-final-local-acceptance-20261010 -> origin/fix/jra-bloodb-final-local-acceptance-20261010
+2026-10-16T09:28:54.0066446Z  * [new branch]        fix/jra-bvi-observed-evidence-status-20261011 -> origin/fix/jra-bvi-observed-evidence-status-20261011
+2026-10-16T09:28:54.0069840Z  * [new branch]        fix/jra-bvi-official-corpus-bodyweight-identity-20261011 -> origin/fix/jra-bvi-official-corpus-bodyweight-identity-20261011
+2026-10-16T09:28:54.0144442Z  * [new branch]        fix/jra-bvi-pedigree-relevance-precheck-20261011 -> origin/fix/jra-bvi-pedigree-relevance-precheck-20261011
+2026-10-16T09:28:54.0147843Z  * [new branch]        fix/jra-bvi-signed-source-relevance-precheck-20261011 -> origin/fix/jra-bvi-signed-source-relevance-precheck-20261011
+2026-10-16T09:28:54.0151103Z  * [new branch]        fix/jra-bvi-targeted-damsire-official-20261011 -> origin/fix/jra-bvi-targeted-damsire-official-20261011
+2026-10-16T09:28:54.0154795Z  * [new branch]        fix/jra-bvi-targeted-official-pedigree-corpus-20261011 -> origin/fix/jra-bvi-targeted-official-pedigree-corpus-20261011
+2026-10-16T09:28:54.0158150Z  * [new branch]        fix/jra-candidate-krs-contract-20261010-tky5 -> origin/fix/jra-candidate-krs-contract-20261010-tky5
+2026-10-16T09:28:54.0160940Z  * [new branch]        fix/jra-candidate-krs-high-mode-20261010 -> origin/fix/jra-candidate-krs-high-mode-20261010
+2026-10-16T09:28:54.0164529Z  * [new branch]        fix/jra-candidate-oos-utility-attribution-20260927-r1 -> origin/fix/jra-candidate-oos-utility-attribution-20260927-r1
+2026-10-16T09:28:54.0167991Z  * [new branch]        fix/jra-candidate-pfs-new-settlement-ledger-20261010 -> origin/fix/jra-candidate-pfs-new-settlement-ledger-20261010
+2026-10-16T09:28:54.0170980Z  * [new branch]        fix/jra-candidate-stage-checkpoint-r44 -> origin/fix/jra-candidate-stage-checkpoint-r44
+2026-10-16T09:28:54.0174097Z  * [new branch]        fix/jra-final-purchase-label-unverified-20261012 -> origin/fix/jra-final-purchase-label-unverified-20261012
+2026-10-16T09:28:54.0176950Z  * [new branch]        fix/jra-formal-closure-repair-20261010 -> origin/fix/jra-formal-closure-repair-20261010
+2026-10-16T09:28:54.0179552Z  * [new branch]        fix/jra-keibabook-evaluator-conformance -> origin/fix/jra-keibabook-evaluator-conformance
+2026-10-16T09:28:54.0182108Z  * [new branch]        fix/jra-keibabook-private-intake -> origin/fix/jra-keibabook-private-intake
+2026-10-16T09:28:54.0185282Z  * [new branch]        fix/jra-no-bet-late-candidate-dispatch-gate-20261010 -> origin/fix/jra-no-bet-late-candidate-dispatch-gate-20261010
+2026-10-16T09:28:54.0189061Z  * [new branch]        fix/jra-nobet-acceptance-recompute-current-production-20261010 -> origin/fix/jra-nobet-acceptance-recompute-current-production-20261010
+2026-10-16T09:28:54.0193249Z  * [new branch]        fix/jra-official-going-fact-bound-candidate-r44 -> origin/fix/jra-official-going-fact-bound-candidate-r44
+2026-10-16T09:28:54.0196365Z  * [new branch]        fix/jra-official-universe-career-provenance-r44 -> origin/fix/jra-official-universe-career-provenance-r44
+2026-10-16T09:28:54.0199333Z  * [new branch]        fix/jra-partial-index-real-calculation-r44 -> origin/fix/jra-partial-index-real-calculation-r44
+2026-10-16T09:28:54.0202816Z  * [new branch]        fix/jra-pedigree-complete-cumulative-evidence-20261010 -> origin/fix/jra-pedigree-complete-cumulative-evidence-20261010
+2026-10-16T09:28:54.0206576Z  * [new branch]        fix/jra-pedigree-postmerge-production-proof-20261010 -> origin/fix/jra-pedigree-postmerge-production-proof-20261010
+2026-10-16T09:28:54.0209847Z  * [new branch]        fix/jra-pedigree-provenance-backfill-20261010 -> origin/fix/jra-pedigree-provenance-backfill-20261010
+2026-10-16T09:28:54.0213045Z  * [new branch]        fix/jra-pedigree-real-debut-only-signal-20261010 -> origin/fix/jra-pedigree-real-debut-only-signal-20261010
+2026-10-16T09:28:54.0215860Z  * [new branch]        fix/jra-production-index-coverage-r44 -> origin/fix/jra-production-index-coverage-r44
+2026-10-16T09:28:54.0218757Z  * [new branch]        fix/jra-production-index-evidence-closure-20261010 -> origin/fix/jra-production-index-evidence-closure-20261010
+2026-10-16T09:28:54.0221875Z  * [new branch]        fix/jra-production-krs-20000-contract-20261010 -> origin/fix/jra-production-krs-20000-contract-20261010
+2026-10-16T09:28:54.0225558Z  * [new branch]        fix/jra-production-owner-recompute-canonical-20261010 -> origin/fix/jra-production-owner-recompute-canonical-20261010
+2026-10-16T09:28:54.0229225Z  * [new branch]        fix/jra-production-source-only-closure-diagnostics-20261010 -> origin/fix/jra-production-source-only-closure-diagnostics-20261010
+2026-10-16T09:28:54.0232612Z  * [new branch]        fix/jra-risk-budget-completion-20261004-r1 -> origin/fix/jra-risk-budget-completion-20261004-r1
+2026-10-16T09:28:54.0235668Z  * [new branch]        fix/jra-runtime-requirements-literal-escape-20261010 -> origin/fix/jra-runtime-requirements-literal-escape-20261010
+2026-10-16T09:28:54.0239158Z  * [new branch]        fix/jra-source-evidence-speed-person-normalizer-20261010 -> origin/fix/jra-source-evidence-speed-person-normalizer-20261010
+2026-10-16T09:28:54.0242380Z  * [new branch]        fix/jra-status-pfs-winning-tickets-20261012 -> origin/fix/jra-status-pfs-winning-tickets-20261012
+2026-10-16T09:28:54.0246087Z  * [new branch]        fix/jra-verified-nobet-terminal-workflow-completion-20261010 -> origin/fix/jra-verified-nobet-terminal-workflow-completion-20261010
+2026-10-16T09:28:54.0249895Z  * [new branch]        fix/jra-zero-return-idempotent-pfs-bridge-20261010 -> origin/fix/jra-zero-return-idempotent-pfs-bridge-20261010
+2026-10-16T09:28:54.0253202Z  * [new branch]        fix/local-evidence-acquisition-roundtrip-r1 -> origin/fix/local-evidence-acquisition-roundtrip-r1
+2026-10-16T09:28:54.0255804Z  * [new branch]        fix/local-execution-gateway-hardening -> origin/fix/local-execution-gateway-hardening
+2026-10-16T09:28:54.0257976Z  * [new branch]        fix/local-execution-gateway-v1 -> origin/fix/local-execution-gateway-v1
+2026-10-16T09:28:54.0260281Z  * [new branch]        fix/local-formal-entry-preflight-20261009 -> origin/fix/local-formal-entry-preflight-20261009
+2026-10-16T09:28:54.0263536Z  * [new branch]        fix/local-kaw-r08-signed-source-registry-20261012 -> origin/fix/local-kaw-r08-signed-source-registry-20261012
+2026-10-16T09:28:54.0266710Z  * [new branch]        fix/local-mec-r5-settlement-classification-20260924 -> origin/fix/local-mec-r5-settlement-classification-20260924
+2026-10-16T09:28:54.0270003Z  * [new branch]        fix/local-owner-active-runner-reconciliation-20261015 -> origin/fix/local-owner-active-runner-reconciliation-20261015
+2026-10-16T09:28:54.0273180Z  * [new branch]        fix/local-race-key-live-invocation-20261014 -> origin/fix/local-race-key-live-invocation-20261014
+2026-10-16T09:28:54.0275915Z  * [new branch]        fix/local-race-key-push-concurrency-20261014 -> origin/fix/local-race-key-push-concurrency-20261014
+2026-10-16T09:28:54.0278651Z  * [new branch]        fix/local-result-scratch-after-push-20261014 -> origin/fix/local-result-scratch-after-push-20261014
+2026-10-16T09:28:54.0281192Z  * [new branch]        fix/local-source-derived-krs-proxy-r1 -> origin/fix/local-source-derived-krs-proxy-r1
+2026-10-16T09:28:54.0283880Z  * [new branch]        fix/local-source-phase-success-20261014 -> origin/fix/local-source-phase-success-20261014
+2026-10-16T09:28:54.0286416Z  * [new branch]        fix/local-static-input-discovery-20261012 -> origin/fix/local-static-input-discovery-20261012
+2026-10-16T09:28:54.0288975Z  * [new branch]        fix/newcomer-paper-smooth-20261012 -> origin/fix/newcomer-paper-smooth-20261012
+2026-10-16T09:28:54.0291198Z  * [new branch]        fix/newcomer-replay-mec-r12-20261012 -> origin/fix/newcomer-replay-mec-r12-20261012
+2026-10-16T09:28:54.0293853Z  * [new branch]        fix/ohi-20261008-result-reflection-regression -> origin/fix/ohi-20261008-result-reflection-regression
+2026-10-16T09:28:54.0296833Z  * [new branch]        fix/ohi-source-temporal-failure-diagnostics-20261009 -> origin/fix/ohi-source-temporal-failure-diagnostics-20261009
+2026-10-16T09:28:54.0299702Z  * [new branch]        fix/prediction-utility-trace-20260927-r1 -> origin/fix/prediction-utility-trace-20260927-r1
+2026-10-16T09:28:54.0302208Z  * [new branch]        fix/r29-oos-authority-dynamic-20260927-r1 -> origin/fix/r29-oos-authority-dynamic-20260927-r1
+2026-10-16T09:28:54.0305297Z  * [new branch]        fix/r30-acceptance-pytest-install-20260927-r1 -> origin/fix/r30-acceptance-pytest-install-20260927-r1
+2026-10-16T09:28:54.0308097Z  * [new branch]        fix/r30-acceptance-successor-aware-20261003-r1 -> origin/fix/r30-acceptance-successor-aware-20261003-r1
+2026-10-16T09:28:54.0310929Z  * [new branch]        fix/r30-prediction-utility-current-authority-ci -> origin/fix/r30-prediction-utility-current-authority-ci
+2026-10-16T09:28:54.0313700Z  * [new branch]        fix/r44-local-runtime-contract-pointer -> origin/fix/r44-local-runtime-contract-pointer
+2026-10-16T09:28:54.0316495Z  * [new branch]        fix/result-canonical-store-before-acceptance-skip-v1 -> origin/fix/result-canonical-store-before-acceptance-skip-v1
+2026-10-16T09:28:54.0319222Z  * [new branch]        fix/single-entry-r2-runtime-identity -> origin/fix/single-entry-r2-runtime-identity
+2026-10-16T09:28:54.0321602Z  * [new branch]        fix/single-entry-static-source-binding-r1 -> origin/fix/single-entry-static-source-binding-r1
+2026-10-16T09:28:54.0324651Z  * [new branch]        fix/source-checkpoint-compatibility-r1 -> origin/fix/source-checkpoint-compatibility-r1
+2026-10-16T09:28:54.0326779Z  * [new branch]        fnb-v21-r31-alignment-20260928 -> origin/fnb-v21-r31-alignment-20260928
+2026-10-16T09:28:54.0328897Z  * [new branch]        governance/family-owner-utility-pfs-r43 -> origin/governance/family-owner-utility-pfs-r43
+2026-10-16T09:28:54.0331449Z  * [new branch]        governance/local-source-enrichment-v2-20260924 -> origin/governance/local-source-enrichment-v2-20260924
+2026-10-16T09:28:54.0334317Z  * [new branch]        hotfix/entry-transport-fallback-20261001 -> origin/hotfix/entry-transport-fallback-20261001
+2026-10-16T09:28:54.0336770Z  * [new branch]        hotfix/explicit-result-revision-20261001 -> origin/hotfix/explicit-result-revision-20261001
+2026-10-16T09:28:54.0339319Z  * [new branch]        hotfix/result-authority-frozen-refs-20261001 -> origin/hotfix/result-authority-frozen-refs-20261001
+2026-10-16T09:28:54.0341845Z  * [new branch]        hotfix/result-persistence-stash-20261001 -> origin/hotfix/result-persistence-stash-20261001
+2026-10-16T09:28:54.0344826Z  * [new branch]        hsn-r04-base-index-repair-verify-20260920 -> origin/hsn-r04-base-index-repair-verify-20260920
+2026-10-16T09:28:54.0347431Z  * [new branch]        hsn-r04-base-index-repair-verify-v2-20260920 -> origin/hsn-r04-base-index-repair-verify-v2-20260920
+2026-10-16T09:28:54.0349895Z  * [new branch]        hsn-r04-poststart-krs-replay-20260920 -> origin/hsn-r04-poststart-krs-replay-20260920
+2026-10-16T09:28:54.0352033Z  * [new branch]        hsn-r04-real-failclosed-20260920 -> origin/hsn-r04-real-failclosed-20260920
+2026-10-16T09:28:54.0354019Z  * [new branch]        hsn-r05-live-formal-20260920 -> origin/hsn-r05-live-formal-20260920
+2026-10-16T09:28:54.0356043Z  * [new branch]        jra-base-index-calculator-v01-20260920 -> origin/jra-base-index-calculator-v01-20260920
+2026-10-16T09:28:54.0358320Z  * [new branch]        jra-base-index-node-runtime-20260920 -> origin/jra-base-index-node-runtime-20260920
+2026-10-16T09:28:54.0360592Z  * [new branch]        jra-base-index-selftest-20260920 -> origin/jra-base-index-selftest-20260920
+2026-10-16T09:28:54.0363099Z  * [new branch]        jra-prekrs-terminal-compat-v01-20260920 -> origin/jra-prekrs-terminal-compat-v01-20260920
+2026-10-16T09:28:54.0365281Z  * [new branch]        km-family-execution-r2-20260920 -> origin/km-family-execution-r2-20260920
+2026-10-16T09:28:54.0367145Z  * [new branch]        km-r2-e2e-acceptance-20260920 -> origin/km-r2-e2e-acceptance-20260920
+2026-10-16T09:28:54.0369087Z  * [new branch]        km-r2-e2e-acceptance-8bet-20260920 -> origin/km-r2-e2e-acceptance-8bet-20260920
+2026-10-16T09:28:54.0371106Z  * [new branch]        km-r2-e2e-acceptance-t03-20260920 -> origin/km-r2-e2e-acceptance-t03-20260920
+2026-10-16T09:28:54.0372994Z  * [new branch]        km-r2-e2e-probe-20260920 -> origin/km-r2-e2e-probe-20260920
+2026-10-16T09:28:54.0374727Z  * [new branch]        live/hsn-r05-c4-external-20260921 -> origin/live/hsn-r05-c4-external-20260921
+2026-10-16T09:28:54.0377275Z  * [new branch]        local-auto-postresult-learning-acceptance-20260923 -> origin/local-auto-postresult-learning-acceptance-20260923
+2026-10-16T09:28:54.0380254Z  * [new branch]        local-automatic-full-lifecycle-routing-20260923 -> origin/local-automatic-full-lifecycle-routing-20260923
+2026-10-16T09:28:54.0383187Z  * [new branch]        local-bun-numerical-runtime-20260922 -> origin/local-bun-numerical-runtime-20260922
+2026-10-16T09:28:54.0385494Z  * [new branch]        local-component-alignment-r4-20260923 -> origin/local-component-alignment-r4-20260923
+2026-10-16T09:28:54.0387804Z  * [new branch]        local-full-execution-close-r1-20260923 -> origin/local-full-execution-close-r1-20260923
+2026-10-16T09:28:54.0390214Z  * [new branch]        local-full-lifecycle-acceptance-20260922 -> origin/local-full-lifecycle-acceptance-20260922
+2026-10-16T09:28:54.0392681Z  * [new branch]        local-full-lifecycle-close-20260922 -> origin/local-full-lifecycle-close-20260922
+2026-10-16T09:28:54.0394954Z  * [new branch]        local-health-probe-v2-20260922 -> origin/local-health-probe-v2-20260922
+2026-10-16T09:28:54.0397145Z  * [new branch]        local-numerical-railway-service-20260922 -> origin/local-numerical-railway-service-20260922
+2026-10-16T09:28:54.0399686Z  * [new branch]        local-physical-runtime-acceptance-20260922 -> origin/local-physical-runtime-acceptance-20260922
+2026-10-16T09:28:54.0402292Z  * [new branch]        local-physical-runtime-activate-r2-20260922 -> origin/local-physical-runtime-activate-r2-20260922
+2026-10-16T09:28:54.0404954Z  * [new branch]        local-physical-runtime-r1-20260922 -> origin/local-physical-runtime-r1-20260922
+2026-10-16T09:28:54.0407412Z  * [new branch]        local-production-numerical-closure-r1-20260922 -> origin/local-production-numerical-closure-r1-20260922
+2026-10-16T09:28:54.0410168Z  * [new branch]        local-r4-acceptance-metadata-closure-20260923 -> origin/local-r4-acceptance-metadata-closure-20260923
+2026-10-16T09:28:54.0412908Z  * [new branch]        local-r6-runtime-status-fix-20260923 -> origin/local-r6-runtime-status-fix-20260923
+2026-10-16T09:28:54.0415252Z  * [new branch]        local-result-frozen-lineage-v14-20260923 -> origin/local-result-frozen-lineage-v14-20260923
+2026-10-16T09:28:54.0417542Z  * [new branch]        local-result-lifecycle-v11-20260922 -> origin/local-result-lifecycle-v11-20260922
+2026-10-16T09:28:54.0419803Z  * [new branch]        local-runtime-acceptance-close-20260922 -> origin/local-runtime-acceptance-close-20260922
+2026-10-16T09:28:54.0422727Z  * [new branch]        local-runtime-auto-postresult-learning-20260923 -> origin/local-runtime-auto-postresult-learning-20260923
+2026-10-16T09:28:54.0425371Z  * [new branch]        local-runtime-contract-r2-20260922 -> origin/local-runtime-contract-r2-20260922
+2026-10-16T09:28:54.0428078Z  * [new branch]        local-runtime-rev8-source-parallel-activation-20260928 -> origin/local-runtime-rev8-source-parallel-activation-20260928
+2026-10-16T09:28:54.0431205Z  * [new branch]        local-runtime-rev8-version-staged-20260928 -> origin/local-runtime-rev8-version-staged-20260928
+2026-10-16T09:28:54.0433788Z  * [new branch]        local-source-parallel-staged-20260928 -> origin/local-source-parallel-staged-20260928
+2026-10-16T09:28:54.0436324Z  * [new branch]        local-staged-formal-runner-acceptance-20260923 -> origin/local-staged-formal-runner-acceptance-20260923
+2026-10-16T09:28:54.0438951Z  * [new branch]        local-staged-fullpipeline-mec-r1-20260923 -> origin/local-staged-fullpipeline-mec-r1-20260923
+2026-10-16T09:28:54.0441528Z  * [new branch]        local-v03-evidence-routing-hardening-20260925 -> origin/local-v03-evidence-routing-hardening-20260925
+2026-10-16T09:28:54.0444442Z  * [new branch]        local-v14-frozen-result-acceptance-20260923 -> origin/local-v14-frozen-result-acceptance-20260923
+2026-10-16T09:28:54.0446903Z  * [new branch]        local-v413-current-authority-r3-20260923 -> origin/local-v413-current-authority-r3-20260923
+2026-10-16T09:28:54.0448593Z  * [new branch]        main                   -> origin/main
+2026-10-16T09:28:54.0450425Z  * [new branch]        measurement/local-mec-r5-initial-status-20260924 -> origin/measurement/local-mec-r5-initial-status-20260924
+2026-10-16T09:28:54.0453330Z  * [new branch]        numerical/local-production-v1-completion-20261008 -> origin/numerical/local-production-v1-completion-20261008
+2026-10-16T09:28:54.0455464Z  * [new branch]        ohi-daily-improvements -> origin/ohi-daily-improvements
+2026-10-16T09:28:54.0457603Z  * [new branch]        ops/c2-credit-recovery-manual-acceptance-20261009 -> origin/ops/c2-credit-recovery-manual-acceptance-20261009
+2026-10-16T09:28:54.0460082Z  * [new branch]        pedigree-seed-regex-hotfix-20260924 -> origin/pedigree-seed-regex-hotfix-20260924
+2026-10-16T09:28:54.0461788Z  * [new branch]        pfs-forward-r41        -> origin/pfs-forward-r41
+2026-10-16T09:28:54.0463719Z  * [new branch]        race-day-fast-path-r1-20260928 -> origin/race-day-fast-path-r1-20260928
+2026-10-16T09:28:54.0465906Z  * [new branch]        refactor/unified-formal-lifecycle-r1 -> origin/refactor/unified-formal-lifecycle-r1
+2026-10-16T09:28:54.0468082Z  * [new branch]        refactor/unified-formal-lifecycle-r2 -> origin/refactor/unified-formal-lifecycle-r2
+2026-10-16T09:28:54.0470286Z  * [new branch]        repair/aki-v21-capital-closure-20261011 -> origin/repair/aki-v21-capital-closure-20261011
+2026-10-16T09:28:54.0472930Z  * [new branch]        repair/common-role-pair-third-closure-20260930 -> origin/repair/common-role-pair-third-closure-20260930
+2026-10-16T09:28:54.0475493Z  * [new branch]        repair/jra-production-mapping-20260921-r1 -> origin/repair/jra-production-mapping-20260921-r1
+2026-10-16T09:28:54.0477806Z  * [new branch]        repair/urw-terminal-registry-20260923 -> origin/repair/urw-terminal-registry-20260923
+2026-10-16T09:28:54.0480132Z  * [new branch]        rerun-local-acceptance-bootstrap-20260922 -> origin/rerun-local-acceptance-bootstrap-20260922
+2026-10-16T09:28:54.0482776Z  * [new branch]        research/adaptive-ticket-width-20261011 -> origin/research/adaptive-ticket-width-20261011
+2026-10-16T09:28:54.0485067Z  * [new branch]        research/aki-20261009-oos-ledger-closure -> origin/research/aki-20261009-oos-ledger-closure
+2026-10-16T09:28:54.0487803Z  * [new branch]        research/local-ohi-20261009-r43-scorecard-learning-binding -> origin/research/local-ohi-20261009-r43-scorecard-learning-binding
+2026-10-16T09:28:54.0490728Z  * [new branch]        research/ohi-20261009-common-capital-regression -> origin/research/ohi-20261009-common-capital-regression
+2026-10-16T09:28:54.0493246Z  * [new branch]        review/kyo-20261004-rev9-learning -> origin/review/kyo-20261004-rev9-learning
+2026-10-16T09:28:54.0495431Z  * [new branch]        review/kyoto-20261010-r02-r03-pfs-learning-r1 -> origin/review/kyoto-20261010-r02-r03-pfs-learning-r1
+2026-10-16T09:28:54.0497604Z  * [new branch]        review/tky-20261004-rev9-learning -> origin/review/tky-20261004-rev9-learning
+2026-10-16T09:28:54.0499487Z  * [new branch]        source-enrichment-20260924 -> origin/source-enrichment-20260924
+2026-10-16T09:28:54.0501729Z  * [new branch]        source-enrichment-production-acceptance-20260924 -> origin/source-enrichment-production-acceptance-20260924
+2026-10-16T09:28:54.0504554Z  * [new branch]        test/acceptance-oos-firewall-r1 -> origin/test/acceptance-oos-firewall-r1
+2026-10-16T09:28:54.0506739Z  * [new branch]        test/execution-gateway-canary-verification -> origin/test/execution-gateway-canary-verification
+2026-10-16T09:28:54.0508906Z  * [new branch]        test/execution-workflow-contract -> origin/test/execution-workflow-contract
+2026-10-16T09:28:54.0511446Z  * [new branch]        test/jra-actual-official-postresult-acceptance-20261010 -> origin/test/jra-actual-official-postresult-acceptance-20261010
+2026-10-16T09:28:54.0514511Z  * [new branch]        test/jra-bvi-postcapture-real-closure-20261011 -> origin/test/jra-bvi-postcapture-real-closure-20261011
+2026-10-16T09:28:54.0517292Z  * [new branch]        test/jra-four-real-signed-pedigree-batches-20261010 -> origin/test/jra-four-real-signed-pedigree-batches-20261010
+2026-10-16T09:28:54.0520307Z  * [new branch]        test/jra-full20-prekrs-krs-final-20000-external-20261010 -> origin/test/jra-full20-prekrs-krs-final-20000-external-20261010
+2026-10-16T09:28:54.0523641Z  * [new branch]        test/jra-production-20k-external-runtime-20261010 -> origin/test/jra-production-20k-external-runtime-20261010
+2026-10-16T09:28:54.0526625Z  * [new branch]        test/jra-production-historical-source-closure-20261010 -> origin/test/jra-production-historical-source-closure-20261010
+2026-10-16T09:28:54.0529643Z  * [new branch]        test/jra-real-source-closure-pull-request-20261010 -> origin/test/jra-real-source-closure-pull-request-20261010
+2026-10-16T09:28:54.0532160Z  * [new branch]        venue-chat-formal-routing-r1-20260920 -> origin/venue-chat-formal-routing-r1-20260920
+2026-10-16T09:28:54.0534547Z  * [new branch]        venue-routing-r6-local-complete-20260923 -> origin/venue-routing-r6-local-complete-20260923
+2026-10-16T09:28:54.0537050Z  * [new branch]        venue-routing-r6-rev1-local-v14-20260923 -> origin/venue-routing-r6-rev1-local-v14-20260923
+2026-10-16T09:28:54.0539941Z ##[endgroup]
+2026-10-16T09:28:54.0540827Z ##[group]Determining the checkout info
+2026-10-16T09:28:54.0541714Z [command]/usr/bin/git branch --list --remote origin/main
+2026-10-16T09:28:54.0543002Z   origin/main
+2026-10-16T09:28:54.0544607Z ##[endgroup]
+2026-10-16T09:28:54.0545167Z [command]/usr/bin/git sparse-checkout disable
+2026-10-16T09:28:54.0547009Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-16T09:28:54.0549206Z ##[group]Checking out the ref
+2026-10-16T09:28:54.0550296Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-10-16T09:28:55.0446355Z Updating files:  11% (1547/13066)
+2026-10-16T09:28:55.1769771Z Updating files:  12% (1568/13066)
+2026-10-16T09:28:55.3690965Z Updating files:  13% (1699/13066)
+2026-10-16T09:28:55.5340548Z Updating files:  14% (1830/13066)
+2026-10-16T09:28:55.5929549Z Updating files:  15% (1960/13066)
+2026-10-16T09:28:55.6337166Z Updating files:  16% (2091/13066)
+2026-10-16T09:28:55.6649319Z Updating files:  17% (2222/13066)
+2026-10-16T09:28:55.6865205Z Updating files:  18% (2352/13066)
+2026-10-16T09:28:55.7135825Z Updating files:  19% (2483/13066)
+2026-10-16T09:28:55.7407995Z Updating files:  20% (2614/13066)
+2026-10-16T09:28:55.7787121Z Updating files:  21% (2744/13066)
+2026-10-16T09:28:55.8050768Z Updating files:  22% (2875/13066)
+2026-10-16T09:28:55.8601411Z Updating files:  23% (3006/13066)
+2026-10-16T09:28:55.9046091Z Updating files:  24% (3136/13066)
+2026-10-16T09:28:55.9385355Z Updating files:  25% (3267/13066)
+2026-10-16T09:28:55.9823185Z Updating files:  26% (3398/13066)
+2026-10-16T09:28:56.0047718Z Updating files:  27% (3528/13066)
+2026-10-16T09:28:56.0134262Z Updating files:  28% (3659/13066)
+2026-10-16T09:28:56.0444865Z Updating files:  28% (3697/13066)
+2026-10-16T09:28:56.0932978Z Updating files:  29% (3790/13066)
+2026-10-16T09:28:56.1218011Z Updating files:  30% (3920/13066)
+2026-10-16T09:28:56.1636567Z Updating files:  31% (4051/13066)
+2026-10-16T09:28:56.2064867Z Updating files:  32% (4182/13066)
+2026-10-16T09:28:56.2693176Z Updating files:  33% (4312/13066)
+2026-10-16T09:28:56.2896034Z Updating files:  34% (4443/13066)
+2026-10-16T09:28:56.3102874Z Updating files:  35% (4574/13066)
+2026-10-16T09:28:56.3297836Z Updating files:  36% (4704/13066)
+2026-10-16T09:28:56.3552170Z Updating files:  37% (4835/13066)
+2026-10-16T09:28:56.3930323Z Updating files:  38% (4966/13066)
+2026-10-16T09:28:56.4183757Z Updating files:  39% (5096/13066)
+2026-10-16T09:28:56.4383152Z Updating files:  40% (5227/13066)
+2026-10-16T09:28:56.4582359Z Updating files:  41% (5358/13066)
+2026-10-16T09:28:56.4769058Z Updating files:  42% (5488/13066)
+2026-10-16T09:28:56.5006374Z Updating files:  43% (5619/13066)
+2026-10-16T09:28:56.5171174Z Updating files:  44% (5750/13066)
+2026-10-16T09:28:56.5344791Z Updating files:  45% (5880/13066)
+2026-10-16T09:28:56.5497843Z Updating files:  46% (6011/13066)
+2026-10-16T09:28:56.5709578Z Updating files:  47% (6142/13066)
+2026-10-16T09:28:56.5859045Z Updating files:  48% (6272/13066)
+2026-10-16T09:28:56.6028018Z Updating files:  49% (6403/13066)
+2026-10-16T09:28:56.6446313Z Updating files:  50% (6533/13066)
+2026-10-16T09:28:56.6658267Z Updating files:  51% (6664/13066)
+2026-10-16T09:28:56.6926615Z Updating files:  52% (6795/13066)
+2026-10-16T09:28:56.7150509Z Updating files:  53% (6925/13066)
+2026-10-16T09:28:56.7374568Z Updating files:  54% (7056/13066)
+2026-10-16T09:28:56.7601603Z Updating files:  55% (7187/13066)
+2026-10-16T09:28:56.7891084Z Updating files:  56% (7317/13066)
+2026-10-16T09:28:56.8140206Z Updating files:  57% (7448/13066)
+2026-10-16T09:28:56.8319747Z Updating files:  58% (7579/13066)
+2026-10-16T09:28:56.8533228Z Updating files:  59% (7709/13066)
+2026-10-16T09:28:56.9208058Z Updating files:  60% (7840/13066)
+2026-10-16T09:28:56.9496093Z Updating files:  61% (7971/13066)
+2026-10-16T09:28:56.9732292Z Updating files:  62% (8101/13066)
+2026-10-16T09:28:57.0099957Z Updating files:  63% (8232/13066)
+2026-10-16T09:28:57.0126676Z Updating files:  64% (8363/13066)
+2026-10-16T09:28:57.0353309Z Updating files:  64% (8385/13066)
+2026-10-16T09:28:57.0590259Z Updating files:  65% (8493/13066)
+2026-10-16T09:28:57.0845358Z Updating files:  66% (8624/13066)
+2026-10-16T09:28:57.1136683Z Updating files:  67% (8755/13066)
+2026-10-16T09:28:57.1359773Z Updating files:  68% (8885/13066)
+2026-10-16T09:28:57.1669601Z Updating files:  69% (9016/13066)
+2026-10-16T09:28:57.1926985Z Updating files:  70% (9147/13066)
+2026-10-16T09:28:57.2133815Z Updating files:  71% (9277/13066)
+2026-10-16T09:28:57.2394803Z Updating files:  72% (9408/13066)
+2026-10-16T09:28:57.2595002Z Updating files:  73% (9539/13066)
+2026-10-16T09:28:57.2785240Z Updating files:  74% (9669/13066)
+2026-10-16T09:28:57.3053443Z Updating files:  75% (9800/13066)
+2026-10-16T09:28:57.3154244Z Updating files:  76% (9931/13066)
+2026-10-16T09:28:57.3259022Z Updating files:  77% (10061/13066)
+2026-10-16T09:28:57.3456961Z Updating files:  78% (10192/13066)
+2026-10-16T09:28:57.3710181Z Updating files:  79% (10323/13066)
+2026-10-16T09:28:57.3885378Z Updating files:  80% (10453/13066)
+2026-10-16T09:28:57.4109702Z Updating files:  81% (10584/13066)
+2026-10-16T09:28:57.4232898Z Updating files:  82% (10715/13066)
+2026-10-16T09:28:57.6736778Z Updating files:  83% (10845/13066)
+2026-10-16T09:28:57.8521200Z Updating files:  84% (10976/13066)
+2026-10-16T09:28:57.8586201Z Updating files:  85% (11107/13066)
+2026-10-16T09:28:58.0244933Z Updating files:  86% (11237/13066)
+2026-10-16T09:28:58.0637220Z Updating files:  86% (11281/13066)
+2026-10-16T09:28:58.0694948Z Updating files:  87% (11368/13066)
+2026-10-16T09:28:58.2283265Z Updating files:  88% (11499/13066)
+2026-10-16T09:28:58.2997132Z Updating files:  89% (11629/13066)
+2026-10-16T09:28:58.3581553Z Updating files:  90% (11760/13066)
+2026-10-16T09:28:58.3879600Z Updating files:  91% (11891/13066)
+2026-10-16T09:28:58.5949811Z Updating files:  92% (12021/13066)
+2026-10-16T09:28:58.6431989Z Updating files:  93% (12152/13066)
+2026-10-16T09:28:58.7562566Z Updating files:  94% (12283/13066)
+2026-10-16T09:28:58.9863603Z Updating files:  95% (12413/13066)
+2026-10-16T09:28:59.0162155Z Updating files:  96% (12544/13066)
+2026-10-16T09:28:59.0764492Z Updating files:  96% (12584/13066)
+2026-10-16T09:28:59.1459847Z Updating files:  97% (12675/13066)
+2026-10-16T09:28:59.1619074Z Updating files:  98% (12805/13066)
+2026-10-16T09:28:59.1714457Z Updating files:  99% (12936/13066)
+2026-10-16T09:28:59.1715094Z Updating files: 100% (13066/13066)
+2026-10-16T09:28:59.1715622Z Updating files: 100% (13066/13066), done.
+2026-10-16T09:28:59.2298483Z Switched to a new branch 'main'
+2026-10-16T09:28:59.2301193Z branch 'main' set up to track 'origin/main'.
+2026-10-16T09:28:59.2403446Z ##[endgroup]
+2026-10-16T09:28:59.2455328Z [command]/usr/bin/git log -1 --format=%H
+2026-10-16T09:28:59.2482781Z 4f24e44e0e8a6de96eb1ecfeeb2c39adcf971405
+2026-10-16T09:28:59.2794427Z ##[group]Run actions/setup-python@v5
+2026-10-16T09:28:59.2794907Z with:
+2026-10-16T09:28:59.2795207Z   python-version: 3.13
+2026-10-16T09:28:59.2795545Z   check-latest: false
+2026-10-16T09:28:59.2799128Z   token: ***
+2026-10-16T09:28:59.2799357Z   update-environment: true
+2026-10-16T09:28:59.2799604Z   allow-prereleases: false
+2026-10-16T09:28:59.2799835Z   freethreaded: false
+2026-10-16T09:28:59.2800043Z env:
+2026-10-16T09:28:59.2800606Z   PYTHONPATH: /home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime:/home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:28:59.2801251Z ##[endgroup]
+2026-10-16T09:28:59.4207453Z ##[group]Installed versions
+2026-10-16T09:28:59.5313771Z (node:2322) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T09:28:59.5314491Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T09:28:59.5315697Z Successfully set up CPython (3.13.16)
+2026-10-16T09:28:59.5333218Z ##[endgroup]
+2026-10-16T09:28:59.6239078Z ##[group]Run python -m pip install --disable-pip-version-check -q cryptography
+2026-10-16T09:28:59.6239763Z [36;1mpython -m pip install --disable-pip-version-check -q cryptography[0m
+2026-10-16T09:29:00.1793764Z shell: /usr/bin/bash -e {0}
+2026-10-16T09:29:00.1794072Z env:
+2026-10-16T09:29:00.1794705Z   PYTHONPATH: /home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime:/home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:29:00.1795479Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:00.1795940Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T09:29:00.1796385Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:00.1796782Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:00.1797177Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:00.1797595Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T09:29:00.1797996Z ##[endgroup]
+2026-10-16T09:29:04.0663674Z ##[group]Run python - <<'PY'
+2026-10-16T09:29:04.0664017Z [36;1mpython - <<'PY'[0m
+2026-10-16T09:29:04.0664264Z [36;1mimport json, subprocess[0m
+2026-10-16T09:29:04.0664533Z [36;1mfrom pathlib import Path[0m
+2026-10-16T09:29:04.0664860Z [36;1mfrom datetime import datetime, timezone, timedelta[0m
+2026-10-16T09:29:04.0665308Z [36;1mday = datetime.now(timezone(timedelta(hours=9))).date().isoformat()[0m
+2026-10-16T09:29:04.0665849Z [36;1msubprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)[0m
+2026-10-16T09:29:04.0666461Z [36;1msubprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)[0m
+2026-10-16T09:29:04.0667084Z [36;1mfor path in sorted(Path('profiles/local_autonomous_approvals').glob(day+'-*.json')):[0m
+2026-10-16T09:29:04.0667566Z [36;1m    approval=json.loads(path.read_text())[0m
+2026-10-16T09:29:04.0667920Z [36;1m    if approval.get('enabled') is not True:[0m
+2026-10-16T09:29:04.0668252Z [36;1m        continue[0m
+2026-10-16T09:29:04.0668612Z [36;1m    subprocess.run(['python','-m','runtime.local_race_day_dispatcher',[0m
+2026-10-16T09:29:04.0669039Z [36;1m        '--venue',approval['venue_id'],'--date',day,[0m
+2026-10-16T09:29:04.0669486Z [36;1m        '--cutoff-seconds',str(approval['cutoff_seconds']),'--execute'],check=True)[0m
+2026-10-16T09:29:04.0669887Z [36;1mPY[0m
+2026-10-16T09:29:04.0735771Z shell: /usr/bin/bash -e {0}
+2026-10-16T09:29:04.0736034Z env:
+2026-10-16T09:29:04.0736629Z   PYTHONPATH: /home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime:/home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:29:04.0737357Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:04.0737804Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T09:29:04.0738242Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:04.0738638Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:04.0739020Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:04.0739418Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T09:29:04.0741846Z   GH_TOKEN: ***
+2026-10-16T09:29:04.0742077Z   KM_LOCAL_AUTONOMOUS_ENABLED: true
+2026-10-16T09:29:04.0742339Z ##[endgroup]
+2026-10-16T09:29:07.4497226Z ##[group]Run actions/upload-artifact@v4
+2026-10-16T09:29:07.4497532Z with:
+2026-10-16T09:29:07.4497737Z   name: local-day-38880716990
+2026-10-16T09:29:07.4497999Z   path: runtime/local_race_day_plan/
+2026-10-16T09:29:07.4498268Z   if-no-files-found: ignore
+2026-10-16T09:29:07.4498501Z   retention-days: 90
+2026-10-16T09:29:07.4498721Z   compression-level: 6
+2026-10-16T09:29:07.4498931Z   overwrite: false
+2026-10-16T09:29:07.4499141Z   include-hidden-files: false
+2026-10-16T09:29:07.4499368Z env:
+2026-10-16T09:29:07.4500121Z   PYTHONPATH: /home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime:/home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:29:07.4500828Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:07.4501261Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T09:29:07.4501681Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:07.4502093Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:07.4502754Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T09:29:07.4503154Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T09:29:07.4503475Z ##[endgroup]
+2026-10-16T09:29:07.6121918Z (node:2697) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T09:29:07.6123299Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T09:29:07.6213561Z With the provided path, there will be 2 files uploaded
+2026-10-16T09:29:07.6234289Z Artifact name is valid!
+2026-10-16T09:29:07.6235104Z Root directory input is valid!
+2026-10-16T09:29:07.8094435Z Beginning upload of artifact content to blob storage
+2026-10-16T09:29:07.8492189Z (node:2697) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-16T09:29:07.8961463Z Uploaded bytes 274449
+2026-10-16T09:29:07.9116258Z Finished uploading artifact content to blob storage!
+2026-10-16T09:29:07.9117385Z SHA256 digest of uploaded artifact zip is ca01d6d46c2170b0eee8939d361de5ade6992fc6712cfd2eee5b9475be5953e4
+2026-10-16T09:29:07.9119791Z Finalizing artifact upload
+2026-10-16T09:29:08.1472169Z Artifact local-day-38880716990.zip successfully finalized. Artifact ID 12037426534
+2026-10-16T09:29:08.1473863Z Artifact local-day-38880716990 has been successfully uploaded! Final size is 274449 bytes. Artifact ID is 12037426534
+2026-10-16T09:29:08.1475472Z Artifact download URL: https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38880716990/artifacts/12037426534
+2026-10-16T09:29:08.1651235Z Post job cleanup.
+2026-10-16T09:29:08.2860193Z (node:2709) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T09:29:08.2861278Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T09:29:08.3051111Z Post job cleanup.
+2026-10-16T09:29:08.3930224Z [command]/usr/bin/git version
+2026-10-16T09:29:08.3973823Z git version 2.55.0
+2026-10-16T09:29:08.4020089Z Temporarily overriding HOME='/home/runner/work/_temp/148bfb79-e1dd-420f-872c-2d5518032345' before making global git config changes
+2026-10-16T09:29:08.4021075Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-16T09:29:08.4027090Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T09:29:08.4066334Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-16T09:29:08.4102709Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-16T09:29:08.4375229Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-16T09:29:08.4399587Z http.https://github.com/.extraheader
+2026-10-16T09:29:08.4411246Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-16T09:29:08.4449633Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-16T09:29:08.4759405Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-16T09:29:08.4806659Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-16T09:29:08.5320568Z Cleaning up orphan processes
+2026-10-16T09:29:08.5656582Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

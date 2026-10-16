@@ -132,3 +132,10 @@ def test_owner_scorecard_reports_concentration_and_candidate_metrics():
     assert x["payout_concentration"]["largest_return_race"] == "A"
     assert x["payout_concentration"]["largest_return_share"] == 1.0
     assert x["candidate_comparisons"]["SELECTIVE_EXACT"]["pfs"] == 150.0
+
+
+def test_invalid_metric_cannot_enable_human_promotion_review():
+    for value in (True, False, float('nan'), float('inf'), float('-inf'), 'inf', None):
+        result = evaluate_promotion_gate(complete_summary(candidate_pfs=value))
+        assert result['verdict'] == 'HOLD_INCOMPLETE_OR_INTEGRITY'
+        assert result['production_change_authorized'] is False

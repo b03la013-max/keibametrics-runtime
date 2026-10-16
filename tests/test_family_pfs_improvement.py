@@ -118,3 +118,10 @@ def test_semantic_purchase_and_unknown_purchase_principles_are_explicit():
     x = build_pfs_improvement_assessment(review())
     assert "SEMANTIC_UNIVERSE != PURCHASED_UNIVERSE" in x["principles"]
     assert "UNKNOWN != MUST_PURCHASE" in x["principles"]
+
+
+def test_invalid_pfs_cannot_claim_realized_profit():
+    for value in (True, False, float('nan'), float('inf'), float('-inf'), 'inf'):
+        result = build_pfs_improvement_assessment(review('NONE', value, False, False))
+        assert result['pfs_status'] == 'UNKNOWN'
+        assert result['dominant_pfs_loss_owner']['owner'] == 'UNKNOWN'

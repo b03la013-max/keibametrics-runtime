@@ -1,0 +1,79 @@
+{
+  "candidate_head": "260a1b5a9ad8ef81c9926f3ee9cad33843629cc3",
+  "ci": {
+    "compile": "PASS",
+    "conclusion": "success",
+    "head_sha": "260a1b5a9ad8ef81c9926f3ee9cad33843629cc3",
+    "job_id": 116736893477,
+    "regression": "159 passed, 29 subtests passed",
+    "run_id": 38827072743
+  },
+  "external_sbo_acceptance": "NOT_RUN_NOT_CLAIMED",
+  "files": [
+    ".github/workflows/local-sbo-public-shadow-production-runtime-acceptance.yml",
+    ".github/workflows/local-runtime-correctness-regression.yml",
+    "tests/test_sbo_runtime_acceptance_gateway.py"
+  ],
+  "historical_source_requests_this_turn": 0,
+  "merged": false,
+  "new_signatures_this_turn": 0,
+  "next_action": "Owner review and explicit merge approval for exact candidate HEAD; no historical signing authorization is implied by merge.",
+  "observed_at": "2026-10-16T00:10:52.486358+00:00",
+  "pr": 284,
+  "preserved": "Original SOURCE/SBO/profile/universe/tamper rejection checks remain. robots restrictions are not bypassed. No policy/engine/parameter/Signer/authority/fee changes.",
+  "previous_head": "09bfef16fc438308786552ea73da07dc951e0583",
+  "regression": {
+    "before": "1 FAIL / 4 PASS + 10 subtests; missing dispatch authorization inputs",
+    "full_after": "159 PASS + 29 subtests",
+    "targeted_after": "14 PASS + 16 subtests"
+  },
+  "repair": "Reuse existing Current Gateway health assessment. Main push runs actual offline tests. Historical SOURCE acquisition/signing job requires main workflow_dispatch, authorize_historical_source=true, nonempty owner_approval_ref and successful offline-regression.",
+  "rollback": "If Current Gateway acceptance integration fails, restore the old fail-closed predicate while retaining the explicit manual historical-signing gate. Do not revert the safety commit wholesale and restore automatic historical signing.",
+  "root_cause": "Stale REV.7 literal rejects compatible canonical REV.8 runtime. Existing main push trigger would also acquire/sign historical URW 2025-07-21 R01 on merge.",
+  "runtime_changed": false,
+  "status": "CANDIDATE_OWNER_EXACT_HEAD_APPROVAL_PENDING",
+  "trigger_acceptance": [
+    {
+      "authorized": true,
+      "branch": "main",
+      "event": "push",
+      "external_job": false,
+      "owner_ref_present": true
+    },
+    {
+      "authorized": true,
+      "branch": "main",
+      "event": "pull_request",
+      "external_job": false,
+      "owner_ref_present": true
+    },
+    {
+      "authorized": false,
+      "branch": "main",
+      "event": "workflow_dispatch",
+      "external_job": false,
+      "owner_ref_present": false
+    },
+    {
+      "authorized": true,
+      "branch": "main",
+      "event": "workflow_dispatch",
+      "external_job": false,
+      "owner_ref_present": false
+    },
+    {
+      "authorized": true,
+      "branch": "candidate",
+      "event": "workflow_dispatch",
+      "external_job": false,
+      "owner_ref_present": true
+    },
+    {
+      "authorized": true,
+      "branch": "main",
+      "event": "workflow_dispatch",
+      "external_job": true,
+      "owner_ref_present": true
+    }
+  ]
+}

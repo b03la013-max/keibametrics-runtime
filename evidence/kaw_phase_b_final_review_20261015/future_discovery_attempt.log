@@ -1,0 +1,27 @@
+Traceback (most recent call last):
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_physical/source_acquisition.py", line 128, in validate_public_url
+    infos = socket.getaddrinfo(p.hostname, p.port or 443, type=socket.SOCK_STREAM)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/socket.py", line 978, in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+socket.gaierror: [Errno -3] Temporary failure in name resolution
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_race_day_dispatcher.py", line 449, in <module>
+    main()
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_race_day_dispatcher.py", line 426, in main
+    plan = json.loads(plan_path.read_text()) if plan_path.exists() else discover(args.venue,args.date,args.cutoff_seconds,now=now)
+                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_race_day_dispatcher.py", line 85, in discover
+    menu, errors = fetch(spec, '')
+                   ^^^^^^^^^^^^^^^
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_physical/source_acquisition.py", line 410, in fetch_source
+    validate_public_url(url)
+  File "/workspace/scratch/909297d88dbc/km-local-day/runtime/local_physical/source_acquisition.py", line 130, in validate_public_url
+    raise ValueError("SOURCE_DNS_RESOLUTION_FAILED:" + str(e))
+ValueError: SOURCE_DNS_RESOLUTION_FAILED:[Errno -3] Temporary failure in name resolution

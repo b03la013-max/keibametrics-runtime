@@ -1,0 +1,162 @@
+{
+  "status": "PENDING_OFFICIAL_PLAN_AND_OWNER_APPROVAL",
+  "activation": false,
+  "family_id": "LOCAL",
+  "venue_id": "KAW",
+  "next_official_meeting": [
+    "2026-11-09",
+    "2026-11-13"
+  ],
+  "calendar_source": "https://www.kawasaki-keiba.jp/info/news/detail.html?did=3432",
+  "official_plan_sha256": null,
+  "approved_race_numbers": null,
+  "fixed_target_execution_ids": null,
+  "denominator": null,
+  "selection": "Phase B one Owner-approved future race; then Phase C limited multiple races with separate acceptance reference; Phase D never inferred from Discovery",
+  "before_first_live_requirements": [
+    "official menu/card identity and declared runner universe verified",
+    "owner-signed/recorded exact target set and official plan SHA",
+    "fresh Current Authority and KAW Owner only",
+    "existing Soft5/Hard10 provider control verified with actual billing access",
+    "dated approval, max dispatches, endpoint and payload scope",
+    "reviewed kickoff time plus fallback opportunities and bounded worker duration",
+    "no historical 2026-10-16 race reused as unknown future",
+    "delivery channel and acknowledgement method fixed"
+  ],
+  "dispatch_window": {
+    "start": "scheduled_post - start_lead_seconds",
+    "last_permitted_start": "min(prediction_cutoff, scheduled_post - 120s) - minimum_remaining_seconds",
+    "initial_proposal_start_lead_seconds": 3600,
+    "initial_proposal_minimum_remaining_seconds": 600,
+    "worker_seconds": null,
+    "worker_seconds_cap": 21000,
+    "worker_default_seconds": 0,
+    "worker_is_not_activated": true,
+    "lease_requirement": "approved start+lease must cover every selected race window; later races cannot silently fall outside lease; schedule delay cannot consume the remaining runtime margin"
+  },
+  "metric_rules": {
+    "denominator": "all officially frozen approved target execution IDs, including missing/failed/late races",
+    "unknown_counts_as_success": false,
+    "denominator_changes": "new explicitly versioned cohort, never remove a failed race",
+    "desired_acceptance": "100% per stage in the small acceptance cohort, duplicates=0, invalid signatures accepted=0; then multiple-race continuity, not single-race generalization",
+    "prediction_accuracy_separate": true
+  },
+  "rates": [
+    {
+      "metric": "discovery",
+      "success_condition": "official identity/date/number/post, declared universe and complete official target menu",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "race_key_registration",
+      "success_condition": "durable exact five-field key, owned plan/authority hash and registration timestamp",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "request_intent",
+      "success_condition": "durable normalized SOURCE request intent before dispatch; not frozen Static",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "formal_intent",
+      "success_condition": "SOURCE-bound frozen authorized Static intent, full existing validator PASS",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "signed_source",
+      "success_condition": "fresh signature/identity/cutoff/runner checks PASS",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "static",
+      "success_condition": "Authorized Static bound to verified SOURCE and full 29 closure",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "krs",
+      "success_condition": "PRE_KRS and KRS signed receipts PASS under unchanged Physics",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "signed_final",
+      "success_condition": "full chain, signed FINAL and canonical round-trip PASS",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "cutoff_compliance",
+      "success_condition": "source/static/final signed timestamps <= formal cutoff and strictly pre-post",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "github_canonical_publication",
+      "success_condition": "original canonical content hash+FINAL SHA+publication commit/time before post",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "prestart_user_delivery",
+      "success_condition": "recipient acknowledgement time strictly pre-post bound to FINAL SHA and content hash",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    },
+    {
+      "metric": "result_settlement_learning",
+      "success_condition": "official signed RESULT, valid settlement, paper PFS and Learning durable; purchase not inferred",
+      "numerator": null,
+      "denominator": null,
+      "rate": null,
+      "status": "NOT_RUN"
+    }
+  ],
+  "counts": {
+    "duplicate_dispatch": null,
+    "invalid_signature_accepted": null,
+    "deadline_deviation": null
+  },
+  "first_stop_required_fields": [
+    "execution_id",
+    "stage",
+    "observed_at",
+    "original_event_at_or_unknown",
+    "tool_or_process",
+    "input_or_ref",
+    "raw_response_or_error",
+    "http_status_or_unknown",
+    "retryability",
+    "repair_status",
+    "related_claim_run_checkpoint"
+  ],
+  "actual_purchases": false,
+  "post_start_new_final_forbidden": true
+}
