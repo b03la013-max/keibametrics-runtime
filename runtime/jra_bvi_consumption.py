@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+import re
 from collections import Counter
 try:
     from .jra_evidence_to_base_production import _weighted_index, _profile_for_runner
@@ -29,7 +30,7 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             if card.get(key) and parents.get(key) and card[key]!=parents[key]:
                 raise ValueError('BVI_CONSUMPTION_PEDIGREE_IDENTITY_CONFLICT:'+rid+':'+key)
         profile=_profile_for_runner(runner)
-        replay=_weighted_index('BVI',profile,features,mapping)
+        replay=_weighted_index('BVI',profile,features,mapping,acquisition_failure=runner.get('bvi_acquisition_failure'))
         cell=runner['canonical_components']['BVI']
         if type(cell['value']) not in (int,float) or not math.isfinite(cell['value']) or abs(cell['value']-replay['value'])>1e-6:
             raise ValueError('BVI_CONSUMPTION_NUMERICAL_MISMATCH:'+rid)
@@ -42,6 +43,8 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             parts.append({**c,'observation_count':spec.get('observation_count'),
                 'source_authority':spec.get('source_authority'),
                 'observed_at':spec.get('observed_at'),
+                'population_sample_count':spec.get('observation_count') if type(spec.get('observation_count')) is int and spec['observation_count']>=0 else None,
+                'independent_offspring_count':int(re.search(r'offspring=(\d+)',c['source_fact']).group(1)) if re.search(r'offspring=(\d+)',c['source_fact']) else None,
                 'value_contribution':c['weight']*(c['category_score']-(50 if dcr else 0))/denominator})
         baseline=50.0 if dcr else 0.0
         if abs(baseline+sum(x['value_contribution'] for x in parts)-cell['value'])>1e-6:
@@ -53,6 +56,8 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             'pedigree_reference':pedigree,
             'source_observed_at':source_artifact.get('source_freeze_at'),
             'source_available_at_evidence':'SIGNED_SOURCE_FREEZE_UPPER_BOUND' if source_artifact else 'UNKNOWN',
+            'calculation_timestamp':request.get('numerical_calculated_at'),
+            'calculation_timestamp_status':'RECORDED_ACTUAL_EXECUTION' if request.get('numerical_calculated_at') else 'LEGACY_UNKNOWN',
             'profile':profile,'bvi_value':cell['value'],'bvi_artifact_sha256':sha(cell),
             'feature_snapshot_sha256':sha(features),'mapping_version':mapping['mapping_id'],
             'components':parts,'baseline':baseline,
@@ -61,7 +66,13 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             'consumption_class':('MEASURED_PLUS_DCR' if dcr else 'MEASURED') if parts else 'DCR_ONLY',
             'missing_cause':'NOT_INDEPENDENTLY_ESTABLISHED_BY_LEGACY_FEATURE_ABSENCE' if dcr else None,
             'dcr_applied':dcr,'numerical_replay':'PASS'})
-    result={'profile':'KM-JRA-BVI-CONSUMPTION-PROOF-v1','race_id':request['race_id'],
+    static_proof=request.get('bvi_static_consumption_proof')
+    if static_proof is not None:
+        from jra_bvi_static_proof import verify_static_proof
+        verify_static_proof(static_proof,request)
+    result={'static_execution_proof':static_proof,
+        'static_execution_proof_status':'BOUND_ACTUAL_EXECUTION' if static_proof else 'LEGACY_NO_EXECUTION_PROOF',
+        'profile':'KM-JRA-BVI-CONSUMPTION-PROOF-v1','race_id':request['race_id'],
         'production_authority':request.get('current_authority') or request.get('base_index_mapping_authority'),
         'source_snapshot_sha256':request.get('source_snapshot_sha256') or source_artifact.get('source_snapshot_sha256'),
         'static_owner_activation_binding':request.get('static_owner_activation_binding'),

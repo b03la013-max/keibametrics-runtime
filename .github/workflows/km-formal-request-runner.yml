@@ -270,6 +270,9 @@ jobs:
           if not isinstance(req.get("index_provenance_ledger"),dict) or not req.get("index_provenance_ledger"):
               req=attach_production_ledger_to_request(req,prod_map)
           req=materialize_index_provenance(req)
+          if req.get("family_id")=="JRA":
+              from jra_bvi_consumption import build_bvi_consumption
+              req["bvi_pre_krs_consumption"]=build_bvi_consumption(req,prod_map,source_artifact=source_artifact)
           if not isinstance(req.get("krs_input_data"),dict) or not req.get("krs_input_data"):
               req=build_krs_input(req)
 
@@ -288,6 +291,11 @@ jobs:
           def stage(name, **evidence):
               stage_manifest[name]={"status":"PASS", **evidence}
 
+          if req.get("bvi_pre_krs_consumption"):
+              stage("BVI_PRE_KRS_CONSUMPTION_VERIFIED",
+                    sha256=req["bvi_pre_krs_consumption"]["sha256"],
+                    counts=req["bvi_pre_krs_consumption"]["counts"],
+                    static_proof_status=req["bvi_pre_krs_consumption"]["static_execution_proof_status"])
           active_aki=(((resolved_authority_obj.get("family_scoped_authority") or {}).get("JRA") or {}).get("aki_v21_activation") or {})
           if req.get("family_id")=="JRA" and active_aki and temporal_mode_early=="FORMAL-PRE-RACE":
               assert req.get("aki_calculation_requirement")=="OFFICIAL_V2_1", "ACTIVE_OFFICIAL_AKI_CANNOT_DOWNGRADE_TO_PROXY"

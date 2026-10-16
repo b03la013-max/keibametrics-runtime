@@ -35,7 +35,7 @@ def call(path,payload,timeout):
 
 
 def policy_fingerprint():
-    names=('runtime/jra_aki_v21.py','runtime/jra_aki_v21_features.py',
+    names=('runtime/jra_bvi_failure_attribution.py','runtime/jra_bvi_static_proof.py','runtime/jra_bvi_oos_metrics.py','runtime/jra_aki_v21.py','runtime/jra_aki_v21_features.py',
         'runtime/jra_krs_input_builder_production.py','runtime/jra_candidate_krs_plan.py',
         'runtime/krs_prediction_utility.py','runtime/minimum_efficient_coverage.py','runtime/capital_policy.py',
         'scripts/jra_bvi_pipeline_forward_shadow.py',
@@ -94,7 +94,9 @@ def freeze(request, source_path, output):
         executed=time(arm['krs_signed_run_receipt']['receipt']['timestamp'])
         if not now<=executed<=completed:
             raise ValueError('BVI_FORWARD_KRS_TIME_OUTSIDE_PRE_CUTOFF_FREEZE')
-    record={'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),
+    from jra_bvi_oos_metrics import preregister
+    record={'comparison_protocol':preregister(comparison),
+        'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),
         'computation_started_at':now.isoformat(),'prediction_cutoff':req['prediction_cutoff'],
         'scheduled_post_at':req['scheduled_post_at'],'policy_fingerprint':policy_fingerprint(),
         'authority_manifest':authority['manifest_id'],'authority_file_sha256':hashlib.sha256(authority_path.read_bytes()).hexdigest(),
@@ -227,17 +229,37 @@ def cohort_metrics(eligible):
         for field in fields:
             observed=[float(x[field]) for x in arm_records if x.get(field) is not None]
             accuracy[field]={'n':len(observed),'mean':sum(observed)/len(observed) if observed else None}
+        rows.sort(key=lambda row:(row['date'],row['race_id']))
         metrics[name]={'aggregate':_aggregate(rows),'robustness':_robustness(rows),'prediction':accuracy}
     return metrics
 
 
 def settle(root=ROOT):
     records=[]
+    evaluations=[]
+    evaluation_refs=[]
     failures=[]
+    from jra_bvi_oos_metrics import evaluate, aggregate
     for path in sorted((root/'runtime/jra_static_owner_forward_oos').glob('*/pedigree_pipeline_pre_result.json')):
         try:
             record=_settle_record(path,root)
-            if record is not None:records.append(record)
+            if record is not None:
+                pre=json.loads(path.read_text())
+                result_path=root/'runtime/results'/f"{pre['race_id']}.json"
+                raw=result_path.read_bytes()
+                if hashlib.sha256(raw).hexdigest()!=record['official_result_file_sha256']:
+                    raise ValueError('BVI_OOS_RESULT_CHANGED_AFTER_VERIFICATION')
+                evaluation=evaluate(pre,json.loads(raw)['official_result'],record)
+                evaluation['policy_fingerprint']=record['policy_fingerprint']
+                evaluation['frozen_sha256']=pre['sha256']
+                evaluation['official_result_file_sha256']=record['official_result_file_sha256']
+                evaluation['sha256']=sha(evaluation)
+                metric_code_sha=hashlib.sha256((ROOT/'runtime/jra_bvi_oos_metrics.py').read_bytes()).hexdigest()
+                metric_path=path.with_name('pedigree_evaluation_'+metric_code_sha[:16]+'.json')
+                save_immutable(metric_path,evaluation)
+                evaluation_refs.append({'race_id':pre['race_id'],'policy_fingerprint':record['policy_fingerprint'],
+                    'metrics_path':str(metric_path.relative_to(root)),'sha256':evaluation['sha256']})
+                evaluations.append(evaluation);records.append(record)
         except (ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
             failures.append({'race_id':path.parent.name,'status':'HOLD','reason':str(exc)})
     eligible=[x for x in records if x['policy_fingerprint']==policy_fingerprint()]
@@ -245,7 +267,13 @@ def settle(root=ROOT):
     cohorts={}
     for record in records:
         cohorts.setdefault(record['policy_fingerprint'], []).append(record['race_id'])
-    scorecard={'race_failures':failures,'policy_cohorts':{key:{'eligible_settled_races':len(ids), 'race_ids':sorted(ids), 'current_policy':key==policy_fingerprint(), 'arms':cohort_metrics([r for r in records if r['policy_fingerprint']==key])} for key,ids in cohorts.items()},
+    current_profiles=aggregate([e for e in evaluations if e['policy_fingerprint']==policy_fingerprint()])
+    scorecard={'profile_capital_by_policy':{key:{profile:cohort_metrics([r for r in records if r['policy_fingerprint']==key and
+            any(e['race_id']==r['race_id'] and e['race_profile']==profile for e in evaluations)])
+            for profile in ('NEWCOMER','LOW_CAREER','ESTABLISHED','MIXED')} for key in cohorts},
+        'profile_metrics':current_profiles, 'controlled_comparison_races':evaluation_refs,
+        'historical_profile_cohorts':{key:aggregate([e for e in evaluations if e['policy_fingerprint']==key]) for key in cohorts},
+        'race_failures':failures,'policy_cohorts':{key:{'eligible_settled_races':len(ids), 'race_ids':sorted(ids), 'current_policy':key==policy_fingerprint(), 'arms':cohort_metrics([r for r in records if r['policy_fingerprint']==key])} for key,ids in cohorts.items()},
         'profile':PROFILE,'eligible_settled_races':len(eligible),'arms':metrics,
         'status':'FORWARD OOS PENDING' if len(eligible)<30 else 'INDEPENDENT_REVIEW_REQUIRED',
         'required_forward_races':30,'automatic_promotion':False,'production_effect':'NONE',

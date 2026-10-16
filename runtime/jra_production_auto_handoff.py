@@ -190,6 +190,7 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
         "runners": deepcopy(prepared["runners"]),
         "index_provenance_ledger": deepcopy(prepared["index_provenance_ledger"]),
         "index_provenance_hash": prepared["index_provenance_hash"],
+        "numerical_calculated_at":prepared.get("numerical_calculated_at"),
         "numeric_calculation_requirement": "FULL_REQUIRED",
         "base_index_mapping_authority": deepcopy(prepared["base_index_mapping_authority"]),
     })
@@ -247,6 +248,9 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     req["final_prediction_package"]["source"] = "CANONICALIZED_FROM_FROZEN_STATIC_PRODUCTION_AUTO_HANDOFF"
     if activation.get("status") == "OWNER_AUTHORIZED_UNVALIDATED":
         req["final_prediction_package"]["validation_status"] = "UNVALIDATED"
+    from jra_bvi_static_proof import build_static_proof
+    req["bvi_static_consumption_proof"]=build_static_proof(prepared,owner,req,current_authority,root=Path(root),
+        execution_class="ACCEPTANCE_REPLAY" if intent.get("acceptance_only") else "FORMAL_PRE_RACE_ACTUAL_COMPUTATION")
     req = build_krs_input(req)
     validate_production_authority(req)
     validate_pre_krs_request(req)

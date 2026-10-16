@@ -30,7 +30,7 @@ def time(value):
 
 
 def fingerprint(root=ROOT):
-    paths=("runtime/jra_static_owner_executable.py","runtime/jra_bvi_shadow_comparison.py",
+    paths=("runtime/jra_bvi_failure_attribution.py","runtime/jra_static_owner_executable.py","runtime/jra_bvi_shadow_comparison.py",
            "runtime/jra_owner_authorized_feature_rules.py","runtime/jra_pedigree_corpus.py",
            "mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json",
            "runtime/jra_official_fact_evaluator_production.py",
