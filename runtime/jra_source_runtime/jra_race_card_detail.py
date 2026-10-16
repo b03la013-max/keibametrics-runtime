@@ -304,8 +304,12 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         ident=_parse_identity(row[identity_i] if identity_i<len(row) else "")
         person=_parse_current_person(row[person_i] if person_i<len(row) else "")
         frame_no=_num(row[0]) if len(row)>0 else None
-        joined=" ".join(str(z or "") for z in row)
-        status="CANCELLED" if "出走取消" in joined else "EXCLUDED" if "競走除外" in joined else "ACTIVE"
+        # Previous-run scratches are history, not the current runner status.
+        current_cells=[_norm(z) for i,z in enumerate(row) if i not in run_indices]
+        cancelled=any("出走取消" in z or z=="取消" for z in current_cells)
+        excluded=any("競走除外" in z or z=="除外" for z in current_cells)
+        if cancelled and excluded:raise ValueError("JRA_CURRENT_RUNNER_STATUS_AMBIGUOUS")
+        status="CANCELLED" if cancelled else "EXCLUDED" if excluded else "ACTIVE"
         recent=[]
         for i in run_indices:
             x=_parse_recent(row[i] if i<len(row) else "")
