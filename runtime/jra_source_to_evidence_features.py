@@ -825,11 +825,14 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
         tmp = copy.deepcopy(factual_runner)
         tmp["evidence_features"] = merged
         coverage = _coverage_for_runner(tmp,mapping)
+        from jra_bvi_failure_attribution import acquisition_failure
+        bvi_failure=acquisition_failure(rid,source_artifact,factual_runner,merged,mapping)
         gap = _automation_gap(source_only_coverage)
         all_ready = all_ready and bool(coverage.get("formal_base_ready"))
         all_missing_sources.update(coverage.get("missing_source_families") or [])
         runners_out[rid] = {
             "runner_name": str(r.get("name") or official[rid].get("name") or ""),
+            "bvi_acquisition_failure":bvi_failure,
             "factual_runner_updates":{
                 "career_starts":factual_runner.get("career_starts"),
                 "newcomer":factual_runner.get("newcomer"),
@@ -899,6 +902,7 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
         if by_id[rid].get("career_starts") is None and rr["factual_runner_updates"].get("career_starts") is not None:
             by_id[rid]["career_starts"] = int(rr["factual_runner_updates"]["career_starts"])
             by_id[rid]["newcomer"] = bool(rr["factual_runner_updates"].get("newcomer"))
+        by_id[rid]["bvi_acquisition_failure"] = rr.get("bvi_acquisition_failure")
         by_id[rid]["evidence_features"] = copy.deepcopy(rr["merged_evidence_features"])
         by_id[rid]["source_shadow_observations"] = copy.deepcopy(rr["shadow_observations"])
         by_id[rid]["source_rule_evaluator_inputs"] = copy.deepcopy(rr["rule_evaluator_inputs"])

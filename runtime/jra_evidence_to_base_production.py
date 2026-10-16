@@ -87,7 +87,7 @@ def _feature_score(feature_name, features, mapping):
     }
 
 
-def _weighted_index(index, profile, features, mapping):
+def _weighted_index(index, profile, features, mapping, *, acquisition_failure=None):
     weights = mapping["index_profiles"][profile][index]
     numerator = 0.0
     covered = 0.0
@@ -117,6 +117,8 @@ def _weighted_index(index, profile, features, mapping):
 
     minimum = float(mapping["profiles"][profile]["minimum_index_coverage_weight"])
     if covered + 1e-12 < minimum:
+        if index == "BVI" and acquisition_failure:
+            raise ProductionMappingError("BVI_DCR_INELIGIBLE:"+str(acquisition_failure))
         if not DCR_INFORMATION_POLICY_ENABLED:
             raise ProductionMappingError(
                 f"INDEX_EVIDENCE_COVERAGE_LOW:{profile}:{index}:{covered:.6f}<{minimum:.6f}"
@@ -272,7 +274,7 @@ def evaluate_partial_production_base_indices(race_id, runners, mapping):
                 reason = profile_error or f"EVIDENCE_FEATURES_MISSING:{rid}"
             else:
                 try:
-                    calculated_cell = _weighted_index(idx, profile, features, mapping)
+                    calculated_cell = _weighted_index(idx, profile, features, mapping, acquisition_failure=runner.get("bvi_acquisition_failure") if idx=="BVI" else None)
                     reason = None
                 except (ProductionMappingError, ValueError, TypeError) as exc:
                     calculated_cell = None
@@ -339,7 +341,7 @@ def build_production_ledger(race_id, runners, mapping):
             raise ProductionMappingError(f"EVIDENCE_FEATURES_MISSING:{rid}")
 
         profile = _profile_for_runner(runner)
-        base = {idx: _weighted_index(idx, profile, features, mapping) for idx in BASE}
+        base = {idx: _weighted_index(idx, profile, features, mapping, acquisition_failure=runner.get("bvi_acquisition_failure") if idx=="BVI" else None) for idx in BASE}
         dcr_components = _dcr_for_runner(runner, profile, features, mapping)
         dcr_score = round(sum(x["points"] for x in dcr_components.values()), 6)
 

@@ -402,6 +402,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
         rid = runner["runner_id"]
         rr = features["runners"][rid]
         runner.update(rr["factual_runner_updates"])
+        runner["bvi_acquisition_failure"] = rr.get("bvi_acquisition_failure")
         for name, value in rr["generated_production_features"].items():
             runner["evidence_features"].setdefault(name, copy.deepcopy(value))
         for name, row in rr["source_feature_trace"]["features"].items():
@@ -430,6 +431,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
             "calibration_status": mapping.get("calibration_status"),
         }
         req = materialize_index_provenance(req)
+        req["numerical_calculated_at"]=datetime.now(timezone.utc).isoformat()
         try:
             from .jra_bvi_consumption import build_bvi_consumption
         except ImportError:
@@ -440,6 +442,8 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
         numerical_ready = False
         numeric_error = str(exc)
     partial_base = evaluate_partial_production_base_indices(intent["race_id"], req["runners"], mapping)
+    from jra_bvi_failure_attribution import summarize as summarize_bvi
+    bvi_summary=summarize_bvi(partial_base)
     index_coverage = _production_index_coverage_diagnostic(req["runners"], mapping)
     gap_summary = _production_gap_summary(gaps)
     closure_plan = _source_only_coverage_repair_plan(index_coverage, features)
@@ -530,6 +534,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
               "exact_gap_count":len(gaps),
               "production_closure_summary":gap_summary,
               "base_index_coverage_diagnostic":index_coverage,
+              "bvi_calculation_summary":bvi_summary,
               "partial_production_base_calculation":partial_base,
               "partial_base_calculated_count":partial_base["calculated_base_cells"],
               "partial_base_blocked_count":partial_base["blocked_base_cells"],
