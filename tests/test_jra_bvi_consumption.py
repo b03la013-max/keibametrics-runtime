@@ -2,6 +2,9 @@ from copy import deepcopy
 from pathlib import Path
 import json
 import pytest
+import sys
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/"runtime"))
 from jra_bvi_consumption import build_bvi_consumption
 from jra_evidence_to_base_production import attach_production_ledger_to_request
 from jra_index_provenance_builder import materialize_index_provenance
