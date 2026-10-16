@@ -383,3 +383,26 @@ def test_new_worker_and_registration_require_explicit_review(tmp_path,changes):
     p=plan(); a=prereg_approval(p); a.update(changes); send=Mock(); publish=Mock()
     with pytest.raises(ValueError):run(tmp_path,p,a,{},execute=True,send=send,publish=publish)
     send.assert_not_called(); publish.assert_not_called()
+
+
+def test_official_discovery_read_retries_dns_but_preserves_original_failure():
+    calls=[]
+    def fetch(spec,cutoff):
+        calls.append(spec['source_id'])
+        if len(calls)==1:raise ValueError('SOURCE_DNS_RESOLUTION_FAILED:temporary test failure')
+        return fake_fetch(spec,cutoff)
+    p=d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    observed=p['discovery_read_attempts']
+    assert len(p['races'])==2 and calls[0]==calls[1]
+    assert observed[0]['error']=='SOURCE_DNS_RESOLUTION_FAILED:temporary test failure'
+    assert observed[0]['attempt']==1 and observed[1]['attempt']==2
+
+
+def test_official_discovery_signature_guard_is_never_retried():
+    calls=[]
+    def fetch(spec,cutoff):
+        calls.append(spec['source_id'])
+        raise ValueError('SOURCE_RAW_HASH_MISMATCH')
+    with pytest.raises(ValueError,match='HASH_MISMATCH'):
+        d.discover('KAW','2026-10-15',120,now=NOW,fetch=fetch)
+    assert len(calls)==1

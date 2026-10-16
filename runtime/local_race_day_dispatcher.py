@@ -71,7 +71,8 @@ class CardLinks(HTMLParser):
         self.races.add(int(values[0]))
 
 
-def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_resolver=None):
+def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_resolver=None,
+             read_observer=None, sleeper=time.sleep):
     """Use official menu links, then each individual official card; never guess N."""
     if venue not in LOCAL_BABA_CODES or date.fromisoformat(day).isoformat() != day:
         raise ValueError('LOCAL_DAY_IDENTITY_INVALID')
@@ -79,11 +80,41 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         raise ValueError('EXPLICIT_CUTOFF_SECONDS_REQUIRED')
     from runtime.family_authority_guard import resolve_current_authority
     authority = (authority_resolver or resolve_current_authority)(now=now)
+    reads = []
+    def read(spec):
+        # Official GET only. Do not apply this retry to signed SOURCE/FORMAL
+        # submissions, receipt validation, or an ambiguous Actions handoff.
+        from urllib.error import URLError, HTTPError
+        from runtime.execution_gateway import RETRYABLE_HTTP_STATUS
+        for attempt in range(1,4):
+            event = {'source_id':spec['source_id'], 'url':spec['url'],
+                     'attempt':attempt, 'observed_at':datetime.now(timezone.utc).isoformat()}
+            try:
+                snapshot, errors = fetch(spec, '')
+                retryable = snapshot.get('http_status') in RETRYABLE_HTTP_STATUS
+                event.update(http_status=snapshot.get('http_status'), errors=errors,
+                             snapshot_sha256=snapshot.get('snapshot_sha256'))
+                if retryable:
+                    event['failed_snapshot'] = snapshot
+                if not retryable or attempt == 3:
+                    return snapshot, errors
+            except (OSError, ValueError) as exc:
+                event.update(error=str(exc),error_type=type(exc).__name__)
+                retryable = (isinstance(exc,(TimeoutError,ConnectionError,URLError))
+                    and (not isinstance(exc,HTTPError) or exc.code in RETRYABLE_HTTP_STATUS))
+                retryable |= str(exc).startswith('SOURCE_DNS_RESOLUTION_FAILED:')
+                if not retryable or attempt == 3:
+                    raise
+            finally:
+                reads.append(event)
+                if read_observer:
+                    read_observer(event)
+            sleeper(attempt)
     menu_url = _url('RaceList', LOCAL_BABA_CODES[venue], day.replace('-', '/'), 1)
     spec = {'source_id': f'NAR-{venue}-{day}-DAY-MENU', 'source_class': 'OFFICIAL_DAY_MENU',
             'authority': 'NAR_OFFICIAL', 'official': True, 'required': True,
             'url': menu_url, 'max_bytes': 900000}
-    menu, errors = fetch(spec, '')
+    menu, errors = read(spec)
     if errors:
         raise ValueError('OFFICIAL_MENU_HOLD:' + ';'.join(errors))
     links = CardLinks(venue, day)
@@ -94,7 +125,7 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
     records, snapshots = [], [menu]
     for number in numbers:
         spec = _race_card_source(venue, LOCAL_BABA_CODES[venue], day.replace('-', '/'), number)
-        card, errors = fetch(spec, '')
+        card, errors = read(spec)
         if errors:
             raise ValueError(f'OFFICIAL_CARD_R{number:02d}_HOLD:' + ';'.join(errors))
         html = raw_html(card)
@@ -117,7 +148,7 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
                                            'snapshot_sha256': card['snapshot_sha256']}}
         odds_error = None
         try:
-            odds, odds_errors = fetch(_odds_source(venue, LOCAL_BABA_CODES[venue],day.replace('-','/'),number), '')
+            odds, odds_errors = read(_odds_source(venue, LOCAL_BABA_CODES[venue],day.replace('-','/'),number))
             raw_html(odds)
             if odds_errors:
                 raise ValueError(';'.join(odds_errors))
@@ -133,6 +164,7 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         records.append({'race_key': f'{venue}-{d:%Y%m%d}-R{number:02d}-LIVE-R1',
                         'execution_id': request['execution_id'], 'fields': fields,
                         'current_authority_at_observation': request['current_authority_manifest'],
+                        'registration_status':'NOT_REGISTERED',
                         'declared_runner_universe': universe['declared_runner_universe'],
                         'observed_active_runner_universe': universe['active_runner_universe'] if active_proven else None,
                         'active_universe_status':'OFFICIAL_OBSERVATION_REQUIRES_DISPATCH_RECHECK' if active_proven else 'UNKNOWN_PENDING_FRESH_SIGNED_SOURCE',
@@ -143,7 +175,8 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         snapshots.append(card)
     plan = {'family_id': 'LOCAL', 'venue_id': venue, 'race_date': day,
             'observed_at': now.isoformat(), 'races': records, 'official_snapshots': snapshots,
-            'status': 'PREREGISTRATION_ONLY_NOT_SIGNED_SOURCE', 'prediction_freeze': False}
+            'discovery_read_attempts':reads,
+            'status': 'DISCOVERY_ONLY_NOT_REGISTERED_NOT_SIGNED_SOURCE', 'prediction_freeze': False}
     plan['plan_sha256'] = sha(plan)
     return plan
 
@@ -560,7 +593,24 @@ def main():
     approval_path = root/'profiles/local_autonomous_approvals'/(name+'.json')
     if args.execute and (os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true' or not approval_path.exists()):
         raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
-    plan = json.loads(plan_path.read_text()) if plan_path.exists() else discover(args.venue,args.date,args.cutoff_seconds,now=now)
+    discovery_reads = []
+    try:
+        plan = json.loads(plan_path.read_text()) if plan_path.exists() else discover(
+            args.venue,args.date,args.cutoff_seconds,now=now,read_observer=discovery_reads.append)
+    except (OSError,ValueError,KeyError,TypeError) as exc:
+        failure_path = folder/(name+'.discovery-failure.json')
+        write(failure_path, {
+            'status':'HOLD_OFFICIAL_DISCOVERY', 'first_stop_stage':'OFFICIAL_DISCOVERY',
+            'observed_at':datetime.now(timezone.utc).isoformat(), 'original_error':str(exc),
+            'attempts':discovery_reads, 'race_registration_proven':False, 'dispatch_count':0})
+        if args.execute:
+            try:
+                publish_state(root,[str(failure_path.relative_to(root))])
+            except Exception as persistence_error:
+                # The original failure remains available to the workflow's
+                # always-uploaded artifact even if Git persistence also fails.
+                print('DISCOVERY_FAILURE_PERSISTENCE_HOLD:'+str(persistence_error))
+        raise
     if (plan['venue_id'],plan['race_date']) != (args.venue,args.date):
         raise ValueError('DAY_PLAN_IDENTITY_MISMATCH')
     write(plan_path, plan)
