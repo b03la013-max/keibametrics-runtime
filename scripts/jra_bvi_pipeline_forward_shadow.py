@@ -47,6 +47,80 @@ def policy_fingerprint():
         'files':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in names}})
 
 
+def bind_production_reference(comparison, req, final, *, require_match=True):
+    """Compare the A replay to the actual canonical Production recommendation.
+
+    The caller separately verifies the signed FINAL with the current trust anchor.
+    Ticket annotations may differ; selections, direction and stakes may not.
+    """
+    from jra_production_postresult import verify_final
+    verify_final(final)
+    if any(final.get(k)!=req.get(k) for k in
+           ('race_id','source_snapshot_sha256','prediction_cutoff','scheduled_post_at')):
+        raise ValueError('BVI_FORWARD_CANONICAL_FINAL_BINDING_MISMATCH')
+    if time(final['final_receipt']['receipt']['timestamp'])>time(req['prediction_cutoff']):
+        raise ValueError('BVI_FORWARD_CANONICAL_FINAL_AFTER_CUTOFF')
+    arm=comparison['arms']['A_CURRENT']
+    matches={'ranking':arm['owner']['static_prediction']['ranking']==final['static_prediction']['ranking']}
+    for field,keys in [('role_registry',('runner_id','column','status')),
+            ('pair_dispositions',('head','second','status')),
+            ('third_dispositions',('head','second','third','status'))]:
+        project=lambda rows:sorted(tuple(str(row[k]) for k in keys) for row in rows)
+        matches[field]=project(arm['owner'][field])==project(final[field])
+    def tickets(rows):
+        return sorted((x['bet_type'],tuple(sorted(x['selection']) if x['bet_type']=='TRIO' else x['selection']),x['stake']) for x in rows)
+    actual=final['final_ticket']
+    matches['tickets']=tickets(arm['diagnostic_tickets'])==tickets(actual['tickets'])
+    matches['investment']=sum(x['stake'] for x in arm['diagnostic_tickets'])==actual['total_investment']
+    if require_match and not all(matches.values()):
+        raise ValueError('BVI_FORWARD_CANONICAL_TICKET_REPLAY_MISMATCH:'+','.join(k for k,v in matches.items() if not v))
+    return {'status':'MATCHED_CANONICAL_PRODUCTION_RECOMMENDATION' if all(matches.values()) else 'HISTORICAL_CURRENT_POLICY_REPLAY_DIFFERS_FROM_ORIGINAL_PRODUCTION',
+        'replay_matches':matches,'forward_eligible_baseline':all(matches.values()),
+        'final_sha256':final['sha256'],'final_receipt_sha256':final['final_receipt_sha256'],
+        'source_snapshot_sha256':final['source_snapshot_sha256'],
+        'production_krs_receipt_sha256':final['krs_run_receipt']['receipt_sha256'],
+        'production_krs_input_sha256':final['krs_run_receipt']['receipt']['input_sha256'],
+        'ticket_sha256':sha(actual),'capital_sha256':sha(final['capital_policy_decision']),
+        'ticket_count':len(actual['tickets']),'total_investment':actual['total_investment'],
+        'comparison_krs_lane':'SEPARATE_CANDIDATE_REPLAY; NOT_PRODUCTION_EXECUTION',
+        'pfs_basis':'FROZEN_RECOMMENDATION; ACTUAL_PURCHASE_UNVERIFIED'}
+
+
+def arm_consumption(comparison, req, source, mapping, authority, *, execution_class='FORWARD_SHADOW_ACTUAL_COMPUTATION_NOT_PRODUCTION_FINAL'):
+    from jra_bvi_consumption import build_bvi_consumption
+    from jra_bvi_static_proof import build_static_proof
+    from jra_static_owner_executable import compile_static_owner
+    out={}
+    for name,arm in comparison['arms'].items():
+        prepared=copy.deepcopy(req)
+        prepared.pop('bvi_static_consumption_proof',None)
+        prepared['runners']=copy.deepcopy(arm['numerical_runners'])
+        prepared['numerical_calculated_at']=arm.get('numerical_calculated_at')
+        owner=arm['owner']
+        raw=compile_static_owner(prepared,source_snapshot_sha256=owner['source_snapshot_sha256'],
+            source_receipt_sha256=owner['source_receipt_sha256'],frozen_at=owner['frozen_at'],
+            prediction_cutoff=req['prediction_cutoff'])
+        formal=copy.deepcopy(prepared)
+        formal.update({k:copy.deepcopy(owner[k]) for k in
+            ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')})
+        formal['krs_input_data']=copy.deepcopy(arm['krs_input'])
+        formal['bvi_static_consumption_proof']=build_static_proof(prepared,raw,formal,authority,
+            execution_class=execution_class)
+        proof=build_bvi_consumption(formal,mapping,source_artifact=source)
+        receipt=arm.get('krs_signed_run_receipt') or {}
+        proof['comparison_execution']={'krs_lane':'SEPARATE_CANDIDATE_EXECUTION',
+            'signed_run_receipt_sha256':receipt.get('receipt_sha256'),
+            'executed_input_sha256':(receipt.get('receipt') or {}).get('input_sha256'),
+            'executed_output_sha256':(receipt.get('receipt') or {}).get('output_sha256'),
+            'actual_run_count':(receipt.get('receipt') or {}).get('actual_run_count'),
+            'mec_sha256':sha(arm.get('mec')),'capital_sha256':sha(arm.get('capital_policy_decision')),
+            'ticket_sha256':sha(arm.get('diagnostic_tickets')),
+            'receipt_verified':arm.get('krs_receipt_verified') is True}
+        proof['sha256']=sha({k:v for k,v in proof.items() if k!='sha256'})
+        out[name]=proof
+    return out
+
+
 def freeze(request, source_path, output):
     req=json.loads(request.read_text());now=require_open_window(req)
     checked=_verified_source(source_path)
@@ -89,6 +163,16 @@ def freeze(request, source_path, output):
         def semantics(rows):return sorted(tuple(str(r[k]) for k in columns) for r in rows)
         if semantics(actual[field])!=semantics(req[field]):raise ValueError('BVI_FORWARD_A_CURRENT_POLICY_REPLAY_MISMATCH:'+field)
     execute_diagnostic_downstream(comparison,req,None,call)
+    final_path=ROOT/'runtime/final_artifacts'/f"{req['race_id']}.json"
+    final=json.loads(final_path.read_text())
+    contracts=json.loads((ROOT/authority['common_family_components']['family_runtime_contracts_profile']).read_text())
+    contract=contracts['families']['JRA']
+    from jra_delivery import verify_signed_final
+    with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:
+        health=json.load(response)
+    verify_signed_final(final,health,contract)
+    production_reference=bind_production_reference(comparison,req,final)
+    consumption=arm_consumption(comparison,req,source,mapping,authority)
     completed=require_open_window(req)
     for arm in comparison['arms'].values():
         executed=time(arm['krs_signed_run_receipt']['receipt']['timestamp'])
@@ -96,6 +180,7 @@ def freeze(request, source_path, output):
             raise ValueError('BVI_FORWARD_KRS_TIME_OUTSIDE_PRE_CUTOFF_FREEZE')
     from jra_bvi_oos_metrics import preregister
     record={'comparison_protocol':preregister(comparison),
+        'production_baseline':production_reference,'arm_bvi_consumption':consumption,
         'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),
         'computation_started_at':now.isoformat(),'prediction_cutoff':req['prediction_cutoff'],
         'scheduled_post_at':req['scheduled_post_at'],'policy_fingerprint':policy_fingerprint(),
@@ -286,5 +371,15 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();sub=parser.add_subparsers(dest='action',required=True)
     f=sub.add_parser('freeze');f.add_argument('--request',type=Path,required=True);f.add_argument('--source',type=Path,required=True);f.add_argument('--output',type=Path,required=True)
     sub.add_parser('settle');args=parser.parse_args()
-    if args.action=='freeze':r=freeze(args.request,args.source,args.output);print('BVI_FORWARD_PIPELINE_FROZEN',r['race_id'],r['sha256'])
+    if args.action=='freeze':
+        try:
+            r=freeze(args.request,args.source,args.output)
+        except Exception as exc:
+            failure={'profile':PROFILE,'status':'NOT_FROZEN','first_failed_operation':'FORWARD_COMPARISON_FREEZE',
+                'reason':type(exc).__name__+':'+str(exc),'recorded_at':datetime.now(timezone.utc).isoformat(),
+                'request_path':str(args.request),'production_effect':'NONE','forward_oos_increment':0}
+            p=ROOT/'runtime_out/jra_bvi_forward_freeze_failure.json';p.parent.mkdir(parents=True,exist_ok=True)
+            p.write_text(json.dumps(failure,ensure_ascii=False,indent=2)+'\n')
+            raise
+        print('BVI_FORWARD_PIPELINE_FROZEN',r['race_id'],r['sha256'])
     else:print(json.dumps(settle(),ensure_ascii=False))

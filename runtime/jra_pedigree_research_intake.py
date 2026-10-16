@@ -8,9 +8,102 @@ from collections import Counter
 from datetime import datetime
 import hashlib,json,zipfile
 from pathlib import Path
+from urllib.parse import urlsplit, parse_qs
 
 
 def sha(data):return hashlib.sha256(data).hexdigest()
+
+
+def reconcile_checkpoint(path):
+    """Reconcile retained source tables, inventory, queue and persisted rows.
+
+    Returns aggregate metadata only; no provider rows or URLs are published.
+    Does not acquire data, rewrite the checkpoint or grant source eligibility.
+    """
+    import sqlite3
+    _, normalized = normalize_checkpoint(path)  # Verify every retained member first.
+    def code(url):
+        values = parse_qs(urlsplit(url).query).get('rcode', [])
+        if len(values) != 1 or not values[0].isdigit():
+            raise ValueError('PRIVATE_CHECKPOINT_RACE_URL_INVALID')
+        return values[0]
+    with zipfile.ZipFile(path) as z:
+        inventory = json.loads(z.read('observed_races.json'))
+        rows = json.loads(z.read('results.json'))
+        races = json.loads(z.read('races.json'))
+        queue = json.loads(z.read('resume_queue.json'))
+        state = json.loads(z.read('collection_state.json'))
+        worker = json.loads(z.read('worker_status.json'))
+        pages = [json.loads(x) for x in z.read('raw_pages.jsonl').splitlines()]
+        prior = [json.loads(x) for x in z.read('prior_raw_results.jsonl').splitlines()]
+        db = sqlite3.connect(':memory:')
+        try:
+            db.deserialize(z.read('bloodb_checkpoint.sqlite'))
+            sql = {'integrity':db.execute('pragma integrity_check').fetchone()[0],
+                'races':db.execute('select count(*) from races').fetchone()[0],
+                'rows':db.execute('select count(*) from results').fetchone()[0]}
+            sql_keys = set(db.execute('select race_id,horse_number,horse_id from results'))
+        finally:db.close()
+    ids = {code(x['url']) for x in inventory}
+    raw = {code(x['url']):x for x in prior}
+    raw.update({code(x['url']):x['data'] for x in pages if x['kind']=='result'})
+    parsed = {}; unparsed = 0; duplicate_rows = 0; row_conflicts = 0
+    for rid,data in raw.items():
+        for table in data['tables']:
+            for row in table:
+                if isinstance(row,dict): cells,links = row['cells'],row['links']
+                else:
+                    cells=[c['text'] for c in row]
+                    links=[link for c in row for link in c['links']]
+                horses=[x for x in links if 'hinfo?hcode=' in x['url']]
+                if not horses:continue
+                if len(cells)!=21:
+                    unparsed+=1;continue
+                hid=parse_qs(urlsplit(horses[0]['url']).query)['hcode'][0]
+                key=(rid,str(cells[2]))
+                value=(hid,str(cells[4]),str(cells[5]),str(cells[7]))
+                if key in parsed:
+                    duplicate_rows+=1;row_conflicts+=int(parsed[key]!=value)
+                parsed[key]=value
+    saved={(str(r['race_id']),str(r['horse_number'])):
+           (str(r['horse_id']),str(r['horse_name']),str(r['sire']),str(r['damsire'])) for r in rows}
+    race_ids={str(x['race_id']) for x in races}
+    mismatches=sum(r['race_date']!=str(r['race_id'])[:8] or code(r['source_url'])!=str(r['race_id']) for r in rows)
+    mismatches+=sum(r['race_date']!=str(r['race_id'])[:8] or code(r['source_url'])!=str(r['race_id']) for r in races)
+    pending={str(x['race_id']) for x in queue['races'] if x['result_pending']}
+    missing=ids-race_ids
+    years=sorted({rid[:4] for rid in ids}|{rid[:4] for rid in race_ids})
+    by_year={year:{'observed_links':sum(r[:4]==year for r in ids),
+        'raw_result_races':sum(r[:4]==year for r in raw),
+        'persisted_result_races':sum(r[:4]==year for r in race_ids),
+        'runner_rows':sum(r['race_date'][:4]==year for r in rows),
+        'uncollected_observed_links':sum(r[:4]==year for r in missing)} for year in years}
+    sql_match=sql['integrity']=='ok' and sql['races']==len(races) and sql['rows']==len(rows) and sql_keys=={(str(r['race_id']),str(r['horse_number']),str(r['horse_id'])) for r in rows}
+    report={'profile':'KM-JRA-BLOODB-CHECKPOINT-RECONCILIATION-v1',
+        'archive_sha256':normalized['archive_sha256'],'archive_member_hashes_verified':normalized['archive_member_hashes_verified'],
+        'requested_period':state['requested_period'],'by_year':by_year,
+        'unique_observed_links':len(ids),'duplicate_inventory_links':len(inventory)-len(ids),
+        'persisted_result_races':len(race_ids),'persisted_runner_rows':len(rows),
+        'uncollected_observed_links':len(missing),'observed_link_capture_pct':100*len(ids&race_ids)/len(ids) if ids else None,
+        'national_coverage_denominator':'UNKNOWN; OBSERVED_PROVIDER_LINKS_ONLY',
+        'raw_result_races':len(raw),'raw_parsed_runner_rows':len(parsed),'unparsed_horse_rows':unparsed,
+        'raw_rows_missing_from_persistence':len(set(parsed)-set(saved)),
+        'persisted_rows_without_raw':len(set(saved)-set(parsed)),
+        'raw_persisted_parent_or_identity_mismatches':sum(parsed[k]!=saved[k] for k in set(parsed)&set(saved)),
+        'raw_duplicate_runner_rows':duplicate_rows,'raw_conflicting_runner_rows':row_conflicts,
+        'date_or_race_url_join_mismatches':mismatches,'results_not_in_observed_inventory':len(race_ids-ids),
+        'resume_queue_missing_result_links':len(missing-pending),'resume_queue_unexpected_pending':len(pending-missing),
+        'sqlite':{**sql,'matches_json':sql_match},
+        'collection_status':state['status'],'worker_phase':worker.get('phase'),
+        'worker_error':worker.get('error'),
+        'missing_2022_2025_cause':('NOT_COLLECTED_BEFORE_BACKGROUND_WORKER_FAILURE'
+            if all(by_year.get(str(y),{}).get('raw_result_races',0)==0 for y in range(2022,2026))
+            and 'exec context not found' in str(worker.get('error')) else 'REQUIRES_SEPARATE_INVESTIGATION'),
+        'provider_unavailability':'NOT_ESTABLISHED','permission_denial':'NOT_ESTABLISHED',
+        'recovered_result_rows':0,'production_rows_imported':0,
+        'source_eligibility':'PRIVATE_RESEARCH_ONLY; OFFICIAL_CROSSWALK_AND_APPROVAL_NOT_ESTABLISHED',
+        'postcapture_for_historical_prediction':True,'checkpoint_modified':False}
+    return report
 
 
 def normalize_checkpoint(path, cutoff=None):

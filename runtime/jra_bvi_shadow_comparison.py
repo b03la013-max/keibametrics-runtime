@@ -4,6 +4,7 @@ No arm is a FINAL or has purchase authority. Enhanced equals Current until an
 eligible, separately frozen richer official input is supplied; no invented gain.
 """
 import copy
+from datetime import datetime, timezone
 from jra_evidence_to_base_production import attach_production_ledger_to_request
 from jra_index_provenance_builder import materialize_index_provenance
 from jra_static_owner_executable import compile_static_owner
@@ -37,6 +38,7 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
                     if k not in PEDIGREE_FEATURES
                     and v.get('source_authority') != 'JRA_OFFICIAL_POINT_IN_TIME_CORPUS'}
         req = materialize_index_provenance(attach_production_ledger_to_request(req, mapping))
+        calculated_at = datetime.now(timezone.utc).isoformat()
         owner = compile_static_owner(req, source_snapshot_sha256=source_sha,
             source_receipt_sha256=receipt_sha, frozen_at=algorithm_freeze_at,
             prediction_cutoff=cutoff)
@@ -60,6 +62,7 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
             owner['sha256']=sha({k:v for k,v in owner.items() if k!='sha256'})
         krs = build_krs_input(req)['krs_input_data']
         arms[name] = {'owner': owner, 'krs_input': krs,
+            'numerical_calculated_at':calculated_at,
             'bvi': {str(r['runner_id']):r['canonical_components']['BVI'] for r in req['runners']},
             'numerical_provenance_sha256':req['index_provenance_hash'],
             'numerical_runners':copy.deepcopy(req['runners']),
@@ -70,7 +73,8 @@ def compare(prepared, mapping, *, source_sha, receipt_sha, algorithm_freeze_at, 
     a,b=arms['A_CURRENT'],arms['B_PEDIGREE_ENHANCED_SHADOW']
     return {'arms': arms, 'enhanced_input_supplied': enhanced_features is not None,
         'enhanced_input_distinct':sha([r['evidence_features'] for r in a['numerical_runners']])!=sha([r['evidence_features'] for r in b['numerical_runners']]),
-        'enhanced_bvi_distinct':sha(a['bvi'])!=sha(b['bvi']),
+        'enhanced_bvi_artifact_distinct':sha(a['bvi'])!=sha(b['bvi']),
+        'enhanced_bvi_distinct':any(a['bvi'][rid]['value']!=b['bvi'][rid]['value'] for rid in a['bvi']),
         'enhanced_ranking_distinct':a['owner']['static_prediction']['ranking']!=b['owner']['static_prediction']['ranking'],
         'same_runner_universe': True, 'same_mapping_and_cutoff': True,
         'production_effect': 'NONE', 'predictive_improvement_demonstrated': False,
