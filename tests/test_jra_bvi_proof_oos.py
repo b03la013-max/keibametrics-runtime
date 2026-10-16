@@ -96,3 +96,13 @@ def test_handoff_proof_survives_existing_transport_validation_and_canonical_repl
     assert verify_static_proof(req['bvi_static_consumption_proof'],req)
     real=json.loads(next((ROOT/'runtime/requests').glob('*KYO-20261011-R07*FORMAL.json')).read_text())
     assert static_input(real)==static_input(materialize_index_provenance(copy.deepcopy(real)))
+
+
+def test_real_corpus_ablation_is_not_misreported_as_bvi_scalar_only():
+    pre,official,settled=historical()
+    out=evaluate(pre,official,settled)
+    arm=out['arms']['C_BLOODLINE_ABLATION']
+    assert arm['other_base_index_changes_vs_a']['GCI']
+    assert arm['other_base_index_changes_vs_a']['KGI']
+    assert arm['bvi_only_causal_comparison'] is False
+    assert out['arms']['A_CURRENT']['bvi_only_causal_comparison'] is False

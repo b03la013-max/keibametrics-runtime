@@ -77,3 +77,20 @@ the official-only JRA registry. LOCAL2021–25 aggregate AEI/neutral52 coefficie
 are not transplanted. Full five-year national coverage and future utility remain
 unfinished. Existing Oct17/18 monitoring continues, without claiming predictions
 or results that have not yet occurred.
+
+## Actual shared-feature finding
+
+The new real27-runner acceptance found20 changed BVI values and a changed Winner
+ranking in Kyoto R07. This does not contradict ZAI_WIN having no BVI scalar term:
+existing pedigree Feature values also feed other base indices directly. In the
+ESTABLISHED mapping, physical_pedigree_fit feeds GCI and pedigree_class feeds KGI;
+LOW_CAREER/NEWCOMER additionally reuse pedigree features in HPI/SSI/CFI/GCI/KGI.
+A/B preserves non-pedigree feature inputs, but can change several base outputs.
+Thus pedigree-features-only and BVI-scalar-only comparisons are separate flags.
+The per-runner consumption proof exposes the exact existing shared bindings;
+per-race OOS metrics explicitly list changed non-BVI base indices. A baseline with
+no intervention cannot claim a BVI-only effect. This is a measurement-label repair;
+no production numerical values, weights, rankings or frozen evidence are changed.
+Real hashes/receipts and all20 observed delta counts are recorded in
+static_proof_real_acceptance.json. The new evaluator gets a new code-hash filename;
+old evaluation versions remain preserved, while current references use the fix.
