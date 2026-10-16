@@ -275,3 +275,20 @@ class ProductionBVIEvidenceVersusDCRTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_maternal_enrichment_and_conflict_quarantine_are_order_independent(tmp_path,monkeypatch):
+    import json
+    folder=tmp_path/'runtime/pedigree_corpus';folder.mkdir(parents=True)
+    horse={'horse_name':'Identity test','sire':'Sire','dam':'Dam','runs':[]}
+    for i,parent in enumerate(('', 'Maternal A','Maternal B','Maternal A')):
+        (folder/f'{i}.json').write_text(json.dumps({'harvested_at':'2026-10-10T01:00:00+00:00',
+            'sha256':str(i)*64,'horses':[{**horse,'damsire':parent}]}))
+    monkeypatch.setattr('jra_pedigree_corpus._verified_harvest',lambda p,**k:json.loads(p.read_text()))
+    result=build_corpus(tmp_path,prediction_cutoff='2026-10-11T00:00:00+00:00',race_date='2026-10-11')
+    row=next(iter(result['horses'].values()))
+    assert row['damsire']=='' and row['maternal_identity_status']=='CONFLICT_QUARANTINED'
+    assert result['maternal_identity_conflict_count']==1
+    (folder/'2.json').unlink()
+    result=build_corpus(tmp_path,prediction_cutoff='2026-10-11T00:00:00+00:00',race_date='2026-10-11')
+    assert next(iter(result['horses'].values()))['damsire']=='Maternal A'

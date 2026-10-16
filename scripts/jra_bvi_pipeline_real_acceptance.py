@@ -11,6 +11,7 @@ from jra_pedigree_corpus import _verified_source, _attested, build_corpus
 from jra_owner_authorized_feature_rules import owner_authorized_observations
 from jra_bvi_shadow_comparison import compare, execute_diagnostic_downstream
 from jra_evidence_to_base_production import _weighted_index, _profile_for_runner
+from jra_bvi_consumption import build_bvi_consumption
 from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
 from family_authority_guard import resolve_current_authority
 
@@ -85,6 +86,7 @@ def evaluate():
             'authority_use':'CURRENT POLICY COUNTERFACTUAL ONLY; NOT HISTORICAL PRE-CUTOFF AUTHORITY',
             'mapping_id':mapping['mapping_id'],'mapping_file_sha256':sha_file(ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json'),
             'postcapture_corpus':{k:corpus.get(k) for k in ('manifest_sha256','horse_count','run_count','snapshot_count','identity_collision_count','run_conflict_count','snapshots','rejected_untrusted_inputs')},
+            'bvi_consumption_ledger':build_bvi_consumption(req,mapping,source_artifact=source),
             'runners':rows,'comparison':comparison,'frozen_lineage':{'request_sha256':sha_file(path),
                 'final_sha256':sha_file(finalpath),'source_binding_matches':final['source_snapshot_sha256']==checked['source_snapshot_sha256'],
                 'static_prediction':final['static_prediction'],'krs_run_receipt':final['krs_run_receipt'],

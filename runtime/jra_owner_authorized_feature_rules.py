@@ -256,6 +256,18 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         return {}
     detail = _rows(source.get("jra_official_race_card_detail") or {})
     history = _rows(source.get("jra_official_horse_history") or {})
+    # Conflicting target identities are acquisition/correctness failures, not
+    # officially unpublished evidence eligible for a neutral DCR substitute.
+    for rid, card in detail.items():
+        hist = history.get(rid) or {}
+        parent = hist.get("pedigree") or {}
+        for key in ("sire", "dam", "damsire"):
+            a,b = str(card.get(key) or "").strip(), str(parent.get(key) or "").strip()
+            if a and b and a != b:
+                raise ValueError("JRA_PEDIGREE_TARGET_IDENTITY_CONFLICT:"+rid+":"+key)
+        a,b = str(card.get("horse_name") or "").strip(),str(hist.get("horse_name") or "").strip()
+        if a and b and a != b:
+            raise ValueError("JRA_PEDIGREE_TARGET_IDENTITY_CONFLICT:"+rid+":horse_name")
     persons = _rows(source.get("jra_official_person_stats") or {})
     workout = {str(x.get("runner_id") or x.get("horse_no")): x
                for x in ((source.get("jra_registered_common") or {}).get("workout") or {}).get("runners") or []

@@ -112,3 +112,35 @@ def test_jra_result_attribution_binds_static_roles_without_changing_common_defin
     assert all(not x['static_roles'] for x in utility['summary'])
     request['family_id']='LOCAL'
     with pytest.raises(ValueError,match='FAMILY_MISMATCH'):bind_jra_static_role_trace(utility,request)
+
+
+def test_real_compact_result_receipt_binds_request_without_embedded_artifact(monkeypatch,tmp_path):
+    from copy import deepcopy
+    directory=ROOT/'runtime/jra_static_owner_forward_oos/KM-JRA-KYO-20261012-R07'
+    pre=json.loads((directory/'pedigree_pipeline_pre_result.json').read_text())
+    result=json.loads((ROOT/'runtime/results'/f"{pre['race_id']}.json").read_text())
+    bound=json.loads((directory/'production_result_receipt.json').read_text())
+    assert 'artifact' not in bound['signed_result_envelope']
+    assert bound['signed_result_envelope']['receipt']['artifact_sha256']==f.sha(result)
+    # Boundary test only. Live acceptance independently calls the real verifier.
+    target=tmp_path/directory.relative_to(ROOT);target.mkdir(parents=True)
+    rp=tmp_path/'runtime/results';rp.mkdir()
+    for name,value in [('pedigree_pipeline_pre_result.json',pre),('production_result_receipt.json',bound)]:
+        (target/name).write_text(json.dumps(value))
+    result_path=rp/f"{pre['race_id']}.json";result_path.write_text(json.dumps(result))
+    monkeypatch.setattr(f.subprocess,'check_output',lambda *a,**k:pre['frozen_at'])
+    monkeypatch.setattr(f,'call',lambda *a,**k:{'valid':True})
+    out=f._settle_record(target/'pedigree_pipeline_pre_result.json',tmp_path)
+    assert out['signed_result_verified'] and out['oos_eligible']
+    result['official_result']['top3']=list(reversed(result['official_result']['top3']))
+    result_path.write_text(json.dumps(result))
+    with pytest.raises(ValueError,match='SIGNED_RESULT_BINDING_INVALID'):
+        f._settle_record(target/'pedigree_pipeline_pre_result.json',tmp_path)
+
+
+def test_corrupt_race_is_held_without_blocking_other_races(tmp_path):
+    p=tmp_path/'runtime/jra_static_owner_forward_oos/broken/pedigree_pipeline_pre_result.json'
+    p.parent.mkdir(parents=True);p.write_text('{}')
+    out=f.settle(tmp_path)
+    assert out['eligible_settled_races']==0
+    assert out['race_failures']==[{'race_id':'broken','status':'HOLD','reason':'BVI_FORWARD_FROZEN_HASH_INVALID'}]
