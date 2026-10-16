@@ -33,6 +33,11 @@ def failure_class_for(code: object) -> str:
 
 
 def resume_hint_for(code: object) -> str:
+    value = str(code or '')
+    if (value.startswith(('RUNNER_UNIVERSE_', 'CURRENT_AUTHORITY_', 'AUTHORITY_',
+                          'RUNTIME_FINGERPRINT_', 'CHECKPOINT_'))
+            or any(part in value for part in ('SIGNATURE', 'RECEIPT_VERIFY', 'HASH_MISMATCH'))):
+        return 'HOLD_RECONCILE_IDENTITY_AUTHORITY_SIGNATURE_NO_AUTOMATIC_RETRY'
     klass = failure_class_for(code)
     if klass == "PREDICTION_OWNER_INPUT_REQUIRED":
         return "AWAIT_AUTHORIZED_FROZEN_STATIC_INPUT_NO_AUTOMATIC_OWNER_PROMOTION"
