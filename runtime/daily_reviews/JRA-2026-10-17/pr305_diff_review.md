@@ -78,3 +78,18 @@ Live Acceptanceは(1)承認対象HEADとWorkflow SHA、(2)正式Intent一回受�
 既存Shadow登録本文と14定義SHAは不変。新gateはCorrectness検証であり、Shadow列選定・数値Policy変更ではない。Owner承認・第三者Review・MergeとLive Acceptanceは引き続き必要。
 
 後続入力結合の検証を含め、ローカル70 tests /25 subtests PASS。原23署名入力の照合、内容改変・未知版・別Race拒否、Workflowでの入力不一致停止と証拠保存、canonical field-order不変を確認した。
+
+
+## Final independent closure (2026-10-17)
+
+A distinct technical reviewer audited the107 actual PR paths and562 archived evidence members at dc6333f, then independently reproduced and re-reviewed two repairs. Original23 cryptographic Input/Output bindings PASS. CHECKPOINT_TOCTOU is resolved by the durable caller wrapper, leaving frozen serializer bytes unchanged. DECLARED_SCHEMA_BYPASS is resolved by revision/schema checks before both branches. New helper/tests are covered by PR and main-push CI paths. Local exact utility CI command:78 tests /25 subtests PASS;24 independent process schedules plus abrupt process death recovery PASS.
+
+Reports: independent_review.md (initial findings; OPEN states are historical), independent_repair_review.md (superseding closure), evidence/independent_review.json and independent_repair_review.json. Independent agent review is not GitHub human/Owner approval. Original probe scripts are preserved under evidence/jra_day_review_20261017/independent_review_probes.
+
+The109 two-dot comparison contains two main-only live state files absent from the actual107-path PR diff. Independent three-way merge preserved their latest main blobs; no state rollback repair was made. New files add to107 and will be listed in final commit inventory. Production numerical policies, signed originals and14 preregistered definition fingerprints are unchanged.
+
+Remaining readiness,23 Delivery evidence records,36 existing Learning timing records, Rollback constraints and19-stage unknown-future acceptance checklist are consolidated in execution_assurance_closure.json#/final_independent_closure. Railway diagnosis/build/boot/health and static launcher analysis are in runtime_startup_provenance.json. Saved command unconditionally exits9; current uvicorn readiness does not prove next startup. App Git SHA/image digest/PID1 source linkage remain UNVERIFIED. **NOT MERGE-READY.**
+
+Delivery receive ACK0 verified; next Prediction Learning consumption0 verified. No new notification, Production binding, Merge, Deploy or Activation was performed. Frozen recommendation19 positive FINALs33,600yen→9,100yen remains distinct from actual purchase and from36-race execution coverage.
+
+Required13 outputs are consolidated, not duplicated: independent reports/full diff inventory; original23 KRS verification; Railway/startup provenance evidence; Delivery/Learning rows; exact repair diff and CI; Rollback, Merge Readiness, Live Acceptance and blocker ledger in the same closure object.

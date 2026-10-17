@@ -65,3 +65,16 @@ def test_wrong_inner_race_is_rejected_before_transport(originals):
     payload['input_data']['race']['race_id'] = 'OTHER'
     with pytest.raises(KRSInputBindingError, match='RACE_ID_MISMATCH'):
         assert_input_race_identity(payload)
+
+
+@pytest.mark.parametrize('field', ['runtime_revision', 'schema'])
+def test_declared_hash_contract_cannot_bypass_runtime_schema_gate(originals, field):
+    payload, response = copy.deepcopy(originals[0])
+    receipt = response['run_receipt']['receipt']
+    receipt['input_hash_contract'] = 'KM-KRS-INPUT-DATA-SORTED-UTF8-v1'
+    receipt['input_sha256'] = hashlib.sha256(json.dumps(payload['input_data'], ensure_ascii=False,
+        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    check_input_binding(payload, response)
+    receipt[field] = 'UNKNOWN'
+    with pytest.raises(KRSInputBindingError, match='RUNTIME_UNSUPPORTED'):
+        check_input_binding(payload, response)

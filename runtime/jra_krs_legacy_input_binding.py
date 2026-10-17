@@ -33,6 +33,8 @@ def check_input_binding(payload, response):
     receipt = (response.get('run_receipt') or {}).get('receipt') or {}
     if receipt.get('race_id') != payload['race_id']:
         raise KRSInputBindingError('KRS_INPUT_RECEIPT_RACE_ID_MISMATCH')
+    if receipt.get('runtime_revision') != REVISION or receipt.get('schema') != SCHEMA:
+        raise KRSInputBindingError('KRS_INPUT_LEGACY_RUNTIME_UNSUPPORTED')
     declared = receipt.get('input_hash_contract')
     value = deepcopy(payload['input_data'])
     if declared is not None:
@@ -40,8 +42,6 @@ def check_input_binding(payload, response):
             raise KRSInputBindingError('KRS_INPUT_DECLARED_CONTRACT_UNSUPPORTED')
         contract = declared
     else:
-        if receipt.get('runtime_revision') != REVISION or receipt.get('schema') != SCHEMA:
-            raise KRSInputBindingError('KRS_INPUT_LEGACY_RUNTIME_UNSUPPORTED')
         race = value.get('race')
         race['prediction_id'] = payload['race_id']
         contract = CONTRACT

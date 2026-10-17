@@ -1,0 +1,244 @@
+{
+  "observed_at": "2026-10-17T11:12:00.635Z",
+  "deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+  "status": "SUCCESS",
+  "context": {
+    "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+    "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+    "repo": null,
+    "branch": null,
+    "commitHash": null,
+    "commitMessage": null,
+    "prNumber": null,
+    "prTitle": null,
+    "prUrl": null,
+    "builder": "RAILPACK",
+    "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+    "healthcheckPath": "/health",
+    "sourceImage": "python:3.13-slim",
+    "dockerfilePath": null,
+    "rootDirectory": null,
+    "failedReason": null,
+    "failureStage": null,
+    "failureError": null
+  },
+  "build_logs": [
+    {
+      "timestamp": "2026-10-14T06:16:02.427397140Z",
+      "severity": "info",
+      "message": "",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427407787Z",
+      "severity": "info",
+      "message": "\u001b[35m====================\nStarting Healthcheck\n====================\n\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427409222Z",
+      "severity": "info",
+      "message": "\u001b[37mPath: /health\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427410635Z",
+      "severity": "info",
+      "message": "\u001b[37mRetry window: 5m0s\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427411905Z",
+      "severity": "info",
+      "message": "",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.530983454Z",
+      "severity": "info",
+      "message": "\u001b[93mAttempt #1 failed with service unavailable. Continuing to retry for 4m49s\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:13.683044507Z",
+      "severity": "info",
+      "message": "\u001b[92m[1/1] Healthcheck succeeded!\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    }
+  ],
+  "boot_logs": [
+    {
+      "timestamp": "2026-10-14T06:16:01.461056249Z",
+      "severity": "info",
+      "message": "Starting Container",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.205620436Z",
+      "severity": "info",
+      "message": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104694136Z",
+      "severity": "error",
+      "message": "INFO:     Application startup complete.",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104698376Z",
+      "severity": "error",
+      "message": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104703776Z",
+      "severity": "error",
+      "message": "INFO:     Started server process [1]",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104758455Z",
+      "severity": "error",
+      "message": "INFO:     Waiting for application startup.",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104772855Z",
+      "severity": "error",
+      "message": "StreamableHTTP session manager started",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:14.085634700Z",
+      "severity": "info",
+      "message": "INFO:     100.64.0.1:35889 - \"GET /health HTTP/1.1\" 200 OK",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    }
+  ],
+  "limitations": {
+    "image_digest": "NOT_EXPOSED",
+    "git_sha": "NOT_EXPOSED",
+    "actual_process_argv": "NOT_EXPOSED; uvicorn host/port observed only",
+    "live_saved_config_is_deployment_snapshot": "UNVERIFIED; context source does not establish effective PID1 command",
+    "next_restart_behavior": "UNVERIFIED",
+    "next_deployment_safety": "BLOCKED",
+    "mutations": 0
+  },
+  "stored_command_static_analysis": {
+    "shell": "sh -c / python -c",
+    "syntax": "PARSE PASS",
+    "unconditional_terminal_statement": "Raise(exc=Call(func=Name(id='SystemExit', ctx=Load()), args=[Constant(value=9)], keywords=[]))",
+    "network_process_started": false,
+    "credentials_read": false,
+    "safe_uvicorn_launcher": false
+  },
+  "current_health": {
+    "status": "READY",
+    "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+    "mcp_bridge": "ACTIVE",
+    "mcp_endpoint": "https://quorumprobe-production.up.railway.app/mcp",
+    "engine": {
+      "version": "KRS-Engine v1.1.0",
+      "sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "expected_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "ready": true
+    },
+    "parameter_map": {
+      "version": "0.1-provisional",
+      "status": "PROVISIONAL_UNCALIBRATED",
+      "sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "expected_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "ready": true
+    },
+    "receipt_signer": {
+      "key_id": "KM-RUNTIME-ED25519-20260917",
+      "algorithm": "Ed25519",
+      "ready": true,
+      "public_key_b64": "UhjfD9zFt+e77/9JUB19R6/XFC3SG4pM5twHBqfUSzI="
+    },
+    "capabilities": [
+      "PRE_KRS",
+      "KRS_EXECUTE",
+      "FINAL",
+      "RESULT",
+      "VERIFY_RECEIPT"
+    ],
+    "timestamp": "2026-10-17T11:12:07.958118Z"
+  }
+}
