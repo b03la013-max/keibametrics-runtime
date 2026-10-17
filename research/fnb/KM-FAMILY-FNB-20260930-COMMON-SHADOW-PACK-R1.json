@@ -1,0 +1,62 @@
+{
+  "profile_id": "KM-FAMILY-FNB-DAY-REGRESSION-COMMON-SHADOW-20260930-R1",
+  "created_at": "2026-09-30T21:40:00+09:00",
+  "status": "SHADOW / NON-PRODUCTION / FNB-SEEDED / COMMON-OWNED / NO-AUTO-PROMOTION / NO-PRODUCTION-EFFECT",
+  "source_basis": {
+    "venue": "FNB",
+    "date": "2026-09-30",
+    "classification": "KNOWN-RESULT DAY REGRESSION / NOT OOS",
+    "purpose": "Preregister common-owner hypotheses for future result-blind testing without importing them into Venue Canon."
+  },
+  "production_changes": {
+    "ticket_conversion": false,
+    "mec_r3": false,
+    "capital_policy": false,
+    "krs_authority": false,
+    "venue_canon": false
+  },
+  "hypotheses": [
+    {
+      "id": "KM-COMMON-EXACT-CONTINUITY-AUDIT-R1",
+      "owner": "COMMON_TICKET_CONVERSION",
+      "status": "PREREGISTERED AUDIT SHADOW / NO AUTO PURCHASE",
+      "observation_races": [
+        "FNB-R04",
+        "FNB-R05",
+        "FNB-R07",
+        "FNB-R08",
+        "FNB-R09",
+        "FNB-R11",
+        "FNB-R12"
+      ],
+      "activation": [
+        "ORDERED_PAIR_STATUS IN {PURCHASED,PROTECT,MATERIAL}",
+        "THIRD_ROLE IN {P3_CORE,P3_PROTECTED,P3_ACTIVE}",
+        "NO_EXPLICIT_PAIR_SPECIFIC_THIRD_REJECTION"
+      ],
+      "action": "DO NOT SILENTLY TERMINATE AS SEMANTIC_ONLY; REQUIRE PRE-RACE EXACT MATERIALITY RE-AUDIT WITH EXPLICIT TERMINAL REASON.",
+      "automatic_purchase": false,
+      "krs_signal": "KRS high exact support may raise audit priority but has no independent purchase authority.",
+      "current_day_oos_eligible": false
+    },
+    {
+      "id": "KM-COMMON-CONCENTRATION-AWARE-CAPITAL-WIDTH-HYPOTHESIS-R1",
+      "owner": "COMMON_MEC_CAPITAL",
+      "status": "SHADOW-HOLD / HYPOTHESIS NOT YET DETERMINISTIC CAPITAL ARM",
+      "observation": "Semantic coverage was sometimes valuable (e.g. tail rescue) and sometimes highly dilutive; therefore blanket tail deletion is rejected.",
+      "principle": "PRESERVE SEMANTIC UNIVERSE; TEST CAPITAL WIDTH SEPARATELY.",
+      "candidate_signals": [
+        "STATIC_HEAD_CONCENTRATION",
+        "PAIR_CONCENTRATION",
+        "STATIC_KRS_AGREEMENT",
+        "MARKET_CONCENTRATION",
+        "ROBUSTNESS",
+        "RACE_UNCERTAINTY"
+      ],
+      "automatic_capital_change": false,
+      "oos_eligible": false,
+      "hold_reason": "A deterministic result-blind activation function/threshold has not yet been justified; do not invent one from the same-day results.",
+      "next_step": "Define a frozen deterministic comparison arm before counting any future race as OOS."
+    }
+  ]
+}
