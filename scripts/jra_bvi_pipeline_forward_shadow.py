@@ -4,7 +4,7 @@ Never acquires extra race information or emits a Production FINAL. Late/partial
 runs fail closed and cannot become eligible samples. Result evaluation uses the
 existing official Production result lane; no optimizing on observed outcomes.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import argparse, copy, hashlib, json, subprocess, sys, urllib.request
 ROOT=Path(__file__).resolve().parents[1]
@@ -26,6 +26,44 @@ def require_open_window(req, now=None):
     if req.get('family_id')!='JRA' or req.get('candidate_only') is True:
         raise ValueError('BVI_FORWARD_CURRENT_PRODUCTION_REQUEST_REQUIRED')
     return now
+
+
+
+def production_priority_window(req, *, root=ROOT, now=None, signed_final_ids=()):
+    """Oct18 operational admission only; no prediction or OOS rule changes."""
+    now=now or datetime.now(timezone.utc)
+    if req.get('race_date')!='2026-10-18':
+        return None
+    plan=json.loads((root/'runtime/jra_race_day_plan/2026-10-18.json').read_text())
+    ids=plan['cohort']['race_ids']
+    if len(ids)!=36 or len(set(ids))!=36 or req['race_id'] not in ids:
+        raise ValueError('BVI_SHADOW_PRIORITY_COHORT_UNVERIFIED')
+    stop=min(time(req['prediction_cutoff'])-timedelta(seconds=120),now+timedelta(seconds=600))
+    pending=[]
+    schedule_path=root/'runtime/jra_race_day_plan/2026-10-18.schedule.json'
+    schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
+    for rid in ids:
+        if rid==req['race_id'] or rid in signed_final_ids:
+            continue
+        registration=json.loads((root/'runtime/jra_race_registrations/2026-10-18'/f'{rid}.json').read_text())
+        from jra_race_day_registration import verify_registration
+        post=time(registration['intake_intent']['scheduled_post_at'])
+        verify_registration(registration,plan,race_id=rid,official_post=post)
+        # Prefer the existing current-day schedule when the official post changes.
+        if rid in schedule:post=time(schedule[rid]['post'])
+        cutoff=post-timedelta(minutes=5)
+        opening=post-timedelta(minutes=55)
+        if now>=cutoff:
+            continue
+        if opening<=now:
+            pending.append(rid)
+        else:
+            stop=min(stop,opening-timedelta(seconds=120))
+    if pending:
+        raise ValueError('BVI_SHADOW_DEFER_PRODUCTION_PENDING:'+','.join(pending))
+    if (stop-now).total_seconds()<180:
+        raise ValueError('BVI_SHADOW_DEFER_INSUFFICIENT_SAFE_WINDOW')
+    return stop
 
 
 def call(path,payload,timeout):
@@ -123,6 +161,24 @@ def arm_consumption(comparison, req, source, mapping, authority, *, execution_cl
 
 def freeze(request, source_path, output):
     req=json.loads(request.read_text());now=require_open_window(req)
+    shadow_stop=None
+    if req.get('race_date')=='2026-10-18':
+        # Read-only trust check before any research KRS use. Production is untouched.
+        from jra_delivery import verify_signed_final
+        _,priority_authority=resolve_current_authority(ROOT,now=now)
+        contracts=json.loads((ROOT/priority_authority['common_family_components']['family_runtime_contracts_profile']).read_text())
+        contract=contracts['families']['JRA']
+        with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:
+            priority_health=json.load(response)
+        completed_ids=[]
+        for path in (ROOT/'runtime/final_artifacts').glob('KM-JRA-*-20261018-R*.json'):
+            try:
+                final=json.loads(path.read_text());verify_signed_final(final,priority_health,contract)
+                if time(final['final_receipt']['receipt']['timestamp'])<=now:
+                    completed_ids.append(final['race_id'])
+            except Exception:
+                continue  # invalid/unknown is pending, never permission to run research
+        shadow_stop=production_priority_window(req,now=now,signed_final_ids=completed_ids)
     checked=_verified_source(source_path)
     if checked is None or not _attested(source_path,not_after=time(req['prediction_cutoff'])):
         raise ValueError('BVI_FORWARD_SOURCE_OIDC_OR_SIGNATURE_INVALID')
@@ -162,7 +218,16 @@ def freeze(request, source_path, output):
         columns=('runner_id','column','status') if field=='role_registry' else ('head','second','status') if field=='pair_dispositions' else ('head','second','third','status')
         def semantics(rows):return sorted(tuple(str(r[k]) for k in columns) for r in rows)
         if semantics(actual[field])!=semantics(req[field]):raise ValueError('BVI_FORWARD_A_CURRENT_POLICY_REPLAY_MISMATCH:'+field)
-    execute_diagnostic_downstream(comparison,req,None,call)
+    def priority_call(path,payload,timeout):
+        observed=require_open_window(req)
+        if shadow_stop is not None:
+            remaining=(shadow_stop-observed).total_seconds()
+            # Keep the existing maximum single KRS request (420s) inside the
+            # reserved window; do not launch work that would rely on cancellation.
+            if remaining<timeout+30:
+                raise ValueError('BVI_SHADOW_DEFER_REQUEST_EXCEEDS_SAFE_WINDOW')
+        return call(path,payload,timeout)
+    execute_diagnostic_downstream(comparison,req,None,priority_call)
     final_path=ROOT/'runtime/final_artifacts'/f"{req['race_id']}.json"
     final=json.loads(final_path.read_text())
     contracts=json.loads((ROOT/authority['common_family_components']['family_runtime_contracts_profile']).read_text())
@@ -174,12 +239,15 @@ def freeze(request, source_path, output):
     production_reference=bind_production_reference(comparison,req,final)
     consumption=arm_consumption(comparison,req,source,mapping,authority)
     completed=require_open_window(req)
+    if shadow_stop is not None and completed>=shadow_stop:
+        raise ValueError('BVI_SHADOW_SAFE_WINDOW_EXPIRED')
     for arm in comparison['arms'].values():
         executed=time(arm['krs_signed_run_receipt']['receipt']['timestamp'])
         if not now<=executed<=completed:
             raise ValueError('BVI_FORWARD_KRS_TIME_OUTSIDE_PRE_CUTOFF_FREEZE')
     from jra_bvi_oos_metrics import preregister
-    record={'comparison_protocol':preregister(comparison),
+    record={'operational_shadow_stop_at':shadow_stop.isoformat() if shadow_stop else None,
+        'comparison_protocol':preregister(comparison),
         'production_baseline':production_reference,'arm_bvi_consumption':consumption,
         'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),
         'computation_started_at':now.isoformat(),'prediction_cutoff':req['prediction_cutoff'],

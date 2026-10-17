@@ -173,3 +173,48 @@ def test_metadata_only_enrichment_is_not_a_changed_bvi_value():
         algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],enhanced_features=enriched)
     assert out['enhanced_bvi_distinct'] is False
     assert out['enhanced_ranking_distinct'] is False
+
+
+def _actual_oct18_priority_fixture(tmp_path):
+    import shutil
+    plan_path=Path('runtime/jra_race_day_plan/2026-10-18.json')
+    (tmp_path/plan_path.parent).mkdir(parents=True)
+    shutil.copyfile(ROOT/plan_path,tmp_path/plan_path)
+    shutil.copytree(ROOT/'runtime/jra_race_registrations/2026-10-18',tmp_path/'runtime/jra_race_registrations/2026-10-18')
+    schedule=Path('runtime/jra_race_day_plan/2026-10-18.schedule.json')
+    shutil.copyfile(ROOT/schedule,tmp_path/schedule)
+    plan=json.loads((tmp_path/plan_path).read_text())
+    req=json.loads((tmp_path/'runtime/jra_race_registrations/2026-10-18/KM-JRA-NGT-20261018-R01.json').read_text())['intake_intent']
+    return req,plan['cohort']['race_ids']
+
+
+def test_oct18_shadow_defers_to_other_due_production_from_real_cohort(tmp_path):
+    req,ids=_actual_oct18_priority_fixture(tmp_path)
+    with pytest.raises(ValueError,match='DEFER_PRODUCTION_PENDING:.*TKY'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T09:00:00+09:00'))
+
+
+def test_oct18_shadow_stops_before_next_dispatch_and_requires_useful_slack(tmp_path):
+    req,ids=_actual_oct18_priority_fixture(tmp_path)
+    stop=f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T08:40:00+09:00'))
+    assert stop==datetime.fromisoformat('2026-10-18T08:48:00+09:00')
+    with pytest.raises(ValueError,match='DEFER_INSUFFICIENT_SAFE_WINDOW'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T08:46:00+09:00'))
+
+
+def test_oct18_verified_completed_peers_allow_bounded_shadow_not_late_freeze(tmp_path):
+    req,ids=_actual_oct18_priority_fixture(tmp_path)
+    now=datetime.fromisoformat('2026-10-18T09:10:00+09:00')
+    assert f.production_priority_window(req,root=tmp_path,now=now,signed_final_ids=ids)==datetime.fromisoformat('2026-10-18T09:20:00+09:00')
+    with pytest.raises(ValueError,match='DEFER_INSUFFICIENT_SAFE_WINDOW'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T09:32:00+09:00'),signed_final_ids=ids)
+
+
+def test_oct18_corrupt_registration_cannot_admit_shadow(tmp_path):
+    req,ids=_actual_oct18_priority_fixture(tmp_path)
+    other=next(rid for rid in ids if rid!=req['race_id'])
+    path=tmp_path/'runtime/jra_race_registrations/2026-10-18'/f'{other}.json'
+    doc=json.loads(path.read_text());doc['planned_required_cells']=1;path.write_text(json.dumps(doc))
+    with pytest.raises(ValueError,match='JRA_REGISTRATION_HASH_MISMATCH'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T08:00:00+09:00'))
+    assert f.production_priority_window({'race_date':'2026-10-17'},root=tmp_path) is None
