@@ -18,3 +18,5 @@
 DATA COMPLETE / PREDICTION PARTIAL / CAPITAL COMPLETE / LEARNING PARTIAL。Analysis-only。Production数値Policy・署名済みArtifact・元Learningの書換えなし。
 
 詳細なRace別JSON、全馬20指数CSV、公式HTML、Actions原KRS/RESULT出力は `evidence/jra_day_review_20261017/payload.tar.gz` に元bytesを保存。`payload_manifest.json` のSHA256と `python scripts/unpack_jra_day_review.py` で検証・展開する。展開後、上記2コマンドで集計を再現する。元のProduction署名ファイルは置換しない。
+
+券種別Candidate/Paper-reference/各MEC Shadow、勝ち馬20指数順位、Head別資金集中、Lane別KRS救済は `supplemental_metrics.json`。再現コマンド `python scripts/jra_day_review_supplement.py`。
