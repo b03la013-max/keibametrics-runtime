@@ -100,7 +100,34 @@ def test_actual_kyo12_dead_heat_never_invents_unique_second_third():
     assert pred['P2'] is None and pred['P3'] is None and pred['ordered_exact'] is None
     assert settle_tickets(final['final_ticket']['tickets'],obj)['investment']==1600
 
+def test_kyo12_payable_order_sensitivity_preserves_canonical_hold_and_inputs():
+    from jra_dead_heat_review import review
+    obj=official('082026040612','KYO',12)
+    final=json.loads((ROOT/'runtime/final_artifacts/KM-JRA-KYO-20261017-R12.json').read_text())
+    before=copy.deepcopy((final,obj))
+    result=review(final,obj)
+    assert (final,obj)==before
+    assert [s['payable_order'] for s in result['scenarios']]==[[5,7,10],[5,10,7]]
+    assert result['capture_bounds']['W']=={'any_payable_order':False,'all_payable_orders':False}
+    assert result['capture_bounds']['P2']=={'any_payable_order':True,'all_payable_orders':True}
+    assert result['capture_bounds']['ordered_exact']['any_payable_order'] is False
+    assert result['settlement']['return']==0
+    assert result['canonical_result_status']=='PENDING EXISTING MANUAL ADJUDICATION'
+    assert result['cohort_effect'].startswith('NONE')
+
 def test_preregistered_common_definition_bytes_are_preserved():
     import hashlib
     protocol=json.loads((ROOT/'research/utility/forward_protocol.json').read_text())
     assert {p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in protocol['definition_files']}==protocol['definition_sha256']
+
+def test_saved_oidc_verification_is_source_bundle_and_output_bound():
+    from jra_full_day_postrace_review import oidc_evidence_files
+    report=json.loads((EVIDENCE/'source_oidc/summary.json').read_text())
+    passed=[r for r in report['rows'] if r['status']=='PASS']
+    assert len(passed)==report['passed']
+    assert len(report['rows'])==34
+    for record in passed:
+        assert len(oidc_evidence_files(record))==3
+    tampered={**passed[0],'subject_sha256':'0'*64}
+    with pytest.raises(ValueError,match='OIDC_EVIDENCE_HASH_MISMATCH'):
+        oidc_evidence_files(tampered)

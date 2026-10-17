@@ -9,6 +9,8 @@ def pack():
         'next_race_learning_oos.md','summary.json','scorecard.csv','completion.json','improvement_backlog.json',
         'forward_oos_plan.json','next_race_learning_index.json','krs_incremental_utility.json','bvi_consumption_review.json']]
     keep += [E/x for x in ['validation.json','current_authority.json','runtime_health.json','workflow_result_publisher_39014862272.json']]
+    keep += [D/'supplemental_metrics.json',D/'dead_heat_review.json',E/'ci_reconciliation.json',
+             E/'runtime_followup.json',E/'source_oidc/summary.json']
     keep += list(Path('runtime/learning_states/jra_day_review_20261017').glob('*.json'))
     files=[]
     for folder in [E,D,Path('runtime/pfs_grand_review')]:
@@ -31,7 +33,8 @@ def pack():
         'materialize':'python scripts/unpack_jra_day_review.py','readable_entrypoints':[str(x) for x in keep]}
     (ROOT/E/'payload_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
     paths=keep+[E/'payload.tar.gz',E/'payload_manifest.json',Path('runtime/krs_prediction_utility.py'),
-        *[Path('scripts')/x for x in ['collect_jra_day_review.py','jra_full_day_postrace_review.py','render_jra_day_review.py','pack_jra_day_review.py','unpack_jra_day_review.py']],
+        *[Path('scripts')/x for x in ['collect_jra_day_review.py','jra_full_day_postrace_review.py','render_jra_day_review.py','pack_jra_day_review.py','unpack_jra_day_review.py',
+                                   'jra_dead_heat_review.py','verify_jra_day_source_oidc.py']],
         Path('tests/test_jra_day_review.py')]
     Path('/tmp/km-review-stage-paths.json').write_text(json.dumps([str(x) for x in paths]))
     print(json.dumps({'archive_bytes':bundle.stat().st_size,'members':len(files),'tracked_paths':len(paths)}))

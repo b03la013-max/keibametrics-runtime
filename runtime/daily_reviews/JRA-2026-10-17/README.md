@@ -22,3 +22,7 @@ DATA COMPLETE / PREDICTION PARTIAL / CAPITAL COMPLETE / LEARNING PARTIAL。Analy
 券種別Candidate/Paper-reference/各MEC Shadow、勝ち馬20指数順位、Head別資金集中、Lane別KRS救済は `supplemental_metrics.json`。再現コマンド `python scripts/jra_day_review_supplement.py`。
 
 KRS補正はJRA診断専用 `runtime/jra_krs_utility_measurement.py` を監査から明示使用する。事前登録がhash固定するCommon `krs_prediction_utility.py` とforward_protocolは元bytesを維持する。Production呼出への接続と補正後OOS cohortはOwner承認・事前登録待ちで、今回自動Activationしない。
+
+追加検証：SOURCE OIDCを公式GitHub CLIで独立照合し、34件中33件がPASS。Repository、SOURCE Workflow、source SHA、main ref、GitHub-hosted Runnerを制約し、証明対象SOURCE bytesのSHA256も照合した。東京11Rの1件はGitHub公開APIの取得制限（403）で未取得であり、証明不正とは判定しない。BundleとVerifier JSONは監査payloadに保存、一覧は `evidence/jra_day_review_20261017/source_oidc/summary.json`。`python scripts/verify_jra_day_source_oidc.py --gh /path/to/gh` で既存Bundleを再利用して再検証できる。Predicate内のRun IDはWorkflowが記載した主張として扱い、証明書のWorkflow/Source identityと区別する。
+
+京都12Rの追加感度分析は `dead_heat_review.json`（再現: `python scripts/jra_dead_heat_review.py`）。公式払戻対象の5→7→10と5→10→7を別々に評価。両順序ともW=False、P2/P3=True、Ordered Pair/Exact=False、推薦券面払戻0円。KRSの役割救済は各順序1件だが、異なる役割への割当を合算しない。元のP2/P3/Order評価母数と正式RESULT同着保留は維持。Productionへの変更・追加署名・Receipt再生成はない。

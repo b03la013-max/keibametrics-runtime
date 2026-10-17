@@ -171,6 +171,15 @@ def metric(values):
     known=[x for x in values if isinstance(x,bool)]
     return {'numerator':sum(known),'denominator':len(known),'rate':sum(known)/len(known) if known else None}
 
+def oidc_evidence_files(record):
+    """Bind saved independent verifier output to the exact SOURCE and Bundle."""
+    checks={record['source_path']:record['subject_sha256'],
+            record['bundle_path']:record['bundle_sha256'],
+            record['verification_path']:record['verification_sha256']}
+    if any(hashlib.sha256((ROOT/p).read_bytes()).hexdigest()!=digest for p,digest in checks.items()):
+        raise ValueError('INDEPENDENT_OIDC_EVIDENCE_HASH_MISMATCH')
+    return checks
+
 def prediction(final,official,market_observation=None):
     actual=[str(x) for x in official['top3']];w,p2,p3=actual
     ranking=[str(x) for x in final['static_prediction']['ranking']]
@@ -217,6 +226,8 @@ def analyze(day):
     collection=read(evidence/'official/collection.json',{})
     health=read(evidence/'runtime_health.json',{})
     current=read(evidence/'current_authority.json',{})
+    oidc_summary=read(evidence/'source_oidc/summary.json',{})
+    oidc_rows={x['race_id']:x for x in oidc_summary.get('rows',[])}
     workflow_runs=[]
     for path in [evidence/'github_2.json',*sorted(evidence.glob('workflow_runs_page*.json'))]:workflow_runs+=read(path,{}).get('workflow_runs',[])
     runmap={str(x['id']):x for x in workflow_runs}
@@ -301,6 +312,13 @@ def analyze(day):
             except Exception as exc:v['source']={'valid':False,'error':str(exc)}
             att=paths['source'].parent/'source_attestation.json';ref(att)
             v['source_oidc']={'saved_assertion':read(att,{}),'independent_sigstore_verification':'NOT VERIFIED: bundle not persisted'}
+            independently_verified=oidc_rows.get(rid+'-LIVE-R1',{})
+            if independently_verified.get('status')=='PASS':
+                record=independently_verified
+                checks=oidc_evidence_files(record)
+                for p in checks:ref(ROOT/p)
+                v['source_oidc'].update(independent_sigstore_verification='PASS',
+                    verification_record=record,verifier=oidc_summary['verifier'],policy=oidc_summary['policy'])
             v['source_request_binding']={'snapshot_sha_matches':req.get('source_snapshot_sha256')==(source.get('artifact') or {}).get('source_snapshot_sha256') if req.get('source_snapshot_sha256') else None,
                 'checkpoint_receipt_matches':(req.get('source_checkpoint_manifest') or gap.get('source_checkpoint_manifest') or {}).get('receipt_sha256')==source.get('receipt_sha256')}
             if o:
@@ -527,7 +545,7 @@ def analyze(day):
                 if isinstance(p,dict) and p not in o['payouts'].get(bt,[]):diffs.append({'field':bt,'old':p,'official':o['payouts'].get(bt)})
             v['official_reconciliation']={'status':'MATCH' if not diffs else 'MISMATCH','differences':diffs}
         missing.append({'race_id':rid,'missing_artifacts':[k for k,v0 in refs.items() if v0 is None],
-                        'unverified':['ACTUAL_PURCHASE','USER_DELIVERY','INDEPENDENT_SOURCE_OIDC']+(['SIGNED_RESULT_ENVELOPE'] if v['result_receipt']['status']!='SIGNATURE_VERIFIED' else [])})
+                        'unverified':['ACTUAL_PURCHASE','USER_DELIVERY']+(['INDEPENDENT_SOURCE_OIDC'] if source and v.get('source_oidc',{}).get('independent_sigstore_verification')!='PASS' else [])+(['SIGNED_RESULT_ENVELOPE'] if v['result_receipt']['status']!='SIGNATURE_VERIFIED' else [])})
         rows.append(row)
         write(out/'races'/f'{rid}.json',row)
     settlement_rows=[{'race_id':r['race_id'],'post':r['post'],'venue':r['venue'],**{k:r['settlement'][k] for k in ['investment','return','profit_loss','pfs','hit','hit_but_loss']}}
@@ -558,11 +576,12 @@ def analyze(day):
              'pair_infeasibility_count':sum(r['first_material_failure']['classification']=='AKI PAIR INFEASIBILITY' for r in rows),
              'first_material_failures':dict(Counter(r['first_material_failure']['classification'] for r in rows)),
              'source_signature_verified':sum(r['verification'].get('source',{}).get('valid',False) for r in rows),
+             'source_oidc_independently_verified':sum(r['verification'].get('source_oidc',{}).get('independent_sigstore_verification')=='PASS' for r in rows),
              'result_receipt_verified':sum(r['verification']['result_receipt']['status']=='SIGNATURE_VERIFIED' for r in rows),
              'learning_hash_verified':sum(r['verification']['learning']['hash_verified'] for r in rows),
              'actual_purchase_pfs':'NOT VERIFIED','causal_pfs_loss_attribution':'UNDETERMINED',
              'limitations':['Single dependent meeting-day, no prospective policy comparison.','Market baseline is the saved pre-cutoff SOURCE observation; closing popularity is a separate diagnostic.',
-                            'Raw RESULT envelopes recovered from Actions where available; independent SOURCE Sigstore bundle verification incomplete.',
+                            'Raw RESULT envelopes recovered from Actions where available; SOURCE Sigstore verification count reported separately.',
                             'No Actual Purchase evidence or user receipt ACK verified.'],
              'analysis_only':True,'production_change_authorized':False}
     write(out/'audit_ledger.json',{'summary':summary,'races':rows})
