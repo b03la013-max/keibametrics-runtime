@@ -37,6 +37,8 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
     bindings = (prediction_input or {}).get("learning_state_bindings", [])
     if not isinstance(bindings, list):
         raise ValueError("INVALID_LEARNING_BINDINGS")
+    if not isinstance(learning_states, list):
+        raise ValueError("STATES_MUST_BE_LIST")
     eligible, rejected, consumed = [], [], []
     seen = set()
     for state in learning_states:
@@ -53,6 +55,8 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
                 reason = "SAME_RACE_LEAKAGE"
             elif not str(state.get("race_id", "")).startswith("KM-JRA-"):
                 reason = "FAMILY_MISMATCH"
+            elif not state.get("sha256") or not isinstance(state.get("sha256"), str):
+                reason = "STATE_DIGEST_MISSING"
             elif not state.get("effective_time"):
                 reason = "EFFECTIVE_TIME_MISSING"
             else:
@@ -65,7 +69,7 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
             rejected.append({"state_id": sid, "reason": reason})
             continue
         eligible.append(sid)
-        # Explicit frozen input binding is required; mere file existence is not consumption.
+        # Explicit reference only: digest provenance and actual numerical use remain unverified.
         for binding in bindings:
             if not isinstance(binding, dict):
                 continue
@@ -79,6 +83,8 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
         "input_bound_state_ids": consumed,
         "status": "INPUT_BINDING_REFERENCE_OBSERVED_UNVERIFIED" if consumed else "NEXT_RACE_CONSUMPTION_UNVERIFIED",
         "prediction_effect": "NOT_ASSESSED",
+        "digest_integrity": "UNVERIFIED_EXTERNAL_STATE_PROVENANCE",
+        "input_freeze_integrity": "UNVERIFIED",
         "production_policy_changed": False,
     }
     result["sha256"] = _sha(result)
