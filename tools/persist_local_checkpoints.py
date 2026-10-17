@@ -1,4 +1,4 @@
-"""Rebase LOCAL race records strictly; rebuild disposable aggregate views on conflict.
+"""Rebase race records strictly; rebuild disposable aggregate views on conflict.
 
 Run after committing only the workflow's approved paths. Never select a side for
 conflicting receipts, per-race measurements, authority, or configuration.
@@ -20,6 +20,10 @@ SNAPSHOTS = {
     'runtime/local_mec_r5_oos_status.json',
     'runtime/aki_adaptive_oos_status.json',
     'runtime/common_exact_continuity_oos_status.json',
+    'runtime/krs_oos_status.json',
+    'runtime/source_candidate_oos_status.json',
+    'runtime/pfs_grand_review/current.json',
+    'runtime/family_prediction_utility/current.json',
 }
 
 
@@ -31,7 +35,23 @@ def git(*args, cwd):
 def rebuild(paths):
     sys.path.insert(0, str(ROOT / 'runtime'))
     for path in sorted(paths):
-        if path == 'runtime/local_candidate_forward_status.json':
+        if path == 'runtime/krs_oos_status.json':
+            from krs_oos_promotion_gate import evaluate_r30
+            obj = evaluate_r30([json.loads(p.read_text()) for p in
+                               sorted(Path('runtime/krs_oos_measurements').glob('*.json'))])
+        elif path == 'runtime/source_candidate_oos_status.json':
+            from jra_source_candidate_promotion_gate import evaluate
+            obj = evaluate([json.loads(p.read_text()) for p in
+                            sorted(Path('runtime/source_candidate_oos').glob('*/result_evaluation.json'))])
+        elif path == 'runtime/pfs_grand_review/current.json':
+            from pfs_grand_review import write_report
+            write_report(path)
+            continue
+        elif path == 'runtime/family_prediction_utility/current.json':
+            from family_prediction_utility import write_snapshot
+            write_snapshot(path)
+            continue
+        elif path == 'runtime/local_candidate_forward_status.json':
             from local_candidate_postresult import forward_status
             obj = forward_status()
         elif path == 'runtime/aki_adaptive_oos_status.json':
@@ -84,7 +104,7 @@ def persist(*, cwd, branch, refresh=rebuild, attempts=5):
                 if git('add', '--', *sorted(touched), cwd=cwd).returncode:
                     raise RuntimeError('PERSIST_VIEW_STAGE_FAILED')
                 if git('diff', '--cached', '--quiet', cwd=cwd).returncode:
-                    if git('commit', '-m', 'measurement: rebuild merged LOCAL views [skip ci]', cwd=cwd).returncode:
+                    if git('commit', '-m', 'measurement: rebuild merged measurement views [skip ci]', cwd=cwd).returncode:
                         raise RuntimeError('PERSIST_VIEW_COMMIT_FAILED')
             if git('push', 'origin', 'HEAD:' + branch, cwd=cwd).returncode == 0:
                 pushed = True
