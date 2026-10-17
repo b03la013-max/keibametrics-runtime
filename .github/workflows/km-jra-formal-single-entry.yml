@@ -78,12 +78,29 @@ jobs:
           git fetch -q origin main
           if git cat-file -e "origin/main:runtime/final_artifacts/$RID.json" 2>/dev/null; then
             git show "origin/main:runtime/final_artifacts/$RID.json" > runtime_out/jra_existing_signed_final.json
-            python -m pip install --disable-pip-version-check -q cryptography==45.0.7
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final runtime_out/jra_existing_signed_final.json \
-              --output-dir runtime_out/existing_final_readback \
-              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              > runtime_out/existing_final_readback.txt
-            { echo '## Existing Signed FINAL — canonical read-back'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            # Reuse immutable presentation timestamps/bytes on repeated requests.
+            mkdir -p runtime_out/existing_final_readback
+            for name in publication.json canonical_tree.txt presentation.json presentation_detail.json presentation.md; do
+              if git cat-file -e "origin/main:runtime/jra_delivery/$RID/$name" 2>/dev/null; then
+                git show "origin/main:runtime/jra_delivery/$RID/$name" > "runtime_out/existing_final_readback/$name"
+              fi
+            done
+            if [ -f runtime_out/existing_final_readback/presentation.json ]; then
+              # An already verified saved answer does not depend on live health.
+              # This checks immutable FINAL/hash lineage, not a new signer READY.
+              FINAL_SHA="$(PYTHONPATH=runtime python -c 'import json;from jra_production_postresult import verify_final;f=json.load(open("runtime_out/jra_existing_signed_final.json"));verify_final(f);print(f["sha256"])')"
+              PYTHONPATH=runtime python runtime/jra_presentation.py \
+                --directory runtime_out/existing_final_readback --expected-race-id "$RID" \
+                --expected-final-sha256 "$FINAL_SHA" > runtime_out/existing_final_readback.txt
+            else
+              python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+              PYTHONPATH=runtime python runtime/jra_delivery.py --final runtime_out/jra_existing_signed_final.json \
+                --output-dir runtime_out/existing_final_readback \
+                --expected-race-id "$RID" \
+                --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                > runtime_out/existing_final_readback.txt
+            fi
+            { echo '## Existing Signed FINAL — completed presentation'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             echo 'reused=true' >> "$GITHUB_OUTPUT"
           else
             echo 'reused=false' >> "$GITHUB_OUTPUT"
