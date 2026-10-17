@@ -98,3 +98,29 @@ def audit_delivery(*, final, publication=None, availability=None,
     result["evidence_scope"] = "SELF_HASHED_RECORDS_ONLY_NO_INDEPENDENT_TRUST_VERIFICATION"
     result["sha256"] = _sha(result)
     return result
+
+def main(argv=None):
+    """Inspect existing evidence only; never transmit, create, or re-sign it."""
+    import argparse
+    from pathlib import Path
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--final", type=Path, required=True)
+    parser.add_argument("--publication", type=Path)
+    parser.add_argument("--availability", type=Path)
+    parser.add_argument("--notification", type=Path)
+    parser.add_argument("--recipient-ack", type=Path)
+    args = parser.parse_args(argv)
+    def load(path):
+        return json.loads(path.read_text(encoding="utf-8")) if path else None
+    report = audit_delivery(
+        final=load(args.final),
+        publication=load(args.publication),
+        availability=load(args.availability),
+        notification=load(args.notification),
+        recipient_ack=load(args.recipient_ack))
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2))
+    return report
+
+
+if __name__ == "__main__":
+    main()
