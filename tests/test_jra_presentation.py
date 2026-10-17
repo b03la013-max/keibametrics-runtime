@@ -145,6 +145,10 @@ def test_delivery_cli_timeout_preserves_final_and_compact_readback(tmp_path, mon
     with pytest.raises(TimeoutError):
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert read_presentation(tmp_path, expected_race_id=f['race_id'], expected_final_sha256=f['sha256'])['text'] == first
+    monkeypatch.setattr(sys, 'argv', ['jra_presentation.py', '--directory', str(tmp_path),
+                                    '--expected-race-id', f['race_id'], '--expected-final-sha256', f['sha256']])
+    runpy.run_path(str(ROOT / 'runtime/jra_presentation.py'), run_name='__main__')
+    assert capsys.readouterr().out == first
     assert final_path.read_bytes() == original
 
 
@@ -155,3 +159,5 @@ def test_workflows_publish_presentation_and_reuse_before_source():
     assert 'presentation_availability.json' in formal
     assert single.index('presentation_detail.json') < single.index('- name: Build canonical JRA SOURCE request')
     assert '--expected-race-id "$RID"' in single
+    assert single.index('runtime/jra_presentation.py') < single.index('python runtime/jra_delivery.py')
+    assert 'verify_final(f);print(f["sha256"])' in single

@@ -10,7 +10,6 @@ import hashlib
 import json
 from pathlib import Path
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 import base64
 from jra_ticket_tree_renderer import render_ticket_tree, BET_LABEL
 
@@ -25,6 +24,7 @@ def text_hash(text):
 
 
 def _receipt(envelope, signer, race, phase):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     r = envelope['receipt']
     if (envelope.get('receipt_sha256') != digest(r) or r.get('race_id') != race
             or envelope.get('signer_key_id') != signer['key_id']
