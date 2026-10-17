@@ -26,12 +26,20 @@ class LearningBindingAuditTest(unittest.TestCase):
         report = audit_learning_consumption(**self.kw, learning_states=[self.state],
             prediction_input={"learning_state_bindings": [{"state_id": "s1", "state_sha256": "abc"}]})
         self.assertEqual(report["input_bound_state_ids"], ["s1"])
+        self.assertEqual(report["status"], "INPUT_BINDING_REFERENCE_OBSERVED_UNVERIFIED")
 
     def test_post_freeze_and_same_race_rejected(self):
         late = dict(self.state, effective_time="2026-10-18T10:31:00+09:00")
         same = dict(self.state, state_id="s2", race_id=self.race)
         report = audit_learning_consumption(**self.kw, learning_states=[late, same])
         self.assertEqual(len(report["rejected"]), 2)
+
+    def test_missing_digest_is_not_eligible(self):
+        state = dict(self.state)
+        state.pop("sha256")
+        report = audit_learning_consumption(**self.kw, learning_states=[state])
+        self.assertEqual(report["eligible_state_ids"], [])
+        self.assertEqual(report["rejected"][0]["reason"], "STATE_DIGEST_MISSING")
 
     def test_invalid_temporal_input_fails_closed(self):
         with self.assertRaises(ValueError):
