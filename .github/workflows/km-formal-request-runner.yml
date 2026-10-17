@@ -553,6 +553,10 @@ jobs:
           artifact_dir=os.path.join("krs-artifacts",race_id)
           kbody,khashes=checkpoint_krs_request(kpayload,artifact_dir)
           kcode,k=call(KRS,"/krs/execute",kpayload,timeout=360,body_bytes=kbody)
+          # Preserve the observed response even when contract/signature checks
+          # fail. A saved response is evidence, never execution authorization.
+          with open(os.path.join(artifact_dir,"krs_response.json"),"w",encoding="utf-8") as fh:
+              json.dump(k,fh,ensure_ascii=False,sort_keys=True,indent=2)
           assert kcode<300,(kcode,k)
           rr=assert_production_krs_receipt(
               kpayload,k,expected_engine_sha256=ENGINE_SHA
@@ -575,8 +579,6 @@ jobs:
           utility=build_krs_prediction_utility(req,k)
           artifact_dir=os.path.join("krs-artifacts",race_id)
           os.makedirs(artifact_dir,exist_ok=True)
-          with open(os.path.join(artifact_dir,"krs_response.json"),"w",encoding="utf-8") as fh:
-              json.dump(k,fh,ensure_ascii=False,sort_keys=True,indent=2)
           with open(os.path.join(artifact_dir,"krs_prediction_utility.json"),"w",encoding="utf-8") as fh:
               json.dump(utility,fh,ensure_ascii=False,sort_keys=True,indent=2)
           stage("KRS_PREDICTION_UTILITY_CAPTURED",
