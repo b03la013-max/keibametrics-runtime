@@ -21,7 +21,7 @@ jobs:
   restart-worker:
     if: >-
       ${{
-        github.event.workflow_run.name == 'KeibaMetrics JRA Race-Day Autopilot' &&
+        github.event.workflow_run.path == '.github/workflows/km-jra-race-day-autopilot.yml' &&
         github.event.workflow_run.head_branch == 'main' &&
         (github.event.workflow_run.conclusion == 'failure' ||
          github.event.workflow_run.conclusion == 'timed_out')
@@ -73,7 +73,7 @@ jobs:
 
   reconcile-resolver:
     if: >-
-      ${{ github.event.workflow_run.name == 'KeibaMetrics JRA Race Intent Resolver' &&
+      ${{ github.event.workflow_run.path == '.github/workflows/km-jra-race-intent-resolver.yml' &&
           github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
