@@ -80,7 +80,7 @@ def audit_delivery(*, final, publication=None, availability=None,
                 or notification.get("provider_status") != "ACCEPTED"):
             raise ValueError("NOTIFICATION_PROVIDER_EVIDENCE_INVALID")
         sent = _time(notification["provider_accepted_at"])
-        result["notification_sent"] = "PROVIDER_ACCEPTED_RECORD"
+        result["notification_sent"] = "PROVIDER_ACCEPTED_RECORD_NOT_DELIVERY_PROOF"
         result["notification_before_post"] = sent < post
     if recipient_ack is not None:
         if notification is None:
@@ -92,6 +92,8 @@ def audit_delivery(*, final, publication=None, availability=None,
                 or recipient_ack.get("ack_status") != "RECEIVED"):
             raise ValueError("RECIPIENT_ACK_BINDING_INVALID")
         acknowledged = _time(recipient_ack["received_at"])
+        if acknowledged < _time(notification["provider_accepted_at"]):
+            raise ValueError("RECIPIENT_ACK_BEFORE_PROVIDER_ACCEPTANCE")
         result["recipient_acknowledged"] = "RECIPIENT_ACK_RECORD"
         result["pre_post_delivery"] = ("ACK_BEFORE_POST_RECORDED" if acknowledged < post
                                        else "ACK_AFTER_POST_RECORDED")
