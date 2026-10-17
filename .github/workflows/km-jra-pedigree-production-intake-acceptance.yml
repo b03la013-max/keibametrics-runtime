@@ -58,9 +58,29 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -q cryptography pytest beautifulsoup4
+      - name: Protect live Production from historical external diagnostics during Oct17-18 freeze
+        id: external_window
+        run: |
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timedelta,timezone
+          from pathlib import Path
+          day=datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+          allowed=day not in ('2026-10-17','2026-10-18')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('allowed='+str(allowed).lower()+'\n')
+          if not allowed:
+              p=Path('runtime_out/jra_bvi_external_acceptance_deferred.json')
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_text(json.dumps({'status':'DEFERRED_PRODUCTION_FREEZE',
+                  'jst_date':day,'external_diagnostics_executed':False,
+                  'reason':'Preserve live Production KRS capacity; numerical regression still runs',
+                  'full_real_acceptance_pass_claimed':False},indent=2)+'\n')
+          PY
       - name: Numerical lineage and temporal regression
         run: python -m pytest -q tests/test_jra_bvi_proof_oos.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_consumption.py tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py
       - name: Verify real OIDC corpus, temporal gates and full BVI downstream diagnostics
+        if: steps.external_window.outputs.allowed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -74,12 +94,14 @@ jobs:
               runpy.run_path(path,run_name="__main__")
           PYCODE
       - name: Reverify signed forward results and retain separate policy cohorts
+        if: steps.external_window.outputs.allowed == 'true'
         run: python scripts/jra_bvi_pipeline_forward_shadow.py settle
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jra-real-signed-pedigree-corpus-intake
           path: |
+            runtime_out/jra_bvi_external_acceptance_deferred.json
             runtime_out/jra_pedigree_verified_acceptance.json
             runtime_out/jra_bvi_postcapture_real_closure.json
             runtime_out/jra_bvi_pipeline_real_acceptance.json

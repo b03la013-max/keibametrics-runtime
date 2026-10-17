@@ -1,0 +1,113 @@
+{
+  "observed_at": "2026-10-17T00:35:13.207Z",
+  "services": [
+    {
+      "service": {
+        "id": "0b81c7a5-e2b5-49dd-9559-894b61d649e6",
+        "name": "jra-validation-sandbox",
+        "state": "live"
+      },
+      "environment": {
+        "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "name": "production"
+      },
+      "latest_deployment": {
+        "id": "c05f3e85-18ae-4147-821e-97f224c2258c",
+        "status": "SUCCESS",
+        "createdAt": "2026-10-14T06:12:53.295Z",
+        "url": null
+      },
+      "deployments": [
+        {
+          "id": "c05f3e85-18ae-4147-821e-97f224c2258c",
+          "status": "SUCCESS",
+          "createdAt": "2026-10-14T06:12:53.295Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+          }
+        },
+        {
+          "id": "42b4cd92-c6a8-4a79-bfc5-f2a3b5fc86a1",
+          "status": "REMOVED",
+          "createdAt": "2026-09-21T05:59:28.147Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+          }
+        },
+        {
+          "id": "0db4a1a3-a211-49b0-a984-8283ec03b9dd",
+          "status": "REMOVED",
+          "createdAt": "2026-09-21T05:56:47.977Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+          }
+        }
+      ],
+      "source": {
+        "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+      },
+      "start_command": "bun -e 'eval(await (await fetch(\"https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/main/runtime/base-index-service/server.mjs?rev=20260921r10\")).text())'",
+      "staged_changes": [],
+      "git_commit_sha_verified": false
+    },
+    {
+      "service": {
+        "id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+        "name": "quorumprobe",
+        "state": "live"
+      },
+      "environment": {
+        "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "name": "production"
+      },
+      "latest_deployment": {
+        "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+        "status": "SUCCESS",
+        "createdAt": "2026-10-14T06:12:52.934Z",
+        "url": null
+      },
+      "deployments": [
+        {
+          "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+          "status": "SUCCESS",
+          "createdAt": "2026-10-14T06:12:52.934Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "35de5393-7b71-4617-b4cc-6470cb70e748",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:51:01.935Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "6c99ce4d-0cf3-45d9-9cc5-d9707f8e8327",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:47:10.583Z",
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        }
+      ],
+      "source": {
+        "image": "python:3.13-slim"
+      },
+      "start_command": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+      "staged_changes": [],
+      "git_commit_sha_verified": false
+    }
+  ],
+  "limitations": [
+    "Deployment IDs and terminal SUCCESS observed; deployment Git SHA not exposed for image/bootstrap services",
+    "KRS saved start command exits9 while live health was READY in prior phase; never restart or redeploy during freeze"
+  ]
+}
