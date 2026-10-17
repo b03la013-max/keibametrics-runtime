@@ -72,6 +72,7 @@ def audit_delivery(*, final, publication=None, availability=None,
             raise ValueError("AVAILABILITY_TEMPORAL_CLAIM_MISMATCH")
         result["canonical_availability"] = "READBACK_RECORDED"
         result["canonical_available_before_post"] = observed < post
+        result["canonical_availability_verified_independently"] = False
     if notification is not None:
         _verify_record(notification, "NOTIFICATION")
         if (notification.get("race_id") != race_id
