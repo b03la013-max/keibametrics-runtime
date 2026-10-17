@@ -77,7 +77,7 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
         "prediction_cutoff": prediction_cutoff,
         "eligible_state_ids": eligible, "rejected": rejected,
         "input_bound_state_ids": consumed,
-        "status": "INPUT_BINDING_OBSERVED" if consumed else "NEXT_RACE_CONSUMPTION_UNVERIFIED",
+        "status": "INPUT_BINDING_REFERENCE_OBSERVED_UNVERIFIED" if consumed else "NEXT_RACE_CONSUMPTION_UNVERIFIED",
         "prediction_effect": "NOT_ASSESSED",
         "production_policy_changed": False,
     }
