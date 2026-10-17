@@ -6,7 +6,7 @@
 |---|---|---|
 | SOURCE OIDC | 34/34件が独立Sigstore/OIDC検証PASS。東京11RはAPI制限解除後に原Bundle回復 | なし |
 | KRS Output | 原23件がReceiptのcanonical SHAと一致。実行時にcanonical SHA / 構造化Outputの結合を強制する修復を追加 | Owner承認Mergeと次の未知Raceでの受入 |
-| KRS Input | 正確に送信するUTF-8 JSON bytesとそのSHAを送信前に保存するcheckpointを追加。既知の宣言済み入力hash契約は内容照合、未知契約は拒否 | 現稼働Receiptのlegacy input hash対象範囲はUNVERIFIED。新しい契約名は提案であり、現稼働が採用したとは主張しない |
+| KRS Input | 正確に送信するUTF-8 JSON bytesとそのSHAを送信前に保存するcheckpointを追加。既知の宣言済み入力hash契約は内容照合、未知契約は拒否 | 追加照合で23/23原Receiptがrace.prediction_id補完後のsorted UTF-8 SHAと一致し、署名も23/23検証。別sidecarの内容結合を実装。Owner Mergeと次未知Raceの受入は未完了 |
 | Runtime | health READY、Engine / parameter_mapは既存契約と一致。Railway image-based Deployment ID確認 | App Git SHA / 実コードfingerprintはUNVERIFIED。CIやEngine hashで代替しない |
 | 署名原本 | SOURCE34、PRE_KRS/KRS/FINAL23、RESULT原Envelope19を検証。RESULT workflowの原本always-uploadとoptional診断前保存は既にmainに存在 | 東京4R・京都5R・新潟5Rの古いRESULT原本3件はGitHubと可視Base44 Logから未回復。再生成・再署名しない。京都12Rの同着manual hold維持 |
 | Delivery | 発走前Signed FINAL23、Canonical可用性23。元の公開時刻を再timestampしない | ユーザー受領ACK0確認。観測経路にChatGPT自動Push実装なし。経路承認なしに外部送信しない |
@@ -75,3 +75,10 @@ RailwayのDeployment `7c7eeb5e-3b5b-496a-b66f-82bd71897d53` の2026-10-14 06:16:
 OAuth経路の環境変数は値非公開。コードblobを取得できず、legacy Input SHAの対象範囲の確定にも到達していない。署名Receiptのhashを一致する値へ置き換える処理は行わない。送信bytesの不変checkpointと宣言済み契約の厳密照合は将来の追跡を改善する修復であり、過去23件のInput SHA検証完了とは扱わない。原ログ・設定・照合範囲は `evidence/jra_day_review_20261017/runtime_boot_readback.json` に保存した。
 
 コードHEAD `58ec50282964eb438f56315e8464dd24dae32764` の9件のCIは全SUCCESSを再確認。GitHubのPR Review一覧は0件。追加差分は上記証拠・説明のみで、Productionコード・凍結済みShadow定義・署名原本・数値Policyは変更しない。Owner承認・Independent Review・配置元と起動設定の結合・未知未来Live Acceptanceは未完了。
+
+
+## 追加解決：legacy Input SHA
+
+後続調査で、Runtime v1.3.1の既存23原Receiptすべてが、input_data.race.prediction_idをouter race_idで補完したsorted/compact UTF-8 JSONのSHAと一致した。23原ReceiptのEd25519署名とreceipt SHAも独立検証PASS。これは既存入力内容の結合を回復した証拠であり、過去のexact HTTP wire bytesの回収やApp Git SHA確認ではない。
+
+`runtime/jra_krs_legacy_input_binding.py` とFormal Runnerへ別の入力結合gateを追加。既存Shadowが固定するcontractコード・14定義・登録SHAは変更しない。未知Runtime/schema、identity競合、内容不一致はFail-Closed。原Receiptを変更せず、送信前identityチェックと送信後normalized SHA照合、独立/verifyを組み合わせる。外部20,000回CIにも同じgateを接続し、synthetic fixtureの内外Race IDを一致させた。詳細 `evidence/jra_day_review_20261017/legacy_krs_input_hash_closure.json`。上記のlegacy未解決という記述は、この後続証拠により解消されたが、Runtime Git照合・Delivery・Learning閉路は未解決のまま。

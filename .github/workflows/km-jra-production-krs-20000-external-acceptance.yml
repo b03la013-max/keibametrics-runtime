@@ -5,12 +5,14 @@ on:
     paths:
       - ".github/workflows/km-jra-production-krs-20000-external-acceptance.yml"
       - "runtime/jra_production_krs_contract.py"
+      - "runtime/jra_krs_legacy_input_binding.py"
       - "runtime/jra_production_auto_handoff.py"
   push:
     branches: [main]
     paths:
       - ".github/workflows/km-jra-production-krs-20000-external-acceptance.yml"
       - "runtime/jra_production_krs_contract.py"
+      - "runtime/jra_krs_legacy_input_binding.py"
       - "runtime/jra_production_auto_handoff.py"
   workflow_dispatch:
 permissions:
@@ -36,6 +38,7 @@ jobs:
           import sys
           sys.path.insert(0, "runtime")
           from jra_production_krs_contract import production_krs_payload, assert_production_krs_receipt
+          from jra_krs_legacy_input_binding import check_input_binding, assert_input_race_identity
 
           # Synthetic numerical fixture only; no pre-race OOS, no purchase,
           # no Production authority, no signed FINAL of a real horse race.
@@ -43,10 +46,12 @@ jobs:
           req = regression["req"]
           req["family_id"] = "JRA"
           req["race_id"] = "KM-JRA-ACCEPTANCE-ONLY-PRODUCTION-SHAPE-SIMHIGH-20000-20261010"
+          req["krs_input_data"]["race"]["race_id"] = req["race_id"]
           req["run_count"] = 20000
           req["seed"] = 2026101005
           assert len(req["krs_input_data"]["horses"]) == 3
           payload = production_krs_payload(req)
+          assert_input_race_identity(payload)
           assert payload["mode"] == "SIM-HIGH"
           assert payload["input_data"]["simulation"]["run_count"] == 20000
 
@@ -66,6 +71,7 @@ jobs:
           assert code < 300
           engine_sha = "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
           receipt = assert_production_krs_receipt(payload,result,expected_engine_sha256=engine_sha)
+          input_binding = check_input_binding(payload,result)
           code, verified = call("/verify",result["run_receipt"],timeout=30)
           assert code < 300 and verified.get("valid") is True, verified
           artifact = {
@@ -78,6 +84,7 @@ jobs:
             "engine_sha256":receipt["engine_sha256"],
             "receipt_sha256":result["run_receipt"]["receipt_sha256"],
             "signed_run_receipt_verified":verified["valid"],
+            "input_content_binding":input_binding,
             "production_effect":"NONE",
             "final_receipt_verified":False,
             "created_at":datetime.now(timezone.utc).isoformat(),

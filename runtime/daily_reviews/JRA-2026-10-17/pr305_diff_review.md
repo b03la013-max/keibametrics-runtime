@@ -67,3 +67,14 @@ Workflow変更のRollbackは検証前へ移動した応答保存ブロックを�
 Live Acceptanceは(1)承認対象HEADとWorkflow SHA、(2)正式Intent一回受付、(3)公式Resolve、(4)OIDC/Signed SOURCE、(5)Full20、Static、AKI、(6)署名PRE_KRSとKRS原応答・exact wire checkpoint・hash検証、(7)PRE_KRS→MEC/Capital→Signed FINALが期限内、(8)承認済み経路の送信/公開/受領を別記録、(9)公式RESULT/Settlement、(10)許可されたLearningを次RaceのSOURCE freezeより前に固定し、そのdigestを次Prediction Inputと結合、の実証を要求する。いずれか未確認なら部分結果とし、単なるWorkflow SUCCESSでPASSにしない。期限切れRaceの再FINALは禁止。必要な導入承認と通知/学習経路がそろうまでLive AcceptanceはPENDING。
 
 判定: CORRECTNESS PARTIAL / WINNER DISCOVERY TRACE COMPLETE（改善効用は未実証）/ SHADOW READINESS PARTIAL・NOT ACTIVATED / DELIVERY・LEARNING CLOSED LOOP PARTIAL / LIVE ACCEPTANCE PENDING。
+
+
+## 後続Correctness解決：legacy hashの補完規則
+
+追加調査で、23件すべてのInput SHAが`input_data.race.prediction_id = outer race_id`補完後のsorted/compact UTF-8 JSONと完全一致。23件の原Ed25519署名・Receipt SHAも検証した。R305-03は歴史的入力内容の照合について解決。exact wireは過去に未保存のため別扱いとする。Runtime原コード・Git SHAは依然未回復であり、R305-04を解決したとは主張しない。
+
+既存の固定contractファイルを改変せず、別sidecarをFormal Runnerへ接続した。未知Runtime/schema・別Race・conflicting prediction_id・内容改変は拒否し、署名verifyは別途必須。元リクエストを変更しない。新しい入力結合JSONも既存のalways-upload対象へ保存する。既存の外部20,000回CIのfixtureでは、外側だけをacceptance用Race IDに変え内側をselftestのままにしていたため、fixtureのidentityを一致させ、実API経路でも新gateを試験する。Productionの入力や予測値は書き換えない。
+
+既存Shadow登録本文と14定義SHAは不変。新gateはCorrectness検証であり、Shadow列選定・数値Policy変更ではない。Owner承認・第三者Review・MergeとLive Acceptanceは引き続き必要。
+
+後続入力結合の検証を含め、ローカル70 tests /25 subtests PASS。原23署名入力の照合、内容改変・未知版・別Race拒否、Workflowでの入力不一致停止と証拠保存、canonical field-order不変を確認した。

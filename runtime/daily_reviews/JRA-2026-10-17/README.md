@@ -30,3 +30,5 @@ KRS補正はJRA診断専用 `runtime/jra_krs_utility_measurement.py` を監査�
 追加実行保証Review: [remaining_evidence_closure.md](remaining_evidence_closure.md)。KRS Output結合・送信bytes checkpoint・投資0保持の最小Correctness修復、Learning時刻検証、全36Failure Matrix、固定Shadow比較を保存。Merge/Activation・次Race消費は未確認。
 
 追加差分Reviewと本番導入条件: [pr305_diff_review.md](pr305_diff_review.md)。勝ち馬16件・320セルの追跡: [winner_discovery_16_review.md](winner_discovery_16_review.md) / JSON。五Laneの同一Race観測比較は `five_lane_role_observation_review.json`。既存Shadow登録bytesと定義SHAは不変。
+
+後続hash照合: `evidence/jra_day_review_20261017/legacy_krs_input_hash_closure.json`。23原KRSの入力内容・署名一致。過去wire原本・Runtime App Git SHAとは区別する。

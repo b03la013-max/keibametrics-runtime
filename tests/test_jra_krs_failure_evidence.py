@@ -15,9 +15,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'runtime'))
 from jra_production_krs_contract import production_krs_payload, assert_production_krs_receipt, JRAProductionKRSContractError
+from jra_krs_legacy_input_binding import check_input_binding, KRSInputBindingError
 
 
-@pytest.mark.parametrize('fault', ['output_hash', 'signature', 'http', 'none'])
+@pytest.mark.parametrize('fault', ['output_hash', 'input_content', 'signature', 'http', 'none'])
 def test_observed_krs_response_survives_failure(tmp_path, fault):
     rid = 'KM-JRA-KYO-20261017-R11'
     req = json.loads((ROOT / 'runtime/requests' / (rid + '-LIVE-R1-FORMAL.json')).read_text())
@@ -35,12 +36,16 @@ def test_observed_krs_response_survives_failure(tmp_path, fault):
     block = workflow[workflow.index('          kcode,k=call(KRS,"/krs/execute"'):workflow.index('          # Persist the actual structured KRS output')]
     env = dict(call=call, KRS='unused', kpayload=production_krs_payload(req), kbody=b'fixture',
                artifact_dir=str(tmp_path), os=os, json=json, assert_production_krs_receipt=assert_production_krs_receipt,
-               ENGINE_SHA=req['engine_sha256'], khashes={'wire_sha256': 'fixture'}, stage=lambda *a, **kw: stages.append(a))
+               ENGINE_SHA=req['engine_sha256'], check_input_binding=check_input_binding,
+               khashes={'wire_sha256': 'fixture'}, stage=lambda *a, **kw: stages.append(a))
+    if fault == 'input_content':
+        env['kpayload']['input_data']['horses'][0]['name'] += ' altered'
     if fault == 'none':
         exec(compile(textwrap.dedent(block), '<actual-workflow-krs-block>', 'exec'), env)
         assert stages == [('KRS_EXECUTION_VERIFIED',)]
     else:
-        error = JRAProductionKRSContractError if fault == 'output_hash' else AssertionError
+        error = (JRAProductionKRSContractError if fault == 'output_hash' else
+                 KRSInputBindingError if fault == 'input_content' else AssertionError)
         with pytest.raises(error):
             exec(compile(textwrap.dedent(block), '<actual-workflow-krs-block>', 'exec'), env)
         assert not stages
