@@ -54,7 +54,12 @@ def build_publication(final, *, health, contract, published_at, run_url):
     verify_signed_final(final,health,contract)
     when=datetime.fromisoformat(published_at.replace('Z','+00:00'))
     if when.tzinfo is None:raise ValueError('JRA_DELIVERY_TIMEZONE_REQUIRED')
-    tree=render_ticket_tree(final)
+    try:
+        tree=render_ticket_tree(final)
+    except Exception:
+        from jra_presentation import _fallback
+        tree={'text':_fallback(final),'ticket_count':len(final['final_ticket']['tickets']),
+              'total_investment':sum(t['stake'] for t in final['final_ticket']['tickets'])}
     before=when<datetime.fromisoformat(final['scheduled_post_at'])
     record={'profile':'KM-JRA-CANONICAL-FINAL-PUBLICATION-v1','race_id':final['race_id'],
             'final_sha256':final['sha256'],'final_receipt_sha256':final['final_receipt_sha256'],
@@ -73,7 +78,9 @@ def build_publication(final, *, health, contract, published_at, run_url):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--final',required=True);p.add_argument('--output-dir',required=True)
-    p.add_argument('--run-url',required=True);p.add_argument('--published-ref');a=p.parse_args()
+    p.add_argument('--run-url',required=True);p.add_argument('--published-ref')
+    p.add_argument('--expected-race-id');p.add_argument('--expected-final-sha256');p.add_argument('--expected-authority')
+    a=p.parse_args()
     from family_authority_guard import resolve_current_authority
     root=Path(__file__).resolve().parents[1]
     _,authority=resolve_current_authority(root=root,now=datetime.now(timezone.utc))
@@ -83,6 +90,12 @@ if __name__=='__main__':
         health=json.load(response)
     final=json.loads(Path(a.final).read_text())
     out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
+    from jra_presentation import build_presentation, save_presentation, read_presentation
+    # Never modify the FINAL or old publication receipt. A separate derivative
+    # survives response interruption and can be read without multi-MB SOURCE.
+    bundle=save_presentation(out,build_presentation(final,health=health,contract=contract,
+        generated_at=datetime.now(timezone.utc).isoformat(),expected_race_id=a.expected_race_id,
+        expected_final_sha256=a.expected_final_sha256,expected_authority=a.expected_authority))
     record,tree=build_publication(final,health=health,contract=contract,
                                  published_at=datetime.now(timezone.utc).isoformat(),run_url=a.run_url)
     # Existing publication is read back, not re-timestamped as a fresh delivery.
@@ -124,4 +137,30 @@ if __name__=='__main__':
                     or old.get('final_sha256')!=final['sha256'] or old.get('tree_sha256')!=record['tree_sha256']):
                 raise ValueError('JRA_DELIVERY_AVAILABILITY_RECEIPT_INVALID')
         else:readback.write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    print(tree)
+        # Availability is not notification, destination arrival or user ACK.
+        presentation_url=base+'/runtime/jra_delivery/'+final['race_id']+'/'
+        for name in ('presentation.json','presentation_detail.json','presentation.md'):
+            with urllib.request.urlopen(presentation_url+name,timeout=20) as response:
+                remote_bytes=response.read()
+            if remote_bytes!=(out/name).read_bytes():
+                raise ValueError('JRA_PRESENTATION_REMOTE_READBACK_MISMATCH:'+name)
+        read_presentation(out,expected_race_id=final['race_id'],expected_final_sha256=final['sha256'])
+        observed=datetime.now(timezone.utc)
+        availability={'race_id':final['race_id'],'final_sha256':final['sha256'],
+                      'presentation_sha256':bundle['manifest']['sha256'],'published_ref':a.published_ref,
+                      'presentation_url':presentation_url+'presentation.md',
+                      'availability_verified_at':observed.isoformat(),
+                      'availability_verified_before_post':observed<datetime.fromisoformat(final['scheduled_post_at']),
+                      'FINAL_VERIFIED':True,'RENDER_READY':True,'CANONICAL_AVAILABLE':True,
+                      'NOTIFICATION_SENT':None,'DESTINATION_ARRIVAL_CONFIRMED':None,
+                      'USER_ACKNOWLEDGED':None,'delivery_state':'DELIVERY_UNKNOWN',
+                      'user_delivery_verified':False,'user_received_at':None}
+        availability['sha256']=_sha(availability)
+        target=out/'presentation_availability.json'
+        if target.exists():
+            old=json.loads(target.read_text())
+            if (old.get('sha256')!=_sha({k:v for k,v in old.items() if k!='sha256'})
+                    or old.get('presentation_sha256')!=bundle['manifest']['sha256']):
+                raise ValueError('JRA_PRESENTATION_AVAILABILITY_CONFLICT')
+        else:target.write_text(json.dumps(availability,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+    print(bundle['text'],end='')

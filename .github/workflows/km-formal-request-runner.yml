@@ -962,9 +962,11 @@ jobs:
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
             PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" \
+              --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               > krs-artifacts/canonical_tree.txt
-            { echo '## Signed FINAL canonical tickets'; echo '```'; cat krs-artifacts/canonical_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            cp "runtime/jra_delivery/$RID"/presentation* krs-artifacts/
+            { echo '## Signed FINAL completed presentation'; echo '```'; cat krs-artifacts/canonical_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Persist immutable FINAL or acceptance artifact
@@ -999,6 +1001,7 @@ jobs:
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               > krs-artifacts/canonical_tree.txt
             cp "runtime/jra_delivery/$RID/availability_receipt.json" krs-artifacts/
+            cp "runtime/jra_delivery/$RID/presentation_availability.json" krs-artifacts/
             git add "runtime/jra_delivery/$RID"
             if ! git diff --cached --quiet; then
               git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"

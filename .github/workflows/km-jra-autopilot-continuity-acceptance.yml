@@ -3,11 +3,16 @@ on:
   push:
     branches: [main]
     paths:
+      - 'runtime/jra_presentation.py'
+      - 'runtime/jra_delivery.py'
+      - 'tests/test_jra_presentation.py'
       - 'tools/persist_local_checkpoints.py'
       - '.github/workflows/km-formal-result-runner.yml'
       - 'tests/test_jra_result_persistence.py'
   pull_request:
     paths:
+      - 'runtime/jra_presentation.py'
+      - 'tests/test_jra_presentation.py'
       - 'tools/persist_local_checkpoints.py'
       - '.github/workflows/km-formal-result-runner.yml'
       - 'tests/test_jra_result_persistence.py'
@@ -32,3 +37,4 @@ jobs:
       - run: python -m pip install -q pytest beautifulsoup4 cryptography PyMuPDF
       - run: python -m pytest -q tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_continuity.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_real_race_failure_regressions.py tests/test_jra_day_status_settlement_pfs_delivery.py tests/test_jra_p0_20261018.py
       - run: python -m pytest -q tests/test_jra_result_persistence.py tests/test_persist_local_checkpoints_scratch.py
+      - run: python -m pytest -q tests/test_jra_presentation.py tests/test_jra_ticket_tree_renderer.py

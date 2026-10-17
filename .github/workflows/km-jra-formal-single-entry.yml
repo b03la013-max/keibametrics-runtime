@@ -78,12 +78,20 @@ jobs:
           git fetch -q origin main
           if git cat-file -e "origin/main:runtime/final_artifacts/$RID.json" 2>/dev/null; then
             git show "origin/main:runtime/final_artifacts/$RID.json" > runtime_out/jra_existing_signed_final.json
+            # Reuse immutable presentation timestamps/bytes on repeated requests.
+            mkdir -p runtime_out/existing_final_readback
+            for name in publication.json canonical_tree.txt presentation.json presentation_detail.json presentation.md; do
+              if git cat-file -e "origin/main:runtime/jra_delivery/$RID/$name" 2>/dev/null; then
+                git show "origin/main:runtime/jra_delivery/$RID/$name" > "runtime_out/existing_final_readback/$name"
+              fi
+            done
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
             PYTHONPATH=runtime python runtime/jra_delivery.py --final runtime_out/jra_existing_signed_final.json \
               --output-dir runtime_out/existing_final_readback \
+              --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               > runtime_out/existing_final_readback.txt
-            { echo '## Existing Signed FINAL — canonical read-back'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            { echo '## Existing Signed FINAL — completed presentation'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             echo 'reused=true' >> "$GITHUB_OUTPUT"
           else
             echo 'reused=false' >> "$GITHUB_OUTPUT"
