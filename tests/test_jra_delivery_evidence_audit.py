@@ -79,6 +79,27 @@ class DeliveryAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ACK_BEFORE_PROVIDER"):
             audit_delivery(final=self.final, notification=note, recipient_ack=ack)
 
+    def test_existing_jra_publication_schema_and_availability(self):
+        publication = seal({
+            "profile": "KM-JRA-CANONICAL-FINAL-PUBLICATION-v1",
+            "race_id": self.final["race_id"], "final_sha256": self.final["sha256"],
+            "tree_sha256": "b" * 64, "channel": "GITHUB_CANONICAL_AND_STEP_SUMMARY",
+            "notification_sent_at": None, "user_received_at": None,
+            "user_delivery_verified": False, "actual_purchase_status": "UNVERIFIED",
+        })
+        availability = seal({
+            "race_id": self.final["race_id"], "final_sha256": self.final["sha256"],
+            "tree_sha256": publication["tree_sha256"], "channel": "GITHUB_CANONICAL",
+            "availability_verified_at": "2026-10-18T09:55:00+09:00",
+            "availability_verified_before_post": True, "http_status": 200,
+            "user_delivery_verified": False, "user_received_at": None,
+        })
+        result = audit_delivery(final=self.final, publication=publication, availability=availability)
+        self.assertEqual(result["canonical_availability"], "READBACK_RECORDED")
+        self.assertEqual(result["notification_sent"], "UNVERIFIED")
+        self.assertEqual(result["recipient_acknowledged"], "UNVERIFIED")
+        self.assertEqual(result["pre_post_delivery"], "UNVERIFIED")
+
     def test_read_only_cli(self):
         from runtime.jra_delivery_evidence_audit import main
         with tempfile.TemporaryDirectory() as directory:
