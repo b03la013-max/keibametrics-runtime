@@ -7,6 +7,9 @@ All KRS physics, parameter_map and existing signed /verify stay unchanged.
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 from typing import Any, Mapping
 
 MODE_FOR_RUNS = {5000: "SIM-STD", 20000: "SIM-HIGH"}
@@ -14,6 +17,33 @@ MODE_FOR_RUNS = {5000: "SIM-STD", 20000: "SIM-HIGH"}
 
 class JRAProductionKRSContractError(ValueError):
     pass
+
+
+def serialize_krs_payload(payload):
+    """Exact existing HTTP serialization, captured before transport."""
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=False,
+                      allow_nan=False).encode("utf-8")
+
+
+def checkpoint_krs_request(payload, directory):
+    body=serialize_krs_payload(payload)
+    canonical=json.dumps(payload['input_data'],ensure_ascii=False,sort_keys=True,
+                         separators=(',',':'),allow_nan=False).encode('utf-8')
+    record={'race_id':payload['race_id'], 'wire_sha256':hashlib.sha256(body).hexdigest(),
+            'input_data_canonical_sha256':hashlib.sha256(canonical).hexdigest(),
+            'wire_serialization':'UTF-8; insertion field order; compact JSON; no newline',
+            'input_data_serialization':'UTF-8; sorted keys; compact JSON; no newline',
+            'receipt_input_hash_scope':'UNVERIFIED until runtime declares a supported contract',
+            'production_policy_effect':'NONE'}
+    root=Path(directory);root.mkdir(parents=True,exist_ok=True)
+    files={'krs_request_wire.json':body,
+           'krs_request_hashes.json':(json.dumps(record,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode()}
+    for name,raw in files.items():
+        path=root/name
+        if path.exists() and path.read_bytes()!=raw:
+            raise JRAProductionKRSContractError('KRS_REQUEST_CHECKPOINT_CONFLICT:'+name)
+        if not path.exists():path.write_bytes(raw)
+    return body,record
 
 
 def production_krs_payload(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -88,5 +118,26 @@ def assert_production_krs_receipt(
             raise JRAProductionKRSContractError(f"FORMAL_KRS_RECEIPT_{name.upper()}_INVALID")
     if not run.get("receipt_sha256"):
         raise JRAProductionKRSContractError("FORMAL_KRS_RECEIPT_HASH_MISSING")
+    # The signed output digest must bind the exact structured output consumed
+    # downstream. A genuine receipt alone cannot authenticate a different body.
+    raw=response.get('output_canonical_json')
+    if not isinstance(raw,str) or not isinstance(response.get('output'),dict):
+        raise JRAProductionKRSContractError('FORMAL_KRS_STRUCTURED_OUTPUT_MISSING')
+    if hashlib.sha256(raw.encode('utf-8')).hexdigest()!=receipt['output_sha256']:
+        raise JRAProductionKRSContractError('FORMAL_KRS_OUTPUT_HASH_MISMATCH')
+    try:decoded=json.loads(raw)
+    except (TypeError,ValueError) as exc:
+        raise JRAProductionKRSContractError('FORMAL_KRS_OUTPUT_JSON_INVALID') from exc
+    if json.dumps(decoded,sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)!=json.dumps(
+            response['output'],sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False):
+        raise JRAProductionKRSContractError('FORMAL_KRS_STRUCTURED_OUTPUT_MISMATCH')
+    declared=receipt.get('input_hash_contract')
+    if declared is not None:
+        if declared!='KM-KRS-INPUT-DATA-SORTED-UTF8-v1':
+            raise JRAProductionKRSContractError('FORMAL_KRS_INPUT_HASH_CONTRACT_UNSUPPORTED')
+        expected=hashlib.sha256(json.dumps(payload['input_data'],ensure_ascii=False,
+            sort_keys=True,separators=(',',':'),allow_nan=False).encode('utf-8')).hexdigest()
+        if receipt['input_sha256']!=expected:
+            raise JRAProductionKRSContractError('FORMAL_KRS_INPUT_HASH_MISMATCH')
     # The independent /verify call must still verify the signed envelope.
     return receipt

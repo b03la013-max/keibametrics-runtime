@@ -50,7 +50,8 @@ def build_fast_reflection(result_artifact:Dict[str,Any], *, race_id:str|None=Non
         "status":"RACE-DAY-DIAGNOSTIC-COMPLETE",
         "purpose":"Immediate between-race diagnosis only; deep causal research is deferred to daily review.",
         "settlement":{
-            "investment":settlement.get("investment") or settlement.get("settled_investment"),
+            "investment":(settlement.get("investment") if settlement.get("investment") is not None
+                          else settlement.get("settled_investment")),
             "return":settlement.get("return"),
             "profit_loss":settlement.get("profit_loss"),
             "pfs":settlement.get("pfs"),
