@@ -27,7 +27,10 @@ import jra_race_day_autopilot as a
 schedule=json.loads((root/'runtime/jra_race_day_plan/2026-10-17.schedule.json').read_text())
 for rid in ['KM-JRA-TKY-20261017-R04','KM-JRA-NGT-20261017-R05','KM-JRA-KYO-20261017-R05']:
     row=a.race_status(root,rid,schedule[rid],{},datetime.datetime.now(a.JST))
-    assert row['state']=='FINAL', row
+    # The same immutable FINAL may already have advanced through result/learning.
+    assert row['state'] in {'FINAL','SETTLED','SETTLED_SIGNED_RESULT_LEARNED'}, row
+    final=json.loads((root/'runtime/final_artifacts'/(rid+'.json')).read_text())
+    assert row['immutable_final_sha256']==final['sha256'], row
     assert row['canonical_availability_verified_before_post'] is True, row
 print('ACTUAL_DELIVERED_FINALS_STATUS_PASS')
 '''
