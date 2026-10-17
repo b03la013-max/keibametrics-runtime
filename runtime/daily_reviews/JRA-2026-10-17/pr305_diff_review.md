@@ -114,3 +114,26 @@ Official Railway references: https://docs.railway.com/deployments/start-command 
 Next required evidence: provider-supported read-only deployment details/export for active snapshot1db3ca05..., actualPID1argv, immutableimageDigest/platform, sourcebundle/hashscope/buildmanifest and rollback target snapshot. Do not export private signing keys. Available connector read tools omit these fields; browser fallback has not been used without approval. Once recovered, reproduce the exact launcher in an existing approved isolated environment/local equivalent, then Health/KRS hashes/Receipt/version/engine/parameters/stop-start/rollback/signature checks. Until then **NOT MERGE-READY**, no Deploy/Restart/rollback authorization sought.
 
 Delivery remains23available/0verifiedsend/0ACK; Learning22stored/0verifiedintake/inputbinding/consumption. These do not become complete through Railway availability. No notification adapter/destination or new Production learning policy was connected.
+
+
+## Startup最終追加照合：snapshot / 実プロセス回収（2026-10-17）
+
+上記の「App原本・起動command・hash対象UNKNOWN」は後続証拠で更新した。最新mainは `98b6be3261b72acf460a07da7d981ae83f871151`（旧d7ae23a以降は日次state/statusのみ）。親HEAD `dc86a93f877bda4ece521e8bec768b0080b8a349` のCI9/9 SUCCESS。Mergeは未実施。
+
+**Root Causeは保存サービス設定と配置snapshotの世代差、および管理APIの参照scope差である。** Deployment Detailsの配置7c7eeb5e… / snapshot1db3ca05…は108変数・healthcheck300秒・コードblob復元/SHA検証→pip→exec uvicorn。現在サービスは122変数・30秒・診断後SystemExit(9)。異なる配置のMCP diagnosisも現行サービスcommandを返しており、実配置commandの代替にはならなかった。誰がいつ診断設定へ変更したか、過去設定継承・provider反映漏れはUNKNOWNを維持する。
+
+読み取り専用Consoleで同じDeployment/instanceのPID1（python /usr/local/bin/uvicorn app:app --app-dir /opt/km …8080）を確認した。Appの実ファイルSHAは `1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989`。回収したsnapshot App bytes・実ファイル・起動ログ第1blobが一致し、hash対象はdecoded App bytesと確定した。Engine `9929df99…`、parameter `75cc9d0e…` も実ファイルと回収原本が一致する。Git SHAはUNVERIFIED、Imageはpython:3.13-slim / UI sha:70729 prefixのみでfull actual digestはUNVERIFIED。現在の公開registry digestを実配置証明へ読み替えない。
+
+正しい配置時startCommand全文と未適用修復候補は `evidence/jra_day_review_20261017/startup_owner_configuration_candidate.json`。実配置は7App/6Engine/1parameter gzip blobを復元し3 SHAを確認後、uvicornをexecする。候補はこの処理を保ち、実配置と同じ28依存版を固定しpip retry2/timeout15秒、healthcheck300秒へ戻す。候補command SHA `610839e28c178df8b0527d3a5850fe67b597f94bf5ef757823df9fb3ec326fec`。Owner未承認につきService設定・環境・Signer・Deploymentへ未適用。現行service blob値は独立decode未確認であり、適用前の3 SHA preflightが必要。ネットワーク/package可用性も別条件である。
+
+独立した技術Reviewerが原Appの正規化処理をASTから抽出し、23原ReceiptのInput SHAを23/23再現。元23件の署名・Output検証は前節のPASSを維持し、再署名しない。実装担当と別のReviewerでありGitHub human承認ではない。
+
+回収したApp/Engine/parameter原本、Python3.13.16、実配置と一致する依存版で**隔離試験PASS**：Cold Start READY→実Engine SMOKE100→同一TEST鍵でStop/Restart・旧Receipt検証→SMOKE100→Engine改変でDEGRADED/actual_run_count0→原本復元READY→SMOKE100。合計300run、Input/Output canonical SHA・Ed25519・改ざん拒否すべてPASS。元launcherのdecode処理を実行した。元の未固定pip installと公開bind、Railway provider操作は実行せず、ローカルPythonのcompiler/buildも本番と異なる。候補28pinのdry-runは変更不要。これは未知未来OOS・本番Restart・provider Rollback・Live Acceptanceではない。
+
+回収原本は `independent_review_probes/recovered_runtime_reference/` にbyte不変で保存した監査referenceで、Productionへの接続なし。再現probe `independent_review_probes/km_recovered_runtime_rehearsal.py` は冒頭のscratch入力を使う実行時snapshotである。再現時は上記3原本を `/tmp/km-recovered-{app.py,engine.py,param.json}` へcopyし、candidateのrecovered commandを末尾newline付き `/tmp/km-recovered-start-command.txt` に保存する。同じPython/depsを `/tmp/km-runtime-startup-venv` に用意し、probe内REPOをcheckoutへ合わせる。LOCAL `/opt/km` が存在すれば上書きを拒否する。元の入力fixtureは既存archiveを展開した正本を参照し、新しいLOCAL identity・TEST鍵を使用する。Production鍵を持ち込まない。
+
+**判定：NOT MERGE-READY。** 現在のサービスcommandは依然として診断用で、次回Deployment安全性は未成立。Ownerが設定候補を承認し、現行blob整合・隔離したprovider起動・rollback先snapshotを検証するまで格上げしない。稼働中配置7c7eeb5e…を将来候補導入のrollback基準として保全する。前配置35de5393…のREMOVED/canRollbackだけでは安全なrollback先としない。
+
+DeliveryはSigned FINAL/公開可用性23・ACK0確認。Learning保存22・次Prediction消費0確認を維持する。新通知先・Production Learning接続なし。原RESULT3件回復待ち、京都12R同着manual holdも維持する。Production数式、AKI、KRS Physics、MEC、Capital、Venue Canon、Shadow14定義/fingerprint、署名原本は不変更。残存provider試験/設定適用、exact HEAD Merge、必要Deploy/Activationは個別Owner承認事項である。
+
+最終追加差分10ファイルの独立技術Review PASS。全PR124path台帳の自己参照以外123 SHA一致、Shadow14定義不変、原23Receipt/562archive member再検証PASS。新しい空の隔離環境へ候補と同じpip flagsで28依存版を導入し、全29版（pip含む）・pip check・原App importもPASS。最終Railway readbackでも配置7c7eeb5e…/snapshot1db3ca05…/SUCCESSは不変、現行commandはSystemExit9・30秒・stagedなし。Owner未承認の適用は行わず、NOT MERGE-READYを維持する。

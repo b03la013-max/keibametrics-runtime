@@ -2477,5 +2477,605 @@
       "image_executed": false
     },
     "independent_review_capture_scope": "Reviewer hashes capture reviewed snapshot before embedding the review record in this same evidence file; not a self-hash of final containing JSON. Probe/runtime bytes unchanged after independent review."
+  },
+  "recovered_snapshot_closure": {
+    "observed_at": "2026-10-17T11:48:47.943426+00:00",
+    "supersedes": "startup_followup root_cause UNKNOWN / browser fallback not used / correct_start_command UNKNOWN. Those observations precede authenticated Deployment Details and read-only Console recovery.",
+    "root_cause": {
+      "status": "CONFIRMED_CONFIGURATION_GENERATION_AND_READ_SCOPE_DIFFERENCE",
+      "explanation": "Active deployment snapshot has SHA-verified gzip code reconstruction + pip install + exec uvicorn, healthcheckTimeout300. Current service configuration is diagnostic SystemExit(9), timeout30. MCP diagnosis contexts repeat current service settings even for previous/failed deployments. Deployment Details snapshot and actual PID1/code resolve the apparent contradiction. Who/when/why changed the service settings remains UNKNOWN.",
+      "configuration_changed_by": "UNKNOWN",
+      "configuration_changed_at": "UNKNOWN"
+    },
+    "deployment": {
+      "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+      "snapshot_id": "1db3ca05-b62e-4038-8106-80c3c561e761",
+      "service_id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+      "environment_id": "8af4a037-975f-4c15-8005-7bcde494022b",
+      "instance_id": "6f5ea0d2-9f48-417b-999c-7289f1500d37",
+      "image_source": "DockerHub python:3.13-slim",
+      "ui_image_sha_prefix": "70729",
+      "full_actual_image_digest": "UNVERIFIED",
+      "git_commit_sha": "UNVERIFIED",
+      "build_provenance": "IMAGE_BASED; recovered deployment env blobs, not Git source build; no attested full image/Git mapping",
+      "deployed_variable_count": 108,
+      "current_service_variable_count": 122,
+      "deployed_healthcheck_timeout": 300,
+      "current_service_healthcheck_timeout": 30
+    },
+    "observed_pid1_argv": [
+      "/usr/local/bin/python",
+      "/usr/local/bin/uvicorn",
+      "app:app",
+      "--app-dir",
+      "/opt/km",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "--proxy-headers",
+      "--forwarded-allow-ips=*",
+      ""
+    ],
+    "actual_runtime": {
+      "python": "3.13.16 (main, Oct 6 2026, 02:02:59) [GCC 14.2.0]",
+      "packages": [
+        [
+          "PyJWT",
+          "2.15.1"
+        ],
+        [
+          "annotated-types",
+          "0.8.0"
+        ],
+        [
+          "anyio",
+          "4.15.1"
+        ],
+        [
+          "attrs",
+          "26.1.0"
+        ],
+        [
+          "cffi",
+          "2.1.1"
+        ],
+        [
+          "click",
+          "8.5.0"
+        ],
+        [
+          "cryptography",
+          "50.0.2"
+        ],
+        [
+          "h11",
+          "0.16.0"
+        ],
+        [
+          "httpcore2",
+          "2.13.1"
+        ],
+        [
+          "httpx2",
+          "2.13.1"
+        ],
+        [
+          "idna",
+          "3.20"
+        ],
+        [
+          "jsonschema",
+          "4.26.0"
+        ],
+        [
+          "jsonschema-specifications",
+          "2025.9.1"
+        ],
+        [
+          "mcp",
+          "2.3.0"
+        ],
+        [
+          "mcp-types",
+          "2.3.0"
+        ],
+        [
+          "opentelemetry-api",
+          "1.45.1"
+        ],
+        [
+          "pip",
+          "26.2.1"
+        ],
+        [
+          "pycparser",
+          "3.11"
+        ],
+        [
+          "pydantic",
+          "2.14.1"
+        ],
+        [
+          "pydantic_core",
+          "2.50.1"
+        ],
+        [
+          "python-multipart",
+          "0.0.32"
+        ],
+        [
+          "referencing",
+          "0.37.0"
+        ],
+        [
+          "rpds-py",
+          "2026.9.1"
+        ],
+        [
+          "sse-starlette",
+          "3.5.0"
+        ],
+        [
+          "starlette",
+          "1.8.0"
+        ],
+        [
+          "truststore",
+          "0.10.5"
+        ],
+        [
+          "typing-inspection",
+          "0.4.4"
+        ],
+        [
+          "typing_extensions",
+          "4.16.0"
+        ],
+        [
+          "uvicorn",
+          "0.54.0"
+        ]
+      ],
+      "app_sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "code_binding": "Recovered snapshot App bytes = live /opt/km/app.py SHA = bootlog first blob SHA. Engine/param live file hashes also match recovered originals.",
+      "git_mapping": "NOT ESTABLISHED; verified code fingerprint is not Git SHA",
+      "signer_key_id": "KM-RUNTIME-ED25519-20260917",
+      "public_trust_anchor": "UhjfD9zFt+e77/9JUB19R6/XFC3SG4pM5twHBqfUSzI=",
+      "private_key_handling": "No Production private key saved in repository/local test artifacts, used for testing, or changed. Local fresh TEST key only."
+    },
+    "hypotheses": [
+      {
+        "id": 1,
+        "name": "Stored/deployed configuration generation",
+        "verdict": "CONFIRMED",
+        "evidence": "Snapshot command/300s vs service diagnostic/30s;108vs122 variables"
+      },
+      {
+        "id": 2,
+        "name": "Image ENTRYPOINT/CMD",
+        "verdict": "ACTUAL_FULL_IMAGE_UNKNOWN; NOT NEEDED_TO_EXPLAIN_PROCESS",
+        "evidence": "PID1 and deployment explicit command both uvicorn. Current public reference image ENTRYPOINT null / CMD python3 is only reference."
+      },
+      {
+        "id": 3,
+        "name": "Railway command override",
+        "verdict": "EXPLICIT_DEPLOYMENT_COMMAND_CONFIRMED",
+        "evidence": "Deployment Details command matches PID1; undocumented additional override UNKNOWN"
+      },
+      {
+        "id": 4,
+        "name": "Old deployment inheritance",
+        "verdict": "UNKNOWN",
+        "evidence": "No actor/change history proves origin"
+      },
+      {
+        "id": 5,
+        "name": "Residual diagnostic command",
+        "verdict": "CONFIRMED_CURRENT_SERVICE_SETTING",
+        "evidence": "Static and local execution show SystemExit9; why retained UNKNOWN"
+      },
+      {
+        "id": 6,
+        "name": "Build/deploy reflection failure",
+        "verdict": "UNKNOWN_NOT_ESTABLISHED",
+        "evidence": "Generation difference alone does not prove provider failure"
+      },
+      {
+        "id": 7,
+        "name": "Process/API reference mismatch",
+        "verdict": "READ_SCOPE_MISMATCH_CONFIRMED",
+        "evidence": "Same service/env/deployment/instance; diagnosis current context is not deployed snapshot; Console actual PID1/source recovered"
+      }
+    ],
+    "recovered_command_ref": "evidence/jra_day_review_20261017/startup_owner_configuration_candidate.json#/recovered_snapshot_start_command",
+    "owner_configuration_candidate": "evidence/jra_day_review_20261017/startup_owner_configuration_candidate.json",
+    "independent_source_review": {
+      "app_sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+      "recovered_source_normalization_test": "23/23 PASS using exact AST statements, no module import/health/privatekey/signing/engine invoked",
+      "race_count": 23,
+      "code_scope": "actual execute_krs normalization only",
+      "production_mutations": 0
+    },
+    "independent_local_rehearsal": {
+      "versions": {
+        "python": "3.13.16 (main, Oct  3 2026, 01:06:22) [Clang 22.1.3 ]",
+        "dependencies": {
+          "mcp": "2.3.0",
+          "uvicorn": "0.54.0",
+          "cryptography": "50.0.2",
+          "starlette": "1.8.0",
+          "pydantic": "2.14.1"
+        }
+      },
+      "classification": "LOCAL RECOVERED-SOURCE REHEARSAL / NOT PROVIDER COLD START, RESTART, ROLLBACK OR LIVE ACCEPTANCE",
+      "source_sha256": {
+        "app.py": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+        "KRS-Engine_v1.1.0_PORTABLE.py": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+        "parameter_map_v0.1-provisional.json": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc"
+      },
+      "launcher_sha256": "3a160b8d72b9248ec3638ded092c9bb6f46a6088eb20459f7e58c88f7c79d5ac",
+      "decoder": "EXACT RECOVERED; locally repackaged nonsecret original code/Engine/param",
+      "server_command": "LOCAL LOOPBACK OVERRIDE; not original public binding",
+      "dependency_install_step": "NOT RUN; exact installed dependency versions used",
+      "environment": "clean synthetic environment; TEST-only generated signer; no Production keys",
+      "public_test_key": "ZBthvfI2TMhtVa0oc9v9pk2KilDIKWJ2rysTAqX+g70=",
+      "events": [
+        {
+          "stage": "RECOVERED_EXACT_DECODER",
+          "status": "PASS",
+          "code_sha256": "e70623bdf54053347af8039630cf999a680c13edceae8672e5fc6e854b310acf",
+          "stdout": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "production_blobs_used": false
+        },
+        {
+          "stage": "LOCAL_COLD_START",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 7,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_COLD_START",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "cc890f702a6cdabde930283fe7b16d9d6e853e4864dd175c495c389c5a6a8b07",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_RESTART_SAME_TEST_KEY",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 9,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_RESTART",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "e4acfbb587fd19e341f50820ac16350a4c6a421bb8a34e9570cba123d895d1c9",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_BAD_ENGINE_HASH",
+          "status": "DEGRADED",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "adc0ff277cde97f9d6ec969d347e54072dc1e4096942c6aeef9445b1a7f4ba34",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 11,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_BAD_ENGINE_FAIL_CLOSED",
+          "status": "PASS",
+          "actual_run_count": 0
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_RESTORE_ORIGINAL_ARTIFACTS",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 12,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_RESTORE",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "f81201de85f6957a4650a2606f2d37f3714551e584dae29e50dc8812691df645",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        }
+      ],
+      "real_engine_local_runs": 300,
+      "production_runtime_calls": 0,
+      "production_mutations": 0,
+      "provider_rollback": "NOT EXECUTED / NOT VERIFIED",
+      "production_cold_start_restart": "NOT EXECUTED / NOT VERIFIED",
+      "git_sha": "NOT ESTABLISHED",
+      "future_oos_credit": 0,
+      "full_prediction_final_delivery_learning_acceptance": false,
+      "launcher_file_sha256": "3a160b8d72b9248ec3638ded092c9bb6f46a6088eb20459f7e58c88f7c79d5ac",
+      "launcher_command_sha256": "4c89146f5ac67b2ac2f0fb3a03a934b4b6630919a74d23306f21c792fc800cf3",
+      "launcher_sha_scope": "Original launcher_sha256 hashes file including trailing newline; command_sha256 excludes surrounding whitespace",
+      "test_receipt_envelopes_from_original_logs": [
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2825,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:20.535801Z"
+          },
+          "receipt_sha256": "cc890f702a6cdabde930283fe7b16d9d6e853e4864dd175c495c389c5a6a8b07",
+          "signature": "SFuVV8KH2npYcVF8zYUXfirEi3dWMeu0M1qZHY+qxe/Z7BEt9PhOc/7sbwqMARjHVpxMQ6Lm9UE5ea45Bb95BQ==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2761,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:24.147687Z"
+          },
+          "receipt_sha256": "e4acfbb587fd19e341f50820ac16350a4c6a421bb8a34e9570cba123d895d1c9",
+          "signature": "SmxmXV7Qsny0ivpthbJcxeTs/jMYznmj7fPBgIFgkJsnLVdciR3z8z+MDkUwFo650KKpw31C6k0EM2pB0zNCAg==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 0,
+            "cause": "RUNTIME-DEGRADED",
+            "mode": "SMOKE",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "status": "EXECUTION-FAILED",
+            "timestamp": "2026-10-17T11:45:24.984991Z"
+          },
+          "receipt_sha256": "145425f2eeb68677b9e7931d45457a5e543e7cc5e51aca0c449aea5f343cc1e6",
+          "signature": "kVylwzAnkIlq6CcpUdGrfIPbIBCVEA+3TsIl8tpApBBr58VJ8Wfqkoc91uo1whUu7B0chEeKgZVdXCKoecl4Dw==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2707,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:28.477041Z"
+          },
+          "receipt_sha256": "f81201de85f6957a4650a2606f2d37f3714551e584dae29e50dc8812691df645",
+          "signature": "xFlknA1YDL6g76bcLhcPjHE9dkkj7K4dFdiyFvkLWLhCPZ76M5u3VueNC8NFHcGJeidXtA41E5YXsGA389TeAg==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        }
+      ],
+      "original_test_log_sha256": "cca65bcd6b9444f3defab6c5c0aa73e2357a8bfb20c70cb9aba66e8cdb89305f",
+      "test_receipts_regenerated": false
+    },
+    "independent_candidate_review": {
+      "candidate_status": "PREPARED_NOT_APPLIED",
+      "candidate_command_sha256": "610839e28c178df8b0527d3a5850fe67b597f94bf5ef757823df9fb3ec326fec",
+      "observed_deployed_command_sha256": "4c89146f5ac67b2ac2f0fb3a03a934b4b6630919a74d23306f21c792fc800cf3",
+      "same_exact_decoder_and_server_tail": true,
+      "pinned_application_distributions": 28,
+      "all_pins_match_local_installed_metadata": true,
+      "production_changes": 0,
+      "local_rehearsal": "PASS: real Engine300runs / TEST signer only",
+      "local_test_receipt_original_log_signatures_verified": 4,
+      "limitations": [
+        "Original unversioned pip resolution step was not replayed",
+        "Candidate still requires network/package availability",
+        "No deployed full image digest or Git mapping verified",
+        "No provider restart/rollback performed",
+        "Owner authorization required before config/deploy/activation"
+      ],
+      "review_verdict": "ACCEPTABLE_OWNER_REVIEW_CANDIDATE / NOT APPLIED / NOT PRODUCTION STARTUP ACCEPTANCE"
+    },
+    "pinned_requirements_dry_run": {
+      "tool": "uv pip install --python /tmp/km-runtime-startup-venv/bin/python --dry-run -r /tmp/km-recovered-runtime-requirements.txt",
+      "status": "PASS",
+      "checked_packages": 28,
+      "result": "Would make no changes"
+    },
+    "restart_safety": {
+      "local": "PASS matching original App/Engine/params, Python version number and application packages; different local Python build/compiler, loopback binding, TEST trust",
+      "provider": "UNVERIFIED_NOT_EXECUTED",
+      "current_service_next_deploy": "UNSAFE_DIAGNOSTIC_COMMAND_REMAINS",
+      "network_install": "Original unpinned pip startup step not rehearsed; pinned candidate prepared, package/network availability still required",
+      "current_variable_values": "Current service code blob values not independently decoded; owner preflight must validate 7app/6engine/param SHA before config apply. Deployed snapshot/running originals verified."
+    },
+    "rollback_safety": {
+      "local": "PASS original artifacts restored after corrupted Engine rejected",
+      "provider": "UNVERIFIED_NOT_EXECUTED",
+      "target_for_future_candidate_rollback": "Preserve currently active deployment7c7eeb5e... with known original snapshot. Previous35de5393... REMOVED is not a proven rollback target. canRollback metadata is not safety proof."
+    },
+    "read_only_browser_scope": "Railway plugin lacks deployed snapshot command/live PID1/source. Authorized read-only UI fallback used; no service settings/variables/deployments changed. File download UI canceled, code-only Console reads used. Raw Editor viewed and Cancelled without changes.",
+    "source_reference_files": {
+      "app.py": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/app.py",
+        "sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989"
+      },
+      "KRS-Engine_v1.1.0_PORTABLE.py": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/KRS-Engine_v1.1.0_PORTABLE.py",
+        "sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+      },
+      "parameter_map_v0.1-provisional.json": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/parameter_map_v0.1-provisional.json",
+        "sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc"
+      }
+    },
+    "production_operations": {
+      "merge": 0,
+      "deploy": 0,
+      "restart": 0,
+      "settings_changes": 0,
+      "environment_changes": 0,
+      "signer_changes": 0,
+      "external_notification": 0
+    },
+    "delivery_learning": {
+      "signed_final": 23,
+      "canonical_available": 23,
+      "ack_verified": 0,
+      "learning_stored": 22,
+      "next_prediction_consumption_verified": 0,
+      "status": "Separate existing blockers, no new Production connection/notification authority"
+    },
+    "verdict": "NOT MERGE-READY; isolated runtime rehearsal PASS, current service settings still unsafe, provider restart/rollback and exact HEAD owner approval pending",
+    "latest_main_at_closure": "98b6be3261b72acf460a07da7d981ae83f871151",
+    "latest_main_change": "Only live race-day status/state2 files changed after d7ae23a; clean read-only merge-tree e91bb21015b3e8fb16fa2d708adddb879cd84e2d for parent dc86a93.",
+    "pinned_requirements_fresh_install": {
+      "status": "PASS",
+      "environment": "NEW LOCAL /tmp/km-pinned-startup-venv Python3.13.16; no Production keys",
+      "installer": "python -m pip with exact candidate --no-cache-dir --disable-pip-version-check --retries2 --timeout15 options and28pins",
+      "pip_version": "26.2.1",
+      "installed_application_distributions": 28,
+      "pip_check": "No broken requirements found",
+      "all_29_observed_versions_including_pip": "MATCH",
+      "original_app_import": "PASS v1.3.1",
+      "install_log_sha256": "98b7e90fc7e1d11e73f8a6e02e4157cd4398efd89ecb0e182cc9e9e30def0780",
+      "provider_equivalence": "NOT A Railway image/container coldstart proof; network availability on futuredeploy remains contingent"
+    },
+    "final_independent_delta_review": {
+      "reviewer": "Independent technical agent distinct from implementation agent",
+      "reviewed_parent_head": "dc86a93f877bda4ece521e8bec768b0080b8a349",
+      "main_sha": "98b6be3261b72acf460a07da7d981ae83f871151",
+      "delta_files": 10,
+      "expected_final_pr_file_count": 124,
+      "original_source_references_sha_verified": 3,
+      "embedded_local_test_receipts_ed25519_verified": 4,
+      "fixed_shadow_definition_hashes_verified": 14,
+      "three_way_merge_tree": "e91bb21015b3e8fb16fa2d708adddb879cd84e2d",
+      "live_state_main_preserved": true,
+      "runtime_policy_workflow_production_changes": 0,
+      "signed_production_artifact_changes": 0,
+      "new_secret_literals_observed": false,
+      "candidate_applied": false,
+      "local_engine_runs": 300,
+      "local_rehearsal": "PASS_WITH_TEST_TRUST_ONLY",
+      "provider_restart_rollback": "NOT_EXECUTED_UNVERIFIED",
+      "git_sha_actual_runtime": "UNVERIFIED",
+      "actual_full_image_digest": "UNVERIFIED",
+      "verdict": "TECHNICAL_DELTA_REVIEW_PASS / NOT_MERGE_READY",
+      "notes": [
+        "New recovered code files are SHA-preserved non-Production audit references",
+        "Local Python version number matches, build/compiler differs; no exact container equivalence claim",
+        "Correct deployed startup generation now established; actor/time/root historical mutation cause unknown",
+        "Current service command still diagnostic; Owner preflight and config approval remain needed",
+        "Deployment/restart/rollback/Delivery/Learning live acceptance remain separate"
+      ],
+      "pinned_fresh_install_independent_checks": {
+        "pip_check": "PASS",
+        "all_observed_versions_including_pip": 29,
+        "app_import": "PASS v1.3.1, clean environment",
+        "install_log_sha256": "98b7e90fc7e1d11e73f8a6e02e4157cd4398efd89ecb0e182cc9e9e30def0780",
+        "credential_url_in_log": false
+      },
+      "final_inventory_hash_mismatches": [],
+      "final_inventory_self_hash": "Explicitly excluded as SELF_REFERENTIAL_NOT_EMBEDDED, correct",
+      "final_inventory_other_hashes_verified": 123
+    },
+    "review_capture_scope": "Independent reviewer checked10 changed/new paths and124 full PR inventory before this report was embedded. Report embedding/inventory self-hash refresh does not alter reviewed executable/reference/candidate bytes.",
+    "final_immutable_artifact_recheck": {
+      "original_receipts": 23,
+      "signature_input_output_sha": "23/23 PASS",
+      "archive_members": 562,
+      "archive_sha256": "2fe1620da315a5d5b8d5de8cd983c3a23b9f60710ac36ef40c7643c1009a6355",
+      "signed_originals_changed": false
+    },
+    "final_railway_readback": {
+      "deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+      "status": "SUCCESS",
+      "snapshot_id": "1db3ca05-b62e-4038-8106-80c3c561e761",
+      "service_command_still_SystemExit9": true,
+      "healthcheckTimeout": 30,
+      "service_staged": null,
+      "environment_staged": null,
+      "production_mutation_performed": false
+    }
   }
 }
