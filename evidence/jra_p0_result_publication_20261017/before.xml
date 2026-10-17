@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="5" time="0.583" timestamp="2026-10-17T11:45:48.870523+08:00" hostname="cc47d378f0eb"><testcase classname="tests.test_jra_result_persistence" name="test_real_push_race_retries_without_changing_receipt_or_other_race" time="0.172" /><testcase classname="tests.test_jra_result_persistence" name="test_conflicting_immutable_receipt_fails_closed_without_side_selection" time="0.133" /><testcase classname="tests.test_jra_result_persistence" name="test_jra_snapshot_conflict_rebuilds_merged_records" time="0.148"><failure message="RuntimeError: PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-18/test_jra_snapshot_conflict_reb0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f0749496270&gt;
+
+    def test_jra_snapshot_conflict_rebuilds_merged_records(tmp_path,monkeypatch):
+        remote,a,b=repository(tmp_path)
+        view='runtime/krs_oos_status.json'
+        commit(a,view,b'{"stale":"worker"}\n')
+        commit(a,'runtime/krs_oos_measurements/A.json',b'{"race_id":"A"}\n')
+        commit(b,view,b'{"stale":"peer"}\n')
+        commit(b,'runtime/krs_oos_measurements/B.json',b'{"race_id":"B"}\n')
+        git(b,'push','origin','HEAD:main')
+        refreshed=[]
+        def refresh(paths):
+            refreshed.append(set(paths))
+            # Both per-race records must exist before the disposable view is rebuilt.
+            ids=sorted(json.loads(p.read_text())['race_id'] for p in (a/'runtime/krs_oos_measurements').glob('*.json'))
+            assert ids==['A','B']
+            (a/view).write_text(json.dumps({'race_ids':ids}))
+        monkeypatch.setattr(store.time,'sleep',lambda _:None)
+&gt;       store.persist(cwd=a,branch='main',attempts=2,refresh=refresh)
+
+tests/test_jra_result_persistence.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-root/pytest-18/test_jra_snapshot_conflict_reb0/worker')
+branch = 'main'
+refresh = &lt;function test_jra_snapshot_conflict_rebuilds_merged_records.&lt;locals&gt;.refresh at 0x7f07494c0400&gt;
+attempts = 2
+
+    def persist(*, cwd, branch, refresh=rebuild, attempts=5):
+        # Noncommitted runtime scratch must not obstruct the durable record commit.
+        dirty = git('status', '--porcelain', cwd=cwd).stdout.strip()
+        stashed = bool(dirty)
+        if stashed and git('stash', 'push', '--include-untracked', '-m', 'km-local-persist-scratch', cwd=cwd).returncode:
+            raise RuntimeError('PERSIST_SCRATCH_STASH_FAILED')
+        touched = set(git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD', cwd=cwd).stdout.splitlines()) &amp; SNAPSHOTS
+        pushed = False
+        try:
+            for attempt in range(attempts):
+                if git('fetch', 'origin', branch, cwd=cwd).returncode:
+                    raise RuntimeError('PERSIST_FETCH_FAILED')
+                result = git('rebase', 'FETCH_HEAD', cwd=cwd)
+                while result.returncode:
+                    conflicts = set(git('diff', '--name-only', '--diff-filter=U', cwd=cwd).stdout.splitlines())
+                    if not conflicts or not conflicts &lt;= SNAPSHOTS:
+                        git('rebase', '--abort', cwd=cwd)
+&gt;                       raise RuntimeError('PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT')
+E                       RuntimeError: PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT
+
+tools/persist_local_checkpoints.py:73: RuntimeError</failure></testcase><testcase classname="tests.test_jra_result_persistence" name="test_retry_exhaustion_keeps_local_commit_and_does_not_claim_success" time="0.102" /><testcase classname="tests.test_jra_result_persistence" name="test_verified_result_is_checkpointed_before_review_and_uploaded_on_failure" time="0.000"><failure message="ValueError: substring not found">def test_verified_result_is_checkpointed_before_review_and_uploaded_on_failure():
+        text=Path('.github/workflows/km-formal-result-runner.yml').read_text()
+&gt;       assert text.index('assert vcode&lt;300') &lt; text.index('result_receipt_envelope.json') &lt; text.index('review=build_post_result_review')
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ValueError: substring not found
+
+tests/test_jra_result_persistence.py:106: ValueError</failure></testcase></testsuite></testsuites>
