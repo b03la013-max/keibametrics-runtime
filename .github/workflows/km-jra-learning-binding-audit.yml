@@ -1,0 +1,22 @@
+name: JRA next-race learning binding audit
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-audit-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m unittest discover -s tests -p test_jra_next_race_learning_binding_audit.py -v
