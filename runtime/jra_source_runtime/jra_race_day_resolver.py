@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import re
+import time
 from typing import Any, Dict, List
 
 PROFILE = "KM-JRA-OFFICIAL-RACE-DAY-RESOLVER-v1.0-20261010"
@@ -112,6 +113,7 @@ def resolve_meetings(race_date: str) -> List[str]:
     from jra_pedigree_harvest import _Client, _calendar
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
     c = _Client(delay=1.0)
+    c.deadline_monotonic = time.monotonic() + 180
     cal = c.get(_calendar(race_date))
     m = re.search(r"doAction\('/JRADB/accessD\.html'\s*,\s*'([^']+)'\)", cal)
     if not m:
@@ -121,13 +123,14 @@ def resolve_meetings(race_date: str) -> List[str]:
     return [VENUES[c_][1] for c_ in codes if c_ in VENUES]
 
 
-def resolve_day(race_date: str, venue: str):
+def resolve_day(race_date: str, venue: str, *, deadline_monotonic=None):
     """Official JRA day race list for one venue: (meeting_key, races)."""
     from jra_pedigree_harvest import _Client, _calendar
     from source_acquisition import _html_tables
     code = venue_code(venue)
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
-    c = _Client(delay=1.0)  # harvest client enforces >=0.7s politeness
+    c = _Client(delay=1.0)
+    c.deadline_monotonic = deadline_monotonic or time.monotonic() + 180
     cal = c.get(_calendar(race_date))
     m = re.search(r"doAction\('/JRADB/accessD\.html'\s*,\s*'([^']+)'\)", cal)
     if not m:
@@ -149,29 +152,19 @@ def resolve_day(race_date: str, venue: str):
 
 def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[str, Any]:
     """Network path (official JRA only); used by the resolver workflow."""
-    key, races = resolve_day(race_date, venue)
+    deadline = kw.pop("deadline_monotonic", None)
+    key, races = resolve_day(race_date, venue, **({"deadline_monotonic": deadline} if deadline is not None else {}))
     race = next((r for r in races if r["race_no"] == int(race_no)), None)
     if race is None:
         raise ValueError("JRA_RESOLVER_RACE_NOT_FOUND")
     return build_intent(race_date=race_date, venue=venue, race_no=race_no, meeting_key=key, race=race, **kw)
 
 
-if __name__ == "__main__":
-    import argparse
+def execute(a, deadline_monotonic):
     import json
     from pathlib import Path
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--date", required=True)
-    ap.add_argument("--venue", required=True)
-    ap.add_argument("--race", type=int, required=True)
-    ap.add_argument("--run-count", type=int, default=5000)
-    ap.add_argument("--revision", type=int, default=1)
-    ap.add_argument("--out-dir", default="runtime/jra_formal_intents")
-    ap.add_argument("--orchestration-session-id")
-    ap.add_argument("--min-lead-minutes", type=float, default=15.0)
-    a = ap.parse_args()
     intent = resolve_and_build(a.date, a.venue, a.race, run_count=a.run_count, revision=a.revision,
-                               orchestration_session_id=a.orchestration_session_id)
+                               orchestration_session_id=a.orchestration_session_id, deadline_monotonic=deadline_monotonic)
     # A Formal pre-race prediction needs SOURCE + Full20 + KRS + MEC + signed
     # FINAL before the cutoff. Too close to post: no intent, no error, and no
     # late or backdated FINAL; the day's status index holds the real state.
@@ -197,3 +190,82 @@ if __name__ == "__main__":
         raise SystemExit("INTENT_ALREADY_EXISTS:" + str(p))
     p.write_text(json.dumps(intent, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(json.dumps(intent, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    import argparse
+    import json
+    from pathlib import Path
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--date", required=True)
+    ap.add_argument("--venue", required=True)
+    ap.add_argument("--race", type=int, required=True)
+    ap.add_argument("--run-count", type=int, default=5000)
+    ap.add_argument("--revision", type=int, default=1)
+    ap.add_argument("--out-dir", default="runtime/jra_formal_intents")
+    ap.add_argument("--orchestration-session-id")
+    ap.add_argument("--min-lead-minutes", type=float, default=15.0)
+    a = ap.parse_args()
+    import os
+    import sys
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "runtime"))
+    rid = f"KM-JRA-{VENUES[venue_code(a.venue)][0]}-{_dt.date.fromisoformat(a.date).strftime('%Y%m%d')}-R{a.race:02d}"
+    if not 1 <= a.race <= 12:
+        raise ValueError("JRA_RACE_NO_INVALID")
+    # A previously observed official schedule can only shorten the 180s
+    # resolver budget; it cannot authorize an intent or replace fresh resolve.
+    retry_deadline = None
+    schedule_path = root / "runtime/jra_race_day_plan" / (a.date + ".schedule.json")
+    if schedule_path.exists():
+        schedule = json.loads(schedule_path.read_text()).get(rid) or {}
+        if schedule.get("post"):
+            post = _dt.datetime.fromisoformat(schedule["post"])
+            if post.tzinfo is None or post.astimezone(JST).date().isoformat() != a.date:
+                raise ValueError("JRA_RESOLVER_SCHEDULE_TIME_INVALID")
+            retry_deadline = post - _dt.timedelta(minutes=a.min_lead_minutes)
+    budget = min(180, (retry_deadline - _dt.datetime.now(JST)).total_seconds()) if retry_deadline else 180
+    try:
+        if budget <= 0:
+            from jra_pedigree_harvest import OfficialDeadlineExceeded
+            raise OfficialDeadlineExceeded("JRA_RESOLVER_INTAKE_DEADLINE")
+        # Linux Actions wall-clock guard also interrupts DNS/TLS/body calls;
+        # socket timeouts alone do not bound DNS or a slowly streaming body.
+        import signal
+        from jra_pedigree_harvest import OfficialDeadlineExceeded
+        def expired(*_):
+            raise OfficialDeadlineExceeded("JRA_RESOLVER_OVERALL_DEADLINE")
+        previous = signal.signal(signal.SIGALRM, expired)
+        signal.setitimer(signal.ITIMER_REAL, budget)
+        try:
+            execute(a, time.monotonic() + budget)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, previous)
+    except Exception as exc:
+        from jra_pedigree_harvest import retryable_official_error
+        from jra_single_entry_outcome import record_formal_failure
+        import traceback
+        observed = _dt.datetime.now(JST)
+        eligible = retry_deadline is not None and observed < retry_deadline
+        failure = {
+            "run_id": os.environ.get("GITHUB_RUN_ID", "0"),
+            "workflow_run_id": os.environ.get("GITHUB_RUN_ID", "0"),
+            "run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
+            "first_failed_stage": "RESOLVE_OFFICIAL_RACE_AND_BUILD_INTENT",
+            "failure_owner": "JRA_OFFICIAL_RACE_RESOLVER",
+            "exception_class": type(exc).__name__, "error": str(exc)[:2000],
+            "official_request": getattr(exc, "official_request", None),
+            "traceback": traceback.format_exc()[-12000:],
+            "retryable": retryable_official_error(exc),
+            "retry_deadline": retry_deadline.isoformat() if retry_deadline else None,
+            "temporal_eligibility": eligible,
+            "last_attempt_at": observed.isoformat(), "status_updated_at": observed.isoformat(),
+            "terminal_state": ("RESOLVER_FAILED" if eligible or retry_deadline is None
+                               else "RESOLVER_DEADLINE_EXCEEDED"),
+            "conclusion": "failure", "exit_code": 1,
+            "run_url": "https://github.com/" + os.environ.get("GITHUB_REPOSITORY", "b03la013-max/keibametrics-runtime") + "/actions/runs/" + os.environ.get("GITHUB_RUN_ID", "0"),
+        }
+        record_formal_failure(root, {"family_id": "JRA", "race_id": rid,
+                              "execution_id": f"{rid}-LIVE-R{a.revision}"}, failure)
+        raise

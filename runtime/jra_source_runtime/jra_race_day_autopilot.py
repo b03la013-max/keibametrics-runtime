@@ -79,7 +79,8 @@ def race_id_for(race_date: str, venue: str, race_no: int) -> str:
 
 def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
          meetings=resolve_meetings, dispatch=None, default_all=False, cache=None,
-         publish=None) -> list[dict]:
+         publish=None, resolver_runs=None, retry_resolver=None) -> list[dict]:
+    tick_started = time.monotonic()
     plan_dir = root / "runtime" / "jra_race_day_plan"
     plan_path = plan_dir / f"{race_date}.json"
     if plan_path.exists():
@@ -116,6 +117,7 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
                 raise _c
             return _c
     out = []
+    resolver_runs = observed_resolver_runs(root) if resolver_runs is None else resolver_runs
     for venue, race_no, run_count, err in plan_entries(plan, race_date, meetings=meetings,
                                                        resolve=resolve, days=days):
         if err:
@@ -155,6 +157,42 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             except (ValueError,OSError,KeyError,TypeError) as exc:
                 schedule[rid]['status']='HOLD_PREREGISTRATION_INTEGRITY'
                 out.append({'race_id':rid,'status':'HOLD_PREREGISTRATION_INTEGRITY','error':str(exc)[:300]})
+                continue
+        # Recovery reruns the SAME completed Resolver run at most once. The
+        # durable claim precedes the API call; ambiguous sends are never resent.
+        if rid in state and not list((root / "runtime/jra_formal_intents").glob(rid + "-LIVE-*.json")):
+            failure = resolver_failure(root, rid)
+            run = matched_resolver_run(rid, resolver_runs)
+            deadline = (post - _dt.timedelta(minutes=15))
+            if failure and failure.get("retry_deadline"):
+                deadline = min(deadline, _dt.datetime.fromisoformat(failure["retry_deadline"]))
+            if (failure and failure.get('retryable') is True and run
+                    and str(failure.get('workflow_run_id')) == str(run['databaseId'])
+                    and run.get('status') == 'completed' and run.get('conclusion') == 'failure'
+                    and int(run.get('attempt') or 1) < 2
+                    and now + _dt.timedelta(seconds=time.monotonic()-tick_started) < deadline and publish is not None
+                    and not state[rid].get('resolver_recovery_claim')):
+                state[rid]['resolver_recovery_claim'] = {'workflow_run_id':str(run['databaseId']),
+                    'claimed_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
+                state_path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+                try:
+                    publish()
+                except Exception as exc:
+                    # Known no-send; a future tick may publish the claim again.
+                    state[rid].pop('resolver_recovery_claim',None)
+                    out.append({'race_id':rid,'status':'RECOVERY_CLAIM_PUBLISH_FAILED_NO_SEND','error':str(exc)[:200]})
+                    continue
+                if now + _dt.timedelta(seconds=time.monotonic()-tick_started) >= deadline:
+                    state[rid]['resolver_recovery_claim']['state']='DEADLINE_EXCEEDED_NO_SEND'
+                    out.append({'race_id':rid,'status':'RESOLVER_DEADLINE_EXCEEDED'})
+                    continue
+                try:
+                    (retry_resolver or _gh_retry_resolver)(root, run['databaseId'])
+                    state[rid]['resolver_recovery_claim']['state']='ACKNOWLEDGED'
+                except Exception as exc:
+                    state[rid]['resolver_recovery_claim']['state']='HOLD_AMBIGUOUS_NO_AUTOMATIC_RETRY'
+                    state[rid]['resolver_recovery_claim']['error']=str(exc)[:200]
+                out.append({'race_id':rid,'status':'RESOLVER_RECOVERY_REQUESTED'})
                 continue
         # Only a failure known to precede the dispatch call may be retried.
         # An ambiguous acknowledgement retains the existing no-resend hold.
@@ -225,7 +263,8 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     intents = sorted(glob.glob(str(root / "runtime" / "jra_formal_intents" / (rid + "-LIVE-*.json"))))
     final_p = root / "runtime" / "final_artifacts" / (rid + ".json")
     result_p = root / "runtime" / "results" / (rid + ".json")
-    eids = [Path(p).stem for p in intents]
+    eids = sorted(set([Path(p).stem for p in intents] +
+                       [p.stem for p in (root/'runtime/exact_gaps').glob(rid+'-LIVE-*.json')]))
     no_bet = [p for e in eids for p in glob.glob(str(root / "runtime" / "jra_no_bet_terminals" / (e + ".json")))]
     gaps = [p for e in eids for p in glob.glob(str(root / "runtime" / "exact_gaps" / (e + ".json")))]
     if final_p.exists():
@@ -299,6 +338,23 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
         failure = gap.get('formal_execution_failure')
         if failure:
+            if failure.get('failure_owner') == 'JRA_OFFICIAL_RACE_RESOLVER':
+                if intents:
+                    # A successful retry has crossed the Intent boundary; an
+                    # older resolver failure cannot own its Formal status.
+                    row.update(state='DISPATCHED_RUNNING',awaiting_stage='SIGNED_SOURCE_OR_FORMAL')
+                    return row
+                row.update({k: failure.get(k) for k in ('workflow_run_id','execution_id',
+                    'first_failed_stage','failure_owner','exception_class','retryable','retry_deadline',
+                    'last_attempt_at','terminal_state','status_updated_at')})
+                deadline = failure.get('retry_deadline')
+                eligible = bool(deadline and now < _dt.datetime.fromisoformat(deadline))
+                terminal = ('RESOLVER_FAILED_TIME_UNRESOLVED' if deadline is None else
+                            'RESOLVER_FAILED' if eligible else 'RESOLVER_DEADLINE_EXCEEDED')
+                row.update(state=terminal,
+                           temporal_eligibility=eligible, execution_error=failure.get('error'))
+                row['terminal_state']=row['state']
+                return row
             row.update(state='FORMAL_FAILED', first_blocked_stage=failure['first_failed_stage'],
                        execution_error=failure.get('error'), formal_run_id=failure['run_id'],
                        formal_run_url=failure.get('run_url'),
@@ -330,6 +386,97 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         row["state"] = ("MISSED_WINDOW" if close and now > close else "WAITING")
         row["dispatch_window_open"] = sched.get("dispatch_window_open")
     return row
+
+
+def resolver_failure(root, rid):
+    records = []
+    for p in (root/'runtime/exact_gaps').glob(rid+'-LIVE-*.json'):
+        try:
+            f = json.loads(p.read_text()).get('formal_execution_failure') or {}
+            if f.get('race_id') == rid and f.get('failure_owner') == 'JRA_OFFICIAL_RACE_RESOLVER':
+                int(f['workflow_run_id']); int(f.get('run_attempt') or 1)
+                if f.get('retry_deadline'):
+                    parsed = _dt.datetime.fromisoformat(f['retry_deadline'])
+                    if parsed.tzinfo is None:continue
+                records.append(f)
+        except (OSError,ValueError,TypeError,KeyError):
+            continue
+    return max(records,key=lambda x:(int(x['workflow_run_id']),int(x.get('run_attempt') or 1))) if records else None
+
+
+def observed_resolver_runs(root):
+    import os
+    if not os.environ.get('GH_TOKEN') and not os.environ.get('GITHUB_TOKEN'):
+        return []
+    try:
+        result = subprocess.run(['gh','run','list','--workflow','km-jra-race-intent-resolver.yml',
+            '--branch','main','--limit','100','--json',
+            'databaseId,displayTitle,status,conclusion,url,headSha,attempt,createdAt'],
+            cwd=root,check=True,capture_output=True,text=True,timeout=15)
+        return json.loads(result.stdout)
+    except (OSError,subprocess.SubprocessError,ValueError):
+        return []
+
+
+def matched_resolver_run(rid, runs):
+    # Titles from this workflow contain the exact venue, date and race number.
+    # Never correlate by R number alone, substring, dispatch time or list order.
+    parts=rid.split('-')
+    vid,date,number=parts[2],parts[3],int(parts[4][1:])
+    name=next((n for _,(v,n) in VENUES.items() if v==vid),None)
+    day=_dt.datetime.strptime(date,'%Y%m%d').date().isoformat()
+    titles={f'JRA intent {v} {day} R{n}' for v in (name,vid) for n in (str(number),f'{number:02d}')}
+    matches=[]
+    for r in runs:
+        if r.get('displayTitle') in titles:
+            matches.append(r)
+            continue
+        implicit={f'JRA intent {v} {d} R{n}' for v in (name,vid) for d in ('','today')
+                  for n in (str(number),f'{number:02d}')}
+        if r.get('displayTitle') in implicit and r.get('createdAt'):
+            try:
+                created=_dt.datetime.fromisoformat(r['createdAt'].replace('Z','+00:00'))
+                if created.tzinfo is not None and created.astimezone(JST).date().isoformat()==day:
+                    matches.append(r)
+            except (ValueError,TypeError):
+                continue
+    return max(matches,key=lambda x:int(x['databaseId'])) if matches else None
+
+
+def reconcile_resolver_run_status(root, row, runs, now):
+    if row.get('state') not in {'DISPATCHED_RUNNING','RESOLVER_FAILED','RESOLVER_DEADLINE_EXCEEDED','RESOLVER_FAILED_TIME_UNRESOLVED'}:
+        return
+    if list((root/'runtime/jra_formal_intents').glob(row['race_id']+'-LIVE-*.json')):
+        return  # A completed resolver does not own the downstream Formal state.
+    run=matched_resolver_run(row['race_id'],runs)
+    if not run:return
+    row['workflow_run_id']=str(run['databaseId'])
+    row['status_updated_at']=now.isoformat()
+    if run.get('status') != 'completed':
+        row.update(state='DISPATCHED_RUNNING',terminal_state=None)
+    elif run.get('conclusion') in {'failure','timed_out','cancelled'}:
+        deadline=_dt.datetime.fromisoformat(row['post'])-_dt.timedelta(minutes=15) if row.get('post') else None
+        eligible=bool(deadline and now<deadline)
+        row.update(state='RESOLVER_FAILED' if eligible else 'RESOLVER_DEADLINE_EXCEEDED',
+                   temporal_eligibility=eligible, retry_deadline=deadline.isoformat() if deadline else None,
+                   resolver_conclusion=run['conclusion'])
+        row['terminal_state']=row['state']
+        row.setdefault('first_failed_stage','INTENT_RESOLVER_WORKFLOW')
+        row.setdefault('failure_owner','JRA_OFFICIAL_RACE_RESOLVER')
+        row.setdefault('exception_class',None)  # No invented traceback from run conclusion.
+        row.setdefault('retryable',False)
+        row.setdefault('last_attempt_at',run.get('createdAt'))
+        row.setdefault('execution_id',row['race_id']+'-LIVE-R1')
+    elif run.get('conclusion') == 'success':
+        # SUCCESS without a persisted intent is not a running Formal prediction.
+        expired=bool(row.get('post') and now >= _dt.datetime.fromisoformat(row['post'])-_dt.timedelta(minutes=15))
+        terminal='RESOLVER_DEADLINE_EXCEEDED' if expired else 'RESOLVER_COMPLETED_WITHOUT_INTENT'
+        row.update(state=terminal,terminal_state=terminal,temporal_eligibility=not expired)
+
+
+def _gh_retry_resolver(root, run_id):
+    subprocess.run(['gh','run','rerun',str(int(run_id)),'--failed'],cwd=root,
+                   check=True,capture_output=True,text=True,timeout=30)
 
 
 def observed_formal_runs(root):
@@ -374,7 +521,7 @@ def reconcile_formal_run_status(root, row, runs):
                    detailed_failure_stage_verified=False)
 
 
-def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict, *, formal_runs=None) -> dict:
+def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict, *, formal_runs=None, resolver_runs=None) -> dict:
     rows=[]
     for rid,s in schedule.items():
         try:rows.append(race_status(root,rid,s,state,now))
@@ -382,7 +529,9 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
             rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
                          'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
     runs=(observed_formal_runs(root) if any(r.get('state')=='DISPATCHED_RUNNING' for r in rows) else []) if formal_runs is None else formal_runs
+    resolver_runs = observed_resolver_runs(root) if resolver_runs is None else resolver_runs
     for row in rows:
+        reconcile_resolver_run_status(root,row,resolver_runs,now)
         reconcile_formal_run_status(root,row,runs)
     rows.sort(key=lambda r: (r.get("post") or "", r["race_id"]))
     idx = {"profile": PROFILE, "race_date": race_date, "generated_at":now.isoformat(), "races": rows,
@@ -537,6 +686,8 @@ def merge_dispatch_state(remote: dict, local: dict) -> dict:
                 observed=[x[stamp] for x in (a,b) if x.get(stamp)]
                 if observed:merged[stamp]=min(observed)
             if a.get('first_failure'):merged['first_failure']=a['first_failure']
+            if a.get('resolver_recovery_claim'):
+                merged['resolver_recovery_claim']=a['resolver_recovery_claim']
             if merged.get('dispatched_at'):
                 merged['dispatch_state']='DISPATCH_ACKNOWLEDGED'
                 acknowledged=next((x for x in (a,b) if x.get('dispatched_at')),merged)

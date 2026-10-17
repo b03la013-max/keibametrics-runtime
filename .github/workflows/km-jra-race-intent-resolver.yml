@@ -1,5 +1,5 @@
 name: KeibaMetrics JRA Race Intent Resolver
-run-name: JRA intent ${{ inputs.venue }} ${{ inputs.race_date }} R${{ inputs.race_no }}
+run-name: JRA intent ${{ inputs.venue }} ${{ inputs.race_date || 'today' }} R${{ inputs.race_no }}
 
 # "競馬場 + R番号" -> official meeting key / post time -> Formal intent.
 # A GITHUB_TOKEN push does not trigger other workflows, so the Single Entry
@@ -34,6 +34,11 @@ on:
         required: false
         default: "1"
         type: string
+
+# Same-race callers serialize; existing immutable intents prevent redispatch.
+concurrency:
+  group: km-jra-resolver-${{ inputs.race_date }}-${{ inputs.venue }}-${{ inputs.race_no }}
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -81,3 +86,41 @@ jobs:
           $pushed
           gh workflow run km-jra-formal-single-entry.yml --ref main -f intent_path="$INTENT_PATH"
           echo "Dispatched Single Entry for $INTENT_PATH"
+
+      - name: Persist Resolver failure and refresh derived status
+        if: failure() && steps.intent.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RACE_DATE: ${{ inputs.race_date }}
+        run: |
+          set -euo pipefail
+          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          mkdir -p runtime_out
+          python - <<'PYCODE'
+          import json,os,pathlib
+          root=pathlib.Path('.')
+          found=[]
+          for path in (root/'runtime/exact_gaps').glob('KM-JRA-*-LIVE-*.json'):
+              value=json.loads(path.read_text())
+              failure=value.get('formal_execution_failure') or {}
+              if str(failure.get('workflow_run_id'))==os.environ['GITHUB_RUN_ID']:
+                  found.append((path,value))
+          if not found:
+              raise SystemExit('RESOLVER_FAILURE_CHECKPOINT_MISSING_USE_WORKFLOW_COMPLETION_RECONCILIATION')
+          for path,value in found:
+              (root/'runtime_out/resolver_failure.json').write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+              import subprocess
+              subprocess.run(['git','add',str(path)],check=True)
+          PYCODE
+          git diff --cached --quiet || git commit -m "execution: persist JRA Resolver failure [skip ci]"
+          # Existing bounded generated-state publisher also retries pending commits.
+          python runtime/jra_source_runtime/jra_race_day_autopilot.py --repo-root . --date "$D" --publish-only
+      - name: Preserve Resolver failure when status publication fails
+        if: failure() && steps.intent.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-resolver-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime_out/resolver_failure.json
+          if-no-files-found: warn
