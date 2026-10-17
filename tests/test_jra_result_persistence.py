@@ -81,7 +81,8 @@ def test_jra_snapshot_conflict_rebuilds_merged_records(tmp_path,monkeypatch):
         assert ids==['A','B']
         (a/view).write_text(json.dumps({'race_ids':ids}))
     monkeypatch.setattr(store.time,'sleep',lambda _:None)
-    store.persist(cwd=a,branch='main',attempts=2,refresh=refresh)
+    store.persist(cwd=a,branch='main',attempts=2,refresh=refresh,
+                  snapshots=store.SNAPSHOTS | store.JRA_RESULT_SNAPSHOTS)
     assert view in refreshed[0]
     assert json.loads(git(remote,'show','main:'+view))=={'race_ids':['A','B']}
 
@@ -104,5 +105,5 @@ def test_retry_exhaustion_keeps_local_commit_and_does_not_claim_success(tmp_path
 def test_verified_result_is_checkpointed_before_review_and_uploaded_on_failure():
     text=Path('.github/workflows/km-formal-result-runner.yml').read_text()
     assert text.index('assert vcode<300') < text.index('result_receipt_envelope.json') < text.index('review=build_post_result_review')
-    assert 'python tools/persist_local_checkpoints.py --branch main' in text
+    assert 'python tools/persist_local_checkpoints.py --branch main --jra-result' in text
     assert 'if: always()' in text and 'path: runtime_out/result_checkpoint/' in text

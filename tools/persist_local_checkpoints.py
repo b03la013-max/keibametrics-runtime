@@ -20,6 +20,8 @@ SNAPSHOTS = {
     'runtime/local_mec_r5_oos_status.json',
     'runtime/aki_adaptive_oos_status.json',
     'runtime/common_exact_continuity_oos_status.json',
+}
+JRA_RESULT_SNAPSHOTS = {
     'runtime/krs_oos_status.json',
     'runtime/source_candidate_oos_status.json',
     'runtime/pfs_grand_review/current.json',
@@ -34,7 +36,8 @@ def git(*args, cwd):
 
 def rebuild(paths):
     sys.path.insert(0, str(ROOT / 'runtime'))
-    for path in sorted(paths):
+    # The utility snapshot consumes the other merged views, so it is last.
+    for path in sorted(paths, key=lambda p: (p == 'runtime/family_prediction_utility/current.json', p)):
         if path == 'runtime/krs_oos_status.json':
             from krs_oos_promotion_gate import evaluate_r30
             obj = evaluate_r30([json.loads(p.read_text()) for p in
@@ -70,16 +73,17 @@ def rebuild(paths):
             name = Path(path).stem.replace('_status', '_tracker')
             importlib.import_module(name).write_status(path)
             continue
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
 
 
-def persist(*, cwd, branch, refresh=rebuild, attempts=5):
+def persist(*, cwd, branch, refresh=rebuild, attempts=5, snapshots=SNAPSHOTS):
     # Noncommitted runtime scratch must not obstruct the durable record commit.
     dirty = git('status', '--porcelain', cwd=cwd).stdout.strip()
     stashed = bool(dirty)
     if stashed and git('stash', 'push', '--include-untracked', '-m', 'km-local-persist-scratch', cwd=cwd).returncode:
         raise RuntimeError('PERSIST_SCRATCH_STASH_FAILED')
-    touched = set(git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD', cwd=cwd).stdout.splitlines()) & SNAPSHOTS
+    touched = set(git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD', cwd=cwd).stdout.splitlines()) & snapshots
     pushed = False
     try:
         for attempt in range(attempts):
@@ -88,7 +92,7 @@ def persist(*, cwd, branch, refresh=rebuild, attempts=5):
             result = git('rebase', 'FETCH_HEAD', cwd=cwd)
             while result.returncode:
                 conflicts = set(git('diff', '--name-only', '--diff-filter=U', cwd=cwd).stdout.splitlines())
-                if not conflicts or not conflicts <= SNAPSHOTS:
+                if not conflicts or not conflicts <= snapshots:
                     git('rebase', '--abort', cwd=cwd)
                     raise RuntimeError('PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT')
                 touched |= conflicts
@@ -132,5 +136,7 @@ def persist(*, cwd, branch, refresh=rebuild, attempts=5):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--branch', required=True)
+    parser.add_argument('--jra-result', action='store_true')
     args = parser.parse_args()
-    persist(cwd=Path.cwd(), branch=args.branch)
+    persist(cwd=Path.cwd(), branch=args.branch,
+            snapshots=SNAPSHOTS | JRA_RESULT_SNAPSHOTS if args.jra_result else SNAPSHOTS)

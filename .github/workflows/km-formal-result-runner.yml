@@ -366,7 +366,7 @@ jobs:
           if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json; fi
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
-            python tools/persist_local_checkpoints.py --branch main
+            python tools/persist_local_checkpoints.py --branch main --jra-result
           fi
 
       - uses: actions/upload-artifact@v4
