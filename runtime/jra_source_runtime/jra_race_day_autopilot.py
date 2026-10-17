@@ -321,7 +321,7 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         row["state"] = "DISPATCHED_RUNNING"
         row["dispatched_at"] = (state.get(rid) or {}).get("dispatched_at")
         cell=state.get(rid) or {}
-        if cell.get('claimed_at') and not cell.get('dispatched_at'):
+        if cell.get('claimed_at') and not cell.get('dispatched_at') and not eids:
             row['state']=cell.get('dispatch_state','CLAIMED_NOT_ACKNOWLEDGED')
             row['first_failure']=cell.get('first_failure')
     else:

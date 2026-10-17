@@ -40,6 +40,15 @@ print('ACTUAL_DELIVERED_FINALS_STATUS_PASS')
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertIn('ACTUAL_DELIVERED_FINALS_STATUS_PASS',result.stdout)
 
+    def test_existing_intent_is_not_hidden_by_older_unacknowledged_claim(self):
+        from jra_race_day_autopilot import race_status
+        rid='KM-JRA-TKY-20261017-R06'
+        (self.tmp/'runtime/jra_formal_intents'/(rid+'-LIVE-R1.json')).write_text(json.dumps({'race_id':rid}))
+        row=race_status(self.tmp,rid,{'post':'2026-10-17T12:55:00+09:00'},
+                        {rid:{'claimed_at':'2026-10-17T12:00:00+09:00','dispatch_state':'CLAIMED_NOT_ACKNOWLEDGED'}},
+                        dt.datetime(2026,10,17,12,20,tzinfo=JST))
+        self.assertEqual(row['state'],'DISPATCHED_RUNNING')
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         (self.tmp / "runtime/jra_race_day_plan").mkdir(parents=True)
