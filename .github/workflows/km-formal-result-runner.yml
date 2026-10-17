@@ -103,6 +103,13 @@ jobs:
           vcode,v=call("/verify",res)
           assert vcode<300 and v.get("valid") is True,(vcode,v)
 
+          # Retain the exact verified response even if downstream git publication
+          # fails. Recovery must not reissue RESULT merely to recover lost bytes.
+          os.makedirs("runtime_out/result_checkpoint",exist_ok=True)
+          for name,value in (("result_request.json",p),("result_receipt_envelope.json",res)):
+              with open("runtime_out/result_checkpoint/"+name,"w",encoding="utf-8") as fh:
+                  json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
+
           # Closed-loop authority separation:
           # Production RESULT requires Production Immutable FINAL.
           # Source-Derived Candidate RESULT is allowed to bind only to its
@@ -339,6 +346,8 @@ jobs:
               # Shadow failure cannot change the completed Production result.
               print("BVI_FORWARD_RESULT_RECEIPT_BLOCKED="+str(exc))
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
+          with open("runtime_out/result_checkpoint/result_summary.json","w",encoding="utf-8") as fh:
+              json.dump(summary,fh,ensure_ascii=False,sort_keys=True,indent=2)
           PY
 
       - name: Persist automatic review and learning state
@@ -357,6 +366,13 @@ jobs:
           if [ -d runtime/mec_shadow_results ]; then git add runtime/mec_shadow_results/*.json; fi
           if ! git diff --cached --quiet; then
             git commit -m "learning: persist automatic post-result state [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            python tools/persist_local_checkpoints.py --branch main --jra-result
           fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-result-checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime_out/result_checkpoint/
+          if-no-files-found: warn
+          retention-days: 90
