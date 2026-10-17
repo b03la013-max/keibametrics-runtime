@@ -15,6 +15,13 @@ import html
 import http.cookiejar
 import json
 import re
+import random
+import socket
+import ssl
+import errno
+import sys
+import http.client
+from email.utils import parsedate_to_datetime
 import time
 import urllib.parse
 import urllib.request
@@ -34,8 +41,29 @@ def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+class OfficialDeadlineExceeded(TimeoutError):
+    """No further official request may consume the reserved downstream budget."""
+
+
+def retryable_official_error(exc):
+    if isinstance(exc, OfficialDeadlineExceeded):
+        return False
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code == 429 or 500 <= exc.code <= 599
+    if isinstance(exc, urllib.error.URLError):
+        return retryable_official_error(exc.reason)
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return False
+    if isinstance(exc, (TimeoutError, ConnectionError, http.client.IncompleteRead,
+                        http.client.RemoteDisconnected)):
+        return True
+    return isinstance(exc, OSError) and exc.errno in {
+        errno.ECONNRESET, errno.ECONNABORTED, errno.ETIMEDOUT,
+        errno.EPIPE, errno.EHOSTUNREACH, errno.ENETUNREACH, socket.EAI_AGAIN}
+
+
 class _Client:
-    def __init__(self, delay: float = 1.0):
+    def __init__(self, delay: float = 1.0, *, deadline_monotonic=None):
         if not 0.7 <= delay <= 15.0:
             raise ValueError("JRA_HARVEST_RATE_TOO_FAST_OR_INVALID")
         class _NoExternalRedirect(urllib.request.HTTPRedirectHandler):
@@ -48,28 +76,75 @@ class _Client:
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
             _NoExternalRedirect())
         self.delay = delay
+        self.deadline_monotonic = deadline_monotonic
 
     def _open(self, url: str, data: bytes | None = None) -> str:
         if not url.startswith(BASE + "/"):
             raise ValueError("JRA_OFFICIAL_ONLY")
         req = urllib.request.Request(url, data=data, headers={
             "User-Agent": UA, "Accept": "text/html,*/*;q=0.1", "Accept-Language": "ja"})
-        time.sleep(self.delay)
+        # Three attempts retain the old bound. Reset/timeout/body-read failures
+        # now share it with 429/5xx. Keep the same opener, cookies, URL and POST
+        # token: navigation reads are safe to retry; no new source is invented.
+        deadline = min(time.monotonic() + 105, self.deadline_monotonic or float("inf"))
+        def remaining():
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise OfficialDeadlineExceeded("JRA_OFFICIAL_RETRY_DEADLINE")
+            return left
+        def pause(seconds):
+            if seconds >= remaining():
+                raise OfficialDeadlineExceeded("JRA_OFFICIAL_RETRY_DEADLINE")
+            time.sleep(seconds)
+        pause(self.delay)
         for attempt in range(3):
+            phase = "CONNECT_TLS_OR_RESPONSE_HEADERS"
             try:
-                response = self.opener.open(req, timeout=30)
-                break
-            except urllib.error.HTTPError as exc:
-                if exc.code not in (502, 503, 504) or attempt == 2:
+                with self.opener.open(req, timeout=min(30, remaining())) as r:
+                    phase = "READ_BODY"
+                    if urllib.parse.urlsplit(r.geturl()).hostname != "www.jra.go.jp":
+                        raise ValueError("JRA_HARVEST_FINAL_HOST_INVALID")
+                    # read1 returns after a single underlying read, so a slow
+                    # stream cannot reset a 30s timeout forever. Bound every read.
+                    chunks, size = [], 0
+                    while True:
+                        left = remaining()
+                        sock = getattr(getattr(getattr(r, "fp", None), "raw", None), "_sock", None)
+                        if sock is not None:
+                            sock.settimeout(min(30, left))
+                        chunk = r.read1(min(65536, 6_000_001 - size))
+                        remaining()
+                        if not chunk:
+                            if getattr(r, "length", 0):
+                                raise http.client.IncompleteRead(b"".join(chunks), r.length)
+                            break
+                        chunks.append(chunk); size += len(chunk)
+                        if size > 6_000_000:
+                            raise ValueError("JRA_HARVEST_PAGE_TOO_LARGE")
+                    raw = b"".join(chunks)
+                    return _decode(raw, r.headers.get("content-type", ""))
+            except (OSError, http.client.HTTPException) as exc:
+                exc.official_request = {"url": url, "method": req.get_method(),
+                                        "phase": phase, "attempt": attempt + 1}
+                if not retryable_official_error(exc) or attempt == 2:
                     raise
-                time.sleep(3 * (attempt + 1))
-        with response as r:
-            if urllib.parse.urlsplit(r.geturl()).hostname != "www.jra.go.jp":
-                raise ValueError("JRA_HARVEST_FINAL_HOST_INVALID")
-            raw = r.read(6_000_001)
-            if len(raw) > 6_000_000:
-                raise ValueError("JRA_HARVEST_PAGE_TOO_LARGE")
-            return _decode(raw, r.headers.get("content-type", ""))
+                wait = 3 * (2 ** attempt) + random.uniform(0, 0.75)
+                if isinstance(exc, urllib.error.HTTPError):
+                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                    exc.close()
+                    if retry_after:
+                        try:
+                            wait = max(wait, float(retry_after))
+                        except ValueError:
+                            try:
+                                when = parsedate_to_datetime(retry_after)
+                                wait = max(wait, (when - _dt.datetime.now(_dt.timezone.utc)).total_seconds())
+                            except (ValueError, TypeError, OverflowError):
+                                pass
+                print(json.dumps({"stage":"JRA_OFFICIAL_HTTP_RETRY", **exc.official_request,
+                                  "exception_class":type(exc).__name__, "backoff_seconds":wait}),
+                      file=sys.stderr, flush=True)
+                pause(wait)
 
     def get(self, path: str) -> str:
         return self._open(BASE + path)

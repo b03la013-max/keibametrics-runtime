@@ -1,0 +1,65 @@
+2026-10-17T04:01:40.5775478Z Traceback (most recent call last):
+2026-10-17T04:01:40.5775908Z   File "/usr/lib/python3.12/urllib/request.py", line 1344, in do_open
+2026-10-17T04:01:40.6118056Z     h.request(req.get_method(), req.selector, req.data, headers,
+2026-10-17T04:01:40.6118471Z   File "/usr/lib/python3.12/http/client.py", line 1365, in request
+2026-10-17T04:01:40.6122706Z     self._send_request(method, url, body, headers, encode_chunked)
+2026-10-17T04:01:40.6123127Z   File "/usr/lib/python3.12/http/client.py", line 1411, in _send_request
+2026-10-17T04:01:40.6124249Z     self.endheaders(body, encode_chunked=encode_chunked)
+2026-10-17T04:01:40.6124501Z   File "/usr/lib/python3.12/http/client.py", line 1360, in endheaders
+2026-10-17T04:01:40.6125985Z     self._send_output(message_body, encode_chunked=encode_chunked)
+2026-10-17T04:01:40.6126414Z   File "/usr/lib/python3.12/http/client.py", line 1120, in _send_output
+2026-10-17T04:01:40.6127202Z     self.send(msg)
+2026-10-17T04:01:40.6127483Z   File "/usr/lib/python3.12/http/client.py", line 1064, in send
+2026-10-17T04:01:40.6128337Z     self.connect()
+2026-10-17T04:01:40.6129081Z   File "/usr/lib/python3.12/http/client.py", line 1506, in connect
+2026-10-17T04:01:40.6129879Z     self.sock = self._context.wrap_socket(self.sock,
+2026-10-17T04:01:40.6130224Z                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6130584Z   File "/usr/lib/python3.12/ssl.py", line 455, in wrap_socket
+2026-10-17T04:01:40.6132582Z     return self.sslsocket_class._create(
+2026-10-17T04:01:40.6132909Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6133204Z   File "/usr/lib/python3.12/ssl.py", line 1042, in _create
+2026-10-17T04:01:40.6134040Z     self.do_handshake()
+2026-10-17T04:01:40.6134295Z   File "/usr/lib/python3.12/ssl.py", line 1320, in do_handshake
+2026-10-17T04:01:40.6135465Z     self._sslobj.do_handshake()
+2026-10-17T04:01:40.6135734Z ConnectionResetError: [Errno 104] Connection reset by peer
+2026-10-17T04:01:40.6136014Z 
+2026-10-17T04:01:40.6136220Z During handling of the above exception, another exception occurred:
+2026-10-17T04:01:40.6136416Z 
+2026-10-17T04:01:40.6136566Z Traceback (most recent call last):
+2026-10-17T04:01:40.6136927Z   File "/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_resolver.py", line 173, in <module>
+2026-10-17T04:01:40.6137410Z     intent = resolve_and_build(a.date, a.venue, a.race, run_count=a.run_count, revision=a.revision,
+2026-10-17T04:01:40.6137732Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6138146Z   File "/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_resolver.py", line 152, in resolve_and_build
+2026-10-17T04:01:40.6138547Z     key, races = resolve_day(race_date, venue)
+2026-10-17T04:01:40.6138724Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6139351Z   File "/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_resolver.py", line 141, in resolve_day
+2026-10-17T04:01:40.6139744Z     s2 = c.post("/JRADB/accessD.html", tok)
+2026-10-17T04:01:40.6139955Z          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6140290Z   File "/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_pedigree_harvest.py", line 78, in post
+2026-10-17T04:01:40.6140727Z     return self._open(BASE + path, urllib.parse.urlencode({"cname": token}).encode())
+2026-10-17T04:01:40.6141008Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6141375Z   File "/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_pedigree_harvest.py", line 60, in _open
+2026-10-17T04:01:40.6141754Z     response = self.opener.open(req, timeout=30)
+2026-10-17T04:01:40.6141937Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6142147Z   File "/usr/lib/python3.12/urllib/request.py", line 515, in open
+2026-10-17T04:01:40.6142378Z     response = self._open(req, data)
+2026-10-17T04:01:40.6142537Z                ^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6142727Z   File "/usr/lib/python3.12/urllib/request.py", line 532, in _open
+2026-10-17T04:01:40.6142996Z     result = self._call_chain(self.handle_open, protocol, protocol +
+2026-10-17T04:01:40.6143213Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6143448Z   File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+2026-10-17T04:01:40.6143682Z     result = func(*args)
+2026-10-17T04:01:40.6143818Z              ^^^^^^^^^^^
+2026-10-17T04:01:40.6144007Z   File "/usr/lib/python3.12/urllib/request.py", line 1392, in https_open
+2026-10-17T04:01:40.6144293Z     return self.do_open(http.client.HTTPSConnection, req,
+2026-10-17T04:01:40.6144493Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-17T04:01:40.6144743Z   File "/usr/lib/python3.12/urllib/request.py", line 1347, in do_open
+2026-10-17T04:01:40.6145122Z     raise URLError(err)
+2026-10-17T04:01:40.6145495Z urllib.error.URLError: <urlopen error [Errno 104] Connection reset by peer>
+2026-10-17T04:01:40.6450820Z ##[error]Process completed with exit code 1.
+2026-10-17T04:01:40.7176955Z [command]/usr/bin/git version
+2026-10-17T04:01:40.7214238Z git version 2.55.0
+2026-10-17T04:01:40.7242978Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-17T04:01:40.7589218Z http.https://github.com/.extraheader
+2026-10-17T04:01:40.8274651Z Cleaning up orphan processes
+2026-10-17T04:01:40.8513451Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
