@@ -273,8 +273,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
           "SSR-W":x.get("SSR-W"),"SSR-P2":x.get("SSR-P2"),"SSR-P3":x.get("SSR-P3"),"SSR-T3":x.get("SSR-T3"),
           "LSR":x.get("LSR"),"Z4R-W":x.get("Z4R-W"),"Z4R-P2":x.get("Z4R-P2"),"Z4R-P3":x.get("Z4R-P3"),
           "Robustness":x.get("Robustness"),"ranks":{k:ranks[k][int(x["horse_no"])] for k in ranks},
-          "positions":copy.deepcopy(x.get("positions") or {}),
-          "static_roles":sorted(resolved_roles.get(int(x["horse_no"]),set())),
+          "positions":copy.deepcopy(x.get("positions") or {}),"static_roles":copy.deepcopy(x.get("static_roles") or []),
       } for x in summary],
       "non_probability_notice":"SSR/LSR/Z4R and occurrence frequencies are uncalibrated simulation support, not real-world probabilities or EV.",
       "production_effect":"NONE",
@@ -283,7 +282,7 @@ def build_krs_prediction_utility(request:dict,krs_response:dict)->dict:
     report["sha256"]=hashlib.sha256(raw).hexdigest()
     return report
 
-def evaluate_against_result(utility:dict,actual_top3:list[int], *, static_ranking=None, static_roles=None)->dict:
+def evaluate_against_result(utility:dict,actual_top3:list[int], *, static_ranking=None)->dict:
     actual=[int(x) for x in actual_top3]
     actionable_roles={(int(x["horse_no"]),x["proposal"]) for x in utility.get("actionable_role_proposals") or []}
     actionable_pairs={(int(x["head"]),int(x["second"])) for x in utility.get("actionable_ordered_pair_proposals") or []}
@@ -334,11 +333,9 @@ def evaluate_against_result(utility:dict,actual_top3:list[int], *, static_rankin
     role_rescue=role_harm=0
     for role,horse in zip(("W","P2","P3"),actual):
         key="SSR-"+role
-        # P3 proposals are selected with SSR-T3, not the distinct SSR-P3 metric.
-        if role=="P3":key="SSR-T3"
         kr=next(((x.get("ranks") or {}).get(key) for x in rows if int(x["horse_no"])==horse),None)
         sr=static.index(horse)+1 if horse in static else None
-        sh=(role in (static_roles.get(str(horse),static_roles.get(horse,[])) or [])) if static_roles is not None else any(int(x["horse_no"])==horse and role in (x.get("static_roles") or []) for x in rows)
+        sh=any(int(x["horse_no"])==horse and role in (x.get("static_roles") or []) for x in rows)
         limit=zones.get(role)
         kh=None if not isinstance(limit,int) else bool(kr is not None and kr<=limit)
         if kh is not None:

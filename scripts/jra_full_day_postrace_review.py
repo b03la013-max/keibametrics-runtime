@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'runtime'), str(ROOT/'runtime/jra_source_runtime')]
 from jra_delivery import verify_signed_final, canonical_bytes
 from jra_source_runtime.verify_source_envelope import verify as verify_source
-from krs_prediction_utility import evaluate_against_result
+from jra_krs_utility_measurement import evaluate_against_result
 from jra_production_krs_contract import production_krs_payload
 
 BASE = 'HPI SSI CFI RFI BVI JTI CSI TRI BWI GCI PRI KGI VMI'.split()
@@ -415,7 +415,7 @@ def analyze(day):
             utility=final.get('krs_prediction_utility',{})
             if utility:
                 semantic_eligible=not o.get('top3_display_order_is_not_unique')
-                ev=evaluate_against_result(utility,o['top3'],static_ranking=sp.get('ranking'),static_roles=sp.get('roles',{})) if semantic_eligible else {'status':'PENDING_DEAD_HEAT_ORDER_ADJUDICATION','unique_rescue_role_count':None,'unique_harm_role_count':None}
+                ev=evaluate_against_result(utility,o['top3'],static_ranking=sp.get('ranking'),static_roles=sp.get('roles',{}),p3_rank_metric='SSR-T3') if semantic_eligible else {'status':'PENDING_DEAD_HEAT_ORDER_ADJUDICATION','unique_rescue_role_count':None,'unique_harm_role_count':None}
                 row['krs']={'execution_receipt':final['krs_run_receipt']['receipt'],'output_persisted':bool(utility.get('summary')),
                             'semantic_evaluation_eligible':semantic_eligible,
                             'raw_output_sha_verified':'NOT VERIFIED: full raw structured engine response not persisted',

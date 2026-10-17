@@ -7,7 +7,8 @@ import sys
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'scripts'),str(ROOT/'runtime')]
 from jra_full_day_postrace_review import parse_official, settle_tickets, robust, metric, prediction
-from krs_prediction_utility import build_krs_prediction_utility, evaluate_against_result
+from jra_krs_utility_measurement import build_krs_prediction_utility, evaluate_against_result
+from krs_prediction_utility import evaluate_against_result as evaluate_common_utility
 import pytest
 
 EVIDENCE=ROOT/'evidence/jra_day_review_20261017'
@@ -84,9 +85,11 @@ def test_p3_uses_same_metric_as_frozen_proposal_selection():
         {'horse_no':2,'ranks':{'SSR-P2':1}},
         {'horse_no':3,'ranks':{'SSR-P3':1,'SSR-T3':3}}],
         'snapshot':{'role_zones':{'W':1,'P2':1,'P3':1}}}
-    result=evaluate_against_result(utility,[1,2,3],static_roles={'3':['P3']})
+    result=evaluate_against_result(utility,[1,2,3],static_roles={'3':['P3']},p3_rank_metric='SSR-T3')
     assert result['rank_comparison'][2]['krs_rank']==3
     assert result['rank_comparison'][2]['krs_role_zone_hit'] is False
+    legacy=evaluate_common_utility(utility,[1,2,3])
+    assert legacy['rank_comparison'][2]['krs_rank']==1
 
 def test_actual_kyo12_dead_heat_never_invents_unique_second_third():
     obj=official('082026040612','KYO',12)
@@ -96,3 +99,8 @@ def test_actual_kyo12_dead_heat_never_invents_unique_second_third():
     pred=prediction(final,obj)
     assert pred['P2'] is None and pred['P3'] is None and pred['ordered_exact'] is None
     assert settle_tickets(final['final_ticket']['tickets'],obj)['investment']==1600
+
+def test_preregistered_common_definition_bytes_are_preserved():
+    import hashlib
+    protocol=json.loads((ROOT/'research/utility/forward_protocol.json').read_text())
+    assert {p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in protocol['definition_files']}==protocol['definition_sha256']
