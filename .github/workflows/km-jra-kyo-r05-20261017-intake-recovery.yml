@@ -1,0 +1,37 @@
+name: JRA Kyoto R05 2026-10-17 Formal Intake Recovery
+run-name: Kyoto R05 rescue dispatch through authorized Resolver
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_intake_recovery_requests/20261017-KYO-R05.json'
+permissions:
+  contents: read
+  actions: write
+jobs:
+  authorized-resolver-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify race date, timing and no duplicate canonical intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(TZ=Asia/Tokyo date +%F)" = "2026-10-17"
+          test "$(TZ=Asia/Tokyo date +%H%M)" -lt 1155
+          test -f runtime/jra_intake_recovery_requests/20261017-KYO-R05.json
+          test ! -f runtime/jra_formal_intents/KM-JRA-KYO-20261017-R05-LIVE-R1.json
+          python - <<'PY'
+          import json
+          p='runtime/jra_intake_recovery_requests/20261017-KYO-R05.json'
+          q=json.load(open(p))
+          assert q=={'family_id':'JRA','venue':'京都','race_date':'2026-10-17','race_no':5,'run_count':5000,'revision':1,'transport':'AUTHORIZED_EXISTING_RESOLVER_ONLY'}
+          PY
+      - name: Dispatch existing canonical JRA Resolver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run km-jra-race-intent-resolver.yml --ref main -f venue=京都 -f race_no=5 -f race_date=2026-10-17 -f run_count=5000 -f revision=1
+          echo 'Dispatched canonical JRA Resolver (Kyoto R05 2026-10-17)'
