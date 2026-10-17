@@ -541,6 +541,14 @@ def merge_dispatch_state(remote: dict, local: dict) -> dict:
                 merged['dispatch_state']='DISPATCH_ACKNOWLEDGED'
                 acknowledged=next((x for x in (a,b) if x.get('dispatched_at')),merged)
                 if acknowledged.get('acknowledgement'):merged['acknowledgement']=acknowledged['acknowledgement']
+            else:
+                # A stale worker claim cannot undo a verified deadline closure.
+                # An actual dispatch acknowledgement above still has precedence.
+                expired=[x for x in (a,b) if x.get('dispatch_state')=='MISSED_WINDOW'
+                         and x.get('temporal_eligible') is False]
+                if expired:
+                    closure=max(expired,key=lambda x:x.get('reconciled_at',''))
+                    merged.update({k:v for k,v in closure.items() if k not in ('claimed_at','dispatched_at')})
             out[key]=merged
     return out
 

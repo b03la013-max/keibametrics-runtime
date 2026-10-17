@@ -14,6 +14,24 @@ RACES = [{"race_no": i, "post_time": f"{9 + i // 2:02d}:{(i % 2) * 30:02d}", "ti
 
 
 class TestAutopilot(unittest.TestCase):
+    def test_actual_expired_tky5_claim_merge_cannot_resurrect_unacknowledged_state(self):
+        from jra_race_day_autopilot import merge_dispatch_state
+        rid='KM-JRA-TKY-20261017-R05'
+        old={'claimed_at':'2026-10-17T11:30:38.722273+09:00',
+             'dispatch_state':'CLAIMED_NOT_ACKNOWLEDGED','post':'2026-10-17T12:25:00+09:00'}
+        closed={**old,'dispatch_state':'MISSED_WINDOW','temporal_eligible':False,
+                'retry_eligible':False,'reconciled_at':'2026-10-17T03:29:22.690Z',
+                'first_failure':'STATUS_CHECKPOINT_READBACK_BEFORE_INTENT_DISPATCH'}
+        for remote,local in [(closed,old),(old,closed)]:
+            result=merge_dispatch_state({rid:remote},{rid:local})[rid]
+            self.assertEqual(result['dispatch_state'],'MISSED_WINDOW')
+            self.assertIs(result['retry_eligible'],False)
+            self.assertEqual(result['claimed_at'],old['claimed_at'])
+        ack={**old,'dispatched_at':'2026-10-17T11:31:00+09:00','acknowledgement':{'run_id':'actual'}}
+        result=merge_dispatch_state({rid:closed},{rid:ack})[rid]
+        self.assertEqual(result['dispatch_state'],'DISPATCH_ACKNOWLEDGED')
+        self.assertEqual(result['acknowledgement'],ack['acknowledgement'])
+
     def test_actual_delivered_final_status_in_clean_production_import_environment(self):
         import os
         import subprocess
