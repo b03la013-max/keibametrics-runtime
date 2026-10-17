@@ -69,6 +69,16 @@ class DeliveryAuditTest(unittest.TestCase):
 
 
 
+    def test_ack_cannot_precede_provider_acceptance(self):
+        note = seal({"race_id": self.final["race_id"], "final_sha256": self.final["sha256"],
+                     "provider_message_id": "m1", "provider_status": "ACCEPTED",
+                     "provider_accepted_at": "2026-10-18T09:57:00+09:00"})
+        ack = seal({"race_id": self.final["race_id"], "final_sha256": self.final["sha256"],
+                    "provider_message_id": "m1", "ack_status": "RECEIVED",
+                    "received_at": "2026-10-18T09:56:00+09:00"})
+        with self.assertRaisesRegex(ValueError, "ACK_BEFORE_PROVIDER"):
+            audit_delivery(final=self.final, notification=note, recipient_ack=ack)
+
     def test_read_only_cli(self):
         from runtime.jra_delivery_evidence_audit import main
         with tempfile.TemporaryDirectory() as directory:
