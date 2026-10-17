@@ -18,8 +18,33 @@ def static_input(request):
             for key,cell in r['canonical_components'].items()}} for r in request['runners']]}
 
 
+SOURCE_ANNOTATIONS = ('source_basis_receipt_sha256', 'source_basis_snapshot_sha256',
+                      'source_checkpoint_manifest_sha256')
+
+
 def semantic_output(request):
-    return {k:request[k] for k in ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')}
+    # The bridge adds verified SOURCE checkpoint annotations after Static is
+    # frozen. They are lineage, not ranking/role/pair prediction content.
+    out = deepcopy({k:request[k] for k in ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')})
+    for key in SOURCE_ANNOTATIONS:
+        out['static_prediction'].pop(key, None)
+    return out
+
+
+def _verify_source_annotations(proof, request):
+    static = request['static_prediction']
+    if not any(key in static for key in SOURCE_ANNOTATIONS):
+        if request.get('source_checkpoint_manifest'):
+            raise ValueError('BVI_STATIC_PROOF_SOURCE_ANNOTATION_INVALID')
+        return
+    checkpoint = request.get('source_checkpoint_manifest') or {}
+    expected = dict(zip(SOURCE_ANNOTATIONS, (checkpoint.get('receipt_sha256'),
+                    checkpoint.get('source_snapshot_sha256'), checkpoint.get('sha256'))))
+    if (not checkpoint or checkpoint.get('sha256') != sha({k:v for k,v in checkpoint.items() if k!='sha256'})
+            or checkpoint.get('receipt_sha256') != proof.get('source_receipt_sha256')
+            or checkpoint.get('source_snapshot_sha256') != proof.get('source_snapshot_sha256')
+            or any(not value or static.get(key) != value for key,value in expected.items())):
+        raise ValueError('BVI_STATIC_PROOF_SOURCE_ANNOTATION_INVALID')
 
 
 def build_static_proof(prepared, owner, formal_request, authority, root=ROOT, *, execution_class="REPLAY_VERIFIED; CALLER_OWNS_TEMPORAL_GATE"):
@@ -54,10 +79,13 @@ def build_static_proof(prepared, owner, formal_request, authority, root=ROOT, *,
 
 
 def verify_static_proof(proof, request):
+    _verify_source_annotations(proof, request)
+    # Retain compatibility with proofs frozen after lineage was already added.
+    literal = {k:request[k] for k in ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')}
     if (proof.get('sha256')!=sha({k:v for k,v in proof.items() if k!='sha256'})
             or proof.get('race_id')!=request['race_id']
             or proof.get('source_snapshot_sha256')!=request['source_snapshot_sha256']
             or proof.get('static_input_sha256')!=sha(static_input(request))
-            or proof.get('formal_semantic_output_sha256')!=sha(semantic_output(request))):
+            or proof.get('formal_semantic_output_sha256') not in (sha(semantic_output(request)), sha(literal))):
         raise ValueError('BVI_STATIC_PROOF_BINDING_INVALID')
     return True

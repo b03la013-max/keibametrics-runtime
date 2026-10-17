@@ -6,6 +6,7 @@ from pathlib import Path
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime" / "jra_source_runtime"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime"))
 from jra_race_day_autopilot import tick, due
 from jra_race_day_resolver import JST
 
@@ -124,3 +125,56 @@ class TestAllRacesAndStatus(unittest.TestCase):
         out = tick(tmp, "2026-10-11", now, meetings=boom, resolve=lambda d, v: ("x", RACES),
                    dispatch=lambda *a: None, default_all=True)
         self.assertTrue(out[0]["status"].startswith("OFFICIAL_CALENDAR_UNAVAILABLE"))
+
+
+def test_formal_failure_checkpoint_replaces_running_without_touching_signed_source(tmp_path):
+    from jra_single_entry_outcome import record_formal_failure
+    from jra_race_day_autopilot import race_status
+    rid='KM-JRA-TKY-20261017-R03';eid=rid+'-LIVE-R1'
+    intents=tmp_path/'runtime/jra_formal_intents';intents.mkdir(parents=True)
+    (intents/(eid+'.json')).write_text('{}')
+    req={'family_id':'JRA','race_id':rid,'execution_id':eid,'runners':[{}]*12}
+    failure={'run_id':'38990090543','first_failed_stage':'BVI_STATIC_CONSUMPTION_BINDING',
+             'error':'BVI_STATIC_PROOF_BINDING_INVALID','exit_code':1,'conclusion':'failure'}
+    path=record_formal_failure(tmp_path,req,failure)
+    before=path.read_bytes();record_formal_failure(tmp_path,req,failure)
+    assert path.read_bytes()==before
+    row=race_status(tmp_path,rid,{'post':'2026-10-17T11:05:00+09:00'},
+                    {rid:{'dispatched_at':'2026-10-17T10:10:00+09:00'}},dt.datetime(2026,10,17,11,4,tzinfo=JST))
+    assert row['state']=='FORMAL_FAILED' and row['formal_exit_code']==1
+    assert row['first_blocked_stage']=='BVI_STATIC_CONSUMPTION_BINDING'
+    assert not (tmp_path/'runtime/final_artifacts').exists()
+
+
+def test_early_formal_traceback_is_retained_before_krs(tmp_path):
+    import sys
+    from jra_single_entry_outcome import FormalFailureCheckpoint
+    old=sys.excepthook
+    tracker=FormalFailureCheckpoint('request.json',tmp_path)
+    tracker.previous_hook=lambda *args:None
+    try:
+        tracker.mark('BVI_STATIC_CONSUMPTION_BINDING')
+        try:raise ValueError('BVI_STATIC_PROOF_BINDING_INVALID')
+        except ValueError:tracker.capture(*sys.exc_info())
+    finally:sys.excepthook=old
+    record=json.loads((tmp_path/'formal_failure.json').read_text())
+    assert record['exit_code']==1 and 'Traceback' in record['traceback']
+    assert record['first_failed_stage']=='BVI_STATIC_CONSUMPTION_BINDING'
+
+
+def test_completed_canonical_formal_failure_is_visible_even_without_any_artifact(tmp_path):
+    from jra_race_day_autopilot import write_status
+    rid='KM-JRA-TKY-20261017-R03';eid=rid+'-LIVE-R1'
+    intents=tmp_path/'runtime/jra_formal_intents';intents.mkdir(parents=True)
+    (intents/(eid+'.json')).write_text('{}')
+    requests=tmp_path/'runtime/requests';requests.mkdir()
+    p=requests/(eid+'-FORMAL.json');p.write_text(json.dumps({'family_id':'JRA','race_id':rid}))
+    run={'databaseId':38990090543,'displayTitle':'JRA Formal '+p.relative_to(tmp_path).as_posix(),
+         'status':'completed','conclusion':'failure','headSha':'be5b8d59e03ac62717af4e5cccd0690f9cb2997f'}
+    schedule={rid:{'post':'2026-10-17T11:05:00+09:00'}}
+    row=write_status(tmp_path,'2026-10-17',dt.datetime(2026,10,17,11,4,tzinfo=JST),schedule,{},formal_runs=[run])['races'][0]
+    assert row['state']=='FORMAL_FAILED' and row['formal_run_id']=='38990090543'
+    assert not row['detailed_failure_stage_verified']
+    newer={**run,'databaseId':38990090544,'status':'in_progress','conclusion':None}
+    row=write_status(tmp_path,'2026-10-17',dt.datetime(2026,10,17,11,4,tzinfo=JST),schedule,{},formal_runs=[run,newer])['races'][0]
+    assert row['state']=='DISPATCHED_RUNNING'
