@@ -1029,9 +1029,9 @@ jobs:
           from pathlib import Path
           report=json.loads(Path("krs-artifacts/jra_delivery_evidence_audit.json").read_text())
           with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
-              f.write("\\n## Delivery evidence audit\\n")
+              f.write("\n## Delivery evidence audit\n")
               for field in ("canonical_availability","notification_sent","recipient_acknowledged","pre_post_delivery"):
-                  f.write(f"- {field}: {report[field]}\\n")
+                  f.write(f"- {field}: {report[field]}\n")
           PY
           fi
 
