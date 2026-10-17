@@ -4,6 +4,7 @@ from runtime.jra_delivery_evidence_audit import _sha, audit_delivery
 
 
 def seal(obj):
+    obj.pop("sha256", None)
     obj["sha256"] = _sha(obj)
     return obj
 
