@@ -64,3 +64,14 @@ Aの最大払戻依存100%、最大払戻Race除外PFS0%、Top3払戻Race除外P
 判定: CORRECTNESS PARTIAL / PREDICTION REVIEW PARTIAL / CAPITAL REVIEW COMPLETE / LEARNING CLOSED LOOP PARTIAL / LIVE ACCEPTANCE PENDING。
 
 追加の原本回復調査: KeibaMetrics ConsoleのExecutionReceipt / ExecutionRun / ExecutionArtifact / LedgerIndexを当該3Raceで読み取り照会し、可視レコード0件。KRS京都11Rのpayload Logも可視0件。これは認証ユーザーの可視範囲であり、全システム上の不存在を断定しない。RuntimeConfigのJRA2経路は既存契約と一致。Builder・Sandbox・署名・データ変更は行っていない。詳細 `evidence/jra_day_review_20261017/receipt_recovery.json`。
+
+
+## Runtime起動証拠の追加照合
+
+RailwayのDeployment `7c7eeb5e-3b5b-496a-b66f-82bd71897d53` の2026-10-14 06:16:02Z起動ログから、`KM_RUNTIME_BLOB_SHA` の第1値 `1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989` を取得した。後続2値は既存Engine / parameter_map SHAと一致する。ただしログ生成元の実装を取得できず、第1値のhash対象範囲・現行稼働プロセス全コード・Git commitとの結合はUNVERIFIED。現行追跡ファイル14,570件とローカル履歴の候補blob16件に一致なし。この探索範囲を全履歴の不存在と解釈しない。
+
+保存済みstartCommandは診断出力後`SystemExit(9)`となる一方、当該Deploymentの起動ログはuvicornの起動とhealth 200を示す。これは以前のP0証拠にも存在するconfig/deployment差異であり、今回の操作で発生したものではない。`get_service_config`でも同じ保存設定・stagedなしを確認した。設定変更は次回Deploymentで反映され得るため、稼働中のREADYだけで次回配置の安全性を判断しない。再起動・再配置・変数変更は実施していない。
+
+OAuth経路の環境変数は値非公開。コードblobを取得できず、legacy Input SHAの対象範囲の確定にも到達していない。署名Receiptのhashを一致する値へ置き換える処理は行わない。送信bytesの不変checkpointと宣言済み契約の厳密照合は将来の追跡を改善する修復であり、過去23件のInput SHA検証完了とは扱わない。原ログ・設定・照合範囲は `evidence/jra_day_review_20261017/runtime_boot_readback.json` に保存した。
+
+コードHEAD `58ec50282964eb438f56315e8464dd24dae32764` の9件のCIは全SUCCESSを再確認。GitHubのPR Review一覧は0件。追加差分は上記証拠・説明のみで、Productionコード・凍結済みShadow定義・署名原本・数値Policyは変更しない。Owner承認・Independent Review・配置元と起動設定の結合・未知未来Live Acceptanceは未完了。
