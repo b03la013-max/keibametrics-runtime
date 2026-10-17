@@ -59,6 +59,7 @@ jobs:
           python runtime/family_authority_guard.py --request "$REQUEST_FILE"
 
       - name: Full external formal execution
+        id: formal_execution
         if: steps.request.outputs.candidate_parallel != 'true'
         shell: bash
         env:
@@ -69,6 +70,8 @@ jobs:
           import json, urllib.request, urllib.error, sys, hashlib, os
           sys.path.insert(0,"runtime")
           sys.path.insert(0,os.path.join("runtime","jra_source_runtime"))
+          from jra_single_entry_outcome import FormalFailureCheckpoint
+          failure_checkpoint = FormalFailureCheckpoint(os.environ["REQUEST_FILE"])
           from prekrs_terminal_compat import adapt_calculator_output
           from formal_request_validator import validate_request, validate_pre_krs_request, validate_production_authority
           from jra_index_provenance_builder import materialize_index_provenance
@@ -162,6 +165,7 @@ jobs:
           # JRA SOURCE-first handoff. New formal requests may reference an immutable
           # signed SOURCE phase produced by the dedicated external JRA source runtime.
           # Historical requests without source_execution_id remain compatibility-readable.
+          failure_checkpoint.mark("SOURCE_TRUST_VERIFICATION")
           source_artifact=None
           source_execution_id=str(req.get("source_execution_id") or "").strip()
           if source_execution_id:
@@ -250,6 +254,7 @@ jobs:
                   "tsl_authority":"THIRD_PARTY_PUBLIC_SHADOW_NON_PRODUCTION"
               }
 
+          failure_checkpoint.mark("NUMERICAL_MATERIALIZATION")
           prod_map=load_production_mapping("mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")
           supplemental_attestation=None
           if isinstance(req.get("supplemental_evidence_pack"),dict):
@@ -272,6 +277,7 @@ jobs:
           req=materialize_index_provenance(req)
           if req.get("family_id")=="JRA":
               from jra_bvi_consumption import build_bvi_consumption
+              failure_checkpoint.mark("BVI_STATIC_CONSUMPTION_BINDING")
               req["bvi_pre_krs_consumption"]=build_bvi_consumption(req,prod_map,source_artifact=source_artifact)
           if not isinstance(req.get("krs_input_data"),dict) or not req.get("krs_input_data"):
               req=build_krs_input(req)
@@ -533,6 +539,7 @@ jobs:
             "krs_required":True,
             "krs_executable":True
           }
+          failure_checkpoint.mark("PRE_KRS")
           pcode,p=call(KRS,"/pre-krs",pre,timeout=60)
           assert pcode<300 and p.get("receipt",{}).get("status")=="PASS",(pcode,p)
           vcode,v=call(KRS,"/verify",p,timeout=30)
@@ -542,6 +549,7 @@ jobs:
           # Real KRS execution. The runtime's parameter_map_sha256 is Engine-side params,
           # not the JRA Static->HSV formal adapter identity.
           kpayload=production_krs_payload(req)
+          failure_checkpoint.mark("KRS")
           kcode,k=call(KRS,"/krs/execute",kpayload,timeout=360)
           assert kcode<300,(kcode,k)
           rr=assert_production_krs_receipt(
@@ -585,6 +593,7 @@ jobs:
 
           if mec_required:
               aki_binding=None
+              failure_checkpoint.mark("MEC")
               mec=build_mec_plan(req,utility,strict_head_closure=True,min_stake=100)
               mec_check=validate_mec_plan(mec)
               if req.get("static_owner_activation_binding") or req.get("aki_calculation_requirement")=="OFFICIAL_V2_1" or (req.get("static_prediction") or {}).get("aki_jra_v21"):
@@ -593,6 +602,7 @@ jobs:
                   with open(os.path.join(artifact_dir,"aki_capital_preflight.json"),"w",encoding="utf-8") as fh:
                       json.dump(aki_binding,fh,ensure_ascii=False,sort_keys=True,indent=2)
                   stage("AKI_ACTUAL_TICKET_BINDING_VERIFIED",**aki_binding)
+              failure_checkpoint.mark("CAPITAL")
               capital_decision=resolve_capital_policy(req,mec)
               final_freeze_timestamp=datetime.now(timezone.utc).isoformat()
               if temporal_mode=="FORMAL-PRE-RACE":
@@ -766,6 +776,7 @@ jobs:
             },
             "final_freeze_timestamp":final_freeze_timestamp
           }
+          failure_checkpoint.mark("FINAL")
           fcode,f=call(KRS,"/final",final_payload,timeout=60)
           assert fcode<300 and f.get("receipt",{}).get("status")=="PASS",(fcode,f)
           fvcode,fv=call(KRS,"/verify",f,timeout=30)
@@ -1003,3 +1014,21 @@ jobs:
           path: krs-artifacts/
           if-no-files-found: error
           retention-days: 90
+
+      - name: Persist failed Formal outcome and refresh race status
+        if: always() && steps.formal_execution.outcome == 'failure' && steps.request.outputs.candidate_parallel != 'true' && steps.request.outputs.request != ''
+        env:
+          REQUEST_FILE: ${{ steps.request.outputs.request }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          GAP="$(python runtime/jra_single_entry_outcome.py --request "$REQUEST_FILE")"
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$GAP"
+          if ! git diff --cached --quiet; then
+            git commit -m "execution: persist failed JRA Formal outcome [skip ci]"
+            python tools/persist_local_checkpoints.py --branch main
+          fi
+          D="$(python -c 'import json,os; q=json.load(open(os.environ["REQUEST_FILE"])); print(q["race_id"].split("-")[3][:4]+"-"+q["race_id"].split("-")[3][4:6]+"-"+q["race_id"].split("-")[3][6:8])')"
+          python runtime/jra_source_runtime/jra_race_day_autopilot.py --repo-root . --date "$D" --publish-only

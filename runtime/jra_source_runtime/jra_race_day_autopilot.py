@@ -289,6 +289,14 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
             row["unclosed_cells"] = _blocked_cells(gap)
     elif gaps:
         gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
+        failure = gap.get('formal_execution_failure')
+        if failure:
+            row.update(state='FORMAL_FAILED', first_blocked_stage=failure['first_failed_stage'],
+                       execution_error=failure.get('error'), formal_run_id=failure['run_id'],
+                       formal_run_url=failure.get('run_url'),
+                       formal_conclusion=failure.get('conclusion'),
+                       formal_exit_code=failure.get('exit_code'))
+            return row
         row["state"] = "PRODUCTION_BLOCKED"
         error=gap.get("auto_handoff_error")
         stage=gap.get("first_blocked_stage") or (gap.get("production_blocker_classification") or {}).get("first_actual_blocked_stage")
@@ -316,13 +324,58 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     return row
 
 
-def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict) -> dict:
+def observed_formal_runs(root):
+    """One bounded read per status refresh, including hard-killed Formal jobs."""
+    import os
+    if not os.environ.get('GH_TOKEN') and not os.environ.get('GITHUB_TOKEN'):
+        return []
+    try:
+        result=subprocess.run(['gh','run','list','--workflow','km-formal-request-runner.yml',
+            '--limit','100','--json','databaseId,displayTitle,status,conclusion,url,headSha'],
+            cwd=root,check=True,capture_output=True,text=True,timeout=15)
+        return json.loads(result.stdout)
+    except (OSError,subprocess.SubprocessError,ValueError):
+        return []  # Missing observation never becomes a fabricated failure.
+
+
+def reconcile_formal_run_status(root, row, runs):
+    if row.get('state')!='DISPATCHED_RUNNING':
+        return
+    matches=[]
+    for run in runs:
+        title=str(run.get('displayTitle') or '')
+        path=title.removeprefix('JRA Formal ')
+        if not path.startswith('runtime/requests/') or not path.endswith('.json'):
+            continue
+        target=(root/path).resolve()
+        if not target.is_relative_to((root/'runtime/requests').resolve()) or not target.is_file():
+            continue
+        try:
+            request=json.loads(target.read_text())
+        except (OSError,ValueError):
+            continue
+        if request.get('family_id')=='JRA' and request.get('race_id')==row['race_id']:
+            matches.append(run)
+    if not matches:return
+    latest=max(matches,key=lambda x:int(x['databaseId']))
+    if latest.get('status')=='completed' and latest.get('conclusion') in ('failure','cancelled','timed_out'):
+        row.update(state='FORMAL_FAILED',first_blocked_stage='EXTERNAL_FORMAL_WORKFLOW',
+                   formal_run_id=str(latest['databaseId']),formal_run_url=latest.get('url'),
+                   formal_conclusion=latest['conclusion'],formal_workflow_head_sha=latest.get('headSha'),
+                   execution_error='CANONICAL_FORMAL_RUN_'+latest['conclusion'].upper(),
+                   detailed_failure_stage_verified=False)
+
+
+def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict, *, formal_runs=None) -> dict:
     rows=[]
     for rid,s in schedule.items():
         try:rows.append(race_status(root,rid,s,state,now))
         except (OSError,ValueError,KeyError,TypeError) as exc:
             rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
                          'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
+    runs=(observed_formal_runs(root) if any(r.get('state')=='DISPATCHED_RUNNING' for r in rows) else []) if formal_runs is None else formal_runs
+    for row in rows:
+        reconcile_formal_run_status(root,row,runs)
     rows.sort(key=lambda r: (r.get("post") or "", r["race_id"]))
     idx = {"profile": PROFILE, "race_date": race_date, "generated_at":now.isoformat(), "races": rows,
            "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race "
@@ -354,6 +407,9 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
     for r in rows:
         head = f"## {r.get('venue') or ''}{r.get('race_no') or ''}R {r.get('title') or ''} ({(r.get('post') or '')[11:16]}) — {r.get('state')}"
         md.append(head)
+        if r.get('formal_run_id'):
+            md.append(f"Formal Run {r['formal_run_id']} / {r.get('formal_conclusion')} / "
+                      f"最初の停止工程 {r.get('first_blocked_stage')} / {r.get('execution_error')}")
         if r.get("ticket_tree"):
             md += ["```", r["ticket_tree"], "```"]
         if (r.get("aki_reference") or {}).get("tree"):
@@ -547,6 +603,12 @@ if __name__ == "__main__":
     a = ap.parse_args()
     root = Path(a.repo_root).resolve()
     if a.publish_only:
+        if not _rebase_generated(root,a.date):
+            raise RuntimeError('AUTOPILOT_STATUS_REFRESH_PULL_FAILED')
+        schedule=json.loads((root/'runtime/jra_race_day_plan'/f'{a.date}.schedule.json').read_text())
+        state_path=root/'runtime/jra_race_day_plan'/f'{a.date}.state.json'
+        state=json.loads(state_path.read_text()) if state_path.exists() else {}
+        write_status(root,a.date,_dt.datetime.now(JST),schedule,state)
         _commit(root,a.date)
         raise SystemExit(0)
     started=time.monotonic()

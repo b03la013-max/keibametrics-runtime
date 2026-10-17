@@ -1,0 +1,23 @@
+# 2026-10-17 JRA Formal障害復旧
+
+基準main：a64bc0961a141e2f59febb77a6f4bd8f98d652eb。対象Formal：東京3R Run38990090543、東京4R Run38992217538、新潟3R Run38988607083、新潟4R Run38990821167。
+
+4Runすべて実ログの最初の例外は `BVI_STATIC_PROOF_BINDING_INVALID`、Exit Code1。Full20の再計算後、BVI Static証明の結合検証で停止。PRE_KRS、外部KRS、MEC、Capital、FINALには未到達。SOURCEのWorkflow成功とFormal完走は別である。
+
+原因は、BVI証明作成後に既存のJRA Source橋渡しがStaticへ `source_basis_receipt_sha256`、`source_basis_snapshot_sha256`、`source_checkpoint_manifest_sha256` を付加する順序不整合。元証明のsemantic hashは追跡項目付加前の辞書に結合されており、予測が不変でも検証に失敗した。実入力4件すべてで3追跡項目以外の差はないことを確認した。
+
+修復は予測内容とSOURCE追跡注記の結合を分離する。追跡注記は除外して放置せず、Checkpointの自己hash、証明のSOURCE snapshot／Receipt、3項目の完全一致を別に必須照合する。旧形式の追跡注記込みhashにも互換性を保つ。数値、順位、Role、Pair、Third、未承認の追加Static項目の改変は引き続き拒否する。
+
+Status残留には3要因があった。
+
+1. KRS artifactディレクトリ作成より前の失敗で、Traceback保存先がなく二次的なUpload失敗となった。
+2. StatusはIntentの存在からDISPATCHED_RUNNINGとし、Formalジョブの失敗を参照していなかった。
+3. publish-onlyはStatusを再生成せず、既存ファイルをcommitするだけだった。
+
+正式Python開始時から失敗Checkpointを保存し、元のTracebackとExit Codeを保持する。失敗時は既存exact_gapsへrace-localな診断を永続化する。StatusではFORMAL_FAILEDとRun ID、最初の停止工程、Exit Codeを表示する。Artifactが残らない強制終了も、既存GitHub Actionsの終了状態を1回の読取で照合する（詳細未取得なら工程を推測しない）。publish-onlyは最新CheckpointからStatusを再生成する。署名FINALが存在する場合は従来どおりFINALを優先する。
+
+実入力4件で、署名SOURCEのローカルEd25519／snapshot hash、既存Maturity Source結合、Full20、BVI消費証明の再計算を検証した。OIDCの独立再認証と新しい正式KRS実行はGitHubの正式経路で検証する。ローカル再生を新規Productionや未知未来OOSに数えない。
+
+4件の元Request、Signed SOURCE、署名FINAL／RESULTは変更していない。予測Authority、BVI係数、Static、AKI閾値、KRS Physics、MEC、Capitalの保護対象8ファイルのhashも不変。新規408走のProduction昇格なし。
+
+期限を過ぎたレースは正式事前予測として再実行しない。正式再試行は最新時刻・Cutoff・既存成功FINAL・稼働Runを再確認してから、既存Formal request受付を利用する。未来レースの正式完走確認は、実行Runと署名FINALで別途判定する。
