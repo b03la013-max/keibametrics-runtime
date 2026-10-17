@@ -18,8 +18,17 @@
 | 東京6R | 38998381910 | 360/360 | 5,000 | 12:22:36 | 30点・3,000円 |
 | 新潟7R | 38998782039 | 300/300 | 5,000 | 12:28:48 | 6点・600円 |
 | 京都7R | 38998786014 | 200/200 | 5,000 | 12:28:48 | 6点・600円 |
+| 東京7R | 38999347308 | 220/220 | 5,000 | 12:37:18 | 19点・1,900円 |
 
-上記5件はPRE_KRS/KRS/FINAL Ed25519署名、署名payload、Canonical券面、GitHub availability receiptを独立照合し、署名はCutoff前、公開は発走前。券面は改変していない。東京7Rは既存窓開始12:30後、重複なしを確認しIntent `2fdf1c5766d50d30d168a8837367c8a464fce27e`で開始。進行結果は最新証拠で別判定する。
+上記6件はPRE_KRS/KRS/FINAL Ed25519署名、署名payload、Canonical券面、GitHub availability receiptを独立照合し、署名はCutoff前、公開は発走前。券面は改変していない。東京7Rは既存窓開始12:30後、重複なしを確認しIntent `2fdf1c5766d50d30d168a8837367c8a464fce27e`で開始。最新の判定は`RECOVERY_VERIFIED.json`。
+
+## 12:42更新：自律受付とStatusの実復旧
+
+Statusは12:36:31に更新され、期限切れFormal失敗・東京5R MISSED_WINDOW・Signed FINALを正しく表示。修復済みmainを継承した既存Worker38999450939は12:40:04に新潟8Rを自動Dispatch、Resolver38999673226が成功し、Intentが12:41:11に保存され、Single Entry38999733943へ引き渡された。この8RのIntentをWorkが手動作成したのではない。自動受付から後続実行まで実証したが、8R FINAL完了を先取りしない。
+
+競合再現で確認した期限切れ状態の巻戻りはPR300（HEAD `68b8390ff7f4bdf6f60071aa21712eeb3773b313`、merge `648943a23567d154b2217a9ed48d91c5acf94e6e`）で修復。実ACK優先を維持し、確定MISSED_WINDOWを旧claimに戻さない8行。42回帰PASS、PR CI4/4、main CI4/4。保護8ファイルはmain `9abfcf434eccb3451129b788477ba322ff713a0e`でもhash不変。
+
+当日確認済みFINALは9件（PAPER4・非ゼロ券面5）、その126頭中MEASURED122頭/DCR_ONLY4頭、2,520セル。これは当日全Raceの血統Coverageではなく成立FINAL cohortの分母。今回の救済cohort6件ではIntentからFINAL・発走前Canonical公開まで各6/6、人のACK0/6。
 
 東京5RはResolver最小lead15分による12:10受付期限を超え、Cutoff12:20・発走12:25も経過。元claimを保持し、`85efccd827514fa480d2a01087d934d935138014`でMISSED_WINDOW/再試行不可へ整合。期限切れ東京3R、新潟3/4R、新潟1R、東京1R、京都2Rを事前予測として再実行していない。
 
