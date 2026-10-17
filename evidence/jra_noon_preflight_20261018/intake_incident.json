@@ -1,0 +1,48 @@
+{
+ "observed_at": "2026-10-17T03:16:17.420Z",
+ "root_cause": "Status reads canonical delivery receipt from a directly launched source-runtime script without sibling runtime on sys.path; ModuleNotFoundError interrupts write_status before dispatch call, leaving durable claims without acknowledgement.",
+ "first_failed_stage": "STATUS_CHECKPOINT_READBACK_BEFORE_INTENT_DISPATCH",
+ "error": "ModuleNotFoundError: No module named 'jra_production_postresult'",
+ "exit_code": 1,
+ "runs": [
+  38993239193,
+  38995356610
+ ],
+ "job_ids": [
+  117279978904,
+  117286598477
+ ],
+ "traces": [
+  {
+   "job_id": 117279978904,
+   "traceback": "Traceback (most recent call last):\n2026-10-17T02:32:59.5094813Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 611, in <module>\n2026-10-17T02:32:59.5096041Z     write_status(root,a.date,_dt.datetime.now(JST),schedule,state)\n2026-10-17T02:32:59.5097504Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 372, in write_status\n2026-10-17T02:32:59.5098802Z     try:rows.append(race_status(root,rid,s,state,now))\n2026-10-17T02:32:59.5099382Z                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n2026-10-17T02:32:59.5100599Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 235, in race_status\n2026-10-17T02:32:59.5101852Z     from jra_production_postresult import _sha\n2026-10-17T02:32:59.5102752Z ModuleNotFoundError: No module named 'jra_production_postresult'\n2026-10-17T02:32:59.5382399Z ##[error]Process completed with exit code 1.\n2026-10-17T02:32:59.5436934Z ##[group]Run set -euo pipefail\n2026-10-17T02:32:59.5437268Z \u001b[36;1mset -euo pipefail\u001b[0m\n2026-10-17T02:32:59.5437550Z \u001b[36;1mD=\"${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}\"\u001b[0m\n2026-10-17T02:32:59.5437953Z \u001b[36;1mif [ \"${MODE:-}\" != \"tick\" ] && [ \"$D\" = \"$(TZ=Asia/Tokyo date +%F)\" ] && \\\u001b[0m\n2026-10-17T02:32:59.5438514Z \u001b[36;1m   [ \"$(TZ=Asia/Tokyo dat"
+  },
+  {
+   "job_id": 117286598477,
+   "traceback": "Traceback (most recent call last):\n2026-10-17T03:04:44.6966349Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 611, in <module>\n2026-10-17T03:04:44.6967258Z     write_status(root,a.date,_dt.datetime.now(JST),schedule,state)\n2026-10-17T03:04:44.6968155Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 372, in write_status\n2026-10-17T03:04:44.6968747Z     try:rows.append(race_status(root,rid,s,state,now))\n2026-10-17T03:04:44.6969077Z                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n2026-10-17T03:04:44.6969594Z   File \"/home/runner/work/keibametrics-runtime/keibametrics-runtime/runtime/jra_source_runtime/jra_race_day_autopilot.py\", line 235, in race_status\n2026-10-17T03:04:44.6970264Z     from jra_production_postresult import _sha\n2026-10-17T03:04:44.6970644Z ModuleNotFoundError: No module named 'jra_production_postresult'\n2026-10-17T03:04:44.7146237Z ##[error]Process completed with exit code 1.\n2026-10-17T03:04:44.7191928Z ##[group]Run set -euo pipefail\n2026-10-17T03:04:44.7192232Z \u001b[36;1mset -euo pipefail\u001b[0m\n2026-10-17T03:04:44.7192497Z \u001b[36;1mD=\"${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}\"\u001b[0m\n2026-10-17T03:04:44.7192957Z \u001b[36;1mif [ \"${MODE:-}\" != \"tick\" ] && [ \"$D\" = \"$(TZ=Asia/Tokyo date +%F)\" ] && \\\u001b[0m\n2026-10-17T03:04:44.7193407Z \u001b[36;1m   [ \"$(TZ=Asia/Tokyo dat"
+  }
+ ],
+ "tky5": {
+  "race_id": "KM-JRA-TKY-20261017-R05",
+  "original_claimed_at": "2026-10-17T11:30:38.722273+09:00",
+  "dispatch_api_attempt_verified": false,
+  "intent_observed": false,
+  "post": "2026-10-17T12:25:00+09:00",
+  "resolver_min_lead_minutes": 15,
+  "resolver_acceptance_deadline": "2026-10-17T12:10:00+09:00",
+  "prediction_cutoff": "2026-10-17T12:20:00+09:00",
+  "retry_performed": false,
+  "reason": "Existing Resolver lead deadline had passed when latest instruction arrived; no relaxation/backdated FINAL"
+ },
+ "source_of_prior_aki_example": {
+  "actual_race": "KM-JRA-NGT-20261017-R02",
+  "not_tomorrow_input": true,
+  "policy_change": false
+ },
+ "recovery_intents": {
+  "NGT": "e11f8a5f7aed72c27364ea0d6bdfbf5192e6e51b",
+  "KYO": "6760f18b4f3d82dabed80099297e9700f06bc673",
+  "TKY": "0c6d6789e231bdb5c80f483eebf5cc73279dada2"
+ },
+ "prediction_policy_changed": false
+}
