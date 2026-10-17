@@ -26,6 +26,11 @@ import sys
 import time
 from pathlib import Path
 
+# This file is also executed directly from runtime/jra_source_runtime in the
+# production workflow. Resolve sibling runtime modules before Status reads a
+# delivered FINAL; pytest's runtime path must not be required for live intake.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from jra_race_day_resolver import JST, VENUES, resolve_day, resolve_meetings, venue_code
 
 PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012"
@@ -151,7 +156,10 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
                 schedule[rid]['status']='HOLD_PREREGISTRATION_INTEGRITY'
                 out.append({'race_id':rid,'status':'HOLD_PREREGISTRATION_INTEGRITY','error':str(exc)[:300]})
                 continue
-        if rid in state or list((root / "runtime" / "jra_formal_intents").glob(rid + "-LIVE-*.json")):
+        # Only a failure known to precede the dispatch call may be retried.
+        # An ambiguous acknowledgement retains the existing no-resend hold.
+        known_no_send = (state.get(rid) or {}).get('dispatch_state') == 'CLAIM_PUBLISH_FAILED_NO_SEND'
+        if (rid in state and not known_no_send) or list((root / "runtime" / "jra_formal_intents").glob(rid + "-LIVE-*.json")):
             out.append({"race_id": rid, "status": "ALREADY_DISPATCHED"})
             continue
         decision = due(post, now, window)
@@ -159,13 +167,13 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             if dispatch is None and publish is None:
                 raise ValueError('DURABLE_DISPATCH_PUBLISH_REQUIRED')
             if publish is not None:
-                state[rid]={'claimed_at':now.isoformat(),'post':post.isoformat(),
+                state[rid]={**state.get(rid,{}),'claimed_at':now.isoformat(),'post':post.isoformat(),
                             'profile':PROFILE,'dispatch_state':'CLAIMED_NOT_ACKNOWLEDGED',
                             'cohort_sha256':(plan.get('cohort') or {}).get('sha256')}
                 schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
                 state_path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
-                write_status(root,race_date,now,schedule,state)
                 try:
+                    write_status(root,race_date,now,schedule,state)
                     publish()  # The claim must exist on main BEFORE the API call.
                     merged=json.loads(state_path.read_text())
                     state.clear();state.update(merged)
@@ -370,7 +378,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
     rows=[]
     for rid,s in schedule.items():
         try:rows.append(race_status(root,rid,s,state,now))
-        except (OSError,ValueError,KeyError,TypeError) as exc:
+        except (OSError,ValueError,KeyError,TypeError,ImportError) as exc:
             rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
                          'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
     runs=(observed_formal_runs(root) if any(r.get('state')=='DISPATCHED_RUNNING' for r in rows) else []) if formal_runs is None else formal_runs

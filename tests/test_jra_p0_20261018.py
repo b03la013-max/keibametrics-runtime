@@ -75,6 +75,38 @@ def test_unpublished_claim_cannot_send(tmp_path):
     assert {r['status'] for r in out}=={'CLAIM_PUBLISH_FAILED_NO_SEND'}
 
 
+def test_failed_before_dispatch_retries_in_window_but_ambiguous_claim_does_not(tmp_path):
+    small_plan(tmp_path)
+    when=datetime.fromisoformat('2026-10-18T09:10:00+09:00')
+    options=dict(resolve=lambda *args:('meeting',[{'race_no':i,'post_time':'10:00'} for i in [1,2]]))
+    def offline():raise OSError('claim not published; dispatch not called')
+    tick(tmp_path,'2026-10-18',when,publish=offline,
+         dispatch=lambda *args:pytest.fail('unpublished dispatch'),**options)
+    sent=[]
+    tick(tmp_path,'2026-10-18',when,publish=lambda:None,dispatch=lambda *args:sent.append(args),**options)
+    assert len(sent)==2
+    tick(tmp_path,'2026-10-18',when,publish=lambda:None,
+         dispatch=lambda *args:pytest.fail('duplicate dispatch'),**options)
+    state=tmp_path/'runtime/jra_race_day_plan/2026-10-18.state.json'
+    d=json.loads(state.read_text())
+    for value in d.values():
+        value.pop('dispatched_at',None)
+        value['dispatch_state']='CLAIMED_NOT_ACKNOWLEDGED'
+    state.write_text(json.dumps(d))
+    tick(tmp_path,'2026-10-18',when,publish=lambda:None,
+         dispatch=lambda *args:pytest.fail('ambiguous dispatch must not retry'),**options)
+
+
+def test_failed_before_dispatch_never_retries_after_window(tmp_path):
+    small_plan(tmp_path)
+    state=tmp_path/'runtime/jra_race_day_plan/2026-10-18.state.json'
+    state.write_text(json.dumps({'KM-JRA-TKY-20261018-R01':{'dispatch_state':'CLAIM_PUBLISH_FAILED_NO_SEND'}}))
+    out=tick(tmp_path,'2026-10-18',datetime.fromisoformat('2026-10-18T09:50:00+09:00'),
+             resolve=lambda *args:('meeting',[{'race_no':i,'post_time':'10:00'} for i in [1,2]]),
+             publish=lambda:None,dispatch=lambda *args:pytest.fail('late dispatch'))
+    assert all(x['status']=='MISSED_WINDOW' for x in out)
+
+
 def test_one_corrupt_final_cannot_block_independent_result_worker(tmp_path):
     small_plan(tmp_path);p=tmp_path/'runtime/final_artifacts';p.mkdir(parents=True)
     (p/'KM-JRA-TKY-20261018-R01.json').write_text('bad json')

@@ -14,6 +14,29 @@ RACES = [{"race_no": i, "post_time": f"{9 + i // 2:02d}:{(i % 2) * 30:02d}", "ti
 
 
 class TestAutopilot(unittest.TestCase):
+    def test_actual_delivered_final_status_in_clean_production_import_environment(self):
+        import os
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        code = '''
+import datetime,json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+sys.path.insert(0,str(root/'runtime/jra_source_runtime'))
+assert 'jra_production_postresult' not in sys.modules
+import jra_race_day_autopilot as a
+schedule=json.loads((root/'runtime/jra_race_day_plan/2026-10-17.schedule.json').read_text())
+for rid in ['KM-JRA-TKY-20261017-R04','KM-JRA-NGT-20261017-R05','KM-JRA-KYO-20261017-R05']:
+    row=a.race_status(root,rid,schedule[rid],{},datetime.datetime.now(a.JST))
+    assert row['state']=='FINAL', row
+    assert row['canonical_availability_verified_before_post'] is True, row
+print('ACTUAL_DELIVERED_FINALS_STATUS_PASS')
+'''
+        env = {k:v for k,v in os.environ.items() if k not in {'PYTHONPATH','GH_TOKEN','GITHUB_TOKEN'}}
+        result = subprocess.run([sys.executable,'-I','-c',code,str(root)],cwd=self.tmp,
+                                env=env,capture_output=True,text=True,timeout=30)
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertIn('ACTUAL_DELIVERED_FINALS_STATUS_PASS',result.stdout)
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         (self.tmp / "runtime/jra_race_day_plan").mkdir(parents=True)
