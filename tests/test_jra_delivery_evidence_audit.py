@@ -1,4 +1,9 @@
 import unittest
+import json
+import tempfile
+from pathlib import Path
+from contextlib import redirect_stdout
+from io import StringIO
 
 from runtime.jra_delivery_evidence_audit import _sha, audit_delivery
 
@@ -62,6 +67,19 @@ class DeliveryAuditTest(unittest.TestCase):
         self.assertEqual(result["pre_post_delivery"], "ACK_BEFORE_POST_RECORDED")
         self.assertFalse(result["final_signature_independently_verified"])
 
+
+
+    def test_read_only_cli(self):
+        from runtime.jra_delivery_evidence_audit import main
+        with tempfile.TemporaryDirectory() as directory:
+            final_path = Path(directory) / "final.json"
+            final_path.write_text(json.dumps(self.final), encoding="utf-8")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                result = main(["--final", str(final_path)])
+            self.assertEqual(result["recipient_acknowledged"], "UNVERIFIED")
+            self.assertEqual(json.loads(stdout.getvalue())["race_id"], self.final["race_id"])
+            self.assertEqual(json.loads(final_path.read_text()), self.final)
 
 if __name__ == "__main__":
     unittest.main()
