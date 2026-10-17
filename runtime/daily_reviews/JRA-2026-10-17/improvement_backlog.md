@@ -17,3 +17,5 @@
 | P2 | D-FREEZE | DO_NOT_CHANGE | Family Common | 0 | PROMOTION_REVIEW only after current gates and Owner review |
 
 詳細のEvidence/Regression/OOS/Promotion条件はimprovement_backlog.json。Production activation・Merge・通知送信は実施しない。
+
+追加実行保証Review: [remaining_evidence_closure.md](remaining_evidence_closure.md)。KRS Output結合・送信bytes checkpoint・投資0保持の最小Correctness修復、Learning時刻検証、全36Failure Matrix、固定Shadow比較を保存。Merge/Activation・次Race消費は未確認。

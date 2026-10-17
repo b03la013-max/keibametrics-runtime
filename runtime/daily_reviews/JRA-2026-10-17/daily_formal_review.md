@@ -122,6 +122,8 @@ Production Base/Derived/BVI/AKI閾値/KRS Physics/parameter_map/MEC/Capitalは�
 
 全体完了とはしない。公式全件取得と精算は完成、Predictionの一部Authority/入力証明・Learningの署名依存/Deliveryは未完。詳細はcompletion.jsonとmissing_artifacts.json。
 
-追加検証：SOURCE OIDCを公式GitHub CLIで独立照合し、34件中33件がPASS。Repository、SOURCE Workflow、source SHA、main ref、GitHub-hosted Runnerを制約し、証明対象SOURCE bytesのSHA256も照合した。東京11Rの1件はGitHub公開APIの取得制限（403）で未取得であり、証明不正とは判定しない。BundleとVerifier JSONは監査payloadに保存、一覧は `evidence/jra_day_review_20261017/source_oidc/summary.json`。`python scripts/verify_jra_day_source_oidc.py --gh /path/to/gh` で既存Bundleを再利用して再検証できる。Predicate内のRun IDはWorkflowが記載した主張として扱い、証明書のWorkflow/Source identityと区別する。
+追加検証：SOURCE OIDCを公式GitHub CLIで独立照合し、34件中34件がPASS。Repository、SOURCE Workflow、source SHA、main ref、GitHub-hosted Runnerを制約し、証明対象SOURCE bytesのSHA256も照合した。東京11Rも公開API取得制限解除後に原Bundle取得・独立検証が通過した。34/34件PASSであり、原本欠落・署名不成立ではなかった。BundleとVerifier JSONは監査payloadに保存、一覧は `evidence/jra_day_review_20261017/source_oidc/summary.json`。`python scripts/verify_jra_day_source_oidc.py --gh /path/to/gh` で既存Bundleを再利用して再検証できる。Predicate内のRun IDはWorkflowが記載した主張として扱い、証明書のWorkflow/Source identityと区別する。
 
 京都12Rの追加感度分析は `dead_heat_review.json`（再現: `python scripts/jra_dead_heat_review.py`）。公式払戻対象の5→7→10と5→10→7を別々に評価。両順序ともW=False、P2/P3=True、Ordered Pair/Exact=False、推薦券面払戻0円。KRSの役割救済は各順序1件だが、異なる役割への割当を合算しない。元のP2/P3/Order評価母数と正式RESULT同着保留は維持。Productionへの変更・追加署名・Receipt再生成はない。
+
+追加実行保証Review: [remaining_evidence_closure.md](remaining_evidence_closure.md)。KRS Output結合・送信bytes checkpoint・投資0保持の最小Correctness修復、Learning時刻検証、全36Failure Matrix、固定Shadow比較を保存。Merge/Activation・次Race消費は未確認。

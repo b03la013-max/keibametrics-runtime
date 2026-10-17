@@ -12,3 +12,5 @@ Effective time 2026-10-17T08:19:29.361663+00:00。既存helperで36件のreview 
 | H-CAPITAL | Family Common | Weighted and largest-win-excluded PFS at same budget | 変更なし / Shadow proposed |
 
 同じRace/Cutoff/Source/Runner Universe/結果集合、同予算・同点数を別比較として事前固定。各Negative Control、false-positive費用、Keep/Reject条件はforward_oos_plan.json。数値閾値の事後最適化なし、サンプル30のみで昇格なし。Owner審査前の自動実行なし。
+
+追加実行保証Review: [remaining_evidence_closure.md](remaining_evidence_closure.md)。KRS Output結合・送信bytes checkpoint・投資0保持の最小Correctness修復、Learning時刻検証、全36Failure Matrix、固定Shadow比較を保存。Merge/Activation・次Race消費は未確認。
