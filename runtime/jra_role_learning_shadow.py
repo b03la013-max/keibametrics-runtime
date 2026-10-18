@@ -203,11 +203,21 @@ def persist_shadow(root, request, final, *, observed_at=None):
         return old
     states = [json.loads(p.read_text()) for p in sorted((root/'runtime/learning_states').glob('*.json'))]
     out = build_shadow(request, final, states=states, observed_at=observed_at)
+    model_path=root/'research/jra_conditional_rank/model.json'
+    if model_path.exists():
+        try:
+            from jra_conditional_rank_shadow import compare
+            out['conditional_rank_comparison']=compare(request,json.loads(model_path.read_text()))
+            out['additional_code_sha256']={'runtime/jra_conditional_rank_shadow.py':out['conditional_rank_comparison']['code_sha256']}
+            out['additional_input_sha256']={'research/jra_conditional_rank/model.json':out['conditional_rank_comparison']['model_sha256']}
+        except (ValueError,KeyError,TypeError) as exc:
+            out['conditional_rank_comparison']={'status':'HOLD','reason':type(exc).__name__+':'+str(exc),'production_effect':'NONE'}
     if os.environ.get('GITHUB_ACTIONS') == 'true':
         out['actions_freeze_context'] = {k: os.environ.get(v) for k,v in {
             'repository':'GITHUB_REPOSITORY','run_id':'GITHUB_RUN_ID',
             'run_attempt':'GITHUB_RUN_ATTEMPT','head_sha':'GITHUB_SHA'}.items()}
         out['sha256'] = digest({k:v for k,v in out.items() if k!='sha256'})
+    out['sha256']=digest({k:v for k,v in out.items() if k!='sha256'})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, ensure_ascii=False, sort_keys=True, indent=2)+'\n')
     return out
@@ -250,6 +260,14 @@ def settle_shadow(shadow, result):
          'official_raw_sha256':official['raw_sha256'],'arms':arms,
          'oos_eligible':False,'eligibility_status':'PENDING_INDEPENDENT_PRE_RESULT_PERSISTENCE_WITNESS',
          'production_effect':'NONE','automatic_promotion':False}
+    rank=shadow.get('conditional_rank_comparison') or {}
+    if rank.get('role_rankings'):
+        actual=list(map(str,official['top3']))
+        out['conditional_rank_evaluation']={'candidate_id':rank['candidate_id'],'model_sha256':rank['model_sha256'],
+          'actual_role_ranks':{role:rank['role_rankings'][role].index(h)+1 for role,h in zip(('W','P2','P3'),actual)},
+          'oracle_head_local_p2_rank':rank['head_local_p2'][actual[0]].index(actual[1])+1,
+          'oracle_pair_conditioned_third_rank':rank['pair_conditioned_third'][actual[0]+'>'+actual[1]].index(actual[2])+1,
+          'oracle_conditioning_is_diagnostic_not_predicted_exact_capture':True,'tickets_or_capital_created':False}
     out['sha256']=digest(out)
     return out
 
@@ -263,6 +281,8 @@ def persist_shadow_result(root, result):
     out['oos_eligible']=bool(witness.get('verified') and shadow.get('temporally_eligible')
         and instant(shadow['observed_at']).date().isoformat()>POLICY['training_end']
         and shadow.get('classification')=='PRE_CUTOFF_SHADOW')
+    if out.get('conditional_rank_evaluation'):
+        out['conditional_rank_evaluation']['oos_eligible']=out['oos_eligible']
     out['eligibility_status']='FORWARD_OOS_ELIGIBLE' if out['oos_eligible'] else 'PENDING_SERVER_TIMESTAMP_AND_ARTIFACT_CONTENT_WITNESS'
     out['sha256']=digest({k:v for k,v in out.items() if k!='sha256'})
     path=root/'runtime/role_rescue_shadow_results'/(rid+'.json')
@@ -315,6 +335,16 @@ def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
     ctx=shadow.get('actions_freeze_context') or {}
     if shadow.get('sha256') != digest({k:v for k,v in shadow.items() if k!='sha256'}):
         raise ValueError('WITNESS_SHADOW_HASH_INVALID')
+    nested=shadow.get('conditional_rank_comparison') or {}
+    if nested.get('role_rankings'):
+        if (nested.get('sha256')!=digest({k:v for k,v in nested.items() if k!='sha256'})
+                or nested.get('candidate_id')!='JRA-CONDITIONAL-RANK-20261018-R1'
+                or shadow.get('additional_code_sha256')!={'runtime/jra_conditional_rank_shadow.py':nested.get('code_sha256')}
+                or shadow.get('additional_input_sha256')!={'research/jra_conditional_rank/model.json':nested.get('model_sha256')}
+                or nested.get('source_sha256')!=shadow['source_sha256']
+                or nested.get('runner_universe_sha256')!=shadow['runner_universe_sha256']
+                or nested.get('prediction_cutoff')!=shadow['prediction_cutoff']):
+            raise ValueError('WITNESS_NESTED_RANK_BINDING_INVALID')
     if shadow.get('candidate_id')!=CANDIDATE_ID or shadow.get('policy_fingerprint')!=digest(POLICY):
         raise ValueError('WITNESS_CANDIDATE_POLICY_MISMATCH')
     if ctx.get('repository') != WITNESS_REPO or str(run['id']) != str(ctx.get('run_id')):
@@ -372,6 +402,15 @@ def actions_pre_result_witness(shadow):
             raise ValueError('WITNESS_ARTIFACT_SIZE_OR_ID')
         code=json.loads(api('contents/runtime/jra_role_learning_shadow.py?ref='+run['head_sha']))
         code_bytes=base64.b64decode(code['content'],validate=False)
+        for path,expected in shadow.get('additional_code_sha256',{}).items():
+            if path!='runtime/jra_conditional_rank_shadow.py':raise ValueError('WITNESS_UNREGISTERED_CODE')
+            obj=json.loads(api('contents/'+path+'?ref='+run['head_sha']))
+            if hashlib.sha256(base64.b64decode(obj['content'])).hexdigest()!=expected:raise ValueError('WITNESS_ADDITIONAL_CODE_MISMATCH')
+        for path,expected in shadow.get('additional_input_sha256',{}).items():
+            if path!='research/jra_conditional_rank/model.json':raise ValueError('WITNESS_UNREGISTERED_INPUT')
+            obj=json.loads(api('contents/'+path+'?ref='+run['head_sha']))
+            model=json.loads(base64.b64decode(obj['content']))
+            if digest({k:v for k,v in model.items() if k!='sha256'})!=expected or model.get('sha256')!=expected:raise ValueError('WITNESS_MODEL_INPUT_MISMATCH')
         archive=api('actions/artifacts/'+str(artifact['id'])+'/zip')
         return verify_actions_artifact(shadow,run,artifact,archive,code_bytes)
     except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as exc:

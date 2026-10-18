@@ -96,9 +96,13 @@ class NoBetWorkflowTests(unittest.TestCase):
    seen.append((key,rn));return {},{'official':False}
   def open_day(date,key):
    opened.append((date,key));return None,None,None,key,None
+  real_exists=Path.exists
+  def pending_fixture(path):
+   if str(path).startswith('runtime/jra_no_bet_learning/'):return False
+   return real_exists(path)
   old=os.getcwd();os.chdir(ROOT)
   try:
-   with tempfile.TemporaryDirectory() as td,patch('datetime.datetime',Clock),patch.object(module,'_open_day',side_effect=open_day),patch.object(module,'_fetch_race',side_effect=fetch),patch.dict(os.environ,{'GITHUB_OUTPUT':str(Path(td)/'out')}):
+   with tempfile.TemporaryDirectory() as td,patch.object(Path,'exists',pending_fixture),patch('datetime.datetime',Clock),patch.object(module,'_open_day',side_effect=open_day),patch.object(module,'_fetch_race',side_effect=fetch),patch.dict(os.environ,{'GITHUB_OUTPUT':str(Path(td)/'out')}):
     exec(compile(self.code('capture'),'capture_workflow','exec'),{})
    # Both today's terminals are encountered before the older three.
    self.assertEqual(len(seen),4)
