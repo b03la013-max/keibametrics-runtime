@@ -596,18 +596,16 @@ jobs:
             done
           fi
           test -n "$RUN_ID"
-          # A post-signature publication failure must not erase a valid signed FINAL.
-          # Completion still requires the independently validated canonical summary below.
-          gh run watch "$RUN_ID" --exit-status || echo "CANONICAL_JOB_FAILED_VERIFY_SIGNED_COMPLETION_SEPARATELY"
-          gh run view "$RUN_ID" --json status,conclusion,url > runtime_out/canonical_job_status.json
+          # Canonical Production artifact is uploaded before independent Shadow finishes.
+          # Keep all existing completion/receipt validation below; only the wait changes.
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          gh run download "$RUN_ID" --name "krs-utility-$RUN_ID" --dir runtime_out/canonical_formal
+          PYTHONPATH=runtime python runtime/jra_formal_artifact_wait.py --run-id "$RUN_ID" --output runtime_out/canonical_formal
           PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
           from jra_single_entry_outcome import verify_formal_completion_summary
           request=json.loads(Path("runtime_out/jra_single_entry_formal_request.json").read_text())
-          summaries=list(Path("runtime_out/canonical_formal").glob("*/formal_execution_summary.json"))
+          summaries=list(Path("runtime_out/canonical_formal").glob("**/formal_execution_summary.json"))
           assert len(summaries)==1, "JRA_CANONICAL_FORMAL_SUMMARY_REQUIRED"
           summary=json.loads(summaries[0].read_text())
           result=verify_formal_completion_summary(summary,request)
