@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, json
 from typing import Any
-from krs_prediction_utility import evaluate_against_result
+from jra_krs_measurement import evaluate_against_result
 from family_pfs_improvement import build_pfs_improvement_assessment
 
 LEARNING_PROFILE="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
@@ -113,7 +113,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
 
     ku=final_artifact.get("krs_prediction_utility") or {}
     if isinstance(ku,dict) and ku.get("utility_revision"):
-        krs_eval=evaluate_against_result(ku,top3)
+        krs_eval=evaluate_against_result(ku,top3,
+            static_ranking=(final_artifact.get("static_prediction") or {}).get("ranking")
+                or (final_artifact.get("final_prediction_package") or {}).get("ranking"),
+            static_roles=roles)
     else:
         krs_eval={"classification":"NOT_AVAILABLE","rescues":[],"supports":[],"misses":[]}
 
@@ -210,7 +213,7 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     review["sha256"]=_sha(review)
     return review
 
-def build_learning_state(review:dict)->dict:
+def build_learning_state(review:dict, *, effective_time=None)->dict:
     ff=(review.get("failure_localization") or {}).get("first_material_failure")
     pfs_improvement=review.get("pfs_improvement") or build_pfs_improvement_assessment(review)
     shadow=[]
@@ -255,5 +258,13 @@ def build_learning_state(review:dict)->dict:
       "forbidden":["RETROACTIVE_PREDICTION_REWRITE","AUTOMATIC_NUMERIC_WEIGHT_CHANGE","RESULT_DERIVED_FEATURE_REWRITE"],
       "production_change_authorized":False,
     }
+    if effective_time is not None:
+        from datetime import datetime
+        when=datetime.fromisoformat(effective_time.replace('Z','+00:00'))
+        if when.tzinfo is None:
+            raise LearningError("LEARNING_TIMEZONE_REQUIRED")
+        state["effective_time"]=when.isoformat()
+        state["learning_validity"]="FAMILY-CANDIDATE"
+        state["prediction_use"]="SHADOW_REVIEW_CONTEXT_ONLY"
     state["sha256"]=_sha(state)
     return state
