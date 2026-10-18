@@ -145,3 +145,81 @@ def freeze(request, base_model, model, *, observed_at=None):
                status='RESEARCH_ONLY_NO_AUTOMATIC_RUNNER_CONNECTION')
     out['sha256'] = sha(out)
     return out
+
+
+EXPOSURE_POLICY = {'candidate_id':'JRA-HEAD-P2-EQUAL-EXPOSURE-20261018-R1',
+                  'ordering':'EXACTA joint W/P2 mass; TRIFECTA joint mass; TRIO sum over orientations; numeric tie-break',
+                  'exposure':'same bet-type counts and original stake multiset, no added capital',
+                  'probabilities_calibrated':False, 'ev_kelly_authority':False,
+                  'production_effect':'NONE', 'automatic_promotion':False}
+
+
+def matched_exposure(distribution, final):
+    """Research allocation for the existing unit/interaction models, never an EV decision.
+
+    Identical ordering is applied to both arms. A known-outcome replay is exploration,
+    and this function cannot create a forward freeze or purchase instruction.
+    """
+    from itertools import permutations
+    from collections import Counter
+    if final.get('sha256') != sha({k:v for k,v in final.items() if k!='sha256'}):
+        raise ValueError('HEAD_EXPOSURE_FINAL_HASH')
+    ids=set(map(str,final['static_prediction']['ranking']))
+    if len(ids)<3 or set(distribution['marginals']['W'])!=ids:
+        raise ValueError('HEAD_EXPOSURE_UNIVERSE')
+    def probability_vector(values, universe):
+        if (set(values)!=universe or any(type(v) not in (int,float) or not math.isfinite(v)
+                or not 0<=v<=1 for v in values.values()) or abs(sum(values.values())-1.)>1e-8):
+            raise ValueError('HEAD_EXPOSURE_PROBABILITY_VECTOR')
+    if set(distribution['marginals'])!={'W','P2','P3'}:
+        raise ValueError('HEAD_EXPOSURE_MARGINAL_ROLES')
+    for values in distribution['marginals'].values():probability_vector(values,ids)
+    joint=distribution['ordered_joint']
+    expected={'>'.join(p) for p in permutations(ids,3)}
+    if set(joint)!=expected or set(distribution['head_p2'])!=ids:
+        raise ValueError('HEAD_EXPOSURE_JOINT_UNIVERSE')
+    orders={kind:{} for kind in ('EXACTA','TRIO','TRIFECTA')}
+    for h in ids:
+        p2=distribution['head_p2'][h]
+        probability_vector(p2,ids-{h})
+        for s in p2:
+            thirds=distribution['pair_third'][h+'>'+s]
+            probability_vector(thirds,ids-{h,s})
+            pair=distribution['marginals']['W'][h]*p2[s]
+            orders['EXACTA'][(int(h),int(s))]=pair
+            for t,pt in thirds.items():
+                key=(int(h),int(s),int(t));mass=joint[h+'>'+s+'>'+t]
+                if (type(mass) not in (int,float) or not math.isfinite(mass) or mass<0
+                        or abs(mass-pair*pt)>1e-10):raise ValueError('HEAD_EXPOSURE_JOINT_MASS')
+                orders['TRIFECTA'][key]=mass
+                trio=tuple(sorted(key));orders['TRIO'][trio]=orders['TRIO'].get(trio,0.)+mass
+    if abs(sum(joint.values())-1.)>1e-8:raise ValueError('HEAD_EXPOSURE_NORMALIZATION')
+    for i,role in enumerate(('W','P2','P3')):
+        for horse in ids:
+            mass=sum(p for key,p in joint.items() if key.split('>')[i]==horse)
+            if abs(mass-distribution['marginals'][role][horse])>1e-8:
+                raise ValueError('HEAD_EXPOSURE_MARGINAL_MASS')
+    tickets=final['final_ticket']['tickets'];keys=[]
+    for ticket in tickets:
+        kind=ticket['bet_type'];sel=tuple(ticket['selection']);stake=ticket['stake']
+        if (kind not in orders or type(stake) is not int or stake<=0 or stake%100
+                or sel not in orders[kind] or (kind,sel) in keys):
+            raise ValueError('HEAD_EXPOSURE_BASELINE_TICKET')
+        keys.append((kind,sel))
+    if sum(t['stake'] for t in tickets)!=final['final_ticket']['total_investment']:
+        raise ValueError('HEAD_EXPOSURE_BASELINE_BUDGET')
+    out=[]
+    for kind in orders:
+        originals=[t for t in tickets if t['bet_type']==kind]
+        ranked=sorted(orders[kind],key=lambda sel:(-orders[kind][sel],sel))
+        out.extend({'bet_type':kind,'selection':list(sel),'stake':t['stake']}
+                   for sel,t in zip(ranked,originals))
+    assert Counter((t['bet_type'],t['stake']) for t in out)==Counter((t['bet_type'],t['stake']) for t in tickets)
+    result={'policy':EXPOSURE_POLICY,'policy_sha256':sha(EXPOSURE_POLICY),
+            'baseline_final_sha256':final['sha256'], 'race_id':final['race_id'],
+            'source_sha256':final['source_snapshot_sha256'],
+            'tickets':out,'ticket_count':len(out),'required_capital':sum(t['stake'] for t in out),
+            'added_capital':0,'purchase_authority':False,'oos_eligible':False,
+            'classification':'RESEARCH_COMPARISON_REQUIRES_SEPARATE_PRE_RESULT_FREEZE'}
+    result['sha256']=sha(result)
+    return result

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -94,6 +95,38 @@ def write_once(path, obj):
     finally: temp.unlink()
 
 
+def prepare(root, request, final, *, created_at=None):
+    """Resume the original immutable handoff; never resnapshot Learning on retry."""
+    path = Path(root)/'shadow-output'/final['race_id']/'shadow_input.json'
+    if path.exists():
+        old = validate(root, json.loads(path.read_text()))
+        if old['request'] != request or old['final'] != final:
+            raise ValueError('IMMUTABLE_SHADOW_CHECKPOINT_CONFLICT')
+        return old
+    checkpoint = pack(root, request, final, created_at=created_at)
+    write_once(path, checkpoint)
+    return checkpoint
+
+
+def learning_effect(shadow):
+    """Observed input/ticket differences, not a prediction-improvement claim."""
+    accepted = shadow['learning_intake']['accepted']
+    from jra_role_learning_shadow import ticket_key
+    base = shadow['arms']['PRODUCTION']; learned = shadow['arms']['LEARNING_ON']
+    before = {ticket_key(t) for t in base['tickets']}
+    after = {ticket_key(t) for t in learned['tickets']}
+    return {'accepted_state_bindings': accepted, 'accepted_count': len(accepted),
+            'accepted_input_sha256': digest(accepted), 'without_learning_input_sha256': digest([]),
+            'input_values_changed': bool(accepted),
+            'applied_arm': shadow.get('learning_applied_to_arm'),
+            'numerical_rank_or_role_effect': 'NONE_FIXED_MODEL',
+            'added_ordered_pairs': [list(v) for k,v in sorted(after-before) if k=='EXACTA'],
+            'added_ordered_thirds': [list(v) for k,v in sorted(after-before) if k=='TRIFECTA'],
+            'added_ticket_count': len(after-before), 'removed_ticket_count': len(before-after),
+            'capital_difference': learned['required_capital']-base['required_capital'],
+            'utility_improvement': 'PENDING_RESULT_AND_INDEPENDENT_OOS_WITNESS'}
+
+
 def execute(root, checkpoint, *, verify_final, clock=None):
     """Worker is bounded by its own Actions job; no thread/future in Production."""
     root = Path(root); c = validate(root,checkpoint)
@@ -144,30 +177,85 @@ def main():
     from jra_delivery import verify_signed_final
     from family_authority_guard import resolve_current_authority
     import urllib.request
-    root=Path(a.root).resolve();_,authority=resolve_current_authority(root=root)
-    contract=json.loads((root/authority['common_family_components']['family_runtime_contracts_profile']).read_text())['families']['JRA']
-    with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:health=json.load(response)
-    if a.request:
-        if not a.final:raise ValueError('SHADOW_CHECKPOINT_FINAL_REQUIRED')
-        c=pack(root,json.loads(Path(a.request).read_text()),json.loads(Path(a.final).read_text()))
-        write_once(root/'shadow-output'/c['race_id']/'shadow_input.json',c)
-    else:c=json.loads(Path(a.checkpoint).read_text())
-    if a.restore_shadow:
-        from jra_role_learning_shadow import actions_pre_result_witness
-        verify_signed_final(c['final'],health,contract)
-        restore(root,c,json.loads(Path(a.restore_shadow).read_text()),witness=actions_pre_result_witness)
-        print('ORIGINAL_PRE_CUTOFF_SHADOW_RESTORED_NO_RECOMPUTATION');return
-    out=execute(root,c,verify_final=lambda f:verify_signed_final(f,health,contract))
-    target=root/'shadow-output'/c['race_id']/'role_learning_shadow.json';write_once(target,out)
-    # MEC R4 remains a separately stored research artifact, after Delivery as well.
+    root=Path(a.root).resolve()
+    # Raw worker clocks are diagnostic; only the provider archive is an independent witness.
+    started=time.monotonic()
+    trace={'started_at':datetime.now(timezone.utc).isoformat(), 'production_effect':'NONE',
+           'clock_trust':'WORKER_SELF_REPORTED_NOT_INDEPENDENT_FREEZE_PROOF',
+           'oos_eligible':False, 'status':'STARTED', 'events':[]}
+    run_id=os.environ.get('GITHUB_RUN_ID','local')
+    attempt=os.environ.get('GITHUB_RUN_ATTEMPT','local')
+    if not all(re.fullmatch(r'[0-9]+|local',x) for x in (run_id,attempt)):
+        raise ValueError('SHADOW_TELEMETRY_EXECUTION_ID')
+    worker_path=root/'shadow-output'/('worker-'+run_id+'-'+attempt)
+    early=dict(trace);early['sha256']=digest(early)
+    if not worker_path.with_suffix('.started.json').exists():
+        write_once(worker_path.with_suffix('.started.json'),early)
+    checkpoint=None
     try:
-        from mec_r4_shadow import build_mec_r4_shadow
-        mec=build_mec_r4_shadow(c['final'])
-        if instant(datetime.now(timezone.utc).isoformat()) <= instant(c['prediction_cutoff']):
-            write_once(root/'runtime/mec_shadow_artifacts'/(c['race_id']+'.json'),mec)
+        if a.request:
+            if not a.final:raise ValueError('SHADOW_CHECKPOINT_FINAL_REQUIRED')
+            checkpoint=prepare(root,json.loads(Path(a.request).read_text()),json.loads(Path(a.final).read_text()))
+        else:checkpoint=validate(root,json.loads(Path(a.checkpoint).read_text()))
+        c=checkpoint
+        trace.update(race_id=c['race_id'], checkpoint_sha256=c['sha256'],
+                     source_sha256=c['source_sha256'], runner_universe_sha256=c['runner_universe_sha256'],
+                     prediction_cutoff=c['prediction_cutoff'], code_sha256=c['code_sha256'],
+                     model_sha256=c['model_sha256'], policy_sha256=c['policy_sha256'])
+        trace['events'].append({'stage':'CHECKPOINT_READY','at':datetime.now(timezone.utc).isoformat()})
+        trace['actions_context']={k:os.environ.get(v) for k,v in
+            {'run_id':'GITHUB_RUN_ID','run_attempt':'GITHUB_RUN_ATTEMPT','head_sha':'GITHUB_SHA','job':'GITHUB_JOB'}.items()}
+        start_record=dict(trace)
+        start_record['sha256']=digest(start_record)
+        attempt=os.environ.get('GITHUB_RUN_ATTEMPT','local')
+        start_path=root/'shadow-output'/c['race_id']/('execution-'+str(attempt)+'-started.json')
+        if start_path.exists():
+            previous=json.loads(start_path.read_text())
+            if (previous.get('sha256')!=digest({k:v for k,v in previous.items() if k!='sha256'})
+                    or previous.get('checkpoint_sha256')!=c['sha256']):
+                raise ValueError('IMMUTABLE_SHADOW_EXECUTION_CONFLICT')
+        else:write_once(start_path,start_record)
+        _,authority=resolve_current_authority(root=root)
+        contract=json.loads((root/authority['common_family_components']['family_runtime_contracts_profile']).read_text())['families']['JRA']
+        with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:health=json.load(response)
+        if a.restore_shadow:
+            from jra_role_learning_shadow import actions_pre_result_witness
+            verify_signed_final(c['final'],health,contract)
+            out=restore(root,c,json.loads(Path(a.restore_shadow).read_text()),witness=actions_pre_result_witness)
+            trace['status']='RESTORED_ORIGINAL_WITNESS_NO_RECOMPUTATION'
+        else:
+            trace['events'].append({'stage':'COMPUTE_START','at':datetime.now(timezone.utc).isoformat()})
+            out=execute(root,c,verify_final=lambda f:verify_signed_final(f,health,contract))
+            trace['status']='FROZEN_PENDING_INDEPENDENT_ARCHIVE_WITNESS'
+        target=root/'shadow-output'/c['race_id']/'role_learning_shadow.json';write_once(target,out)
+        trace['events'].append({'stage':'SHADOW_SAVED','at':datetime.now(timezone.utc).isoformat()})
+        trace.update(shadow_sha256=out['sha256'],learning_effect=learning_effect(out))
+        # MEC R4 remains a separately stored research artifact, after Delivery as well.
+        try:
+            from mec_r4_shadow import build_mec_r4_shadow
+            mec=build_mec_r4_shadow(c['final'])
+            if instant(datetime.now(timezone.utc).isoformat()) <= instant(c['prediction_cutoff']):
+                write_once(root/'runtime/mec_shadow_artifacts'/(c['race_id']+'.json'),mec)
+        except Exception as exc:
+            trace['mec_status']='HOLD:'+type(exc).__name__
+        print(json.dumps({'race_id':c['race_id'],'shadow_sha256':out['sha256'],'oos_eligible':False,'status':trace['status']}))
     except Exception as exc:
-        print('MEC_R4_SHADOW_HOLD:'+type(exc).__name__)
-    print(json.dumps({'race_id':c['race_id'],'shadow_sha256':out['sha256'],'oos_eligible':False,'status':'PENDING_INDEPENDENT_ARCHIVE_WITNESS'}))
+        trace.update(status='FAILED',error_type=type(exc).__name__,reason=str(exc)[:180])
+        raise
+    finally:
+        trace.update(finished_at=datetime.now(timezone.utc).isoformat(),elapsed_seconds=time.monotonic()-started)
+        if checkpoint:
+            trace['seconds_before_cutoff_at_finish']=(instant(checkpoint['prediction_cutoff'])-instant(trace['finished_at'])).total_seconds()
+            # Attempts have distinct telemetry; immutable forecast/checkpoint bytes stay unchanged.
+            attempt=os.environ.get('GITHUB_RUN_ATTEMPT','local')
+            path=root/'shadow-output'/checkpoint['race_id']/('execution-'+str(attempt)+'.json')
+            trace['sha256']=digest(trace)
+            try:write_once(path,trace)
+            except (OSError,ValueError) as exc:print('SHADOW_TELEMETRY_SAVE_HOLD:'+type(exc).__name__)
+        else:
+            trace['sha256']=digest(trace)
+            try:write_once(worker_path.with_suffix('.failed.json'),trace)
+            except (OSError,ValueError) as exc:print('SHADOW_TELEMETRY_SAVE_HOLD:'+type(exc).__name__)
 
 
 if __name__=='__main__':main()
