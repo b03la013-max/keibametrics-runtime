@@ -851,7 +851,7 @@ def _choice_features(pack, rid, prefix, *, stage_evidence=True, interactions=Tru
 
 # Source references for NON-PRODUCTION adapters, not a Production Scope list.
 # OHI's attached v2.0 cannot replace current v2.1. No dedicated current canon
-# was supplied for HIM/KNZ/MIZ; those requests remain explicit HOLD.
+# was supplied for HIM/KNZ/MIZ/NGY; those requests remain explicit HOLD.
 VENUE_CANDIDATE_SOURCES = {
     'URW':(URW_CANON,URW_CANON_SHA256),
     'FNB':('KM-LOCAL-FNB-v2.1-20260928-R1','158b78d9509ac805409d77bcc569b4910ffd0db90e639f4e70885925ec78fd6f'),
@@ -861,7 +861,6 @@ VENUE_CANDIDATE_SOURCES = {
     'SAG':('SAG-v1.2','3a981355502bb3bcf317d20e1fb09fafbd802c9b4886c9fc264553b801528f44'),
     'KSM':('KSM-v1.1','186cda55802ae54b28249c4107919a7c54ae6c09046844388a8cb6590a465186'),
     'KCH':('KCH-v1.0','b71f0dea84b57a58ff85b69807d788bea00db6dc1073d7d264afb995fabb5940'),
-    'NGY':('NGY-YATOMI-INFORMATION-SOURCE-202607','b1c22084269dbada6fba283d8ae30f8a9546b143092e9129d390fad6dc610b2c'),
 }
 
 
@@ -936,7 +935,7 @@ def compile_public_venue_candidate(request, source, numerical, *, historical_rep
         raise ShadowOwnerError('VENUE_PUBLIC_ACTIVE_FULL29_OR_SCOPE_HOLD')
     # Current MON inner/outer families may not share matched analogs. MOR turf
     # remains HOLD in the existing dirt-only factual header adapter, never
-    # silently relabelled as dirt. NGY old-track observations are not Yatomi.
+    # silently relabelled as dirt.
     def course_family(distance):
         if venue=='MON':
             return 'INNER' if distance in (1500,1600) else 'OUTER' if distance in (1000,1100,1200,1700,1800,2000) else 'UNKNOWN'
@@ -950,12 +949,11 @@ def compile_public_venue_candidate(request, source, numerical, *, historical_rep
             if when is None or when.date()>=post.astimezone(JST).date():
                 raise ShadowOwnerError('VENUE_PUBLIC_NON_PRESTART_HISTORY')
             same=str(s.get('venue','')).replace('ナ','')==VENUE_NAMES[venue]
-            current_course=not (venue=='NGY' and when.date().isoformat()<'2022-04-08')
             positions=s.get('content_positions') or []
             observations.append({'date':s['date'],'venue':s.get('venue'),'distance':s.get('distance'),
                 'surface':s.get('surface'),'finish':s.get('finish'),'field_size':s.get('field_size'),
                 'positions':positions,'going':s.get('going'),'class_tokens':_urw_class_tokens(s.get('race_name')),
-                'matched_venue_distance':same and current_course and s.get('distance')==header['distance'] and course_family(header['distance'])!='UNKNOWN'
+                'matched_venue_distance':same and s.get('distance')==header['distance'] and course_family(header['distance'])!='UNKNOWN'
                     and course_family(s.get('distance'))==course_family(header['distance']),
                 'raw_reference':s.get('raw')})
         current={'current_distance_m':header['distance'],'current_frame_no':parsed[rid].get('frame_no'),
@@ -1049,7 +1047,8 @@ def fit_conditioned_owner(training_packs, training_labels, *, stage_evidence=Tru
     behavior change, excluded from C1 and Production promotion.
     """
     packs=sorted(training_packs,key=lambda p:_aware(p['scheduled_post_at'],'TRAINING_POST'))
-    if (len(packs)<2 or len({p['venue_id'] for p in packs})!=1 or len({p['race_id'] for p in packs})!=len(packs)
+    if (len(packs)<2 or any(not p.get('venue_canon') or not p.get('venue_canon_source_sha256') for p in packs)
+            or len({p['venue_id'] for p in packs})!=1 or len({p['race_id'] for p in packs})!=len(packs)
             or len({(p['venue_canon'],p['venue_canon_source_sha256']) for p in packs})!=1):
         raise ShadowOwnerError('CONDITIONAL_TRAINING_SCOPE_OR_COUNT')
     for p in packs:

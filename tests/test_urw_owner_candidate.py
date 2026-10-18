@@ -195,6 +195,12 @@ def test_conditional_model_training_parameters_ignore_validation_input(condition
     again=fit_conditioned_owner(packs,labels)
     assert again['fits']==model['fits']
     assert all(set(f['coefficients'])!={0.} for f in model['fits'])
+    missing=copy.deepcopy(packs)
+    for pack in missing:
+        pack['venue_canon']=None
+        pack['sha256']=_sha({k:v for k,v in pack.items() if k!='sha256'})
+    with pytest.raises(ShadowOwnerError,match='TRAINING_SCOPE'):
+        fit_conditioned_owner(missing,labels)
     # An injected time cannot create a forward freeze, even in a test process.
     p=copy.deepcopy(packs[-1]);p.update(race_id='TEST-URW-FUTURE',scheduled_post_at='2027-01-01T12:00:00+09:00',prediction_cutoff='2027-01-01T11:58:00+09:00')
     p['sha256']=_sha({k:v for k,v in p.items() if k!='sha256'})
@@ -222,7 +228,7 @@ def test_unsigned_public_adapter_preserves_full_universe_and_never_claims_signat
         compile_public_venue_candidate(req,bad,changed,historical_replay=True)
 
 
-@pytest.mark.parametrize('venue',['OHI','HIM','KNZ','MIZ'])
+@pytest.mark.parametrize('venue',['OHI','HIM','KNZ','MIZ','NGY'])
 def test_missing_current_venue_canon_holds_without_using_another_venue(original,venue):
     from runtime.local_race_key_shadow_owner import compile_public_venue_candidate
     req,s,n=original
