@@ -68,6 +68,14 @@ def run(root=ROOT):
               result_status='OFFICIAL_OBSERVATION_ONLY_NO_PRODUCTION_SIGNED_RESULT',
               no_bet_learning_status='MISSING_CANONICAL_NO_BET_LEARNING',
               dominant_pfs_loss_owner='NO_CAPITAL_EXPOSURE',capture=None)
+            lp=root/'runtime/jra_no_bet_learning'/terminal.name
+            if lp.exists():
+                learning=load(lp)
+                if learning['sha256']!=digest({k:v for k,v in learning.items() if k!='sha256'}) or learning['decision_lineage_sha256']!=t['sha256']:
+                    raise ValueError('NO_BET_LEARNING_BINDING')
+                row.update(no_bet_learning_status=learning['status'],production_learning_path=str(lp.relative_to(root)),
+                           official_top3=learning['official_top3'],result_status='OFFICIAL_OIDC_ZERO_EXPOSURE_LEARNING_NOT_SIGNED_FINAL',
+                           zero_exposure_learning_sha256=learning['sha256'])
             rows.append(row);continue
         f=load(fp);verify_final(f);verify_signed_final(f,health,contract)
         result=load(root/'runtime/results'/f'{rid}.json');official=result['official_result']

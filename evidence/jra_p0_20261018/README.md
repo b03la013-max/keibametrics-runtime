@@ -78,3 +78,51 @@ Retrospective cost measurement, same 31 invested formal races (all arms designed
 | KRS Actionable | 60,700 | 59,400 | 94,700 |
 
 Baseline is 56,900 yen / 30,500 yen return. Unequal-budget arms do not establish improvement; equal-budget/equal-ticket diagnostics and forward comparison remain separate. Full machine-readable observations are appended to existing EXECUTION_CONTEXT.json.
+
+
+## Prediction quality continuation — 2026-10-18 (unmerged research)
+
+Latest main base: 6a907d6e (PR306/307 merged, NO-BET Learning2 generated). Current Authority R51 and Production numerical policy remain unchanged. PR305 isolated provider/rollback gate remains independent and unresolved.
+
+Full review: PREDICTION_QUALITY.json.gz; compact metrics: PREDICTION_QUALITY_SUMMARY.json. All36 races /450 runners /9000 index cells included, with actual NO-BET Full20 inputs separated from34 signed FINALs. Per-runner values, midranks, feature contributions and immutable input references are retained. Missing features and DCR-only values are not labelled weak ability.
+
+| Index | Actual W mean rank | Actual P2 mean rank | Actual P3 mean rank |
+|---|---:|---:|---:|
+| BVI | 5.944 | 7.347 | 5.903 |
+| BWI | 5.875 | 6.306 | 6.764 |
+| CFI | 5.417 | 5.639 | 5.292 |
+| CSI | 4.625 | 6.264 | 5.514 |
+| DCR | 5.056 | 6.472 | 5.736 |
+| F3S | 4.250 | 5.583 | 5.500 |
+| GCI | 5.611 | 6.167 | 5.833 |
+| HPI | 4.833 | 5.417 | 5.611 |
+| JTI | 4.542 | 4.611 | 5.125 |
+| KGI | 5.250 | 5.708 | 4.681 |
+| PRI | 4.417 | 6.347 | 6.792 |
+| RFI | 5.319 | 7.458 | 5.931 |
+| SRI | 3.972 | 5.833 | 5.528 |
+| SSI | 4.639 | 5.333 | 5.819 |
+| T3I | 4.111 | 5.500 | 5.500 |
+| TPI | 4.028 | 5.500 | 5.333 |
+| TRI | 5.042 | 5.819 | 5.153 |
+| VMI | 3.986 | 5.083 | 4.472 |
+| ZAI_PLACE | 4.167 | 5.472 | 5.667 |
+| ZAI_WIN | 4.250 | 5.444 | 5.611 |
+
+Ranks use midranks for ties; normalized rank and target pairwise concordance are in JSON. Finish Spearman excludes races lacking full official finish order (NO-BET only has canonical top3 here). Correlation/dependency is association, not proof of an implementation defect or independent causal evidence. ZAI_WIN/ZAI_PLACE mean within-race rank correlation=0.9833. Low AKI<=20 descriptive subset:9/11 invested races excluded the actual Winner from W; this does not calibrate AKI as a probability.
+
+BVI measured414, measured+DCR12, DCR-only24. Existing registered Full20 formula replay is exact for9000 cells (max error0). In-memory BVI scalar=50 sensitivity leaves W/P2 ranks unchanged; actual P3 mean midrank5.500→5.5278. This is not a Corpus/Evidence, AKI/KRS, Ticket or PFS ablation and does not prove the whole pedigree channel useless. Raw offspring-count shrinkage sensitivity is labelled non-Bayesian, research-only; official IDs/independent samples and full hierarchical Bayesian fit remain HOLD. Unaccepted408 runs were not imported; Blood-B was not newly collected.
+
+Candidate JRA-CONDITIONAL-RANK-20261018-R1 uses fixed strong L2 race-balanced pairwise loss, trained on41 completed canonical races fromOct11/12/17. No hyperparameter search onOct18. Mean actual W/P2/P3 midranks: Production indices4.25/5.4722/5.50; learned3.8889/4.9167/4.4167. Paired exploratory confidence intervals and every race are in JSON. Specification was designed after results; this is NOT authentic OOS, and historical RESULT signatures were not independently reverified for this training cohort. Head/Pair conditioning excludes already selected horses; it does not learn head/pair interactions. TKY12 P2 worsens9→12, KYO7 Winner remains6, NGT10 Winner remains12: the core failures are not solved by this fit.
+
+The rank-only Candidate attaches to the existing Shadow sidecar, with independent ID/model/code/source/universe/cutoff binding and provider artifact checks. It creates no tickets and changes no Production Role, Capital, coefficients or KRS Physics. Model creation must precede Source freeze; target overlap or training-result times after model creation reject. Future NO-BET rank freezing is not connected by this successful-FINAL path. Existing R1 frozen arms are preserved. Future race freeze and actual next-race Learning consumption remain PENDING; no past states were backdated.
+
+KRS31-invested-race diagnostic:20 potential Role-zone rescues,1 potential Static-correct Role non-confirmation (not Production deletion),585 Role proposals,185 false Pair and310 false Exact additions. Added Capital60700 yen, losing added-ticket stake59400 yen, added-ticket return94700 yen. These are post-result research conversions, not actual winning purchases.
+
+Integer100-yen same-budget allocation preserves56900-yen total. Baseline and baseline-preserving rescue arms remain PFS53.6028% because retaining all existing100-yen tickets exhausts the budget. Equal-budget Static-top3 BOX224.2004% drops to36.9526% after largest-return race removal; Market-top3 BOX147.9438% drops to67.0425%. Baselines are diagnostics, not proposed Production BOX rules. Largest-return dependence and omitted baseline tickets are recorded; unknown future benefit is unproven.
+
+Correctness changes: bind nested Candidate hashes to provider-verified dependencies; repair stale NO-BET audit missing label; make pending-batch regression independent of already completed live Learning records. Regression47 tests+25 subtests PASS; independent reviewer28 tests+25 subtests PASS and numerical convergence/positive-control checks. No unresolved High finding.
+
+Rollback: revert new rank-only optional attachment, research module/model, audit/test/CI changes; preserve all signed histories and deployed Runtime. No Production deployment or promotion. Merge HOLD pending current HEAD Owner approval and CI. Forward OOS minimum60 distinct races/3 dates/2 venues, no automatic promotion.
+
+Artifacts: model SHA c288ab90c0c855799e8b0ac22ba8fdb0a4392b258d4ce9369247082f26aa8674; full report SHA 2f3c05dba506645d86f949afca391d6af9ef49b37b846780c5d2530a99175cbe; summary SHA 89c628e579bc885c3dacbbd958366c8c72ab2dcc78e67ecc569e2d269069259e.
