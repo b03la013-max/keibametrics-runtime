@@ -10,6 +10,12 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+import sys
+
+# The reused numerical modules retain their existing runtime-local imports.
+# Make this test independently collectable, not dependent on another test
+# importing the orchestrator first or on an interactive PYTHONPATH setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'runtime'))
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 import pytest
@@ -89,6 +95,7 @@ def test_urw_repeatable_roles_evidence_and_explicit_semantic_gaps(original):
     'BAD_POST','MISSING_INDEX','WRONG_INDEX','BOOLEAN','NAN','INFINITY','MISSING_PROVENANCE',
     'UNKNOWN_CELL','STALE_NUMERIC_HASH','DUPLICATE_RUNNER','MISSING_ACTIVE','PROMOTED_CONSUMER',
     'DUPLICATE_DECLARED','DUPLICATE_OFFICIAL','UNEXPLAINED_STATUS','FOREIGN_CARD','BAD_RAW',
+    'FOREIGN_NUMERIC_RACE','FOREIGN_NUMERIC_SOURCE',
 ])
 def test_contract_mutations_fail_closed(original,target):
     req,s,n = copy.deepcopy(original)
@@ -111,6 +118,8 @@ def test_contract_mutations_fail_closed(original,target):
     if target=='DUPLICATE_RUNNER': n['runners'].append(copy.deepcopy(n['runners'][0]))
     if target=='MISSING_ACTIVE': n['runners'].pop()
     if target=='PROMOTED_CONSUMER': n['production_numerical_authority']['krs_consumption_authorized']=True
+    if target=='FOREIGN_NUMERIC_RACE': n['race_id']='OTHER'
+    if target=='FOREIGN_NUMERIC_SOURCE': n['production_evidence_compiler']['source_snapshot_sha256']='OTHER'
     # Recompute ordinary hashes only to reach inner shape checks. Signatures are
     # deliberately not recreated; these are negative parser unit cases only.
     a=s['artifact']

@@ -221,7 +221,7 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
         raise ShadowOwnerError('CURRENT_TIME_TZ_REQUIRED')
     receipt = source_envelope.get('receipt') or {}
     source = source_envelope.get('artifact') or {}
-    if (receipt.get('phase') != 'SOURCE' or receipt.get('status') != 'SOURCE_FROZEN'
+    if (receipt.get('family') != 'LOCAL' or receipt.get('phase') != 'SOURCE' or receipt.get('status') != 'SOURCE_FROZEN'
             or receipt.get('race_id') != request['race_id'] or source.get('race_id') != request['race_id']
             or not source_envelope.get('signature') or source_envelope.get('signature_alg') != 'Ed25519'
             or source_envelope.get('receipt_sha256') != _sha(receipt)
@@ -270,6 +270,11 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
             or set(ids) != set(official) or set(ids) != set(numeric_ids)):
         raise ShadowOwnerError('URW_ACTIVE_UNIVERSE_MISMATCH')
     authority = materialized.get('production_numerical_authority') or {}
+    compiler = materialized.get('production_evidence_compiler') or {}
+    if (materialized.get('race_id') != request['race_id']
+            or compiler.get('source_snapshot_sha256') != source.get('source_snapshot_sha256')
+            or not source.get('source_snapshot_sha256')):
+        raise ShadowOwnerError('URW_NUMERICAL_SOURCE_IDENTITY_MISMATCH')
     if (materialized.get('strict_full_numerical_ready') is not True
             or len(materialized.get('required_indices') or []) != 29
             or set(materialized['required_indices']) != set(REQUIRED)
