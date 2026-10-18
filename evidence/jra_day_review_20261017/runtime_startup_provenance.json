@@ -1,0 +1,3081 @@
+{
+  "observed_at": "2026-10-17T11:12:00.635Z",
+  "deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+  "status": "SUCCESS",
+  "context": {
+    "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+    "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+    "repo": null,
+    "branch": null,
+    "commitHash": null,
+    "commitMessage": null,
+    "prNumber": null,
+    "prTitle": null,
+    "prUrl": null,
+    "builder": "RAILPACK",
+    "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+    "healthcheckPath": "/health",
+    "sourceImage": "python:3.13-slim",
+    "dockerfilePath": null,
+    "rootDirectory": null,
+    "failedReason": null,
+    "failureStage": null,
+    "failureError": null
+  },
+  "build_logs": [
+    {
+      "timestamp": "2026-10-14T06:16:02.427397140Z",
+      "severity": "info",
+      "message": "",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427407787Z",
+      "severity": "info",
+      "message": "\u001b[35m====================\nStarting Healthcheck\n====================\n\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427409222Z",
+      "severity": "info",
+      "message": "\u001b[37mPath: /health\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427410635Z",
+      "severity": "info",
+      "message": "\u001b[37mRetry window: 5m0s\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.427411905Z",
+      "severity": "info",
+      "message": "",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.530983454Z",
+      "severity": "info",
+      "message": "\u001b[93mAttempt #1 failed with service unavailable. Continuing to retry for 4m49s\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:13.683044507Z",
+      "severity": "info",
+      "message": "\u001b[92m[1/1] Healthcheck succeeded!\u001b[0m",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    }
+  ],
+  "boot_logs": [
+    {
+      "timestamp": "2026-10-14T06:16:01.461056249Z",
+      "severity": "info",
+      "message": "Starting Container",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:02.205620436Z",
+      "severity": "info",
+      "message": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104694136Z",
+      "severity": "error",
+      "message": "INFO:     Application startup complete.",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104698376Z",
+      "severity": "error",
+      "message": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104703776Z",
+      "severity": "error",
+      "message": "INFO:     Started server process [1]",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104758455Z",
+      "severity": "error",
+      "message": "INFO:     Waiting for application startup.",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:12.104772855Z",
+      "severity": "error",
+      "message": "StreamableHTTP session manager started",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"error\""
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-10-14T06:16:14.085634700Z",
+      "severity": "info",
+      "message": "INFO:     100.64.0.1:35889 - \"GET /health HTTP/1.1\" 200 OK",
+      "attributes": [
+        {
+          "key": "level",
+          "value": "\"info\""
+        }
+      ]
+    }
+  ],
+  "limitations": {
+    "image_digest": "NOT_EXPOSED",
+    "git_sha": "NOT_EXPOSED",
+    "actual_process_argv": "NOT_EXPOSED; uvicorn host/port observed only",
+    "live_saved_config_is_deployment_snapshot": "UNVERIFIED; context source does not establish effective PID1 command",
+    "next_restart_behavior": "UNVERIFIED",
+    "next_deployment_safety": "BLOCKED",
+    "mutations": 0
+  },
+  "stored_command_static_analysis": {
+    "shell": "sh -c / python -c",
+    "syntax": "PARSE PASS",
+    "unconditional_terminal_statement": "Raise(exc=Call(func=Name(id='SystemExit', ctx=Load()), args=[Constant(value=9)], keywords=[]))",
+    "network_process_started": false,
+    "credentials_read": false,
+    "safe_uvicorn_launcher": false
+  },
+  "current_health": {
+    "status": "READY",
+    "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+    "mcp_bridge": "ACTIVE",
+    "mcp_endpoint": "https://quorumprobe-production.up.railway.app/mcp",
+    "engine": {
+      "version": "KRS-Engine v1.1.0",
+      "sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "expected_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "ready": true
+    },
+    "parameter_map": {
+      "version": "0.1-provisional",
+      "status": "PROVISIONAL_UNCALIBRATED",
+      "sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "expected_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "ready": true
+    },
+    "receipt_signer": {
+      "key_id": "KM-RUNTIME-ED25519-20260917",
+      "algorithm": "Ed25519",
+      "ready": true,
+      "public_key_b64": "UhjfD9zFt+e77/9JUB19R6/XFC3SG4pM5twHBqfUSzI="
+    },
+    "capabilities": [
+      "PRE_KRS",
+      "KRS_EXECUTE",
+      "FINAL",
+      "RESULT",
+      "VERIFY_RECEIPT"
+    ],
+    "timestamp": "2026-10-17T11:12:07.958118Z"
+  },
+  "startup_followup": {
+    "observed_at": "2026-10-17T11:25:47.482Z",
+    "pr_head_at_investigation": "5383c5cf56e919b997afac3ff62a78338950d4cb",
+    "main_sha": "d7ae23a07f7e872957085ef2bf72cf794a0c316f",
+    "readback": {
+      "observed_at": "2026-10-17T11:25:47.482Z",
+      "ids": {
+        "projectId": "b83c61e2-1555-4944-8f3f-68f269931185",
+        "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0"
+      },
+      "current_config": {
+        "service": {
+          "id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "name": "quorumprobe"
+        },
+        "environment": {
+          "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "name": "production"
+        },
+        "config": {
+          "source": {
+            "image": "python:3.13-slim"
+          },
+          "networking": {
+            "serviceDomains": {
+              "quorumprobe-production.up.railway.app": {}
+            }
+          },
+          "build": {
+            "builder": "RAILPACK",
+            "buildEnvironment": "V3"
+          },
+          "deploy": {
+            "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+            "preDeployCommand": [],
+            "healthcheckPath": "/health",
+            "healthcheckTimeout": 30,
+            "restartPolicyType": "NEVER",
+            "useLegacyStacker": false,
+            "ipv6EgressEnabled": false,
+            "runtime": "V2",
+            "multiRegionConfig": {
+              "sfo": {
+                "numReplicas": 1
+              }
+            }
+          }
+        },
+        "variableNames": [
+          "KM_APPLOG_0",
+          "KM_APPLOG_1",
+          "KM_APPLOG_2",
+          "KM_APPLOG_3",
+          "KM_APPLOG_4",
+          "KM_APPLOG_5",
+          "KM_APP_0",
+          "KM_APP_1",
+          "KM_APP_B64",
+          "KM_APP_B64_1",
+          "KM_APP_B64_2",
+          "KM_APP_B64_3",
+          "KM_APP_B64_4",
+          "KM_APP_B64_5",
+          "KM_APP_GZ_B64",
+          "KM_APP_GZ_B64_0",
+          "KM_APP_GZ_B64_1",
+          "KM_APP_GZ_B64_2",
+          "KM_APP_GZ_B64_3",
+          "KM_APP_GZ_B64_4",
+          "KM_APP_GZ_B64_5",
+          "KM_BASE44APP_0",
+          "KM_BASE44APP_1",
+          "KM_BASE44APP_2",
+          "KM_BASE44APP_3",
+          "KM_BASE44APP_4",
+          "KM_BASE44APP_5",
+          "KM_BASE44APP_6",
+          "KM_BASE44APP_7",
+          "KM_BASE44APP_SHA256",
+          "KM_BASE44_APP_ID",
+          "KM_BOOT_MODE",
+          "KM_BRIDGEAPP2_0",
+          "KM_BRIDGEAPP2_1",
+          "KM_BRIDGEAPP_0",
+          "KM_BRIDGEAPP_1",
+          "KM_BRIDGEAPP_2",
+          "KM_ENGINE_0",
+          "KM_ENGINE_1",
+          "KM_ENGINE_2",
+          "KM_ENGINE_3",
+          "KM_ENGINE_4",
+          "KM_ENGINE_5",
+          "KM_ENGINE_6",
+          "KM_ENGINE_B64_1",
+          "KM_ENGINE_B64_1A",
+          "KM_ENGINE_B64_1B",
+          "KM_ENGINE_B64_2",
+          "KM_ENGINE_B64_3",
+          "KM_ENGINE_B64_4",
+          "KM_ENGINE_B64_5",
+          "KM_ENGINE_B64_6",
+          "KM_ENGINE_GZ_B64_0",
+          "KM_ENGINE_GZ_B64_1",
+          "KM_ENGINE_GZ_B64_2",
+          "KM_ENGINE_GZ_B64_3",
+          "KM_ENGINE_GZ_B64_4",
+          "KM_ENGINE_GZ_B64_5",
+          "KM_ENGINE_SHA256",
+          "KM_EXECUTION_ARCH_R2_SHA256",
+          "KM_EXECUTION_CONSTITUTION_SHA256",
+          "KM_EXECUTION_PROFILE",
+          "KM_FAIL_CLOSED",
+          "KM_FORMAL_ENTRY_MODE",
+          "KM_FORMAL_RUNTIME_AUTHORITY",
+          "KM_GITHUB_CANON_REPO",
+          "KM_GITHUB_CANON_REV",
+          "KM_LOCAL_BOOTSTRAP_B64",
+          "KM_LOCAL_BOOTSTRAP_B64_V4",
+          "KM_LOCAL_COMBINED_B64",
+          "KM_LOCAL_GITHUB_REV",
+          "KM_LOCAL_RECEIPT_PRIVATE_KEY_B64",
+          "KM_LOCAL_RECEIPT_SIGNER_KEY_ID",
+          "KM_LOCAL_RUNTIME_PROFILE",
+          "KM_MCPAPP_0",
+          "KM_MCPAPP_1",
+          "KM_MCPAPP_2",
+          "KM_MCPAPP_SHA256",
+          "KM_MCPFINE_0",
+          "KM_MCPFINE_1",
+          "KM_MCPFINE_2",
+          "KM_MCPFINE_3",
+          "KM_MCPFINE_4",
+          "KM_MCPFINE_5",
+          "KM_MCPFINE_6",
+          "KM_MCPFINE_7",
+          "KM_MCPFINE_SHA256",
+          "KM_NO_SILENT_BYPASS",
+          "KM_PARAM_0",
+          "KM_PARAM_B64",
+          "KM_PARAM_B64_1",
+          "KM_PARAM_B64_2",
+          "KM_PARAM_GZ_B64",
+          "KM_PARAM_SHA256",
+          "KM_PATCHER_V102_B64",
+          "KM_PUBLIC_HOST",
+          "KM_RECEIPT_BRANCH",
+          "KM_RECEIPT_PRIVATE_KEY_B64",
+          "KM_RECEIPT_REPO",
+          "KM_RECEIPT_SIGNER_KEY_ID",
+          "KM_RUNTIME_REV",
+          "KM_UNREGISTERED_VENUE_POLICY",
+          "KM_USE_SPLIT_BLOBS",
+          "KM_VENUE_CHAT_ROUTING_PROFILE",
+          "PYTHONUNBUFFERED",
+          "WITNESS_OPERATIONAL_ALLOWED",
+          "WITNESS_SIGNER_KEY_ID",
+          "WITNESS_TRUST_DOMAIN_ID"
+        ],
+        "staged": null
+      },
+      "inventory": {
+        "project": {
+          "id": "b83c61e2-1555-4944-8f3f-68f269931185",
+          "name": "kmjrawitnessv061"
+        },
+        "environments": [
+          {
+            "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+            "name": "production"
+          }
+        ],
+        "services": [
+          {
+            "id": "85f75924-4d01-4b21-8558-d23bf99e1c42",
+            "name": "km-jra-validation-oneshot"
+          },
+          {
+            "id": "0b81c7a5-e2b5-49dd-9559-894b61d649e6",
+            "name": "jra-validation-sandbox"
+          },
+          {
+            "id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+            "name": "quorumprobe"
+          },
+          {
+            "id": "c0c4d3df-1d7b-476b-bc05-1870d19ca871",
+            "name": "witnessstrictimage"
+          },
+          {
+            "id": "525fc16b-297c-43c0-8df2-83f6f2be6986",
+            "name": "witnessv061"
+          }
+        ]
+      },
+      "staged": {
+        "project": {
+          "id": "b83c61e2-1555-4944-8f3f-68f269931185",
+          "name": "kmjrawitnessv061"
+        },
+        "environment": {
+          "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "name": "production"
+        },
+        "staged": null,
+        "destructive": false,
+        "resources": [],
+        "sharedVariables": [],
+        "privateNetworkDisabled": null
+      },
+      "active_description": {
+        "service": {
+          "id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "name": "quorumprobe",
+          "state": "live"
+        },
+        "environment": {
+          "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "name": "production"
+        },
+        "staged": null,
+        "config": {
+          "source": {
+            "image": "python:3.13-slim"
+          },
+          "networking": {
+            "serviceDomains": {
+              "quorumprobe-production.up.railway.app": {}
+            }
+          },
+          "build": {
+            "builder": "RAILPACK",
+            "buildEnvironment": "V3"
+          },
+          "deploy": {
+            "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+            "preDeployCommand": [],
+            "healthcheckPath": "/health",
+            "healthcheckTimeout": 30,
+            "restartPolicyType": "NEVER",
+            "useLegacyStacker": false,
+            "ipv6EgressEnabled": false,
+            "runtime": "V2",
+            "multiRegionConfig": {
+              "sfo": {
+                "numReplicas": 1
+              }
+            }
+          }
+        },
+        "stagedChanges": [],
+        "volumes": [],
+        "domains": {
+          "serviceDomains": [
+            {
+              "id": "fbaa8bc2-2586-489f-bcfb-1cad3f31ef46",
+              "domain": "quorumprobe-production.up.railway.app",
+              "targetPort": null
+            }
+          ],
+          "customDomains": []
+        },
+        "tcpProxies": [],
+        "latestDeployment": {
+          "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+          "status": "SUCCESS",
+          "createdAt": "2026-10-14T06:12:52.934Z",
+          "url": null
+        },
+        "tracing": {
+          "tracingEnabled": false,
+          "autoInstrumentationEnabled": false,
+          "autoInstrumentationActive": false
+        }
+      },
+      "deployments": [
+        {
+          "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+          "status": "SUCCESS",
+          "createdAt": "2026-10-14T06:12:52.934Z",
+          "updatedAt": "2026-10-14T06:16:16.627Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "1db3ca05-b62e-4038-8106-80c3c561e761",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "35de5393-7b71-4617-b4cc-6470cb70e748",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:51:01.935Z",
+          "updatedAt": "2026-10-13T18:05:30.964Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "f556fd79-bcec-49da-bee0-06a5276e1ffe",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "6c99ce4d-0cf3-45d9-9cc5-d9707f8e8327",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:47:10.583Z",
+          "updatedAt": "2026-09-22T14:51:18.190Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "3a50535a-92e1-43cf-b7e8-4b1c8daf436b",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "c9c26294-80ea-4b8d-9b30-d1aeb528076e",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:45:28.117Z",
+          "updatedAt": "2026-09-22T14:47:33.982Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "5e50223d-8ad7-4052-ab29-39ba0f01aec5",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "0809ab0b-b1ce-4865-a730-222d2e65d07d",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:43:00.148Z",
+          "updatedAt": "2026-09-22T14:46:03.781Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "041908bc-b27e-4bd4-b088-c124cddfa090",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "1067bebe-3684-476c-b814-613a23dc1164",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:40:40.293Z",
+          "updatedAt": "2026-09-22T14:43:16.693Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "5edf5ec4-7d19-4634-acc7-92f0b261b48d",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "f1c3b560-c56d-4142-ab8f-f09090858137",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:37:17.458Z",
+          "updatedAt": "2026-09-22T14:41:06.740Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "f316a5ab-246f-4a87-83c8-743bfdc0b0db",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "90cc5f29-d9c3-4f66-b6fc-5ea6145ead09",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:32:44.772Z",
+          "updatedAt": "2026-09-22T14:37:34.428Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "f59ea5fd-6e41-4706-98c0-1b76aa0b1949",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "12101d08-b62a-446f-be8f-49c75e1498ae",
+          "status": "REMOVED",
+          "createdAt": "2026-09-22T14:29:31.797Z",
+          "updatedAt": "2026-09-22T14:33:05.404Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "51f04cc6-30b4-4d6a-9b99-b4cc038197c3",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "5a8d03c5-bd34-4c87-b405-0e225fc6025f",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T02:43:18.135Z",
+          "updatedAt": "2026-09-22T14:29:49.597Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "21d57408-281d-48d6-a314-ccc323ef7656",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "ea1a732a-83d6-446c-9a86-c4b1cd27fd2d",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T02:40:47.196Z",
+          "updatedAt": "2026-09-20T02:43:30.962Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "d15204df-0938-485d-92d0-5039f43be3a2",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "c5e4b1a2-6417-4672-b444-3c9e2e870a67",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T02:40:08.369Z",
+          "updatedAt": "2026-09-20T02:41:00.885Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "5aab3ba0-c3a2-440b-82a6-39ddaabb8dab",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "2801769b-f673-4f91-9f76-6a2ad0d38fc1",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T02:39:23.843Z",
+          "updatedAt": "2026-09-20T02:40:22.403Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "b232dbc4-3005-4988-944e-03c4ee29918a",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "c281f8b8-db9d-4c87-a340-bec5cd54edbf",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T01:46:30.552Z",
+          "updatedAt": "2026-09-20T02:39:40.119Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "aa8896f8-a668-48f7-99ec-12462f48a811",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "83e3f34f-457f-4944-b629-93fb77834493",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T01:41:49.895Z",
+          "updatedAt": "2026-09-20T01:46:44.549Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "2b7e9332-4442-4838-9861-df825e55027e",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "214c7455-3b6d-4809-b852-bf46ac210ab4",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T01:39:03.603Z",
+          "updatedAt": "2026-09-20T01:42:04.539Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "04ad2167-21d2-43e5-afc7-5b8ca644d6ab",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "0c69eb26-c129-4393-98fd-9b95cdd8e150",
+          "status": "REMOVED",
+          "createdAt": "2026-09-20T01:34:36.531Z",
+          "updatedAt": "2026-09-20T01:39:18.805Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "abac35b8-35e6-44ec-aec8-61c3520a0afc",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "dcb0f18c-dcae-4e26-a1ff-b9b1ef725cba",
+          "status": "REMOVED",
+          "createdAt": "2026-09-19T18:36:04.959Z",
+          "updatedAt": "2026-09-20T01:34:53.982Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "75fabc11-f9f9-43e1-b733-f5f5f82dc6d3",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "99ba15d7-1b71-488b-8675-b797f7860893",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T10:45:59.623Z",
+          "updatedAt": "2026-09-19T18:36:19.368Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "1085d578-7043-4e09-8e96-3cffbb598338",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "32a1bf94-a7ae-4b06-80fe-960a8a962e98",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T10:43:30.971Z",
+          "updatedAt": "2026-09-17T10:46:22.136Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "8c7c1615-3ecf-430c-ba6d-41bc943408a0",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "f7637487-f4f8-419e-a2c0-c56478455ce7",
+          "status": "FAILED",
+          "createdAt": "2026-09-17T10:32:37.542Z",
+          "updatedAt": "2026-09-17T10:37:34.142Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "d4dad2f2-b94a-481c-801f-02cf7318c7ff",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "752cc198-e484-43c1-81e6-39e0b92ad2f6",
+          "status": "FAILED",
+          "createdAt": "2026-09-17T10:30:55.647Z",
+          "updatedAt": "2026-09-17T10:35:52.076Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "06764566-e7b5-4e82-9090-209f597c2f7f",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "7e0544f7-b6c4-45dc-b57b-03ffbc845710",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T10:03:23.844Z",
+          "updatedAt": "2026-09-17T10:43:42.652Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "7ed7a22f-e1eb-475b-a30f-bbe171b685e3",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "7a7509cc-4d0f-4c1b-9781-9a68448b8890",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T09:08:05.590Z",
+          "updatedAt": "2026-09-17T10:03:39.570Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "7b81e022-b7dd-4335-a213-de9fef5248fb",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "ad4d1686-1c1f-4acc-a02c-ce581434d5b1",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T09:06:42.833Z",
+          "updatedAt": "2026-09-17T09:08:26.844Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "ed7b9b58-0c62-447b-b2ab-5e48fa8c6642",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "a9e2070c-e31b-4276-b813-50a6708c4fff",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T09:04:37.582Z",
+          "updatedAt": "2026-09-17T09:08:27.384Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "508bd28e-09b5-4bb2-ab8a-ac0f60cfd0b4",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "redeploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "79936b1a-9a70-4bbf-bea0-66dae288d6c6",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T09:04:05.297Z",
+          "updatedAt": "2026-09-17T09:08:26.245Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "a94d1c15-0529-4f93-9f61-103cec9f0832",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "8f0cb531-e947-47d7-a328-3f7d88201905",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T09:01:15.955Z",
+          "updatedAt": "2026-09-17T09:08:26.143Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "4f0f268b-06de-4f4e-9304-9164ece562e6",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "e8a424fa-77aa-4841-895c-ba4b088441cf",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T08:51:43.788Z",
+          "updatedAt": "2026-09-17T09:01:28.319Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "1b679e46-d548-47c3-af74-53a0e7ec40c7",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "a0c59b11-8b63-46a3-a1b3-bdcec10cb722",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T08:47:14.781Z",
+          "updatedAt": "2026-09-17T08:51:56.960Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "0be69555-c751-4bfc-a35b-e30d4335c57b",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "2e527553-1c90-4cbd-99e7-af51ad4584d7",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:53:32.541Z",
+          "updatedAt": "2026-09-17T08:47:31.889Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "189582ce-4266-40da-83f6-50b198876e97",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "d1b554cc-0c60-47d5-aaba-16b667b8c19a",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:53:06.534Z",
+          "updatedAt": "2026-09-17T03:53:45.925Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "4992fa04-e600-4c97-9033-c364b3f188f1",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "2f837951-e017-4233-9c4d-24d7f561c5f8",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:51:55.061Z",
+          "updatedAt": "2026-09-17T03:53:46.563Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "1e87db80-1294-41db-ae3a-07ba6aebb3d7",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "d370ed97-5510-4e08-9fe2-f9df476c7f2a",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:47:34.837Z",
+          "updatedAt": "2026-09-17T03:53:46.175Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "7e72c0ee-9ae6-423b-89ce-3342f4ba66a1",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "7f13ddda-0fd4-4626-94f7-a6c559cd209d",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:45:27.747Z",
+          "updatedAt": "2026-09-17T03:47:51.149Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "86d4b7d9-3b2a-4bcd-9e5f-3b7b67b3044e",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "51d550d7-23c0-484b-a714-79f58961f670",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:43:20.862Z",
+          "updatedAt": "2026-09-17T03:47:49.217Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "42f9c5df-0b69-4f9b-8c1f-8ab706f3ab06",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "f69eb01b-eb49-4b49-bb5e-5954b0a258c0",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:41:05.007Z",
+          "updatedAt": "2026-09-17T03:43:33.160Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "53d9e034-422c-40cc-a5de-4dd7a118622d",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "f4f2bb4f-eb50-45d4-bb93-660aa21bcd1e",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:33:44.804Z",
+          "updatedAt": "2026-09-17T03:41:18.622Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "66217697-4ba1-4f2c-b7a2-48a87e758c28",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "e43b8232-7c66-43b4-ade1-170277848619",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:31:31.239Z",
+          "updatedAt": "2026-09-17T03:33:59.101Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "90ab5802-08e9-4268-8636-5a46d8669117",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "920f5da0-2eea-4823-ab2d-5c70b1b7a7a6",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:29:34.540Z",
+          "updatedAt": "2026-09-17T03:33:58.730Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "f4b7a629-1409-45a4-ae5b-2f832897a21b",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "2a166999-25dd-43f1-b351-5076f33e696a",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:28:01.540Z",
+          "updatedAt": "2026-09-17T03:29:48.293Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "e6444588-b5e7-41f3-a831-fba2d9596fa5",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "b588e168-6f84-4f96-a7c4-804b6a0d7e33",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:20:52.924Z",
+          "updatedAt": "2026-09-17T03:28:15.655Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "09845638-8e68-46aa-ad58-3b9773f0528f",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "1b65a165-0ebc-4524-bca8-d1505af5de7c",
+          "status": "FAILED",
+          "createdAt": "2026-09-17T03:18:58.442Z",
+          "updatedAt": "2026-09-17T03:19:33.277Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "5067a945-8f1f-47d6-9973-7e95f8a13994",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "72ef1266-ac2c-4a11-8716-b5ed7a747ef9",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:18:21.335Z",
+          "updatedAt": "2026-09-17T03:21:08.706Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "e798ca30-e547-42ae-8e26-e57a1856595b",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "c1876863-5fdf-4b81-9d85-f8737feba2a7",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:17:39.223Z",
+          "updatedAt": "2026-09-17T03:21:09.520Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "2c5be6b9-ade9-49d9-b860-eee20ff82844",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "c75cede7-a2ee-41ff-8d90-33b835c511d8",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:14:10.858Z",
+          "updatedAt": "2026-09-17T03:21:07.390Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "a9dc8c88-8d0b-436e-9eba-6923f53f442d",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "5150737a-a9f8-459c-9b96-849100e540db",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:12:45.560Z",
+          "updatedAt": "2026-09-17T03:14:24.727Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "c462c7f0-d880-49dd-adf2-ff6f502f4e5a",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "62b2809a-65f0-46ae-88a7-b91fffdba6de",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:09:16.291Z",
+          "updatedAt": "2026-09-17T03:14:25.968Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "01b36aed-501e-45e6-8c96-8f6d32383d9b",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "d2fddef8-dc78-47b9-9e66-b0d91af5f8ec",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T03:06:27.406Z",
+          "updatedAt": "2026-09-17T03:09:36.928Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "914310e3-55f1-45fc-9d7a-3f1652ab959a",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        },
+        {
+          "id": "0562f8a5-ba4a-4b5a-88c4-e9fb68ba2d2d",
+          "status": "REMOVED",
+          "createdAt": "2026-09-17T02:42:14.891Z",
+          "updatedAt": "2026-09-17T03:06:43.823Z",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "url": null,
+          "snapshotId": "8b0273ed-68eb-41cc-89bb-b6f5ec5d7aa3",
+          "canRollback": true,
+          "canRedeploy": true,
+          "regions": [
+            "sfo"
+          ],
+          "meta": {
+            "reason": "deploy",
+            "image": "python:3.13-slim"
+          }
+        }
+      ],
+      "comparison_diagnoses": [
+        {
+          "deploymentId": "35de5393-7b71-4617-b4cc-6470cb70e748",
+          "deploymentStatus": "REMOVED",
+          "context": {
+            "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+            "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+            "repo": null,
+            "branch": null,
+            "commitHash": null,
+            "commitMessage": null,
+            "prNumber": null,
+            "prTitle": null,
+            "prUrl": null,
+            "builder": "RAILPACK",
+            "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+            "healthcheckPath": "/health",
+            "sourceImage": "python:3.13-slim",
+            "dockerfilePath": null,
+            "rootDirectory": null,
+            "failedReason": null,
+            "failureStage": null,
+            "failureError": null
+          },
+          "diagnosis": null
+        },
+        {
+          "deploymentId": "f7637487-f4f8-419e-a2c0-c56478455ce7",
+          "deploymentStatus": "FAILED",
+          "context": {
+            "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+            "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+            "repo": null,
+            "branch": null,
+            "commitHash": null,
+            "commitMessage": null,
+            "prNumber": null,
+            "prTitle": null,
+            "prUrl": null,
+            "builder": "RAILPACK",
+            "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+            "healthcheckPath": "/health",
+            "sourceImage": "python:3.13-slim",
+            "dockerfilePath": null,
+            "rootDirectory": null,
+            "failedReason": null,
+            "failureStage": "HEALTHCHECK",
+            "failureError": "Healthcheck failure"
+          },
+          "diagnosis": null
+        }
+      ],
+      "boot_comparison": {
+        "active": {
+          "scope": "deployment",
+          "deploymentId": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "status": "SUCCESS",
+          "build": [
+            {
+              "timestamp": "2026-10-14T06:16:02.427397140Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:02.427407787Z",
+              "severity": "info",
+              "message": "\u001b[35m====================\nStarting Healthcheck\n====================\n\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:02.427409222Z",
+              "severity": "info",
+              "message": "\u001b[37mPath: /health\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:02.427410635Z",
+              "severity": "info",
+              "message": "\u001b[37mRetry window: 5m0s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:02.427411905Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.530983454Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #1 failed with service unavailable. Continuing to retry for 4m49s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:13.683044507Z",
+              "severity": "info",
+              "message": "\u001b[92m[1/1] Healthcheck succeeded!\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            }
+          ],
+          "deploy": [
+            {
+              "timestamp": "2026-10-14T06:16:01.461056249Z",
+              "severity": "info",
+              "message": "Starting Container",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:02.205620436Z",
+              "severity": "info",
+              "message": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.104694136Z",
+              "severity": "error",
+              "message": "INFO:     Application startup complete.",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"error\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.104698376Z",
+              "severity": "error",
+              "message": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"error\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.104703776Z",
+              "severity": "error",
+              "message": "INFO:     Started server process [1]",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"error\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.104758455Z",
+              "severity": "error",
+              "message": "INFO:     Waiting for application startup.",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"error\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:12.104772855Z",
+              "severity": "error",
+              "message": "StreamableHTTP session manager started",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"error\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-10-14T06:16:14.085634700Z",
+              "severity": "info",
+              "message": "INFO:     100.64.0.1:35889 - \"GET /health HTTP/1.1\" 200 OK",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            }
+          ]
+        },
+        "previous": {
+          "scope": "deployment",
+          "deploymentId": "35de5393-7b71-4617-b4cc-6470cb70e748",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "status": "REMOVED",
+          "build": [
+            {
+              "timestamp": "2026-09-22T14:51:08.489465592Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-22T14:51:08.489473860Z",
+              "severity": "info",
+              "message": "\u001b[35m====================\nStarting Healthcheck\n====================\n\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-22T14:51:08.489475515Z",
+              "severity": "info",
+              "message": "\u001b[37mPath: /health\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-22T14:51:08.489477114Z",
+              "severity": "info",
+              "message": "\u001b[37mRetry window: 5m0s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-22T14:51:08.489478751Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-22T14:51:10.650146859Z",
+              "severity": "info",
+              "message": "\u001b[92m[1/1] Healthcheck succeeded!\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            }
+          ],
+          "deploy": []
+        },
+        "failed": {
+          "scope": "deployment",
+          "deploymentId": "f7637487-f4f8-419e-a2c0-c56478455ce7",
+          "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+          "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+          "status": "FAILED",
+          "build": [
+            {
+              "timestamp": "2026-09-17T10:32:40.865282995Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:32:40.865290082Z",
+              "severity": "info",
+              "message": "\u001b[35m====================\nStarting Healthcheck\n====================\n\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:32:40.865292962Z",
+              "severity": "info",
+              "message": "\u001b[37mPath: /health\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:32:40.865295024Z",
+              "severity": "info",
+              "message": "\u001b[37mRetry window: 5m0s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:32:40.865297066Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:32:50.942586443Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #1 failed with service unavailable. Continuing to retry for 4m49s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:33:01.981670622Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #2 failed with service unavailable. Continuing to retry for 4m38s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:33:14.022485198Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #3 failed with service unavailable. Continuing to retry for 4m26s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:33:28.069509121Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #4 failed with service unavailable. Continuing to retry for 4m12s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:33:46.111535295Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #5 failed with service unavailable. Continuing to retry for 3m54s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:34:12.151702077Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #6 failed with service unavailable. Continuing to retry for 3m28s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:34:52.187575631Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #7 failed with service unavailable. Continuing to retry for 2m48s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:35:32.225388573Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #8 failed with service unavailable. Continuing to retry for 2m8s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:36:12.266746579Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #9 failed with service unavailable. Continuing to retry for 1m28s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:36:52.307356406Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #10 failed with service unavailable. Continuing to retry for 48s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:37:32.349604071Z",
+              "severity": "info",
+              "message": "\u001b[93mAttempt #11 failed with service unavailable. Continuing to retry for 8s\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:37:32.402889881Z",
+              "severity": "info",
+              "message": "",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:37:32.402901895Z",
+              "severity": "info",
+              "message": "\u001b[91m1/1 replicas never became healthy!\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            },
+            {
+              "timestamp": "2026-09-17T10:37:32.402905490Z",
+              "severity": "info",
+              "message": "\u001b[91mHealthcheck failed!\u001b[0m",
+              "attributes": [
+                {
+                  "key": "level",
+                  "value": "\"info\""
+                }
+              ]
+            }
+          ],
+          "deploy": []
+        }
+      },
+      "variable_access": {
+        "valuesRedacted": true,
+        "variableNames": [
+          "KM_APPLOG_0",
+          "KM_APPLOG_1",
+          "KM_APPLOG_2",
+          "KM_APPLOG_3",
+          "KM_APPLOG_4",
+          "KM_APPLOG_5",
+          "KM_APP_0",
+          "KM_APP_1",
+          "KM_APP_B64",
+          "KM_APP_B64_1",
+          "KM_APP_B64_2",
+          "KM_APP_B64_3",
+          "KM_APP_B64_4",
+          "KM_APP_B64_5",
+          "KM_APP_GZ_B64",
+          "KM_APP_GZ_B64_0",
+          "KM_APP_GZ_B64_1",
+          "KM_APP_GZ_B64_2",
+          "KM_APP_GZ_B64_3",
+          "KM_APP_GZ_B64_4",
+          "KM_APP_GZ_B64_5",
+          "KM_BASE44APP_0",
+          "KM_BASE44APP_1",
+          "KM_BASE44APP_2",
+          "KM_BASE44APP_3",
+          "KM_BASE44APP_4",
+          "KM_BASE44APP_5",
+          "KM_BASE44APP_6",
+          "KM_BASE44APP_7",
+          "KM_BASE44APP_SHA256",
+          "KM_BASE44_APP_ID",
+          "KM_BOOT_MODE",
+          "KM_BRIDGEAPP2_0",
+          "KM_BRIDGEAPP2_1",
+          "KM_BRIDGEAPP_0",
+          "KM_BRIDGEAPP_1",
+          "KM_BRIDGEAPP_2",
+          "KM_ENGINE_0",
+          "KM_ENGINE_1",
+          "KM_ENGINE_2",
+          "KM_ENGINE_3",
+          "KM_ENGINE_4",
+          "KM_ENGINE_5",
+          "KM_ENGINE_6",
+          "KM_ENGINE_B64_1",
+          "KM_ENGINE_B64_1A",
+          "KM_ENGINE_B64_1B",
+          "KM_ENGINE_B64_2",
+          "KM_ENGINE_B64_3",
+          "KM_ENGINE_B64_4",
+          "KM_ENGINE_B64_5",
+          "KM_ENGINE_B64_6",
+          "KM_ENGINE_GZ_B64_0",
+          "KM_ENGINE_GZ_B64_1",
+          "KM_ENGINE_GZ_B64_2",
+          "KM_ENGINE_GZ_B64_3",
+          "KM_ENGINE_GZ_B64_4",
+          "KM_ENGINE_GZ_B64_5",
+          "KM_ENGINE_SHA256",
+          "KM_EXECUTION_ARCH_R2_SHA256",
+          "KM_EXECUTION_CONSTITUTION_SHA256",
+          "KM_EXECUTION_PROFILE",
+          "KM_FAIL_CLOSED",
+          "KM_FORMAL_ENTRY_MODE",
+          "KM_FORMAL_RUNTIME_AUTHORITY",
+          "KM_GITHUB_CANON_REPO",
+          "KM_GITHUB_CANON_REV",
+          "KM_LOCAL_BOOTSTRAP_B64",
+          "KM_LOCAL_BOOTSTRAP_B64_V4",
+          "KM_LOCAL_COMBINED_B64",
+          "KM_LOCAL_GITHUB_REV",
+          "KM_LOCAL_RECEIPT_PRIVATE_KEY_B64",
+          "KM_LOCAL_RECEIPT_SIGNER_KEY_ID",
+          "KM_LOCAL_RUNTIME_PROFILE",
+          "KM_MCPAPP_0",
+          "KM_MCPAPP_1",
+          "KM_MCPAPP_2",
+          "KM_MCPAPP_SHA256",
+          "KM_MCPFINE_0",
+          "KM_MCPFINE_1",
+          "KM_MCPFINE_2",
+          "KM_MCPFINE_3",
+          "KM_MCPFINE_4",
+          "KM_MCPFINE_5",
+          "KM_MCPFINE_6",
+          "KM_MCPFINE_7",
+          "KM_MCPFINE_SHA256",
+          "KM_NO_SILENT_BYPASS",
+          "KM_PARAM_0",
+          "KM_PARAM_B64",
+          "KM_PARAM_B64_1",
+          "KM_PARAM_B64_2",
+          "KM_PARAM_GZ_B64",
+          "KM_PARAM_SHA256",
+          "KM_PATCHER_V102_B64",
+          "KM_PUBLIC_HOST",
+          "KM_RECEIPT_BRANCH",
+          "KM_RECEIPT_PRIVATE_KEY_B64",
+          "KM_RECEIPT_REPO",
+          "KM_RECEIPT_SIGNER_KEY_ID",
+          "KM_RUNTIME_REV",
+          "KM_UNREGISTERED_VENUE_POLICY",
+          "KM_USE_SPLIT_BLOBS",
+          "KM_VENUE_CHAT_ROUTING_PROFILE",
+          "PYTHONUNBUFFERED",
+          "RAILWAY_ENVIRONMENT",
+          "RAILWAY_ENVIRONMENT_ID",
+          "RAILWAY_ENVIRONMENT_NAME",
+          "RAILWAY_PRIVATE_DOMAIN",
+          "RAILWAY_PROJECT_ID",
+          "RAILWAY_PROJECT_NAME",
+          "RAILWAY_PUBLIC_DOMAIN",
+          "RAILWAY_SERVICE_ID",
+          "RAILWAY_SERVICE_JRA_VALIDATION_SANDBOX_URL",
+          "RAILWAY_SERVICE_NAME",
+          "RAILWAY_SERVICE_QUORUMPROBE_URL",
+          "RAILWAY_SERVICE_WITNESSSTRICTIMAGE_URL",
+          "RAILWAY_SERVICE_WITNESSV061_URL",
+          "RAILWAY_STATIC_URL",
+          "WITNESS_OPERATIONAL_ALLOWED",
+          "WITNESS_SIGNER_KEY_ID",
+          "WITNESS_TRUST_DOMAIN_ID"
+        ],
+        "sealedVariableNames": [],
+        "readable_variable_names": []
+      },
+      "sandbox_configs": [
+        {
+          "service": {
+            "id": "0b81c7a5-e2b5-49dd-9559-894b61d649e6",
+            "name": "jra-validation-sandbox"
+          },
+          "environment": {
+            "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+            "name": "production"
+          },
+          "config": {
+            "source": {
+              "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+            },
+            "networking": {
+              "serviceDomains": {
+                "jra-validation-sandbox-production.up.railway.app": {}
+              }
+            },
+            "build": {
+              "builder": "RAILPACK",
+              "buildEnvironment": "V3"
+            },
+            "deploy": {
+              "startCommand": "bun -e 'eval(await (await fetch(\"https://raw.githubusercontent.com/b03la013-max/keibametrics-runtime/main/runtime/base-index-service/server.mjs?rev=20260921r10\")).text())'",
+              "healthcheckPath": "/health",
+              "healthcheckTimeout": 0,
+              "restartPolicyType": "NEVER",
+              "useLegacyStacker": false,
+              "ipv6EgressEnabled": false,
+              "runtime": "V2",
+              "multiRegionConfig": {
+                "sfo": {
+                  "numReplicas": 1
+                }
+              }
+            }
+          },
+          "variableNames": [
+            "KM_BACKEND_URL",
+            "KM_CONSOLE_ACCESS_KEY",
+            "KM_CONSOLE_REV",
+            "KM_JOB_ACTION",
+            "KM_JOB_CHUNK_COUNT",
+            "KM_JOB_ID",
+            "KM_JOB_PAYLOAD_0",
+            "KM_JOB_REV",
+            "KM_MCP_CALL_PROBE_REV",
+            "KM_MCP_LIFECYCLE_PROBE_REV",
+            "KM_MCP_PROBE_REV",
+            "KM_PREKRS_SCHEMA_PROBE",
+            "KM_PROBE_BODY",
+            "KM_PROBE_REV",
+            "KM_PROBE_URL"
+          ],
+          "staged": null
+        },
+        {
+          "service": {
+            "id": "85f75924-4d01-4b21-8558-d23bf99e1c42",
+            "name": "km-jra-validation-oneshot"
+          },
+          "environment": {
+            "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+            "name": "production"
+          },
+          "config": {
+            "source": {
+              "image": "ghcr.io/railwayapp/function-bun:1.4.0"
+            },
+            "build": {
+              "builder": "RAILPACK",
+              "buildEnvironment": "V3"
+            },
+            "deploy": {
+              "startCommand": "bun -e 'const u=process.env.KM_URL; const b=process.env.KM_BODY; const r=await fetch(u,{method:\"POST\",headers:{\"content-type\":\"application/json\"},body:b}); const t=await r.text(); console.log(\"HTTP\",r.status); console.log(t);'",
+              "restartPolicyType": "NEVER",
+              "useLegacyStacker": false,
+              "ipv6EgressEnabled": false,
+              "runtime": "V2",
+              "multiRegionConfig": {
+                "sfo": {
+                  "numReplicas": 1
+                }
+              }
+            }
+          },
+          "variableNames": [
+            "KM_BODY",
+            "KM_URL"
+          ],
+          "staged": null
+        }
+      ],
+      "diagnosis_context_matches_current_saved_command": [
+        {
+          "deployment_id": "35de5393-7b71-4617-b4cc-6470cb70e748",
+          "command_matches": true
+        },
+        {
+          "deployment_id": "f7637487-f4f8-419e-a2c0-c56478455ce7",
+          "command_matches": true
+        }
+      ]
+    },
+    "local_saved_command_reproduction": {
+      "classification": "LOCAL DIAGNOSTIC FAILURE REPRODUCTION / NOT LIVE ACCEPTANCE",
+      "command_sha256": "7e0a88dae4037bb1b8c9bbcde56d8116ac5fbfe493690bdf0a6ba753e84f0778",
+      "production_mutations": 0,
+      "production_credentials_used": false,
+      "cases": [
+        {
+          "case": "no_blobs",
+          "returncode": 9,
+          "expected_returncode": 9,
+          "stdout": "KM_LOCAL_COMBINED_B64 len= 0\nKM_LOCAL_BOOTSTRAP_B64 len= 0\nKM_LOCAL_BOOTSTRAP_B64_V4 len= 0\n",
+          "stderr": "",
+          "pass": true
+        },
+        {
+          "case": "synthetic_blobs",
+          "returncode": 9,
+          "expected_returncode": 9,
+          "stdout": "KM_LOCAL_COMBINED_B64 len= 52\nKM_LOCAL_COMBINED_B64 sha= 9f571dacb35d5d758949b8b13141f55cb07009f2181c3c0622f27d5b2390d2c6 decoded_len= 38\nKM_LOCAL_COMBINED_B64 head= b'LOCAL_SYNTHETIC_PROBE_NOT_RUNTIME_CODE'\nKM_LOCAL_BOOTSTRAP_B64 len= 52\nKM_LOCAL_BOOTSTRAP_B64 sha= 9f571dacb35d5d758949b8b13141f55cb07009f2181c3c0622f27d5b2390d2c6 decoded_len= 38\nKM_LOCAL_BOOTSTRAP_B64 head= b'LOCAL_SYNTHETIC_PROBE_NOT_RUNTIME_CODE'\nKM_LOCAL_BOOTSTRAP_B64_V4 len= 52\nKM_LOCAL_BOOTSTRAP_B64_V4 sha= 9f571dacb35d5d758949b8b13141f55cb07009f2181c3c0622f27d5b2390d2c6 decoded_len= 38\nKM_LOCAL_BOOTSTRAP_B64_V4 head= b'LOCAL_SYNTHETIC_PROBE_NOT_RUNTIME_CODE'\n",
+          "stderr": "",
+          "pass": true
+        },
+        {
+          "case": "malformed_blob",
+          "returncode": 1,
+          "expected_returncode": 1,
+          "stdout": "KM_LOCAL_COMBINED_B64 len= 1\n",
+          "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 6, in <module>\n  File \"/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/base64.py\", line 88, in b64decode\n    return binascii.a2b_base64(s, strict_mode=validate)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbinascii.Error: Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4\n",
+          "pass": true
+        }
+      ],
+      "runtime_cold_start": "NOT EXECUTED",
+      "runtime_restart": "NOT EXECUTED",
+      "runtime_rollback": "NOT EXECUTED"
+    },
+    "local_python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "current_public_image_reference": {
+      "observed_at": "2026-10-17T11:27:40.026210+00:00",
+      "classification": "CURRENT PUBLIC TAG REFERENCE ONLY; NOT DEPLOYED IMAGE PROVENANCE",
+      "reference": "docker.io/library/python:3.13-slim",
+      "current_index_digest": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+      "index_digest_recomputed": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+      "selected_reference_platform": {
+        "architecture": "amd64",
+        "os": "linux"
+      },
+      "selected_reference_digest": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+      "manifest_digest_header": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+      "manifest_digest_recomputed": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+      "config_digest_declared": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+      "config_digest_recomputed": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+      "created": "2026-10-06T02:05:24.190948597Z",
+      "config": {
+        "Entrypoint": null,
+        "Cmd": [
+          "python3"
+        ],
+        "WorkingDir": null
+      },
+      "deployed_digest_verified": false,
+      "layers_downloaded": 0,
+      "image_executed": false
+    },
+    "independent_startup_review": {
+      "reviewer": "independent agent distinct from implementer",
+      "python_version": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+      "command_sha256": "7e0a88dae4037bb1b8c9bbcde56d8116ac5fbfe493690bdf0a6ba753e84f0778",
+      "probe_sha256": "970e6d8810a3f8c76e47a8c69420e409696f5c96f53437e02bac92cab3f373e0",
+      "results": [
+        {
+          "case": "no_blobs",
+          "returncode": 9,
+          "pass": true
+        },
+        {
+          "case": "synthetic_blobs",
+          "returncode": 9,
+          "pass": true
+        },
+        {
+          "case": "malformed_blob",
+          "returncode": 1,
+          "pass": true
+        }
+      ],
+      "valid_conclusion": "Saved diagnostic command is not a server launcher and terminates locally before serving; deployed effective launcher/source unknown",
+      "unsafe_inference_rejected": "Identical historical diagnosis contexts do not prove when/who/how setting drift arose",
+      "startup_safety": "UNVERIFIED",
+      "production_mutations": 0
+    },
+    "root_cause": "UNKNOWN: current diagnostic command and effective deployed launcher differ; immutable effective config unavailable",
+    "hypothesis_checks": [
+      {
+        "id": 1,
+        "hypothesis": "saved vs deployed configuration generation difference",
+        "verdict": "UNKNOWN",
+        "evidence": "saved config observed; snapshot ID known but historical effective fields not exposed; no mutation timestamp"
+      },
+      {
+        "id": 2,
+        "hypothesis": "image ENTRYPOINT/CMD",
+        "verdict": "DEPLOYED UNKNOWN; CURRENT PUBLIC REFERENCE INSPECTED",
+        "evidence": "current linux/amd64 reference has Entrypoint=null,Cmd=[python3]; manifest/config digests independently matched; not bound to deployed image"
+      },
+      {
+        "id": 3,
+        "hypothesis": "Railway command override",
+        "verdict": "CURRENT OVERRIDE OBSERVED; DEPLOYED OVERRIDE UNKNOWN",
+        "evidence": "current deploy.startCommand explicit; official documentation describes ENTRYPOINT override; effective deployment value not available"
+      },
+      {
+        "id": 4,
+        "hypothesis": "inherited old deployment configuration",
+        "verdict": "UNKNOWN",
+        "evidence": "50 deployment records contain distinct snapshot IDs; none exposes effective snapshot content"
+      },
+      {
+        "id": 5,
+        "hypothesis": "residual diagnostic startCommand",
+        "verdict": "OBSERVED IN CURRENT SAVED CONFIG; CAUSAL HISTORY UNKNOWN",
+        "evidence": "exact command SHA and clean-env exit9 reproduced; no evidence of who/when changed it"
+      },
+      {
+        "id": 6,
+        "hypothesis": "build/deploy configuration not applied",
+        "verdict": "UNKNOWN",
+        "evidence": "no staged patch now; build stream contains healthchecks only; no effective build/start manifest"
+      },
+      {
+        "id": 7,
+        "hypothesis": "process and management API reference mismatch",
+        "verdict": "SERVICE/ENV IDs MATCH; TEMPORAL VIEW UNKNOWN",
+        "evidence": "active logs/config carry identical service/environment IDs; diagnosis for old/failed deployments repeats current command, which does not establish historical snapshot semantics"
+      }
+    ],
+    "restart_and_rollback": {
+      "cold_start": "BLOCKED: exact deployed code/image/effective argv not recovered",
+      "health_now": "READY (11:24:37Z read-only health request)",
+      "stop_restart": "NOT EXECUTED: Production prohibited; no equivalent authorized isolated KRS environment recovered",
+      "rollback": "UNVERIFIED: platform canRollback flag is not a known-good boot or signature test",
+      "rollback_candidate_previous_deployment": "35de5393-7b71-4617-b4cc-6470cb70e748",
+      "previous_candidate_evidence": "historical healthcheck succeeded; code/config/signature compatibility not recovered",
+      "correct_start_command": "UNKNOWN; no guessed app:module command supplied",
+      "safe_change_candidate": "blocked until exact active snapshot launcher + source bundle + dependency/image binding recovered; do not merely remove SystemExit(9)",
+      "production_mutations": 0
+    },
+    "access_limitations": {
+      "oauth_variable_values": "REDACTED:122 names,0 readable values",
+      "snapshot_pid1_image_digest": "not exposed by available MCP read tools",
+      "local_railway_cli": false,
+      "local_railway_auth": false,
+      "local_container_runtime": false,
+      "isolated_environments": "only production environment; existing Bun validation proxy/oneshot services are not an established equivalent KRS cold-start environment",
+      "browser_fallback": "NOT USED: provider-supported read-only deployment details/export needed; requires user approval before connector fallback"
+    },
+    "required_readonly_evidence": {
+      "deployment": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+      "snapshot": "1db3ca05-b62e-4038-8106-80c3c561e761",
+      "fields": [
+        "deployment-effective startCommand/ENTRYPOINT/CMD/PID1 argv",
+        "immutable image digest/platform",
+        "active runtime source bundle and app-blob hash scope",
+        "build dependency/source manifest",
+        "rollback candidate effective snapshot and source binding"
+      ],
+      "do_not_export": [
+        "private signing key",
+        "unrelated secret values"
+      ]
+    },
+    "delivery_learning_independent_status": {
+      "publication_available": 23,
+      "notification_send_proven": 0,
+      "recipient_ack_verified": 0,
+      "learning_stored": 22,
+      "next_race_intake_proven": 0,
+      "prediction_input_binding_proven": 0,
+      "prediction_consumption_proven": 0,
+      "production_connection_added": false,
+      "new_notification_destination_added": false
+    },
+    "verdict": "NOT MERGE-READY",
+    "original_krs_receipts_rechecked": 23,
+    "archive_member_sha_rechecked": 562,
+    "followup_changed_paths": [
+      "evidence/jra_day_review_20261017/runtime_startup_provenance.json",
+      "runtime/daily_reviews/JRA-2026-10-17/pr305_diff_review.md",
+      "evidence/jra_day_review_20261017/independent_review_probes/km_saved_startup_repro.py",
+      "evidence/jra_day_review_20261017/independent_review_probes/km_read_python_image.py"
+    ],
+    "production_runtime_workflow_policy_changes": 0,
+    "independent_final_followup_review": {
+      "reviewer": "independent technical agent distinct from implementer",
+      "scope": "Four staged evidence/report/probe files; no runtime/workflow/policy modifications",
+      "files_reviewed": [
+        "evidence/jra_day_review_20261017/independent_review_probes/km_read_python_image.py",
+        "evidence/jra_day_review_20261017/independent_review_probes/km_saved_startup_repro.py",
+        "evidence/jra_day_review_20261017/runtime_startup_provenance.json",
+        "runtime/daily_reviews/JRA-2026-10-17/pr305_diff_review.md"
+      ],
+      "reviewed_file_sha256": {
+        "evidence/jra_day_review_20261017/independent_review_probes/km_read_python_image.py": "5ba1a6ffe3541649eac4affb36026dddf6e37c4efd3e05153ac8d52499f97829",
+        "evidence/jra_day_review_20261017/independent_review_probes/km_saved_startup_repro.py": "970e6d8810a3f8c76e47a8c69420e409696f5c96f53437e02bac92cab3f373e0",
+        "evidence/jra_day_review_20261017/runtime_startup_provenance.json": "c82163bda9d5bac18c1635746c2be55215210893ff153c69117b99476041b9cf",
+        "runtime/daily_reviews/JRA-2026-10-17/pr305_diff_review.md": "ec8b6e15253ca94f03fe0247711ee45057f9795c512d5e102baeece67b304509"
+      },
+      "saved_command_probe_sha256_verified": "970e6d8810a3f8c76e47a8c69420e409696f5c96f53437e02bac92cab3f373e0",
+      "saved_command_local_cases": "3/3 independently reproduced; Python3.12 only",
+      "public_image_reference_independently_verified": {
+        "index_digest_computed": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+        "index_digest_header": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+        "manifest_digest_computed": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+        "manifest_digest_header": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+        "config_digest_computed": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+        "config_digest_declared": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+        "Entrypoint": null,
+        "Cmd": [
+          "python3"
+        ],
+        "classification": "INDEPENDENT CURRENT PUBLIC REFERENCE ONLY / NOT DEPLOYED PROVENANCE",
+        "network_mutations": 0,
+        "layers_read": 0,
+        "image_executed": false
+      },
+      "public_registry_probe_correction": "retains and asserts index/manifest/config recomputed digests; reviewed correctedsource",
+      "provenance_interpretation": "PASS: public tag is current reference only, not active deployment image; no inferred Git SHA or historical drift cause",
+      "new_blocking_code_findings": 0,
+      "actual_deployment_startup": "UNVERIFIED",
+      "readiness": "NOT MERGE-READY",
+      "production_mutations": 0,
+      "read_only_provider_snapshot_required": true,
+      "private_key_export_required": false
+    },
+    "independent_public_image_review": {
+      "index_digest_computed": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+      "index_digest_header": "sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f",
+      "manifest_digest_computed": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+      "manifest_digest_header": "sha256:8fb4cfa1a2616d7b8e0c2175cc6ad68f5729c34ea8488c0b360d2934b7be9024",
+      "config_digest_computed": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+      "config_digest_declared": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+      "Entrypoint": null,
+      "Cmd": [
+        "python3"
+      ],
+      "classification": "INDEPENDENT CURRENT PUBLIC REFERENCE ONLY / NOT DEPLOYED PROVENANCE",
+      "network_mutations": 0,
+      "layers_read": 0,
+      "image_executed": false
+    },
+    "independent_review_capture_scope": "Reviewer hashes capture reviewed snapshot before embedding the review record in this same evidence file; not a self-hash of final containing JSON. Probe/runtime bytes unchanged after independent review."
+  },
+  "recovered_snapshot_closure": {
+    "observed_at": "2026-10-17T11:48:47.943426+00:00",
+    "supersedes": "startup_followup root_cause UNKNOWN / browser fallback not used / correct_start_command UNKNOWN. Those observations precede authenticated Deployment Details and read-only Console recovery.",
+    "root_cause": {
+      "status": "CONFIRMED_CONFIGURATION_GENERATION_AND_READ_SCOPE_DIFFERENCE",
+      "explanation": "Active deployment snapshot has SHA-verified gzip code reconstruction + pip install + exec uvicorn, healthcheckTimeout300. Current service configuration is diagnostic SystemExit(9), timeout30. MCP diagnosis contexts repeat current service settings even for previous/failed deployments. Deployment Details snapshot and actual PID1/code resolve the apparent contradiction. Who/when/why changed the service settings remains UNKNOWN.",
+      "configuration_changed_by": "UNKNOWN",
+      "configuration_changed_at": "UNKNOWN"
+    },
+    "deployment": {
+      "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+      "snapshot_id": "1db3ca05-b62e-4038-8106-80c3c561e761",
+      "service_id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+      "environment_id": "8af4a037-975f-4c15-8005-7bcde494022b",
+      "instance_id": "6f5ea0d2-9f48-417b-999c-7289f1500d37",
+      "image_source": "DockerHub python:3.13-slim",
+      "ui_image_sha_prefix": "70729",
+      "full_actual_image_digest": "UNVERIFIED",
+      "git_commit_sha": "UNVERIFIED",
+      "build_provenance": "IMAGE_BASED; recovered deployment env blobs, not Git source build; no attested full image/Git mapping",
+      "deployed_variable_count": 108,
+      "current_service_variable_count": 122,
+      "deployed_healthcheck_timeout": 300,
+      "current_service_healthcheck_timeout": 30
+    },
+    "observed_pid1_argv": [
+      "/usr/local/bin/python",
+      "/usr/local/bin/uvicorn",
+      "app:app",
+      "--app-dir",
+      "/opt/km",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "--proxy-headers",
+      "--forwarded-allow-ips=*",
+      ""
+    ],
+    "actual_runtime": {
+      "python": "3.13.16 (main, Oct 6 2026, 02:02:59) [GCC 14.2.0]",
+      "packages": [
+        [
+          "PyJWT",
+          "2.15.1"
+        ],
+        [
+          "annotated-types",
+          "0.8.0"
+        ],
+        [
+          "anyio",
+          "4.15.1"
+        ],
+        [
+          "attrs",
+          "26.1.0"
+        ],
+        [
+          "cffi",
+          "2.1.1"
+        ],
+        [
+          "click",
+          "8.5.0"
+        ],
+        [
+          "cryptography",
+          "50.0.2"
+        ],
+        [
+          "h11",
+          "0.16.0"
+        ],
+        [
+          "httpcore2",
+          "2.13.1"
+        ],
+        [
+          "httpx2",
+          "2.13.1"
+        ],
+        [
+          "idna",
+          "3.20"
+        ],
+        [
+          "jsonschema",
+          "4.26.0"
+        ],
+        [
+          "jsonschema-specifications",
+          "2025.9.1"
+        ],
+        [
+          "mcp",
+          "2.3.0"
+        ],
+        [
+          "mcp-types",
+          "2.3.0"
+        ],
+        [
+          "opentelemetry-api",
+          "1.45.1"
+        ],
+        [
+          "pip",
+          "26.2.1"
+        ],
+        [
+          "pycparser",
+          "3.11"
+        ],
+        [
+          "pydantic",
+          "2.14.1"
+        ],
+        [
+          "pydantic_core",
+          "2.50.1"
+        ],
+        [
+          "python-multipart",
+          "0.0.32"
+        ],
+        [
+          "referencing",
+          "0.37.0"
+        ],
+        [
+          "rpds-py",
+          "2026.9.1"
+        ],
+        [
+          "sse-starlette",
+          "3.5.0"
+        ],
+        [
+          "starlette",
+          "1.8.0"
+        ],
+        [
+          "truststore",
+          "0.10.5"
+        ],
+        [
+          "typing-inspection",
+          "0.4.4"
+        ],
+        [
+          "typing_extensions",
+          "4.16.0"
+        ],
+        [
+          "uvicorn",
+          "0.54.0"
+        ]
+      ],
+      "app_sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+      "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+      "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+      "code_binding": "Recovered snapshot App bytes = live /opt/km/app.py SHA = bootlog first blob SHA. Engine/param live file hashes also match recovered originals.",
+      "git_mapping": "NOT ESTABLISHED; verified code fingerprint is not Git SHA",
+      "signer_key_id": "KM-RUNTIME-ED25519-20260917",
+      "public_trust_anchor": "UhjfD9zFt+e77/9JUB19R6/XFC3SG4pM5twHBqfUSzI=",
+      "private_key_handling": "No Production private key saved in repository/local test artifacts, used for testing, or changed. Local fresh TEST key only."
+    },
+    "hypotheses": [
+      {
+        "id": 1,
+        "name": "Stored/deployed configuration generation",
+        "verdict": "CONFIRMED",
+        "evidence": "Snapshot command/300s vs service diagnostic/30s;108vs122 variables"
+      },
+      {
+        "id": 2,
+        "name": "Image ENTRYPOINT/CMD",
+        "verdict": "ACTUAL_FULL_IMAGE_UNKNOWN; NOT NEEDED_TO_EXPLAIN_PROCESS",
+        "evidence": "PID1 and deployment explicit command both uvicorn. Current public reference image ENTRYPOINT null / CMD python3 is only reference."
+      },
+      {
+        "id": 3,
+        "name": "Railway command override",
+        "verdict": "EXPLICIT_DEPLOYMENT_COMMAND_CONFIRMED",
+        "evidence": "Deployment Details command matches PID1; undocumented additional override UNKNOWN"
+      },
+      {
+        "id": 4,
+        "name": "Old deployment inheritance",
+        "verdict": "UNKNOWN",
+        "evidence": "No actor/change history proves origin"
+      },
+      {
+        "id": 5,
+        "name": "Residual diagnostic command",
+        "verdict": "CONFIRMED_CURRENT_SERVICE_SETTING",
+        "evidence": "Static and local execution show SystemExit9; why retained UNKNOWN"
+      },
+      {
+        "id": 6,
+        "name": "Build/deploy reflection failure",
+        "verdict": "UNKNOWN_NOT_ESTABLISHED",
+        "evidence": "Generation difference alone does not prove provider failure"
+      },
+      {
+        "id": 7,
+        "name": "Process/API reference mismatch",
+        "verdict": "READ_SCOPE_MISMATCH_CONFIRMED",
+        "evidence": "Same service/env/deployment/instance; diagnosis current context is not deployed snapshot; Console actual PID1/source recovered"
+      }
+    ],
+    "recovered_command_ref": "evidence/jra_day_review_20261017/startup_owner_configuration_candidate.json#/recovered_snapshot_start_command",
+    "owner_configuration_candidate": "evidence/jra_day_review_20261017/startup_owner_configuration_candidate.json",
+    "independent_source_review": {
+      "app_sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+      "recovered_source_normalization_test": "23/23 PASS using exact AST statements, no module import/health/privatekey/signing/engine invoked",
+      "race_count": 23,
+      "code_scope": "actual execute_krs normalization only",
+      "production_mutations": 0
+    },
+    "independent_local_rehearsal": {
+      "versions": {
+        "python": "3.13.16 (main, Oct  3 2026, 01:06:22) [Clang 22.1.3 ]",
+        "dependencies": {
+          "mcp": "2.3.0",
+          "uvicorn": "0.54.0",
+          "cryptography": "50.0.2",
+          "starlette": "1.8.0",
+          "pydantic": "2.14.1"
+        }
+      },
+      "classification": "LOCAL RECOVERED-SOURCE REHEARSAL / NOT PROVIDER COLD START, RESTART, ROLLBACK OR LIVE ACCEPTANCE",
+      "source_sha256": {
+        "app.py": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+        "KRS-Engine_v1.1.0_PORTABLE.py": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+        "parameter_map_v0.1-provisional.json": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc"
+      },
+      "launcher_sha256": "3a160b8d72b9248ec3638ded092c9bb6f46a6088eb20459f7e58c88f7c79d5ac",
+      "decoder": "EXACT RECOVERED; locally repackaged nonsecret original code/Engine/param",
+      "server_command": "LOCAL LOOPBACK OVERRIDE; not original public binding",
+      "dependency_install_step": "NOT RUN; exact installed dependency versions used",
+      "environment": "clean synthetic environment; TEST-only generated signer; no Production keys",
+      "public_test_key": "ZBthvfI2TMhtVa0oc9v9pk2KilDIKWJ2rysTAqX+g70=",
+      "events": [
+        {
+          "stage": "RECOVERED_EXACT_DECODER",
+          "status": "PASS",
+          "code_sha256": "e70623bdf54053347af8039630cf999a680c13edceae8672e5fc6e854b310acf",
+          "stdout": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "production_blobs_used": false
+        },
+        {
+          "stage": "LOCAL_COLD_START",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 7,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_COLD_START",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "cc890f702a6cdabde930283fe7b16d9d6e853e4864dd175c495c389c5a6a8b07",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_RESTART_SAME_TEST_KEY",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 9,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_RESTART",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "e4acfbb587fd19e341f50820ac16350a4c6a421bb8a34e9570cba123d895d1c9",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_BAD_ENGINE_HASH",
+          "status": "DEGRADED",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "adc0ff277cde97f9d6ec969d347e54072dc1e4096942c6aeef9445b1a7f4ba34",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 11,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_BAD_ENGINE_FAIL_CLOSED",
+          "status": "PASS",
+          "actual_run_count": 0
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        },
+        {
+          "stage": "LOCAL_RESTORE_ORIGINAL_ARTIFACTS",
+          "status": "READY",
+          "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+          "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+          "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION",
+          "local_process_pid": 12,
+          "listen_host": "127.0.0.1"
+        },
+        {
+          "stage": "LOCAL_SMOKE100_AFTER_RESTORE",
+          "status": "PASS",
+          "actual_run_count": 100,
+          "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+          "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+          "receipt_sha256": "f81201de85f6957a4650a2606f2d37f3714551e584dae29e50dc8812691df645",
+          "independent_ed25519": "PASS",
+          "tampered_receipt_rejected": true,
+          "signer": "LOCAL TEST KEY ONLY"
+        },
+        {
+          "stage": "LOCAL_STOP",
+          "exitcode": -15
+        }
+      ],
+      "real_engine_local_runs": 300,
+      "production_runtime_calls": 0,
+      "production_mutations": 0,
+      "provider_rollback": "NOT EXECUTED / NOT VERIFIED",
+      "production_cold_start_restart": "NOT EXECUTED / NOT VERIFIED",
+      "git_sha": "NOT ESTABLISHED",
+      "future_oos_credit": 0,
+      "full_prediction_final_delivery_learning_acceptance": false,
+      "launcher_file_sha256": "3a160b8d72b9248ec3638ded092c9bb6f46a6088eb20459f7e58c88f7c79d5ac",
+      "launcher_command_sha256": "4c89146f5ac67b2ac2f0fb3a03a934b4b6630919a74d23306f21c792fc800cf3",
+      "launcher_sha_scope": "Original launcher_sha256 hashes file including trailing newline; command_sha256 excludes surrounding whitespace",
+      "test_receipt_envelopes_from_original_logs": [
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2825,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:20.535801Z"
+          },
+          "receipt_sha256": "cc890f702a6cdabde930283fe7b16d9d6e853e4864dd175c495c389c5a6a8b07",
+          "signature": "SFuVV8KH2npYcVF8zYUXfirEi3dWMeu0M1qZHY+qxe/Z7BEt9PhOc/7sbwqMARjHVpxMQ6Lm9UE5ea45Bb95BQ==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2761,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:24.147687Z"
+          },
+          "receipt_sha256": "e4acfbb587fd19e341f50820ac16350a4c6a421bb8a34e9570cba123d895d1c9",
+          "signature": "SmxmXV7Qsny0ivpthbJcxeTs/jMYznmj7fPBgIFgkJsnLVdciR3z8z+MDkUwFo650KKpw31C6k0EM2pB0zNCAg==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 0,
+            "cause": "RUNTIME-DEGRADED",
+            "mode": "SMOKE",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "status": "EXECUTION-FAILED",
+            "timestamp": "2026-10-17T11:45:24.984991Z"
+          },
+          "receipt_sha256": "145425f2eeb68677b9e7931d45457a5e543e7cc5e51aca0c449aea5f343cc1e6",
+          "signature": "kVylwzAnkIlq6CcpUdGrfIPbIBCVEA+3TsIl8tpApBBr58VJ8Wfqkoc91uo1whUu7B0chEeKgZVdXCKoecl4Dw==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        },
+        {
+          "receipt": {
+            "actual_run_count": 100,
+            "elapsed_ms": 2707,
+            "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+            "engine_version": "KRS-Engine v1.1.0",
+            "input_class": "LOCAL-TEST-NONPRODUCTION",
+            "input_sha256": "0ab3b20abbb5f6bd575b167a70d0317150f716cd2176af5daf68c85753271914",
+            "mode": "SMOKE",
+            "output_sha256": "91eb9f3e6efa269b96be983380973c680065fc3fe52bcb0139882b48e0a80097",
+            "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+            "parameter_map_status": "PROVISIONAL_UNCALIBRATED",
+            "parameter_map_version": "0.1-provisional",
+            "race_id": "KM-JRA-LOCAL-STARTUP-REHEARSAL-NONPRODUCTION-20261017",
+            "requested_run_count": 100,
+            "runtime_revision": "KM-EXEC-RUNTIME-v1.3.1-BASE44-RECEIPT-LOG-20260917",
+            "schema": "KM-KRS-RUN-RECEIPT-v1",
+            "seed": 172003,
+            "status": "EXECUTED",
+            "timestamp": "2026-10-17T11:45:28.477041Z"
+          },
+          "receipt_sha256": "f81201de85f6957a4650a2606f2d37f3714551e584dae29e50dc8812691df645",
+          "signature": "xFlknA1YDL6g76bcLhcPjHE9dkkj7K4dFdiyFvkLWLhCPZ76M5u3VueNC8NFHcGJeidXtA41E5YXsGA389TeAg==",
+          "signature_alg": "Ed25519",
+          "signer_key_id": "KM-LOCAL-TEST-ONLY-NO-PRODUCTION"
+        }
+      ],
+      "original_test_log_sha256": "cca65bcd6b9444f3defab6c5c0aa73e2357a8bfb20c70cb9aba66e8cdb89305f",
+      "test_receipts_regenerated": false
+    },
+    "independent_candidate_review": {
+      "candidate_status": "PREPARED_NOT_APPLIED",
+      "candidate_command_sha256": "610839e28c178df8b0527d3a5850fe67b597f94bf5ef757823df9fb3ec326fec",
+      "observed_deployed_command_sha256": "4c89146f5ac67b2ac2f0fb3a03a934b4b6630919a74d23306f21c792fc800cf3",
+      "same_exact_decoder_and_server_tail": true,
+      "pinned_application_distributions": 28,
+      "all_pins_match_local_installed_metadata": true,
+      "production_changes": 0,
+      "local_rehearsal": "PASS: real Engine300runs / TEST signer only",
+      "local_test_receipt_original_log_signatures_verified": 4,
+      "limitations": [
+        "Original unversioned pip resolution step was not replayed",
+        "Candidate still requires network/package availability",
+        "No deployed full image digest or Git mapping verified",
+        "No provider restart/rollback performed",
+        "Owner authorization required before config/deploy/activation"
+      ],
+      "review_verdict": "ACCEPTABLE_OWNER_REVIEW_CANDIDATE / NOT APPLIED / NOT PRODUCTION STARTUP ACCEPTANCE"
+    },
+    "pinned_requirements_dry_run": {
+      "tool": "uv pip install --python /tmp/km-runtime-startup-venv/bin/python --dry-run -r /tmp/km-recovered-runtime-requirements.txt",
+      "status": "PASS",
+      "checked_packages": 28,
+      "result": "Would make no changes"
+    },
+    "restart_safety": {
+      "local": "PASS matching original App/Engine/params, Python version number and application packages; different local Python build/compiler, loopback binding, TEST trust",
+      "provider": "UNVERIFIED_NOT_EXECUTED",
+      "current_service_next_deploy": "UNSAFE_DIAGNOSTIC_COMMAND_REMAINS",
+      "network_install": "Original unpinned pip startup step not rehearsed; pinned candidate prepared, package/network availability still required",
+      "current_variable_values": "Current service code blob values not independently decoded; owner preflight must validate 7app/6engine/param SHA before config apply. Deployed snapshot/running originals verified."
+    },
+    "rollback_safety": {
+      "local": "PASS original artifacts restored after corrupted Engine rejected",
+      "provider": "UNVERIFIED_NOT_EXECUTED",
+      "target_for_future_candidate_rollback": "Preserve currently active deployment7c7eeb5e... with known original snapshot. Previous35de5393... REMOVED is not a proven rollback target. canRollback metadata is not safety proof."
+    },
+    "read_only_browser_scope": "Railway plugin lacks deployed snapshot command/live PID1/source. Authorized read-only UI fallback used; no service settings/variables/deployments changed. File download UI canceled, code-only Console reads used. Raw Editor viewed and Cancelled without changes.",
+    "source_reference_files": {
+      "app.py": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/app.py",
+        "sha256": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989"
+      },
+      "KRS-Engine_v1.1.0_PORTABLE.py": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/KRS-Engine_v1.1.0_PORTABLE.py",
+        "sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421"
+      },
+      "parameter_map_v0.1-provisional.json": {
+        "path": "evidence/jra_day_review_20261017/independent_review_probes/recovered_runtime_reference/parameter_map_v0.1-provisional.json",
+        "sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc"
+      }
+    },
+    "production_operations": {
+      "merge": 0,
+      "deploy": 0,
+      "restart": 0,
+      "settings_changes": 0,
+      "environment_changes": 0,
+      "signer_changes": 0,
+      "external_notification": 0
+    },
+    "delivery_learning": {
+      "signed_final": 23,
+      "canonical_available": 23,
+      "ack_verified": 0,
+      "learning_stored": 22,
+      "next_prediction_consumption_verified": 0,
+      "status": "Separate existing blockers, no new Production connection/notification authority"
+    },
+    "verdict": "NOT MERGE-READY; isolated runtime rehearsal PASS, current service settings still unsafe, provider restart/rollback and exact HEAD owner approval pending",
+    "latest_main_at_closure": "98b6be3261b72acf460a07da7d981ae83f871151",
+    "latest_main_change": "Only live race-day status/state2 files changed after d7ae23a; clean read-only merge-tree e91bb21015b3e8fb16fa2d708adddb879cd84e2d for parent dc86a93.",
+    "pinned_requirements_fresh_install": {
+      "status": "PASS",
+      "environment": "NEW LOCAL /tmp/km-pinned-startup-venv Python3.13.16; no Production keys",
+      "installer": "python -m pip with exact candidate --no-cache-dir --disable-pip-version-check --retries2 --timeout15 options and28pins",
+      "pip_version": "26.2.1",
+      "installed_application_distributions": 28,
+      "pip_check": "No broken requirements found",
+      "all_29_observed_versions_including_pip": "MATCH",
+      "original_app_import": "PASS v1.3.1",
+      "install_log_sha256": "98b7e90fc7e1d11e73f8a6e02e4157cd4398efd89ecb0e182cc9e9e30def0780",
+      "provider_equivalence": "NOT A Railway image/container coldstart proof; network availability on futuredeploy remains contingent"
+    },
+    "final_independent_delta_review": {
+      "reviewer": "Independent technical agent distinct from implementation agent",
+      "reviewed_parent_head": "dc86a93f877bda4ece521e8bec768b0080b8a349",
+      "main_sha": "98b6be3261b72acf460a07da7d981ae83f871151",
+      "delta_files": 10,
+      "expected_final_pr_file_count": 124,
+      "original_source_references_sha_verified": 3,
+      "embedded_local_test_receipts_ed25519_verified": 4,
+      "fixed_shadow_definition_hashes_verified": 14,
+      "three_way_merge_tree": "e91bb21015b3e8fb16fa2d708adddb879cd84e2d",
+      "live_state_main_preserved": true,
+      "runtime_policy_workflow_production_changes": 0,
+      "signed_production_artifact_changes": 0,
+      "new_secret_literals_observed": false,
+      "candidate_applied": false,
+      "local_engine_runs": 300,
+      "local_rehearsal": "PASS_WITH_TEST_TRUST_ONLY",
+      "provider_restart_rollback": "NOT_EXECUTED_UNVERIFIED",
+      "git_sha_actual_runtime": "UNVERIFIED",
+      "actual_full_image_digest": "UNVERIFIED",
+      "verdict": "TECHNICAL_DELTA_REVIEW_PASS / NOT_MERGE_READY",
+      "notes": [
+        "New recovered code files are SHA-preserved non-Production audit references",
+        "Local Python version number matches, build/compiler differs; no exact container equivalence claim",
+        "Correct deployed startup generation now established; actor/time/root historical mutation cause unknown",
+        "Current service command still diagnostic; Owner preflight and config approval remain needed",
+        "Deployment/restart/rollback/Delivery/Learning live acceptance remain separate"
+      ],
+      "pinned_fresh_install_independent_checks": {
+        "pip_check": "PASS",
+        "all_observed_versions_including_pip": 29,
+        "app_import": "PASS v1.3.1, clean environment",
+        "install_log_sha256": "98b7e90fc7e1d11e73f8a6e02e4157cd4398efd89ecb0e182cc9e9e30def0780",
+        "credential_url_in_log": false
+      },
+      "final_inventory_hash_mismatches": [],
+      "final_inventory_self_hash": "Explicitly excluded as SELF_REFERENTIAL_NOT_EMBEDDED, correct",
+      "final_inventory_other_hashes_verified": 123
+    },
+    "review_capture_scope": "Independent reviewer checked10 changed/new paths and124 full PR inventory before this report was embedded. Report embedding/inventory self-hash refresh does not alter reviewed executable/reference/candidate bytes.",
+    "final_immutable_artifact_recheck": {
+      "original_receipts": 23,
+      "signature_input_output_sha": "23/23 PASS",
+      "archive_members": 562,
+      "archive_sha256": "2fe1620da315a5d5b8d5de8cd983c3a23b9f60710ac36ef40c7643c1009a6355",
+      "signed_originals_changed": false
+    },
+    "final_railway_readback": {
+      "deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+      "status": "SUCCESS",
+      "snapshot_id": "1db3ca05-b62e-4038-8106-80c3c561e761",
+      "service_command_still_SystemExit9": true,
+      "healthcheckTimeout": 30,
+      "service_staged": null,
+      "environment_staged": null,
+      "production_mutation_performed": false
+    }
+  }
+}
