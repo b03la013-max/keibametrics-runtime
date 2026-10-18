@@ -32,7 +32,7 @@ Original evidence and new regression results: READINESS.md and adjacent JSON fil
 
 ## Oct18 URW implementation update
 
-Latest main f64b0fbf6fd6e95a14d3c0b173a8e44c0ccb9e3e is merged into the existing candidate with no local conflict. Fresh GitHub mergeability of old HEAD34cf282 was true/clean. Required-check administration read remains UNKNOWN_HTTP403. New HEAD must be reviewed independently; merge approval is PENDING.
+Historical integration base f64b0fbf6fd6e95a14d3c0b173a8e44c0ccb9e3e was merged into the existing candidate with no local conflict. Fresh GitHub mergeability of old HEAD34cf282 was true/clean. Required-check administration read remains UNKNOWN_HTTP403. New HEAD must be reviewed independently; merge approval is PENDING.
 
 | Added result | Decision | Evidence / limitation |
 |---|---|---|
@@ -40,7 +40,7 @@ Latest main f64b0fbf6fd6e95a14d3c0b173a8e44c0ccb9e3e is merged into the existing
 | Real historical SOURCE contract | VERIFIED | Ed25519 against independent current key;12 runners×29=348 cells,309 calculated/39 ruled-neutral; deterministic same-clock replay. No forward OOS credit. |
 | URW pair/scenario predictive model | PENDING | Candidate pair/third enumeration labels effects UNESTABLISHED. Full qualitative canon is not executed. Approval alone cannot fill a missing evaluator. |
 | Formal Owner / Production consumer scope | BLOCKED | KAW-only Production profile unchanged. Candidate cannot fill Formal Intent, construct MEC/Capital tickets or claim Signed FINAL. |
-| Latest main preservation | COMPLETED | Three unrelated JRA-only paths preserved. Signed execution/Receipt/OOS/authority/profile/mapping/Engine/policy paths are unchanged. |
+| Latest main preservation | COMPLETED | Current main4c0a72adf5d977289329329be50bffe374267511 is preserved, including its24 intervening paths. PR310 itself does not change signed execution/Receipt/OOS/authority/profile/mapping/Engine/policy paths. |
 
 Regression and original-source provenance: tests/test_urw_owner_candidate.py and urw_owner_candidate_review.json; latest CI result is linked on PR310. Historical baseline and future denominators above remain unchanged.
 
@@ -60,3 +60,5 @@ Repeated official acquisition initially produced a false plan-drift HOLD because
 45 dedicated tests and175 related local regressions pass. See current PR310 CI and urw_owner_candidate_review.json for source/code hashes, mechanism counts, PAPER-only contract accounting and per-race stop records. Future Settlement/PFS/Learning are pending future authorized FINAL/RESULT. Existing66300→50640/PFS76.38% remains unchanged; absent FINAL=N/A, actual purchaseUNKNOWN.
 
 Candidate temporal correctness: Freeze time is sampled after conditional computation completes. Completing at/after Cutoff or a backwards runtime clock produces HOLD; an explicitly injected test clock never claims a real prestart freeze. Four additional clock regressions cover these boundaries. These are Candidate-only temporal guards, separate from the conditional prediction hypotheses and unchanged Production signing/deadline code.
+
+Review handoff: current main4c0a72adf5d977289329329be50bffe374267511 is synchronized without conflict. Existing PR310 is prepared for Ready for Review; that status is not human approval, Owner merge authorization or Production activation. The exact reviewed HEAD/check results are in the PR body. The only dated autonomous approval found on current main remains2026-10-16-KAW.json; no URW2026-10-19 grant is inferred. Phase B requires one race, so1R/2R is not sent as a two-race Phase-B batch. R2 expansion requires actual Phase-B acceptance and valid Phase-C authority.
