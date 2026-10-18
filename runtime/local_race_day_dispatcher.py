@@ -770,9 +770,17 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
                 plan = json.loads(plan_path.read_text())
                 # Current official identity/time/universe drift requires review;
                 # do not silently rewrite the plan SHA an Owner already approved.
-                if (plan['venue_id'], plan['race_date']) != (venue, day) or [
-                        (r['fields'],r['declared_runner_universe']) for r in plan['races']] != [
-                        (r['fields'],r['declared_runner_universe']) for r in fresh['races']]:
+                # A verified new GET has a new snapshot hash even when every
+                # declared runner is unchanged. Compare declared CONTENT, not
+                # those two derived provenance hashes. Both plans retain their
+                # original hashes/raw evidence; only fresh signed SOURCE can
+                # establish current ACTIVE runners and prestart evidence.
+                def identity(r):
+                    declared = {k:v for k,v in r['declared_runner_universe'].items()
+                                if k not in {'source_snapshot_sha256', 'runner_universe_sha256'}}
+                    return r['fields'], r['execution_id'], r['race_key'], declared
+                if ((plan['venue_id'], plan['race_date']) != (venue, day)
+                        or [identity(r) for r in plan['races']] != [identity(r) for r in fresh['races']]):
                     raise ValueError('OFFICIAL_DAY_PLAN_DRIFT_REVIEW_REQUIRED')
             else:
                 plan = fresh

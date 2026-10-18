@@ -100,6 +100,41 @@ def test_all_discovered_targets_retained_without_approval_or_execution(tmp_path,
     assert all(v['first_stop_stage']=='DATED_OWNER_AUTHORIZATION' for v in r['venues'].values())
 
 
+@pytest.mark.parametrize('change',['snapshot_only','runner_name','runner_id','count','time','execution_id','unknown_field'])
+def test_repeat_official_get_preserves_plan_but_holds_actual_declared_drift(tmp_path,monkeypatch,change):
+    discover=setup_day(monkeypatch)
+    monkeypatch.setattr(d,'prepare_worker',lambda *a:pytest.fail('READ-ONLY MUST NOT DISPATCH'))
+    first=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
+    assert first['target_races_complete']
+    path=tmp_path/'runtime/local_race_day_plan/2026-10-15-KAW.json'
+    original=path.read_bytes()
+    def fresh(venue,day,*a,**kw):
+        p=discover(venue,day,*a,**kw)
+        if venue=='KAW':
+            u=p['races'][0]['declared_runner_universe']
+            u['source_snapshot_sha256']='new-verified-snapshot'
+            u['runner_universe_sha256']='new-derived-hash'
+            if change=='runner_name':u['runners'][0]['name']='CHANGED'
+            if change=='runner_id':u['runners'][0]['runner_id']='999'
+            if change=='count':u['runner_count']+=1
+            if change=='time':p['races'][0]['fields']['scheduled_post_at']='2026-10-15T19:00:00+09:00'
+            if change=='execution_id':p['races'][0]['execution_id']='OTHER'
+            if change=='unknown_field':u['unexpected_semantic_field']='changed'
+            p['plan_sha256']=d.sha({k:v for k,v in p.items() if k!='plan_sha256'})
+        return p
+    monkeypatch.setattr(d,'discover',fresh)
+    second=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
+    assert path.read_bytes()==original  # Never replace an Owner-reviewed plan.
+    assert len(second['venues']['OHI']['races'])==2
+    if change=='snapshot_only':
+        assert second['target_races_complete'] and second['target_races']==4
+        assert len(second['venues']['KAW']['races'])==2
+        assert not second['new_live_send']
+    else:
+        assert not second['target_races_complete']
+        assert second['venues']['KAW']['original_error'].endswith('OFFICIAL_DAY_PLAN_DRIFT_REVIEW_REQUIRED')
+
+
 @pytest.mark.parametrize('failure',['scope','worker','drift'])
 def test_sibling_scope_worker_and_plan_failures_never_stop_other_venue(tmp_path,monkeypatch,failure):
     discover=setup_day(monkeypatch);monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
