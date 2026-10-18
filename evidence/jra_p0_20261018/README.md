@@ -20,7 +20,7 @@ Production remains R51, resolved from main d1b711d63c50d7f14e2d2ab2a96f2b3ec7e72
 | VENUE_DAILY_REVIEW | JSON venues / venue_canon |
 | CAPITAL_ROBUST_PFS | JSON summary / bet_type_pfs / tier_pfs / shadow_comparison |
 | LEARNING_CONSUMPTION_PROOF | JSON learning + temporal regression tests; actual consumption remains zero verified |
-| CORRECTNESS_REPAIR | runtime/krs_prediction_utility.py, runtime/post_result_learning.py, both existing workflows, tests/test_jra_role_learning_repair.py |
+| CORRECTNESS_REPAIR | runtime/jra_krs_measurement.py, runtime/post_result_learning.py, both existing workflows, tests/test_jra_role_learning_repair.py |
 | FORWARD_OOS_SHADOW | runtime/jra_role_learning_shadow.py; proposed existing workflow connections |
 | NEXT_RACE_READINESS | EXECUTION_CONTEXT.json, RUNTIME_READINESS.json, limitations below |
 
@@ -51,3 +51,5 @@ A separate review agent independently reproduced KRS false-rescue counts, Source
 5. No notification/recipient ACK records were found. Canonical publication/readback is separate from user receipt. No external send was made.
 
 Production Merge HOLD; Shadow forward OOS BLOCKED pending Merge and independent server witness; model quality/Robust PFS improvement FORWARD OOS PENDING. Revert this PR's code/workflow additions to roll back; do not rewrite signed artifacts. Production Railway deployment remains7c7eeb5e-3b5b-496a-b66f-82bd71897d53; Runtime READY; deployed Git SHA unknown. No deploy/restart/stop was done.
+
+CI caught LOCAL preregistration coupling to the shared KRS file. Its exact main bytes were restored. The JRA-only adapter contains the measurement repair; LOCAL code, metrics and frozen definition hashes are unchanged.

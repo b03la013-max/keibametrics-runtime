@@ -89,3 +89,17 @@ class PersistenceWitnessTests(unittest.TestCase):
    proof=pre_result_witness(root,s)
    self.assertTrue(proof.get('git_history_correlated'))
    self.assertFalse(proof['verified'])
+
+class FamilyIsolationTests(unittest.TestCase):
+ def test_local_preregistered_definition_bytes_unchanged(self):
+  import hashlib
+  protocol=json.loads((ROOT/'research/utility/forward_protocol.json').read_text())
+  path='runtime/krs_prediction_utility.py'
+  self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),protocol['definition_sha256'][path])
+ def test_jra_producer_records_actual_frozen_roles(self):
+  from jra_krs_measurement import build_krs_prediction_utility
+  q,f,_=fixture();u=copy.deepcopy(f['krs_prediction_utility']);zones=u['snapshot']['role_zones']
+  u['snapshot']['role_zones']={k:v for k,v in zip(('w_max_rank','p2_max_rank','p3_max_rank'),(zones['W'],zones['P2'],zones['P3']))}
+  out=build_krs_prediction_utility(q,{'status':'EXECUTED','output':u})
+  for row in out['summary']:
+   self.assertEqual(row['static_roles'],sorted(q['static_prediction']['roles'][str(row['horse_no'])]))

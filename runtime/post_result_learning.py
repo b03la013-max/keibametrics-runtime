@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, json
 from typing import Any
-from krs_prediction_utility import evaluate_against_result
+from jra_krs_measurement import evaluate_against_result
 from family_pfs_improvement import build_pfs_improvement_assessment
 
 LEARNING_PROFILE="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
