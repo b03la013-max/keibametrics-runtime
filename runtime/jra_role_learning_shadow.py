@@ -360,6 +360,12 @@ def pre_result_witness(root,shadow):
 
 WITNESS_REPO = 'b03la013-max/keibametrics-runtime'
 
+def utility_artifact_name(run_id, attempt):
+    if not str(run_id).isdigit() or not str(attempt).isdigit() or int(attempt)<1:
+        raise ValueError('WITNESS_EXECUTION_ID')
+    return 'krs-utility-'+str(run_id)+('' if int(attempt)==1 else '-attempt-'+str(attempt))
+
+
 def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
     """Bind GitHub server receipt time to exact archived Shadow bytes.
 
@@ -404,7 +410,7 @@ def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
         raise ValueError('WITNESS_UNTRUSTED_WORKFLOW')
     if hashlib.sha256(code_bytes).hexdigest()!=shadow['code_sha256']:
         raise ValueError('WITNESS_CODE_MISMATCH')
-    if (artifact.get('name') != 'krs-utility-'+str(run['id'])
+    if (artifact.get('name') != utility_artifact_name(run['id'],run['run_attempt'])
             or artifact.get('workflow_run',{}).get('id') != run['id']
             or artifact.get('workflow_run',{}).get('head_sha') != run['head_sha']
             or artifact.get('expired') is not False):
@@ -438,9 +444,11 @@ def actions_pre_result_witness(shadow):
         return subprocess.check_output(['gh','api','--hostname','github.com',
             'repos/'+WITNESS_REPO+'/'+path],timeout=30,stderr=subprocess.DEVNULL)
     try:
-        rid=str(ctx['run_id']);run=json.loads(api('actions/runs/'+rid))
+        rid=str(ctx['run_id']);attempt=str(ctx.get('run_attempt',''))
+        utility_artifact_name(rid,attempt)
+        run=json.loads(api('actions/runs/'+rid+'/attempts/'+attempt))
         artifacts=json.loads(api('actions/runs/'+rid+'/artifacts?per_page=100'))['artifacts']
-        matches=[a for a in artifacts if a.get('name')=='krs-utility-'+rid]
+        matches=[a for a in artifacts if a.get('name')==utility_artifact_name(rid,attempt)]
         if len(matches)!=1:raise ValueError('WITNESS_ARTIFACT_NOT_UNIQUE')
         artifact=matches[0]
         if type(artifact.get('id')) is not int or not 0<artifact.get('size_in_bytes',0)<=32*1024*1024:
