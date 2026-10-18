@@ -744,7 +744,8 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
     folder = root/'runtime/local_race_day_plan'
     index_path = root/'runtime/execution_reports'/('LOCAL-'+day)/'canonical_index.json'
     report = {'race_date':day, 'observed_at':now.isoformat(), 'venues':{},
-              'new_live_send':False, 'target_races':0, 'target_races_complete':False}
+              'live_execution_requested':execute, 'new_live_send':None if execute else False,
+              'target_races':0, 'target_races_complete':False}
     if execute and os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true':
         raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
     meeting_reads = []
@@ -866,8 +867,12 @@ def main():
     args = p.parse_args()
     root, now = Path(args.repo_root).resolve(), datetime.now(timezone.utc)
     if args.south_kanto:
-        print(json.dumps(south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute)))
-        return
+        report = south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute)
+        print(json.dumps(report))
+        # An Actions green exit is not FINAL proof; explicit discovery/worker
+        # HOLD must nevertheless alert the caller after preserving its evidence.
+        return int(not report['target_races_complete'] or any(
+            v.get('status','').startswith('HOLD') for v in report['venues'].values()))
     name = args.date+'-'+args.venue
     folder = root/'runtime/local_race_day_plan'
     plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
@@ -905,4 +910,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

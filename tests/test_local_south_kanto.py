@@ -96,6 +96,7 @@ def test_all_discovered_targets_retained_without_approval_or_execution(tmp_path,
     monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
     assert r['target_races']==4 and all(v['status']=='HOLD' for v in r['venues'].values())
+    assert r['live_execution_requested'] and r['new_live_send'] is None
     assert all(v['first_stop_stage']=='DATED_OWNER_AUTHORIZATION' for v in r['venues'].values())
 
 
@@ -124,6 +125,15 @@ def test_sibling_scope_worker_and_plan_failures_never_stop_other_venue(tmp_path,
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
     assert executed==['KAW'] and r['venues']['OHI']['status'].startswith('HOLD')
     assert len(r['venues']['KAW']['races'])==2
+
+
+def test_cli_reports_hold_as_nonzero_after_evidence_write(monkeypatch,tmp_path):
+    import sys
+    monkeypatch.setattr(sys,'argv',['dispatcher','--south-kanto','--date','2026-10-19',
+                                  '--cutoff-seconds','120','--repo-root',str(tmp_path)])
+    monkeypatch.setattr(d,'south_kanto_day',lambda *a,**k:{
+        'target_races_complete':True,'venues':{'URW':{'status':'HOLD','first_stop_stage':'DATED_OWNER_AUTHORIZATION'}}})
+    assert d.main()==1
 
 
 def signed_envelope(artifact,eid,key,health):
