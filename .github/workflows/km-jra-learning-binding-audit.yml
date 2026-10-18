@@ -1,0 +1,111 @@
+name: JRA next-race learning binding audit
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'runtime/jra_role_learning_shadow.py'
+      - 'runtime/jra_conditional_rank_shadow.py'
+      - 'scripts/jra_prediction_quality_audit.py'
+      - 'scripts/jra_conditional_failure_audit.py'
+      - 'scripts/jra_20261018_formal_review.py'
+      - 'research/jra_conditional_rank/**'
+      - 'scripts/jra_probability_readiness_audit.py'
+      - 'scripts/jra_conditional_p2_recheck.py'
+      - 'tests/test_jra_probability_shadow.py'
+      - 'tests/test_jra_head_p2_exposure.py'
+      - 'scripts/jra_p0_p2_integration.py'
+      - 'scripts/jra_pedigree_identity_recovery.py'
+      - 'tests/test_jra_pedigree_identity_recovery.py'
+      - 'runtime/jra_shadow_checkpoint.py'
+      - 'runtime/jra_formal_artifact_wait.py'
+      - 'tests/test_jra_delivery_shadow_isolation.py'
+      - 'tools/jra_workflow_readiness.py'
+      - 'tests/test_jra_prediction_quality.py'
+      - 'runtime/krs_prediction_utility.py'
+      - 'runtime/jra_krs_measurement.py'
+      - 'runtime/post_result_learning.py'
+      - 'tests/test_jra_role_learning_repair.py'
+      - 'tests/test_jra_live_acceptance_continuation.py'
+      - '.github/workflows/km-jra-no-bet-postresult-learning.yml'
+      - '.github/workflows/km-formal-request-runner.yml'
+      - '.github/workflows/km-formal-result-runner.yml'
+      - '.github/workflows/km-jra-formal-single-entry.yml'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'runtime/jra_role_learning_shadow.py'
+      - 'runtime/jra_conditional_rank_shadow.py'
+      - 'scripts/jra_prediction_quality_audit.py'
+      - 'scripts/jra_conditional_failure_audit.py'
+      - 'scripts/jra_20261018_formal_review.py'
+      - 'research/jra_conditional_rank/**'
+      - 'scripts/jra_probability_readiness_audit.py'
+      - 'scripts/jra_conditional_p2_recheck.py'
+      - 'tests/test_jra_probability_shadow.py'
+      - 'tests/test_jra_head_p2_exposure.py'
+      - 'scripts/jra_p0_p2_integration.py'
+      - 'scripts/jra_pedigree_identity_recovery.py'
+      - 'tests/test_jra_pedigree_identity_recovery.py'
+      - 'runtime/jra_shadow_checkpoint.py'
+      - 'runtime/jra_formal_artifact_wait.py'
+      - 'tests/test_jra_delivery_shadow_isolation.py'
+      - 'tools/jra_workflow_readiness.py'
+      - 'tests/test_jra_prediction_quality.py'
+      - 'runtime/krs_prediction_utility.py'
+      - 'runtime/jra_krs_measurement.py'
+      - 'runtime/post_result_learning.py'
+      - 'tests/test_jra_role_learning_repair.py'
+      - 'tests/test_jra_live_acceptance_continuation.py'
+      - '.github/workflows/km-jra-no-bet-postresult-learning.yml'
+      - '.github/workflows/km-formal-request-runner.yml'
+      - '.github/workflows/km-formal-result-runner.yml'
+      - '.github/workflows/km-jra-formal-single-entry.yml'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  attestations: read
+jobs:
+  pedigree-id-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install -q cryptography beautifulsoup4 pytest
+      - run: python -m pytest -q tests/test_jra_pedigree_identity_recovery.py
+      - name: Recover exact stored official locators and reverify existing OIDC intake
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/jra_pedigree_identity_recovery.py --verify-oidc
+      - name: Archive research lookup and provenance separately from Production Corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-pedigree-id-recovery-${{ github.run_id }}
+          path: research/jra_pedigree/identity_recovery*.json
+          retention-days: 90
+  read-only-audit-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m unittest discover -s tests -p test_jra_next_race_learning_binding_audit.py -v
+      - name: Read authenticated Workflow states after rate reset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/jra_workflow_readiness.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jra-workflow-readiness-${{ github.run_id }}
+          path: workflow-readiness.json
+          retention-days: 7
+  role-learning-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install pytest pyyaml cryptography numpy
+      - run: python -m pytest -q tests/test_jra_role_learning_repair.py tests/test_jra_live_acceptance_continuation.py tests/test_jra_prediction_quality.py tests/test_jra_probability_shadow.py tests/test_jra_delivery_shadow_isolation.py tests/test_jra_head_p2_exposure.py tests/test_jra_single_entry_outcome.py tests/test_jra_delivery_evidence_audit.py tests/test_krs_prediction_utility.py tests/test_family_pfs_improvement.py tests/test_jra_production_postresult.py tests/test_jra_next_race_learning_binding_audit.py

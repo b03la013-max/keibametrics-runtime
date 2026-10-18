@@ -6,7 +6,7 @@ name: KeibaMetrics JRA Autopilot Failure Recovery
 # Recovery is independent of the unreliable cron and cannot backdate FINAL.
 on:
   workflow_run:
-    workflows: ["KeibaMetrics JRA Race-Day Autopilot"]
+    workflows: ["KeibaMetrics JRA Race-Day Autopilot", "KeibaMetrics JRA Race Intent Resolver"]
     types: [completed]
 
 permissions:
@@ -21,6 +21,7 @@ jobs:
   restart-worker:
     if: >-
       ${{
+        github.event.workflow_run.path == '.github/workflows/km-jra-race-day-autopilot.yml' &&
         github.event.workflow_run.head_branch == 'main' &&
         (github.event.workflow_run.conclusion == 'failure' ||
          github.event.workflow_run.conclusion == 'timed_out')
@@ -69,3 +70,33 @@ jobs:
             --repo "${{ github.repository }}" --ref main \
             -f race_date="$D" -f mode=loop
           echo "JRA_DAY_LOOP_RECOVERY_DISPATCHED date=$D"
+
+  reconcile-resolver:
+    if: >-
+      ${{ github.event.workflow_run.path == '.github/workflows/km-jra-race-intent-resolver.yml' &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Request canonical status reconciliation after Resolver completion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_TITLE: ${{ github.event.workflow_run.display_title }}
+          RUN_CREATED_AT: ${{ github.event.workflow_run.created_at }}
+        run: |
+          # The day worker observes actual workflow outcomes even if the
+          # Resolver's own status writer/push failed. It never infers FINAL.
+          D="$(python - <<'PYCODE'
+          import os,re,datetime as dt
+          title=os.environ['RUN_TITLE']
+          match=re.fullmatch(r'JRA intent \S+ (\d{4}-\d{2}-\d{2}|today|) R\d{1,2}',title)
+          if not match:raise SystemExit('RESOLVER_RUN_IDENTITY_UNRESOLVED')
+          day=match.group(1)
+          if day in ('','today'):
+              day=dt.datetime.fromisoformat(os.environ['RUN_CREATED_AT'].replace('Z','+00:00')).astimezone(dt.timezone(dt.timedelta(hours=9))).date().isoformat()
+          print(dt.date.fromisoformat(day).isoformat())
+          PYCODE
+          )"
+          gh workflow run km-jra-race-day-autopilot.yml \
+            --repo "${{ github.repository }}" --ref main \
+            -f race_date="$D" -f mode=tick

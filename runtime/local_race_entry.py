@@ -11,7 +11,7 @@ from runtime import formal_execution_orchestrator as o
 from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
 from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
-from runtime.local_race_key_shadow_owner import compile_shadow, ShadowOwnerError
+from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
 from runtime.local_production_static_owner import build_formal_static, StaticOwnerError
 
 
@@ -147,7 +147,8 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     # never fill formal, final_prediction_package, or any Production ticket.
     if formal is None and generation_allowed and intent.get('analysis_only') is not True:
         try:
-            shadow = compile_shadow(request, source, numerical)
+            compiler = compile_urw_candidate if request.get('venue_id') == 'URW' else compile_shadow
+            shadow = compiler(request, source, numerical)
             o._write(output/'shadow_prediction.json', shadow)
             report['shadow_owner'] = {
                 'status': 'FROZEN_NON_PRODUCTION',

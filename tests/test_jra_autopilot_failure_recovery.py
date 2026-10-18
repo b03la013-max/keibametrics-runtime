@@ -31,3 +31,28 @@ def test_recovery_only_dispatches_canonical_bounded_worker():
     assert "cancel-in-progress: false" in WORKFLOW
     assert "Continue with fresh worker before hosted job limit" in CANONICAL
     assert "if: always()" in CANONICAL
+
+
+def test_actual_dynamic_run_names_route_by_verified_workflow_path():
+    import json
+    import yaml
+    events=json.loads((ROOT/"tests/fixtures/jra_completion_actual_runs_20261017.json").read_text())
+    workflow=yaml.safe_load(WORKFLOW)
+    jobs=workflow["jobs"]
+    def permits(job,event):
+        expression=jobs[job]["if"].strip().removeprefix("${{").removesuffix("}}").strip()
+        for key in ("path","name","head_branch","conclusion"):
+            expression=expression.replace("github.event.workflow_run."+key,repr(event.get(key)))
+        expression=expression.replace("&&"," and ").replace("||"," or ").replace("\n"," ")
+        return eval(expression,{"__builtins__":{}},{})
+    resolver,autopilot=events
+    assert resolver["name"]=="JRA intent 東京 2026-10-17 R8"
+    assert autopilot["name"]=="JRA race-day autopilot 2026-10-17 loop"
+    assert permits("reconcile-resolver",resolver)
+    assert not permits("restart-worker",resolver)
+    assert permits("restart-worker",autopilot)
+    assert not permits("reconcile-resolver",autopilot)
+    for event in events:
+        other={**event,"head_branch":"untrusted"}
+        assert not permits("restart-worker",other)
+        assert not permits("reconcile-resolver",other)
