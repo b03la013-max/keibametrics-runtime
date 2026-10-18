@@ -882,7 +882,18 @@ jobs:
           else:
               shadow_error="NON_PRE_RACE_OR_ACCEPTANCE_NO_SHADOW"
 
+          # Independent research sidecar. Never alters req, FINAL, KRS or money.
+          # Late/corrupt Shadow inputs do not block a successful Production run.
+          role_learning_shadow=None
+          if temporal_mode=="FORMAL-PRE-RACE" and not acceptance_only and family=="JRA":
+              try:
+                  from jra_role_learning_shadow import persist_shadow
+                  role_learning_shadow=persist_shadow(".",req,immutable_final_artifact)
+              except Exception as exc:
+                  role_learning_shadow={"status":"NOT_FROZEN","reason":type(exc).__name__+":"+str(exc),"production_effect":"NONE"}
+
           summary={
+            "role_learning_shadow":role_learning_shadow and {k:role_learning_shadow.get(k) for k in ("status","reason","candidate_id","sha256","eligibility_status","production_effect")},
             "race_id":race_id,
             "family_id":family,
             "venue_id":venue_canonical,
@@ -977,6 +988,7 @@ jobs:
           if [ -d runtime/final_artifacts ]; then git add runtime/final_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/acceptance_artifacts ]; then git add runtime/acceptance_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
+          if [ -d runtime/role_rescue_shadow ]; then git add runtime/role_rescue_shadow/*.json 2>/dev/null || true; fi
           if [ -d runtime/jra_delivery ]; then git add runtime/jra_delivery; fi
           if ! git diff --cached --quiet; then
             git commit -m "runtime: persist immutable FINAL/acceptance artifact [skip ci]"

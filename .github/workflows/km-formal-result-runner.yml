@@ -141,9 +141,37 @@ jobs:
                   with open(os.path.join("runtime","mec_shadow_results",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                       json.dump(shadow_settlement,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
-              review=build_post_result_review(p,final_artifact)
-              learning=build_learning_state(review)
+              existing_review=os.path.join("runtime","reviews_auto",p["race_id"]+"-AUTO.json")
+              from post_result_learning import _sha as learning_sha
+              if os.path.exists(existing_review):
+                  with open(existing_review,encoding="utf-8") as fh:
+                      review=json.load(fh)
+                  assert review.get("sha256")==learning_sha({k:v for k,v in review.items() if k!="sha256"}), "EXISTING_REVIEW_HASH_INVALID"
+                  assert review.get("immutable_final_artifact_sha256")==final_artifact.get("sha256"), "EXISTING_REVIEW_FINAL_CONFLICT"
+                  assert review.get("official_top3")==p["official_result"]["top3"], "OFFICIAL_RESULT_REVISION_REQUIRES_SEPARATE_REVIEW"
+                  assert review.get("capital",{}).get("investment")==p["settlement"]["total_investment"], "SETTLEMENT_REVISION_REQUIRES_SEPARATE_REVIEW"
+                  assert review.get("capital",{}).get("return")==p["settlement"]["total_payout"], "PAYOUT_REVISION_REQUIRES_SEPARATE_REVIEW"
+              else:
+                  review=build_post_result_review(p,final_artifact)
+              # Only newly generated states receive an actual observation time.
+              # Historical states remain unchanged and temporally ineligible.
+              from datetime import datetime, timezone
+              existing_learning=os.path.join("runtime","learning_states",p["race_id"]+".json")
+              if os.path.exists(existing_learning):
+                  with open(existing_learning,encoding="utf-8") as fh:
+                      learning=json.load(fh)
+                  from post_result_learning import _sha as learning_sha
+                  assert learning.get("sha256")==learning_sha({k:v for k,v in learning.items() if k!="sha256"}), "EXISTING_LEARNING_HASH_INVALID"
+                  assert learning.get("source_review_sha256")==review.get("sha256"), "EXISTING_LEARNING_REVIEW_CONFLICT"
+              else:
+                  learning=build_learning_state(review,effective_time=datetime.now(timezone.utc).isoformat())
               oos=build_oos_measurement(review,final_artifact,p)
+              # Role/learning research settlement cannot block Production RESULT.
+              try:
+                  from jra_role_learning_shadow import persist_shadow_result
+                  role_shadow_result=persist_shadow_result(".",p)
+              except Exception as exc:
+                  role_shadow_result={"status":"NOT_SETTLED","reason":type(exc).__name__+":"+str(exc)}
               fast_reflection=build_fast_reflection({
                   "race_id":p["race_id"],
                   "settlement":p.get("settlement") or {},
@@ -287,6 +315,7 @@ jobs:
 
           summary={
             "race_id":p["race_id"],
+            "role_learning_shadow_result":role_shadow_result if not candidate_only else None,
             "result_lane":"SOURCE_DERIVED_CANDIDATE" if candidate_only else "PRODUCTION",
             "status":"CANDIDATE_RESULT_E2E_PASS" if candidate_only else "RESULT_E2E_PASS",
             "receipt_sha256":res.get("receipt_sha256"),
@@ -358,6 +387,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           if [ -d runtime/jra_static_owner_forward_oos ]; then git add runtime/jra_static_owner_forward_oos; fi
           git add runtime/reviews_auto/*.json runtime/learning_states/*.json runtime/krs_oos_measurements/*.json runtime/krs_oos_status.json runtime/mec_r4_oos_status.json
+          if [ -d runtime/role_rescue_shadow_results ]; then git add runtime/role_rescue_shadow_results/*.json runtime/role_rescue_shadow_status.json; fi
           if [ -d runtime/jra_fast_reflections ]; then git add runtime/jra_fast_reflections/*.json 2>/dev/null || true; fi
           if [ -d runtime/source_candidate_oos ]; then git add runtime/source_candidate_oos; fi
           if [ -f runtime/source_candidate_oos_status.json ]; then git add runtime/source_candidate_oos_status.json; fi

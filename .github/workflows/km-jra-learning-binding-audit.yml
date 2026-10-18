@@ -1,0 +1,40 @@
+name: JRA next-race learning binding audit
+on:
+  pull_request:
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'runtime/jra_role_learning_shadow.py'
+      - 'runtime/krs_prediction_utility.py'
+      - 'runtime/post_result_learning.py'
+      - 'tests/test_jra_role_learning_repair.py'
+      - '.github/workflows/km-formal-request-runner.yml'
+      - '.github/workflows/km-formal-result-runner.yml'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/jra_next_race_learning_binding_audit.py'
+      - 'runtime/jra_role_learning_shadow.py'
+      - 'runtime/krs_prediction_utility.py'
+      - 'runtime/post_result_learning.py'
+      - 'tests/test_jra_role_learning_repair.py'
+      - '.github/workflows/km-formal-request-runner.yml'
+      - '.github/workflows/km-formal-result-runner.yml'
+      - 'tests/test_jra_next_race_learning_binding_audit.py'
+      - '.github/workflows/km-jra-learning-binding-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-audit-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m unittest discover -s tests -p test_jra_next_race_learning_binding_audit.py -v
+  role-learning-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install pytest pyyaml cryptography
+      - run: python -m pytest -q tests/test_jra_role_learning_repair.py tests/test_krs_prediction_utility.py tests/test_family_pfs_improvement.py tests/test_jra_production_postresult.py tests/test_jra_next_race_learning_binding_audit.py
