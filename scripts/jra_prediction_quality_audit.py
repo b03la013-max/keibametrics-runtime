@@ -55,7 +55,37 @@ def bvi_ablation(row):
   result['rank_changes'][role]={'with_bvi':old[h],'scalar_50':new[h]}
  return result
 
+def verify_fit_rows(rows):
+ """Bind research labels/features to existing canonical history before fitting.
+
+ Self-declared manifest hashes do not authenticate a detached top3 or runner view.
+ This is content validation, not a fresh verification of historical signatures.
+ """
+ from jra_shadow_checkpoint import verify_frozen_inputs
+ ids=[row['race_id'] for row in rows]
+ if not rows or len(ids)!=len(set(ids)):raise ValueError('RESEARCH_FIT_EMPTY_OR_DUPLICATE_RACE')
+ for row in rows:
+  rid=row['race_id'];q=row['q'];f=row['f'];result=row['r']
+  if not re.fullmatch(r'KM-JRA-[A-Z]{3}-20[0-9]{6}-R[0-9]{2}',rid):raise ValueError('RESEARCH_FIT_RACE_ID')
+  if (row.get('no_bet') or row.get('day',rid.split('-')[3])!=rid.split('-')[3]
+      or row.get('venue',rid.split('-')[2])!=rid.split('-')[2]
+      or any(obj.get('race_id')!=rid for obj in (q,f,result))
+      or row['runners']!=q['runners'] or row['top3']!=list(map(str,result['official_result']['top3']))
+      or len(row['top3'])!=3 or len(set(row['top3']))!=3
+      or not set(row['top3'])<={str(h['runner_id']) for h in q['runners']}
+      or q['source_snapshot_sha256']!=f['source_snapshot_sha256']
+      or f['sha256']!=sha({k:v for k,v in f.items() if k!='sha256'})
+      or result['frozen_prediction_ref']['immutable_final_sha256']!=f['sha256']):
+   raise ValueError('RESEARCH_FIT_FROZEN_LABEL_INPUT_BINDING')
+  canonical_final=load(ROOT/'runtime/final_artifacts'/f'{rid}.json')
+  canonical_result=load(ROOT/'runtime/results'/f'{rid}.json')
+  canonical_request=load(ROOT/'runtime/requests'/f'{rid}-LIVE-R1-FORMAL.json')
+  if sha(q)!=sha(canonical_request) or sha(f)!=sha(canonical_final) or sha(result)!=sha(canonical_result):
+   raise ValueError('RESEARCH_FIT_CANONICAL_HISTORY_BINDING')
+  verify_frozen_inputs(ROOT,q,f)
+
 def fit(rows):
+ verify_fit_rows(rows)
  import numpy as np
  coeff={}
  for j,role in enumerate(('W','P2','P3')):

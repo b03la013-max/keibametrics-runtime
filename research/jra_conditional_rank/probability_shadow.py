@@ -37,10 +37,13 @@ def conditional_nll(sc,actual,temperatures):
  return {role:-math.log(softmax(sc[role],temperatures[role],actual[:i])[actual[i]]) for i,role in enumerate(('W','P2','P3'))}
 
 def fit_temperatures(calibration_rows,rank_model):
+ if rank_model.get('sha256')!=sha({k:v for k,v in rank_model.items() if k!='sha256'}):raise ValueError('PROBABILITY_RANK_HASH')
  if not calibration_rows:raise ValueError('EMPTY_PROBABILITY_CALIBRATION')
  ids=[r['race_id'] for r in calibration_rows]
  if len(ids)!=len(set(ids)):raise ValueError('DUPLICATE_PROBABILITY_CALIBRATION_RACE')
  if set(ids)&{r['race_id'] for r in rank_model['training_manifest']}:raise ValueError('PROBABILITY_TRAIN_CALIBRATION_OVERLAP')
+ from jra_prediction_quality_audit import verify_fit_rows
+ verify_fit_rows(calibration_rows)
  for row in calibration_rows:
   if any(instant(m['result_captured_at'])>=instant(row['q']['source_snapshot']['source_freeze_at']) for m in rank_model['training_manifest']):raise ValueError('PROBABILITY_TRAIN_RESULT_UNAVAILABLE')
  cache=[(scores(r['runners'],rank_model),r['top3']) for r in calibration_rows];temperatures={};losses={}

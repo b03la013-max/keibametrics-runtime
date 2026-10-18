@@ -177,3 +177,70 @@ class RealGitRaceConflictTests(unittest.TestCase):
    with self.assertRaisesRegex(RuntimeError,'IMMUTABLE_OR_UNKNOWN_CONFLICT'):
     persist(cwd=fourth,branch='main',refresh=lambda p:None,attempts=1)
    self.assertEqual(git(base,'--git-dir='+str(remote),'show','main:runtime/role_rescue_shadow/R01.json'),'{"value": 3}')
+
+
+class DurableResumeAndTelemetryTests(unittest.TestCase):
+ setup_root=IsolationTests.setup_root
+ def test_killed_worker_leaves_started_record_and_never_a_new_freeze(self):
+  import subprocess
+  q,f,_=fixture()
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);c=pack(root,q,f,created_at=f['final_freeze_timestamp'])
+   p=root/'input.json';p.write_text(json.dumps(c))
+   program="""import sys,os,signal
+sys.path.insert(0,sys.argv[1])
+import family_authority_guard,jra_shadow_checkpoint
+family_authority_guard.resolve_current_authority=lambda **kwargs:os.kill(os.getpid(),signal.SIGKILL)
+sys.argv=['checkpoint','--root',sys.argv[2],'--checkpoint',sys.argv[3]]
+jra_shadow_checkpoint.main()
+"""
+   result=subprocess.run([sys.executable,'-c',program,str(ROOT/'runtime'),str(root),str(p)],timeout=10)
+   self.assertEqual(result.returncode,-9)
+   self.assertTrue(list((root/'shadow-output').glob('worker-*.started.json')))
+   self.assertTrue(list((root/'shadow-output'/f['race_id']).glob('execution-*-started.json')))
+   self.assertFalse((root/'runtime/role_rescue_shadow').exists())
+ def test_pre_checkpoint_failure_is_also_recorded(self):
+  import jra_shadow_checkpoint as checkpoint
+  with tempfile.TemporaryDirectory() as folder:
+   p=Path(folder)/'input.json';p.write_text('not JSON')
+   with patch('sys.argv',['checkpoint','--root',folder,'--checkpoint',str(p)]),self.assertRaises(ValueError):checkpoint.main()
+   paths=list((Path(folder)/'shadow-output').glob('worker-*.failed.json'))
+   self.assertEqual(len(paths),1);self.assertEqual(json.loads(paths[0].read_text())['status'],'FAILED')
+ def test_real_handoff_retry_preserves_original_time_and_learning_snapshot(self):
+  from jra_shadow_checkpoint import prepare
+  q,f,_=fixture()
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder)
+   first=prepare(root,q,f,created_at=f['final_freeze_timestamp'])
+   # A later corrupt state must not alter the original frozen retry input.
+   p=root/'runtime/learning_states/new.json';p.parent.mkdir(parents=True);p.write_text('not JSON')
+   second=prepare(root,q,f,created_at='2026-10-24T10:00:00+09:00')
+   self.assertEqual(first,second)
+   altered=copy.deepcopy(q);altered['source_snapshot_sha256']='0'*64
+   with self.assertRaisesRegex(ValueError,'CONFLICT'):prepare(root,altered,f)
+ def test_learning_effect_distinguishes_read_from_numerical_and_ticket_change(self):
+  from jra_shadow_checkpoint import learning_effect
+  from jra_role_learning_shadow import build_shadow
+  q,f,_=fixture()
+  out=build_shadow(q,f,observed_at=f['final_freeze_timestamp'])
+  effect=learning_effect(out)
+  self.assertEqual(effect['accepted_count'],0);self.assertFalse(effect['input_values_changed'])
+  self.assertEqual(effect['added_ticket_count'],0)
+  self.assertEqual(effect['numerical_rank_or_role_effect'],'NONE_FIXED_MODEL')
+  out['learning_intake']['accepted']=[{'state_id':'test-only','state_sha256':'a'*64}]
+  effect=learning_effect(out)
+  self.assertTrue(effect['input_values_changed']);self.assertEqual(effect['added_ticket_count'],0)
+  self.assertNotEqual(effect['accepted_input_sha256'],effect['without_learning_input_sha256'])
+ def test_cli_failure_retains_diagnostic_without_a_new_forecast(self):
+  import jra_shadow_checkpoint as checkpoint
+  q,f,_=fixture()
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);c=pack(root,q,f,created_at=f['final_freeze_timestamp'])
+   p=root/'input.json';p.write_text(json.dumps(c))
+   with patch('sys.argv',['checkpoint','--root',str(root),'--checkpoint',str(p)]),patch('family_authority_guard.resolve_current_authority',side_effect=RuntimeError('simulated interruption')):
+    with self.assertRaises(RuntimeError):checkpoint.main()
+   files=[p for p in (root/'shadow-output'/f['race_id']).glob('execution-*.json') if not p.name.endswith('-started.json')]
+   self.assertEqual(len(files),1);trace=json.loads(files[0].read_text())
+   self.assertEqual(trace['status'],'FAILED');self.assertFalse(trace['oos_eligible'])
+   self.assertIn('WORKER_SELF_REPORTED',trace['clock_trust']);self.assertGreaterEqual(trace['elapsed_seconds'],0)
+   self.assertFalse((root/'runtime/role_rescue_shadow').exists())

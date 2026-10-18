@@ -14,6 +14,48 @@ def fixture():
  q={'race_id':'KM-JRA-TKY-20000104-R01','runners':runners,'source_snapshot':{'source_freeze_at':'2000-01-04T01:00:00+00:00'},'source_snapshot_sha256':'unit-source','prediction_cutoff':'2000-01-04T02:00:00+00:00'}
  return q,model
 
+class ResearchFitBindingTests(unittest.TestCase):
+ def real_row(self, manifest):
+  rid=manifest['race_id']
+  q=json.loads((ROOT/'runtime/requests'/f'{rid}-LIVE-R1-FORMAL.json').read_text())
+  f=json.loads((ROOT/'runtime/final_artifacts'/f'{rid}.json').read_text())
+  r=json.loads((ROOT/'runtime/results'/f'{rid}.json').read_text())
+  return {'race_id':rid,'day':rid.split('-')[3],'q':q,'f':f,'r':r,'runners':q['runners'],
+          'top3':list(map(str,r['official_result']['top3'])),'no_bet':False}
+ def test_real_fitter_and_calibration_reject_detached_or_rehashed_history(self):
+  from jra_prediction_quality_audit import fit,verify_fit_rows
+  model=json.loads((ROOT/'research/jra_conditional_rank/probability_candidate.json').read_text())
+  train=self.real_row(model['rank_model']['training_manifest'][0])
+  cal=self.real_row(model['calibration_manifest'][0])
+  old=copy.deepcopy((train,cal,model))
+  good=fit([train]);self.assertEqual(good['training_manifest'][0]['result_sha256'],sha(train['r']))
+  temperatures,_=fit_temperatures([cal],model['rank_model']);self.assertEqual(set(temperatures),{'W','P2','P3'})
+  for original in (train,cal):
+   for kind in ('top3_swap','detached_runners','full20','feature_category','rehashed_result','rehashed_final','race_id','split_day','source_time'):
+    row=copy.deepcopy(original)
+    if kind=='top3_swap':row['top3'][0],row['top3'][1]=row['top3'][1],row['top3'][0]
+    elif kind=='detached_runners':row['runners']=copy.deepcopy(row['runners']);row['runners'][0]['canonical_components']['HPI']['value']+=1
+    elif kind=='full20':row['runners'][0]['canonical_components']['HPI']['value']+=1
+    elif kind=='feature_category':
+     feature=next(iter(row['runners'][0]['evidence_features'].values()));feature['category']='STRONG' if feature.get('category')!='STRONG' else 'WEAK'
+    elif kind=='rehashed_result':
+     row['r']['official_result']['top3'][0],row['r']['official_result']['top3'][1]=row['r']['official_result']['top3'][1],row['r']['official_result']['top3'][0]
+     row['top3']=list(map(str,row['r']['official_result']['top3']))
+     if 'sha256' in row['r']:row['r']['sha256']=sha({k:v for k,v in row['r'].items() if k!='sha256'})
+    elif kind=='rehashed_final':
+     row['f']['scheduled_post_at']='2099-01-01T00:00:00+00:00';row['f']['sha256']=sha({k:v for k,v in row['f'].items() if k!='sha256'})
+     row['r']['frozen_prediction_ref']['immutable_final_sha256']=row['f']['sha256']
+    elif kind=='split_day':row['day']='20000101'
+    elif kind=='source_time':row['q']['source_snapshot']['source_freeze_at']='2000-01-01T00:00:00+00:00'
+    else:row['q']['race_id']='KM-JRA-TKY-20000101-R01'
+    with self.subTest(day=original['day'],kind=kind),self.assertRaises(ValueError):
+     if original is train:fit([row])
+     else:fit_temperatures([row],model['rank_model'])
+  with self.assertRaisesRegex(ValueError,'DUPLICATE'):verify_fit_rows([train,train])
+  bad_rank=copy.deepcopy(model['rank_model']);bad_rank['coefficients']['W'][0]+=1
+  with self.assertRaisesRegex(ValueError,'RANK_HASH'):fit_temperatures([cal],bad_rank)
+  self.assertEqual((train,cal,model),old)
+
 class ProbabilityTests(unittest.TestCase):
  def test_uniform_joint_marginals_and_no_repeat_orientation(self):
   sc={r:{str(h):0. for h in (1,2,3,4)} for r in ('W','P2','P3')};out=distribution(sc,{r:1 for r in sc})
