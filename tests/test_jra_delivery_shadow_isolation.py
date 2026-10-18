@@ -409,7 +409,7 @@ class CrossRunReadbackTests(unittest.TestCase):
   def rebuild():
    out=io.BytesIO()
    with zipfile.ZipFile(out,'w') as z:
-    for name,data in files.items():z.writestr(name,data)
+    for name,data in files.items():z.writestr(zipfile.ZipInfo(name,date_time=(2026,10,18,0,0,0)),data)
    raw=out.getvalue();a.update(name='krs-production-123',digest='sha256:'+hashlib.sha256(raw).hexdigest(),size_in_bytes=len(raw));return raw
   raw=rebuild()
   def api(path):
