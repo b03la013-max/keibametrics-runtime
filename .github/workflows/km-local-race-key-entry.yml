@@ -351,18 +351,18 @@ jobs:
           day = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
           subprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)
           subprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)
-          for path in sorted(Path('profiles/local_autonomous_approvals').glob(day+'-*.json')):
-              approval=json.loads(path.read_text())
-              if approval.get('enabled') is not True:
-                  continue
-              subprocess.run(['python','-m','runtime.local_race_day_dispatcher',
-                  '--venue',approval['venue_id'],'--date',day,
-                  '--cutoff-seconds',str(approval['cutoff_seconds']),'--execute'],check=True)
+          # One existing driver resolves the official held venue set. Each venue
+          # keeps its own dated Owner scope, plan SHA, budget and bounded lease.
+          # No new cron, activation variable or approval is introduced here.
+          subprocess.run(['python','-m','runtime.local_race_day_dispatcher',
+              '--south-kanto','--date',day,'--cutoff-seconds','120','--execute'],check=True)
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: local-day-${{ github.run_id }}
-          path: runtime/local_race_day_plan/
+          path: |
+            runtime/local_race_day_plan/
+            runtime/execution_reports/LOCAL-*/
           if-no-files-found: ignore
           retention-days: 90
