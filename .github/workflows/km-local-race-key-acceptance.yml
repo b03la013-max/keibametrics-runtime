@@ -68,6 +68,13 @@ jobs:
       - name: LOCAL race-key and existing formal regression
         run: python -m pytest -q tests/test_urw_owner_candidate.py tests/test_local_south_kanto.py tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py tests/test_jra_next_race_learning_binding_audit.py
 
+      - name: Recheck historical training and validation labels from official RESULT (read-only)
+        run: python scripts/urw_candidate_krs_replay.py --official-label-refetch --output historical-label-refetch
+
+      - name: Read-only Oct19 public SOURCE research (no Runtime POST, no signature, no LIVE)
+        run: |
+          python scripts/urw_candidate_krs_replay.py --public-shadow --output public-source-shadow
+
       - name: Record official NAR day discovery availability (read-only, no LIVE/OOS execution)
         run: |
           python - <<'PY'
@@ -94,7 +101,8 @@ jobs:
           # never a main plan push, activation, Runtime POST or OOS prediction.
           import tempfile
           root=Path(tempfile.mkdtemp(prefix='local-read-only-'))
-          result=south_kanto_day(root,'2026-10-19',120,now=datetime.now(timezone.utc))
+          from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES
+          result=south_kanto_day(root,'2026-10-19',120,now=datetime.now(timezone.utc),allowed_venues=tuple(LOCAL_BABA_CODES))
           Path('south-kanto-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
           import shutil
           if (root/'runtime/local_race_day_plan').exists():
@@ -126,4 +134,6 @@ jobs:
             south-kanto-discovery.json
             south-kanto-plans/
             historical-canonical-index.json
+            public-source-shadow/
+            historical-label-refetch/
           if-no-files-found: ignore

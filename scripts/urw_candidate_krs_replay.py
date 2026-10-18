@@ -160,8 +160,11 @@ def ranker_audit(output):
     import math
     rows=[];sums={arm:{'races':0,'winner_top1':0,'winner_top3':0,'W':0,'P2':0,'P3':0,
         'ordered_pair_top1':0,'exact_top1':0,'exact_top5':0,'top3_joint_nll':0.} for arm in ['BASELINE',*forecasts]}
+    for key in ('ordered_pair_top1','exact_top1','exact_top5','top3_joint_nll'):sums['BASELINE'][key]=None
+    uniform_nll=0.
     for p in validation:
         actual,ref=labels_for(p);rid=p['race_id'];base=p['baseline']
+        n=len(p['runners']);uniform_nll+=math.log(n*(n-1)*(n-2))
         b=sums['BASELINE'];b['races']+=1;b['winner_top1']+=base['ranking'][0]==actual[0];b['winner_top3']+=actual[0] in base['ranking'][:3]
         for role,horse in zip(('W','P2','P3'),actual):b[role]+=horse in base[role]
         row={'race_id':rid,'label_provenance':ref,'actual_top3':actual,'arms':{}}
@@ -197,22 +200,159 @@ def ranker_audit(output):
         'training_races':[p['race_id'] for p in training],'validation_races':[p['race_id'] for p in validation],
         'original_selected_denominator':7,'training_completed':3,'validation_completed':3,'input_hold_retained':1,
         'metrics':sums,'validation_rows':rows,'production_changes':False,'runtime_post_count':0,'genuine_forward_oos':0,
-        'adoption':'HOLD_SMALL_SAMPLE_RETROSPECTIVE_NO_PRODUCTION_OR_MATERIAL_EXACT_AUTHORITY',
+        'uniform_ordered_top3_reference_nll':uniform_nll,
+        'adoption':'REJECTED_FOR_PRODUCTION_NO_WINNER_ROLE_CAPTURE_GAIN',
         'training_label_limit':'Sep23 stored labels were unverified in historical metadata; fresh official refetch required for empirical acceptance. Diagnostic fitting is not proof of true outcome or Publication Time.'}
     report['sha256']=_sha(report);dump(output/'ranker_report.json',report)
     print(json.dumps({'metrics':sums,'disposition':report['adoption']}))
+
+
+
+def refetch_historical_labels(output):
+    """Official GET checks after forecasts are frozen; no fitting or settlement.
+
+    Preserve the old records. A mismatch invalidates the retrospective quality
+    claim rather than changing labels, forecasts or a Production/OOS ledger.
+    """
+    sys.path.insert(0,str(ROOT/'runtime/local_physical'))
+    from runtime.local_physical.nar_source_manifest import _result_source,LOCAL_BABA_CODES
+    from runtime.local_physical.source_acquisition import fetch_source
+    from runtime.formal_execution_orchestrator import parse_official_result_snapshot
+    frozen=ROOT/'research/urw_owner/20261019_conditional_model/forecasts_before_evaluation.json.gz'
+    report_path=ROOT/'research/urw_owner/20261019_conditional_model/ranker_report.json'
+    forecast_sha=hashlib.sha256(frozen.read_bytes()).hexdigest()
+    evaluation=json.loads(report_path.read_text())
+    assert evaluation['forecast_artifact_sha256']==forecast_sha
+    packs=frozen_feature_packs(ROOT/'research/urw_owner/20261019_condition_consumption/evidence_audit.json.gz')
+    output.mkdir(parents=True,exist_ok=False)
+    def check(p):
+        import re
+        rid=p['race_id'];race_no=int(re.search(r'-R(\d+)-FORMAL',rid).group(1))
+        row={'race_id':rid,'role':'TRAINING' if p['race_date']=='2026-09-23' else 'VALIDATION'}
+        paths=sorted((ROOT/'runtime/family_result_requests').glob(rid.replace('-FORMAL-R1','')+'-RESULT-R*.json'))
+        record=json.loads(paths[-1].read_text());stored=list(map(str,record['finish_order'][:3]))
+        row.update(stored_top3=stored,stored_path=str(paths[-1].relative_to(ROOT)),
+                   stored_sha256=hashlib.sha256(paths[-1].read_bytes()).hexdigest())
+        try:
+            spec=_result_source('URW',LOCAL_BABA_CODES['URW'],p['race_date'].replace('-','/'),race_no)
+            snapshot,errors=fetch_source(spec,'')
+            dump(output/(rid+'.official_snapshot.json'),snapshot)
+            if errors:raise ValueError('OFFICIAL_RESULT_SOURCE_ERRORS:'+','.join(errors))
+            order,payouts=parse_official_result_snapshot(snapshot,
+                {'venue_id':'URW','race_date':p['race_date'],'race_no':race_no},list(p['runners']))
+            actual=list(map(str,order[:3]));matches=actual==stored
+            row.update(status='VERIFIED_CURRENT_OFFICIAL_LABEL' if matches else 'HOLD_STORED_LABEL_MISMATCH',
+                official_top3=actual,stored_matches_official=matches,
+                official_raw_sha256=snapshot['raw_sha256'],fetched_at=snapshot['fetched_at'],
+                official_payouts=payouts)
+        except (ValueError,KeyError,TypeError,OSError,RuntimeError) as exc:
+            row.update(status='HOLD_OFFICIAL_LABEL_UNVERIFIED',error=str(exc))
+        return row
+    with ThreadPoolExecutor(max_workers=3) as pool:rows=list(pool.map(check,packs))
+    result={'classification':'READ_ONLY_FRESH_OFFICIAL_RESULT_CHECK_NOT_SETTLEMENT_NOT_OOS',
+        'forecast_artifact_sha256':forecast_sha,'selected_denominator':7,'complete_feature_races':len(packs),
+        'retained_input_hold':1,'rows':rows,'verified_labels':sum(x.get('stored_matches_official') is True for x in rows),
+        'historical_publication_times':'UNKNOWN_NOT_PREQUENTIAL_CREDIT',
+        'runtime_post_count':0,'existing_record_changes':False,'refit_performed':False,
+        'compiled_at':datetime.now(timezone.utc).isoformat()}
+    result['status']='VERIFIED_CURRENT_OFFICIAL_LABELS' if result['verified_labels']==len(packs) else 'HOLD_LABEL_PROVENANCE'
+    result['sha256']=_sha(result);dump(output/'official_label_verification.json',result)
+    print(json.dumps(result,ensure_ascii=False))
+
+
+def public_source_shadow(output, models_path=None):
+    """Public official GET only; never Runtime POST, receipt mint or LIVE.
+
+    Date/race scope is this user's Oct19 URW1 research preparation. It cannot
+    silently roll to another date or obtain an OOS/Production signature. The
+    ordinary full SOURCE acquisition/evidence/materializer code is reused.
+    """
+    sys.path.insert(0,str(ROOT/'runtime/local_physical'))
+    from runtime.local_physical.nar_source_manifest import build_local_nar_manifest
+    from runtime.local_physical.source_acquisition import acquire_sources,sha_obj,verify_source_artifact
+    from runtime.local_physical.nar_runner_universe import enrich_source_artifact
+    from runtime.local_physical.nar_auxiliary_evidence import enrich_with_auxiliary_evidence
+    from runtime.local_physical.local_population_ledger import enrich_with_population_seed
+    from runtime.local_race_key_shadow_owner import compile_public_venue_candidate,owner_feature_pack,predict_conditioned_owner
+    from runtime.local_race_key_intake import JST
+    output.mkdir(parents=True,exist_ok=False)
+    req={'family_id':'LOCAL','venue_id':'URW','race_date':'2026-10-19','race_no':1,
+        'race_id':'KM-LOCAL-URW-20261019-R01-PUBLIC-SHADOW','execution_id':'KM-LOCAL-URW-20261019-R01-PUBLIC-SHADOW',
+        'scheduled_post_at':'2026-10-19T12:20:00+09:00','prediction_cutoff':'2026-10-19T12:18:00+09:00',
+        'require_active_runner_universe':True,'include_odds':True}
+    report={'classification':'PUBLIC_OFFICIAL_RESEARCH_NOT_FORMAL_NOT_SIGNED_SOURCE',
+        'race_id':req['race_id'],'started_at':datetime.now(timezone.utc).isoformat(),
+        'runtime_post_count':0,'signed_source_count':0,'signed_final_count':0,'formal_registration':False,
+        'delivery_verified':False,'forward_oos_credit':0,'production_changes':False,'new_paid_api_requests':0}
+    try:
+        now=datetime.now(JST)
+        if now.date().isoformat()!=req['race_date'] or now>=datetime.fromisoformat(req['prediction_cutoff']):
+            raise ValueError('DATED_PUBLIC_SHADOW_WINDOW_CLOSED')
+        manifest=build_local_nar_manifest(req)
+        artifact,errors=acquire_sources(manifest)
+        dump(output/'public_source_attempt.json',artifact)
+        if errors:
+            report['source_errors']=errors
+            report['first_failed_stage']='OFFICIAL_SOURCE_GET'
+            raise ValueError('PUBLIC_REQUIRED_SOURCE_HOLD:'+','.join(errors))
+        artifact['source_manifest_profile']=manifest['manifest_profile']
+        artifact['source_race_context']={k:req[k] for k in ('venue_id','race_date','race_no')}
+        artifact=enrich_source_artifact(artifact)
+        if errors or artifact.get('formal_ready') is not True:
+            raise ValueError('PUBLIC_REQUIRED_SOURCE_HOLD:'+','.join(errors))
+        if not (artifact.get('active_runner_universe') or {}).get('runners'):
+            raise ValueError('PUBLIC_FRESH_ACTIVE_RUNNER_UNIVERSE_UNPROVEN')
+        if any(r.get('status')=='ACTIVE_DECLARED' for r in artifact.get('runner_status_registry') or []):
+            report['first_failed_stage']='ACTIVE_RUNNER_UNIVERSE'
+            raise ValueError('PUBLIC_ACTIVE_DECLARED_IS_NOT_VERIFIED_ACTIVE')
+        artifact,aux_errors=enrich_with_auxiliary_evidence(artifact,req['prediction_cutoff'],require_profiles=False)
+        if aux_errors:raise ValueError('PUBLIC_AUXILIARY_SOURCE_HOLD:'+','.join(aux_errors))
+        artifact=enrich_with_population_seed(artifact)
+        artifact['source_snapshot_sha256']=sha_obj({k:v for k,v in artifact.items() if k!='source_snapshot_sha256'})
+        valid,errors=verify_source_artifact(artifact)
+        if not valid:raise ValueError('PUBLIC_SOURCE_REVERIFY_HOLD:'+','.join(errors))
+        n=materialize_production(artifact,{**req,'runners':artifact['official_runner_universe']['runners']},assess()['required_indices'])
+        c=compile_public_venue_candidate(req,artifact,n)
+        p=owner_feature_pack(c,n)
+        dump(output/'public_source_artifact.json',artifact)
+        dump(output/'public_full29.json',n);dump(output/'public_candidate.json',c);dump(output/'public_feature_pack.json',p)
+        if models_path is not None:
+            frozen=json.loads(gzip.decompress(models_path.read_bytes()))
+            for arm,model in frozen['models'].items():
+                prediction=predict_conditioned_owner(model,p)
+                prediction['source_signature_eligibility']='HOLD_UNSIGNED_PUBLIC_SOURCE; not formal Signed SOURCE OOS'
+                prediction['sha256']=_sha({k:v for k,v in prediction.items() if k!='sha256'})
+                dump(output/(arm+'.prestart_shadow.json'),prediction)
+        report.update(status='PUBLIC_PRESTART_SHADOW_SAVED_NOT_FORMAL_NOT_SIGNED',
+            source_snapshot_sha256=artifact['source_snapshot_sha256'],source_freeze_at=artifact['source_freeze_at'],
+            declared=len(artifact['declared_runner_universe']['runners']),active=len(artifact['active_runner_universe']['runners']),
+            numerical_cells=len(n['runners'])*29,candidate_sha256=c['sha256'],feature_sha256=p['sha256'])
+    except (ValueError,KeyError,TypeError,OSError) as exc:
+        report.update(status='HOLD_PUBLIC_SHADOW',error=str(exc))
+        report.setdefault('first_failed_stage','PUBLIC_SOURCE_OR_CANDIDATE_INPUT')
+    report['completed_at']=datetime.now(timezone.utc).isoformat();report['sha256']=_sha(report)
+    dump(output/'public_shadow_status.json',report);print(json.dumps(report))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--archives', type=Path)
     ap.add_argument('--ranker-audit', action='store_true')
+    ap.add_argument('--public-shadow', action='store_true')
+    ap.add_argument('--official-label-refetch', action='store_true')
+    ap.add_argument('--frozen-models', type=Path)
     ap.add_argument('--engine', type=Path)
     ap.add_argument('--baseline-outputs', type=Path)
     ap.add_argument('--evidence-audit-only', action='store_true')
     ap.add_argument('--prior-predictions', type=Path)
     ap.add_argument('--output', type=Path, required=True)
     args = ap.parse_args()
+    if args.official_label_refetch:
+        refetch_historical_labels(args.output)
+        return
+    if args.public_shadow:
+        public_source_shadow(args.output,args.frozen_models)
+        return
     if args.ranker_audit:
         ranker_audit(args.output)
         return

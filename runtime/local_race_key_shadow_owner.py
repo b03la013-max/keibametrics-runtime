@@ -904,6 +904,16 @@ def compile_public_venue_candidate(request, source, numerical, *, historical_rep
             or query.get('k_raceDate')!=[str(request['race_date']).replace('-','/')]
             or query.get('k_raceNo')!=[str(request['race_no'])] or card.get('cutoff_relation')!='PRE_CUTOFF'):
         raise ShadowOwnerError('VENUE_PUBLIC_CARD_URL_IDENTITY')
+    import re,unicodedata
+    from runtime.local_production_static_owner import _VisibleText
+    raw=gzip.decompress(base64.b64decode(card['raw_gzip_b64'],validate=True))
+    try:page=raw.decode('utf-8')
+    except UnicodeError:page=raw.decode('cp932')
+    parser=_VisibleText();parser.feed(page)
+    visible=re.sub(r'\s+','',unicodedata.normalize('NFKC',''.join(parser.fragments)))
+    y,m,d=map(int,str(request['race_date']).split('-'))
+    pattern=rf'{y}年{m}月{d}日.{{0,30}}{VENUE_NAMES[venue]}.{{0,12}}第{request["race_no"]}競走'
+    if not re.search(pattern,visible):raise ShadowOwnerError('VENUE_PUBLIC_CARD_BODY_IDENTITY')
     header=_card_heading(source);header['class_tokens']=_urw_class_tokens(header['class'])
     header['going']=(source.get('normalized_evidence') or {}).get('track_condition',{}).get('value')
     start=(source.get('normalized_evidence') or {}).get('start_time') or {}
@@ -913,7 +923,10 @@ def compile_public_venue_candidate(request, source, numerical, *, historical_rep
     rows=numerical.get('runners') or [];ids=[str(r['runner_id']) for r in rows]
     active=[str(r['runner_id']) for r in (source.get('active_runner_universe') or {}).get('runners') or []]
     parsed=parse_race_card(source)
-    if (len(ids)<3 or len(ids)!=len(set(ids)) or set(ids)!=set(active)
+    status=source.get('runner_status_registry') or []
+    active_status={str(r['runner_id']) for r in status if r.get('status')=='ACTIVE'}
+    if (len(ids)<3 or len(ids)!=len(set(ids)) or len(active)!=len(set(active)) or set(ids)!=set(active)
+            or active_status!=set(ids) or any(r.get('status')=='ACTIVE_DECLARED' for r in status)
             or numerical.get('strict_full_numerical_ready') is not True
             or set(numerical.get('required_indices') or [])!=set(REQUIRED)
             or numerical.get('race_id')!=request['race_id']
@@ -1035,7 +1048,7 @@ def fit_conditioned_owner(training_packs, training_labels, *, stage_evidence=Tru
     expanding training-race folds, then frozen. This is a numerical research
     behavior change, excluded from C1 and Production promotion.
     """
-    packs=sorted(training_packs,key=lambda p:p['scheduled_post_at'])
+    packs=sorted(training_packs,key=lambda p:_aware(p['scheduled_post_at'],'TRAINING_POST'))
     if (len(packs)<2 or len({p['venue_id'] for p in packs})!=1 or len({p['race_id'] for p in packs})!=len(packs)
             or len({(p['venue_canon'],p['venue_canon_source_sha256']) for p in packs})!=1):
         raise ShadowOwnerError('CONDITIONAL_TRAINING_SCOPE_OR_COUNT')

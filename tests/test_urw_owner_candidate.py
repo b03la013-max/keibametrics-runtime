@@ -202,6 +202,34 @@ def test_conditional_model_training_parameters_ignore_validation_input(condition
         predict_conditioned_owner(model,p,now=NOW)
 
 
+def test_unsigned_public_adapter_preserves_full_universe_and_never_claims_signature(original):
+    from runtime.local_race_key_shadow_owner import compile_public_venue_candidate,owner_feature_pack
+    req,s,n=original
+    # Legacy archive has no source_race_context. Build an explicitly unsigned
+    # parser derivative; do not change its original signed envelope or claim a
+    # new receipt. The live public acquisition records this context itself.
+    raw=copy.deepcopy(s['artifact']);raw['source_race_context']={k:req[k] for k in ('venue_id','race_date','race_no')}
+    raw['source_snapshot_sha256']=_sha({k:v for k,v in raw.items() if k!='source_snapshot_sha256'})
+    numeric=copy.deepcopy(n);numeric['production_evidence_compiler']['source_snapshot_sha256']=raw['source_snapshot_sha256']
+    out=compile_public_venue_candidate(req,raw,numeric,historical_replay=True)
+    assert out['source_receipt_sha256'] is None and out['source_signature_authority'].startswith('UNSIGNED')
+    assert not out['formal_handoff_allowed'] and out['forward_oos_credit']==0
+    assert len(owner_feature_pack(out,numeric)['runners'])==12
+    bad=copy.deepcopy(raw);bad['runner_status_registry'][0]['status']='ACTIVE_DECLARED'
+    bad['source_snapshot_sha256']=_sha({k:v for k,v in bad.items() if k!='source_snapshot_sha256'})
+    changed=copy.deepcopy(n);changed['production_evidence_compiler']['source_snapshot_sha256']=bad['source_snapshot_sha256']
+    with pytest.raises(ShadowOwnerError,match='ACTIVE_FULL29'):
+        compile_public_venue_candidate(req,bad,changed,historical_replay=True)
+
+
+@pytest.mark.parametrize('venue',['OHI','HIM','KNZ','MIZ'])
+def test_missing_current_venue_canon_holds_without_using_another_venue(original,venue):
+    from runtime.local_race_key_shadow_owner import compile_public_venue_candidate
+    req,s,n=original
+    with pytest.raises(ShadowOwnerError,match='CURRENT_CANON_UNRESOLVED'):
+        compile_public_venue_candidate({**req,'venue_id':venue},s['artifact'],n,historical_replay=True)
+
+
 @pytest.mark.parametrize('target',[
     'FOREIGN_VENUE','WRONG_RACE','UNSIGNED','ARTIFACT_TAMPER','RECEIPT_TAMPER',
     'BAD_POST','MISSING_INDEX','WRONG_INDEX','BOOLEAN','NAN','INFINITY','MISSING_PROVENANCE',
