@@ -36,5 +36,85 @@ def run(health):
     print(json.dumps({k:report[k] for k in ['classification','signed_payload_verified','before_median_seconds','after_median_seconds','production_final_unchanged']}))
 
 
+def learning_mechanical(root=ROOT):
+    """Reproducible retrospective probe; synthetic creation time grants no live eligibility."""
+    from datetime import timedelta
+    from jra_role_learning_shadow import build_shadow, digest, instant, POLICY
+    from jra_shadow_checkpoint import learning_effect
+    from post_result_learning import build_post_result_review, build_learning_state
+    root=Path(root); inventory={}; rows=[]; cache={}
+    def read(relative):
+        if relative not in cache:
+            raw=(root/relative).read_bytes()
+            inventory[relative]=hashlib.sha256(raw).hexdigest()
+            cache[relative]=json.loads(raw)
+        return cache[relative]
+    for venue in ('TKY','KYO','NGT'):
+        for number in range(2,13):
+            rid=f'KM-JRA-{venue}-20261018-R{number:02d}'
+            request_path=f'runtime/requests/{rid}-LIVE-R1-FORMAL.json'
+            final_path=f'runtime/final_artifacts/{rid}.json'
+            if not (root/request_path).exists() or not (root/final_path).exists():continue
+            request,final=read(request_path),read(final_path)
+            states=[]; sources=[]
+            for previous in range(1,number):
+                source_race=f'KM-JRA-{venue}-20261018-R{previous:02d}'
+                sf=f'runtime/final_artifacts/{source_race}.json';sr=f'runtime/results/{source_race}.json'
+                if not (root/sf).exists() or not (root/sr).exists():continue
+                source_final,result=read(sf),read(sr)
+                synthetic=instant(result['official_result']['captured_at'])+timedelta(seconds=1)
+                if synthetic>=instant(request['source_snapshot']['source_freeze_at']):continue
+                review=build_post_result_review(result,source_final)
+                state=build_learning_state(review,effective_time=synthetic.isoformat())
+                states.append(state)
+                sources.append({'source_race':source_race,'result_path':sr,'final_path':sf,
+                    'result_file_sha256':inventory[sr],'final_file_sha256':inventory[sf],
+                    'official_result_captured_at':result['official_result']['captured_at'],
+                    'review_sha256':review['sha256'],'synthetic_state':state,
+                    'state_creation_time_is_simulated':True})
+            if not states:continue
+            observed=final['final_freeze_timestamp']
+            off=build_shadow(request,final,states=[],observed_at=observed)
+            on=build_shadow(request,final,states=states,observed_at=observed)
+            effect=learning_effect(on)
+            assert off['arms']['PRODUCTION']==on['arms']['PRODUCTION']
+            rows.append({'target_race':rid,'request_path':request_path,'final_path':final_path,
+                'request_file_sha256':inventory[request_path],'final_file_sha256':inventory[final_path],
+                'source_sha256':request['source_snapshot_sha256'],'runner_universe_sha256':on['runner_universe_sha256'],
+                'source_freeze_at':request['source_snapshot']['source_freeze_at'],
+                'prediction_cutoff':request['prediction_cutoff'],'synthetic_shadow_observed_at':observed,
+                'source_states':sources,'checkpoint_learning_input_sha256':digest(states),
+                'prediction_input_sha256_on':digest({'request_sha256':digest(request),'learning_states':states}),
+                'prediction_input_sha256_off':digest({'request_sha256':digest(request),'learning_states':[]}),
+                'shadow_content_sha256_on':on['sha256'],'shadow_content_sha256_off':off['sha256'],
+                'effect':effect,'production_arm_unchanged':True})
+    for relative,expected in inventory.items():
+        assert hashlib.sha256((root/relative).read_bytes()).hexdigest()==expected,relative
+    out={'profile':'JRA-LEARNING-ON-OFF-MECHANICAL-20261018',
+         'classification':'RETROSPECTIVE_REAL_INPUTS_SIMULATED_STATE_CREATION_AND_SHADOW_TIME_NOT_LIVE_NOT_OOS',
+         'time_rule':'same-venue prior RESULT captured_at + 1 second, strictly before target SOURCE freeze; simulated availability only',
+         'independent_time_verified':False,'signature_reverified_in_this_probe':False,
+         'live_learning_consumption':0,'genuine_forward_oos_races':0,'production_effect':'NONE',
+         'policy_fingerprint':digest(POLICY),'input_inventory_file_sha256':inventory,
+         'code_sha256':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in
+             ['scripts/jra_delivery_shadow_acceptance.py','runtime/jra_role_learning_shadow.py','runtime/jra_shadow_checkpoint.py','runtime/post_result_learning.py']},
+         'targets':len(rows),'accepted_binding_occurrences':sum(r['effect']['accepted_count'] for r in rows),
+         'ticket_changed_targets':sum(r['effect']['added_ticket_count']>0 for r in rows),
+         'added_ticket_count':sum(r['effect']['added_ticket_count'] for r in rows),
+         'added_virtual_capital':sum(r['effect']['capital_difference'] for r in rows),
+         'comparison_limit':'LEARNING_ON rescue adds capital; not the separate equal-budget rank portfolio and not predictive improvement',
+         'rows':rows}
+    out['sha256']=digest(out)
+    return out
+
+
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--health',required=True);a=p.parse_args();run(json.loads(Path(a.health).read_text()))
+    p=argparse.ArgumentParser();p.add_argument('--health');p.add_argument('--learning-mechanical',action='store_true');p.add_argument('--output');a=p.parse_args()
+    if a.learning_mechanical:
+        if not a.output:p.error('--learning-mechanical requires --output')
+        report=learning_mechanical()
+        Path(a.output).write_text(json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+        print(json.dumps({k:report[k] for k in ('classification','targets','accepted_binding_occurrences','ticket_changed_targets','added_ticket_count','added_virtual_capital','sha256')}))
+    else:
+        if not a.health:p.error('--health is required for the Delivery latency probe')
+        run(json.loads(Path(a.health).read_text()))

@@ -71,9 +71,10 @@ in `replay_report.json`; no baseline artifact is rewritten by the v0.3 run.
 Local focused regression79 PASS; existing KAW Owner regression20 PASS. The
 full14-file acceptance command reached326 PASS and one missing historical
 OHI fixture failure in the sparse workspace. It does not silently skip this
-real-evidence test or claim327 PASS. Exact-HEAD GitHub full-checkout CI must
-resolve that test before merge readiness is declared. `regression.xml` records
-the actual local result, including the missing-fixture failure.
+real-evidence test or claim a local327 PASS. GitHub full-checkout CI at code
+HEAD089687cfe49629aa3f1e5563aabbb0e4a73423c0 resolved that fixture: run39136941802
+passed327, and run39136941847 passed162 plus29 subtests. `regression.xml`
+retains the actual local missing-fixture result. No test was silently skipped.
 
 Rollback is an ordinary Owner-approved revert of this Candidate-only change.
 It requires no Runtime deployment, key rotation, coefficient rollback or
