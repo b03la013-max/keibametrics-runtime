@@ -97,3 +97,96 @@ class ProbabilitySchemaRegressionTests(unittest.TestCase):
    if kind=='source_after_result':a['calibration_manifest'][0]['source_freeze_at']='2000-01-03T00:00:00+00:00'
    a['rank_model']['sha256']=sha({k:v for k,v in a['rank_model'].items() if k!='sha256'});a['sha256']=sha({k:v for k,v in a.items() if k!='sha256'})
    with self.subTest(kind=kind),self.assertRaises(ValueError):forecast(q,a,observed_at='2000-01-04T01:01:00+00:00')
+
+class HeadInteractionTests(unittest.TestCase):
+ def setup_model(self):
+  import hashlib
+  import head_p2_shadow as hp
+  q,b=fixture()
+  q['runners'].append(copy.deepcopy(q['runners'][-1]));q['runners'][-1]['runner_id']='4'
+  for r in q['runners']:
+   category='EXCEPTIONAL' if r['runner_id'] in ('1','3') else 'VERY_WEAK'
+   r['evidence_features']={k:{'category':category,'result_derived':False,'source_authority':'JRA_OFFICIAL','evidence_refs':['unit']} for k in hp.FEATURES}
+  m={'candidate_id':hp.ID,'policy':hp.POLICY,'policy_sha256':sha(hp.POLICY),'base_model_sha256':b['sha256'],
+     'mapping_sha256':hashlib.sha256(hp.MAPPING.read_bytes()).hexdigest(),'weights':[0.]*4,
+     'training_manifest':b['rank_model']['training_manifest'],'created_at':'2000-01-03T01:00:00+00:00'}
+  m['sha256']=sha(m)
+  return q,b,m
+ def test_zero_residual_matches_complete_baseline_and_nonzero_changes_context(self):
+  from head_p2_shadow import predict
+  q,b,m=self.setup_model();old=copy.deepcopy((q,b,m));a=predict(q['runners'],b,m)
+  baseline=distribution({r:{str(h):0. for h in (1,2,3,4)} for r in ('W','P2','P3')},{r:1. for r in ('W','P2','P3')})
+  self.assertEqual(a['ordered_joint'],baseline['ordered_joint']);self.assertEqual((q,b,m),old)
+  m['weights'][0]=1.;m['sha256']=sha({k:v for k,v in m.items() if k!='sha256'});a=predict(q['runners'],b,m)
+  self.assertGreater(a['head_p2']['1']['3'],a['head_p2']['1']['4'])
+  self.assertGreater(a['head_p2']['2']['4'],a['head_p2']['2']['3'])
+  self.assertAlmostEqual(sum(a['ordered_joint'].values()),1.)
+  for p in a['marginals'].values():self.assertAlmostEqual(sum(p.values()),1.)
+  for key in a['ordered_joint']:self.assertEqual(len(set(key.split('>'))),3)
+ def test_missing_and_result_derived_evidence_do_not_become_weak_or_enter_interaction(self):
+  from head_p2_shadow import evidence_vectors,interaction
+  q,b,m=self.setup_model();q['runners'][0]['evidence_features']['position_quality']['result_derived']=True
+  x,missing=evidence_vectors(q['runners']);self.assertIsNone(x['1'][0]);self.assertIn('position_quality',missing['1'])
+  self.assertEqual(interaction(x,'1','3')[0],0.)
+  with self.assertRaises(ValueError):interaction(x,'1','1')
+ def test_content_policy_and_freeze_chronology_fail_closed(self):
+  from head_p2_shadow import predict,freeze
+  q,b,m=self.setup_model();out=freeze(q,b,m,observed_at='2000-01-04T01:01:00+00:00')
+  self.assertFalse(out['oos_eligible']);self.assertFalse(out['ev_kelly_authority']);self.assertEqual(out['tickets_created'],0)
+  for kind in ('hash','policy','mapping','weights','manifest','late_created'):
+   x=copy.deepcopy(m)
+   if kind=='hash':x['sha256']='wrong'
+   if kind=='policy':x['policy_sha256']='wrong'
+   if kind=='mapping':x['mapping_sha256']='wrong'
+   if kind=='weights':x['weights']=[float('inf')]*4
+   if kind=='manifest':x['training_manifest']=[]
+   if kind=='late_created':x['created_at']=q['prediction_cutoff']
+   if kind not in ('hash','weights'):x['sha256']=sha({k:v for k,v in x.items() if k!='sha256'})
+   with self.subTest(kind=kind),self.assertRaises(ValueError):freeze(q,b,x,observed_at='2000-01-04T01:01:00+00:00')
+  with self.assertRaises(ValueError):freeze(q,b,m,observed_at='2000-01-04T02:01:00+00:00')
+ def test_training_refuses_changed_sample_and_duplicate_races(self):
+  from head_p2_shadow import fit_interaction
+  q,b,m=self.setup_model();row={'race_id':b['rank_model']['training_manifest'][0]['race_id'],'q':q,'f':{'sha256':'wrong'},'r':{},'runners':q['runners'],'top3':['1','2','3']}
+  with self.assertRaises(ValueError):fit_interaction([row],b)
+  with self.assertRaises(ValueError):fit_interaction([row,row],b)
+ def test_real_frozen_training_labels_features_and_full20_cannot_diverge(self):
+  from head_p2_shadow import fit_interaction
+  b=json.loads((ROOT/'research/jra_conditional_rank/probability_candidate.json').read_text())
+  m=b['rank_model']['training_manifest'][0];rid=m['race_id']
+  q=json.loads((ROOT/'runtime/requests'/f'{rid}-LIVE-R1-FORMAL.json').read_text())
+  f=json.loads((ROOT/'runtime/final_artifacts'/f'{rid}.json').read_text())
+  r=json.loads((ROOT/'runtime/results'/f'{rid}.json').read_text())
+  b['rank_model']['training_manifest']=[m]
+  b['rank_model']['sha256']=sha({k:v for k,v in b['rank_model'].items() if k!='sha256'})
+  b['sha256']=sha({k:v for k,v in b.items() if k!='sha256'})
+  row={'race_id':rid,'q':q,'f':f,'r':r,'runners':q['runners'],'top3':list(map(str,r['official_result']['top3']))}
+  good=fit_interaction([row],b);self.assertEqual(good['training_input_bindings'][0]['request_sha256'],sha(q))
+  for kind in ('top3_swap','detached_runner','feature_category','full20','final_body','race_id'):
+   x=copy.deepcopy(row)
+   if kind=='top3_swap':x['top3'][0],x['top3'][1]=x['top3'][1],x['top3'][0]
+   if kind=='detached_runner':x['runners']=copy.deepcopy(x['runners']);x['runners'][0]['canonical_components']['HPI']['value']+=1
+   if kind=='feature_category':x['runners'][0]['evidence_features']['position_quality']['category']='VERY_WEAK' if x['runners'][0]['evidence_features']['position_quality']['category']!='VERY_WEAK' else 'STRONG'
+   if kind=='full20':x['runners'][0]['canonical_components']['HPI']['value']+=1
+   if kind=='final_body':x['f']['scheduled_post_at']='2099-01-01T00:00:00+00:00'
+   if kind=='race_id':x['q']['race_id']='KM-JRA-TKY-20000101-R01'
+   with self.subTest(kind=kind),self.assertRaises(ValueError):fit_interaction([x],b)
+ def test_corpus_dedup_records_conflicts_without_claiming_official_identity(self):
+  import tempfile,hashlib
+  from jra_conditional_p2_recheck import corpus_inventory
+  run={'date':'2000-01-01','venue':'東京','surface':'芝','distance_m':1800,'going':'良','race_name':'unit','finish':1,'field_size':10}
+  h={'horse_name':'unit','sire':'sire','dam':'dam','damsire':'damsire','raw_sha256':'a'*64,'runs':[run,dict(run,finish=2)]}
+  obj={'official':True,'source':'www.jra.go.jp','horses':[h]};obj['sha256']=hashlib.sha256(json.dumps(obj,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+  with tempfile.TemporaryDirectory() as d:
+   Path(d,'sample.json').write_text(json.dumps(obj));r=corpus_inventory(Path(d))
+  self.assertEqual(r['counts']['content_hash_valid_files'],1);self.assertEqual(r['counts']['surrogate_unique_horse_run_groups'],1)
+  self.assertEqual(r['counts']['repeated_surrogate_observations'],1);self.assertEqual(r['counts']['conflicting_surrogate_label_or_going_groups'],1)
+  self.assertEqual(r['counts']['missing_race_id_run_observations'],2);self.assertEqual(r['official_identity_complete_verified_samples'],0)
+  self.assertFalse(r['production_admission'])
+ def test_saved_recheck_p2_cause_and_plan_pins(self):
+  p=ROOT/'evidence/jra_p0_20261018/CONDITIONAL_P2_RECHECK.json'
+  r=json.loads(p.read_text());self.assertEqual(r['sha256'],sha({k:v for k,v in r.items() if k!='sha256'}))
+  self.assertEqual(r['root_cause_checks']['max_p2_mapped_vs_w_only_nll_difference'],0.)
+  for day,proof in r['future']['plans'].items():
+   import hashlib
+   self.assertEqual(proof['planned_target_count'],36)
+   self.assertEqual(proof['file_sha256'],hashlib.sha256((ROOT/'runtime/jra_race_day_plan'/f'{day}.json').read_bytes()).hexdigest())
