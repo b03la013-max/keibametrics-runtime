@@ -206,8 +206,9 @@ def persist_shadow(root, request, final, *, observed_at=None):
     model_path=root/'research/jra_conditional_rank/model.json'
     if model_path.exists():
         try:
-            from jra_conditional_rank_shadow import compare
+            from jra_conditional_rank_shadow import compare, exposure_portfolio
             out['conditional_rank_comparison']=compare(request,json.loads(model_path.read_text()))
+            out['conditional_rank_portfolio']=exposure_portfolio(out['conditional_rank_comparison'],final)
             out['additional_code_sha256']={'runtime/jra_conditional_rank_shadow.py':out['conditional_rank_comparison']['code_sha256']}
             out['additional_input_sha256']={'research/jra_conditional_rank/model.json':out['conditional_rank_comparison']['model_sha256']}
         except (ValueError,KeyError,TypeError) as exc:
@@ -262,12 +263,43 @@ def settle_shadow(shadow, result):
          'production_effect':'NONE','automatic_promotion':False}
     rank=shadow.get('conditional_rank_comparison') or {}
     if rank.get('role_rankings'):
+        if rank.get('sha256')!=digest({k:v for k,v in rank.items() if k!='sha256'}):raise ValueError('RANK_NESTED_HASH_INVALID')
         actual=list(map(str,official['top3']))
-        out['conditional_rank_evaluation']={'candidate_id':rank['candidate_id'],'model_sha256':rank['model_sha256'],
-          'actual_role_ranks':{role:rank['role_rankings'][role].index(h)+1 for role,h in zip(('W','P2','P3'),actual)},
-          'oracle_head_local_p2_rank':rank['head_local_p2'][actual[0]].index(actual[1])+1,
-          'oracle_pair_conditioned_third_rank':rank['pair_conditioned_third'][actual[0]+'>'+actual[1]].index(actual[2])+1,
-          'oracle_conditioning_is_diagnostic_not_predicted_exact_capture':True,'tickets_or_capital_created':False}
+        if rank.get('model_policy_sha256'):
+            from jra_conditional_rank_shadow import evaluate_comparison
+            out['conditional_rank_evaluation']=evaluate_comparison(rank,actual)
+        else:
+            out['conditional_rank_evaluation']={'candidate_id':rank['candidate_id'],'status':'LEGACY_RANK_ONLY_NO_POLICY_BINDING'}
+    portfolio=shadow.get('conditional_rank_portfolio') or {}
+    if portfolio:
+        from jra_conditional_rank_shadow import _validate_rank_universe
+        universe=_validate_rank_universe(rank)
+        if any(str(h) not in universe for t in portfolio['tickets'] for h in t['selection']):raise ValueError('EXPOSURE_TICKET_UNIVERSE')
+        if portfolio.get('sha256')!=digest({k:v for k,v in portfolio.items() if k!='sha256'}):raise ValueError('EXPOSURE_PORTFOLIO_HASH')
+        from collections import Counter
+        if (portfolio.get('baseline_final_sha256')!=shadow['baseline_final_sha256']
+            or portfolio.get('rank_comparison_sha256')!=rank.get('sha256')
+            or portfolio.get('model_sha256')!=rank.get('model_sha256')
+            or portfolio.get('required_capital')!=budget or portfolio.get('ticket_count')!=n
+            or len(portfolio['tickets'])!=n
+            or Counter((t['bet_type'],t['stake']) for t in portfolio['tickets'])!=Counter((t['bet_type'],t['stake']) for t in baseline['tickets'])):
+            raise ValueError('EXPOSURE_BASELINE_OR_BUDGET_MISMATCH')
+        pf={'final_ticket':{'tickets':portfolio['tickets'],'total_investment':portfolio['required_capital']}}
+        ps=settle_final(pf,official);base_return=arms['PRODUCTION']['total_payout']
+        base_keys={ticket_key(t) for t in baseline['tickets']};new_keys={ticket_key(t) for t in portfolio['tickets']}
+        old_stake={ticket_key(t):t['stake'] for t in baseline['tickets']};new_stake={ticket_key(t):t['stake'] for t in portfolio['tickets']}
+        extra=[{**t,'stake':t['stake']-old_stake.get(ticket_key(t),0)} for t in portfolio['tickets'] if t['stake']>old_stake.get(ticket_key(t),0)]
+        removed=[{**t,'stake':t['stake']-new_stake.get(ticket_key(t),0)} for t in baseline['tickets'] if t['stake']>new_stake.get(ticket_key(t),0)]
+        def subsettle(ts):return settle_final({'final_ticket':{'tickets':ts,'total_investment':sum(t['stake'] for t in ts)}},official)
+        added=subsettle(extra);lost=subsettle(removed)
+        out['conditional_rank_portfolio_result']={**ps,'candidate_id':portfolio['candidate_id'],'policy_sha256':portfolio['policy_sha256'],
+          'portfolio_sha256':portfolio['sha256'],'added_capital':portfolio['required_capital']-baseline['required_capital'],
+          'same_point_count':len(portfolio['tickets'])==len(baseline['tickets']),
+          'false_positive_cost':sum(t['stake'] for t in extra)-sum(t['stake'] for t in added['winning_tickets']),
+          'increased_allocation_return':added['total_payout'],'decreased_allocation_return':lost['total_payout'],
+          'redeployed_capital':sum(t['stake'] for t in extra),'added_ticket_count':len(new_keys-base_keys),'removed_ticket_count':len(base_keys-new_keys),
+          'net_payout_increment':ps['total_payout']-base_return,'baseline_return':base_return,
+          'oos_eligible':False,'production_effect':'NONE','actual_purchase':'UNVERIFIED'}
     out['sha256']=digest(out)
     return out
 
@@ -283,6 +315,8 @@ def persist_shadow_result(root, result):
         and shadow.get('classification')=='PRE_CUTOFF_SHADOW')
     if out.get('conditional_rank_evaluation'):
         out['conditional_rank_evaluation']['oos_eligible']=out['oos_eligible']
+    if out.get('conditional_rank_portfolio_result'):
+        out['conditional_rank_portfolio_result']['oos_eligible']=out['oos_eligible']
     out['eligibility_status']='FORWARD_OOS_ELIGIBLE' if out['oos_eligible'] else 'PENDING_SERVER_TIMESTAMP_AND_ARTIFACT_CONTENT_WITNESS'
     out['sha256']=digest({k:v for k,v in out.items() if k!='sha256'})
     path=root/'runtime/role_rescue_shadow_results'/(rid+'.json')
@@ -345,6 +379,17 @@ def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
                 or nested.get('runner_universe_sha256')!=shadow['runner_universe_sha256']
                 or nested.get('prediction_cutoff')!=shadow['prediction_cutoff']):
             raise ValueError('WITNESS_NESTED_RANK_BINDING_INVALID')
+    portfolio=shadow.get('conditional_rank_portfolio') or {}
+    if portfolio:
+        from jra_conditional_rank_shadow import EXPOSURE_POLICY
+        if (portfolio.get('sha256')!=digest({k:v for k,v in portfolio.items() if k!='sha256'})
+            or portfolio.get('policy_sha256')!=digest(EXPOSURE_POLICY) or portfolio.get('policy')!=EXPOSURE_POLICY
+            or portfolio.get('rank_comparison_sha256')!=nested.get('sha256')
+            or portfolio.get('model_policy_sha256')!=nested.get('model_policy_sha256')
+            or portfolio.get('model_sha256')!=nested.get('model_sha256')
+            or portfolio.get('baseline_final_sha256')!=shadow['baseline_final_sha256']
+            or any(portfolio.get(k)!=shadow.get(k) for k in ('race_id','source_sha256','runner_universe_sha256','prediction_cutoff'))):
+            raise ValueError('WITNESS_EXPOSURE_BINDING_INVALID')
     if shadow.get('candidate_id')!=CANDIDATE_ID or shadow.get('policy_fingerprint')!=digest(POLICY):
         raise ValueError('WITNESS_CANDIDATE_POLICY_MISMATCH')
     if ctx.get('repository') != WITNESS_REPO or str(run['id']) != str(ctx.get('run_id')):
@@ -411,6 +456,9 @@ def actions_pre_result_witness(shadow):
             obj=json.loads(api('contents/'+path+'?ref='+run['head_sha']))
             model=json.loads(base64.b64decode(obj['content']))
             if digest({k:v for k,v in model.items() if k!='sha256'})!=expected or model.get('sha256')!=expected:raise ValueError('WITNESS_MODEL_INPUT_MISMATCH')
+            if (shadow.get('conditional_rank_comparison') or {}).get('model_policy_sha256'):
+                from jra_conditional_rank_shadow import policy_sha
+                if shadow['conditional_rank_comparison']['model_policy_sha256']!=policy_sha(model):raise ValueError('WITNESS_MODEL_POLICY_MISMATCH')
         archive=api('actions/artifacts/'+str(artifact['id'])+'/zip')
         return verify_actions_artifact(shadow,run,artifact,archive,code_bytes)
     except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as exc:
