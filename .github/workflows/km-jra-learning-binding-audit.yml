@@ -9,6 +9,8 @@ on:
       - 'scripts/jra_conditional_failure_audit.py'
       - 'scripts/jra_20261018_formal_review.py'
       - 'research/jra_conditional_rank/**'
+      - 'scripts/jra_probability_readiness_audit.py'
+      - 'tests/test_jra_probability_shadow.py'
       - 'tests/test_jra_prediction_quality.py'
       - 'runtime/krs_prediction_utility.py'
       - 'runtime/jra_krs_measurement.py'
@@ -30,6 +32,8 @@ on:
       - 'scripts/jra_conditional_failure_audit.py'
       - 'scripts/jra_20261018_formal_review.py'
       - 'research/jra_conditional_rank/**'
+      - 'scripts/jra_probability_readiness_audit.py'
+      - 'tests/test_jra_probability_shadow.py'
       - 'tests/test_jra_prediction_quality.py'
       - 'runtime/krs_prediction_utility.py'
       - 'runtime/jra_krs_measurement.py'
@@ -55,4 +59,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python -m pip install pytest pyyaml cryptography
-      - run: python -m pytest -q tests/test_jra_role_learning_repair.py tests/test_jra_live_acceptance_continuation.py tests/test_jra_prediction_quality.py tests/test_krs_prediction_utility.py tests/test_family_pfs_improvement.py tests/test_jra_production_postresult.py tests/test_jra_next_race_learning_binding_audit.py
+      - run: python -m pytest -q tests/test_jra_role_learning_repair.py tests/test_jra_live_acceptance_continuation.py tests/test_jra_prediction_quality.py tests/test_jra_probability_shadow.py tests/test_krs_prediction_utility.py tests/test_family_pfs_improvement.py tests/test_jra_production_postresult.py tests/test_jra_next_race_learning_binding_audit.py
