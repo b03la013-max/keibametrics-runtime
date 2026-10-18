@@ -45,6 +45,40 @@ def test_official_other_venue_is_positive_nonholding_evidence():
     assert r['status']=='NO_SOUTH_KANTO_MEETING' and r['venues']==[]
 
 
+def test_all_local_discovery_uses_official_held_venues_and_excludes_banei():
+    r=d.discover_meetings('2026-10-15',now=NOW,
+        fetch=menu_fetch('KCH',siblings=('03','10','22','24')),
+        allowed_venues=tuple(d.LOCAL_BABA_CODES))
+    assert set(r['venues'])=={'MOR','KNZ','NGY','KCH'}
+    assert len(r['allowed_venues'])==14 and 'BAN' not in r['allowed_venues']
+    assert r['status']=='OFFICIAL_MEETINGS_DISCOVERED'
+    assert not r['new_live_send'] and not r['formal_registration_proven']
+
+
+@pytest.mark.parametrize('scope',[(),('BAN',),('KCH','KCH'),('JRA',)])
+def test_all_local_discovery_cannot_expand_to_other_families(scope):
+    with pytest.raises(ValueError,match='LOCAL_MEETING_SCOPE_INVALID'):
+        d.discover_meetings('2026-10-15',now=NOW,fetch=menu_fetch(),allowed_venues=scope)
+
+
+def test_non_south_kanto_discovery_still_requires_dated_owner_approval(tmp_path,monkeypatch):
+    base=plan();base['venue_id']='KCH'
+    for race in base['races']:
+        race['fields']['venue_id']='KCH'
+        race['execution_id']=race['execution_id'].replace('-KAW-','-KCH-')
+    base['plan_sha256']=d.sha({k:v for k,v in base.items() if k!='plan_sha256'})
+    monkeypatch.setattr(d,'discover',lambda *a,**k:deepcopy(base))
+    monkeypatch.setattr(d,'prepare_worker',lambda *a,**k:pytest.fail('NO APPROVED WORKER'))
+    monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
+    r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True,
+        fetch=menu_fetch('KCH',siblings=('03',)),allowed_venues=tuple(d.LOCAL_BABA_CODES))
+    assert r['target_races']==2 and r['target_races_complete']
+    assert r['venues']['KCH']['first_stop_stage']=='DATED_OWNER_AUTHORIZATION'
+    assert r['venues']['KCH']['status']=='HOLD'
+    assert not list((tmp_path/'runtime/race_key_requests').glob('*'))
+    assert '--all-local' in (Path(__file__).parents[1]/'.github/workflows/km-local-race-key-entry.yml').read_text()
+
+
 @pytest.mark.parametrize('kind',['empty','wrong_date','foreign','broken_sha','network'])
 def test_failure_is_never_no_meeting(kind,tmp_path):
     def fetch(spec,cutoff):

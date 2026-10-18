@@ -190,7 +190,7 @@ def compile_shadow(
     return output
 
 
-URW_PROFILE = 'KM-LOCAL-URW-OWNER-CANDIDATE-v0.3-20261018'
+URW_PROFILE = 'KM-LOCAL-URW-OWNER-CANDIDATE-v0.4-20261019'
 URW_CANON = 'KM-LOCAL-URW-v1.6-CURRENT-AUTHORITY-MEC-FULL-LIFECYCLE-20260923'
 URW_CANON_SHA256 = '33172660c85666f0a66a6ec97c20e24ccefdadf8bf396d22ede822f5d4b0f7a0'
 
@@ -356,8 +356,9 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
                 'matched_urw_distance':str(s.get('venue','')).replace('ナ','')=='浦和' and s.get('distance')==header['distance'],
                 'observed_progression':positions[0]-positions[-1] if len(positions)>=2 else None,
                 'raw_reference':s.get('raw')})
-        evidence[rid]={'article_refs':['59-C5R','60-MPA','61-UPR','100-DER','121-AOEP','137-PCA'],
+        evidence[rid]={'article_refs':['59-C5R','60-MPA','61-UPR','100-DER','118-EWL-URW','121-AOEP','134-DCT-URW','137-PCA'],
             'past_starts':observations,'past_start_count':len(starts),
+            'current_condition_translation':_urw_current_condition_translation(parsed[rid],observations,header),
             'missing_history':'UNKNOWN_NOT_WEAK' if not starts else None,
             'observed_position_range':[min(p),max(p)] if (p:=[v for s in observations for v in s['positions']]) else None,
             'max_observed_progression':max((s['observed_progression'] for s in observations if s['observed_progression'] is not None),default=None),
@@ -415,6 +416,55 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
         'kaw_owner_reused':False,'krs_numeric_consumption':False,'capital_policy_changed':False}
     output['sha256']=_sha(output)
     return output
+
+
+def _urw_current_condition_translation(card, observations, header):
+    """Expose source-bound transfers without inventing their magnitude/sign.
+
+    URW v1.6 sections 118/134/136/142: acquisition is not survival, a
+    shortener is not automatically an improvement, and draw/friction effects
+    have no approved numerical adjustment. Historical place-only evidence
+    cannot be silently promoted into a direct Winner witness.
+    """
+    current_distance=header['distance']
+    translated=[]
+    for obs in observations:
+        distance=obs.get('distance')
+        delta=current_distance-distance if type(distance) is int else None
+        positions=obs.get('positions') or []
+        same_course=obs.get('matched_urw_distance') is True
+        same_class=bool(header['class_tokens']) and obs.get('class_tokens')==header['class_tokens']
+        finish=obs.get('finish')
+        path_known=len(positions)==4 and obs.get('surface')=='DIRT'
+        if same_course and same_class and path_known and finish==1:
+            kind='DIRECT_WIN_OBSERVATION_CURRENT_EFFECT_UNCALIBRATED'
+        elif same_course and same_class and path_known and type(finish) is int and finish in (2,3):
+            kind='PLACE_ONLY_NOT_DIRECT_WINNER'
+        else:
+            kind='TRANSFER_OR_INCOMPLETE_CURRENT_WINNER_EFFECT_UNKNOWN'
+        translated.append({'observation_sha256':_sha(obs),'date':obs['date'],
+            'historical_distance':distance,'distance_delta_m':delta,
+            'distance_relation':'UNKNOWN' if delta is None else 'SAME' if delta==0 else 'SHORTENING' if delta<0 else 'LENGTHENING',
+            'venue_transfer':'NOT_NEEDED' if str(obs.get('venue','')).replace('ナ','')=='浦和' else 'UNKNOWN',
+            'class_transfer':'NOT_NEEDED' if same_class else 'UNKNOWN',
+            'going_transfer':'NOT_NEEDED' if header.get('going') and obs.get('going')==header['going'] else 'UNKNOWN',
+            'winner_evidence_class':kind,'direct_hard_qualification':'UNKNOWN_REQUIRES_CURRENT_STATE_AND_TIME_PATH_AUDIT',
+            'position_acquired':positions[0] if positions else None,
+            'corner_rank_changes':[a-b for a,b in zip(positions,positions[1:])] if len(positions)>1 else None,
+            'straight_rank_change':positions[-1]-finish if positions and type(finish) is int else None,
+            'current_acquisition_effect':'UNKNOWN','current_survival_effect':'UNKNOWN',
+            'new_score_adjustment':None})
+    return {'article_refs':['118-EWL-URW','134-DCT-URW/DSSR-URW/WAST-URW','136-PLFM-URW','142.2'],
+        'current_distance_m':current_distance,'current_frame_no':card.get('frame_no'),
+        'current_frame_status':'OBSERVED' if type(card.get('frame_no')) is int else 'UNKNOWN_NOT_IN_PARSED_SOURCE',
+        'current_body_weight':card.get('current_body_weight'),
+        'current_body_weight_change':card.get('current_body_weight_change'),
+        'current_assigned_load':card.get('current_load'),
+        'source_id':card.get('race_card_source_id'),'source_snapshot_sha256':card.get('race_card_snapshot_sha256'),
+        'effective_time':card.get('race_card_fetched_at'),'observations':translated,
+        'draw_effect':'UNKNOWN_NO_APPROVED_DRAW_EFFECT','assigned_load_effect':'UNKNOWN_NOT_A_FIXED_BONUS',
+        'body_weight_effect':'UNKNOWN_REQUIRES_INDIVIDUAL_SUCCESSFUL_WEIGHT_COMPARISON',
+        'role_adjustments_applied':False,'missing_evidence_protection':'UNKNOWN_NOT_WEAK'}
 
 
 def _urw_class_tokens(text):

@@ -51,6 +51,10 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
                                runtime_out=output/'formal', tmp_root=output/'tmp')
         report.update(execution_id=request['execution_id'], prediction_reexecution=False,
                       readback_only=True)
+        from runtime.local_race_key_gate import readback_final
+        # Existing FINAL readback never enters SOURCE/Prediction or a /verify
+        # POST. A missing first presentation may use the canonical health GET.
+        report['delivery']=readback_final(request['execution_id'],'readback')
         o._write(output/'entry_report.json', report)
         return report
     # Existing verified pre-cutoff SOURCE remains usable; reacquisition after

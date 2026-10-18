@@ -86,7 +86,8 @@ def read_official(spec, *, fetch, reads, read_observer=None, sleeper=time.sleep)
         sleeper(attempt)
 
 
-def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleeper=time.sleep):
+def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleeper=time.sleep,
+                      allowed_venues=SOUTH_KANTO):
     """Read the actual official daily menu. Fetch failure never means no meeting.
 
     Use the official all-venue day index, not RaceList without a venue (which
@@ -95,6 +96,9 @@ def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleep
     """
     if date.fromisoformat(day).isoformat() != day or now.tzinfo is None:
         raise ValueError('LOCAL_DAY_IDENTITY_INVALID')
+    if (not allowed_venues or len(set(allowed_venues))!=len(allowed_venues)
+            or not set(allowed_venues)<=set(LOCAL_BABA_CODES)):
+        raise ValueError('LOCAL_MEETING_SCOPE_INVALID')
     spec = {'source_id':f'NAR-{day}-SOUTH-KANTO-MEETINGS', 'source_class':'OFFICIAL_DAY_MENU',
             'authority':'NAR_OFFICIAL', 'official':True, 'required':True, 'max_bytes':900000,
             'url':'https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/TodayRaceInfoTop?k_raceDate='+day.replace('-', '%2F')}
@@ -112,10 +116,11 @@ def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleep
     if not links.codes or not links.codes <= set(codes.values()):
         raise ValueError('OFFICIAL_DAY_MEETINGS_NOT_PROVEN')
     held = links.codes
-    venues = [v for v in SOUTH_KANTO if LOCAL_BABA_CODES[v] in held]
+    venues = [v for v in allowed_venues if LOCAL_BABA_CODES[v] in held]
     result = {'family_id':'LOCAL', 'race_date':day, 'observed_at':now.isoformat(),
-              'allowed_venues':list(SOUTH_KANTO), 'venues':venues,
-              'status':'OFFICIAL_MEETINGS_DISCOVERED' if venues else 'NO_SOUTH_KANTO_MEETING',
+              'allowed_venues':list(allowed_venues), 'venues':venues,
+              'status':'OFFICIAL_MEETINGS_DISCOVERED' if venues else
+                       'NO_SOUTH_KANTO_MEETING' if tuple(allowed_venues)==SOUTH_KANTO else 'NO_LOCAL_MEETING',
               'official_snapshot':snapshot, 'discovery_read_attempts':reads, 'prediction_freeze':False,
               'formal_registration_proven':False, 'new_live_send':False}
     result['sha256'] = sha(result)
@@ -735,7 +740,8 @@ def publish_state(root, paths):
     persist(cwd=root, branch='main')
 
 
-def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetch_source):
+def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetch_source,
+                    allowed_venues=SOUTH_KANTO):
     """Resolve once, plan every held venue, then use existing dated workers.
 
     Planning never implies approval. Workers share one loop and strict Git
@@ -750,7 +756,8 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
         raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
     meeting_reads = []
     try:
-        meeting = discover_meetings(day, now=now, fetch=fetch, read_observer=meeting_reads.append)
+        meeting = discover_meetings(day, now=now, fetch=fetch, read_observer=meeting_reads.append,
+                                   allowed_venues=allowed_venues)
         report['meeting'] = meeting
     except Exception as exc:
         report.update(status='HOLD_OFFICIAL_DISCOVERY', original_error=f'{type(exc).__name__}:{exc}', discovery_reads=meeting_reads)
@@ -869,13 +876,15 @@ def main():
     scope = p.add_mutually_exclusive_group(required=True)
     scope.add_argument('--venue', choices=sorted(LOCAL_BABA_CODES))
     scope.add_argument('--south-kanto', action='store_true')
+    scope.add_argument('--all-local', action='store_true')
     p.add_argument('--date', required=True)
     p.add_argument('--cutoff-seconds', required=True, type=int)
     p.add_argument('--execute', action='store_true')
     args = p.parse_args()
     root, now = Path(args.repo_root).resolve(), datetime.now(timezone.utc)
-    if args.south_kanto:
-        report = south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute)
+    if args.south_kanto or args.all_local:
+        report = south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute,
+            **({'allowed_venues':tuple(LOCAL_BABA_CODES)} if args.all_local else {}))
         print(json.dumps(report))
         # An Actions green exit is not FINAL proof; explicit discovery/worker
         # HOLD must nevertheless alert the caller after preserving its evidence.

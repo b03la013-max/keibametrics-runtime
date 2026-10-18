@@ -16,6 +16,7 @@ import json
 import subprocess
 import sys
 import time
+import copy
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'runtime')]
@@ -44,15 +45,67 @@ def dump(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
 
 
+def audit_index_consumption(numerical):
+    """Result-blind finite interventions on the existing Candidate baseline.
+
+    These unsigned 0/100 counterfactuals measure code dependence, not plausible
+    feature changes, predictive value, calibration or Production authority.
+    Preserve RULED-NEUTRAL state and provenance; never save as materialized
+    SOURCE or feed these synthetic values to the Runtime/Engine.
+    """
+    from runtime.local_krs_bridge_candidate import build_candidate_prediction_structure_derived as predict
+    rows=numerical['runners']
+    base=predict({'runners':copy.deepcopy(rows)})['candidate_static_prediction']
+    scores={x['runner_id']:x for x in base['runner_scores']}
+    indices=[]
+    for name in numerical['required_indices']:
+        cells=[]
+        for offset,row in enumerate(rows):
+            rid=str(row['runner_id']);cell=row['canonical_components'][name]
+            interventions=[]
+            for value in (0,100):
+                changed=copy.deepcopy(rows)
+                changed[offset]['canonical_components'][name]['value']=value
+                observed=predict({'runners':changed})['candidate_static_prediction']
+                score=next(x for x in observed['runner_scores'] if x['runner_id']==rid)
+                interventions.append({'unsigned_synthetic_value':value,
+                    'role_score_deltas':{k:score[k]-scores[rid][k] for k in ('w_score','p2_score','p3_score')},
+                    'ranking_changed':observed['ranking']!=base['ranking'],
+                    'roles_changed':observed['roles']!=base['roles']})
+            cells.append({'runner_id':rid,'value':cell['value'],'terminal_status':cell['terminal_status'],
+                'rule_id':cell['rule_id'],'mapping_version':cell['mapping_version'],
+                'evidence_refs':cell['evidence_refs'],'source_fact':cell['source_fact'],
+                'cell_sha256':_sha(cell),'interventions':interventions,
+                'production_consumption_authorized':False})
+        indices.append({'index':name,'cells':cells,
+            'candidate_score_dependence':any(any(v!=0 for v in q['role_score_deltas'].values()) for c in cells for q in c['interventions']),
+            'ranking_changed_cases':sum(q['ranking_changed'] for c in cells for q in c['interventions']),
+            'role_changed_cases':sum(q['roles_changed'] for c in cells for q in c['interventions'])})
+    out={'classification':'UNSIGNED_SYNTHETIC_CODE_SENSITIVITY_NOT_PREDICTIVE_VALUE_NOT_OOS',
+        'race_id':numerical['race_id'],'source_snapshot_sha256':numerical['production_evidence_compiler']['source_snapshot_sha256'],
+        'original_numeric_provenance_sha256':numerical['index_provenance_hash'],
+        'candidate_baseline':base,'indices':indices,'index_count':len(indices),
+        'score_consumed_indices':[x['index'] for x in indices if x['candidate_score_dependence']],
+        'production_consumption_authorized':False,'runtime_post_count':0,
+        'prediction_value_increment':'UNKNOWN_REQUIRES_FROZEN_FORWARD_COMPARISON'}
+    out['sha256']=_sha(out)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--archives', type=Path, required=True)
-    ap.add_argument('--engine', type=Path, required=True)
-    ap.add_argument('--baseline-outputs', type=Path, required=True)
+    ap.add_argument('--engine', type=Path)
+    ap.add_argument('--baseline-outputs', type=Path)
+    ap.add_argument('--evidence-audit-only', action='store_true')
+    ap.add_argument('--prior-predictions', type=Path)
     ap.add_argument('--output', type=Path, required=True)
     args = ap.parse_args()
     params = ROOT / 'runtime/local_physical/parameter_map_v0.1-provisional.json'
-    assert hashlib.sha256(args.engine.read_bytes()).hexdigest() == ENGINE
+    if not args.evidence_audit_only:
+        if args.engine is None or args.baseline_outputs is None:
+            ap.error('--engine and --baseline-outputs required for Engine replay')
+        assert hashlib.sha256(args.engine.read_bytes()).hexdigest() == ENGINE
     assert hashlib.sha256(params.read_bytes()).hexdigest() == PARAMETERS
     args.output.mkdir(parents=True, exist_ok=False)
     key = Ed25519PublicKey.from_public_bytes(base64.b64decode(KEY))
@@ -84,11 +137,46 @@ def main():
             candidate = compile_urw_candidate(request, source, numerical, historical_replay=True)
             paper = audit_urw_candidate_paper_pipeline(candidate, numerical)
             forecasts[rid] = {'candidate': candidate, 'paper': paper}
+            if args.evidence_audit_only:
+                forecasts[rid]['index_consumption_audit']=audit_index_consumption(numerical)
             row.update(status='CANDIDATE_REPLAY', candidate_sha256=candidate['sha256'],
                        candidate_krs_input_sha256=paper['candidate_krs_input_sha256'])
             dump(args.output / f'{rid}.input.json', paper['candidate_krs_input'])
         except ValueError as exc:
             row.update(status='HOLD', first_failed_stage='URW_STATIC_CANDIDATE', error=str(exc))
+
+    if args.evidence_audit_only:
+        prior=json.loads(gzip.decompress(args.prior_predictions.read_bytes()))['forecasts'] if args.prior_predictions else {}
+        for row in rows:
+            rid=row['race_id']
+            if rid not in forecasts:
+                continue
+            f=forecasts[rid];candidate=f['candidate'];scenario=candidate['urw_scenario_prediction']
+            if prior:
+                old=prior[rid]
+                row['same_ranking_and_roles_as_prior_identity_replay']=(candidate['ranking']==old['candidate']['ranking'] and candidate['role_columns']==old['candidate']['role_columns'])
+                row['same_engine_input_as_prior_identity_replay']=f['paper']['candidate_krs_input_sha256']==old['paper']['candidate_krs_input_sha256']
+                assert row['same_ranking_and_roles_as_prior_identity_replay'] and row['same_engine_input_as_prior_identity_replay']
+            row.update(score_consumed_indices=f['index_consumption_audit']['score_consumed_indices'],
+                strict_p2_order_edges=sum(len(x['partial_order_edges']) for x in scenario['head_local_p2'].values()),
+                strict_p3_order_edges=sum(len(x['partial_order_edges']) for x in scenario['pair_conditioned_p3'].values()),
+                material_exact_count=sum(e['material_exact_evidence'] for x in scenario['pair_conditioned_p3'].values() for e in x['evaluations'].values()),
+                source_bound_condition_translations=len(candidate['urw_evidence']))
+        artifact={'classification':'HISTORICAL_EVIDENCE_AND_UNSIGNED_CODE_SENSITIVITY_NOT_FORWARD',
+                  'forecasts':forecasts,'created_at':datetime.now(timezone.utc).isoformat()}
+        packed=gzip.compress(json.dumps(artifact,ensure_ascii=False,sort_keys=True).encode(),mtime=0)
+        (args.output/'evidence_audit.json.gz').write_bytes(packed)
+        report={'classification':artifact['classification'],'selected_denominator':len(rows),
+            'candidate_completed':len(forecasts),'held':len(rows)-len(forecasts),
+            'races':rows,'artifact_sha256':hashlib.sha256(packed).hexdigest(),
+            'script_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'genuine_forward_oos':0,'new_engine_runs':0,'runtime_post_count':0,
+            'prediction_quality_improvement':'NOT_PROVEN','production_changes':False,
+            'limits':'0/100 unsigned interventions measure Candidate code dependence only, not feature plausibility or incremental prediction value. Neutral states preserved. Existing six-race Engine evidence reusable only where exact Engine input SHA and roles match; no new quality claim.'}
+        report['sha256']=_sha(report)
+        dump(args.output/'report.json',report)
+        print(json.dumps({k:v for k,v in report.items() if k!='races'}))
+        return
 
     def simulate(rid):
         wall = time.perf_counter()

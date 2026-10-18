@@ -93,6 +93,54 @@ def test_urw_repeatable_roles_evidence_and_explicit_semantic_gaps(original):
     assert compile_urw_candidate(contaminated,s,n,now=NOW,historical_replay=True) == a
 
 
+def test_current_condition_translation_has_source_binding_without_role_or_weight_promotion(original):
+    req,s,n=original
+    c=compile_urw_candidate(req,s,n,now=NOW,historical_replay=True)
+    for evidence in c['urw_evidence'].values():
+        t=evidence['current_condition_translation']
+        assert t['source_id'] and t['source_snapshot_sha256'] and t['effective_time']
+        if t['current_frame_no'] is None:
+            assert t['current_frame_status']=='UNKNOWN_NOT_IN_PARSED_SOURCE'
+        else:
+            assert type(t['current_frame_no']) is int and 1<=t['current_frame_no']<=8
+        assert not t['role_adjustments_applied']
+        assert all(x['new_score_adjustment'] is None for x in t['observations'])
+    assert c['ranking']==c['existing_local_baseline']['ranking']
+    assert c['role_columns']==c['existing_local_baseline']['roles']
+
+
+def test_shortening_and_place_only_never_become_automatic_winner_evidence():
+    from runtime.local_race_key_shadow_owner import _urw_current_condition_translation as translate
+    header={'distance':1400,'class_tokens':['C1'],'going':'良'}
+    obs={'date':'2026-10-01','distance':1500,'venue':'浦和','finish':2,
+         'positions':[1,1,2,2],'surface':'DIRT','class_tokens':['C1'],
+         'going':'良','matched_urw_distance':False}
+    t=translate({'frame_no':1},[obs],header)['observations'][0]
+    assert t['distance_relation']=='SHORTENING' and t['distance_delta_m']==-100
+    assert t['new_score_adjustment'] is None and t['current_survival_effect']=='UNKNOWN'
+    same={**obs,'distance':1400,'matched_urw_distance':True}
+    place=translate({},[same],header)['observations'][0]
+    assert place['winner_evidence_class']=='PLACE_ONLY_NOT_DIRECT_WINNER'
+    winner=translate({},[{**same,'finish':1}],header)['observations'][0]
+    assert winner['winner_evidence_class']=='DIRECT_WIN_OBSERVATION_CURRENT_EFFECT_UNCALIBRATED'
+    assert place['corner_rank_changes']==[0,-1,0]
+
+
+def test_index_consumption_audit_separates_display_from_score_dependence(original):
+    from scripts.urw_candidate_krs_replay import audit_index_consumption
+    _,_,n=original
+    small=copy.deepcopy(n);small['runners']=small['runners'][:2]
+    original_bytes=_sha(small)
+    audit=audit_index_consumption(small)
+    assert _sha(small)==original_bytes
+    assert audit['index_count']==29 and not audit['production_consumption_authorized']
+    by_index={x['index']:x for x in audit['indices']}
+    assert by_index['ZAI-WIN']['candidate_score_dependence']
+    assert not by_index['BVIg-L']['candidate_score_dependence']
+    assert len(by_index['BVIg-L']['cells'])==2 and audit['runtime_post_count']==0
+    assert all(c['cell_sha256'] for x in audit['indices'] for c in x['cells'])
+
+
 @pytest.mark.parametrize('target',[
     'FOREIGN_VENUE','WRONG_RACE','UNSIGNED','ARTIFACT_TAMPER','RECEIPT_TAMPER',
     'BAD_POST','MISSING_INDEX','WRONG_INDEX','BOOLEAN','NAN','INFINITY','MISSING_PROVENANCE',
