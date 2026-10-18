@@ -3,6 +3,7 @@ import base64
 from copy import deepcopy
 from datetime import datetime
 import json
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -27,6 +28,16 @@ def test_four_only_official_resolver_current_registry():
     r=d.discover_meetings('2026-10-15', now=NOW, fetch=menu_fetch(siblings=('19','20','21','03','10')))
     assert r['venues']==['FNB','OHI','URW','KAW']
     assert not r['new_live_send'] and not r['formal_registration_proven']
+
+
+def test_original_official_index_bytes_urw12_next_day_not_a_prediction():
+    # Original GET snapshot from CI39120192594, not reconstructed web text.
+    original=json.loads((Path(__file__).parent/'fixtures/local_official_south_kanto_top_20261018.json').read_text())
+    fetch=lambda spec,cutoff:(original,[])
+    r=d.discover_meetings('2026-10-19',now=NOW,fetch=fetch)
+    assert r['venues']==['URW'] and not r['formal_registration_proven']
+    today=d.discover_meetings('2026-10-18',now=NOW,fetch=fetch)
+    assert today['status']=='NO_SOUTH_KANTO_MEETING'
 
 
 def test_official_other_venue_is_positive_nonholding_evidence():
@@ -58,6 +69,59 @@ def test_corrupt_identifiable_sibling_isolated_unknown_alias_holds(tmp_path):
     with pytest.raises(ValueError): d.existing_race_refs(tmp_path,p['races'][0])
     (folder/'unknown-alias.json').write_text('null')
     with pytest.raises(ValueError): d.existing_race_refs(tmp_path,p['races'][1])
+
+
+def setup_day(monkeypatch):
+    base=plan()
+    def discover(venue,day,*args,**kwargs):
+        p=deepcopy(base);p['venue_id']=venue
+        for r in p['races']:
+            r['fields']['venue_id']=venue
+            r['execution_id']=r['execution_id'].replace('-KAW-',f'-{venue}-')
+        p['plan_sha256']=d.sha({k:v for k,v in p.items() if k!='plan_sha256'})
+        return p
+    monkeypatch.setattr(d,'discover_meetings',lambda *a,**k:{'venues':['OHI','KAW']})
+    monkeypatch.setattr(d,'discover',discover)
+    return discover
+
+
+def test_all_discovered_targets_retained_without_approval_or_execution(tmp_path,monkeypatch):
+    setup_day(monkeypatch)
+    monkeypatch.setattr(d,'prepare_worker',lambda *a:pytest.fail('NO EXECUTION FROM DISCOVERY'))
+    r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
+    assert r['target_races']==4 and r['target_races_complete']
+    assert len(r['venues']['KAW']['races'])==2
+    monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
+    r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
+    assert r['target_races']==4 and all(v['status']=='HOLD' for v in r['venues'].values())
+    assert all(v['first_stop_stage']=='DATED_OWNER_AUTHORIZATION' for v in r['venues'].values())
+
+
+@pytest.mark.parametrize('failure',['scope','worker','drift'])
+def test_sibling_scope_worker_and_plan_failures_never_stop_other_venue(tmp_path,monkeypatch,failure):
+    discover=setup_day(monkeypatch);monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
+    for v in ['OHI','KAW']:
+        d.write(tmp_path/'profiles/local_autonomous_approvals'/f'2026-10-15-{v}.json',{'worker_seconds':0})
+    if failure=='drift':
+        old=discover('OHI','2026-10-15');old['races'][0]['fields']['scheduled_post_at']='2026-10-15T19:00:00+09:00'
+        old['plan_sha256']=d.sha({k:v for k,v in old.items() if k!='plan_sha256'})
+        d.write(tmp_path/'runtime/local_race_day_plan/2026-10-15-OHI.json',old)
+    def authorize(a,p,*args):
+        if failure=='scope' and p['venue_id']=='OHI':raise ValueError('OWNER_SCOPE_HOLD')
+    monkeypatch.setattr(d,'authorization',authorize)
+    executed=[]
+    def prepare(root,p,*args):
+        def step():
+            if failure=='worker' and p['venue_id']=='OHI':raise ValueError('ORIGINAL_WORKER_ERROR')
+            executed.append(p['venue_id'])
+            d.write(root/'runtime/execution_reports/LOCAL-2026-10-15'/(p['venue_id']+'.json'),
+                    d.canonical_day_index(root,p,now=NOW))
+            return {'races':{}}
+        return {'worker_seconds':0},step
+    monkeypatch.setattr(d,'prepare_worker',prepare)
+    r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
+    assert executed==['KAW'] and r['venues']['OHI']['status'].startswith('HOLD')
+    assert len(r['venues']['KAW']['races'])==2
 
 
 def signed_envelope(artifact,eid,key,health):
@@ -96,7 +160,7 @@ def test_index_trust_deadline_full_denominator_no_delivery_claim(tmp_path,monkey
     assert report['delivery_verified_count']==0 and not report['new_live_send']
     assert all(r['delivery_sent_at'] is None and r['actual_purchase_pfs']=='UNKNOWN' for r in report['races'])
     if bad=='none': assert report['races'][0]['canonical_tree']=='full vertical tree'
-    elif bad!='after_cutoff': assert 'canonical_tree' not in report['races'][0]
+    else: assert 'canonical_tree' not in report['races'][0]
 
 
 def test_local_learning_reuses_readonly_common_audit_without_injection():

@@ -45,10 +45,14 @@ class MeetingLinks(HTMLParser):
         q = parse_qs(p.query)
         if q.get('k_raceDate') != [self.day] or len(q.get('k_babaCode', [])) != 1:
             return
+        code = q['k_babaCode'][0]
+        if not re.fullmatch(r'\d{1,2}', code):
+            raise ValueError('OFFICIAL_VENUE_CODE_INVALID')
+        code = code.zfill(2)  # Official top emits BAN=3, registry stores 03.
         if p.path == '/KeibaWeb/TodayRaceInfo/RaceList':
-            self.codes.add(q['k_babaCode'][0])
+            self.codes.add(code)
         elif p.path == '/KeibaWeb/TodayRaceInfo/DebaTable':
-            self.card_codes.add(q['k_babaCode'][0])
+            self.card_codes.add(code)
 
 
 def read_official(spec, *, fetch, reads, read_observer=None, sleeper=time.sleep):
@@ -477,6 +481,9 @@ def canonical_day_index(root, plan, *, now, health=None, state=None):
                 cutoff = datetime.fromisoformat(fields['prediction_cutoff'])
                 if signed.tzinfo is None or frozen.tzinfo is None or not frozen <= signed <= now:
                     raise ValueError('CANONICAL_FINAL_CLOCK_INVALID')
+                if signed >= cutoff or frozen >= cutoff:
+                    row.update(final_generated=True, final_signed=True, final_signed_at=receipt['timestamp'])
+                    raise ValueError('CANONICAL_FINAL_AFTER_CUTOFF_NOT_FORMAL_PRESTART')
                 tree = render_ticket_tree(artifact)
                 row.update(final_generated=True, final_signed=True, final_signed_at=receipt['timestamp'],
                            final_signed_before_cutoff=frozen < cutoff and signed < cutoff,
@@ -768,7 +775,8 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
                 plan = fresh
                 write(plan_path, plan)
             state = json.loads(state_path.read_text()) if state_path.exists() else {}
-            report['venues'][venue] = canonical_day_index(root, plan, now=now, state=state)
+            report['venues'][venue] = canonical_day_index(root, plan, now=now, state=state,
+                                                         health=readback_health(root, plan))
             report['target_races'] += len(plan['races'])
             if execute:
                 first_stop_stage = 'DATED_OWNER_AUTHORIZATION'
@@ -807,6 +815,16 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
     return report
 
 
+def readback_health(root, plan):
+    if any((root/'runtime/executions'/r['execution_id']/'FORMAL/LATEST.json').exists() for r in plan['races']):
+        try:
+            from runtime.execution_gateway import family_config, fetch_health
+            return fetch_health(family_config('LOCAL')['external_endpoint'])
+        except Exception:
+            pass
+    return None
+
+
 def prepare_worker(root, plan, plan_path, state_path, approval_path):
     approval = json.loads(approval_path.read_text())
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
@@ -814,13 +832,7 @@ def prepare_worker(root, plan, plan_path, state_path, approval_path):
     index_path = root/'runtime/execution_reports'/('LOCAL-'+plan['race_date'])/(plan['venue_id']+'.json')
     def publish():
         write(state_path, state)
-        health = None
-        if any((root/'runtime/executions'/r['execution_id']/'FORMAL/LATEST.json').exists() for r in plan['races']):
-            try:
-                from runtime.execution_gateway import family_config, fetch_health
-                health = fetch_health(family_config('LOCAL')['external_endpoint'])
-            except Exception:
-                pass  # Index explicitly retains HOLD; no persisted signature flag is trusted.
+        health = readback_health(root, plan)
         write(index_path, canonical_day_index(root, plan, now=datetime.now(timezone.utc), health=health, state=state))
         delivery_paths=[str(p.relative_to(root)) for r in plan['races']
                         if (p:=root/'runtime/execution_reports'/r['execution_id']/'delivery').exists()]
