@@ -99,6 +99,16 @@ jobs:
               shutil.copytree(root/'runtime/local_race_day_plan','south-kanto-plans',dirs_exist_ok=True)
           print(json.dumps({'status':result['status'],'target_races':result['target_races'],
               'complete':result['target_races_complete'],'venues':list(result['venues'])}))
+          from runtime.local_race_day_dispatcher import canonical_day_index
+          from runtime.execution_gateway import family_config, fetch_health
+          historical=json.loads(Path('phase-b-discovery-plan.json').read_text())
+          index=canonical_day_index(Path.cwd(),historical,now=datetime.now(timezone.utc),
+              health=fetch_health(family_config('LOCAL')['external_endpoint']))
+          Path('historical-canonical-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2))
+          print(json.dumps({'historical_signed_before_cutoff':index['signed_final_before_cutoff_count'],
+              'target_races':index['target_races'], 'delivery_verified':index['delivery_verified_count'],
+              'readback_errors':[{'race':r['race_no'],'error':r.get('observation_error')} for r in index['races'] if r.get('observation_error')]}))
+          assert index['target_races']==12 and index['signed_final_before_cutoff_count']==5
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -113,4 +123,5 @@ jobs:
             next-kaw-discovery-plan.json
             south-kanto-discovery.json
             south-kanto-plans/
+            historical-canonical-index.json
           if-no-files-found: ignore

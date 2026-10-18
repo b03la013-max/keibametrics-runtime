@@ -17,7 +17,7 @@ def menu_fetch(venue='URW', siblings=('10','22','24'), day='2026/10/15'):
     def fetch(spec, cutoff):
         code = d.LOCAL_BABA_CODES[venue]
         html = f'2026年10月15日（木）{d.VENUE_NAMES[venue]}競馬当日メニュー'
-        html += ''.join(f'<a href="RaceList?k_babaCode={c}&amp;k_raceDate={day}">場</a>' for c in siblings)
+        html += ''.join(f'<a href="RaceList?k_babaCode={c}&amp;k_raceDate={day}">場</a>' for c in (*siblings,code))
         html += f'<a href="DebaTable?k_babaCode={code}&amp;k_raceDate={day}&amp;k_raceNo=1">1R</a>'
         return snapshot(spec, html)
     return fetch

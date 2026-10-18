@@ -85,15 +85,15 @@ def read_official(spec, *, fetch, reads, read_observer=None, sleeper=time.sleep)
 def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleeper=time.sleep):
     """Read the actual official daily menu. Fetch failure never means no meeting.
 
-    Require a selected venue with race-card links and its dated heading as well
-    as venue navigation. An empty/unrecognized page remains HOLD, even on a
-    holiday. No dates or venues are inferred from a weekly calendar.
+    Use the official all-venue day index, not RaceList without a venue (which
+    redirects to a message page). Same-day official RaceList links are positive
+    meeting evidence. An empty/unrecognized page remains HOLD, even on a holiday.
     """
     if date.fromisoformat(day).isoformat() != day or now.tzinfo is None:
         raise ValueError('LOCAL_DAY_IDENTITY_INVALID')
     spec = {'source_id':f'NAR-{day}-SOUTH-KANTO-MEETINGS', 'source_class':'OFFICIAL_DAY_MENU',
             'authority':'NAR_OFFICIAL', 'official':True, 'required':True, 'max_bytes':900000,
-            'url':'https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceList?k_raceDate='+day.replace('-', '%2F')}
+            'url':'https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/TodayRaceInfoTop?k_raceDate='+day.replace('-', '%2F')}
     reads = []
     snapshot, errors = read_official(spec, fetch=fetch, reads=reads, read_observer=read_observer, sleeper=sleeper)
     if read_observer:
@@ -103,17 +103,11 @@ def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleep
     html = raw_html(snapshot)
     links = MeetingLinks(day)
     links.feed(html)
-    d = date.fromisoformat(day)
-    text = re.sub(r'\s+', '', _html_text(html))
     # BAN can be present in the official menu without joining LOCAL dispatch.
-    names = {**VENUE_NAMES, 'BAN':'帯広'}
     codes = {**LOCAL_BABA_CODES, 'BAN':'03'}
-    selected = [v for v in names if re.search(
-        rf'{d.year}年{d.month}月{d.day}日.*?{names[v]}競馬', text)
-        and codes[v] in links.card_codes]
-    if len(selected) != 1 or not links.codes or links.card_codes != {codes[selected[0]]}:
+    if not links.codes or not links.codes <= set(codes.values()):
         raise ValueError('OFFICIAL_DAY_MEETINGS_NOT_PROVEN')
-    held = links.codes | links.card_codes
+    held = links.codes
     venues = [v for v in SOUTH_KANTO if LOCAL_BABA_CODES[v] in held]
     result = {'family_id':'LOCAL', 'race_date':day, 'observed_at':now.isoformat(),
               'allowed_venues':list(SOUTH_KANTO), 'venues':venues,
