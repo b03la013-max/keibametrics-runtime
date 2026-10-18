@@ -212,6 +212,7 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
     from runtime.local_fullnumerical_candidate import REQUIRED
     from runtime.local_krs_bridge_candidate import build_candidate_prediction_structure_derived
 
+    injected_clock = now is not None
     now = now or datetime.now(timezone.utc)
     cutoff = _aware(request.get('prediction_cutoff'), 'PREDICTION_CUTOFF')
     if (request.get('family_id') != 'LOCAL' or request.get('venue_id') != 'URW'
@@ -375,10 +376,21 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
         context = scenario['pair_conditioned_p3'][t['head']+'>'+t['second']]['evaluations'][t['third']]
         t['conditional_geometry_support'] = context['status']
         t['conditional_evidence_sha256'] = context['sha256']
+    # Freeze at completion, not function entry: a large conditional universe
+    # must not appear pre-cutoff merely because computation started in time.
+    completed = now if injected_clock else datetime.now(timezone.utc)
+    if completed < now:
+        raise ShadowOwnerError('URW_CANDIDATE_CLOCK_REGRESSION')
+    if not historical_replay and completed >= cutoff:
+        raise ShadowOwnerError('URW_CANDIDATE_COMPLETED_AFTER_CUTOFF')
     output = {'profile':URW_PROFILE,'status':'CANDIDATE / NON-PRODUCTION / CONDITIONAL-ANALOG-UNVALIDATED',
-        'race_id':request['race_id'],'venue_id':'URW','compiled_at':now.isoformat(),
-        'temporal_class':'HISTORICAL_CONTRACT_REPLAY' if historical_replay else 'PRESTART_SHADOW_LOCAL_FREEZE',
-        'frozen_at':None if historical_replay else now.isoformat(),'prediction_cutoff':request['prediction_cutoff'],
+        'race_id':request['race_id'],'venue_id':'URW','compiled_at':completed.isoformat(),
+        'compilation_started_at':now.isoformat(),
+        'compile_clock_source':'INJECTED_CONTRACT_CLOCK' if injected_clock else 'ACTUAL_RUNTIME_CLOCK',
+        'temporal_class':('HISTORICAL_CONTRACT_REPLAY' if historical_replay else
+                          'INJECTED_CLOCK_CONTRACT_TEST' if injected_clock else 'PRESTART_SHADOW_LOCAL_FREEZE'),
+        'frozen_at':None if historical_replay or injected_clock else completed.isoformat(),
+        'prediction_cutoff':request['prediction_cutoff'],
         'source_receipt_sha256':source_envelope['receipt_sha256'],'source_snapshot_sha256':source['source_snapshot_sha256'],
         'source_signature_authority':'CALLER_CANONICAL_INGRESS_VERIFICATION_REQUIRED',
         'venue_canon':URW_CANON,'venue_canon_source_sha256':URW_CANON_SHA256,

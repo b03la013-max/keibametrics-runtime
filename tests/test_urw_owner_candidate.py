@@ -343,3 +343,56 @@ def test_real_source_scenarios_and_pipeline_refuse_cross_source_numerics(origina
     wrong=copy.deepcopy(n);wrong['production_evidence_compiler']['source_snapshot_sha256']='other'
     with pytest.raises(ShadowOwnerError,match='NUMERICAL_BINDING'):
         audit_urw_candidate_paper_pipeline(a,wrong)
+
+
+def test_injected_prestart_clock_never_claims_a_real_forward_freeze(original):
+    req,s,n=original
+    p=compile_urw_candidate(req,s,n,now=datetime(2026,9,23,10,20,tzinfo=timezone.utc))
+    assert p['temporal_class']=='INJECTED_CLOCK_CONTRACT_TEST'
+    assert p['frozen_at'] is None and p['forward_oos_credit']==0
+
+
+def test_completion_crossing_cutoff_fails_even_when_started_in_time(original,monkeypatch):
+    from runtime import local_race_key_shadow_owner as m
+    class CrossingClock(datetime):
+        calls=0
+        @classmethod
+        def now(cls,tz=None):
+            cls.calls+=1
+            return datetime(2026,9,23,10,20 if cls.calls==1 else 28,tzinfo=timezone.utc)
+    monkeypatch.setattr(m,'datetime',CrossingClock)
+    req,s,n=original
+    with pytest.raises(ShadowOwnerError,match='COMPLETED_AFTER_CUTOFF'):
+        m.compile_urw_candidate(req,s,n)
+
+
+def test_real_local_freeze_uses_completion_clock_not_start(original,monkeypatch):
+    from runtime import local_race_key_shadow_owner as m
+    class AdvancingClock(datetime):
+        calls=0
+        @classmethod
+        def now(cls,tz=None):
+            cls.calls+=1
+            return datetime(2026,9,23,10,20,cls.calls,tzinfo=timezone.utc)
+    monkeypatch.setattr(m,'datetime',AdvancingClock)
+    req,s,n=original
+    p=m.compile_urw_candidate(req,s,n)
+    assert p['compilation_started_at'].endswith('10:20:01+00:00')
+    assert p['frozen_at']==p['compiled_at']=='2026-09-23T10:20:02+00:00'
+    # This uses an internal monkeypatched clock only in the unit test, never
+    # a persisted freeze, independently timestamped OOS record or live result.
+    assert p['forward_oos_credit']==0 and p['signed_final_claim'] is False
+
+
+def test_runtime_clock_regression_is_not_a_valid_freeze(original,monkeypatch):
+    from runtime import local_race_key_shadow_owner as m
+    class ReversingClock(datetime):
+        calls=0
+        @classmethod
+        def now(cls,tz=None):
+            cls.calls+=1
+            return datetime(2026,9,23,10,20 if cls.calls==1 else 19,tzinfo=timezone.utc)
+    monkeypatch.setattr(m,'datetime',ReversingClock)
+    req,s,n=original
+    with pytest.raises(ShadowOwnerError,match='CLOCK_REGRESSION'):
+        m.compile_urw_candidate(req,s,n)

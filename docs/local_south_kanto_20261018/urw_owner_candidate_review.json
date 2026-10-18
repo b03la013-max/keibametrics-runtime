@@ -1,6 +1,6 @@
 {
   "status": "CANDIDATE_NOT_PRODUCTION",
-  "reviewed_at": "2026-10-18T11:54:34.793196+00:00",
+  "reviewed_at": "2026-10-18T12:01:30.877208+00:00",
   "review_base_head": "0799ca2b97a76cec4876af5beb4d35b3bca0842f",
   "main": "39a86b7e1fa3bc4874d78619a9194fd4c2cdf7f1",
   "change_classification": {
@@ -39,9 +39,9 @@
   },
   "replay": {
     "candidate_profile": "KM-LOCAL-URW-OWNER-CANDIDATE-v0.2-20261018",
-    "candidate_sha256": "c1662d24d780ad922ef9e8e8b1948d4f0a9392e58f197283f9ce0fd44f2b0632",
+    "candidate_sha256": "d82d22d4ab77069b741dca49a58bbb7fe8db423913a7431a086c1c1cec17177d",
     "scenario_sha256": "76b056b41d9cdd2f31dd5ce50f18de458f0a4580d5328e468944a00c30a16f73",
-    "compiled_at": "2026-10-18T11:54:34.793196+00:00",
+    "compiled_at": "2026-10-18T12:01:30.877208+00:00",
     "frozen_at": null,
     "temporal_class": "HISTORICAL_CONTRACT_REPLAY",
     "forward_oos_credit": 0,
@@ -61,7 +61,9 @@
       "B3",
       "C1"
     ],
-    "deterministic_same_clock": true
+    "deterministic_same_clock": true,
+    "compilation_started_at": "2026-10-18T12:01:30.877208+00:00",
+    "compile_clock_source": "INJECTED_CONTRACT_CLOCK"
   },
   "offline_pipeline": {
     "status": "OFFLINE_PAPER_CONTRACT_ONLY_NOT_FORMAL_FINAL",
@@ -175,14 +177,21 @@
   },
   "signed_artifact_oos_policy_physics_capital_changes": false,
   "code_sha256": {
-    "runtime/local_race_key_shadow_owner.py": "d82a9ae4ef08ebf637a9442870e37800a7ef17e4adba49b8a5f4f7bff49e8ff9",
-    "tests/test_urw_owner_candidate.py": "ed9954c194615d312676a58c8e04ad57e58ba1249d58c4eb9eb8cd36e986ff93"
+    "runtime/local_race_key_shadow_owner.py": "6d0dffafa757451e6b97447471740ecb63478fd7165ab30f78d0aafed44c13f4",
+    "tests/test_urw_owner_candidate.py": "81d509d82c89cd7adf314b45f9e94f8ea78be9fe7830a0a464af53ca86b3496f"
   },
   "local_regression": {
-    "urw": 41,
-    "related": 171,
+    "urw": 45,
+    "related": 175,
     "result": "PASS",
     "ci_at_creation": "PENDING_NEW_HEAD"
   },
-  "main_delta_preserved": "PR311 seven JRA research/CI paths; no URW/Authority/KRS/MEC/Capital overlap"
+  "main_delta_preserved": "PR311 seven JRA research/CI paths; no URW/Authority/KRS/MEC/Capital overlap",
+  "candidate_temporal_correctness": {
+    "freeze_uses_completion_time": true,
+    "completion_after_cutoff": "HOLD",
+    "clock_regression": "HOLD",
+    "injected_clock": "CONTRACT_ONLY_NO_FORWARD_FREEZE",
+    "production_signed_artifacts_changed": false
+  }
 }
