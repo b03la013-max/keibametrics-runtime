@@ -1,8 +1,9 @@
-"""Offline historical URW contract diagnostic, never a dispatcher or OOS freeze.
+"""URW contract/conditional-model research, never a Production dispatcher.
 
 Requires the original seven Actions archives and the independently pinned Engine
-reference. No network calls, keys, signing, policy fitting or Runtime requests.
-Forecast/Engine outputs are persisted before the separate result-label pass.
+reference. Archive/fit modes make no network calls, signatures or Runtime
+requests. Conditional fitting is explicitly NON-PRODUCTION. Forecast/Engine
+outputs are persisted before the separate validation-label pass.
 """
 from pathlib import Path
 from datetime import datetime, timezone
@@ -92,15 +93,130 @@ def audit_index_consumption(numerical):
     return out
 
 
+def frozen_feature_packs(path):
+    """Reuse the immutable signed-SOURCE-derived feature audit, not labels."""
+    from runtime.local_race_key_shadow_owner import owner_feature_pack
+    raw=path.read_bytes()
+    original=json.loads(gzip.decompress(raw));packs=[]
+    for f in original['forecasts'].values():
+        c=f['candidate'];audit=f['index_consumption_audit']
+        rows={rid:{'runner_id':rid,'canonical_components':{}} for rid in c['ranking']}
+        # Reconstitute exactly the ORIGINAL cells from the stored audit. The
+        # unsigned0/100 interventions are deliberately not read here.
+        for index in audit['indices']:
+            for cell in index['cells']:
+                cc={k:cell[k] for k in ('value','terminal_status','rule_id','mapping_version','evidence_refs','source_fact')}
+                # Some original cells have additional provenance; retain exact
+                # hash by recovering the production cell from the bound SOURCE
+                # materializer when available, or use the audit's separate hash.
+                rows[cell['runner_id']]['canonical_components'][index['index']]=cc
+        n={'race_id':c['race_id'],'runners':list(rows.values()),
+            'production_evidence_compiler':{'source_snapshot_sha256':c['source_snapshot_sha256']}}
+        # Audit cells expose a subset of the original provenance. Bind this
+        # explicit derived representation, never pass it as Production material.
+        derived=copy.deepcopy(c)
+        derived['numeric_provenance_sha256']=_sha([r['canonical_components'] for r in n['runners']])
+        derived['sha256']=_sha({k:v for k,v in derived.items() if k!='sha256'})
+        pack=owner_feature_pack(derived,n)
+        pack['original_candidate_sha256']=c['sha256'];pack['source_audit_sha256']=hashlib.sha256(raw).hexdigest()
+        pack['original_cell_sha256']={index['index']:{cell['runner_id']:cell['cell_sha256'] for cell in index['cells']}
+                                     for index in audit['indices']}
+        pack['sha256']=_sha({k:v for k,v in pack.items() if k!='sha256'});packs.append(pack)
+    return sorted(packs,key=lambda p:p['scheduled_post_at'])
+
+
+def ranker_audit(output):
+    """Chronological retrospective comparison; validation labels read last."""
+    from runtime.local_race_key_shadow_owner import fit_conditioned_owner,predict_conditioned_owner
+    protocol_path=ROOT/'research/urw_owner/20261019_conditional_model/protocol.json'
+    protocol=json.loads(protocol_path.read_text())
+    packs=frozen_feature_packs(ROOT/'research/urw_owner/20261019_condition_consumption/evidence_audit.json.gz')
+    training=[p for p in packs if p['race_date']<=protocol['training_through']]
+    validation=[p for p in packs if p['race_date']>=protocol['validation_from']]
+    assert len(training)==3 and len(validation)==3
+    def labels_for(p):
+        paths=sorted((ROOT/'runtime/family_result_requests').glob(p['race_id'].replace('-FORMAL-R1','')+'-RESULT-R*.json'))
+        record=json.loads(paths[-1].read_text())
+        assert record['race_id']==p['race_id']
+        return list(map(str,record['finish_order'][:3])),{'path':str(paths[-1].relative_to(ROOT)),
+            'sha256':hashlib.sha256(paths[-1].read_bytes()).hexdigest(),
+            'official_verified_recorded':record.get('official_result_verified') is True,
+            'label_time_available_before_historical_target':'UNKNOWN_NOT_PREQUENTIAL_CREDIT'}
+    train_labels={p['race_id']:labels_for(p)[0] for p in training}
+    models={};forecasts={}
+    for arm,spec in protocol['arms'].items():
+        model=fit_conditioned_owner(training,train_labels,**spec);models[arm]=model
+        forecasts[arm]={p['race_id']:predict_conditioned_owner(model,p,historical_replay=True) for p in validation}
+    output.mkdir(parents=True,exist_ok=False)
+    frozen={'protocol_sha256':hashlib.sha256(protocol_path.read_bytes()).hexdigest(),
+        'compiled_at':datetime.now(timezone.utc).isoformat(),'models':models,'forecasts':forecasts,
+        'training_features':[p['sha256'] for p in training],'validation_features':[p['sha256'] for p in validation],
+        'classification':'RETROSPECTIVE_CHRONOLOGICAL_HOLDOUT_NOT_UNSEEN_RESEARCHER_NOT_FORWARD',
+        'limits':'Historical validation labels have appeared in earlier repository reports. No researcher-blind validation or calibrated quality is claimed. Neither scaling, penalty selection nor fitting receives validation inputs or labels.'}
+    packed=gzip.compress(json.dumps(frozen,ensure_ascii=False,sort_keys=True).encode(),mtime=0)
+    (output/'forecasts_before_evaluation.json.gz').write_bytes(packed)
+    # Only after the immutable forecast artifact exists does evaluation read
+    # validation labels. No best-arm selection or coefficient adjustment follows.
+    import math
+    rows=[];sums={arm:{'races':0,'winner_top1':0,'winner_top3':0,'W':0,'P2':0,'P3':0,
+        'ordered_pair_top1':0,'exact_top1':0,'exact_top5':0,'top3_joint_nll':0.} for arm in ['BASELINE',*forecasts]}
+    for p in validation:
+        actual,ref=labels_for(p);rid=p['race_id'];base=p['baseline']
+        b=sums['BASELINE'];b['races']+=1;b['winner_top1']+=base['ranking'][0]==actual[0];b['winner_top3']+=actual[0] in base['ranking'][:3]
+        for role,horse in zip(('W','P2','P3'),actual):b[role]+=horse in base[role]
+        row={'race_id':rid,'label_provenance':ref,'actual_top3':actual,'arms':{}}
+        for arm,predictions in forecasts.items():
+            pred=predictions[rid];score=sums[arm];score['races']+=1
+            score['winner_top1']+=pred['ranking'][0]==actual[0];score['winner_top3']+=actual[0] in pred['ranking'][:3]
+            for role,horse in zip(('W','P2','P3'),actual):score[role]+=role in pred['role_columns'][horse]
+            pair=pred['ordered_pairs'][0];triple=pred['ordered_triples'][0]
+            score['ordered_pair_top1']+=[pair['head'],pair['second']]==actual[:2]
+            score['exact_top1']+=[triple['head'],triple['second'],triple['third']]==actual
+            score['exact_top5']+=any([t['head'],t['second'],t['third']]==actual for t in pred['ordered_triples'][:5])
+            mass=next(t['model_mass'] for t in pred['ordered_triples'] if [t['head'],t['second'],t['third']]==actual)
+            score['top3_joint_nll']-=math.log(max(mass,1e-300))
+            def conditional_changes(distributions):
+                # Excluding a different head/pair changes the list even for an
+                # independent model. Compare only COMMON alternatives: odds
+                # changes and order reversals expose actual conditioning.
+                from itertools import combinations
+                max_shift=0.;reversals=0;comparisons=0
+                for a,b in combinations(distributions.values(),2):
+                    for x,y in combinations(sorted(set(a)&set(b)),2):
+                        first=math.log(max(a[x],1e-300)/max(a[y],1e-300))
+                        second=math.log(max(b[x],1e-300)/max(b[y],1e-300))
+                        max_shift=max(max_shift,abs(first-second));comparisons+=1
+                        reversals+=first*second<0 and min(abs(first),abs(second))>1e-10
+                return {'common_alternative_comparisons':comparisons,'order_reversals':reversals,'max_logodds_shift':max_shift}
+            row['arms'][arm]={'prediction_sha256':pred['sha256'],'actual_exact_model_rank':next(i+1 for i,t in enumerate(pred['ordered_triples']) if [t['head'],t['second'],t['third']]==actual),
+                'head_conditioning':conditional_changes(pred['p2_model_mass_given_head']),
+                'pair_conditioning':conditional_changes(pred['p3_model_mass_given_pair']),
+                'material_exact_evidence':False}
+        rows.append(row)
+    report={'protocol':protocol,'forecast_artifact_sha256':hashlib.sha256(packed).hexdigest(),
+        'training_races':[p['race_id'] for p in training],'validation_races':[p['race_id'] for p in validation],
+        'original_selected_denominator':7,'training_completed':3,'validation_completed':3,'input_hold_retained':1,
+        'metrics':sums,'validation_rows':rows,'production_changes':False,'runtime_post_count':0,'genuine_forward_oos':0,
+        'adoption':'HOLD_SMALL_SAMPLE_RETROSPECTIVE_NO_PRODUCTION_OR_MATERIAL_EXACT_AUTHORITY',
+        'training_label_limit':'Sep23 stored labels were unverified in historical metadata; fresh official refetch required for empirical acceptance. Diagnostic fitting is not proof of true outcome or Publication Time.'}
+    report['sha256']=_sha(report);dump(output/'ranker_report.json',report)
+    print(json.dumps({'metrics':sums,'disposition':report['adoption']}))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--archives', type=Path, required=True)
+    ap.add_argument('--archives', type=Path)
+    ap.add_argument('--ranker-audit', action='store_true')
     ap.add_argument('--engine', type=Path)
     ap.add_argument('--baseline-outputs', type=Path)
     ap.add_argument('--evidence-audit-only', action='store_true')
     ap.add_argument('--prior-predictions', type=Path)
     ap.add_argument('--output', type=Path, required=True)
     args = ap.parse_args()
+    if args.ranker_audit:
+        ranker_audit(args.output)
+        return
+    if args.archives is None:ap.error('--archives required for archive replay')
     params = ROOT / 'runtime/local_physical/parameter_map_v0.1-provisional.json'
     if not args.evidence_audit_only:
         if args.engine is None or args.baseline_outputs is None:

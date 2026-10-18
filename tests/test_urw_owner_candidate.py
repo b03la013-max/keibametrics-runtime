@@ -141,6 +141,67 @@ def test_index_consumption_audit_separates_display_from_score_dependence(origina
     assert all(c['cell_sha256'] for x in audit['indices'] for c in x['cells'])
 
 
+def test_conditional_features_never_score_ruled_neutral_as_weak(original):
+    from runtime.local_race_key_shadow_owner import owner_feature_pack
+    req,s,n=original;c=compile_urw_candidate(req,s,n,now=NOW,historical_replay=True)
+    p=owner_feature_pack(c,n)
+    for row in n['runners']:
+        for name,cell in row['canonical_components'].items():
+            value=p['runners'][str(row['runner_id'])]['INDEX:'+name]
+            assert value==(None if cell['terminal_status']=='RULED-NEUTRAL' else cell['value'])
+    changed=copy.deepcopy(n);changed['runners'][0]['canonical_components']['HPI-L']['value']+=1
+    with pytest.raises(ShadowOwnerError,match='NUMERICAL_BINDING'):
+        owner_feature_pack(c,changed)
+
+
+@pytest.fixture(scope='module')
+def conditional_training():
+    # Synthetic optimizer/conditional-mass test only, not race-quality credit.
+    from runtime.local_race_key_shadow_owner import fit_conditioned_owner
+    packs=[];labels={}
+    for day in (1,2,3):
+        p={'race_id':f'TEST-URW-{day}','race_date':f'2026-09-0{day}','venue_id':'URW',
+            'venue_canon':'TEST_ONLY','venue_canon_source_sha256':'a'*64,
+            'scheduled_post_at':f'2026-09-0{day}T12:00:00+09:00','prediction_cutoff':f'2026-09-0{day}T11:58:00+09:00',
+            'production_authority':False,'runners':{},'baseline':{'W':['1'],'P2':['2','3'],'P3':['2','3','4']}}
+        for i in range(1,6):
+            p['runners'][str(i)]={'INDEX:HPI-L':float((i*day)%6),
+                **{'STAGE:'+k:float((i+day)%3) for k in ('lead','frame','progression','final_reserve')}}
+        p['sha256']=_sha(p);packs.append(p);labels[p['race_id']]=list(map(str,((day%5)+1,((day+1)%5)+1,((day+2)%5)+1)))
+    model=fit_conditioned_owner(packs,labels)
+    return packs,labels,model
+
+
+def test_conditional_joint_mass_normalization_and_no_actual_prefix_input(conditional_training):
+    from runtime.local_race_key_shadow_owner import predict_conditioned_owner
+    packs,_,model=conditional_training
+    p=copy.deepcopy(packs[-1]);p.update(race_id='TEST-URW-VALIDATION',scheduled_post_at='2026-09-04T12:00:00+09:00',prediction_cutoff='2026-09-04T11:58:00+09:00')
+    p['sha256']=_sha({k:v for k,v in p.items() if k!='sha256'})
+    pred=predict_conditioned_owner(model,p,historical_replay=True)
+    assert sum(x['model_mass'] for x in pred['ordered_triples'])==pytest.approx(1.)
+    assert len(pred['ordered_triples'])==60 and len(pred['ordered_pairs'])==20
+    assert all(len({x['head'],x['second'],x['third']})==3 for x in pred['ordered_triples'])
+    assert not pred['material_exact_evidence'] and not pred['formal_handoff_allowed']
+    with pytest.raises(ShadowOwnerError,match='STRICTLY_EARLIER'):
+        predict_conditioned_owner(model,packs[0],historical_replay=True)
+    p['venue_id']='KAW';p['sha256']=_sha({k:v for k,v in p.items() if k!='sha256'})
+    with pytest.raises(ShadowOwnerError,match='TRANSFER_FORBIDDEN'):
+        predict_conditioned_owner(model,p,historical_replay=True)
+
+
+def test_conditional_model_training_parameters_ignore_validation_input(conditional_training):
+    from runtime.local_race_key_shadow_owner import fit_conditioned_owner,predict_conditioned_owner
+    packs,labels,model=conditional_training
+    again=fit_conditioned_owner(packs,labels)
+    assert again['fits']==model['fits']
+    assert all(set(f['coefficients'])!={0.} for f in model['fits'])
+    # An injected time cannot create a forward freeze, even in a test process.
+    p=copy.deepcopy(packs[-1]);p.update(race_id='TEST-URW-FUTURE',scheduled_post_at='2027-01-01T12:00:00+09:00',prediction_cutoff='2027-01-01T11:58:00+09:00')
+    p['sha256']=_sha({k:v for k,v in p.items() if k!='sha256'})
+    with pytest.raises(ShadowOwnerError,match='FORWARD_CLOCK'):
+        predict_conditioned_owner(model,p,now=NOW)
+
+
 @pytest.mark.parametrize('target',[
     'FOREIGN_VENUE','WRONG_RACE','UNSIGNED','ARTIFACT_TAMPER','RECEIPT_TAMPER',
     'BAD_POST','MISSING_INDEX','WRONG_INDEX','BOOLEAN','NAN','INFINITY','MISSING_PROVENANCE',

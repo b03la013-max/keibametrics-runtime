@@ -756,3 +756,376 @@ def audit_urw_candidate_paper_pipeline(candidate, materialized, *, research_exac
         'prediction_quality_proven':False,'formal_no_bet_claim':False,'forward_oos_credit':0}
     out['sha256'] = _sha(out)
     return out
+
+
+# Research only. These functions have no call site in the Production Static
+# Owner, Formal request, KRS transport, MEC or Capital path.
+def owner_feature_pack(candidate, numerical):
+    """Result-blind inputs for a venue-local conditional choice experiment.
+
+    RULED-NEUTRAL cells are missing observations, never weak ability. They
+    receive no score contribution after training-only centering. Source
+    provenance and the observed/missing mask survive separately from scores.
+    """
+    import statistics
+    if candidate.get('production_authority') is not False or candidate.get('sha256') != _sha({k:v for k,v in candidate.items() if k!='sha256'}):
+        raise ShadowOwnerError('CANDIDATE_FEATURE_FREEZE_INVALID')
+    rows=numerical.get('runners') or []
+    if (candidate.get('race_id')!=numerical.get('race_id')
+            or candidate.get('numeric_provenance_sha256')!=_sha([r['canonical_components'] for r in rows])
+            or candidate.get('source_snapshot_sha256')!=(numerical.get('production_evidence_compiler') or {}).get('source_snapshot_sha256')):
+        raise ShadowOwnerError('CANDIDATE_FEATURE_NUMERICAL_BINDING')
+    def mean(values):
+        values=[v for v in values if type(v) in (int,float) and math.isfinite(v)]
+        return statistics.mean(values) if values else None
+    evidence=candidate.get('urw_evidence') or candidate.get('venue_evidence') or {}
+    result={}
+    refs={}
+    for row in rows:
+        rid=str(row['runner_id']);values={};refs[rid]={}
+        for name,cell in row['canonical_components'].items():
+            val=cell.get('value');status=cell.get('terminal_status')
+            if status not in VALID or type(val) not in (int,float) or not math.isfinite(val):
+                raise ShadowOwnerError('CANDIDATE_FEATURE_CELL_INVALID')
+            values['INDEX:'+name]=float(val) if status=='CALCULATED' else None
+            refs[rid][name]={'cell_sha256':_sha(cell),'terminal_status':status,'evidence_refs':cell['evidence_refs']}
+        ev=evidence.get(rid) or {};starts=ev.get('past_starts') or []
+        current=ev.get('current_condition_translation') or {}
+        # Observed rank fractions preserve field-size units; they are not
+        # probabilities of winning the target race. No winner-label input.
+        usable=[s for s in starts if type(s.get('field_size')) is int and s['field_size']>=2]
+        direct=[s for s in usable if s.get('matched_urw_distance') or s.get('matched_venue_distance')]
+        dirt=[s for s in usable if s.get('surface')=='DIRT']
+        analog=direct or dirt
+        first=lambda s:(s.get('positions') or [None])[0]
+        last=lambda s:(s.get('positions') or [None])[-1]
+        fraction=lambda rank,s:float(rank)/s['field_size'] if type(rank) is int else None
+        leader=[s for s in analog if first(s)==1]
+        values.update({
+            'STAGE:direct_finish':mean(fraction(s.get('finish'),s) for s in direct),
+            'STAGE:direct_win':mean(int(s.get('finish')==1) for s in direct if type(s.get('finish')) is int),
+            'STAGE:direct_place':mean(int(s['finish']<=3) for s in direct if type(s.get('finish')) is int),
+            'STAGE:acquisition':mean(fraction(first(s),s) for s in analog),
+            'STAGE:last_corner':mean(fraction(last(s),s) for s in analog),
+            'STAGE:progression':mean((first(s)-last(s))/s['field_size'] for s in analog if type(first(s)) is int and type(last(s)) is int),
+            'STAGE:final_reserve':mean((last(s)-s['finish'])/s['field_size'] for s in analog if type(last(s)) is int and type(s.get('finish')) is int),
+            'STAGE:lead':mean(int(first(s)==1) for s in analog if type(first(s)) is int),
+            'STAGE:leader_survival':mean(int(s['finish']<=3) for s in leader if type(s.get('finish')) is int),
+            'STAGE:distance_delta':mean(current['current_distance_m']-s['distance'] for s in analog if type(s.get('distance')) is int) if current.get('current_distance_m') else None,
+            'STAGE:frame':current.get('current_frame_no'),
+            'STAGE:assigned_load':current.get('current_assigned_load'),
+            'STAGE:bodyweight_change':current.get('current_body_weight_change'),
+        })
+        result[rid]=values
+    out={'schema':'LOCAL-VENUE-CONDITIONAL-FEATURES-v1','race_id':candidate['race_id'],
+        'venue_id':candidate.get('venue_id','URW'),'venue_canon':candidate.get('venue_canon'),
+        'venue_canon_source_sha256':candidate.get('venue_canon_source_sha256'),
+        'race_date':candidate['race_date'],'scheduled_post_at':candidate['scheduled_post_at'],
+        'prediction_cutoff':candidate['prediction_cutoff'],'source_snapshot_sha256':candidate['source_snapshot_sha256'],
+        'source_receipt_sha256':candidate.get('source_receipt_sha256'),
+        'candidate_sha256':candidate['sha256'],'runners':result,'cell_provenance':refs,
+        'baseline':candidate['existing_local_baseline'],'feature_names':sorted(next(iter(result.values()))),
+        'unknown_not_weak':True,'production_authority':False}
+    out['sha256']=_sha(out)
+    return out
+
+
+def _choice_features(pack, rid, prefix, *, stage_evidence=True, interactions=True):
+    row=pack['runners'][rid]
+    out={k:v for k,v in row.items() if stage_evidence or k.startswith('INDEX:')}
+    if interactions and stage_evidence and prefix:
+        head=pack['runners'][prefix[0]]
+        def product(a,b):return a*b if a is not None and b is not None else None
+        def difference(a,b):return a-b if a is not None and b is not None else None
+        out.update({'PAIR:lead_collision':product(row['STAGE:lead'],head['STAGE:lead']),
+            'PAIR:frame_gap':difference(row['STAGE:frame'],head['STAGE:frame']),
+            'PAIR:progression_vs_head_lead':product(row['STAGE:progression'],head['STAGE:lead']),
+            'PAIR:reserve_vs_head_lead':product(row['STAGE:final_reserve'],head['STAGE:lead'])})
+        if len(prefix)==2:
+            second=pack['runners'][prefix[1]]
+            out.update({'THIRD:second_lead_collision':product(row['STAGE:lead'],second['STAGE:lead']),
+                'THIRD:second_frame_gap':difference(row['STAGE:frame'],second['STAGE:frame']),
+                'THIRD:reserve_vs_second_lead':product(row['STAGE:final_reserve'],second['STAGE:lead'])})
+    return out
+
+
+# Source references for NON-PRODUCTION adapters, not a Production Scope list.
+# OHI's attached v2.0 cannot replace current v2.1. No dedicated current canon
+# was supplied for HIM/KNZ/MIZ; those requests remain explicit HOLD.
+VENUE_CANDIDATE_SOURCES = {
+    'URW':(URW_CANON,URW_CANON_SHA256),
+    'FNB':('KM-LOCAL-FNB-v2.1-20260928-R1','158b78d9509ac805409d77bcc569b4910ffd0db90e639f4e70885925ec78fd6f'),
+    'SON':('SON-v2.5-20260827','662852646d99dfe8a1a3b65e234561b669558ee5d7a23f0cafe63e45d2919354'),
+    'MOR':('MOR-v5.0','f4149709718b0d0513185cdab65b4f0149f0d7a49ef9d98ba38bcb5675316f69'),
+    'MON':('MON-v1.0','06e4aa3222f0ac62d2b37460a274a240d494ad7a3b1dfd0871a658e0f037702b'),
+    'SAG':('SAG-v1.2','3a981355502bb3bcf317d20e1fb09fafbd802c9b4886c9fc264553b801528f44'),
+    'KSM':('KSM-v1.1','186cda55802ae54b28249c4107919a7c54ae6c09046844388a8cb6590a465186'),
+    'KCH':('KCH-v1.0','b71f0dea84b57a58ff85b69807d788bea00db6dc1073d7d264afb995fabb5940'),
+    'NGY':('NGY-YATOMI-INFORMATION-SOURCE-202607','b1c22084269dbada6fba283d8ae30f8a9546b143092e9129d390fad6dc610b2c'),
+}
+
+
+def compile_public_venue_candidate(request, source, numerical, *, historical_replay=False):
+    """Reuse LOCAL facts/29-index baseline with a verified venue source ref.
+
+    Deliberately UNSIGNED public research: cannot fill Signed SOURCE, Formal
+    Intent or Production Owner. A model fitted at another venue is rejected
+    by predict_conditioned_owner. No KAW Owner or coefficient is copied.
+    """
+    import copy
+    from urllib.parse import urlparse,parse_qs
+    from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES,VENUE_NAMES
+    from runtime.local_physical.source_acquisition import verify_source_artifact
+    from runtime.local_nar_evidence_candidate import parse_race_card
+    from runtime.local_production_static_owner import _card_heading,_start_date
+    from runtime.local_fullnumerical_candidate import REQUIRED
+    from runtime.local_krs_bridge_candidate import build_candidate_prediction_structure_derived
+    now=datetime.now(timezone.utc);venue=request.get('venue_id')
+    if request.get('family_id')!='LOCAL' or venue not in LOCAL_BABA_CODES:
+        raise ShadowOwnerError('VENUE_CANDIDATE_LOCAL_ONLY')
+    if venue not in VENUE_CANDIDATE_SOURCES:
+        raise ShadowOwnerError('VENUE_CURRENT_CANON_UNRESOLVED:'+str(venue))
+    valid,errors=verify_source_artifact(source)
+    if not valid:raise ShadowOwnerError('VENUE_PUBLIC_SOURCE_INVALID:'+','.join(errors))
+    context=source.get('source_race_context') or {}
+    for key in ('venue_id','race_date','race_no'):
+        if str(request.get(key)).replace('/','-')!=str(context.get(key)).replace('/','-'):
+            raise ShadowOwnerError('VENUE_PUBLIC_SOURCE_RACE_MISMATCH')
+    post=_aware(request['scheduled_post_at'],'POST');cutoff=_aware(request['prediction_cutoff'],'CUTOFF')
+    if (source.get('race_id')!=request['race_id'] or request.get('execution_id')!=request['race_id']
+            or not _aware(source['source_freeze_at'],'SOURCE_FREEZE')<cutoff<post
+            or (not historical_replay and now>=cutoff)):
+        raise ShadowOwnerError('VENUE_PUBLIC_SOURCE_CLOCK_OR_IDENTITY')
+    cards=[s for s in source['sources'] if s.get('source_class')=='OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT' and s.get('official') is True]
+    if len(cards)!=1:raise ShadowOwnerError('VENUE_PUBLIC_CARD_REQUIRED')
+    card=cards[0];url=urlparse(card['final_url']);query=parse_qs(url.query)
+    if (url.scheme!='https' or url.hostname!='www.keiba.go.jp' or not url.path.endswith('/DebaTable')
+            or query.get('k_babaCode')!=[LOCAL_BABA_CODES[venue]]
+            or query.get('k_raceDate')!=[str(request['race_date']).replace('-','/')]
+            or query.get('k_raceNo')!=[str(request['race_no'])] or card.get('cutoff_relation')!='PRE_CUTOFF'):
+        raise ShadowOwnerError('VENUE_PUBLIC_CARD_URL_IDENTITY')
+    header=_card_heading(source);header['class_tokens']=_urw_class_tokens(header['class'])
+    header['going']=(source.get('normalized_evidence') or {}).get('track_condition',{}).get('value')
+    start=(source.get('normalized_evidence') or {}).get('start_time') or {}
+    from runtime.local_race_key_intake import JST
+    if start.get('authority')!='NAR_OFFICIAL' or start.get('value')!=post.astimezone(JST).strftime('%H:%M'):
+        raise ShadowOwnerError('VENUE_PUBLIC_OFFICIAL_POST_MISMATCH')
+    rows=numerical.get('runners') or [];ids=[str(r['runner_id']) for r in rows]
+    active=[str(r['runner_id']) for r in (source.get('active_runner_universe') or {}).get('runners') or []]
+    parsed=parse_race_card(source)
+    if (len(ids)<3 or len(ids)!=len(set(ids)) or set(ids)!=set(active)
+            or numerical.get('strict_full_numerical_ready') is not True
+            or set(numerical.get('required_indices') or [])!=set(REQUIRED)
+            or numerical.get('race_id')!=request['race_id']
+            or (numerical.get('production_evidence_compiler') or {}).get('source_snapshot_sha256')!=source['source_snapshot_sha256']
+            or any((numerical.get('production_numerical_authority') or {}).get(k) is not False for k in
+                   ('prediction_consumption_authorized','krs_consumption_authorized','ticket_consumption_authorized','capital_consumption_authorized'))):
+        raise ShadowOwnerError('VENUE_PUBLIC_ACTIVE_FULL29_OR_SCOPE_HOLD')
+    # Current MON inner/outer families may not share matched analogs. MOR turf
+    # remains HOLD in the existing dirt-only factual header adapter, never
+    # silently relabelled as dirt. NGY old-track observations are not Yatomi.
+    def course_family(distance):
+        if venue=='MON':
+            return 'INNER' if distance in (1500,1600) else 'OUTER' if distance in (1000,1100,1200,1700,1800,2000) else 'UNKNOWN'
+        return 'CURRENT_SOURCE_COURSE'
+    evidence={}
+    for rid in ids:
+        if rid not in parsed:raise ShadowOwnerError('VENUE_PUBLIC_ACTIVE_CARD_MISMATCH')
+        observations=[]
+        for s in sorted(parsed[rid].get('starts') or [],key=lambda x:_start_date(x.get('date')) or datetime.min,reverse=True)[:5]:
+            when=_start_date(s.get('date'))
+            if when is None or when.date()>=post.astimezone(JST).date():
+                raise ShadowOwnerError('VENUE_PUBLIC_NON_PRESTART_HISTORY')
+            same=str(s.get('venue','')).replace('ナ','')==VENUE_NAMES[venue]
+            current_course=not (venue=='NGY' and when.date().isoformat()<'2022-04-08')
+            positions=s.get('content_positions') or []
+            observations.append({'date':s['date'],'venue':s.get('venue'),'distance':s.get('distance'),
+                'surface':s.get('surface'),'finish':s.get('finish'),'field_size':s.get('field_size'),
+                'positions':positions,'going':s.get('going'),'class_tokens':_urw_class_tokens(s.get('race_name')),
+                'matched_venue_distance':same and current_course and s.get('distance')==header['distance'] and course_family(header['distance'])!='UNKNOWN'
+                    and course_family(s.get('distance'))==course_family(header['distance']),
+                'raw_reference':s.get('raw')})
+        current={'current_distance_m':header['distance'],'current_frame_no':parsed[rid].get('frame_no'),
+            'current_assigned_load':parsed[rid].get('current_load'),
+            'current_body_weight_change':parsed[rid].get('current_body_weight_change'),
+            'source_id':parsed[rid].get('race_card_source_id'),
+            'source_snapshot_sha256':parsed[rid].get('race_card_snapshot_sha256'),
+            'effective_time':parsed[rid].get('race_card_fetched_at'),
+            'numerical_venue_effects':'UNKNOWN_NOT_PORTED_FROM_ANOTHER_VENUE'}
+        if venue=='URW':
+            local_observations=[{**s,'matched_urw_distance':s['matched_venue_distance']} for s in observations]
+            current=_urw_current_condition_translation(parsed[rid],local_observations,header)
+        evidence[rid]={'past_starts':observations,
+            'current_condition_translation':current,
+            'current_bias':'UNKNOWN_NO_HISTORICAL_CARRYOVER','venue_source_ref':VENUE_CANDIDATE_SOURCES[venue][0]}
+    baseline=build_candidate_prediction_structure_derived({'runners':copy.deepcopy(rows)})['candidate_static_prediction']
+    completed=datetime.now(timezone.utc)
+    if not historical_replay and completed>=cutoff:raise ShadowOwnerError('VENUE_PUBLIC_COMPLETED_AFTER_CUTOFF')
+    out={'profile':'LOCAL-VENUE-SOURCE-CANDIDATE-v0.1-20261019','venue_id':venue,
+        'venue_canon':VENUE_CANDIDATE_SOURCES[venue][0],'venue_canon_source_sha256':VENUE_CANDIDATE_SOURCES[venue][1],
+        'race_id':request['race_id'],'race_date':request['race_date'],'race_no':request['race_no'],
+        'scheduled_post_at':request['scheduled_post_at'],'prediction_cutoff':request['prediction_cutoff'],
+        'source_snapshot_sha256':source['source_snapshot_sha256'],'source_receipt_sha256':None,
+        'source_signature_authority':'UNSIGNED_PUBLIC_SOURCE_NOT_SIGNED_SOURCE',
+        'numeric_provenance_sha256':numerical['index_provenance_hash'],
+        'existing_local_baseline':baseline,'ranking':baseline['ranking'],'role_columns':baseline['roles'],
+        'venue_evidence':evidence,'current_course_family':course_family(header['distance']),
+        'compiled_at':completed.isoformat(),'frozen_at':None if historical_replay else completed.isoformat(),
+        'temporal_class':'HISTORICAL_RESEARCH' if historical_replay else 'UNSIGNED_PUBLIC_PRESTART_SHADOW',
+        'status':'CANDIDATE_SHARED_BASELINE_VENUE_INPUT_ADAPTER_NOT_VALIDATED_OWNER',
+        'paper_ticket_count':0,'paper_capital_yen':0,'production_authority':False,
+        'formal_handoff_allowed':False,'signed_final_claim':False,'forward_oos_credit':0,
+        'prediction_consumption_authorized':False,'actual_purchase':False,'kaw_owner_reused':False}
+    out['sha256']=_sha(out);return out
+
+
+def _choice_fit(cases, penalty):
+    """Small deterministic ridge conditional-softmax fit; no external API."""
+    import statistics
+    names=sorted({k for rows,_ in cases for r in rows.values() for k in r})
+    means=[];scales=[]
+    for name in names:
+        vals=[r[name] for rows,_ in cases for r in rows.values() if r.get(name) is not None]
+        means.append(statistics.mean(vals) if vals else 0.)
+        scales.append(statistics.pstdev(vals) if len(vals)>1 and len(set(vals))>1 else 0.)
+    def vector(row):
+        return [(row.get(k)-m)/s if row.get(k) is not None and s else 0. for k,m,s in zip(names,means,scales)]
+    data=[([vector(r) for r in rows.values()],list(rows).index(label)) for rows,label in cases]
+    def objective(w, gradient=False):
+        loss=penalty*sum(x*x for x in w)/2;g=[penalty*x for x in w]
+        for x,target in data:
+            scores=[sum(a*b for a,b in zip(w,r)) for r in x];top=max(scores)
+            exp=[math.exp(v-top) for v in scores];denom=sum(exp)
+            loss+=(math.log(denom)+top-scores[target])/len(data)
+            if gradient:
+                for i,r in enumerate(x):
+                    error=(exp[i]/denom-int(i==target))/len(data)
+                    for j,v in enumerate(r):g[j]+=error*v
+        return (loss,g) if gradient else loss
+    w=[0.]*len(names)
+    for iteration in range(400):
+        loss,g=objective(w,True);norm=sum(x*x for x in g)
+        if norm<1e-12:break
+        rate=1.
+        while rate>1e-12:
+            new=[a-rate*b for a,b in zip(w,g)]
+            if objective(new)<=loss-1e-4*rate*norm:break
+            rate/=2
+        if rate<=1e-12:break
+        w=new
+    return {'feature_names':names,'training_means':means,'training_scales':scales,
+            'coefficients':w,'ridge_penalty':penalty,'iterations':iteration+1,
+            'training_objective':objective(w),'missing_contribution':0.,'calibrated':False}
+
+
+def _choice_probabilities(fit, rows):
+    scores={rid:sum(w*(row.get(k)-m)/s if row.get(k) is not None and s else 0.
+        for k,m,s,w in zip(fit['feature_names'],fit['training_means'],fit['training_scales'],fit['coefficients']))
+        for rid,row in rows.items()}
+    top=max(scores.values());exp={k:math.exp(v-top) for k,v in scores.items()};total=sum(exp.values())
+    return {k:v/total for k,v in exp.items()}
+
+
+def fit_conditioned_owner(training_packs, training_labels, *, stage_evidence=True, interactions=True):
+    """Venue-local Candidate only; selection/scaling never sees validation.
+
+    Fit independent W/P2/P3 conditional choice functions. P2/P3 training uses
+    the observed prefix only in TRAINING; inference enumerates hypothetical
+    heads/pairs and never receives target outcomes. Penalty is selected by
+    expanding training-race folds, then frozen. This is a numerical research
+    behavior change, excluded from C1 and Production promotion.
+    """
+    packs=sorted(training_packs,key=lambda p:p['scheduled_post_at'])
+    if (len(packs)<2 or len({p['venue_id'] for p in packs})!=1 or len({p['race_id'] for p in packs})!=len(packs)
+            or len({(p['venue_canon'],p['venue_canon_source_sha256']) for p in packs})!=1):
+        raise ShadowOwnerError('CONDITIONAL_TRAINING_SCOPE_OR_COUNT')
+    for p in packs:
+        if p['sha256']!=_sha({k:v for k,v in p.items() if k!='sha256'}) or p.get('production_authority') is not False:
+            raise ShadowOwnerError('CONDITIONAL_TRAINING_FEATURE_HASH')
+        if len(p['runners'])<3 or any(v is not None and (type(v) not in (int,float) or not math.isfinite(v))
+                for row in p['runners'].values() for v in row.values()):
+            raise ShadowOwnerError('CONDITIONAL_TRAINING_NONFINITE_OR_UNIVERSE')
+        label=list(map(str,training_labels[p['race_id']]))
+        if len(label)!=3 or len(set(label))!=3 or not set(label)<=set(p['runners']):
+            raise ShadowOwnerError('CONDITIONAL_TRAINING_LABEL_UNIVERSE')
+    fits=[]
+    for depth in range(3):
+        cases=[]
+        for p in packs:
+            actual=list(map(str,training_labels[p['race_id']]));prefix=actual[:depth]
+            rows={rid:_choice_features(p,rid,prefix,stage_evidence=stage_evidence,interactions=interactions)
+                  for rid in p['runners'] if rid not in prefix}
+            cases.append((rows,actual[depth]))
+        cv=[]
+        for penalty in (.1,1.,10.):
+            losses=[]
+            for stop in range(1,len(cases)):
+                f=_choice_fit(cases[:stop],penalty)
+                probs=_choice_probabilities(f,cases[stop][0])
+                losses.append(-math.log(max(probs[cases[stop][1]],1e-300)))
+            cv.append({'ridge_penalty':penalty,'training_forward_fold_nll':sum(losses)/len(losses)})
+        best=min(cv,key=lambda x:(x['training_forward_fold_nll'],-x['ridge_penalty']))
+        fit=_choice_fit(cases,best['ridge_penalty']);fit['training_only_cv']=cv;fits.append(fit)
+    model={'schema':'LOCAL-VENUE-CONDITIONAL-CHOICE-v1','venue_id':packs[0]['venue_id'],
+        'venue_canon':packs[0]['venue_canon'],'venue_canon_source_sha256':packs[0]['venue_canon_source_sha256'],
+        'training_races':[{'race_id':p['race_id'],'feature_sha256':p['sha256'],
+            'scheduled_post_at':p['scheduled_post_at'],'training_label_sha256':_sha(training_labels[p['race_id']])} for p in packs],
+        'training_max_post_at':packs[-1]['scheduled_post_at'],'stage_evidence':stage_evidence,'interactions':interactions,
+        'fits':fits,'trained_at':datetime.now(timezone.utc).isoformat(),
+        'production_authority':False,'prediction_consumption_authorized':False,
+        'signed_final_claim':False,'calibration':'UNVALIDATED_SMALL_SAMPLE',
+        'material_exact_authority':False,'genuine_forward_oos':0}
+    model['sha256']=_sha(model);return model
+
+
+def predict_conditioned_owner(model, pack, *, historical_replay=False, now=None):
+    """Enumerate conditional orders without an actual Winner/Second input."""
+    for value in (model,pack):
+        if value.get('sha256')!=_sha({k:v for k,v in value.items() if k!='sha256'}) or value.get('production_authority') is not False:
+            raise ShadowOwnerError('CONDITIONAL_PREDICTION_HASH_OR_AUTHORITY')
+    if len(pack['runners'])<3 or any(v is not None and (type(v) not in (int,float) or not math.isfinite(v))
+            for row in pack['runners'].values() for v in row.values()):
+        raise ShadowOwnerError('CONDITIONAL_PREDICTION_NONFINITE_OR_UNIVERSE')
+    if (model['venue_id']!=pack['venue_id'] or model['venue_canon']!=pack['venue_canon']
+            or model['venue_canon_source_sha256']!=pack['venue_canon_source_sha256']):
+        raise ShadowOwnerError('CONDITIONAL_VENUE_MODEL_TRANSFER_FORBIDDEN')
+    if (pack['race_id'] in {p['race_id'] for p in model['training_races']}
+            or _aware(model['training_max_post_at'],'TRAINING_POST')>=_aware(pack['scheduled_post_at'],'PREDICTION_POST')):
+        raise ShadowOwnerError('CONDITIONAL_TRAINING_NOT_STRICTLY_EARLIER')
+    started=now or datetime.now(timezone.utc)
+    if not historical_replay and (now is not None or _aware(model['trained_at'],'TRAINED_AT')>started or started>=_aware(pack['prediction_cutoff'],'CUTOFF')):
+        raise ShadowOwnerError('CONDITIONAL_FORWARD_CLOCK_OR_CUTOFF')
+    ids=list(pack['runners']);fits=model['fits']
+    def probability(depth,prefix):
+        return _choice_probabilities(fits[depth],{rid:_choice_features(pack,rid,prefix,
+            stage_evidence=model['stage_evidence'],interactions=model['interactions']) for rid in ids if rid not in prefix})
+    w=probability(0,[]);p2={};p3={};pairs=[];triples=[];m2={rid:0. for rid in ids};m3=dict(m2)
+    for h in ids:
+        p2[h]=probability(1,[h])
+        for s,prob in p2[h].items():
+            joint=w[h]*prob;m2[s]+=joint;pairs.append({'head':h,'second':s,'model_mass':joint})
+            key=h+'>'+s;p3[key]=probability(2,[h,s])
+            for t,third_prob in p3[key].items():
+                m3[t]+=joint*third_prob;triples.append({'head':h,'second':s,'third':t,'model_mass':joint*third_prob})
+    ordered=lambda probs:sorted(probs,key=lambda rid:(-probs[rid],int(rid)))
+    rankings={'W':ordered(w),'P2':ordered(m2),'P3':ordered(m3)}
+    baseline=pack['baseline'];widths={role:len(baseline[role]) for role in COLUMNS}
+    roles={rid:[role for role in COLUMNS if rid in rankings[role][:widths[role]]] for rid in ids}
+    pairs.sort(key=lambda p:(-p['model_mass'],int(p['head']),int(p['second'])))
+    triples.sort(key=lambda p:(-p['model_mass'],int(p['head']),int(p['second']),int(p['third'])))
+    completed=now or datetime.now(timezone.utc)
+    if not historical_replay and completed>=_aware(pack['prediction_cutoff'],'CUTOFF'):
+        raise ShadowOwnerError('CONDITIONAL_FORWARD_COMPLETED_AFTER_CUTOFF')
+    out={'schema':'LOCAL-VENUE-CONDITIONAL-PREDICTION-v1','race_id':pack['race_id'],'venue_id':pack['venue_id'],
+        'model_sha256':model['sha256'],'feature_sha256':pack['sha256'],'compiled_at':completed.isoformat(),
+        'temporal_class':'HISTORICAL_RESEARCH_NOT_FORWARD' if historical_replay else 'LOCAL_PRESTART_SHADOW_NOT_FORMAL',
+        'frozen_at':None if historical_replay else completed.isoformat(),'prediction_cutoff':pack['prediction_cutoff'],
+        'ranking':rankings['W'],'rankings_by_role':rankings,'role_columns':roles,'role_widths':widths,
+        'winner_model_mass':w,'p2_model_mass_given_head':p2,'p3_model_mass_given_pair':p3,
+        'ordered_pairs':pairs,'ordered_triples':triples,
+        'material_exact_evidence':False,'material_exact_reason':'NO_VALIDATED_MATERIALITY_OR_FORWARD_EVIDENCE',
+        'probability_interpretation':'NORMALIZED_MODEL_MASS_NOT_CALIBRATED_WIN_PROBABILITY',
+        'missingness':{rid:[k for k,v in row.items() if v is None] for rid,row in pack['runners'].items()},
+        'hard_role_exclusions':[],'production_authority':False,'formal_handoff_allowed':False,
+        'prediction_consumption_authorized':False,'signed_final_claim':False,'actual_purchase':False,'forward_oos_credit':0}
+    out['sha256']=_sha(out);return out
