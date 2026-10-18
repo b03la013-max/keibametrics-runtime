@@ -27,6 +27,101 @@ from runtime.local_physical.nar_runner_universe import enrich_source_artifact
 
 WORKFLOW = 'km-local-race-key-entry.yml'
 ROOT = Path(__file__).resolve().parents[1]
+SOUTH_KANTO = ('FNB', 'OHI', 'URW', 'KAW')
+
+
+class MeetingLinks(HTMLParser):
+    """Official same-day navigation, excluding unrelated dates and hosts."""
+    def __init__(self, day):
+        super().__init__()
+        self.day, self.codes, self.card_codes = day.replace('-', '/'), set(), set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        p = urlparse(urljoin('https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/', dict(attrs).get('href', '')))
+        if (p.scheme, p.netloc) != ('https', 'www.keiba.go.jp'):
+            return
+        q = parse_qs(p.query)
+        if q.get('k_raceDate') != [self.day] or len(q.get('k_babaCode', [])) != 1:
+            return
+        if p.path == '/KeibaWeb/TodayRaceInfo/RaceList':
+            self.codes.add(q['k_babaCode'][0])
+        elif p.path == '/KeibaWeb/TodayRaceInfo/DebaTable':
+            self.card_codes.add(q['k_babaCode'][0])
+
+
+def read_official(spec, *, fetch, reads, read_observer=None, sleeper=time.sleep):
+    # Official GET only. Do not apply this retry to signed SOURCE/FORMAL
+    # submissions, receipt validation, or an ambiguous Actions handoff.
+    from urllib.error import URLError, HTTPError
+    from runtime.execution_gateway import RETRYABLE_HTTP_STATUS
+    for attempt in range(1,4):
+        event = {'source_id':spec['source_id'], 'url':spec['url'],
+                 'attempt':attempt, 'observed_at':datetime.now(timezone.utc).isoformat()}
+        try:
+            snapshot, errors = fetch(spec, '')
+            retryable = snapshot.get('http_status') in RETRYABLE_HTTP_STATUS
+            event.update(http_status=snapshot.get('http_status'), errors=errors,
+                         snapshot_sha256=snapshot.get('snapshot_sha256'))
+            if retryable:
+                event['failed_snapshot'] = snapshot
+            if not retryable or attempt == 3:
+                return snapshot, errors
+        except (OSError, ValueError) as exc:
+            event.update(error=str(exc),error_type=type(exc).__name__)
+            retryable = (isinstance(exc,(TimeoutError,ConnectionError,URLError))
+                and (not isinstance(exc,HTTPError) or exc.code in RETRYABLE_HTTP_STATUS))
+            retryable |= str(exc).startswith('SOURCE_DNS_RESOLUTION_FAILED:')
+            if not retryable or attempt == 3:
+                raise
+        finally:
+            reads.append(event)
+            if read_observer:
+                read_observer(event)
+        sleeper(attempt)
+
+
+def discover_meetings(day, *, now, fetch=fetch_source, read_observer=None, sleeper=time.sleep):
+    """Read the actual official daily menu. Fetch failure never means no meeting.
+
+    Require a selected venue with race-card links and its dated heading as well
+    as venue navigation. An empty/unrecognized page remains HOLD, even on a
+    holiday. No dates or venues are inferred from a weekly calendar.
+    """
+    if date.fromisoformat(day).isoformat() != day or now.tzinfo is None:
+        raise ValueError('LOCAL_DAY_IDENTITY_INVALID')
+    spec = {'source_id':f'NAR-{day}-SOUTH-KANTO-MEETINGS', 'source_class':'OFFICIAL_DAY_MENU',
+            'authority':'NAR_OFFICIAL', 'official':True, 'required':True, 'max_bytes':900000,
+            'url':'https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceList?k_raceDate='+day.replace('-', '%2F')}
+    reads = []
+    snapshot, errors = read_official(spec, fetch=fetch, reads=reads, read_observer=read_observer, sleeper=sleeper)
+    if read_observer:
+        read_observer({'official_snapshot':snapshot})
+    if errors:
+        raise ValueError('OFFICIAL_MEETINGS_HOLD:'+';'.join(errors))
+    html = raw_html(snapshot)
+    links = MeetingLinks(day)
+    links.feed(html)
+    d = date.fromisoformat(day)
+    text = re.sub(r'\s+', '', _html_text(html))
+    # BAN can be present in the official menu without joining LOCAL dispatch.
+    names = {**VENUE_NAMES, 'BAN':'帯広'}
+    codes = {**LOCAL_BABA_CODES, 'BAN':'03'}
+    selected = [v for v in names if re.search(
+        rf'{d.year}年{d.month}月{d.day}日.*?{names[v]}競馬', text)
+        and codes[v] in links.card_codes]
+    if len(selected) != 1 or not links.codes or links.card_codes != {codes[selected[0]]}:
+        raise ValueError('OFFICIAL_DAY_MEETINGS_NOT_PROVEN')
+    held = links.codes | links.card_codes
+    venues = [v for v in SOUTH_KANTO if LOCAL_BABA_CODES[v] in held]
+    result = {'family_id':'LOCAL', 'race_date':day, 'observed_at':now.isoformat(),
+              'allowed_venues':list(SOUTH_KANTO), 'venues':venues,
+              'status':'OFFICIAL_MEETINGS_DISCOVERED' if venues else 'NO_SOUTH_KANTO_MEETING',
+              'official_snapshot':snapshot, 'discovery_read_attempts':reads, 'prediction_freeze':False,
+              'formal_registration_proven':False, 'new_live_send':False}
+    result['sha256'] = sha(result)
+    return result
 
 
 def sha(obj):
@@ -82,34 +177,7 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
     authority = (authority_resolver or resolve_current_authority)(now=now)
     reads = []
     def read(spec):
-        # Official GET only. Do not apply this retry to signed SOURCE/FORMAL
-        # submissions, receipt validation, or an ambiguous Actions handoff.
-        from urllib.error import URLError, HTTPError
-        from runtime.execution_gateway import RETRYABLE_HTTP_STATUS
-        for attempt in range(1,4):
-            event = {'source_id':spec['source_id'], 'url':spec['url'],
-                     'attempt':attempt, 'observed_at':datetime.now(timezone.utc).isoformat()}
-            try:
-                snapshot, errors = fetch(spec, '')
-                retryable = snapshot.get('http_status') in RETRYABLE_HTTP_STATUS
-                event.update(http_status=snapshot.get('http_status'), errors=errors,
-                             snapshot_sha256=snapshot.get('snapshot_sha256'))
-                if retryable:
-                    event['failed_snapshot'] = snapshot
-                if not retryable or attempt == 3:
-                    return snapshot, errors
-            except (OSError, ValueError) as exc:
-                event.update(error=str(exc),error_type=type(exc).__name__)
-                retryable = (isinstance(exc,(TimeoutError,ConnectionError,URLError))
-                    and (not isinstance(exc,HTTPError) or exc.code in RETRYABLE_HTTP_STATUS))
-                retryable |= str(exc).startswith('SOURCE_DNS_RESOLUTION_FAILED:')
-                if not retryable or attempt == 3:
-                    raise
-            finally:
-                reads.append(event)
-                if read_observer:
-                    read_observer(event)
-            sleeper(attempt)
+        return read_official(spec, fetch=fetch, reads=reads, read_observer=read_observer, sleeper=sleeper)
     menu_url = _url('RaceList', LOCAL_BABA_CODES[venue], day.replace('-', '/'), 1)
     spec = {'source_id': f'NAR-{venue}-{day}-DAY-MENU', 'source_class': 'OFFICIAL_DAY_MENU',
             'authority': 'NAR_OFFICIAL', 'official': True, 'required': True,
@@ -164,6 +232,9 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         records.append({'race_key': f'{venue}-{d:%Y%m%d}-R{number:02d}-LIVE-R1',
                         'execution_id': request['execution_id'], 'fields': fields,
                         'current_authority_at_observation': request['current_authority_manifest'],
+                        'request_intent_draft':request,
+                        'intent_status':'DRAFT_NOT_FORMAL_STATIC_NOT_DISPATCHED',
+                        'planned_dispatch_window':'DATED_OWNER_LEAD_AND_LOCAL_TIMING_EVIDENCE_REQUIRED',
                         'registration_status':'NOT_REGISTERED',
                         'declared_runner_universe': universe['declared_runner_universe'],
                         'observed_active_runner_universe': universe['active_runner_universe'] if active_proven else None,
@@ -302,18 +373,18 @@ def inspect_plan(root, plan, now):
     rows = []
     for race in plan['races']:
         fields, eid = race['fields'], race['execution_id']
-        prefix = eid.rsplit('-R1', 1)[0]
-        existing = list((root/'runtime/executions').glob(prefix+'-R*'))
-        existing += list((root/'runtime/formal_intents').glob(prefix+'-R*.json'))
-        for key in (root/'runtime/race_key_requests').glob('*.json'):
-            value = json.loads(key.read_text())
-            if all(str(value.get(k)) == str(fields[k]) for k in ('venue_id','race_date','race_no')):
-                existing.append(key)
+        try:
+            existing = existing_race_refs(root, race)
+            checkpoints = checkpoint_status(root, eid)
+            error = None
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            existing, checkpoints, error = [], {}, str(exc)
         rows.append({'execution_id':eid, 'fields':fields,
                      'existing_refs':sorted(str(p.relative_to(root)) for p in existing),
                      'remaining_seconds':(datetime.fromisoformat(fields['prediction_cutoff'])-now).total_seconds(),
                      'observed_active_runner_universe':race.get('observed_active_runner_universe'),
-                     'checkpoints':checkpoint_status(root,eid), 'live_eligibility':'NOT_EVALUATED_NO_AUTHORIZATION'})
+                     'checkpoints':checkpoints, 'observation_error':error,
+                     'live_eligibility':'NOT_EVALUATED_NO_AUTHORIZATION'})
     return {'phase':'A', 'status':'READ_ONLY_NO_LIVE_SEND', 'current_authority_manifest':current,
             'observed_at':now.isoformat(), 'plan_sha256':plan['plan_sha256'], 'target_races':len(rows),
             'races':rows, 'dispatch_count':0, 'new_signed_artifacts':0}
@@ -345,10 +416,93 @@ def existing_race_refs(root, race):
     refs = list((root/'runtime/executions').glob(prefix+'-R*'))
     refs += list((root/'runtime/formal_intents').glob(prefix+'-R*.json'))
     for key in (root/'runtime/race_key_requests').glob('*.json'):
-        candidate = json.loads(key.read_text())
+        try:
+            candidate = json.loads(key.read_text())
+            if not isinstance(candidate, dict):
+                raise ValueError('RACE_KEY_OBJECT_REQUIRED')
+        except (ValueError, OSError):
+            identity = re.fullmatch(r'([A-Z]{3})-(\d{8})-R(\d{2})-LIVE-R\d+', key.stem)
+            expected = (race['fields']['venue_id'], race['fields']['race_date'].replace('-',''),
+                        f"{int(race['fields']['race_no']):02d}")
+            # A malformed identifiable sibling cannot be an accepted key. Hold
+            # that sibling only; unidentified aliases remain conservatively HOLD.
+            if identity and identity.groups() != expected:
+                continue
+            raise
         if all(str(candidate.get(k)) == str(race['fields'][k]) for k in ('venue_id','race_date','race_no')):
             refs.append(key)
     return refs
+
+
+def canonical_day_index(root, plan, *, now, health=None, state=None):
+    """Read-only LOCAL FINAL readback, with independent publication/arrival fields.
+
+    The optional health must come from the canonical Gateway GET. Its current
+    fingerprint is assessed here; keys embedded in envelopes are never trusted.
+    No /verify POST, signing, notification or learning injection is performed.
+    """
+    if sha({k:v for k,v in plan.items() if k != 'plan_sha256'}) != plan.get('plan_sha256'):
+        raise ValueError('DAY_PLAN_SHA_MISMATCH')
+    from runtime.execution_gateway import assess_runtime_health
+    from runtime.jra_ticket_tree_renderer import render_ticket_tree
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    trusted = health is not None and assess_runtime_health(health, 'LOCAL')['status'] == 'PASS'
+    rows = []
+    for race in plan['races']:
+        eid, fields = race['execution_id'], race['fields']
+        cell = ((state or {}).get('races') or {}).get(eid, {})
+        row = {'execution_id':eid, **fields, 'discovered':True,
+               'registration_status':cell.get('registration', {}).get('status', 'NOT_PROVEN'),
+               'execution_status':cell.get('status', 'DISCOVERED'),
+               'first_failure_observation':cell.get('first_failure_observation'),
+               'final_generated':None, 'final_signed':False, 'final_signed_before_cutoff':False,
+               'final_published_at':None, 'delivery_sent_at':None, 'delivery_acknowledged_at':None,
+               'delivery_verified':False, 'recommendation_pfs':'N/A_NO_VERIFIED_FINAL',
+               'actual_purchase_pfs':'UNKNOWN', 'next_race_consumption':'UNVERIFIED'}
+        try:
+            observation = checkpoint_status(root, eid)
+            row['checkpoints'] = observation
+            ref = observation['stages']['FINAL'].get('artifact_ref')
+            if ref and trusted:
+                envelope = json.loads((root/ref).read_text())
+                receipt, artifact = envelope['receipt'], envelope['artifact']
+                if (receipt.get('family') != 'LOCAL' or receipt.get('phase') != 'FINAL'
+                        or receipt.get('status') != 'PASS' or receipt.get('errors')
+                        or receipt.get('race_id') != eid or envelope.get('signature_alg') != 'Ed25519'
+                        or envelope.get('signer_key_id') != health['receipt_signer_key_id']
+                        or receipt.get('engine_sha256') != health['engine_sha256']
+                        or receipt.get('parameter_map_sha256') != health['parameter_map_sha256']
+                        or sha(receipt) != envelope['receipt_sha256']
+                        or sha(artifact) != receipt['artifact_sha256']):
+                    raise ValueError('CANONICAL_FINAL_IDENTITY_OR_HASH_MISMATCH')
+                Ed25519PublicKey.from_public_bytes(base64.b64decode(health['receipt_public_key_b64'], validate=True)).verify(
+                    base64.b64decode(envelope['signature'], validate=True),
+                    json.dumps(receipt, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode())
+                signed = datetime.fromisoformat(receipt['timestamp'].replace('Z','+00:00'))
+                frozen = datetime.fromisoformat(artifact['final_freeze_timestamp'].replace('Z','+00:00'))
+                cutoff = datetime.fromisoformat(fields['prediction_cutoff'])
+                if signed.tzinfo is None or frozen.tzinfo is None or not frozen <= signed <= now:
+                    raise ValueError('CANONICAL_FINAL_CLOCK_INVALID')
+                tree = render_ticket_tree(artifact)
+                row.update(final_generated=True, final_signed=True, final_signed_at=receipt['timestamp'],
+                           final_signed_before_cutoff=frozen < cutoff and signed < cutoff,
+                           final_artifact_sha256=receipt['artifact_sha256'], final_receipt_sha256=envelope['receipt_sha256'],
+                           canonical_tree=tree['text'], ticket_count=tree['ticket_count'],
+                           total_investment=tree['total_investment'],
+                           capital_decision=artifact.get('capital_policy_decision'),
+                           recommendation_pfs='UNKNOWN_PENDING_VERIFIED_SETTLEMENT')
+            elif ref:
+                row['verification_status'] = 'HOLD_CANONICAL_HEALTH_REQUIRED'
+        except Exception as exc:
+            # InvalidSignature has an empty message; preserve the error type.
+            row.update(verification_status='HOLD_READBACK', observation_error=f'{type(exc).__name__}:{exc}')
+        rows.append(row)
+    return {'family_id':'LOCAL', 'venue_id':plan['venue_id'], 'race_date':plan['race_date'],
+            'observed_at':now.isoformat(), 'plan_sha256':plan['plan_sha256'],
+            'target_races':len(rows), 'races':rows,
+            'signed_final_before_cutoff_count':sum(r['final_signed_before_cutoff'] for r in rows),
+            'delivery_verified_count':0, 'new_live_send':False,
+            'publication_status':'LOCAL_INDEX_RENDER_ONLY_REMOTE_AVAILABILITY_UNVERIFIED'}
 
 
 def owned_registration(root, race, cell, plan, current):
@@ -578,15 +732,134 @@ def publish_state(root, paths):
     persist(cwd=root, branch='main')
 
 
+def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetch_source):
+    """Resolve once, plan every held venue, then use existing dated workers.
+
+    Planning never implies approval. Workers share one loop and strict Git
+    publisher, rather than blocking behind a sibling's long lease or RESULT.
+    """
+    folder = root/'runtime/local_race_day_plan'
+    index_path = root/'runtime/execution_reports'/('LOCAL-'+day)/'canonical_index.json'
+    report = {'race_date':day, 'observed_at':now.isoformat(), 'venues':{},
+              'new_live_send':False, 'target_races':0, 'target_races_complete':False}
+    if execute and os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true':
+        raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
+    meeting_reads = []
+    try:
+        meeting = discover_meetings(day, now=now, fetch=fetch, read_observer=meeting_reads.append)
+        report['meeting'] = meeting
+    except Exception as exc:
+        report.update(status='HOLD_OFFICIAL_DISCOVERY', original_error=f'{type(exc).__name__}:{exc}', discovery_reads=meeting_reads)
+        write(index_path, report)
+        return report
+    contexts = []
+    for venue in meeting['venues']:
+        name = day+'-'+venue
+        plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
+        approval_path = root/'profiles/local_autonomous_approvals'/(name+'.json')
+        first_stop_stage = 'OFFICIAL_RACE_DISCOVERY_OR_PLAN_RECONCILIATION'
+        try:
+            approval = json.loads(approval_path.read_text()) if execute and approval_path.exists() else None
+            fresh = discover(venue, day, approval.get('cutoff_seconds', cutoff_seconds) if approval else cutoff_seconds,
+                             now=now, fetch=fetch)
+            if plan_path.exists():
+                plan = json.loads(plan_path.read_text())
+                # Current official identity/time/universe drift requires review;
+                # do not silently rewrite the plan SHA an Owner already approved.
+                if (plan['venue_id'], plan['race_date']) != (venue, day) or [
+                        (r['fields'],r['declared_runner_universe']) for r in plan['races']] != [
+                        (r['fields'],r['declared_runner_universe']) for r in fresh['races']]:
+                    raise ValueError('OFFICIAL_DAY_PLAN_DRIFT_REVIEW_REQUIRED')
+            else:
+                plan = fresh
+                write(plan_path, plan)
+            state = json.loads(state_path.read_text()) if state_path.exists() else {}
+            report['venues'][venue] = canonical_day_index(root, plan, now=now, state=state)
+            report['target_races'] += len(plan['races'])
+            if execute:
+                first_stop_stage = 'DATED_OWNER_AUTHORIZATION'
+                if approval is None:
+                    raise ValueError('DATED_OWNER_APPROVAL_REQUIRED')
+                authorization(approval, plan, root, now)
+                _, step = prepare_worker(root, plan, plan_path, state_path, approval_path)
+                contexts.append((venue, approval, step, time.monotonic()))
+        except Exception as exc:
+            report['venues'].setdefault(venue, {}).update(status='HOLD',
+                first_stop_stage=first_stop_stage,
+                original_error=f'{type(exc).__name__}:{exc}', formal_registration_proven=False)
+    report['target_races_complete'] = all('races' in v for v in report['venues'].values())
+    report['status'] = 'READ_ONLY_DISCOVERY' if not execute else 'GATED_EXECUTION_OBSERVATION'
+    write(index_path, report)
+    while contexts:
+        pending = []
+        for venue, approval, step, started in contexts:
+            try:
+                state = step()
+                venue_index = root/'runtime/execution_reports'/('LOCAL-'+day)/(venue+'.json')
+                report['venues'][venue] = json.loads(venue_index.read_text())
+                report['venues'][venue]['worker_state'] = state
+                # Each venue retains its OWN reviewed duration and race budget.
+                if (time.monotonic()-started < approval.get('worker_seconds', 0)
+                        and any(c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
+                            and not c.get('manual_recovery_required') and not c.get('claimed_at')
+                            for c in state.get('races',{}).values())):
+                    pending.append((venue, approval, step, started))
+            except Exception as exc:
+                report['venues'][venue].update(status='HOLD_WORKER', original_error=f'{type(exc).__name__}:{exc}')
+        write(index_path, report)
+        contexts = pending
+        if contexts:
+            time.sleep(min(60, max(0, min(a.get('worker_seconds',0)-(time.monotonic()-s) for _,a,_,s in contexts))))
+    return report
+
+
+def prepare_worker(root, plan, plan_path, state_path, approval_path):
+    approval = json.loads(approval_path.read_text())
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    paths = [str(plan_path.relative_to(root)), str(state_path.relative_to(root)), 'runtime/race_key_requests']
+    index_path = root/'runtime/execution_reports'/('LOCAL-'+plan['race_date'])/(plan['venue_id']+'.json')
+    def publish():
+        write(state_path, state)
+        health = None
+        if any((root/'runtime/executions'/r['execution_id']/'FORMAL/LATEST.json').exists() for r in plan['races']):
+            try:
+                from runtime.execution_gateway import family_config, fetch_health
+                health = fetch_health(family_config('LOCAL')['external_endpoint'])
+            except Exception:
+                pass  # Index explicitly retains HOLD; no persisted signature flag is trusted.
+        write(index_path, canonical_day_index(root, plan, now=datetime.now(timezone.utc), health=health, state=state))
+        delivery_paths=[str(p.relative_to(root)) for r in plan['races']
+                        if (p:=root/'runtime/execution_reports'/r['execution_id']/'delivery').exists()]
+        publish_state(root, paths+delivery_paths+[str(index_path.relative_to(root))])
+        if sha(json.loads(approval_path.read_text())) != sha(approval):
+            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
+        if json.loads(plan_path.read_text()) != plan:
+            raise ValueError('DAY_PLAN_CHANGED_DURING_WORKER')
+    def step():
+        current_approval = json.loads(approval_path.read_text())
+        if sha(current_approval) != sha(approval):
+            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
+        tick(root,plan,current_approval,state,now=datetime.now(timezone.utc),execute=True,
+             publish=publish,clock=lambda:datetime.now(timezone.utc))
+        publish()
+        return state
+    return approval, step
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--repo-root', default=str(ROOT))
-    p.add_argument('--venue', required=True, choices=sorted(LOCAL_BABA_CODES))
+    scope = p.add_mutually_exclusive_group(required=True)
+    scope.add_argument('--venue', choices=sorted(LOCAL_BABA_CODES))
+    scope.add_argument('--south-kanto', action='store_true')
     p.add_argument('--date', required=True)
     p.add_argument('--cutoff-seconds', required=True, type=int)
     p.add_argument('--execute', action='store_true')
     args = p.parse_args()
     root, now = Path(args.repo_root).resolve(), datetime.now(timezone.utc)
+    if args.south_kanto:
+        print(json.dumps(south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute)))
+        return
     name = args.date+'-'+args.venue
     folder = root/'runtime/local_race_day_plan'
     plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
@@ -619,29 +892,7 @@ def main():
         write(folder/(name+'.dry-run.json'), report)
         print(json.dumps(report))
         return
-    approval = json.loads(approval_path.read_text())
-    state = json.loads(state_path.read_text()) if state_path.exists() else {}
-    paths = [str(plan_path.relative_to(root)), str(state_path.relative_to(root)), 'runtime/race_key_requests']
-    # Only each approved race's derived delivery folder; no unrelated race writes.
-    def publish():
-        write(state_path, state)
-        delivery_paths=[str(p.relative_to(root)) for r in plan['races']
-                        if (p:=root/'runtime/execution_reports'/r['execution_id']/'delivery').exists()]
-        publish_state(root, paths+delivery_paths)
-        if sha(json.loads(approval_path.read_text())) != sha(approval):
-            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
-        if json.loads(plan_path.read_text()) != plan:
-            raise ValueError('DAY_PLAN_CHANGED_DURING_WORKER')
-    def step():
-        # publish_state rebases incoming race-local checkpoints; each iteration
-        # rereads approval, so revocation and authority drift stop the worker.
-        current_approval = json.loads(approval_path.read_text())
-        if sha(current_approval) != sha(approval):
-            raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
-        tick(root,plan,current_approval,state,now=datetime.now(timezone.utc),execute=True,
-             publish=publish,clock=lambda:datetime.now(timezone.utc))
-        publish()
-        return state
+    approval, step = prepare_worker(root, plan, plan_path, state_path, approval_path)
     run_worker(approval,step)
 
 

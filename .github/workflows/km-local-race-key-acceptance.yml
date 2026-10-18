@@ -9,6 +9,8 @@ on:
     paths:
       - "runtime/local_race_day_dispatcher.py"
       - "tests/test_local_race_day_dispatcher.py"
+      - "tests/test_local_south_kanto.py"
+      - "runtime/jra_next_race_learning_binding_audit.py"
       - "runtime/formal_failure_diagnostics.py"
       - "tests/test_formal_failure_diagnostics.py"
       - "runtime/local_race_key_intake.py"
@@ -62,7 +64,7 @@ jobs:
           PYTHONPATH=runtime:. python -m runtime.local_race_entry --help >/dev/null
           PYTHONPATH=runtime:. python -m runtime.local_race_key_gate --help >/dev/null
       - name: LOCAL race-key and existing formal regression
-        run: python -m pytest -q tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py
+        run: python -m pytest -q tests/test_local_south_kanto.py tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py tests/test_jra_next_race_learning_binding_audit.py
 
       - name: Record official NAR day discovery availability (read-only, no LIVE/OOS execution)
         run: |
@@ -85,6 +87,18 @@ jobs:
                           'new_live_send':False,'forward_oos':False}
               Path(prefix+'-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
               print(json.dumps(result,ensure_ascii=False))
+          from runtime.local_race_day_dispatcher import south_kanto_day
+          # Official GET only. Output is an Actions artifact in a temporary root,
+          # never a main plan push, activation, Runtime POST or OOS prediction.
+          import tempfile
+          root=Path(tempfile.mkdtemp(prefix='local-read-only-'))
+          result=south_kanto_day(root,'2026-10-19',120,now=datetime.now(timezone.utc))
+          Path('south-kanto-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+          import shutil
+          if (root/'runtime/local_race_day_plan').exists():
+              shutil.copytree(root/'runtime/local_race_day_plan','south-kanto-plans',dirs_exist_ok=True)
+          print(json.dumps({'status':result['status'],'target_races':result['target_races'],
+              'complete':result['target_races_complete'],'venues':list(result['venues'])}))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
@@ -97,4 +111,6 @@ jobs:
             phase-b-discovery-plan.json
             next-kaw-discovery.json
             next-kaw-discovery-plan.json
+            south-kanto-discovery.json
+            south-kanto-plans/
           if-no-files-found: ignore

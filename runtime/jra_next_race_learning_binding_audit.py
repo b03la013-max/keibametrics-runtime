@@ -21,7 +21,7 @@ def _sha(obj):
 
 
 def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
-                               learning_states, prediction_input=None):
+                               learning_states, prediction_input=None, family_id='JRA'):
     """Distinguish temporal eligibility, read evidence, and actual input binding.
 
     prediction_input must be an existing frozen input artifact; this function
@@ -30,8 +30,8 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
     freeze, cutoff = _time(source_freeze), _time(prediction_cutoff)
     if freeze > cutoff:
         raise ValueError("SOURCE_AFTER_CUTOFF")
-    if not race_id.startswith("KM-JRA-"):
-        raise ValueError("JRA_SCOPE_REQUIRED")
+    if family_id not in {'JRA', 'LOCAL'} or not race_id.startswith(f"KM-{family_id}-"):
+        raise ValueError(f"{family_id}_SCOPE_REQUIRED")
     if prediction_input is not None and not isinstance(prediction_input, dict):
         raise ValueError("PREDICTION_INPUT_MUST_BE_OBJECT")
     bindings = (prediction_input or {}).get("learning_state_bindings", [])
@@ -53,7 +53,7 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
             seen.add(sid)
             if state.get("race_id") == race_id:
                 reason = "SAME_RACE_LEAKAGE"
-            elif not str(state.get("race_id", "")).startswith("KM-JRA-"):
+            elif not str(state.get("race_id", "")).startswith(f"KM-{family_id}-"):
                 reason = "FAMILY_MISMATCH"
             elif not state.get("sha256") or not isinstance(state.get("sha256"), str):
                 reason = "STATE_DIGEST_MISSING"
@@ -95,6 +95,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--race-id", required=True)
+    parser.add_argument("--family-id", choices=['JRA','LOCAL'], default='JRA')
     parser.add_argument("--source-freeze", required=True)
     parser.add_argument("--cutoff", required=True)
     parser.add_argument("--states", required=True)
@@ -108,7 +109,7 @@ def main():
     report = audit_learning_consumption(
         race_id=args.race_id, source_freeze=args.source_freeze,
         prediction_cutoff=args.cutoff, learning_states=states,
-        prediction_input=frozen)
+        prediction_input=frozen, family_id=args.family_id)
     Path(args.output).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
