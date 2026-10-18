@@ -22,7 +22,10 @@ import pytest
 
 from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
-from runtime.local_race_key_shadow_owner import compile_urw_candidate, ShadowOwnerError, _sha
+from runtime.local_race_key_shadow_owner import (
+    compile_urw_candidate, ShadowOwnerError, _sha, _urw_scenario_prediction,
+    audit_urw_candidate_paper_pipeline,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBKEY = 'jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE='
@@ -180,3 +183,163 @@ def test_entry_selects_urw_candidate_without_formal_or_external_request(original
     assert out['shadow_owner']['production_prediction_changed'] is False
     assert phases==['SOURCE']
     assert not (tmp_path/'runtime/formal_intents').exists()
+
+
+def mechanism_fixture():
+    """Synthetic geometry counterfactuals; NOT a signed SOURCE or accuracy test."""
+    def observation(positions,finish=3):
+        return {'date':'26.09.01','venue':'浦和','distance':1400,'going':'良','surface':'DIRT',
+                'race_name':'Ｃ１一','class_tokens':['C1'],'field_size':8,'positions':positions,
+                'finish':finish,'matched_urw_distance':True}
+    paths = {'1':[observation([1,1,1,1],1),observation([2,2,2,1],1)],
+             '2':[observation([2,2,2,2],1)],
+             '3':[observation([2,2,2,2],2)],
+             '4':[observation([3,3,3,3],2)],
+             '5':[observation([4,4,4,4])],
+             '6':[observation([5,5,5,5])],
+             '7':[observation([3,3,3,3])],'8':[]}
+    evidence = {rid:{'past_starts':obs} for rid,obs in paths.items()}
+    baseline = {'ranking':list(paths),'W':['1','2'],'P2':['3','4','6'],
+                'P3':['3','4','5','6','7','8'],
+                'roles':{rid:[k for k,pool in [('W',['1','2']),('P2',['3','4','6']),
+                    ('P3',['3','4','5','6','7','8'])] if rid in pool] for rid in paths}}
+    header = {'distance':1400,'class_tokens':['C1'],'going':'良'}
+    return evidence,baseline,header
+
+
+def test_conditions_change_p2_and_residual_p3_evidence_not_just_exclusion():
+    e,b,h=mechanism_fixture()
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    a=q['head_local_p2']['1'];c=q['head_local_p2']['2']
+    assert a['evaluations']['3']['supported_contexts']
+    assert not c['evaluations']['3']['supported_contexts']  # Different HEAD geometry.
+    assert ['4','3'] in a['partial_order_edges']  # No weighted sum; support inclusion.
+    assert a['incomparable_groups'] != c['incomparable_groups']
+    t=q['pair_conditioned_p3']
+    assert t['1>3']['evaluations']['7']['supported_contexts']
+    assert not t['1>4']['evaluations']['7']['supported_contexts']  # SECOND changes the residual.
+    assert all(not x['hard_exclusion'] and not x['material_exact_evidence']
+        for block in t.values() for x in block['evaluations'].values())
+    assert q['baseline_roles_changed'] is False
+    assert q['new_numerical_weights']=={} and q['calibrated_probabilities'] is False
+
+
+def test_missing_evidence_is_incomparable_and_never_automatic_purchase():
+    e,b,h=mechanism_fixture()
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    for block in q['pair_conditioned_p3'].values():
+        row=block['evaluations']['8']
+        assert row['unknown_contexts'] and not row['hard_exclusion']
+        assert '8' in block['incomparable_groups'][0]
+        assert not any('8' in edge for edge in block['partial_order_edges'])
+    assert q['unknown_role_alternatives']['8']==['W','P2','P3']
+    assert q['unknown_role_alternatives_material'] is False
+
+
+def test_stances_preserve_correlated_paths_and_acquisition_is_not_survival():
+    e,b,h=mechanism_fixture()
+    e['1']['past_starts']=[{**e['1']['past_starts'][0],'positions':[1,2,5,6],'finish':7},
+                          {**e['1']['past_starts'][1],'positions':[4,4,2,1],'finish':1}]
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    stances=q['runner_scenarios']['1']
+    assert stances['PRESS']['projected_position_alternatives']==[{'C1':1,'C3':5,'C4':6}]
+    assert stances['SIT']['projected_position_alternatives']==[{'C1':4,'C3':2,'C4':1}]
+    assert {'C1':1,'C3':2,'C4':1} not in sum((s['projected_position_alternatives'] for s in stances.values()),[])
+    survival=q['actor_evidence']['1']['lead_survival_observations'][0]
+    assert survival['C4_lead_retained'] is False and survival['finish_lead_retained'] is False
+    assert survival['straight_rank_change']==-1
+    assert q['actor_evidence']['1']['current_survival_probability'] is None
+    assert all(s['probability'] is None and s['new_score_adjustment'] is None for s in stances.values())
+
+
+@pytest.mark.parametrize('target',['two_calls','foreign_course','different_field','different_class'])
+def test_unknown_translation_never_becomes_context_matched_effect(target):
+    e,b,h=mechanism_fixture()
+    for row in e['3']['past_starts']:
+        if target=='two_calls':row['positions']=[2,2]
+        if target=='foreign_course':row.update(venue='川崎',matched_urw_distance=False)
+        if target=='different_field':row['field_size']=10
+        if target=='different_class':row['class_tokens']=['C2']
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    row=q['head_local_p2']['1']['evaluations']['3']
+    assert row['unknown_contexts'] and not row['matched_contexts']
+    assert row['material_exact_evidence'] is False and row['hard_exclusion'] is False
+
+
+def test_missing_past_win_does_not_delete_winner_hypotheses():
+    e,b,h=mechanism_fixture()
+    for row in e['1']['past_starts']:row['finish']=6
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    assert q['head_local_p2']['1']['evaluations']['3']['supported_contexts']
+    assert q['actor_evidence']['1']['baseline_roles_retained']==['W']
+
+
+def test_pairwise_friction_has_directional_branches_and_no_invented_cost():
+    e,b,h=mechanism_fixture();h['distance']=2000
+    q=_urw_scenario_prediction(e,b,header=h,field_size=8)
+    f=next(x for x in q['pairwise_friction'] if (x['a'],x['b'])==('1','2'))
+    assert f['branches'][0]['evidence_status']=='OBSERVED_ANALOG_AVAILABLE'
+    assert f['branches'][1]['evidence_status']=='UNKNOWN_NOT_IMPOSSIBLE'
+    assert f['branches'][2]['duration']==f['branches'][2]['energy_cost']=='UNKNOWN'
+    assert f['score_effect'].startswith('UNKNOWN') and not f['pair_exclusion_authority']
+
+
+def test_real_source_candidate_krs_mec_capital_and_exact_plumbing_remain_paper(original):
+    from runtime.formal_request_validator import (
+        validate_numeric_input, validate_production_authority, FormalValidationError,
+    )
+    req,s,n=original
+    frozen=compile_urw_candidate(req,s,n,now=NOW,historical_replay=True)
+    before=copy.deepcopy(frozen)
+    p=audit_urw_candidate_paper_pipeline(frozen,n)
+    validate_numeric_input(p['candidate_krs_input'],[r['runner_id'] for r in n['runners']])
+    assert p['candidate_krs_input']['keibametrics_input_authority']['production_authority'] is False
+    assert p['mec_contract_result']['material_coverage_ratio']==1
+    assert p['capital_contract_result']['decision']=='PAPER'
+    assert p['capital_contract_result']['capital_limit']==0
+    assert p['exact_materiality_inferred_from_geometry'] is False
+    assert not any(t['bet_type']=='TRIFECTA' for t in p['mec_contract_result']['tickets'])
+    key=next(iter(frozen['pair_conditioned_thirds']))
+    triple=(key['head'],key['second'],key['third'])
+    # Explicit hypothetical materiality tests Common Exact plumbing. It is NOT
+    # inferred from this retrospective race, a recommendation or a signed FINAL.
+    exact=audit_urw_candidate_paper_pipeline(frozen,n,research_exact_keys=[triple])
+    tickets=exact['mec_contract_result']['tickets']
+    assert any(t['bet_type']=='EXACTA' and tuple(map(str,t['selection']))==triple[:2] for t in tickets)
+    assert any(t['bet_type']=='TRIFECTA' and tuple(map(str,t['selection']))==triple for t in tickets)
+    assert exact['capital_contract_result']['decision']=='PAPER'
+    assert exact['mec_contract_result']['minimum_required_capital']==p['mec_contract_result']['minimum_required_capital']+100
+    assert frozen==before  # Paper/Capital/KRS never rewrite the Static freeze.
+    assert not p['signed_final_claim'] and p['runtime_send_count']==0
+    assert not p['prediction_quality_proven'] and p['forward_oos_credit']==0
+    candidate_request={**p['semantic_request'],
+        'base_index_mapping_authority':{'production_authority':True,'status':'PRODUCTION'}}
+    with pytest.raises(FormalValidationError,match='NON_PRODUCTION_STATIC_PREDICTION_FORBIDDEN'):
+        validate_production_authority(candidate_request)
+    with pytest.raises(ShadowOwnerError,match='OUTSIDE_FROZEN_SEMANTICS'):
+        audit_urw_candidate_paper_pipeline(frozen,n,research_exact_keys=[('1','1','1')])
+
+
+def test_krs_and_capital_inputs_cannot_backsolve_static_freeze(original):
+    req,s,n=original
+    a=compile_urw_candidate(req,s,n,now=NOW,historical_replay=True)
+    injected={**req,'krs_output':{'SSR_W':{'12':100}},'budget':10000000,
+              'scenario_weights':{'PRESS':1},'static_prediction':{'ranking':['12']}}
+    b=compile_urw_candidate(injected,s,n,now=NOW,historical_replay=True)
+    assert a==b
+    assert a['urw_scenario_prediction']['krs_input_or_output_consumed'] is False
+    assert a['urw_scenario_prediction']['krs_role_veto_allowed'] is False
+
+
+def test_real_source_scenarios_and_pipeline_refuse_cross_source_numerics(original):
+    req,s,n=original
+    a=compile_urw_candidate(req,s,n,now=NOW,historical_replay=True)
+    q=a['urw_scenario_prediction']
+    assert q['header_context']['class_tokens']==['B3','C1']
+    assert len(q['runner_scenarios'])==12 and len(q['pairwise_friction'])==66
+    assert len(q['head_local_p2'])==6 and len(q['pair_conditioned_p3'])==48
+    assert any(v['supported_contexts'] for block in q['pair_conditioned_p3'].values() for v in block['evaluations'].values())
+    assert q['full_urw_model_complete'] is False
+    wrong=copy.deepcopy(n);wrong['production_evidence_compiler']['source_snapshot_sha256']='other'
+    with pytest.raises(ShadowOwnerError,match='NUMERICAL_BINDING'):
+        audit_urw_candidate_paper_pipeline(a,wrong)

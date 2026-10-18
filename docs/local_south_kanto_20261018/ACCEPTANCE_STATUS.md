@@ -45,3 +45,16 @@ Latest main f64b0fbf6fd6e95a14d3c0b173a8e44c0ccb9e3e is merged into the existing
 Regression and original-source provenance: tests/test_urw_owner_candidate.py and urw_owner_candidate_review.json; latest CI result is linked on PR310. Historical baseline and future denominators above remain unchanged.
 
 Repeated official acquisition initially produced a false plan-drift HOLD because the comparison included changing acquisition hashes. This was reproduced using both original CI archives and repaired in the same PR: only the two derived snapshot/universe hashes are excluded from declared-content comparison; all runner/identity/time fields, plan/raw integrity and approval/SOURCE/ACTIVE checks remain. Read-only replay keeps12 targets and the prior plan bytes unchanged, sends/registers0. Seven negative/refresh integration regressions were added. Latest discovery planSHA779ba76a549b9c2e0fcaef2ac5736fa25c4d150a7ca57c2abf034dc438fada19, declared119; all active sets remain pending fresh signed SOURCE. A1R/2R limited-LIVE proposal is documented in READINESS, not activated or approved.
+
+## URW v0.2 next instruction outcome
+
+| Item | Decision | Current evidence |
+|---|---|---|
+| Conditional URW scenario/role mechanism | CANDIDATE |3 path stances per runner; acquisition/survival/progression split; directional friction; Head/P2 and Head+Second/P3 joint geometry/partial orders. No numerical effect or probability invented. |
+| Production predictive discrimination / Exact materiality | PENDING |150 geometric P3 witnesses on retrospective SOURCE are not prediction wins. No empirical Forward credit; no material Exact inferred or automatic promotion. |
+| Offline full pipeline contract | VERIFIED |Existing Candidate KRS transport, Common MEC-R3 and Capital run as PAPER; existing Formal firewall rejects Candidate. Explicit Exact test assumption is separate from prediction evidence. |
+| Actual URW1R/2R first stop | BLOCKED |PRE_DISPATCH_DATED_OWNER_AUTHORIZATION. Actual first-failed-stage=null because no run was attempted. Registration0/2; fresh Signed SOURCE/Active/FINAL/send/ACK absent. Further Production Static Owner/input authority not established. |
+| Merge | BLOCKED |New candidate behavior is separated from unchanged Correctness repairs. Exact-new-head Owner grant absent; human reviews0; required-check configuration unreadable403. |
+| Runtime / stored signed artifacts | VERIFIED |Fresh Health/Gateway PASS, existing deployment unchanged; no redeploy or mutation of signed/OOS/policy/Engine/parameter/MEC/Capital. |
+
+41 dedicated tests and171 related local regressions pass. See current PR310 CI and urw_owner_candidate_review.json for source/code hashes, mechanism counts, PAPER-only contract accounting and per-race stop records. Future Settlement/PFS/Learning are pending future authorized FINAL/RESULT. Existing66300→50640/PFS76.38% remains unchanged; absent FINAL=N/A, actual purchaseUNKNOWN.
