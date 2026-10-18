@@ -519,3 +519,13 @@ class CrossRunReadbackTests(unittest.TestCase):
     with patch.dict(os.environ,env),self.assertRaisesRegex(ValueError,'OUTPUT_PROVIDER_IDENTITY'):
      recover_previous(root,q,f,api=api,verify_final=lambda f:None,origin_run_id='123',output_run_id='456')
     self.assertFalse((root/'shadow-output'/f['race_id']/'shadow_input.json').exists())
+
+ def test_normal_production_preflight_exits_before_shadow_dependencies(self):
+  import os,subprocess
+  w=yaml.safe_load((ROOT/'.github/workflows/km-formal-request-runner.yml').read_text())
+  script=next(x['run'] for x in w['jobs']['formal-run']['steps'] if x.get('id')=='production_readback')
+  with tempfile.TemporaryDirectory() as folder:
+   output=Path(folder)/'outputs'
+   env={**os.environ,'ORIGIN_RUN_ID':'','GITHUB_RUN_ATTEMPT':'1','GITHUB_RUN_ID':'456','RACE_ID':'KM-JRA-TKY-20261024-R01','GITHUB_OUTPUT':str(output)}
+   result=__import__('subprocess').run(['bash','-c',script],cwd=folder,env=env,capture_output=True,text=True,timeout=5)
+   self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(output.read_text(),'reused=false\nartifact_run_id=456\n')

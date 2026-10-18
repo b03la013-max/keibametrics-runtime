@@ -81,9 +81,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUEST_PATH: ${{ steps.request.outputs.request }}
+          RACE_ID: ${{ steps.request.outputs.race_id }}
           ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
         run: |
           set -euo pipefail
+          # Normal live execution must not import/install optional Shadow recovery code.
+          if [ -z "$ORIGIN_RUN_ID" ] && [ "$GITHUB_RUN_ATTEMPT" = "1" ] && [ ! -e "runtime/final_artifacts/$RACE_ID.json" ]; then
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_run_id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           python -m pip install --disable-pip-version-check -q cryptography==45.0.7
           args=(--request "$REQUEST_PATH" --production-readback)
           if [ -n "$ORIGIN_RUN_ID" ]; then args+=(--origin-run-id "$ORIGIN_RUN_ID"); fi
