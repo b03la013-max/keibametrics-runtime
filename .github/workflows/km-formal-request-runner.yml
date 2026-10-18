@@ -1060,6 +1060,10 @@ jobs:
 
 
   shadow-run:
+    permissions:
+      contents: write
+      actions: read
+      attestations: read
     # Durable runner job, not a thread; never a dependency of Production Delivery.
     needs: formal-run
     if: ${{ always() && needs.formal-run.outputs.shadow_input != '' && needs.formal-run.result != 'cancelled' }}
@@ -1075,6 +1079,23 @@ jobs:
         with:
           name: krs-production-${{ github.run_id }}
           path: shadow-input
+      - name: Restore original checkpoint or prepare first attempt
+        id: prepare_shadow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_PATH: ${{ needs.formal-run.outputs.shadow_input }}
+        run: |
+          python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+          FINAL="$(find shadow-input/runtime/final_artifacts -maxdepth 1 -name '*.json' -print -quit)"
+          test -n "$FINAL"
+          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py --request "shadow-input/$REQUEST_PATH" --final "$FINAL" --prepare-only
+      - name: Archive original checkpoint before computation
+        uses: actions/upload-artifact@v4
+        with:
+          name: krs-shadow-checkpoint-${{ github.run_id }}-${{ github.run_attempt }}
+          path: shadow-output/
+          if-no-files-found: error
+          retention-days: 90
       - name: Execute saved Race-local Shadow before cutoff
         id: compute
         timeout-minutes: 1
@@ -1085,12 +1106,14 @@ jobs:
           python -m pip install --disable-pip-version-check -q cryptography==45.0.7
           FINAL="$(find shadow-input/runtime/final_artifacts -maxdepth 1 -name '*.json' -print -quit)"
           test -n "$FINAL"
-          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py --request "shadow-input/$REQUEST_PATH" --final "$FINAL"
+          CHECKPOINT="$(find shadow-output -name shadow_input.json -print -quit)"
+          test -n "$CHECKPOINT"
+          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py --checkpoint "$CHECKPOINT"
       - name: Archive Shadow independently before any Git push
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: krs-utility-${{ github.run_id }}
+          name: krs-utility-${{ github.run_id }}${{ github.run_attempt != '1' && format('-attempt-{0}', github.run_attempt) || '' }}
           path: shadow-output/
           if-no-files-found: ignore
           retention-days: 90
