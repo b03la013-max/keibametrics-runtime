@@ -190,7 +190,7 @@ def compile_shadow(
     return output
 
 
-URW_PROFILE = 'KM-LOCAL-URW-OWNER-CANDIDATE-v0.2-20261018'
+URW_PROFILE = 'KM-LOCAL-URW-OWNER-CANDIDATE-v0.3-20261018'
 URW_CANON = 'KM-LOCAL-URW-v1.6-CURRENT-AUTHORITY-MEC-FULL-LIFECYCLE-20260923'
 URW_CANON_SHA256 = '33172660c85666f0a66a6ec97c20e24ccefdadf8bf396d22ede822f5d4b0f7a0'
 
@@ -231,6 +231,12 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
     frozen = _aware(source.get('source_freeze_at'), 'SOURCE_FREEZE_AT')
     signed = _aware(receipt.get('timestamp'), 'SOURCE_SIGNED_AT')
     post = _aware(request.get('scheduled_post_at'), 'OFFICIAL_POST')
+    from runtime.local_race_key_intake import JST
+    if (not isinstance(request.get('race_date'), str)
+            or request['race_date'] != post.astimezone(JST).date().isoformat()
+            or type(request.get('race_no')) is not int
+            or not 1 <= request['race_no'] <= 12):
+        raise ShadowOwnerError('URW_CANDIDATE_RACE_CALENDAR_IDENTITY')
     if not frozen <= signed < cutoff < post or frozen > now or signed > now:
         raise ShadowOwnerError('URW_CANDIDATE_SOURCE_TIME_BINDING')
     if not historical_replay and now >= cutoff:
@@ -256,7 +262,6 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
     if hashlib.sha256(raw).hexdigest() != card.get('raw_sha256'):
         raise ShadowOwnerError('URW_OFFICIAL_CARD_RAW_HASH')
     start = (source.get('normalized_evidence') or {}).get('start_time') or {}
-    from runtime.local_race_key_intake import JST
     if (start.get('authority') != 'NAR_OFFICIAL' or start.get('cutoff_relation') != 'PRE_CUTOFF'
             or start.get('value') != post.astimezone(JST).strftime('%H:%M')):
         raise ShadowOwnerError('URW_OFFICIAL_POST_MISMATCH')
@@ -385,6 +390,8 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
         raise ShadowOwnerError('URW_CANDIDATE_COMPLETED_AFTER_CUTOFF')
     output = {'profile':URW_PROFILE,'status':'CANDIDATE / NON-PRODUCTION / CONDITIONAL-ANALOG-UNVALIDATED',
         'race_id':request['race_id'],'venue_id':'URW','compiled_at':completed.isoformat(),
+        'race_date':request['race_date'],'race_no':request['race_no'],
+        'scheduled_post_at':request['scheduled_post_at'],
         'compilation_started_at':now.isoformat(),
         'compile_clock_source':'INJECTED_CONTRACT_CLOCK' if injected_clock else 'ACTUAL_RUNTIME_CLOCK',
         'temporal_class':('HISTORICAL_CONTRACT_REPLAY' if historical_replay else
@@ -648,8 +655,16 @@ def audit_urw_candidate_paper_pipeline(candidate, materialized, *, research_exac
     for row in bridge_rows:
         row['candidate_static_roles'] = list(baseline['roles'][str(row['runner_id'])])
     header = scenario['header_context']
+    # The unchanged Engine uses prediction_id as its seed namespace and in
+    # simulation_snapshot_id. Its native race keys must survive the Candidate
+    # bridge; venue-only metadata otherwise silently produces an anonymous
+    # snapshot shared by different races. This changes offline replay draws,
+    # not Engine physics, parameters or Production input authority.
     bridge = build_candidate_krs({'race_id':candidate['race_id'],
-        'race':{'venue':'URW','distance':header['distance'],'surface':'dirt','course':'left'},
+        'race':{'prediction_id':candidate['race_id'],'racecourse':'浦和',
+            'date':candidate['race_date'],'race_no':candidate['race_no'],
+            'course_rule_version':candidate['venue_canon'],
+            'venue':'URW','distance':header['distance'],'surface':'dirt','course':'left'},
         'runners':bridge_rows,
         'candidate_full_numerical_summary':{'numeric_transport_complete':True,
             'mapping_id':materialized['production_numerical_authority']['mapping_id'],
@@ -678,7 +693,7 @@ def audit_urw_candidate_paper_pipeline(candidate, materialized, *, research_exac
     capital = resolve_capital_policy(semantic,mec)
     if not mec['minimum_required_capital'] or capital['paper_only'] is not True:
         raise ShadowOwnerError('URW_OFFLINE_AUDIT_MUST_REMAIN_PAPER')
-    out = {'profile':'URW-OFFLINE-PIPELINE-CONTRACT-v0.2-20261018',
+    out = {'profile':'URW-OFFLINE-PIPELINE-CONTRACT-v0.3-20261018',
         'status':'OFFLINE_PAPER_CONTRACT_ONLY_NOT_FORMAL_FINAL',
         'candidate_freeze_sha256':candidate['sha256'],'source_receipt_sha256':candidate['source_receipt_sha256'],
         'semantic_request':semantic,'candidate_krs_input':bridge['candidate_krs_input_data'],

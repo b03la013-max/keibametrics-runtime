@@ -293,6 +293,12 @@ def test_real_source_candidate_krs_mec_capital_and_exact_plumbing_remain_paper(o
     before=copy.deepcopy(frozen)
     p=audit_urw_candidate_paper_pipeline(frozen,n)
     validate_numeric_input(p['candidate_krs_input'],[r['runner_id'] for r in n['runners']])
+    native=p['candidate_krs_input']['race']
+    assert native['prediction_id']==req['race_id']
+    assert native['racecourse']=='浦和' and native['date']==req['race_date']
+    assert native['race_no']==req['race_no']
+    assert native['course_rule_version']==frozen['venue_canon']
+    assert frozen['scheduled_post_at']==req['scheduled_post_at']
     assert p['candidate_krs_input']['keibametrics_input_authority']['production_authority'] is False
     assert p['mec_contract_result']['material_coverage_ratio']==1
     assert p['capital_contract_result']['decision']=='PAPER'
@@ -318,6 +324,16 @@ def test_real_source_candidate_krs_mec_capital_and_exact_plumbing_remain_paper(o
         validate_production_authority(candidate_request)
     with pytest.raises(ShadowOwnerError,match='OUTSIDE_FROZEN_SEMANTICS'):
         audit_urw_candidate_paper_pipeline(frozen,n,research_exact_keys=[('1','1','1')])
+
+
+@pytest.mark.parametrize('change',[
+    {'race_date':'2026-09-24'}, {'race_date':None}, {'race_no':True},
+    {'race_no':'12'}, {'race_no':0}, {'race_no':13},
+])
+def test_candidate_native_krs_identity_requires_official_calendar(original,change):
+    req,s,n=original
+    with pytest.raises(ShadowOwnerError,match='RACE_CALENDAR_IDENTITY'):
+        compile_urw_candidate({**req,**change},s,n,now=NOW,historical_replay=True)
 
 
 def test_krs_and_capital_inputs_cannot_backsolve_static_freeze(original):
