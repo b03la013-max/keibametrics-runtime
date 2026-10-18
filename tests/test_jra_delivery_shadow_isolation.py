@@ -355,3 +355,167 @@ class FreshRunnerArchiveTests(unittest.TestCase):
    with patch.dict(os.environ,env):got=recover_previous(root,q,f,api=api,verify_final=lambda f:None)
    self.assertEqual(got,c);self.assertIn('actions/runs/123/attempts/1',calls)
    self.assertNotIn('actions/artifacts/3/zip',calls)
+
+
+class CrossRunReadbackTests(unittest.TestCase):
+ setup_root=IsolationTests.setup_root
+ archive_fixture=FreshRunnerArchiveTests.archive_fixture
+ def test_cross_run_preserves_original_context_and_learning(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   env.update(GITHUB_RUN_ID='456',GITHUB_RUN_ATTEMPT='1',GITHUB_SHA='b'*40)
+   with patch.dict(os.environ,env):got=recover_previous(root,q,f,api=api,verify_final=lambda f:None,origin_run_id='123')
+   self.assertEqual(got,c);self.assertEqual(got['actions_checkpoint_context']['run_id'],'123')
+   self.assertTrue(all('/456/' not in x for x in calls))
+   with self.assertRaisesRegex(ValueError,'AFTER_CUTOFF'):
+    execute(root,got,verify_final=lambda f:None,clock=lambda:'2099-01-01T00:00:00Z')
+ def test_cross_run_rejects_wrong_origin_and_active_origin(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  for mutation in ('origin','active','model','receipt'):
+   with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as folder:
+    root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+    env.update(GITHUB_RUN_ID='456',GITHUB_RUN_ATTEMPT='1',GITHUB_SHA='b'*40)
+    if mutation=='origin':run['id']=999
+    if mutation=='active':run['status']='in_progress'
+    if mutation=='model':(root/MODEL).write_text('{}')
+    def signed(f):
+     if mutation=='receipt':raise ValueError('BAD_RECEIPT')
+    with patch.dict(os.environ,env),self.assertRaises((ValueError,KeyError)):
+     recover_previous(root,q,f,api=api,verify_final=signed,origin_run_id='123')
+    self.assertFalse((root/'shadow-output'/f['race_id']/'shadow_input.json').exists())
+ def production_fixture(self,root):
+  import io,zipfile,hashlib
+  q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+  qp='runtime/requests/'+f['race_id']+'.json';fp='runtime/final_artifacts/'+f['race_id']+'.json'
+  (root/qp).parent.mkdir(parents=True);(root/qp).write_text(json.dumps(q))
+  # Synthetic provider/signature callback fixture around real frozen numerical input.
+  # Historic signed files remain untouched; live signature checks are not mocked in CLI.
+  output={'summary':[]};wire=json.dumps(output)
+  f=copy.deepcopy(f);f['krs_run_receipt']['receipt']['output_sha256']=hashlib.sha256(wire.encode()).hexdigest()
+  f['sha256']=digest({k:v for k,v in f.items() if k!='sha256'})
+  from test_jra_single_entry_outcome import fixture as completion_fixture
+  _,summary=completion_fixture()
+  summary.update(race_id=f['race_id'],source_snapshot_sha256=q['source_snapshot_sha256'])
+  summary['manifest'].update(required_count=len(q['runners'])*20,calculated_count=len(q['runners'])*20)
+  summary['pre_krs']['receipt_sha256']=f['pre_krs_receipt']['receipt_sha256']
+  summary['krs'].update(receipt_sha256=f['krs_run_receipt']['receipt_sha256'],requested_run_count=q.get('run_count',5000),actual_run_count=q.get('run_count',5000))
+  summary['final'].update(receipt_sha256=f['final_receipt_sha256'],immutable_artifact_sha256=f['sha256'],receipt_timestamp=f['final_receipt']['receipt']['timestamp'])
+  prefix='krs-artifacts/'+f['race_id']+'/'
+  files={qp:json.dumps(q).encode(),fp:json.dumps(f).encode(),'krs-artifacts/original.json':b'{"receipt":"original"}',
+    prefix+'formal_execution_summary.json':json.dumps(summary).encode(),prefix+'krs_response.json':json.dumps({'run_receipt':f['krs_run_receipt'],'output':output,'output_canonical_json':wire}).encode(),prefix+'krs_prediction_utility.json':json.dumps(f['krs_prediction_utility']).encode()}
+  def rebuild():
+   out=io.BytesIO()
+   with zipfile.ZipFile(out,'w') as z:
+    for name,data in files.items():z.writestr(name,data)
+   raw=out.getvalue();a.update(name='krs-production-123',digest='sha256:'+hashlib.sha256(raw).hexdigest(),size_in_bytes=len(raw));return raw
+  raw=rebuild()
+  def api(path):
+   calls.append(path)
+   if '/artifacts?' in path:return json.dumps(items).encode()
+   if path=='actions/runs/123':return json.dumps(run).encode()
+   return rebuild()
+  return q,f,qp,fp,files,a,items,api,env,calls
+ def test_production_rerun_reads_exact_bytes_without_recompute(self):
+  import os
+  from jra_shadow_checkpoint import production_readback
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,qp,fp,files,a,items,api,env,calls=self.production_fixture(root);seen=[]
+   with patch.dict(os.environ,env):r=production_readback(root,qp,api=api,verify_final=lambda f:seen.append(f))
+   self.assertTrue(r['reused']);self.assertEqual(len(seen),1)
+   for name,data in files.items():self.assertEqual((root/name).read_bytes(),data)
+   with patch.dict(os.environ,env):r2=production_readback(root,qp,api=api,verify_final=lambda f:None)
+   self.assertEqual(r,r2)
+ def test_production_cross_run_and_partial_conflict_refusal(self):
+  import os
+  from jra_shadow_checkpoint import production_readback
+  for mutation in ('none','missing','summary','stage','duplicate','conflict','source','receipt','traversal','wire','output'):
+   with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as folder:
+    root=self.setup_root(folder);q,f,qp,fp,files,a,items,api,env,calls=self.production_fixture(root)
+    env.update(GITHUB_RUN_ID='456',GITHUB_RUN_ATTEMPT='1',GITHUB_SHA='b'*40)
+    if mutation=='missing':files.pop(fp)
+    if mutation=='summary':files.pop('krs-artifacts/'+f['race_id']+'/formal_execution_summary.json')
+    if mutation=='stage':files['krs-artifacts/'+f['race_id']+'/krs_response.json']=b'{}'
+    if mutation in {'wire','output'}:
+     name='krs-artifacts/'+f['race_id']+'/krs_response.json';k=json.loads(files[name]);k['output_canonical_json' if mutation=='wire' else 'output']='tamper' if mutation=='wire' else {'summary':[1]};files[name]=json.dumps(k).encode()
+    if mutation=='duplicate':items['artifacts'].append(copy.deepcopy(a))
+    if mutation=='conflict':(root/fp).parent.mkdir(parents=True);(root/fp).write_text('conflict')
+    if mutation=='source':q['source_snapshot_sha256']='0'*64;(root/qp).write_text(json.dumps(q))
+    if mutation=='traversal':files['krs-artifacts/../../escape']=b'x'
+    def signed(f):
+     if mutation=='receipt':raise ValueError('BAD_RECEIPT')
+    # Archive metadata is settled before download; no mutations after its provider digest.
+    api('download')
+    with patch.dict(os.environ,env):
+     if mutation=='none':self.assertTrue(production_readback(root,qp,api=api,verify_final=signed,origin_run_id='123')['reused'])
+     else:
+      with self.assertRaises(ValueError):production_readback(root,qp,api=api,verify_final=signed,origin_run_id='123')
+      self.assertFalse((root/'krs-artifacts/original.json').exists())
+ def test_live_first_attempt_has_no_readback_api_dependency(self):
+  import os
+  from jra_shadow_checkpoint import production_readback
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,qp,fp,files,a,items,api,env,calls=self.production_fixture(root)
+   env['GITHUB_RUN_ATTEMPT']='1'
+   with patch.dict(os.environ,env):r=production_readback(root,qp,api=lambda _:self.fail('unexpected API'),verify_final=lambda _:self.fail('unexpected signature'))
+   self.assertFalse(r['reused']);self.assertFalse((root/fp).exists())
+ def test_workflow_uses_readback_before_compute_and_reuses_original_archive(self):
+  w=yaml.safe_load((ROOT/'.github/workflows/km-formal-request-runner.yml').read_text())
+  steps=w['jobs']['formal-run']['steps'];rd=next(i for i,x in enumerate(steps) if x.get('id')=='production_readback');co=next(i for i,x in enumerate(steps) if x.get('id')=='formal_execution')
+  self.assertLess(rd,co);self.assertIn("reused == 'false'",steps[co]['if'])
+  up=next(x for x in steps if x.get('uses')=='actions/upload-artifact@v4');self.assertIn("reused == 'false'",up['if'])
+  download=next(x for x in w['jobs']['shadow-run']['steps'] if x.get('uses')=='actions/download-artifact@v4')
+  self.assertIn('artifact_run_id',download['with']['run-id']);self.assertNotIn('shadow-run',w['jobs']['formal-run'].get('needs',[]))
+
+ def test_cross_run_chain_restores_later_output_without_new_freeze(self):
+  import os,io,zipfile,hashlib
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   with patch.dict(os.environ,{**env,'GITHUB_ACTIONS':'true','GITHUB_RUN_ID':'456','GITHUB_RUN_ATTEMPT':'1'}):
+    out=execute(root,c,verify_final=lambda f:None,clock=lambda:f['final_freeze_timestamp'])
+   destination=root/'runtime/role_rescue_shadow'/(f['race_id']+'.json');destination.unlink()
+   b=io.BytesIO()
+   with zipfile.ZipFile(b,'w') as z:z.writestr(f['race_id']+'/role_learning_shadow.json',json.dumps(out))
+   archive=b.getvalue();u=provider_artifact('krs-utility-456');u.update(id=2,size_in_bytes=len(archive),digest='sha256:'+hashlib.sha256(archive).hexdigest())
+   u['workflow_run']={'id':456,'head_sha':'b'*40}
+   later=copy.deepcopy(run);later.update(id=456,head_sha='b'*40)
+   original_api=api
+   def api(path):
+    if path=='actions/runs/456':return json.dumps(later).encode()
+    if path=='actions/runs/456/artifacts?per_page=100':return json.dumps({'artifacts':[u],'total_count':1}).encode()
+    if path=='actions/artifacts/2/zip':return archive
+    return original_api(path)
+   env.update(GITHUB_RUN_ID='789',GITHUB_RUN_ATTEMPT='1',GITHUB_SHA='c'*40)
+   with patch.dict(os.environ,env),patch('jra_shadow_checkpoint.persist_shadow') as compute:
+    got=recover_previous(root,q,f,api=api,verify_final=lambda f:None,witness=lambda s:{'verified':True},origin_run_id='123',output_run_id='456')
+   compute.assert_not_called();self.assertEqual(got,c);self.assertEqual(json.loads(destination.read_text()),out)
+   self.assertEqual(out['actions_freeze_context']['run_id'],'456')
+ def test_explicit_missing_output_never_falls_back_to_new_prediction(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   original_api=api
+   def api(path):
+    if path=='actions/runs/456':return json.dumps({**run,'id':456}).encode()
+    return b'{"artifacts":[],"total_count":0}' if '/456/artifacts?' in path else original_api(path)
+   env.update(GITHUB_RUN_ID='789',GITHUB_RUN_ATTEMPT='1')
+   with patch.dict(os.environ,env),self.assertRaisesRegex(ValueError,'EXPLICIT_OUTPUT_MISSING'):
+    recover_previous(root,q,f,api=api,verify_final=lambda f:None,origin_run_id='123',output_run_id='456')
+   self.assertFalse((root/'shadow-output'/f['race_id']/'shadow_input.json').exists())
+
+ def test_later_shadow_provider_must_be_canonical_and_completed(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  for field,value in (('id',999),('status','in_progress'),('head_branch','research'),('path','other.yml'),('head_sha','bad')):
+   with self.subTest(field=field),tempfile.TemporaryDirectory() as folder:
+    root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+    later={**run,'id':456,field:value};original_api=api
+    def api(path):return json.dumps(later).encode() if path=='actions/runs/456' else original_api(path)
+    env.update(GITHUB_RUN_ID='789',GITHUB_RUN_ATTEMPT='1')
+    with patch.dict(os.environ,env),self.assertRaisesRegex(ValueError,'OUTPUT_PROVIDER_IDENTITY'):
+     recover_previous(root,q,f,api=api,verify_final=lambda f:None,origin_run_id='123',output_run_id='456')
+    self.assertFalse((root/'shadow-output'/f['race_id']/'shadow_input.json').exists())

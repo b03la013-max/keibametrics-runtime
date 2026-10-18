@@ -112,7 +112,7 @@ def prepare(root, request, final, *, created_at=None):
     return checkpoint
 
 
-def archived_checkpoint(root, request, final, run, artifact, archive):
+def archived_checkpoint(root, request, final, run, artifact, archive, *, origin_run_id=None):
     """Only authenticated provider metadata + digest may restore an input handoff."""
     from jra_role_learning_shadow import WITNESS_REPO
     if (run.get('repository',{}).get('full_name')!=WITNESS_REPO
@@ -120,11 +120,13 @@ def archived_checkpoint(root, request, final, run, artifact, archive):
         or run.get('head_branch')!='main'
         or run.get('path')!='.github/workflows/km-formal-request-runner.yml'
         or run.get('event') not in {'push','workflow_dispatch'}
-        or str(run.get('id'))!=os.environ.get('GITHUB_RUN_ID')
-        or run.get('head_sha')!=os.environ.get('GITHUB_SHA')):
+        or (origin_run_id and run.get('status')!='completed')
+        or not re.fullmatch(r'[0-9a-f]{40}',str(run.get('head_sha','')))
+        or str(run.get('id'))!=(origin_run_id or os.environ.get('GITHUB_RUN_ID'))
+        or (not origin_run_id and run.get('head_sha')!=os.environ.get('GITHUB_SHA'))):
         raise ValueError('SHADOW_RESUME_PROVIDER_IDENTITY')
     attempt=run.get('run_attempt')
-    if type(attempt) is not int or not 0<attempt<int(os.environ['GITHUB_RUN_ATTEMPT']):
+    if type(attempt) is not int or attempt<1 or (not origin_run_id and attempt>=int(os.environ['GITHUB_RUN_ATTEMPT'])):
         raise ValueError('SHADOW_RESUME_ATTEMPT')
     if (artifact.get('name')!='krs-shadow-checkpoint-'+str(run['id'])+'-'+str(attempt)
         or artifact.get('workflow_run',{}).get('id')!=run['id']
@@ -150,12 +152,15 @@ def archived_checkpoint(root, request, final, run, artifact, archive):
     return c
 
 
-def recover_previous(root, request, final, *, verify_final, api=None, witness=None):
+def recover_previous(root, request, final, *, verify_final, api=None, witness=None, origin_run_id=None, output_run_id=None):
     """Same execution, fresh Runner. No retries on provider refusal; no new Learning snapshot."""
     from jra_role_learning_shadow import WITNESS_REPO, actions_pre_result_witness, utility_artifact_name
     rid=os.environ.get('GITHUB_RUN_ID','');attempt=os.environ.get('GITHUB_RUN_ATTEMPT','')
     if not rid.isdigit() or not attempt.isdigit():raise ValueError('SHADOW_RESUME_EXECUTION_ID')
-    if int(attempt)==1:return None
+    if origin_run_id:
+        if not re.fullmatch(r'[1-9][0-9]*',origin_run_id) or origin_run_id==rid:raise ValueError('SHADOW_RESUME_ORIGIN_RUN')
+        rid=origin_run_id
+    elif int(attempt)==1:return None
     if api is None:
         def api(path):
             return subprocess.check_output(['gh','api','--hostname','github.com','repos/'+WITNESS_REPO+'/'+path],timeout=20)
@@ -164,7 +169,7 @@ def recover_previous(root, request, final, *, verify_final, api=None, witness=No
     artifacts=items['artifacts']; candidates=[]
     for a in artifacts:
         m=re.fullmatch('krs-shadow-checkpoint-'+rid+r'-([0-9]+)',a.get('name',''))
-        if m and 0<int(m[1])<int(attempt):candidates.append((int(m[1]),a))
+        if m and int(m[1])>0 and (origin_run_id or int(m[1])<int(attempt)):candidates.append((int(m[1]),a))
     if not candidates:raise ValueError('SHADOW_RESUME_ORIGINAL_CHECKPOINT_MISSING')
     selected=min(n for n,a in candidates);matches=[a for n,a in candidates if n==selected]
     if len(matches)!=1:raise ValueError('SHADOW_RESUME_AMBIGUOUS_CHECKPOINT')
@@ -174,21 +179,47 @@ def recover_previous(root, request, final, *, verify_final, api=None, witness=No
             raise ValueError('SHADOW_RESUME_ARCHIVE_SIZE')
         return api('actions/artifacts/'+str(a['id'])+'/zip')
     run=json.loads(api('actions/runs/'+rid+'/attempts/'+str(selected)))
-    c=archived_checkpoint(root,request,final,run,a,download(a))
+    c=archived_checkpoint(root,request,final,run,a,download(a),origin_run_id=origin_run_id)
     verify_final(c['final'])
     shadows=[]
-    for n in range(1,int(attempt)):
-        matches=[a for a in artifacts if a.get('name')==utility_artifact_name(rid,n)]
-        if len(matches)>1:raise ValueError('SHADOW_RESUME_AMBIGUOUS_OUTPUT')
-        if not matches:continue
-        a=matches[0];raw=download(a)
-        if a.get('digest')!='sha256:'+hashlib.sha256(raw).hexdigest():raise ValueError('SHADOW_RESUME_OUTPUT_DIGEST')
-        with zipfile.ZipFile(io.BytesIO(raw)) as z:
-            entries=[i for i in z.infolist() if i.filename==c['race_id']+'/role_learning_shadow.json']
-            if len(entries)>1:raise ValueError('SHADOW_RESUME_DUPLICATE_MEMBER')
-            if not entries:continue
-            if entries[0].file_size>8*1024*1024:raise ValueError('SHADOW_RESUME_OUTPUT_SIZE')
-            shadows.append(json.loads(z.read(entries[0])))
+    output_sources=[(rid,artifacts)]
+    extra_run=None
+    if output_run_id and output_run_id!=rid:
+        if not re.fullmatch(r'[1-9][0-9]*',output_run_id):raise ValueError('SHADOW_OUTPUT_RUN_ID')
+        extra_run=json.loads(api('actions/runs/'+output_run_id))
+        if (str(extra_run.get('id'))!=output_run_id or extra_run.get('status')!='completed'
+            or extra_run.get('repository',{}).get('full_name')!=WITNESS_REPO
+            or extra_run.get('head_repository',{}).get('full_name')!=WITNESS_REPO
+            or extra_run.get('head_branch')!='main'
+            or extra_run.get('path')!='.github/workflows/km-formal-request-runner.yml'
+            or extra_run.get('event') not in {'push','workflow_dispatch'}
+            or not re.fullmatch(r'[0-9a-f]{40}',str(extra_run.get('head_sha','')))):
+            raise ValueError('SHADOW_OUTPUT_PROVIDER_IDENTITY')
+        extra=json.loads(api('actions/runs/'+output_run_id+'/artifacts?per_page=100'))
+        if extra.get('total_count',len(extra['artifacts']))>100:raise ValueError('SHADOW_RESUME_INCOMPLETE_ARTIFACT_LIST')
+        output_sources.append((output_run_id,extra['artifacts']))
+    for output_rid,artifacts in output_sources:
+        count_before=len(shadows)
+        attempts=sorted({int(m[1] or '1') for a in artifacts if (m:=re.fullmatch('krs-utility-'+output_rid+r'(?:-attempt-([0-9]+))?',a.get('name','')))})
+        for n in attempts:
+            if n<1 or (output_rid==os.environ.get('GITHUB_RUN_ID') and n>=int(attempt)):continue
+            matches=[a for a in artifacts if a.get('name')==utility_artifact_name(output_rid,n)]
+            if len(matches)>1:raise ValueError('SHADOW_RESUME_AMBIGUOUS_OUTPUT')
+            if not matches:continue
+            a=matches[0]
+            if extra_run and output_rid==output_run_id and (a.get('expired') is not False
+                or a.get('workflow_run',{}).get('id')!=extra_run['id']
+                or a.get('workflow_run',{}).get('head_sha')!=extra_run['head_sha']):
+                raise ValueError('SHADOW_OUTPUT_PROVIDER_BINDING')
+            raw=download(a)
+            if a.get('digest')!='sha256:'+hashlib.sha256(raw).hexdigest():raise ValueError('SHADOW_RESUME_OUTPUT_DIGEST')
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                entries=[i for i in z.infolist() if i.filename==c['race_id']+'/role_learning_shadow.json']
+                if len(entries)>1:raise ValueError('SHADOW_RESUME_DUPLICATE_MEMBER')
+                if not entries:continue
+                if entries[0].file_size>8*1024*1024:raise ValueError('SHADOW_RESUME_OUTPUT_SIZE')
+                shadows.append(json.loads(z.read(entries[0])))
+        if output_run_id==output_rid and len(shadows)==count_before:raise ValueError('SHADOW_EXPLICIT_OUTPUT_MISSING')
     if shadows and any(s!=shadows[0] for s in shadows):raise ValueError('SHADOW_RESUME_CONFLICTING_FROZEN_OUTPUT')
     if shadows:restore(root,c,shadows[0],witness=witness or actions_pre_result_witness)
     write_once(Path(root)/'shadow-output'/c['race_id']/'shadow_input.json',c)
@@ -263,8 +294,109 @@ def restore(root, checkpoint, shadow, *, witness):
     return shadow
 
 
+def production_readback(root, request_path, *, verify_final, origin_run_id=None, api=None):
+    """Read provider originals BEFORE formal computation. Never overwrite or regenerate."""
+    from jra_role_learning_shadow import WITNESS_REPO
+    root=Path(root); current=os.environ.get('GITHUB_RUN_ID','')
+    rid=origin_run_id or current
+    if not re.fullmatch(r'[1-9][0-9]*',rid):raise ValueError('PRODUCTION_ORIGIN_RUN')
+    qpath=Path(request_path)
+    if not re.fullmatch(r'runtime/requests/[A-Za-z0-9_.-]+\.json',qpath.as_posix()):raise ValueError('PRODUCTION_REQUEST_PATH')
+    q=json.loads((root/qpath).read_text());race=q['race_id']
+    if not re.fullmatch(r'KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}',race):raise ValueError('PRODUCTION_RACE_ID')
+    fpath='runtime/final_artifacts/'+race+'.json'
+    # First execution has no prior archive: avoid a provider dependency in the live path.
+    if not origin_run_id and os.environ.get('GITHUB_RUN_ATTEMPT','1')=='1':
+        if (root/fpath).exists():raise ValueError('PRODUCTION_ORIGIN_RUN_REQUIRED')
+        return {'reused':False,'artifact_run_id':current}
+    if api is None:
+        def api(path):
+            return subprocess.check_output(['gh','api','--hostname','github.com','repos/'+WITNESS_REPO+'/'+path],timeout=20)
+    listing=json.loads(api('actions/runs/'+rid+'/artifacts?per_page=100'))
+    if listing.get('total_count',len(listing['artifacts']))>100:raise ValueError('PRODUCTION_INCOMPLETE_ARTIFACT_LIST')
+    matches=[a for a in listing['artifacts'] if a.get('name')=='krs-production-'+rid]
+    if not matches:
+        if origin_run_id or int(os.environ.get('GITHUB_RUN_ATTEMPT','1'))>1 or (root/fpath).exists():
+            raise ValueError('PRODUCTION_ORIGINAL_REQUIRED_NO_REGENERATION')
+        return {'reused':False,'artifact_run_id':current}
+    if len(matches)!=1:raise ValueError('PRODUCTION_DUPLICATE_ARCHIVE')
+    a=matches[0];run=json.loads(api('actions/runs/'+rid))
+    if (str(run.get('id'))!=rid or run.get('repository',{}).get('full_name')!=WITNESS_REPO
+        or run.get('head_repository',{}).get('full_name')!=WITNESS_REPO
+        or run.get('path')!='.github/workflows/km-formal-request-runner.yml'
+        or run.get('head_branch')!='main' or run.get('event') not in {'push','workflow_dispatch'}
+        or (not origin_run_id and run.get('head_sha')!=os.environ.get('GITHUB_SHA'))
+        or (origin_run_id and run.get('status')!='completed')
+        or not re.fullmatch(r'[0-9a-f]{40}',str(run.get('head_sha','')))
+        or a.get('workflow_run',{}).get('id')!=run['id']
+        or a.get('workflow_run',{}).get('head_sha')!=run['head_sha']
+        or a.get('expired') is not False or type(a.get('id')) is not int
+        or not 0<a.get('size_in_bytes',0)<=32*1024*1024):
+        raise ValueError('PRODUCTION_PROVIDER_BINDING')
+    raw=api('actions/artifacts/'+str(a['id'])+'/zip')
+    if len(raw)>32*1024*1024 or a.get('digest')!='sha256:'+hashlib.sha256(raw).hexdigest():raise ValueError('PRODUCTION_ARCHIVE_DIGEST')
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        files={};total=0
+        for i in z.infolist():
+            if i.is_dir():continue
+            name=i.filename;parts=Path(name).parts;total+=i.file_size
+            if (name in files or name.startswith('/') or '..' in parts or '\\' in name
+                or not (name in {qpath.as_posix(),fpath} or name.startswith('krs-artifacts/'))
+                or total>64*1024*1024 or i.file_size>16*1024*1024):
+                raise ValueError('PRODUCTION_ARCHIVE_MEMBER')
+            files[name]=z.read(i)
+    if qpath.as_posix() not in files or fpath not in files:raise ValueError('PRODUCTION_PARTIAL_ARCHIVE')
+    f=json.loads(files[fpath])
+    if (json.loads(files[qpath.as_posix()])!=q or f.get('race_id')!=race
+        or f.get('source_snapshot_sha256')!=q.get('source_snapshot_sha256')
+        or f.get('prediction_cutoff')!=q.get('prediction_cutoff')
+        or f.get('sha256')!=digest({k:v for k,v in f.items() if k!='sha256'})):
+        raise ValueError('PRODUCTION_ORIGINAL_INPUT_MISMATCH')
+    prefix='krs-artifacts/'+race+'/'
+    required=[prefix+n+'.json' for n in ('formal_execution_summary','krs_response','krs_prediction_utility')]
+    if any(name not in files for name in required):raise ValueError('PRODUCTION_PARTIAL_STAGE_ARCHIVE')
+    summary,krs,utility=[json.loads(files[name]) for name in required]
+    from jra_single_entry_outcome import verify_formal_completion_summary
+    verify_formal_completion_summary(summary,q)
+    if (summary['final']['immutable_artifact_sha256']!=f['sha256']
+        or summary['final']['receipt_sha256']!=f['final_receipt_sha256']
+        or summary['pre_krs']['receipt_sha256']!=f['pre_krs_receipt']['receipt_sha256']
+        or summary['krs']['receipt_sha256']!=f['krs_run_receipt']['receipt_sha256']
+        or krs.get('run_receipt')!=f['krs_run_receipt'] or utility!=f['krs_prediction_utility']):
+        raise ValueError('PRODUCTION_STAGE_RECEIPT_BINDING')
+    # Existing Runtime contract: hash exact wire UTF-8, not a new JSON serialization.
+    wire=krs.get('output_canonical_json')
+    if (not isinstance(wire,str) or not isinstance(krs.get('output'),dict)
+        or hashlib.sha256(wire.encode('utf-8')).hexdigest()!=f['krs_run_receipt']['receipt']['output_sha256']):
+        raise ValueError('PRODUCTION_KRS_OUTPUT_HASH')
+    if json.dumps(json.loads(wire),sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False)!=json.dumps(krs['output'],sort_keys=True,separators=(',',':'),ensure_ascii=False,allow_nan=False):
+        raise ValueError('PRODUCTION_KRS_STRUCTURED_OUTPUT')
+    verify_frozen_inputs(root,q,f)
+    verify_final(f)  # Existing signature, signed payload, ticket and Capital validation.
+    if not instant(f['final_freeze_timestamp'])<=instant(q['prediction_cutoff']):raise ValueError('PRODUCTION_LATE_FINAL')
+    # Check every destination before writes; reruns preserve exact archived stage bytes.
+    for name,data in files.items():
+        dest=root/name
+        if dest.exists() and dest.read_bytes()!=data:
+            # Request checkout formatting may differ; its complete semantic identity was checked above.
+            if name!=qpath.as_posix():raise ValueError('PRODUCTION_IMMUTABLE_CONFLICT')
+    for name,data in files.items():
+        dest=root/name
+        if dest.exists():continue
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=dest.parent,delete=False) as tmp:
+            temp=Path(tmp.name);tmp.write(data);tmp.flush();os.fsync(tmp.fileno())
+        try:
+            try:os.link(temp,dest)
+            except FileExistsError:
+                if dest.read_bytes()!=data:raise ValueError('PRODUCTION_IMMUTABLE_CONFLICT')
+        finally:temp.unlink()
+    return {'reused':True,'artifact_run_id':rid,'artifact_id':a['id'],'archive_digest':a['digest'],'origin_head_sha':run['head_sha'],'final_sha256':f['sha256'],'final_receipt_sha256':f['final_receipt_sha256']}
+
+
 def main():
-    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--checkpoint');g.add_argument('--request');p.add_argument('--final');p.add_argument('--root',default='.');p.add_argument('--restore-shadow');p.add_argument('--prepare-only',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--checkpoint');g.add_argument('--request');p.add_argument('--final');p.add_argument('--root',default='.');p.add_argument('--restore-shadow');p.add_argument('--prepare-only',action='store_true');p.add_argument('--origin-run-id');p.add_argument('--shadow-run-id');p.add_argument('--production-readback',action='store_true');a=p.parse_args()
+    if a.shadow_run_id and not a.origin_run_id:raise ValueError('SHADOW_OUTPUT_REQUIRES_PRODUCTION_ORIGIN')
     from jra_delivery import verify_signed_final
     from family_authority_guard import resolve_current_authority
     import urllib.request
@@ -291,11 +423,18 @@ def main():
             with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:health=json.load(response)
             health_cache.update(health=health,contract=contract)
         return verify_signed_final(f,health_cache['health'],health_cache['contract'])
+    if a.production_readback:
+        if not a.request:raise ValueError('PRODUCTION_REQUEST_REQUIRED')
+        result=production_readback(root,a.request,verify_final=verify_original,origin_run_id=a.origin_run_id)
+        print(json.dumps(result,sort_keys=True))
+        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write('reused='+str(result['reused']).lower()+'\nartifact_run_id='+result['artifact_run_id']+'\n')
+        return
     try:
         if a.request:
             if not a.final:raise ValueError('SHADOW_CHECKPOINT_FINAL_REQUIRED')
             request=json.loads(Path(a.request).read_text());final=json.loads(Path(a.final).read_text())
-            checkpoint=recover_previous(root,request,final,verify_final=verify_original) if int(os.environ.get('GITHUB_RUN_ATTEMPT','1'))>1 else None
+            checkpoint=recover_previous(root,request,final,verify_final=verify_original,origin_run_id=a.origin_run_id,output_run_id=a.shadow_run_id) if a.origin_run_id or int(os.environ.get('GITHUB_RUN_ATTEMPT','1'))>1 else None
             checkpoint=checkpoint or prepare(root,request,final)
         else:checkpoint=validate(root,json.loads(Path(a.checkpoint).read_text()))
         c=checkpoint
