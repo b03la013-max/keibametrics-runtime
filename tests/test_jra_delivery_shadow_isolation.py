@@ -95,7 +95,7 @@ def provider_artifact(name='krs-production-123'):
 class WorkflowIsolationTests(unittest.TestCase):
  def test_production_and_shadow_dag_and_archive_order(self):
   j=yaml.safe_load((ROOT/'.github/workflows/km-formal-request-runner.yml').read_text())['jobs']
-  p=j['formal-run'];s=j['shadow-run'];self.assertNotIn('needs',p);self.assertEqual(s['needs'],'formal-run');self.assertTrue(s['continue-on-error'])
+  p=j['formal-run'];s=j['shadow-run'];self.assertNotIn('needs',p);self.assertEqual(s['needs'],'formal-run');self.assertTrue(s['continue-on-error']);self.assertEqual(s['permissions']['actions'],'read')
   formal=next(x['run'] for x in p['steps'] if x.get('id')=='formal_execution')
   self.assertNotIn('from jra_shadow_checkpoint',formal);self.assertNotIn('persist_shadow(',formal);self.assertNotIn('build_mec_r4_shadow(',formal)
   self.assertIn('verify_aki_ticket_binding',formal);self.assertIn('fvcode,fv=call(KRS,"/verify",f',formal)
@@ -244,3 +244,114 @@ jra_shadow_checkpoint.main()
    self.assertEqual(trace['status'],'FAILED');self.assertFalse(trace['oos_eligible'])
    self.assertIn('WORKER_SELF_REPORTED',trace['clock_trust']);self.assertGreaterEqual(trace['elapsed_seconds'],0)
    self.assertFalse((root/'runtime/role_rescue_shadow').exists())
+
+class FreshRunnerArchiveTests(unittest.TestCase):
+ setup_root=IsolationTests.setup_root
+ def archive_fixture(self,root):
+  import io,zipfile,hashlib,os
+  from jra_shadow_checkpoint import recover_previous
+  q,f,_=fixture();env={'GITHUB_REPOSITORY':'b03la013-max/keibametrics-runtime','GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1','GITHUB_SHA':'a'*40}
+  with patch.dict(os.environ,env):c=pack(root,q,f,created_at=f['final_freeze_timestamp'])
+  stream=io.BytesIO()
+  with zipfile.ZipFile(stream,'w') as z:z.writestr(f['race_id']+'/shadow_input.json',json.dumps(c))
+  raw=stream.getvalue();run=provider_run('completed');run.update(run_attempt=1,created_at=q['source_snapshot']['source_freeze_at'],conclusion='cancelled')
+  a=provider_artifact('krs-shadow-checkpoint-123-1');a.update(size_in_bytes=len(raw),digest='sha256:'+hashlib.sha256(raw).hexdigest(),created_at=f['final_freeze_timestamp'],updated_at=f['final_freeze_timestamp'])
+  items={'total_count':1,'artifacts':[a]};calls=[]
+  def api(path):
+   calls.append(path)
+   if '/artifacts?' in path:return json.dumps(items).encode()
+   if '/attempts/' in path:return json.dumps(run).encode()
+   return raw
+  env['GITHUB_RUN_ATTEMPT']='2'
+  return q,f,c,run,a,items,raw,api,env,calls
+ def test_killed_previous_runner_restores_original_learning_then_resumes_before_cutoff(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   p=root/'runtime/learning_states/new.json';p.parent.mkdir(parents=True);p.write_text('invalid later state')
+   seen=[]
+   with patch.dict(os.environ,env):got=recover_previous(root,q,f,api=api,verify_final=lambda final:seen.append(final))
+   self.assertEqual(got,c);self.assertEqual(seen,[f]);self.assertEqual(got['learning_states'],[])
+   out=execute(root,got,verify_final=lambda f:None,clock=lambda:f['final_freeze_timestamp'])
+   self.assertEqual(out['delivery_checkpoint_sha256'],c['sha256']);self.assertFalse((root/'runtime/final_artifacts').exists())
+ def test_missing_duplicate_partial_refused_without_new_checkpoint(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  for failure in ('missing','duplicate','partial','truncated_list'):
+   with self.subTest(failure=failure),tempfile.TemporaryDirectory() as folder:
+    root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+    if failure=='missing':items['artifacts']=[]
+    if failure=='duplicate':items['artifacts']=[a,a]
+    if failure=='partial':a['digest']='sha256:'+'0'*64
+    if failure=='truncated_list':items['total_count']=101
+    with patch.dict(os.environ,env),self.assertRaises(ValueError):recover_previous(root,q,f,api=api,verify_final=lambda f:None)
+    self.assertFalse((root/'shadow-output'/f['race_id']/'shadow_input.json').exists())
+ def test_wrong_execution_source_model_time_receipt_are_refused(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  for failure in ('execution','source','model','late_archive','receipt'):
+   with self.subTest(failure=failure),tempfile.TemporaryDirectory() as folder:
+    root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+    if failure=='execution':run['id']=999
+    if failure=='source':q=copy.deepcopy(q);q['source_snapshot_sha256']='b'*64
+    if failure=='model':p=root/MODEL;d=json.loads(p.read_text());d['sha256']='b'*64;p.write_text(json.dumps(d))
+    if failure=='late_archive':a['updated_at']='2026-10-25T23:59:00+09:00'
+    def signed(f):
+     if failure=='receipt':raise ValueError('SIGNATURE')
+    with patch.dict(os.environ,env),self.assertRaises(ValueError):recover_previous(root,q,f,api=api,verify_final=signed)
+    self.assertFalse((root/'runtime/role_rescue_shadow').exists())
+ def test_checkpoint_only_resume_after_cutoff_does_not_compute(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   with patch.dict(os.environ,env):got=recover_previous(root,q,f,api=api,verify_final=lambda f:None)
+   with patch('jra_shadow_checkpoint.persist_shadow') as compute,self.assertRaisesRegex(ValueError,'AFTER_CUTOFF'):
+    execute(root,got,verify_final=lambda f:None,clock=lambda:'2026-10-25T23:59:00+09:00')
+   compute.assert_not_called()
+ def test_provider_refusal_is_not_retried(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root);calls=[]
+   def refused(path):calls.append(path);raise RuntimeError('403')
+   with patch.dict(os.environ,env),self.assertRaisesRegex(RuntimeError,'403'):recover_previous(root,q,f,api=refused,verify_final=lambda f:None)
+   self.assertEqual(len(calls),1)
+ def test_completed_shadow_restored_unchanged_after_cutoff(self):
+  import os,io,zipfile,hashlib
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   out=execute(root,c,verify_final=lambda f:None,clock=lambda:f['final_freeze_timestamp'])
+   (root/'runtime/role_rescue_shadow'/(f['race_id']+'.json')).unlink()
+   b=io.BytesIO()
+   with zipfile.ZipFile(b,'w') as z:z.writestr(f['race_id']+'/role_learning_shadow.json',json.dumps(out))
+   archive=b.getvalue();u=provider_artifact('krs-utility-123');u.update(id=2,size_in_bytes=len(archive),digest='sha256:'+hashlib.sha256(archive).hexdigest());items['artifacts'].append(u);items['total_count']=2
+   original_api=api
+   def api(path):return archive if path=='actions/artifacts/2/zip' else original_api(path)
+   with patch.dict(os.environ,env),patch('jra_shadow_checkpoint.persist_shadow') as compute:
+    got=recover_previous(root,q,f,api=api,verify_final=lambda f:None,witness=lambda s:{'verified':True})
+   compute.assert_not_called();self.assertEqual(got,c);self.assertEqual(json.loads((root/'runtime/role_rescue_shadow'/(f['race_id']+'.json')).read_text()),out)
+ def test_attempt_artifact_name_keeps_original_witness_identity(self):
+  import io,zipfile,hashlib
+  from test_jra_live_acceptance_continuation import proof_fixture
+  from jra_role_learning_shadow import verify_actions_artifact,utility_artifact_name
+  s,run,a,data,code,r=proof_fixture();s['actions_freeze_context']['run_attempt']='2';s['sha256']=digest({k:v for k,v in s.items() if k!='sha256'});run['run_attempt']=2
+  b=io.BytesIO()
+  with zipfile.ZipFile(b,'w') as z:z.writestr(s['race_id']+'/role_learning_shadow.json',json.dumps(s))
+  data=b.getvalue();a['digest']='sha256:'+hashlib.sha256(data).hexdigest();a['name']=utility_artifact_name(123,2)
+  self.assertTrue(verify_actions_artifact(s,run,a,data,code)['verified'])
+  a['name']='krs-utility-123'
+  with self.assertRaises(ValueError):verify_actions_artifact(s,run,a,data,code)
+
+ def test_third_attempt_preserves_first_archive_before_cutoff(self):
+  import os
+  from jra_shadow_checkpoint import recover_previous
+  with tempfile.TemporaryDirectory() as folder:
+   root=self.setup_root(folder);q,f,c,run,a,items,raw,api,env,calls=self.archive_fixture(root)
+   late=copy.deepcopy(a);late.update(id=3,name='krs-shadow-checkpoint-123-2',created_at='2026-10-25T23:59:00+09:00',updated_at='2026-10-25T23:59:00+09:00')
+   items['artifacts'].append(late);items['total_count']=2;env['GITHUB_RUN_ATTEMPT']='3'
+   with patch.dict(os.environ,env):got=recover_previous(root,q,f,api=api,verify_final=lambda f:None)
+   self.assertEqual(got,c);self.assertIn('actions/runs/123/attempts/1',calls)
+   self.assertNotIn('actions/artifacts/3/zip',calls)
