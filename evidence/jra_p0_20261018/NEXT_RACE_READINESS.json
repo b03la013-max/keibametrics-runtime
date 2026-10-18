@@ -1,4 +1,12 @@
 {
+  "authorized_merge": {
+    "changed_paths": 5,
+    "head": "b2da88985f574187a97f3036b6ce3bbf493c1088",
+    "merge_sha": "e19df8358e86056c6c355054c9aa2874ce7dda6a",
+    "pr": 315,
+    "production_numerical_change": false,
+    "runtime_deployment": false
+  },
   "blockers": [
     {
       "next": "Existing race-day Autopilot resolves official cards and dispatches within55..30min; missing data fail closed",
@@ -11,14 +19,19 @@
       "reason": "Current sidecar inherits signed baseline but has provider archive digest rather than separate cryptographic Shadow signature"
     },
     {
-      "next": "No retry or alternative-path bypass; formal provider approval mechanism required",
-      "operation": "PR305 provider cold-start/restart/rollback",
-      "reason": "Prior execution approval rejection unresolved"
-    },
-    {
       "next": "Audit canonical publication and only existing authorized receipt paths",
       "operation": "Delivery receipt",
       "reason": "Publication, send and ACK are separate; no new external send authorized"
+    },
+    {
+      "next": "Restore official resource viewer authorization for reads; isolated mutation still requires its original safe approval path. No bypass or retry.",
+      "operation": "Railway management provenance / PR305 Cold Start / Rollback",
+      "reason": "Current resource read refused: viewer role required; prior isolated operation approval refusal still unresolved"
+    },
+    {
+      "next": "Review and approve new repair HEAD; isolated malformed/lineage/settlement/partial-write/replace failure tests preserve Production and previous research bytes",
+      "operation": "Production RESULT closed loop",
+      "reason": "Main optional MEC Shadow exception before review/Learning; reproduced on actual Tokyo11 FINAL/RESULT"
     }
   ],
   "capital": {
@@ -40,7 +53,7 @@
   "executed_operations": {
     "additional_paid_api": false,
     "deployment": false,
-    "new_code_merge": false,
+    "new_code_merge": true,
     "new_external_notification": false,
     "policy_change": false,
     "production_restart": false,
@@ -54,6 +67,46 @@
     "historic_states_with_effective_time": 0,
     "historical_oct18_states": 34,
     "intake": "SHADOW_ONLY; state ID/SHA/source race/effective_time bound in learning_state_bindings; source freeze boundary enforced",
+    "mechanical_actual_input_comparison": {
+      "accepted_binding_occurrences": 128,
+      "added_ticket_count": 398,
+      "added_virtual_capital": 39800,
+      "classification": "RETROSPECTIVE_REAL_INPUTS_SIMULATED_STATE_CREATION_AND_SHADOW_TIME_NOT_LIVE_NOT_OOS",
+      "code_sha256": {
+        "runtime/jra_role_learning_shadow.py": "fd0cb6ca38f958f7a976ed2fbefdcb8fe05c5f1c117b4c353513c1f75d5aefb2",
+        "runtime/jra_shadow_checkpoint.py": "a923e4881e109f6beb35e2c9721af3f8ad8cd940caecf0eb791108e34707d25c",
+        "runtime/post_result_learning.py": "284f40a5913481db85429a820b2e57cb9893373dd3ac8f2a82072757c8e4865f",
+        "scripts/jra_delivery_shadow_acceptance.py": "c4807be4779fe0f96d1ecffb203916f45f70a9f1efdea93fd9c9227b3a617539"
+      },
+      "comparison_limit": "LEARNING_ON rescue adds capital; not the separate equal-budget rank portfolio and not predictive improvement",
+      "full_evidence": "Existing learning-binding-audit role-learning-regression job archives learning-mechanical.json; actual future CI URL recorded in PR",
+      "genuine_forward_oos_races": 0,
+      "independent_time_verified": false,
+      "input_file_count": 96,
+      "live_learning_consumption": 0,
+      "policy_fingerprint": "64220662175d91428da6197eea2427d9b541d632b2dbe0fa1c49243b14589bc8",
+      "production_effect": "NONE",
+      "profile": "JRA-LEARNING-ON-OFF-MECHANICAL-20261018",
+      "reproduce": "python scripts/jra_delivery_shadow_acceptance.py --learning-mechanical --output learning-mechanical.json",
+      "sha256": "ea33f78b33fd75f8bf2dcc0aa0ba0c401b094cac2b14668e48596aed2b5d7d42",
+      "signature_reverified_in_this_probe": false,
+      "targets": 25,
+      "ticket_changed_targets": 22,
+      "time_rule": "same-venue prior RESULT captured_at + 1 second, strictly before target SOURCE freeze; simulated availability only"
+    },
+    "no_bet_records": {
+      "count": 2,
+      "effective_time": null,
+      "hash_valid": true,
+      "investment": 0,
+      "next_race_consumption_credit": 0,
+      "payout": 0,
+      "pfs": null,
+      "races": [
+        "KM-JRA-KYO-20261018-R05",
+        "KM-JRA-TKY-20261018-R05"
+      ]
+    },
     "prediction_input_sha_requirement": "Must derive and record from actual stored request + accepted state bindings at the next live freeze; no actual input consumption SHA exists yet"
   },
   "live_measurements": {
@@ -68,7 +121,7 @@
     "shadow_freeze_success": 0,
     "signed_final_success": 0
   },
-  "main_checked": "126695b4cb9a9a45e903aacd0a74714550c92697",
+  "main_checked": "e19df8358e86056c6c355054c9aa2874ce7dda6a",
   "mechanical_validation": {
     "classification": "SCHEDULE_CONSUMER_TEST_NOT_LIVE_OOS",
     "external_dispatch_calls": 0,
@@ -77,21 +130,26 @@
     "planned_races_checked": 72,
     "wait_without_dispatch": 72
   },
-  "observed_at": "2026-10-18T10:58:06.229556+00:00",
+  "observed_at": "2026-10-18T14:13:45.907201+00:00",
   "production_static_owner_status": "OWNER_AUTHORIZED_UNVALIDATED",
-  "readiness": "CONDITIONAL_READY_FOR_EXISTING_DAY_PLAN; LIVE_ACCEPTANCE_PENDING",
+  "readiness": "PARTIAL_IMPLEMENTATION; RESULT_REPAIR_MERGE_PENDING; FUTURE_RACE_ACCEPTANCE_PENDING",
   "runtime": {
+    "deployment_current_status": "NOT_RECONFIRMED_DUE_TO_PROVIDER_ROLE",
     "deployment_git_sha": "UNKNOWN",
     "deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+    "deployment_last_verified_at": "2026-10-18T13:41:37Z",
     "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
-    "health_at": "2026-10-18T10:56:02.837297Z",
+    "health_at": "2026-10-18T14:08:03.837447Z",
+    "health_raw_sha256": "6446968008b7bc5ab08c8c2aeaa054890f79503ee4fe9560d4ba3ccef9ebee06",
+    "management_error": "You don't have the required role (viewer) on this resource.",
+    "management_read_status": "EXTERNAL_SERVICE_BLOCKED_VIEWER_ROLE_REQUIRED",
     "parameter_map_sha256": "75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
     "saved_start_vs_actual_process_binding": "UNVERIFIED; reuse PR305 evidence, no restart/deploy test",
     "service": "quorumprobe",
     "signer": "KM-RUNTIME-ED25519-20260917",
     "status": "READY"
   },
-  "sha256": "717662e50340e776dc3036269ab825901d4b9b157a7c926ca95cdf3ae1dda5dd",
+  "sha256": "4c74f20efee22a2237577b5fb7ad0de596c571fdb81c19cd927d16f956ccb2f5",
   "target_registration": {
     "day_plan_targets": 72,
     "days": [
@@ -113,9 +171,74 @@
   },
   "workflow_reachability": {
     "autopilot": "active; existing 08:30 JST loop plus five-minute backups; host schedule has no SLA guarantee",
+    "checkpoint": "Same-filesystem immutable prepare/resume supported; fresh-runner automatic prior-archive retrieval NOT IMPLEMENTED; original-witness manual restoration only",
     "postresult": "active; observed scheduled success at main126695b4 2026-10-18T10:54:46Z",
-    "production_first": "FINAL is saved before Shadow; errors caught; no hard CPU timeout isolation claimed",
-    "request": ".github/workflows/km-formal-request-runner.yml -> persist_shadow -> upload-artifact@v4",
-    "result": ".github/workflows/km-formal-result-runner.yml -> persist_shadow_result"
+    "production_first": "PR313 main: verified FINAL publication and durable production artifact precede independent bounded shadow-run job; Single Entry does not wait for whole workflow",
+    "request": ".github/workflows/km-formal-request-runner.yml formal-run -> durable input archive -> shadow-run -> independent output archive -> Git persistence",
+    "result": "Main optional MEC shadow exception can block review/Learning; focused unmerged isolation+atomic-save repair prepared"
+  },
+  "workflow_state_evidence": {
+    "artifact_url": "https://github.com/b03la013-max/keibametrics-runtime/actions/runs/39134508822/artifacts/12139311639",
+    "authenticated": true,
+    "observed_at": "2026-10-18T14:07:31.299370+00:00",
+    "scope": "READ_ONLY_NO_DISPATCH_OR_ENABLE",
+    "status": "VERIFIED",
+    "workflows": [
+      {
+        "classification": "OK",
+        "http_status": 200,
+        "path": ".github/workflows/km-jra-race-day-autopilot.yml",
+        "rate_remaining": "4974",
+        "rate_reset": "1792333380",
+        "request_id": "6028:81685:1D99AE1:60EFEE9:6AD4D2A3",
+        "state": "active",
+        "workflow": "km-jra-race-day-autopilot.yml",
+        "workflow_id": 380940641
+      },
+      {
+        "classification": "OK",
+        "http_status": 200,
+        "path": ".github/workflows/km-jra-race-intent-resolver.yml",
+        "rate_remaining": "4973",
+        "rate_reset": "1792333380",
+        "request_id": "6029:2DB34E:CB472B:293E48C:6AD4D2A3",
+        "state": "active",
+        "workflow": "km-jra-race-intent-resolver.yml",
+        "workflow_id": 380373677
+      },
+      {
+        "classification": "OK",
+        "http_status": 200,
+        "path": ".github/workflows/km-jra-formal-single-entry.yml",
+        "rate_remaining": "4972",
+        "rate_reset": "1792333380",
+        "request_id": "602A:20EE7B:C658B8:2842235:6AD4D2A3",
+        "state": "active",
+        "workflow": "km-jra-formal-single-entry.yml",
+        "workflow_id": 373307758
+      },
+      {
+        "classification": "OK",
+        "http_status": 200,
+        "path": ".github/workflows/km-formal-request-runner.yml",
+        "rate_remaining": "4971",
+        "rate_reset": "1792333380",
+        "request_id": "602B:14707:C8250A:2893306:6AD4D2A4",
+        "state": "active",
+        "workflow": "km-formal-request-runner.yml",
+        "workflow_id": 362469020
+      },
+      {
+        "classification": "OK",
+        "http_status": 200,
+        "path": ".github/workflows/km-formal-result-runner.yml",
+        "rate_remaining": "4970",
+        "rate_reset": "1792333380",
+        "request_id": "602C:BEEE1:E8BDBB:2EE474E:6AD4D2A4",
+        "state": "active",
+        "workflow": "km-formal-result-runner.yml",
+        "workflow_id": 362473127
+      }
+    ]
   }
 }

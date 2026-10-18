@@ -104,7 +104,7 @@ def run_key(run):return tuple(run.get(k) for k in RUN_KEYS)
 
 
 def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
-    root=Path(root);counts=Counter();observations=[];corpus_files={};targets=set()
+    root=Path(root);counts=Counter();observations=[];corpus_files={};targets=set();raw_targets=set()
     for path in sorted((root/'runtime/pedigree_corpus').glob('*.json')):
         raw=path.read_bytes();obj=json.loads(raw);rel=str(path.relative_to(root))
         valid=(obj.get('official') is True and obj.get('source')=='www.jra.go.jp'
@@ -113,8 +113,9 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
         if not valid:counts['invalid_corpus_files']+=1;continue
         for i,h in enumerate(obj.get('horses',[])):
             observations.append((rel,i,h));targets.add(h.get('profile_token_sha256'))
+            if h.get('raw_sha256'):raw_targets.add(h['raw_sha256'])
             counts['horse_observations']+=1;counts['run_observations']+=len(h.get('runs',[]))
-    index=defaultdict(list);proofs={};seen=set();source_files={}
+    index=defaultdict(list);raw_index=defaultdict(list);proofs={};seen=set();source_files={}
     for path in sorted((root/'runtime/executions').glob('KM-JRA-*/SOURCE/runs/*/source_receipt_envelope.json')):
         counts['source_envelopes_seen']+=1
         try:
@@ -128,7 +129,7 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
                 if snap.get('source_class')!='OFFICIAL_JRA_HORSE_HISTORY':continue
                 try:
                     token=locator(snap['requested_url'],'U')
-                    if digest_bytes(token.encode()) not in targets:continue
+                    if digest_bytes(token.encode()) not in targets and snap.get('raw_sha256') not in raw_targets:continue
                     sid=snap['snapshot_sha256']
                     if sid in seen:continue
                     record=profile(snap)
@@ -141,6 +142,7 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
                                  'github_run_id':checked['github_run_id'],'github_code_sha':checked['github_sha'],
                                  'crypto_verified':True,'oidc_reverified':False}
                     record['proof']=sid;index[digest_bytes(token.encode())].append(record)
+                    raw_index[snap['raw_sha256']].append(record)
                     counts['matched_raw_profiles']+=1
                 except (ValueError,KeyError,TypeError,OSError) as exc:counts['raw_hold_'+type(exc).__name__+':'+str(exc)[:70]]+=1
         except Exception as exc:counts['envelope_hold_'+type(exc).__name__]+=1
@@ -148,6 +150,15 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
     for rel,i,h in observations:
         names[h.get('horse_name')].add(signature(h));identity_tokens[signature(h)].add(h.get('profile_token_sha256'))
         matches=index.get(h.get('profile_token_sha256'),[])
+        method=None
+        if not matches:
+            raw_matches=raw_index.get(h.get('raw_sha256'),[])
+            if raw_matches and {signature(m['pedigree']) for m in raw_matches}=={signature(h)}:
+                # Identical HTML bytes identify an observed navigation endpoint,
+                # not an equivalence class of permanent IDs or global CNAME aliases.
+                first=min(raw_matches,key=lambda m:stamp(proofs[m['proof']]['fetched_at']))
+                matches=[m for m in raw_matches if m['profile_token']==first['profile_token']]
+                method='RAW_CONTENT_EQUIVALENT_PROFILE_NAVIGATION'
         if not matches:unresolved['NO_EXACT_TOKEN_RAW_EVIDENCE']+=1;continue
         if {signature(m['pedigree']) for m in matches}!={signature(h)}:
             unresolved['CONFLICTING_PROFILE_PEDIGREE']+=1;continue
@@ -173,7 +184,7 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
                           'observed_at':proofs[proof]['fetched_at'],'chronology_before_target':available<stamp(target_cutoff)})
         proof=proofs[chosen['proof']]
         available=max(stamp(corpus_files[rel]['harvested_at']),stamp(proof['fetched_at']))
-        resolved.append({'corpus_file':rel,'observation_index':i,'profile_token_sha256':h['profile_token_sha256'],
+        recovered={'corpus_file':rel,'observation_index':i,'profile_token_sha256':h['profile_token_sha256'],
                          'official_profile_token':chosen['profile_token'],'parent_profile_tokens':parent_tokens,
                          'parent_profile_proofs':parent_proofs,
                          'permanent_horse_id':None,'permanent_sire_id':None,'permanent_damsire_id':None,
@@ -181,12 +192,15 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
                          'proof':chosen['proof'],'original_observation_at':corpus_files[rel]['harvested_at'],
                          'identity_observed_at':proof['fetched_at'],'original_raw_bytes_equal':h.get('raw_sha256')==proof['raw_sha256'],
                          'earliest_content_available_at':available.isoformat(),'chronology_before_target':available<stamp(target_cutoff),
-                         'run_bindings':bound,'research_training_eligible':False,'production_eligible':False})
+                         'run_bindings':bound,'research_training_eligible':False,'production_eligible':False}
+        if method:recovered['recovery_method']=method
+        resolved.append(recovered)
     counts.update(profile_locator_resolved_observations=len(resolved),profile_locator_unresolved_observations=sum(unresolved.values()),
                   official_result_locator_resolved_runs=sum(len(r['run_bindings']) for r in resolved),
                   permanent_horse_ids_resolved=0,permanent_parent_ids_resolved=0,
                   same_name_multiple_pedigree_tuples=sum(len(v)>1 for v in names.values()),
                   same_pedigree_tuple_multiple_navigation_tokens=sum(len(v)>1 for v in identity_tokens.values()))
+    counts['raw_content_equivalent_resolved_observations']=sum(r.get('recovery_method')=='RAW_CONTENT_EQUIVALENT_PROFILE_NAVIGATION' for r in resolved)
     counts['official_result_locator_unresolved_runs']=counts['run_observations']-counts['official_result_locator_resolved_runs']
     for key in PARENT_KEYS:
         counts[key+'_profile_locator_resolved_observations']=sum(bool(r['parent_profile_tokens'][key]) for r in resolved)
@@ -197,6 +211,7 @@ def recover(root=ROOT,target_cutoff='2026-10-24T09:00:00+09:00'):
          'research_training_eligible_observations':0,'production_eligible_observations':0,
          'temporal_scope':'Original observation, recovered identity/run evidence and target cutoff are separate; no historical backdate',
          'permanent_id_scope':'CNAME aliases are never merged or declared permanent IDs; no independent-offspring inflation',
+         'raw_content_equivalence_scope':'Fallback only for identical original Raw SHA and exact full pedigree names; observed endpoint per observation, no permanent-ID or global alias equivalence',
          'oidc_path':'existing gh attestation verify, signer-workflow pinned before admission; Production requires separate Owner intake',
          'code_sha256':digest_bytes(Path(__file__).read_bytes())}
     out['sha256']=sha_obj(out);return out
@@ -263,7 +278,12 @@ def verify_recovery_bindings(recovery,root=ROOT):
         if index>=len(obj['horses']):raise ValueError('RECOVERY_BINDING_OBSERVATION_INDEX')
         horse=obj['horses'][index];proof,parsed=raw_proof(row['proof'])
         token=parsed['profile_token'];available=max(stamp(obj['harvested_at']),stamp(proof['fetched_at']))
-        if (signature(parsed['pedigree'])!=signature(horse) or digest_bytes(token.encode())!=horse['profile_token_sha256']
+        method=row.get('recovery_method')
+        if method not in (None,'RAW_CONTENT_EQUIVALENT_PROFILE_NAVIGATION'):
+            raise ValueError('RECOVERY_BINDING_METHOD')
+        identity_bound=(digest_bytes(token.encode())==horse['profile_token_sha256'] if method is None
+                        else proof['raw_sha256']==horse.get('raw_sha256'))
+        if (signature(parsed['pedigree'])!=signature(horse) or not identity_bound
                 or row['profile_token_sha256']!=horse['profile_token_sha256'] or row['official_profile_token']!=token
                 or row['identity_namespace']!='JRA_OFFICIAL_NAVIGATION_CNAME_NOT_PERMANENT_REGISTRY_ID'
                 or any(row.get(k) is not None for k in ('permanent_horse_id','permanent_sire_id','permanent_damsire_id'))
@@ -277,8 +297,9 @@ def verify_recovery_bindings(recovery,root=ROOT):
             parent_token=row['parent_profile_tokens'][parent];sid=row['parent_profile_proofs'][parent]
             if (parent_token is None)!=(sid is None):raise ValueError('RECOVERY_BINDING_PARENT')
             if sid is not None:
-                _,parent_raw=raw_proof(sid)
+                parent_proof,parent_raw=raw_proof(sid)
                 if (parent_raw['profile_token']!=token or signature(parent_raw['pedigree'])!=signature(horse)
+                        or (method is not None and parent_proof['raw_sha256']!=horse.get('raw_sha256'))
                         or parent_raw['parent_profile_tokens'][parent]!=parent_token):
                     raise ValueError('RECOVERY_BINDING_PARENT')
         seen_runs=set()
@@ -290,6 +311,7 @@ def verify_recovery_bindings(recovery,root=ROOT):
             tokens={r['official_result_navigation_token'] for r in run_raw['runs'] if run_key(r)==run_key(item)}
             available=max(stamp(obj['harvested_at']),stamp(run_proof['fetched_at']))
             if (run_raw['profile_token']!=token or signature(run_raw['pedigree'])!=signature(horse)
+                    or (method is not None and run_proof['raw_sha256']!=horse.get('raw_sha256'))
                     or tokens!={run['official_result_navigation_token']}
                     or run['observed_at']!=run_proof['fetched_at']
                     or stamp(item['date']+'T00:00:00+09:00')>=cutoff
@@ -355,9 +377,11 @@ def reverify_oidc(recovery,root=ROOT,*,runner=subprocess.run):
         corpus_ok=verified.get(row['corpus_file'],{}).get('qualified',False)
         proof=recovery['raw_proofs'][row['proof']]
         if corpus_ok and row['chronology_before_target'] and verified.get(proof['source_envelope'],{}).get('qualified',False):
-            qualified.append({'corpus_file':row['corpus_file'],'observation_index':row['observation_index'],
-                              'official_profile_token':row['official_profile_token'],'permanent_horse_id':None,
-                              'identity_namespace':row['identity_namespace'],'production_eligible':False})
+            item={'corpus_file':row['corpus_file'],'observation_index':row['observation_index'],
+                  'official_profile_token':row['official_profile_token'],'permanent_horse_id':None,
+                  'identity_namespace':row['identity_namespace'],'production_eligible':False}
+            if row.get('recovery_method'):item['recovery_method']=row['recovery_method']
+            qualified.append(item)
         for run in row['run_bindings']:
             source=recovery['raw_proofs'][run['proof']]['source_envelope']
             runs+=bool(corpus_ok and run['chronology_before_target'] and verified.get(source,{}).get('qualified',False))

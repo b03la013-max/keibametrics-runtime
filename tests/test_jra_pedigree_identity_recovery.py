@@ -49,7 +49,7 @@ class RecoveryTest(unittest.TestCase):
      'raw_sha256':s['raw_sha256'],'profile_token_sha256':digest_bytes(p['profile_token'].encode())}
   with tempfile.TemporaryDirectory() as folder:
    root=Path(folder);directory=root/'runtime/pedigree_corpus';directory.mkdir(parents=True)
-   other=copy.deepcopy(h);other['profile_token_sha256']='a'*64
+   other=copy.deepcopy(h);other['profile_token_sha256']='a'*64;other['raw_sha256']='b'*64
    obj={'official':True,'source':'www.jra.go.jp','harvested_at':'2026-10-18T00:00:00+00:00','horses':[h,other]}
    obj['sha256']=digest_bytes(json.dumps(obj,ensure_ascii=False,sort_keys=True).encode())
    (directory/'fixture.json').write_text(json.dumps(obj))
@@ -82,6 +82,42 @@ class RecoveryTest(unittest.TestCase):
      runner=Mock()
      with self.assertRaises(ValueError):reverify_oidc(bad,root,runner=runner)
      runner.assert_not_called()
+ def test_identical_raw_content_recovers_observation_without_alias_or_registry_merge(self):
+  s=fixture();p=profile(s);raw=gzip.decompress(base64.b64decode(s['raw_gzip_b64']))
+  h={**p['pedigree'],'runs':parse_horse_history(raw,s['content_type'])['runs'],
+     'raw_sha256':s['raw_sha256'],'profile_token_sha256':digest_bytes(p['profile_token'].encode())}
+  with tempfile.TemporaryDirectory() as folder:
+   root=Path(folder);directory=root/'runtime/pedigree_corpus';directory.mkdir(parents=True)
+   obj={'official':True,'source':'www.jra.go.jp','harvested_at':'2026-10-18T00:00:00+00:00','horses':[h]}
+   def save():
+    obj['sha256']=digest_bytes(json.dumps({k:v for k,v in obj.items() if k!='sha256'},ensure_ascii=False,sort_keys=True).encode())
+    (directory/'fixture.json').write_text(json.dumps(obj))
+   save()
+   source=next((ROOT/'runtime/executions/KM-JRA-TKY-20261018-R10-LIVE-R1/SOURCE/runs').glob('*/source_receipt_envelope.json'))
+   path=root/source.relative_to(ROOT);path.parent.mkdir(parents=True);path.write_bytes(source.read_bytes())
+   baseline=recover(root);exact=baseline['resolved'][0]
+   equivalent=copy.deepcopy(h);equivalent['profile_token_sha256']='a'*64
+   different=copy.deepcopy(equivalent);different['raw_sha256']='b'*64
+   mismatch=copy.deepcopy(equivalent);mismatch['sire']='UNMATCHED_EXACT_PEDIGREE'
+   obj['horses'].extend([equivalent,different,mismatch]);save();out=recover(root)
+   self.assertEqual(out['counts']['profile_locator_resolved_observations'],2)
+   self.assertEqual(out['counts']['raw_content_equivalent_resolved_observations'],1)
+   self.assertEqual(out['resolved'][0],exact)
+   recovered=out['resolved'][1]
+   self.assertEqual(recovered['recovery_method'],'RAW_CONTENT_EQUIVALENT_PROFILE_NAVIGATION')
+   self.assertNotEqual(recovered['profile_token_sha256'],digest_bytes(recovered['official_profile_token'].encode()))
+   self.assertTrue(recovered['original_raw_bytes_equal']);self.assertIsNone(recovered['permanent_horse_id'])
+   self.assertTrue(verify_recovery_bindings(out,root))
+   for kind in ('remove_method','false_method','wrong_locator','false_availability'):
+    bad=copy.deepcopy(out);row=bad['resolved'][1]
+    if kind=='remove_method':row.pop('recovery_method')
+    elif kind=='false_method':row['recovery_method']='NAME_ONLY'
+    elif kind=='wrong_locator':row['official_profile_token']='pw01dud102015104189/6E'
+    else:row['earliest_content_available_at']='2000-01-01T00:00:00+00:00'
+    bad['sha256']=sha_obj({k:v for k,v in bad.items() if k!='sha256'})
+    with self.subTest(kind=kind),self.assertRaises(ValueError):verify_recovery_bindings(bad,root)
+   late=recover(root,target_cutoff='2026-10-17T09:00:00+09:00')
+   self.assertFalse(late['resolved'][1]['chronology_before_target'])
 
 
 def oidc_fixture(root):
