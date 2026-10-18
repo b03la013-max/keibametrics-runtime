@@ -889,6 +889,8 @@ jobs:
               try:
                   from jra_role_learning_shadow import persist_shadow
                   role_learning_shadow=persist_shadow(".",req,immutable_final_artifact)
+                  with open(os.path.join(artifact_dir,"role_learning_shadow.json"),"w",encoding="utf-8") as fh:
+                      json.dump(role_learning_shadow,fh,ensure_ascii=False,sort_keys=True,indent=2)
               except Exception as exc:
                   role_learning_shadow={"status":"NOT_FROZEN","reason":type(exc).__name__+":"+str(exc),"production_effect":"NONE"}
 
@@ -1016,6 +1018,35 @@ jobs:
               git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"
               python tools/persist_local_checkpoints.py --branch main
             fi
+          fi
+
+      - name: Audit canonical JRA delivery evidence (read-only)
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
+          FINAL="runtime/final_artifacts/$RID.json"
+          PUBLICATION="runtime/jra_delivery/$RID/publication.json"
+          AVAILABILITY="runtime/jra_delivery/$RID/availability_receipt.json"
+          if [ -f "$FINAL" ]; then
+            if [ ! -f "$PUBLICATION" ]; then
+              echo "JRA_DELIVERY_AUDIT_PUBLICATION_MISSING" >&2
+              exit 1
+            fi
+            args=(--final "$FINAL" --publication "$PUBLICATION")
+            if [ -f "$AVAILABILITY" ]; then args+=(--availability "$AVAILABILITY"); fi
+            PYTHONPATH=runtime python runtime/jra_delivery_evidence_audit.py "${args[@]}" > krs-artifacts/jra_delivery_evidence_audit.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path("krs-artifacts/jra_delivery_evidence_audit.json").read_text())
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("\n## Delivery evidence audit\n")
+              for field in ("canonical_availability","notification_sent","recipient_acknowledged","pre_post_delivery"):
+                  f.write(f"- {field}: {report[field]}\n")
+          PY
           fi
 
       - name: Upload KRS structured output and utility delta

@@ -8,6 +8,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
+import io
+import zipfile
 import subprocess
 from pathlib import Path
 
@@ -200,6 +203,11 @@ def persist_shadow(root, request, final, *, observed_at=None):
         return old
     states = [json.loads(p.read_text()) for p in sorted((root/'runtime/learning_states').glob('*.json'))]
     out = build_shadow(request, final, states=states, observed_at=observed_at)
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        out['actions_freeze_context'] = {k: os.environ.get(v) for k,v in {
+            'repository':'GITHUB_REPOSITORY','run_id':'GITHUB_RUN_ID',
+            'run_attempt':'GITHUB_RUN_ATTEMPT','head_sha':'GITHUB_SHA'}.items()}
+        out['sha256'] = digest({k:v for k,v in out.items() if k!='sha256'})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, ensure_ascii=False, sort_keys=True, indent=2)+'\n')
     return out
@@ -223,7 +231,14 @@ def settle_shadow(shadow, result):
         settled=settle_final(f,official)
         prefix=arm['tickets'][:n]
         p=settle_final({'final_ticket':{'tickets':prefix,'total_investment':sum(t['stake'] for t in prefix)}},official)
+        baseline_keys={ticket_key(t) for t in baseline['tickets']}
+        extra=[t for t in arm['tickets'] if ticket_key(t) not in baseline_keys]
+        extra_settled=settle_final({'final_ticket':{'tickets':extra,'total_investment':sum(t['stake'] for t in extra)}},official)
+        added_winning_stake=sum(t['stake'] for t in extra_settled['winning_tickets'])
         arms[name]={**settled,'added_capital':arm['added_capital'],
+            'added_winning_stake':added_winning_stake,
+            'false_positive_cost':sum(t['stake'] for t in extra)-added_winning_stake,
+            'added_ticket_return':extra_settled['total_payout'],
             'actual_ticket_count':len(arm['tickets']),'equal_ticket_actual_count':len(prefix),
             'equal_ticket_target_count':n,'equal_ticket_count_matched':len(prefix)==n,
             'equal_budget_fractional_return':settled['total_payout']*budget/arm['required_capital'] if arm['required_capital'] else None,
@@ -243,12 +258,12 @@ def persist_shadow_result(root, result):
     if not pre.exists():return None
     out=settle_shadow(json.loads(pre.read_text()),result)
     shadow=json.loads(pre.read_text())
-    witness=pre_result_witness(root,shadow)
+    witness=actions_pre_result_witness(shadow)
     out['persistence_witness']=witness
-    # Git committer dates can be backdated. A local history match cannot prove
-    # provider receipt before cutoff; server-side artifact witness is separate.
-    out['oos_eligible']=False
-    out['eligibility_status']='PENDING_SERVER_TIMESTAMP_AND_ARTIFACT_CONTENT_WITNESS'
+    out['oos_eligible']=bool(witness.get('verified') and shadow.get('temporally_eligible')
+        and instant(shadow['observed_at']).date().isoformat()>POLICY['training_end']
+        and shadow.get('classification')=='PRE_CUTOFF_SHADOW')
+    out['eligibility_status']='FORWARD_OOS_ELIGIBLE' if out['oos_eligible'] else 'PENDING_SERVER_TIMESTAMP_AND_ARTIFACT_CONTENT_WITNESS'
     out['sha256']=digest({k:v for k,v in out.items() if k!='sha256'})
     path=root/'runtime/role_rescue_shadow_results'/(rid+'.json')
     if path.exists():
@@ -287,3 +302,77 @@ def pre_result_witness(root,shadow):
                 'scope':'Committer timestamps are mutable; cannot establish independent pre-result receipt.'}
     except (subprocess.CalledProcessError,ValueError,StopIteration):
         return {'verified':False,'status':'UNVERIFIED_PRE_RESULT_PERSISTENCE'}
+
+
+WITNESS_REPO = 'b03la013-max/keibametrics-runtime'
+
+def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
+    """Bind GitHub server receipt time to exact archived Shadow bytes.
+
+    Inputs are fetched from the fixed repository API by actions_pre_result_witness;
+    callers must not substitute self-reported JSON as provider evidence.
+    """
+    ctx=shadow.get('actions_freeze_context') or {}
+    if shadow.get('sha256') != digest({k:v for k,v in shadow.items() if k!='sha256'}):
+        raise ValueError('WITNESS_SHADOW_HASH_INVALID')
+    if shadow.get('candidate_id')!=CANDIDATE_ID or shadow.get('policy_fingerprint')!=digest(POLICY):
+        raise ValueError('WITNESS_CANDIDATE_POLICY_MISMATCH')
+    if ctx.get('repository') != WITNESS_REPO or str(run['id']) != str(ctx.get('run_id')):
+        raise ValueError('WITNESS_RUN_IDENTITY')
+    if (run.get('repository',{}).get('full_name') != WITNESS_REPO
+            or run.get('head_repository',{}).get('full_name') != WITNESS_REPO
+            or run.get('head_branch') != 'main' or run.get('head_sha') != ctx.get('head_sha')
+            or run.get('path') != '.github/workflows/km-formal-request-runner.yml'
+            or run.get('event') not in {'push','workflow_dispatch'}
+            or run.get('conclusion') != 'success'
+            or str(run.get('run_attempt')) != str(ctx.get('run_attempt'))):
+        raise ValueError('WITNESS_UNTRUSTED_WORKFLOW')
+    if hashlib.sha256(code_bytes).hexdigest()!=shadow['code_sha256']:
+        raise ValueError('WITNESS_CODE_MISMATCH')
+    if (artifact.get('name') != 'krs-utility-'+str(run['id'])
+            or artifact.get('workflow_run',{}).get('id') != run['id']
+            or artifact.get('workflow_run',{}).get('head_sha') != run['head_sha']
+            or artifact.get('expired') is not False):
+        raise ValueError('WITNESS_ARTIFACT_IDENTITY')
+    if not (instant(run['created_at']) <= instant(shadow['observed_at'])
+            <= instant(artifact['created_at']) <= instant(artifact['updated_at'])
+            <= instant(shadow['prediction_cutoff'])):
+        raise ValueError('WITNESS_SERVER_RECEIPT_AFTER_CUTOFF_OR_BAD_CHRONOLOGY')
+    if len(archive)>32*1024*1024 or artifact.get('digest') != 'sha256:'+hashlib.sha256(archive).hexdigest():
+        raise ValueError('WITNESS_ARCHIVE_DIGEST')
+    name=shadow['race_id']+'/role_learning_shadow.json'
+    with zipfile.ZipFile(io.BytesIO(archive)) as z:
+        entries=[i for i in z.infolist() if i.filename==name]
+        if len(entries)!=1 or entries[0].file_size>8*1024*1024:
+            raise ValueError('WITNESS_ARCHIVE_MEMBER')
+        if json.loads(z.read(entries[0])) != shadow:
+            raise ValueError('WITNESS_FROZEN_CONTENT_MISMATCH')
+    return {'verified':True,'status':'GITHUB_ARTIFACT_SERVER_RECEIPT_AND_CONTENT_VERIFIED',
+            'repository':WITNESS_REPO,'run_id':run['id'],'artifact_id':artifact['id'],
+            'server_created_at':artifact['created_at'],'server_updated_at':artifact['updated_at'],
+            'archive_digest':artifact['digest'],'shadow_sha256':shadow['sha256'],
+            'scope':'Pre-cutoff persistence only; predictive improvement and promotion remain separate.'}
+
+def actions_pre_result_witness(shadow):
+    """Read-only provider verification; missing credentials/expired evidence fail closed."""
+    import base64
+    ctx=shadow.get('actions_freeze_context') or {}
+    if ctx.get('repository') != WITNESS_REPO or not str(ctx.get('run_id','')).isdigit():
+        return {'verified':False,'status':'MISSING_ACTIONS_FREEZE_CONTEXT'}
+    def api(path):
+        return subprocess.check_output(['gh','api','--hostname','github.com',
+            'repos/'+WITNESS_REPO+'/'+path],timeout=30,stderr=subprocess.DEVNULL)
+    try:
+        rid=str(ctx['run_id']);run=json.loads(api('actions/runs/'+rid))
+        artifacts=json.loads(api('actions/runs/'+rid+'/artifacts?per_page=100'))['artifacts']
+        matches=[a for a in artifacts if a.get('name')=='krs-utility-'+rid]
+        if len(matches)!=1:raise ValueError('WITNESS_ARTIFACT_NOT_UNIQUE')
+        artifact=matches[0]
+        if type(artifact.get('id')) is not int or not 0<artifact.get('size_in_bytes',0)<=32*1024*1024:
+            raise ValueError('WITNESS_ARTIFACT_SIZE_OR_ID')
+        code=json.loads(api('contents/runtime/jra_role_learning_shadow.py?ref='+run['head_sha']))
+        code_bytes=base64.b64decode(code['content'],validate=False)
+        archive=api('actions/artifacts/'+str(artifact['id'])+'/zip')
+        return verify_actions_artifact(shadow,run,artifact,archive,code_bytes)
+    except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as exc:
+        return {'verified':False,'status':'UNVERIFIED_GITHUB_ARTIFACT_WITNESS','reason':type(exc).__name__+':'+str(exc)[:180]}

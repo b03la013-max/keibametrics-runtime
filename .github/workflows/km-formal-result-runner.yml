@@ -2,6 +2,7 @@ name: KeibaMetrics Formal Result Runner
 
 permissions:
   contents: write
+  actions: read
 
 on:
   push:
@@ -58,6 +59,7 @@ jobs:
       - name: Submit and verify RESULT receipt
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           RESULT_FILE: ${{ steps.result.outputs.request }}
         run: |
           python - <<'PY'

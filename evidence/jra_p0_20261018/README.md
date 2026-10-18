@@ -53,3 +53,28 @@ A separate review agent independently reproduced KRS false-rescue counts, Source
 Production Merge HOLD; Shadow forward OOS BLOCKED pending Merge and independent server witness; model quality/Robust PFS improvement FORWARD OOS PENDING. Revert this PR's code/workflow additions to roll back; do not rewrite signed artifacts. Production Railway deployment remains7c7eeb5e-3b5b-496a-b66f-82bd71897d53; Runtime READY; deployed Git SHA unknown. No deploy/restart/stop was done.
 
 CI caught LOCAL preregistration coupling to the shared KRS file. Its exact main bytes were restored. The JRA-only adapter contains the measurement repair; LOCAL code, metrics and frozen definition hashes are unchanged.
+
+
+## PR306 merge and next-race continuation — 2026-10-18
+
+Owner approved exact HEAD `5f9165b81cc7a1ddb341af7c44f219a63a6523e0`.
+Merged as `408def14c7e32515ccefbad8af6ae39f41b70f26`; approved and merged trees are identical. PR CI 9/9 and merge/main CI 19/19 succeeded. Main subsequently observed at `b6ca787d10b1984f303aabaa73965c9046bdb4cd`. No signed historical artifact, Production coefficient, Engine, parameter map, Signer, AKI, MEC or Capital policy changed. Production Deployment `7c7eeb5e-3b5b-496a-b66f-82bd71897d53` remains SUCCESS/READY; deployed Git SHA remains UNVERIFIED. No Deployment/Restart/stop was performed. Rollback for merged code: revert PR306 code/workflow changes while preserving immutable artifacts. PR305 provider isolation gate remains unresolved and was not bypassed.
+
+Unmerged continuation is consolidated into existing PR307. The existing Actions upload now contains the exact Shadow sidecar. RESULT checks fixed repository/main workflow/run attempt/head/code bytes, immutable archive digest and exact content, with server creation and update times no later than Cutoff. Git dates alone never confer OOS eligibility. New fields separately record losing added-ticket stake (False-positive Cost), added winning stake and return. These changes do not generate purchase instructions or promote a Candidate.
+
+The existing zero-bet Workflow had five valid pending decisions but selected the oldest four; Kyoto R05 fell outside that batch. Selection now prioritizes the current meeting, and individual OIDC/decision-validation failures cannot block valid siblings. Regression executes the actual Workflow Python with official-network and attestation boundaries mocked, including the actual five pending terminal records. This is not proof of official capture: both Oct18 zero-bet canonical Learning records still await the existing OIDC Workflow's real execution. No unsigned observation was relabelled verified.
+
+Focused regression: 53 tests + 32 subtests PASS. YAML and embedded Python compile, whitespace checks PASS. Separate technical reviewer independently passed 26 tests + 13 subtests, server-witness/NO-BET adversarial probes, and the combined Delivery wiring review; this is distinct from Owner authorization and from actual provider acceptance.
+
+The 34 FINAL publication/readback records were audited; all 34 notification and recipient ACK states remain UNVERIFIED. No external message was sent. Actual next-race Learning consumption remains 0 verified; original 34 states are not backdated. New timestamped states can be bound only when actually available before the next Source freeze. True Forward OOS remains PENDING, not ACTIVE, until the unmerged code is approved and a future pre-cutoff artifact is independently verified. Prediction improvement is unproven.
+
+Retrospective cost measurement, same 31 invested formal races (all arms designed after results; exploration only; not OOS or actual purchase):
+
+| Arm | Added capital (yen) | Losing added-ticket stake (yen) | Added-ticket return (yen) |
+|---|---:|---:|---:|
+| Winner Re-Audit | 45,900 | 45,100 | 62,670 |
+| Head-local P2 | 42,600 | 41,200 | 39,180 |
+| Pair-conditioned Third | 11,500 | 11,100 | 3,190 |
+| KRS Actionable | 60,700 | 59,400 | 94,700 |
+
+Baseline is 56,900 yen / 30,500 yen return. Unequal-budget arms do not establish improvement; equal-budget/equal-ticket diagnostics and forward comparison remain separate. Full machine-readable observations are appended to existing EXECUTION_CONTEXT.json.
