@@ -230,6 +230,8 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
         records.append({'race_key': f'{venue}-{d:%Y%m%d}-R{number:02d}-LIVE-R1',
                         'execution_id': request['execution_id'], 'fields': fields,
                         'current_authority_at_observation': request['current_authority_manifest'],
+                        'required_numerical_manifest':authority[1]['common_family_components'].get('local_production_numerical_authority'),
+                        'numerical_execution_status':'NOT_EXECUTED_REQUIRES_FRESH_SIGNED_SOURCE',
                         'request_intent_draft':request,
                         'intent_status':'DRAFT_NOT_FORMAL_STATIC_NOT_DISPATCHED',
                         'planned_dispatch_window':'DATED_OWNER_LEAD_AND_LOCAL_TIMING_EVIDENCE_REQUIRED',

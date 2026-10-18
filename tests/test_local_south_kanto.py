@@ -91,6 +91,8 @@ def test_all_discovered_targets_retained_without_approval_or_execution(tmp_path,
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW)
     assert r['target_races']==4 and r['target_races_complete']
     assert len(r['venues']['KAW']['races'])==2
+    saved=json.loads((tmp_path/'runtime/local_race_day_plan/2026-10-15-KAW.json').read_text())
+    assert saved['races'][0]['required_numerical_manifest']=='LOCAL-FULL-NUMERICAL-MAPPING-v1.0-PRODUCTION-20261008'
     monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED','true')
     r=d.south_kanto_day(tmp_path,'2026-10-15',120,now=NOW,execute=True)
     assert r['target_races']==4 and all(v['status']=='HOLD' for v in r['venues'].values())
