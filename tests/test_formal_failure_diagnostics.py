@@ -1,6 +1,16 @@
 from runtime.formal_failure_diagnostics import failure_class_for, resume_hint_for
 
 
+def test_authorization_and_delivery_require_specific_recovery_not_source_rerun():
+    from runtime.formal_failure_diagnostics import failure_stage_for
+    assert failure_stage_for('PRE_DISPATCH_DATED_OWNER_AUTHORIZATION') == 'ACTIVATION'
+    assert failure_stage_for('VENUE_OWNER_NOT_AUTHORIZED') == 'AUTHORIZATION'
+    assert resume_hint_for('VENUE_OWNER_NOT_AUTHORIZED').startswith('HOLD_AWAIT')
+    assert failure_stage_for('FULL_NUMERICAL_AUTHORITY_NOT_READY') == 'NUMERICAL'
+    assert failure_stage_for('TICKET_UNIVERSE_MISMATCH') == 'TICKET'
+    assert resume_hint_for('DELIVERY_ACK_MISSING').startswith('REUSE_VERIFIED_FINAL')
+
+
 def test_source_runner_mismatch_never_recommends_automatic_retry():
     assert resume_hint_for('RUNNER_UNIVERSE_MISMATCH').startswith('HOLD')
     assert resume_hint_for('SOURCE_RECEIPT_VERIFY_FAILED').startswith('HOLD')

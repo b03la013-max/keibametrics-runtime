@@ -102,7 +102,7 @@ FIELDS = ("venue_id", "race_date", "race_no", "scheduled_post_at", "prediction_c
 def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
     """Resolve immutable event range, never moving checkout HEAD. One cell per race."""
     requests, errors, seen = [], [], set()
-    candidates, day_plans = [], []
+    candidates, day_plans, reference_starts = [], [], []
     def git_read(*args):
         return subprocess.check_output(["git", *args], cwd=cwd, text=True)
     if event_name == "push":
@@ -111,10 +111,14 @@ def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
             raise IntakeError("PUSH_EVENT_SHA_REQUIRED")
         if event.get("deleted"):
             raise IntakeError("DELETED_PUSH_NOT_EXECUTABLE")
-        roots = ('runtime/race_key_requests/', 'runtime/local_race_day_plan/', 'profiles/local_autonomous_approvals/')
+        roots = ('runtime/race_key_requests/', 'runtime/local_race_day_plan/', 'profiles/local_autonomous_approvals/', 'runtime/local_reference_start_requests/')
         paths = (git_read("ls-tree", "-r", "--name-only", after, *roots)
                  if before == "0" * 40 else git_read("diff", "--name-only", "--diff-filter=AMR", before, after, "--", *roots))
         for path in paths.splitlines():
+            if re.fullmatch(r'runtime/local_reference_start_requests/\d{4}-\d{2}-\d{2}\.json',path):
+                # An independent reference worker validates this dated request.
+                # It creates no Formal matrix entry or day-activation signal.
+                reference_starts.append(path)
             if re.fullmatch(r"runtime/race_key_requests/[A-Za-z0-9_.-]+\.json", path):
                 candidates.append((path, git_read("show", after + ":" + path)))
             # Only exact dated official plans / owner approvals wake the same
@@ -145,11 +149,11 @@ def resolve_event(event: dict, event_name: str, *, cwd: Path) -> dict:
             requests.append({**data,'execution_id':eid,'ingress_origin':origin})
         except (ValueError, TypeError, KeyError) as exc:
             errors.append({'origin':origin,'status':'TERMINAL_ERROR','reason':str(exc)})
-    if not candidates and not day_plans:
+    if not candidates and not day_plans and not reference_starts:
         errors.append({'status':'TERMINAL_ERROR','reason':'EVENT_HAS_NO_RACE_KEY'})
     return {'event_name':event_name,'before':event.get('before'),'after':event.get('after'),
-            'requests':requests,'day_plans':day_plans,'errors':errors,
-            'status':'PARTIAL' if errors and (requests or day_plans) else 'PASS' if requests or day_plans else 'TERMINAL_ERROR',
+            'requests':requests,'day_plans':day_plans,'reference_start_paths':reference_starts,'errors':errors,
+            'status':'PARTIAL' if errors and (requests or day_plans or reference_starts) else 'PASS' if requests or day_plans or reference_starts else 'TERMINAL_ERROR',
             'received_at':datetime.now(timezone.utc).isoformat(),'prestart_delivery_proven':False}
 
 

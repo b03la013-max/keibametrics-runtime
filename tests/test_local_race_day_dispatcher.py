@@ -101,6 +101,40 @@ def test_durable_claim_precedes_dispatch_multiple_races_no_result_wait(tmp_path)
     send.assert_not_called()
 
 
+def test_urw_chat_dispatch_keeps_other_approved_races_untouched(tmp_path):
+    from runtime.family_authority_guard import resolve_current_authority
+    p = plan()
+    p['venue_id'] = 'URW'
+    for race in p['races']:
+        race['fields']['venue_id'] = 'URW'
+        race['execution_id'] = race['execution_id'].replace('-KAW-', '-URW-')
+        race['race_key'] = race['race_key'].replace('KAW-', 'URW-')
+    p['plan_sha256'] = d.sha({k:v for k,v in p.items() if k != 'plan_sha256'})
+    a = approval(p)
+    a.update(venue_id='URW', preregister_authorized_races=True)
+    eid = p['races'][0]['execution_id']
+    state, calls = {}, []
+    current = resolve_current_authority(now=NOW)[1]['manifest_id']
+    result = d.tick(tmp_path, p, a, state, now=NOW, execute=True,
+        authorize=lambda *args: current, health=lambda:{'status':'PASS'},
+        publish=lambda: calls.append('persist'),
+        send=lambda fields: calls.append(fields['race_no']) or {'acknowledged':True},
+        only_execution_id=eid)
+    assert list(result['races']) == [eid]
+    assert calls == ['persist', 1, 'persist']
+    assert not (tmp_path/'runtime/race_key_requests'/(p['races'][1]['race_key']+'.json')).exists()
+    d.tick(tmp_path, p, a, state, now=NOW, execute=True,
+        authorize=lambda *args: current, publish=lambda:None,
+        send=lambda *args: pytest.fail('no duplicate chat dispatch'), only_execution_id=eid)
+
+
+def test_chat_dispatch_filter_cannot_expand_scope_or_target_other_venue(tmp_path):
+    p = plan(); a = approval(p)
+    with pytest.raises(ValueError, match='CHAT_APPROVED_URW_EXECUTION_REQUIRED'):
+        d.tick(tmp_path, p, a, {}, now=NOW, only_execution_id=p['races'][0]['execution_id'],
+               authorize=lambda *args:'contract')
+
+
 def test_uncertain_dispatch_never_retry_and_other_race_continues(tmp_path):
     p=plan();a=approval(p);state={};calls=[]
     def send(fields):

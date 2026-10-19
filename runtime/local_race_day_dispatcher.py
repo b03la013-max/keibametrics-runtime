@@ -519,6 +519,67 @@ def owned_registration(root, race, cell, plan, current):
             and key.exists() and json.loads(key.read_text()) == race['fields'])
 
 
+def preregister_intakes(root, plan, approval, *, now):
+    """JRA-style future intake, outside every live push-trigger directory.
+
+    Reuse LOCAL authority, phase/subset, cost and canonical request guards.
+    Registration does not dispatch SOURCE or freeze Static. The dated worker
+    still claims/publishes through the existing race-day path at its own window.
+    """
+    root=Path(root)
+    if (plan.get('family_id')!='LOCAL' or plan.get('venue_id')!='URW'
+            or plan.get('plan_sha256')!=sha({k:v for k,v in plan.items() if k!='plan_sha256'})
+            or now.tzinfo is None or now.astimezone(JST).date().isoformat()>plan['race_date']):
+        raise ValueError('URW_PREREGISTRATION_PLAN_OR_DATE_INVALID')
+    current=authorization(approval,plan,root,now)
+    if (approval.get('preregister_authorized_races') is not True
+            or not approval.get('preregistration_approval_ref')):
+        raise ValueError('PREREGISTRATION_OWNER_APPROVAL_REQUIRED')
+    selected=sorted(approval['race_numbers'])
+    cohort={'family_id':'LOCAL','venue_id':'URW','race_date':plan['race_date'],
+        'plan_sha256':plan['plan_sha256'],'race_numbers':selected,
+        'current_authority_manifest':current,'approval_sha256':sha(approval)}
+    cohort_sha=sha(cohort);pending=[];records=[]
+    for race in plan['races']:
+        fields=race['fields'];eid=race['execution_id']
+        if fields['race_no'] not in selected:
+            continue
+        intent=build(fields,now=now)
+        if intent['execution_id']!=eid or intent['current_authority_manifest']!=current:
+            raise ValueError('PREREGISTRATION_IDENTITY_OR_AUTHORITY_MISMATCH')
+        path=root/'runtime/local_race_registrations'/plan['race_date']/(eid+'.json')
+        expected={'family_id':'LOCAL','venue_id':'URW','race_date':plan['race_date'],
+            'race_no':fields['race_no'],'execution_id':eid,'plan_sha256':plan['plan_sha256'],
+            'cohort_sha256':cohort_sha,'current_authority_manifest':current,
+            'approval_sha256':sha(approval),'intake_intent':intent,
+            'formal_status':'REGISTERED_AUTHORIZED_INTAKE_ONLY'}
+        if path.exists():
+            record=json.loads(path.read_text())
+            if (record.get('sha256')!=sha({k:v for k,v in record.items() if k!='sha256'})
+                    or any(record.get(k)!=v for k,v in expected.items())):
+                raise ValueError('LOCAL_INTAKE_IMMUTABLE_BINDING_CONFLICT')
+        else:
+            if existing_race_refs(root,race):
+                raise ValueError('EXISTING_RACE_REQUIRES_READBACK')
+            record={**expected,'registered_at':now.isoformat(),
+                'required_index_count':29,'planned_required_cells':29*len(race['declared_runner_universe']['runners']),
+                'executed_cells':0,'fresh_signed_source_required':True,
+                'active_runner_authority':'FRESH_SIGNED_RACE_DAY_SOURCE_REQUIRED',
+                'source_executed':False,'static_frozen':False,'dispatch_acknowledged':False,
+                'user_delivery_verified':False}
+            record['sha256']=sha(record);pending.append((path,record))
+        records.append(record)
+    # Validate the complete approved cohort before writing any record.
+    if len(records)!=len(selected):
+        raise ValueError('LOCAL_INTAKE_APPROVED_COHORT_INCOMPLETE')
+    for path,record in pending:
+        write(path,record)
+    return {'cohort':cohort,'cohort_sha256':cohort_sha,'discovered_count':len(plan['races']),
+        'approved_target_count':len(selected),'registered_count':len(records),
+        'registered_execution_ids':[r['execution_id'] for r in records],
+        'runtime_posts':0,'dispatch_count':0,'source_executed':False}
+
+
 def preregister(root, plan, approval, state, *, now, current, publish):
     """Persist approved request intents; never pretend they are frozen Static."""
     target = {'official_plan_sha256':plan['plan_sha256'],
@@ -536,6 +597,15 @@ def preregister(root, plan, approval, state, *, now, current, publish):
         cell = state['races'].setdefault(eid, {})
         key = root/'runtime/race_key_requests'/(race['race_key']+'.json')
         try:
+            intake=root/'runtime/local_race_registrations'/plan['race_date']/(eid+'.json')
+            if intake.exists():
+                record=json.loads(intake.read_text())
+                if (record.get('sha256')!=sha({k:v for k,v in record.items() if k!='sha256'})
+                        or record.get('execution_id')!=eid or record.get('plan_sha256')!=plan['plan_sha256']
+                        or record.get('current_authority_manifest')!=current
+                        or record.get('approval_sha256')!=sha(approval)
+                        or record.get('intake_intent')!=build(fields,now=now)):
+                    raise ValueError('LOCAL_INTAKE_IMMUTABLE_BINDING_CONFLICT')
             if not owned_registration(root,race,cell,plan,current):
                 if cell.get('registration') or cell.get('claimed_at') or existing_race_refs(root,race) or key.exists():
                     raise ValueError('EXISTING_RACE_OR_REGISTRATION_REQUIRES_READBACK')
@@ -568,19 +638,26 @@ def preregister(root, plan, approval, state, *, now, current, publish):
 
 
 def tick(root, plan, approval, state, *, now, execute=False, authorize=authorization,
-         health=runtime_ready, send=dispatch, publish=None, reconcile=reconcile_run, clock=None):
+         health=runtime_ready, send=dispatch, publish=None, reconcile=reconcile_run, clock=None,
+         only_execution_id=None):
     if sha({k:v for k,v in plan.items() if k != 'plan_sha256'}) != plan.get('plan_sha256'):
         raise ValueError('DAY_PLAN_SHA_MISMATCH')
     if now.tzinfo is None or now.astimezone(JST).date().isoformat() != plan['race_date']:
         raise ValueError('DISPATCH_REQUIRES_CURRENT_LOCAL_DAY')
     current = authorize(approval, plan, root, now)
+    if only_execution_id is not None and (plan.get('venue_id') != 'URW' or
+            only_execution_id not in {r['execution_id'] for r in plan['races']
+                if r['fields']['race_no'] in approval['race_numbers']}):
+        raise ValueError('CHAT_APPROVED_URW_EXECUTION_REQUIRED')
     if execute and publish is None:
         raise ValueError('DURABLE_CLAIM_PUBLISH_REQUIRED')
     state.setdefault('races', {})
-    if execute and approval.get('preregister_authorized_races') is True:
+    if execute and only_execution_id is None and approval.get('preregister_authorized_races') is True:
         preregister(root,plan,approval,state,now=now,current=current,publish=publish)
     for race in plan['races']:
         eid, fields = race['execution_id'], race['fields']
+        if only_execution_id is not None and eid != only_execution_id:
+            continue
         cell = state['races'].setdefault(eid, {})
         try:
             cell.update(checkpoint_status(root, eid))
@@ -836,7 +913,7 @@ def readback_health(root, plan):
     return None
 
 
-def prepare_worker(root, plan, plan_path, state_path, approval_path):
+def prepare_worker(root, plan, plan_path, state_path, approval_path, *, only_execution_id=None):
     approval = json.loads(approval_path.read_text())
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     paths = [str(plan_path.relative_to(root)), str(state_path.relative_to(root)), 'runtime/race_key_requests']
@@ -857,7 +934,7 @@ def prepare_worker(root, plan, plan_path, state_path, approval_path):
         if sha(current_approval) != sha(approval):
             raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
         tick(root,plan,current_approval,state,now=datetime.now(timezone.utc),execute=True,
-             publish=publish,clock=lambda:datetime.now(timezone.utc))
+             publish=publish,clock=lambda:datetime.now(timezone.utc),only_execution_id=only_execution_id)
         publish()
         return state
     return approval, step
@@ -872,8 +949,11 @@ def main():
     p.add_argument('--date', required=True)
     p.add_argument('--cutoff-seconds', required=True, type=int)
     p.add_argument('--execute', action='store_true')
+    p.add_argument('--preregister-only', action='store_true',help='URW authorized future intake only; never dispatch')
     args = p.parse_args()
     root, now = Path(args.repo_root).resolve(), datetime.now(timezone.utc)
+    if args.preregister_only and (args.execute or args.south_kanto or args.venue!='URW'):
+        raise ValueError('PREREGISTER_ONLY_ONE_URW_PLAN_NO_DISPATCH')
     if args.south_kanto:
         report = south_kanto_day(root,args.date,args.cutoff_seconds,now=now,execute=args.execute)
         print(json.dumps(report))
@@ -885,7 +965,7 @@ def main():
     folder = root/'runtime/local_race_day_plan'
     plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
     approval_path = root/'profiles/local_autonomous_approvals'/(name+'.json')
-    if args.execute and (os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true' or not approval_path.exists()):
+    if (args.execute or args.preregister_only) and (os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true' or not approval_path.exists()):
         raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
     discovery_reads = []
     try:
@@ -908,6 +988,11 @@ def main():
     if (plan['venue_id'],plan['race_date']) != (args.venue,args.date):
         raise ValueError('DAY_PLAN_IDENTITY_MISMATCH')
     write(plan_path, plan)
+    if args.preregister_only:
+        report=preregister_intakes(root,plan,json.loads(approval_path.read_text()),now=now)
+        write(folder/(name+'.intake-registration.json'),report)
+        print(json.dumps(report))
+        return 0
     if not args.execute:
         report = inspect_plan(root, plan, now)
         write(folder/(name+'.dry-run.json'), report)

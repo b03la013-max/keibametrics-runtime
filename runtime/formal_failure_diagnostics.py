@@ -3,6 +3,28 @@ from __future__ import annotations
 from typing import Optional
 
 
+def failure_stage_for(code: object) -> str:
+    """Stable operational stage, alongside the existing compatibility classes."""
+    value = str(code or '').upper()
+    for terms, stage in (
+        (('DELIVERY', 'NOTIFICATION', 'USER_ACK'), 'DELIVERY'),
+        (('DEADLINE', 'CUTOFF', 'POST_START', 'PRESTART_WINDOW', 'LATENCY', 'COMPLETED_AFTER'), 'LATENCY'),
+        (('NUMERICAL', 'INDEX_', 'TERMINALIZATION'), 'NUMERICAL'),
+        (('DATED_', 'ACTIVATION', 'PRE_DISPATCH_DATED', 'PHASE_B_', 'PHASE_C_'), 'ACTIVATION'),
+        (('AUTHORITY', 'AUTHORIZATION', 'VENUE_OWNER', 'OWNER_SCOPE'), 'AUTHORIZATION'),
+        (('REGISTRATION', 'INTENT_', 'CLAIM_'), 'REGISTRATION'),
+        (('PRE_KRS', 'KRS_'), 'KRS'),
+        (('MEC_',), 'MEC'), (('TICKET_',), 'TICKET'), (('CAPITAL_',), 'CAPITAL'),
+        (('FINAL_',), 'FINAL'),
+        (('RUNNER', 'UNIVERSE'), 'RUNNER'),
+        (('SOURCE', 'OFFICIAL_CARD', 'OFFICIAL_POST'), 'SOURCE'),
+        (('STATIC_', 'PREDICTION', 'REFERENCE_'), 'PREDICTION'),
+    ):
+        if any(term in value for term in terms):
+            return stage
+    return 'RUNTIME'
+
+
 def failure_class_for(code: object) -> str:
     code = str(code or "")
     if code in {"PRODUCTION_STATIC_OWNER_REQUIRED", "STATIC_PREDICTION_FREEZE_REQUIRED", "STATIC_PREDICTION_NOT_FROZEN"}:
@@ -34,6 +56,11 @@ def failure_class_for(code: object) -> str:
 
 def resume_hint_for(code: object) -> str:
     value = str(code or '')
+    stage = failure_stage_for(value)
+    if stage in {'AUTHORIZATION', 'ACTIVATION'}:
+        return 'HOLD_AWAIT_EXPLICIT_APPLICABLE_AUTHORITY_NO_AUTOMATIC_RETRY'
+    if stage == 'DELIVERY':
+        return 'REUSE_VERIFIED_FINAL_RETRY_APPROVED_DELIVERY_ONLY_NO_REPREDICTION'
     if (value.startswith(('RUNNER_UNIVERSE_', 'CURRENT_AUTHORITY_', 'AUTHORITY_',
                           'RUNTIME_FINGERPRINT_', 'CHECKPOINT_'))
             or any(part in value for part in ('SIGNATURE', 'RECEIPT_VERIFY', 'HASH_MISMATCH'))):

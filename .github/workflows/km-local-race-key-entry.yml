@@ -10,6 +10,11 @@ on:
     # the existing exact dated approval gate still prevents later reuse.
     # Phase C/D scheduling requires a separately reviewed configuration.
     - cron: "0,5,10 5 16 10 *"
+    # Reference-only discovery for today's and tomorrow's official URW cards.
+    # Formal local-day is explicitly excluded from these schedules below.
+    - cron: "0 22,1 * * *"
+    # Evening preparation gives the next day's public reference a head start.
+    - cron: "0 11 * * *"
   workflow_dispatch:
     inputs:
       venue_id:
@@ -43,6 +48,7 @@ on:
       - '!runtime/local_race_day_plan/*.dry-run.json'
       - '!runtime/local_race_day_plan/*.discovery-failure.json'
       - 'profiles/local_autonomous_approvals/*.json'
+      - 'runtime/local_reference_start_requests/*.json'
 
 permissions:
   contents: write
@@ -54,6 +60,106 @@ env:
   PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
 
 jobs:
+  reference-day:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'schedule' && (github.event.schedule == '0 22,1 * * *' || github.event.schedule == '0 11 * * *')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: km-urw-reference-day
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Read prior workers' durable references before generation
+        # Concurrency serializes workers, but queued github.sha stays fixed.
+        # Keep GITHUB_SHA/event before/after immutable for request selection;
+        # advance only this clean reference checkout by normal fast-forward.
+        run: python3 tools/persist_local_checkpoints.py --branch main --sync-before-generation --event-sha "$GITHUB_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check -q cryptography
+      - name: Resolve exact dated reference-only request
+        id: request
+        run: |
+          python - <<'PY'
+          import json,os,re,subprocess
+          from datetime import datetime,timedelta,timezone
+          from pathlib import Path
+          from runtime.local_reference_day import resolve_start_request
+          from tools.persist_local_checkpoints import verify_event_files
+          event=json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text());changed=[]
+          if os.environ['GITHUB_EVENT_NAME']=='push':
+              before,after=event.get('before',''),event.get('after','')
+              if event.get('deleted') or not all(re.fullmatch('[0-9a-f]{40}',s) for s in (before,after)):
+                  raise ValueError('REFERENCE_PUSH_IMMUTABLE_RANGE_REQUIRED')
+              args=['git','ls-tree','-r','--name-only',after] if before=='0'*40 else ['git','diff','--name-only','--diff-filter=AMR',before,after]
+              changed=subprocess.check_output(args,text=True).splitlines()
+              requests=[path for path in changed if re.fullmatch(r'runtime/local_reference_start_requests/\d{4}-\d{2}-\d{2}\.json',path)]
+              verify_event_files(cwd=Path.cwd(),event_sha=after,paths=requests)
+          if os.environ['GITHUB_EVENT_NAME']=='schedule':
+              today=datetime.now(timezone(timedelta(hours=9))).date()
+              days=[(today+timedelta(days=offset)).isoformat() for offset in (0,1)]
+              mode='discovery'
+          else:
+              day=resolve_start_request(Path.cwd(),event='push',changed=changed)
+              days=[day] if day else []
+              mode='dated'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+              output.write('days='+json.dumps(days,separators=(',',':'))+'\n')
+              output.write('mode='+mode+'\n')
+          PY
+      - name: Complete or resume every frozen URW reference
+        if: steps.request.outputs.days != '[]'
+        env:
+          REFERENCE_DAYS: ${{ steps.request.outputs.days }}
+          REFERENCE_MODE: ${{ steps.request.outputs.mode }}
+        run: |
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          from runtime.local_reference_day import run_discovery_window
+          days=json.loads(os.environ['REFERENCE_DAYS'])
+          if os.environ['REFERENCE_MODE']=='discovery':
+              report=run_discovery_window(Path.cwd(),start_day=days[0])
+              print(json.dumps(report,ensure_ascii=False))
+              if not any(r.get('reference_all_races_complete') for r in report['days']):
+                  raise SystemExit(2)
+          else:
+              subprocess.run(['python','-m','runtime.local_reference_day','--date',days[0]],check=True)
+          PY
+      - name: Persist only dated reference outputs
+        if: always() && steps.request.outputs.days != '' && steps.request.outputs.days != '[]'
+        env:
+          REFERENCE_DAYS: ${{ steps.request.outputs.days }}
+        run: |
+          python - <<'PY'
+          import json,os,subprocess
+          from datetime import date
+          from pathlib import Path
+          days=json.loads(os.environ['REFERENCE_DAYS'])
+          if not 1<=len(days)<=2 or any(date.fromisoformat(day).isoformat()!=day for day in days):
+              raise ValueError('REFERENCE_PUBLICATION_DATED_SCOPE_REQUIRED')
+          paths=[str(p) for day in days for p in (Path('runtime/local_reference')/day).rglob('*')
+              if p.is_file() and p.suffix in {'.json','.gz','.txt','.md'}]
+          if not paths:raise SystemExit('REFERENCE_OUTPUT_MISSING')
+          subprocess.run(['git','config','user.name','keibametrics-runtime'],check=True)
+          subprocess.run(['git','config','user.email','actions@users.noreply.github.com'],check=True)
+          subprocess.run(['git','add','--',*paths],check=True)
+          if subprocess.run(['git','diff','--cached','--quiet']).returncode:
+              subprocess.run(['git','commit','-m','reference: frozen URW '+','.join(days)+' [skip ci]'],check=True)
+              subprocess.run(['python','tools/persist_local_checkpoints.py','--branch','main'],check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.request.outputs.days != '' && steps.request.outputs.days != '[]'
+        with:
+          name: urw-reference-${{ github.run_id }}
+          path: |
+            runtime/local_reference/
+            !runtime/local_reference/**/worker.lock
+          retention-days: 90
   resolve:
     if: github.ref == 'refs/heads/main' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
@@ -113,7 +219,17 @@ jobs:
           python-version: '3.13'
       - name: Install existing runtime dependency
         run: python -m pip install -q cryptography
+      - name: Read existing LOCAL FINAL before deadline or Runtime execution gates
+        id: readback
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          mkdir -p entry-out
+          python -m runtime.local_race_key_gate --readback-only \
+            --execution-id "$EXECUTION_ID" --job-status readback \
+            --github-output "$GITHUB_OUTPUT" --output entry-out/existing_final_readback.json
       - name: Build race-key SOURCE request from Current Authority
+        if: steps.readback.outputs.final_exists != 'true'
         id: intake
         env:
           VENUE_ID: ${{ matrix.venue_id }}
@@ -130,10 +246,12 @@ jobs:
             --output entry-out/race_request.json
           python runtime/family_authority_guard.py --request entry-out/race_request.json
       - name: Verify canonical external Runtime
+        if: steps.readback.outputs.final_exists != 'true'
         run: |
           set -euo pipefail
           python runtime/execution_gateway.py health-check --family LOCAL --output entry-out/gateway_preflight.json
       - name: Signed SOURCE and existing frozen-Static handoff
+        if: steps.readback.outputs.final_exists != 'true'
         id: execute
         shell: bash
         run: |
@@ -148,6 +266,7 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
       - name: Verify signed checkpoint and classify exact completion
+        if: steps.readback.outputs.final_exists != 'true'
         id: gate
         run: |
           set -euo pipefail
@@ -211,7 +330,9 @@ jobs:
               cp "entry-out/$item.json" "runtime/execution_reports/$EXECUTION_ID/$item-${{ github.run_id }}.json"
             fi
           done
-          python -m runtime.local_race_key_gate --terminal-only \
+          mode=--terminal-only
+          if [ "${{ steps.readback.outputs.final_exists }}" = true ]; then mode=--readback-only; fi
+          python -m runtime.local_race_key_gate "$mode" \
             --execution-id "$EXECUTION_ID" --job-status "$JOB_STATUS" \
             --report "runtime/execution_reports/$EXECUTION_ID/entry_report-${{ github.run_id }}.json" \
             --github-summary "$GITHUB_STEP_SUMMARY" \
@@ -231,6 +352,19 @@ jobs:
           path: entry-out/
           if-no-files-found: warn
           retention-days: 90
+      - name: Require existing FINAL readback after persisting diagnostics
+        if: always() && steps.readback.outputs.final_exists == 'true'
+        env:
+          EXECUTION_ID: ${{ matrix.execution_id }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path('runtime/execution_reports')/os.environ['EXECUTION_ID']/'terminal-${{ github.run_id }}.json'
+          r=json.loads(p.read_text())
+          if not all(r.get(k) is True for k in ('signed_final_pass','prestart_final_pass','render_available')):
+              raise SystemExit('EXISTING_FINAL_READBACK_HOLD: '+str(r.get('reason') or r.get('status')))
+          PY
 
   result:
     needs: [resolve, entry]
@@ -319,7 +453,7 @@ jobs:
     # A reviewed dated-plan push can start the SAME driver ahead of the race.
     # GITHUB_TOKEN persistence pushes do not recursively trigger this workflow.
     needs: [resolve]
-    if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'push' && needs.resolve.outputs.has_day_plans == 'true')) && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
+    if: always() && github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule == '0,5,10 5 16 10 *') || (github.event_name == 'push' && needs.resolve.outputs.has_day_plans == 'true')) && vars.KM_LOCAL_AUTONOMOUS_ENABLED == 'true'
     permissions:
       contents: write
       actions: write

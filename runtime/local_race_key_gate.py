@@ -4,6 +4,10 @@ import argparse
 from datetime import datetime, timezone
 import json
 import hashlib
+import base64
+import os
+import re
+import tempfile
 from pathlib import Path
 
 from runtime import formal_execution_orchestrator as o
@@ -12,6 +16,176 @@ from runtime.local_race_key_intake import aware
 
 class RaceKeyGateError(ValueError):
     pass
+
+
+def readback_final(execution_id, job_status='readback', *, repo_root=None,
+                   allow_network=True, _verified_final_response=None):
+    """Recover canonical LOCAL content; never generate or POST a prediction.
+
+    A first read verifies Ed25519 with the existing canonical Gateway GET key.
+    Later reads bind the saved derivative to the exact immutable SOURCE/FINAL
+    manifests and current Gateway configuration. They claim historical content
+    verification, not a new signature check or recipient acknowledgement.
+    The private response argument is used only after terminal_state's existing
+    /verify succeeds; it creates the same saved answer during initial execution.
+    No key is persisted as a new trust anchor.
+    """
+    now = datetime.now(timezone.utc)
+    report = {'execution_id':execution_id,'observed_at':now.isoformat(),
+        'workflow_job_status':job_status,'final_exists':False,'signed_final_pass':False,
+        'prestart_final_pass':False,'render_available':False,'prestart_delivery_pass':False,
+        'user_received_at':None,'delivery_authority':'UNPROVEN','actual_purchase_pfs':'UNKNOWN',
+        'prediction_reexecution':False,'new_runtime_post':False,'production_changed':False}
+    try:
+        if (not re.fullmatch(r'[A-Za-z0-9_.-]{1,180}', str(execution_id))
+                or execution_id in {'.','..'}):
+            raise RaceKeyGateError('READBACK_EXECUTION_ID_INVALID')
+        root = Path(repo_root or o.ROOT)
+        report['final_exists']=(root/'runtime/executions'/execution_id/'FORMAL/LATEST.json').exists()
+        formal = o.resolve_phase(execution_id,'FORMAL',root=root/'runtime/executions')
+        if formal is None:
+            return {**report,'status':'NO_SIGNED_FINAL','reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
+        if 'final_receipt_envelope.json' not in formal['manifest']['files']:
+            return {**report,'final_exists':False,'status':'NO_SIGNED_FINAL','reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
+        report['final_exists'] = True
+        source = o.resolve_phase(execution_id,'SOURCE',root=root/'runtime/executions')
+        if source is None:
+            raise RaceKeyGateError('READBACK_SIGNED_SOURCE_MISSING')
+        final = o._load_checkpoint_json(formal,'final_receipt_envelope.json') or {}
+        signed_source = o._load_checkpoint_json(source,'source_receipt_envelope.json') or {}
+        flags = o._load_checkpoint_json(formal,'receipt_verifications.json') or {}
+        temporal = o._load_checkpoint_json(formal,'final_before_post_verification.json') or {}
+        if any(flags.get(p) is not True for p in ('SOURCE','PRE_KRS','KRS_RUN','FINAL')):
+            raise RaceKeyGateError('READBACK_ORIGINAL_VERIFICATIONS_INCOMPLETE')
+        from runtime.execution_gateway import family_config, load_gateway, request_json, assess_runtime_health
+        gateway = load_gateway(root/'profiles/current_execution_gateway.json')
+        cfg = family_config('LOCAL',gateway)
+        def digest(value):
+            return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,
+                separators=(',',':')).encode()).hexdigest()
+        def stamp(value):
+            t=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+            if t.tzinfo is None:
+                raise RaceKeyGateError('READBACK_TIMEZONE_REQUIRED')
+            return t
+        for envelope,phase,status in ((signed_source,'SOURCE','SOURCE_FROZEN'),(final,'FINAL','PASS')):
+            receipt,artifact=envelope.get('receipt') or {},envelope.get('artifact') or {}
+            if (receipt.get('family')!='LOCAL' or receipt.get('phase')!=phase
+                    or receipt.get('status')!=status or receipt.get('errors')
+                    or receipt.get('race_id')!=execution_id or artifact.get('race_id',execution_id)!=execution_id
+                    or envelope.get('signature_alg')!='Ed25519'
+                    or envelope.get('signer_key_id')!=cfg['receipt_signer_key_id']
+                    or receipt.get('engine_sha256')!=cfg['engine_sha256']
+                    or receipt.get('parameter_map_sha256')!=cfg['parameter_map_sha256']
+                    or digest(receipt)!=envelope.get('receipt_sha256')
+                    or digest(artifact)!=receipt.get('artifact_sha256') or not envelope.get('signature')):
+                raise RaceKeyGateError('READBACK_RECEIPT_IDENTITY_OR_HASH_MISMATCH:'+phase)
+        artifact=final['artifact']; receipt=final['receipt']; src=signed_source['artifact']
+        if (artifact.get('source_receipt_sha256')!=signed_source['receipt_sha256']
+                or artifact.get('source_snapshot_sha256')!=src.get('source_snapshot_sha256')
+                or temporal.get('execution_id')!=execution_id or temporal.get('race_id')!=execution_id
+                or temporal.get('final_receipt_sha256')!=final['receipt_sha256']
+                or temporal.get('verified') is not True):
+            raise RaceKeyGateError('READBACK_SOURCE_OR_TEMPORAL_LINEAGE_MISMATCH')
+        cutoff=stamp(src['prediction_cutoff']);post=stamp(temporal['scheduled_post_at'])
+        frozen=stamp(artifact['final_freeze_timestamp']);signed=stamp(receipt['timestamp'])
+        if not stamp(src['source_freeze_at'])<=stamp(signed_source['receipt']['timestamp'])<=frozen<=signed<cutoff<post:
+            raise RaceKeyGateError('READBACK_FINAL_NOT_BEFORE_CUTOFF')
+        if signed>now:
+            raise RaceKeyGateError('READBACK_FUTURE_SIGNATURE_TIME')
+        from runtime.jra_ticket_tree_renderer import render_ticket_tree
+        tree=render_ticket_tree(artifact)
+        payload={'canonical_tree':tree['text'],'rendered_ticket_count':tree['ticket_count'],
+            'rendered_investment':tree['total_investment'],
+            'rendered_stakes':sorted({t['stake'] for t in tree['reflattened_tickets']}),
+            'canonical_prediction':{'current_authority':artifact.get('current_authority_manifest'),
+                'formal_grade':artifact.get('formal_grade'),
+                'prediction_package':artifact.get('final_prediction_package') or {},
+                'final_ticket':artifact.get('final_ticket'),'actual_purchase':'UNKNOWN',
+                'krs_receipt':artifact.get('krs_receipt_sha256'),'missing_display_fields_are_unknown':True},
+            'final_receipt_sha256':final['receipt_sha256'],
+            'original_final_artifact_sha256':receipt['artifact_sha256'],
+            'freeze_time':artifact['final_freeze_timestamp'],'final_signed_at':receipt['timestamp'],
+            'prediction_cutoff':src['prediction_cutoff'],'scheduled_post_at':temporal['scheduled_post_at'],
+            'signature':final['signature'],'signature_alg':final['signature_alg'],
+            'signer_key_id':final['signer_key_id']}
+        bindings={'execution_id':execution_id,'source_manifest_sha256':source['latest']['manifest_sha256'],
+            'formal_manifest_sha256':formal['latest']['manifest_sha256'],
+            'source_envelope_sha256':digest(signed_source),'final_envelope_sha256':digest(final),
+            'gateway_configuration_sha256':digest(cfg)}
+        target=root/'runtime/execution_reports'/execution_id/'delivery'
+        saved_path=target/'canonical_presentation.json'
+        saved=None
+        reused=saved_path.exists()
+        if reused:
+            saved=json.loads(saved_path.read_text(encoding='utf-8'))
+            if (saved.get('schema')!='KM-LOCAL-CANONICAL-PRESENTATION-v1'
+                    or saved.get('sha256')!=digest({k:v for k,v in saved.items() if k!='sha256'})
+                    or saved.get('bindings')!=bindings or saved.get('payload')!=payload
+                    or saved.get('verification',{}).get('valid') is not True
+                    or saved.get('verification',{}).get('method') not in
+                       {'CANONICAL_GATEWAY_GET_ED25519','EXISTING_REMOTE_FINAL_VERIFY'}
+                    or stamp(saved['created_at'])<signed or stamp(saved['created_at'])>now):
+                raise RaceKeyGateError('SAVED_PRESENTATION_CANONICAL_BINDING_MISMATCH')
+        elif _verified_final_response is not None:
+            if _verified_final_response.get('valid') is not True:
+                raise RaceKeyGateError('READBACK_REMOTE_SIGNATURE_VERIFICATION_REQUIRED')
+            verification={'valid':True,'method':'EXISTING_REMOTE_FINAL_VERIFY'}
+        elif allow_network:
+            status,health=request_json(cfg['external_endpoint'].rstrip('/')+'/health',
+                                       method='GET',timeout=20,attempts=1)
+            if status>=300 or assess_runtime_health(health,'LOCAL',gateway,root)['status']!='PASS':
+                raise RaceKeyGateError('READBACK_CANONICAL_GATEWAY_HEALTH_REQUIRED')
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+            key=Ed25519PublicKey.from_public_bytes(base64.b64decode(health['receipt_public_key_b64'],validate=True))
+            for envelope in (signed_source,final):
+                key.verify(base64.b64decode(envelope['signature'],validate=True),
+                    json.dumps(envelope['receipt'],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode())
+            verification={'valid':True,'method':'CANONICAL_GATEWAY_GET_ED25519',
+                          'gateway_bundle_fingerprint':assess_runtime_health(health,'LOCAL',gateway,root)['bundle_fingerprint_actual']}
+        else:
+            raise RaceKeyGateError('INITIAL_READBACK_VERIFICATION_REQUIRED')
+        tree_path=target/'canonical_tree.txt';tree_bytes=(tree['text']+'\n').encode()
+        restore_tree=not tree_path.exists() or tree_path.read_bytes()!=tree_bytes
+        if saved is None:
+            target.mkdir(parents=True,exist_ok=True)
+            saved={'schema':'KM-LOCAL-CANONICAL-PRESENTATION-v1','created_at':now.isoformat(),
+                   'bindings':bindings,'payload':payload,'verification':verification}
+            saved['sha256']=digest(saved)
+            # Atomic create-if-absent: a killed/concurrent worker cannot publish
+            # a partial answer or replace the first successful timestamp.
+            with tempfile.NamedTemporaryFile(dir=target,delete=False) as temp:
+                temp.write((json.dumps(saved,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+                temp_path=Path(temp.name)
+            try:
+                try:os.link(temp_path,saved_path)
+                except FileExistsError:
+                    return readback_final(execution_id,job_status,repo_root=root,allow_network=False)
+            finally:temp_path.unlink(missing_ok=True)
+        if restore_tree:
+            with tempfile.NamedTemporaryFile(dir=target,delete=False) as temp:
+                temp.write(tree_bytes);tree_temp=Path(temp.name)
+            try:os.replace(tree_temp,tree_path)
+            finally:tree_temp.unlink(missing_ok=True)
+        return {**report,**payload,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+            'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
+            'readback_only':True,'readback_time':now.isoformat(),
+            'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
+            'canonical_tree_ref':str(tree_path.relative_to(root)),
+            'canonical_presentation_ref':str(saved_path.relative_to(root)),
+            'tree_sha256':hashlib.sha256(tree['text'].encode()).hexdigest(),
+            'persisted_tree_sha256':hashlib.sha256(tree_bytes).hexdigest(),
+            'capital_compatibility':artifact.get('capital_policy_decision',{}).get('compatibility'),
+            'verification_scope':'SAVED_CANONICAL_CONTENT_NOT_NEW_SIGNATURE' if reused else 'VERIFIED_CANONICAL_READBACK',
+            'fresh_signature_verification':not reused,
+            'fresh_external_verify':_verified_final_response,
+            'new_runtime_post':_verified_final_response is not None,
+            'prediction_post_count':0,'verification_post_count':int(_verified_final_response is not None),
+            'derivative_tree_restored':restore_tree,
+            'publication_status':'LOCAL_READBACK_ONLY_REMOTE_AVAILABILITY_UNVERIFIED',
+            'delivery_time':None,'delivered_content_sha256':None}
+    except Exception as exc:
+        return {**report,'status':'HOLD_READBACK','reason':f'{type(exc).__name__}:{exc}'}
 
 
 def certify(request: dict, entry_report: dict) -> dict:
@@ -95,6 +269,8 @@ def certify(request: dict, entry_report: dict) -> dict:
 
 def terminal_state(execution_id: str, job_status: str) -> dict:
     """Receipt state is independent of Actions exit and user delivery evidence."""
+    if (o.ROOT/'runtime/execution_reports'/execution_id/'delivery/canonical_presentation.json').is_file():
+        return readback_final(execution_id,job_status,allow_network=False)
     now=datetime.now(timezone.utc)
     report={'execution_id':execution_id,'observed_at':now.isoformat(),'workflow_job_status':job_status,
             'signed_final_pass':False,'prestart_final_pass':False,'render_available':False,
@@ -118,44 +294,14 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
     if (http >= 300 or verification.get('valid') is not True
             or final.get('receipt', {}).get('race_id') != execution_id):
         return {**report, 'status': 'HOLD', 'reason': 'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED'}
-    from runtime.jra_ticket_tree_renderer import render_ticket_tree
-    tree=render_ticket_tree(final['artifact'])
-    target=o.ROOT/'runtime/execution_reports'/execution_id/'delivery'
-    target.mkdir(parents=True,exist_ok=True)
-    (target/'canonical_tree.txt').write_text(tree['text']+'\n',encoding='utf-8')
-    package = final['artifact'].get('final_prediction_package') or {}
-    report['canonical_prediction'] = {
-        'current_authority': final['artifact'].get('current_authority_manifest'),
-        'formal_grade': final['artifact'].get('formal_grade'),
-        'prediction_package': package,
-        'final_ticket': final['artifact'].get('final_ticket'),
-        'actual_purchase': 'UNKNOWN',
-        'krs_receipt': (o._load_checkpoint_json(phase, 'krs_receipt_envelope.json') or {}).get('receipt_sha256'),
-        'missing_display_fields_are_unknown': True,
-    }
-    report['canonical_tree'] = tree['text']
-    report['canonical_tree_ref'] = str((target/'canonical_tree.txt').relative_to(o.ROOT))
-    report['fresh_external_verify'] = verification
-    report.update(signed_final_pass=True,prestart_final_pass=temporal.get('verified') is True,
-                  render_available=True,render_generated_at=now.isoformat(),
-                  rendered_ticket_count=tree['ticket_count'],rendered_investment=tree['total_investment'],
-                  tree_sha256=hashlib.sha256(tree['text'].encode()).hexdigest(),
-                  persisted_tree_sha256=hashlib.sha256((tree['text']+'\n').encode()).hexdigest(),
-                  original_final_artifact_sha256=final['receipt'].get('artifact_sha256'),
-                  freeze_time=final['receipt'].get('timestamp'),
-                  rendered_stakes=sorted({t['stake'] for t in tree['reflattened_tickets']}),
-                  readback_time=now.isoformat(),
-                  delivered_content_sha256=None,
-                  delivery_time=None,
-                  final_receipt_sha256=final['receipt_sha256'],
-                  capital_compatibility=final['artifact'].get('capital_policy_decision',{}).get('compatibility'),
-                  status='SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN')
-    return report
+    return readback_final(execution_id,job_status,allow_network=False,
+                          _verified_final_response=verification)
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--request")
     parser.add_argument("--terminal-only",action="store_true")
+    parser.add_argument("--readback-only",action="store_true")
     parser.add_argument("--execution-id")
     parser.add_argument("--job-status")
     parser.add_argument("--report")
@@ -163,9 +309,10 @@ def main() -> int:
     parser.add_argument("--github-output")
     parser.add_argument("--github-summary")
     args = parser.parse_args()
-    if args.terminal_only:
+    if args.terminal_only or args.readback_only:
         try:
-            result=terminal_state(args.execution_id,args.job_status)
+            result=(readback_final(args.execution_id,args.job_status) if args.readback_only
+                    else terminal_state(args.execution_id,args.job_status))
         except Exception as exc:
             result={'execution_id':args.execution_id,'status':'TERMINAL_ERROR','reason':str(exc),
                     'prestart_delivery_pass':False,'observed_at':datetime.now(timezone.utc).isoformat()}
@@ -203,6 +350,10 @@ def main() -> int:
                 'final_artifact_sha256':result.get('original_final_artifact_sha256') if included else None}
         target=Path(args.output);target.parent.mkdir(parents=True,exist_ok=True)
         target.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+        if args.github_output:
+            with Path(args.github_output).open('a',encoding='utf-8') as handle:
+                handle.write('final_exists='+str(result.get('final_exists') is True).lower()+'\n')
+                handle.write('render_available='+str(result.get('render_available') is True).lower()+'\n')
         print(json.dumps(result,ensure_ascii=False))
         return 0
     req = json.loads(Path(args.request).read_text(encoding="utf-8"))
