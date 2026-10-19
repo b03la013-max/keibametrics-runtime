@@ -64,19 +64,34 @@
     "private_original_candidate_tests": 428,
     "public_contract_suite_receipt": "CI/artifact and final release receipt report exact commit separately",
     "public_contract_tests": {
-      "tests": 472,
+      "tests": 474,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
-      "junit_sha256": "278e3390fa308b8683982eca36feed3b9faaaa8d92fe701958382fd3a0efa35b"
+      "junit_sha256": "4e1ea82161250fdbe33e63f67d7026cf6a047af5fb7c9a61df1c72d750edfe6e"
     },
-    "workflow_yaml_and_embedded_python": "PASS"
+    "workflow_yaml_and_embedded_python": "PASS",
+    "first_remote_ci": {
+      "head": "7982af51ff804831bbbd457ddff1275d53f064d9",
+      "success": 6,
+      "failure": 2,
+      "cause": "Unsigned reference imported optional cryptography archive verifier at module scope",
+      "resolution": "Move only Ed25519PublicKey import into archive mode; preserve key.verify and explicitly reject missing dependency there; test unsigned import/capture without crypto",
+      "final_head_ci": "REQUIRED_SEPARATELY"
+    }
   },
   "cost": {
     "new_paid_openai_api_requests": 0,
     "new_services": 0,
     "railway_limits_changed": false,
-    "actual_increment": "UNKNOWN"
+    "actual_increment": "UNKNOWN",
+    "compute_soft_limit_usd_verified": 5,
+    "compute_soft_limit_purpose": "Email alert",
+    "compute_hard_limit_usd_verified": 10,
+    "compute_hard_limit_purpose": "All resources stopped",
+    "verification": "Authenticated Railway Usage limits dialog, cancelled without saving",
+    "current_usage_usd_display": 0.55,
+    "observed_increment": "UNKNOWN"
   },
   "rollback": "Revert only the reviewed integration commit/merge to previous main. Existing Railway deployment and signed/OOS artifacts are not modified."
 }

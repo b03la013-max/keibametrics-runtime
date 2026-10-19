@@ -21,7 +21,6 @@ import copy
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / 'runtime')]
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
 from runtime.local_race_key_shadow_owner import compile_urw_candidate, audit_urw_candidate_paper_pipeline, _sha
@@ -833,6 +832,7 @@ def main():
         assert hashlib.sha256(args.engine.read_bytes()).hexdigest() == ENGINE
     assert hashlib.sha256(params.read_bytes()).hexdigest() == PARAMETERS
     args.output.mkdir(parents=True, exist_ok=False)
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     key = Ed25519PublicKey.from_public_bytes(base64.b64decode(KEY))
     rows, forecasts = [], {}
     started = datetime.now(timezone.utc).isoformat()
