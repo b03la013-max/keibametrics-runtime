@@ -31,10 +31,32 @@ Venueチャットは、利用可能な正規Connectorで同一Raceのmanifestと
 実際に取得して回答する必要があります。CLI成功、保存成功、本文照合成功は、
 ChatGPT画面表示・再読込保持・ユーザー受領の証拠とは分離します。
 
-新規の無人SOURCE取得は `DATA_SOURCE_POLICY` が第一停止です。
+既存のNAR新規SOURCE経路は `DATA_SOURCE_POLICY` が第一停止です。
 2026-10-19のNAR robots確認では一般UAにTodayRaceInfoをDisallowしています。
-許可された公式Feedまたは提供者の明示的許諾が確認されるまで、禁止対象の
-カード・オッズGETを実行しません。保存済み本文の読戻しは継続できます。
+禁止対象のカード・オッズGETを実行せず、保存済み本文の読戻しは継続します。
+
+南関公式の独立REFERENCE用取得は `runtime.urw_nankan_reference_source` に
+分離しています。本人の非営利・私的利用に限定し、公式calendarの実リンク、
+program、同Raceの公開canonical遷移、実出走表を照合します。robotsの404は
+ファイル不在であり、転載や無制限アクセスの許諾ではありません。HTTP不明・
+禁止・別hostや別Raceへの遷移は停止します。
+
+```
+python -m runtime.urw_nankan_reference_source \
+  --race-date 2026-10-20 --race-no 1 \
+  --output /tmp/urw-private-reference-20261020-r01 \
+  --personal-noncommercial-private-only
+```
+
+出力先は私有の絶対pathに限り、Git配下・公開directory・symlinkを拒否します。
+生HTML、全履歴、生成本文は私有のまま保持し、公開workflowへ流しません。
+完成原本があれば取得や予測を繰り返さず同じ原本を検証して読み戻します。
+NARのSOURCE schema、正式Source Registry、Owner、署名、日付別Activationを
+この独立providerで置き換えません。
+
+この私有CLIを追加しただけでは、永続私有Collectorの配置、全Raceの常設起動、
+通常ChatGPTのConnector接続、未保存Raceの恒常Deliveryは成立しません。
+公開の `local_reference_delivery` 原本をこのproviderで上書きしません。
 
 URW Ownerの品質不合格、KAW限定Owner Scope、下流4Consumerの未認可、
 日付別正式ActivationのGateは維持しています。REFERENCEをSigned SOURCE、
