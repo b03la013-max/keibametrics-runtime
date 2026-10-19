@@ -137,6 +137,20 @@ def test_second_redirect_is_not_followed(tmp_path):
     assert len(o.calls)==5
 
 
+def test_history_before_target_but_after_actual_capture_is_not_available_evidence(tmp_path):
+    original,_=client(tmp_path)
+    class FutureHistory:
+        def get(self,url):
+            meta,raw=original.get(url)
+            if '/uma_shosai/' in url:
+                raw=raw.replace(b'26.9.20',b'26.10.21').replace(b'/result/20260920',b'/result/20261021')
+                meta['raw_sha256']=hashlib.sha256(raw).hexdigest()
+            return meta,raw
+    with pytest.raises(n.NankanError,match='HISTORY_AFTER_ACTUAL_CAPTURE'):
+        n.capture_race(DAY,1,tmp_path/'private',client=FutureHistory(),now=lambda:NOW)
+    assert not (tmp_path/'private/publication.json').exists()
+
+
 @pytest.mark.parametrize('damage',['raw','wrong_race','time','formal','truncate','rank'])
 def test_private_checkpoint_detects_tampering_even_if_publication_rehashed(tmp_path,damage):
     output,(manifest,evidence,prediction,body),_,_=captured(tmp_path)
@@ -183,6 +197,20 @@ def test_day_private_checkpoint_never_follows_symlink(tmp_path,name):
     with pytest.raises(n.NankanError,match='SYMLINK'):
         n.capture_day(DAY,root,client=c,now=lambda:NOW)
     assert outside.read_bytes()==original
+
+
+@pytest.mark.parametrize('entry',['race_lock','day_lock','dangling_cohort'])
+def test_private_worker_and_dangling_cohort_symlinks_hold_before_http(tmp_path,entry):
+    c,o=client(tmp_path);root=tmp_path/'private'
+    n.private_directory(root)
+    folder=root if entry=='race_lock' else n.private_directory(root/DAY)
+    outside=tmp_path/'outside-must-not-be-created'
+    name='cohort.json' if entry=='dangling_cohort' else 'worker.lock'
+    (folder/name).symlink_to(outside)
+    with pytest.raises(n.NankanError,match='SYMLINK'):
+        if entry=='race_lock':n.capture_race(DAY,1,root,client=c,now=lambda:NOW)
+        else:n.capture_day(DAY,root,client=c,now=lambda:NOW)
+    assert not o.calls and not outside.exists()
 
 
 def test_day_rehashed_cohort_provider_or_race_change_is_rejected(tmp_path):

@@ -95,6 +95,11 @@ def immutable(path,raw):
 def save_json(path,obj):immutable(path,(json.dumps(obj,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
 
 
+def private_lock(path):
+    if path.is_symlink():raise NankanError('NANKAN_PRIVATE_SYMLINK_OUTPUT_FORBIDDEN')
+    return os.fdopen(os.open(path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600),'a')
+
+
 def reference_metadata(meta):
     flags=('formal_source_claim','signed_source_claim','production_authority','public_redistribution_authorized')
     if (meta.get('provider',PROVIDER)!=PROVIDER or meta.get('source_authority',PROVIDER)!=PROVIDER
@@ -363,6 +368,15 @@ def compile_private_reference(evidence,*,now=None):
     result['sha256']=sha(result);return result
 
 
+def verify_history_asof(runners,card_fetched_at):
+    fetched=datetime.fromisoformat(card_fetched_at)
+    if fetched.tzinfo is None:raise NankanError('NANKAN_CAPTURE_TIMEZONE_REQUIRED')
+    captured_day=fetched.astimezone(JST).date()
+    if any(datetime.strptime(start['date'],'%y.%m.%d').date()>captured_day
+           for row in runners for start in row['starts']):
+        raise NankanError('NANKAN_HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN')
+
+
 def render_private_reference(evidence,prediction):
     race=evidence['race'];lines=[f"REFERENCE ONLY / PRIVATE：{race['race_date']} 浦和{race['race_no']}R {race['race_name']}",
         f"浦和ダート{race['distance']}m／発走予定{race['scheduled_post_at']}／参考締切{race['prediction_cutoff']}",
@@ -426,6 +440,7 @@ def validate_checkpoint(folder,evidence,prediction,body,parts,day,number):
             or evidence['sources'][3]['url']!=expected_card):raise NankanError('NANKAN_READBACK_SOURCE_IDENTITY_HOLD')
     for source in evidence['sources']:reference_metadata(source)
     evrows=evidence['runners'];prrows=prediction['runners']
+    verify_history_asof(evrows,evidence['sources'][3]['fetched_at'])
     if ([{key:row[key] for key in ('runner_id','name','status')} for row in evrows]
             !=[{key:row[key] for key in ('runner_id','name','status')} for row in prrows]
             or len(evrows)!=race['program_runner_count'] or len({r['runner_id'] for r in evrows})!=len(evrows)):
@@ -497,6 +512,7 @@ def freeze_observations(folder,day,number,sources,raws,*,now=None,clock=utcnow,
     if (redirect.get('http_status')!=302 or redirect.get('source_url')!=race['observed_card_url']
             or redirect.get('location')!=canonical or sources[3]['url']!=canonical):raise NankanError('NANKAN_CANONICAL_TRANSITION_HOLD')
     runners=parse_card(raws[2],race,canonical)
+    verify_history_asof(runners,sources[3]['fetched_at'])
     for index,(source,raw) in enumerate(zip((sources[0],sources[1],sources[3]),raws)):
         if source['raw_sha256']!=hashlib.sha256(raw).hexdigest():raise NankanError('NANKAN_OBSERVATION_HASH_HOLD')
         name=('calendar','program','card')[index]+'.html.gz';immutable(folder/name,gzip.compress(raw,mtime=0))
@@ -522,7 +538,7 @@ def freeze_observations(folder,day,number,sources,raws,*,now=None,clock=utcnow,
 
 def capture_race(day,number,output,*,client=None,now=utcnow,prediction_cutoff=None):
     folder=private_directory(output)
-    with (folder/'worker.lock').open('a') as lock:
+    with private_lock(folder/'worker.lock') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         return _capture_locked(day,number,folder,client=client,now=now,prediction_cutoff=prediction_cutoff)
 
@@ -559,7 +575,7 @@ def _capture_locked(day,number,folder,*,client,now,prediction_cutoff):
 
 def capture_day(day,private_root,*,client=None,now=utcnow):
     folder=private_directory(private_directory(private_root)/day)
-    with (folder/'worker.lock').open('a') as lock:
+    with private_lock(folder/'worker.lock') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         return _capture_day_locked(day,private_root,client=client,now=now)
 
@@ -577,9 +593,9 @@ def _capture_day_locked(day,private_root,*,client,now):
             if shared:cache[url]=(dict(result[0]),result[1])
             return result
     shared=DayClient();cohort_path=folder/'cohort.json'
+    if any((folder/name).is_symlink() for name in ('cohort.json','calendar.html.gz','program.html.gz')):
+        raise NankanError('NANKAN_PRIVATE_SYMLINK_OUTPUT_FORBIDDEN')
     if cohort_path.exists():
-        if any((folder/name).is_symlink() for name in ('cohort.json','calendar.html.gz','program.html.gz')):
-            raise NankanError('NANKAN_PRIVATE_SYMLINK_OUTPUT_FORBIDDEN')
         cohort=json.loads(cohort_path.read_text())
         if (cohort.get('sha256')!=sha({k:v for k,v in cohort.items() if k!='sha256'}) or cohort.get('race_date')!=day
                 or cohort.get('profile')!=PROFILE or cohort.get('provider')!=PROVIDER or len(cohort.get('sources',[]))!=2):
