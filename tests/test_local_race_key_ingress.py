@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import json
 
 from runtime import local_race_key_intake as intake
 from runtime import local_race_key_gate as gate
@@ -404,3 +405,104 @@ def test_terminal_summary_binds_exact_content_and_final_without_receipt_claim(mo
     assert record['final_artifact_sha256']=='artifact-sha'
     assert record['written_at'] and record['canonical_final_included'] is True
     assert result['prestart_delivery_pass'] is False and result['user_received_at'] is None
+
+
+@pytest.fixture
+def actual_local_readback(tmp_path,monkeypatch):
+    """Copy immutable real evidence. Gateway GET is a recorded fixture, not LIVE."""
+    import shutil
+    from runtime import local_race_key_gate as gate, execution_gateway as gateway
+    root=Path(__file__).resolve().parents[1]
+    rid='KM-LOCAL-KAW-20261016-R01-LIVE-R1'
+    src=root/'runtime/executions'/rid
+    assert src.exists(), 'REAL_SIGNED_KAW_READBACK_FIXTURE_REQUIRED'
+    for phase in ('SOURCE','FORMAL'):
+        shutil.copytree(src/phase,tmp_path/'runtime/executions'/rid/phase)
+    (tmp_path/'profiles').mkdir()
+    shutil.copyfile(root/'profiles/current_execution_gateway.json',tmp_path/'profiles/current_execution_gateway.json')
+    health=json.loads((root/'docs/local_south_kanto_20261018/runtime_health_recheck.json').read_text())['health']
+    # Independent trust fixture, never an envelope-supplied key.
+    assert health['receipt_public_key_b64']=='jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE='
+    calls=[]
+    def get(url,**kw):
+        calls.append((url,kw));assert url.endswith('/health') and kw['method']=='GET'
+        return 200,health
+    monkeypatch.setattr(gateway,'request_json',get)
+    return gate,rid,tmp_path,calls
+
+
+def test_real_local_final_saved_readback_survives_outage_without_new_prediction(actual_local_readback,monkeypatch):
+    import hashlib
+    from runtime import execution_gateway as gateway
+    gate,rid,root,calls=actual_local_readback
+    def inventory():return {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in (root/'runtime/executions').rglob('*') if p.is_file()}
+    before=inventory();first=gate.readback_final(rid,repo_root=root)
+    assert first['render_available'],first
+    assert first['rendered_ticket_count']==156 and first['rendered_investment']==15600
+    assert first['canonical_prediction']['final_ticket'] and first['signature_alg']=='Ed25519'
+    assert len(calls)==1 and first['fresh_signature_verification']
+    monkeypatch.setattr(gateway,'request_json',lambda *a,**k:pytest.fail('SAVED_READBACK_MUST_NOT_CALL_RUNTIME'))
+    target=root/first['canonical_presentation_ref'];original=target.read_bytes()
+    second=gate.readback_final(rid,repo_root=root,allow_network=False)
+    assert second['render_available'] and second['canonical_tree']==first['canonical_tree']
+    assert second['render_generated_at']==first['render_generated_at']
+    assert not second['fresh_signature_verification'] and not second['new_runtime_post']
+    assert second['verification_scope']=='SAVED_CANONICAL_CONTENT_NOT_NEW_SIGNATURE'
+    assert not second['prestart_delivery_pass'] and second['user_received_at'] is None
+    assert target.read_bytes()==original and inventory()==before
+    # A partial/deleted derivative is repaired from unchanged signed content;
+    # original freeze and presentation timestamps are retained.
+    (root/second['canonical_tree_ref']).write_text('partial stale derivative')
+    third=gate.readback_final(rid,repo_root=root,allow_network=False)
+    assert third['render_available'] and third['derivative_tree_restored']
+    assert third['render_generated_at']==first['render_generated_at']
+    assert inventory()==before and target.read_bytes()==original
+
+
+@pytest.mark.parametrize('bad',['presentation','signature','gateway'])
+def test_saved_local_answer_cannot_override_corrupt_canonical_or_new_signer(actual_local_readback,monkeypatch,bad):
+    import hashlib
+    from runtime import execution_gateway as gateway
+    gate,rid,root,calls=actual_local_readback
+    first=gate.readback_final(rid,repo_root=root);assert first['render_available'],first
+    if bad=='presentation':
+        p=root/first['canonical_presentation_ref'];a=json.loads(p.read_text())
+        a['payload']['canonical_tree']='FAKE TICKETS'
+        a['sha256']=hashlib.sha256(json.dumps({k:v for k,v in a.items() if k!='sha256'},
+            ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        p.write_text(json.dumps(a))
+    elif bad=='signature':
+        p=next((root/'runtime/executions'/rid/'FORMAL').rglob('final_receipt_envelope.json'))
+        a=json.loads(p.read_text());a['signature']='INVALID';p.write_text(json.dumps(a))
+    else:
+        p=root/'profiles/current_execution_gateway.json';a=json.loads(p.read_text())
+        a['families']['LOCAL']['receipt_signer_key_id']='UNAPPROVED_NEW_SIGNER';p.write_text(json.dumps(a))
+    monkeypatch.setattr(gateway,'request_json',lambda *a,**k:pytest.fail('NO_BYPASS_OR_REGENERATION'))
+    result=gate.readback_final(rid,repo_root=root,allow_network=False)
+    assert result['status']=='HOLD_READBACK' and result['final_exists']
+    assert not result['render_available'] and 'canonical_tree' not in result
+
+
+def test_local_existing_final_outage_holds_without_source_fallback(actual_local_readback,monkeypatch):
+    from runtime import execution_gateway as gateway
+    gate,rid,root,calls=actual_local_readback
+    monkeypatch.setattr(gateway,'request_json',lambda *a,**k:(_ for _ in ()).throw(TimeoutError('original timeout')))
+    result=gate.readback_final(rid,repo_root=root)
+    assert result['status']=='HOLD_READBACK' and result['final_exists']
+    assert not result['render_available'] and 'original timeout' in result['reason']
+    assert not list((root/'runtime/execution_reports').glob('**/canonical_presentation.json'))
+
+
+def test_local_workflow_reuses_final_before_deadline_health_and_source():
+    import yaml
+    root=Path(__file__).resolve().parents[1]
+    steps=yaml.safe_load((root/'.github/workflows/km-local-race-key-entry.yml').read_text())['jobs']['entry']['steps']
+    saved=next(i for i,s in enumerate(steps) if s.get('id')=='readback')
+    for name in ['Build race-key SOURCE request from Current Authority','Verify canonical external Runtime',
+                 'Signed SOURCE and existing frozen-Static handoff','Verify signed checkpoint and classify exact completion']:
+        i=next(i for i,s in enumerate(steps) if s.get('name')==name)
+        assert saved<i and steps[i]['if']=="steps.readback.outputs.final_exists != 'true'"
+    persist=next(i for i,s in enumerate(steps) if s.get('name')=='Persist terminal execution and delivery state')
+    held=next(i for i,s in enumerate(steps) if s.get('name')=='Require existing FINAL readback after persisting diagnostics')
+    assert persist<held and '--readback-only' in steps[persist]['run']

@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -32,6 +33,57 @@ JRA_RESULT_SNAPSHOTS = {
 def git(*args, cwd):
     return subprocess.run(['git', *args], cwd=cwd, text=True, capture_output=True,
                           env={**os.environ, 'GIT_EDITOR': 'true'})
+
+
+def sync_before_generation(*, cwd, branch, event_sha):
+    """Read earlier workers' durable records before producing any new ones.
+
+    A queued Actions checkout is pinned to the event SHA. Only fast-forward it
+    to the fetched branch; never rebase unpublished forecasts, reset local
+    files, or resolve an immutable-record conflict. The caller must keep the
+    original event before/after SHAs for ingress selection.
+    """
+    if (not re.fullmatch(r'[0-9a-f]{40}', event_sha or '') or not branch
+            or branch.startswith('-')
+            or git('check-ref-format', 'refs/heads/' + branch, cwd=cwd).returncode):
+        raise RuntimeError('REFERENCE_SYNC_EVENT_OR_BRANCH_INVALID')
+    head = git('rev-parse', 'HEAD', cwd=cwd)
+    if head.returncode or head.stdout.strip() != event_sha:
+        raise RuntimeError('REFERENCE_SYNC_EVENT_CHECKOUT_MISMATCH')
+    status = git('status', '--porcelain', '--untracked-files=all', cwd=cwd)
+    if status.returncode or status.stdout.strip():
+        raise RuntimeError('REFERENCE_SYNC_DIRTY_CHECKOUT_HOLD')
+    if git('fetch', '--no-tags', 'origin', 'refs/heads/' + branch, cwd=cwd).returncode:
+        raise RuntimeError('REFERENCE_SYNC_FETCH_FAILED')
+    fetched = git('rev-parse', 'FETCH_HEAD', cwd=cwd)
+    if fetched.returncode:
+        raise RuntimeError('REFERENCE_SYNC_FETCHED_HEAD_INVALID')
+    current = fetched.stdout.strip()
+    if git('merge-base', '--is-ancestor', event_sha, current, cwd=cwd).returncode:
+        raise RuntimeError('REFERENCE_SYNC_NOT_FAST_FORWARD_HOLD')
+    if git('merge', '--ff-only', '--no-edit', current, cwd=cwd).returncode:
+        raise RuntimeError('REFERENCE_SYNC_FAST_FORWARD_FAILED')
+    if git('rev-parse', 'HEAD', cwd=cwd).stdout.strip() != current:
+        raise RuntimeError('REFERENCE_SYNC_HEAD_MISMATCH')
+    return {'event_sha': event_sha, 'generation_base_sha': current,
+            'fast_forwarded': current != event_sha, 'remote_write_count': 0}
+
+
+def verify_event_files(*, cwd, event_sha, paths):
+    """Do not consume a newer request body for an older queued push event."""
+    if not re.fullmatch(r'[0-9a-f]{40}', event_sha or ''):
+        raise RuntimeError('REFERENCE_PUSH_EVENT_SHA_INVALID')
+    for name in paths:
+        path = Path(name)
+        if path.is_absolute() or '..' in path.parts:
+            raise RuntimeError('REFERENCE_PUSH_EVENT_PATH_INVALID')
+        original = subprocess.run(['git', 'show', event_sha + ':' + name], cwd=cwd,
+                                  capture_output=True)
+        current = Path(cwd) / path
+        if (original.returncode or not current.is_file() or current.is_symlink()
+                or not current.resolve().is_relative_to(Path(cwd).resolve())
+                or current.read_bytes() != original.stdout):
+            raise RuntimeError('REFERENCE_PUSH_REQUEST_CHANGED_AFTER_EVENT:' + name)
 
 
 def rebuild(paths):
@@ -137,6 +189,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--branch', required=True)
     parser.add_argument('--jra-result', action='store_true')
+    parser.add_argument('--sync-before-generation', action='store_true')
+    parser.add_argument('--event-sha')
     args = parser.parse_args()
-    persist(cwd=Path.cwd(), branch=args.branch,
-            snapshots=SNAPSHOTS | JRA_RESULT_SNAPSHOTS if args.jra_result else SNAPSHOTS)
+    if args.sync_before_generation:
+        if args.jra_result or not args.event_sha:
+            parser.error('--sync-before-generation requires --event-sha and excludes --jra-result')
+        print(json.dumps(sync_before_generation(cwd=Path.cwd(), branch=args.branch,
+                                               event_sha=args.event_sha), sort_keys=True))
+    else:
+        if args.event_sha:
+            parser.error('--event-sha requires --sync-before-generation')
+        persist(cwd=Path.cwd(), branch=args.branch,
+                snapshots=SNAPSHOTS | JRA_RESULT_SNAPSHOTS if args.jra_result else SNAPSHOTS)

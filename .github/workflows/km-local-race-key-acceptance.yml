@@ -8,6 +8,20 @@ on:
     branches: [main]
     paths:
       - "runtime/local_race_day_dispatcher.py"
+      - "runtime/local_reference_day.py"
+      - "runtime/local_reference_delivery.py"
+      - "runtime/local_reference_delivery/**"
+      - "runtime/urw_reference_source_policy.py"
+      - "runtime/local_reference/**"
+      - "runtime/local_reference_start_requests/**"
+      - "scripts/urw_candidate_krs_replay.py"
+      - "tests/test_local_reference_day.py"
+      - "tests/test_local_reference_delivery.py"
+      - "tests/test_urw_reference_source_policy.py"
+      - "tests/test_urw_public_import_boundary.py"
+      - "tests/test_reference_pre_generation_sync.py"
+      - "tests/urw_reference_fixture_support.py"
+      - "tests/fixtures/urw_reference_synthetic/**"
       - "tests/test_local_race_day_dispatcher.py"
       - "tests/test_local_south_kanto.py"
       - "runtime/jra_next_race_learning_binding_audit.py"
@@ -56,7 +70,7 @@ jobs:
           assert w["on"]["workflow_dispatch"]["inputs"]
           assert w["on"]["repository_dispatch"]["types"] == ["km_local_race_key"]
           assert w["permissions"]["contents"] == "write"
-          assert set(w["jobs"]) == {"resolve", "entry", "result", "local-day"}
+          assert set(w["jobs"]) == {"resolve", "entry", "result", "local-day", "reference-day"}
           assert "needs.resolve.outputs.has_requests" in w["jobs"]["result"]["if"]
           assert w["jobs"]["resolve"]["if"] == "github.ref == 'refs/heads/main' && github.event_name != 'schedule'"
           PY
@@ -65,65 +79,36 @@ jobs:
           PYTHONPATH=runtime:. python -m runtime.local_race_key_intake --help >/dev/null
           PYTHONPATH=runtime:. python -m runtime.local_race_entry --help >/dev/null
           PYTHONPATH=runtime:. python -m runtime.local_race_key_gate --help >/dev/null
+          PYTHONPATH=runtime:. python -m runtime.local_reference_day --help >/dev/null
       - name: LOCAL race-key and existing formal regression
-        run: python -m pytest -q tests/test_urw_owner_candidate.py tests/test_local_south_kanto.py tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py tests/test_jra_next_race_learning_binding_audit.py
+        run: python -m pytest -q tests/test_urw_public_import_boundary.py tests/test_local_reference_delivery.py tests/test_urw_reference_source_policy.py tests/test_reference_pre_generation_sync.py tests/test_local_reference_day.py tests/test_urw_owner_candidate.py tests/test_local_south_kanto.py tests/test_local_race_day_dispatcher.py tests/test_jra_ticket_tree_renderer.py tests/test_persist_local_checkpoints_scratch.py tests/test_local_production_static_owner.py tests/test_local_race_key_shadow_owner.py tests/test_local_race_key_ingress.py tests/test_local_source_first_entry.py tests/test_formal_execution_orchestrator.py tests/test_recovery_result_entry.py tests/test_formal_failure_diagnostics.py tests/test_aki_adaptive_oos_tracker.py tests/test_jra_next_race_learning_binding_audit.py
 
-      - name: Record official NAR day discovery availability (read-only, no LIVE/OOS execution)
+      - name: Verify synthetic twelve-race readback contracts without new capture
         run: |
-          python - <<'PY'
+          PYTHONPATH=runtime:. python - <<'PY_URW'
           import json
-          from datetime import datetime, timezone
           from pathlib import Path
-          from runtime.local_race_day_dispatcher import discover
-          for day,prefix in [('2026-10-15','historical'),('2026-10-16','phase-b'),('2026-11-09','next-kaw')]:
-              try:
-                  plan=discover('KAW',day,120,now=datetime.now(timezone.utc))
-                  Path(prefix+'-discovery-plan.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2))
-                  result={'status':'PASS_OFFICIAL_DISCOVERY_READ_ONLY_NOT_LIVE_ACCEPTANCE','race_date':day,'race_count':len(plan['races']),
-                          'plan_sha256':plan['plan_sha256'],'races':[r['fields'] for r in plan['races']],
-                          'runner_counts':[{'race_no':r['fields']['race_no'],'declared':r['declared_runner_universe']['runner_count'],
-                            'active':(r['observed_active_runner_universe'] or {}).get('runner_count'),'status':r['active_universe_status']} for r in plan['races']],
-                          'new_live_send':False,'forward_oos':False}
-              except Exception as exc:
-                  result={'status':'HOLD_OFFICIAL_DISCOVERY_UNAVAILABLE','race_date':day,'reason':str(exc),
-                          'new_live_send':False,'forward_oos':False}
-              Path(prefix+'-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
-              print(json.dumps(result,ensure_ascii=False))
-          from runtime.local_race_day_dispatcher import south_kanto_day
-          # Official GET only. Output is an Actions artifact in a temporary root,
-          # never a main plan push, activation, Runtime POST or OOS prediction.
-          import tempfile
-          root=Path(tempfile.mkdtemp(prefix='local-read-only-'))
-          result=south_kanto_day(root,'2026-10-19',120,now=datetime.now(timezone.utc))
-          Path('south-kanto-discovery.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
-          import shutil
-          if (root/'runtime/local_race_day_plan').exists():
-              shutil.copytree(root/'runtime/local_race_day_plan','south-kanto-plans',dirs_exist_ok=True)
-          print(json.dumps({'status':result['status'],'target_races':result['target_races'],
-              'complete':result['target_races_complete'],'venues':list(result['venues'])}))
-          from runtime.local_race_day_dispatcher import canonical_day_index
-          from runtime.execution_gateway import family_config, fetch_health
-          historical=json.loads(Path('phase-b-discovery-plan.json').read_text())
-          index=canonical_day_index(Path.cwd(),historical,now=datetime.now(timezone.utc),
-              health=fetch_health(family_config('LOCAL')['external_endpoint']))
-          Path('historical-canonical-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2))
-          print(json.dumps({'historical_signed_before_cutoff':index['signed_final_before_cutoff_count'],
-              'target_races':index['target_races'], 'delivery_verified':index['delivery_verified_count'],
-              'readback_errors':[{'race':r['race_no'],'error':r.get('observation_error')} for r in index['races'] if r.get('observation_error')]}))
-          assert index['target_races']==12 and index['signed_final_before_cutoff_count']==5
-          PY
+          from runtime.local_reference_day import load_plan,verified_readback
+          import sys
+          sys.path.insert(0,str(Path('tests').resolve()))
+          from urw_reference_fixture_support import fixture_root
+          folder=fixture_root()/'runtime/local_reference/2026-10-20'
+          plan=load_plan(folder,'2026-10-20');rows=[]
+          for race in plan['races']:
+              n=race['fields']['race_no']
+              expected={'family_id':'LOCAL','venue_id':'URW','race_date':'2026-10-20','race_no':n}
+              publication,body=verified_readback(folder/f'R{n:02d}',expected)
+              rows.append({'race_no':n,'runner_count':publication['reference_runner_count'],
+                  'answer_sha256':publication['answer_sha256'],'scope':'TEST_SYNTHETIC_ONLY_NOT_OFFICIAL_OR_CHAT_ACCEPTANCE'})
+          assert len(rows)==12 and sum(r['runner_count'] for r in rows)==131
+          Path('urw-reference-cohort-verification.json').write_text(json.dumps({
+              'TEST_SYNTHETIC_ONLY':True,'plan_sha256':plan['plan_sha256'],
+              'races':rows,'runtime_posts':0,'new_captures':0,'live_acceptance':False},indent=2))
+          PY_URW
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: local-historical-discovery
+          name: local-urw-prestart-evidence
           path: |
-            historical-discovery.json
-            historical-discovery-plan.json
-            phase-b-discovery.json
-            phase-b-discovery-plan.json
-            next-kaw-discovery.json
-            next-kaw-discovery-plan.json
-            south-kanto-discovery.json
-            south-kanto-plans/
-            historical-canonical-index.json
+            urw-reference-cohort-verification.json
           if-no-files-found: ignore
