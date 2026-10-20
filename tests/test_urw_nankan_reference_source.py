@@ -74,6 +74,37 @@ def test_provider_going_abbreviations_preserve_the_printed_witness(printed,expec
     assert all(r['active_verified'] is False for r in rows)
 
 
+@pytest.mark.parametrize('unnumbered', [False, True])
+def test_current_card_explicit_scratch_reduces_current_numbered_universe(unnumbered):
+    # A post-change 1-head program may still print two rows, one marked
+    # 取 消 in place of the original horse number. This is an unsigned,
+    # synthetic PARSER test, not Formal ACTIVE/Owner promotion.
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    race['program_runner_count']=1
+    raw=card(cancelled=True).decode().replace('(2頭)','(1頭)')
+    if unnumbered:
+        raw=raw.replace('<td class="umaban">1</td>',
+                        '<td class="umaban">取 消</td>',1)
+    excluded=[]
+    rows=n.parse_card(raw.encode(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do',
+                      excluded_rows=excluded)
+    assert [r['runner_id'] for r in rows]==['2']
+    assert len(excluded)==1 and excluded[0]['name']=='テスト1'
+    assert excluded[0]['status']=='CANCELLED' and excluded[0]['active_verified'] is False
+    assert excluded[0]['provider_horse_id']=='1'
+    assert excluded[0]['runner_id']==(None if unnumbered else '1')
+
+
+@pytest.mark.parametrize('bad_marker', ['欠場','UNKNOWN',''])
+def test_unknown_unnumbered_current_horse_cannot_be_silently_dropped(bad_marker):
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    race['program_runner_count']=1
+    raw=card(cancelled=True).decode().replace('(2頭)','(1頭)').replace(
+        '<td class="umaban">1</td>',f'<td class="umaban">{bad_marker}</td>',1)
+    with pytest.raises(n.NankanError,match='NANKAN_HORSE_NUMBER_UNKNOWN'):
+        n.parse_card(raw.encode(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
+
+
 def test_observed_urw_win_place_odds_and_fixed_change_links_use_same_client_scope():
     assert n.url_scope(n.ORIGIN+'/odds/202610201807020501.do')
     assert n.url_scope(n.ORIGIN+'/henko_info/00000000000000.do')
