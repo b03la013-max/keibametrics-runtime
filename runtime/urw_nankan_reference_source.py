@@ -961,7 +961,11 @@ def _capture_locked(day,number,folder,*,client,now,prediction_cutoff,refresh=Fal
         if now()>=datetime.fromisoformat(prior[0]['race']['prediction_cutoff']):
             raise NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')
     checkpoints=('reference_evidence.json','reference_prediction.json','readback.txt','answer_parts.json')
-    if not prior and all((folder/name).exists() for name in checkpoints):return readback(folder,day,number,resume=True)
+    if not prior and all((folder/name).exists() for name in checkpoints):
+        prior=readback(folder,day,number,resume=True)
+        if not refresh:return prior
+        if now()>=datetime.fromisoformat(prior[0]['race']['prediction_cutoff']):
+            raise NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')
     if not prior and any((folder/name).exists() for name in (*checkpoints,'calendar.html.gz','program.html.gz','card.html.gz')):
         raise NankanError('NANKAN_PARTIAL_PRIVATE_CAPTURE_HOLD_NO_REGENERATION')
     if prediction_cutoff and now()>=datetime.fromisoformat(prediction_cutoff):raise NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')
