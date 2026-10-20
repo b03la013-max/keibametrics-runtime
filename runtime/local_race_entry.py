@@ -139,14 +139,38 @@ def chat_formal_status(intent):
     return observation
 
 
+def _nankan_chat_reference(intent, root, saved, *, generated=False, current=False):
+    import hashlib
+    manifest, evidence, prediction, content = saved
+    eid = (f"KM-LOCAL-URW-{intent['race_date'].replace('-', '')}-R{intent['race_no']:02d}"
+           f"-NANKAN-REFERENCE-{manifest['forecast_sha256'][:12]}")
+    return {'execution_id': eid,
+        'status': 'CURRENT_PRIVATE_REFERENCE_AVAILABLE' if current else 'FROZEN_PRIVATE_REFERENCE_HISTORY',
+        'answer_origin': 'CURRENT_OFFICIAL_NANKAN_PRIVATE_REFERENCE' if current else 'VERIFIED_FROZEN_NANKAN_PRIVATE_REFERENCE_HISTORY',
+        'private_reference_root': str(root),
+        'answer_sha256': hashlib.sha256(content.encode()).hexdigest(),
+        'answer_required_parts': content.rstrip('\n').split('\n\n'),
+        'reference_readback_only': not generated,
+        'reference_generated_in_this_request': generated, 'prediction_reexecution': generated,
+        'current_official_checked': current, 'source_freshness_claim': current,
+        'current_official_checked_at': datetime.now(timezone.utc).isoformat() if current else None,
+        'source_raw_reverified': True, 'active_verified': False,
+        'source_frozen_at': evidence['source_frozen_at'], 'forecast_frozen_at': manifest['frozen_at'],
+        'source_sha256': evidence['sources'][3]['raw_sha256'],
+        'reference_prediction_sha256': manifest['forecast_sha256'],
+        'reference_runner_count': manifest['runner_count'],
+        'formal_final_proven': False, 'production_authority': False, 'signed_source_claim': False,
+        'verification_scope': 'PRIVATE_NANKAN_RAW_CHECKED_UNSIGNED_REFERENCE_ONLY',
+        'public_redistribution_authorized': False}, content
+
+
 def _chat_reference(intent, *, output, run_id):
     """Check the current permitted card before returning a prestart reference."""
     from runtime import urw_nankan_reference_source as nankan
     from runtime.local_race_key_intake import JST
     import hashlib
     import tempfile
-    if date.fromisoformat(intent['race_date']) < datetime.now(timezone.utc).astimezone(JST).date():
-        return _chat_frozen_reference(intent, output=output, run_id=run_id)
+    private = None
     try:
         # Both raw evidence and the complete derived chat response are private.
         # An Actions/Git output must never acquire these private provider bytes.
@@ -154,41 +178,39 @@ def _chat_reference(intent, *, output, run_id):
         root = Path(os.environ.get('KM_URW_PRIVATE_REFERENCE_ROOT',
             str(Path(tempfile.gettempdir())/f'km-urw-private-reference-{os.getuid()}')))
         private = nankan.private_directory(root/intent['race_date']/f"R{intent['race_no']:02d}")
-        prior = {json.loads(p.read_text())['forecast_sha256']
-                 for p in private.glob('**/publication.json')}
-        manifest, evidence, prediction, content = nankan.capture_race(
+        prior = {json.loads(p.read_text())['sha256']
+                 for p in private.glob('**/reference_prediction.json')}
+        if date.fromisoformat(intent['race_date']) < datetime.now(timezone.utc).astimezone(JST).date():
+            raise nankan.NankanError('NANKAN_REFERENCE_CURRENT_OR_FUTURE_URW_REQUIRED')
+        saved = nankan.capture_race(
             intent['race_date'], intent['race_no'], private, refresh=True)
-        parts = content.rstrip('\n').split('\n\n')
-        generated = manifest['forecast_sha256'] not in prior
-        eid = (f"KM-LOCAL-URW-{intent['race_date'].replace('-', '')}-R{intent['race_no']:02d}"
-               f"-NANKAN-REFERENCE-{manifest['forecast_sha256'][:12]}")
-        return {'execution_id': eid, 'status': 'CURRENT_PRIVATE_REFERENCE_AVAILABLE',
-            'answer_origin': 'CURRENT_OFFICIAL_NANKAN_PRIVATE_REFERENCE',
-            'private_reference_root': str(root),
-            'answer_sha256': hashlib.sha256(content.encode()).hexdigest(),
-            'answer_required_parts': parts, 'reference_readback_only': not generated,
-            'reference_generated_in_this_request': generated, 'prediction_reexecution': generated,
-            'current_official_checked': True, 'source_freshness_claim': True,
-            'current_official_checked_at': datetime.now(timezone.utc).isoformat(),
-            'source_raw_reverified': True, 'active_verified': False,
-            'source_frozen_at': evidence['source_frozen_at'],
-            'forecast_frozen_at': manifest['frozen_at'],
-            'source_sha256': evidence['sources'][3]['raw_sha256'],
-            'reference_prediction_sha256': manifest['forecast_sha256'],
-            'reference_runner_count': manifest['runner_count'],
-            'formal_final_proven': False, 'production_authority': False,
-            'signed_source_claim': False,
-            'verification_scope': 'PRIVATE_NANKAN_RAW_CHECKED_UNSIGNED_REFERENCE_ONLY',
-            'public_redistribution_authorized': False}, content
+        return _nankan_chat_reference(intent, root, saved,
+            generated=saved[0]['forecast_sha256'] not in prior, current=True)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         # A fresh-source failure may show an intact historical freeze, but
         # must never silently label that freeze as the current forecast.
         code = exc.receipt['code'] if isinstance(exc, nankan.NankanError) else str(exc)
-        try:
-            reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id,
-                                                       allow_generation=False)
-        except (OSError, ValueError, KeyError, TypeError) as missing:
-            raise exc from missing
+        # The most recent private revision belongs to this race's history too.
+        # Verify every saved revision before selecting the newest; corruption
+        # must not silently fall through to an older public presentation.
+        candidates = []
+        if private is not None:
+            if (private/'reference_prediction.json').exists():
+                candidates.append(private)
+            if (private/'revisions').exists():
+                candidates.extend(nankan.private_directory(private/'revisions').iterdir())
+        if candidates:
+            histories = [nankan.readback(p, intent['race_date'], intent['race_no']) for p in candidates]
+            saved = max(histories, key=lambda item: datetime.fromisoformat(item[0]['frozen_at']))
+            reference, content = _nankan_chat_reference(intent, root, saved)
+        else:
+            try:
+                reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id,
+                                                           allow_generation=False)
+            except (OSError, ValueError, KeyError, TypeError) as missing:
+                if str(missing) == 'CURRENT_REFERENCE_UNAVAILABLE_AND_NO_FROZEN_HISTORY':
+                    raise exc from missing
+                raise missing from exc
         notice = ('当日公式再確認HOLD：'+code+'。以下は旧Freezeの履歴であり、'
                   '現在の出走集合を反映した新しい予測ではありません。')
         content = notice+'\n\n'+content

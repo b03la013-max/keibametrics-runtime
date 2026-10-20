@@ -506,6 +506,63 @@ def test_normal_chat_current_capture_failure_labels_old_freeze_as_history(tmp_pa
     assert entry.reference_answer_content_check(report['answer_required_parts'],body)['content_complete']
 
 
+def test_normal_chat_current_failure_keeps_latest_private_revision_as_history(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    c,_=client(tmp_path);monkeypatch.setattr(n,'Client',lambda:c)
+    intent=entry.resolve_chat_intent(DAY+' 浦和1R')
+    first,body=entry._chat_reference(intent,output=tmp_path/'first',run_id='first')
+    before={p:p.read_bytes() for p in (tmp_path/'shared-source').rglob('*') if p.is_file()}
+    monkeypatch.setattr(n,'capture_race',lambda *a,**k:(_ for _ in ()).throw(
+        n.NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')))
+    monkeypatch.setattr(entry,'_chat_frozen_reference',lambda *a,**k:pytest.fail('new private history must precede old publication'))
+    history,message=entry._chat_reference(intent,output=tmp_path/'later',run_id='later')
+    assert history['execution_id']==first['execution_id'] and body in message
+    assert history['answer_origin']=='VERIFIED_FROZEN_NANKAN_PRIVATE_REFERENCE_HISTORY'
+    assert not history['prediction_reexecution'] and not history['source_freshness_claim']
+    assert history['current_official_checked_at'] is None and history['source_raw_reverified']
+    assert '旧Freezeの履歴' in message
+    assert before=={p:p.read_bytes() for p in before}
+
+
+def test_past_day_reads_private_revision_without_source_http(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    c,_=client(tmp_path);monkeypatch.setattr(n,'Client',lambda:c)
+    intent=entry.resolve_chat_intent(DAY+' 浦和1R')
+    first,body=entry._chat_reference(intent,output=tmp_path/'first',run_id='first')
+    class AfterRace(datetime):
+        @classmethod
+        def now(cls,tz=None):return (NOW+timedelta(days=4)).astimezone(tz)
+    monkeypatch.setattr(entry,'datetime',AfterRace)
+    monkeypatch.setattr(n,'capture_race',lambda *a,**k:pytest.fail('past reference must never fetch or forecast'))
+    report,message=entry._chat_reference(intent,output=tmp_path/'past',run_id='past')
+    assert report['execution_id']==first['execution_id'] and body in message
+    assert not report['current_official_checked'] and not report['reference_generated_in_this_request']
+
+
+def test_corrupt_private_history_cannot_fall_back_to_an_older_publication(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    c,_=client(tmp_path);monkeypatch.setattr(n,'Client',lambda:c)
+    intent=entry.resolve_chat_intent(DAY+' 浦和1R')
+    entry._chat_reference(intent,output=tmp_path/'first',run_id='first')
+    path=next((tmp_path/'shared-source').rglob('readback.txt'));path.write_text('CORRUPTED')
+    monkeypatch.setattr(n,'capture_race',lambda *a,**k:(_ for _ in ()).throw(n.NankanError('TEST_CURRENT_SOURCE_UNAVAILABLE')))
+    monkeypatch.setattr(entry,'_chat_frozen_reference',lambda *a,**k:pytest.fail('damaged private history cannot fall through'))
+    with pytest.raises(n.NankanError):
+        entry._chat_reference(intent,output=tmp_path/'later',run_id='later')
+
+
+def test_normal_chat_resumed_publication_is_not_counted_as_a_new_forecast(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    c,_=client(tmp_path);monkeypatch.setattr(n,'Client',lambda:c)
+    intent=entry.resolve_chat_intent(DAY+' 浦和1R')
+    first,body=entry._chat_reference(intent,output=tmp_path/'first',run_id='first')
+    next((tmp_path/'shared-source').rglob('publication.json')).unlink()
+    monkeypatch.setattr(n,'compile_private_reference',lambda *a,**k:pytest.fail('completed freeze must never regenerate'))
+    second,again=entry._chat_reference(intent,output=tmp_path/'second',run_id='second')
+    assert first['prediction_reexecution'] and not second['prediction_reexecution']
+    assert second['execution_id']==first['execution_id'] and again==body
+
+
 def test_normal_chat_current_failure_cannot_generate_an_alternative_forecast(tmp_path,monkeypatch,fixed_chat_clock):
     from runtime import local_race_entry as entry
     monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'sources'))
@@ -571,6 +628,14 @@ def test_legacy_freeze_without_scratch_witness_uses_its_frozen_parser_facts(tmp_
     monkeypatch.setattr(n,'parse_card',lambda *a,**kw:pytest.fail('legacy readback must retain the original parser facts'))
     assert n.readback(output,DAY,1)[3]==body
     assert before=={p.name:p.read_bytes() for p in output.iterdir() if p.is_file()}
+
+
+def test_resumed_root_publication_still_checks_current_card_before_freshness_claim(tmp_path,monkeypatch):
+    output,original,c,opener=captured(tmp_path)
+    (output/'publication.json').unlink();before=len(opener.calls)
+    monkeypatch.setattr(n,'compile_private_reference',lambda *a,**k:pytest.fail('same original must not regenerate'))
+    assert n.capture_race(DAY,1,output,client=c,now=lambda:NOW,refresh=True)==original
+    assert len(opener.calls)==before+4
 
 
 def test_current_refresh_recomputes_changed_universe_without_overwriting_or_duplicate_revision(tmp_path,monkeypatch):
