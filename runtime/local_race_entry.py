@@ -208,7 +208,9 @@ def _chat_reference(intent, *, output, run_id):
                 reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id,
                                                            allow_generation=False)
             except (OSError, ValueError, KeyError, TypeError) as missing:
-                raise exc from missing
+                if str(missing) == 'CURRENT_REFERENCE_UNAVAILABLE_AND_NO_FROZEN_HISTORY':
+                    raise exc from missing
+                raise missing from exc
         notice = ('当日公式再確認HOLD：'+code+'。以下は旧Freezeの履歴であり、'
                   '現在の出走集合を反映した新しい予測ではありません。')
         content = notice+'\n\n'+content
