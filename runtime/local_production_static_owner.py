@@ -69,7 +69,7 @@ class _VisibleText(HTMLParser):
             self.fragments.append(data)
 
 
-def _card_heading(source_artifact: dict) -> dict:
+def _card_heading(source_artifact: dict, *, expected_race: dict | None = None) -> dict:
     sources = source_artifact.get("sources") or []
     main = next((x for x in sources if x.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"
                  and x.get("official") is True and x.get("cutoff_relation") == "PRE_CUTOFF"), None)
@@ -89,6 +89,15 @@ def _card_heading(source_artifact: dict) -> dict:
     # Important: use only race HEADER, never historical starts that follow
     # the official 競走馬 table. A requested course/distance is never guessed.
     head = re.split(r"競走馬|枠番", visible, maxsplit=1)[0]
+    if expected_race is not None:
+        # URL/context labels originate in the request. Verify the independent
+        # printed race header before its distance/class can feed calculation.
+        y, m, d = map(int, str(expected_race["race_date"]).split("-"))
+        printed = re.sub(r"\s+", "", head)
+        pattern = (rf"{y}年{m}月{d}日.{{0,30}}浦和.{{0,12}}"
+                   rf"第{int(expected_race['race_no'])}競走")
+        if not re.search(pattern, printed):
+            raise StaticOwnerError("URW_NUMERICAL_CARD_BODY_IDENTITY_MISMATCH")
     candidates = []
     for match in re.finditer(r"(?:ダート|芝)[^0-9]{0,24}(\d{3,4})\s*[mｍ]|(\d{3,4})\s*[mｍ][^0-9]{0,24}(?:ダート|芝)", head):
         candidates.append((int(match.group(1) or match.group(2)), match.group(0)))
@@ -140,7 +149,7 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
                 str(context.get(k)).replace("/", "-") != str(request.get(k))
                 for k in ("venue_id", "race_date", "race_no")))):
         raise StaticOwnerError("URW_NUMERICAL_SOURCE_RACE_MISMATCH")
-    header = _card_heading(source)
+    header = _card_heading(source, expected_race=request)
     observed = {"venue_id": "URW", "race_date": request["race_date"],
                 "race_no": request["race_no"], "distance": header["distance"],
                 "surface": header["surface"], "class": header["class"]}
@@ -299,7 +308,7 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         rid = str(row["runner_id"])
         if str(parsed[rid]["name"]) != str(row["name"]):
             raise StaticOwnerError("OFFICIAL_CARD_NAME_MISMATCH")
-    header = _card_heading(source)
+    header = _card_heading(source, expected_race=request if venue == "URW" else None)
     day = _dt(request["scheduled_post_at"]).astimezone(JST).replace(hour=0, minute=0, second=0, microsecond=0)
     facts = {rid: _runner_facts(parsed[rid], venue_name=VENUE_NAMES[venue],
                                 distance=header["distance"], race_day=day) for rid in ids}

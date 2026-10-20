@@ -135,6 +135,30 @@ def test_urw_source_context_rejects_changed_source_without_mutating_it(original)
     assert bind_urw_numerical_context(other, {}) == other
 
 
+@pytest.mark.parametrize('before,after', [
+    ('2026年9月23日', '2026年9月24日'), ('浦 和', '川 崎'), ('第12競走', '第11競走')])
+def test_urw_numeric_context_checks_card_body_beside_url(original, before, after):
+    from runtime.local_production_static_owner import bind_urw_numerical_context, StaticOwnerError
+    from runtime.local_physical.source_acquisition import sha_obj, verify_source_artifact
+    import unicodedata
+    req, envelope, _ = original
+    # In-memory unsigned transport mutation, never a new signed SOURCE.
+    source = copy.deepcopy(envelope['artifact'])
+    card = next(s for s in source['sources']
+                if s.get('source_class') == 'OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT')
+    page = gzip.decompress(base64.b64decode(card['raw_gzip_b64'])).decode('utf-8')
+    page = unicodedata.normalize('NFKC', page)
+    assert before in page
+    raw = page.replace(before, after).encode('utf-8')
+    card['raw_gzip_b64'] = base64.b64encode(gzip.compress(raw, mtime=0)).decode()
+    card['raw_sha256'] = hashlib.sha256(raw).hexdigest()
+    card['snapshot_sha256'] = sha_obj({k:v for k,v in card.items() if k != 'snapshot_sha256'})
+    source['source_snapshot_sha256'] = sha_obj({k:v for k,v in source.items() if k != 'source_snapshot_sha256'})
+    assert verify_source_artifact(source) == (True, [])
+    with pytest.raises(StaticOwnerError, match='URW_NUMERICAL_CARD_BODY_IDENTITY_MISMATCH'):
+        bind_urw_numerical_context(req, source)
+
+
 def test_urw_repeatable_roles_evidence_and_explicit_semantic_gaps(original):
     req, s, n = original
     before = copy.deepcopy(original)
