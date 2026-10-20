@@ -418,12 +418,14 @@ def parse_card(raw,race,url):
             positions=[]
             for p in run.all('p','position'):
                 positions=[int(node.text()) for node in p.all('span') if re.fullmatch(r'\d{1,2}',node.text())]
+            going_label=re.fullmatch(r'(不良|稍重|良|重|不|稍)(?:内|外)?(?:ダート|ダ|芝)\s*\d{3,4}',spans[2].text())
+            going=({'不':'不良','稍':'稍重'}.get(going_label[1],going_label[1]) if going_label else None)
             start={'date':when.strftime('%y.%m.%d'),'venue':venue,'provider_race_id':rid[1],
                 'surface':'DIRT' if 'ダ' in spans[2].text() else 'TURF' if '芝' in spans[2].text() else 'UNKNOWN',
                 'distance':int(dist[1]) if dist else None,'finish':int(finish[1]) if finish else None,
                 'field_size':int(field[1]) if field else None,'content_positions':positions,'race_name':link.text(),
                 'going_observed':spans[2].text(),'raw':run.text(),'provider':PROVIDER,
-                'going':next((g for g in ('不良','稍重','良','重') if spans[2].text().startswith(g)),None),
+                'going':going,
                 'direction':'UNKNOWN',
                 'horse_no':int(ride[2]) if ride else None,
                 'ride_popularity':int(ride[3]) if ride else None,
