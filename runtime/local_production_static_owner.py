@@ -301,13 +301,25 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         raise StaticOwnerError("OFFICIAL_ACTIVE_STATUS_UNIVERSE_MISMATCH")
     official_ids = {str(s.get("source_id")) for s in source.get("sources") or []
                     if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"}
+    official_card_ids = {str(s.get("source_id")) for s in source.get("sources") or []
+                         if s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF"
+                         and s.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"}
+    # The official runner-universe normalizer emits distinct reason codes for
+    # an explicit race-card scratch and an official-odds scratch. Both are
+    # cancellation evidence; absence from odds alone is not.
+    cancellation_reasons = {"EXPLICIT_OFFICIAL_ODDS_CANCELLATION",
+                            "EXPLICIT_RACE_CARD_CANCELLATION"}
     for rid in set(declared_ids) - set(ids):
         entry = registered[rid]
-        if (entry.get("status") != "CANCELLED"
-                or entry.get("reason") != "EXPLICIT_OFFICIAL_ODDS_CANCELLATION"):
+        reason = entry.get("reason")
+        if (entry.get("status") != "CANCELLED" or reason not in cancellation_reasons):
             raise StaticOwnerError("OFFICIAL_CANCELLATION_NOT_VERIFIED:" + rid)
-        if (not entry.get("evidence_sources")
-                or not set(entry["evidence_sources"]).issubset(official_ids)):
+        evidence_ids = entry.get("evidence_sources")
+        if (not isinstance(evidence_ids, list) or not evidence_ids
+                or any(type(value) is not str for value in evidence_ids)
+                or not set(evidence_ids).issubset(official_ids)
+                or (reason == "EXPLICIT_RACE_CARD_CANCELLATION"
+                    and not set(evidence_ids).intersection(official_card_ids))):
             raise StaticOwnerError("OFFICIAL_CARD_RUNNER_MISMATCH")
     # NAR race-card HTML may still include withdrawn runners. Only the
     # official signed ACTIVE universe receives Production prediction roles.
