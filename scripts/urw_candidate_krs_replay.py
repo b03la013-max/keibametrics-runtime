@@ -45,6 +45,192 @@ def dump(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
 
 
+def parsed_owner_feature_pack(numerical):
+    """Reuse existing URW model features for unsigned parsed facts, not SOURCE.
+
+    No signature, verified-active state or Production consumer is created.
+    The exact parsed observation and numerical cell hashes bind both model arms.
+    """
+    from runtime.local_race_key_shadow_owner import (
+        owner_feature_pack, _urw_class_tokens, _urw_current_condition_translation,
+        URW_CANON, URW_CANON_SHA256)
+    from runtime.local_krs_bridge_candidate import build_candidate_prediction_structure_derived
+    if (numerical.get('production_authority') is not False
+            or numerical.get('signed_source_claim') is not False
+            or numerical.get('sha256') != _sha({k:v for k,v in numerical.items() if k!='sha256'})):
+        raise ValueError('UNSIGNED_OWNER_NUMERICAL_HASH_OR_AUTHORITY')
+    race=numerical['race'];rows=numerical['runners'];ids=[str(x['runner_id']) for x in rows]
+    compiler=numerical.get('candidate_evidence_compiler') or {}
+    state=numerical.get('candidate_current_state') or {}
+    observation=numerical.get('input_observation') or {}
+    snapshot=compiler.get('source_snapshot_sha256')
+    if (race.get('venue_id')!='URW' or len(ids)<3 or len(ids)!=len(set(ids))
+            or not snapshot or snapshot!=state.get('source_snapshot_sha256')
+            or snapshot!=observation.get('raw_sha256')
+            or compiler.get('result_derived_features')!=0
+            or numerical.get('candidate_index_provenance_sha256')!=_sha([r['canonical_components'] for r in rows])):
+        raise ValueError('UNSIGNED_OWNER_NUMERICAL_IDENTITY')
+    header={'distance':race['distance'],'class_tokens':_urw_class_tokens(race.get('class')),
+            'going':state.get('official_going') or None}
+    evidence={}
+    for row in rows:
+        rid=str(row['runner_id']);card=row['raw_candidate_evidence'];starts=[]
+        if (card.get('runner_id')!=rid or card.get('race_card_snapshot_sha256')!=snapshot
+                or card.get('status')!='ACTIVE_DECLARED' or card.get('active_verified') is not False):
+            raise ValueError('UNSIGNED_OWNER_PARSED_RUNNER_BINDING')
+        for s in card.get('starts') or []:
+            starts.append({'date':s['date'],'venue':s.get('venue'),'distance':s.get('distance'),
+                'surface':s.get('surface'),'finish':s.get('finish'),'field_size':s.get('field_size'),
+                'positions':s.get('content_positions') or [],'going':s.get('going'),
+                'class_tokens':_urw_class_tokens(s.get('race_name')),
+                'matched_urw_distance':str(s.get('venue','')).replace('ナ','')=='浦和' and s.get('distance')==race['distance'],
+                'raw_reference':s.get('raw')})
+        evidence[rid]={'past_starts':starts,
+            'current_condition_translation':_urw_current_condition_translation(card,starts,header)}
+    baseline=build_candidate_prediction_structure_derived({'runners':copy.deepcopy(rows)})['candidate_static_prediction']
+    candidate={'race_id':numerical['race_id'],'venue_id':'URW','venue_canon':URW_CANON,
+        'venue_canon_source_sha256':URW_CANON_SHA256,'race_date':race['race_date'],
+        'scheduled_post_at':race['scheduled_post_at'],'prediction_cutoff':race['prediction_cutoff'],
+        'source_snapshot_sha256':snapshot,'source_receipt_sha256':None,
+        'numeric_provenance_sha256':numerical['candidate_index_provenance_sha256'],
+        'existing_local_baseline':baseline,'urw_evidence':evidence,
+        'production_authority':False,'formal_handoff_allowed':False}
+    candidate['sha256']=_sha(candidate)
+    pack=owner_feature_pack(candidate,numerical)
+    pack.update(source_observed_at=observation['source_fetched_at'],
+        source_signature_status='UNSIGNED_PRIVATE_OFFICIAL_OBSERVATION',
+        source_universe='LISTED_DECLARED_NOT_SIGNED_ACTIVE',
+        candidate_numerical_sha256=numerical['sha256'])
+    pack['sha256']=_sha({k:v for k,v in pack.items() if k!='sha256'})
+    return pack
+
+
+def owner_forward_protocol(baseline_model, candidate_model):
+    """Preregister one fixed comparison; no fitting, result input or selection.
+
+    Sixty races on five distinct dates is a minimum observation floor, not a
+    power guarantee. Paired date clusters retain within-card dependence. The
+    joint-log-loss interval must actually reject no gain before any quality
+    review can pass. Formal eligibility remains a separate signed-input gate.
+    """
+    for model in (baseline_model,candidate_model):
+        if (model.get('production_authority') is not False
+                or model.get('sha256')!=_sha({k:v for k,v in model.items() if k!='sha256'})):
+            raise ValueError('FORWARD_OWNER_MODEL_HASH_OR_AUTHORITY')
+    out={'profile':'URW-EXISTING-OWNER-FORWARD-COMPARISON',
+        'baseline_model_sha256':baseline_model['sha256'],
+        'candidate_model_sha256':candidate_model['sha256'],
+        'primary':'PAIRED_CANDIDATE_MINUS_BASELINE_ORDERED_TOP3_LOG_LOSS',
+        'minimum_eligible_races':60,'minimum_distinct_race_dates':5,
+        'interval':{'method':'PAIRED_RACE_DATE_CLUSTER_BOOTSTRAP_PERCENTILE',
+                    'replicates':10000,'seed':20261020,'upper_percentile':95,
+                    'pass_rule':'UPPER_BOUND_STRICTLY_LESS_THAN_ZERO'},
+        'noninferiority_observed_guardrails':['WINNER_TOP1','WINNER_BRIER','EXACT_TOP5'],
+        'secondary':['W_CAPTURE','P2_CAPTURE','P3_CAPTURE','ORDERED_PAIR_TOP1',
+                     'EXACT_TOP1','EXACT_TOP5','JOINT_NLL_VS_UNIFORM'],
+        'denominator':'ALL_CONTIGUOUS_ELIGIBLE_URW_RACES_AFTER_PREREGISTRATION_RETAIN_BLOCKS',
+        'eligibility':'BOTH_ARMS_SAME_UNIVERSE_SNAPSHOT_CUTOFF_AND_WIDTHS_PRESTART_INDEPENDENT_TIMESTAMP',
+        'missing_or_failed_races':'RETAIN_IN_FIXED_DENOMINATOR_DO_NOT_SELECT_SUCCESSFUL_SUBSET',
+        'labels':'OFFICIAL_VERIFIED_POST_RESULT_ONLY_NO_RESULT_BEFORE_FREEZE',
+        'model_or_coefficient_change':'NEW_SEPARATE_COHORT_NO_POOLING',
+        'formal_quality_gate':'SIGNED_SOURCE_VERIFIED_ACTIVE_AND_INDEPENDENT_FREEZE_REQUIRED',
+        'production_promotion':'HUMAN_REVIEW_AND_SCOPE_APPROVAL_REQUIRED_NO_AUTOMATIC_PROMOTION',
+        'production_authority':False}
+    out['sha256']=_sha(out);return out
+
+
+def freeze_owner_forward_comparison(pack, baseline_model, candidate_model, *, protocol, output):
+    """Freeze both existing models on the same actual pack before any labels.
+
+    Output is a private unsigned Shadow artifact. Independent anchoring is
+    supplied by the caller afterwards; no local self-report grants OOS credit.
+    """
+    from runtime.local_race_key_shadow_owner import predict_conditioned_owner, _aware
+    from runtime.urw_nankan_reference_source import private_directory, immutable
+    if protocol!=owner_forward_protocol(baseline_model,candidate_model):
+        raise ValueError('FORWARD_OWNER_PROTOCOL_OR_MODELS_CHANGED')
+    now=datetime.now(timezone.utc);cutoff=_aware(pack['prediction_cutoff'],'CUTOFF')
+    if not _aware(pack['source_observed_at'],'SOURCE_OBSERVED_AT')<=now<cutoff:
+        raise ValueError('FORWARD_OWNER_SOURCE_OR_DEADLINE')
+    # Both arms receive the same immutable pack and thus identical role widths.
+    predictions={name:predict_conditioned_owner(model,pack) for name,model in
+                 [('BASELINE',baseline_model),('CANDIDATE',candidate_model)]}
+    if predictions['BASELINE']['role_widths']!=predictions['CANDIDATE']['role_widths']:
+        raise ValueError('FORWARD_OWNER_ROLE_WIDTH_MISMATCH')
+    completed=datetime.now(timezone.utc)
+    if completed>=cutoff:raise ValueError('FORWARD_OWNER_COMPLETED_AFTER_CUTOFF')
+    out={'classification':'UNSIGNED_PRIVATE_PRESTART_SHADOW_COMPARISON_NOT_FORMAL',
+        'race_id':pack['race_id'],'race_date':pack['race_date'],
+        'scheduled_post_at':pack['scheduled_post_at'],'prediction_cutoff':pack['prediction_cutoff'],
+        'frozen_at':completed.isoformat(),'protocol':protocol,'feature_pack':pack,
+        'models':{'BASELINE':baseline_model,'CANDIDATE':candidate_model},'predictions':predictions,
+        'same_input_sha256':pack['sha256'],'same_source_snapshot_sha256':pack['source_snapshot_sha256'],
+        'same_role_widths':predictions['BASELINE']['role_widths'],
+        'independent_timestamp':'PENDING_EXTERNAL_ANCHOR',
+        'formal_quality_eligible':False,'signed_source_claim':False,'signed_final_claim':False,
+        'production_authority':False,'runtime_post_count':0,'forward_oos_credit':0,
+        'quality_disposition':'PENDING_FUTURE_OFFICIAL_RESULTS_AND_FULL_PREREGISTERED_COHORT'}
+    out['sha256']=_sha(out)
+    path=Path(output);private_directory(path.parent)
+    immutable(path,(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+    return out
+
+
+def evaluate_owner_forward_comparison(frozen, result):
+    """Score one immutable comparison only after independently verified result.
+
+    This never refits, chooses an arm, changes a frozen prediction, settles a
+    ticket, or turns unsigned research inputs into formal-quality evidence.
+    """
+    import math
+    from runtime.local_race_key_shadow_owner import _aware
+    if (frozen.get('sha256')!=_sha({k:v for k,v in frozen.items() if k!='sha256'})
+            or frozen.get('protocol')!=owner_forward_protocol(
+                frozen['models']['BASELINE'],frozen['models']['CANDIDATE'])):
+        raise ValueError('OWNER_FORWARD_FREEZE_OR_PROTOCOL_CHANGED')
+    if (result.get('race_id')!=frozen['race_id']
+            or result.get('official_result_verified') is not True
+            or not result.get('source_url') or not result.get('source_raw_sha256')
+            or _aware(result['observed_at'],'RESULT_OBSERVED_AT')<=_aware(frozen['scheduled_post_at'],'POST')
+            or not _aware(frozen['frozen_at'],'FREEZE')<_aware(frozen['prediction_cutoff'],'CUTOFF')):
+        raise ValueError('OWNER_FORWARD_RESULT_IDENTITY_OR_TIME')
+    actual=list(map(str,result['finish_order'][:3]));ids=set(frozen['feature_pack']['runners'])
+    if len(actual)!=3 or len(set(actual))!=3 or not set(actual)<=ids:
+        raise ValueError('OWNER_FORWARD_RESULT_RUNNER_UNIVERSE')
+    stats={}
+    for arm,pred in frozen['predictions'].items():
+        if (pred['sha256']!=_sha({k:v for k,v in pred.items() if k!='sha256'})
+                or pred.get('temporal_class')!='LOCAL_PRESTART_SHADOW_NOT_FORMAL'
+                or pred.get('feature_sha256')!=frozen['feature_pack']['sha256']
+                or pred.get('model_sha256')!=frozen['models'][arm]['sha256']
+                or not pred.get('frozen_at')
+                or _aware(pred['frozen_at'],'PREDICTION_FREEZE')>=_aware(frozen['prediction_cutoff'],'CUTOFF')):
+            raise ValueError('OWNER_FORWARD_PREDICTION_CHANGED_OR_NOT_PRESTART')
+        triple=next(t for t in pred['ordered_triples']
+                    if [t['head'],t['second'],t['third']]==actual)
+        pair=pred['ordered_pairs'][0]
+        stats[arm]={
+            'winner_top1':int(pred['ranking'][0]==actual[0]),
+            'winner_brier':sum((v-int(rid==actual[0]))**2 for rid,v in pred['winner_model_mass'].items()),
+            'top3_joint_nll':-math.log(max(triple['model_mass'],1e-300)),
+            'ordered_pair_top1':int([pair['head'],pair['second']]==actual[:2]),
+            'exact_top1':int(pred['ordered_triples'][0]==triple),
+            'exact_top5':int(triple in pred['ordered_triples'][:5]),
+            **{role+'_capture':int(role in pred['role_columns'][horse])
+               for role,horse in zip(('W','P2','P3'),actual)}}
+    out={'race_id':frozen['race_id'],'race_date':frozen['race_date'],
+        'comparison_sha256':frozen['sha256'],'protocol_sha256':frozen['protocol']['sha256'],
+        'official_result_reference':{k:result[k] for k in
+            ('source_url','source_raw_sha256','observed_at')},'actual_top3':actual,'arms':stats,
+        'paired_joint_nll_delta':stats['CANDIDATE']['top3_joint_nll']-stats['BASELINE']['top3_joint_nll'],
+        'uniform_joint_nll':math.log(len(ids)*(len(ids)-1)*(len(ids)-2)),
+        'formal_quality_eligible':frozen.get('formal_quality_eligible') is True,
+        'independent_prestart_anchor_verified':False,
+        'quality_status':'PENDING_COHORT_AND_INDEPENDENT_ANCHOR_REVIEW',
+        'production_authority':False,'recommendation_pfs':'N/A','actual_purchase_pfs':'UNKNOWN'}
+    out['sha256']=_sha(out);return out
+
+
 def audit_index_consumption(numerical):
     """Result-blind finite interventions on the existing Candidate baseline.
 

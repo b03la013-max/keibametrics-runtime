@@ -187,6 +187,9 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
 
 def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: datetime) -> dict:
     obs = []
+    observed_day = None
+    if venue_name == "浦和" and row.get("race_card_fetched_at"):
+        observed_day = _dt(row["race_card_fetched_at"]).astimezone(JST).date()
     for start in row.get("starts") or []:
         past = _start_date(start.get("date"))
         if past is None or past >= race_day:
@@ -194,6 +197,8 @@ def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: dateti
             if past is not None and past >= race_day:
                 raise StaticOwnerError("NON_PRESTART_HISTORICAL_START")
             continue
+        if observed_day is not None and past.date() > observed_day:
+            raise StaticOwnerError("HISTORICAL_START_AFTER_SOURCE_OBSERVATION")
         if start.get("surface") != "DIRT":
             continue
         field = int(start.get("field_size") or 0)
@@ -212,6 +217,11 @@ def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: dateti
                     "last_turn": pos[-1] if pos else None,
                     "race_name": start.get("race_name"),
                     "raw_reference": start.get("raw")})
+    if venue_name == "浦和":
+        # Provider tables and resumed observations need not retain newest-first
+        # order. "Recent" is the latest observed date, never the first row.
+        # This corrects source ordering only; the existing ordinal keys stay.
+        obs.sort(key=lambda x: x["date"], reverse=True)
     exact_rows = [x for x in obs if x["exact"]]
     venue_rows = [x for x in obs if x["same_venue"]]
     # Strict ordinal hierarchy over known observed records (not calibrated

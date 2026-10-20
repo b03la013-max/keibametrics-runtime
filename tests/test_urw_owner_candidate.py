@@ -995,3 +995,106 @@ def test_runtime_clock_regression_is_not_a_valid_freeze(original,monkeypatch):
     req,s,n=original
     with pytest.raises(ShadowOwnerError,match='CLOCK_REGRESSION'):
         m.compile_urw_candidate(req,s,n)
+
+
+def test_urw_recent_record_uses_observation_date_not_transport_row_order():
+    from runtime.local_production_static_owner import _runner_facts
+    past = {"surface": "DIRT", "venue": "浦和", "distance": 1400,
+            "field_size": 10, "content_positions": [2, 2, 2, 2]}
+    old = {**past, "date": "26.08.01", "finish": 1}
+    recent = {**past, "date": "26.09.20", "finish": 10}
+    row = {"starts": [old, recent], "race_card_fetched_at": "2026-09-22T10:00:00+09:00"}
+    before = copy.deepcopy(row)
+    kwargs = {"venue_name": "浦和", "distance": 1400,
+              "race_day": datetime(2026, 9, 23, tzinfo=timezone.utc)}
+    a = _runner_facts(row, **kwargs)
+    b = _runner_facts({**row, "starts": [recent, old]}, **kwargs)
+    assert a == b and row == before
+    assert a["recent_dirt_finish_share"] == 0
+    assert a["exact_wins"] == 1 and a["exact_podiums"] == 1
+    assert [v["date"] for v in a["observed_runs"]] == ["2026-09-20", "2026-08-01"]
+
+
+def test_urw_record_cannot_postdate_source_observation_even_before_target_day():
+    from runtime.local_production_static_owner import _runner_facts, StaticOwnerError
+    row = {"race_card_fetched_at": "2026-09-21T14:00:00+09:00",
+           "starts": [{"date": "26.09.22", "surface": "DIRT", "venue": "浦和",
+                       "distance": 1400, "field_size": 10, "finish": 1}]}
+    with pytest.raises(StaticOwnerError, match="HISTORICAL_START_AFTER_SOURCE_OBSERVATION"):
+        _runner_facts(row, venue_name="浦和", distance=1400,
+                      race_day=datetime(2026, 9, 23, tzinfo=timezone.utc))
+
+
+@pytest.mark.parametrize("before,after", [
+    ("2026年9月23日", "2026年9月24日"), ("浦 和", "川 崎"), ("第12競走", "第11競走")])
+def test_direct_urw_candidate_checks_printed_identity_beside_transport(original, before, after):
+    import unicodedata
+    req, envelope, numeric = original
+    changed = copy.deepcopy(envelope)
+    source = changed["artifact"]
+    card = next(s for s in source["sources"]
+                if s.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT")
+    text = unicodedata.normalize("NFKC", gzip.decompress(
+        base64.b64decode(card["raw_gzip_b64"])).decode("utf-8"))
+    assert before in text
+    raw = text.replace(before, after).encode("utf-8")
+    card["raw_gzip_b64"] = base64.b64encode(gzip.compress(raw, mtime=0)).decode()
+    card["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+    card["snapshot_sha256"] = _sha({k:v for k,v in card.items() if k != "snapshot_sha256"})
+    source["source_snapshot_sha256"] = _sha({k:v for k,v in source.items() if k != "source_snapshot_sha256"})
+    changed["receipt"]["artifact_sha256"] = _sha(source)
+    changed["receipt_sha256"] = _sha(changed["receipt"])
+    # Unsigned negative mutation, not a newly signed SOURCE. A consistent
+    # transport hash must not bypass the independent printed identity check.
+    with pytest.raises(ValueError, match="URW_NUMERICAL_CARD_BODY_IDENTITY_MISMATCH"):
+        compile_urw_candidate(req, changed, numeric, now=NOW, historical_replay=True)
+
+
+
+def test_forward_owner_protocol_preserves_models_and_has_no_automatic_promotion(conditional_training):
+    from scripts.urw_candidate_krs_replay import owner_forward_protocol
+    _,_,model=conditional_training
+    before=copy.deepcopy(model)
+    protocol=owner_forward_protocol(model,model)
+    assert model==before
+    assert protocol["minimum_eligible_races"]==60 and protocol["minimum_distinct_race_dates"]==5
+    assert protocol["interval"]["upper_percentile"]==95
+    assert protocol["production_authority"] is False
+    assert "NO_AUTOMATIC_PROMOTION" in protocol["production_promotion"]
+    changed=copy.deepcopy(model);changed["fits"][0]["coefficients"][0]+=1
+    with pytest.raises(ValueError,match="MODEL_HASH_OR_AUTHORITY"):
+        owner_forward_protocol(changed,model)
+
+
+def test_frozen_owner_evaluator_requires_result_after_post_and_retains_nonformal(conditional_training):
+    from scripts.urw_candidate_krs_replay import owner_forward_protocol,evaluate_owner_forward_comparison
+    from runtime.local_race_key_shadow_owner import predict_conditioned_owner
+    packs,_,model=conditional_training
+    pack=copy.deepcopy(packs[-1]);pack.update(race_id="TEST-URW-VALIDATION",
+        race_date="2026-09-04",scheduled_post_at="2026-09-04T12:00:00+09:00",
+        prediction_cutoff="2026-09-04T11:58:00+09:00")
+    pack["sha256"]=_sha({k:v for k,v in pack.items() if k!="sha256"})
+    pred=predict_conditioned_owner(model,pack,historical_replay=True)
+    # Unsigned synthetic freeze fields for evaluator-contract tests only.
+    pred.update(temporal_class="LOCAL_PRESTART_SHADOW_NOT_FORMAL",
+                frozen_at="2026-09-04T11:55:00+09:00")
+    pred["sha256"]=_sha({k:v for k,v in pred.items() if k!="sha256"})
+    freeze={"race_id":pack["race_id"],"race_date":pack["race_date"],
+        "scheduled_post_at":pack["scheduled_post_at"],"prediction_cutoff":pack["prediction_cutoff"],
+        "frozen_at":"2026-09-04T11:55:00+09:00", "feature_pack":pack,
+        "models":{"BASELINE":model,"CANDIDATE":model},
+        "predictions":{"BASELINE":pred,"CANDIDATE":pred},
+        "protocol":owner_forward_protocol(model,model),"formal_quality_eligible":False}
+    freeze["sha256"]=_sha(freeze)
+    label={"race_id":pack["race_id"],"official_result_verified":True,
+        "source_url":"https://example.invalid/TEST-ONLY", "source_raw_sha256":"0"*64,
+        "observed_at":"2026-09-04T12:10:00+09:00","finish_order":["1","2","3"]}
+    actual=evaluate_owner_forward_comparison(freeze,label)
+    assert actual["paired_joint_nll_delta"]==0
+    assert actual["formal_quality_eligible"] is actual["production_authority"] is False
+    assert actual["recommendation_pfs"]=="N/A" and actual["actual_purchase_pfs"]=="UNKNOWN"
+    with pytest.raises(ValueError,match="RESULT_IDENTITY_OR_TIME"):
+        evaluate_owner_forward_comparison(freeze,{**label,"observed_at":"2026-09-04T11:59:00+09:00"})
+    broken=copy.deepcopy(freeze);broken["predictions"]["CANDIDATE"]["ranking"]=[]
+    with pytest.raises(ValueError,match="FREEZE_OR_PROTOCOL_CHANGED"):
+        evaluate_owner_forward_comparison(broken,label)

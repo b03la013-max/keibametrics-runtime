@@ -5,7 +5,9 @@ from datetime import datetime,timedelta
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -36,6 +38,149 @@ def card(number=1,*,preview=True,cancelled=False):
     header=f'<p class="nk23_c-tab1__subtitle">{number}R 2026年10月22日 第7回 浦和競馬 第4日 ダ1,300m (2頭) 発走時刻12:{20+(number-1)*30:02}</p>'
     fake='<table id="tb-sample" class="tb-shousai hidden"><tbody><tr><td>トウキョウスター 2022年</td></tr></tbody></table>' if preview else ''
     return ('<meta charset="UTF-8">'+header+'<table class="nk23_c-table22__table tb-shousai nk24"><tbody>'+''.join(rows)+'</tbody></table>'+fake).encode()
+
+
+def detailed_card():
+    """Authored fact rows with provider-labelled fields, never original HTML."""
+    raw=card().decode()
+    raw=raw.replace('<p>父名を混ぜない</p>',
+        '<p class="nk23_u-text12">自作父</p>')
+    raw=raw.replace('<p>母名を混ぜない</p>',
+        '<p class="nk23_u-text10">牝4 鹿毛</p><p class="nk23_u-text10">自作母</p><p class="nk23_u-text10">(自作母父)</p>')
+    raw=raw.replace('54.0</span></td>',
+        '▲51.0</span><a href="/cho_info/1.do">自作調教師</a></td><td class="cs-g2">481 ±0</td>')
+    raw=raw.replace('<span class="popularity">10頭1番1人気</span>',
+        '<p class="nk23_u-text10"><span class="popularity">10頭 1番 1人気</span> 試験騎手 54.0</p>'
+        '<p class="nk23_u-text10">479kg 自作相手</p>'
+        '<p class="nk23_u-text10">1:30.1 (1.6) 3F 39.8 (7)</p>')
+    return raw.encode()
+
+
+def parsed_detailed_card(raw=None):
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
+
+
+def test_existing_snapshot_schema_adapter_stays_unsigned_and_not_admitted():
+    from runtime.local_physical.source_acquisition import verify_source_artifact
+    race,_=parsed_detailed_card();raw=detailed_card()
+    meta={'provider':n.PROVIDER,'source_authority':n.PROVIDER,'http_status':200,
+        'url':n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do','fetched_at':NOW.isoformat(),
+        'raw_sha256':hashlib.sha256(raw).hexdigest(),
+        'source_policy':{'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'}}
+    out=n.build_unsigned_source_snapshot(raw,race,meta,race_id='TEST-SYNTHETIC-UNSIGNED')
+    assert out['schema']=='KM-SOURCE-SNAPSHOT-v1' and out['provider']==n.PROVIDER
+    assert out['sources'][0]['authority']==n.PROVIDER
+    assert out['sources'][0]['raw_sha256']==meta['raw_sha256']
+    assert len(out['parsed_nankan_facts'])==2
+    assert all(out[k] is False for k in ('formal_ready','active_verified','signed_source_claim','production_authority'))
+    assert 'active_runner_universe' not in out and 'official_runner_universe' not in out
+    assert verify_source_artifact(out)==(False,['SOURCE_NOT_FORMAL_READY'])
+    bad=dict(meta,raw_sha256='0'*64)
+    with pytest.raises(n.NankanError,match='RAW_HASH'):
+        n.build_unsigned_source_snapshot(raw,race,bad,race_id='TEST-SYNTHETIC-UNSIGNED')
+    bad=dict(meta,signed_source_claim=True)
+    with pytest.raises(n.NankanError,match='AUTHORITY_HOLD'):
+        n.build_unsigned_source_snapshot(raw,race,bad,race_id='TEST-SYNTHETIC-UNSIGNED')
+    with pytest.raises(n.NankanError,match='PROVIDER_OR_VENUE'):
+        n.build_unsigned_source_snapshot(raw,dict(race,venue_id='KAW'),meta,race_id='TEST-SYNTHETIC-UNSIGNED')
+    other=dict(race,provider_race_id=DAY_ID+'02')
+    with pytest.raises(n.NankanError,match='PROVIDER_RACE_IDENTITY'):
+        n.build_unsigned_source_snapshot(raw,other,dict(meta,url=n.ORIGIN+'/uma_shosai/'+DAY_ID+'02.do'),
+            race_id='TEST-SYNTHETIC-UNSIGNED')
+
+
+def test_current_weight_apprentice_load_pedigree_and_history_are_observed_facts():
+    _,rows=parsed_detailed_card()
+    r=rows[0];past=r['starts'][0]
+    assert r['current_body_weight']==481 and r['current_body_weight_change']==0
+    assert r['current_load']==51.0 and r['current_jockey']=='試験騎手'
+    assert (r['sire'],r['dam'],r['damsire'],r['age'])==('自作父','自作母','自作母父',4)
+    assert r['trainer']=='自作調教師' and r['active_verified'] is False
+    assert 'CURRENT_BODY_WEIGHT_UNKNOWN' not in r['missingness']
+    assert past['content_time_text']=='1:30.1' and past['content_final3f']==39.8
+    assert (past['ride_body_weight'],past['ride_carried_weight'],past['ride_jockey'],past['ride_popularity'])==(479,54.0,'試験騎手',1)
+    assert past['margin']==0.0 and past['winning_margin']==1.6 and past['winner'] is None
+    # The same displayed difference is a deficit only for a non-winner.
+    _,losers=parsed_detailed_card(detailed_card().replace(b'<span>1',b'<span>3'))
+    assert losers[0]['starts'][0]['margin']==1.6
+
+
+def test_missing_or_malformed_optional_weight_is_not_taken_from_other_numbers():
+    raw=detailed_card().replace(b'481 \xc2\xb10',b'UNKNOWN 999')
+    _,rows=parsed_detailed_card(raw)
+    assert rows[0]['current_body_weight'] is None and rows[0]['current_body_weight_change'] is None
+    assert 'CURRENT_BODY_WEIGHT_UNKNOWN' in rows[0]['missingness']
+    duplicate=detailed_card().replace(b'<td class="cs-g2">',b'<td class="cs-g2">999 +0</td><td class="cs-g2">')
+    with pytest.raises(n.NankanError,match='BODY_WEIGHT_NOT_UNIQUE'):parsed_detailed_card(duplicate)
+
+
+def test_parsed_fact_compiler_reuses_existing_arithmetic_without_formal_authority(monkeypatch):
+    from runtime import local_nar_evidence_candidate as c
+    from runtime.local_fullnumerical_candidate import materialize_candidate
+    race,rows=parsed_detailed_card()
+    for row in rows:
+        row.update(race_card_source_id='TEST_SYNTHETIC_ONLY',race_card_snapshot_sha256='a'*64,race_card_fetched_at=NOW.isoformat())
+    raw_field={r['runner_id']:r for r in rows}
+    source={'provider':n.PROVIDER,'production_authority':False,'source_snapshot_sha256':'a'*64,'source_freeze_at':NOW.isoformat()}
+    request={'race':{**race,'venue':'URW','class':'C3'},'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in rows]}
+    compiled=c.compile_parsed_candidate_evidence(source,request,raw_field)
+    past=compiled['runners'][0]['raw_candidate_evidence']['starts'][0]
+    assert past['content_time_seconds']==90.1 and past['finish_score']==100.0 and past['class_score']==52.0
+    assert compiled['candidate_evidence_compiler']['production_authority'] is False
+    assert not compiled['runners'][0]['evidence_features']['good_weight_range']['missing']
+    assert compiled['runners'][0]['evidence_features']['good_weight_range']['evidence_refs']==['TEST_SYNTHETIC_ONLY','a'*64]
+    assert compiled['runners'][0]['evidence_features']['sire_fit']['missing']
+    numerical=materialize_candidate(compiled)
+    assert numerical['candidate_full_numerical_summary']['required_count']==58
+    assert numerical['candidate_full_numerical_summary']['unresolved_count']==0
+    assert numerical['candidate_full_numerical_summary']['production_authority'] is False
+    # The established NAR wrapper uses exactly the same post-extraction path.
+    monkeypatch.setattr(c,'parse_race_card',lambda _:deepcopy(raw_field))
+    assert c.compile_candidate_evidence(source,request)==compiled
+
+
+def test_urw_numerical_recency_is_date_ordered_and_never_uses_future_history():
+    from runtime import local_nar_evidence_candidate as c
+    from runtime.local_fullnumerical_candidate import materialize_candidate
+    race,rows=parsed_detailed_card()
+    for row in rows:
+        row.update(race_card_source_id='TEST_SYNTHETIC_ONLY',race_card_snapshot_sha256='b'*64,race_card_fetched_at=NOW.isoformat())
+        older=deepcopy(row['starts'][0]);older.update(date='26.08.20',finish=8,content_positions=[8,7,6])
+        row['starts'].append(older)
+    source={'provider':n.PROVIDER,'production_authority':False,'source_snapshot_sha256':'b'*64,'source_freeze_at':NOW.isoformat()}
+    request={'race':{**race,'venue':'URW','class':'C3'},'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in rows]}
+    raw={r['runner_id']:r for r in rows}
+    original=deepcopy(raw)
+    first=materialize_candidate(c.compile_parsed_candidate_evidence(source,request,raw))
+    reverse=deepcopy(raw)
+    for row in reverse.values():row['starts'].reverse()
+    second=materialize_candidate(c.compile_parsed_candidate_evidence(source,request,reverse))
+    assert first==second and raw==original
+    future=deepcopy(raw);future['1']['starts'][0]['date']='26.10.20'
+    with pytest.raises(c.LocalCandidateEvidenceError,match='AFTER_AVAILABLE_ASOF'):
+        c.compile_parsed_candidate_evidence(source,request,future)
+    for date_text in ('UNKNOWN','26.99.01'):
+        unknown=deepcopy(raw);unknown['1']['starts'][0]['date']=date_text
+        compiled=c.compile_parsed_candidate_evidence(source,request,unknown)
+        facts=compiled['runners'][0]['raw_candidate_evidence']
+        assert len(facts['undated_starts'])==1 and len(facts['starts'])==1
+
+
+@pytest.mark.parametrize('damage',['request_duplicate','raw_identity_mismatch'])
+def test_shared_fact_compiler_cannot_collapse_duplicate_or_conflicting_runner_ids(damage):
+    from runtime import local_nar_evidence_candidate as c
+    race,rows=parsed_detailed_card()
+    request={'race':{**race,'venue':'URW'},'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in rows]}
+    raw={r['runner_id']:r for r in rows}
+    if damage=='request_duplicate':
+        request['runners'].append(deepcopy(request['runners'][0]))
+        message='REQUEST_RUNNER_ID_DUPLICATE'
+    else:
+        raw['1']['runner_id']='2'
+        message='RAW_RUNNER_ID_MISMATCH'
+    with pytest.raises(c.LocalCandidateEvidenceError,match=message):
+        c.compile_parsed_candidate_evidence({'production_authority':False},request,raw)
 
 
 class Clock:
@@ -252,3 +397,38 @@ def test_cli_help_is_available_without_optional_crypto_dependency():
     root=Path(__file__).resolve().parents[1]
     result=subprocess.run([sys.executable,'-S','-m','runtime.urw_nankan_reference_source','--help'],cwd=root,capture_output=True,text=True)
     assert result.returncode==0 and '--all-races' in result.stdout and '--import-observations' in result.stdout
+
+
+def test_fixed_five_module_private_cli_cold_parse_freeze_and_readback(tmp_path):
+    root=Path(__file__).resolve().parents[1];deployment=tmp_path/'isolated';deployment.mkdir()
+    for name in ('runtime/urw_nankan_reference_source.py','runtime/urw_reference_source_policy.py',
+                 'runtime/local_production_static_owner.py','runtime/local_nar_evidence_candidate.py',
+                 'runtime/local_physical/nar_source_manifest.py'):
+        target=deployment/name;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(root/name,target)
+    values={'day':DAY,'now':NOW.isoformat(),'day_id':DAY_ID,
+            'calendar':CAL.decode(),'program':program().decode(),'card':detailed_card().decode()}
+    (deployment/'synthetic.json').write_text(json.dumps(values))
+    script='''
+import hashlib,json,sys,urllib.request
+from pathlib import Path
+from datetime import datetime
+from runtime import urw_nankan_reference_source as n
+x=json.loads(Path('synthetic.json').read_text());now=datetime.fromisoformat(x['now'])
+raw=[x[key].encode() for key in ('calendar','program','card')]
+urls=[n.CALENDAR,n.ORIGIN+'/program/'+x['day_id']+'.do',n.ORIGIN+'/uma_shosai/'+x['day_id']+'01.do']
+sources=[dict(url=url,http_status=200,fetched_at=now.isoformat(),raw_sha256=hashlib.sha256(body).hexdigest()) for url,body in zip(urls,raw)]
+sources.insert(2,dict(source_url=n.ORIGIN+'/syousai/'+x['day_id']+'01.do',location=urls[-1],http_status=302,fetched_at=now.isoformat()))
+def offline(*a,**k):raise AssertionError('NO_HTTP_ALLOWED')
+urllib.request.OpenerDirector.open=offline
+result=n.freeze_observations(Path.cwd()/'private',x['day'],1,sources,raw,now=now,clock=lambda:now)
+again=n.readback(Path.cwd()/'private',x['day'],1)
+assert again==result and result[1]['runners'][0]['current_body_weight']==481
+assert not any(name.startswith('cryptography') for name in sys.modules)
+assert result[1]['signed_source_claim'] is False and result[2]['production_authority'] is False
+print(json.dumps({'runners':result[0]['runner_count'],'readback_same':True}))
+'''
+    result=subprocess.run([sys.executable,'-S','-c',script],cwd=deployment,
+                          env={**os.environ,'PYTHONPATH':''},capture_output=True,text=True)
+    assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)=={'runners':2,'readback_same':True}

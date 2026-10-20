@@ -657,8 +657,66 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
 
 def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[str, Any],
                                registry_path: str | Path = DEFAULT_REGISTRY) -> Dict[str, Any]:
-    reg = _load(registry_path)
     raw_field = parse_race_card(source_artifact)
+    return compile_parsed_candidate_evidence(source_artifact, request, raw_field, registry_path)
+
+
+def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[str, Any],
+                                      raw_field: Dict[str, Dict[str, Any]],
+                                      registry_path: str | Path = DEFAULT_REGISTRY) -> Dict[str, Any]:
+    """Shared candidate arithmetic after provider-specific fact extraction.
+
+    This function does not validate or sign SOURCE and does not grant a provider
+    Production consumer authority.  The formal NAR entry retains its parser and
+    separate SOURCE/identity/signature gates in compile_candidate_evidence.
+    """
+    reg = _load(registry_path)
+    raw_field = json.loads(json.dumps(raw_field, ensure_ascii=False))
+    race = request.get("race") or {}
+    venue = str(race.get("venue_id") or race.get("venue") or request.get("venue_id") or "").upper()
+    if venue in {"URW", "浦和"}:
+        race_day_text = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
+        try:
+            race_day = dt.date.fromisoformat(race_day_text.replace("/", "-"))
+        except ValueError:
+            race_day = None
+        for raw in raw_field.values():
+            observed = raw.get("race_card_fetched_at") or source_artifact.get("source_freeze_at")
+            observed_day = None
+            if observed:
+                stamp = dt.datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    raise LocalCandidateEvidenceError("URW_HISTORY_OBSERVATION_TIMEZONE_REQUIRED")
+                observed_day = stamp.astimezone(dt.timezone(dt.timedelta(hours=9))).date()
+            dated = []
+            undated = []
+            for run in raw.get("starts") or []:
+                try:
+                    when = _parse_date(run.get("date", ""))
+                except ValueError:
+                    when = None
+                if when is None:
+                    # Unknown dates cannot establish recency. Preserve the
+                    # observation separately rather than assigning an order.
+                    undated.append(run)
+                    continue
+                if (race_day is not None and when >= race_day) or (observed_day is not None and when > observed_day):
+                    raise LocalCandidateEvidenceError("URW_HISTORY_AFTER_AVAILABLE_ASOF_FORBIDDEN")
+                dated.append((when, run))
+            if undated:
+                raw["undated_starts"] = undated
+            raw["starts"] = [run for _, run in sorted(dated, key=lambda pair: pair[0], reverse=True)]
+    # Provider parsers supply observed facts.  Scoring/units belong to this
+    # existing transform layer, keeping the private standalone parser free of
+    # numerical-engine dependencies.  Existing NAR-derived values are retained.
+    for raw in raw_field.values():
+        for run in raw.get("starts") or []:
+            if "class_score" not in run or "class_parse_state" not in run:
+                run["class_score"], run["class_parse_state"] = _class_score(run.get("race_name", ""))
+            if "finish_score" not in run:
+                run["finish_score"] = _finish_score(run.get("finish"), run.get("field_size"))
+            if "content_time_seconds" not in run:
+                run["content_time_seconds"] = _time_seconds(run.get("content_time_text", ""))
     # Formal LOCAL execution is defined over the official ACTIVE runner universe.
     # NAR race-card HTML may still contain cancelled runners; exclude those before
     # comparing against the request and before deriving KRS technical evidence.
@@ -675,6 +733,12 @@ def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[st
     req_runners = request.get("runners") or []
     if not req_runners:
         raise LocalCandidateEvidenceError("REQUEST_RUNNERS_REQUIRED")
+    request_ids = [str(x.get("runner_id")) for x in req_runners]
+    if len(set(request_ids)) != len(request_ids):
+        raise LocalCandidateEvidenceError("REQUEST_RUNNER_ID_DUPLICATE")
+    for rid, row in raw_field.items():
+        if str(row.get("runner_id")) != str(rid):
+            raise LocalCandidateEvidenceError(f"RAW_RUNNER_ID_MISMATCH:{rid}")
     expected = {str(x.get("runner_id")): _norm(x.get("name")) for x in req_runners}
     actual = {rid: _norm(x.get("name")) for rid, x in raw_field.items()}
     if set(expected) != set(actual):
