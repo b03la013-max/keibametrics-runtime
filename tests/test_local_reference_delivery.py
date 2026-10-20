@@ -79,7 +79,7 @@ def test_chat_prefers_existing_canonical_and_only_reads_public_when_raw_cache_ab
     folder,_,original=exported(tmp_path)
     monkeypatch.setattr(orchestrator,'ROOT',tmp_path)
     monkeypatch.setattr(entry,'run_reference',lambda *a,**k:pytest.fail('public readback cannot generate'))
-    report,body=entry._chat_reference(INTENT,output=tmp_path/'out',run_id='synthetic-public')
+    report,body=entry._chat_frozen_reference(INTENT,output=tmp_path/'out',run_id='synthetic-public')
     assert original.decode() in body and delivery.NOTICE in body
     assert report['answer_origin']=='PUBLISHED_REFERENCE_PRESENTATION'
     assert report['reference_generated_in_this_request'] is False
@@ -88,7 +88,7 @@ def test_chat_prefers_existing_canonical_and_only_reads_public_when_raw_cache_ab
     (canonical/'publication.json').write_text('{}')
     monkeypatch.setattr(delivery,'read_publication',lambda *a:pytest.fail('damaged canonical cannot fall back'))
     with pytest.raises(ValueError,match='REFERENCE_PUBLICATION_HASH'):
-        entry._chat_reference(INTENT,output=tmp_path/'out',run_id='canonical-damaged')
+        entry._chat_frozen_reference(INTENT,output=tmp_path/'out',run_id='canonical-damaged')
 
 
 def test_public_absence_is_distinct_from_partial_corrupt_publication(tmp_path):

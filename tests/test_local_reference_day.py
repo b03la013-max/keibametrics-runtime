@@ -24,7 +24,11 @@ SAVED=SYNTHETIC_ROOT/'runtime/local_reference'/DAY
 @pytest.fixture(autouse=True)
 def synthetic_chat_store(monkeypatch):
     from runtime import formal_execution_orchestrator as orchestrator
+    from runtime import urw_nankan_reference_source as nankan
     monkeypatch.setattr(orchestrator,'ROOT',SYNTHETIC_ROOT)
+    def unavailable(*a, **k):
+        raise nankan.NankanError('TEST_CURRENT_SOURCE_UNAVAILABLE')
+    monkeypatch.setattr(nankan,'capture_race',unavailable)
 
 
 def plan():
@@ -210,6 +214,9 @@ def test_new_chat_request_publishes_for_other_output_and_day_worker(tmp_path,mon
             return json.loads((output/'entry_report.json').read_text())
         return original(intent,output=output,run_id=run_id)
     monkeypatch.setattr(entry,'run_reference',capture_once)
+    # Exercise the legacy publisher contract. The current official-card route
+    # has separate tests and must not generate a fallback after a source HOLD.
+    monkeypatch.setattr(entry,'_chat_reference',entry._chat_frozen_reference)
     intent=entry.resolve_chat_intent('2026年10月20日浦和5Rのケイバメトリクス調査願います')
     first=entry.run_chat(intent,output=tmp_path/'chat1',run_id='new')
     published=tmp_path/'runtime/local_reference'/DAY/'R05'

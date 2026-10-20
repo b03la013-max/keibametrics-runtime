@@ -140,6 +140,65 @@ def chat_formal_status(intent):
 
 
 def _chat_reference(intent, *, output, run_id):
+    """Check the current permitted card before returning a prestart reference."""
+    from runtime import urw_nankan_reference_source as nankan
+    from runtime.local_race_key_intake import JST
+    import hashlib
+    import tempfile
+    if date.fromisoformat(intent['race_date']) < datetime.now(timezone.utc).astimezone(JST).date():
+        return _chat_frozen_reference(intent, output=output, run_id=run_id)
+    try:
+        # Both raw evidence and the complete derived chat response are private.
+        # An Actions/Git output must never acquire these private provider bytes.
+        nankan.private_directory(output)
+        root = Path(os.environ.get('KM_URW_PRIVATE_REFERENCE_ROOT',
+            str(Path(tempfile.gettempdir())/f'km-urw-private-reference-{os.getuid()}')))
+        private = nankan.private_directory(root/intent['race_date']/f"R{intent['race_no']:02d}")
+        prior = {json.loads(p.read_text())['forecast_sha256']
+                 for p in private.glob('**/publication.json')}
+        manifest, evidence, prediction, content = nankan.capture_race(
+            intent['race_date'], intent['race_no'], private, refresh=True)
+        parts = content.rstrip('\n').split('\n\n')
+        generated = manifest['forecast_sha256'] not in prior
+        eid = (f"KM-LOCAL-URW-{intent['race_date'].replace('-', '')}-R{intent['race_no']:02d}"
+               f"-NANKAN-REFERENCE-{manifest['forecast_sha256'][:12]}")
+        return {'execution_id': eid, 'status': 'CURRENT_PRIVATE_REFERENCE_AVAILABLE',
+            'answer_origin': 'CURRENT_OFFICIAL_NANKAN_PRIVATE_REFERENCE',
+            'private_reference_root': str(root),
+            'answer_sha256': hashlib.sha256(content.encode()).hexdigest(),
+            'answer_required_parts': parts, 'reference_readback_only': not generated,
+            'reference_generated_in_this_request': generated, 'prediction_reexecution': generated,
+            'current_official_checked': True, 'source_freshness_claim': True,
+            'current_official_checked_at': datetime.now(timezone.utc).isoformat(),
+            'source_raw_reverified': True, 'active_verified': False,
+            'source_frozen_at': evidence['source_frozen_at'],
+            'forecast_frozen_at': manifest['frozen_at'],
+            'source_sha256': evidence['sources'][3]['raw_sha256'],
+            'reference_prediction_sha256': manifest['forecast_sha256'],
+            'reference_runner_count': manifest['runner_count'],
+            'formal_final_proven': False, 'production_authority': False,
+            'signed_source_claim': False,
+            'verification_scope': 'PRIVATE_NANKAN_RAW_CHECKED_UNSIGNED_REFERENCE_ONLY',
+            'public_redistribution_authorized': False}, content
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        # A fresh-source failure may show an intact historical freeze, but
+        # must never silently label that freeze as the current forecast.
+        code = exc.receipt['code'] if isinstance(exc, nankan.NankanError) else str(exc)
+        try:
+            reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id,
+                                                       allow_generation=False)
+        except (OSError, ValueError, KeyError, TypeError) as missing:
+            raise exc from missing
+        notice = ('当日公式再確認HOLD：'+code+'。以下は旧Freezeの履歴であり、'
+                  '現在の出走集合を反映した新しい予測ではありません。')
+        content = notice+'\n\n'+content
+        return {**reference, 'current_official_checked': False,
+            'current_official_hold': code, 'source_freshness_claim': False,
+            'answer_sha256': hashlib.sha256(content.encode()).hexdigest(),
+            'answer_required_parts': [notice]+reference.get('answer_required_parts', [])}, content
+
+
+def _chat_frozen_reference(intent, *, output, run_id, allow_generation=True):
     """Find the original prestart reference before considering a new capture."""
     day = date.fromisoformat(intent['race_date']).strftime('%Y%m%d')
     base = o.ROOT/'research/urw_owner'
@@ -182,6 +241,8 @@ def _chat_reference(intent, *, output, run_id):
                 content = NOTICE+'\n\n'+content
                 return {**report,'answer_sha256':hashlib.sha256(content.encode()).hexdigest(),
                     'answer_required_parts':[NOTICE]+report['answer_required_parts']},content
+        if not allow_generation:
+            raise ValueError('CURRENT_REFERENCE_UNAVAILABLE_AND_NO_FROZEN_HISTORY')
         # A genuinely new chat request uses the same durable race publication
         # as the day worker, rather than leaving an unindexed research cache.
         # The race lock also serializes a simultaneous day-worker request.
@@ -193,7 +254,7 @@ def _chat_reference(intent, *, output, run_id):
             generated = result.get('reference_readback_only') is not True
             return result
         one_race(published, intent['race_date'], intent['race_no'], generate=generate)
-        report, content = _chat_reference(intent, output=output, run_id=run_id)
+        report, content = _chat_frozen_reference(intent, output=output, run_id=run_id)
         report['reference_generated_in_this_request'] = generated
         return report, content
     ref_intent = {k:intent[k] for k in ('family_id', 'venue_id', 'race_date', 'race_no')}
@@ -357,7 +418,7 @@ def run_chat(intent, *, output, run_id):
         raise ValueError('CHAT_IDENTITY_MUST_BE_RESOLVED_FROM_VENUE_DATE_RACE')
     if any(k in intent for k in ('static_prediction', 'signature', 'source_receipt_envelope', 'final_prediction_package')):
         raise ValueError('CHAT_CANNOT_SUPPLY_FORMAL_AUTHORITY_OR_PREDICTION')
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
     final, search = _chat_final(intent)
     report = {'status': 'BOTH_UNAVAILABLE', 'race': {k:intent[k] for k in ('venue_id','race_date','race_no')},
               'observed_at': datetime.now(timezone.utc).isoformat(), 'final_search': search,
@@ -408,7 +469,8 @@ def run_chat(intent, *, output, run_id):
             reference, content = _chat_reference(intent, output=output, run_id=run_id)
             report.update(status='FORMAL_BLOCKED_REFERENCE_AVAILABLE' if formal['status']=='BLOCKED'
                           else 'FORMAL_PENDING_REFERENCE_AVAILABLE', reference=reference,
-                          execution_id=reference['execution_id'], prediction_reexecution=False,
+                          execution_id=reference['execution_id'],
+                          prediction_reexecution=reference.get('prediction_reexecution', False),
                           reference_generation_executed=reference.get('reference_generated_in_this_request',
                               reference.get('reference_readback_only') is not True))
             message = (f"FORMAL {formal['status']}：{formal.get('first_failed_stage') or 'FINAL'}／{formal.get('code') or formal['status']}\n\n"

@@ -420,7 +420,7 @@ def actual_local_readback(tmp_path,monkeypatch):
         shutil.copytree(src/phase,tmp_path/'runtime/executions'/rid/phase)
     (tmp_path/'profiles').mkdir()
     shutil.copyfile(root/'profiles/current_execution_gateway.json',tmp_path/'profiles/current_execution_gateway.json')
-    health=json.loads((root/'docs/local_south_kanto_20261018/runtime_health_recheck.json').read_text())['health']
+    health=json.loads((root/'docs/local_south_kanto_20261020/runtime_health_recheck.json').read_text())['health']
     # Independent trust fixture, never an envelope-supplied key.
     assert health['receipt_public_key_b64']=='jqWqOYlmhXXmpv/nR7lx3c2n/S5shDYava/WJVxn4kE='
     calls=[]
@@ -458,6 +458,39 @@ def test_real_local_final_saved_readback_survives_outage_without_new_prediction(
     assert third['render_available'] and third['derivative_tree_restored']
     assert third['render_generated_at']==first['render_generated_at']
     assert inventory()==before and target.read_bytes()==original
+
+
+def test_correctness_rollout_reverifies_old_final_into_independent_render_without_mutation(actual_local_readback,monkeypatch):
+    from runtime import execution_gateway as gateway
+    gate,rid,root,calls=actual_local_readback
+    first=gate.readback_final(rid,repo_root=root)
+    assert first['render_available']
+    original=root/first['canonical_presentation_ref'];original_bytes=original.read_bytes()
+    signed={str(p.relative_to(root)):p.read_bytes() for p in (root/'runtime/executions').rglob('*') if p.is_file()}
+    pointer=root/'profiles/current_execution_gateway.json';cfg=json.loads(pointer.read_text())
+    cfg['families']['LOCAL']['active_bundle_sha256']['source_acquisition_sha256']='f'*64
+    pointer.write_text(json.dumps(cfg))
+    # A changed Gateway does not inherit an old runtime's verification.
+    offline=gate.readback_final(rid,repo_root=root,allow_network=False)
+    assert not offline['render_available']
+    health=json.loads((Path(__file__).resolve().parents[1]/
+        'docs/local_south_kanto_20261020/runtime_health_recheck.json').read_text())['health']
+    health['source_acquisition_sha256']='f'*64
+    def get(url,**kw):
+        assert url.endswith('/health') and kw['method']=='GET'
+        return 200,health
+    monkeypatch.setattr(gateway,'request_json',get)
+    second=gate.readback_final(rid,repo_root=root)
+    assert second['render_available'] and second['fresh_signature_verification']
+    assert second['canonical_tree']==first['canonical_tree'] and second['freeze_time']==first['freeze_time']
+    assert second['canonical_presentation_ref']!=first['canonical_presentation_ref']
+    assert original.read_bytes()==original_bytes
+    assert signed=={str(p.relative_to(root)):p.read_bytes() for p in (root/'runtime/executions').rglob('*') if p.is_file()}
+    monkeypatch.setattr(gateway,'request_json',lambda *a,**k:pytest.fail('verified new binding must read offline'))
+    assert gate.readback_final(rid,repo_root=root,allow_network=False)['render_available']
+    # A later valid render cannot hide corruption of the old canonical file.
+    original.write_text('BROKEN')
+    assert not gate.readback_final(rid,repo_root=root,allow_network=False)['render_available']
 
 
 @pytest.mark.parametrize('bad',['presentation','signature','gateway'])

@@ -119,6 +119,27 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         reused=saved_path.exists()
         if reused:
             saved=json.loads(saved_path.read_text(encoding='utf-8'))
+            # A correctness rollout changes the Gateway bundle, not this
+            # immutable signed race. Verify the old derivative first, then
+            # use one separate render per Gateway binding. The new binding
+            # still requires a fresh trusted-key check before offline reuse.
+            old_bindings=saved.get('bindings') or {}
+            if old_bindings.get('gateway_configuration_sha256')!=bindings['gateway_configuration_sha256']:
+                if (saved.get('schema')!='KM-LOCAL-CANONICAL-PRESENTATION-v1'
+                        or saved.get('sha256')!=digest({k:v for k,v in saved.items() if k!='sha256'})
+                        or {k:v for k,v in old_bindings.items() if k!='gateway_configuration_sha256'}
+                           !={k:v for k,v in bindings.items() if k!='gateway_configuration_sha256'}
+                        or saved.get('payload')!=payload
+                        or saved.get('verification',{}).get('valid') is not True
+                        or saved.get('verification',{}).get('method') not in
+                           {'CANONICAL_GATEWAY_GET_ED25519','EXISTING_REMOTE_FINAL_VERIFY'}
+                        or stamp(saved['created_at'])<signed or stamp(saved['created_at'])>now):
+                    raise RaceKeyGateError('SAVED_PRESENTATION_CANONICAL_BINDING_MISMATCH')
+                target=target/'runtime_revisions'/bindings['gateway_configuration_sha256']
+                saved_path=target/'canonical_presentation.json'
+                reused=saved_path.exists()
+                saved=json.loads(saved_path.read_text(encoding='utf-8')) if reused else None
+        if saved is not None:
             if (saved.get('schema')!='KM-LOCAL-CANONICAL-PRESENTATION-v1'
                     or saved.get('sha256')!=digest({k:v for k,v in saved.items() if k!='sha256'})
                     or saved.get('bindings')!=bindings or saved.get('payload')!=payload

@@ -44,7 +44,7 @@ jobs:
       - name: Verify staged or promoted source-parallel state truthfully
         run: |
           python - <<'PY'
-          import hashlib,json
+          import hashlib,json,re
           from pathlib import Path
           gw=json.load(open("profiles/current_execution_gateway.json",encoding="utf-8"))
           st=json.load(open("profiles/local_source_parallel_staged_20260928_R1.json",encoding="utf-8"))
@@ -59,7 +59,10 @@ jobs:
               state="STAGED_PENDING_LIVE_DEPLOYMENT"
           elif status.startswith("PROMOTED / HISTORY"):
               assert cfg["runtime_profile"]==st["active_runtime_profile"]
-              assert active["source_acquisition_sha256"]==st["promotion_evidence"]["active_source_acquisition_sha256"]
+              historical=gw["railway_bootstrap"]["runtime_healthcheck"]
+              assert historical["source_acquisition_sha256"]==st["promotion_evidence"]["active_source_acquisition_sha256"]
+              assert historical["runtime_profile"]==st["promotion_evidence"]["runtime_profile"]
+              assert re.fullmatch(r"[0-9a-f]{64}",active["source_acquisition_sha256"])
               assert cfg["runtime_profile"]==st["promotion_evidence"]["runtime_profile"]
               state="HISTORICAL_PROMOTION_RECORD_VERIFIED"
           else:
