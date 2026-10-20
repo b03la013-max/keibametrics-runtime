@@ -347,20 +347,33 @@ def _verify_race_header(dom,race):
     return header
 
 
-def parse_card(raw,race,url):
+def parse_card(raw,race,url,*,excluded_rows=None):
     if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
     dom=DOM(decode(raw)).root
     _verify_race_header(dom,race)
     table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
                and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
     body=one(table.all('tbody'),'NANKAN_ACTUAL_HISTORY_BODY_REQUIRED');runners=[]
+    exclusions=[]
     for row in [node for node in body.children if isinstance(node,Node) and node.tag=='tr']:
         no=one(row.all('td','umaban'),'NANKAN_HORSE_NUMBER_REQUIRED').text()
-        if not re.fullmatch(r'[1-9]|1[0-6]',no):raise NankanError('NANKAN_HORSE_NUMBER_UNKNOWN')
         cell=one(row.all('td','pr-umaName-textRound'),'NANKAN_HORSE_NAME_CELL_REQUIRED')
         anchors=[node for node in cell.all('a') if re.fullmatch(r'/uma_info/\d+\.do',node.attrs.get('href',''))]
         horse=one(anchors,'NANKAN_HORSE_IDENTITY_REQUIRED');name=horse.text()
         if not name:raise NankanError('NANKAN_HORSE_NAME_UNKNOWN')
+        if not re.fullmatch(r'[1-9]|1[0-6]',no):
+            # A current official card can show 取 消 instead of a numerical
+            # horse number. This is an *explicitly unnumbered* scratch, never
+            # a new numerical runner ID or proof of all other horses being ACTIVE.
+            marker=norm(no).replace(' ','')
+            if marker not in ('取消','除外','出走取消','競走除外'):
+                raise NankanError('NANKAN_HORSE_NUMBER_UNKNOWN')
+            exclusions.append({'runner_id':None,'name':name,
+                'provider_horse_id':horse.attrs['href'].split('/')[-1][:-3],
+                'observed_marker':no,'status':'CANCELLED',
+                'reason':'EXPLICIT_UNNUMBERED_OFFICIAL_CARD_CANCELLATION',
+                'active_verified':False})
+            continue
         group=one(row.all('td','cs-g1'),'NANKAN_CURRENT_RIDER_CELL_REQUIRED')
         jockeys=[node.text() for node in group.all('a') if node.attrs.get('href','').startswith('/kis_info/')]
         loads=[re.sub(r'^[☆▲△◇★]\s*','',node.text()) for node in group.all('span','nk23_u-text12')
@@ -461,8 +474,29 @@ def parse_card(raw,race,url):
                 +(['CURRENT_BODY_WEIGHT_UNKNOWN'] if current_bw is None else [])
                 +(['CURRENT_BODY_WEIGHT_CHANGE_UNKNOWN'] if current_bw_change is None else [])})
     ids=[r['runner_id'] for r in runners]
-    if len(ids)!=race['program_runner_count'] or len(set(ids))!=len(ids) or len(set(r['name'] for r in runners))!=len(ids):
+    if len(set(ids))!=len(ids) or len(set(r['name'] for r in runners))!=len(ids):
         raise NankanError('NANKAN_ALL_RUNNER_UNIVERSE_MISMATCH')
+    # The program may advertise only currently numbered runners even when the
+    # HTML retains an explicitly CANCELLED, still-numbered historical row.
+    # When the program and table counts already match, preserve the original
+    # declared+cancelled semantics and immutable original behavior.
+    if len(runners)!=race['program_runner_count']:
+        numbered_active=[r for r in runners if r['status']!='CANCELLED']
+        if len(numbered_active)!=race['program_runner_count']:
+            raise NankanError('NANKAN_ALL_RUNNER_UNIVERSE_MISMATCH')
+        for row in runners:
+            if row['status']=='CANCELLED':
+                exclusions.append({'runner_id':row['runner_id'],'name':row['name'],
+                    'provider_horse_id':row['provider_horse_id'],
+                    'observed_marker':'CANCELLED_IN_CARD_ODDS',
+                    'status':'CANCELLED','reason':'EXPLICIT_NUMBERED_OFFICIAL_CARD_CANCELLATION',
+                    'active_verified':False})
+        runners=numbered_active
+    identities=[row['provider_horse_id'] for row in runners+exclusions]
+    if len(set(identities))!=len(identities) or len(set(row['name'] for row in runners+exclusions))!=len(identities):
+        raise NankanError('NANKAN_SCRATCH_IDENTITY_DUPLICATE')
+    if excluded_rows is not None:
+        excluded_rows.extend(exclusions)
     return runners
 
 
@@ -797,6 +831,13 @@ def validate_checkpoint(folder,evidence,prediction,body,parts,day,number):
     for source in evidence['sources']:reference_metadata(source)
     evrows=evidence['runners'];prrows=prediction['runners']
     verify_history_asof(evrows,evidence['sources'][3]['fetched_at'])
+    # Bind the explicit scratch set to the immutable pre-cutoff raw card,
+    # not merely to a self-hashed evidence JSON or a post-race result.
+    card_bytes=gzip.decompress((folder/'card.html.gz').read_bytes())
+    observed_exclusions=[]
+    if (parse_card(card_bytes,race,expected_card,excluded_rows=observed_exclusions)!=evrows
+            or evidence.get('explicit_card_exclusions',[])!=observed_exclusions):
+        raise NankanError('NANKAN_SCRATCH_RAW_REPLAY_MISMATCH')
     if ([{key:row[key] for key in ('runner_id','name','status')} for row in evrows]
             !=[{key:row[key] for key in ('runner_id','name','status')} for row in prrows]
             or len(evrows)!=race['program_runner_count'] or len({r['runner_id'] for r in evrows})!=len(evrows)):
@@ -867,13 +908,15 @@ def freeze_observations(folder,day,number,sources,raws,*,now=None,clock=utcnow,
     redirect=sources[2]
     if (redirect.get('http_status')!=302 or redirect.get('source_url')!=race['observed_card_url']
             or redirect.get('location')!=canonical or sources[3]['url']!=canonical):raise NankanError('NANKAN_CANONICAL_TRANSITION_HOLD')
-    runners=parse_card(raws[2],race,canonical)
+    excluded=[]
+    runners=parse_card(raws[2],race,canonical,excluded_rows=excluded)
     verify_history_asof(runners,sources[3]['fetched_at'])
     for index,(source,raw) in enumerate(zip((sources[0],sources[1],sources[3]),raws)):
         if source['raw_sha256']!=hashlib.sha256(raw).hexdigest():raise NankanError('NANKAN_OBSERVATION_HASH_HOLD')
         name=('calendar','program','card')[index]+'.html.gz';immutable(folder/name,gzip.compress(raw,mtime=0))
         source['private_raw_path']=name
     evidence={'profile':PROFILE,'provider':PROVIDER,'race':race,'sources':sources,'runners':runners,
+        'explicit_card_exclusions':excluded,
         'source_frozen_at':now.isoformat(),'parser_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'formal_source_claim':False,'signed_source_claim':False,'production_authority':False,
         'public_redistribution_authorized':False,'page_update_time_claim':'UNKNOWN_NOT_FETCH_TIME',
