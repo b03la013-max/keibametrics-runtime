@@ -506,6 +506,19 @@ def test_normal_chat_current_capture_failure_labels_old_freeze_as_history(tmp_pa
     assert entry.reference_answer_content_check(report['answer_required_parts'],body)['content_complete']
 
 
+def test_normal_chat_current_failure_cannot_generate_an_alternative_forecast(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'sources'))
+    monkeypatch.setattr(entry.o,'ROOT',tmp_path/'empty-repository')
+    def unavailable(*a,**k):
+        raise n.NankanError('TEST_CURRENT_SOURCE_UNAVAILABLE')
+    monkeypatch.setattr(n,'capture_race',unavailable)
+    monkeypatch.setattr(entry,'run_reference',lambda *a,**k:pytest.fail('source HOLD must not generate another forecast'))
+    with pytest.raises(n.NankanError,match='TEST_CURRENT_SOURCE_UNAVAILABLE'):
+        entry._chat_reference(entry.resolve_chat_intent(DAY+' 浦和1R'),
+            output=tmp_path/'chat',run_id='no-alternative')
+
+
 def test_normal_chat_must_not_capture_or_write_private_provider_answer_inside_git(tmp_path,monkeypatch,fixed_chat_clock):
     from runtime import local_race_entry as entry
     folder=tmp_path/'repository';folder.mkdir(mode=0o700);(folder/'.git').mkdir()

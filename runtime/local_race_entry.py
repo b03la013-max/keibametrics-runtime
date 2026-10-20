@@ -184,7 +184,11 @@ def _chat_reference(intent, *, output, run_id):
         # A fresh-source failure may show an intact historical freeze, but
         # must never silently label that freeze as the current forecast.
         code = exc.receipt['code'] if isinstance(exc, nankan.NankanError) else str(exc)
-        reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id)
+        try:
+            reference, content = _chat_frozen_reference(intent, output=output, run_id=run_id,
+                                                       allow_generation=False)
+        except (OSError, ValueError, KeyError, TypeError) as missing:
+            raise exc from missing
         notice = ('当日公式再確認HOLD：'+code+'。以下は旧Freezeの履歴であり、'
                   '現在の出走集合を反映した新しい予測ではありません。')
         content = notice+'\n\n'+content
@@ -194,7 +198,7 @@ def _chat_reference(intent, *, output, run_id):
             'answer_required_parts': [notice]+reference.get('answer_required_parts', [])}, content
 
 
-def _chat_frozen_reference(intent, *, output, run_id):
+def _chat_frozen_reference(intent, *, output, run_id, allow_generation=True):
     """Find the original prestart reference before considering a new capture."""
     day = date.fromisoformat(intent['race_date']).strftime('%Y%m%d')
     base = o.ROOT/'research/urw_owner'
@@ -237,6 +241,8 @@ def _chat_frozen_reference(intent, *, output, run_id):
                 content = NOTICE+'\n\n'+content
                 return {**report,'answer_sha256':hashlib.sha256(content.encode()).hexdigest(),
                     'answer_required_parts':[NOTICE]+report['answer_required_parts']},content
+        if not allow_generation:
+            raise ValueError('CURRENT_REFERENCE_UNAVAILABLE_AND_NO_FROZEN_HISTORY')
         # A genuinely new chat request uses the same durable race publication
         # as the day worker, rather than leaving an unindexed research cache.
         # The race lock also serializes a simultaneous day-worker request.
