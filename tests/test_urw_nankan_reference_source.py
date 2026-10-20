@@ -61,6 +61,19 @@ def parsed_detailed_card(raw=None):
     return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
 
 
+@pytest.mark.parametrize('printed,expected',[
+    ('良外ダ1300','良'),('重外ダ1300','重'),('稍外ダ1300','稍重'),
+    ('不外ダ1300','不良'),('稍重ダ1300','稍重'),('不良内ダ1300','不良'),
+    ('稍芝1300','稍重'),('不明外ダ1300',None),('稍未確認ダ1300',None),
+])
+def test_provider_going_abbreviations_preserve_the_printed_witness(printed,expected):
+    raw=detailed_card().decode().replace('良外ダ1300',printed).encode()
+    _,rows=parsed_detailed_card(raw)
+    assert all(r['starts'][0]['going']==expected for r in rows)
+    assert all(r['starts'][0]['going_observed']==printed for r in rows)
+    assert all(r['active_verified'] is False for r in rows)
+
+
 def test_observed_urw_win_place_odds_and_fixed_change_links_use_same_client_scope():
     assert n.url_scope(n.ORIGIN+'/odds/202610201807020501.do')
     assert n.url_scope(n.ORIGIN+'/henko_info/00000000000000.do')
