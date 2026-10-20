@@ -495,6 +495,10 @@ def parse_card(raw,race,url,*,excluded_rows=None):
     identities=[row['provider_horse_id'] for row in runners+exclusions]
     if len(set(identities))!=len(identities) or len(set(row['name'] for row in runners+exclusions))!=len(identities):
         raise NankanError('NANKAN_SCRATCH_IDENTITY_DUPLICATE')
+    numbered={int(row['runner_id']) for row in runners+exclusions if row['runner_id'] is not None}
+    unexplained=set(range(1,max(numbered,default=0)+1))-numbered
+    if len(unexplained)>sum(row['runner_id'] is None for row in exclusions):
+        raise NankanError('NANKAN_UNEXPLAINED_RUNNER_NUMBER_GAP')
     if excluded_rows is not None:
         excluded_rows.extend(exclusions)
     return runners
@@ -833,11 +837,18 @@ def validate_checkpoint(folder,evidence,prediction,body,parts,day,number):
     verify_history_asof(evrows,evidence['sources'][3]['fetched_at'])
     # Bind the explicit scratch set to the immutable pre-cutoff raw card,
     # not merely to a self-hashed evidence JSON or a post-race result.
-    card_bytes=gzip.decompress((folder/'card.html.gz').read_bytes())
-    observed_exclusions=[]
-    if (parse_card(card_bytes,race,expected_card,excluded_rows=observed_exclusions)!=evrows
-            or evidence.get('explicit_card_exclusions',[])!=observed_exclusions):
-        raise NankanError('NANKAN_SCRATCH_RAW_REPLAY_MISMATCH')
+    # Legacy freezes predate this witness and retain their original parser's
+    # facts. Reinterpreting them with newly added fields changes the record.
+    if 'explicit_card_exclusions' in evidence:
+        card_path=folder/'card.html.gz'
+        if card_path.is_symlink():raise NankanError('NANKAN_PRIVATE_RAW_PATH_HOLD')
+        card_bytes=gzip.decompress(card_path.read_bytes())
+        observed_exclusions=[]
+        observed_rows=parse_card(card_bytes,race,expected_card,excluded_rows=observed_exclusions)
+        identity=lambda rows:[{key:row[key] for key in ('runner_id','name','provider_horse_id','status')} for row in rows]
+        if (identity(observed_rows)!=identity(evrows)
+                or evidence['explicit_card_exclusions']!=observed_exclusions):
+            raise NankanError('NANKAN_SCRATCH_RAW_REPLAY_MISMATCH')
     if ([{key:row[key] for key in ('runner_id','name','status')} for row in evrows]
             !=[{key:row[key] for key in ('runner_id','name','status')} for row in prrows]
             or len(evrows)!=race['program_runner_count'] or len({r['runner_id'] for r in evrows})!=len(evrows)):
@@ -935,18 +946,23 @@ def freeze_observations(folder,day,number,sources,raws,*,now=None,clock=utcnow,
     return readback(folder,day,number)
 
 
-def capture_race(day,number,output,*,client=None,now=utcnow,prediction_cutoff=None):
+def capture_race(day,number,output,*,client=None,now=utcnow,prediction_cutoff=None,refresh=False):
     folder=private_directory(output)
     with private_lock(folder/'worker.lock') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        return _capture_locked(day,number,folder,client=client,now=now,prediction_cutoff=prediction_cutoff)
+        return _capture_locked(day,number,folder,client=client,now=now,prediction_cutoff=prediction_cutoff,refresh=refresh)
 
 
-def _capture_locked(day,number,folder,*,client,now,prediction_cutoff):
-    if (folder/'publication.json').exists():return readback(folder,day,number)
+def _capture_locked(day,number,folder,*,client,now,prediction_cutoff,refresh=False):
+    prior=None
+    if (folder/'publication.json').exists():
+        prior=readback(folder,day,number)
+        if not refresh:return prior
+        if now()>=datetime.fromisoformat(prior[0]['race']['prediction_cutoff']):
+            raise NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')
     checkpoints=('reference_evidence.json','reference_prediction.json','readback.txt','answer_parts.json')
-    if all((folder/name).exists() for name in checkpoints):return readback(folder,day,number,resume=True)
-    if any((folder/name).exists() for name in (*checkpoints,'calendar.html.gz','program.html.gz','card.html.gz')):
+    if not prior and all((folder/name).exists() for name in checkpoints):return readback(folder,day,number,resume=True)
+    if not prior and any((folder/name).exists() for name in (*checkpoints,'calendar.html.gz','program.html.gz','card.html.gz')):
         raise NankanError('NANKAN_PARTIAL_PRIVATE_CAPTURE_HOLD_NO_REGENERATION')
     if prediction_cutoff and now()>=datetime.fromisoformat(prediction_cutoff):raise NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')
     if date.fromisoformat(day)<now().astimezone(JST).date() or type(number) is not int or not 1<=number<=12:
@@ -961,12 +977,42 @@ def _capture_locked(day,number,folder,*,client,now,prediction_cutoff):
     except ObservedRedirect as exc:redirect=dict(exc.receipt)
     else:raise NankanError('NANKAN_EXPECTED_SUPPORTED_CANONICAL_TRANSITION_REQUIRED')
     expected=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do'
-    if redirect.get('http_status')!=302 or redirect.get('location')!=expected:raise NankanError('NANKAN_CANONICAL_TRANSITION_HOLD')
+    if (redirect.get('http_status')!=302 or redirect.get('source_url')!=race['observed_card_url']
+            or redirect.get('location')!=expected):raise NankanError('NANKAN_CANONICAL_TRANSITION_HOLD')
     url_scope(redirect['location'])
     # This is an explicit, policy-checked GET of the observed Location, not an
     # HTTP library redirect follow or a fabricated URL. A second redirect holds.
     try:card,raw_card=client.get(redirect['location'])
     except ObservedRedirect as exc:raise NankanError('NANKAN_SECOND_REDIRECT_HOLD') from exc
+    if refresh:
+        # One immutable revision for this race/cutoff/raw observation. The
+        # original publication stays intact, including on later readback.
+        current=[reference_metadata(s) for s in (calendar,program,redirect,card)]
+        observed=now();times=[datetime.fromisoformat(s['fetched_at']) for s in current]
+        if (any(t.tzinfo is None for t in times) or times!=sorted(times)
+                or max(times)>observed or observed>=datetime.fromisoformat(race['prediction_cutoff'])):
+            raise NankanError('NANKAN_CURRENT_OBSERVATION_TIME_HOLD')
+        for meta,raw,url in zip((current[0],current[1],current[3]),
+                (raw_calendar,raw_program,raw_card),(CALENDAR,program_url,expected)):
+            if meta.get('http_status')!=200 or meta.get('url')!=url:
+                raise NankanError('NANKAN_OBSERVATION_HTTP_HOLD')
+            if hashlib.sha256(raw).hexdigest()!=meta['raw_sha256']:
+                raise NankanError('NANKAN_OBSERVATION_HASH_HOLD')
+        verify_history_asof(parse_card(raw_card,race,card['url']),card['fetched_at'])
+        if prior and (prior[1]['race']==race
+                and prior[1]['sources'][3]['raw_sha256']==card['raw_sha256']):return prior
+        revisions=private_directory(folder/'revisions')
+        key=sha({'provider_race_id':race['provider_race_id'],
+                 'prediction_cutoff':race['prediction_cutoff'],'source_sha256':card['raw_sha256']})
+        target=revisions/key
+        if target.exists():
+            if not all((target/name).exists() for name in checkpoints):
+                raise NankanError('NANKAN_PARTIAL_PRIVATE_CAPTURE_HOLD_NO_REGENERATION')
+            saved=readback(target,day,number,resume=True)
+            if saved[1]['race']!=race:raise NankanError('NANKAN_CURRENT_REVISION_RACE_MISMATCH')
+            return saved
+        if len(list(revisions.iterdir()))>=3:raise NankanError('NANKAN_PRIVATE_REVISION_LIMIT_REACHED')
+        folder=private_directory(target)
     return freeze_observations(folder,day,number,[calendar,program,redirect,card],
                                [raw_calendar,raw_program,raw_card],clock=now,
                                observation_mode='COLD_OFFICIAL_SOURCE_PRIVATE_REFERENCE_NOT_FORMAL_NOT_CHAT_DELIVERY')
@@ -1045,15 +1091,19 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--import-observations',type=Path,
         help='Private JSON record of three already-fetched raw paths and four source receipts; HTTP0 replay')
+    parser.add_argument('--refresh-current-official',action='store_true',
+        help='Check current official card before cutoff; preserve original and deduplicate private revisions')
     parser.add_argument('--personal-noncommercial-private-only',action='store_true',required=True)
     args=parser.parse_args()
     try:
+        if args.refresh_current_official and (args.all_races or args.import_observations):
+            raise NankanError('NANKAN_REFRESH_REQUIRES_ONE_CURRENT_OFFICIAL_RACE')
         if args.all_races:
             if args.import_observations:raise NankanError('NANKAN_IMPORT_REQUIRES_ONE_RACE')
             status=capture_day(args.race_date,args.output)
             print(json.dumps({key:status[key] for key in ('provider','race_date','discovered_count','reference_complete_count','formal_final_count','chat_render_verified','sha256')},sort_keys=True))
             return 0 if status['reference_complete_count']==status['discovered_count'] else 2
-        if (args.output/'publication.json').exists():
+        if (args.output/'publication.json').exists() and not args.refresh_current_official:
             manifest,_,prediction,_=readback(args.output,args.race_date,args.race_no)
         elif args.import_observations:
             obj=json.loads(args.import_observations.read_text());raws=[]
@@ -1063,7 +1113,7 @@ def main():
                 raws.append(gzip.decompress(path.read_bytes()))
             manifest,_,prediction,_=freeze_observations(args.output,args.race_date,args.race_no,obj['sources'],raws)
         else:
-            manifest,_,prediction,_=capture_race(args.race_date,args.race_no,args.output)
+            manifest,_,prediction,_=capture_race(args.race_date,args.race_no,args.output,refresh=args.refresh_current_official)
         print(json.dumps({'status':'PRIVATE_REFERENCE_COMPLETE_NOT_CHAT_DELIVERED','provider':PROVIDER,
             'race_date':args.race_date,'race_no':args.race_no,'runner_count':manifest['runner_count'],
             'unknown_count':len(prediction['unknown_runner_ids']),'input_sha256':manifest['input_sha256'],

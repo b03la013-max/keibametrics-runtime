@@ -105,6 +105,13 @@ def test_unknown_unnumbered_current_horse_cannot_be_silently_dropped(bad_marker)
         n.parse_card(raw.encode(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
 
 
+def test_unexplained_runner_number_gap_is_not_a_cancellation():
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    raw=card().replace(b'<td class="umaban">2</td>',b'<td class="umaban">3</td>')
+    with pytest.raises(n.NankanError,match='UNEXPLAINED_RUNNER_NUMBER_GAP'):
+        n.parse_card(raw,race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
+
+
 def test_observed_urw_win_place_odds_and_fixed_change_links_use_same_client_scope():
     assert n.url_scope(n.ORIGIN+'/odds/202610201807020501.do')
     assert n.url_scope(n.ORIGIN+'/henko_info/00000000000000.do')
@@ -470,6 +477,76 @@ def test_cold_private_source_to_full_reference_and_offline_same_byte_readback(tm
     assert again[0]==manifest and again[3]==body
     (output/'publication.json').unlink()
     assert n.capture_race(DAY,1,output,client=Offline(),now=lambda:NOW+timedelta(days=10))[0]==manifest
+
+
+def test_legacy_freeze_without_scratch_witness_uses_its_frozen_parser_facts(tmp_path,monkeypatch):
+    output,(_,evidence,prediction,body),_,_=captured(tmp_path)
+    evidence.pop('explicit_card_exclusions')
+    for row in evidence['runners']:
+        row.pop('age',None)
+    evidence['sha256']=n.sha({k:v for k,v in evidence.items() if k!='sha256'})
+    prediction['input_sha256']=evidence['sha256']
+    prediction['sha256']=n.sha({k:v for k,v in prediction.items() if k!='sha256'})
+    parts=json.loads((output/'answer_parts.json').read_text())
+    parts.update(input_sha256=evidence['sha256'],forecast_sha256=prediction['sha256'])
+    for name,value in [('reference_evidence.json',evidence),('reference_prediction.json',prediction),
+                       ('answer_parts.json',parts),('publication.json',n.publication_for(evidence,prediction,body,parts))]:
+        rewrite(output/name,value)
+    before={p.name:p.read_bytes() for p in output.iterdir() if p.is_file()}
+    monkeypatch.setattr(n,'parse_card',lambda *a,**kw:pytest.fail('legacy readback must retain the original parser facts'))
+    assert n.readback(output,DAY,1)[3]==body
+    assert before=={p.name:p.read_bytes() for p in output.iterdir() if p.is_file()}
+
+
+def test_current_refresh_recomputes_changed_universe_without_overwriting_or_duplicate_revision(tmp_path,monkeypatch):
+    output,(_,_,original,body),c,_=captured(tmp_path)
+    before={p.name:p.read_bytes() for p in output.iterdir() if p.is_file()}
+    class ChangedCard:
+        def get(self,url):
+            meta,raw=c.get(url)
+            if '/program/' in url:raw=raw.replace(b'2'+bytes('頭','utf-8'),b'1'+bytes('頭','utf-8'),1)
+            if '/uma_shosai/' in url:
+                raw=card(cancelled=True).decode().replace('(2頭)','(1頭)').replace(
+                    '<td class="umaban">1</td>','<td class="umaban">取 消</td>',1).encode()
+            meta['raw_sha256']=hashlib.sha256(raw).hexdigest()
+            return meta,raw
+    refreshed=n.capture_race(DAY,1,output,client=ChangedCard(),now=lambda:NOW,refresh=True)
+    assert [r['runner_id'] for r in refreshed[1]['runners']]==['2']
+    assert refreshed[1]['explicit_card_exclusions'][0]['provider_horse_id']=='1'
+    assert refreshed[2]['reference_ranking']==[] and refreshed[2]['unknown_runner_ids']==['2']
+    assert original['reference_ranking']==['1'] and '|1|テスト1|' not in refreshed[3]
+    assert body==(output/'readback.txt').read_text()
+    assert before=={p.name:p.read_bytes() for p in output.iterdir() if p.is_file()}
+    revisions=list((output/'revisions').iterdir());assert len(revisions)==1
+    (revisions[0]/'publication.json').unlink()
+    monkeypatch.setattr(n,'compile_private_reference',lambda *a,**kw:pytest.fail('same source must reuse its revision'))
+    assert n.capture_race(DAY,1,output,client=ChangedCard(),now=lambda:NOW,refresh=True)==refreshed
+    assert list((output/'revisions').iterdir())==revisions
+    class Offline:
+        def get(self,url):pytest.fail('post-cutoff refresh must stop before HTTP')
+    with pytest.raises(n.NankanError,match='CUTOFF_HOLD'):
+        n.capture_race(DAY,1,output,client=Offline(),now=lambda:datetime.fromisoformat(refreshed[0]['race']['prediction_cutoff']),refresh=True)
+
+
+@pytest.mark.parametrize('damage',['provider','future','http','calendar_hash','redirect_identity'])
+def test_current_refresh_revalidates_fresh_observations_before_reusing_same_source(tmp_path,damage):
+    output,_,c,_=captured(tmp_path)
+    class DamagedCurrent:
+        def get(self,url):
+            if damage=='redirect_identity' and '/syousai/' in url:
+                try:c.get(url)
+                except n.ObservedRedirect as exc:
+                    exc.receipt['source_url']=n.ORIGIN+'/syousai/'+DAY_ID+'02.do'
+                    raise
+            meta,raw=c.get(url)
+            if '/uma_shosai/' in url:
+                if damage=='provider':meta['provider']='OTHER_PROVIDER'
+                if damage=='future':meta['fetched_at']=(NOW+timedelta(seconds=1)).isoformat()
+                if damage=='http':meta['http_status']=500
+            if url==n.CALENDAR and damage=='calendar_hash':meta['raw_sha256']='0'*64
+            return meta,raw
+    with pytest.raises(n.NankanError):
+        n.capture_race(DAY,1,output,client=DamagedCurrent(),now=lambda:NOW,refresh=True)
 
 
 @pytest.mark.parametrize('location',[n.ORIGIN+'/uma_shosai/2026102218070402.do',
