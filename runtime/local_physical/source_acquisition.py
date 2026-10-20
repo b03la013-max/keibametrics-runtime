@@ -15,7 +15,6 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.robotparser
 import urllib.request
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Tuple
@@ -164,10 +163,14 @@ class _RobotsNoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _literal_robots_policy(text: str, robots_url: str) -> Dict[str, Any]:
-    # stdlib robotparser supplies groups/delay but its first-match allowance
-    # ignores RFC wildcards. Unsupported rules remain UNKNOWN, never an allow.
+    # Parse the deliberately limited literal rules here. CPython robotparser's
+    # internal default-group representation differs by version; no access
+    # decision may depend on entries/default_entry or silently lose '*'.
+    # Unsupported rules remain UNKNOWN, never an allow.
     default_groups = 0
-    agent_seen = False
+    groups = []
+    group = None
+    directives = False
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
@@ -176,34 +179,41 @@ def _literal_robots_policy(text: str, robots_url: str) -> Dict[str, Any]:
             raise ValueError("ROBOTS_MALFORMED_LINE")
         key, value = (part.strip() for part in line.split(":", 1))
         key = key.lower()
-        if key in ("allow", "disallow", "crawl-delay", "request-rate") and not agent_seen:
+        if key in ("allow", "disallow", "crawl-delay", "request-rate") and group is None:
             raise ValueError("ROBOTS_DIRECTIVE_WITHOUT_AGENT")
         if key in ("allow", "disallow") and (any(ch in value for ch in "*$%") or value and not value.startswith("/")):
             raise ValueError("ROBOTS_UNSUPPORTED_RULE_PATTERN")
         if key == "user-agent":
-            agent_seen = True
             if not value or value != "*" and not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
                 raise ValueError("ROBOTS_AGENT_INVALID")
+            if group is None or directives:
+                group = {"agents": [], "rules": [], "delay": 0}
+                groups.append(group)
+            group["agents"].append(value.lower())
+            directives = False
             default_groups += value == "*"
         if key == "crawl-delay" and not re.fullmatch(r"\d+", value):
             raise ValueError("ROBOTS_UNSUPPORTED_CRAWL_DELAY")
         if key == "request-rate" and not re.fullmatch(r"[1-9]\d*/[1-9]\d*", value):
             raise ValueError("ROBOTS_UNSUPPORTED_REQUEST_RATE")
+        if key in ("allow", "disallow", "crawl-delay", "request-rate"):
+            directives = True
+            if key in ("allow", "disallow") and value:
+                group["rules"].append((urllib.parse.quote(value), key == "allow"))
+            elif key == "crawl-delay":
+                group["delay"] = max(group["delay"], int(value))
+            elif key == "request-rate":
+                requests, seconds = map(int, value.split("/"))
+                group["delay"] = max(group["delay"], seconds / requests)
     if default_groups > 1:
         raise ValueError("ROBOTS_REPEATED_DEFAULT_GROUP_UNSUPPORTED")
-    parser = urllib.robotparser.RobotFileParser(robots_url)
-    parser.parse(text.splitlines())
     product = SOURCE_USER_AGENT.split("/", 1)[0].lower()
-    matches = [(len(agent), entry) for entry in parser.entries for agent in entry.useragents
-               if agent.lower() in product]
-    entries = ([entry for length, entry in matches if length == max(n for n, _ in matches)]
-               if matches else [parser.default_entry] if parser.default_entry else [])
-    delay = 0
-    for entry in entries:
-        delay = max(delay, entry.delay or 0)
-        if entry.req_rate:
-            delay = max(delay, entry.req_rate.seconds / entry.req_rate.requests)
-    return {"rules": [(rule.path, rule.allowance) for entry in entries for rule in entry.rulelines], "delay": delay}
+    matches = [(len(agent), entry) for entry in groups for agent in entry["agents"]
+               if agent != "*" and agent in product]
+    selected = ([entry for length, entry in matches if length == max(n for n, _ in matches)]
+                if matches else [entry for entry in groups if "*" in entry["agents"]])
+    return {"rules": [rule for entry in selected for rule in entry["rules"]],
+            "delay": max([0] + [entry["delay"] for entry in selected])}
 
 
 def _http_backoff_seconds(headers: Dict[str, str]) -> float:

@@ -213,3 +213,22 @@ def test_expired_robots_cache_never_bypasses_target_retry_after(transport, monke
     with pytest.raises(ValueError, match='SOURCE_POLICY_RETRY_NOT_READY'):
         fetch()
     assert [url for url, _ in calls] == [ROBOTS, URL]
+
+
+def test_literal_group_parser_keeps_default_without_stdlib_internal_state():
+    policy = s._literal_robots_policy('User-agent: *\nDisallow: /KeibaWeb/\nCrawl-delay: 12\n', ROBOTS)
+    assert policy == {'rules':[('/KeibaWeb/', False)], 'delay':12}
+
+
+def test_literal_group_parser_combines_equal_specificity_groups():
+    product = s.SOURCE_USER_AGENT.split('/', 1)[0]
+    policy = s._literal_robots_policy(
+        'User-agent: *\nAllow: /\n\nUser-agent: '+product+'\nDisallow: /KeibaWeb/\n'
+        '\nUser-agent: '+product+'\nAllow: /public/\nRequest-rate: 2/10\n', ROBOTS)
+    assert policy == {'rules':[('/KeibaWeb/', False),('/public/', True)], 'delay':5}
+
+
+def test_comment_between_agent_aliases_does_not_drop_applicable_restriction():
+    product = s.SOURCE_USER_AGENT.split('/', 1)[0]
+    policy = s._literal_robots_policy('User-agent: '+product+'\n# comment\nUser-agent: second-agent\nDisallow: /\n', ROBOTS)
+    assert policy['rules'] == [('/', False)]

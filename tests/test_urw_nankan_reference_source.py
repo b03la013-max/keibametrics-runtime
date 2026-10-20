@@ -61,6 +61,183 @@ def parsed_detailed_card(raw=None):
     return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
 
 
+def test_observed_urw_win_place_odds_and_fixed_change_links_use_same_client_scope():
+    assert n.url_scope(n.ORIGIN+'/odds/202610201807020501.do')
+    assert n.url_scope(n.ORIGIN+'/henko_info/00000000000000.do')
+    for path in ('/odds/202610201907020501.do','/odds/202610201807020502.do',
+                 '/odds/202610201807029901.do','/henko_info/20261020180702.do'):
+        with pytest.raises(n.NankanError,match='URL_SCOPE_HOLD'):n.url_scope(n.ORIGIN+path)
+
+
+def current_receipt(raw,url,*,fetched=None):
+    return {'provider':n.PROVIDER,'url':url,'http_status':200,
+        'fetched_at':fetched or DAY+'T12:10:00+09:00','raw_sha256':hashlib.sha256(raw).hexdigest()}
+
+
+def current_odds_page(*,time='12:09',row2=True,unknown=False,cancelled=False):
+    head=n.DOM(n.decode(card())).root.all('p','nk23_c-tab1__subtitle')[0].text()
+    win='-' if unknown else '1.7';place='-' if unknown else '1.1-1.7'
+    if cancelled:win=place='取消'
+    rows=f'<tr><th>1</th><td>1</td><td>テスト1</td><td>{win}</td><td>{place}</td></tr>'
+    if row2:rows+='<tr><td>2</td><td>テスト2</td><td>3.9</td><td>1.5-2.0</td></tr>'
+    return (f'<meta charset="UTF-8"><p class="nk23_c-tab1__subtitle">{head}</p>'
+        f'<span class="btn_now_time_break">{time} 現在</span>'
+        '<table class="nk23_c-table04__table"><tr><th>枠番</th><th>馬番</th><th>馬名</th><th>単勝</th><th>複勝</th></tr>'
+        +rows+'</table>').encode()
+
+
+def current_changes_page():
+    def change(rid,kind,details):
+        return f'<div class="nk23_c-block01__list2__item"><p class="nk23_c-block01__tag">{kind}</p>'\
+            f'<p><span class="nk23_c-block01__txt2">{rid}番</span><a href="/uma_info/{rid}.do">テスト{rid}</a></p>'\
+            f'<p class="nk23_c-block01__text2">{details}</p></div>'
+    changes=change(1,'出走取消','自作理由')+change(2,'騎手変更','<a href="/kis_info/3.do">旧騎手</a>→<a href="/kis_info/4.do">新騎手</a>')
+    return ('<meta charset="UTF-8"><div>2026年10月22日<h3 class="nk23_c-block01__info__title">第7回 浦和競馬 第4日 の変更情報</h3></div>'
+        f'<li id="01" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">1R</span>'
+        f'<a href="/syousai/{DAY_ID}01.do">出走表</a>{changes}</li>'
+        '<li id="02" class="nk23_c-block01__list__item"><span>別Raceの不正な文字列は対象外</span></li>').encode()
+
+
+def statistics_card(*,rate='3.2%',wins='3',starts='93',labels='1200<br>1300<br>1400<br>1500<br>浦1400'):
+    def counts(cls,percent,num,total):
+        return f'<td class="{cls}"><span class="is-percent">{percent}</span>'\
+            f'<span class="is-number">{num}</span><span class="is-total">{total}</span></td>'
+    header='<thead><tr><th class="cs-ai1">騎手とコースの相性 (勝率)</th>'\
+        '<th class="cs-ai2">騎手と調教師の相性 (勝率)</th>'\
+        '<th class="cs-anl">種牡馬 分析 (勝率/連対率)</th>'\
+        f'<th class="cs-anl">{labels}</th></tr></thead>'
+    cells=counts('cs-ai1',rate,wins,starts)+counts('cs-ai2','10.0%','3','30')
+    cells+='<td class="cs-anl mk-sire"><p class="is-grPercent__item">18.8% 11.8% 16.8% 14.5% 33.3%</p>'\
+        '<p class="is-grPercent__item">29.2% 29.4% 28.3% 19.4% 33.3%</p></td>'
+    raw=detailed_card().decode().replace('<tbody>',header+'<tbody>',1)
+    return raw.replace('</tr>',cells+'</tr>').encode()
+
+
+def test_current_odds_observes_complete_membership_and_preserves_unsigned_scope():
+    race,facts=parsed_detailed_card();raw=current_odds_page();url=n.ORIGIN+'/odds/'+DAY_ID+'0101.do'
+    result=n.parse_current_odds(raw,race,current_receipt(raw,url),facts)
+    assert result['runner_count']==2 and result['betting_membership_observed_count']==2
+    assert result['provider_display_at']==DAY+'T12:09:00+09:00'
+    assert result['source_fetched_at']==DAY+'T12:10:00+09:00'
+    assert result['observed_before_reference_cutoff'] is True and result['active_verified'] is False
+    assert result['signed_source_claim'] is False and result['production_authority'] is False
+    raw=current_odds_page(unknown=True)
+    missing=n.parse_current_odds(raw,race,current_receipt(raw,url),facts)
+    assert missing['betting_membership_observed_count']==1 and missing['runners'][0]['win_odds'] is None
+    raw=current_odds_page(cancelled=True)
+    scratched=n.parse_current_odds(raw,race,current_receipt(raw,url),facts)
+    assert scratched['runners'][0]['status']=='CANCELLED' and scratched['active_verified'] is False
+    late=n.parse_current_odds(raw,race,current_receipt(raw,url,fetched=DAY+'T12:30:00+09:00'),facts)
+    assert late['observed_before_reference_cutoff'] is False
+
+
+def test_one_digit_provider_clock_is_normalized_and_invalid_clock_is_held():
+    race,facts=parsed_detailed_card();raw=current_odds_page(time='9:09');url=n.ORIGIN+'/odds/'+DAY_ID+'0101.do'
+    result=n.parse_current_odds(raw,race,current_receipt(raw,url,fetched=DAY+'T09:10:00+09:00'),facts)
+    assert result['provider_display_at']==DAY+'T09:09:00+09:00'
+    raw=current_odds_page(time='24:09')
+    with pytest.raises(n.NankanError,match='PROVIDER_TIME_INVALID'):
+        n.parse_current_odds(raw,race,current_receipt(raw,url),facts)
+
+
+@pytest.mark.parametrize('kind',['odds','changes','statistics'])
+@pytest.mark.parametrize('damage',['provider','venue','date_identity','race_identity','empty','duplicate','count'])
+def test_current_fact_parsers_require_consistent_urw_context_and_nonempty_unique_universe(kind,damage):
+    race,facts=parsed_detailed_card()
+    if damage=='provider':race['provider']='NAR_OFFICIAL'
+    elif damage=='venue':race['venue_id']='KAW'
+    elif damage=='date_identity':race['race_date']='2026-10-21'
+    elif damage=='race_identity':race['provider_race_id']=DAY_ID+'02'
+    elif damage=='empty':facts=[]
+    elif damage=='duplicate':facts=[facts[0],facts[0]]
+    elif damage=='count':facts=facts[:1]
+    if kind=='odds':
+        raw=current_odds_page();url=n.ORIGIN+'/odds/'+race['provider_race_id']+'01.do';parser=n.parse_current_odds
+    elif kind=='changes':
+        raw=current_changes_page();url=n.ORIGIN+'/henko_info/00000000000000.do';parser=n.parse_current_changes
+    else:
+        raw=statistics_card();url=n.ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do';parser=n.parse_provider_statistics
+    with pytest.raises(n.NankanError):parser(raw,race,current_receipt(raw,url),facts)
+
+
+def test_provider_statistics_preserve_labels_counts_and_unknown_definitions_without_index_conversion():
+    raw=statistics_card();race,facts=parsed_detailed_card(raw);url=n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do'
+    result=n.parse_provider_statistics(raw,race,current_receipt(raw,url),facts)
+    assert result['runner_count']==2 and result['declared_facts_sha256']==n.sha(facts)
+    assert result['raw_sha256']==hashlib.sha256(raw).hexdigest()
+    row=result['runners'][0]
+    assert (row['rider_course']['wins'],row['rider_course']['starts'],row['rider_course']['win_rate_percent'])==(3,93,3.2)
+    assert row['rider_course']['count_rate_consistency']=='MATCHES_DISPLAY_PRECISION'
+    assert row['rider_trainer']['provider_definition']=='騎手と調教師の相性 (勝率)'
+    assert row['rider_trainer']['target_period'] is None
+    assert row['sire_analysis']['sample_count'] is None
+    assert row['sire_analysis']['conditions'][4]=={'provider_label':'浦1400',
+        'win_rate_percent':33.3,'quinella_rate_percent':33.3,'win_rate_display':'33.3%','quinella_rate_display':'33.3%'}
+    assert result['canonical_index_transform_applied'] is False and result['forecast_recalculation_performed'] is False
+    assert result['signed_source_claim'] is False and result['production_authority'] is False
+    assert n.parse_card(raw,race,url)==facts
+
+
+def test_provider_missing_statistics_and_zero_denominators_remain_unknown():
+    race,facts=parsed_detailed_card();raw=detailed_card();url=n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do'
+    result=n.parse_provider_statistics(raw,race,current_receipt(raw,url),facts)
+    assert result['runners'][0]['rider_course']['win_rate_percent'] is None
+    assert result['runners'][0]['sire_analysis']['conditions']==[]
+    raw=statistics_card(rate='0.0%',wins='0',starts='0');race,facts=parsed_detailed_card(raw)
+    result=n.parse_provider_statistics(raw,race,current_receipt(raw,url),facts)
+    assert result['runners'][0]['rider_course']['count_rate_consistency']=='UNDEFINED_ZERO_STARTS'
+
+
+@pytest.mark.parametrize('damage',['rate_count','count_range','rate_range','sire_labels','sire_rate_order','facts','day','raw_hash'])
+def test_provider_statistics_reject_inconsistent_counts_labels_identity_and_hash(damage):
+    raw=statistics_card();race,facts=parsed_detailed_card(raw);url=n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do'
+    if damage=='rate_count':raw=statistics_card(wins='4')
+    elif damage=='count_range':raw=statistics_card(wins='94')
+    elif damage=='rate_range':raw=statistics_card(rate='100.1%')
+    elif damage=='sire_labels':raw=statistics_card(labels='1200<br>1300')
+    elif damage=='sire_rate_order':raw=raw.replace(b'29.2%',b'10.0%')
+    elif damage=='facts':facts[0]['name']='別馬'
+    elif damage=='day':raw=raw.replace('2026年10月22日'.encode(),'2026年10月21日'.encode())
+    meta=current_receipt(raw,url)
+    if damage=='raw_hash':meta['raw_sha256']='0'*64
+    with pytest.raises(n.NankanError):n.parse_provider_statistics(raw,race,meta,facts)
+
+
+@pytest.mark.parametrize('damage',['day','race','name','missing','future_clock','raw_hash'])
+def test_current_odds_rejects_wrong_identity_missing_universe_and_future_update(damage):
+    race,facts=parsed_detailed_card();raw=current_odds_page();url=n.ORIGIN+'/odds/'+DAY_ID+'0101.do'
+    if damage=='day':raw=raw.replace('2026年10月22日'.encode(),'2026年10月21日'.encode())
+    elif damage=='race':url=n.ORIGIN+'/odds/'+DAY_ID+'0201.do'
+    elif damage=='name':raw=raw.replace('テスト1'.encode(),'別馬'.encode())
+    elif damage=='missing':raw=current_odds_page(row2=False)
+    elif damage=='future_clock':raw=current_odds_page(time='12:11')
+    meta=current_receipt(raw,url)
+    if damage=='raw_hash':meta['raw_sha256']='0'*64
+    with pytest.raises(n.NankanError):n.parse_current_odds(raw,race,meta,facts)
+
+
+def test_change_items_are_bound_to_target_race_and_absence_never_confirms_active():
+    race,facts=parsed_detailed_card();raw=current_changes_page();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    result=n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+    assert len(result['items'])==2 and result['items'][0]['status']=='CANCELLED'
+    assert result['items'][1]['change_type']=='騎手変更'
+    assert result['items'][1]['jockey_names_observed']==['旧騎手','新騎手']
+    assert result['active_verified'] is False and result['absence_is_no_change_authority'] is False
+    absent=raw.replace(b'id="01"',b'id="03"')
+    observed=n.parse_current_changes(absent,race,current_receipt(absent,url),facts)
+    assert observed['items']==[] and observed['target_race_row_present'] is False
+
+
+@pytest.mark.parametrize('damage',['day','venue','race_url','name'])
+def test_change_item_identity_disagreement_is_held(damage):
+    race,facts=parsed_detailed_card();raw=current_changes_page();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    if damage=='day':raw=raw.replace('2026年10月22日'.encode(),'2026年10月21日'.encode())
+    elif damage=='venue':raw=raw.replace('浦和競馬'.encode(),'船橋競馬'.encode())
+    elif damage=='race_url':raw=raw.replace((DAY_ID+'01.do').encode(),(DAY_ID+'02.do').encode())
+    elif damage=='name':raw=raw.replace('テスト1'.encode(),'別馬'.encode())
+    with pytest.raises(n.NankanError):n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+
+
 def test_existing_snapshot_schema_adapter_stays_unsigned_and_not_admitted():
     from runtime.local_physical.source_acquisition import verify_source_artifact
     race,_=parsed_detailed_card();raw=detailed_card()

@@ -63,7 +63,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def url_scope(url):
     p=urlsplit(url)
     if (p.scheme!='https' or p.netloc!='www.nankankeiba.com' or p.query or p.fragment
-            or not re.fullmatch(r'/(?:calendar/\d{6}|program/\d{14}|(?:syousai|uma_shosai)/\d{16})\.do|/robots\.txt',p.path)):
+            or not re.fullmatch(r'/(?:calendar/\d{6}|program/\d{14}|(?:syousai|uma_shosai)/\d{16}'
+                r'|odds/\d{8}18\d{4}(?:0[1-9]|1[0-2])01|henko_info/00000000000000)\.do|/robots\.txt',p.path)):
         raise NankanError('NANKAN_URL_SCOPE_HOLD')
     return p
 
@@ -335,9 +336,7 @@ def one(nodes,code):
     return nodes[0]
 
 
-def parse_card(raw,race,url):
-    if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
-    dom=DOM(decode(raw)).root
+def _verify_race_header(dom,race):
     header=one(dom.all('p','nk23_c-tab1__subtitle'),'NANKAN_CARD_HEADER_UNKNOWN').text()
     y,m,d=map(int,race['race_date'].split('-'))
     if not re.search(rf'{y}年{m}月{d}日',header) or '浦和競馬' not in header or not re.match(rf'{race["race_no"]}R\b',header):
@@ -345,6 +344,13 @@ def parse_card(raw,race,url):
     if (not re.search(rf'(?<![\d,])(?:{race["distance"]:,}|{race["distance"]})m(?![A-Za-z0-9])',header)
             or race['scheduled_post_at'][11:16] not in header or f'{race["program_runner_count"]}頭' not in header):
         raise NankanError('NANKAN_CARD_PROGRAM_FACT_MISMATCH')
+    return header
+
+
+def parse_card(raw,race,url):
+    if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
+    dom=DOM(decode(raw)).root
+    _verify_race_header(dom,race)
     table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
                and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
     body=one(table.all('tbody'),'NANKAN_ACTUAL_HISTORY_BODY_REQUIRED');runners=[]
@@ -456,6 +462,232 @@ def parse_card(raw,race,url):
     if len(ids)!=race['program_runner_count'] or len(set(ids))!=len(ids) or len(set(r['name'] for r in runners))!=len(ids):
         raise NankanError('NANKAN_ALL_RUNNER_UNIVERSE_MISMATCH')
     return runners
+
+
+def _unsigned_current_observation(raw,race,receipt,expected_url,kind):
+    number=race.get('race_no');day=str(race.get('race_date','')).replace('-','')
+    if (race.get('provider')!=PROVIDER or race.get('venue_id')!='URW' or type(number) is not int
+            or not 1<=number<=12 or len(day)!=8
+            or not re.fullmatch(re.escape(day)+r'18\d{4}'+f'{number:02d}',str(race.get('provider_race_id','')))):
+        raise NankanError('NANKAN_CURRENT_RACE_CONTEXT_MISMATCH')
+    meta=reference_metadata(receipt)
+    if (meta.get('url')!=expected_url or meta.get('http_status')!=200
+            or hashlib.sha256(raw).hexdigest()!=meta.get('raw_sha256')):
+        raise NankanError('NANKAN_CURRENT_OBSERVATION_IDENTITY_OR_RAW_HASH')
+    try:
+        fetched=datetime.fromisoformat(meta['fetched_at'])
+        cutoff=datetime.fromisoformat(race['prediction_cutoff'])
+        if fetched.tzinfo is None or cutoff.tzinfo is None:raise ValueError('TIMEZONE')
+    except (KeyError,TypeError,ValueError) as exc:
+        raise NankanError('NANKAN_CURRENT_OBSERVATION_TIME_UNKNOWN') from exc
+    return {'provider':PROVIDER,'observation_type':kind,'race':race,'source_url':expected_url,
+        'raw_sha256':meta['raw_sha256'],'source_fetched_at':meta['fetched_at'],
+        'source_policy':meta.get('source_policy'),'observed_before_reference_cutoff':fetched<cutoff,
+        'formal_source_claim':False,'signed_source_claim':False,'production_authority':False,
+        'active_verified':False,'public_redistribution_authorized':False}
+
+
+def _declared_current_facts(race,declared_facts):
+    if not isinstance(declared_facts,list) or not declared_facts or len(declared_facts)!=race['program_runner_count']:
+        raise NankanError('NANKAN_CURRENT_DECLARED_UNIVERSE_REQUIRED')
+    declared={str(r['runner_id']):r for r in declared_facts}
+    if len(declared)!=len(declared_facts):raise NankanError('NANKAN_CURRENT_DECLARED_ID_DUPLICATE')
+    return declared
+
+
+def parse_current_odds(raw,race,receipt,declared_facts):
+    """Observed win/place membership only; never a signed ACTIVE universe."""
+    url=ORIGIN+'/odds/'+race['provider_race_id']+'01.do';url_scope(url)
+    result=_unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_OFFICIAL_ODDS_MEMBERSHIP')
+    dom=DOM(decode(raw)).root;_verify_race_header(dom,race)
+    table=one(dom.all('table','nk23_c-table04__table'),'NANKAN_WIN_PLACE_ODDS_TABLE_REQUIRED')
+    declared=_declared_current_facts(race,declared_facts)
+    rows=[]
+    for row in table.all('tr'):
+        cells=[node.text() for node in row.children if isinstance(node,Node) and node.tag=='td']
+        if not cells:continue
+        if len(cells) not in (3,4) or not re.fullmatch(r'[1-9]|1[0-6]',cells[0]):
+            raise NankanError('NANKAN_ODDS_ROW_IDENTITY_UNKNOWN')
+        rid,name=cells[:2]
+        if rid not in declared or declared[rid]['name']!=name:raise NankanError('NANKAN_ODDS_DECLARED_NAME_MISMATCH')
+        cancelled=any(value.replace(' ','') in ('取消','取止','除外','出走取消','競走除外') for value in cells[2:])
+        win=float(cells[2]) if not cancelled and re.fullmatch(r'\d+(?:\.\d+)?',cells[2]) else None
+        place=re.fullmatch(r'(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)',cells[3]) if len(cells)==4 and not cancelled else None
+        low,high=(float(place[1]),float(place[2])) if place else (None,None)
+        present=win is not None and win>0 and low is not None and 0<low<=high
+        rows.append({'runner_id':rid,'name':name,'status':'CANCELLED' if cancelled else 'ACTIVE_DECLARED',
+            'win_odds':win,'place_odds_low':low,'place_odds_high':high,
+            'betting_membership_observed':present,'active_verified':False,
+            'missingness':[] if present or cancelled else ['CURRENT_ODDS_MEMBERSHIP_UNKNOWN']})
+    if len(rows)!=len(declared) or len({r['runner_id'] for r in rows})!=len(rows) or {r['runner_id'] for r in rows}!=set(declared):
+        raise NankanError('NANKAN_ODDS_DECLARED_UNIVERSE_MISMATCH')
+    times={match[1] for node in dom.all('span','btn_now_time_break')
+           if (match:=re.fullmatch(r'(\d{1,2}:\d{2})\s*現在',node.text()))}
+    if len(times)>1:raise NankanError('NANKAN_ODDS_PROVIDER_TIME_NOT_UNIQUE')
+    try:
+        hour,minute=map(int,next(iter(times)).split(':')) if times else (None,None)
+        provider_at=datetime.combine(date.fromisoformat(race['race_date']),datetime.min.time(),JST).replace(hour=hour,minute=minute) if times else None
+    except ValueError as exc:
+        raise NankanError('NANKAN_ODDS_PROVIDER_TIME_INVALID') from exc
+    if provider_at and provider_at>datetime.fromisoformat(result['source_fetched_at']):
+        raise NankanError('NANKAN_ODDS_PROVIDER_TIME_AFTER_CAPTURE')
+    result.update(runners=rows,runner_count=len(rows),declared_facts_sha256=sha(declared_facts),
+        provider_display_at=provider_at.isoformat() if provider_at else None,
+        provider_display_time_status='OBSERVED' if provider_at else 'UNKNOWN',
+        betting_membership_observed_count=sum(r['betting_membership_observed'] for r in rows))
+    result['sha256']=sha(result);return result
+
+
+def parse_current_changes(raw,race,receipt,declared_facts):
+    """Read target-race change facts; absence never grants ACTIVE authority."""
+    url=ORIGIN+'/henko_info/00000000000000.do'
+    result=_unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_OFFICIAL_CHANGE_ITEMS')
+    dom=DOM(decode(raw)).root
+    heading=one(dom.all('h3','nk23_c-block01__info__title'),'NANKAN_CHANGES_VENUE_HEADER_REQUIRED')
+    y,m,d=map(int,race['race_date'].split('-'))
+    if '浦和競馬' not in heading.text() or f'{y}年{m}月{d}日' not in heading.parent.text():
+        raise NankanError('NANKAN_CHANGES_DAY_OR_VENUE_MISMATCH')
+    declared=_declared_current_facts(race,declared_facts);items=[];target_rows=0
+    for row in dom.all('li','nk23_c-block01__list__item'):
+        if row.attrs.get('id')!=f"{race['race_no']:02d}":continue
+        target_rows+=1
+        label=one(row.all('span','nk23_c-block01__label'),'NANKAN_CHANGE_RACE_LABEL_REQUIRED').text()
+        if label!=str(race['race_no'])+'R':raise NankanError('NANKAN_CHANGE_RACE_LABEL_MISMATCH')
+        links={node.attrs.get('href') for node in row.all('a')}
+        if '/syousai/'+race['provider_race_id']+'.do' not in links:
+            raise NankanError('NANKAN_CHANGE_CARD_IDENTITY_MISMATCH')
+        for change in row.all('div','nk23_c-block01__list2__item'):
+            kind=one(change.all('p','nk23_c-block01__tag'),'NANKAN_CHANGE_TYPE_REQUIRED').text()
+            number=one(change.all('span','nk23_c-block01__txt2'),'NANKAN_CHANGE_HORSE_NUMBER_REQUIRED').text()
+            match=re.fullmatch(r'(\d{1,2})番',number)
+            horse=one([a for a in change.all('a') if re.fullmatch(r'/uma_info/\d+\.do',a.attrs.get('href',''))],
+                      'NANKAN_CHANGE_HORSE_IDENTITY_REQUIRED')
+            rid=match[1] if match else None;original=declared.get(rid)
+            if not original or original['name']!=horse.text() or horse.attrs['href']!='/uma_info/'+original['provider_horse_id']+'.do':
+                raise NankanError('NANKAN_CHANGE_DECLARED_IDENTITY_MISMATCH')
+            details=' '.join(node.text() for node in change.all('p','nk23_c-block01__text2'))
+            items.append({'runner_id':rid,'name':horse.text(),'change_type':kind,
+                'status':'CANCELLED' if kind in ('競走除外','出走取消') else 'ACTIVE_DECLARED',
+                'jockey_names_observed':[a.text() for a in change.all('a') if a.attrs.get('href','').startswith('/kis_info/')],
+                'change_detail_observed':details,'active_verified':False})
+    if target_rows>1:raise NankanError('NANKAN_CHANGE_RACE_ROWS_NOT_UNIQUE')
+    result.update(items=items,target_race_row_present=bool(target_rows),declared_facts_sha256=sha(declared_facts),
+        absence_is_no_change_authority=False)
+    result['sha256']=sha(result);return result
+
+
+def parse_provider_statistics(raw,race,receipt,declared_facts):
+    """Preserve provider-labelled statistics without creating index scores.
+
+    The displayed count/rate pairs and sire-analysis labels are observations.
+    A missing period or denominator stays unknown; no BVI/JTI transformation
+    or addition to an existing forecast is performed here.
+    """
+    url=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do'
+    result=_unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_PROVIDER_STATISTICS')
+    declared=_declared_current_facts(race,declared_facts)
+    observed=parse_card(raw,race,url)
+    if sha(observed)!=sha(declared_facts):raise NankanError('NANKAN_STATISTICS_DECLARED_FACTS_MISMATCH')
+    verify_history_asof(observed,result['source_fetched_at'])
+    dom=DOM(decode(raw)).root
+    table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
+        and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
+    body=one(table.all('tbody'),'NANKAN_ACTUAL_HISTORY_BODY_REQUIRED')
+
+    def definition(cls):
+        nodes=table.all('th',cls)
+        if len(nodes)>1:raise NankanError('NANKAN_STATISTICS_DEFINITION_NOT_UNIQUE')
+        return nodes[0].text() if nodes else None
+
+    def percentage(text):
+        match=re.fullmatch(r'(\d+(?:\.\d+)?)%',text)
+        if not match:return None,None
+        value=float(match[1])
+        if not 0<=value<=100:raise NankanError('NANKAN_STATISTICS_RATE_RANGE_HOLD')
+        precision=len(match[1].split('.')[1]) if '.' in match[1] else 0
+        return value,0.5*10**-precision
+
+    def count_rate(row,cls,meaning):
+        cells=row.all('td',cls)
+        if len(cells)>1:raise NankanError('NANKAN_STATISTICS_CELL_NOT_UNIQUE')
+        cell=cells[0] if cells else None
+        out={'provider_definition':meaning,'target_period':None,
+            'target_period_status':'UNKNOWN_NOT_PRINTED_IN_STATISTICS_FIELD',
+            'displayed_text':cell.text() if cell else None,'win_rate_percent':None,
+            'wins':None,'starts':None,'count_rate_consistency':'UNKNOWN','missingness':[]}
+        if not cell:
+            out['missingness']=['PROVIDER_STATISTICS_FIELD_NOT_PRESENT'];return out
+        values={}
+        for name,selector in (('rate','is-percent'),('wins','is-number'),('starts','is-total')):
+            nodes=cell.all('span',selector)
+            if len(nodes)>1:raise NankanError('NANKAN_STATISTICS_VALUE_NOT_UNIQUE')
+            values[name]=nodes[0].text() if nodes else ''
+        rate,tolerance=percentage(values['rate']);out['win_rate_percent']=rate
+        for key in ('wins','starts'):
+            if re.fullmatch(r'\d+',values[key]):out[key]=int(values[key])
+            elif re.fullmatch(r'-\d+',values[key]):raise NankanError('NANKAN_STATISTICS_COUNT_RANGE_HOLD')
+        wins,starts=out['wins'],out['starts']
+        if wins is not None and starts is not None:
+            if not 0<=wins<=starts:raise NankanError('NANKAN_STATISTICS_COUNT_RANGE_HOLD')
+            if starts==0:
+                if rate not in (None,0):raise NankanError('NANKAN_STATISTICS_COUNT_RATE_MISMATCH')
+                out['count_rate_consistency']='UNDEFINED_ZERO_STARTS'
+            elif rate is not None:
+                if abs(100*wins/starts-rate)>tolerance+1e-9:raise NankanError('NANKAN_STATISTICS_COUNT_RATE_MISMATCH')
+                out['count_rate_consistency']='MATCHES_DISPLAY_PRECISION'
+        if rate is None:out['missingness'].append('WIN_RATE_UNKNOWN')
+        if wins is None:out['missingness'].append('WINS_UNKNOWN')
+        if starts is None:out['missingness'].append('STARTS_UNKNOWN')
+        return out
+
+    course_definition=definition('cs-ai1');stable_definition=definition('cs-ai2')
+    sire_headers=table.all('th','cs-anl')
+    sire_definitions=[node.text() for node in sire_headers if '勝率/連対率' in node.text()]
+    if len(sire_definitions)>1:raise NankanError('NANKAN_SIRE_STATISTICS_DEFINITION_NOT_UNIQUE')
+    label_sets=[]
+    for node in sire_headers:
+        lines=[];parts=[]
+        for child in node.children:
+            if isinstance(child,Node) and child.tag=='br':
+                if norm(''.join(parts)):lines.append(norm(''.join(parts)))
+                parts=[]
+            else:parts.append(child.text() if isinstance(child,Node) else child)
+        if norm(''.join(parts)):lines.append(norm(''.join(parts)))
+        if lines and all(re.fullmatch(r'[^\s%/]*\d{3,4}',line) for line in lines):label_sets.append(lines)
+    if len(label_sets)>1:raise NankanError('NANKAN_SIRE_STATISTICS_LABELS_NOT_UNIQUE')
+    labels=label_sets[0] if label_sets else []
+    if len(set(labels))!=len(labels):raise NankanError('NANKAN_SIRE_STATISTICS_LABELS_NOT_UNIQUE')
+    rows=[]
+    for row in [node for node in body.children if isinstance(node,Node) and node.tag=='tr']:
+        rid=one(row.all('td','umaban'),'NANKAN_HORSE_NUMBER_REQUIRED').text()
+        original=declared.get(rid)
+        if not original:raise NankanError('NANKAN_STATISTICS_DECLARED_IDENTITY_MISMATCH')
+        analysis={'provider_definition':sire_definitions[0] if sire_definitions else None,
+            'target_period':None,'target_period_status':'UNKNOWN_NOT_PRINTED_IN_STATISTICS_FIELD',
+            'sample_count':None,'sample_count_status':'UNKNOWN_NOT_PRINTED_IN_STATISTICS_FIELD',
+            'conditions':[],'missingness':[]}
+        cells=row.all('td','mk-sire')
+        if len(cells)>1:raise NankanError('NANKAN_SIRE_STATISTICS_CELL_NOT_UNIQUE')
+        if cells:
+            if not labels or not sire_definitions:raise NankanError('NANKAN_SIRE_STATISTICS_LABELS_REQUIRED')
+            rates=cells[0].all('p','is-grPercent__item')
+            if len(rates)!=2:raise NankanError('NANKAN_SIRE_STATISTICS_RATE_ROWS_REQUIRED')
+            win_rates,quinella_rates=[node.text().split() for node in rates]
+            if len(win_rates)!=len(labels) or len(quinella_rates)!=len(labels):
+                raise NankanError('NANKAN_SIRE_STATISTICS_LABEL_RATE_MISMATCH')
+            for label,win,quinella in zip(labels,win_rates,quinella_rates):
+                wr,_=percentage(win);qr,_=percentage(quinella)
+                if wr is not None and qr is not None and wr>qr:raise NankanError('NANKAN_SIRE_STATISTICS_RATE_ORDER_HOLD')
+                analysis['conditions'].append({'provider_label':label,'win_rate_percent':wr,'quinella_rate_percent':qr,
+                    'win_rate_display':win,'quinella_rate_display':quinella})
+                if wr is None or qr is None:analysis['missingness'].append('RATE_UNKNOWN:'+label)
+        else:analysis['missingness']=['PROVIDER_SIRE_STATISTICS_FIELD_NOT_PRESENT']
+        rows.append({'runner_id':rid,'name':original['name'],'provider_horse_id':original['provider_horse_id'],
+            'rider_course':count_rate(row,'cs-ai1',course_definition),
+            'rider_trainer':count_rate(row,'cs-ai2',stable_definition),'sire_analysis':analysis})
+    result.update(runners=rows,runner_count=len(rows),declared_facts_sha256=sha(declared_facts),
+        canonical_index_transform_applied=False,forecast_recalculation_performed=False)
+    result['sha256']=sha(result);return result
 
 
 def compile_private_reference(evidence,*,now=None):

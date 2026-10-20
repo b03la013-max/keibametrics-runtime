@@ -1098,3 +1098,22 @@ def test_frozen_owner_evaluator_requires_result_after_post_and_retains_nonformal
     broken=copy.deepcopy(freeze);broken["predictions"]["CANDIDATE"]["ranking"]=[]
     with pytest.raises(ValueError,match="FREEZE_OR_PROTOCOL_CHANGED"):
         evaluate_owner_forward_comparison(broken,label)
+
+
+@pytest.mark.parametrize("label,expected", [
+    ("GI",100), ("GⅠ",100), ("JpnI",100), ("ＪｐｎⅠ",100),
+    ("GII",96), ("GⅡ",96), ("JpnII",96), ("ＪｐｎⅡ",96),
+    ("日本テレビ盃JpnII",96), ("GII競走",96),
+    ("GIII",92), ("GⅢ",92), ("JpnIII",92), ("ＪｐｎⅢ",92),
+    ("東京盃JpnIII",92), ("ＧⅢ競走",92),
+    ("S1",100), ("Ｓ２",96), ("S3",92),
+    ("B3イC1ア",70), ("C2(五)(六)",58), ("3歳未勝利",54)])
+def test_grade_class_transform_uses_whole_roman_grade_tokens(label,expected):
+    from runtime.local_nar_evidence_candidate import _class_score
+    assert _class_score(label)==(float(expected),"PARSED_CLASS_ORDINAL")
+
+
+@pytest.mark.parametrize("label", ["", "UNKNOWN", "WAKAI", "XGIIIY", "JPNIIII", "JPNII0", "S10", "G10"])
+def test_grade_like_substrings_are_not_a_grade_or_observed_class(label):
+    from runtime.local_nar_evidence_candidate import _class_score
+    assert _class_score(label)==(52.0,"CLASS_UNRESOLVED_CANONICAL_NEUTRAL")

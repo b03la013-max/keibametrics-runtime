@@ -69,9 +69,12 @@ def _class_score(text: str) -> Tuple[float, str]:
     """Transparent ordinal only. Candidate / uncalibrated, never a probability."""
     t = _norm(text).upper()
     table = [
-        (r"(JPN|JPN)?[ⅠI]$|JPN1|JPNI|G1|GI|Ｓ１|S1", 100),
-        (r"JPN2|JPNII|G2|GII|Ｓ２|S2", 96),
-        (r"JPN3|JPNIII|G3|GIII|Ｓ３|S3", 92),
+        # Roman grades are whole tokens: GI must not consume GII/GIII,
+        # and a trailing I in an unrelated word is not a grade witness.
+        # _norm already normalizes full-width and Unicode Roman forms.
+        (r"(?<![A-Z0-9])(?:JPN1|JPNI|G1|GI|S1|I)(?![A-Z0-9])", 100),
+        (r"(?<![A-Z0-9])(?:JPN2|JPNII|G2|GII|S2)(?![A-Z0-9])", 96),
+        (r"(?<![A-Z0-9])(?:JPN3|JPNIII|G3|GIII|S3)(?![A-Z0-9])", 92),
         (r"オープン|OPEN|Ａ１|A1", 88),
         (r"Ａ２|A2", 84),
         (r"Ａ３|A3", 80),

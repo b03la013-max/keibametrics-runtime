@@ -58,17 +58,22 @@ jobs:
               assert cand != active["source_acquisition_sha256"]
               state="STAGED_PENDING_LIVE_DEPLOYMENT"
           elif status.startswith("PROMOTED / HISTORY"):
-              assert cand == active["source_acquisition_sha256"]
               assert cfg["runtime_profile"]==st["active_runtime_profile"]
-              assert cfg["runtime_git_revision"]==st["active_runtime_git_revision"]
               assert active["source_acquisition_sha256"]==st["promotion_evidence"]["active_source_acquisition_sha256"]
-              state="PROMOTED_ACTIVE_VERIFIED"
+              assert cfg["runtime_profile"]==st["promotion_evidence"]["runtime_profile"]
+              state="HISTORICAL_PROMOTION_RECORD_VERIFIED"
           else:
               raise AssertionError("UNKNOWN_SOURCE_PARALLEL_LIFECYCLE_STATUS:"+status)
           assert st["automatic_activation"] is False
           print(json.dumps({
             "status":"PASS",
             "lifecycle_state":state,
+            "checkout_state":("MATCHES_FROZEN_ACTIVE_SOURCE_BUNDLE" if cand==active["source_acquisition_sha256"] else "UNDEPLOYED_CANDIDATE"),
+            "live_runtime_observed":False,
+            "automatic_activation":False,
+            "historical_runtime_git_revision":st["active_runtime_git_revision"],
+            "current_runtime_git_revision":cfg["runtime_git_revision"],
+            "historical_revision_matches_current":cfg["runtime_git_revision"]==st["active_runtime_git_revision"],
             "gateway_profile":gw["profile_id"],
             "current_authority":gw["parent_current_authority"],
             "runtime_profile":cfg["runtime_profile"],
