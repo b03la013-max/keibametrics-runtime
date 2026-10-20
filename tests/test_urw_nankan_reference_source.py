@@ -457,6 +457,68 @@ def captured(tmp_path,**kwargs):
     return output,result,c,o
 
 
+@pytest.fixture
+def fixed_chat_clock(monkeypatch,tmp_path):
+    from runtime import local_race_entry as entry
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls,tz=None):return NOW.astimezone(tz)
+    monkeypatch.setattr(entry,'datetime',FixedDateTime)
+    monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'shared-source'))
+
+
+def test_normal_chat_checks_current_card_before_legacy_and_deduplicates(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    c,opener=client(tmp_path)
+    monkeypatch.setattr(n,'Client',lambda:c)
+    monkeypatch.setattr(entry,'_chat_final',lambda *a:(None,[]))
+    monkeypatch.setattr(entry,'chat_formal_status',lambda *a:{
+        'status':'BLOCKED','first_failed_stage':'AUTHORIZATION','code':'VENUE_OWNER_NOT_AUTHORIZED'})
+    monkeypatch.setattr(entry,'_chat_frozen_reference',lambda *a,**k:pytest.fail('current card must precede legacy'))
+    intent=entry.resolve_chat_intent(DAY+' 浦和1R')
+    output=tmp_path/'chat'
+    first=entry.run_chat(intent,output=output,run_id='current-normal')
+    assert first['reference']['current_official_checked'] is True
+    assert first['reference_generation_executed'] is first['prediction_reexecution'] is True
+    assert '|1|テスト1|1位|' in first['message'] and '|2|テスト2|UNKNOWN|' in first['message']
+    assert first['answer_content_check']['content_complete'] is True
+    assert not first['formal_final_proven'] and not first['reference']['active_verified']
+    assert not first['delivery']['formal_delivery_verified']
+    second=entry.run_chat(intent,output=tmp_path/'another-request',run_id='current-same')
+    assert second['reference_generation_executed'] is second['prediction_reexecution'] is False
+    assert second['execution_id']==first['execution_id']
+    assert len(list((tmp_path/'shared-source'/DAY/'R01/revisions').iterdir()))==1
+    assert len(opener.calls)==9  # robots once, four real source checks per request
+
+
+def test_normal_chat_current_capture_failure_labels_old_freeze_as_history(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    monkeypatch.setattr(n,'capture_race',lambda *a,**k:(_ for _ in ()).throw(
+        n.NankanError('NANKAN_REFERENCE_CUTOFF_HOLD')))
+    monkeypatch.setattr(entry,'_chat_frozen_reference',lambda *a,**k:(
+        {'execution_id':'original','reference_readback_only':True,'answer_required_parts':['OLD FREEZE']},
+        'OLD FREEZE'))
+    report,body=entry._chat_reference(entry.resolve_chat_intent(DAY+' 浦和1R'),
+        output=tmp_path,run_id='expired')
+    assert report['current_official_hold']=='NANKAN_REFERENCE_CUTOFF_HOLD'
+    assert report['source_freshness_claim'] is report['current_official_checked'] is False
+    assert '旧Freezeの履歴' in body and body.endswith('OLD FREEZE')
+    assert entry.reference_answer_content_check(report['answer_required_parts'],body)['content_complete']
+
+
+def test_normal_chat_must_not_capture_or_write_private_provider_answer_inside_git(tmp_path,monkeypatch,fixed_chat_clock):
+    from runtime import local_race_entry as entry
+    folder=tmp_path/'repository';folder.mkdir(mode=0o700);(folder/'.git').mkdir()
+    monkeypatch.setattr(n,'capture_race',lambda *a,**k:pytest.fail('private source must not enter Git'))
+    monkeypatch.setattr(entry,'_chat_frozen_reference',lambda *a,**k:(
+        {'execution_id':'original','answer_required_parts':['HISTORY']},'HISTORY'))
+    report,body=entry._chat_reference(entry.resolve_chat_intent(DAY+' 浦和1R'),
+        output=folder,run_id='privacy')
+    assert report['current_official_hold']=='NANKAN_PRIVATE_OUTPUT_INSIDE_GIT_FORBIDDEN'
+    assert not (folder/'current_official').exists()
+    assert '旧Freezeの履歴' in body
+
+
 def rewrite(path,obj):path.write_text(json.dumps(obj,ensure_ascii=False))
 
 

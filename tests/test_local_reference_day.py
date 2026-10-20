@@ -24,7 +24,11 @@ SAVED=SYNTHETIC_ROOT/'runtime/local_reference'/DAY
 @pytest.fixture(autouse=True)
 def synthetic_chat_store(monkeypatch):
     from runtime import formal_execution_orchestrator as orchestrator
+    from runtime import urw_nankan_reference_source as nankan
     monkeypatch.setattr(orchestrator,'ROOT',SYNTHETIC_ROOT)
+    def unavailable(*a, **k):
+        raise nankan.NankanError('TEST_CURRENT_SOURCE_UNAVAILABLE')
+    monkeypatch.setattr(nankan,'capture_race',unavailable)
 
 
 def plan():
