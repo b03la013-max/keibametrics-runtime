@@ -60,11 +60,79 @@ def test_real_source_crypto_and_full_29_materialization(original):
     assert n['strict_full_numerical_ready'] is True
     cells = [c for r in n['runners'] for c in r['canonical_components'].values()]
     assert len(cells) == 348
-    assert sum(c['terminal_status']=='CALCULATED' for c in cells) == 309
-    assert sum(c['terminal_status']=='RULED-NEUTRAL' for c in cells) == 39
+    # Current UNKNOWN class handling cannot count the old implicit 52 as an
+    # observed class. The original signed SOURCE bytes remain unchanged.
+    assert sum(c['terminal_status']=='CALCULATED' for c in cells) == 285
+    assert sum(c['terminal_status']=='RULED-NEUTRAL' for c in cells) == 63
     assert not any(n['production_numerical_authority'][k] for k in (
         'prediction_consumption_authorized','krs_consumption_authorized',
         'ticket_consumption_authorized','capital_consumption_authorized'))
+
+
+def test_urw_numeric_entry_uses_real_official_distance_instead_of_zero(original):
+    from runtime.local_production_static_owner import bind_urw_numerical_context
+    req, source, prior = original
+    before = copy.deepcopy((req, source, prior))
+    bound = bind_urw_numerical_context(
+        {**req, 'runners': source['artifact']['official_runner_universe']['runners']}, source['artifact'])
+    assert bound['race']['distance'] == 2000
+    assert bound['race']['surface'] == 'dirt'
+    assert bound['race']['class'] == 'B3_C1'
+    fixed = materialize_production(source['artifact'], bound, assess()['required_indices'])
+    assert fixed['strict_full_numerical_ready'] is True
+    assert fixed['numeric_coverage']['required_count'] == 348
+    observed = [r for r in fixed['runners'] if not r['evidence_features']['same_distance']['missing']]
+    assert observed, 'The actual card contains prior 2000m observations.'
+    assert all('2000m' in r['evidence_features']['same_distance']['source_fact'] for r in fixed['runners'])
+    for row in observed:
+        starts = row['raw_candidate_evidence']['starts']
+        matched = [r for r in starts if r.get('distance') == 2000 and r.get('field_size', 0) > 1]
+        expected = sum(100 * (r['field_size'] - r['finish']) / (r['field_size'] - 1)
+                       for r in matched) / len(matched)
+        assert row['evidence_features']['same_distance']['score'] == pytest.approx(expected, abs=1e-6)
+    assert bound['numerical_race_context_source']['source_snapshot_sha256'] == source['artifact']['source_snapshot_sha256']
+    assert not any(fixed['production_numerical_authority'][k] for k in (
+        'prediction_consumption_authorized', 'krs_consumption_authorized',
+        'ticket_consumption_authorized', 'capital_consumption_authorized'))
+    assert (req, source, prior) == before
+
+
+def test_unresolved_urw_numeric_class_is_not_an_observed_numeric_class(original):
+    from runtime.local_production_static_owner import bind_urw_numerical_context
+    req, source, _ = original
+    bound = bind_urw_numerical_context(
+        {**req, 'runners': source['artifact']['official_runner_universe']['runners']}, source['artifact'])
+    # Exercise missing input explicitly without changing the signed SOURCE.
+    # The live entry above binds the real B3イC1ア header before calculation.
+    bound['race']['class'] = 'UNKNOWN'
+    fixed = materialize_production(source['artifact'], bound, assess()['required_indices'])
+    for row in fixed['runners']:
+        for name in ('current_class', 'race_set_level', 'class_change_pressure', 'transfer_class'):
+            cell = row['evidence_features'][name]
+            assert cell['missing'] is True and cell['coverage'] == 0
+            assert cell['raw_metric'] is None
+
+
+@pytest.mark.parametrize('field,value', [('distance', 1400), ('surface', 'turf'),
+    ('class', 'A1'), ('venue_id', 'KAW'), ('race_date', '2026-09-24'), ('race_no', 11)])
+def test_urw_source_context_cannot_be_overridden_by_request(original, field, value):
+    from runtime.local_production_static_owner import bind_urw_numerical_context, StaticOwnerError
+    req, source, _ = original
+    with pytest.raises(StaticOwnerError, match='URW_NUMERICAL_RACE_CONTEXT_CONFLICT'):
+        bind_urw_numerical_context({**req, 'race': {field: value}}, source['artifact'])
+
+
+def test_urw_source_context_rejects_changed_source_without_mutating_it(original):
+    from runtime.local_production_static_owner import bind_urw_numerical_context, StaticOwnerError
+    req, source, _ = original
+    changed = copy.deepcopy(source['artifact'])
+    changed['normalized_evidence']['start_time']['value'] = '19:31'
+    with pytest.raises(StaticOwnerError, match='URW_NUMERICAL_SOURCE_INVALID'):
+        bind_urw_numerical_context(req, changed)
+    with pytest.raises(StaticOwnerError, match='URW_NUMERICAL_SOURCE_RACE_MISMATCH'):
+        bind_urw_numerical_context({**req, 'race_id': 'OTHER-RACE'}, source['artifact'])
+    other = {'venue_id': 'KAW', 'race': {'distance': 1400}}
+    assert bind_urw_numerical_context(other, {}) == other
 
 
 def test_urw_repeatable_roles_evidence_and_explicit_semantic_gaps(original):

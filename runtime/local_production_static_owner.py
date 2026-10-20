@@ -99,7 +99,14 @@ def _card_heading(source_artifact: dict) -> dict:
     if surface != "dirt" or not 800 <= dist <= 2600:
         raise StaticOwnerError("LOCAL_DIRT_DISTANCE_OUT_OF_SCOPE")
     classes = re.findall(r"(?<![A-Z0-9])([ABC][1-3])(?:選定馬|[一二三四五六七八九十 ]|$)", head.upper())
-    return {"distance": dist, "surface": surface, "class": classes[0] if classes else "UNKNOWN",
+    class_label = classes[0] if classes else "UNKNOWN"
+    # URW headers also use B3イC1ア / C2選抜馬. Preserve each explicitly
+    # printed class token for the existing class transform; never invent one.
+    from urllib.parse import parse_qs, urlsplit
+    if parse_qs(urlsplit(main.get("final_url", "")).query).get("k_babaCode") == ["18"]:
+        classes = re.findall(r"(?<![A-Z0-9])([ABC][1-3])(?=[^A-Z0-9]|$)", head.upper())
+        class_label = "_".join(dict.fromkeys(classes)) if classes else "UNKNOWN"
+    return {"distance": dist, "surface": surface, "class": class_label,
             "header_witness": witness, "header_sha256": hashlib.sha256(head.encode()).hexdigest()}
 
 
@@ -111,6 +118,62 @@ def _start_date(raw: str) -> datetime | None:
         return datetime(2000 + int(match.group(1)), int(match.group(2)), int(match.group(3)), tzinfo=JST)
     except ValueError:
         return None
+
+
+def bind_urw_numerical_context(request: dict, source: dict) -> dict:
+    """Bind the existing URW materializer to the verified card, not distance 0.
+
+    SOURCE signature/Authority verification belongs to the existing caller.
+    This supplies observed inputs only; it grants no predictive consumer scope.
+    Frozen numerical artifacts are never passed through this function on readback.
+    """
+    out = copy.deepcopy(request)
+    if request.get("venue_id") != "URW":
+        return out
+    from runtime.local_physical.source_acquisition import verify_source_artifact
+    valid, errors = verify_source_artifact(source)
+    if not valid:
+        raise StaticOwnerError("URW_NUMERICAL_SOURCE_INVALID:" + ",".join(errors))
+    context = source.get("source_race_context")
+    if (source.get("race_id") != request.get("race_id")
+            or (context is not None and any(
+                str(context.get(k)).replace("/", "-") != str(request.get(k))
+                for k in ("venue_id", "race_date", "race_no")))):
+        raise StaticOwnerError("URW_NUMERICAL_SOURCE_RACE_MISMATCH")
+    header = _card_heading(source)
+    observed = {"venue_id": "URW", "race_date": request["race_date"],
+                "race_no": request["race_no"], "distance": header["distance"],
+                "surface": header["surface"], "class": header["class"]}
+    race = out.get("race") or {}
+    if not isinstance(race, dict):
+        raise StaticOwnerError("URW_NUMERICAL_RACE_CONTEXT_INVALID")
+    for key, value in observed.items():
+        if key in race and race[key] not in (None, "", "UNKNOWN", value):
+            raise StaticOwnerError("URW_NUMERICAL_RACE_CONTEXT_CONFLICT:" + key)
+    if race.get("venue") not in (None, "", "URW", "浦和"):
+        raise StaticOwnerError("URW_NUMERICAL_RACE_CONTEXT_CONFLICT:venue")
+    out["race"] = {**race, **observed}
+    card = next(s for s in source["sources"]
+                if s.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"
+                and s.get("official") is True and s.get("cutoff_relation") == "PRE_CUTOFF")
+    from urllib.parse import urlsplit, parse_qs
+    url = urlsplit(card["final_url"])
+    query = parse_qs(url.query)
+    if (url.scheme != "https" or url.hostname != "www.keiba.go.jp"
+            or url.path != "/KeibaWeb/TodayRaceInfo/DebaTable"
+            or any(query.get(k) != [v] for k, v in {
+                "k_babaCode": "18", "k_raceDate": request["race_date"].replace("-", "/"),
+                "k_raceNo": str(request["race_no"])}.items())):
+        raise StaticOwnerError("URW_NUMERICAL_CARD_IDENTITY_MISMATCH")
+    out["numerical_race_context_source"] = {
+        "source_id": card["source_id"], "raw_sha256": card["raw_sha256"],
+        "snapshot_sha256": card["snapshot_sha256"],
+        "source_snapshot_sha256": source["source_snapshot_sha256"],
+        "fetched_at": card["fetched_at"], "header_sha256": header["header_sha256"],
+        "observed_fields": observed,
+        "signature_verification": "EXISTING_SOURCE_CALLER_REQUIRED_NOT_GRANTED_HERE",
+    }
+    return out
 
 
 def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: datetime) -> dict:

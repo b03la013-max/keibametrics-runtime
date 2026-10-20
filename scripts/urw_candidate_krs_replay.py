@@ -651,7 +651,10 @@ def public_source_shadow(output, models_path=None, *, race_no=1, plan_path=None,
         valid,errors=verify_source_artifact(artifact)
         if not valid:raise ValueError('PUBLIC_SOURCE_REVERIFY_HOLD:'+','.join(errors))
         stage='FULL29_MATERIALIZATION'
-        n=materialize_production(artifact,{**req,'runners':artifact['official_runner_universe']['runners']},assess()['required_indices'])
+        from runtime.local_production_static_owner import bind_urw_numerical_context
+        numeric_request=bind_urw_numerical_context(
+            {**req,'runners':artifact['official_runner_universe']['runners']},artifact)
+        n=materialize_production(artifact,numeric_request,assess()['required_indices'])
         stage='VENUE_CANDIDATE_STATIC'
         c=compile_public_venue_candidate(req,artifact,n)
         p=owner_feature_pack(c,n)
