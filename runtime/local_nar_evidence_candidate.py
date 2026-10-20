@@ -69,9 +69,12 @@ def _class_score(text: str) -> Tuple[float, str]:
     """Transparent ordinal only. Candidate / uncalibrated, never a probability."""
     t = _norm(text).upper()
     table = [
-        (r"(JPN|JPN)?[ⅠI]$|JPN1|JPNI|G1|GI|Ｓ１|S1", 100),
-        (r"JPN2|JPNII|G2|GII|Ｓ２|S2", 96),
-        (r"JPN3|JPNIII|G3|GIII|Ｓ３|S3", 92),
+        # Roman grades are whole tokens: GI must not consume GII/GIII,
+        # and a trailing I in an unrelated word is not a grade witness.
+        # _norm already normalizes full-width and Unicode Roman forms.
+        (r"(?<![A-Z0-9])(?:JPN1|JPNI|G1|GI|S1|I)(?![A-Z0-9])", 100),
+        (r"(?<![A-Z0-9])(?:JPN2|JPNII|G2|GII|S2)(?![A-Z0-9])", 96),
+        (r"(?<![A-Z0-9])(?:JPN3|JPNIII|G3|GIII|S3)(?![A-Z0-9])", 92),
         (r"オープン|OPEN|Ａ１|A1", 88),
         (r"Ａ２|A2", 84),
         (r"Ａ３|A3", 80),
@@ -615,21 +618,28 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present)
 
     current_class, cls_state = _class_score(str(race.get("class") or ""))
+    # URW's missing header class is UNKNOWN, not an observed C3/52 ordinal.
+    # Preserve the registered missing rule and every scoring formula/weight.
+    missing_urw_class = venue.upper() == "URW" and cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
     prev_class = starts[0].get("class_score") if starts else None
     put("NCI", "current_class", current_class, f"current race class={race.get('class')}; state={cls_state}",
-        coverage=1, raw_metric=current_class)
+        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
+        force_missing=missing_urw_class)
     put("NCI", "previous_class", prev_class, f"latest race class ordinal={prev_class}",
         coverage=1 if prev_class is not None else 0, raw_metric=prev_class)
     put("NCI", "recent_opponent_class", _weighted(class_vals), f"recent class ordinals={class_vals}",
         coverage=len(class_vals)/5, raw_metric=class_vals)
-    put("NCI", "race_set_level", current_class, f"current race-set class ordinal={current_class}", coverage=1, raw_metric=current_class)
-    pressure = None if prev_class is None else _clamp(50 + (prev_class-current_class)*1.5)
+    put("NCI", "race_set_level", current_class,
+        f"current race-set class ordinal={None if missing_urw_class else current_class}",
+        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
+        force_missing=missing_urw_class)
+    pressure = None if prev_class is None or missing_urw_class else _clamp(50 + (prev_class-current_class)*1.5)
     put("NCI", "class_change_pressure", pressure,
-        f"previous-current class delta={None if prev_class is None else prev_class-current_class}",
+        f"previous-current class delta={None if prev_class is None or missing_urw_class else prev_class-current_class}",
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
     is_jra_transfer = bool(starts and _norm(starts[0].get("venue","")).startswith("J"))
     transfer_class = None
-    if starts:
+    if starts and not missing_urw_class:
         transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if is_jra_transfer else 0.8))
     put("NCI", "transfer_class", transfer_class,
         f"latest venue={starts[0].get('venue') if starts else None}; JRA transfer={is_jra_transfer}",
@@ -650,8 +660,66 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
 
 def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[str, Any],
                                registry_path: str | Path = DEFAULT_REGISTRY) -> Dict[str, Any]:
-    reg = _load(registry_path)
     raw_field = parse_race_card(source_artifact)
+    return compile_parsed_candidate_evidence(source_artifact, request, raw_field, registry_path)
+
+
+def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[str, Any],
+                                      raw_field: Dict[str, Dict[str, Any]],
+                                      registry_path: str | Path = DEFAULT_REGISTRY) -> Dict[str, Any]:
+    """Shared candidate arithmetic after provider-specific fact extraction.
+
+    This function does not validate or sign SOURCE and does not grant a provider
+    Production consumer authority.  The formal NAR entry retains its parser and
+    separate SOURCE/identity/signature gates in compile_candidate_evidence.
+    """
+    reg = _load(registry_path)
+    raw_field = json.loads(json.dumps(raw_field, ensure_ascii=False))
+    race = request.get("race") or {}
+    venue = str(race.get("venue_id") or race.get("venue") or request.get("venue_id") or "").upper()
+    if venue in {"URW", "浦和"}:
+        race_day_text = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
+        try:
+            race_day = dt.date.fromisoformat(race_day_text.replace("/", "-"))
+        except ValueError:
+            race_day = None
+        for raw in raw_field.values():
+            observed = raw.get("race_card_fetched_at") or source_artifact.get("source_freeze_at")
+            observed_day = None
+            if observed:
+                stamp = dt.datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    raise LocalCandidateEvidenceError("URW_HISTORY_OBSERVATION_TIMEZONE_REQUIRED")
+                observed_day = stamp.astimezone(dt.timezone(dt.timedelta(hours=9))).date()
+            dated = []
+            undated = []
+            for run in raw.get("starts") or []:
+                try:
+                    when = _parse_date(run.get("date", ""))
+                except ValueError:
+                    when = None
+                if when is None:
+                    # Unknown dates cannot establish recency. Preserve the
+                    # observation separately rather than assigning an order.
+                    undated.append(run)
+                    continue
+                if (race_day is not None and when >= race_day) or (observed_day is not None and when > observed_day):
+                    raise LocalCandidateEvidenceError("URW_HISTORY_AFTER_AVAILABLE_ASOF_FORBIDDEN")
+                dated.append((when, run))
+            if undated:
+                raw["undated_starts"] = undated
+            raw["starts"] = [run for _, run in sorted(dated, key=lambda pair: pair[0], reverse=True)]
+    # Provider parsers supply observed facts.  Scoring/units belong to this
+    # existing transform layer, keeping the private standalone parser free of
+    # numerical-engine dependencies.  Existing NAR-derived values are retained.
+    for raw in raw_field.values():
+        for run in raw.get("starts") or []:
+            if "class_score" not in run or "class_parse_state" not in run:
+                run["class_score"], run["class_parse_state"] = _class_score(run.get("race_name", ""))
+            if "finish_score" not in run:
+                run["finish_score"] = _finish_score(run.get("finish"), run.get("field_size"))
+            if "content_time_seconds" not in run:
+                run["content_time_seconds"] = _time_seconds(run.get("content_time_text", ""))
     # Formal LOCAL execution is defined over the official ACTIVE runner universe.
     # NAR race-card HTML may still contain cancelled runners; exclude those before
     # comparing against the request and before deriving KRS technical evidence.
@@ -668,6 +736,12 @@ def compile_candidate_evidence(source_artifact: Dict[str, Any], request: Dict[st
     req_runners = request.get("runners") or []
     if not req_runners:
         raise LocalCandidateEvidenceError("REQUEST_RUNNERS_REQUIRED")
+    request_ids = [str(x.get("runner_id")) for x in req_runners]
+    if len(set(request_ids)) != len(request_ids):
+        raise LocalCandidateEvidenceError("REQUEST_RUNNER_ID_DUPLICATE")
+    for rid, row in raw_field.items():
+        if str(row.get("runner_id")) != str(rid):
+            raise LocalCandidateEvidenceError(f"RAW_RUNNER_ID_MISMATCH:{rid}")
     expected = {str(x.get("runner_id")): _norm(x.get("name")) for x in req_runners}
     actual = {rid: _norm(x.get("name")) for rid, x in raw_field.items()}
     if set(expected) != set(actual):

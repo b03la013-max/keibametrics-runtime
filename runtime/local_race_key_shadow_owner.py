@@ -265,7 +265,7 @@ def compile_urw_candidate(request, source_envelope, materialized, *, now=None,
     if (start.get('authority') != 'NAR_OFFICIAL' or start.get('cutoff_relation') != 'PRE_CUTOFF'
             or start.get('value') != post.astimezone(JST).strftime('%H:%M')):
         raise ShadowOwnerError('URW_OFFICIAL_POST_MISMATCH')
-    header = _card_heading(source)
+    header = _card_heading(source, expected_race=request)
     # Resolve categorical context from the same verified HEADER, never past
     # starts further down the card or a caller-provided class/scenario/result.
     import re

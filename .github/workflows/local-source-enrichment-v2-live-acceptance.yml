@@ -14,7 +14,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify enrichment and provider access policy with offline fixtures
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest -q tests/test_jma_weather_evidence.py tests/test_local_population_ledger.py tests/test_source_acquisition_access_policy.py
   live:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

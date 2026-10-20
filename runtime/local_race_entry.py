@@ -12,7 +12,7 @@ from runtime.local_fullnumerical_production import materialize_production
 from runtime.local_numerical_authority_gate import assess
 from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
 from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
-from runtime.local_production_static_owner import build_formal_static, StaticOwnerError
+from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
 
 
 def resolve_chat_intent(query, *, now=None):
@@ -640,6 +640,7 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     source = o._load_checkpoint_json(saved, 'source_receipt_envelope.json')
     numeric_request = copy.deepcopy(request)
     numeric_request['runners'] = source['artifact']['official_runner_universe']['runners']
+    numeric_request = bind_urw_numerical_context(numeric_request, source['artifact'])
     authority = assess()
     if authority['status'] != 'READY':
         raise ValueError('PRODUCTION_NUMERICAL_AUTHORITY_NOT_READY')
