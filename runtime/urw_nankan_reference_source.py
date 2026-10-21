@@ -587,8 +587,49 @@ def parse_current_changes(raw,race,receipt,declared_facts):
     y,m,d=map(int,race['race_date'].split('-'))
     if '浦和競馬' not in heading.text() or f'{y}年{m}月{d}日' not in heading.parent.text():
         raise NankanError('NANKAN_CHANGES_DAY_OR_VENUE_MISMATCH')
+    # A missing race row is UNKNOWN. Preserve the provider's explicit day-wide
+    # notice separately, within the same dated venue block, without granting
+    # ACTIVE, Admission or Production authority.
+    block=heading.parent
+    while block and 'nk23_c-block01' not in block.attrs.get('class','').split():
+        block=block.parent
+
+    def block_nodes(tag,cls=None):
+        nodes=(block or dom).all(tag,cls)
+        if block is None:return nodes  # Legacy row fixtures have no venue block.
+        owned=[]
+        for node in nodes:
+            parent=node.parent
+            while parent is not None and 'nk23_c-block01' not in parent.attrs.get('class','').split():
+                parent=parent.parent
+            if parent is block:owned.append(node)
+        return owned
+
+    notices=[node for node in block_nodes('p','nk23_c-text02')
+             if node.text()=='本日開催に変更情報がありません'] if block else []
+    if len(notices)>1:raise NankanError('NANKAN_CHANGES_NO_CHANGE_NOTICE_NOT_UNIQUE')
+    no_changes=bool(notices)
+    if no_changes and datetime.fromisoformat(result['source_fetched_at']).astimezone(JST).date().isoformat()!=race['race_date']:
+        raise NankanError('NANKAN_CHANGES_CURRENT_DAY_MISMATCH')
+    if no_changes and (block_nodes('li','nk23_c-block01__list__item')
+                       or block_nodes('div','nk23_c-block01__list2__item')):
+        raise NankanError('NANKAN_CHANGES_NO_CHANGE_NOTICE_CONTRADICTION')
+    clocks=[node for node in block_nodes('span') if node.attrs.get('id')=='nowDateSpan'] if block else []
+    if len(clocks)>1:raise NankanError('NANKAN_CHANGES_PROVIDER_TIME_NOT_UNIQUE')
+    provider_at=None
+    if clocks:
+        match=re.fullmatch(r'(\d{4})年(\d{1,2})月(\d{1,2})日 (\d{1,2}):(\d{2})現在',clocks[0].text())
+        try:
+            if not match:raise ValueError('DISPLAY_TIME')
+            provider_at=datetime(*map(int,match.groups()),tzinfo=JST)
+        except ValueError as exc:
+            raise NankanError('NANKAN_CHANGES_PROVIDER_TIME_INVALID') from exc
+        if provider_at.date().isoformat()!=race['race_date']:
+            raise NankanError('NANKAN_CHANGES_PROVIDER_TIME_DAY_MISMATCH')
+        if provider_at>datetime.fromisoformat(result['source_fetched_at']):
+            raise NankanError('NANKAN_CHANGES_PROVIDER_TIME_AFTER_CAPTURE')
     declared=_declared_current_facts(race,declared_facts);items=[];target_rows=0
-    for row in dom.all('li','nk23_c-block01__list__item'):
+    for row in block_nodes('li','nk23_c-block01__list__item'):
         if row.attrs.get('id')!=f"{race['race_no']:02d}":continue
         target_rows+=1
         label=one(row.all('span','nk23_c-block01__label'),'NANKAN_CHANGE_RACE_LABEL_REQUIRED').text()
@@ -611,7 +652,13 @@ def parse_current_changes(raw,race,receipt,declared_facts):
                 'jockey_names_observed':[a.text() for a in change.all('a') if a.attrs.get('href','').startswith('/kis_info/')],
                 'change_detail_observed':details,'active_verified':False})
     if target_rows>1:raise NankanError('NANKAN_CHANGE_RACE_ROWS_NOT_UNIQUE')
+    if no_changes and target_rows:raise NankanError('NANKAN_CHANGES_NO_CHANGE_NOTICE_CONTRADICTION')
     result.update(items=items,target_race_row_present=bool(target_rows),declared_facts_sha256=sha(declared_facts),
+        explicit_no_changes_today_observed=no_changes,
+        target_race_change_status=('CHANGE_ITEMS_OBSERVED' if items else
+                                  'EXPLICIT_NO_CHANGES_TODAY' if no_changes else 'UNKNOWN'),
+        provider_display_at=provider_at.isoformat() if provider_at else None,
+        provider_display_time_status='OBSERVED' if provider_at else 'UNKNOWN',
         absence_is_no_change_authority=False)
     result['sha256']=sha(result);return result
 

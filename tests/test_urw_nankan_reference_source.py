@@ -273,10 +273,84 @@ def test_change_items_are_bound_to_target_race_and_absence_never_confirms_active
     assert len(result['items'])==2 and result['items'][0]['status']=='CANCELLED'
     assert result['items'][1]['change_type']=='騎手変更'
     assert result['items'][1]['jockey_names_observed']==['旧騎手','新騎手']
+    assert result['target_race_change_status']=='CHANGE_ITEMS_OBSERVED'
+    assert result['explicit_no_changes_today_observed'] is False
     assert result['active_verified'] is False and result['absence_is_no_change_authority'] is False
     absent=raw.replace(b'id="01"',b'id="03"')
     observed=n.parse_current_changes(absent,race,current_receipt(absent,url),facts)
     assert observed['items']==[] and observed['target_race_row_present'] is False
+    assert observed['target_race_change_status']=='UNKNOWN'
+    assert observed['explicit_no_changes_today_observed'] is False
+
+
+def no_changes_page(*,clock='12:09',notice='本日開催に変更情報がありません'):
+    display=(f'<span id="nowDateSpan">2026年10月22日 <span id="nowDateSpanTime">{clock}現在</span></span>'
+             if clock is not None else '')
+    return ('<meta charset="UTF-8"><div class="nk23_c-block01 js-tab3 is-bg-urawa-thin">'
+        '<div>2026年10月22日<h3 class="nk23_c-block01__info__title">第7回 浦和競馬 第4日 の変更情報</h3></div>'
+        +display+f'<div class="nk23_c-tab4__content"><p class="nk23_c-text02">{notice}</p></div></div>').encode()
+
+
+@pytest.mark.parametrize('clock',['12:09',None])
+def test_explicit_official_no_change_notice_preserves_observation_and_unsigned_scope(clock):
+    race,facts=parsed_detailed_card();raw=no_changes_page(clock=clock);url=n.ORIGIN+'/henko_info/00000000000000.do'
+    result=n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+    assert result['explicit_no_changes_today_observed'] is True
+    assert result['target_race_change_status']=='EXPLICIT_NO_CHANGES_TODAY'
+    assert result['items']==[] and result['target_race_row_present'] is False
+    assert result['provider_display_at']==(DAY+'T12:09:00+09:00' if clock else None)
+    assert result['provider_display_time_status']==('OBSERVED' if clock else 'UNKNOWN')
+    assert all(result[key] is False for key in ('active_verified','absence_is_no_change_authority',
+        'formal_source_claim','signed_source_claim','production_authority','public_redistribution_authorized'))
+    assert result['sha256']==n.sha({key:value for key,value in result.items() if key!='sha256'})
+
+
+@pytest.mark.parametrize('damage',['future_clock','invalid_clock','clock_day','duplicate_clock',
+    'duplicate_notice','other_race_change','capture_day'])
+def test_official_no_change_notice_rejects_contradictions_and_wrong_clock(damage):
+    race,facts=parsed_detailed_card();raw=no_changes_page();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    if damage=='future_clock':raw=no_changes_page(clock='12:11')
+    elif damage=='invalid_clock':raw=no_changes_page(clock='25:00')
+    elif damage=='clock_day':raw=raw.replace(b'id="nowDateSpan">2026',b'id="nowDateSpan">2025')
+    elif damage=='duplicate_clock':raw=raw.replace(b'<span id="nowDateSpan">',b'<span id="nowDateSpan"></span><span id="nowDateSpan">')
+    elif damage=='duplicate_notice':raw=raw.replace(b'</p>',b'</p><p class="nk23_c-text02">'+ '本日開催に変更情報がありません'.encode()+b'</p>')
+    elif damage=='other_race_change':raw=raw.replace(b'<div class="nk23_c-tab4__content">',
+        b'<div class="nk23_c-tab4__content"><li class="nk23_c-block01__list__item" id="02">other race</li>')
+    meta=current_receipt(raw,url,fetched='2026-10-23T12:10:00+09:00' if damage=='capture_day' else None)
+    with pytest.raises(n.NankanError):n.parse_current_changes(raw,race,meta,facts)
+
+
+@pytest.mark.parametrize('damage',['outside_venue_block','different_notice'])
+def test_unrelated_or_unrecognized_no_change_text_does_not_confirm_change_status(damage):
+    race,facts=parsed_detailed_card();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    raw=no_changes_page(notice='変更なし' if damage=='different_notice' else '本日開催に変更情報がありません')
+    if damage=='outside_venue_block':
+        raw=raw.replace(b'<div class="nk23_c-tab4__content">',b'</div><div class="nk23_c-tab4__content">')
+    result=n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+    assert result['explicit_no_changes_today_observed'] is False
+    assert result['target_race_change_status']=='UNKNOWN' and result['active_verified'] is False
+
+
+def test_nested_other_venue_notice_and_clock_cannot_be_bound_to_urw():
+    race,facts=parsed_detailed_card();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    raw=no_changes_page().replace(b'<span id="nowDateSpan">',
+        '<div class="nk23_c-block01">船橋競馬<span id="nowDateSpan">'.encode())
+    result=n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+    assert result['explicit_no_changes_today_observed'] is False
+    assert result['target_race_change_status']=='UNKNOWN'
+    assert result['provider_display_at'] is None and result['provider_display_time_status']=='UNKNOWN'
+
+
+@pytest.mark.parametrize('nested',[False,True])
+def test_other_block_race_rows_do_not_override_urw_no_change_notice(nested):
+    race,facts=parsed_detailed_card();url=n.ORIGIN+'/henko_info/00000000000000.do'
+    foreign=b'<div class="nk23_c-block01"><li class="nk23_c-block01__list__item" id="01">other venue</li></div>'
+    raw=no_changes_page()
+    raw=raw.replace(b'<div class="nk23_c-tab4__content">',foreign+b'<div class="nk23_c-tab4__content">') if nested else raw+foreign
+    result=n.parse_current_changes(raw,race,current_receipt(raw,url),facts)
+    assert result['explicit_no_changes_today_observed'] is True
+    assert result['target_race_row_present'] is False and result['items']==[]
+    assert result['target_race_change_status']=='EXPLICIT_NO_CHANGES_TODAY' and result['active_verified'] is False
 
 
 @pytest.mark.parametrize('damage',['day','venue','race_url','name'])
