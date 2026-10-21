@@ -6,6 +6,7 @@ import pytest
 
 from runtime import urw_nankan_reference_source as n
 from scripts.urw_paper_selection_replay import settle_observed_ticket_list as settle_ticket_list
+from scripts.urw_paper_selection_replay import _portfolio_effect, _summary
 
 
 def case(status='競走除外',note='返還:4号馬'):
@@ -78,3 +79,76 @@ def test_partial_refund_metadata_or_strict_missing_refund_is_hold():
         assert out['status']=='HOLD_REFUND_UNRESOLVED' and out['return'] is None
     partial={'official_result':{'top3':[1,2,3],'refunded_runner_ids':[4]}}
     assert settle_ticket_list(ts,partial)['return'] is None
+
+
+def test_multiple_refunded_runners_refund_each_ticket_once_with_original_stakes():
+    result=parse(*case())
+    result['official_result']['refunded_runner_ids']=['4','5']  # Authored multi-refund settlement case.
+    tickets=[{'bet_type':'EXACTA','selection':[1,4],'stake':300},
+             {'bet_type':'TRIO','selection':[5,1,4],'stake':200},
+             {'bet_type':'EXACTA','selection':[1,2],'stake':200},
+             {'bet_type':'TRIO','selection':[3,1,2],'stake':300},
+             {'bet_type':'TRIFECTA','selection':[1,2,3],'stake':100}]
+    before=copy.deepcopy(tickets)
+    value=settle_ticket_list(tickets,result)
+    assert tickets==before
+    assert value['investment']==1100 and value['refund']==500
+    assert value['winnings']==5900 and value['return']==6400
+    assert value['profit_loss']==5300
+    assert value['by_bet_type']['TRIO']['refunded_ticket_count']==1
+    assert value['by_bet_type']['TRIO']['winnings']==2700
+    with pytest.raises(ValueError,match='DUPLICATE_TICKET'):
+        settle_ticket_list([{'bet_type':'TRIO','selection':[1,2,3],'stake':100},
+                            {'bet_type':'TRIO','selection':[3,2,1],'stake':200}],result)
+
+
+def test_same_result_can_pay_exacta_and_trio_despite_shared_scenario_coverage():
+    value=settle_ticket_list([{'bet_type':'EXACTA','selection':[1,2],'stake':100},
+                              {'bet_type':'TRIO','selection':[3,1,2],'stake':100}],parse(*case()))
+    assert value['winnings']==500+900
+    assert set(value['hit_types'])=={'EXACTA','TRIO'}
+
+
+def test_selection_effect_separates_no_bet_release_refund_and_hit():
+    result=parse(*case())
+    value=_portfolio_effect([], [{'bet_type':'EXACTA','selection':[1,4],'stake':300}],result)
+    assert value['no_bet_released'] and value['reference_no_bet']
+    assert value['delta']=={'investment':300,'winnings':0,'refund':300,'return':300,'profit_loss':0}
+    assert not value['candidate']['hit_types']
+    assert value['added_finance']['by_bet_type']['EXACTA']['refunded_ticket_count']==1
+    assert not value['causal_or_future_performance_claim']
+    no_bet=settle_ticket_list([],result)
+    assert no_bet['investment']==0 and no_bet['pfs'] is None
+
+
+def test_missing_result_never_changes_known_selection_participation():
+    one={'status':'SETTLED','investment':100,'return':500,'refund':0,'profit_loss':400}
+    value=_summary([one],3,planned_race_investments=[100,0,300])
+    assert value['investment']==400
+    assert value['participating_races']==2 and value['participation_rate']==pytest.approx(2/3)
+    assert value['return'] is None and value['final_research_balance'] is None
+    assert value['maximum_drawdown_yen'] is None and value['balance_after_each_race_yen'] is None
+    assert _summary([one],3)['participating_races'] is None
+    with pytest.raises(ValueError,match='INVESTMENT_UNIVERSE'):
+        _summary([one],3,planned_race_investments=[100])
+    with pytest.raises(ValueError,match='INVESTMENT_TOTAL'):
+        _summary([one],1,planned_race_investments=[100],planned_investment=200)
+
+
+@pytest.mark.parametrize('side',['reference','candidate'])
+def test_portfolio_comparison_cannot_drop_duplicate_stakes(side):
+    duplicate=[{'bet_type':'EXACTA','selection':[1,2],'stake':100},
+               {'bet_type':'EXACTA','selection':[1,2],'stake':200}]
+    args={'reference':[],'candidate':[],'result':parse(*case())};args[side]=duplicate
+    with pytest.raises(ValueError,match='DUPLICATE_TICKET'):_portfolio_effect(**args)
+
+
+def test_complete_settlement_requires_same_planned_race_stakes():
+    one={'status':'SETTLED','investment':100,'return':500,'refund':0,'profit_loss':400}
+    with pytest.raises(ValueError,match='SETTLEMENT_PLANNED_STAKE_MISMATCH'):
+        _summary([one],1,planned_race_investments=[200])
+    other={**one,'investment':200,'profit_loss':300}
+    with pytest.raises(ValueError,match='SETTLEMENT_PLANNED_STAKE_MISMATCH'):
+        _summary([one,other],2,planned_race_investments=[200,100])
+    value=_summary([one,other],2,planned_race_investments=[100,200])
+    assert value['final_research_balance']==150000+value['profit_loss']

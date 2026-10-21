@@ -37,6 +37,17 @@ def tickets(pred):
             [{'bet_type':'TRIO','selection':list(map(int,s)),'stake':100} for s in combinations(ids,3)])
 
 
+def rebuild_joint(pred):
+    for row in pred['ordered_pairs']:
+        h,s=row['head'],row['second']
+        row['model_mass']=pred['winner_model_mass'][h]*pred['p2_model_mass_given_head'][h][s]
+    for row in pred['ordered_triples']:
+        h,s,t=row['head'],row['second'],row['third']
+        row['model_mass']=(pred['winner_model_mass'][h]*pred['p2_model_mass_given_head'][h][s]
+                           *pred['p3_model_mass_given_pair'][h+'>'+s][t])
+    return seal(pred)
+
+
 def run(pred=None, **kwargs):
     p=pred or prediction()
     ref={'immutable_semantic_sha256':'synthetic'}
@@ -185,3 +196,87 @@ def test_p1_requires_both_evidence_families_and_rejects_history_after_capture():
     bad=copy.deepcopy(obs);bad['source']['fetched_at']='2026-10-19T09:00:00+09:00'
     pack['source_observed_at']=bad['source']['fetched_at'];seal(pack);p['feature_sha256']=pack['sha256'];seal(p)
     with pytest.raises(ValueError,match='HISTORY_AFTER_ACTUAL_CAPTURE'):p1_role_hypotheses(p,pack,bad)
+
+
+@pytest.mark.parametrize('bad',['offsetting_p3_rows','offsetting_p2_rows','negative_factors','unused_runner'])
+def test_normalized_joint_total_cannot_hide_invalid_conditioning_distributions(bad):
+    p=prediction(n=3,strength=1)
+    if bad=='offsetting_p3_rows':
+        p['p3_model_mass_given_pair']['1>2']['3']=2.0
+        p['p3_model_mass_given_pair']['2>1']['3']=0.0
+    elif bad=='offsetting_p2_rows':
+        for h,scale in [('1',1.5),('2',0.5)]:
+            p['p2_model_mass_given_head'][h]={s:value*scale for s,value in p['p2_model_mass_given_head'][h].items()}
+    elif bad=='negative_factors':
+        p['winner_model_mass']={h:-value for h,value in p['winner_model_mass'].items()}
+        p['p2_model_mass_given_head']={h:{s:-value for s,value in values.items()}
+                                      for h,values in p['p2_model_mass_given_head'].items()}
+    else:
+        p['p3_model_mass_given_pair']['1>2']['99']=0.0
+    rebuild_joint(p)
+    # Each supplied ordered row agrees with its factors and global mass is one;
+    # the invalid per-context distribution must still be rejected.
+    assert sum(x['model_mass'] for x in p['ordered_pairs'])==pytest.approx(1)
+    assert sum(x['model_mass'] for x in p['ordered_triples'])==pytest.approx(1)
+    with pytest.raises(ValueError,match='CONDITIONAL_DISTRIBUTION'):
+        select_portfolio(p,tickets(p),source_ref={})
+
+
+def test_cross_bet_scenario_suppression_is_explained_without_claiming_payout_redundancy():
+    p=prediction(n=4,strength=4)
+    source=[{'bet_type':'EXACTA','selection':[1,2],'stake':500},
+            {'bet_type':'TRIO','selection':[1,2,3],'stake':300}]
+    before=copy.deepcopy((p,source))
+    result=select_portfolio(p,source,source_ref={})
+    exacta,trio=result['candidate_ledger']
+    assert result['selected_tickets']==[{'bet_type':'TRIO','selection':[1,2,3],'stake':100}]
+    assert exacta['joint_lift_over_uniform_not_ev']>=POLICY['minimum_joint_lift_over_uniform']
+    diagnostic=exacta['final_tier_diagnostics']['CORE']
+    assert 'BELOW_RELATIVE_MARGINAL_GAIN' in diagnostic['blocking_conditions']
+    assert diagnostic['within_bet_type_marginal_model_coverage']==pytest.approx(exacta['conditional_model_mass'])
+    assert diagnostic['cross_bet_suppressed_marginal_mass']>0
+    assert diagnostic['shared_marginal_model_coverage']<diagnostic['relative_marginal_gain_floor']
+    assert not diagnostic['economic_redundancy_inferred_from_coverage']
+    assert result['coverage']['objective']=='SHARED_ORDERED_SCENARIO_UNION_NOT_ADDITIVE_PAYOUT'
+    assert not result['coverage']['cross_bet_overlap_proves_economic_redundancy']
+    # Outcome 1,2,3 belongs to both payout events, although S1 retains only TRIO.
+    assert source[0]['selection']==[1,2] and set(source[1]['selection'])=={1,2,3}
+    assert trio['decision_trace'][0]['decision']=='SELECTED'
+    assert trio['decision_trace'][0]['eligible_for_this_step']
+    assert (p,source)==before
+
+
+def test_diagnostics_separate_protection_only_no_bet_and_exhausted_budget():
+    p=prediction(strength=1)
+    utility=seal({'krs_status':'EXECUTED','race_id':p['race_id'],'snapshot':{'master_seed':1},
+                  'top_exacta_occurrence':[{'W':1,'P2':2,'frequency':0.3}],
+                  'top_trifecta_occurrence':[{'W':1,'P2':2,'P3':3,'frequency':0.2}]})
+    protected=run(p,krs_utility=utility)
+    assert protected['participation_state']=='PROTECTION_ONLY'
+    assert protected['tier_spend_yen']['CORE']==0
+    assert 0<protected['tier_spend_yen']['PROTECTION']<=500
+    assert not protected['no_bet']
+    unknown=next(row for row in protected['candidate_ledger'] if row['krs_joint_support'] is None)
+    assert unknown['final_tier_diagnostics']['PROTECTION']['krs_support_state']=='UNKNOWN_NOT_ZERO'
+    assert 'KRS_TOPLIST_SUPPORT_UNKNOWN' in unknown['final_tier_diagnostics']['PROTECTION']['blocking_conditions']
+    assert run(p)['participation_state']=='COMPLETE_NO_BET'
+    exhausted=run(day_remaining_yen=0)
+    assert exhausted['used_budget_yen']==0 and exhausted['unused_budget_yen']==0
+    assert all('FIXED_TIER_BUDGET_EXHAUSTED' in row['final_tier_diagnostics'][tier]['blocking_conditions']
+               for row in exhausted['candidate_ledger'] for tier in ('CORE','PROTECTION'))
+
+
+def test_equal_gain_tie_is_canonical_and_trace_conserves_selected_ticket_units():
+    p=prediction(n=4,strength=1)
+    p['winner_model_mass']={'1':0.7,'2':0.1,'3':0.1,'4':0.1};rebuild_joint(p)
+    source=[{'bet_type':'EXACTA','selection':[1,3],'stake':700},
+            {'bet_type':'EXACTA','selection':[1,2],'stake':100}]
+    first=select_portfolio(p,source,source_ref={})
+    second=select_portfolio(p,list(reversed(source)),source_ref={})
+    assert first['selected_tickets']==second['selected_tickets']
+    assert first['candidate_ledger']==second['candidate_ledger']
+    selected=sorted(first['candidate_ledger'],key=lambda row:row['decision_trace'][0]['selection_order'])
+    assert [row['original_ticket']['selection'] for row in selected]==[[1,2],[1,3]]
+    assert first['used_budget_yen']==200 and first['participation_state']=='CORE_ONLY'
+    assert sum(row['selection_detail']['stake'] for row in selected)==first['used_budget_yen']
+    assert sha(POLICY)=='663c63f6931d49d5cbc994ee17cef8a3075d957216db18bf02590d82d5e3c34d'

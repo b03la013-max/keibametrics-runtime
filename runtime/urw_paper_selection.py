@@ -65,6 +65,15 @@ def canonical_tickets(tickets):
             for bt, ids, stake in sorted((*_key(t), t['stake']) for t in tickets)]
 
 
+def _distribution(values, expected_ids):
+    if (not isinstance(values, dict) or set(values) != set(expected_ids)
+            or any(type(value) not in (int, float) or not math.isfinite(value)
+                   or not 0 <= value <= 1 for value in values.values())):
+        raise ValueError('RESEARCH_CONDITIONAL_DISTRIBUTION_INVALID')
+    if not math.isclose(math.fsum(values.values()), 1.0, rel_tol=0, abs_tol=1e-8):
+        raise ValueError('RESEARCH_CONDITIONAL_DISTRIBUTION_NOT_NORMALIZED')
+
+
 def _joint(pred):
     """Consume the existing conditional models; reject inconsistent adapters."""
     _check_sha(pred)
@@ -90,6 +99,17 @@ def _joint(pred):
     n = len(ids)
     if len(pairs) != n*(n-1) or len(triples) != n*(n-1)*(n-2):
         raise ValueError('RESEARCH_CONDITIONAL_UNIVERSE_INCOMPLETE')
+    # A normalized joint total alone can hide offsetting invalid conditionals:
+    # e.g. one P3 row sums to two while another sums to zero. Validate every
+    # conditioning context, including zero-mass contexts, without refitting it.
+    _distribution(pred['winner_model_mass'], ids)
+    p2 = pred['p2_model_mass_given_head']; p3 = pred['p3_model_mass_given_pair']
+    if (set(p2) != ids or set(p3) != {h+'>'+s for h, s in pairs}):
+        raise ValueError('RESEARCH_CONDITIONAL_DISTRIBUTION_INVALID')
+    for head in ids:
+        _distribution(p2[head], ids - {head})
+    for head, second in pairs:
+        _distribution(p3[head+'>'+second], ids - {head, second})
     return ids, pairs, triples
 
 
@@ -135,6 +155,41 @@ def _krs_support(utility, ids, prediction, source_ref):
             for k, v in out.items()}
 
 
+def _decision_diagnostic(row, tier, covered, covered_by_type, first_gain,
+                         available_yen, chosen, policy):
+    """Outcome-blind explanation of the unchanged S1 decision at this step."""
+    key = _key(row['ticket']); bt = key[0]
+    same_bet_covered = covered_by_type.get(bt, set())
+    marginal = sum(row['triples'][a] for a in row['atoms'] - covered)
+    within_bet = sum(row['triples'][a] for a in row['atoms'] - same_bet_covered)
+    floor = (0.0 if first_gain is None else
+             first_gain * policy['minimum_marginal_fraction_of_first_gain'])
+    static_floor = policy['minimum_joint_lift_over_uniform'] if tier == 'CORE' else policy['minimum_protection_model_lift']
+    blockers = []
+    if key in chosen: blockers.append('ALREADY_SELECTED')
+    if row['excluded']: blockers.append('EXPLICIT_SCRATCH_OR_EXCLUSION')
+    if row['lift'] < static_floor: blockers.append('BELOW_STATIC_LIFT')
+    if tier == 'PROTECTION':
+        if row['krs'] is None: blockers.append('KRS_TOPLIST_SUPPORT_UNKNOWN')
+        elif row['krs']['uniform_lift_lower_bound'] < policy['minimum_krs_joint_lift']:
+            blockers.append('BELOW_KRS_JOINT_LIFT')
+    if available_yen < policy['unit_yen']: blockers.append('FIXED_TIER_BUDGET_EXHAUSTED')
+    if marginal <= 0: blockers.append('ZERO_SHARED_MARGINAL_COVERAGE')
+    elif first_gain is not None and marginal < floor: blockers.append('BELOW_RELATIVE_MARGINAL_GAIN')
+    return {'tier': tier, 'eligible_for_this_step': not blockers,
+            'blocking_conditions': blockers, 'decision': blockers[0] if blockers else 'ELIGIBLE_OPTION',
+            'available_tier_budget_yen': available_yen,
+            'static_lift_threshold': static_floor,
+            'krs_joint_lift_threshold': policy['minimum_krs_joint_lift'] if tier == 'PROTECTION' else None,
+            'krs_support_state': 'OBSERVED_JOINT_LOWER_BOUND' if row['krs'] is not None else 'UNKNOWN_NOT_ZERO',
+            'shared_first_gain': first_gain, 'relative_marginal_gain_floor': floor,
+            'shared_marginal_model_coverage': marginal,
+            'within_bet_type_marginal_model_coverage': within_bet,
+            'cross_bet_suppressed_marginal_mass': sum(row['triples'][a] for a in
+                (row['atoms'] - same_bet_covered) & covered),
+            'economic_redundancy_inferred_from_coverage': False}
+
+
 def select_portfolio(prediction, source_tickets, *, source_ref, policy=POLICY,
                      krs_utility=None, excluded_runner_ids=(), day_remaining_yen=None):
     """P0S1: predictions/roles/KRS fixed; select, never rewrite their semantics.
@@ -168,8 +223,9 @@ def select_portfolio(prediction, source_tickets, *, source_ref, policy=POLICY,
         mass = sum(triples[k] for k in atoms)
         uniform = (1/(n*(n-1)) if bt=='EXACTA' else (6 if bt=='TRIO' else 1)/(n*(n-1)*(n-2)))
         candidates.append({'ticket':ticket,'atoms':atoms,'model_mass':mass,'lift':mass/uniform,
+                           'uniform_mass':uniform, 'triples':triples, 'decision_trace':[], 'tier_diagnostics':{},
                            'krs':support.get(key),'excluded':bool(set(order)&excluded)})
-    chosen = {}; covered = set(); first_gain = None
+    chosen = {}; covered = set(); covered_by_type = {}; first_gain = None
     for tier, cap in (('CORE',core_budget),('PROTECTION',min(policy['protection_cap_yen'],budget-core_budget))):
         spent = 0
         while spent + policy['unit_yen'] <= cap:
@@ -187,11 +243,20 @@ def select_portfolio(prediction, source_tickets, *, source_ref, policy=POLICY,
                 options.append((gain, key, row))
             if not options:break
             gain, key, row = sorted(options,key=lambda x:(-x[0],x[1]))[0]
+            diagnostic = _decision_diagnostic(row,tier,covered,covered_by_type,
+                                              first_gain,cap-spent,chosen,policy)
+            diagnostic['decision']='SELECTED'
+            diagnostic['selection_order']=len(chosen)+1
+            row['decision_trace'].append(diagnostic)
             if first_gain is None:first_gain=gain
             chosen[key]={'tier':tier,'marginal_model_coverage':gain,
                          'reason':'CONDITIONAL_JOINT_MARGINAL_COVERAGE' if tier=='CORE' else 'STATIC_AND_JOINT_KRS_SUPPORT',
                          'stake':policy['unit_yen']}
-            covered |= row['atoms'];spent += policy['unit_yen']
+            covered |= row['atoms'];covered_by_type.setdefault(key[0],set()).update(row['atoms'])
+            spent += policy['unit_yen']
+        for row in candidates:
+            row['tier_diagnostics'][tier]=_decision_diagnostic(row,tier,covered,covered_by_type,
+                                                              first_gain,cap-spent,chosen,policy)
     ledger=[]; selected=[]
     for row in candidates:
         key=_key(row['ticket']);pick=chosen.get(key)
@@ -206,8 +271,11 @@ def select_portfolio(prediction, source_tickets, *, source_ref, policy=POLICY,
                     'REDUNDANT_LOW_MARGINAL_GAIN_OR_FIXED_TIER_BUDGET')
         ledger.append({'original_ticket':row['ticket'],'selected':bool(pick),'reason':reason,
                        'selection_detail':pick,'conditional_model_mass':row['model_mass'],
+                       'uniform_model_mass':row['uniform_mass'],
                        'joint_lift_over_uniform_not_ev':row['lift'],'krs_joint_support':row['krs'],
                        'ordered_scenario_count':len(row['atoms']),
+                       'decision_trace':row['decision_trace'],
+                       'final_tier_diagnostics':row['tier_diagnostics'],
                        'input_ref':source_ref})
     source_atoms=set().union(*(r['atoms'] for r in candidates)) if candidates else set()
     spent=len(selected)*policy['unit_yen']
@@ -229,11 +297,17 @@ def select_portfolio(prediction, source_tickets, *, source_ref, policy=POLICY,
         'race_budget_yen':budget,'used_budget_yen':spent,'unused_budget_yen':budget-spent,
         'day_budget_remaining_yen':remaining-spent,
         'tier_spend_yen':{tier:sum(x['stake'] for x in chosen.values() if x['tier']==tier) for tier in ('CORE','PROTECTION')},
+        'participation_state':('CORE_AND_PROTECTION' if {x['tier'] for x in chosen.values()}=={'CORE','PROTECTION'} else
+                               'CORE_ONLY' if any(x['tier']=='CORE' for x in chosen.values()) else
+                               'PROTECTION_ONLY' if chosen else 'COMPLETE_NO_BET'),
         'coverage':{'source_ordered_scenarios':len(source_atoms),'protected_ordered_scenarios':len(covered),
                     'lost_ordered_scenarios':len(source_atoms-covered),
                     'source_model_mass':sum(triples[x] for x in source_atoms),
                     'protected_model_mass':sum(triples[x] for x in covered),
                     'lost_model_mass':sum(triples[x] for x in source_atoms-covered),
+                    'objective':'SHARED_ORDERED_SCENARIO_UNION_NOT_ADDITIVE_PAYOUT',
+                    'cross_bet_overlap_proves_economic_redundancy':False,
+                    'first_gain_shared_across_bet_types_and_tiers':True,
                     'is_material_coverage_100_percent':False,'original_mec_unchanged':True},
         'no_bet':not selected,'no_bet_reason':'NO_QUALIFIED_NONREDUNDANT_TICKET_WITHIN_RESEARCH_CAP' if not selected else None,
         'calibrated_probability':False,'ev_claim':False,'production_authority':False,

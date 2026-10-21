@@ -10,7 +10,7 @@ import pytest
 from scripts import urw_paper_selection_replay as cli
 from runtime.local_race_key_shadow_owner import predict_conditioned_owner
 from runtime.urw_paper_selection import sha
-from runtime.urw_nankan_reference_source import save_json
+from runtime.urw_nankan_reference_source import save_json,immutable
 
 
 def seal(x):
@@ -64,6 +64,15 @@ def bundle(no=1):
     return {'frozen':frozen,'audits':audits,'observation':obs}
 
 
+def refresh_checkpoint(args):
+    paths=list(args.registration.parent.glob('ledger-checkpoint-*.json'))
+    path=args.registration.parent/f'ledger-checkpoint-{len(paths):03d}.json'
+    cli.checkpoint(argparse.Namespace(registration=args.registration,output=path))
+    args.ledger_checkpoint=path
+    args.expected_checkpoint_sha256=cli.file_sha(path)
+    return args
+
+
 def setup(tmp_path,monkeypatch,b):
     tmp_path.chmod(0o700);bp=tmp_path/'bundle.json';save_json(bp,b)
     mp=tmp_path/'model-comparison.json';save_json(mp,b['frozen'])
@@ -73,12 +82,15 @@ def setup(tmp_path,monkeypatch,b):
     monkeypatch.setattr(cli,'now',lambda:datetime.now(timezone.utc)-timedelta(seconds=30))
     cli.register(argparse.Namespace(model_bundle=mp,output=reg,ledger=ledger))
     monkeypatch.setattr(cli,'now',lambda:datetime.now(timezone.utc))
+    args=refresh_checkpoint(argparse.Namespace(registration=reg,input_bundle=bp,ledger=ledger,
+                                              output=tmp_path/'freeze'))
     races=[]
     for i in range(1,13):races.append({'fields':bundle(i)['observation']['race']})
     plan={'family_id':'LOCAL','venue_id':'URW','race_date':'2099-10-21','races':races}
     plan['plan_sha256']=sha(plan);pp=tmp_path/'day-plan.json';save_json(pp,plan)
-    cli.register_day(argparse.Namespace(registration=reg,day_plan=pp))
-    return argparse.Namespace(registration=reg,input_bundle=bp,ledger=ledger,output=tmp_path/'freeze')
+    cli.register_day(argparse.Namespace(registration=reg,day_plan=pp,
+        ledger_checkpoint=args.ledger_checkpoint,expected_checkpoint_sha256=args.expected_checkpoint_sha256))
+    return refresh_checkpoint(args)
 
 
 def test_real_model_four_cell_forward_freeze_and_duplicate_protection(tmp_path,monkeypatch):
@@ -87,8 +99,10 @@ def test_real_model_four_cell_forward_freeze_and_duplicate_protection(tmp_path,m
     assert result['formal_quality_credit']==0 and not result['signed_final_claim']
     assert set(result['views']['CANDIDATE']['cells'])==set(cli.CELLS)
     assert len(list(a.ledger.glob('event-*.json')))==2
+    refresh_checkpoint(a)
     with pytest.raises(ValueError,match='DUPLICATE'):cli.freeze(a)
-    status=tmp_path/'status.json';cli.cohort_status(argparse.Namespace(registration=a.registration,output=status))
+    status=tmp_path/'status.json';cli.cohort_status(argparse.Namespace(registration=a.registration,output=status,
+        ledger_checkpoint=a.ledger_checkpoint,expected_checkpoint_sha256=a.expected_checkpoint_sha256))
     assert cli.read(status)['planned_fixed_denominator']==12
     assert len(cli.read(status)['races'])==12  # Eleven uninvoked races retained.
 
@@ -124,6 +138,7 @@ def test_crash_before_completion_preserves_reservation_and_other_ledger_rejected
     assert (a.output/'research-selection-freeze.json').exists()
     reservation=cli.read(a.ledger/'event-0001.json')
     assert reservation['remaining']['CANDIDATE']['P0S1']==22000
+    refresh_checkpoint(a)
     with pytest.raises(ValueError,match='DUPLICATE'):cli.freeze(a)
     a.ledger=tmp_path/'new-ledger'
     with pytest.raises(ValueError,match='CANONICAL_LEDGER'):cli.freeze(a)
@@ -144,6 +159,7 @@ def test_uncompleted_later_race_reservation_still_blocks_old_race(tmp_path,monke
     monkeypatch.setattr(cli,'save_json',fail_completion)
     with pytest.raises(OSError):cli.freeze(a)
     monkeypatch.setattr(cli,'save_json',real_save)
+    refresh_checkpoint(a)
     older=bundle(4);a.input_bundle=tmp_path/'older.json';save_json(a.input_bundle,older);a.output=tmp_path/'older-freeze'
     with pytest.raises(ValueError,match='RACE_ORDER'):cli.freeze(a)
 
@@ -158,3 +174,142 @@ def test_explicit_cancellation_reaches_all_research_selectors_not_original_s0():
             assert not any(4 in t['selection'] for t in v['cells'][name]['tickets'])
         assert not any(4 in t['selection'] for t in v['P0S1_NO_KRS']['selected_tickets'])
         assert not any(4 in t['selection'] for t in v['TOP4_BOX_DIAGNOSTIC'])
+
+
+@pytest.mark.parametrize('conflicting',[False,True])
+def test_duplicate_runner_facts_cannot_choose_last_row_or_change_exclusion(conflicting):
+    b=bundle();duplicate=copy.deepcopy(b['observation']['facts'][0])
+    if conflicting:duplicate['status']='CANCELLED'
+    b['observation']['facts'].append(duplicate)
+    remaining={a:{k:24000 for k in ('P0S1','P1S1','P0S1_NO_KRS')} for a in cli.ARMS}
+    with pytest.raises(ValueError,match='OBSERVATION_RUNNER_UNIVERSE_OR_DUPLICATE'):
+        cli.build_views(b['frozen'],b['audits'],b['observation'],remaining)
+
+
+def test_day_validator_is_pinned_and_wrong_policy_digest_is_refused(tmp_path,monkeypatch):
+    b=bundle();a=setup(tmp_path,monkeypatch,b)
+    assert 'runtime/local_reference_day.py' in cli.code_pins()
+    reg=cli.read(a.registration);reg['policy_sha256']='0'*64;seal(reg)
+    a.registration=tmp_path/'wrong-policy-digest.json';save_json(a.registration,reg)
+    with pytest.raises(ValueError,match='PREREGISTERED_CODE_OR_POLICY_CHANGED'):
+        cli.cohort_status(argparse.Namespace(registration=a.registration,output=tmp_path/'status.json'))
+
+
+def test_day_validator_code_change_requires_new_registration(tmp_path,monkeypatch):
+    a=setup(tmp_path,monkeypatch,bundle());pins=cli.code_pins()
+    pins['runtime/local_reference_day.py']='0'*64
+    monkeypatch.setattr(cli,'code_pins',lambda:pins)
+    with pytest.raises(ValueError,match='PREREGISTERED_CODE_OR_POLICY_CHANGED'):
+        cli.freeze(a)
+
+
+def test_artifact_write_finishing_after_cutoff_is_a_hold(tmp_path,monkeypatch):
+    b=bundle();a=setup(tmp_path,monkeypatch,b);real_save=cli.save_json
+    clock=[datetime.now(timezone.utc)]
+    monkeypatch.setattr(cli,'now',lambda:clock[0])
+    def delayed_artifact(path,value):
+        real_save(path,value)
+        if Path(path).name=='research-selection-freeze.json':
+            clock[0]=datetime.fromisoformat(b['frozen']['prediction_cutoff'])+timedelta(seconds=1)
+    monkeypatch.setattr(cli,'save_json',delayed_artifact)
+    with pytest.raises(ValueError,match='FORWARD_PERSISTED_AFTER_CUTOFF'):
+        cli.freeze(a)
+    completion=cli.read(a.ledger/'event-0002.json')
+    assert completion['status']=='HOLD_RETAINED_IN_DENOMINATOR'
+    assert completion['reason']=='FORWARD_PERSISTED_AFTER_CUTOFF'
+    assert (a.output/'research-selection-freeze.json').exists()  # Immutable orphan, not an accepted Freeze.
+
+
+@pytest.mark.parametrize('deletion',['all_events','last_event'])
+def test_checkpoint_verifies_complete_restore_and_refuses_empty_or_suffix_rollback(tmp_path,monkeypatch,deletion):
+    a=setup(tmp_path,monkeypatch,bundle());cli.freeze(a);refresh_checkpoint(a)
+    cli.verify_restore(a)
+    paths=sorted(a.ledger.glob('event-*.json'))
+    originals={p:p.read_bytes() for p in paths}
+    for path in paths if deletion=='all_events' else paths[-1:]:path.unlink()
+    with pytest.raises(ValueError,match='CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER'):
+        cli.verify_restore(a)
+    with pytest.raises(ValueError,match='CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER'):
+        cli.freeze(a)
+    with pytest.raises(ValueError,match='CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER'):
+        cli.cohort_status(argparse.Namespace(registration=a.registration,output=tmp_path/'status.json',
+            ledger_checkpoint=a.ledger_checkpoint,expected_checkpoint_sha256=a.expected_checkpoint_sha256))
+    for path,raw in originals.items():
+        if not path.exists():immutable(path,raw)
+    cli.verify_restore(a)
+
+
+def test_crash_reservation_is_part_of_full_checkpoint_restore(tmp_path,monkeypatch):
+    a=setup(tmp_path,monkeypatch,bundle());real_save=cli.save_json
+    def interrupted(path,value):
+        if Path(path).name=='event-0002.json':raise OSError('SYNTHETIC_COMPLETION_CRASH')
+        real_save(path,value)
+    monkeypatch.setattr(cli,'save_json',interrupted)
+    with pytest.raises(OSError):cli.freeze(a)
+    monkeypatch.setattr(cli,'save_json',real_save);refresh_checkpoint(a)
+    cli.verify_restore(a)
+    checkpoint=cli.read(a.ledger_checkpoint)
+    assert checkpoint['event_count']==1 and 'event-0001.json' in checkpoint['members']
+    assert cli.read(a.ledger/'event-0001.json')['remaining']['CANDIDATE']['P0S1']==22000
+    (a.ledger/'event-0001.json').unlink()
+    with pytest.raises(ValueError,match='CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER'):
+        cli.verify_restore(a)
+
+
+def test_old_or_altered_checkpoint_cannot_be_silently_used(tmp_path,monkeypatch):
+    a=setup(tmp_path,monkeypatch,bundle());cli.freeze(a)
+    with pytest.raises(ValueError,match='CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER'):
+        cli.freeze(a)  # The pre-attempt checkpoint is stale, even before duplicate checking.
+    refresh_checkpoint(a)
+    original_sha=a.expected_checkpoint_sha256
+    replacement=tmp_path/'changed-checkpoint.json'
+    raw=a.ledger_checkpoint.read_bytes()+b'\n';replacement.write_bytes(raw);replacement.chmod(0o600)
+    a.ledger_checkpoint=replacement
+    assert a.expected_checkpoint_sha256==original_sha
+    with pytest.raises(ValueError,match='CHECKPOINT_FILE_SHA_MISMATCH'):
+        cli.verify_restore(a)
+
+
+@pytest.mark.parametrize('kind',['path_traversal','member_bytes','symlink'])
+def test_checkpoint_rejects_bad_member_paths_integrity_and_symlinks(tmp_path,monkeypatch,kind):
+    a=setup(tmp_path,monkeypatch,bundle())
+    if kind=='symlink':
+        (a.ledger/'event-9999.json').symlink_to(a.ledger/'initialization.json')
+        match='CHECKPOINT_SYMLINK_OR_NONFILE'
+    else:
+        value=cli.read(a.ledger_checkpoint)
+        if kind=='path_traversal':
+            value['members']['../initialization.json']=value['members'].pop('initialization.json')
+            match='CHECKPOINT_MEMBER_PATH'
+        else:
+            value['members']['initialization.json']['bytes']+=1
+            match='CHECKPOINT_MEMBER_INTEGRITY'
+        path=tmp_path/'bad-checkpoint.json';save_json(path,seal(value))
+        a.ledger_checkpoint=path;a.expected_checkpoint_sha256=cli.file_sha(path)
+    with pytest.raises(ValueError,match=match):cli.verify_restore(a)
+
+
+def test_new_forward_invocation_requires_caller_trusted_checkpoint(tmp_path,monkeypatch):
+    a=setup(tmp_path,monkeypatch,bundle());a.expected_checkpoint_sha256=None
+    with pytest.raises(ValueError,match='CHECKPOINT_AND_TRUSTED_SHA_REQUIRED'):
+        cli.freeze(a)
+    assert not list(a.ledger.glob('event-*.json'))
+
+
+@pytest.mark.parametrize('operation',['freeze','cohort_status','checkpoint'])
+@pytest.mark.parametrize('nested',[False,True])
+def test_forward_outputs_cannot_poison_canonical_ledger(tmp_path,monkeypatch,operation,nested):
+    a=setup(tmp_path,monkeypatch,bundle())
+    before={p.name:p.read_bytes() for p in a.ledger.iterdir()}
+    a.output=a.ledger/'nested' if nested else a.ledger
+    with pytest.raises(ValueError,match='OUTPUT_MUST_BE_OUTSIDE_LEDGER'):
+        getattr(cli,operation)(a)
+    assert {p.name:p.read_bytes() for p in a.ledger.iterdir()}==before
+    cli.verify_restore(a)
+
+
+def test_registration_output_cannot_create_an_unusable_ledger(tmp_path):
+    mp=tmp_path/'models.json';save_json(mp,bundle()['frozen']);ledger=tmp_path/'ledger'
+    with pytest.raises(ValueError,match='OUTPUT_MUST_BE_OUTSIDE_LEDGER'):
+        cli.register(argparse.Namespace(model_bundle=mp,ledger=ledger,output=ledger/'registration.json'))
+    assert not ledger.exists()

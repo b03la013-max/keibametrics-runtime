@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import copy
 from datetime import datetime, timezone
 from fractions import Fraction
@@ -18,6 +19,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -31,6 +33,7 @@ from runtime.minimum_efficient_coverage import build_mec_plan,validate_mec_plan
 from runtime.capital_policy import resolve_capital_policy
 from runtime.mec_r4_shadow import settle_ticket_list,_payout,_top3_ids
 from runtime.jra_ticket_tree_renderer import render_ticket_tree
+from runtime.urw_paper_archive import verify_extracted_archive
 
 ARMS=('BASELINE','CANDIDATE')
 CELLS=('P0S0','P0S1','P1S0','P1S1')
@@ -39,7 +42,8 @@ CODE_FILES=('runtime/urw_paper_selection.py','scripts/urw_paper_selection_replay
             'runtime/urw_nankan_reference_source.py','runtime/mec_r4_shadow.py',
             'runtime/local_krs_bridge_candidate.py','runtime/local_race_key_shadow_owner.py',
             'runtime/minimum_efficient_coverage.py','runtime/capital_policy.py',
-            'runtime/jra_ticket_tree_renderer.py')
+            'runtime/jra_ticket_tree_renderer.py','runtime/local_reference_day.py',
+            'runtime/urw_paper_archive.py')
 
 
 def read(path):return json.loads(Path(path).read_text())
@@ -53,6 +57,11 @@ def head():return subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,te
 def verify_bundle(frozen,audits,observation,*,forward=False):
     """Bind existing Freeze objects, not a new SOURCE/Production admission."""
     pack=frozen['feature_pack'];race=observation['race']
+    facts=observation['facts']
+    if (not isinstance(facts,list) or any(not isinstance(row,dict) or 'runner_id' not in row for row in facts)
+            or len({str(row['runner_id']) for row in facts})!=len(facts)
+            or {str(row['runner_id']) for row in facts}!=set(pack['runners'])):
+        raise ValueError('RESEARCH_OBSERVATION_RUNNER_UNIVERSE_OR_DUPLICATE')
     for value in (frozen,pack,*frozen['models'].values(),*frozen['predictions'].values(),*audits.values()):
         _check_sha(value)
     def aware(value):
@@ -283,31 +292,91 @@ def _finance(tickets,result):
     return settle_observed_ticket_list(tickets,result,require_resolved_refunds=True)
 
 
-def _summary(finances,denominator,*,planned_investment=None):
+def _summary(finances,denominator,*,planned_investment=None,planned_race_investments=None):
+    if type(denominator) is not int or denominator<=0:
+        raise ValueError('RESEARCH_FIXED_DENOMINATOR_INVALID')
+    if planned_race_investments is not None:
+        if (len(planned_race_investments)!=denominator or
+                any(type(x) is not int or x<0 or x%100 for x in planned_race_investments)):
+            raise ValueError('RESEARCH_PLANNED_INVESTMENT_UNIVERSE')
+        if planned_investment is not None and sum(planned_race_investments)!=planned_investment:
+            raise ValueError('RESEARCH_PLANNED_INVESTMENT_TOTAL')
+        planned_investment=sum(planned_race_investments)
     known=len(finances)==denominator and bool(finances) and all(f['status']=='SETTLED' and f['return'] is not None for f in finances)
     observed_investment=sum(f['investment'] for f in finances)
     investment=observed_investment if planned_investment is None else planned_investment
+    if known and (investment!=observed_investment or planned_race_investments is not None
+                  and [f['investment'] for f in finances]!=planned_race_investments):
+        raise ValueError('RESEARCH_SETTLEMENT_PLANNED_STAKE_MISMATCH')
     ret=sum(f['return'] for f in finances) if known else None
     cash=POLICY['initial_research_cash_yen'];balance=cash;peak=cash;dd=0
+    balances=[]
     if known:
         for f in finances:
             balance+=f['profit_loss'];peak=max(peak,balance);dd=max(dd,peak-balance)
+            balances.append(balance)
     max_return=max((f['return'] for f in finances),default=0) if known else None
     max_race=max(finances,key=lambda f:f['return']) if known else None
+    participation=(sum(x>0 for x in planned_race_investments) if planned_race_investments is not None
+                   else sum(f['investment']>0 for f in finances) if len(finances)==denominator else None)
     return {'fixed_denominator':denominator,'resolved':sum(f['status']=='SETTLED' for f in finances),
             'missing_or_held':denominator-sum(f['status']=='SETTLED' for f in finances),
             'observed_partial_return_not_full_day':sum(f['return'] for f in finances if f['return'] is not None),
             'observed_investment':observed_investment,
             'investment':investment,'return':ret,'refund':sum(f['refund'] for f in finances) if known else None,
             'profit_loss':ret-investment if known else None,'pfs':100*ret/investment if known and investment else None,
-            'participating_races':sum(f['investment']>0 for f in finances),'participation_rate':sum(f['investment']>0 for f in finances)/denominator,
+            'participating_races':participation,'participation_rate':participation/denominator if participation is not None else None,
+            'participation_basis':'OUTCOME_BLIND_PLANNED_STAKES' if planned_race_investments is not None else
+                'ALL_RACE_STAKES' if participation is not None else 'UNKNOWN_MISSING_RACE_STAKES',
+            'resolved_participating_races':sum(f['investment']>0 for f in finances if f['status']=='SETTLED'),
             'unused_of_research_day_cap':max(0,POLICY['day_cap_yen']-investment),
             'research_day_cap_exceeded_by_original_S0_reference':investment>POLICY['day_cap_yen'],
             'common_initial_research_cash_yen':cash,'final_research_balance':balance if known else None,
+            'balance_after_each_race_yen':balances if known else None,
             'maximum_drawdown_yen':dd if known else None,'maximum_return_yen':max_return,
             'profit_loss_excluding_largest_return':ret-max_return-investment if known else None,
             'profit_loss_excluding_largest_return_race':ret-max_return-investment+max_race['investment'] if known else None,
             'performance_pass':False,'actual_purchase':False}
+
+
+def _portfolio_effect(reference,candidate,result):
+    """Post-result accounting of ALL additions/removals, never a selection input."""
+    key=lambda ticket:(ticket['bet_type'],tuple(ticket['selection']))
+    old_rows=canonical_tickets(reference);new_rows=canonical_tickets(candidate)
+    old={key(t):t for t in old_rows}
+    new={key(t):t for t in new_rows}
+    if len(old)!=len(old_rows) or len(new)!=len(new_rows):
+        raise ValueError('OBSERVED_SETTLEMENT_DUPLICATE_TICKET')
+    added=[new[k] for k in sorted(new.keys()-old.keys())]
+    removed=[old[k] for k in sorted(old.keys()-new.keys())]
+    before=_finance(list(old.values()),result);after=_finance(list(new.values()),result)
+    delta={field:after[field]-before[field] if after[field] is not None and before[field] is not None else None
+           for field in ('investment','winnings','refund','return','profit_loss')}
+    return {'reference':before,'candidate':after,'delta':delta,
+            'reference_no_bet':not old,'candidate_no_bet':not new,'no_bet_released':not old and bool(new),
+            'added_tickets':added,'removed_tickets':removed,
+            'added_finance':_finance(added,result),'removed_finance':_finance(removed,result),
+            'common_ticket_stake_changes':[{'reference':old[k],'candidate':new[k]} for k in sorted(old.keys()&new.keys())
+                                           if old[k]['stake']!=new[k]['stake']],
+            'causal_or_future_performance_claim':False}
+
+
+def _support_diagnostics(prediction,selection):
+    """Uncalibrated concentration and every candidate, independent of outcomes."""
+    def concentration(values):
+        xs=list(values.values())
+        return {'maximum_mass':max(xs),'effective_support_size':1/sum(x*x for x in xs),
+                'entropy':-sum(x*math.log(x) for x in xs if x>0)}
+    rows=selection['candidate_ledger']
+    return {'winner':concentration(prediction['winner_model_mass']),
+            'conditional_second_by_head':{key:concentration(value) for key,value in prediction['p2_model_mass_given_head'].items()},
+            'conditional_third_by_pair':{key:concentration(value) for key,value in prediction['p3_model_mass_given_pair'].items()},
+            'by_bet_type':{bt:{'candidates':sum(x['original_ticket']['bet_type']==bt for x in rows),
+                'selected':sum(x['original_ticket']['bet_type']==bt and x['selected'] for x in rows),
+                'core_lift_qualified':sum(x['original_ticket']['bet_type']==bt and
+                    x['joint_lift_over_uniform_not_ev']>=POLICY['minimum_joint_lift_over_uniform'] for x in rows)}
+                for bt in ('EXACTA','TRIO','TRIFECTA')},
+            'calibration_or_purchase_value_claim':False}
 
 
 def _trace(frozen,audits,numeric,result):
@@ -370,10 +439,19 @@ def _trace(frozen,audits,numeric,result):
 
 
 def replay(args):
+    verified_archive=verify_extracted_archive(args.archive_zip,args.archive)
+    output=args.output.resolve()
+    for source in (args.archive,args.analysis_helper,args.results):
+        original=source.resolve()
+        if output.is_relative_to(original) or original.is_relative_to(output):
+            raise ValueError('RESEARCH_OUTPUT_MUST_NOT_OVERLAP_ORIGINAL_INPUTS')
+    if any(source.resolve().is_relative_to(output) for source in
+           (args.archive_zip,args.equal_budget,args.utility)):
+        raise ValueError('RESEARCH_OUTPUT_MUST_NOT_OVERLAP_ORIGINAL_INPUTS')
     out=private_directory(args.output);helpers=existing_functions(args.analysis_helper)
     protocol=read(args.equal_budget);_check_sha(protocol)
     utility=read(args.utility);_check_sha(utility)
-    archive_hash=file_sha(args.archive_zip)
+    archive_hash=verified_archive['archive_sha256']
     if archive_hash!=protocol['original_archive_sha256'] or utility['source_archive_sha256']!=archive_hash:
         raise ValueError('ORIGINAL_ARCHIVE_OR_UTILITY_BINDING')
     uarms={(x['race_no'],x['owner']):x for x in utility['arms']}
@@ -470,6 +548,20 @@ def replay(args):
             entry['arms'][arm]={'original':original,'equal_fixed_integer':ref,'equal_analytic':analytic,
                 'utility_separate':uf,'utility_vs_original':utility_diff,'experiments':finances,
                 'P0S1_NO_KRS':no_krs,'TOP4_BOX_DIAGNOSTIC':top4,'selection_losses_and_rescues':decisions,
+                'krs_incremental_selection':_portfolio_effect(v['P0S1_NO_KRS']['selected_tickets'],
+                    v['cells']['P0S1']['tickets'],result),
+                'model_support_diagnostics':_support_diagnostics(pred,v['cells']['P0S1']['selection']),
+                'p1_role_candidate_selection_flow':{
+                    'rank_and_joint_model_values_unchanged':all(pred[k]==v['cells']['P1S0']['prediction'][k] for k in
+                        ('ranking','winner_model_mass','p2_model_mass_given_head','p3_model_mass_given_pair',
+                         'ordered_pairs','ordered_triples')),
+                    'role_additions':v['cells']['P1S0']['role_hypotheses']['all_runner_review'],
+                    's0_candidate_effect':_portfolio_effect(v['cells']['P0S0']['tickets'],v['cells']['P1S0']['tickets'],result),
+                    's1_selected_effect':_portfolio_effect(v['cells']['P0S1']['tickets'],v['cells']['P1S1']['tickets'],result)},
+                'all_candidate_outcome_join':{cell:[{**x,
+                    'original_stake_finance':_finance([x['original_ticket']],result),
+                    'research_unit_finance':_finance([{**x['original_ticket'],'stake':POLICY['unit_yen']}],result)}
+                    for x in v['cells'][cell]['selection']['candidate_ledger']] for cell in ('P0S1','P1S1')},
                 'all_runner_outcome_join':[{'runner_id':h,'actual_rank':next((r['rank'] for r in result['finish_rows'] if r['runner_id']==h),None),
                     'original_rank':pred['ranking'].index(h)+1,'original_roles':rs,
                     'direct_history_unknown':frozen['feature_pack']['runners'][h].get('STAGE:direct_finish') is None,
@@ -491,26 +583,35 @@ def replay(args):
              'performance_pass':False,'private_storage_required':True,'public_redistribution_authorized':False}
     for arm in ARMS:
         values=[r['arms'][arm] for r in rows]
-        def total(key):return sum(p['arms'][arm][key] for p in planned)
-        summary['arms'][arm]={'original':_summary([v['original'] for v in values],12,planned_investment=total('original')),
+        def investments(key,excluded=()):return [p['arms'][arm][key] for p in planned if p['race_no'] not in excluded]
+        summary['arms'][arm]={'original':_summary([v['original'] for v in values],12,planned_race_investments=investments('original')),
              'user_reported_10_race_scope':_summary([r['arms'][arm]['original'] for r in rows if r['race_no'] not in (1,4)],10,
-                 planned_investment=sum(p['arms'][arm]['original'] for p in planned if p['race_no'] not in (1,4))),
-             'equal_fixed_integer':_summary([v['equal_fixed_integer'] for v in values],12,planned_investment=total('equal_fixed_integer')),
-             'utility_separate':_summary([v['utility_separate'] for v in values],12,planned_investment=total('utility_separate')),
-             **{k:_summary([v['experiments'][k] for v in values],12,planned_investment=total(k)) for k in CELLS},
-             'P0S1_NO_KRS':_summary([v['P0S1_NO_KRS'] for v in values],12,planned_investment=total('P0S1_NO_KRS')),
-             'TOP4_BOX_DIAGNOSTIC':_summary([v['TOP4_BOX_DIAGNOSTIC'] for v in values],12,planned_investment=total('TOP4_BOX_DIAGNOSTIC'))}
+                 planned_race_investments=investments('original',(1,4))),
+             'equal_fixed_integer':_summary([v['equal_fixed_integer'] for v in values],12,planned_race_investments=investments('equal_fixed_integer')),
+             'utility_separate':_summary([v['utility_separate'] for v in values],12,planned_race_investments=investments('utility_separate')),
+             **{k:_summary([v['experiments'][k] for v in values],12,planned_race_investments=investments(k)) for k in CELLS},
+             'P0S1_NO_KRS':_summary([v['P0S1_NO_KRS'] for v in values],12,planned_race_investments=investments('P0S1_NO_KRS')),
+             'TOP4_BOX_DIAGNOSTIC':_summary([v['TOP4_BOX_DIAGNOSTIC'] for v in values],12,planned_race_investments=investments('TOP4_BOX_DIAGNOSTIC'))}
     if summary['original_archive_sha256_after']!=archive_hash:raise ValueError('ORIGINAL_ARCHIVE_CHANGED')
+    if verify_extracted_archive(args.archive_zip,args.archive)!=verified_archive:
+        raise ValueError('ORIGINAL_EXTRACTED_ARCHIVE_CHANGED')
+    summary['verified_original_archive_inventory']=verified_archive
     save_json(out/'result-revision-and-policy-replay.json',sealed(summary))
     print(json.dumps({'output':str(out),'observed_races':len(rows),'holds':len(holds),'arms':summary['arms']},ensure_ascii=False))
+
+
+def _output_outside_ledger(output,ledger):
+    if Path(output).resolve().is_relative_to(Path(ledger).resolve()):
+        raise ValueError('FORWARD_OUTPUT_MUST_BE_OUTSIDE_LEDGER')
 
 
 def register(args):
     frozen=read(args.model_bundle);_check_sha(frozen)
     for model in frozen['models'].values():_check_sha(model)
+    _output_outside_ledger(args.output,args.ledger)
     ledger=private_directory(args.ledger)
     if list(ledger.iterdir()):raise ValueError('NEW_REGISTRATION_REQUIRES_NEW_EMPTY_PRIVATE_LEDGER')
-    registration=sealed({'schema':'URW-SELECTION-RESEARCH-PREREGISTRATION-v1','registered_at':now().isoformat(),
+    registration=sealed({'schema':'URW-SELECTION-RESEARCH-PREREGISTRATION-v2','registered_at':now().isoformat(),
         'cohort':'NEXT_CONTIGUOUS_ELIGIBLE_URW_RACES_AFTER_REGISTRATION_EXCLUDE_20261021',
         'minimum_races':60,'minimum_dates':5,'policy':POLICY,'policy_sha256':sha(POLICY),
         'models':{a:frozen['models'][a]['sha256'] for a in ARMS},'canonical_ledger_path':str(ledger.resolve()),
@@ -526,6 +627,7 @@ def register(args):
             'guardrails':'REPORT_ROLE_CAPTURE_HIT_LOSS_PARTICIPATION_PROTECTION_AND_MAX_RETURN_ROBUSTNESS',
             'S0_comparison':'UNCAPPED_ORIGINAL_REFERENCE_NOT_FAIR_SAME_SPEND_PERFORMANCE_PROOF'},
         'fixed_denominator':'ALL_ELIGIBLE_ATTEMPTS_INCLUDE_FAILURES_HOLDS_AND_NO_BET',
+        'ledger_restore_contract':'EXACT_PRIVATE_CHECKPOINT_AND_CALLER_TRUSTED_FILE_SHA_REQUIRED_BEFORE_MUTATION',
         'model_or_policy_changes':'NEW_REGISTRATION_AND_SEPARATE_COHORT',
         'performance_pass':'NEVER_FROM_DEVELOPMENT_DAY_REQUIRES_FULL_COHORT_REVIEW',
         'formal_quality_credit':0,'automatic_production_promotion':False,'actual_purchase':False,
@@ -536,44 +638,165 @@ def register(args):
     print(json.dumps({'registration':str(args.output),'sha256':registration['sha256']}))
 
 
+def _registered_context(reg):
+    """Check the complete identity before any current-code cohort operation."""
+    _check_sha(reg)
+    if reg.get('schema')!='URW-SELECTION-RESEARCH-PREREGISTRATION-v2':
+        raise ValueError('FORWARD_NEW_REGISTRATION_REQUIRED')
+    if (reg['policy']!=POLICY or reg['policy_sha256']!=sha(POLICY)
+            or reg['code_sha256']!=code_pins()):
+        raise ValueError('PREREGISTERED_CODE_OR_POLICY_CHANGED')
+    ledger=Path(reg['canonical_ledger_path'])
+    private_directory(ledger)
+    _ledger_inventory(ledger)  # Reject symlinks before reading any member JSON.
+    init=read(ledger/'initialization.json');_check_sha(init)
+    if (init['registration_sha256']!=reg['sha256']
+            or init['canonical_ledger_path']!=str(ledger.resolve())
+            or reg['canonical_ledger_path']!=str(ledger.resolve())):
+        raise ValueError('FORWARD_LEDGER_INITIALIZATION')
+    return ledger
+
+
+def _ledger_inventory(ledger):
+    """Capture original bytes, not a reconstructed or success-only ledger."""
+    members={}
+    for path in sorted(ledger.iterdir()):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('FORWARD_CHECKPOINT_SYMLINK_OR_NONFILE')
+        if path.stat().st_mode&0o077:
+            raise ValueError('FORWARD_CHECKPOINT_PRIVATE_FILE_REQUIRED')
+        if path.name=='ledger.lock':continue
+        if not re.fullmatch(r'initialization\.json|day-\d{4}-\d{2}-\d{2}\.json|event-\d{4,}\.json',path.name):
+            raise ValueError('FORWARD_CHECKPOINT_UNEXPECTED_LEDGER_MEMBER')
+        raw=path.read_bytes()
+        members[path.name]={'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest(),
+                            'contents_b64':base64.b64encode(raw).decode()}
+    return members
+
+
+def _ledger_events(reg,ledger):
+    events=[];parent=None
+    paths=sorted(ledger.glob('event-*.json'),key=lambda p:int(p.stem.split('-')[-1]))
+    for path in paths:
+        event=read(path);_check_sha(event)
+        if (event['registration_sha256']!=reg['sha256'] or event['parent_event_sha256']!=parent
+                or event['sequence']!=len(events)+1
+                or path.name!=f'event-{len(events)+1:04d}.json'):
+            raise ValueError('FORWARD_LEDGER_CHAIN')
+        events.append(event);parent=event['sha256']
+    for path in ledger.glob('day-*.json'):
+        day=read(path);_check_sha(day)
+        if day['registration_sha256']!=reg['sha256']:
+            raise ValueError('FORWARD_DAY_PLAN_REGISTRATION')
+    return events
+
+
+def checkpoint(args):
+    """Export a private, immutable full-ledger checkpoint for external readback.
+
+    Exporting an arbitrary local state is not independent proof of freshness.
+    Resume verification needs the latest exact-file digest obtained from the
+    caller's independently saved copy, never a digest inferred from the ledger.
+    """
+    import fcntl
+    reg=read(args.registration);ledger=_registered_context(reg)
+    _output_outside_ledger(args.output,ledger)
+    private_directory(args.output.parent)
+    with private_lock(ledger/'ledger.lock') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        members=_ledger_inventory(ledger);events=_ledger_events(reg,ledger)
+        value=sealed({'schema':'URW-SELECTION-LEDGER-CHECKPOINT-v1',
+            'registration_sha256':reg['sha256'],'canonical_ledger_path':str(ledger.resolve()),
+            'event_count':len(events),'head_event_sha256':events[-1]['sha256'] if events else None,
+            'members':members,'independent_timestamp':'PENDING_EXTERNAL_PRIVATE_READBACK',
+            'production_authority':False,'public_redistribution_authorized':False})
+        save_json(args.output,value)
+    print(json.dumps({'ledger_checkpoint':str(args.output),'checkpoint_file_sha256':file_sha(args.output),
+                      'event_count':len(events),'independent_anchor_verified':False}))
+
+
+def _verify_checkpoint(reg,ledger,args):
+    path=getattr(args,'ledger_checkpoint',None)
+    expected=getattr(args,'expected_checkpoint_sha256',None)
+    if path is None or not isinstance(expected,str) or not re.fullmatch(r'[a-f0-9]{64}',expected):
+        raise ValueError('FORWARD_LEDGER_CHECKPOINT_AND_TRUSTED_SHA_REQUIRED')
+    path=Path(path);private_directory(path.parent)
+    if path.is_symlink() or not path.is_file() or path.stat().st_mode&0o077:
+        raise ValueError('FORWARD_CHECKPOINT_PRIVATE_REGULAR_FILE_REQUIRED')
+    if file_sha(path)!=expected:
+        raise ValueError('FORWARD_CHECKPOINT_FILE_SHA_MISMATCH')
+    value=read(path);_check_sha(value)
+    if (value.get('schema')!='URW-SELECTION-LEDGER-CHECKPOINT-v1'
+            or value['registration_sha256']!=reg['sha256']
+            or value['canonical_ledger_path']!=str(ledger.resolve())):
+        raise ValueError('FORWARD_CHECKPOINT_REGISTRATION_OR_PATH')
+    for name,member in value['members'].items():
+        if not re.fullmatch(r'initialization\.json|day-\d{4}-\d{2}-\d{2}\.json|event-\d{4,}\.json',name):
+            raise ValueError('FORWARD_CHECKPOINT_MEMBER_PATH')
+        raw=base64.b64decode(member['contents_b64'],validate=True)
+        if len(raw)!=member['bytes'] or hashlib.sha256(raw).hexdigest()!=member['sha256']:
+            raise ValueError('FORWARD_CHECKPOINT_MEMBER_INTEGRITY')
+    if value['members']!=_ledger_inventory(ledger):
+        raise ValueError('FORWARD_LEDGER_CHECKPOINT_MISMATCH_RESTORE_COMPLETE_LEDGER')
+    events=_ledger_events(reg,ledger)
+    if (value['event_count']!=len(events)
+            or value['head_event_sha256']!=(events[-1]['sha256'] if events else None)):
+        raise ValueError('FORWARD_CHECKPOINT_EVENT_HEAD')
+    return value
+
+
+def verify_restore(args):
+    """Verify a complete restoration; never refill, repair or replace its files."""
+    import fcntl
+    reg=read(args.registration);ledger=_registered_context(reg)
+    with private_lock(ledger/'ledger.lock') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        value=_verify_checkpoint(reg,ledger,args)
+    print(json.dumps({'status':'COMPLETE_LEDGER_READBACK_VERIFIED','event_count':value['event_count'],
+                      'registration_sha256':reg['sha256'],'independent_anchor_verified':False}))
+
+
 def register_day(args):
     """Bind the existing official whole-day plan before its first cutoff."""
     from runtime.local_reference_day import verify_plan
-    reg=read(args.registration);_check_sha(reg)
+    reg=read(args.registration);ledger=_registered_context(reg)
     raw=args.day_plan.read_bytes()
     plan=json.loads(gzip.decompress(raw) if raw[:2]==b'\x1f\x8b' else raw)
     verify_plan(plan,plan['race_date'])
-    if (reg['code_sha256']!=code_pins() or reg['policy']!=POLICY
-            or plan['race_date']<=POLICY['development_date_excluded_from_future_quality']
+    if (plan['race_date']<=POLICY['development_date_excluded_from_future_quality']
             or min(datetime.fromisoformat(r['fields']['prediction_cutoff']) for r in plan['races'])<=now()):
         raise ValueError('FORWARD_DAY_PLAN_NOT_PREREGISTERED_BEFORE_FIRST_CUTOFF')
-    ledger=Path(reg['canonical_ledger_path'])
-    init=read(ledger/'initialization.json');_check_sha(init)
-    if init['registration_sha256']!=reg['sha256']:raise ValueError('FORWARD_LEDGER_INITIALIZATION')
-    record=sealed({'registration_sha256':reg['sha256'],'registered_at':now().isoformat(),
-                   'existing_official_day_plan':plan,'source_plan_file_sha256':file_sha(args.day_plan),
-                   'fixed_denominator':len(plan['races']),'production_authority':False})
-    save_json(ledger/f'day-{plan["race_date"]}.json',record)
+    import fcntl
+    with private_lock(ledger/'ledger.lock') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        _verify_checkpoint(reg,ledger,args)
+        if min(datetime.fromisoformat(r['fields']['prediction_cutoff']) for r in plan['races'])<=now():
+            raise ValueError('FORWARD_DAY_PLAN_NOT_PREREGISTERED_BEFORE_FIRST_CUTOFF')
+        record=sealed({'registration_sha256':reg['sha256'],'registered_at':now().isoformat(),
+                       'existing_official_day_plan':plan,'source_plan_file_sha256':file_sha(args.day_plan),
+                       'fixed_denominator':len(plan['races']),'production_authority':False})
+        save_json(ledger/f'day-{plan["race_date"]}.json',record)
     print(json.dumps({'registered_day':plan['race_date'],'fixed_denominator':record['fixed_denominator']}))
 
 
 def cohort_status(args):
     """Read planned races as well as invoked ones; never select successes only."""
-    reg=read(args.registration);_check_sha(reg);ledger=Path(reg['canonical_ledger_path']);events=[];parent=None
-    for path in sorted(ledger.glob('event-*.json')):
-        e=read(path);_check_sha(e)
-        if e['registration_sha256']!=reg['sha256'] or e['parent_event_sha256']!=parent or e['sequence']!=len(events)+1:
-            raise ValueError('FORWARD_LEDGER_CHAIN')
-        events.append(e);parent=e['sha256']
-    rows=[]
-    for path in sorted(ledger.glob('day-*.json')):
-        day=read(path);_check_sha(day)
-        if day['registration_sha256']!=reg['sha256']:raise ValueError('FORWARD_DAY_PLAN_REGISTRATION')
-        for race in day['existing_official_day_plan']['races']:
-            f=race['fields'];es=[e for e in events if e['race_date']==f['race_date'] and e['race_no']==f['race_no']]
-            state=es[-1]['status'] if es else ('HOLD_NOT_INVOKED' if datetime.fromisoformat(f['prediction_cutoff'])<=now() else 'PENDING_PRE_CUTOFF')
-            rows.append({'race_date':f['race_date'],'race_no':f['race_no'],'status':state})
+    import fcntl
+    reg=read(args.registration);ledger=_registered_context(reg)
+    _output_outside_ledger(args.output,ledger)
+    with private_lock(ledger/'ledger.lock') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        _verify_checkpoint(reg,ledger,args);events=_ledger_events(reg,ledger);rows=[]
+        for path in sorted(ledger.glob('day-*.json')):
+            day=read(path);_check_sha(day)
+            if day['registration_sha256']!=reg['sha256']:raise ValueError('FORWARD_DAY_PLAN_REGISTRATION')
+            for race in day['existing_official_day_plan']['races']:
+                f=race['fields'];es=[e for e in events if e['race_date']==f['race_date'] and e['race_no']==f['race_no']]
+                state=es[-1]['status'] if es else ('HOLD_NOT_INVOKED' if datetime.fromisoformat(f['prediction_cutoff'])<=now() else 'PENDING_PRE_CUTOFF')
+                rows.append({'race_date':f['race_date'],'race_no':f['race_no'],'status':state})
     value=sealed({'registration_sha256':reg['sha256'],'planned_fixed_denominator':len(rows),'races':rows,
+                  'ledger_checkpoint_file_sha256':args.expected_checkpoint_sha256,
+                  'ledger_verification':'EXACT_CALLER_DIGEST_MATCH_NOT_INDEPENDENT_TIMING_PROOF',
                   'performance_pass':False,'formal_quality_credit':0})
     private_directory(args.output.parent);save_json(args.output,value)
     print(json.dumps({'cohort_status':str(args.output),'fixed_denominator':len(rows)}))
@@ -581,9 +804,9 @@ def cohort_status(args):
 
 def freeze(args):
     import fcntl
-    reg=read(args.registration);_check_sha(reg)
-    if reg['policy']!=POLICY or reg['code_sha256']!=code_pins():raise ValueError('PREREGISTERED_CODE_OR_POLICY_CHANGED')
+    reg=read(args.registration);_registered_context(reg)
     if str(args.ledger.resolve())!=reg['canonical_ledger_path']:raise ValueError('FORWARD_CANONICAL_LEDGER_REQUIRED')
+    _output_outside_ledger(args.output,args.ledger)
     init=read(args.ledger/'initialization.json');_check_sha(init)
     if init['registration_sha256']!=reg['sha256']:raise ValueError('FORWARD_LEDGER_INITIALIZATION')
     bundle=read(args.input_bundle)
@@ -593,12 +816,8 @@ def freeze(args):
     private_directory(args.ledger);private_directory(args.output)
     with private_lock(args.ledger/'ledger.lock') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        events=[];parent=None
-        for path in sorted(args.ledger.glob('event-*.json')):
-            event=read(path);_check_sha(event)
-            if (event['registration_sha256']!=reg['sha256'] or event['parent_event_sha256']!=parent
-                    or event['sequence']!=len(events)+1):raise ValueError('FORWARD_LEDGER_CHAIN')
-            events.append(event);parent=event['sha256']
+        _verify_checkpoint(reg,args.ledger,args)
+        events=_ledger_events(reg,args.ledger)
         race_no=obs['race']['race_no']
         if any(x['race_date']==pack['race_date'] and x['race_no']==race_no for x in events):
             raise ValueError('FORWARD_DUPLICATE_RACE_ATTEMPT')
@@ -674,6 +893,10 @@ def freeze(args):
                 'formal_quality_credit':0,'production_authority':False,'signed_final_claim':False,
                 'actual_purchase':False,'private_storage_required':True,'public_redistribution_authorized':False})
             save_json(args.output/'research-selection-freeze.json',artifact)
+            if now()>=cutoff:
+                # The immutable bytes may exist, but finishing the write after
+                # the deadline cannot become an eligible completed Freeze.
+                raise ValueError('FORWARD_PERSISTED_AFTER_CUTOFF')
             attempt.update(status='FROZEN_PENDING_INDEPENDENT_ANCHOR',artifact_sha256=artifact['sha256'],remaining=remaining)
         except Exception as exc:
             attempt.update(status='HOLD_RETAINED_IN_DENOMINATOR',reason=str(exc),remaining=remaining)
@@ -693,10 +916,17 @@ def main():
         p.add_argument('--'+flag,type=Path,required=True)
     p.set_defaults(run=replay)
     p=sub.add_parser('register');p.add_argument('--model-bundle',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--ledger',type=Path,required=True);p.set_defaults(run=register)
-    p=sub.add_parser('register-day');p.add_argument('--registration',type=Path,required=True);p.add_argument('--day-plan',type=Path,required=True);p.set_defaults(run=register_day)
-    p=sub.add_parser('cohort-status');p.add_argument('--registration',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.set_defaults(run=cohort_status)
+    def checkpoint_inputs(p):
+        p.add_argument('--ledger-checkpoint',type=Path,required=True)
+        p.add_argument('--expected-checkpoint-sha256',required=True,
+                       help='Exact checkpoint-file SHA from the independently saved private copy, not inferred from the ledger')
+    p=sub.add_parser('register-day');p.add_argument('--registration',type=Path,required=True);p.add_argument('--day-plan',type=Path,required=True);checkpoint_inputs(p);p.set_defaults(run=register_day)
+    p=sub.add_parser('cohort-status');p.add_argument('--registration',type=Path,required=True);p.add_argument('--output',type=Path,required=True);checkpoint_inputs(p);p.set_defaults(run=cohort_status)
+    p=sub.add_parser('checkpoint');p.add_argument('--registration',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.set_defaults(run=checkpoint)
+    p=sub.add_parser('verify-restore');p.add_argument('--registration',type=Path,required=True);checkpoint_inputs(p);p.set_defaults(run=verify_restore)
     p=sub.add_parser('freeze')
     for flag in ('input-bundle','registration','ledger','output'):p.add_argument('--'+flag,type=Path,required=True)
+    checkpoint_inputs(p)
     p.set_defaults(run=freeze)
     a=parser.parse_args();a.run(a)
 
