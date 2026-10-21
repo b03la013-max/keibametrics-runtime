@@ -1,4 +1,4 @@
-import copy, hashlib, json, math
+import copy, hashlib, json
 from datetime import datetime, timezone
 
 PROFILE="KM-FAMILY-MEC-R4-SHADOW-CANDIDATE-20260922-R1"
@@ -264,7 +264,7 @@ def _payout(result,bet_type,top3):
             return float(payout)/float(stake)*100.0
     return None
 
-def settle_ticket_list(tickets,result,*,require_resolved_refunds=False):
+def settle_ticket_list(tickets,result):
     """Settle exacta/trio/trifecta tickets with one canonical implementation.
 
     This helper is shared by MEC-R4 Shadow and the Production-R3 comparator.
@@ -273,24 +273,6 @@ def settle_ticket_list(tickets,result,*,require_resolved_refunds=False):
     top3=_top3_ids(result)
     if len(top3)!=3:
         raise AssertionError("SHADOW_RESULT_TOP3_MISSING")
-    official=result.get("official_result") or {}
-    refund_status=official.get("refund_status")
-    refund_fields=any(k in official for k in ('refund_status','refunded_runner_ids','refund_evidence','nonfinish_rows'))
-    refund_hold=(require_resolved_refunds or refund_fields) and refund_status!="RESOLVED"
-    refunds={int(x) for x in official.get("refunded_runner_ids",[])} if not refund_hold else set()
-    if refunds & set(map(int,top3)):
-        raise AssertionError("SHADOW_REFUND_FINISH_CONFLICT")
-    seen=set()
-    for row in tickets:
-        bt=str(row.get("bet_type") or "").upper();sel=row.get("selection") or []
-        if (bt not in {"EXACTA","TRIO","TRIFECTA"} or len(sel)!=(2 if bt=="EXACTA" else 3)
-                or any(type(x) not in (int,str) or not str(x).isdigit() or int(x)<=0 for x in sel)
-                or len(set(map(int,sel)))!=len(sel) or type(row.get("stake")) is not int
-                or row["stake"]<=0 or row["stake"]%100):
-            raise AssertionError("SHADOW_TICKET_INVALID")
-        key=_key(bt,sel)
-        if key in seen:raise AssertionError("SHADOW_TICKET_DUPLICATE")
-        seen.add(key)
     targets={
         "EXACTA":top3[:2],
         "TRIO":sorted(top3),
@@ -300,56 +282,40 @@ def settle_ticket_list(tickets,result,*,require_resolved_refunds=False):
     unresolved=[]
     total_inv=0
     total_ret=0.0
-    total_refund=0
-    total_winnings=0.0
     hit_types=[]
     for bt in ("EXACTA","TRIO","TRIFECTA"):
         rows=[x for x in tickets if str(x.get("bet_type") or "").upper()==bt]
         inv=sum(int(x.get("stake") or 0) for x in rows)
-        refunded=[x for x in rows if refunds & set(map(int,x['selection']))]
-        refund=sum(x['stake'] for x in refunded)
-        ret=float(refund)
-        winnings=0.0
+        ret=0.0
         hit=False
         matching=[x for x in rows if _key(bt,x.get("selection") or [])==_key(bt,targets[bt])]
         if matching:
             pay=_payout(result,bt,top3)
-            if pay is None or not math.isfinite(pay) or pay<=0:
+            if pay is None:
                 unresolved.append(bt)
             else:
                 for x in matching:
-                    winnings += pay*(int(x.get("stake") or 0)/100.0)
-                ret+=winnings
-                hit=winnings>0
+                    ret += pay*(int(x.get("stake") or 0)/100.0)
+                hit=ret>0
                 if hit:
                     hit_types.append(bt)
         total_inv += inv
         total_ret += ret
-        total_refund += refund
-        total_winnings += winnings
-        known=bt not in unresolved and not refund_hold
         by_type[bt]={
             "investment":inv,
-            "return":ret if known else None,
-            "winnings":winnings if known else None,
-            "refund":refund if known else None,
-            "refunded_ticket_count":len(refunded) if known else None,
-            "profit_loss":(ret-inv) if known else None,
-            "pfs":(ret/inv*100.0) if inv and known else None,
-            "hit":hit if known else None,
+            "return":ret if bt not in unresolved else None,
+            "profit_loss":(ret-inv) if bt not in unresolved else None,
+            "pfs":(ret/inv*100.0) if (inv and bt not in unresolved) else (None if bt in unresolved else None),
+            "hit":hit if bt not in unresolved else None,
             "ticket_count":len(rows),
         }
-    status="HOLD_REFUND_UNRESOLVED" if refund_hold else "SETTLED" if not unresolved else "PARTIAL_PAYOUT_MISSING"
-    known=not unresolved and not refund_hold
+    status="SETTLED" if not unresolved else "PARTIAL_PAYOUT_MISSING"
     return {
         "status":status,
         "investment":total_inv,
-        "return":total_ret if known else None,
-        "winnings":total_winnings if known else None,
-        "refund":total_refund if known else None,
-        "profit_loss":(total_ret-total_inv) if known else None,
-        "pfs":(total_ret/total_inv*100.0) if total_inv and known else None,
-        "refund_status":refund_status or "LEGACY_NOT_ASSERTED",
+        "return":total_ret if not unresolved else None,
+        "profit_loss":(total_ret-total_inv) if not unresolved else None,
+        "pfs":(total_ret/total_inv*100.0) if (total_inv and not unresolved) else None,
         "hit_types":sorted(set(hit_types)),
         "unresolved_payout_types":sorted(set(unresolved)),
         "ticket_count":len(tickets),

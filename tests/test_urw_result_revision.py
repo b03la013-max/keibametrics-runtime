@@ -5,7 +5,7 @@ import hashlib
 import pytest
 
 from runtime import urw_nankan_reference_source as n
-from runtime.mec_r4_shadow import settle_ticket_list
+from scripts.urw_paper_selection_replay import settle_observed_ticket_list as settle_ticket_list
 
 
 def case(status='競走除外',note='返還:4号馬'):

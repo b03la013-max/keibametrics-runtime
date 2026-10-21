@@ -21,6 +21,9 @@ read only after each race's outcome-blind research views have been saved.
 Missing witnesses retain planned investment and the fixed denominator; full-day
 return/PFS remain unknown until every race is settled. Refunds are separate from
 winning returns. The original helper and its prior HOLD records are unchanged.
+The result-revision adapter separates explicit refunds and delegates live tickets
+to the byte-unchanged preregistered shared settler. Its old definition hashes and
+historical cohort are not rewritten to make CI pass.
 
 P0S0 is the immutable original reference. P0S1 selects from that same universe.
 P1 keeps model values/rankings fixed and tests limited, multi-evidence Role

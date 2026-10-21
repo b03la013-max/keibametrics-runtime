@@ -15,6 +15,7 @@ import gzip
 import hashlib
 from itertools import combinations, permutations
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -28,7 +29,7 @@ from runtime.urw_nankan_reference_source import (parse_result,private_directory,
                                                 private_lock,DOM,decode,Node,one)
 from runtime.minimum_efficient_coverage import build_mec_plan,validate_mec_plan
 from runtime.capital_policy import resolve_capital_policy
-from runtime.mec_r4_shadow import settle_ticket_list
+from runtime.mec_r4_shadow import settle_ticket_list,_payout,_top3_ids
 from runtime.jra_ticket_tree_renderer import render_ticket_tree
 
 ARMS=('BASELINE','CANDIDATE')
@@ -225,8 +226,61 @@ def build_views(frozen,audits,observation,remaining):
     return views
 
 
+def settle_observed_ticket_list(tickets,result,*,require_resolved_refunds=True):
+    """Result-Revision adapter around the unchanged, preregistered settler.
+
+    The old forward protocol fingerprints the entire shared settler file.
+    Keep those bytes and historical receipts intact: split explicit refunds,
+    settle the remaining tickets with that SAME function, then reconcile the
+    original gross stake ledger. No new purchase/selection rule is introduced.
+    """
+    normalized=canonical_tickets(tickets)
+    keys=[(t['bet_type'],tuple(t['selection'])) for t in normalized]
+    if len(keys)!=len(set(keys)):raise ValueError('OBSERVED_SETTLEMENT_DUPLICATE_TICKET')
+    official=result.get('official_result') or {};top=list(map(int,_top3_ids(result)))
+    if len(top)!=3 or len(set(top))!=3:raise ValueError('OBSERVED_RESULT_TOP3_INVALID')
+    fields=any(k in official for k in ('refund_status','refunded_runner_ids','refund_evidence','nonfinish_rows'))
+    refund_hold=(require_resolved_refunds or fields) and official.get('refund_status')!='RESOLVED'
+    raw_ids=official.get('refunded_runner_ids',[]) if not refund_hold else []
+    if (not isinstance(raw_ids,list) or any(type(x) not in (int,str) or not str(x).isdigit() for x in raw_ids)
+            or len(set(map(int,raw_ids)))!=len(raw_ids)):raise ValueError('OBSERVED_REFUND_IDS_INVALID')
+    refunds=set(map(int,raw_ids))
+    if refunds&set(top):raise ValueError('OBSERVED_REFUND_FINISH_CONFLICT')
+    returned=[t for t in normalized if refunds&set(t['selection'])]
+    live=[t for t in normalized if not refunds&set(t['selection'])]
+    base=settle_ticket_list(live,result)
+    unresolved=set(base['unresolved_payout_types'])
+    targets={'EXACTA':top[:2],'TRIO':sorted(top),'TRIFECTA':top}
+    for bt,target in targets.items():
+        if any(t['bet_type']==bt and t['selection']==target for t in live):
+            pay=_payout(result,bt,top)
+            if pay is None or not math.isfinite(pay) or pay<=0:unresolved.add(bt)
+    buckets={};hit_types=[]
+    for bt,b in base['by_bet_type'].items():
+        inv=sum(t['stake'] for t in normalized if t['bet_type']==bt)
+        ref=sum(t['stake'] for t in returned if t['bet_type']==bt)
+        known=not refund_hold and bt not in unresolved
+        winnings=b['return'] if known else None
+        total=winnings+ref if known else None
+        hit=bool(winnings) if known else None
+        if hit:hit_types.append(bt)
+        buckets[bt]={**b,'investment':inv,'return':total,'winnings':winnings,'refund':ref if known else None,
+            'refunded_ticket_count':sum(t['bet_type']==bt for t in returned) if known else None,
+            'profit_loss':total-inv if known else None,'pfs':100*total/inv if inv and known else None,
+            'hit':hit,'ticket_count':sum(t['bet_type']==bt for t in normalized)}
+    known=not refund_hold and not unresolved;inv=sum(t['stake'] for t in normalized)
+    ret=sum(b['return'] for b in buckets.values()) if known else None
+    return {**base,'status':'HOLD_REFUND_UNRESOLVED' if refund_hold else 'PARTIAL_PAYOUT_MISSING' if unresolved else 'SETTLED',
+            'investment':inv,'return':ret,'winnings':sum(b['winnings'] for b in buckets.values()) if known else None,
+            'refund':sum(t['stake'] for t in returned) if known else None,
+            'profit_loss':ret-inv if known else None,'pfs':100*ret/inv if inv and known else None,
+            'ticket_count':len(normalized),'by_bet_type':buckets,'hit_types':hit_types,
+            'unresolved_payout_types':sorted(unresolved),'refund_status':official.get('refund_status') or 'LEGACY_NOT_ASSERTED',
+            'settlement_adapter':'URW_RESULT_REVISION_EXPLICIT_REFUND_OVER_UNCHANGED_PREREGISTERED_SETTLER'}
+
+
 def _finance(tickets,result):
-    return settle_ticket_list(tickets,result,require_resolved_refunds=True)
+    return settle_observed_ticket_list(tickets,result,require_resolved_refunds=True)
 
 
 def _summary(finances,denominator,*,planned_investment=None):
