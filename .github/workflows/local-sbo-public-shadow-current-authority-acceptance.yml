@@ -21,8 +21,10 @@ jobs:
       - name: Validate authority graph and production boundary
         run: |
           python - <<'PY'
-          import json,urllib.request
+          import json
           from pathlib import Path
+          from runtime.execution_gateway import load_gateway, family_config, fetch_health, assess_runtime_health
+          from runtime.family_authority_guard import resolve_current_authority
 
           def j(path):
               return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -32,8 +34,6 @@ jobs:
           s=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R9.json")
           r=j("profiles/local_information_source_registry_v1.10_20260924.json")
           x=j("governance/KM-LOCAL-SBO-PUBLIC-SHADOW-SOURCE-ACTIVATION-20260924-R1.json")
-          r4=j("runtime/mec_r4_oos_status.json")
-          r5=j("runtime/local_mec_r5_oos_status.json")
 
           assert a["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R11"
           assert a["common_family_components"]["family_runtime_contracts"]==c["profile_id"]
@@ -79,33 +79,38 @@ jobs:
           assert x["capital_change"] is False
           assert x["acceptance"]["production_runtime_conclusion"]=="SUCCESS"
 
-          assert r4["eligible_races"]==3 and r4["target_eligible_races"]==30
-          assert r5["eligible_races"]==3 and r5["target_eligible_races"]==30
+          # R11 is an immutable historical authority graph. Its snapshot count
+          # must not be compared to the continuously updated OOS ledgers.
           assert L["mec_measurement"]["r4_local"]["current_local_oos_count"]==3
           assert L["mec_measurement"]["r5_local"]["current_oos_count"]==3
 
-          with urllib.request.urlopen("https://witnessstrictimage-production.up.railway.app/health",timeout=30) as resp:
-              h=json.load(resp)
-          assert h["status"]=="READY",h
-          assert h["runtime_revision"]==L["runtime"],h
-          assert h["github_revision"]=="d753d0cbca00f790351a56ff9f5c923290830d4f",h
+          # Check the live runtime against the current approved bundle rather
+          # than requiring the historical September deployment to stay live.
+          _,current=resolve_current_authority()
+          gateway=load_gateway()
+          assert current["common_family_components"]["local_execution_gateway"]==gateway["profile_id"]
+          h=fetch_health(family_config("LOCAL",gateway)["external_endpoint"])
+          acceptance=assess_runtime_health(h,"LOCAL",gateway)
+          assert acceptance["status"]=="PASS",acceptance
           assert h["sbo_public_shadow_profile"]=="KM-LOCAL-SBO-PUBLIC-SHADOW-EVIDENCE-v1.0-20260924",h
           assert h["sbo_public_shadow_sha256"]=="998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53",h
           assert "SOURCE_SBO_PUBLIC_SHADOW" in h["capabilities"],h
 
           print("LOCAL_SBO_PUBLIC_SHADOW_AUTHORITY_PASS="+json.dumps({
-              "current_authority":a["manifest_id"],
-              "runtime_contract":c["profile_id"],
-              "suite_manifest":s["manifest_id"],
+              "historical_authority":a["manifest_id"],
+              "current_authority":current["manifest_id"],
+              "historical_runtime_contract":c["profile_id"],
+              "historical_suite_manifest":s["manifest_id"],
               "information_registry":r["profile_id"],
               "runtime":h["runtime_revision"],
               "runtime_git_revision":h["github_revision"],
               "sbo_profile":h["sbo_public_shadow_profile"],
               "sbo_sha256":h["sbo_public_shadow_sha256"],
               "production_authority":False,
-              "numerical_authority":L["numerical_authority_status"],
+              "historical_numerical_authority":L["numerical_authority_status"],
               "production_suite":L["production_suite"],
-              "r4_oos":r4["eligible_races"],
-              "r5_oos":r5["eligible_races"],
+              "historical_r4_oos":L["mec_measurement"]["r4_local"]["current_local_oos_count"],
+              "historical_r5_oos":L["mec_measurement"]["r5_local"]["current_oos_count"],
+              "runtime_acceptance":acceptance,
           },ensure_ascii=False,separators=(",",":")))
           PY
