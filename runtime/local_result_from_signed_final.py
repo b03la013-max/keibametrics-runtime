@@ -21,12 +21,14 @@ from common_exact_continuity_shadow import (
 )
 from common_exact_continuity_oos_tracker import write_status as write_common_exact_continuity_oos_status
 from execution_gateway import load_gateway, normalize_request, family_config, artifact_name as gateway_artifact_name, request_json, result_route
-from execution_store import materialize_phase, verify_result_reuse
+from execution_store import (materialize_phase, verify_result_reuse,
+                             require_public_storage, require_public_artifact_paths)
 from race_day_fast_reflection import build_fast_reflection
 
 RUNTIME_OUT = os.environ.get("KM_RUNTIME_OUT", "runtime_out")
 
 raw_req=json.load(open(sys.argv[1],encoding="utf-8"))
+require_public_storage(raw_req)
 gateway=load_gateway()
 req,execution_context=normalize_request(raw_req,gateway)
 execution_id=str(execution_context["execution_id"])
@@ -103,6 +105,7 @@ json.dump({
 
 if resolution_mode!="CANONICAL_EXECUTION_STORE":
     subprocess.run(["gh","run","download",str(run_id),"-n",artifact_name,"-D","runtime_result_in"],check=True)
+require_public_artifact_paths(["runtime_result_in"])
 fin_path=os.path.join("runtime_result_in","final_receipt_envelope.json")
 fin=json.load(open(fin_path,encoding="utf-8"))
 rid=req["race_id"]

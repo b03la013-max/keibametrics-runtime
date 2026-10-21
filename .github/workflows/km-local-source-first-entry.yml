@@ -80,11 +80,15 @@ jobs:
               raise SystemExit('UNEXPECTED_SOURCE_FIRST_FAILURE:' + str(r.get('code')))
           print('SIGNED_SOURCE_ONLY_PASS / FORMAL_FINAL_NOT_CLAIMED / ' + str(r.get('code')))
           PY
-      - uses: actions/upload-artifact@v4
+      - name: Check public SOURCE artifact storage scope
+        id: public_storage
         if: always()
+        run: python runtime/execution_store.py assert-public --json-only entry-out "runtime/executions/${{ steps.entry.outputs.execution_id }}/SOURCE"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.public_storage.outcome == 'success'
         with:
           name: local-source-first-${{ github.run_id }}
           path: |
-            entry-out/
-            runtime/executions/${{ steps.entry.outputs.execution_id }}/SOURCE/
+            entry-out/**/*.json
+            runtime/executions/${{ steps.entry.outputs.execution_id }}/SOURCE/**/*.json
           retention-days: 90

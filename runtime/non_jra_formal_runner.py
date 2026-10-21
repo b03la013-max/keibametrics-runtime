@@ -67,6 +67,8 @@ endpoint=resolved["external_endpoint"]
 
 os.makedirs(RUNTIME_OUT,exist_ok=True)
 def persist(name,obj):
+    from execution_store import require_public_storage
+    require_public_storage(obj)
     with open(os.path.join(RUNTIME_OUT,name),"w",encoding="utf-8") as wf:
         json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
 
@@ -1733,8 +1735,7 @@ if candidate_shadow_q is not None or candidate_shadow_q_v02 is not None or candi
 os.makedirs(RUNTIME_OUT,exist_ok=True)
 for nm,obj in (("source_receipt_envelope.json",source),("pre_krs_receipt_envelope.json",pre),
                ("krs_receipt_envelope.json",run),("final_receipt_envelope.json",fin)):
-    with open(os.path.join(RUNTIME_OUT,nm),"w",encoding="utf-8") as wf:
-        json.dump(obj,wf,ensure_ascii=False,sort_keys=True,separators=(",",":"))
+    persist(nm,obj)
 
 result_summary=None
 post_result=req.get("post_result_after_final")

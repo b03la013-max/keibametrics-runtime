@@ -526,6 +526,45 @@ def run_chat(intent, *, output, run_id):
     report['delivery']['message_generated'] = True
     report['final_search_scope'] = 'MATERIALIZED_CANONICAL_EXECUTION_STORE_NOT_A_REMOTE_ARTIFACT_SEARCH'
     report['message'] = message
+    from runtime.execution_store import ExecutionStoreError, require_public_storage
+    try:
+        require_public_storage(report)
+    except ExecutionStoreError:
+        from runtime import urw_nankan_reference_source as nankan
+        try:
+            nankan.private_directory(output)
+        except nankan.NankanError:
+            # Keep public diagnostics useful without retaining the private
+            # response in JSON, Markdown, logs or a public artifact upload.
+            message = 'REFERENCE HOLD: PRIVATE_REFERENCE_STORAGE_REQUIRED\n私有原本の読戻しには許可された私有保存先が必要です。\n'
+            report = {'status': 'PRIVATE_REFERENCE_STORAGE_HOLD',
+                'race': report['race'], 'observed_at': report['observed_at'],
+                'completion': False, 'formal_final_proven': False,
+                'reference': {'status': 'HOLD', 'code': 'PRIVATE_REFERENCE_STORAGE_REQUIRED'},
+                'delivery': {'message_generated': True, 'external_notification_sent': False,
+                            'user_acknowledgement_verified': False, 'formal_delivery_verified': False},
+                'message': message}
+        else:
+            # These two files are the latest delivery view, not a source or
+            # prediction freeze. Atomically refresh them on an ordinary reread;
+            # the immutable reference files remain owned by the private writer.
+            import tempfile
+            for name, raw in (
+                    ('chat_response.md', message.encode('utf-8')),
+                    ('chat_entry_report.json', (json.dumps(report, ensure_ascii=False,
+                        sort_keys=True, indent=2)+'\n').encode('utf-8'))):
+                target = output/name
+                if target.is_symlink():
+                    raise nankan.NankanError('NANKAN_PRIVATE_SYMLINK_OUTPUT_FORBIDDEN')
+                fd, temporary = tempfile.mkstemp(prefix='.chat-delivery-', dir=output)
+                try:
+                    with os.fdopen(fd, 'wb') as stream:
+                        stream.write(raw)
+                    os.replace(temporary, target)
+                finally:
+                    if os.path.exists(temporary):
+                        os.unlink(temporary)
+            return report
     # Keep legacy reference files immutable when their directory was requested.
     (output/'chat_response.md').write_text(message, encoding='utf-8')
     o._write(output/'chat_entry_report.json', report)

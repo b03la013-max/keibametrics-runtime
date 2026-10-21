@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import os
 import fcntl
+from urllib.parse import urlsplit
 from typing import Any, Dict, Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -18,6 +19,105 @@ DEFAULT_ROOT = REPO_ROOT / "runtime" / "executions"
 
 class ExecutionStoreError(ValueError):
     pass
+
+
+def require_public_storage(value: Any) -> None:
+    """Keep private provider content out of Git/Actions persistence.
+
+    Acquisition/AI/cloud permission is not public redistribution permission.
+    A payload flag cannot grant that permission. The existing private NANKAN
+    writer remains the storage owner until a separate retention transport is
+    approved; this boundary never relocates or rewrites a signed artifact.
+    Metadata-only provider/permission diagnostics remain publishable.
+    """
+    pending = [(value, False)]
+    seen = set()
+    content_keys = {
+        "raw_gzip_b64", "raw_html", "raw_body", "card_raw", "parsed_nankan_facts",
+        "nankan_runner_facts", "normalized_evidence", "declared_runner_universe",
+        "active_runner_universe", "official_runner_universe", "runners", "sources",
+        "predictions", "numerical", "ticket_tree", "krs_output",
+        "answer_required_parts", "message",
+        "raw", "content", "text",
+    }
+    document_keys = {spelling + suffix for spelling in
+                     ("license_document", "licence_document", "permission_document", "contract_document")
+                     for suffix in ("", "_raw", "_text", "_content", "_b64", "_base64", "_bytes")}
+    def nankan_url(value):
+        try:
+            return isinstance(value, str) and (urlsplit(value).hostname or "").rstrip(".") in {
+                "nankankeiba.com", "www.nankankeiba.com"}
+        except ValueError:
+            return False
+    while pending:
+        item, inherited_restriction = pending.pop()
+        if isinstance(item, (dict, list, tuple)):
+            identity = (id(item), inherited_restriction)
+            if identity in seen:
+                continue
+            seen.add(identity)
+        if isinstance(item, dict):
+            if any(item.get(key) is True for key in ("private_only", "private_storage_required")):
+                raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
+            if any(item.get(key) not in (None, "", [], {}) for key in document_keys):
+                raise ExecutionStoreError("PRIVATE_LICENSE_DOCUMENT_PUBLIC_STORAGE_FORBIDDEN")
+            if any(isinstance(item.get(key), str) and item[key].strip()
+                   for key in ("license_evidence", "licence_evidence")):
+                raise ExecutionStoreError("PRIVATE_LICENSE_DOCUMENT_PUBLIC_STORAGE_FORBIDDEN")
+            provider = any(str(item.get(key) or "").upper() == "NANKAN_OFFICIAL"
+                           for key in ("provider", "source_authority", "authority"))
+            private_profile = "NANKAN-PRIVATE-REFERENCE" in str(item.get("profile") or "")
+            host = any(nankan_url(v)
+                       for key, v in item.items() if key in
+                       {"url", "source_url", "requested_url", "final_url", "origin"})
+            restricted = (inherited_restriction or provider or private_profile or host
+                          or item.get("public_redistribution_authorized") is False)
+            if restricted and content_keys.intersection(item):
+                raise ExecutionStoreError("PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN")
+            pending.extend((v, restricted or key in {"license_evidence", "licence_evidence"})
+                           for key, v in item.items())
+        elif isinstance(item, (list, tuple)):
+            pending.extend((v, inherited_restriction) for v in item)
+        elif isinstance(item, str) and item.lstrip().startswith(("{", "[")):
+            # Transport errors sometimes retain the original JSON as text.
+            try:
+                pending.append((json.loads(item), inherited_restriction))
+            except (ValueError, TypeError, RecursionError):
+                pass
+
+
+def require_public_json_files(files) -> None:
+    """Inspect the entire batch before any file, pointer or directory changes."""
+    for path in files:
+        path = pathlib.Path(path)
+        if path.is_symlink():
+            raise ExecutionStoreError("PUBLIC_STORAGE_SYMLINK_FORBIDDEN")
+        require_public_storage(json.loads(path.read_text(encoding="utf-8")))
+
+
+def require_public_artifact_paths(paths, *, json_only=False) -> int:
+    files = []
+    for value in paths:
+        path = pathlib.Path(value)
+        if path.is_symlink():
+            raise ExecutionStoreError("PUBLIC_STORAGE_SYMLINK_FORBIDDEN")
+        if not path.exists():
+            continue
+        if path.is_file():
+            if json_only and path.suffix != ".json":
+                continue
+            files.append(path)
+        else:
+            descendants = sorted(path.rglob("*"))
+            if any(p.is_symlink() for p in descendants):
+                raise ExecutionStoreError("PUBLIC_STORAGE_SYMLINK_FORBIDDEN")
+            if not json_only and any(p.is_file() and p.suffix != ".json"
+                                     and not (p.name == ".write.lock" and p.stat().st_size == 0)
+                                     for p in descendants):
+                raise ExecutionStoreError("PUBLIC_STORAGE_UNREVIEWED_FILE_FORBIDDEN")
+            files.extend(p for p in descendants if p.is_file() and p.suffix == ".json")
+    require_public_json_files(files)
+    return len(files)
 
 
 def verify_result_reuse(envelope, final, expected_payload, verification):
@@ -84,6 +184,7 @@ def persist_phase(
     files = sorted(p for p in src.iterdir() if p.is_file() and p.suffix == ".json" and p.name != "manifest.json")
     if not files:
         raise ExecutionStoreError("EXECUTION_STORE_NO_JSON_FILES")
+    require_public_json_files(files)
 
     proot = phase_root(execution_id, phase, root)
     run_key = _safe(str(run_id))
@@ -238,6 +339,8 @@ def materialize_phase(
     if resolved is None:
         return None
     dest = pathlib.Path(destination)
+    require_public_json_files(resolved["run_dir"] / name
+                              for name in resolved["manifest"]["files"])
     dest.mkdir(parents=True, exist_ok=True)
     # Only materialize bytes bound by the verified inventory, never stray files.
     for name in resolved["manifest"]["files"]:
@@ -261,8 +364,15 @@ def _cli() -> int:
     rp.add_argument("--phase", required=True)
     rp.add_argument("--destination")
 
+    public = sub.add_parser("assert-public")
+    public.add_argument("--json-only", action="store_true")
+    public.add_argument("paths", nargs="+")
+
     args = ap.parse_args()
-    if args.cmd == "persist":
+    if args.cmd == "assert-public":
+        result = {"public_storage_check": "PASS",
+                  "json_files_checked": require_public_artifact_paths(args.paths, json_only=args.json_only)}
+    elif args.cmd == "persist":
         result = persist_phase(
             args.execution_id,
             args.phase,
