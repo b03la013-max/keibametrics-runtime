@@ -53,7 +53,7 @@ def configuration(path):
     if path.is_symlink() or path.stat().st_mode&0o077:raise ValueError('PAPER_CONNECTION_PRIVATE_CONFIG')
     c=read(path);reg=read(c['registration']);_check_sha(reg)
     if (type(c.get('seed')) is not int or type(c.get('runs')) is not int
-            or c['runs']!=5000 or c['seed']<0):raise ValueError('PAPER_EXISTING_SIMULATION_CONTRACT')
+            or c['runs']!=5000 or c['seed']!=1):raise ValueError('PAPER_EXISTING_SIMULATION_CONTRACT')
     if (reg['code_sha256']!=registered.code_pins() or reg['policy']!=POLICY
             or reg['policy_sha256']!=sha(POLICY)):raise ValueError('PAPER_REGISTERED_CODE_OR_POLICY_CHANGED')
     if digest(c['engine'])!=ENGINE or digest(c['parameters'])!=PARAMETERS:

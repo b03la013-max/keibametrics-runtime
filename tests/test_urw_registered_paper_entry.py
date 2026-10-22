@@ -76,6 +76,16 @@ def test_partial_engine_attempt_is_preserved_without_a_duplicate_run(tmp_path,mo
     assert (folder/'engine.log').read_text()=='interrupted attempt'
 
 
+@pytest.mark.parametrize('seed',[2,-1,True])
+def test_transport_cannot_change_the_existing_same_seed_contract(tmp_path,monkeypatch,seed):
+    config=tmp_path/'connection.json';config.write_text('{}');config.chmod(0o600)
+    monkeypatch.setattr(p,'private_directory',lambda x:x)
+    monkeypatch.setattr(p,'read',lambda path:p.seal({}) if str(path)=='registration' else
+        {'registration':'registration','seed':seed,'runs':5000})
+    with pytest.raises(ValueError,match='EXISTING_SIMULATION_CONTRACT'):
+        p.configuration(config)
+
+
 def test_later_diagnostic_does_not_replace_an_eligible_forward_pointer(tmp_path,monkeypatch):
     root,folder,archive,receipt,complete=fixture(tmp_path,monkeypatch)
     diagnostic=p.publish('config',folder/'complete.json',archive,receipt)
