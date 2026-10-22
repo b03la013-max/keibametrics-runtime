@@ -599,13 +599,32 @@ def parse_card(raw,race,url,*,excluded_rows=None):
     table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
                and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
     body=one(table.all('tbody'),'NANKAN_ACTUAL_HISTORY_BODY_REQUIRED');runners=[]
-    exclusions=[]
-    for row in [node for node in body.children if isinstance(node,Node) and node.tag=='tr']:
+    exclusions=[];active_frame=None;frame_remaining=0
+    horse_rows=[node for node in body.children if isinstance(node,Node) and node.tag=='tr']
+    for row_index,row in enumerate(horse_rows):
         no=one(row.all('td','umaban'),'NANKAN_HORSE_NUMBER_REQUIRED').text()
         cell=one(row.all('td','pr-umaName-textRound'),'NANKAN_HORSE_NAME_CELL_REQUIRED')
         anchors=[node for node in cell.all('a') if re.fullmatch(r'/uma_info/\d+\.do',node.attrs.get('href',''))]
         horse=one(anchors,'NANKAN_HORSE_IDENTITY_REQUIRED');name=horse.text()
         if not name:raise NankanError('NANKAN_HORSE_NAME_UNKNOWN')
+        # The actual frame cell can span consecutive horse rows. The right
+        # display copy must not establish a second span or advance the count.
+        # Consume physical rows, including explicitly unnumbered scratches.
+        frames=[node for node in row.all('td','waku') if 'cs-wakuBanR' not in node.attrs.get('class','').split()]
+        if len(frames)>1:raise NankanError('NANKAN_FRAME_CELL_NOT_UNIQUE')
+        if frames:
+            if frame_remaining:raise NankanError('NANKAN_FRAME_ROWSPAN_OVERLAP')
+            cell_frame=frames[0];span=cell_frame.attrs.get('rowspan','1');label=cell_frame.text()
+            if not re.fullmatch(r'[1-9][0-9]?',span) or int(span)>len(horse_rows)-row_index:
+                raise NankanError('NANKAN_FRAME_ROWSPAN_INVALID')
+            if not re.fullmatch(r'[1-8]',label) and label not in ('','-','−','－'):
+                raise NankanError('NANKAN_FRAME_VALUE_INVALID')
+            active_frame=int(label) if re.fullmatch(r'[1-8]',label) else None
+            frame_remaining=int(span)
+        frame=active_frame if frame_remaining else None
+        if frame_remaining:
+            frame_remaining-=1
+            if not frame_remaining:active_frame=None
         if not re.fullmatch(r'[1-9]|1[0-6]',no):
             # A current official card can show 取 消 instead of a numerical
             # horse number. This is an *explicitly unnumbered* scratch, never
@@ -635,8 +654,6 @@ def parse_card(raw,race,url,*,excluded_rows=None):
         sex_age=details[0] if details else None
         age_match=re.match(r'^[牡牝セ騸](\d{1,2})\b',sex_age or '')
         trainers=[node.text() for node in group.all('a') if node.attrs.get('href','').startswith('/cho_info/')]
-        frames=[node for node in row.all('td','waku') if 'cs-wakuBanR' not in node.attrs.get('class','').split()]
-        frame=frames[0].text() if len(frames)==1 else ''
         starts=[];missing=[];observations=[]
         for slot in range(1,6):
             cells=row.all('td',f'cs-z{slot}')
@@ -662,7 +679,7 @@ def parse_card(raw,race,url,*,excluded_rows=None):
         statuses=[node.text() for node in row.all('td','cs-odds')]
         cancelled=any(re.fullmatch(r'(?:取消|除外)',text) for text in statuses)
         runners.append({'runner_id':no,'horse_no':int(no),'name':name,'provider_horse_id':horse.attrs['href'].split('/')[-1][:-3],
-            'frame_no':int(frame) if re.fullmatch(r'[1-8]',frame) else None,
+            'frame_no':frame,
             'status':'CANCELLED' if cancelled else 'ACTIVE_DECLARED','active_verified':False,
             'current_jockey':jockeys[0] if len(jockeys)==1 else 'UNKNOWN','current_load':float(loads[0]) if len(loads)==1 else None,
             'current_body_weight':current_bw,'current_body_weight_change':current_bw_change,
@@ -675,6 +692,7 @@ def parse_card(raw,race,url,*,excluded_rows=None):
             'missingness':missing+['CURRENT_ACTIVE_NOT_VERIFIED','CURRENT_ODDS_UNKNOWN']
                 +(['CURRENT_BODY_WEIGHT_UNKNOWN'] if current_bw is None else [])
                 +(['CURRENT_BODY_WEIGHT_CHANGE_UNKNOWN'] if current_bw_change is None else [])})
+    if frame_remaining:raise NankanError('NANKAN_FRAME_ROWSPAN_INCOMPLETE')
     ids=[r['runner_id'] for r in runners]
     if len(set(ids))!=len(ids) or len(set(r['name'] for r in runners))!=len(ids):
         raise NankanError('NANKAN_ALL_RUNNER_UNIVERSE_MISMATCH')

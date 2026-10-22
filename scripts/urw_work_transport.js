@@ -20,7 +20,8 @@
     return output;
   };
   const json = output => JSON.parse(output.trim().split('\n').at(-1));
-  const base='python3 -m runtime.urw_registered_paper_entry --config '+quote(options.config);
+  const python=quote(options.python || 'python3');
+  const base=python+' -m runtime.urw_registered_paper_entry --config '+quote(options.config);
   const query=' --query '+quote(options.query);
   const selectors = target => [['classification','classification'],['artifact_sha256','artifact-sha256'],
     ['source_sha256','source-sha256'],['revision','revision']]
@@ -28,22 +29,49 @@
     .map(([key,arg])=>' --'+arg+' '+quote(target[key])).join('');
   let complete=options.completed;
   const requested=complete || options.readback || {};
-  let saved=json(await shell(base+' read'+query+selectors(requested)));
-  if(saved)return {status:'EXACT_COMPLETED_READBACK_REUSED',publication:saved,calculation_executed:false,storage_writes:0};
-  if(!complete && selectors(requested))throw new Error('WORK_REQUESTED_ORIGINAL_NOT_FOUND_NO_RECOMPUTATION');
-  const ordinaryOutput=options.privateDirectory+'/ordinary-'+String(options.requestId||'request').replace(/[^A-Za-z0-9_-]/g,'_');
-  const ordinary='KM_URW_SINGLE_RACE_CONNECTION='+quote(options.config)+' python3 -m runtime.local_race_entry'+query
+  let saved,calculationExecuted=false,prepareInvoked=false,ordinaryInvoked=false;
+  const invocation=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  const ordinaryOutput=options.privateDirectory+'/ordinary-'+String(options.requestId||'request').replace(/[^A-Za-z0-9_-]/g,'_')+'-'+invocation;
+  const ordinary='KM_URW_SINGLE_RACE_CONNECTION='+quote(options.config)+' '+python+' -m runtime.local_race_entry'+query
     +' --output '+quote(ordinaryOutput)+' --run-id '+quote(options.requestId||'ordinary-single-race');
+  if(complete || selectors(requested) || options.executionMode!=='SINGLE_RACE_NONPRODUCTION') {
+    saved=json(await shell(base+' read'+query+selectors(requested)));
+    if(saved)return {status:'EXACT_COMPLETED_READBACK_REUSED',publication:saved,body:saved.body,
+      calculation_executed:false,storage_writes:0};
+    if(!complete && selectors(requested))throw new Error('WORK_REQUESTED_ORIGINAL_NOT_FOUND_NO_RECOMPUTATION');
+  }
   if(!complete && options.executionMode==='SINGLE_RACE_NONPRODUCTION') {
     // One natural request enters the existing caller, then resumes the same
     // result through actual storage. No registered-v2 admission is inferred.
+    ordinaryInvoked=true;
     await shell(ordinary+' >/dev/null || test -f '+quote(ordinaryOutput+'/chat_entry_report.json'));
     const report=JSON.parse(await shell('cat '+quote(ordinaryOutput+'/chat_entry_report.json')));
+    if(report.status==='FORMAL_VERIFIED' || report.status==='FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED')
+      return {status:'ORDINARY_COMPLETED_READBACK_REUSED',report,body:report.message,
+        ordinary_output:ordinaryOutput,calculation_executed:false,storage_writes:0};
     complete=report.research_execution;
     if(report.status!=='SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING')throw new Error('WORK_ORDINARY_ENTRY_EXECUTION_FAILED: '+JSON.stringify(complete));
+    calculationExecuted=(report.prediction_reexecution===true ? true : report.prediction_reexecution===false ? false : null);
+    prepareInvoked=report.research_execution_invocation?.prepare_invoked===true;
   }
-  complete=complete || json(await shell(base+' prepare'+query));
+  if(!complete){complete=json(await shell(base+' prepare'+query));prepareInvoked=true;calculationExecuted=null;}
   if(complete.status!=='PRIVATE_SAVE_REQUIRED')throw new Error('WORK_TRANSPORT_NO_COMPLETED_CALCULATION');
+  // Validate exact saved bytes with the ordinary entry's existing reader.
+  // This read never invokes SOURCE capture, Owner, KRS, or a ledger writer.
+  const local=json(await shell(python+' -c '+quote(
+    'import json,sys; from runtime.local_race_entry import resolve_chat_intent,_prepared_paper_answer; '+
+    'c=json.loads(sys.argv[1]); body,_=_prepared_paper_answer(c,resolve_chat_intent(sys.argv[2])); '+
+    "print(json.dumps({'body':body,'artifact_sha256':c['artifact_sha256']},ensure_ascii=False))")+
+    ' '+quote(JSON.stringify(complete))+' '+quote(options.query)));
+  const requiredStorage=['mcp__codex_apps__google_drive_upload_file','mcp__codex_apps__google_drive_get_file_metadata',
+    'mcp__codex_apps__google_drive_fetch'];
+  const missing=requiredStorage.filter(name=>typeof tools[name]!=='function');
+  if(missing.length || !options.driveFolder)return {status:'CALCULATED_PRIVATE_SAVE_PENDING',
+    completed:complete,body:local.body,calculation_executed:calculationExecuted,prepare_invoked:prepareInvoked,
+    ordinary_output:ordinaryInvoked?ordinaryOutput:null,completion:false,
+    storage_writes:0,external_storage_roundtrip_verified:false,independent_external_anchor_verified:false,
+    formal_quality_credit:0,chat_render_verified:false,user_acknowledgement_verified:false,
+    storage_hold:{code:missing.length?'PRIVATE_STORAGE_TOOLS_UNAVAILABLE':'PRIVATE_STORAGE_FOLDER_UNCONFIGURED',missing_tools:missing}};
   const upload=unwrap(await tools.mcp__codex_apps__google_drive_upload_file({file_uri:complete.archive,
     file_name:complete.race_id+'-'+complete.artifact_sha256.slice(0,12)+'.zip',mime_type:'application/zip',parent_folder_id:options.driveFolder}));
   if(!upload.success || !upload.id)throw new Error('WORK_TRANSPORT_PRIVATE_UPLOAD_NOT_CONFIRMED');
@@ -54,7 +82,7 @@
   const prefix=options.privateDirectory+'/readback-'+complete.artifact_sha256;
   const file=prefix+'.zip', receipt=prefix+'.receipt.json';
   const actual=json(await shell('umask 077\ncurl --fail --silent --show-error --location --output '+quote(file)+' '+quote(raw.file_uri.download_url)
-    +'\npython3 -c '+quote("import hashlib,json,pathlib; p=pathlib.Path("+JSON.stringify(file)+"); print(json.dumps({'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}))")));
+    +'\n'+python+' -c '+quote("import hashlib,json,pathlib; p=pathlib.Path("+JSON.stringify(file)+"); print(json.dumps({'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}))")));
   if(actual.sha256!==complete.archive_sha256 || actual.bytes!==Number(meta.size))throw new Error('WORK_TRANSPORT_PRIVATE_BYTE_MISMATCH');
   const proof={storage_provider:'Google Drive',storage_id:meta.id,url:meta.url,provider_created_at:meta.created_time,
     provider_modified_at:meta.modified_time,provider_shared:meta.shared,bytes:actual.bytes,readback_sha256:actual.sha256,
@@ -69,6 +97,7 @@
     if(report.status!=='FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED' || !report.message.includes(saved.body))
       throw new Error('WORK_ORDINARY_ENTRY_COMPLETE_BODY_MISMATCH');
   }
-  return {status:'CALCULATION_PRIVATE_SAVE_READBACK_AND_INDEX_CONNECTED',publication:saved,calculation_executed:!options.completed,
+  return {status:'CALCULATION_PRIVATE_SAVE_READBACK_AND_INDEX_CONNECTED',publication:saved,body:saved.body,
+    calculation_executed:calculationExecuted,prepare_invoked:prepareInvoked,
     storage_writes:1,chat_render_verified:false,user_acknowledgement_verified:false};
 })

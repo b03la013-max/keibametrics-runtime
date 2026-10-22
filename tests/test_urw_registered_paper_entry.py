@@ -384,6 +384,55 @@ catch(e){console.log(JSON.stringify({commands,error:e.message}));}})();
     else:assert result['error']=='WORK_REQUESTED_ORIGINAL_NOT_FOUND_NO_RECOMPUTATION'
 
 
+def work_mock(responses,options):
+    import shutil
+    import subprocess
+    node=shutil.which('node')
+    if not node:pytest.skip('Node required for Work caller routing regression')
+    source=Path('scripts/urw_work_transport.js').read_text()
+    script='const transport='+source+';\n'+'''
+const commands=[],responses=RESPONSES;
+const tools={exec_command:async x=>{commands.push(x.cmd);if(!responses.length)throw new Error('UNEXPECTED_COMMAND');
+return {exit_code:0,output:JSON.stringify(responses.shift())}}};
+(async()=>{const result=await transport(tools,OPTIONS);console.log(JSON.stringify({commands,result}));})();
+'''.replace('RESPONSES',json.dumps(responses)).replace('OPTIONS',json.dumps(options))
+    return json.loads(subprocess.run([node,'-e',script],check=True,text=True,capture_output=True).stdout)
+
+
+@pytest.mark.parametrize('status',['FORMAL_VERIFIED','FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED'])
+def test_work_generic_single_uses_ordinary_classification_before_paper_catalog(status):
+    options={'repo':'synthetic','config':'private-config','query':'2026-10-22 浦和2R',
+        'executionMode':p.SINGLE_MODE,'privateDirectory':'private','python':"/verified path/py'thon"}
+    report={'status':status,'message':'EXACT_EXISTING_ORIGINAL','prediction_reexecution':False}
+    result=work_mock([{},report],options)
+    assert len(result['commands'])==2 and 'runtime.local_race_entry' in result['commands'][0]
+    assert 'runtime.urw_registered_paper_entry' not in result['commands'][0]
+    assert "'/verified path/py'\\''thon'" in result['commands'][0]
+    assert result['result']['body']=='EXACT_EXISTING_ORIGINAL'
+    assert result['result']['storage_writes']==0 and result['result']['calculation_executed'] is False
+
+
+@pytest.mark.parametrize('explicit,generation',[(False,False),(False,None),(True,False)])
+def test_work_keeps_verified_local_full_body_when_storage_tools_absent(explicit,generation):
+    complete={'status':'PRIVATE_SAVE_REQUIRED','folder':'private-complete','artifact_sha256':'exact-original'}
+    options={'repo':'synthetic','config':'private-config','query':'2026-10-22 浦和2R',
+        'executionMode':p.SINGLE_MODE,'privateDirectory':'private','python':'/verified/python'}
+    local={'body':'ALL_HORSES_AND_SIX_TREES_STAKES_FROM_NATIVE_READER','artifact_sha256':'exact-original'}
+    if explicit:
+        options['completed']=complete;responses=[None,local]
+    else:
+        report={'status':'SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING','research_execution':complete,
+            'prediction_reexecution':generation,'research_execution_invocation':{'prepare_invoked':True}}
+        responses=[{},report,local]
+    result=work_mock(responses,options);value=result['result']
+    assert value['status']=='CALCULATED_PRIVATE_SAVE_PENDING' and value['body']==local['body']
+    assert '_prepared_paper_answer' in result['commands'][-1] and 'resolve_chat_intent' in result['commands'][-1]
+    assert not any(' prepare --query' in command for command in result['commands'])
+    assert value['calculation_executed'] is generation and value['storage_writes']==0
+    assert value['external_storage_roundtrip_verified'] is False and value['independent_external_anchor_verified'] is False
+    assert value['formal_quality_credit']==0 and value['chat_render_verified'] is False
+
+
 @pytest.mark.parametrize('single',[False,True])
 def test_repaired_single_caller_records_own_code_without_rebinding_v2_registration(tmp_path,monkeypatch,single):
     models={arm:p.seal({'synthetic_arm':arm}) for arm in p.ARMS}

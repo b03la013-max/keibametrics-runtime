@@ -62,6 +62,64 @@ def parsed_detailed_card(raw=None):
     return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
 
 
+def framed_card(*,span='2',second_frame=None,duplicate_primary=False):
+    """Authored shared frame cells; the right display copy is not a horse row."""
+    raw=detailed_card().decode()
+    first=(f'<td class="waku" rowspan="{span}">3</td>'
+           f'<td class="waku cs-wakuBanR" rowspan="{span}">3</td>')
+    if duplicate_primary:first+='<td class="waku">4</td>'
+    raw=raw.replace('<tr><td class="umaban">1</td>',
+        '<tr>'+first+'<td class="umaban">1</td>')
+    if second_frame is not None:
+        raw=raw.replace('<tr><td class="umaban">2</td>',
+            f'<tr><td class="waku">{second_frame}</td><td class="umaban">2</td>')
+    return raw.encode()
+
+
+def test_frame_rowspan_binds_each_actual_horse_once_without_changing_history():
+    _,plain=parsed_detailed_card()
+    assert [r['frame_no'] for r in plain]==[None,None]
+    _,shared=parsed_detailed_card(framed_card())
+    assert [r['frame_no'] for r in shared]==[3,3]
+    # Inserting frame markup changes the whole Raw hash in slot provenance;
+    # observed history records and every other current fact remain the same.
+    assert [{k:v for k,v in r.items() if k not in ('frame_no','history_observations')} for r in shared]==[
+        {k:v for k,v in r.items() if k not in ('frame_no','history_observations')} for r in plain]
+    assert [[x['record'] for x in r['history_observations']] for r in shared]==[
+        [x['record'] for x in r['history_observations']] for r in plain]
+    # A completed span never fills a later genuine absence from the old frame.
+    _,partial=parsed_detailed_card(framed_card(span='1'))
+    assert [r['frame_no'] for r in partial]==[3,None]
+    _,explicit=parsed_detailed_card(framed_card(span='1',second_frame=4))
+    assert [r['frame_no'] for r in explicit]==[3,4]
+
+
+@pytest.mark.parametrize('kwargs',[
+    {'span':'0'},{'span':'-1'},{'span':'bad'},{'span':'3'},
+    {'second_frame':4},{'duplicate_primary':True},{'span':'1','second_frame':9},
+])
+def test_frame_rowspan_contradictions_hold_instead_of_guessing(kwargs):
+    with pytest.raises(n.NankanError,match='NANKAN_FRAME_'):
+        parsed_detailed_card(framed_card(**kwargs))
+
+
+def test_frame_rowspan_consumes_unnumbered_scratch_and_ignores_display_only_copy():
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    race['program_runner_count']=1
+    raw=framed_card().decode().replace('(2頭)','(1頭)').replace(
+        '<td class="umaban">1</td>','<td class="umaban">取 消</td>',1)
+    excluded=[]
+    rows=n.parse_card(raw.encode(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do',excluded_rows=excluded)
+    assert [(r['runner_id'],r['frame_no']) for r in rows]==[('2',3)]
+    assert excluded[0]['runner_id'] is None and excluded[0]['status']=='CANCELLED'
+    # Without the authoritative frame cell, the UI copy cannot fill an absence.
+    raw=framed_card().decode().replace('<td class="waku" rowspan="2">3</td>','')
+    _,rows=parsed_detailed_card(raw.encode())
+    assert [r['frame_no'] for r in rows]==[None,None]
+    _,rows=parsed_detailed_card(framed_card().replace(b'>3</td>', '>－</td>'.encode()))
+    assert [r['frame_no'] for r in rows]==[None,None]
+
+
 def condition_header(*,day='2026年10月22日',venue='浦和競馬',weather='晴',going='ダ良'):
     return (f'<div class="nk23_c-block01__info__detail"><p class="nk23_c-block01__info__text">{day}</p>'
         f'<h3 class="nk23_c-block01__info__title">第7回 {venue} 第4日</h3>'
