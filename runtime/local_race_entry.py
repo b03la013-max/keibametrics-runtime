@@ -430,7 +430,7 @@ def reference_answer_content_check(parts, body):
             'scope': 'SUPPLIED_BODY_ONLY_NOT_CHATGPT_RENDER_OR_USER_RECEIPT'}
 
 
-def _prepared_paper_answer(complete, intent):
+def _prepared_paper_answer(complete, intent, *, prepare_started_at=None, prepare_completed_at=None):
     """Display verified local calculation bytes without claiming external save."""
     from runtime import urw_registered_paper_entry as paper
     from runtime.urw_nankan_reference_source import private_directory
@@ -448,7 +448,19 @@ def _prepared_paper_answer(complete, intent):
     paper.calculated_portfolios(artifact)
     if paper.digest(folder/'readback.txt') != complete['answer_sha256']:
         raise ValueError('PAPER_PREPARED_BODY_CHANGED')
-    return body
+    generated = None
+    comparison = artifact.get('comparison', {})
+    stamp = comparison.get('created_at') or comparison.get('frozen_at')
+    if stamp and prepare_started_at is not None and prepare_completed_at is not None:
+        try:
+            paper._check_sha(comparison)
+            observed = datetime.fromisoformat(stamp)
+            if (observed.tzinfo is not None and prepare_completed_at >= prepare_started_at
+                    and observed <= prepare_completed_at):
+                generated = observed >= prepare_started_at
+        except (KeyError, TypeError, ValueError):
+            pass
+    return body, generated
 
 
 def run_chat(intent, *, output, run_id):
@@ -517,6 +529,7 @@ def run_chat(intent, *, output, run_id):
         try:
             paper = None
             pending = None
+            prepare_started_at = prepare_completed_at = None
             # Separate ordinary single-race execution from v2 cohort admission.
             # Each has an explicit contract and private store; never retry a
             # failed registered admission as an admitted research freeze.
@@ -533,7 +546,9 @@ def run_chat(intent, *, output, run_id):
                     if paper is None:
                         if exact_readback:
                             raise ValueError('EXACT_ORIGINAL_ARTIFACT_UNAVAILABLE')
+                        prepare_started_at = datetime.now(timezone.utc)
                         pending = prepare(connection, intent)
+                        prepare_completed_at = datetime.now(timezone.utc)
                         report['research_execution'] = pending
                         report['research_first_missing_stage'] = 'PRIVATE_SAVE_AND_BYTE_READBACK'
                 except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
@@ -547,10 +562,16 @@ def run_chat(intent, *, output, run_id):
                 reference, content = paper, paper['body']
                 report['research'] = {k:v for k,v in paper.items() if k!='body'}
             elif pending is not None:
-                body = _prepared_paper_answer(pending, intent)
+                body, generated = _prepared_paper_answer(pending, intent,
+                    prepare_started_at=prepare_started_at, prepare_completed_at=prepare_completed_at)
                 reference={'execution_id':pending['race_id'],'answer_required_parts':[body],
                     'private_storage_required':True, 'public_redistribution_authorized':False,
-                    'reference_generated_in_this_request':False,'prediction_reexecution':True}
+                    'reference_generated_in_this_request':False,'prediction_reexecution':generated}
+                report['research_execution_invocation'] = {
+                    'prepare_invoked': True, 'started_at': prepare_started_at.isoformat(),
+                    'completed_at': prepare_completed_at.isoformat(),
+                    'owner_prediction_generated_in_this_call': generated,
+                    'scope': 'SEALED_OWNER_COMPARISON_TIME_NOT_ENGINE_OR_DELIVERY_PROOF'}
                 content=('対象Raceの全計算は完了。以下はローカル原本の検算済み本文です。'
                     '外部私有保存・再取得は未成立であり、配送完了とは扱いません。\n\n'+body)
             else:

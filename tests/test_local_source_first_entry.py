@@ -133,6 +133,31 @@ def test_prepared_private_body_is_available_without_external_success(monkeypatch
         assert expected in result['message']
 
 
+@pytest.mark.parametrize('stamp,field,expected', [
+    ('2026-10-22T12:00:01+00:00','created_at',True),
+    ('2026-10-22T11:59:59+00:00','frozen_at',False),
+    ('2026-10-22T12:00:03+00:00','created_at',None),
+    ('2026-10-22T12:00:01','created_at',None),
+])
+def test_prepared_prediction_generation_uses_sealed_owner_time_not_prepare_call(monkeypatch, tmp_path, stamp, field, expected):
+    from datetime import datetime, timezone
+    from runtime import local_race_entry as entry
+    from runtime import urw_registered_paper_entry as paper
+    from tests.test_urw_registered_paper_entry import fixture
+    _, folder, _, _, complete = fixture(tmp_path, monkeypatch)
+    artifact = paper.read(folder/'calculation.json')
+    artifact['comparison'] = paper.seal({field: stamp})
+    artifact = paper.seal({k:v for k,v in artifact.items() if k != 'sha256'})
+    (folder/'calculation.json').write_text(json.dumps(artifact))
+    complete = paper.seal({**{k:v for k,v in complete.items() if k != 'sha256'},
+                           'artifact_sha256': artifact['sha256']})
+    (folder/'complete.json').write_text(json.dumps(complete))
+    body, generated = entry._prepared_paper_answer(complete, {'race_date':'2026-10-22','race_no':2},
+        prepare_started_at=datetime(2026,10,22,12,0,0,tzinfo=timezone.utc),
+        prepare_completed_at=datetime(2026,10,22,12,0,2,tzinfo=timezone.utc))
+    assert body == 'EXACT_BODY_STAKES_100\n' and generated is expected
+
+
 def test_reference_routes_before_formal_authority_and_never_publishes(monkeypatch, tmp_path):
     from runtime import local_race_entry as entry
     monkeypatch.setattr(o, 'validate_request_context', lambda *a: pytest.fail('REFERENCE MUST NOT ENTER FORMAL'))
