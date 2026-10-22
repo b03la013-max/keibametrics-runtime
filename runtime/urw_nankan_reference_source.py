@@ -303,7 +303,7 @@ def program_link(raw,day):
     return chosen[0]
 
 
-def parse_program(raw,url,day):
+def parse_program(raw,url,day,*,condition_observations=None):
     url_scope(url);provider_day_id=urlsplit(url).path.rsplit('/',1)[1][:-3]
     if not provider_day_id.startswith(day.replace('-','')+'18'):raise NankanError('NANKAN_PROGRAM_DAY_IDENTITY')
     dom=DOM(decode(raw)).root
@@ -328,6 +328,43 @@ def parse_program(raw,url,day):
             'cutoff_basis':'LOCAL_REFERENCE_POLICY_POST_MINUS_120_SECONDS_NOT_PROVIDER_OFFICIAL_CUTOFF',
             'distance':int(distance[1]),'surface':'DIRT','program_runner_count':int(count[1]),'observed_card_url':card})
     if [r['race_no'] for r in races]!=list(range(1,len(races)+1)) or not 1<=len(races)<=12:raise NankanError('NANKAN_PROGRAM_ALL_RACES_NOT_PROVEN')
+    if condition_observations is not None:
+        # Current meeting conditions belong to this dated venue header only.
+        # Keep the default race identity/schema unchanged and let the caller
+        # bind this Raw observation to the independently checked program receipt.
+        headers=[]
+        for detail in dom.all('div','nk23_c-block01__info__detail'):
+            children=[node for node in detail.children if isinstance(node,Node)]
+            dates=[node.text() for node in children if node.tag=='p'
+                   and 'nk23_c-block01__info__text' in node.attrs.get('class','').split()]
+            titles=[node.text() for node in children if node.tag=='h3'
+                    and 'nk23_c-block01__info__title' in node.attrs.get('class','').split()]
+            if (dates==[f'{y}年{m}月{d}日'] and len(titles)==1
+                    and re.fullmatch(r'(?:第\d+回\s+)?浦和競馬(?:\s+第\d+日)?',titles[0])):
+                headers.append(detail)
+        status=('CURRENT_URW_HEADER_MATCHED' if len(headers)==1 else
+            'CURRENT_URW_HEADER_NOT_FOUND' if not headers else 'CURRENT_URW_HEADER_NOT_UNIQUE')
+        observed={'provider':PROVIDER,'venue_id':'URW','race_date':day,'provider_day_id':provider_day_id,
+            'source_url':url,'source_raw_sha256':hashlib.sha256(raw).hexdigest(),
+            'header_scope_status':status,'raw_header':headers[0].text() if len(headers)==1 else None,
+            'weather':None,'track_condition':None,'weather_observed':None,'track_condition_observed':None,
+            'weather_reason':status,'track_condition_reason':status}
+        if len(headers)==1:
+            labels=[node.text() for node in headers[0].children if isinstance(node,Node) and node.tag=='p'
+                    and 'nk23_c-block01__info__texts' in node.attrs.get('class','').split()]
+            match=re.fullmatch(r'天候\s*:\s*(\S+)\s+馬場\s*:\s*(\S+)',labels[0]) if len(labels)==1 else None
+            if match:
+                weather,going=match.groups();observed.update(weather_observed=weather,track_condition_observed=going)
+                observed['weather']=weather if weather in ('晴','曇','雨','雪','小雨','小雪') else None
+                ground=re.fullmatch(r'(?:ダート|ダ)?(不良|稍重|良|重|不|稍)',going)
+                observed['track_condition']=({'不':'不良','稍':'稍重'}.get(ground[1],ground[1]) if ground else None)
+                for key,printed in (('weather',weather),('track_condition',going)):
+                    observed[key+'_reason']=('OBSERVED_CURRENT_HEADER_LABEL' if observed[key] is not None else
+                        'UNPUBLISHED_HEADER_MARKER' if printed in ('-','―','ー','UNKNOWN') else 'UNSUPPORTED_HEADER_VALUE')
+            else:
+                observed.update(weather_reason='CURRENT_HEADER_CONDITION_LABELS_UNSUPPORTED',
+                    track_condition_reason='CURRENT_HEADER_CONDITION_LABELS_UNSUPPORTED')
+        condition_observations.update(observed)
     return races
 
 
@@ -449,9 +486,115 @@ def _verify_race_header(dom,race,*,verify_runner_count=True):
     return header
 
 
+def _history_observation(run,*,slot,race,source_raw_sha256,source_url,provider_horse_id):
+    """Read a displayed slot; local evidence identity never impersonates a result ID.
+
+    Nonordinary events remain available for audit, outside the ordinary starts
+    consumed by the existing numerical/Owner contracts. Receipt time belongs to
+    the enclosing snapshot; this byte parser does not manufacture one.
+    """
+    raw=run.text() if run is not None else ''
+    provenance={'identity_type':'LOCAL_RAW_HISTORY_SLOT','source_raw_sha256':source_raw_sha256,
+        'source_url':source_url,'provider_horse_id':provider_horse_id,'history_slot':slot,
+        'provider_result_url':None}
+    observation={'slot':slot,'classification':'UNSUPPORTED','status':'UNKNOWN','event_type':'UNKNOWN',
+        'ordinary_start_eligible':False,'reason':None,'raw':raw,'record':None,'provenance':provenance}
+    def unsupported(reason):
+        observation['reason']=reason
+        return observation
+    if run is None:
+        observation.update(classification='ABSENT',reason='HISTORY_SLOT_ABSENT');return observation
+    if not raw:
+        observation.update(classification='EMPTY',reason='HISTORY_SLOT_EMPTY');return observation
+    heads=run.all('p','nk23_u-d-flex')
+    if not heads:return unsupported('HISTORY_DESCRIPTOR_MISSING')
+    if len(heads)!=1:raise NankanError('NANKAN_HISTORY_DESCRIPTOR_NOT_UNIQUE')
+    spans=[node for node in heads[0].children if isinstance(node,Node) and node.tag=='span']
+    if len(spans)!=3:raise NankanError('NANKAN_HISTORY_DESCRIPTOR_UNKNOWN')
+    date_match=re.fullmatch(r'(.+?)(\d{2,4})\.(\d{1,2})\.(\d{1,2})',spans[1].text())
+    if not date_match:raise NankanError('NANKAN_HISTORY_DATE_UNKNOWN')
+    venue,year,month,day=date_match.groups();year=int(year)+(2000 if len(year)==2 else 0)
+    try:when=date(year,int(month),int(day))
+    except ValueError as exc:raise NankanError('NANKAN_HISTORY_DATE_UNKNOWN') from exc
+    if when>=date.fromisoformat(race['race_date']):raise NankanError('NANKAN_POST_RACE_HISTORY_FORBIDDEN')
+    provenance['history_date']=when.isoformat()
+    provenance['local_evidence_id']=sha({'source_raw_sha256':source_raw_sha256,
+        'provider_horse_id':provider_horse_id,'history_slot':slot,'history_date':when.isoformat()})
+    titles=run.all('a','race_name_len')+run.all('p','race_name_len')
+    if len(titles)>1:raise NankanError('NANKAN_HISTORY_RACE_NOT_UNIQUE')
+    title=titles[0] if titles else None
+    rid=None
+    if title is not None and title.tag=='a':
+        match=re.fullmatch(r'/result/(\d{16})\.do',title.attrs.get('href',''))
+        if not match or not match[1].startswith(when.strftime('%Y%m%d')):
+            raise NankanError('NANKAN_HISTORY_PROVIDER_IDENTITY')
+        rid=match[1];provenance['provider_result_url']=ORIGIN+title.attrs['href']
+    marker=spans[0].text().replace(' ','')
+    finish=re.match(r'^(\d{1,2})着',marker)
+    status=('TRIAL' if marker=='能試' else 'EXCLUDED' if marker in ('除外','競走除外','取消','出走取消')
+        else 'DNF' if marker in ('中止','競走中止') else 'FINISHED' if finish else 'UNKNOWN')
+    name=title.text() if title else None
+    kind='TRIAL' if status=='TRIAL' else 'JUMP' if name and '障害' in name else 'FLAT'
+    dist=re.search(r'(\d{3,4})\s*$',spans[2].text())
+    # Only explicitly labelled paragraphs supply optional facts. Missing values
+    # remain missing; no count, jockey or clock is inferred from another number.
+    paragraphs=[node.text() for node in run.children if isinstance(node,Node) and node.tag=='p']
+    rides=[re.fullmatch(r'(\d+)頭\s+(\d+)番\s+(?:(\d+)人気\s+)?(.+?)\s+([☆▲△◇★]?\s*\d{2}(?:\.\d+)?)',text)
+           for text in paragraphs]
+    rides=[m for m in rides if m]
+    if len(rides)>1:raise NankanError('NANKAN_HISTORY_RIDE_NOT_UNIQUE')
+    ride=rides[0] if rides else None
+    popularity=run.all('span','popularity')
+    field=re.search(r'(\d+)頭',popularity[0].text()) if popularity else None
+    field_size=int(field[1]) if field else int(ride[1]) if ride else None
+    if field and ride and int(field[1])!=int(ride[1]):raise NankanError('NANKAN_HISTORY_FIELD_SIZE_CONFLICT')
+    bodyweights=[re.fullmatch(r'(\d{3,4})kg(?:\s+(.+))?',text) for text in paragraphs]
+    bodyweights=[m for m in bodyweights if m]
+    if len(bodyweights)>1:raise NankanError('NANKAN_HISTORY_BODY_WEIGHT_NOT_UNIQUE')
+    past_bw=bodyweights[0] if bodyweights else None
+    clocks=[re.fullmatch(r'((?:\d+:)?\d{2,3}\.\d)(?:\s+\(([+-]?\d+(?:\.\d+)?)\))?(?:\s+3F\s+(\d{2}\.\d)(?:\s+\(\d+\))?)?',text)
+            for text in paragraphs]
+    clocks=[m for m in clocks if m]
+    if len(clocks)>1:raise NankanError('NANKAN_HISTORY_TIME_NOT_UNIQUE')
+    clock=clocks[0] if clocks else None
+    positions=[]
+    for p in run.all('p','position'):
+        positions=[int(node.text()) for node in p.all('span') if re.fullmatch(r'\d{1,2}',node.text())]
+    going_label=re.fullmatch(r'(不良|稍重|良|重|不|稍)(?:内|外)?(?:ダート|ダ|芝)\s*\d{3,4}',spans[2].text())
+    going=({'不':'不良','稍':'稍重'}.get(going_label[1],going_label[1]) if going_label else None)
+    start={'date':when.strftime('%y.%m.%d'),'venue':venue,'provider_race_id':rid,
+        'surface':'DIRT' if 'ダ' in spans[2].text() else 'TURF' if '芝' in spans[2].text() else 'UNKNOWN',
+        'distance':int(dist[1]) if dist else None,'finish':int(finish[1]) if finish else None,
+        'field_size':field_size,'content_positions':positions,'race_name':name,
+        'going_observed':spans[2].text(),'raw':raw,'provider':PROVIDER,'going':going,'direction':'UNKNOWN',
+        'horse_no':int(ride[2]) if ride else None,'ride_popularity':int(ride[3]) if ride and ride[3] else None,
+        'ride_jockey':ride[4] if ride else None,
+        'ride_carried_weight':float(re.sub(r'^[☆▲△◇★]\s*','',ride[5])) if ride else None,
+        'ride_body_weight':int(past_bw[1]) if past_bw else None,
+        'content_time_text':clock[1] if clock else None,'content_final3f':float(clock[3]) if clock and clock[3] else None,
+        # A winner's printed difference is the runner-up margin, not a deficit.
+        'margin':(0.0 if finish and int(finish[1])==1 else float(clock[2])) if clock and clock[2] else None,
+        'winning_margin':float(clock[2]) if clock and clock[2] and finish and int(finish[1])==1 else None,
+        'winner':past_bw[2] if past_bw and (not finish or int(finish[1])!=1) else None}
+    if field_size is not None and (not 1<=field_size<=18
+            or start['finish'] is not None and not 1<=start['finish']<=field_size
+            or any(not 1<=p<=field_size for p in positions)):
+        raise NankanError('NANKAN_HISTORY_RANGE_HOLD')
+    observation.update(status=status,event_type=kind,record=start)
+    if status=='TRIAL':observation.update(classification='TRIAL',reason='NONORDINARY_TRIAL')
+    elif status=='EXCLUDED':observation.update(classification='EXCLUDED',reason='PAST_EVENT_NOT_STARTED')
+    elif kind=='JUMP':observation.update(classification='JUMP',reason='NONORDINARY_JUMP')
+    elif status=='UNKNOWN':return unsupported('HISTORY_FINISH_STATUS_UNKNOWN')
+    elif title is None or not name:return unsupported('HISTORY_RACE_NAME_MISSING')
+    elif start['surface']=='UNKNOWN':return unsupported('HISTORY_SURFACE_UNKNOWN')
+    else:observation.update(classification='ORDINARY_START',ordinary_start_eligible=True,
+        reason='ORDINARY_DNF_FINISH_UNKNOWN' if status=='DNF' else 'OBSERVED_ORDINARY_START')
+    return observation
+
+
 def parse_card(raw,race,url,*,excluded_rows=None):
     if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
-    dom=DOM(decode(raw)).root
+    dom=DOM(decode(raw)).root;raw_sha256=hashlib.sha256(raw).hexdigest()
     _verify_race_header(dom,race)
     table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
                and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
@@ -494,72 +637,28 @@ def parse_card(raw,race,url,*,excluded_rows=None):
         trainers=[node.text() for node in group.all('a') if node.attrs.get('href','').startswith('/cho_info/')]
         frames=[node for node in row.all('td','waku') if 'cs-wakuBanR' not in node.attrs.get('class','').split()]
         frame=frames[0].text() if len(frames)==1 else ''
-        starts=[];missing=[]
+        starts=[];missing=[];observations=[]
         for slot in range(1,6):
             cells=row.all('td',f'cs-z{slot}')
-            if not cells:missing.append(f'PAST_START_{slot}_UNKNOWN');continue
-            run=one(cells,'NANKAN_HISTORY_SLOT_NOT_UNIQUE');heads=run.all('p','nk23_u-d-flex')
-            if not heads or not run.all('a','race_name_len'):
-                missing.append(f'PAST_START_{slot}_UNKNOWN');continue
-            spans=[node for node in heads[0].children if isinstance(node,Node) and node.tag=='span']
-            if len(spans)!=3:raise NankanError('NANKAN_HISTORY_DESCRIPTOR_UNKNOWN')
-            date_match=re.fullmatch(r'(.+?)(\d{2,4})\.(\d{1,2})\.(\d{1,2})',spans[1].text())
-            if not date_match:raise NankanError('NANKAN_HISTORY_DATE_UNKNOWN')
-            venue,year,month,day=date_match.groups();year=int(year)+(2000 if len(year)==2 else 0)
-            when=date(year,int(month),int(day))
-            if when>=date.fromisoformat(race['race_date']):raise NankanError('NANKAN_POST_RACE_HISTORY_FORBIDDEN')
-            link=one(run.all('a','race_name_len'),'NANKAN_HISTORY_RACE_REQUIRED');rid=re.fullmatch(r'/result/(\d{16})\.do',link.attrs.get('href',''))
-            if not rid or not rid[1].startswith(when.strftime('%Y%m%d')):raise NankanError('NANKAN_HISTORY_PROVIDER_IDENTITY')
-            finish=re.match(r'^(\d{1,2})\s*着',spans[0].text());dist=re.search(r'(\d{3,4})\s*$',spans[2].text())
-            popularity=run.all('span','popularity');field=re.search(r'(\d+)頭',popularity[0].text()) if popularity else None
-            # The provider labels these paragraphs explicitly.  Optional absent
-            # or malformed values remain missing rather than being taken from
-            # an unrelated number elsewhere in the row.
-            paragraphs=[node.text() for node in run.children if isinstance(node,Node) and node.tag=='p']
-            rides=[re.fullmatch(r'(\d+)頭\s+(\d+)番\s+(\d+)人気\s+(.+?)\s+([☆▲△◇]?\s*\d{2}(?:\.\d+)?)',text)
-                   for text in paragraphs]
-            rides=[m for m in rides if m]
-            if len(rides)>1:raise NankanError('NANKAN_HISTORY_RIDE_NOT_UNIQUE')
-            ride=rides[0] if rides else None
-            bodyweights=[re.fullmatch(r'(\d{3,4})kg(?:\s+(.+))?',text) for text in paragraphs]
-            bodyweights=[m for m in bodyweights if m]
-            if len(bodyweights)>1:raise NankanError('NANKAN_HISTORY_BODY_WEIGHT_NOT_UNIQUE')
-            past_bw=bodyweights[0] if bodyweights else None
-            clocks=[re.fullmatch(r'((?:\d+:)?\d{2,3}\.\d)\s+\(([+-]?\d+(?:\.\d+)?)\)\s+3F\s+(\d{2}\.\d)(?:\s+\(\d+\))?',text)
-                    for text in paragraphs]
-            clocks=[m for m in clocks if m]
-            if len(clocks)>1:raise NankanError('NANKAN_HISTORY_TIME_NOT_UNIQUE')
-            clock=clocks[0] if clocks else None
-            positions=[]
-            for p in run.all('p','position'):
-                positions=[int(node.text()) for node in p.all('span') if re.fullmatch(r'\d{1,2}',node.text())]
-            going_label=re.fullmatch(r'(不良|稍重|良|重|不|稍)(?:内|外)?(?:ダート|ダ|芝)\s*\d{3,4}',spans[2].text())
-            going=({'不':'不良','稍':'稍重'}.get(going_label[1],going_label[1]) if going_label else None)
-            start={'date':when.strftime('%y.%m.%d'),'venue':venue,'provider_race_id':rid[1],
-                'surface':'DIRT' if 'ダ' in spans[2].text() else 'TURF' if '芝' in spans[2].text() else 'UNKNOWN',
-                'distance':int(dist[1]) if dist else None,'finish':int(finish[1]) if finish else None,
-                'field_size':int(field[1]) if field else None,'content_positions':positions,'race_name':link.text(),
-                'going_observed':spans[2].text(),'raw':run.text(),'provider':PROVIDER,
-                'going':going,
-                'direction':'UNKNOWN',
-                'horse_no':int(ride[2]) if ride else None,
-                'ride_popularity':int(ride[3]) if ride else None,
-                'ride_jockey':ride[4] if ride else None,
-                'ride_carried_weight':float(re.sub(r'^[☆▲△◇]\s*','',ride[5])) if ride else None,
-                'ride_body_weight':int(past_bw[1]) if past_bw else None,
-                'content_time_text':clock[1] if clock else None,
-                'content_final3f':float(clock[3]) if clock else None,
-                # For a winner, the printed difference is the runner-up margin,
-                # not a deficit to the winner.  Keep both observations distinct.
-                'margin':(0.0 if finish and int(finish[1])==1 else float(clock[2])) if clock else None,
-                'winning_margin':float(clock[2]) if clock and finish and int(finish[1])==1 else None,
-                'winner':past_bw[2] if past_bw and (not finish or int(finish[1])!=1) else None}
-            if start['field_size'] is not None and (not 1<=start['field_size']<=18
-                    or start['finish'] is not None and not 1<=start['finish']<=start['field_size']
-                    or any(not 1<=p<=start['field_size'] for p in positions)):
-                raise NankanError('NANKAN_HISTORY_RANGE_HOLD')
-            if not dist or not positions:missing.append(f'PAST_START_{slot}_DISTANCE_OR_POSITIONS_UNKNOWN')
-            starts.append(start)
+            run=one(cells,'NANKAN_HISTORY_SLOT_NOT_UNIQUE') if cells else None
+            observed=_history_observation(run,slot=slot,race=race,
+                source_raw_sha256=raw_sha256,source_url=url,
+                provider_horse_id=horse.attrs['href'].split('/')[-1][:-3])
+            observations.append(observed)
+            if observed['ordinary_start_eligible']:
+                start=observed['record'];starts.append(start)
+                if not start['distance'] or not start['content_positions']:
+                    missing.append(f'PAST_START_{slot}_DISTANCE_OR_POSITIONS_UNKNOWN')
+            elif observed['classification']=='UNSUPPORTED':
+                missing.append(f"PAST_START_{slot}_UNSUPPORTED_{observed['reason']}")
+            elif observed['classification'] in ('ABSENT','EMPTY'):
+                missing.append(f'PAST_START_{slot}_UNKNOWN')
+        slot_counts={'slots':len(observations),'nonempty':sum(bool(x['raw']) for x in observations),
+            'ordinary_starts':len(starts),
+            'nonordinary':sum(x['classification'] in ('TRIAL','JUMP','EXCLUDED') for x in observations),
+            'unsupported':sum(x['classification']=='UNSUPPORTED' for x in observations),
+            'empty':sum(x['classification']=='EMPTY' for x in observations),
+            'absent':sum(x['classification']=='ABSENT' for x in observations)}
         statuses=[node.text() for node in row.all('td','cs-odds')]
         cancelled=any(re.fullmatch(r'(?:取消|除外)',text) for text in statuses)
         runners.append({'runner_id':no,'horse_no':int(no),'name':name,'provider_horse_id':horse.attrs['href'].split('/')[-1][:-3],
@@ -572,6 +671,7 @@ def parse_card(raw,race,url,*,excluded_rows=None):
             'damsire':re.sub(r'^\(|\)$','',details[2]) if len(details)>2 else None,
             'trainer':trainers[0] if len(trainers)==1 else None,
             'current_odds':'UNKNOWN','odds':None,'popularity':None,'starts':starts,
+            'history_observations':observations,'history_slot_counts':slot_counts,
             'missingness':missing+['CURRENT_ACTIVE_NOT_VERIFIED','CURRENT_ODDS_UNKNOWN']
                 +(['CURRENT_BODY_WEIGHT_UNKNOWN'] if current_bw is None else [])
                 +(['CURRENT_BODY_WEIGHT_CHANGE_UNKNOWN'] if current_bw_change is None else [])})
@@ -910,7 +1010,8 @@ def verify_history_asof(runners,card_fetched_at):
     if fetched.tzinfo is None:raise NankanError('NANKAN_CAPTURE_TIMEZONE_REQUIRED')
     captured_day=fetched.astimezone(JST).date()
     if any(datetime.strptime(start['date'],'%y.%m.%d').date()>captured_day
-           for row in runners for start in row['starts']):
+           for row in runners for start in (row['starts']+
+               [x['record'] for x in row.get('history_observations',[]) if x['record'] is not None])):
         raise NankanError('NANKAN_HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN')
 
 
@@ -939,7 +1040,9 @@ def render_private_reference(evidence,prediction):
         label='取消・除外' if row['status']=='CANCELLED' else str(row['reference_rank'])+'位' if row['reference_rank'] else 'UNKNOWN'
         lines.append(f"|{rid}|{row['name']}|{label}|{ground}|")
         if row['status']!='CANCELLED' and latest and latest['content_positions'] and latest['content_positions'][0]<=3:leaders.append(rid)
-    names={r['runner_id']:r['name'] for r in prediction['runners']};tops=prediction['reference_ranking'][:3]
+    names={r['runner_id']:r['name'] for r in prediction['runners']}
+    ranks={r['runner_id']:r['reference_rank'] for r in prediction['runners']}
+    tops=[rid for rid in prediction['reference_ranking'] if ranks[rid] is not None and ranks[rid]<=3]
     lines+=['展開見立て：'+('近走で前方通過の確認できる'+','.join(leaders)+'番が位置取得候補。競合時の消耗と位置維持は未確定。' if leaders else '先行位置の根拠不足によりUNKNOWN。'),
         '参考上位：'+('、'.join(rid+'番'+names[rid] for rid in tops) if tops else '比較可能な同場同距離根拠不足のためUNKNOWN'),
         '不確実性：直近最大5走の観測順位であり、較正勝率ではありません。全キャリア、未観測の当日変更・馬場、表示後の更新は未確認。馬体重は取得時点の出馬表表示です。UNKNOWNは能力不足を意味しません。',

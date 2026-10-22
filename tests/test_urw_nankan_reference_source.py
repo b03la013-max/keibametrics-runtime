@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -59,6 +60,132 @@ def detailed_card():
 def parsed_detailed_card(raw=None):
     race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
     return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
+
+
+def condition_header(*,day='2026年10月22日',venue='浦和競馬',weather='晴',going='ダ良'):
+    return (f'<div class="nk23_c-block01__info__detail"><p class="nk23_c-block01__info__text">{day}</p>'
+        f'<h3 class="nk23_c-block01__info__title">第7回 {venue} 第4日</h3>'
+        f'<p class="nk23_c-block01__info__texts">天候:{weather} 馬場:{going}</p></div>')
+
+
+@pytest.mark.parametrize('weather,going,expected_weather,expected_going',[
+    ('晴','ダ良','晴','良'),('曇','ダ稍重','曇','稍重'),('－','－',None,None),
+])
+def test_program_condition_collector_keeps_default_races_unchanged(weather,going,expected_weather,expected_going):
+    raw=program()+condition_header(weather=weather,going=going).encode();observed={}
+    default=n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)
+    races=n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY,condition_observations=observed)
+    assert races==default
+    assert observed['weather']==expected_weather and observed['track_condition']==expected_going
+    assert observed['source_raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert observed['provider_day_id']==DAY_ID and observed['race_date']==DAY
+    assert observed['weather_observed']==n.norm(weather) and observed['track_condition_observed']==n.norm(going)
+    assert 'fetched_at' not in observed
+    if expected_weather is None:
+        assert observed['weather_reason']==observed['track_condition_reason']=='UNPUBLISHED_HEADER_MARKER'
+
+
+@pytest.mark.parametrize('wrong_header',[
+    condition_header(day='2026年10月21日'),condition_header(venue='大井競馬'),
+])
+def test_program_condition_collector_does_not_borrow_other_day_or_track(wrong_header):
+    raw=program()+wrong_header.encode()+b'<p>weather elsewhere must not be borrowed</p>'
+    observed={};n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY,condition_observations=observed)
+    assert observed['weather'] is None and observed['track_condition'] is None
+    assert observed['raw_header'] is None and observed['header_scope_status']=='CURRENT_URW_HEADER_NOT_FOUND'
+
+
+def history_card(slots):
+    """Replace authored history cells, without using saved official HTML."""
+    raw=detailed_card().decode()
+    return re.sub(r'<td class="cs-z1">.*?</td>',
+        lambda _:''.join(f'<td class="cs-z{i}">{body}</td>' for i,body in enumerate(slots,1)),raw).encode()
+
+
+def history_slot(*,linked=False,status='3着',course='良ダ1800',title='自作3歳未勝利',
+                 clock='1:54.2 (0.8) 3F 38.2 (4)',ride='12頭 4番 2人気 ★試験騎手 52.0'):
+    title=(f'<a class="race_name_len" href="/result/2026092018070101.do">{title}</a>' if linked
+           else f'<p class="race_name_len">{title}</p>') if title is not None else ''
+    return ('<p class="nk23_u-d-flex"><span>'+status+'</span><span>自作場26.9.20</span><span>'+course+'</span></p>'
+        +title+'<p><span class="popularity">'+ride+'</span></p><p>480kg 自作勝馬</p>'
+        +f'<p>{clock}</p><p class="position"><span>4</span><span>3</span></p>')
+
+
+def test_unlinked_history_preserves_the_same_observed_facts_without_inventing_provider_identity():
+    _,linked=parsed_detailed_card(history_card([history_slot(linked=True)]))
+    raw=history_card([history_slot()]);_,unlinked=parsed_detailed_card(raw)
+    assert len(unlinked[0]['starts'])==1
+    old,new=linked[0]['starts'][0],unlinked[0]['starts'][0]
+    assert {k:v for k,v in old.items() if k not in ('raw','provider_race_id')}=={
+        k:v for k,v in new.items() if k not in ('raw','provider_race_id')}
+    assert new['provider_race_id'] is None and new['ride_carried_weight']==52.0
+    witness=unlinked[0]['history_observations'][0]
+    assert witness['classification']=='ORDINARY_START' and witness['ordinary_start_eligible']
+    assert witness['provenance']['source_raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert witness['provenance']['identity_type']=='LOCAL_RAW_HISTORY_SLOT'
+    assert witness['provenance']['provider_result_url'] is None
+    assert 'fetched_at' not in witness['provenance']
+
+
+def test_history_slots_separate_flat_turf_jump_trial_exclusion_and_dnf():
+    slots=[history_slot(course='稍芝1600'),history_slot(title='自作障害未勝利',course='良芝3000',clock='3:22.1 (1.2)'),
+        history_slot(status='能試',course='800',title=None,clock='51.3',ride='5レース'),
+        history_slot(status='除外',title='自作障害未勝利',ride='12頭 4番 試験騎手 59.0',clock=''),
+        history_slot(status='中止')]
+    _,rows=parsed_detailed_card(history_card(slots));row=rows[0]
+    assert len(row['starts'])==2
+    assert row['starts'][0]['surface']=='TURF' and row['starts'][0]['going']=='稍重'
+    assert row['starts'][1]['finish'] is None  # Existing ordinary DNF contract.
+    observations=row['history_observations']
+    assert [x['classification'] for x in observations]==['ORDINARY_START','JUMP','TRIAL','EXCLUDED','ORDINARY_START']
+    assert [x['status'] for x in observations]==['FINISHED','FINISHED','TRIAL','EXCLUDED','DNF']
+    assert observations[1]['record']['content_time_text']=='3:22.1'
+    assert observations[1]['record']['content_final3f'] is None
+    assert observations[2]['record']['distance']==800
+    assert observations[3]['record']['field_size']==12 and observations[3]['record']['horse_no']==4
+    assert observations[3]['event_type']=='JUMP'
+    assert row['status']=='ACTIVE_DECLARED'  # A past exclusion is not a current scratch.
+    assert row['history_slot_counts']=={'slots':5,'nonempty':5,'ordinary_starts':2,
+        'nonordinary':3,'unsupported':0,'empty':0,'absent':0}
+
+
+def test_nonempty_unsupported_history_is_distinct_from_empty_and_absent_slots():
+    _,rows=parsed_detailed_card(history_card(['<p>未対応の記載</p>','']))
+    observations=rows[0]['history_observations']
+    assert [x['classification'] for x in observations]==['UNSUPPORTED','EMPTY','ABSENT','ABSENT','ABSENT']
+    assert observations[0]['raw']=='未対応の記載' and observations[0]['reason']=='HISTORY_DESCRIPTOR_MISSING'
+    assert 'PAST_START_1_UNSUPPORTED_HISTORY_DESCRIPTOR_MISSING' in rows[0]['missingness']
+
+
+def test_nonordinary_history_still_obeys_real_capture_and_target_race_date():
+    raw=history_card([history_slot(status='能試',course='800',title=None)])
+    _,rows=parsed_detailed_card(raw)
+    with pytest.raises(n.NankanError,match='HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN'):
+        n.verify_history_asof(rows,'2026-09-19T12:00:00+09:00')
+    with pytest.raises(n.NankanError,match='POST_RACE_HISTORY_FORBIDDEN'):
+        parsed_detailed_card(raw.replace(b'26.9.20',b'26.10.22'))
+    # Additive audit rows cannot mask an existing start's capture-time gate.
+    _,ordinary=parsed_detailed_card()
+    ordinary[0]['starts'][0]=dict(ordinary[0]['starts'][0],date='26.10.21')
+    with pytest.raises(n.NankanError,match='HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN'):
+        n.verify_history_asof(ordinary,'2026-10-20T12:00:00+09:00')
+
+
+def test_reference_summary_includes_all_third_rank_ties():
+    race,rows=parsed_detailed_card()
+    evidence={'race':race,'observation_mode':'TEST_SYNTHETIC_ONLY','source_frozen_at':NOW.isoformat(),
+        'sources':[{'url':n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do'}],'sha256':'a'*64,'parser_sha256':'b'*64}
+    ranked=[]
+    for i,rank in enumerate((1,2,3,3,5),1):
+        ranked.append({**deepcopy(rows[0]),'runner_id':str(i),'name':f'自作馬{i}','reference_rank':rank,
+            'facts':{'exact_races':0,'exact_wins':0,'exact_podiums':0}})
+    prediction={'runners':ranked,'reference_ranking':[str(i) for i in range(1,6)],
+        'frozen_at':NOW.isoformat(),'method_components_sha256':'c'*64}
+    body=n.render_private_reference(evidence,prediction)
+    summary=next(line for line in body.splitlines() if line.startswith('参考上位：'))
+    assert summary=='参考上位：1番自作馬1、2番自作馬2、3番自作馬3、4番自作馬4'
+    assert 'REFERENCE ONLY' in body and '正式予測は未成立' in body
+    assert prediction['reference_ranking']==['1','2','3','4','5']
 
 
 @pytest.mark.parametrize('printed,expected',[
