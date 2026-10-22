@@ -1,6 +1,9 @@
-"""Private Work transport for the existing registered URW calculation path.
+"""Private Work transport for two explicit URW execution contracts.
 
 No model, selector, Engine, capital policy, registration or ledger is rewritten.
+REGISTERED_V2 retains whole-day/checkpoint admission. Explicit
+SINGLE_RACE_NONPRODUCTION reuses only immutable calculation pins and writes a
+separate private store, with no registered cohort or OOS credit.
 The ordinary entry can prepare an artifact, but only actual private byte
 readback admits its publication. A local completion is never delivery proof.
 """
@@ -24,7 +27,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 from runtime.urw_nankan_reference_source import (
     parse_card, parse_program, verify_history_asof, private_directory,
-    private_lock, save_json, immutable)
+    private_lock, save_json, immutable, capture_race, Client, ORIGIN,
+    parse_current_odds, parse_current_changes, DOM, decode)
 from runtime.urw_paper_selection import POLICY, sha, _check_sha, canonical_tickets, select_portfolio
 from runtime.local_nar_evidence_candidate import compile_parsed_candidate_evidence
 from runtime.local_fullnumerical_candidate import materialize_candidate
@@ -40,6 +44,8 @@ PARAMETERS='d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5'
 ARMS=('BASELINE','CANDIDATE')
 METHODS=('P0S1','P0S1_NO_KRS','TOP4_BOX_DIAGNOSTIC')
 ROOT=Path(__file__).resolve().parents[1]
+SINGLE_MODE='SINGLE_RACE_NONPRODUCTION'
+SINGLE_CLASS='SINGLE_RACE_PRESTART_NONPRODUCTION_NOT_REGISTERED_OOS'
 
 def read(path): return json.loads(Path(path).read_text())
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -52,6 +58,16 @@ def configuration(path):
     path=Path(path);private_directory(path.parent)
     if path.is_symlink() or path.stat().st_mode&0o077:raise ValueError('PAPER_CONNECTION_PRIVATE_CONFIG')
     c=read(path);reg=read(c['registration']);_check_sha(reg)
+    if c.get('execution_mode','REGISTERED_V2') not in ('REGISTERED_V2',SINGLE_MODE):
+        raise ValueError('PAPER_UNKNOWN_EXECUTION_CONTRACT')
+    if c.get('execution_mode')==SINGLE_MODE and (not c.get('current_source_root')
+            or Path(c['store']).resolve()==Path(c.get('registered_store',c['store'])).resolve()):
+        raise ValueError('SINGLE_RACE_EXPLICIT_SEPARATE_STORE_REQUIRED')
+    if c.get('execution_mode')==SINGLE_MODE:
+        ledger=Path(reg['canonical_ledger_path']).resolve()
+        for target in (Path(c['store']).resolve(),Path(c['current_source_root']).resolve()):
+            if target.is_relative_to(ledger) or ledger.is_relative_to(target):
+                raise ValueError('SINGLE_RACE_STORE_OVERLAPS_V2_LEDGER')
     if (type(c.get('seed')) is not int or type(c.get('runs')) is not int
             or c['runs']!=5000 or c['seed']!=1):raise ValueError('PAPER_EXISTING_SIMULATION_CONTRACT')
     if (reg['code_sha256']!=registered.code_pins() or reg['policy']!=POLICY
@@ -64,6 +80,77 @@ def configuration(path):
         if models[arm]['sha256']!=reg['models'][arm]:raise ValueError('PAPER_REGISTERED_MODEL_CHANGED')
     private_directory(c['store'])
     return c,reg,models
+
+def current_jockey_identity(card_raw,changes_raw,fact):
+    """Join observed provider links, never guess abbreviated-name equality."""
+    horse_link='/uma_info/'+fact['provider_horse_id']+'.do'
+    card=DOM(decode(card_raw)).root;changes=DOM(decode(changes_raw)).root
+    rows=[row for table in card.all('table','tb-shousai') if table.attrs.get('id')!='tb-sample'
+          for row in table.all('tr') if any(a.attrs.get('href')==horse_link for a in row.all('a'))
+          and any(n.text()==fact['runner_id'] for n in row.all('td','umaban'))]
+    items=[d for d in changes.all('div','nk23_c-block01__list2__item')
+           if any(a.attrs.get('href')==horse_link for a in d.all('a'))]
+    if len(rows)!=1 or len(items)!=1:raise ValueError('SINGLE_RACE_JOCKEY_PROVIDER_IDENTITY_AMBIGUOUS')
+    card_riders=[a for group in rows[0].all('td','cs-g1') for a in group.all('a')
+                 if a.attrs.get('href','').startswith('/kis_info/')]
+    change_riders=[a for a in items[0].all('a') if a.attrs.get('href','').startswith('/kis_info/')]
+    if (len(card_riders)!=1 or len(change_riders)!=2
+            or card_riders[0].text()!=fact['current_jockey']
+            or card_riders[0].attrs['href']!=change_riders[-1].attrs['href']):
+        raise ValueError('SINGLE_RACE_JOCKEY_CHANGE_CARD_RECONCILIATION_REQUIRED')
+    return {'runner_id':fact['runner_id'],'provider_horse_id':fact['provider_horse_id'],
+        'card_name':card_riders[0].text(),'change_from_name':change_riders[0].text(),
+        'change_to_name':change_riders[-1].text(),'provider_jockey_link':card_riders[0].attrs['href'],
+        'basis':'EXACT_OBSERVED_PROVIDER_ID_MATCH_NOT_NAME_PREFIX_OR_MODEL_CHANGE'}
+
+def current_single_observation(c,day,number):
+    """Existing lawful capture/parser only; no REFERENCE ranking is consumed.
+
+    This contract is independent of cohort admission, not of source checks.
+    Current raw and source-policy receipts remain in the immutable original.
+    """
+    folder=private_directory(Path(c['current_source_root'])/f'R{number:02}')
+    client=Client()
+    _,evidence,_,_=capture_race(day,number,folder,client=client)
+    race=evidence['race'];facts=copy.deepcopy(evidence['runners'])
+    source=evidence['sources'][3]
+    if (now()>=datetime.fromisoformat(race['prediction_cutoff'])
+            or now().timestamp()-datetime.fromisoformat(source['fetched_at']).timestamp()>600):
+        raise ValueError('SINGLE_RACE_CURRENT_SOURCE_EXPIRED_NO_BACKDATE')
+    observations={}
+    for key,url,parser in (
+            ('odds',ORIGIN+'/odds/'+race['provider_race_id']+'01.do',parse_current_odds),
+            ('changes',ORIGIN+'/henko_info/00000000000000.do',parse_current_changes)):
+        raw_path=folder/(key+'.raw.html');receipt_path=folder/(key+'.receipt.json')
+        if raw_path.exists() and receipt_path.exists():
+            raw=raw_path.read_bytes();receipt=read(receipt_path)
+        else:
+            receipt,raw=client.get(url);immutable(raw_path,raw);save_json(receipt_path,receipt)
+        observed=datetime.fromisoformat(receipt['fetched_at'])
+        if observed>now() or now().timestamp()-observed.timestamp()>600:
+            raise ValueError('SINGLE_RACE_CURRENT_CHANGE_OBSERVATION_EXPIRED')
+        observations[key]=parser(raw,race,receipt,facts)
+        save_json(folder/(key+'.parsed.json'),observations[key])
+    odds={r['runner_id']:r for r in observations['odds']['runners']}
+    changes=observations['changes']
+    # Missing rows are UNKNOWN, never an invented no-change certification.
+    reconciliations=[]
+    for change in changes['items']:
+        original=next(r for r in facts if r['runner_id']==change['runner_id'])
+        if change['status']=='CANCELLED':original['status']='CANCELLED'
+        jockeys=change.get('jockey_names_observed',[])
+        if jockeys:
+            reconciliations.append(current_jockey_identity(gzip.decompress((folder/'card.html.gz').read_bytes()),
+                (folder/'changes.raw.html').read_bytes(),original))
+    for fact in facts:
+        if odds[fact['runner_id']]['status']=='CANCELLED':fact['status']='CANCELLED'
+        if fact['status']=='CANCELLED' and odds[fact['runner_id']]['betting_membership_observed']:
+            raise ValueError('SINGLE_RACE_CANCELLED_ODDS_CONTRADICTION')
+    return {'race':race,'facts':facts,'source':source,'active_verified':False,'signed_source_claim':False,
+        'current_observations':observations,'jockey_change_reconciliations':reconciliations,
+        'source_evidence_sha256':evidence['sha256'],
+        'current_source_folder':str(folder),'latest_change_check':'CURRENT_CARD_ODDS_AND_OFFICIAL_CHANGES_OBSERVED',
+        'active_basis':'UNSIGNED_CURRENT_OFFICIAL_OBSERVATIONS_NOT_FORMAL_VERIFIED_ACTIVE'}
 
 def source_observation(source_root, day, number):
     root=Path(source_root);folder=root/f'sources/R{number:02}'
@@ -162,11 +249,12 @@ def tree(pred,tickets):
 def prepare(config_path, intent):
     os.umask(0o077)
     c,reg,models=configuration(config_path);day=intent['race_date'];number=intent['race_no']
-    obs=source_observation(c['source_root'],day,number)
+    single=c.get('execution_mode')==SINGLE_MODE
+    obs=current_single_observation(c,day,number) if single else source_observation(c['source_root'],day,number)
     cutoff=datetime.fromisoformat(obs['race']['prediction_cutoff']);diagnostic=now()>=cutoff
     if diagnostic and not c.get('allow_postcutoff_diagnostic'):raise ValueError('PAPER_PAST_CUTOFF_NO_NEW_FORWARD')
     # Live operation cannot skip the existing whole-day/checkpoint admission.
-    if not diagnostic:
+    if not diagnostic and not single:
         if c.get('current_v2_live_ledger_latestness')!='INDEPENDENT_PRIVATE_READBACK_VERIFIED':
             raise ValueError('PAPER_CURRENT_LIVE_LEDGER_LATESTNESS_NOT_VERIFIED')
         if not Path(reg['canonical_ledger_path']).is_dir():
@@ -176,12 +264,14 @@ def prepare(config_path, intent):
         day_record=read(ledger/f'day-{day}.json');_check_sha(day_record)
         if day_record['registration_sha256']!=reg['sha256']:raise ValueError('PAPER_DAY_REGISTRATION')
     request_key=sha({'date':day,'number':number,'registration':reg['sha256'],'source':obs['source']['raw_sha256'],
-        'caller':digest(__file__),'seed':c['seed'],'runs':c['runs'],'classification':'DIAGNOSTIC' if diagnostic else 'FORWARD'})
+        'current_observations':sha(obs.get('current_observations',{})),
+        'caller':digest(__file__),'seed':c['seed'],'runs':c['runs'],
+        'classification':'DIAGNOSTIC' if diagnostic else SINGLE_CLASS if single else 'FORWARD'})
     folder=private_directory(Path(c['store'])/'races'/day/f'R{number:02}'/request_key)
     with private_lock(folder/'request.lock') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         if (folder/'complete.json').exists():return read(folder/'complete.json')
-        race_id=f'KM-LOCAL-URW-{day.replace("-","")}-R{number:02}-'+('DIAGNOSTIC' if diagnostic else 'FORWARD-RESEARCH')+'-R1'
+        race_id=f'KM-LOCAL-URW-{day.replace("-","")}-R{number:02}-'+('DIAGNOSTIC' if diagnostic else 'SINGLE-NONPRODUCTION' if single else 'FORWARD-RESEARCH')+'-R1'
         save_json(folder/'source-observation.json',obs)
         npath=folder/'numerical.json'
         if not npath.exists():save_json(npath,numerical(obs,race_id))
@@ -221,7 +311,7 @@ def prepare(config_path, intent):
                 'ticket_tree':tree(pred,ts),'production_authority':False})
             arms[arm]={'prediction':pred,'original_mec':original,'engine_receipt':er,'krs_utility':utility,'methods':methods}
         forward=None
-        if not diagnostic:
+        if not diagnostic and not single:
             # The registered writer, not this transport, owns reservation/day budgets.
             bundle=folder/'forward-input.json';save_json(bundle,{'frozen':comparison,'audits':audits,'observation':obs})
             forward=private_directory(folder/'registered-freeze')
@@ -243,14 +333,24 @@ def prepare(config_path, intent):
                     s=view['cells'][key]['selection'] if method=='P0S1' else view[key]
                     arms[arm]['methods'][method]={'selection':s,'tickets':s['selected_tickets'],'tree':tree(arms[arm]['prediction'],s['selected_tickets'])}
             registered.checkpoint(SimpleNamespace(registration=Path(c['registration']),output=folder/'checkpoint-after.json'))
-        artifact=seal({'classification':'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD' if diagnostic else 'REGISTERED_FORWARD_PAPER_PENDING_PRIVATE_SAVE',
+        if not diagnostic and now()>=cutoff:raise ValueError('PAPER_CALCULATION_COMPLETED_AFTER_CUTOFF_NOT_FORWARD')
+        if single:
+            raw_folder=private_directory(folder/'current-source-originals')
+            for source_file in Path(obs['current_source_folder']).iterdir():
+                if source_file.is_file() and source_file.name!='worker.lock':
+                    immutable(raw_folder/source_file.name,source_file.read_bytes())
+            immutable(folder/'execution-caller.py',Path(__file__).read_bytes())
+        artifact=seal({'classification':'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD' if diagnostic else SINGLE_CLASS if single else 'REGISTERED_FORWARD_PAPER_PENDING_PRIVATE_SAVE',
             'race_id':race_id,'provider_race_id':obs['race']['provider_race_id'],'race_date':day,'race_no':number,
             'created_at':now().isoformat(),'prediction_cutoff':cutoff.isoformat(),'registration_sha256':reg['sha256'],
             'registered_head':reg['registered_head'],'caller_sha256':digest(__file__),'source':obs['source'],'race':obs['race'],
             'numerical':n,'comparison':comparison,'arms':arms,'production_authority':False,'signed_final_claim':False,
             'forward_oos_credit':0,'private_storage_required':True,'public_redistribution_authorized':False,'actual_purchase':False,
-            'original_v2_ledger_mutated':not diagnostic,'current_active_verified':False,
-            'source_latest_change_check':'NOT_PERFORMED_SAVED_ASOF_ONLY','formal_quality_credit':0})
+            'original_v2_ledger_mutated':not diagnostic and not single,'current_active_verified':False,
+            'registered_research_admitted':not diagnostic and not single,
+            'registration_reference_scope':'IMMUTABLE_CALCULATION_PINS_ONLY_NO_COHORT_ADMISSION' if single else 'REGISTERED_V2',
+            'source_observation':obs,
+            'source_latest_change_check':obs.get('latest_change_check','NOT_PERFORMED_SAVED_ASOF_ONLY'),'formal_quality_credit':0})
         save_json(folder/'calculation.json',artifact)
         body=render(artifact);immutable(folder/'readback.txt',body.encode())
         archive=folder/'private-artifact.zip'
@@ -271,8 +371,10 @@ def render(artifact):
     lines=[f"浦和{a['race_no']}R｜{a['race_date']}｜{a['classification']}",
         f"Provider {a['provider_race_id']} / Race {a['race_id']}",
         f"計算保存時刻 {a['created_at']} / 参考Cutoff {a['prediction_cutoff']}",
-        f"SOURCE原取得 {a['source']['fetched_at']}。現在の取消・除外・馬体重は未検証。Verified Activeではありません。",
-        'FORMAL HOLD。期限後の新計算はDiagnosticであり、事前予測・正式FINAL・未知未来OOSに算入しません。' if a['classification'].startswith('POSTCUTOFF') else 'REGISTERED PAPER / 非Production。正式署名・購入認可ではありません。',
+        f"SOURCE原取得 {a['source']['fetched_at']}。変更確認：{a.get('source_latest_change_check','未検証')}。正式Verified Activeではありません。",
+        ('FORMAL HOLD。期限後の新計算はDiagnosticであり、事前予測・正式FINAL・未知未来OOSに算入しません。' if a['classification'].startswith('POSTCUTOFF') else
+         '通常単一Raceの発走前・非Production計算。v2研究登録への算入なし／台帳・日予算予約変更なし／OOS加点0。正式署名・購入認可ではありません。' if a['classification']==SINGLE_CLASS else
+         'REGISTERED PAPER / 非Production。正式署名・購入認可ではありません。'),
         f"全{len(names)}頭×29={s['required_count']}セル：実計算{s['calculated_count']}、規則中立{s['ruled_neutral_count']}、未解決{s['unresolved_count']}。",
         '全馬登録モデル評価（UNKNOWNは観測不足であり能力不足ではありません）',
         '|馬番・馬名|B順位|C順位|B Role|C Role|欠測|','|---|---:|---:|---|---|---|']
@@ -290,6 +392,7 @@ def render(artifact):
         lines.append(f"\n{arm}｜W/P2/P3")
         for role in ('W','P2','P3'):lines.append(role+' = '+','.join(h for h in pred['rankings_by_role'][role] if role in pred['role_columns'][h]))
         lines.append(f"KRS {er['run_count']}回 / seed {er['master_seed']} / 実完了 {er['completed_at']}")
+        lines.append(f"展開・KRS：先導候補{u['snapshot'].get('primary_leader_no','UNKNOWN')}番／SIM-DCR {u['snapshot'].get('SIM-DCR','UNKNOWN')}／検証シナリオ {','.join(u.get('scenario_worlds',[]))}。判断区分{u['utility_class']}。")
         lines.append('SSR-W / SSR-P2 / SSR-P3（未較正のシミュレーション支持値。実勝率・EVではない）')
         for row in sorted(u['summary'],key=lambda r:int(r['horse_no'])):
             lines.append(f"{row['horse_no']}: {row['SSR-W']:.4f} / {row['SSR-P2']:.4f} / {row['SSR-P3']:.4f}")
@@ -300,7 +403,7 @@ def render(artifact):
                 se=m['selection'];lines.append(f"Core/Protection={se['tier_spend_yen']} / 未使用{se['unused_budget_yen']}円 / NO-BET理由={se['no_bet_reason']}")
     lines+=['\n最終結論：登録済みモデル・既存選択Policyによる計算結果です。購入推奨・性能合格ではありません。',
         '全29指数・各Provenance・非選択票・完全KRSは同一の私有原本に保存。',
-        '登録ID '+a['registration_sha256'],'原本Artifact SHA '+a['sha256'],'SOURCE Raw SHA '+a['source']['raw_sha256']]
+        '計算固定参照ID（研究算入とは別） '+a['registration_sha256'],'原本Artifact SHA '+a['sha256'],'SOURCE Raw SHA '+a['source']['raw_sha256']]
     return '\n'.join(lines)+'\n'
 
 def publish(config_path, complete_path, readback_zip, storage_receipt_path):
@@ -324,13 +427,15 @@ def publish(config_path, complete_path, readback_zip, storage_receipt_path):
             if (datetime.fromisoformat(receipt['provider_created_at'])>=datetime.fromisoformat(artifact['prediction_cutoff'])
                     or now()>=datetime.fromisoformat(artifact['prediction_cutoff'])):
                 raise ValueError('PAPER_EXTERNAL_SAVE_OR_READBACK_AFTER_CUTOFF')
-            if 'checkpoint-after.json' not in manifest:raise ValueError('PAPER_UPDATED_CHECKPOINT_MISSING')
-    checkpoint_sha=(manifest['checkpoint-after.json']['sha256']
+            if artifact['classification']!=SINGLE_CLASS and 'checkpoint-after.json' not in manifest:raise ValueError('PAPER_UPDATED_CHECKPOINT_MISSING')
+    single=artifact['classification']==SINGLE_CLASS
+    if single and c.get('execution_mode')!=SINGLE_MODE:raise ValueError('SINGLE_RACE_PUBLICATION_CONTRACT_MISMATCH')
+    checkpoint_sha=None if single else (manifest['checkpoint-after.json']['sha256']
                     if not artifact['classification'].startswith('POSTCUTOFF') else c['checkpoint_sha256'])
     pub=seal({**complete,'status':'VERIFIED_PRIVATE_RESEARCH_READBACK','storage':receipt,
         'registration_sha256':reg['sha256'],'private_storage_required':True,'public_redistribution_authorized':False,
         'checkpoint_file_sha256':checkpoint_sha,
-        'checkpoint_scope':'INITIAL_SNAPSHOT_NOT_CURRENT_LIVE_LEDGER' if artifact['classification'].startswith('POSTCUTOFF') else 'UPDATED_CHECKPOINT_INCLUDED_IN_READBACK_ARCHIVE',
+        'checkpoint_scope':'NOT_APPLICABLE_NO_V2_LEDGER_MUTATION' if single else 'INITIAL_SNAPSHOT_NOT_CURRENT_LIVE_LEDGER' if artifact['classification'].startswith('POSTCUTOFF') else 'UPDATED_CHECKPOINT_INCLUDED_IN_READBACK_ARCHIVE',
         'published_at':now().isoformat(),'formal_final_proven':False,'forward_oos_credit':0})
     dest=private_directory(Path(c['store'])/'publications'/complete['race_date']/f"R{complete['race_no']:02}")
     save_json(dest/(complete['artifact_sha256']+'.json'),pub)
@@ -349,6 +454,13 @@ def read_delivery(config_path,intent):
         if digest(folder/'readback.txt')!=pub['answer_sha256']:raise ValueError('PAPER_CATALOG_ANSWER_SHA')
         artifact=read(folder/'calculation.json');_check_sha(artifact)
         if artifact['sha256']!=pub['artifact_sha256']:raise ValueError('PAPER_CATALOG_ARTIFACT_SHA')
+        if artifact['classification']!=pub['classification']:raise ValueError('PAPER_CATALOG_CLASSIFICATION_MISMATCH')
+        if c.get('execution_mode')==SINGLE_MODE:
+            if artifact['classification']!=SINGLE_CLASS:continue
+            if artifact.get('registered_research_admitted') is not False or artifact.get('original_v2_ledger_mutated') is not False:
+                raise ValueError('SINGLE_RACE_CANNOT_CLAIM_V2_ADMISSION')
+        elif artifact['classification']==SINGLE_CLASS:
+            raise ValueError('SINGLE_RACE_CANNOT_ENTER_REGISTERED_CATALOG')
         if artifact['classification'].startswith('POSTCUTOFF') and now()<datetime.fromisoformat(artifact['prediction_cutoff']):continue
         # Re-expand every independent portfolio before displaying any body.
         for arm in ARMS:

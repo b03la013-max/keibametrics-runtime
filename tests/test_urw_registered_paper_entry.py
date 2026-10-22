@@ -155,3 +155,59 @@ def test_research_hold_is_not_no_bet_or_silent_reference_success(tmp_path,monkey
     assert report['research_execution']['no_bet'] is False
     assert report['completion'] is False
     assert '研究実行・保存・配送の成功ではありません' in report['message']
+
+
+@pytest.mark.parametrize('single',[False,True])
+def test_single_race_is_separate_from_registered_admission(tmp_path,monkeypatch,single):
+    import tempfile
+    root=Path(tempfile.mkdtemp(prefix='km-independent-entry-',dir='/var/tmp'));root.chmod(0o700)
+    c={'store':str(root),'source_root':'unused','seed':1,'runs':5000}
+    if single:c['execution_mode']=p.SINGLE_MODE
+    reg={'sha256':'pins-not-admission'}
+    monkeypatch.setattr(p,'configuration',lambda path:(c,reg,{}))
+    obs={'race':{'prediction_cutoff':'2026-10-22T15:23:00+09:00'},'source':{'raw_sha256':'raw'}}
+    monkeypatch.setattr(p,'now',lambda:datetime(2026,10,22,6,10,tzinfo=timezone.utc))
+    monkeypatch.setattr(p,'source_observation',lambda *a:obs)
+    monkeypatch.setattr(p,'current_single_observation',lambda *a:obs)
+    monkeypatch.setattr(p.registered,'_registered_context',lambda *a:pytest.fail('Must not fabricate a registered context'))
+    def compute(*a):raise ValueError('ACTUAL_NUMERICAL_ENTRY_REACHED')
+    monkeypatch.setattr(p,'numerical',compute)
+    expected='ACTUAL_NUMERICAL_ENTRY_REACHED' if single else 'CURRENT_LIVE_LEDGER_LATESTNESS_NOT_VERIFIED'
+    with pytest.raises(ValueError,match=expected):p.prepare('config',{'race_date':'2026-10-22','race_no':7})
+    assert not list(root.rglob('checkpoint-after.json'))
+
+
+def test_single_publication_needs_readback_but_no_v2_checkpoint(tmp_path,monkeypatch):
+    root,folder,archive,receipt,complete=fixture(tmp_path,monkeypatch,p.SINGLE_CLASS)
+    config={'store':str(root/'store'),'execution_mode':p.SINGLE_MODE}
+    monkeypatch.setattr(p,'configuration',lambda path:(config,{'sha256':'registration'},{}))
+    monkeypatch.setattr(p,'now',lambda:datetime(2026,10,22,3,45,tzinfo=timezone.utc))
+    r=p.read(receipt);r['provider_created_at']='2026-10-22T03:40:00+00:00';receipt.write_text(json.dumps(r))
+    pub=p.publish('config',folder/'complete.json',archive,receipt)
+    assert pub['checkpoint_file_sha256'] is None
+    assert pub['checkpoint_scope']=='NOT_APPLICABLE_NO_V2_LEDGER_MUTATION'
+    assert pub['forward_oos_credit']==0 and not pub['formal_final_proven']
+
+
+def test_single_late_save_is_not_prestart(tmp_path,monkeypatch):
+    root,folder,archive,receipt,complete=fixture(tmp_path,monkeypatch,p.SINGLE_CLASS)
+    monkeypatch.setattr(p,'now',lambda:datetime(2026,10,22,6,0,tzinfo=timezone.utc))
+    with pytest.raises(ValueError,match='AFTER_CUTOFF'):p.publish('config',folder/'complete.json',archive,receipt)
+    assert not (root/'store/publications').exists()
+
+
+@pytest.mark.parametrize('current_id,accepted',[('031253',True),('031248',False),('999999',False)])
+def test_jockey_change_joins_provider_identity_and_requires_new_rider(current_id,accepted):
+    card=('<table class="tb-shousai"><tr><td class="umaban">7</td>'
+        '<td><a href="/uma_info/2019109091.do">horse</a></td><td class="cs-g1">'
+        f'<a href="/kis_info/{current_id}.do">SHORT</a></td></tr></table>').encode()
+    changes=('<div class="nk23_c-block01__list2__item"><a href="/uma_info/2019109091.do">horse</a>'
+        '<a href="/kis_info/031248.do">OLD</a> → <a href="/kis_info/031253.do">FULL</a></div>').encode()
+    fact={'runner_id':'7','provider_horse_id':'2019109091','current_jockey':'SHORT'}
+    if accepted:
+        result=p.current_jockey_identity(card,changes,fact)
+        assert result['provider_jockey_link']=='/kis_info/031253.do'
+        assert fact['current_jockey']=='SHORT'  # No model-input rewriting.
+    else:
+        with pytest.raises(ValueError,match='JOCKEY_CHANGE_CARD_RECONCILIATION_REQUIRED'):
+            p.current_jockey_identity(card,changes,fact)

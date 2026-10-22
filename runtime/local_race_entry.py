@@ -489,10 +489,17 @@ def run_chat(intent, *, output, run_id):
         formal = report['formal']
         try:
             paper = None
-            connection = os.environ.get('KM_URW_PAPER_CONNECTION')
+            pending = None
+            # Separate ordinary single-race execution from v2 cohort admission.
+            # Each has an explicit contract and private store; never retry a
+            # failed registered admission as an admitted research freeze.
+            single_connection = os.environ.get('KM_URW_SINGLE_RACE_CONNECTION')
+            connection = single_connection or os.environ.get('KM_URW_PAPER_CONNECTION')
             if connection:
-                from runtime.urw_registered_paper_entry import read_delivery, prepare
+                from runtime.urw_registered_paper_entry import read_delivery, prepare, configuration, SINGLE_MODE
                 try:
+                    if single_connection and configuration(connection)[0].get('execution_mode')!=SINGLE_MODE:
+                        raise ValueError('SINGLE_RACE_EXPLICIT_CONTRACT_REQUIRED')
                     paper = read_delivery(connection, intent)
                     if paper is None:
                         pending = prepare(connection, intent)
@@ -501,10 +508,15 @@ def run_chat(intent, *, output, run_id):
                 except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
                     report['research_execution'] = {'status': 'HOLD', 'code': str(exc),
                         'no_bet': False, 'calculation_success_inferred': False}
-                    report['research_first_missing_stage'] = 'REGISTERED_RESEARCH_ADMISSION_OR_EXECUTION'
+                    report['research_first_missing_stage'] = ('SINGLE_RACE_EXECUTION' if single_connection
+                        else 'REGISTERED_RESEARCH_ADMISSION_OR_EXECUTION')
             if paper is not None:
                 reference, content = paper, paper['body']
                 report['research'] = {k:v for k,v in paper.items() if k!='body'}
+            elif pending is not None:
+                reference={'execution_id':pending['race_id'],'answer_required_parts':[],
+                    'reference_generated_in_this_request':False,'prediction_reexecution':True}
+                content='対象Raceの全計算は完了。私有保存・実バイト再取得待ちです。未配送でありNO-BETではありません。\n'
             else:
                 reference, content = _chat_reference(intent, output=output, run_id=run_id)
             report.update(status='FORMAL_BLOCKED_REFERENCE_AVAILABLE' if formal['status']=='BLOCKED'
@@ -516,13 +528,18 @@ def run_chat(intent, *, output, run_id):
             if paper is not None:
                 report.pop('reference', None)
                 report.pop('reference_generation_executed', None)
-                report['status'] = 'FORMAL_HOLD_RESEARCH_READBACK_VERIFIED'
+                report['status'] = ('FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED' if single_connection
+                    else 'FORMAL_HOLD_RESEARCH_READBACK_VERIFIED')
                 report['completion'] = True
                 report['completion_scope'] = 'CALCULATION_AND_PRIVATE_READBACK_NOT_SCREEN_OR_USER_RECEIPT'
                 report['prediction_reexecution'] = False
+            elif pending is not None:
+                report.pop('reference', None)
+                report.pop('reference_generation_executed', None)
+                report['status']='SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING' if single_connection else 'RESEARCH_CALCULATED_PRIVATE_SAVE_PENDING'
             message = (f"FORMAL {formal['status']}：{formal.get('first_failed_stage') or 'FINAL'}／{formal.get('code') or formal['status']}\n\n"
                 +f"チャット読戻し: {datetime.now(timezone.utc).isoformat()}。下記の観測・凍結時刻を維持し、現在のActive確定とは扱いません。\n\n"+content)
-            if paper is None and report.get('research_first_missing_stage'):
+            if paper is None and pending is None and report.get('research_first_missing_stage'):
                 message += ('\n研究完全計算の到達点：'+report['research_first_missing_stage']
                     +'。REFERENCEへの退避は研究実行・保存・配送の成功ではありません。NO-BETとは区別します。\n')
             report['answer_content_check'] = reference_answer_content_check(reference.get('answer_required_parts') or [], message)
@@ -939,7 +956,7 @@ def main():
     print(report['message'] if args.display and 'message' in report else json.dumps(report, ensure_ascii=False, default=str))
     return 0 if report.get('status') in {'REFERENCE_AVAILABLE', 'FORMAL_VERIFIED',
         'FORMAL_BLOCKED_REFERENCE_AVAILABLE', 'FORMAL_PENDING_REFERENCE_AVAILABLE',
-        'FORMAL_HOLD_RESEARCH_READBACK_VERIFIED'} else o.completion_exit_code(report)
+        'FORMAL_HOLD_RESEARCH_READBACK_VERIFIED','FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED'} else o.completion_exit_code(report)
 
 
 if __name__ == '__main__':

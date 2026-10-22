@@ -24,7 +24,19 @@
   const query=' --query '+quote(options.query);
   let saved=json(await shell(base+' read'+query));
   if(saved)return {status:'EXACT_COMPLETED_READBACK_REUSED',publication:saved,calculation_executed:false,storage_writes:0};
-  const complete=options.completed || json(await shell(base+' prepare'+query));
+  let complete=options.completed;
+  const ordinaryOutput=options.privateDirectory+'/ordinary-'+String(options.requestId||'request').replace(/[^A-Za-z0-9_-]/g,'_');
+  const ordinary='KM_URW_SINGLE_RACE_CONNECTION='+quote(options.config)+' python3 -m runtime.local_race_entry'+query
+    +' --output '+quote(ordinaryOutput)+' --run-id '+quote(options.requestId||'ordinary-single-race');
+  if(!complete && options.executionMode==='SINGLE_RACE_NONPRODUCTION') {
+    // One natural request enters the existing caller, then resumes the same
+    // result through actual storage. No registered-v2 admission is inferred.
+    await shell(ordinary+' >/dev/null || test -f '+quote(ordinaryOutput+'/chat_entry_report.json'));
+    const report=JSON.parse(await shell('cat '+quote(ordinaryOutput+'/chat_entry_report.json')));
+    complete=report.research_execution;
+    if(report.status!=='SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING')throw new Error('WORK_ORDINARY_ENTRY_EXECUTION_FAILED: '+JSON.stringify(complete));
+  }
+  complete=complete || json(await shell(base+' prepare'+query));
   if(complete.status!=='PRIVATE_SAVE_REQUIRED')throw new Error('WORK_TRANSPORT_NO_COMPLETED_CALCULATION');
   const upload=unwrap(await tools.mcp__codex_apps__google_drive_upload_file({file_uri:complete.archive,
     file_name:complete.race_id+'-'+complete.artifact_sha256.slice(0,12)+'.zip',mime_type:'application/zip',parent_folder_id:options.driveFolder}));
@@ -45,6 +57,12 @@
   await shell(base+' publish --complete '+quote(complete.folder+'/complete.json')+' --readback '+quote(file)+' --receipt '+quote(receipt));
   saved=json(await shell(base+' read'+query));
   if(!saved || saved.race_id!==complete.race_id || saved.artifact_sha256!==complete.artifact_sha256)throw new Error('WORK_TRANSPORT_RACE_READBACK_NOT_ADMITTED');
+  if(options.executionMode==='SINGLE_RACE_NONPRODUCTION') {
+    await shell(ordinary+' >/dev/null');
+    const report=JSON.parse(await shell('cat '+quote(ordinaryOutput+'/chat_entry_report.json')));
+    if(report.status!=='FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED' || !report.message.includes(saved.body))
+      throw new Error('WORK_ORDINARY_ENTRY_COMPLETE_BODY_MISMATCH');
+  }
   return {status:'CALCULATION_PRIVATE_SAVE_READBACK_AND_INDEX_CONNECTED',publication:saved,calculation_executed:!options.completed,
     storage_writes:1,chat_render_verified:false,user_acknowledgement_verified:false};
 })
