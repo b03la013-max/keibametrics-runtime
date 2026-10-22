@@ -109,7 +109,7 @@ def current_single_observation(c,day,number):
     This contract is independent of cohort admission, not of source checks.
     Current raw and source-policy receipts remain in the immutable original.
     """
-    folder=private_directory(Path(c['current_source_root'])/f'R{number:02}')
+    folder=private_directory(Path(c['current_source_root'])/day/f'R{number:02}')
     client=Client()
     _,evidence,_,_=capture_race(day,number,folder,client=client)
     race=evidence['race'];facts=copy.deepcopy(evidence['runners'])

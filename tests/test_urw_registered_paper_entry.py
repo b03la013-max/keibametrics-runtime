@@ -211,3 +211,16 @@ def test_jockey_change_joins_provider_identity_and_requires_new_rider(current_id
     else:
         with pytest.raises(ValueError,match='JOCKEY_CHANGE_CARD_RECONCILIATION_REQUIRED'):
             p.current_jockey_identity(card,changes,fact)
+
+
+@pytest.mark.parametrize('day',['2026-10-22','2026-10-23'])
+def test_current_source_store_is_bound_to_date_and_race(tmp_path,monkeypatch,day):
+    import tempfile
+    root=Path(tempfile.mkdtemp(prefix='km-current-source-date-',dir='/var/tmp'));root.chmod(0o700)
+    seen=[]
+    def capture(observed_day,number,folder,**kwargs):
+        seen.append((observed_day,number,folder));raise ValueError('OBSERVATION_STARTED')
+    monkeypatch.setattr(p,'capture_race',capture)
+    with pytest.raises(ValueError,match='OBSERVATION_STARTED'):
+        p.current_single_observation({'current_source_root':str(root)},day,8)
+    assert seen==[(day,8,root/day/'R08')]
