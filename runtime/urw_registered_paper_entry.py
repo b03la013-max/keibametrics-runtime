@@ -44,7 +44,9 @@ ROOT=Path(__file__).resolve().parents[1]
 def read(path): return json.loads(Path(path).read_text())
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 def now(): return datetime.now(timezone.utc)
-def seal(value): return {**value,'sha256':sha(value)}
+def seal(value):
+    body={k:v for k,v in value.items() if k!='sha256'}
+    return {**body,'sha256':sha(body)}
 
 def configuration(path):
     path=Path(path);private_directory(path.parent)
@@ -68,6 +70,10 @@ def source_observation(source_root, day, number):
     evidence=read(folder/'reference_evidence.json');_check_sha(evidence)
     race=evidence['race'];receipt=read(folder/'card.receipt.json');raw=(folder/'card.raw.html').read_bytes()
     provider_id=race.get('provider_race_id','')
+    observed=datetime.fromisoformat(receipt['fetched_at'])
+    if (observed.tzinfo is None or observed>now()
+            or observed>=datetime.fromisoformat(race['prediction_cutoff'])):
+        raise ValueError('PAPER_SOURCE_NOT_AVAILABLE_BEFORE_CUTOFF')
     if (race.get('race_date')!=day or race.get('race_no')!=number or race.get('venue_id')!='URW'
             or not provider_id.startswith(day.replace('-','')+'18') or not provider_id.endswith(f'{number:02}')
             or receipt['raw_sha256']!=hashlib.sha256(raw).hexdigest()
@@ -129,6 +135,8 @@ def simulate(folder, c, data, race_id, number, day):
         r=read(receipt);_check_sha(r)
         if r['input_sha256']!=sha(data) or r['output_file_sha256']!=digest(out):raise ValueError('PAPER_ENGINE_REUSE_BINDING')
         return read(out),r
+    if any((folder/name).exists() for name in ('engine.log','krs.output.json','krs.csv')):
+        raise ValueError('PAPER_INTERRUPTED_ENGINE_ATTEMPT_PRESERVED_NO_DUPLICATE_RUN')
     start=now();wall=time.monotonic()
     with (folder/'engine.log').open('x') as log:
         subprocess.run([sys.executable,c['engine'],str(inp),'--output',str(out),'--csv',str(folder/'krs.csv'),
@@ -152,12 +160,17 @@ def tree(pred,tickets):
     return result
 
 def prepare(config_path, intent):
+    os.umask(0o077)
     c,reg,models=configuration(config_path);day=intent['race_date'];number=intent['race_no']
     obs=source_observation(c['source_root'],day,number)
     cutoff=datetime.fromisoformat(obs['race']['prediction_cutoff']);diagnostic=now()>=cutoff
     if diagnostic and not c.get('allow_postcutoff_diagnostic'):raise ValueError('PAPER_PAST_CUTOFF_NO_NEW_FORWARD')
     # Live operation cannot skip the existing whole-day/checkpoint admission.
     if not diagnostic:
+        if c.get('current_v2_live_ledger_latestness')!='INDEPENDENT_PRIVATE_READBACK_VERIFIED':
+            raise ValueError('PAPER_CURRENT_LIVE_LEDGER_LATESTNESS_NOT_VERIFIED')
+        if not Path(reg['canonical_ledger_path']).is_dir():
+            raise ValueError('PAPER_CURRENT_CANONICAL_LEDGER_NOT_RESTORED')
         ledger=registered._registered_context(reg)
         registered._verify_checkpoint(reg,ledger,SimpleNamespace(ledger_checkpoint=Path(c['checkpoint']),expected_checkpoint_sha256=c['checkpoint_sha256']))
         day_record=read(ledger/f'day-{day}.json');_check_sha(day_record)
@@ -312,8 +325,12 @@ def publish(config_path, complete_path, readback_zip, storage_receipt_path):
                     or now()>=datetime.fromisoformat(artifact['prediction_cutoff'])):
                 raise ValueError('PAPER_EXTERNAL_SAVE_OR_READBACK_AFTER_CUTOFF')
             if 'checkpoint-after.json' not in manifest:raise ValueError('PAPER_UPDATED_CHECKPOINT_MISSING')
+    checkpoint_sha=(manifest['checkpoint-after.json']['sha256']
+                    if not artifact['classification'].startswith('POSTCUTOFF') else c['checkpoint_sha256'])
     pub=seal({**complete,'status':'VERIFIED_PRIVATE_RESEARCH_READBACK','storage':receipt,
         'registration_sha256':reg['sha256'],'private_storage_required':True,'public_redistribution_authorized':False,
+        'checkpoint_file_sha256':checkpoint_sha,
+        'checkpoint_scope':'INITIAL_SNAPSHOT_NOT_CURRENT_LIVE_LEDGER' if artifact['classification'].startswith('POSTCUTOFF') else 'UPDATED_CHECKPOINT_INCLUDED_IN_READBACK_ARCHIVE',
         'published_at':now().isoformat(),'formal_final_proven':False,'forward_oos_credit':0})
     dest=private_directory(Path(c['store'])/'publications'/complete['race_date']/f"R{complete['race_no']:02}")
     save_json(dest/(complete['artifact_sha256']+'.json'),pub)
@@ -327,6 +344,8 @@ def read_delivery(config_path,intent):
         if pub['registration_sha256']!=reg['sha256'] or pub['race_no']!=intent['race_no'] or pub['race_date']!=intent['race_date']:
             raise ValueError('PAPER_CATALOG_RACE_OR_REGISTRATION_MIX')
         folder=Path(pub['folder']);private_directory(folder)
+        if not folder.resolve().is_relative_to((Path(c['store'])/'races'/intent['race_date']/f"R{intent['race_no']:02}").resolve()):
+            raise ValueError('PAPER_CATALOG_FOLDER_OUTSIDE_RACE_STORE')
         if digest(folder/'readback.txt')!=pub['answer_sha256']:raise ValueError('PAPER_CATALOG_ANSWER_SHA')
         artifact=read(folder/'calculation.json');_check_sha(artifact)
         if artifact['sha256']!=pub['artifact_sha256']:raise ValueError('PAPER_CATALOG_ARTIFACT_SHA')
@@ -338,9 +357,12 @@ def read_delivery(config_path,intent):
                 if tree(artifact['arms'][arm]['prediction'],m['tickets'])!=m['tree']:raise ValueError('PAPER_CATALOG_TREE_CHANGED')
         rows.append(pub)
     if not rows:return None
-    pub=max(rows,key=lambda r:r['published_at'])
-    return {**pub,'body':(Path(pub['folder'])/'readback.txt').read_text(),
-        'prediction_reexecution':False,'answer_required_parts':[],
+    # A later diagnostic must not replace a valid pre-cutoff registered freeze.
+    pub=max(rows,key=lambda r:(not r['classification'].startswith('POSTCUTOFF'),r['published_at']))
+    body=(Path(pub['folder'])/'readback.txt').read_text()
+    if pub['storage'].get('url'):body+='\n本人用完全原本：'+pub['storage']['url']+'\n'
+    return {**pub,'body':body,'execution_id':pub['race_id'],
+        'prediction_reexecution':False,'answer_required_parts':[body],
         'delivery':{'chat_render_verified':False,'user_acknowledgement_verified':False}}
 
 def main():

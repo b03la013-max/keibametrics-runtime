@@ -538,6 +538,9 @@ def fixed_chat_clock(monkeypatch,tmp_path):
         @classmethod
         def now(cls,tz=None):return NOW.astimezone(tz)
     monkeypatch.setattr(entry,'datetime',FixedDateTime)
+    # capture_race's default utcnow resolves this module global at call time.
+    # Freeze both consumers: advancing wall time must not expire authored cards.
+    monkeypatch.setattr(n,'datetime',FixedDateTime)
     monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'shared-source'))
 
 
