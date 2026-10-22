@@ -430,6 +430,27 @@ def reference_answer_content_check(parts, body):
             'scope': 'SUPPLIED_BODY_ONLY_NOT_CHATGPT_RENDER_OR_USER_RECEIPT'}
 
 
+def _prepared_paper_answer(complete, intent):
+    """Display verified local calculation bytes without claiming external save."""
+    from runtime import urw_registered_paper_entry as paper
+    from runtime.urw_nankan_reference_source import private_directory
+    paper._check_sha(complete)
+    folder = private_directory(complete['folder'])
+    if paper.read(folder/'complete.json') != complete:
+        raise ValueError('PAPER_PREPARED_COMPLETE_CHANGED')
+    artifact = paper.read(folder/'calculation.json')
+    paper._check_sha(artifact)
+    paper.artifact_binding(artifact, complete)
+    if (artifact['sha256'] != complete['artifact_sha256']
+            or any(artifact[k] != intent[k] for k in ('race_date', 'race_no'))):
+        raise ValueError('PAPER_PREPARED_RACE_OR_ARTIFACT_MISMATCH')
+    body = (folder/'readback.txt').read_text()
+    paper.calculated_portfolios(artifact)
+    if paper.digest(folder/'readback.txt') != complete['answer_sha256']:
+        raise ValueError('PAPER_PREPARED_BODY_CHANGED')
+    return body
+
+
 def run_chat(intent, *, output, run_id):
     """FINAL/authorized dispatch, verified registered-model readback, then reference."""
     if (intent.get('family_id') != 'LOCAL' or intent.get('venue_id') != 'URW'
@@ -441,14 +462,20 @@ def run_chat(intent, *, output, run_id):
     if any(k in intent for k in ('static_prediction', 'signature', 'source_receipt_envelope', 'final_prediction_package')):
         raise ValueError('CHAT_CANNOT_SUPPLY_FORMAL_AUTHORITY_OR_PREDICTION')
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    final, search = _chat_final(intent)
+    exact_readback = any(intent.get(k) is not None for k in
+        ('classification', 'artifact_sha256', 'source_sha256', 'revision'))
+    # An explicitly selected historical artifact must not be replaced by a
+    # different FINAL, a newly calculated revision, or a reference forecast.
+    final, search = (None, []) if exact_readback else _chat_final(intent)
     report = {'status': 'BOTH_UNAVAILABLE', 'race': {k:intent[k] for k in ('venue_id','race_date','race_no')},
               'observed_at': datetime.now(timezone.utc).isoformat(), 'final_search': search,
               'completion': False, 'formal_final_proven': False,
               'delivery': {'message_generated': False, 'external_notification_sent': False,
                            'user_acknowledgement_verified': False, 'formal_delivery_verified': False}}
     if final is None:
-        formal = chat_formal_status(intent)
+        formal = ({'status': 'BLOCKED', 'first_failed_stage': 'READBACK',
+                   'code': 'EXPLICIT_ARTIFACT_READBACK_ONLY'} if exact_readback
+                  else chat_formal_status(intent))
         if any(r.get('status') == 'HOLD_READBACK' for r in search) or len([r for r in search if r.get('signed_final_pass')]) > 1:
             formal.update(status='BLOCKED', first_failed_stage='FINAL', code='EXISTING_FINAL_RECONCILIATION_REQUIRED')
         report['formal'] = formal
@@ -495,6 +522,8 @@ def run_chat(intent, *, output, run_id):
             # failed registered admission as an admitted research freeze.
             single_connection = os.environ.get('KM_URW_SINGLE_RACE_CONNECTION')
             connection = single_connection or os.environ.get('KM_URW_PAPER_CONNECTION')
+            if exact_readback and not connection:
+                raise ValueError('EXACT_READBACK_CONNECTION_REQUIRED')
             if connection:
                 from runtime.urw_registered_paper_entry import read_delivery, prepare, configuration, SINGLE_MODE
                 try:
@@ -502,6 +531,8 @@ def run_chat(intent, *, output, run_id):
                         raise ValueError('SINGLE_RACE_EXPLICIT_CONTRACT_REQUIRED')
                     paper = read_delivery(connection, intent)
                     if paper is None:
+                        if exact_readback:
+                            raise ValueError('EXACT_ORIGINAL_ARTIFACT_UNAVAILABLE')
                         pending = prepare(connection, intent)
                         report['research_execution'] = pending
                         report['research_first_missing_stage'] = 'PRIVATE_SAVE_AND_BYTE_READBACK'
@@ -510,13 +541,18 @@ def run_chat(intent, *, output, run_id):
                         'no_bet': False, 'calculation_success_inferred': False}
                     report['research_first_missing_stage'] = ('SINGLE_RACE_EXECUTION' if single_connection
                         else 'REGISTERED_RESEARCH_ADMISSION_OR_EXECUTION')
+                    if exact_readback:
+                        raise
             if paper is not None:
                 reference, content = paper, paper['body']
                 report['research'] = {k:v for k,v in paper.items() if k!='body'}
             elif pending is not None:
-                reference={'execution_id':pending['race_id'],'answer_required_parts':[],
+                body = _prepared_paper_answer(pending, intent)
+                reference={'execution_id':pending['race_id'],'answer_required_parts':[body],
+                    'private_storage_required':True, 'public_redistribution_authorized':False,
                     'reference_generated_in_this_request':False,'prediction_reexecution':True}
-                content='対象Raceの全計算は完了。私有保存・実バイト再取得待ちです。未配送でありNO-BETではありません。\n'
+                content=('対象Raceの全計算は完了。以下はローカル原本の検算済み本文です。'
+                    '外部私有保存・再取得は未成立であり、配送完了とは扱いません。\n\n'+body)
             else:
                 reference, content = _chat_reference(intent, output=output, run_id=run_id)
             report.update(status='FORMAL_BLOCKED_REFERENCE_AVAILABLE' if formal['status']=='BLOCKED'
@@ -536,6 +572,8 @@ def run_chat(intent, *, output, run_id):
             elif pending is not None:
                 report.pop('reference', None)
                 report.pop('reference_generation_executed', None)
+                report['private_storage_required'] = True
+                report['public_redistribution_authorized'] = False
                 report['status']='SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING' if single_connection else 'RESEARCH_CALCULATED_PRIVATE_SAVE_PENDING'
             message = (f"FORMAL {formal['status']}：{formal.get('first_failed_stage') or 'FINAL'}／{formal.get('code') or formal['status']}\n\n"
                 +f"チャット読戻し: {datetime.now(timezone.utc).isoformat()}。下記の観測・凍結時刻を維持し、現在のActive確定とは扱いません。\n\n"+content)
@@ -915,6 +953,10 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--github-sha')
+    parser.add_argument('--artifact-sha256', help='Read only the exact saved artifact; never recalculate')
+    parser.add_argument('--source-sha256', help='Require the saved original SOURCE digest')
+    parser.add_argument('--classification', help='Require the saved research classification')
+    parser.add_argument('--revision', help='Require the saved original revision')
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
     args = parser.parse_args()
@@ -928,6 +970,14 @@ def main():
             from runtime.local_race_day_dispatcher import publish_state
             publisher = lambda paths: publish_state(o.ROOT, paths)
         intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
+        for key in ('artifact_sha256', 'source_sha256', 'classification', 'revision'):
+            value = getattr(args, key)
+            if value is not None:
+                if intent.get('prediction_mode') != 'AUTO':
+                    raise ValueError('EXACT_READBACK_REQUIRES_CHAT_AUTO_ENTRY')
+                if intent.get(key) not in (None, value):
+                    raise ValueError('EXACT_READBACK_SELECTOR_CONFLICT')
+                intent[key] = value
         report = run(intent, output=output,
                      run_id=args.run_id, github_sha=args.github_sha, checkpoint_publisher=publisher)
     except (o.FormalOrchestrationError, ValueError, KeyError, OSError, RuntimeError) as exc:

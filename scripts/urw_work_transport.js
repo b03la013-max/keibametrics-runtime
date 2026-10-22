@@ -22,9 +22,15 @@
   const json = output => JSON.parse(output.trim().split('\n').at(-1));
   const base='python3 -m runtime.urw_registered_paper_entry --config '+quote(options.config);
   const query=' --query '+quote(options.query);
-  let saved=json(await shell(base+' read'+query));
-  if(saved)return {status:'EXACT_COMPLETED_READBACK_REUSED',publication:saved,calculation_executed:false,storage_writes:0};
+  const selectors = target => [['classification','classification'],['artifact_sha256','artifact-sha256'],
+    ['source_sha256','source-sha256'],['revision','revision']]
+    .filter(([key])=>target?.[key]!==undefined && target[key]!==null)
+    .map(([key,arg])=>' --'+arg+' '+quote(target[key])).join('');
   let complete=options.completed;
+  const requested=complete || options.readback || {};
+  let saved=json(await shell(base+' read'+query+selectors(requested)));
+  if(saved)return {status:'EXACT_COMPLETED_READBACK_REUSED',publication:saved,calculation_executed:false,storage_writes:0};
+  if(!complete && selectors(requested))throw new Error('WORK_REQUESTED_ORIGINAL_NOT_FOUND_NO_RECOMPUTATION');
   const ordinaryOutput=options.privateDirectory+'/ordinary-'+String(options.requestId||'request').replace(/[^A-Za-z0-9_-]/g,'_');
   const ordinary='KM_URW_SINGLE_RACE_CONNECTION='+quote(options.config)+' python3 -m runtime.local_race_entry'+query
     +' --output '+quote(ordinaryOutput)+' --run-id '+quote(options.requestId||'ordinary-single-race');
@@ -55,10 +61,10 @@
     verified_at:new Date().toISOString(),scope:'PRIVATE_BYTE_READBACK_NOT_A_SIGNED_FORMAL_RECEIPT'};
   await tools.apply_patch('*** Begin Patch\n*** Add File: '+receipt+'\n+'+JSON.stringify(proof,null,2).split('\n').join('\n+')+'\n*** End Patch');
   await shell(base+' publish --complete '+quote(complete.folder+'/complete.json')+' --readback '+quote(file)+' --receipt '+quote(receipt));
-  saved=json(await shell(base+' read'+query));
+  saved=json(await shell(base+' read'+query+selectors(complete)));
   if(!saved || saved.race_id!==complete.race_id || saved.artifact_sha256!==complete.artifact_sha256)throw new Error('WORK_TRANSPORT_RACE_READBACK_NOT_ADMITTED');
   if(options.executionMode==='SINGLE_RACE_NONPRODUCTION') {
-    await shell(ordinary+' >/dev/null');
+    await shell(ordinary+selectors(complete)+' >/dev/null');
     const report=JSON.parse(await shell('cat '+quote(ordinaryOutput+'/chat_entry_report.json')));
     if(report.status!=='FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED' || !report.message.includes(saved.body))
       throw new Error('WORK_ORDINARY_ENTRY_COMPLETE_BODY_MISMATCH');
