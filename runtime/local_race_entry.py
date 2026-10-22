@@ -463,6 +463,94 @@ def _prepared_paper_answer(complete, intent, *, prepare_started_at=None, prepare
     return body, generated
 
 
+def _prepared_single_original(config_path, intent):
+    """Read an unambiguous local SINGLE original, without granting external proof."""
+    import hashlib
+    from zipfile import ZipFile
+    from runtime import urw_registered_paper_entry as paper
+    from runtime.urw_paper_archive import _private_path, _member
+    config, registration, models = paper.configuration(config_path)
+    if config.get('execution_mode') != paper.SINGLE_MODE:
+        raise ValueError('SINGLE_RACE_EXPLICIT_CONTRACT_REQUIRED')
+    root = Path(config['store'])/'races'/intent['race_date']/f"R{intent['race_no']:02}"
+    candidates = {}
+    for path in sorted(root.glob('*/complete.json')):
+        _private_path(path, directory=False)
+        complete = paper.read(path); paper._check_sha(complete)
+        folder = _private_path(complete['folder'], directory=True)
+        if (folder.resolve() != path.parent.resolve() or folder.parent.resolve() != root.resolve()
+                or any(complete.get(key) != intent[key] for key in ('race_date', 'race_no'))):
+            raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_PATH_OR_RACE_MISMATCH')
+        artifact = paper.read(_private_path(folder/'calculation.json', directory=False)); paper._check_sha(artifact)
+        paper.artifact_binding(artifact, complete)
+        if artifact.get('registration_sha256') != registration['sha256']:
+            raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_REGISTRATION_MISMATCH')
+        classification = artifact['classification']
+        diagnostic = classification == 'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'
+        if classification != paper.SINGLE_CLASS and not diagnostic:
+            raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_CLASSIFICATION_MISMATCH')
+        if (artifact.get('registered_research_admitted') is not False
+                or artifact.get('original_v2_ledger_mutated') is not False
+                or artifact.get('registration_reference_scope') != 'IMMUTABLE_CALCULATION_PINS_ONLY_NO_COHORT_ADMISSION'):
+            raise ValueError('SINGLE_RACE_CANNOT_CLAIM_V2_ADMISSION')
+        cutoff = datetime.fromisoformat(artifact['prediction_cutoff'])
+        created = datetime.fromisoformat(artifact['created_at'])
+        observed = datetime.fromisoformat(artifact['source']['fetched_at'])
+        current = datetime.now(timezone.utc)
+        if (any(stamp.tzinfo is None for stamp in (cutoff, created, observed)) or observed >= cutoff
+                or observed > created or created > current or (not diagnostic and created >= cutoff)
+                or (diagnostic and created < cutoff)):
+            raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_TEMPORAL_MISMATCH')
+        if diagnostic and (not config.get('allow_postcutoff_diagnostic') or current < cutoff):continue
+        comparison = artifact['comparison']; paper._check_sha(comparison)
+        for arm in paper.ARMS:
+            model = comparison['models'][arm]; paper._check_sha(model)
+            view = artifact['arms'][arm]; receipt = view['engine_receipt']; paper._check_sha(receipt)
+            paper._check_sha(view['prediction'])
+            if (model['sha256'] != models[arm]['sha256'] or view['prediction']['model_sha256'] != model['sha256']
+                    or receipt.get('engine_sha256') != paper.ENGINE or receipt.get('parameter_map_sha256') != paper.PARAMETERS
+                    or receipt.get('run_count') != config['runs'] or receipt.get('master_seed') != config['seed']
+                    or receipt.get('actual_engine_executed') is not True):
+                raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_CALCULATION_CONTRACT_MISMATCH')
+            for method in ('P0S1','P0S1_NO_KRS'):
+                if view['methods'][method]['selection']['policy_sha256'] != registration['policy_sha256']:
+                    raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_POLICY_MISMATCH')
+        archive = _private_path(complete['archive'], directory=False)
+        if archive.parent.resolve() != folder.resolve() or paper.digest(archive) != complete['archive_sha256']:
+            raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_ARCHIVE_MISMATCH')
+        with ZipFile(archive) as zipped:
+            names = [_member(info)[0] for info in zipped.infolist()]
+            manifest = json.loads(zipped.read('BYTE_MANIFEST.json'))
+            if len(set(names)) != len(names) or set(names) != set(manifest)|{'BYTE_MANIFEST.json'}:
+                raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_ARCHIVE_MEMBERS')
+            for name, expected in manifest.items():
+                raw = zipped.read(name)
+                if len(raw) != expected['bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
+                    raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_ARCHIVE_BYTES')
+                if _private_path(folder/name, directory=False).read_bytes() != raw:
+                    raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_ARCHIVE_EXTRACTED_BYTES')
+            for name in ('calculation.json','readback.txt'):
+                if zipped.read(name) != _private_path(folder/name, directory=False).read_bytes():
+                    raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_ARCHIVE_BINDING')
+            for arm in paper.ARMS:
+                receipt = artifact['arms'][arm]['engine_receipt']
+                if (json.loads(zipped.read(arm+'/engine.receipt.json')) != receipt
+                        or paper.sha(json.loads(zipped.read(arm+'/krs.input.json'))) != receipt['input_sha256']
+                        or hashlib.sha256(zipped.read(arm+'/krs.output.json')).hexdigest() != receipt['output_file_sha256']):
+                    raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_KRS_BYTE_BINDING')
+        _prepared_paper_answer(complete, intent)
+        if paper.readback_matches(artifact, intent):candidates[artifact['sha256']] = (complete, artifact)
+    if not candidates:return None
+    preferred = [row for row in candidates.values() if row[1]['classification'] == paper.SINGLE_CLASS]
+    preferred = preferred or list(candidates.values())
+    if len(preferred) != 1:
+        identities = [{'artifact_sha256':artifact['sha256'],'classification':artifact['classification'],
+            'source_sha256':artifact['source']['raw_sha256'],'revision':paper.artifact_revision(artifact)}
+            for _, artifact in preferred]
+        raise ValueError('SINGLE_RACE_LOCAL_ORIGINAL_SELECTION_AMBIGUOUS:'+json.dumps(identities,sort_keys=True))
+    return preferred[0][0]
+
+
 def run_chat(intent, *, output, run_id):
     """FINAL/authorized dispatch, verified registered-model readback, then reference."""
     if (intent.get('family_id') != 'LOCAL' or intent.get('venue_id') != 'URW'
@@ -529,6 +617,7 @@ def run_chat(intent, *, output, run_id):
         try:
             paper = None
             pending = None
+            pending_reused = False
             prepare_started_at = prepare_completed_at = None
             # Separate ordinary single-race execution from v2 cohort admission.
             # Each has an explicit contract and private store; never retry a
@@ -543,7 +632,10 @@ def run_chat(intent, *, output, run_id):
                     if single_connection and configuration(connection)[0].get('execution_mode')!=SINGLE_MODE:
                         raise ValueError('SINGLE_RACE_EXPLICIT_CONTRACT_REQUIRED')
                     paper = read_delivery(connection, intent)
-                    if paper is None:
+                    if paper is None and single_connection:
+                        pending = _prepared_single_original(connection, intent)
+                        pending_reused = pending is not None
+                    if paper is None and pending is None:
                         if exact_readback:
                             raise ValueError('EXACT_ORIGINAL_ARTIFACT_UNAVAILABLE')
                         prepare_started_at = datetime.now(timezone.utc)
@@ -556,7 +648,7 @@ def run_chat(intent, *, output, run_id):
                         'no_bet': False, 'calculation_success_inferred': False}
                     report['research_first_missing_stage'] = ('SINGLE_RACE_EXECUTION' if single_connection
                         else 'REGISTERED_RESEARCH_ADMISSION_OR_EXECUTION')
-                    if exact_readback:
+                    if exact_readback or single_connection:
                         raise
             if paper is not None:
                 reference, content = paper, paper['body']
@@ -568,12 +660,17 @@ def run_chat(intent, *, output, run_id):
                     'private_storage_required':True, 'public_redistribution_authorized':False,
                     'reference_generated_in_this_request':False,'prediction_reexecution':generated}
                 report['research_execution_invocation'] = {
-                    'prepare_invoked': True, 'started_at': prepare_started_at.isoformat(),
-                    'completed_at': prepare_completed_at.isoformat(),
-                    'owner_prediction_generated_in_this_call': generated,
+                    'prepare_invoked': not pending_reused,
+                    'started_at': prepare_started_at.isoformat() if prepare_started_at else None,
+                    'completed_at': prepare_completed_at.isoformat() if prepare_completed_at else None,
+                    'owner_prediction_generated_in_this_call': False if pending_reused else generated,
                     'scope': 'SEALED_OWNER_COMPARISON_TIME_NOT_ENGINE_OR_DELIVERY_PROOF'}
                 content=('対象Raceの全計算は完了。以下はローカル原本の検算済み本文です。'
                     '外部私有保存・再取得は未成立であり、配送完了とは扱いません。\n\n'+body)
+                if pending_reused:
+                    reference['prediction_reexecution'] = False
+                    report['research_execution'] = pending
+                    report['research_first_missing_stage'] = 'PRIVATE_SAVE_AND_BYTE_READBACK'
             else:
                 reference, content = _chat_reference(intent, output=output, run_id=run_id)
             report.update(status='FORMAL_BLOCKED_REFERENCE_AVAILABLE' if formal['status']=='BLOCKED'

@@ -49,6 +49,7 @@ def test_exact_paper_readback_never_substitutes_or_recalculates(monkeypatch, tmp
     monkeypatch.setattr(entry, 'chat_formal_status', lambda *a: pytest.fail('readback cannot dispatch'))
     monkeypatch.setattr(entry, '_chat_reference', lambda *a, **k: pytest.fail('cannot substitute REFERENCE'))
     monkeypatch.setattr(paper, 'prepare', lambda *a: pytest.fail('exact readback cannot calculate'))
+    monkeypatch.setattr(entry, '_prepared_single_original', lambda *a: None)
     monkeypatch.setattr(paper, 'configuration', lambda *a: ({'execution_mode': paper.SINGLE_MODE}, None))
     intent = {**entry.resolve_chat_intent('2099-01-01 浦和2R'),
               'artifact_sha256': 'a'*64, 'source_sha256': 'b'*64,
@@ -108,6 +109,7 @@ def test_prepared_private_body_is_available_without_external_success(monkeypatch
     monkeypatch.setattr(paper, 'configuration', lambda *a: ({'execution_mode': paper.SINGLE_MODE}, None, None))
     monkeypatch.setattr(paper, 'read_delivery', lambda *a: None)
     monkeypatch.setattr(paper, 'prepare', lambda *a: complete)
+    monkeypatch.setattr(entry, '_prepared_single_original', lambda *a: None)
     monkeypatch.setattr(entry, '_chat_final', lambda *a: (None, []))
     monkeypatch.setattr(entry, 'chat_formal_status', lambda *a: {'status':'BLOCKED', 'code':'FORMAL_HOLD'})
     monkeypatch.setattr(entry, '_chat_reference', lambda *a, **k: pytest.fail('calculated original must be used'))

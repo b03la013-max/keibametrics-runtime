@@ -384,6 +384,119 @@ catch(e){console.log(JSON.stringify({commands,error:e.message}));}})();
     else:assert result['error']=='WORK_REQUESTED_ORIGINAL_NOT_FOUND_NO_RECOMPUTATION'
 
 
+def pending_original_fixture(monkeypatch):
+    import tempfile
+    from itertools import permutations,combinations
+    root=Path(tempfile.mkdtemp(prefix='km-pending-original-',dir='/var/tmp'));root.chmod(0o700)
+    models={arm:p.seal({'synthetic_arm':arm}) for arm in p.ARMS}
+    reg={'sha256':'synthetic-registration','policy_sha256':p.sha(p.POLICY)}
+    config={'store':str(root/'store'),'execution_mode':p.SINGLE_MODE,'allow_postcutoff_diagnostic':True,'runs':5000,'seed':1}
+    monkeypatch.setattr(p,'configuration',lambda *a:(config,reg,models))
+    def add(name,classification='POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'):
+        folder=root/'store/races/2026-10-22/R02'/name;folder.mkdir(parents=True,mode=0o700)
+        artifact=render_artifact();artifact.update(classification=classification,registration_sha256=reg['sha256'],
+            race_id='SYNTHETIC-R02-R'+name,registered_research_admitted=False,original_v2_ledger_mutated=False,
+            registration_reference_scope='IMMUTABLE_CALCULATION_PINS_ONLY_NO_COHORT_ADMISSION')
+        if classification==p.SINGLE_CLASS:artifact['created_at']='2026-10-22T03:40:00+00:00'
+        for arm,view in artifact['arms'].items():
+            view['prediction']=p.seal({**view['prediction'],'model_sha256':models[arm]['sha256']})
+            af=folder/arm;af.mkdir(mode=0o700)
+            data={'synthetic':'AUTHORED_TEST_NOT_ACTUAL_KRS','arm':arm};p.save_json(af/'krs.input.json',data)
+            p.save_json(af/'krs.output.json',{'synthetic':'AUTHORED_TEST_NOT_ACTUAL_ENGINE_OUTPUT'})
+            view['engine_receipt']=p.seal({'engine_sha256':p.ENGINE,'parameter_map_sha256':p.PARAMETERS,
+                'run_count':5000,'master_seed':1,'completed_at':artifact['created_at'],'actual_engine_executed':True,
+                'input_sha256':p.sha(data),'output_file_sha256':p.digest(af/'krs.output.json')})
+            p.save_json(af/'engine.receipt.json',view['engine_receipt'])
+            for method in ('P0S1','P0S1_NO_KRS'):
+                selected=view['methods'][method]['tickets']
+                view['methods'][method]['selection']={'selected_tickets':selected,'policy_sha256':reg['policy_sha256'],
+                    'race_budget_yen':2000,'used_budget_yen':100,'unused_budget_yen':1900,'no_bet':False,
+                    'no_bet_reason':None,'tier_spend_yen':{'CORE':100,'PROTECTION':0}}
+            top=p.canonical_tickets([{'bet_type':'EXACTA','selection':list(pair),'stake':100} for pair in permutations((1,2,3,4),2)]+
+                [{'bet_type':'TRIO','selection':list(triple),'stake':100} for triple in combinations((1,2,3,4),3)])
+            view['methods']['TOP4_BOX_DIAGNOSTIC']={'tickets':top,'tree':p.tree(view['prediction'],top)}
+        artifact['comparison']=p.seal({'models':models,'created_at':artifact['created_at']})
+        artifact=p.seal(artifact);p.save_json(folder/'calculation.json',artifact)
+        p.immutable(folder/'readback.txt',p.render(artifact).encode())
+        archive=folder/'private-artifact.zip'
+        manifest={str(path.relative_to(folder)):{'bytes':path.stat().st_size,'sha256':p.digest(path)}
+            for path in folder.rglob('*') if path.is_file()}
+        with ZipFile(archive,'x',compression=ZIP_DEFLATED) as zipped:
+            for name in manifest:zipped.write(folder/name,name)
+            zipped.writestr('BYTE_MANIFEST.json',json.dumps(manifest))
+        archive.chmod(0o600)
+        complete=p.seal({'status':'PRIVATE_SAVE_REQUIRED','race_id':artifact['race_id'],'race_date':'2026-10-22','race_no':2,
+            'folder':str(folder),'archive':str(archive),'archive_sha256':p.digest(archive),'artifact_sha256':artifact['sha256'],
+            'source_sha256':artifact['source']['raw_sha256'],'revision':name,'classification':classification,
+            'answer_sha256':p.digest(folder/'readback.txt')})
+        complete['revision']=p.artifact_revision(artifact);complete=p.seal(complete)
+        p.save_json(folder/'complete.json',complete)
+        return complete,artifact
+    return root,config,add
+
+
+def test_pending_original_precedes_prepare_and_legacy_reference(monkeypatch):
+    root,config,add=pending_original_fixture(monkeypatch);complete,artifact=add('1')
+    before={str(path):path.read_bytes() for path in Path(complete['folder']).iterdir() if path.is_file()}
+    monkeypatch.setenv('KM_URW_SINGLE_RACE_CONNECTION','synthetic-config')
+    monkeypatch.setattr(entry,'_chat_final',lambda *a:(None,[]))
+    monkeypatch.setattr(entry,'chat_formal_status',lambda *a:{'status':'BLOCKED','code':'FORMAL_HOLD'})
+    monkeypatch.setattr(p,'read_delivery',lambda *a:None)
+    monkeypatch.setattr(p,'prepare',lambda *a:pytest.fail('saved original must precede SOURCE/Owner/KRS'))
+    monkeypatch.setattr(entry,'_chat_reference',lambda *a,**k:pytest.fail('no legacy fallback'))
+    result=entry.run_chat({'family_id':'LOCAL','venue_id':'URW','race_date':'2026-10-22','race_no':2},output=root/'answer',run_id='original')
+    assert result['status']=='SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING' and result['completion'] is False
+    assert result['prediction_reexecution'] is False and result['research_execution_invocation']['prepare_invoked'] is False
+    assert result['research_execution']['artifact_sha256']==artifact['sha256']
+    assert (Path(complete['folder'])/'readback.txt').read_text() in result['message']
+    assert before=={str(path):path.read_bytes() for path in Path(complete['folder']).iterdir() if path.is_file()}
+
+
+def test_pending_original_has_prestart_priority_and_ambiguity_requires_identity(monkeypatch):
+    root,config,add=pending_original_fixture(monkeypatch);diagnostic,_=add('1');prestart,old=add('2',p.SINGLE_CLASS)
+    intent={'race_date':'2026-10-22','race_no':2}
+    assert entry._prepared_single_original('config',intent)==prestart
+    newer,_=add('3',p.SINGLE_CLASS)
+    with pytest.raises(ValueError,match='SELECTION_AMBIGUOUS') as error:entry._prepared_single_original('config',intent)
+    assert prestart['artifact_sha256'] in str(error.value) and newer['artifact_sha256'] in str(error.value)
+    assert entry._prepared_single_original('config',{**intent,'artifact_sha256':old['sha256'],'revision':'2'})==prestart
+    assert entry._prepared_single_original('config',{**intent,'artifact_sha256':old['sha256'],'source_sha256':'unrelated'}) is None
+
+
+@pytest.mark.parametrize('damage',['archive','model','registration','folder','diagnostic-before-cutoff','engine-flag'])
+def test_pending_original_rejects_broken_private_bindings(monkeypatch,damage):
+    root,config,add=pending_original_fixture(monkeypatch);complete,artifact=add('1')
+    if damage=='archive':Path(complete['archive']).write_bytes(b'DAMAGED_ARCHIVE')
+    elif damage=='folder':
+        complete['folder']=str(root);(Path(complete['archive']).parent/'complete.json').write_text(json.dumps(p.seal(complete)))
+    else:
+        if damage=='registration':artifact['registration_sha256']='unrelated'
+        elif damage=='diagnostic-before-cutoff':artifact['created_at']='2026-10-22T03:30:00+00:00'
+        elif damage=='engine-flag':artifact['arms']['BASELINE']['engine_receipt']=p.seal({
+            **artifact['arms']['BASELINE']['engine_receipt'],'actual_engine_executed':False})
+        else:artifact['arms']['BASELINE']['prediction']=p.seal({**artifact['arms']['BASELINE']['prediction'],'model_sha256':'unrelated'})
+        artifact=p.seal(artifact);Path(complete['folder'],'calculation.json').write_text(json.dumps(artifact))
+        complete=p.seal({**complete,'artifact_sha256':artifact['sha256']});Path(complete['folder'],'complete.json').write_text(json.dumps(complete))
+    expected={'archive':'ARCHIVE_MISMATCH','model':'CALCULATION_CONTRACT_MISMATCH',
+        'registration':'REGISTRATION_MISMATCH','folder':'PATH_OR_RACE_MISMATCH',
+        'diagnostic-before-cutoff':'TEMPORAL_MISMATCH','engine-flag':'CALCULATION_CONTRACT_MISMATCH'}[damage]
+    with pytest.raises(ValueError,match=expected):entry._prepared_single_original('config',{'race_date':'2026-10-22','race_no':2})
+
+
+def test_configured_single_failure_holds_without_legacy_reference(monkeypatch,tmp_path):
+    monkeypatch.setenv('KM_URW_SINGLE_RACE_CONNECTION','synthetic-config')
+    monkeypatch.setattr(entry,'_chat_final',lambda *a:(None,[]))
+    monkeypatch.setattr(entry,'chat_formal_status',lambda *a:{'status':'BLOCKED','code':'FORMAL_HOLD'})
+    monkeypatch.setattr(p,'configuration',lambda *a:({'execution_mode':p.SINGLE_MODE},None,None))
+    monkeypatch.setattr(p,'read_delivery',lambda *a:None);monkeypatch.setattr(entry,'_prepared_single_original',lambda *a:None)
+    monkeypatch.setattr(entry,'_chat_reference',lambda *a,**k:pytest.fail('native failure cannot regress to REFERENCE'))
+    def stopped(*a):raise ValueError('SYNTHETIC_NATIVE_KRS_FAILURE')
+    monkeypatch.setattr(p,'prepare',stopped)
+    result=entry.run_chat({'family_id':'LOCAL','venue_id':'URW','race_date':'2026-10-22','race_no':2},output=tmp_path,run_id='failure')
+    assert result['completion'] is False and result['research_execution']['no_bet'] is False
+    assert 'SYNTHETIC_NATIVE_KRS_FAILURE' in result['message']
+
+
 def work_mock(responses,options):
     import shutil
     import subprocess
