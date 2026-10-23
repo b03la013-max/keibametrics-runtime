@@ -12,6 +12,163 @@ from runtime import urw_registered_paper_entry as p
 from runtime import local_race_entry as entry
 
 
+def card_changes_fixture(monkeypatch, *, enabled=False, cancelled=False, changes=None, odds_error=None):
+    """Authored provider Raw; no live time, result, fitting or Engine claim."""
+    import gzip
+    import re
+    import tempfile
+    from tests import test_urw_nankan_reference_source as f
+    root=Path(tempfile.mkdtemp(prefix='km-card-changes-contract-',dir='/var/tmp'));root.chmod(0o700)
+    folder=root/f.DAY/'R01';folder.mkdir(parents=True,mode=0o700)
+    for parent in folder.parents:
+        if parent==root:break
+        parent.chmod(0o700)
+    raw=f.card(preview=False,cancelled=cancelled).decode()
+    row=re.findall(r'<tr>.*?</tr>',raw)[-1]
+    extras=''.join(row.replace('>2<',f'>{n}<').replace('uma_info/2.do',f'uma_info/{n}.do')
+                   .replace('テスト2',f'テスト{n}') for n in (3,4))
+    raw=raw.replace('(2頭)','(4頭)').replace('</tbody>',extras+'</tbody>')
+    odds_url=p.ORIGIN+'/odds/'+f.DAY_ID+'0101.do'
+    raw+=('<a data-menu="odds" href="'+odds_url+'">オッズ</a>' if enabled else
+           '<a data-menu="odds" class="nk23_c-btn02 is-disable">オッズ</a>')
+    card=raw.encode();program=f.program().replace('2頭'.encode(),'4頭'.encode())
+    race=p.parse_program(program,p.ORIGIN+'/program/'+f.DAY_ID+'.do',f.DAY)[0]
+    stamp=f.DAY+'T12:09:00+09:00'
+    def receipt(data,url):
+        return {'url':url,'http_status':200,'fetched_at':stamp,'raw_sha256':hashlib.sha256(data).hexdigest(),
+            'source_policy':{'status':404,'classification':'ROBOTS_ABSENT_HTTP_404_NOT_DENIAL',
+                            'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'}}
+    sources=[receipt(f.CAL,p.ORIGIN+'/calendar/000000.do'),receipt(program,p.ORIGIN+'/program/'+f.DAY_ID+'.do'),{},
+             receipt(card,p.ORIGIN+'/uma_shosai/'+f.DAY_ID+'01.do')]
+    for name,data in (('calendar',f.CAL),('program',program),('card',card)):
+        (folder/(name+'.html.gz')).write_bytes(gzip.compress(data))
+    facts=p.parse_card(card,race,sources[3]['url'])
+    evidence=p.seal({'race':race,'sources':sources,'runners':facts,'parser_sha256':'SYNTHETIC_AUTHORED_RAW'})
+    changes=changes if changes is not None else f.no_changes_page()
+    header=re.search(r'<p class="nk23_c-tab1__subtitle">.*?</p>',raw)[0]
+    odds=('<meta charset="UTF-8">'+header+'<table class="nk23_c-table04__table">'+''.join(
+        f'<tr><td>{n}</td><td>テスト{n}</td><td>2.0</td><td>1.1-1.4</td></tr>' for n in range(1,5))+'</table>').encode()
+    calls=[]
+    class Client:
+        def get(self,url):
+            calls.append(url)
+            if '/henko_info/' in url:return receipt(changes,url),changes
+            if odds_error:raise odds_error
+            return receipt(odds,url),odds
+    monkeypatch.setattr(p,'Client',Client)
+    monkeypatch.setattr(p,'capture_race',lambda *a,**k:({},evidence,{},''))
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat(f.DAY+'T12:10:00+09:00'))
+    c={'execution_mode':p.SINGLE_MODE,'current_source_root':str(root),
+       'single_source_profile':p.CARD_CHANGES_PROFILE,'single_source_profile_sha256':p.digest(p.CARD_CHANGES_PROFILE_PATH)}
+    return c,race,facts,folder,calls,Client,evidence,card
+
+
+def test_price_free_card_and_explicit_dated_changes_reach_existing_numerical(monkeypatch):
+    c,race,facts,folder,calls,client,evidence,card=card_changes_fixture(monkeypatch)
+    obs=p.current_single_observation(c,race['race_date'],1)
+    assert len(calls)==1 and '/henko_info/' in calls[0]  # No generated odds or oddsJS GET.
+    market=obs['current_observations']['market']
+    assert market['status']=='MARKET_UNAVAILABLE' and market['betting_membership_observed'] is None
+    assert market['price_used'] is False and obs['active_verified'] is False
+    n=p.numerical(obs,'KM-LOCAL-URW-20261022-R01-SYNTHETIC-R1')
+    assert n['candidate_full_numerical_summary']['terminalized_count']==4*29
+    assert n['candidate_full_numerical_summary']['unresolved_count']==0
+    assert all(row['canonical_components'][index]['terminal_status']!='CALCULATED'
+               for row in n['runners'] for index in ('PRI','OPI-V'))
+    assert p.parsed_owner_feature_pack(n)['runners']
+    pack=p.parsed_owner_feature_pack(n);audit=p.price_free_consumer_audit(obs,n,pack)
+    assert audit['selector_price_or_ev_used'] is False
+    changed=copy.deepcopy(obs);changed['current_observations']['odds']={'runners':[{'win_odds':999.9}]}
+    assert p.parsed_owner_feature_pack(p.numerical(changed,n['race_id']))['runners']==pack['runners']
+    changed['facts'][0]['odds']=999.9
+    with pytest.raises(ValueError,match='PRICE_CONSUMER_DETECTED'):p.price_free_consumer_audit(changed,n,pack)
+
+
+def test_observed_odds_success_preserves_legacy_facts_and_numerical(monkeypatch):
+    c,race,facts,folder,calls,client,evidence,card=card_changes_fixture(monkeypatch,enabled=True)
+    obs=p.current_single_observation(c,race['race_date'],1)
+    assert '/henko_info/' in calls[0] and '/odds/' in calls[1]
+    legacy=p.legacy_current_observations(folder,race,copy.deepcopy(facts),client(),{'current_parser_sha256':'TEST'})
+    assert obs['current_observations']['odds']==legacy['odds']
+    assert obs['current_observations']['changes']==legacy['changes']
+    assert obs['facts']==facts
+    baseline={**obs,'current_observations':legacy};baseline.pop('source_contract')
+    one=p.numerical(obs,'KM-LOCAL-URW-20261022-R01-SYNTHETIC-R1')
+    two=p.numerical(baseline,'KM-LOCAL-URW-20261022-R01-SYNTHETIC-R1')
+    assert one['runners']==two['runners']
+    assert p.parsed_owner_feature_pack(one)['runners']==p.parsed_owner_feature_pack(two)['runners']
+
+
+def test_price_free_explicit_current_scratch_never_enters_candidates(monkeypatch):
+    from tests import test_urw_nankan_reference_source as f
+    # Use only the explicit target scratch, not an unresolved rider change.
+    raw=('<meta charset="UTF-8"><div>2026年10月22日<h3 class="nk23_c-block01__info__title">浦和競馬</h3></div>'
+        f'<li id="01" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">1R</span>'
+        f'<a href="/syousai/{f.DAY_ID}01.do">出走表</a><div class="nk23_c-block01__list2__item">'
+        '<p class="nk23_c-block01__tag">出走取消</p><span class="nk23_c-block01__txt2">1番</span>'
+        '<a href="/uma_info/1.do">テスト1</a></div></li>').encode()
+    c,race,*_=card_changes_fixture(monkeypatch,cancelled=True,changes=raw)
+    obs=p.current_single_observation(c,race['race_date'],1)
+    n=p.numerical(obs,'KM-LOCAL-URW-20261022-R01-SYNTHETIC-R1')
+    assert [r['runner_id'] for r in n['runners']]==['2','3','4']
+    assert '1' not in p.parsed_owner_feature_pack(n)['runners']
+    assert p.portfolio_inactive_ids(obs,{'ranking':['2','3','4']})==[]
+    with pytest.raises(ValueError,match='INACTIVE_RUNNER_REACHED_OWNER'):
+        p.portfolio_inactive_ids(obs,{'ranking':['1','2','3','4']})
+
+
+@pytest.mark.parametrize('damage',['unknown-changes','wrong-day','wrong-race','horse-id','old-source','cutoff','permission'])
+def test_price_free_source_failures_do_not_become_no_change_or_no_bet(monkeypatch,damage):
+    from tests import test_urw_nankan_reference_source as f
+    changes=f.no_changes_page(notice='変更なし') if damage=='unknown-changes' else f.no_changes_page()
+    if damage=='wrong-day':changes=changes.replace('2026年10月22日'.encode(),'2026年10月21日'.encode())
+    if damage=='wrong-race':changes=f.current_changes_page().replace(b'id="01"',b'id="03"')
+    c,race,facts,folder,calls,client,evidence,card=card_changes_fixture(monkeypatch,changes=changes)
+    if damage=='old-source':evidence['sources'][3]['fetched_at']='2026-10-22T11:59:59+09:00'
+    if damage=='cutoff':monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat('2026-10-22T12:18:00+09:00'))
+    if damage=='permission':evidence['sources'][3]['source_policy']['classification']='ROBOTS_DISALLOWED'
+    if damage=='horse-id':
+        altered=copy.deepcopy(facts);altered[0]['provider_horse_id']='999999'
+        with pytest.raises(ValueError,match='FACTS_NOT_BOUND_TO_RAW'):
+            p.card_changes_observations(c,folder,evidence,card,altered,client())
+    else:
+        with pytest.raises(ValueError):p.current_single_observation(c,race['race_date'],1)
+
+
+@pytest.mark.parametrize('kind',['404','403','timeout','malformed'])
+def test_only_observed_link_404_is_an_eligible_market_failure(monkeypatch,kind):
+    import io
+    import urllib.error
+    error=(urllib.error.HTTPError('TEST',int(kind),'test',{},io.BytesIO(b'TEST_ERROR'))
+           if kind in ('403','404') else TimeoutError('TEST_TIMEOUT') if kind=='timeout' else None)
+    c,race,facts,folder,calls,client,evidence,card=card_changes_fixture(monkeypatch,enabled=True,odds_error=error)
+    if kind=='malformed':monkeypatch.setattr(p,'parse_current_odds',lambda *a:(_ for _ in ()).throw(ValueError('BAD_HTML')))
+    if kind=='404':
+        obs=p.current_single_observation(c,race['race_date'],1)
+        assert obs['current_observations']['market']['reason']=='OBSERVED_CANONICAL_ODDS_LINK_HTTP_404'
+    else:
+        with pytest.raises((urllib.error.HTTPError,TimeoutError,ValueError)):
+            p.current_single_observation(c,race['race_date'],1)
+    assert '/henko_info/' in calls[0]
+
+
+def test_source_profile_cannot_grant_registered_v2_admission(monkeypatch):
+    c,*_=card_changes_fixture(monkeypatch)
+    c['execution_mode']='REGISTERED_V2'
+    with pytest.raises(ValueError,match='SOURCE_PROFILE_SCOPE'):p.single_source_profile(c)
+
+
+def test_profile_display_unknown_counts_and_sha_are_derived_from_original(monkeypatch):
+    a=render_artifact();a['source_contract']={'id':p.CARD_CHANGES_PROFILE,'file_sha256':p.digest(p.CARD_CHANGES_PROFILE_PATH)}
+    a['source_observation']={'current_observations':{'market':{'status':'MARKET_UNAVAILABLE','reason':'TEST_ONLY'}}}
+    a['race']={'scheduled_post_at':'2026-10-22T12:20:00+09:00'};a=p.seal(a);before=copy.deepcopy(a)
+    for view in a['arms'].values():view['engine_receipt']['completed_at']='2026-10-22T04:00:00+00:00'
+    a=p.seal(a);before=copy.deepcopy(a)
+    body=p.render(a)
+    assert 'UNKNOWN件数 B=1,C=1' in body and '原本Artifact SHA '+a['sha256'] in body
+    assert body.count('└─ EXACTA 1→2：100円')==6 and a==before
+
+
 def fixture(tmp_path,monkeypatch,classification='POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'):
     # Keep the project's private-Git boundary intact even under a Git checkout.
     import tempfile
