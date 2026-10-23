@@ -169,6 +169,201 @@ def test_profile_display_unknown_counts_and_sha_are_derived_from_original(monkey
     assert body.count('└─ EXACTA 1→2：100円')==6 and a==before
 
 
+
+def scoped_changes_fixture(monkeypatch,*,cancelled=(3,),body=None):
+    """Authored complete dated document; never an official capture or LIVE run."""
+    from tests import test_urw_nankan_reference_source as f
+    import tempfile
+    import gzip
+    root=Path(tempfile.mkdtemp(prefix='km-scoped-changes-',dir='/var/tmp'));root.chmod(0o700)
+    program=f.single_program_fixture(cancelled=cancelled);card=f.single_card_fixture(4)
+    card+=b'<a data-menu="odds" class="nk23_c-btn02 is-disable">odds</a>'
+    race=p.parse_program(f.single_program_fixture(cancelled=()),p.ORIGIN+'/program/'+f.SINGLE_DAY_ID+'.do',f.SINGLE_DAY)[3]
+    race['race_status']='SCHEDULED'
+    calendar=('<a href="/program/'+f.SINGLE_DAY_ID+'.do">TEST_SYNTHETIC_ONLY</a>').encode()
+    stamp=f.SINGLE_DAY+'T13:40:00+09:00'
+    def receipt(raw,url):
+        return {'url':url,'http_status':200,'fetched_at':stamp,'raw_sha256':hashlib.sha256(raw).hexdigest(),
+            'network_executed':False,'scope':'AUTHORED_TEST_VECTOR_NOT_OFFICIAL_CAPTURE',
+            'source_policy':{'status':404,'classification':'ROBOTS_ABSENT_HTTP_404_NOT_DENIAL',
+                'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'}}
+    if body is None:
+        body=(f'<li id="03" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">3R</span>'
+            f'<a href="/syousai/{f.SINGLE_DAY_ID}03.do">program</a>'
+            '<div class="nk23_c-block01__list2__item"><p class="nk23_c-block01__tag">競走取り止め</p></div></li>')
+    changes=('<html><body><div class="nk23_c-block01 js-tab3">'
+        '<div>2026年10月23日<h3 class="nk23_c-block01__info__title">浦和競馬 の変更情報</h3></div>'
+        '<span id="nowDateSpan">2026年10月23日 13:40現在</span>'
+        '<div class="nk23_c-tab4__content"><ul>'+body+'</ul></div></div></body></html>').encode()
+    sources=[receipt(calendar,p.ORIGIN+'/calendar/000000.do'),
+        receipt(program,p.ORIGIN+'/program/'+f.SINGLE_DAY_ID+'.do'),
+        {'source_url':race['observed_card_url'],'http_status':302,'location':p.ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do','fetched_at':stamp},
+        receipt(card,p.ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do')]
+    facts=p.parse_card(card,race,sources[3]['url'])
+    for name,raw in [('calendar',calendar),('program',program),('card',card)]:
+        (root/(name+'.html.gz')).write_bytes(gzip.compress(raw,mtime=0))
+    evidence=p.seal({'race':race,'sources':sources,'runners':facts,'explicit_card_exclusions':[],
+        'parser_sha256':'AUTHORED_TEST_VECTOR','profile':'TEST_SYNTHETIC_ONLY'})
+    (root/'changes.raw.html').write_bytes(changes);p.save_json(root/'changes.receipt.json',receipt(changes,p.ORIGIN+'/henko_info/00000000000000.do'))
+    p.save_json(root/'single-source-evidence.json',evidence)
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat(f.SINGLE_DAY+'T13:41:00+09:00'))
+    c={'execution_mode':p.SINGLE_MODE,'single_source_profile':p.RACE_SCOPED_PROFILE,
+        'single_source_profile_sha256':p.digest(p.RACE_SCOPED_PROFILE_PATH),'current_source_root':str(root),
+        'allow_postcutoff_diagnostic':True,'single_saved_source_folders':{f.SINGLE_DAY+'/R04':str(root)}}
+    class NoHTTP:
+        def get(self,url):pytest.fail('saved original bytes must be consumed without HTTP')
+    return c,race,facts,root,changes,NoHTTP
+
+
+def test_scoped_other_race_cancellation_is_not_unknown_or_no_change_guarantee(monkeypatch):
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    observations,profile=p.card_changes_observations(c,folder,p.read(folder/'single-source-evidence.json'),
+        p.gzip.decompress((folder/'card.html.gz').read_bytes()),facts,client())
+    changes=observations['changes']
+    assert changes['target_race_change_status']=='OTHER_RACE_CHANGES_OBSERVED_TARGET_UNLISTED'
+    assert changes['explicit_no_changes_today_observed'] is False and changes['absence_is_no_change_authority'] is False
+    assert changes['official_target_no_change_guarantee'] is False and changes['items']==[]
+    assert changes['reconciled_program_status']['planned_race_count']==12
+    assert changes['reconciled_program_status']['scheduled_race_count']==11
+    assert observations['market']['status']=='MARKET_UNAVAILABLE' and observations['market']['price_used'] is False
+    assert profile['id']==p.RACE_SCOPED_PROFILE
+
+
+def test_scoped_daywide_notice_is_explicit_and_v1_keeps_unlisted_unknown(monkeypatch):
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch,cancelled=(),
+        body='<p class="nk23_c-text02">本日開催に変更情報がありません</p>')
+    receipt=p.read(folder/'changes.receipt.json')
+    from runtime import urw_nankan_reference_source as native
+    program=native.parse_single_program(p.gzip.decompress((folder/'program.html.gz').read_bytes()),p.read(folder/'single-source-evidence.json')['sources'][1]['url'],race['race_date'])
+    changes=p.scoped_changes(raw,race,receipt,facts,program)
+    assert changes['target_race_change_status']=='EXPLICIT_NO_CHANGES_TODAY'
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    old=native.parse_current_changes(raw,race,p.read(folder/'changes.receipt.json'),facts)
+    assert old['target_race_change_status']=='UNKNOWN'
+
+
+def test_scoped_linkless_other_cancellation_binds_unique_program_identity(monkeypatch):
+    from runtime import urw_nankan_reference_source as native
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    # Remove the actual observed syousai link without changing the row identity.
+    raw=p.re.sub(rb'<a href="/syousai/[^\"]+">program</a>',b'',raw)
+    receipt=p.read(folder/'changes.receipt.json');receipt['raw_sha256']=hashlib.sha256(raw).hexdigest()
+    races=native.parse_single_program(p.gzip.decompress((folder/'program.html.gz').read_bytes()),
+        p.read(folder/'single-source-evidence.json')['sources'][1]['url'],race['race_date'])
+    changes=p.scoped_changes(raw,race,receipt,facts,races)
+    assert changes['target_race_change_status']=='OTHER_RACE_CHANGES_OBSERVED_TARGET_UNLISTED'
+    assert changes['observed_race_rows'][0]['race_identity_basis']=='UNIQUE_PROGRAM_ROW_AND_EXPLICIT_CANCELLATION'
+    assert changes['observed_race_rows'][0]['observed_card_link'] is None
+    next(r for r in races if r['race_no']==3)['race_status']='SCHEDULED'
+    changes=p.scoped_changes(raw,race,receipt,facts,races)
+    assert changes['observed_race_rows'][0]['program_race_status']=='SCHEDULED'
+    assert changes['reconciled_program_status']['cancelled_race_nos']==[3]
+    raw=raw.replace(b'<span class="nk23_c-block01__label">3R</span>',
+        b'<span class="nk23_c-block01__label">3R</span><a href="/syousai/2099010118070103.do">wrong</a>')
+    receipt['raw_sha256']=hashlib.sha256(raw).hexdigest()
+    with pytest.raises(ValueError,match='ROW_CARD_IDENTITY'):p.scoped_changes(raw,race,receipt,facts,races)
+
+
+@pytest.mark.parametrize('damage',['truncated','date','venue','program-id','race-label','horse-id','cancelled-target','empty-list'])
+def test_scoped_changes_rejects_unknown_or_contradictory_evidence(monkeypatch,damage):
+    from tests import test_urw_nankan_reference_source as f
+    kind='競走取り止め' if damage=='cancelled-target' else '出走取消'
+    body=(f'<li id="04" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">4R</span>'
+        f'<a href="/syousai/{f.SINGLE_DAY_ID}04.do">program</a>'
+        f'<div class="nk23_c-block01__list2__item"><p class="nk23_c-block01__tag">{kind}</p>'
+        '<span class="nk23_c-block01__txt2">1番</span><a href="/uma_info/1.do">テスト1</a></div></li>')
+    if damage=='empty-list':body=''
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch,cancelled=(),body=body)
+    if damage=='truncated':raw=raw[:-7]
+    if damage=='date':raw=raw.replace('2026年10月23日'.encode(),'2026年10月22日'.encode())
+    if damage=='venue':raw=raw.replace('浦和競馬'.encode(),'船橋競馬'.encode())
+    if damage=='program-id':raw=raw.replace(f.SINGLE_DAY_ID.encode(),b'20261023180799')
+    if damage=='race-label':raw=raw.replace(b'>4R<',b'>5R<')
+    if damage=='horse-id':raw=raw.replace(b'uma_info/1.do',b'uma_info/999.do')
+    receipt=p.read(folder/'changes.receipt.json');receipt['raw_sha256']=hashlib.sha256(raw).hexdigest()
+    from runtime import urw_nankan_reference_source as native
+    races=native.parse_single_program(p.gzip.decompress((folder/'program.html.gz').read_bytes()),p.read(folder/'single-source-evidence.json')['sources'][1]['url'],race['race_date'])
+    with pytest.raises(ValueError):p.scoped_changes(raw,race,receipt,facts,races)
+
+
+def test_scoped_saved_diagnostic_uses_same_changes_and_preserves_input_bytes(monkeypatch):
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    before={str(x):x.read_bytes() for x in folder.iterdir() if x.is_file()}
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat('2026-10-23T19:00:00+09:00'))
+    monkeypatch.setattr(p,'Client',client)
+    observation=p.saved_single_observation(c,race['race_date'],4)
+    assert observation['historical_diagnostic'] is True and observation['current_source_freshness_claim'] is False
+    assert observation['current_observations']['changes']['target_race_change_status']=='OTHER_RACE_CHANGES_OBSERVED_TARGET_UNLISTED'
+    assert observation['source']['fetched_at']=='2026-10-23T13:40:00+09:00'
+    assert before=={str(x):x.read_bytes() for x in folder.iterdir() if x.is_file()}
+    with pytest.raises(ValueError,match='NOT_CONFIGURED'):p.saved_single_observation(c,race['race_date'],5)
+
+
+
+def test_scoped_known_target_cancellation_is_reflected_without_active_authority(monkeypatch):
+    from tests import test_urw_nankan_reference_source as f
+    body=(f'<li id="04" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">4R</span>'
+        f'<a href="/syousai/{f.SINGLE_DAY_ID}04.do">program</a>'
+        '<div class="nk23_c-block01__list2__item"><p class="nk23_c-block01__tag">出走取消</p>'
+        '<span class="nk23_c-block01__txt2">1番</span><a href="/uma_info/1.do">テスト1</a></div></li>')
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch,cancelled=(),body=body)
+    obs=p._single_observation(c,folder,p.read(folder/'single-source-evidence.json'))
+    assert obs['facts'][0]['status']=='CANCELLED' and obs['facts'][1]['status']=='ACTIVE_DECLARED'
+    assert obs['active_verified'] is False and obs['current_observations']['changes']['target_race_change_status']=='CHANGE_ITEMS_OBSERVED'
+
+
+def test_scoped_target_rider_change_joins_exact_provider_identity(monkeypatch):
+    import re
+    from tests import test_urw_nankan_reference_source as f
+    body=(f'<li id="04" class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">4R</span>'
+        f'<a href="/syousai/{f.SINGLE_DAY_ID}04.do">program</a>'
+        '<div class="nk23_c-block01__list2__item"><p class="nk23_c-block01__tag">騎手変更</p>'
+        '<span class="nk23_c-block01__txt2">2番</span><a href="/uma_info/2.do">テスト2</a>'
+        '<p class="nk23_c-block01__text2"><a href="/kis_info/1.do">試験騎手</a>→<a href="/kis_info/4.do">新騎手</a></p></div></li>')
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch,cancelled=(),body=body)
+    card=p.gzip.decompress((folder/'card.html.gz').read_bytes()).decode()
+    old=next(row for row in re.findall(r'<tr>.*?</tr>',card) if '/uma_info/2.do' in row)
+    card=card.replace(old,old.replace('kis_info/1.do">試験騎手','kis_info/4.do">新騎手')).encode()
+    (folder/'card.html.gz').write_bytes(p.gzip.compress(card,mtime=0))
+    evidence=p.read(folder/'single-source-evidence.json');evidence['sources'][3]['raw_sha256']=hashlib.sha256(card).hexdigest()
+    evidence=p.seal(evidence)
+    obs=p._single_observation(c,folder,evidence)
+    assert obs['facts'][1]['current_jockey']=='新騎手'
+    assert obs['jockey_change_reconciliations'][0]['provider_jockey_link']=='/kis_info/4.do'
+
+
+def test_scoped_historical_market_404_requires_original_error_bytes(monkeypatch):
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    card=p.gzip.decompress((folder/'card.html.gz').read_bytes()).replace(
+        b'<a data-menu="odds" class="nk23_c-btn02 is-disable">odds</a>',
+        ('<a data-menu="odds" href="/odds/'+race['provider_race_id']+'01.do">odds</a>').encode())
+    (folder/'card.html.gz').write_bytes(p.gzip.compress(card,mtime=0))
+    evidence=p.read(folder/'single-source-evidence.json');evidence['sources'][3]['raw_sha256']=hashlib.sha256(card).hexdigest()
+    (folder/'single-source-evidence.json').write_text(json.dumps(p.seal(evidence)))
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat('2026-10-23T19:00:00+09:00'))
+    with pytest.raises(ValueError,match='MARKET_EVIDENCE_MISSING'):p.saved_single_observation(c,race['race_date'],4)
+    error=b'AUTHORED_HTTP_404_NOT_A_REAL_CAPTURE'
+    (folder/'odds.http-error.raw.html').write_bytes(error)
+    meta={'url':p.ORIGIN+'/odds/'+race['provider_race_id']+'01.do','http_status':404,
+        'observed_at':'2026-10-23T13:40:00+09:00','raw_sha256':hashlib.sha256(error).hexdigest(),
+        'scope':'HTTP_ERROR_NOT_A_PRICE_OR_MEMBERSHIP_OBSERVATION'}
+    p.save_json(folder/'odds.http-error.receipt.json',meta)
+    obs=p.saved_single_observation(c,race['race_date'],4)
+    assert obs['current_observations']['market']['reason']=='OBSERVED_CANONICAL_ODDS_LINK_HTTP_404'
+    assert 'odds' not in obs['current_observations']
+    (folder/'odds.http-error.raw.html').write_bytes(b'DAMAGED')
+    with pytest.raises(ValueError,match='404_BINDING'):p.saved_single_observation(c,race['race_date'],4)
+
+def test_scoped_source_expiry_is_checked_at_use_without_rewriting_receipts(monkeypatch):
+    c,race,facts,folder,raw,client=scoped_changes_fixture(monkeypatch)
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat('2026-10-23T19:00:00+09:00'))
+    observation=p.saved_single_observation(c,race['race_date'],4)
+    observation['historical_diagnostic']=False
+    monkeypatch.setattr(p,'now',lambda:datetime.fromisoformat('2026-10-23T13:50:00+09:00'))
+    with pytest.raises(ValueError,match='SOURCE_EXPIRED_AT_USE'):
+        p.single_stage_clock(observation,'OWNER_INPUT_USE')
+    assert observation['source']['fetched_at']=='2026-10-23T13:40:00+09:00'
+
 def fixture(tmp_path,monkeypatch,classification='POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'):
     # Keep the project's private-Git boundary intact even under a Git checkout.
     import tempfile

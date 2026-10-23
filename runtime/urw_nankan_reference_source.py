@@ -33,6 +33,8 @@ ROBOTS=ORIGIN+'/robots.txt'
 TERMS=ORIGIN+'/info/usage/'
 JST=timezone(timedelta(hours=9))
 PROFILE='KM-URW-NANKAN-PRIVATE-REFERENCE-v1'
+SINGLE_PROGRAM_CONTRACT='KM-URW-SINGLE-PROGRAM-OBSERVATION-v2'
+SINGLE_CAPTURE_PROFILE='KM-URW-SINGLE-CARD-PROGRAM-OBSERVATION-v2'
 PROVIDER='NANKAN_OFFICIAL'
 MAX_BYTES=1500000
 
@@ -304,6 +306,21 @@ def program_link(raw,day):
 
 
 def parse_program(raw,url,day,*,condition_observations=None):
+    return _parse_program(raw,url,day,condition_observations=condition_observations)
+
+
+def parse_single_program(raw,url,day,*,condition_observations=None):
+    """Observe every programmed race, including a separately marked cancellation.
+
+    This opt-in SINGLE contract does not relax the reference-v1 parser. A
+    cancellation is an observed race state, not a missing race or a zero-time
+    prediction. The caller must reject it as its calculation target.
+    """
+    return _parse_program(raw,url,day,condition_observations=condition_observations,
+                          single_race_status=True)
+
+
+def _parse_program(raw,url,day,*,condition_observations=None,single_race_status=False):
     url_scope(url);provider_day_id=urlsplit(url).path.rsplit('/',1)[1][:-3]
     if not provider_day_id.startswith(day.replace('-','')+'18'):raise NankanError('NANKAN_PROGRAM_DAY_IDENTITY')
     dom=DOM(decode(raw)).root
@@ -314,19 +331,45 @@ def parse_program(raw,url,day,*,condition_observations=None):
     races=[]
     for item in dom.all('li','nk23_c-block01__list__item'):
         anchors=item.all('a','nk23_c-block01__list__title');labels=item.all('span','nk23_c-block01__label')
-        if len(anchors)!=1 or len(labels)!=1:raise NankanError('NANKAN_PROGRAM_RACE_ROW_HOLD')
+        if len(labels)!=1 or len(anchors)>1 or (not single_race_status and len(anchors)!=1):
+            raise NankanError('NANKAN_PROGRAM_RACE_ROW_HOLD')
         number=re.fullmatch(r'(\d{1,2})R',labels[0].text())
         if not number:raise NankanError('NANKAN_PROGRAM_RACE_NUMBER_HOLD')
-        n=int(number[1]);card=urljoin(url,anchors[0].attrs.get('href',''));url_scope(card)
-        if card!=ORIGIN+'/syousai/'+provider_day_id+f'{n:02d}.do':raise NankanError('NANKAN_PROGRAM_CARD_LINK_IDENTITY')
+        n=int(number[1]);card=None
+        if anchors:
+            card=urljoin(url,anchors[0].attrs.get('href',''));url_scope(card)
+            if card!=ORIGIN+'/syousai/'+provider_day_id+f'{n:02d}.do':raise NankanError('NANKAN_PROGRAM_CARD_LINK_IDENTITY')
         text=item.text();post=re.search(r'\b(\d{1,2}:\d{2})\b',text);distance=re.search(r'\b(\d{3,4})m\b',text);count=re.search(r'(\d{1,2})頭',text)
-        if not post or not distance or not count:raise NankanError('NANKAN_PROGRAM_RACE_FACTS_UNKNOWN')
-        scheduled=datetime.fromisoformat(day+'T'+post[1]+':00+09:00')
-        races.append({'provider':PROVIDER,'provider_day_id':provider_day_id,'provider_race_id':provider_day_id+f'{n:02d}',
-            'venue_id':'URW','race_date':day,'race_no':n,'race_name':anchors[0].text(),
-            'scheduled_post_at':scheduled.isoformat(),'prediction_cutoff':(scheduled-timedelta(seconds=120)).isoformat(),
+        marker=None
+        if single_race_status:
+            def outside_title(node):
+                if anchors and node is anchors[0]:return ''
+                return norm(' '.join(outside_title(child) if isinstance(child,Node) else child
+                                     for child in node.children))
+            status_text=outside_title(item)
+            markers=re.findall(r'(?:^|\s)((?:(?:競走|開催)\s*)?(?:取り止め|取止め|取止|中止))(?=$|\s)',status_text)
+            if markers:marker=markers[0]
+        if not anchors and not marker:raise NankanError('NANKAN_PROGRAM_RACE_ROW_HOLD')
+        if marker is None and (not post or not distance or not count):
+            raise NankanError('NANKAN_PROGRAM_RACE_FACTS_UNKNOWN')
+        try:scheduled=datetime.fromisoformat(day+'T'+post[1]+':00+09:00') if post else None
+        except ValueError as exc:raise NankanError('NANKAN_PROGRAM_POST_TIME_INVALID') from exc
+        race={'provider':PROVIDER,'provider_day_id':provider_day_id,'provider_race_id':provider_day_id+f'{n:02d}',
+            'venue_id':'URW','race_date':day,'race_no':n,'race_name':anchors[0].text() if anchors else None,
+            'scheduled_post_at':scheduled.isoformat() if scheduled and not marker else None,
+            'prediction_cutoff':(scheduled-timedelta(seconds=120)).isoformat() if scheduled and not marker else None,
             'cutoff_basis':'LOCAL_REFERENCE_POLICY_POST_MINUS_120_SECONDS_NOT_PROVIDER_OFFICIAL_CUTOFF',
-            'distance':int(distance[1]),'surface':'DIRT','program_runner_count':int(count[1]),'observed_card_url':card})
+            'distance':int(distance[1]) if distance else None,'surface':'DIRT',
+            'program_runner_count':int(count[1]) if count else None,'observed_card_url':card}
+        if single_race_status:
+            race.update(race_status='CANCELLED' if marker else 'SCHEDULED',
+                race_status_evidence={'contract':SINGLE_PROGRAM_CONTRACT,'marker_observed':marker,
+                    'row_observed':text,'source_url':url,'source_raw_sha256':hashlib.sha256(raw).hexdigest(),
+                    'provider_race_id_basis':'DATED_PROGRAM_ID_AND_VERIFIED_RACE_LABEL',
+                    'card_link_observed':bool(anchors),
+                    'scheduled_post_observed':scheduled.isoformat() if scheduled else None,
+                    'absence_is_official_no_cancellation_guarantee':False})
+        races.append(race)
     if [r['race_no'] for r in races]!=list(range(1,len(races)+1)) or not 1<=len(races)<=12:raise NankanError('NANKAN_PROGRAM_ALL_RACES_NOT_PROVEN')
     if condition_observations is not None:
         # Current meeting conditions belong to this dated venue header only.
@@ -593,9 +636,24 @@ def _history_observation(run,*,slot,race,source_raw_sha256,source_url,provider_h
 
 
 def parse_card(raw,race,url,*,excluded_rows=None):
+    return _parse_card(raw,race,url,excluded_rows=excluded_rows)
+
+
+def parse_single_card(raw,race,url,*,excluded_rows=None,card_observations=None):
+    """Observe explicit scratch counts without assigning an absent horse number."""
+    return _parse_card(raw,race,url,excluded_rows=excluded_rows,single_card=True,
+                       card_observations=card_observations)
+
+
+def _parse_card(raw,race,url,*,excluded_rows=None,single_card=False,card_observations=None):
     if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
     dom=DOM(decode(raw)).root;raw_sha256=hashlib.sha256(raw).hexdigest()
-    _verify_race_header(dom,race)
+    header=_verify_race_header(dom,race,verify_runner_count=not single_card)
+    header_count=None
+    if single_card:
+        counts=re.findall(r'\((\d{1,2})頭\)',header)
+        if len(counts)!=1:raise NankanError('NANKAN_SINGLE_CARD_HEADER_COUNT_UNKNOWN')
+        header_count=int(counts[0])
     table=one([node for node in dom.all('table','tb-shousai') if node.attrs.get('id')!='tb-sample'
                and 'hidden' not in node.attrs.get('class','').split()],'NANKAN_ACTUAL_HISTORY_TABLE_REQUIRED')
     body=one(table.all('tbody'),'NANKAN_ACTUAL_HISTORY_BODY_REQUIRED');runners=[]
@@ -700,18 +758,25 @@ def parse_card(raw,race,url,*,excluded_rows=None):
     # HTML retains an explicitly CANCELLED, still-numbered historical row.
     # When the program and table counts already match, preserve the original
     # declared+cancelled semantics and immutable original behavior.
+    observed_numbered_count=len(runners)
+    explicit_unnumbered_count=sum(row['runner_id'] is None for row in exclusions)
+    if single_card and header_count not in {len(runners),len(runners)+explicit_unnumbered_count,
+                                          sum(row['status']!='CANCELLED' for row in runners)}:
+        raise NankanError('NANKAN_SINGLE_CARD_HEADER_UNIVERSE_MISMATCH')
     if len(runners)!=race['program_runner_count']:
         numbered_active=[r for r in runners if r['status']!='CANCELLED']
-        if len(numbered_active)!=race['program_runner_count']:
+        includes_unnumbered=(single_card and explicit_unnumbered_count
+                            and len(runners)+explicit_unnumbered_count==race['program_runner_count'])
+        if len(numbered_active)!=race['program_runner_count'] and not includes_unnumbered:
             raise NankanError('NANKAN_ALL_RUNNER_UNIVERSE_MISMATCH')
-        for row in runners:
+        for row in ([] if includes_unnumbered else runners):
             if row['status']=='CANCELLED':
                 exclusions.append({'runner_id':row['runner_id'],'name':row['name'],
                     'provider_horse_id':row['provider_horse_id'],
                     'observed_marker':'CANCELLED_IN_CARD_ODDS',
                     'status':'CANCELLED','reason':'EXPLICIT_NUMBERED_OFFICIAL_CARD_CANCELLATION',
                     'active_verified':False})
-        runners=numbered_active
+        if not includes_unnumbered:runners=numbered_active
     identities=[row['provider_horse_id'] for row in runners+exclusions]
     if len(set(identities))!=len(identities) or len(set(row['name'] for row in runners+exclusions))!=len(identities):
         raise NankanError('NANKAN_SCRATCH_IDENTITY_DUPLICATE')
@@ -721,6 +786,19 @@ def parse_card(raw,race,url,*,excluded_rows=None):
         raise NankanError('NANKAN_UNEXPLAINED_RUNNER_NUMBER_GAP')
     if excluded_rows is not None:
         excluded_rows.extend(exclusions)
+    if single_card and card_observations is not None:
+        def basis(count):
+            if count==observed_numbered_count:return 'NUMBERED_CARD_ROWS'
+            if count==observed_numbered_count+explicit_unnumbered_count:
+                return 'NUMBERED_CARD_ROWS_PLUS_EXPLICIT_UNNUMBERED_CANCELLATIONS'
+            return 'NUMBERED_NONCANCELLED_CARD_ROWS'
+        card_observations.update(source_url=url,source_raw_sha256=raw_sha256,
+            program_runner_count_observed=race['program_runner_count'],
+            card_header_runner_count_observed=header_count,
+            numbered_runner_count_observed=observed_numbered_count,
+            explicit_unnumbered_exclusion_count=explicit_unnumbered_count,
+            prediction_runner_count=len(runners),program_count_basis=basis(race['program_runner_count']),
+            card_header_count_basis=basis(header_count),missing_runner_numbers_assigned=False)
     return runners
 
 
@@ -757,24 +835,85 @@ def _declared_current_facts(race,declared_facts):
 
 def parse_current_odds(raw,race,receipt,declared_facts):
     """Observed win/place membership only; never a signed ACTIVE universe."""
+    return _parse_current_odds(raw,race,receipt,declared_facts)
+
+
+def parse_single_odds(raw,race,receipt,declared_facts,*,excluded_rows=(),card_observation=None):
+    """SINGLE-v2 odds observation against the explicitly reconciled Card rows."""
+    return _parse_current_odds(raw,race,receipt,declared_facts,
+                               single_card_observation=card_observation,excluded_rows=excluded_rows,
+                               single_odds=True)
+
+
+def _parse_current_odds(raw,race,receipt,declared_facts,*,single_card_observation=None,
+                        excluded_rows=(),single_odds=False):
     url=ORIGIN+'/odds/'+race['provider_race_id']+'01.do';url_scope(url)
     result=_unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_OFFICIAL_ODDS_MEMBERSHIP')
-    dom=DOM(decode(raw)).root;_verify_race_header(dom,race)
+    dom=DOM(decode(raw)).root;header=_verify_race_header(dom,race,verify_runner_count=not single_odds)
     table=one(dom.all('table','nk23_c-table04__table'),'NANKAN_WIN_PLACE_ODDS_TABLE_REQUIRED')
-    declared=_declared_current_facts(race,declared_facts)
-    rows=[]
+    if single_odds:
+        if not isinstance(declared_facts,list) or not declared_facts or not isinstance(single_card_observation,dict):
+            raise NankanError('NANKAN_SINGLE_ODDS_CARD_OBSERVATION_REQUIRED')
+        declared={str(row['runner_id']):row for row in declared_facts}
+        identities=declared_facts+list(excluded_rows)
+        counts=re.findall(r'\((\d{1,2})頭\)',header)
+        observed_numbered=single_card_observation.get('numbered_runner_count_observed')
+        observed_unnumbered=sum(row.get('runner_id') is None for row in excluded_rows)
+        if (len(declared)!=len(declared_facts)
+                or single_card_observation.get('program_runner_count_observed')!=race['program_runner_count']
+                or single_card_observation.get('prediction_runner_count')!=len(declared_facts)
+                or single_card_observation.get('explicit_unnumbered_exclusion_count')!=observed_unnumbered
+                or not isinstance(observed_numbered,int)
+                or race['program_runner_count'] not in {observed_numbered,observed_numbered+observed_unnumbered,
+                                                        len(declared_facts)}
+                or len(counts)!=1 or int(counts[0]) not in {
+                    observed_numbered,observed_numbered+observed_unnumbered,len(declared_facts),
+                    sum(row['status']!='CANCELLED' for row in declared_facts)}):
+            raise NankanError('NANKAN_SINGLE_ODDS_CARD_UNIVERSE_MISMATCH')
+        if (any(not row.get('provider_horse_id') or not row.get('name') for row in identities)
+                or len({row['provider_horse_id'] for row in identities})!=len(identities)
+                or len({row['name'] for row in identities})!=len(identities)
+                or any(row.get('status')!='CANCELLED' or row.get('reason') not in (
+                    'EXPLICIT_UNNUMBERED_OFFICIAL_CARD_CANCELLATION','EXPLICIT_NUMBERED_OFFICIAL_CARD_CANCELLATION')
+                    for row in excluded_rows)):
+            raise NankanError('NANKAN_SINGLE_ODDS_EXCLUDED_IDENTITY_UNKNOWN')
+    else:declared=_declared_current_facts(race,declared_facts)
+    rows=[];excluded_odds=[];observed_ids=set()
     for row in table.all('tr'):
         cells=[node.text() for node in row.children if isinstance(node,Node) and node.tag=='td']
         if not cells:continue
         if len(cells) not in (3,4) or not re.fullmatch(r'[1-9]|1[0-6]',cells[0]):
             raise NankanError('NANKAN_ODDS_ROW_IDENTITY_UNKNOWN')
         rid,name=cells[:2]
-        if rid not in declared or declared[rid]['name']!=name:raise NankanError('NANKAN_ODDS_DECLARED_NAME_MISMATCH')
         cancelled=any(value.replace(' ','') in ('取消','取止','除外','出走取消','競走除外') for value in cells[2:])
+        if single_odds and rid not in declared:
+            if rid in observed_ids:raise NankanError('NANKAN_ODDS_DECLARED_UNIVERSE_MISMATCH')
+            observed_ids.add(rid)
+            matches=[item for item in excluded_rows if item['name']==name
+                     and (item['runner_id'] is None or str(item['runner_id'])==rid)]
+            if not cancelled or len(matches)!=1:
+                raise NankanError('NANKAN_SINGLE_ODDS_UNEXPLAINED_EXTRA_RUNNER')
+            original=matches[0]
+            horse_links=[a.attrs.get('href') for a in row.all('a') if a.attrs.get('href','').startswith('/uma_info/')]
+            if horse_links and horse_links!=['/uma_info/'+original['provider_horse_id']+'.do']:
+                raise NankanError('NANKAN_SINGLE_ODDS_EXCLUDED_IDENTITY_UNKNOWN')
+            if any(item['provider_horse_id']==original['provider_horse_id'] for item in excluded_odds):
+                raise NankanError('NANKAN_ODDS_DECLARED_UNIVERSE_MISMATCH')
+            excluded_odds.append({'observed_odds_runner_id':rid,'runner_id_from_card':original['runner_id'],
+                'name':name,'provider_horse_id':original['provider_horse_id'],'status':'CANCELLED',
+                'raw_cells':cells,'card_exclusion':original,'prediction_runner_number_assigned':False,
+                'identity_basis':'UNIQUE_SAME_RACE_CARD_EXCLUSION_NAME_AND_EXPLICIT_ODDS_CANCELLATION'})
+            continue
+        if rid not in declared or declared[rid]['name']!=name:raise NankanError('NANKAN_ODDS_DECLARED_NAME_MISMATCH')
+        if single_odds:
+            if rid in observed_ids:raise NankanError('NANKAN_ODDS_DECLARED_UNIVERSE_MISMATCH')
+            observed_ids.add(rid)
         win=float(cells[2]) if not cancelled and re.fullmatch(r'\d+(?:\.\d+)?',cells[2]) else None
         place=re.fullmatch(r'(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)',cells[3]) if len(cells)==4 and not cancelled else None
         low,high=(float(place[1]),float(place[2])) if place else (None,None)
         present=win is not None and win>0 and low is not None and 0<low<=high
+        if single_odds and declared[rid]['status']=='CANCELLED' and present:
+            raise NankanError('NANKAN_SINGLE_ODDS_CANCELLED_BETTING_CONTRADICTION')
         rows.append({'runner_id':rid,'name':name,'status':'CANCELLED' if cancelled else 'ACTIVE_DECLARED',
             'win_odds':win,'place_odds_low':low,'place_odds_high':high,
             'betting_membership_observed':present,'active_verified':False,
@@ -795,6 +934,10 @@ def parse_current_odds(raw,race,receipt,declared_facts):
         provider_display_at=provider_at.isoformat() if provider_at else None,
         provider_display_time_status='OBSERVED' if provider_at else 'UNKNOWN',
         betting_membership_observed_count=sum(r['betting_membership_observed'] for r in rows))
+    if single_odds:
+        result.update(single_card_observation_sha256=sha(single_card_observation),
+            explicit_excluded_odds_rows=excluded_odds,odds_header_runner_count_observed=int(counts[0]),
+            source_contract=SINGLE_CAPTURE_PROFILE,missing_runner_numbers_assigned=False)
     result['sha256']=sha(result);return result
 
 
@@ -1214,6 +1357,126 @@ def freeze_observations(folder,day,number,sources,raws,*,now=None,clock=utcnow,
     save_json(folder/'reference_evidence.json',evidence);save_json(folder/'reference_prediction.json',prediction)
     immutable(folder/'readback.txt',body.encode());save_json(folder/'answer_parts.json',parts);save_json(folder/'publication.json',publication)
     return readback(folder,day,number)
+
+
+def _single_capture_receipt(raw,receipt,url,observed,*,cutoff=None):
+    receipt=reference_metadata(receipt)
+    policy=receipt.get('source_policy',{})
+    try:captured=datetime.fromisoformat(receipt['fetched_at'])
+    except (KeyError,TypeError,ValueError) as exc:raise NankanError('NANKAN_SINGLE_SOURCE_TIME_UNKNOWN') from exc
+    if (receipt.get('url')!=url or receipt.get('http_status')!=200
+            or receipt.get('raw_sha256')!=hashlib.sha256(raw).hexdigest()
+            or policy.get('usage_scope')!='USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'
+            or policy.get('status') not in (200,404)
+            or 'DISALLOW' in policy.get('classification','').upper()):
+        raise NankanError('NANKAN_SINGLE_SOURCE_RAW_OR_PERMISSION')
+    if (captured.tzinfo is None or observed.tzinfo is None or captured>observed
+            or (observed-captured).total_seconds()>600 or (cutoff is not None and captured>=cutoff)):
+        raise NankanError('NANKAN_SINGLE_SOURCE_NOT_CURRENT')
+    return receipt
+
+
+def capture_single_race(day,number,output,*,client=None,now=utcnow):
+    """Capture a new immutable SINGLE observation without reference-v1 generation.
+
+    The caller reads completed calculations before entering this function. An
+    incomplete attempt never pins later requests to its expired Raw. Each
+    requested capture uses the existing policy Client and a race-scoped lock;
+    it does not retry transport failures or acquire another race's lock.
+    """
+    date.fromisoformat(day)
+    if type(number) is not int or not 1<=number<=12:
+        raise NankanError('NANKAN_SINGLE_RACE_NUMBER_REQUIRED')
+    started=now()
+    if started.tzinfo is None:raise NankanError('NANKAN_SINGLE_CLOCK_TIMEZONE_REQUIRED')
+    if date.fromisoformat(day)<started.astimezone(JST).date():
+        raise NankanError('NANKAN_SINGLE_CAPTURE_CURRENT_OR_FUTURE_DAY_REQUIRED')
+    root=private_directory(output)
+    with private_lock(root/f'single-{day}-R{number:02}.lock') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        stamp=now().astimezone(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        folder=private_directory(root/'single-observations'/day/f'R{number:02}'/(stamp+'-'+os.urandom(8).hex()))
+        client=client or Client();sources=[];phases=[]
+        def capture(key,url):
+            phase_started=now();receipt,raw=client.get(url)
+            receipt=_single_capture_receipt(raw,receipt,url,now())
+            immutable(folder/(key+'.html.gz'),gzip.compress(raw,mtime=0))
+            save_json(folder/(key+'.receipt.json'),receipt)
+            phases.append({'phase':key,'started_at':phase_started.isoformat(),
+                           'completed_at':now().isoformat(),'source_fetched_at':receipt['fetched_at']})
+            return receipt,raw
+        try:
+            calendar,raw_calendar=capture('calendar',CALENDAR);sources.append(calendar)
+            program_url=program_link(raw_calendar,day)
+            program,raw_program=capture('program',program_url);sources.append(program)
+            races=parse_single_program(raw_program,program_url,day)
+            scheduled=[row['race_no'] for row in races if row['race_status']=='SCHEDULED']
+            cancelled=[row['race_no'] for row in races if row['race_status']=='CANCELLED']
+            status={'contract':SINGLE_PROGRAM_CONTRACT,'planned_race_count':len(races),
+                'scheduled_race_count':len(scheduled),'cancelled_race_count':len(cancelled),
+                'scheduled_race_nos':scheduled,'cancelled_race_nos':cancelled,
+                'source_url':program_url,'source_raw_sha256':program['raw_sha256'],
+                'source_fetched_at':program['fetched_at'],
+                'scheduled_is_completed_race_claim':False}
+            save_json(folder/'program-observation.json',{'program_status':status,'program_races':races})
+            race=next((row for row in races if row['race_no']==number),None)
+            if race is None:raise NankanError('NANKAN_RACE_NOT_IN_OFFICIAL_PROGRAM')
+            if race['race_status']=='CANCELLED':
+                raise NankanError('NANKAN_SINGLE_TARGET_RACE_CANCELLED',race_id=race['provider_race_id'],
+                    race_status_evidence=race['race_status_evidence'],program_observation=str(folder/'program-observation.json'))
+            cutoff=datetime.fromisoformat(race['prediction_cutoff'])
+            if now()>=cutoff:raise NankanError('NANKAN_SINGLE_CAPTURE_CUTOFF_HOLD')
+            phase_started=now()
+            try:client.get(race['observed_card_url'])
+            except ObservedRedirect as exc:redirect=reference_metadata(dict(exc.receipt))
+            else:raise NankanError('NANKAN_EXPECTED_SUPPORTED_CANONICAL_TRANSITION_REQUIRED')
+            expected=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do'
+            if (redirect.get('http_status')!=302 or redirect.get('source_url')!=race['observed_card_url']
+                    or redirect.get('location')!=expected):
+                raise NankanError('NANKAN_CANONICAL_TRANSITION_HOLD')
+            try:redirect_at=datetime.fromisoformat(redirect['fetched_at'])
+            except (KeyError,TypeError,ValueError) as exc:raise NankanError('NANKAN_SINGLE_REDIRECT_TIME_UNKNOWN') from exc
+            if (redirect_at.tzinfo is None or redirect_at>now() or redirect_at>=cutoff
+                    or (now()-redirect_at).total_seconds()>600):
+                raise NankanError('NANKAN_SINGLE_REDIRECT_NOT_CURRENT')
+            redirect_policy=redirect.get('source_policy',{})
+            if (redirect_policy.get('usage_scope')!='USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'
+                    or redirect_policy.get('status') not in (200,404)
+                    or 'DISALLOW' in redirect_policy.get('classification','').upper()):
+                raise NankanError('NANKAN_SINGLE_REDIRECT_PERMISSION_UNKNOWN')
+            sources.append(redirect);save_json(folder/'redirect.receipt.json',redirect)
+            phases.append({'phase':'observed_redirect','started_at':phase_started.isoformat(),
+                           'completed_at':now().isoformat(),'source_fetched_at':redirect['fetched_at']})
+            try:card,raw_card=capture('card',expected)
+            except ObservedRedirect as exc:raise NankanError('NANKAN_SECOND_REDIRECT_HOLD') from exc
+            sources.append(card);excluded=[];card_observation={}
+            runners=parse_single_card(raw_card,race,expected,excluded_rows=excluded,
+                                      card_observations=card_observation)
+            verify_history_asof(runners,card['fetched_at'])
+            completed=now()
+            if completed>=cutoff:raise NankanError('NANKAN_SINGLE_CAPTURE_COMPLETED_AFTER_CUTOFF')
+            for receipt,raw,url in ((calendar,raw_calendar,CALENDAR),(program,raw_program,program_url),
+                                    (card,raw_card,expected)):
+                _single_capture_receipt(raw,receipt,url,completed,cutoff=cutoff)
+            evidence={'profile':SINGLE_CAPTURE_PROFILE,'provider':PROVIDER,'race':race,'sources':sources,
+                'runners':runners,'explicit_card_exclusions':excluded,'listed_runner_count':len(runners),
+                'card_observation':card_observation,
+                'program_races':races,'program_status':status,'capture_started_at':started.isoformat(),
+                'source_frozen_at':completed.isoformat(),'capture_phases':phases,
+                'parser_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                'formal_source_claim':False,'signed_source_claim':False,'production_authority':False,
+                'public_redistribution_authorized':False,'active_verified':False,
+                'page_update_time_claim':'UNKNOWN_NOT_FETCH_TIME','reference_forecast_generated':False,
+                'formal_quality_credit':0,'temporal_class':('ACTUAL_UTC_COMPLETION_CHECKED_PRIVATE_ONLY'
+                    if now is utcnow else 'INJECTED_CLOCK_CONTRACT_TEST')}
+            evidence['sha256']=sha(evidence);save_json(folder/'single-source-evidence.json',evidence)
+            return evidence,folder
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            save_json(folder/'capture-failure.json',{'profile':SINGLE_CAPTURE_PROFILE,
+                'race_date':day,'race_no':number,'observed_at':now().isoformat(),
+                'code':str(exc),'receipt':getattr(exc,'receipt',None),'capture_phases':phases,
+                'target_prediction_generated':False,'formal_quality_credit':0})
+            raise
 
 
 def capture_race(day,number,output,*,client=None,now=utcnow,prediction_cutoff=None,refresh=False):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import fcntl
 import gzip
@@ -51,6 +52,8 @@ SINGLE_MODE='SINGLE_RACE_NONPRODUCTION'
 SINGLE_CLASS='SINGLE_RACE_PRESTART_NONPRODUCTION_NOT_REGISTERED_OOS'
 CARD_CHANGES_PROFILE='URW-SINGLE-CARD-DATED-CHANGES-NO-MARKET-20261023-v1'
 CARD_CHANGES_PROFILE_PATH=ROOT/'profiles/urw_single_card_dated_changes_no_market_20261023_v1.json'
+RACE_SCOPED_PROFILE='URW-SINGLE-RACE-SCOPED-CHANGES-NO-MARKET-20261023-v2'
+RACE_SCOPED_PROFILE_PATH=ROOT/'profiles/urw_single_race_scoped_changes_no_market_20261023_v2.json'
 
 def read(path): return json.loads(Path(path).read_text())
 def digest(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -62,18 +65,29 @@ def seal(value):
 def single_source_profile(c):
     """Explicit opt-in only. This never grants old v2 or formal admission."""
     if c.get('single_source_profile') is None:return None
-    if c.get('execution_mode')!=SINGLE_MODE or c['single_source_profile']!=CARD_CHANGES_PROFILE:
+    paths={CARD_CHANGES_PROFILE:CARD_CHANGES_PROFILE_PATH,RACE_SCOPED_PROFILE:RACE_SCOPED_PROFILE_PATH}
+    if c.get('execution_mode')!=SINGLE_MODE or c['single_source_profile'] not in paths:
         raise ValueError('SINGLE_RACE_SOURCE_PROFILE_SCOPE')
-    if c.get('single_source_profile_sha256')!=digest(CARD_CHANGES_PROFILE_PATH):
+    path=paths[c['single_source_profile']]
+    if c.get('single_source_profile_sha256')!=digest(path):
         raise ValueError('SINGLE_RACE_SOURCE_PROFILE_PIN')
-    profile=read(CARD_CHANGES_PROFILE_PATH)
-    if (profile['id']!=CARD_CHANGES_PROFILE or profile['execution_mode']!=SINGLE_MODE
+    profile=read(path)
+    if (profile['id']!=c['single_source_profile'] or profile['execution_mode']!=SINGLE_MODE
             or profile['selection_policy_sha256']!=sha(POLICY) or POLICY['price_or_ev_used'] is not False
             or profile['source_max_age_seconds']!=600
             or any(profile[key] is not False for key in ('formal_verified_active','registered_v2_admission',
                 'production_authority','actual_purchase','price_consumers_authorized','oddsjs_source_authorized'))):
         raise ValueError('SINGLE_RACE_SOURCE_PROFILE_CONSUMER_SCOPE')
-    return {'id':profile['id'],'file_sha256':digest(CARD_CHANGES_PROFILE_PATH),'contract':profile}
+    if profile['id']==RACE_SCOPED_PROFILE and (profile.get('unknown_changes_accepted') is not False
+            or profile.get('target_unlisted_is_official_no_change_guarantee') is not False
+            or profile.get('krs_parallel_workers')!=2 or profile.get('krs_max_wall_seconds')!=300
+            or profile.get('delivery_reserve_seconds')!=30):
+        raise ValueError('SINGLE_RACE_SCOPED_OPERATIONAL_CONTRACT')
+    return {'id':profile['id'],'file_sha256':digest(path),'contract':profile}
+
+def source_profile_path(profile):
+    return {CARD_CHANGES_PROFILE:CARD_CHANGES_PROFILE_PATH,
+            RACE_SCOPED_PROFILE:RACE_SCOPED_PROFILE_PATH}[profile['id']]
 
 def configuration(path):
     path=Path(path);private_directory(path.parent)
@@ -142,33 +156,218 @@ def observed_odds_link(card_raw,race):
         raise ValueError('SINGLE_RACE_OFFICIAL_ODDS_LINK_UNSUPPORTED')
     return {**result,'status':'OBSERVED_CANONICAL_ODDS_LINK','url':url}
 
-def card_changes_observations(c,folder,evidence,card_raw,facts,client):
+def scoped_raw(raw,receipt,url,race,*,historical=False):
+    """Original receipt validation; a historical import never renews its time."""
+    if not historical:
+        require_current_raw(raw,receipt,url)
+        return
+    reference_metadata(receipt)
+    policy=receipt.get('source_policy',{});observed=datetime.fromisoformat(receipt['fetched_at'])
+    cutoff=datetime.fromisoformat(race['prediction_cutoff'])
+    if (observed.tzinfo is None or cutoff.tzinfo is None or now()<cutoff or observed>=cutoff or observed>now()
+            or receipt.get('url')!=url or receipt.get('http_status')!=200
+            or receipt.get('raw_sha256')!=hashlib.sha256(raw).hexdigest()
+            or policy.get('usage_scope')!='USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'
+            or policy.get('status') not in (200,404) or 'DISALLOW' in policy.get('classification','').upper()):
+        raise ValueError('SINGLE_RACE_HISTORICAL_RAW_OR_RECEIPT_MISMATCH')
+
+def scoped_changes(raw,race,receipt,facts,program_races,*,excluded_rows=(),historical=False):
+    """Versioned SINGLE observation, not an official no-change guarantee.
+
+    The old parser/profile continues to return UNKNOWN for an unlisted race.
+    This consumer also observes the complete dated list and all programme IDs.
+    """
+    from runtime import urw_nankan_reference_source as native
+    url=ORIGIN+'/henko_info/00000000000000.do'
+    scoped_raw(raw,receipt,url,race,historical=historical)
+    result=native._unsigned_current_observation(raw,race,receipt,url,'PRIVATE_UNSIGNED_RACE_SCOPED_CHANGE_ITEMS')
+    text=decode(raw)
+    if not re.search(r'</body\s*>',text,re.I) or not re.search(r'</html\s*>\s*$',text,re.I):
+        raise ValueError('SINGLE_RACE_CHANGE_LIST_INCOMPLETE_DOCUMENT')
+    dom=DOM(text).root;y,m,d=map(int,race['race_date'].split('-'))
+    headings=[n for n in dom.all('h3','nk23_c-block01__info__title')
+              if '浦和競馬' in n.text() and f'{y}年{m}月{d}日' in n.parent.text()]
+    if len(headings)!=1:raise ValueError('SINGLE_RACE_CHANGES_DATED_VENUE_NOT_UNIQUE')
+    block=headings[0].parent
+    while block and 'nk23_c-block01' not in block.attrs.get('class','').split():block=block.parent
+    if block is None:raise ValueError('SINGLE_RACE_CHANGES_DATED_BLOCK_REQUIRED')
+    def owned(tag,cls=None):
+        out=[]
+        for node in block.all(tag,cls):
+            parent=node.parent
+            while parent and 'nk23_c-block01' not in parent.attrs.get('class','').split():parent=parent.parent
+            if parent is block:out.append(node)
+        return out
+    if len(owned('div','nk23_c-tab4__content'))!=1:
+        raise ValueError('SINGLE_RACE_CHANGE_LIST_COMPLETE_CONTAINER_REQUIRED')
+    if datetime.fromisoformat(receipt['fetched_at']).astimezone(JST).date().isoformat()!=race['race_date']:
+        raise ValueError('SINGLE_RACE_CHANGES_CAPTURE_DAY_MISMATCH')
+    notices=[n for n in owned('p','nk23_c-text02') if n.text()=='本日開催に変更情報がありません']
+    if len(notices)>1:raise ValueError('SINGLE_RACE_CHANGE_LIST_NOTICE_NOT_UNIQUE')
+    clocks=[n for n in owned('span') if n.attrs.get('id')=='nowDateSpan'];provider_at=None
+    if len(clocks)>1:raise ValueError('SINGLE_RACE_CHANGES_PROVIDER_TIME_NOT_UNIQUE')
+    if clocks:
+        match=re.fullmatch(r'(\d{4})年(\d{1,2})月(\d{1,2})日 (\d{1,2}):(\d{2})現在',clocks[0].text())
+        if not match:raise ValueError('SINGLE_RACE_CHANGES_PROVIDER_TIME_INVALID')
+        provider_at=datetime(*map(int,match.groups()),tzinfo=JST)
+        if provider_at.date().isoformat()!=race['race_date'] or provider_at>datetime.fromisoformat(receipt['fetched_at']):
+            raise ValueError('SINGLE_RACE_CHANGES_PROVIDER_TIME_MISMATCH')
+    by_race={r['race_no']:r for r in program_races}
+    if (len(by_race)!=len(program_races) or race['race_no'] not in by_race
+            or any(r.get('race_date')!=race['race_date'] or r.get('venue_id')!='URW' for r in program_races)):
+        raise ValueError('SINGLE_RACE_CHANGES_PROGRAM_UNIVERSE_MISMATCH')
+    target=by_race[race['race_no']]
+    if target.get('race_status')=='CANCELLED':raise ValueError('SINGLE_RACE_TARGET_CANCELLED_IN_PROGRAM')
+    for key in ('provider_race_id','distance','program_runner_count','scheduled_post_at','prediction_cutoff'):
+        if target.get(key)!=race.get(key):raise ValueError('SINGLE_RACE_CHANGES_PROGRAM_CARD_CONTRADICTION:'+key)
+    if (race['program_runner_count'] not in (len(facts),len(facts)+len(excluded_rows))
+            or len({f['provider_horse_id'] for f in facts})!=len(facts)):
+        raise ValueError('SINGLE_RACE_CHANGES_CARD_UNIVERSE_MISMATCH')
+    explicit=list(excluded_rows);declared={f['provider_horse_id']:f for f in [*facts,*explicit]}
+    if len(declared)!=len(facts)+len(explicit) or any(f.get('status')!='CANCELLED' for f in explicit):
+        raise ValueError('SINGLE_RACE_CHANGES_EXCLUDED_UNIVERSE_MISMATCH')
+    rows=owned('li','nk23_c-block01__list__item')
+    if notices and rows:raise ValueError('SINGLE_RACE_CHANGES_NO_CHANGE_NOTICE_CONTRADICTION')
+    if notices and any(r.get('race_status')=='CANCELLED' for r in program_races):
+        raise ValueError('SINGLE_RACE_CHANGES_PROGRAM_STATUS_CONTRADICTION')
+    items=[];observed_rows=[];seen=set();target_present=False
+    race_cancel=re.compile(r'(?:競走|レース|開催)?(?:取り止め|取止め|取止|中止)')
+    def only(nodes,code):
+        if len(nodes)!=1:raise ValueError(code)
+        return nodes[0]
+    for row in rows:
+        number=row.attrs.get('id','')
+        if not re.fullmatch(r'0[1-9]|1[0-2]',number):raise ValueError('SINGLE_RACE_CHANGE_ROW_RACE_NUMBER_UNKNOWN')
+        no=int(number)
+        if no in seen or no not in by_race:raise ValueError('SINGLE_RACE_CHANGE_ROW_PROGRAM_MISMATCH')
+        seen.add(no);expected=by_race[no]
+        if only(row.all('span','nk23_c-block01__label'),'SINGLE_RACE_CHANGE_ROW_LABEL_REQUIRED').text()!=f'{no}R':
+            raise ValueError('SINGLE_RACE_CHANGE_ROW_LABEL_MISMATCH')
+        changes=row.all('div','nk23_c-block01__list2__item')
+        kinds=[only(n.all('p','nk23_c-block01__tag'),'SINGLE_RACE_CHANGE_KIND_REQUIRED').text() for n in changes]
+        cancelled=any(race_cancel.fullmatch(k) for k in kinds) or (not changes and bool(race_cancel.search(row.text())))
+        links={urljoin(ORIGIN,n.attrs.get('href','')) for n in row.all('a')}
+        card_links={link for link in links if '/syousai/' in link}
+        expected_link=ORIGIN+'/syousai/'+expected['provider_race_id']+'.do'
+        linkless_cancelled=not card_links and cancelled
+        if card_links!={expected_link} and not linkless_cancelled:
+            raise ValueError('SINGLE_RACE_CHANGE_ROW_CARD_IDENTITY_MISMATCH')
+        if expected.get('race_status')=='CANCELLED' and not cancelled:
+            raise ValueError('SINGLE_RACE_CHANGE_PROGRAM_STATUS_CONTRADICTION')
+        if no==race['race_no']:
+            target_present=True
+            if cancelled:raise ValueError('SINGLE_RACE_TARGET_CANCELLED_IN_CHANGES')
+        if not changes and not cancelled:raise ValueError('SINGLE_RACE_CHANGE_ROW_CONTENT_UNKNOWN')
+        observed_rows.append({'race_no':no,'provider_race_id':expected['provider_race_id'],
+            'race_status':'CANCELLED' if cancelled else 'CHANGE_ITEMS_OBSERVED','change_types':kinds,
+            'observed_text':row.text(),'program_race_status':expected.get('race_status'),
+            'observed_card_link':expected_link if card_links else None,
+            'race_identity_basis':'UNIQUE_PROGRAM_ROW_AND_EXPLICIT_CANCELLATION'
+                if linkless_cancelled else 'OBSERVED_PROGRAM_CARD_LINK'})
+        if cancelled:continue
+        for node,kind in zip(changes,kinds):
+            printed=only(node.all('span','nk23_c-block01__txt2'),'SINGLE_RACE_CHANGE_HORSE_NUMBER_REQUIRED').text()
+            match=re.fullmatch(r'(\d{1,2})番',printed)
+            horse=only([a for a in node.all('a') if re.fullmatch(r'/uma_info/\d+\.do',a.attrs.get('href',''))],
+                       'SINGLE_RACE_CHANGE_HORSE_IDENTITY_REQUIRED')
+            if not match or not horse.text():raise ValueError('SINGLE_RACE_CHANGE_HORSE_IDENTITY_UNKNOWN')
+            jockeys=[a.text() for a in node.all('a') if a.attrs.get('href','').startswith('/kis_info/')]
+            if no!=race['race_no']:continue
+            if kind not in ('出走取消','競走除外','騎手変更') or (kind=='騎手変更' and len(jockeys)!=2):
+                raise ValueError('SINGLE_RACE_CHANGE_ITEM_UNSUPPORTED')
+            provider_id=horse.attrs['href'].split('/')[-1][:-3];original=declared.get(provider_id)
+            if (not original or original['name']!=horse.text()
+                    or (original.get('runner_id') is not None and str(original['runner_id'])!=match[1])):
+                raise ValueError('SINGLE_RACE_CHANGE_DECLARED_IDENTITY_MISMATCH')
+            excluded=provider_id in {f['provider_horse_id'] for f in explicit}
+            if excluded and kind not in ('出走取消','競走除外'):
+                raise ValueError('SINGLE_RACE_CHANGE_EXCLUDED_HORSE_CONTRADICTION')
+            items.append({'runner_id':match[1],'name':horse.text(),'provider_horse_id':provider_id,
+                'change_type':kind,'status':'CANCELLED' if kind in ('出走取消','競走除外') else 'ACTIVE_DECLARED',
+                'jockey_names_observed':jockeys,'change_detail_observed':' '.join(n.text() for n in node.all('p','nk23_c-block01__text2')),
+                'explicit_card_exclusion':excluded,'active_verified':False})
+    state=('CHANGE_ITEMS_OBSERVED' if items else 'EXPLICIT_NO_CHANGES_TODAY' if notices else
+           'OTHER_RACE_CHANGES_OBSERVED_TARGET_UNLISTED' if observed_rows and not target_present else 'UNKNOWN')
+    if state=='UNKNOWN':raise ValueError('SINGLE_RACE_DATED_CHANGES_UNKNOWN')
+    result.update(items=items,target_race_row_present=target_present,declared_facts_sha256=sha(facts),
+        explicit_card_exclusions_sha256=sha(explicit),explicit_no_changes_today_observed=bool(notices),
+        target_race_change_status=state,observed_race_rows=observed_rows,
+        list_completeness={'status':'DATED_VENUE_BLOCK_AND_ALL_LISTED_ROWS_VALIDATED',
+            'complete_html_document':True,'program_race_count':len(program_races),'listed_change_race_count':len(rows)},
+        provider_display_at=provider_at.isoformat() if provider_at else None,
+        provider_display_time_status='OBSERVED' if provider_at else 'UNKNOWN',
+        absence_is_no_change_authority=False,official_target_no_change_guarantee=False,
+        historical_diagnostic=historical)
+    cancelled_races=sorted({r['race_no'] for r in program_races if r.get('race_status')=='CANCELLED'}|
+        {r['race_no'] for r in observed_rows if r['race_status']=='CANCELLED'})
+    result['reconciled_program_status']={'planned_race_count':len(program_races),
+        'scheduled_race_count':len(program_races)-len(cancelled_races),'cancelled_race_count':len(cancelled_races),
+        'cancelled_race_nos':cancelled_races,'basis':'ORIGINAL_PROGRAM_PLUS_OBSERVED_CHANGE_ITEMS',
+        'original_program_rewritten':False}
+    return seal(result)
+
+def card_changes_observations(c,folder,evidence,card_raw,facts,client,*,historical=False):
     """New price-free SOURCE contract, separate from the old acceptance path."""
     profile=single_source_profile(c);race=evidence['race']
     if not profile:raise ValueError('SINGLE_RACE_EXPLICIT_SOURCE_PROFILE_REQUIRED')
+    scoped=profile['id']==RACE_SCOPED_PROFILE
+    if historical and not scoped:raise ValueError('SINGLE_RACE_HISTORICAL_PROFILE_REQUIRED')
     for i,name in ((0,'calendar.html.gz'),(1,'program.html.gz'),(3,'card.html.gz')):
         receipt=evidence['sources'][i]
-        require_current_raw(gzip.decompress((folder/name).read_bytes()),receipt,receipt['url'])
-    if facts!=parse_card(card_raw,race,evidence['sources'][3]['url']):
+        data=gzip.decompress((folder/name).read_bytes())
+        if scoped:scoped_raw(data,receipt,receipt['url'],race,historical=historical)
+        else:require_current_raw(data,receipt,receipt['url'])
+    card_parser=parse_card
+    if scoped:
+        from runtime.urw_nankan_reference_source import parse_single_card
+        card_parser=parse_single_card
+    if facts!=card_parser(card_raw,race,evidence['sources'][3]['url']):
         raise ValueError('SINGLE_RACE_CARD_FACTS_NOT_BOUND_TO_RAW')
-    if (len(facts)!=race['program_runner_count']
+    if (race['program_runner_count'] not in ((len(facts),len(facts)+len(evidence.get('explicit_card_exclusions',()))) if scoped else (len(facts),))
             or len({x['provider_horse_id'] for x in facts})!=len(facts)
             or any(not re.fullmatch(r'\d+',x['provider_horse_id']) or not x['name']
                    or x['status'] not in ('ACTIVE_DECLARED','CANCELLED') for x in facts)):
         raise ValueError('SINGLE_RACE_CURRENT_CARD_UNIVERSE_UNRESOLVED')
     # Changes are fetched and parsed even when the market is not published.
-    receipt,raw=current_raw(folder,'changes',ORIGIN+'/henko_info/00000000000000.do',client)
-    changes=parse_current_changes(raw,race,receipt,facts)
+    if historical:
+        receipt=read(folder/'changes.receipt.json');raw=(folder/'changes.raw.html').read_bytes()
+    else:receipt,raw=current_raw(folder,'changes',ORIGIN+'/henko_info/00000000000000.do',client)
+    if scoped:
+        from runtime.urw_nankan_reference_source import parse_single_program
+        program=gzip.decompress((folder/'program.html.gz').read_bytes())
+        races=parse_single_program(program,evidence['sources'][1]['url'],race['race_date'])
+        changes=scoped_changes(raw,race,receipt,facts,races,
+            excluded_rows=evidence.get('explicit_card_exclusions',()),historical=historical)
+    else:changes=parse_current_changes(raw,race,receipt,facts)
+    accepted=(profile['contract']['changes_accepted_states'] if scoped else
+              ('EXPLICIT_NO_CHANGES_TODAY','CHANGE_ITEMS_OBSERVED'))
     if (datetime.fromisoformat(receipt['fetched_at']).astimezone(JST).date().isoformat()!=race['race_date']
-            or changes['target_race_change_status'] not in ('EXPLICIT_NO_CHANGES_TODAY','CHANGE_ITEMS_OBSERVED')):
+            or changes['target_race_change_status'] not in accepted):
         raise ValueError('SINGLE_RACE_DATED_CHANGES_UNKNOWN')
     if any(item['status']!='CANCELLED' and not item.get('jockey_names_observed') for item in changes['items']):
         raise ValueError('SINGLE_RACE_CURRENT_CHANGE_UNRESOLVED')
-    link=observed_odds_link(card_raw,race);save_json(folder/'odds-menu-observation.json',link)
+    link=observed_odds_link(card_raw,race)
+    if not historical:save_json(folder/'odds-menu-observation.json',link)
     odds=None;market_reason=link['status']
     if link['url']:
+        saved_404=False
+        if historical and not (folder/'odds.receipt.json').exists():
+            error_path=folder/'odds.http-error.raw.html';meta_path=folder/'odds.http-error.receipt.json'
+            if not error_path.is_file() or not meta_path.is_file():
+                raise ValueError('SINGLE_RACE_HISTORICAL_MARKET_EVIDENCE_MISSING')
+            error=error_path.read_bytes();meta=read(meta_path);stamp=datetime.fromisoformat(meta['observed_at'])
+            if (meta.get('url')!=link['url'] or meta.get('http_status')!=404
+                    or meta.get('raw_sha256')!=hashlib.sha256(error).hexdigest()
+                    or meta.get('scope')!='HTTP_ERROR_NOT_A_PRICE_OR_MEMBERSHIP_OBSERVATION'
+                    or stamp.tzinfo is None or stamp>=datetime.fromisoformat(race['prediction_cutoff']) or stamp>now()):
+                raise ValueError('SINGLE_RACE_HISTORICAL_MARKET_404_BINDING')
+            saved_404=True;market_reason='OBSERVED_CANONICAL_ODDS_LINK_HTTP_404'
         try:
-            odds_receipt,odds_raw=current_raw(folder,'odds',link['url'],client)
+            if saved_404:odds_receipt=odds_raw=None
+            elif historical:
+                odds_receipt=read(folder/'odds.receipt.json');odds_raw=(folder/'odds.raw.html').read_bytes()
+                scoped_raw(odds_raw,odds_receipt,link['url'],race,historical=True)
+            else:odds_receipt,odds_raw=current_raw(folder,'odds',link['url'],client)
         except urllib.error.HTTPError as exc:
             # Only an actual 404 on the observed canonical link is eligible.
             # 403, robots denials, timeouts and malformed 200 HTML propagate.
@@ -179,7 +378,13 @@ def card_changes_observations(c,folder,evidence,card_raw,facts,client):
                 'scope':'HTTP_ERROR_NOT_A_PRICE_OR_MEMBERSHIP_OBSERVATION'})
             market_reason='OBSERVED_CANONICAL_ODDS_LINK_HTTP_404'
         else:
-            odds=parse_current_odds(odds_raw,race,odds_receipt,facts)
+            if not saved_404:
+                if scoped:
+                    from runtime.urw_nankan_reference_source import parse_single_odds
+                    odds=parse_single_odds(odds_raw,race,odds_receipt,facts,
+                        excluded_rows=evidence.get('explicit_card_exclusions',()),
+                        card_observation=evidence.get('card_observation'))
+                else:odds=parse_current_odds(odds_raw,race,odds_receipt,facts)
     market={'status':'MARKET_OBSERVED' if odds is not None else 'MARKET_UNAVAILABLE',
         'reason':None if odds is not None else market_reason,'official_menu':link,
         'price_used':False,'odds_independent_reconciliation':odds is not None,
@@ -192,7 +397,7 @@ def card_changes_observations(c,folder,evidence,card_raw,facts,client):
     # No missing rows or fabricated membership are supplied to the reconciler.
     observations={'changes':changes,'market':market}
     if odds is not None:observations['odds']=odds
-    save_json(folder/'source-contract-observation.json',seal({'profile':profile,'observations':observations}))
+    if not historical:save_json(folder/'source-contract-observation.json',seal({'profile':profile,'observations':observations}))
     return observations,profile
 
 def current_jockey_identity(card_raw,changes_raw,fact):
@@ -217,36 +422,38 @@ def current_jockey_identity(card_raw,changes_raw,fact):
         'change_to_name':change_riders[-1].text(),'provider_jockey_link':card_riders[0].attrs['href'],
         'basis':'EXACT_OBSERVED_PROVIDER_ID_MATCH_NOT_NAME_PREFIX_OR_MODEL_CHANGE'}
 
-def current_single_observation(c,day,number):
-    """Existing lawful capture/parser only; no REFERENCE ranking is consumed.
-
-    This contract is independent of cohort admission, not of source checks.
-    Current raw and source-policy receipts remain in the immutable original.
-    """
-    folder=private_directory(Path(c['current_source_root'])/day/f'R{number:02}')
-    client=Client()
-    _,evidence,_,_=capture_race(day,number,folder,client=client)
-    race=evidence['race']
-    source=evidence['sources'][3]
+def _single_observation(c,folder,evidence,*,historical=False):
+    race=evidence['race'];source=evidence['sources'][3]
     card_raw=gzip.decompress((folder/'card.html.gz').read_bytes())
     if hashlib.sha256(card_raw).hexdigest()!=source['raw_sha256']:raise ValueError('SINGLE_RACE_CURRENT_CARD_RAW_HASH')
-    facts=parse_card(card_raw,race,source['url']);verify_history_asof(facts,source['fetched_at'])
+    profile=single_source_profile(c);scoped=bool(profile and profile['id']==RACE_SCOPED_PROFILE)
+    card_parser=parse_card;card_observation={}
+    if scoped:
+        from runtime.urw_nankan_reference_source import parse_single_card
+        card_parser=parse_single_card
+    exclusions=[]
+    facts=(card_parser(card_raw,race,source['url'],excluded_rows=exclusions,card_observations=card_observation)
+           if scoped else card_parser(card_raw,race,source['url'],excluded_rows=exclusions))
+    verify_history_asof(facts,source['fetched_at'])
     reparse={'original_evidence_sha256':evidence['sha256'],'original_parser_sha256':evidence['parser_sha256'],
         'current_parser_sha256':digest(ROOT/'runtime/urw_nankan_reference_source.py'),
         'original_facts_sha256':sha(evidence['runners']),'current_facts_sha256':sha(facts),'original_files_modified':False}
-    program_conditions=program_condition_observation(
-        gzip.decompress((folder/'program.html.gz').read_bytes()),evidence['sources'][1],race)
-    if (now()>=datetime.fromisoformat(race['prediction_cutoff'])
+    program_conditions=program_condition_observation(gzip.decompress((folder/'program.html.gz').read_bytes()),
+        evidence['sources'][1],race,single_scoped=scoped)
+    if historical:
+        if not scoped or now()<datetime.fromisoformat(race['prediction_cutoff']):
+            raise ValueError('SINGLE_RACE_SAVED_INPUT_DIAGNOSTIC_ONLY')
+    elif (now()>=datetime.fromisoformat(race['prediction_cutoff'])
             or now().timestamp()-datetime.fromisoformat(source['fetched_at']).timestamp()>600):
         raise ValueError('SINGLE_RACE_CURRENT_SOURCE_EXPIRED_NO_BACKDATE')
-    if single_source_profile(c):
-        observations,profile=card_changes_observations(c,folder,evidence,card_raw,facts,client)
-    else:
-        observations,profile=legacy_current_observations(folder,race,facts,client,reparse),None
+    if profile:
+        evidence={**evidence,'explicit_card_exclusions':exclusions,**({'card_observation':card_observation} if scoped else {})}
+        observations,profile=card_changes_observations(c,folder,evidence,card_raw,facts,None if historical else Client(),historical=historical)
+    else:observations,profile=legacy_current_observations(folder,race,facts,Client(),reparse),None
     odds={r['runner_id']:r for r in observations.get('odds',{}).get('runners',[])}
-    changes=observations['changes']
-    reconciliations=[]
+    changes=observations['changes'];reconciliations=[]
     for change in changes['items']:
+        if change.get('explicit_card_exclusion'):continue
         original=next(r for r in facts if r['runner_id']==change['runner_id'])
         if change['status']=='CANCELLED':original['status']='CANCELLED'
         if change.get('jockey_names_observed'):
@@ -257,15 +464,72 @@ def current_single_observation(c,day,number):
             if row['status']=='CANCELLED':fact['status']='CANCELLED'
             if fact['status']=='CANCELLED' and row['betting_membership_observed']:
                 raise ValueError('SINGLE_RACE_CANCELLED_ODDS_CONTRADICTION')
-    return {'race':race,'facts':facts,'source':source,'active_verified':False,'signed_source_claim':False,
+    result={'race':race,'facts':facts,'source':source,'active_verified':False,'signed_source_claim':False,
         'program_conditions':program_conditions,'current_parser_reparse':reparse,
         'current_observations':observations,'jockey_change_reconciliations':reconciliations,
         'source_evidence_sha256':evidence['sha256'],'current_source_folder':str(folder),
         **({'source_contract':profile} if profile else {}),
-        'latest_change_check':('CURRENT_OFFICIAL_CARD_AND_DATED_CHANGES_MARKET_SEPARATE' if profile else
+        'latest_change_check':('CURRENT_OFFICIAL_CARD_AND_RACE_SCOPED_DATED_CHANGES' if scoped else
+            'CURRENT_OFFICIAL_CARD_AND_DATED_CHANGES_MARKET_SEPARATE' if profile else
             'CURRENT_CARD_ODDS_AND_OFFICIAL_CHANGES_OBSERVED'),
         'active_basis':('UNSIGNED_DATED_CARD_AND_CHANGES_NOT_ODDS_VERIFIED_ACTIVE' if profile else
             'UNSIGNED_CURRENT_OFFICIAL_OBSERVATIONS_NOT_FORMAL_VERIFIED_ACTIVE')}
+    if scoped:
+        result.update(explicit_card_exclusions=exclusions,program_status=evidence.get('program_status'),
+            program_races=evidence.get('program_races'),card_observation=card_observation,source_imported_at=now().isoformat(),
+            original_receipts=evidence['sources'],historical_diagnostic=historical,
+            current_source_freshness_claim=not historical)
+    return result
+
+
+def current_single_observation(c,day,number):
+    """One independent Race; new v2 acquisition never reuses an expired receipt."""
+    folder=private_directory(Path(c['current_source_root'])/day/f'R{number:02}')
+    profile=single_source_profile(c)
+    if profile and profile['id']==RACE_SCOPED_PROFILE:
+        from runtime.urw_nankan_reference_source import capture_single_race
+        evidence,folder=capture_single_race(day,number,folder,client=Client())
+    else:_,evidence,_,_=capture_race(day,number,folder,client=Client())
+    return _single_observation(c,folder,evidence)
+
+
+def saved_single_observation(c,day,number):
+    """The same v2 adapter consumes original saved bytes, post-cutoff only."""
+    from runtime.urw_nankan_reference_source import parse_single_program, program_link, CALENDAR
+    profile=single_source_profile(c)
+    if not profile or profile['id']!=RACE_SCOPED_PROFILE:raise ValueError('SINGLE_RACE_SAVED_INPUT_PROFILE_REQUIRED')
+    key=day+f'/R{number:02}'
+    path=c.get('single_saved_source_folders',{}).get(key)
+    if not path:raise ValueError('SINGLE_RACE_SAVED_INPUT_NOT_CONFIGURED')
+    from runtime.urw_paper_archive import _private_path
+    folder=_private_path(path,directory=True)
+    evidence_path=folder/'single-source-evidence.json'
+    if not evidence_path.is_file():evidence_path=folder/'reference_evidence.json'
+    evidence=read(evidence_path);_check_sha(evidence)
+    sources=evidence['sources'];program=gzip.decompress((folder/'program.html.gz').read_bytes())
+    races=parse_single_program(program,sources[1]['url'],day)
+    race=next((r for r in races if r['race_no']==number),None)
+    if race is None:raise ValueError('SINGLE_RACE_SAVED_INPUT_RACE_NOT_IN_PROGRAM')
+    if race.get('race_status')=='CANCELLED':raise ValueError('SINGLE_RACE_TARGET_CANCELLED_IN_PROGRAM')
+    cutoff=datetime.fromisoformat(race['prediction_cutoff'])
+    if now()<cutoff:raise ValueError('SINGLE_RACE_SAVED_INPUT_DIAGNOSTIC_ONLY')
+    for name in ('race_date','race_no','provider_race_id','distance','program_runner_count','scheduled_post_at','prediction_cutoff'):
+        if evidence['race'].get(name)!=race.get(name):raise ValueError('SINGLE_RACE_SAVED_INPUT_RACE_MISMATCH:'+name)
+    calendar=gzip.decompress((folder/'calendar.html.gz').read_bytes())
+    if sources[0]['url']!=CALENDAR or program_link(calendar,day)!=sources[1]['url']:
+        raise ValueError('SINGLE_RACE_SAVED_INPUT_OBSERVED_PROGRAM_LINK')
+    canonical=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do'
+    if (sources[2].get('http_status')!=302 or sources[2].get('source_url')!=race['observed_card_url']
+            or sources[2].get('location')!=canonical or sources[3]['url']!=canonical):
+        raise ValueError('SINGLE_RACE_SAVED_INPUT_OBSERVED_CARD_TRANSITION')
+    metadata={**evidence,'race':race,'program_races':races}
+    result=_single_observation(c,folder,metadata,historical=True)
+    result['saved_input_binding']={'evidence_file_sha256':digest(evidence_path),'evidence_file_name':evidence_path.name,
+        'original_source_times':[s['fetched_at'] for s in sources],
+        'imported_at':result['source_imported_at'],'classification':'POSTCUTOFF_SAVED_SOURCE_IMPORT',
+        'original_files_modified':False,'live_freshness_asserted':False}
+    return result
+
 
 def legacy_current_observations(folder,race,facts,client,reparse):
     """Unchanged c08 odds/changes acceptance for configurations without opt-in."""
@@ -287,7 +551,7 @@ def legacy_current_observations(folder,race,facts,client,reparse):
         save_json(folder/(key+'.parsed-'+version+'.json'),observations[key])
     return observations
 
-def program_condition_observation(raw,receipt,race):
+def program_condition_observation(raw,receipt,race,*,single_scoped=False):
     """Carry observed program conditions into existing unsigned consumers."""
     observed=datetime.fromisoformat(receipt['fetched_at']);cutoff=datetime.fromisoformat(race['prediction_cutoff'])
     expected_url=ORIGIN+'/program/'+race['provider_race_id'][:-2]+'.do'
@@ -295,7 +559,11 @@ def program_condition_observation(raw,receipt,race):
             or receipt.get('url')!=expected_url or receipt.get('http_status')!=200
             or hashlib.sha256(raw).hexdigest()!=receipt.get('raw_sha256')):
         raise ValueError('PAPER_PROGRAM_CONDITION_RAW_RECEIPT_OR_TIME')
-    conditions={};rows=parse_program(raw,receipt['url'],race['race_date'],condition_observations=conditions)
+    conditions={}
+    if single_scoped:
+        from runtime.urw_nankan_reference_source import parse_single_program
+        rows=parse_single_program(raw,receipt['url'],race['race_date'],condition_observations=conditions)
+    else:rows=parse_program(raw,receipt['url'],race['race_date'],condition_observations=conditions)
     expected=next((row for row in rows if row['race_no']==race['race_no']),None)
     if expected is None or any(expected[key]!=race[key] for key in
             ('provider_race_id','distance','program_runner_count','scheduled_post_at','prediction_cutoff')):
@@ -389,7 +657,7 @@ def krs_input(n,pred,*,seed,runs):
           'course_rule_version':URW_CANON,'surface':'dirt','course':'left'}
     return build_candidate_krs({**n,'race':race,'runners':rows,'seed':seed,'run_count':runs})['candidate_krs_input_data']
 
-def simulate(folder, c, data, race_id, number, day):
+def simulate(folder, c, data, race_id, number, day,*,timeout_seconds=None):
     inp=folder/'krs.input.json';out=folder/'krs.output.json';receipt=folder/'engine.receipt.json'
     save_json(inp,data)
     if receipt.exists():
@@ -400,9 +668,17 @@ def simulate(folder, c, data, race_id, number, day):
         raise ValueError('PAPER_INTERRUPTED_ENGINE_ATTEMPT_PRESERVED_NO_DUPLICATE_RUN')
     start=now();wall=time.monotonic()
     with (folder/'engine.log').open('x') as log:
-        subprocess.run([sys.executable,c['engine'],str(inp),'--output',str(out),'--csv',str(folder/'krs.csv'),
-            '--params',c['parameters'],'--runs',str(c['runs']),'--seed',str(c['seed']),'--short'],
-            stdout=log,stderr=subprocess.STDOUT,timeout=300,check=True)
+        try:
+            subprocess.run([sys.executable,c['engine'],str(inp),'--output',str(out),'--csv',str(folder/'krs.csv'),
+                '--params',c['parameters'],'--runs',str(c['runs']),'--seed',str(c['seed']),'--short'],
+                stdout=log,stderr=subprocess.STDOUT,timeout=300 if timeout_seconds is None else timeout_seconds,check=True)
+        except (subprocess.TimeoutExpired,subprocess.CalledProcessError) as exc:
+            if timeout_seconds is None:raise
+            save_json(folder/'engine-failure.json',{'status':'SINGLE_RACE_KRS_EXECUTION_FAILED',
+                'started_at':start.isoformat(),'failed_at':now().isoformat(),'timeout_seconds':timeout_seconds,
+                'error_type':type(exc).__name__,'completed_output_claim':False,'no_bet':False,
+                'partial_attempt_preserved':True})
+            raise ValueError('SINGLE_RACE_KRS_EXECUTION_FAILED:'+type(exc).__name__) from exc
     output=read(out);s=output['snapshot']
     if (s.get('prediction_id')!=race_id or s.get('date')!=day or s.get('race_no')!=number
             or s.get('run_count')!=c['runs'] or s.get('master_seed')!=c['seed']
@@ -458,23 +734,64 @@ def portfolio_inactive_ids(observation,prediction):
         return []
     return inactive
 
+def single_stage_clock(observation,stage,*,reserve_seconds=0,require_pre_cutoff=True):
+    """Check actual input-use time. Historical imports grant no fresh claim."""
+    profile=observation.get('source_contract')
+    if not profile or profile['id']!=RACE_SCOPED_PROFILE:return None
+    current=now();cutoff=datetime.fromisoformat(observation['race']['prediction_cutoff'])
+    if observation.get('historical_diagnostic'):
+        return {'stage':stage,'observed_at':current.isoformat(),'historical_diagnostic':True,
+            'live_freshness_asserted':False,'prediction_cutoff':cutoff.isoformat()}
+    values=[s['fetched_at'] for i,s in enumerate(observation['original_receipts']) if i in (0,1,3)]
+    values+=[v['source_fetched_at'] for k,v in observation['current_observations'].items()
+             if k in ('changes','odds')]
+    times=[datetime.fromisoformat(v) for v in values]
+    if any(t.tzinfo is None or t>current for t in times):raise ValueError('SINGLE_RACE_SOURCE_USE_TIME_UNKNOWN:'+stage)
+    expiry=min(t.timestamp()+600 for t in times)
+    if current.timestamp()>=expiry:raise ValueError('SINGLE_RACE_SOURCE_EXPIRED_AT_USE:'+stage)
+    if require_pre_cutoff and current>=cutoff:raise ValueError('SINGLE_RACE_CUTOFF_BEFORE_STAGE:'+stage)
+    remaining=min(expiry,cutoff.timestamp())-current.timestamp()
+    if reserve_seconds and remaining<=reserve_seconds:
+        raise ValueError('SINGLE_RACE_DELIVERY_BUDGET_EXHAUSTED:'+stage)
+    return {'stage':stage,'observed_at':current.isoformat(),'historical_diagnostic':False,
+        'source_expires_at':datetime.fromtimestamp(expiry,timezone.utc).isoformat(),
+        'prediction_cutoff':cutoff.isoformat(),'remaining_seconds':remaining,
+        'delivery_reserve_seconds':reserve_seconds,'live_freshness_asserted':True}
+
+def record_stage_clock(observation,stage,events,folder,**kwargs):
+    try:record=single_stage_clock(observation,stage,**kwargs)
+    except ValueError as exc:
+        save_json(folder/('pipeline-failure-'+stage+'.json'),{'stage':stage,'failed_at':now().isoformat(),
+            'reason':str(exc),'prediction_cutoff':observation['race']['prediction_cutoff'],
+            'source_fetched_at':observation['source']['fetched_at'],'source_imported_at':observation.get('source_imported_at'),
+            'preceding_stage_observations':events,'forward_completion':False,'no_bet':False})
+        raise
+    events.append(record)
+    return record
+
 
 def prepare(config_path, intent):
     os.umask(0o077)
     c,reg,models=configuration(config_path);day=intent['race_date'];number=intent['race_no']
     single=c.get('execution_mode')==SINGLE_MODE
     pins=calculation_pins(c,models)
+    profile=single_source_profile(c);scoped=bool(profile and profile['id']==RACE_SCOPED_PROFILE)
+    scoped_saved=scoped and day+f'/R{number:02}' in c.get('single_saved_source_folders',{})
+    if scoped and c.get('source_root'):raise ValueError('SINGLE_RACE_SCOPED_LEGACY_SOURCE_ROOT_FORBIDDEN')
     saved_diagnostic=False
-    if single and c.get('allow_postcutoff_diagnostic') and c.get('source_root'):
+    if single and not scoped and c.get('allow_postcutoff_diagnostic') and c.get('source_root'):
         path=Path(c['source_root'])/f'sources/R{number:02}/reference_evidence.json'
         if path.is_file():
             race=read(path)['race']
             saved_diagnostic=(race.get('race_date')==day and race.get('race_no')==number
                 and now()>=datetime.fromisoformat(race['prediction_cutoff']))
-    obs=(source_observation(c['source_root'],day,number,diagnostic_reparse=True) if saved_diagnostic else
+    obs=(saved_single_observation(c,day,number) if scoped_saved else
+        source_observation(c['source_root'],day,number,diagnostic_reparse=True) if saved_diagnostic else
         current_single_observation(c,day,number) if single else source_observation(c['source_root'],day,number))
     cutoff=datetime.fromisoformat(obs['race']['prediction_cutoff']);diagnostic=now()>=cutoff
     if diagnostic and not c.get('allow_postcutoff_diagnostic'):raise ValueError('PAPER_PAST_CUTOFF_NO_NEW_FORWARD')
+    stage_times=[]
+    if scoped:stage_times.append(single_stage_clock(obs,'SOURCE_READY'))
     # Live operation cannot skip the existing whole-day/checkpoint admission.
     if not diagnostic and not single:
         if c.get('current_v2_live_ledger_latestness')!='INDEPENDENT_PRIVATE_READBACK_VERIFIED':
@@ -504,7 +821,7 @@ def prepare(config_path, intent):
             if {key:prior.get(key) for key in manifest}!=manifest:raise ValueError('PAPER_RESUME_CALCULATION_MANIFEST_MISMATCH')
         else:save_json(manifest_path,seal({**manifest,'started_at':now().isoformat()}))
         if obs.get('source_contract'):
-            immutable(folder/'source-contract-profile.json',CARD_CHANGES_PROFILE_PATH.read_bytes())
+            immutable(folder/'source-contract-profile.json',source_profile_path(obs['source_contract']).read_bytes())
         race_id=f'KM-LOCAL-URW-{day.replace("-","")}-R{number:02}-'+('DIAGNOSTIC' if diagnostic else 'SINGLE-NONPRODUCTION' if single else 'FORWARD-RESEARCH')+'-R1'
         observation_path=folder/'source-observation.json'
         if observation_path.exists():
@@ -512,16 +829,20 @@ def prepare(config_path, intent):
             def original_binding(value):
                 value=copy.deepcopy(value)
                 if 'historical_reparse' in value:value['historical_reparse'].pop('reparsed_at',None)
+                value.pop('source_imported_at',None)
+                if 'saved_input_binding' in value:value['saved_input_binding'].pop('imported_at',None)
                 return value
             if original_binding(prior)!=original_binding(obs):raise ValueError('PAPER_RESUME_SOURCE_OBSERVATION_MISMATCH')
             obs=prior
         else:save_json(observation_path,obs)
         npath=folder/'numerical.json'
+        if scoped:record_stage_clock(obs,'NUMERICAL_INPUT_USE',stage_times,folder)
         if not npath.exists():save_json(npath,numerical(obs,race_id))
         n=read(npath);_check_sha(n);pack=parsed_owner_feature_pack(n)
         if obs.get('source_contract'):
             save_json(folder/'price-free-consumer-audit.json',price_free_consumer_audit(obs,n,pack))
         compath=folder/'comparison.json'
+        if scoped:record_stage_clock(obs,'OWNER_INPUT_USE',stage_times,folder)
         if not compath.exists():
             if diagnostic:
                 predictions={a:predict_conditioned_owner(m,pack,historical_replay=True) for a,m in models.items()}
@@ -532,9 +853,22 @@ def prepare(config_path, intent):
                 save_json(compath,comparison)
             else:freeze_owner_forward_comparison(pack,models['BASELINE'],models['CANDIDATE'],protocol=reg['existing_owner_protocol_unchanged'],output=compath)
         comparison=read(compath);_check_sha(comparison);arms={};audits={}
+        parallel={}
+        if scoped:
+            clock=record_stage_clock(obs,'KRS_INPUT_USE',stage_times,folder,
+                reserve_seconds=profile['contract']['delivery_reserve_seconds'])
+            timeout=profile['contract']['krs_max_wall_seconds']
+            if not diagnostic:timeout=min(timeout,clock['remaining_seconds']-clock['delivery_reserve_seconds'])
+            with ThreadPoolExecutor(max_workers=profile['contract']['krs_parallel_workers']) as workers:
+                jobs={arm:workers.submit(simulate,private_directory(folder/arm),c,
+                    krs_input(n,comparison['predictions'][arm],seed=c['seed'],runs=c['runs']),race_id,number,day,
+                    timeout_seconds=timeout) for arm in ARMS}
+                parallel={arm:job.result() for arm,job in jobs.items()}
+            record_stage_clock(obs,'SELECTION_INPUT_USE',stage_times,folder,require_pre_cutoff=False)
         for arm in ARMS:
             af=private_directory(folder/arm);pred=comparison['predictions'][arm];original=original_portfolio(pred)
-            data=krs_input(n,pred,seed=c['seed'],runs=c['runs']);output,er=simulate(af,c,data,race_id,number,day)
+            data=krs_input(n,pred,seed=c['seed'],runs=c['runs'])
+            output,er=parallel[arm] if scoped else simulate(af,c,data,race_id,number,day)
             utility=build_krs_prediction_utility(original['semantic_request'],{'status':'EXECUTED','output':output})
             ref={'original_prediction_sha256':pred['sha256'],'original_comparison_sha256':comparison['sha256'],
                 'immutable_original_mec_sha256':original['mec']['sha256'],'immutable_semantic_sha256':sha(original['semantic_request']),
@@ -579,7 +913,10 @@ def prepare(config_path, intent):
                     s=view['cells'][key]['selection'] if method=='P0S1' else view[key]
                     arms[arm]['methods'][method]={'selection':s,'tickets':s['selected_tickets'],'tree':tree(arms[arm]['prediction'],s['selected_tickets'])}
             registered.checkpoint(SimpleNamespace(registration=Path(c['registration']),output=folder/'checkpoint-after.json'))
-        if not diagnostic and now()>=cutoff:raise ValueError('PAPER_CALCULATION_COMPLETED_AFTER_CUTOFF_NOT_FORWARD')
+        completed_clock=now()
+        late_single=bool(scoped and single and not diagnostic and completed_clock>=cutoff)
+        if not diagnostic and completed_clock>=cutoff and not late_single:
+            raise ValueError('PAPER_CALCULATION_COMPLETED_AFTER_CUTOFF_NOT_FORWARD')
         if single and not diagnostic:
             raw_folder=private_directory(folder/'current-source-originals')
             for source_file in Path(obs['current_source_folder']).iterdir():
@@ -587,9 +924,11 @@ def prepare(config_path, intent):
                     immutable(raw_folder/source_file.name,source_file.read_bytes())
             immutable(folder/'execution-caller.py',Path(__file__).read_bytes())
         if calculation_pins(c,models)!=pins:raise ValueError('PAPER_CALCULATION_DEPENDENCIES_CHANGED_DURING_RUN')
-        artifact=seal({'classification':'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD' if diagnostic else SINGLE_CLASS if single else 'REGISTERED_FORWARD_PAPER_PENDING_PRIVATE_SAVE',
+        artifact_clock=now()
+        if scoped and single and not diagnostic and artifact_clock>=cutoff:late_single=True
+        artifact=seal({'classification':'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD' if diagnostic or late_single else SINGLE_CLASS if single else 'REGISTERED_FORWARD_PAPER_PENDING_PRIVATE_SAVE',
             'race_id':race_id,'provider_race_id':obs['race']['provider_race_id'],'race_date':day,'race_no':number,
-            'created_at':now().isoformat(),'prediction_cutoff':cutoff.isoformat(),'registration_sha256':reg['sha256'],
+            'created_at':artifact_clock.isoformat(),'prediction_cutoff':cutoff.isoformat(),'registration_sha256':reg['sha256'],
             'registered_head':reg['registered_head'],'execution_head':pins['execution_head'],
             'calculation_pins':pins,'calculation_manifest_sha256':read(folder/'calculation-manifest.json')['sha256'],
             'caller_sha256':digest(__file__),'source':obs['source'],'race':obs['race'],
@@ -601,6 +940,23 @@ def prepare(config_path, intent):
             'source_observation':obs,
             **({'source_contract':obs['source_contract'],'revision':'SOURCE-'+request_key} if obs.get('source_contract') else {}),
             'source_latest_change_check':obs.get('latest_change_check','NOT_PERFORMED_SAVED_ASOF_ONLY'),'formal_quality_credit':0})
+        if scoped:
+            artifact=seal({**artifact,'pipeline_timing':{'source_imported_at':obs['source_imported_at'],
+                'source_fetched_at':obs['source']['fetched_at'],'stage_observations':stage_times,
+                'calculation_completed_at':completed_clock.isoformat(),'prediction_cutoff':cutoff.isoformat(),
+                'precutoff_calculation_complete':not diagnostic and not late_single,
+                'prediction_id_changed_after_calculation':False,'delivery_verified':False,
+                'late_completion_diagnostic':late_single}})
+            # A finished calculation is retained for inspection, but expired
+            # observations cannot become a usable prestart original.
+            if not diagnostic and not late_single:
+                try:record_stage_clock(obs,'LOCAL_SAVE',stage_times,folder,require_pre_cutoff=False)
+                except ValueError:
+                    save_json(folder/'source-expired-calculation-diagnostic.json',seal({**artifact,
+                        'classification':'SINGLE_RACE_SOURCE_EXPIRED_CALCULATION_NOT_FORWARD',
+                        'precutoff_delivery_eligible':False,'forward_completion':False}))
+                    raise
+        artifact=seal(artifact)
         save_json(folder/'calculation.json',artifact)
         body=render(artifact);immutable(folder/'readback.txt',body.encode())
         archive=folder/'private-artifact.zip'
@@ -614,6 +970,11 @@ def prepare(config_path, intent):
             'source_sha256':artifact['source']['raw_sha256'],'revision':artifact_revision(artifact),
             'answer_sha256':digest(folder/'readback.txt'),'classification':artifact['classification'],
             'completed_at':now().isoformat(),'chat_render_verified':False,'user_received':False})
+        if scoped:
+            result=seal({**result,'local_archive_completed_before_cutoff':now()<cutoff,
+                'precutoff_delivery_verified':False,'source_fetched_at':obs['source']['fetched_at'],
+                'prediction_cutoff':cutoff.isoformat(),'calculation_completed_at':completed_clock.isoformat(),
+                'cold_postcutoff_execution':False,'late_completion_diagnostic':late_single})
         save_json(folder/'complete.json',result);return result
 
 def portfolio_status(prediction,method):
@@ -836,6 +1197,9 @@ def read_delivery(config_path,intent):
     body=(Path(pub['folder'])/'readback.txt').read_text()
     if pub['storage'].get('url'):body+='\n本人用完全原本：'+pub['storage']['url']+'\n'
     return {**pub,'body':body,'execution_id':pub['race_id'],'source_contract':artifact.get('source_contract'),
+        'prediction_cutoff':artifact.get('prediction_cutoff'),
+        'source_fetched_at':artifact.get('source',{}).get('fetched_at'),
+        'calculation_created_at':artifact.get('created_at'),
         'prediction_reexecution':False,'answer_required_parts':[body],
         'delivery':{'chat_render_verified':False,'user_acknowledgement_verified':False}}
 
