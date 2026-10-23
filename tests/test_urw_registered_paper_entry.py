@@ -364,6 +364,99 @@ def test_scoped_source_expiry_is_checked_at_use_without_rewriting_receipts(monke
         p.single_stage_clock(observation,'OWNER_INPUT_USE')
     assert observation['source']['fetched_at']=='2026-10-23T13:40:00+09:00'
 
+
+def test_inflight_single_crossing_cutoff_seals_all_six_methods_without_changing_prediction_id(monkeypatch):
+    """Injected-clock control-flow regression, not LIVE or actual Engine proof.
+
+    Numerical, MEC, utility, S1, rendering and archive writers run normally.
+    Owner/KRS boundaries provide labelled synthetic outputs; no HTTP/Engine
+    executes, and crossing the deadline must never grant forward credit.
+    """
+    from datetime import timedelta
+    from threading import Barrier
+    from tests.test_urw_paper_selection import prediction
+    c,race,facts,source_folder,calls,client,evidence,card=card_changes_fixture(monkeypatch)
+    observation=p.current_single_observation(c,race['race_date'],race['race_no'])
+    profile_config={**c,'single_source_profile':p.RACE_SCOPED_PROFILE,
+        'single_source_profile_sha256':p.digest(p.RACE_SCOPED_PROFILE_PATH)}
+    profile=p.single_source_profile(profile_config)
+    cutoff=datetime.fromisoformat(race['prediction_cutoff'])
+    clock=[cutoff-timedelta(seconds=60)]
+    observation.update(source_contract=profile,source_imported_at=clock[0].isoformat(),
+        original_receipts=evidence['sources'],historical_diagnostic=False)
+    original_source=copy.deepcopy(observation['source'])
+    c={**profile_config,'store':str(source_folder.parent/'synthetic-late-store'),
+        'seed':1,'runs':5000,'allow_postcutoff_diagnostic':False}
+    reg={'sha256':'SYNTHETIC_PINS_NOT_REGISTERED_COHORT','registered_head':'SYNTHETIC_HEAD',
+        'existing_owner_protocol_unchanged':{'fixture':'SYNTHETIC_CONTROL_FLOW_ONLY'}}
+    models={arm:p.seal({'synthetic_arm':arm}) for arm in p.ARMS}
+    pins={'execution_head':'SYNTHETIC_HEAD','models':{a:m['sha256'] for a,m in models.items()},
+        'policy_sha256':p.sha(p.POLICY),'engine_sha256':p.ENGINE,'parameters_sha256':p.PARAMETERS}
+    monkeypatch.setattr(p,'now',lambda:clock[0])
+    monkeypatch.setattr(p,'configuration',lambda *a:(c,reg,models))
+    monkeypatch.setattr(p,'calculation_pins',lambda *a:copy.deepcopy(pins))
+    monkeypatch.setattr(p,'current_single_observation',lambda *a:copy.deepcopy(observation))
+    monkeypatch.setattr(p,'Client',lambda:pytest.fail('No HTTP in injected-clock regression'))
+    monkeypatch.setattr(p.subprocess,'run',lambda *a,**k:pytest.fail('No real Engine in deadline regression'))
+    predictions={};engine_inputs={};boundary=Barrier(2)
+    def freeze(pack,baseline,candidate,*,protocol,output):
+        assert clock[0]<cutoff and pack['race_id'].endswith('SINGLE-NONPRODUCTION-R1')
+        for arm in p.ARMS:
+            pred=prediction(n=4)
+            pred.update(race_id=pack['race_id'],feature_sha256=pack['sha256'],
+                prediction_cutoff=pack['prediction_cutoff'],model_sha256=models[arm]['sha256'],
+                rankings_by_role={role:pred['ranking'] for role in ('W','P2','P3')},
+                missingness={rid:[] for rid in pred['ranking']})
+            predictions[arm]=p.seal(pred)
+        p.save_json(output,p.seal({'race_id':pack['race_id'],'frozen_at':clock[0].isoformat(),
+            'models':models,'feature_pack':pack,'predictions':predictions,
+            'fixture':'SYNTHETIC_OWNER_BOUNDARY_NOT_ACTUAL_PRESTART_FREEZE'}))
+    def simulated(folder,config,data,race_id,number,day,*,timeout_seconds):
+        engine_inputs[folder.name]=copy.deepcopy(data)
+        started=clock[0].isoformat()
+        assert clock[0]<cutoff and 0<timeout_seconds<=300
+        boundary.wait(timeout=5)
+        clock[0]=cutoff+timedelta(seconds=1)
+        output={'snapshot':{'prediction_id':race_id,'date':day,'race_no':number,'master_seed':1,
+                'run_count':5000,'role_zones':{'w_max_rank':4,'p2_max_rank':4,'p3_max_rank':4}},
+            'summary':[{'horse_no':i,'SSR-W':0.25,'SSR-P2':0.25,'SSR-P3':0.25} for i in range(1,5)],
+            'top_exacta_occurrence':[],'top_trifecta_occurrence':[],
+            'fixture':'SYNTHETIC_KRS_OUTPUT_NOT_AN_ENGINE_EXECUTION'}
+        receipt=p.seal({'started_at':started,'completed_at':clock[0].isoformat(),
+            'output_file_sha256':p.sha(output),'master_seed':1,'run_count':5000,
+            'actual_engine_executed':False,'fixture':'INJECTED_CLOCK_CONTROL_FLOW_ONLY'})
+        return output,receipt
+    monkeypatch.setattr(p,'freeze_owner_forward_comparison',freeze)
+    monkeypatch.setattr(p,'simulate',simulated)
+    result=p.prepare('SYNTHETIC_CONFIG',{'race_date':race['race_date'],'race_no':race['race_no']})
+    folder=Path(result['folder']);artifact=p.read(folder/'calculation.json');p._check_sha(artifact)
+    assert artifact['classification']==result['classification']=='POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'
+    assert result['late_completion_diagnostic'] and result['local_archive_completed_before_cutoff'] is False
+    assert artifact['forward_oos_credit']==artifact['formal_quality_credit']==0
+    assert artifact['registered_research_admitted'] is artifact['original_v2_ledger_mutated'] is False
+    assert artifact['pipeline_timing']['prediction_id_changed_after_calculation'] is False
+    assert artifact['pipeline_timing']['precutoff_calculation_complete'] is False
+    assert artifact['race_id'].endswith('SINGLE-NONPRODUCTION-R1') and 'DIAGNOSTIC' not in artifact['race_id']
+    assert artifact['comparison']['frozen_at']<artifact['prediction_cutoff']<artifact['created_at']
+    assert artifact['source']==original_source and set(engine_inputs)==set(p.ARMS)
+    assert all(data['race']['prediction_id']==artifact['race_id'] for data in engine_inputs.values())
+    assert artifact['comparison']['predictions']==predictions
+    assert not list(folder.rglob('pipeline-failure-*.json'))
+    assert not list(Path(c['store']).rglob('checkpoint-after.json'))
+    with ZipFile(result['archive']) as archive:
+        assert json.loads(archive.read('calculation.json'))==artifact
+        assert archive.read('readback.txt')==(folder/'readback.txt').read_bytes()
+    body=(folder/'readback.txt').read_text()
+    for arm in p.ARMS:
+        assert artifact['arms'][arm]['engine_receipt']['master_seed']==1
+        assert artifact['arms'][arm]['engine_receipt']['actual_engine_executed'] is False
+        assert artifact['arms'][arm]['prediction']==predictions[arm]
+        for method in p.METHODS:
+            view=artifact['arms'][arm]['methods'][method]
+            assert p.canonical_tickets(view['tree']['reflattened_tickets'])==p.canonical_tickets(view['tickets'])
+            assert p.portfolio_status(predictions[arm],view)['stake']==sum(t['stake'] for t in view['tickets'])
+            assert arm+' / '+method+'｜全選択票・各Stake' in body
+
 def fixture(tmp_path,monkeypatch,classification='POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD'):
     # Keep the project's private-Git boundary intact even under a Git checkout.
     import tempfile
