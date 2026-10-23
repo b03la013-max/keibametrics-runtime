@@ -51,7 +51,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install test dependencies
-        run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4
+        run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4 'PyMuPDF>=1.24,<2'
       - name: Replay actual Tokyo R8 transport and status failure
         run: python -m pytest -q tests/test_jra_resolver_transport_recovery.py tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_autopilot_continuity.py tests/test_execution_store.py tests/test_jra_execution_maturity_bridge.py
       - name: Verify observed SOURCE facts with synthetic and archived raw fixtures
