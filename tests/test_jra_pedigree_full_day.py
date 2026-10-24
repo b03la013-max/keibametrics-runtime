@@ -1,12 +1,88 @@
 """Bounded collection, immutable resume and no unverified Production admission."""
 import hashlib,json,sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 import pytest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'runtime'),str(ROOT/'runtime/jra_source_runtime')]
-from scripts.jra_weekend_bvi_intake import day_plan,collect_window,producer_valid
+from scripts.jra_weekend_bvi_intake import day_plan,collect_window,producer_valid,resolve_scheduled_target
 from jra_pedigree_harvest import race_reference,harvest_day,_Client
+
+
+def test_actual_midnight_delayed_results_use_due_day_not_job_today():
+    # Actual failed GitHub schedule40109566451: it started after JST midnight.
+    result = resolve_scheduled_target('20 12 * * 6,0,1',
+        run_created_at=datetime.fromisoformat('2026-10-24T16:00:39+00:00'),
+        observed_at=datetime.fromisoformat('2026-10-24T16:00:59+00:00'))
+    assert result['date'] == '2026-10-24' and result['mode'] == 'results'
+    assert result['inferred_due_at'] == '2026-10-24T12:20:00+00:00'
+    assert result['observed_at'] == '2026-10-24T16:00:59+00:00'
+    assert result['run_created_at'] == '2026-10-24T16:00:39+00:00'
+    assert result['reference_scope'] == 'SCHEDULING_ONLY_NOT_SOURCE_CAPTURE_OR_PREDICTION_EVIDENCE'
+    assert 'harvested_at' not in result and 'prediction_cutoff' not in result
+
+
+def test_retry_retains_original_run_date_and_actual_later_observation_clock():
+    created = datetime.fromisoformat('2026-10-24T16:00:39+00:00')
+    original = resolve_scheduled_target('20 12 * * 6,0,1',run_created_at=created,
+        observed_at=datetime.fromisoformat('2026-10-24T16:00:59+00:00'))
+    retry = resolve_scheduled_target('20 12 * * 6,0,1',run_created_at=created,
+        observed_at=datetime.fromisoformat('2026-10-26T16:00:59+00:00'))
+    assert retry['date'] == original['date'] == '2026-10-24'
+    assert retry['inferred_due_at'] == original['inferred_due_at']
+    assert retry['observed_at'] == '2026-10-26T16:00:59+00:00'
+
+
+@pytest.mark.parametrize('schedule,created,expected_date,expected_due,mode',[
+    ('20 21 * * 5,6,0','2026-10-23T21:20:01+00:00','2026-10-24','2026-10-23T21:20:00+00:00','cards'),
+    ('20 21 * * 5,6,0','2026-10-24T21:20:00+00:00','2026-10-25','2026-10-24T21:20:00+00:00','cards'),
+    ('20 21 * * 5,6,0','2026-10-25T21:20:00+00:00','2026-10-26','2026-10-25T21:20:00+00:00','cards'),
+    ('20 12 * * 6,0,1','2026-10-26T12:20:00+00:00','2026-10-26','2026-10-26T12:20:00+00:00','results'),
+    ('20 12 * * 6,0,1','2026-10-25T12:19:59+00:00','2026-10-24','2026-10-24T12:20:00+00:00','results'),
+    ('20 21 * * 5,6,0','2026-10-25T08:51:00+09:00','2026-10-25','2026-10-24T21:20:00+00:00','cards'),
+])
+def test_existing_cron_dates_use_utc_weekdays_and_jst_target(schedule,created,expected_date,expected_due,mode):
+    stamp = datetime.fromisoformat(created)
+    result = resolve_scheduled_target(schedule,run_created_at=stamp,observed_at=stamp)
+    assert result['date'] == expected_date and result['mode'] == mode
+    assert result['inferred_due_at'] == expected_due
+    assert datetime.fromisoformat(result['inferred_due_at']) <= stamp
+
+
+@pytest.mark.parametrize('schedule',['','* * * * *','20 12 * * 0,6,1',None,[],{}])
+def test_unregistered_schedule_cannot_infer_a_target(schedule):
+    now = datetime(2026,10,24,16,tzinfo=timezone.utc)
+    with pytest.raises(ValueError,match='SCHEDULE_UNSUPPORTED'):
+        resolve_scheduled_target(schedule,run_created_at=now,observed_at=now)
+
+
+@pytest.mark.parametrize('created,observed',[
+    (datetime(2026,10,24,16),datetime(2026,10,24,16,tzinfo=timezone.utc)),
+    (datetime(2026,10,24,16,tzinfo=timezone.utc),datetime(2026,10,24,16)),
+    ('2026-10-24T16:00:00+00:00',datetime(2026,10,24,16,tzinfo=timezone.utc)),
+    (datetime(2026,10,24,16,tzinfo=timezone.utc),'2026-10-24T16:00:00+00:00'),
+])
+def test_schedule_requires_explicit_aware_datetime_clocks(created,observed):
+    with pytest.raises(ValueError,match='SCHEDULE_AWARE_CLOCK_REQUIRED'):
+        resolve_scheduled_target('20 12 * * 6,0,1',run_created_at=created,observed_at=observed)
+
+
+def test_future_original_run_clock_is_rejected():
+    observed = datetime(2026,10,24,16,tzinfo=timezone.utc)
+    with pytest.raises(ValueError,match='RUN_CREATED_IN_FUTURE'):
+        resolve_scheduled_target('20 12 * * 6,0,1',run_created_at=observed+timedelta(seconds=1),observed_at=observed)
+
+
+@pytest.mark.parametrize('schedule,created',[
+    ('20 12 * * 6,0,1','2026-10-27T12:20:00+00:00'),
+    ('20 21 * * 5,6,0','2026-10-27T21:20:00+00:00'),
+    ('20 12 * * 6,0,1','2026-10-24T12:19:59+00:00'),
+])
+def test_stale_or_ambiguous_schedule_reference_fails_without_guessing(schedule,created):
+    stamp = datetime.fromisoformat(created)
+    with pytest.raises(ValueError,match='SCHEDULE_STALE_OR_AMBIGUOUS_REFERENCE'):
+        resolve_scheduled_target(schedule,run_created_at=stamp,observed_at=stamp)
 
 
 class OfficialDay:
