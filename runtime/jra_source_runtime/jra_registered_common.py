@@ -114,7 +114,7 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
             name=_norm(row[mi] if mi is not None and mi<len(row) else "")
             course=str(row[ci] if ci is not None and ci<len(row) else "").strip()
             t=str(row[ti] if ti is not None and ti<len(row) else "").strip()
-            gait=str(row[-3] if len(row)>=3 else "").strip()
+            gait=str(row[gi] if gi is not None and gi<len(row) else "").strip()
             comment=str(row[-2] if len(row)>=2 else "").strip()
             rating=str(row[-1] if len(row)>=1 else "").strip().upper()
             if rating not in {"A","B","C","D"}:

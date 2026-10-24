@@ -125,9 +125,17 @@ class ObservedFactRetention(unittest.TestCase):
                         self.assertRegex(after['jockey_profile_token'],r'^pw04kmk[0-9]{6}/[0-9A-Fa-f]{2}$')
                         rider_recoveries+=1
                     unchanged=set(before)|set(after)
-                    unchanged-={'frame_no','jockey','jockey_profile_token'}
+                    unchanged-={'frame_no','jockey','jockey_profile_token','recent_runs'}
                     self.assertEqual({k:before.get(k) for k in unchanged},
                                      {k:after.get(k) for k in unchanged})
+                    self.assertEqual(len(before['recent_runs']),len(after['recent_runs']))
+                    for old_run,new_run in zip(before['recent_runs'],after['recent_runs']):
+                        keys=(set(old_run)|set(new_run))-{'raw','race_class_text'}
+                        self.assertEqual({k:old_run.get(k) for k in keys},
+                                         {k:new_run.get(k) for k in keys})
+                        if old_run.get('race_class_text')!=new_run.get('race_class_text'):
+                            self.assertTrue(new_run['race_class_text'].startswith(old_run['race_class_text']))
+                            self.assertRegex(new_run['race_class_text'][len(old_run['race_class_text']):],r'^ (?:G[ⅠⅡⅢ123]|Jpn[ⅠⅡⅢ123]|リステッド)$')
                     runners+=1
         self.assertEqual((len(paths),runners),(34,437))
         self.assertEqual(rider_recoveries,10)

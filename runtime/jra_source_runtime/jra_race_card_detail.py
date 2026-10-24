@@ -3,15 +3,15 @@ import datetime, hashlib, http.cookiejar, html, re, urllib.parse, urllib.request
 from typing import Any, Dict, List, Tuple
 
 try:
-    from .source_acquisition import _decode, _html_text, _TableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from .source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 except ImportError:
-    from source_acquisition import _decode, _html_text, _TableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-RACE-CARD-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
 USER_AGENT="KeibaMetrics-JRA-Official-Detail/1.0"
 
-class _DetailTableExtractor(_TableExtractor):
+class _DetailTableExtractor(_OfficialGradeTableExtractor):
     def __init__(self):
         super().__init__()
         self.jockey_cells={}
