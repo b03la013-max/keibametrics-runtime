@@ -157,6 +157,26 @@ class ModelResearchTests(unittest.TestCase):
         self.assertEqual(result["input_sha256"], prediction_input_sha(runner(), environment()))
         self.assertFalse(result["production_authority"])
         self.assertFalse(result["predictive_improvement_demonstrated"])
+        self.assertTrue(result["solver_converged"])
+
+    def test_unconverged_fit_declines_shadow_override(self):
+        model = copy.deepcopy(self.model)
+        model["stage_models"]["CONTROL"]["converged"] = False
+        model["solver_converged"] = False
+        model["model_sha256"] = sha({k: v for k, v in model.items() if k != "model_sha256"})
+        result = predict(model, runner(), environment())
+        self.assertFalse(result["usable_for_shadow_override"])
+        self.assertIsNone(result["score"])
+        self.assertFalse(result["solver_converged"])
+        self.assertIn("NUMERICAL_SOLVER_NOT_CONVERGED; NO_ENVIRONMENT_OVERRIDE", result["reasons"])
+
+    def test_false_convergence_summary_cannot_override_stage_failure(self):
+        model = copy.deepcopy(self.model)
+        model["stage_models"]["CONTROL"]["converged"] = False
+        model["model_sha256"] = sha({k: v for k, v in model.items() if k != "model_sha256"})
+        result = predict(model, runner(), environment())
+        self.assertFalse(result["usable_for_shadow_override"])
+        self.assertFalse(result["solver_converged"])
 
     def test_never_fill_missing_parents_with_invented_bloodline(self):
         horse = runner(); horse["sire"] = None

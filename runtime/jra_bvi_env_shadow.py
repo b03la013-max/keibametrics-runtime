@@ -35,7 +35,7 @@ PROTOCOL = {
     "penalty": {"CONTROL": 4.0, "GENERAL": 12.0, "ENVIRONMENT": 24.0,
                 "SIRE_DAMSIRE_PAIR": 32.0},
     "minimum_runs": 12, "minimum_composite_offspring": 4,
-    "distance_bucket_metres": 400, "coordinate_descent_sweeps": 40,
+    "distance_bucket_metres": 400, "coordinate_descent_sweeps": 400,
     "tolerance": 1e-10,
     "control_optimizer": "EXACT_COMPLETE_FACTOR_RECENTERING_PRESERVES_FITTED_VALUES_AND_MINIMIZES_RIDGE_OFFSET",
     "label": "1-(finish-1)/(field_size-1)",
@@ -321,6 +321,7 @@ def train_model(dataset, *, train_before):
              "model_code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
              "maximum_training_acquisition_at": max(training, key=lambda r: _time(r["available_at"]))["available_at"],
              "stage_models": stages, "residual_rms": residual_rms,
+             "solver_converged": all(stage["converged"] for stage in stages.values()),
              "parent_distributions": {k: _parent_distribution(training, k) for k in ("sire", "damsire")},
              "excluded_rows": exclusions,
              "label_boundary_excluded_runs": len(rows) - len(training),
@@ -420,6 +421,11 @@ def predict(model, runner, environment):
     valid = bool(general and interaction and row.get("sire") and row.get("dam")
                  and row.get("surface") in ("芝", "ダ") and row.get("venue") in VENUES
                  and row.get("distance_m") is not None)
+    solver_converged = (model.get("solver_converged") is True and
+                        all(stage.get("converged") is True for stage in model["stage_models"].values()))
+    if not solver_converged:
+        valid = False
+        reasons.append("NUMERICAL_SOLVER_NOT_CONVERGED; NO_ENVIRONMENT_OVERRIDE")
     if not general:
         reasons.append("INSUFFICIENT_GENERAL_PEDIGREE_SAMPLE")
     if not interaction:
@@ -451,6 +457,7 @@ def predict(model, runner, environment):
                               "upper": round(min(100.0, score + 1.96 * se), 6),
                               "calibrated": False, "confidence_interval_claimed": False},
               "usable_for_shadow_override": valid, "reasons": reasons,
+              "solver_converged": solver_converged,
               "missing_environment": missing, "production_authority": False,
               "purchase_authority": False, "predictive_improvement_demonstrated": False}
     return result
