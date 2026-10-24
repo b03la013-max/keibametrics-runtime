@@ -94,9 +94,32 @@ def test_modified_producer_bytes_are_rejected():
     x=data();assert producer_valid(x);x['horse_count']=999;assert not producer_valid(x)
 
 
+def test_weekday_meeting_is_not_skipped_by_new_cursor_mode():
+    from scripts.jra_pedigree_backfill_cursor import advance
+    state={'status':'ACTIVE','date':'2026-09-26','start_race':33,'race_batch_size':3,'earliest_date':'2023-01-01'}
+    assert advance(state,previous_official_date='2026-09-21',require_official_calendar=True)['date']=='2026-09-21'
+    held=advance(state,require_official_calendar=True)
+    assert held['date']==state['date'] and held['start_race']==33
+    assert 'NO_WEEKDAY_GUESS' in held['calendar_resolution_status']
+
+
 def test_client_formal_retry_default_is_unchanged():
     assert _Client().stop_on_access_denied is False
     assert _Client(stop_on_access_denied=True).stop_on_access_denied is True
+
+
+def test_previous_official_day_uses_observed_monday_not_weekend_guess():
+    from jra_pedigree_harvest import previous_official_race_date
+    class Calendar:
+        def get(self,path):return "doAction('/JRADB/accessS.html','pw01sklROOT')"
+        def post(self,path,token):
+            if token=='pw01sklROOT':return ('var yearMonth = "202610"; objParam["2609"]="AB"; '
+                'pw01skl00 pw01skl10 Number(arg) >= yearMonth objParam[String(arg).substring(2,6)] '
+                '<select name="kaisaiY_list"><option value="2026"></option></select>'
+                '<select name="kaisaiM_list"><option value="09"></option></select>')
+            assert token=='pw01skl10202609/AB'
+            return 'pw01srl00042026040320260921/AB pw01srl00042026040320260926/AB'
+    assert previous_official_race_date(Calendar(),'2026-09-26')=='2026-09-21'
 
 
 def test_workflow_is_serial_and_never_connects_to_formal_or_krs():

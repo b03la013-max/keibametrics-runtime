@@ -30,22 +30,25 @@ def require_open_window(req, now=None):
 
 
 def production_priority_window(req, *, root=ROOT, now=None, signed_final_ids=()):
-    """Oct18 operational admission only; no prediction or OOS rule changes."""
+    """Operational admission only; no prediction or OOS rule changes."""
     now=now or datetime.now(timezone.utc)
-    if req.get('race_date')!='2026-10-18':
+    day=req.get('race_date')
+    if day!='2026-10-18' and (not isinstance(day,str) or day<'2026-10-25'):
         return None
-    plan=json.loads((root/'runtime/jra_race_day_plan/2026-10-18.json').read_text())
+    plan_path=root/f'runtime/jra_race_day_plan/{day}.json'
+    if not plan_path.is_file():raise ValueError('BVI_SHADOW_DEFER_OFFICIAL_DAY_PLAN_MISSING')
+    plan=json.loads(plan_path.read_text())
     ids=plan['cohort']['race_ids']
-    if len(ids)!=36 or len(set(ids))!=36 or req['race_id'] not in ids:
+    if len(ids) not in (12,24,36) or len(set(ids))!=len(ids) or req['race_id'] not in ids:
         raise ValueError('BVI_SHADOW_PRIORITY_COHORT_UNVERIFIED')
     stop=min(time(req['prediction_cutoff'])-timedelta(seconds=120),now+timedelta(seconds=600))
     pending=[]
-    schedule_path=root/'runtime/jra_race_day_plan/2026-10-18.schedule.json'
+    schedule_path=root/f'runtime/jra_race_day_plan/{day}.schedule.json'
     schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
     for rid in ids:
         if rid==req['race_id'] or rid in signed_final_ids:
             continue
-        registration=json.loads((root/'runtime/jra_race_registrations/2026-10-18'/f'{rid}.json').read_text())
+        registration=json.loads((root/f'runtime/jra_race_registrations/{day}'/f'{rid}.json').read_text())
         from jra_race_day_registration import verify_registration
         post=time(registration['intake_intent']['scheduled_post_at'])
         verify_registration(registration,plan,race_id=rid,official_post=post)
@@ -162,7 +165,8 @@ def arm_consumption(comparison, req, source, mapping, authority, *, execution_cl
 def freeze(request, source_path, output):
     req=json.loads(request.read_text());now=require_open_window(req)
     shadow_stop=None
-    if req.get('race_date')=='2026-10-18':
+    day=req.get('race_date')
+    if day=='2026-10-18' or (isinstance(day,str) and day>='2026-10-25'):
         # Read-only trust check before any research KRS use. Production is untouched.
         from jra_delivery import verify_signed_final
         _,priority_authority=resolve_current_authority(ROOT,now=now)
@@ -171,7 +175,7 @@ def freeze(request, source_path, output):
         with urllib.request.urlopen(contract['external_endpoint'].rstrip('/')+'/health',timeout=20) as response:
             priority_health=json.load(response)
         completed_ids=[]
-        for path in (ROOT/'runtime/final_artifacts').glob('KM-JRA-*-20261018-R*.json'):
+        for path in (ROOT/'runtime/final_artifacts').glob(f'KM-JRA-*-{day.replace("-","")}-R*.json'):
             try:
                 final=json.loads(path.read_text());verify_signed_final(final,priority_health,contract)
                 if time(final['final_receipt']['receipt']['timestamp'])<=now:
@@ -247,6 +251,8 @@ def freeze(request, source_path, output):
             raise ValueError('BVI_FORWARD_KRS_TIME_OUTSIDE_PRE_CUTOFF_FREEZE')
     from jra_bvi_oos_metrics import preregister
     record={'operational_shadow_stop_at':shadow_stop.isoformat() if shadow_stop else None,
+        'code_git_sha':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+        'model_sha256':sha({'mapping':mapping,'engine_sha256':req.get('engine_sha256')}),
         'comparison_protocol':preregister(comparison),
         'production_baseline':production_reference,'arm_bvi_consumption':consumption,
         'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),

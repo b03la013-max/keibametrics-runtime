@@ -119,7 +119,8 @@ def collect_window(window,root=ROOT,*,run_id, verifier=None, collector=None):
     files=stored_windows(root,day,mode,start)
     for file in files:
         obj=check(file)
-        if obj and obj['horse_count']==obj['horse_token_count'] and obj['horse_count']>0:
+        if (obj and obj['horse_count']==obj['horse_token_count'] and obj['horse_count']>0
+                and [r['race_id'] for r in obj.get('race_observations',[])]==window['race_ids']):
             return {'status':'ALREADY_VERIFIED_COMPLETE','new':False,'file':str(file.relative_to(root)),
                     'harvest_sha256':obj['sha256'],'horse_count':obj['horse_count']}
     cache={}

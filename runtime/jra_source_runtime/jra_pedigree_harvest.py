@@ -1,6 +1,6 @@
 """Harvest JRA OFFICIAL pedigree identity + race histories for the corpus.
 
-Source: www.jra.go.jp only (robots.txt allows all paths). For a race day it
+Source: www.jra.go.jp only (runtime robots check, no redistribution license claim). For a race day it
 walks the official results (past days) or race cards (upcoming days), opens
 every runner's official horse page and records:
   horse name, 父 (sire), 母の父 (damsire), full official race history.
@@ -20,6 +20,8 @@ import socket
 import ssl
 import errno
 import sys
+import subprocess
+from pathlib import Path
 import http.client
 from email.utils import parsedate_to_datetime
 import time
@@ -290,6 +292,23 @@ def race_reference(token, race_date):
             'identity_kind':'CANONICAL_EXECUTION_REFERENCE_NOT_PERMANENT_REGISTRY_ID'}
 
 
+def previous_official_race_date(client, race_date):
+    """Observed archive month selectors include weekday/holiday meetings too."""
+    day=_dt.date.fromisoformat(race_date)
+    calendar=client.get(_calendar(race_date))
+    entries=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",calendar)
+    archive=next((x for x in entries if x.startswith('pw01skl')),None)
+    if archive is None:raise ValueError('JRA_PREVIOUS_DAY_ARCHIVE_SELECTOR_MISSING')
+    selector=client.post('/JRADB/accessS.html',archive)
+    for month in (day,day.replace(day=1)-_dt.timedelta(days=1)):
+        page=client.post('/JRADB/accessS.html',archive_month_token(selector,month.isoformat()))
+        dates=sorted(set(re.findall(r'pw01srl\d{2}\d{10}(\d{8})/[0-9A-Fa-f]{2}',page)))
+        earlier=[d for d in dates if d<day.strftime('%Y%m%d')]
+        if earlier:
+            return _dt.datetime.strptime(earlier[-1],'%Y%m%d').date().isoformat()
+    raise ValueError('JRA_PREVIOUS_OFFICIAL_DAY_NOT_OBSERVED')
+
+
 def discover_day(client, race_date, *, mode):
     page, entry, days, pattern = _day_navigation(client,race_date,mode)
     races=[]
@@ -358,13 +377,20 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
             except ValueError as exc:
                 record['universe_error']=str(exc)[:160]
             client.race_observations.append(record)
+            race_profiles=set()
             for tok in re.findall(r"accessU\.html\?CNAME=(pw01dud[^\"'&<>\s]+)", s3):
                 tok = urllib.parse.unquote(tok)
+                race_profiles.add(tok)
                 if tok not in out:
                     out.append(tok)
                 if stop_after is not None and len(out) >= stop_after:
                     completed = True
                     break
+            record['profile_navigation_count']=len(race_profiles)
+            bound={r.get('horse_profile_token') for r in record['runners'] if r.get('horse_profile_token')}
+            record['unresolved_profile_link_count']=len(race_profiles-bound)
+            record['universe_kind']=('OFFICIAL_CARD_LISTED_WITH_STATUS' if mode=='cards' else
+                                     'OFFICIAL_RESULT_PARSED_ROWS; NONFINISHER_STATUS_NOT_INFERRED')
             if completed:
                 break
         if completed:
@@ -435,7 +461,12 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
             if isinstance(exc,urllib.error.HTTPError) and exc.code in (403,429):
                 access_refused=True
                 break
+    try:
+        producer_git_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=Path(__file__).resolve().parents[2],text=True,stderr=subprocess.DEVNULL).strip()
+    except (OSError,subprocess.SubprocessError):producer_git_sha=None
     out = {"profile": PROFILE, "official": True, "source": "www.jra.go.jp", "race_date": race_date,
+           "producer_git_sha":producer_git_sha,
+           "producer_runtime_sha256":_sha(Path(__file__).read_bytes()),
            "mode": mode, "collection_started_at":started,
            "harvested_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
            "access_refused":access_refused,

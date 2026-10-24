@@ -194,6 +194,19 @@ def test_oct18_shadow_defers_to_other_due_production_from_real_cohort(tmp_path):
         f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T09:00:00+09:00'))
 
 
+def test_oct25_and_future_shadow_fail_closed_without_official_plan(tmp_path):
+    for day in ('2026-10-25','2026-11-01'):
+        with pytest.raises(ValueError,match='DEFER_OFFICIAL_DAY_PLAN_MISSING'):
+            f.production_priority_window({'race_date':day},root=tmp_path)
+
+
+def test_freeze_uses_dynamic_production_priority_and_explicit_code_lineage():
+    text=(ROOT/'scripts/jra_bvi_pipeline_forward_shadow.py').read_text()
+    assert "day>='2026-10-25'" in text
+    assert "{day.replace" in text and "'code_git_sha':" in text
+    assert "'model_sha256':" in text
+
+
 def test_oct18_shadow_stops_before_next_dispatch_and_requires_useful_slack(tmp_path):
     req,ids=_actual_oct18_priority_fixture(tmp_path)
     stop=f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T08:40:00+09:00'))
