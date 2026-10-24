@@ -538,6 +538,11 @@ def fixed_chat_clock(monkeypatch,tmp_path):
         @classmethod
         def now(cls,tz=None):return NOW.astimezone(tz)
     monkeypatch.setattr(entry,'datetime',FixedDateTime)
+    # capture_race's default callable is bound at definition time. Freeze the
+    # capture boundary too, without weakening the Production past-day guard.
+    capture=n.capture_race
+    monkeypatch.setattr(n,'capture_race',lambda *args,**kwargs:
+        capture(*args,**{'now':lambda:NOW,**kwargs}))
     monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'shared-source'))
 
 

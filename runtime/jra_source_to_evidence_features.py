@@ -781,7 +781,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
                               race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
                               required_sires=relevant_sires,
                               required_damsires=relevant_damsires)
-        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "horse_count", "run_count", "manifest_sha256",
+        owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "snapshots", "horse_count", "run_count", "manifest_sha256",
                                                                         "identity_collision_count", "run_conflict_count",
                                                                         "rejected_untrusted_inputs", "source_signature_level")}
         owner_observations = owner_authorized_observations(

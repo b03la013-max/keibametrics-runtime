@@ -68,10 +68,19 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             'missing_cause':'NOT_INDEPENDENTLY_ESTABLISHED_BY_LEGACY_FEATURE_ABSENCE' if dcr else None,
             'dcr_applied':dcr,'numerical_replay':'PASS'})
     static_proof=request.get('bvi_static_consumption_proof')
+    corpus_manifest=(request.get('source_to_evidence_feature_compiler') or {}).get('pedigree_corpus_manifest')
+    if corpus_manifest and corpus_manifest.get('snapshots') is not None:
+        refs=corpus_manifest['snapshots']
+        if (refs!=sorted(set(refs)) or len(refs)!=corpus_manifest['snapshot_count']
+                or sha(refs)!=corpus_manifest['manifest_sha256']):
+            raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
     if static_proof is not None:
         from jra_bvi_static_proof import verify_static_proof
         verify_static_proof(static_proof,request)
     result={'static_execution_proof':static_proof,
+        'pedigree_corpus_manifest':corpus_manifest,
+        'corpus_artifact_lineage_status':('FROZEN_SNAPSHOT_LIST_BOUND' if corpus_manifest and corpus_manifest.get('snapshots') is not None
+                                        else 'LEGACY_MANIFEST_DIGEST_ONLY'),
         'static_execution_proof_status':'BOUND_ACTUAL_EXECUTION' if static_proof else 'LEGACY_NO_EXECUTION_PROOF',
         'profile':'KM-JRA-BVI-CONSUMPTION-PROOF-v1','race_id':request['race_id'],
         'production_authority':request.get('current_authority') or request.get('base_index_mapping_authority'),
