@@ -219,6 +219,67 @@ def test_oct25_and_future_shadow_fail_closed_without_official_plan(tmp_path):
             f.production_priority_window({'race_date':day},root=tmp_path)
 
 
+def _normal_oct25_plan(tmp_path):
+    import shutil
+    target=tmp_path/'runtime/jra_race_day_plan/2026-10-25.json'
+    target.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT/'runtime/jra_race_day_plan/2026-10-25.json',target)
+    plan=json.loads(target.read_text())
+    assert plan['all_races'] and 'cohort' not in plan
+    return plan
+
+
+def test_actual_oct25_all_races_plan_defers_without_official_schedule_not_keyerror(tmp_path):
+    _normal_oct25_plan(tmp_path)
+    req={'race_date':'2026-10-25','race_id':'KM-JRA-NGT-20261025-R01'}
+    with pytest.raises(ValueError,match='DEFER_OFFICIAL_SCHEDULE_MISSING'):
+        f.production_priority_window(req,root=tmp_path)
+
+
+def _normal_oct25_schedule(tmp_path):
+    from jra_source_runtime.jra_race_day_autopilot import tick
+    plan=_normal_oct25_plan(tmp_path)
+    venues=sorted({r['venue'] for r in plan['forward_oos_preregistration']['targets']})
+    # Scheduling unit boundary only: injected rows are not real future SOURCE,
+    # predictions, OOS freezes or replacements for the provisional program.
+    def resolve(day,venue):
+        rows=[]
+        for n in range(1,13):
+            minutes=9*60+50+30*(n-1)
+            rows.append({'race_no':n,'post_time':f'{minutes//60:02d}:{minutes%60:02d}',
+                         'title':'UNITTEST ONLY','raw':'SYNTHETIC_UNIT_SCHEDULE_ROW_NOT_OOS'})
+        return 'UNITTEST',rows
+    tick(tmp_path,'2026-10-25',datetime.fromisoformat('2026-10-25T08:00:00+09:00'),
+         meetings=lambda day:venues,resolve=resolve,resolver_runs={},
+         dispatch=lambda *a,**k:pytest.fail('No live dispatch permitted in this unit test'))
+    req={'race_date':'2026-10-25','race_id':'KM-JRA-NGT-20261025-R01',
+         'scheduled_post_at':'2026-10-25T09:50:00+09:00','prediction_cutoff':'2026-10-25T09:45:00+09:00'}
+    return req,tmp_path/'runtime/jra_race_day_plan/2026-10-25.schedule.json'
+
+
+def test_normal_all_races_uses_existing_autopilot_schedule_without_registrations(tmp_path):
+    req,path=_normal_oct25_schedule(tmp_path)
+    assert not (tmp_path/'runtime/jra_race_registrations').exists()
+    stop=f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T08:30:00+09:00'))
+    assert stop==datetime.fromisoformat('2026-10-25T08:40:00+09:00')
+    with pytest.raises(ValueError,match='DEFER_PRODUCTION_PENDING'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T09:00:00+09:00'))
+
+
+@pytest.mark.parametrize('change',['missing_peer','missing_official_row','wrong_post_day','wrong_window','current_post'])
+def test_normal_all_races_rejects_incomplete_or_inconsistent_official_schedule(tmp_path,change):
+    req,path=_normal_oct25_schedule(tmp_path);schedule=json.loads(path.read_text())
+    peer='KM-JRA-TKY-20261025-R01'
+    if change=='missing_peer':schedule.pop(peer)
+    elif change=='missing_official_row':schedule[peer].pop('official_day_row')
+    elif change=='wrong_post_day':schedule[peer]['post']='2026-10-24T09:50:00+09:00'
+    elif change=='wrong_window':schedule[peer]['dispatch_window_open']='2026-10-25T08:00:00+09:00'
+    else:req['scheduled_post_at']='2026-10-25T09:55:00+09:00'
+    path.write_text(json.dumps(schedule))
+    with pytest.raises(ValueError,match='BVI_SHADOW_DEFER_'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T08:30:00+09:00'))
+
+
 def test_freeze_uses_dynamic_production_priority_and_explicit_code_lineage():
     text=(ROOT/'scripts/jra_bvi_pipeline_forward_shadow.py').read_text()
     assert "day>='2026-10-25'" in text

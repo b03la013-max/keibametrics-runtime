@@ -157,7 +157,8 @@ def collect_window(window,root=ROOT,*,run_id, verifier=None, collector=None):
                           harvest_sha256=obj['sha256'],horse_count=obj['horse_count'])
     except Exception as exc:
         import urllib.error
-        record['access_refused']=isinstance(exc,urllib.error.HTTPError) and exc.code in (403,429)
+        record['access_refused']=record.get('access_refused',False) or (
+            isinstance(exc,urllib.error.HTTPError) and exc.code in (403,429))
         record['error']=f'{type(exc).__name__}:{exc}'[:250]
     record['completed_at']=datetime.now(timezone.utc).isoformat()
     target=receipt_dir/f'{stem}-{run_id}-acquisition.json'

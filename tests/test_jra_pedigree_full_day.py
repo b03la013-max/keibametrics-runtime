@@ -78,6 +78,20 @@ def test_access_denial_stops_remaining_windows_without_requests(tmp_path):
     assert not list((tmp_path/'runtime/pedigree_corpus').glob('*'))
 
 
+@pytest.mark.parametrize('code',[403,429])
+def test_access_denial_is_not_erased_by_later_universe_error(tmp_path,code):
+    calls=[]
+    def acquire(*a,**kw):
+        calls.append(1);obj=data();obj['access_refused']=True
+        obj['errors']=[f'HTTPError:{code}'];obj['race_observations'][0]['race_id']='CHANGED'
+        obj['sha256']=hashlib.sha256(json.dumps({k:v for k,v in obj.items() if k!='sha256'},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+        return obj
+    first=collect_window(window(),tmp_path,run_id='refusal-'+str(code),verifier=lambda p:None,collector=acquire)
+    second=collect_window({**window(),'start':3},tmp_path,run_id='refusal-'+str(code),verifier=lambda p:None,collector=acquire)
+    assert first['access_refused'] and 'UNIVERSE_CHANGED' in first['error']
+    assert second['status']=='DEFERRED_ACCESS_REFUSED' and len(calls)==1
+
+
 def test_low_coverage_is_isolated_outside_corpus(tmp_path):
     r=collect_window(window(),tmp_path,run_id='5',verifier=lambda p:None,collector=lambda *a,**k:data(8))
     assert r['status']=='QUARANTINED_ACQUISITION' and not r['new']

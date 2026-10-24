@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import argparse, copy, hashlib, json, subprocess, sys, urllib.request
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'runtime'))
+sys.path[:0]=[str(ROOT/'runtime'),str(ROOT/'runtime/jra_source_runtime')]
 from jra_static_owner_forward_oos import sha, time, fingerprint, save_immutable
 from jra_pedigree_corpus import _verified_source, _attested, build_corpus
 from jra_owner_authorized_feature_rules import owner_authorized_observations
@@ -38,24 +38,65 @@ def production_priority_window(req, *, root=ROOT, now=None, signed_final_ids=())
     plan_path=root/f'runtime/jra_race_day_plan/{day}.json'
     if not plan_path.is_file():raise ValueError('BVI_SHADOW_DEFER_OFFICIAL_DAY_PLAN_MISSING')
     plan=json.loads(plan_path.read_text())
-    ids=plan['cohort']['race_ids']
+    if plan.get('race_date')!=day or plan.get('family_id')!='JRA':
+        raise ValueError('BVI_SHADOW_PRIORITY_PLAN_IDENTITY_INVALID')
+    schedule_path=root/f'runtime/jra_race_day_plan/{day}.schedule.json'
+    schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
+    cohort=plan.get('cohort')
+    if cohort:
+        ids=cohort['race_ids']
+    elif plan.get('all_races') is True:
+        # Normal Autopilot plans do not require cohort registrations. Reuse
+        # its saved official day rows, never provisional program post times.
+        if not schedule:raise ValueError('BVI_SHADOW_DEFER_OFFICIAL_SCHEDULE_MISSING')
+        prereg=plan.get('forward_oos_preregistration') or {}
+        targets=prereg.get('targets') or []
+        if not isinstance(targets,list) or any(not isinstance(r,dict) or not isinstance(r.get('race_id'),str) for r in targets):
+            raise ValueError('BVI_SHADOW_DEFER_ALL_RACES_SCOPE_UNVERIFIED')
+        ids=[r.get('race_id') for r in targets]
+        if (plan.get('plan_sha256')!=sha({k:v for k,v in plan.items() if k!='plan_sha256'})
+                or prereg.get('target_race_count')!=len(ids) or set(schedule)!=set(ids)):
+            raise ValueError('BVI_SHADOW_DEFER_ALL_RACES_SCOPE_UNVERIFIED')
+        # Target IDs are only a completeness bound. They are NOT a new cohort
+        # or the authority for any time, Runner Universe or OOS qualification.
+        from jra_source_runtime.jra_race_day_autopilot import race_id_for
+        window=plan.get('dispatch_window_minutes_before_post') or [55,30]
+        if not (len(window)==2 and window[0]>window[1]>5):
+            raise ValueError('BVI_SHADOW_PRIORITY_DISPATCH_WINDOW_INVALID')
+        for rid,row in schedule.items():
+            try:
+                post=time(row['post'])
+                if (post.astimezone(timezone(timedelta(hours=9))).date().isoformat()!=day
+                        or type(row.get('race_no')) is not int or not 1<=row['race_no']<=12
+                        or race_id_for(day,row['venue'],row['race_no'])!=rid
+                        or not isinstance(row.get('official_day_row'),str) or not row['official_day_row'].strip()
+                        or row.get('status')
+                        or time(row['dispatch_window_open'])!=post-timedelta(minutes=window[0])
+                        or time(row['dispatch_window_close'])!=post-timedelta(minutes=window[1])):
+                    raise ValueError('OFFICIAL_SCHEDULE_ROW_INVALID')
+            except (ValueError,KeyError,TypeError) as exc:
+                raise ValueError('BVI_SHADOW_DEFER_OFFICIAL_SCHEDULE_UNVERIFIED:'+str(rid)) from exc
+        if req['race_id'] not in schedule or time(req['scheduled_post_at'])!=time(schedule[req['race_id']]['post']):
+            raise ValueError('BVI_SHADOW_DEFER_CURRENT_POST_MISMATCH')
+    else:
+        raise ValueError('BVI_SHADOW_DEFER_DAY_PLAN_UNSUPPORTED')
     if len(ids) not in (12,24,36) or len(set(ids))!=len(ids) or req['race_id'] not in ids:
         raise ValueError('BVI_SHADOW_PRIORITY_COHORT_UNVERIFIED')
     stop=min(time(req['prediction_cutoff'])-timedelta(seconds=120),now+timedelta(seconds=600))
     pending=[]
-    schedule_path=root/f'runtime/jra_race_day_plan/{day}.schedule.json'
-    schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
     for rid in ids:
         if rid==req['race_id'] or rid in signed_final_ids:
             continue
-        registration=json.loads((root/f'runtime/jra_race_registrations/{day}'/f'{rid}.json').read_text())
-        from jra_race_day_registration import verify_registration
-        post=time(registration['intake_intent']['scheduled_post_at'])
-        verify_registration(registration,plan,race_id=rid,official_post=post)
+        if cohort:
+            registration=json.loads((root/f'runtime/jra_race_registrations/{day}'/f'{rid}.json').read_text())
+            from jra_race_day_registration import verify_registration
+            post=time(registration['intake_intent']['scheduled_post_at'])
+            verify_registration(registration,plan,race_id=rid,official_post=post)
+        else:post=time(schedule[rid]['post'])
         # Prefer the existing current-day schedule when the official post changes.
         if rid in schedule:post=time(schedule[rid]['post'])
         cutoff=post-timedelta(minutes=5)
-        opening=post-timedelta(minutes=55)
+        opening=post-timedelta(minutes=55) if cohort else time(schedule[rid]['dispatch_window_open'])
         if now>=cutoff:
             continue
         if opening<=now:
