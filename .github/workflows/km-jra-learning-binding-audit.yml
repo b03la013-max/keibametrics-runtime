@@ -4,11 +4,21 @@ on:
     paths:
       - 'runtime/jra_next_race_learning_binding_audit.py'
       - 'runtime/jra_role_learning_shadow.py'
+      - 'tests/test_jra_prospective_oos_registration.py'
+      - 'runtime/jra_race_day_plan/*.json'
+      - '!runtime/jra_race_day_plan/*.state.json'
+      - '!runtime/jra_race_day_plan/*.schedule.json'
       - 'runtime/jra_conditional_rank_shadow.py'
       - 'scripts/jra_prediction_quality_audit.py'
       - 'scripts/jra_conditional_failure_audit.py'
       - 'scripts/jra_20261018_formal_review.py'
       - 'research/jra_conditional_rank/**'
+      - 'research/jra_20261024_prediction/**'
+      - 'research/jra_20261024_capital/**'
+      - 'scripts/jra_20261024_prediction_replay.py'
+      - 'scripts/jra_20261024_capital_compare.py'
+      - 'tests/test_jra_20261024_prediction_candidates.py'
+      - 'tests/test_jra_20261024_capital_comparison.py'
       - 'scripts/jra_probability_readiness_audit.py'
       - 'scripts/jra_conditional_p2_recheck.py'
       - 'tests/test_jra_probability_shadow.py'
@@ -38,11 +48,21 @@ on:
     paths:
       - 'runtime/jra_next_race_learning_binding_audit.py'
       - 'runtime/jra_role_learning_shadow.py'
+      - 'tests/test_jra_prospective_oos_registration.py'
+      - 'runtime/jra_race_day_plan/*.json'
+      - '!runtime/jra_race_day_plan/*.state.json'
+      - '!runtime/jra_race_day_plan/*.schedule.json'
       - 'runtime/jra_conditional_rank_shadow.py'
       - 'scripts/jra_prediction_quality_audit.py'
       - 'scripts/jra_conditional_failure_audit.py'
       - 'scripts/jra_20261018_formal_review.py'
       - 'research/jra_conditional_rank/**'
+      - 'research/jra_20261024_prediction/**'
+      - 'research/jra_20261024_capital/**'
+      - 'scripts/jra_20261024_prediction_replay.py'
+      - 'scripts/jra_20261024_capital_compare.py'
+      - 'tests/test_jra_20261024_prediction_candidates.py'
+      - 'tests/test_jra_20261024_capital_comparison.py'
       - 'scripts/jra_probability_readiness_audit.py'
       - 'scripts/jra_conditional_p2_recheck.py'
       - 'tests/test_jra_probability_shadow.py'
@@ -72,6 +92,8 @@ permissions:
   contents: read
   actions: read
   attestations: read
+  issues: read
+  pull-requests: read
 jobs:
   pedigree-id-recovery:
     runs-on: ubuntu-latest
@@ -111,10 +133,26 @@ jobs:
       - uses: actions/checkout@v4
       - run: python -m pip install pytest pyyaml cryptography numpy
       - run: python -m pytest -q tests/test_jra_role_learning_repair.py tests/test_jra_live_acceptance_continuation.py tests/test_jra_prediction_quality.py tests/test_jra_probability_shadow.py tests/test_jra_delivery_shadow_isolation.py tests/test_jra_head_p2_exposure.py tests/test_jra_single_entry_outcome.py tests/test_jra_delivery_evidence_audit.py tests/test_krs_prediction_utility.py tests/test_family_pfs_improvement.py tests/test_jra_production_postresult.py tests/test_jra_next_race_learning_binding_audit.py
+      - name: Verify isolated Oct24 prediction and matched-exposure research
+        run: python -m pytest -q tests/test_jra_20261024_prediction_candidates.py tests/test_jra_20261024_capital_comparison.py
+      - name: Bind prospective cohort to earlier provider registration archive
+        run: python -m pytest -q tests/test_jra_prospective_oos_registration.py tests/test_jra_result_persistence.py
       - name: Reproduce isolated Learning ON/OFF with real immutable inputs
         run: python scripts/jra_delivery_shadow_acceptance.py --learning-mechanical --output learning-mechanical.json
+      - name: Snapshot existing Owner scope approval through read-only provider API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: runtime
+        run: python -c "from jra_role_learning_shadow import snapshot_preregistration_owner_approvals; snapshot_preregistration_owner_approvals('.', 'oos-owner-approval-proofs.json')"
       - uses: actions/upload-artifact@v4
         with:
           name: jra-learning-mechanical-${{ github.run_id }}
-          path: learning-mechanical.json
+          path: |
+            learning-mechanical.json
+            oos-owner-approval-proofs.json
+            runtime/jra_race_day_plan/*.json
+            runtime/jra_role_learning_shadow.py
+            runtime/jra_conditional_rank_shadow.py
+            runtime/jra_shadow_checkpoint.py
+            research/jra_conditional_rank/model.json
           retention-days: 90

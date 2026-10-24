@@ -1,12 +1,14 @@
 name: JRA Single Entry Repair Regression
 on:
   pull_request:
-    branches: [main]
+    branches: [main, fix/jra-completed-presentation-20261017]
     paths:
       - "runtime/jra_source_runtime/**"
       - "runtime/jra_pedigree_corpus.py"
       - "runtime/jra_owner_authorized_feature_rules.py"
       - "tests/test_jra_owner_authorized_rules.py"
+      - "tests/test_jra_source_observed_fact_retention.py"
+      - "tests/test_jra_source_grade_context_retention.py"
       - "tests/test_jra_pedigree_harvest_backfill.py"
       - "tests/test_jra_pedigree_targeted_harvest.py"
       - "tests/test_jra_bvi_official_corpus_repair.py"
@@ -50,9 +52,11 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install test dependencies
-        run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4
+        run: python -m pip install -q pytest cryptography pyyaml beautifulsoup4 'PyMuPDF>=1.24,<2'
       - name: Replay actual Tokyo R8 transport and status failure
         run: python -m pytest -q tests/test_jra_resolver_transport_recovery.py tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_autopilot_continuity.py tests/test_execution_store.py tests/test_jra_execution_maturity_bridge.py
+      - name: Verify observed SOURCE facts with synthetic and archived raw fixtures
+        run: python -m pytest -q tests/test_jra_source_runtime.py tests/test_jra_owner_authorized_rules.py tests/test_jra_source_observed_fact_retention.py tests/test_jra_source_grade_context_retention.py
       - name: Check Production boundaries and Single Entry outcomes
         run: |
           python -m pytest -q tests/test_jra_keibabook_evaluator_conformance.py tests/test_jra_keibabook_private_intake.py tests/test_jra_keibabook_mac_collector.py tests/test_jra_production_auto_handoff.py tests/test_jra_single_entry_outcome.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_static_owner_executable.py tests/test_jra_production_no_bet_terminal.py tests/test_jra_production_no_bet_real_source.py tests/test_jra_candidate_dispatch_guard.py tests/test_jra_execution_maturity_bridge.py tests/test_jra_ticket_tree_renderer.py tests/test_jra_production_krs_contract.py tests/test_jra_official_fact_evaluator_production.py tests/test_jra_observed_context.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_evidence_acquisition_repair.py tests/test_jra_source_to_evidence_features.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_pedigree_targeted_harvest.py tests/test_jra_bvi_official_corpus_repair.py
@@ -81,6 +85,7 @@ jobs:
                   assert attest[0]<verified[0]<persisted[0],(path,job_name)
                   print("JRA_PEDIGREE_SIGN_VERIFY_PERSIST_VALID",path,job_name)
           PY
+      # runtime_out is a retrospective diagnostic artifact, never a forward Freeze or Production FINAL.
       - name: Recompute immutable real SOURCE as historical diagnostics
         run: python scripts/audit_jra_formal_repair.py --output runtime_out/repair_audit
       - uses: actions/upload-artifact@v4

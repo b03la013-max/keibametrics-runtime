@@ -17,12 +17,26 @@ on:
         required: false
         type: string
 
+      resume_run_id:
+        description: "Original formal Workflow Run ID; read-back only, never regenerate Production"
+        required: false
+        type: string
+      shadow_run_id:
+        description: "Optional later Run holding the frozen Shadow; Production origin remains resume_run_id"
+        required: false
+        type: string
+
 jobs:
   formal-run:
+    permissions:
+      contents: write
+      actions: read
+      attestations: read
     runs-on: ubuntu-latest
     timeout-minutes: 12
     outputs:
       shadow_input: ${{ steps.shadow_handoff.outputs.input }}
+      artifact_run_id: ${{ steps.production_readback.outputs.artifact_run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,9 +75,30 @@ jobs:
           set -euo pipefail
           python runtime/family_authority_guard.py --request "$REQUEST_FILE"
 
+      - name: Read back immutable Production before any computation
+        id: production_readback
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+          RACE_ID: ${{ steps.request.outputs.race_id }}
+          ORIGIN_RUN_ID: ${{ inputs.resume_run_id }}
+        run: |
+          set -euo pipefail
+          # Normal live execution must not import/install optional Shadow recovery code.
+          if [ -z "$ORIGIN_RUN_ID" ] && [ "$GITHUB_RUN_ATTEMPT" = "1" ] && [ ! -e "runtime/final_artifacts/$RACE_ID.json" ]; then
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            echo "artifact_run_id=$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+          args=(--request "$REQUEST_PATH" --production-readback)
+          if [ -n "$ORIGIN_RUN_ID" ]; then args+=(--origin-run-id "$ORIGIN_RUN_ID"); fi
+          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py "${args[@]}"
+
       - name: Full external formal execution
         id: formal_execution
-        if: steps.request.outputs.candidate_parallel != 'true'
+        if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         shell: bash
         env:
           REQUEST_FILE: ${{ steps.request.outputs.request }}
@@ -947,20 +982,29 @@ jobs:
         if: steps.request.outputs.candidate_parallel != 'true'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
+          REUSED_PRODUCTION: ${{ steps.production_readback.outputs.reused }}
         run: |
           set -euo pipefail
           RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
           if [ -f "runtime/final_artifacts/$RID.json" ]; then
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+            readback=()
+            if [ "$REUSED_PRODUCTION" = "true" ]; then readback=(--readback-only); fi
             PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" \
+              --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              > krs-artifacts/canonical_tree.txt
-            { echo '## Signed FINAL canonical tickets'; echo '```'; cat krs-artifacts/canonical_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+              "${readback[@]}" \
+              > krs-artifacts/completed_presentation.txt
+            cp "runtime/jra_delivery/$RID"/presentation* krs-artifacts/
+            if [ -f "runtime/jra_delivery/$RID/canonical_tree.txt" ]; then
+              cp "runtime/jra_delivery/$RID/canonical_tree.txt" krs-artifacts/canonical_tree.txt
+            fi
+            { echo '## Signed FINAL completed presentation'; echo '```'; cat krs-artifacts/completed_presentation.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Persist immutable FINAL or acceptance artifact
-        if: steps.request.outputs.candidate_parallel != 'true'
+        if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         shell: bash
         run: |
           set -euo pipefail
@@ -977,7 +1021,7 @@ jobs:
           fi
 
       - name: Verify canonical FINAL availability after publication
-        if: steps.request.outputs.candidate_parallel != 'true'
+        if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
         run: |
@@ -990,8 +1034,9 @@ jobs:
             PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" --published-ref "$(git rev-parse HEAD)" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              > krs-artifacts/canonical_tree.txt
+              > krs-artifacts/completed_presentation.txt
             cp "runtime/jra_delivery/$RID/availability_receipt.json" krs-artifacts/
+            cp "runtime/jra_delivery/$RID/presentation_availability.json" krs-artifacts/
             git add "runtime/jra_delivery/$RID"
             if ! git diff --cached --quiet; then
               git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"
@@ -1003,6 +1048,7 @@ jobs:
         if: steps.request.outputs.candidate_parallel != 'true'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
+          REUSED_PRODUCTION: ${{ steps.production_readback.outputs.reused }}
         run: |
           set -euo pipefail
           RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
@@ -1011,6 +1057,10 @@ jobs:
           AVAILABILITY="runtime/jra_delivery/$RID/availability_receipt.json"
           if [ -f "$FINAL" ]; then
             if [ ! -f "$PUBLICATION" ]; then
+              if [ "$REUSED_PRODUCTION" = "true" ]; then
+                echo "JRA_DELIVERY_REUSED_FINAL_READBACK_PUBLICATION_UNVERIFIED" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
               echo "JRA_DELIVERY_AUDIT_PUBLICATION_MISSING" >&2
               exit 1
             fi
@@ -1029,7 +1079,7 @@ jobs:
           fi
 
       - name: Upload KRS structured output and utility delta
-        if: always() && steps.request.outputs.candidate_parallel != 'true'
+        if: always() && steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: krs-production-${{ github.run_id }}
@@ -1077,18 +1127,25 @@ jobs:
           fetch-depth: 2
       - uses: actions/download-artifact@v4
         with:
-          name: krs-production-${{ github.run_id }}
+          name: krs-production-${{ needs.formal-run.outputs.artifact_run_id }}
+          run-id: ${{ needs.formal-run.outputs.artifact_run_id }}
+          github-token: ${{ github.token }}
           path: shadow-input
       - name: Restore original checkpoint or prepare first attempt
         id: prepare_shadow
         env:
+          SHADOW_RUN_ID: ${{ inputs.shadow_run_id }}
+          ORIGIN_RUN_ID: ${{ needs.formal-run.outputs.artifact_run_id }}
           GH_TOKEN: ${{ github.token }}
           REQUEST_PATH: ${{ needs.formal-run.outputs.shadow_input }}
         run: |
           python -m pip install --disable-pip-version-check -q cryptography==45.0.7
           FINAL="$(find shadow-input/runtime/final_artifacts -maxdepth 1 -name '*.json' -print -quit)"
           test -n "$FINAL"
-          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py --request "shadow-input/$REQUEST_PATH" --final "$FINAL" --prepare-only
+          args=(--request "shadow-input/$REQUEST_PATH" --final "$FINAL" --prepare-only)
+          if [ "$ORIGIN_RUN_ID" != "$GITHUB_RUN_ID" ]; then args+=(--origin-run-id "$ORIGIN_RUN_ID"); fi
+          if [ -n "$SHADOW_RUN_ID" ]; then args+=(--shadow-run-id "$SHADOW_RUN_ID"); fi
+          PYTHONPATH=runtime python runtime/jra_shadow_checkpoint.py "${args[@]}"
       - name: Archive original checkpoint before computation
         uses: actions/upload-artifact@v4
         with:
