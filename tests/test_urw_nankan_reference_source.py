@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,230 @@ def program():
     rows=''.join(f'<li class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">{number}R</span>'
         f'<span>12:{20+(number-1)*30:02} 1300m 2頭</span><a class="nk23_c-block01__list__title" href="/syousai/{DAY_ID}{number:02}.do">自作C3</a></li>' for number in (1,2))
     return ('<meta charset="UTF-8"><p>2026年10月22日</p><h3 class="nk23_c-block01__info__title">浦和競馬</h3><ul>'+rows+'</ul>').encode()
+
+
+SINGLE_DAY='2026-10-23'
+SINGLE_DAY_ID='20261023180705'
+SINGLE_NOW=datetime.fromisoformat(SINGLE_DAY+'T12:00:00+09:00')
+
+
+def single_program_fixture(*,cancelled=(3,),unknown_time=(),omit=(),title='自作試験'):
+    """Authored 12-race cancellation scenario, not a saved official page."""
+    rows=[]
+    for number in range(1,13):
+        if number in omit:continue
+        post=(datetime.fromisoformat(SINGLE_DAY+'T12:20:00+09:00')+timedelta(minutes=30*(number-1))).strftime('%H:%M')
+        state=('<p>競走取り止め</p>' if number in cancelled else
+               '<span>時刻未掲載</span>' if number in unknown_time else '<span>'+post+'</span>')
+        rows.append(f'<li class="nk23_c-block01__list__item"><span class="nk23_c-block01__label">{number}R</span>'
+            f'{state}<span>1300m 2頭</span><a class="nk23_c-block01__list__title" '
+            f'href="/syousai/{SINGLE_DAY_ID}{number:02}.do">{title}</a></li>')
+    return ('<meta charset="UTF-8"><p>2026年10月23日</p><h3 class="nk23_c-block01__info__title">浦和競馬</h3>'
+            '<ul>'+''.join(rows)+'</ul>').encode()
+
+
+def single_card_fixture(number):
+    post=(datetime.fromisoformat(SINGLE_DAY+'T12:20:00+09:00')+timedelta(minutes=30*(number-1))).strftime('%H:%M')
+    return detailed_card().decode().replace(DAY_ID,SINGLE_DAY_ID).replace('2026年10月22日','2026年10月23日').replace(
+        '1R 2026年10月23日',f'{number}R 2026年10月23日').replace('発走時刻12:20','発走時刻'+post).encode()
+
+
+class SingleCaptureFixtureClient:
+    """Observable authored transport; no HTTP, authority or real race claim."""
+    def __init__(self,*,program_raw=None,fail_races=(),after_card_seconds=0):
+        self.program_raw=program_raw or single_program_fixture();self.fail_races=fail_races
+        self.after_card_seconds=after_card_seconds;self.current=SINGLE_NOW;self.calls=[]
+    def now(self):return self.current
+    def get(self,url):
+        self.calls.append(url)
+        policy={'status':404,'classification':'ROBOTS_ABSENT_HTTP_404_NOT_DENIAL',
+                'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION'}
+        if url==n.CALENDAR:raw=f'<a href="/program/{SINGLE_DAY_ID}.do">自作浦和</a>'.encode()
+        elif '/program/' in url:raw=self.program_raw
+        else:
+            number=int(url[-5:-3])
+            if number in self.fail_races:raise OSError('SYNTHETIC_TARGET_SOURCE_FAILURE')
+            if '/syousai/' in url:
+                redirect=n.ObservedRedirect(url,n.ORIGIN+f'/uma_shosai/{SINGLE_DAY_ID}{number:02}.do',302)
+                redirect.receipt.update(fetched_at=self.now().isoformat(),source_policy=policy)
+                raise redirect
+            raw=single_card_fixture(number);self.current+=timedelta(seconds=self.after_card_seconds)
+        return {'url':url,'http_status':200,'fetched_at':self.now().isoformat(),
+                'raw_sha256':hashlib.sha256(raw).hexdigest(),'source_policy':policy},raw
+
+
+def test_single_program_preserves_cancelled_race_without_weakening_reference_v1():
+    raw=single_program_fixture();url=n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do'
+    with pytest.raises(n.NankanError,match='PROGRAM_RACE_FACTS_UNKNOWN'):
+        n.parse_program(raw,url,SINGLE_DAY)
+    rows=n.parse_single_program(raw,url,SINGLE_DAY)
+    assert [r['race_no'] for r in rows]==list(range(1,13))
+    cancelled=rows[2];following=rows[3]
+    assert cancelled['provider_race_id']==SINGLE_DAY_ID+'03' and cancelled['race_status']=='CANCELLED'
+    assert cancelled['scheduled_post_at'] is cancelled['prediction_cutoff'] is None
+    assert cancelled['race_status_evidence']['marker_observed']=='競走取り止め'
+    assert cancelled['race_status_evidence']['source_raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert following['race_status']=='SCHEDULED' and following['distance']==1300 and following['program_runner_count']==2
+    assert following['scheduled_post_at']==SINGLE_DAY+'T13:50:00+09:00'
+    assert following['prediction_cutoff']==SINGLE_DAY+'T13:48:00+09:00'
+    # Ordinary v1 input identities remain byte-value compatible, including conditions.
+    normal=single_program_fixture(cancelled=());old=n.parse_program(normal,url,SINGLE_DAY)
+    new=n.parse_single_program(normal,url,SINGLE_DAY)
+    assert [{k:v for k,v in r.items() if k not in ('race_status','race_status_evidence')} for r in new]==old
+
+
+@pytest.mark.parametrize('damage',['missing_time','race_gap','day','venue','title_only'])
+def test_single_program_does_not_infer_missing_or_contradictory_status(damage):
+    raw=single_program_fixture(cancelled=())
+    if damage=='missing_time':raw=single_program_fixture(cancelled=(),unknown_time=(3,))
+    elif damage=='race_gap':raw=single_program_fixture(omit=(3,))
+    elif damage=='day':raw=raw.replace('2026年10月23日'.encode(),'2026年10月22日'.encode())
+    elif damage=='venue':raw=raw.replace('浦和競馬'.encode(),'大井競馬'.encode())
+    else:raw=single_program_fixture(cancelled=(),unknown_time=(3,),title='競走取り止め')
+    with pytest.raises(n.NankanError):
+        n.parse_single_program(raw,n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)
+
+
+def test_single_program_linkless_cancellation_keeps_identity_without_inventing_a_card_url():
+    raw=single_program_fixture().decode().replace(
+        f'<a class="nk23_c-block01__list__title" href="/syousai/{SINGLE_DAY_ID}03.do">自作試験</a>','')
+    rows=n.parse_single_program(raw.encode(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)
+    cancelled=rows[2]
+    assert cancelled['provider_race_id']==SINGLE_DAY_ID+'03' and cancelled['race_status']=='CANCELLED'
+    assert cancelled['observed_card_url'] is cancelled['race_name'] is None
+    assert cancelled['race_status_evidence']['card_link_observed'] is False
+    assert rows[3]['race_no']==4 and rows[3]['race_status']=='SCHEDULED'
+
+
+@pytest.mark.parametrize('cancelled,duplicate',[(False,False),(True,True)])
+def test_single_program_requires_an_observed_link_unless_the_unique_row_is_cancelled(cancelled,duplicate):
+    raw=single_program_fixture(cancelled=(3,) if cancelled else ()).decode()
+    link=f'<a class="nk23_c-block01__list__title" href="/syousai/{SINGLE_DAY_ID}03.do">自作試験</a>'
+    raw=raw.replace(link,link+link if duplicate else '')
+    with pytest.raises(n.NankanError,match='PROGRAM_RACE_ROW_HOLD'):
+        n.parse_single_program(raw.encode(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)
+
+
+@pytest.mark.parametrize('header_count',[1,2])
+def test_single_card_reconciles_explicit_unnumbered_scratch_with_declared_program_count(header_count):
+    race=n.parse_single_program(single_program_fixture(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)[3]
+    raw=single_card_fixture(4).replace(b'<td class="umaban">1</td>','<td class="umaban">取 消</td>'.encode(),1)
+    raw=raw.replace('(2頭)'.encode(),f'({header_count}頭)'.encode())
+    with pytest.raises(n.NankanError):n.parse_card(raw,race,n.ORIGIN+'/uma_shosai/'+SINGLE_DAY_ID+'04.do')
+    excluded=[];observed={}
+    facts=n.parse_single_card(raw,race,n.ORIGIN+'/uma_shosai/'+SINGLE_DAY_ID+'04.do',
+        excluded_rows=excluded,card_observations=observed)
+    assert [row['runner_id'] for row in facts]==['2'] and excluded[0]['runner_id'] is None
+    assert excluded[0]['provider_horse_id']=='1' and excluded[0]['status']=='CANCELLED'
+    assert observed['program_runner_count_observed']==2 and observed['card_header_runner_count_observed']==header_count
+    assert observed['program_count_basis']=='NUMBERED_CARD_ROWS_PLUS_EXPLICIT_UNNUMBERED_CANCELLATIONS'
+    assert observed['missing_runner_numbers_assigned'] is False
+
+
+def test_single_card_count_mismatch_without_an_explicit_scratch_still_holds():
+    race=n.parse_single_program(single_program_fixture(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)[3]
+    raw=single_card_fixture(4).replace('(2頭)'.encode(),'(1頭)'.encode())
+    with pytest.raises(n.NankanError,match='SINGLE_CARD_HEADER_UNIVERSE_MISMATCH'):
+        n.parse_single_card(raw,race,n.ORIGIN+'/uma_shosai/'+SINGLE_DAY_ID+'04.do')
+
+
+def single_odds_scratch_fixture(*,header_count=2,include_excluded=True,extra_active=False,
+                                extra_name='テスト1',extra_link=None,duplicate=False):
+    header=n.DOM(n.decode(single_card_fixture(4))).root.all('p','nk23_c-tab1__subtitle')[0].text()
+    header=header.replace('(2頭)',f'({header_count}頭)')
+    name=f'<a href="{extra_link}">{extra_name}</a>' if extra_link else extra_name
+    win,place=('1.7','1.1-1.7') if extra_active else ('取消','取消')
+    extra=f'<tr><td>1</td><td>{name}</td><td>{win}</td><td>{place}</td></tr>' if include_excluded else ''
+    rows=extra+(extra if duplicate else '')+'<tr><td>2</td><td>テスト2</td><td>3.9</td><td>1.5-2.0</td></tr>'
+    return ('<meta charset="UTF-8"><p class="nk23_c-tab1__subtitle">'+header+'</p>'
+        '<span class="btn_now_time_break">12:09 現在</span><table class="nk23_c-table04__table">'
+        '<tr><th>馬番</th><th>馬名</th><th>単勝</th><th>複勝</th></tr>'+rows+'</table>').encode()
+
+
+@pytest.mark.parametrize('header_count,include_excluded',[(1,True),(2,True),(1,False)])
+def test_single_odds_keeps_explicit_unnumbered_scratches_outside_prediction_universe(header_count,include_excluded):
+    race=n.parse_single_program(single_program_fixture(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)[3]
+    card_raw=single_card_fixture(4).replace(b'<td class="umaban">1</td>','<td class="umaban">取 消</td>'.encode(),1)
+    excluded=[];observed={}
+    facts=n.parse_single_card(card_raw,race,n.ORIGIN+'/uma_shosai/'+SINGLE_DAY_ID+'04.do',
+        excluded_rows=excluded,card_observations=observed)
+    original=deepcopy(excluded);raw=single_odds_scratch_fixture(header_count=header_count,include_excluded=include_excluded)
+    url=n.ORIGIN+'/odds/'+SINGLE_DAY_ID+'0401.do'
+    receipt=current_receipt(raw,url,fetched=SINGLE_DAY+'T12:10:00+09:00')
+    with pytest.raises(n.NankanError):n.parse_current_odds(raw,race,receipt,facts)
+    result=n.parse_single_odds(raw,race,receipt,facts,excluded_rows=excluded,card_observation=observed)
+    assert result['race']==race and race['program_runner_count']==2
+    assert [row['runner_id'] for row in result['runners']]==['2'] and result['runner_count']==1
+    assert result['betting_membership_observed_count']==1 and result['active_verified'] is False
+    assert result['odds_header_runner_count_observed']==header_count
+    assert result['missing_runner_numbers_assigned'] is False and excluded==original
+    assert len(result['explicit_excluded_odds_rows'])==int(include_excluded)
+    if include_excluded:
+        row=result['explicit_excluded_odds_rows'][0]
+        assert row['observed_odds_runner_id']=='1' and row['runner_id_from_card'] is None
+        assert row['provider_horse_id']=='1' and row['prediction_runner_number_assigned'] is False
+
+
+@pytest.mark.parametrize('damage,expected',[
+    ({'extra_active':True},'SINGLE_ODDS_UNEXPLAINED_EXTRA_RUNNER'),
+    ({'extra_name':'不明な別馬'},'SINGLE_ODDS_UNEXPLAINED_EXTRA_RUNNER'),
+    ({'extra_link':'/uma_info/999.do'},'SINGLE_ODDS_EXCLUDED_IDENTITY_UNKNOWN'),
+    ({'duplicate':True},'ODDS_DECLARED_UNIVERSE_MISMATCH'),
+    ({'header_count':3},'SINGLE_ODDS_CARD_UNIVERSE_MISMATCH'),
+])
+def test_single_odds_does_not_admit_unexplained_or_active_extra_horses(damage,expected):
+    race=n.parse_single_program(single_program_fixture(),n.ORIGIN+'/program/'+SINGLE_DAY_ID+'.do',SINGLE_DAY)[3]
+    card_raw=single_card_fixture(4).replace(b'<td class="umaban">1</td>','<td class="umaban">取 消</td>'.encode(),1)
+    excluded=[];observed={}
+    facts=n.parse_single_card(card_raw,race,n.ORIGIN+'/uma_shosai/'+SINGLE_DAY_ID+'04.do',
+        excluded_rows=excluded,card_observations=observed)
+    raw=single_odds_scratch_fixture(**damage);url=n.ORIGIN+'/odds/'+SINGLE_DAY_ID+'0401.do'
+    with pytest.raises(n.NankanError,match=expected):
+        n.parse_single_odds(raw,race,current_receipt(raw,url,fetched=SINGLE_DAY+'T12:10:00+09:00'),facts,
+            excluded_rows=excluded,card_observation=observed)
+
+
+def test_single_capture_cancelled_target_preserves_evidence_and_next_race_progresses(tmp_path,monkeypatch):
+    transport=SingleCaptureFixtureClient()
+    monkeypatch.setattr(n,'compile_private_reference',lambda *a,**k:pytest.fail('SINGLE SOURCE cannot generate REFERENCE'))
+    with pytest.raises(n.NankanError,match='SINGLE_TARGET_RACE_CANCELLED'):
+        n.capture_single_race(SINGLE_DAY,3,tmp_path,client=transport,now=transport.now)
+    cancellation=next(tmp_path.glob('single-observations/*/R03/*/program-observation.json'))
+    record=json.loads(cancellation.read_bytes());assert record['program_status']['planned_race_count']==12
+    assert record['program_status']['scheduled_race_count']==11 and record['program_status']['cancelled_race_nos']==[3]
+    assert not any('/syousai/'+SINGLE_DAY_ID+'03.do' in url for url in transport.calls)
+    evidence,folder=n.capture_single_race(SINGLE_DAY,4,tmp_path,client=transport,now=transport.now)
+    assert evidence['profile']==n.SINGLE_CAPTURE_PROFILE and evidence['profile']!=n.PROFILE
+    assert evidence['race']['race_no']==4 and len(evidence['runners'])==2
+    assert evidence['program_status']==record['program_status'] and evidence['reference_forecast_generated'] is False
+    assert evidence['formal_quality_credit']==0 and evidence['temporal_class']=='INJECTED_CLOCK_CONTRACT_TEST'
+    assert json.loads((folder/'single-source-evidence.json').read_bytes())==evidence
+    for source,name in zip((evidence['sources'][0],evidence['sources'][1],evidence['sources'][3]),('calendar','program','card')):
+        assert hashlib.sha256(gzip.decompress((folder/(name+'.html.gz')).read_bytes())).hexdigest()==source['raw_sha256']
+        assert json.loads((folder/(name+'.receipt.json')).read_bytes())==source
+
+
+def test_single_capture_target_failure_and_old_static_raw_do_not_block_following_race(tmp_path):
+    transport=SingleCaptureFixtureClient(fail_races=(4,))
+    stale=tmp_path/'program.html.gz';stale.write_bytes(b'ORIGINAL_STALE_STATIC_BYTES_DO_NOT_REUSE_OR_REWRITE')
+    with pytest.raises(OSError,match='SYNTHETIC_TARGET_SOURCE_FAILURE'):
+        n.capture_single_race(SINGLE_DAY,4,tmp_path,client=transport,now=transport.now)
+    failure=next(tmp_path.glob('single-observations/*/R04/*/capture-failure.json'))
+    assert json.loads(failure.read_bytes())['target_prediction_generated'] is False
+    evidence,folder=n.capture_single_race(SINGLE_DAY,5,tmp_path,client=transport,now=transport.now)
+    assert evidence['race']['race_no']==5 and len(evidence['runners'])==2
+    assert stale.read_bytes()==b'ORIGINAL_STALE_STATIC_BYTES_DO_NOT_REUSE_OR_REWRITE'
+    assert folder.name not in str(failure) and not (folder/'capture-failure.json').exists()
+
+
+def test_single_capture_applies_unchanged_600_second_and_cutoff_boundaries(tmp_path):
+    delayed=SingleCaptureFixtureClient(after_card_seconds=601)
+    with pytest.raises(n.NankanError,match='SINGLE_SOURCE_NOT_CURRENT'):
+        n.capture_single_race(SINGLE_DAY,4,tmp_path/'expired',client=delayed,now=delayed.now)
+    cutoff=SingleCaptureFixtureClient();cutoff.current=datetime.fromisoformat(SINGLE_DAY+'T13:48:00+09:00')
+    with pytest.raises(n.NankanError,match='SINGLE_CAPTURE_CUTOFF_HOLD'):
+        n.capture_single_race(SINGLE_DAY,4,tmp_path/'cutoff',client=cutoff,now=cutoff.now)
+    assert not any('/syousai/' in url for url in cutoff.calls)
 
 
 def card(number=1,*,preview=True,cancelled=False):
@@ -59,6 +284,190 @@ def detailed_card():
 def parsed_detailed_card(raw=None):
     race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
     return race,n.parse_card(raw or detailed_card(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do')
+
+
+def framed_card(*,span='2',second_frame=None,duplicate_primary=False):
+    """Authored shared frame cells; the right display copy is not a horse row."""
+    raw=detailed_card().decode()
+    first=(f'<td class="waku" rowspan="{span}">3</td>'
+           f'<td class="waku cs-wakuBanR" rowspan="{span}">3</td>')
+    if duplicate_primary:first+='<td class="waku">4</td>'
+    raw=raw.replace('<tr><td class="umaban">1</td>',
+        '<tr>'+first+'<td class="umaban">1</td>')
+    if second_frame is not None:
+        raw=raw.replace('<tr><td class="umaban">2</td>',
+            f'<tr><td class="waku">{second_frame}</td><td class="umaban">2</td>')
+    return raw.encode()
+
+
+def test_frame_rowspan_binds_each_actual_horse_once_without_changing_history():
+    _,plain=parsed_detailed_card()
+    assert [r['frame_no'] for r in plain]==[None,None]
+    _,shared=parsed_detailed_card(framed_card())
+    assert [r['frame_no'] for r in shared]==[3,3]
+    # Inserting frame markup changes the whole Raw hash in slot provenance;
+    # observed history records and every other current fact remain the same.
+    assert [{k:v for k,v in r.items() if k not in ('frame_no','history_observations')} for r in shared]==[
+        {k:v for k,v in r.items() if k not in ('frame_no','history_observations')} for r in plain]
+    assert [[x['record'] for x in r['history_observations']] for r in shared]==[
+        [x['record'] for x in r['history_observations']] for r in plain]
+    # A completed span never fills a later genuine absence from the old frame.
+    _,partial=parsed_detailed_card(framed_card(span='1'))
+    assert [r['frame_no'] for r in partial]==[3,None]
+    _,explicit=parsed_detailed_card(framed_card(span='1',second_frame=4))
+    assert [r['frame_no'] for r in explicit]==[3,4]
+
+
+@pytest.mark.parametrize('kwargs',[
+    {'span':'0'},{'span':'-1'},{'span':'bad'},{'span':'3'},
+    {'second_frame':4},{'duplicate_primary':True},{'span':'1','second_frame':9},
+])
+def test_frame_rowspan_contradictions_hold_instead_of_guessing(kwargs):
+    with pytest.raises(n.NankanError,match='NANKAN_FRAME_'):
+        parsed_detailed_card(framed_card(**kwargs))
+
+
+def test_frame_rowspan_consumes_unnumbered_scratch_and_ignores_display_only_copy():
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    race['program_runner_count']=1
+    raw=framed_card().decode().replace('(2頭)','(1頭)').replace(
+        '<td class="umaban">1</td>','<td class="umaban">取 消</td>',1)
+    excluded=[]
+    rows=n.parse_card(raw.encode(),race,n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do',excluded_rows=excluded)
+    assert [(r['runner_id'],r['frame_no']) for r in rows]==[('2',3)]
+    assert excluded[0]['runner_id'] is None and excluded[0]['status']=='CANCELLED'
+    # Without the authoritative frame cell, the UI copy cannot fill an absence.
+    raw=framed_card().decode().replace('<td class="waku" rowspan="2">3</td>','')
+    _,rows=parsed_detailed_card(raw.encode())
+    assert [r['frame_no'] for r in rows]==[None,None]
+    _,rows=parsed_detailed_card(framed_card().replace(b'>3</td>', '>－</td>'.encode()))
+    assert [r['frame_no'] for r in rows]==[None,None]
+
+
+def condition_header(*,day='2026年10月22日',venue='浦和競馬',weather='晴',going='ダ良'):
+    return (f'<div class="nk23_c-block01__info__detail"><p class="nk23_c-block01__info__text">{day}</p>'
+        f'<h3 class="nk23_c-block01__info__title">第7回 {venue} 第4日</h3>'
+        f'<p class="nk23_c-block01__info__texts">天候:{weather} 馬場:{going}</p></div>')
+
+
+@pytest.mark.parametrize('weather,going,expected_weather,expected_going',[
+    ('晴','ダ良','晴','良'),('曇','ダ稍重','曇','稍重'),('－','－',None,None),
+])
+def test_program_condition_collector_keeps_default_races_unchanged(weather,going,expected_weather,expected_going):
+    raw=program()+condition_header(weather=weather,going=going).encode();observed={}
+    default=n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)
+    races=n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY,condition_observations=observed)
+    assert races==default
+    assert observed['weather']==expected_weather and observed['track_condition']==expected_going
+    assert observed['source_raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert observed['provider_day_id']==DAY_ID and observed['race_date']==DAY
+    assert observed['weather_observed']==n.norm(weather) and observed['track_condition_observed']==n.norm(going)
+    assert 'fetched_at' not in observed
+    if expected_weather is None:
+        assert observed['weather_reason']==observed['track_condition_reason']=='UNPUBLISHED_HEADER_MARKER'
+
+
+@pytest.mark.parametrize('wrong_header',[
+    condition_header(day='2026年10月21日'),condition_header(venue='大井競馬'),
+])
+def test_program_condition_collector_does_not_borrow_other_day_or_track(wrong_header):
+    raw=program()+wrong_header.encode()+b'<p>weather elsewhere must not be borrowed</p>'
+    observed={};n.parse_program(raw,n.ORIGIN+'/program/'+DAY_ID+'.do',DAY,condition_observations=observed)
+    assert observed['weather'] is None and observed['track_condition'] is None
+    assert observed['raw_header'] is None and observed['header_scope_status']=='CURRENT_URW_HEADER_NOT_FOUND'
+
+
+def history_card(slots):
+    """Replace authored history cells, without using saved official HTML."""
+    raw=detailed_card().decode()
+    return re.sub(r'<td class="cs-z1">.*?</td>',
+        lambda _:''.join(f'<td class="cs-z{i}">{body}</td>' for i,body in enumerate(slots,1)),raw).encode()
+
+
+def history_slot(*,linked=False,status='3着',course='良ダ1800',title='自作3歳未勝利',
+                 clock='1:54.2 (0.8) 3F 38.2 (4)',ride='12頭 4番 2人気 ★試験騎手 52.0'):
+    title=(f'<a class="race_name_len" href="/result/2026092018070101.do">{title}</a>' if linked
+           else f'<p class="race_name_len">{title}</p>') if title is not None else ''
+    return ('<p class="nk23_u-d-flex"><span>'+status+'</span><span>自作場26.9.20</span><span>'+course+'</span></p>'
+        +title+'<p><span class="popularity">'+ride+'</span></p><p>480kg 自作勝馬</p>'
+        +f'<p>{clock}</p><p class="position"><span>4</span><span>3</span></p>')
+
+
+def test_unlinked_history_preserves_the_same_observed_facts_without_inventing_provider_identity():
+    _,linked=parsed_detailed_card(history_card([history_slot(linked=True)]))
+    raw=history_card([history_slot()]);_,unlinked=parsed_detailed_card(raw)
+    assert len(unlinked[0]['starts'])==1
+    old,new=linked[0]['starts'][0],unlinked[0]['starts'][0]
+    assert {k:v for k,v in old.items() if k not in ('raw','provider_race_id')}=={
+        k:v for k,v in new.items() if k not in ('raw','provider_race_id')}
+    assert new['provider_race_id'] is None and new['ride_carried_weight']==52.0
+    witness=unlinked[0]['history_observations'][0]
+    assert witness['classification']=='ORDINARY_START' and witness['ordinary_start_eligible']
+    assert witness['provenance']['source_raw_sha256']==hashlib.sha256(raw).hexdigest()
+    assert witness['provenance']['identity_type']=='LOCAL_RAW_HISTORY_SLOT'
+    assert witness['provenance']['provider_result_url'] is None
+    assert 'fetched_at' not in witness['provenance']
+
+
+def test_history_slots_separate_flat_turf_jump_trial_exclusion_and_dnf():
+    slots=[history_slot(course='稍芝1600'),history_slot(title='自作障害未勝利',course='良芝3000',clock='3:22.1 (1.2)'),
+        history_slot(status='能試',course='800',title=None,clock='51.3',ride='5レース'),
+        history_slot(status='除外',title='自作障害未勝利',ride='12頭 4番 試験騎手 59.0',clock=''),
+        history_slot(status='中止')]
+    _,rows=parsed_detailed_card(history_card(slots));row=rows[0]
+    assert len(row['starts'])==2
+    assert row['starts'][0]['surface']=='TURF' and row['starts'][0]['going']=='稍重'
+    assert row['starts'][1]['finish'] is None  # Existing ordinary DNF contract.
+    observations=row['history_observations']
+    assert [x['classification'] for x in observations]==['ORDINARY_START','JUMP','TRIAL','EXCLUDED','ORDINARY_START']
+    assert [x['status'] for x in observations]==['FINISHED','FINISHED','TRIAL','EXCLUDED','DNF']
+    assert observations[1]['record']['content_time_text']=='3:22.1'
+    assert observations[1]['record']['content_final3f'] is None
+    assert observations[2]['record']['distance']==800
+    assert observations[3]['record']['field_size']==12 and observations[3]['record']['horse_no']==4
+    assert observations[3]['event_type']=='JUMP'
+    assert row['status']=='ACTIVE_DECLARED'  # A past exclusion is not a current scratch.
+    assert row['history_slot_counts']=={'slots':5,'nonempty':5,'ordinary_starts':2,
+        'nonordinary':3,'unsupported':0,'empty':0,'absent':0}
+
+
+def test_nonempty_unsupported_history_is_distinct_from_empty_and_absent_slots():
+    _,rows=parsed_detailed_card(history_card(['<p>未対応の記載</p>','']))
+    observations=rows[0]['history_observations']
+    assert [x['classification'] for x in observations]==['UNSUPPORTED','EMPTY','ABSENT','ABSENT','ABSENT']
+    assert observations[0]['raw']=='未対応の記載' and observations[0]['reason']=='HISTORY_DESCRIPTOR_MISSING'
+    assert 'PAST_START_1_UNSUPPORTED_HISTORY_DESCRIPTOR_MISSING' in rows[0]['missingness']
+
+
+def test_nonordinary_history_still_obeys_real_capture_and_target_race_date():
+    raw=history_card([history_slot(status='能試',course='800',title=None)])
+    _,rows=parsed_detailed_card(raw)
+    with pytest.raises(n.NankanError,match='HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN'):
+        n.verify_history_asof(rows,'2026-09-19T12:00:00+09:00')
+    with pytest.raises(n.NankanError,match='POST_RACE_HISTORY_FORBIDDEN'):
+        parsed_detailed_card(raw.replace(b'26.9.20',b'26.10.22'))
+    # Additive audit rows cannot mask an existing start's capture-time gate.
+    _,ordinary=parsed_detailed_card()
+    ordinary[0]['starts'][0]=dict(ordinary[0]['starts'][0],date='26.10.21')
+    with pytest.raises(n.NankanError,match='HISTORY_AFTER_ACTUAL_CAPTURE_FORBIDDEN'):
+        n.verify_history_asof(ordinary,'2026-10-20T12:00:00+09:00')
+
+
+def test_reference_summary_includes_all_third_rank_ties():
+    race,rows=parsed_detailed_card()
+    evidence={'race':race,'observation_mode':'TEST_SYNTHETIC_ONLY','source_frozen_at':NOW.isoformat(),
+        'sources':[{'url':n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do'}],'sha256':'a'*64,'parser_sha256':'b'*64}
+    ranked=[]
+    for i,rank in enumerate((1,2,3,3,5),1):
+        ranked.append({**deepcopy(rows[0]),'runner_id':str(i),'name':f'自作馬{i}','reference_rank':rank,
+            'facts':{'exact_races':0,'exact_wins':0,'exact_podiums':0}})
+    prediction={'runners':ranked,'reference_ranking':[str(i) for i in range(1,6)],
+        'frozen_at':NOW.isoformat(),'method_components_sha256':'c'*64}
+    body=n.render_private_reference(evidence,prediction)
+    summary=next(line for line in body.splitlines() if line.startswith('参考上位：'))
+    assert summary=='参考上位：1番自作馬1、2番自作馬2、3番自作馬3、4番自作馬4'
+    assert 'REFERENCE ONLY' in body and '正式予測は未成立' in body
+    assert prediction['reference_ranking']==['1','2','3','4','5']
 
 
 @pytest.mark.parametrize('printed,expected',[
@@ -538,6 +947,9 @@ def fixed_chat_clock(monkeypatch,tmp_path):
         @classmethod
         def now(cls,tz=None):return NOW.astimezone(tz)
     monkeypatch.setattr(entry,'datetime',FixedDateTime)
+    # capture_race's default utcnow resolves this module global at call time.
+    # Freeze both consumers: advancing wall time must not expire authored cards.
+    monkeypatch.setattr(n,'datetime',FixedDateTime)
     monkeypatch.setenv('KM_URW_PRIVATE_REFERENCE_ROOT',str(tmp_path/'shared-source'))
 
 

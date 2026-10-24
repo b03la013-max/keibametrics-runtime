@@ -40,6 +40,126 @@ def test_chat_ambiguous_or_foreign_race_cannot_dispatch(text):
         resolve_chat_intent(text)
 
 
+@pytest.mark.parametrize('found', [False, True])
+def test_exact_paper_readback_never_substitutes_or_recalculates(monkeypatch, tmp_path, found):
+    from runtime import local_race_entry as entry
+    from runtime import urw_registered_paper_entry as paper
+    monkeypatch.setenv('KM_URW_SINGLE_RACE_CONNECTION', 'synthetic-connection')
+    monkeypatch.setattr(entry, '_chat_final', lambda *a: pytest.fail('exact selection cannot switch to FINAL'))
+    monkeypatch.setattr(entry, 'chat_formal_status', lambda *a: pytest.fail('readback cannot dispatch'))
+    monkeypatch.setattr(entry, '_chat_reference', lambda *a, **k: pytest.fail('cannot substitute REFERENCE'))
+    monkeypatch.setattr(paper, 'prepare', lambda *a: pytest.fail('exact readback cannot calculate'))
+    monkeypatch.setattr(entry, '_prepared_single_original', lambda *a: None)
+    monkeypatch.setattr(paper, 'configuration', lambda *a: ({'execution_mode': paper.SINGLE_MODE}, None))
+    intent = {**entry.resolve_chat_intent('2099-01-01 浦和2R'),
+              'artifact_sha256': 'a'*64, 'source_sha256': 'b'*64,
+              'classification': 'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD', 'revision': '2'}
+    def saved(connection, selected):
+        assert selected == intent
+        return {'body': 'EXACT SYNTHETIC ORIGINAL', 'execution_id': 'synthetic-R2',
+                'answer_required_parts': ['EXACT SYNTHETIC ORIGINAL']} if found else None
+    monkeypatch.setattr(paper, 'read_delivery', saved)
+    result = entry.run(intent, output=tmp_path, run_id='exact-readback')
+    if found:
+        assert result['prediction_reexecution'] is False
+        assert result['status'] == 'FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED'
+        assert result['completion'] is True
+        assert 'EXACT SYNTHETIC ORIGINAL' in result['message']
+        assert result['delivery']['user_acknowledgement_verified'] is False
+    else:
+        assert result['completion'] is False
+        assert 'EXACT_ORIGINAL_ARTIFACT_UNAVAILABLE' in result['message']
+        assert result['research_execution']['no_bet'] is False
+
+
+def test_cli_exact_readback_selectors_reach_ordinary_intent(monkeypatch, tmp_path, capsys):
+    from runtime import local_race_entry as entry
+    import sys
+    expected = {'artifact_sha256': 'a'*64, 'source_sha256': 'b'*64,
+                'classification': 'POSTCUTOFF_DIAGNOSTIC_NOT_FORWARD', 'revision': '2'}
+    def selected(intent, **kwargs):
+        assert all(intent[k] == v for k, v in expected.items())
+        return {'status': 'FORMAL_HOLD_SINGLE_RACE_READBACK_VERIFIED', 'message': 'EXACT'}
+    monkeypatch.setattr(entry, 'run', selected)
+    argv = ['local_race_entry', '--query', '2099-01-01 浦和2R', '--output', str(tmp_path), '--run-id', 'exact']
+    for key, value in expected.items():
+        argv += ['--'+key.replace('_', '-'), value]
+    monkeypatch.setattr(sys, 'argv', argv)
+    assert entry.main() == 0
+    assert 'EXACT' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('damage', [None, 'body', 'missing-portfolio', 'public-output'])
+def test_prepared_private_body_is_available_without_external_success(monkeypatch, tmp_path, damage):
+    from runtime import local_race_entry as entry
+    from runtime import urw_registered_paper_entry as paper
+    from tests.test_urw_registered_paper_entry import fixture
+    root, folder, _, _, complete = fixture(tmp_path, monkeypatch)
+    if damage == 'body':
+        (folder/'readback.txt').write_text('TRUNCATED')
+    elif damage == 'missing-portfolio':
+        artifact = paper.read(folder/'calculation.json')
+        del artifact['arms']['CANDIDATE']['methods']['P0S1']
+        artifact = paper.seal({k:v for k,v in artifact.items() if k != 'sha256'})
+        (folder/'calculation.json').write_text(json.dumps(artifact))
+        complete = paper.seal({**{k:v for k,v in complete.items() if k != 'sha256'},
+                               'artifact_sha256': artifact['sha256']})
+        (folder/'complete.json').write_text(json.dumps(complete))
+    monkeypatch.setenv('KM_URW_SINGLE_RACE_CONNECTION', 'synthetic-private-config')
+    monkeypatch.setattr(paper, 'configuration', lambda *a: ({'execution_mode': paper.SINGLE_MODE}, None, None))
+    monkeypatch.setattr(paper, 'read_delivery', lambda *a: None)
+    monkeypatch.setattr(paper, 'prepare', lambda *a: complete)
+    monkeypatch.setattr(entry, '_prepared_single_original', lambda *a: None)
+    monkeypatch.setattr(entry, '_chat_final', lambda *a: (None, []))
+    monkeypatch.setattr(entry, 'chat_formal_status', lambda *a: {'status':'BLOCKED', 'code':'FORMAL_HOLD'})
+    monkeypatch.setattr(entry, '_chat_reference', lambda *a, **k: pytest.fail('calculated original must be used'))
+    output = tmp_path/'public-answer' if damage == 'public-output' else root/'answer'
+    if damage == 'public-output':
+        (tmp_path/'.git').mkdir()
+    result = entry.run(entry.resolve_chat_intent('2026-10-22 浦和2R'), output=output, run_id='private-pending')
+    assert result['completion'] is False
+    assert result['delivery']['formal_delivery_verified'] is False
+    assert result['delivery']['user_acknowledgement_verified'] is False
+    if damage is None:
+        assert result['status'] == 'SINGLE_RACE_CALCULATED_PRIVATE_SAVE_PENDING'
+        assert 'EXACT_BODY_STAKES_100' in result['message']
+        assert result['answer_content_check']['content_complete'] is True
+        assert '外部私有保存・再取得は未成立' in result['message']
+    elif damage == 'public-output':
+        assert result['status'] == 'PRIVATE_REFERENCE_STORAGE_HOLD'
+        assert 'EXACT_BODY_STAKES_100' not in result['message']
+        assert 'EXACT_BODY_STAKES_100' not in (output/'chat_response.md').read_text()
+    else:
+        assert 'EXACT_BODY_STAKES_100' not in result['message']
+        expected = 'PAPER_PREPARED_BODY_CHANGED' if damage == 'body' else 'PAPER_PORTFOLIO_NOT_CALCULATED'
+        assert expected in result['message']
+
+
+@pytest.mark.parametrize('stamp,field,expected', [
+    ('2026-10-22T12:00:01+00:00','created_at',True),
+    ('2026-10-22T11:59:59+00:00','frozen_at',False),
+    ('2026-10-22T12:00:03+00:00','created_at',None),
+    ('2026-10-22T12:00:01','created_at',None),
+])
+def test_prepared_prediction_generation_uses_sealed_owner_time_not_prepare_call(monkeypatch, tmp_path, stamp, field, expected):
+    from datetime import datetime, timezone
+    from runtime import local_race_entry as entry
+    from runtime import urw_registered_paper_entry as paper
+    from tests.test_urw_registered_paper_entry import fixture
+    _, folder, _, _, complete = fixture(tmp_path, monkeypatch)
+    artifact = paper.read(folder/'calculation.json')
+    artifact['comparison'] = paper.seal({field: stamp})
+    artifact = paper.seal({k:v for k,v in artifact.items() if k != 'sha256'})
+    (folder/'calculation.json').write_text(json.dumps(artifact))
+    complete = paper.seal({**{k:v for k,v in complete.items() if k != 'sha256'},
+                           'artifact_sha256': artifact['sha256']})
+    (folder/'complete.json').write_text(json.dumps(complete))
+    body, generated = entry._prepared_paper_answer(complete, {'race_date':'2026-10-22','race_no':2},
+        prepare_started_at=datetime(2026,10,22,12,0,0,tzinfo=timezone.utc),
+        prepare_completed_at=datetime(2026,10,22,12,0,2,tzinfo=timezone.utc))
+    assert body == 'EXACT_BODY_STAKES_100\n' and generated is expected
+
+
 def test_reference_routes_before_formal_authority_and_never_publishes(monkeypatch, tmp_path):
     from runtime import local_race_entry as entry
     monkeypatch.setattr(o, 'validate_request_context', lambda *a: pytest.fail('REFERENCE MUST NOT ENTER FORMAL'))
