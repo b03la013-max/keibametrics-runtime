@@ -1,107 +1,177 @@
 name: KeibaMetrics JRA Official Pedigree Corpus Harvest
 run-name: JRA pedigree harvest ${{ inputs.dates || 'scheduled' }} ${{ inputs.mode || 'auto' }}
-
-# Official www.jra.go.jp only (robots.txt allows all paths). Builds the
-# point-in-time pedigree corpus that closes BVI with JRA official facts.
+# Public normalized facts and SHA references only; robots is not a copyright license.
 permissions:
   contents: write
   id-token: write
   attestations: write
   artifact-metadata: write
-
 on:
   schedule:
-    # 06:20 JST Sat/Sun/Mon: upcoming race cards of the day.
     - cron: "20 21 * * 5,6,0"
-    # 21:20 JST Sat/Sun/Mon: official results of the day just finished.
     - cron: "20 12 * * 6,0,1"
   workflow_dispatch:
     inputs:
       dates:
-        description: "Comma separated YYYY-MM-DD (empty = today JST)"
+        description: "One YYYY-MM-DD (empty = today JST); completed batches are not reacquired"
         required: false
         type: string
       mode:
-        description: "results (past days) or cards (upcoming days)"
         required: false
         default: results
         type: choice
         options: [results, cards]
-
+  push:
+    branches: [candidate/jra-bvi-full-day-20261024]
+    paths:
+      - '.github/workflows/km-jra-pedigree-corpus-harvest.yml'
 concurrency:
   group: km-jra-pedigree-harvest
   cancel-in-progress: false
-
 jobs:
-  harvest:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install JRA SOURCE runtime dependencies
-        run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
-      - name: Harvest official pedigree identity and race histories
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/*.py
+            /runtime/jra_source_runtime/
+            /scripts/jra_weekend_bvi_intake.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q beautifulsoup4 cryptography
+      - name: Resolve every official race without acquiring horse pages
+        id: plan
         env:
           DATES: ${{ inputs.dates }}
           MODE: ${{ inputs.mode }}
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
+          PYTHONPATH: runtime:runtime/jra_source_runtime
         run: |
-          set -euo pipefail
-          if [ -z "${DATES:-}" ]; then DATES="$(TZ=Asia/Tokyo date +%F)"; fi
-          if [ "$EVENT" = "schedule" ]; then
-            if [ "$SCHEDULE" = "20 21 * * 5,6,0" ]; then MODE=cards; else MODE=results; fi
-          fi
-          MODE="${MODE:-results}"
-          ARGS=()
-          IFS=',' read -ra DS <<< "$DATES"
-          if [ "${#DS[@]}" -ne 1 ]; then echo "SINGLE_DATE_ONLY" >&2; exit 1; fi
-          for d in "${DS[@]}"; do ARGS+=(--date "$(echo "$d" | xargs)"); done
-          cd runtime/jra_source_runtime
-          python jra_pedigree_harvest.py "${ARGS[@]}" --mode "$MODE" --out-dir ../pedigree_corpus \
-            --max-races 3 --start-race 0 --delay 1.3
-      - name: Detect and validate exactly one new official pedigree file
-        id: corpus
-        run: |
-          set -euo pipefail
-          mapfile -t FILES < <(git ls-files --others --exclude-standard runtime/pedigree_corpus/)
-          if [ "${#FILES[@]}" -eq 0 ]; then
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "${#FILES[@]}" -ne 1 ]; then echo "EXPECTED_ONE_CORPUS_FILE" >&2; exit 1; fi
-          FILE="${FILES[0]}"
-          [[ "$FILE" == runtime/pedigree_corpus/*.json ]]
-          echo "exists=true" >> "$GITHUB_OUTPUT"
-          echo "file=$FILE" >> "$GITHUB_OUTPUT"
-      - name: Attest official pedigree bytes using GitHub OIDC
-        if: steps.corpus.outputs.exists == 'true'
-        uses: actions/attest@v4
+          python - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          from datetime import datetime,timedelta,timezone
+          from urllib.robotparser import RobotFileParser
+          from scripts.jra_weekend_bvi_intake import day_plan
+          ua='KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0'
+          with urllib.request.urlopen(urllib.request.Request('https://www.jra.go.jp/robots.txt',headers={'User-Agent':ua}),timeout=20) as r:
+              rules=RobotFileParser();rules.parse(r.read(30000).decode().splitlines())
+          assert all(rules.can_fetch(ua,'https://www.jra.go.jp/JRADB/'+p) for p in ('accessD.html','accessS.html','accessU.html'))
+          now=datetime.now(timezone(timedelta(hours=9)))
+          mode=os.environ.get('MODE') or 'results'
+          if os.environ['EVENT']=='schedule':mode='cards' if os.environ['SCHEDULE']=='20 21 * * 5,6,0' else 'results'
+          if os.environ['EVENT']=='push':
+              # Isolated owner-requested live pilot. NEVER writes main or predicts.
+              assert now.date().isoformat()=='2026-10-24','DATED_PILOT_EXPIRED'
+              targets=[('2026-10-24','results'),('2026-10-25','cards')]
+          else:
+              day=os.environ.get('DATES') or now.date().isoformat()
+              assert ',' not in day,'SINGLE_DATE_ONLY'
+              targets=[(day,mode)]
+          windows=[]
+          for day,mode in targets:windows.extend(day_plan(day,mode))
+          for i,w in enumerate(windows):w['index']=i
+          p=Path('runtime_out/pedigree_day_plan.json');p.parent.mkdir(exist_ok=True)
+          p.write_text(json.dumps({'include':windows,'planned_at':now.isoformat(),'production_effect':'NONE'},ensure_ascii=False,indent=2)+'\n')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('matrix='+json.dumps({'include':[{'index':w['index']} for w in windows]},separators=(',',':'))+'\n')
+          print('OFFICIAL_TARGET_RACES',sum(len(w['race_ids']) for w in windows),'BOUNDED_BATCHES',len(windows))
+          PY
+      - uses: actions/attest@v4
         with:
-          subject-path: ${{ steps.corpus.outputs.file }}
-      - name: Verify official pedigree OIDC provenance before commit
-        if: steps.corpus.outputs.exists == 'true'
+          subject-path: runtime_out/pedigree_day_plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jra-pedigree-day-plan
+          path: runtime_out/pedigree_day_plan.json
+  harvest:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 2
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/*.py
+            /runtime/jra_source_runtime/
+            /runtime/pedigree_corpus/
+            /runtime/pedigree_intake_receipts/
+            /scripts/jra_weekend_bvi_intake.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q beautifulsoup4 cryptography
+      - uses: actions/download-artifact@v4
+        with:
+          name: jra-pedigree-day-plan
+          path: runtime_out
+      - name: Resume one three-race window; preserve previously verified bytes
+        id: acquire
         env:
           GH_TOKEN: ${{ github.token }}
-          FILE: ${{ steps.corpus.outputs.file }}
+          PYTHONPATH: runtime:runtime/jra_source_runtime
+        run: |
+          python scripts/jra_weekend_bvi_intake.py collect-window \
+            --plan runtime_out/pedigree_day_plan.json --index '${{ matrix.index }}' \
+            --run-id '${{ github.run_id }}-${{ github.run_attempt }}'
+      - name: Attest original producer bytes
+        if: steps.acquire.outputs.new == 'true'
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.acquire.outputs.file }}
+      - name: Verify OIDC and prove the unchanged Production Corpus Reader consumes this batch
+        id: admission
+        if: steps.acquire.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.acquire.outputs.file }}
+          PYTHONPATH: runtime:runtime/jra_source_runtime
         run: |
           set -euo pipefail
           gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml"
-      - name: Persist verified official pedigree file only
-        if: steps.corpus.outputs.exists == 'true'
+          python scripts/jra_weekend_bvi_intake.py admit --file "$FILE" \
+            --receipt "runtime/pedigree_intake_receipts/$(basename "$FILE" .json)-admitted-${{ github.run_id }}.json"
+      - name: Persist independently verified facts or isolated acquisition failure
+        if: always()
         env:
-          FILE: ${{ steps.corpus.outputs.file }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          ACQUIRE_OUTCOME: ${{ steps.acquire.outcome }}
+          NEW: ${{ steps.acquire.outputs.new }}
+          ADMISSION_OUTCOME: ${{ steps.admission.outcome }}
         run: |
           set -euo pipefail
-          git config user.name "keibametrics-runtime"
-          git config user.email "actions@users.noreply.github.com"
-          git add "$FILE"
+          test "$ACQUIRE_OUTCOME" = success || exit 1
+          if [ "$NEW" = true ];then test "$ADMISSION_OUTCOME" = success || exit 1;fi
+          case "$TARGET_BRANCH" in main|candidate/jra-bvi-full-day-20261024) ;; *) echo UNAPPROVED_PUBLICATION_REF;exit 1 ;; esac
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add runtime/pedigree_corpus runtime/pedigree_intake_receipts
           git diff --cached --quiet && exit 0
-          git commit -m "corpus: OIDC-verified JRA official pedigree [skip ci]"
-          for i in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+          git commit -m 'corpus: verified bounded JRA full-day intake [skip ci]'
+          for n in 1 2 3; do
+            if git pull --rebase origin "$TARGET_BRANCH" && git push origin "HEAD:$TARGET_BRANCH";then exit 0;fi
             git rebase --abort 2>/dev/null || true
-            sleep $((i*4))
+            sleep $((n*4))
           done
           exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-pedigree-window-${{ matrix.index }}-${{ github.run_attempt }}
+          path: |
+            runtime/pedigree_intake_receipts/*${{ github.run_id }}*.json
+            ${{ steps.acquire.outputs.file }}

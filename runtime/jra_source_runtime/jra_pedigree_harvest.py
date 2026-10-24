@@ -63,7 +63,7 @@ def retryable_official_error(exc):
 
 
 class _Client:
-    def __init__(self, delay: float = 1.0, *, deadline_monotonic=None):
+    def __init__(self, delay: float = 1.0, *, deadline_monotonic=None, stop_on_access_denied=False):
         if not 0.7 <= delay <= 15.0:
             raise ValueError("JRA_HARVEST_RATE_TOO_FAST_OR_INVALID")
         class _NoExternalRedirect(urllib.request.HTTPRedirectHandler):
@@ -77,6 +77,8 @@ class _Client:
             _NoExternalRedirect())
         self.delay = delay
         self.deadline_monotonic = deadline_monotonic
+        self.stop_on_access_denied = stop_on_access_denied
+        self.last_response = {}
 
     def _open(self, url: str, data: bytes | None = None) -> str:
         if not url.startswith(BASE + "/"):
@@ -122,10 +124,15 @@ class _Client:
                         if size > 6_000_000:
                             raise ValueError("JRA_HARVEST_PAGE_TOO_LARGE")
                     raw = b"".join(chunks)
+                    self.last_response = {'url':url, 'raw_sha256':_sha(raw),
+                                          'fetched_at':_dt.datetime.now(_dt.timezone.utc).isoformat()}
                     return _decode(raw, r.headers.get("content-type", ""))
             except (OSError, http.client.HTTPException) as exc:
                 exc.official_request = {"url": url, "method": req.get_method(),
                                         "phase": phase, "attempt": attempt + 1}
+                if (self.stop_on_access_denied and isinstance(exc, urllib.error.HTTPError)
+                        and exc.code in (403,429)):
+                    raise  # dedicated Collector stops; Formal client defaults are unchanged
                 if not retryable_official_error(exc) or attempt == 2:
                     raise
                 wait = 3 * (2 ** attempt) + random.uniform(0, 0.75)
@@ -243,10 +250,7 @@ def archive_month_token(decoded: str, race_date: str) -> str:
     return prefix + target + "/" + checksums[target[2:]]
 
 
-def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
-                         stop_after: int | None = None,
-                         start_race: int = 0, max_races: int | None = None) -> List[str]:
-    """Return official horse-page CNAME tokens for every race on a day."""
+def _day_navigation(client, race_date, mode):
     d8 = _dt.date.fromisoformat(race_date).strftime("%Y%m%d")
     page, entry_pat, day_pat, race_pat = {
         "results": ("/JRADB/accessS.html", r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",
@@ -270,9 +274,45 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
         entry_token = archive_month_token(selector, race_date)
         s1 = client.post(page, entry_token)
         days = sorted(set(re.findall(day_pat, s1)))
+    return page, entry_token, days, race_pat
+
+
+def race_reference(token, race_date):
+    """Canonical execution reference, NOT an assertion of a permanent race ID."""
+    from jra_race_day_resolver import VENUES
+    m = re.fullmatch(r'pw01(?:sde|dde)\d{2}(\d{10})(\d{2})(\d{8})/[0-9A-Fa-f]{2}', token)
+    if not m or m[3] != race_date.replace('-','') or m[1][:2] not in VENUES:
+        raise ValueError('JRA_OBSERVED_RACE_REFERENCE_INVALID')
+    venue_id, venue_name = VENUES[m[1][:2]]
+    return {'race_id':f'KM-JRA-{venue_id}-{m[3]}-R{int(m[2]):02d}',
+            'venue_id':venue_id,'venue':venue_name,'race_no':int(m[2]),
+            'navigation_token_sha256':_sha(token.encode()),
+            'identity_kind':'CANONICAL_EXECUTION_REFERENCE_NOT_PERMANENT_REGISTRY_ID'}
+
+
+def discover_day(client, race_date, *, mode):
+    page, entry, days, pattern = _day_navigation(client,race_date,mode)
+    races=[]
+    for day in days:
+        client.post(page,entry)
+        decoded=client.post(page,day)
+        source=dict(getattr(client,'last_response',{}))
+        for token in sorted(set(re.findall(pattern,decoded))):
+            races.append({**race_reference(token,race_date),'official_listing':source})
+    if not races or len(races)>36 or len({r['race_id'] for r in races})!=len(races):
+        raise ValueError('JRA_OFFICIAL_DAY_UNIVERSE_INVALID')
+    return races
+
+
+def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
+                         stop_after: int | None = None,
+                         start_race: int = 0, max_races: int | None = None) -> List[str]:
+    """Return official horse-page CNAME tokens for a bounded day window."""
+    page, entry_token, days, race_pat = _day_navigation(client,race_date,mode)
     out: List[str] = []
     race_index = 0
     client.scanned_race_count = 0
+    client.race_observations = []
     completed = False
     for day in days:
         client.post(page, entry_token)
@@ -293,6 +333,31 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
             client.post(page, entry_token)
             client.post(page, day)
             s3 = client.post(page, race)
+            record={**race_reference(race,race_date), 'source':dict(getattr(client,'last_response',{})),
+                    'runners':[], 'universe_status':'UNRESOLVED'}
+            try:
+                if mode=='cards':
+                    from jra_race_card_detail import parse_race_card_detail
+                    detail=parse_race_card_detail(s3.encode('utf-8'),'text/html; charset=utf-8')
+                else:
+                    from jra_same_day_results import parse_result_detail
+                    detail=parse_result_detail(s3.encode('utf-8'),'text/html; charset=utf-8')
+                record['runners']=[{k:r.get(k) for k in ('runner_id','horse_no','horse_name','status','horse_profile_token','sire','dam','damsire')}
+                                   for r in detail['runners']]
+                # Bind result anchors to the official row, not to an opaque-ID guess.
+                links={}
+                for link in BeautifulSoup(s3,'html.parser').select('a[href]'):
+                    match=re.search(r'accessU\.html\?CNAME=(pw01dud[^"\'&<>\s]+)',link['href'])
+                    if match:
+                        links.setdefault(link.get_text(' ',strip=True),set()).add(urllib.parse.unquote(match[1]))
+                for row in record['runners']:
+                    values=links.get(row.get('horse_name'),set())
+                    if not row.get('horse_profile_token') and len(values)==1:
+                        row['horse_profile_token']=next(iter(values))
+                record['universe_status']='OBSERVED_OFFICIAL'
+            except ValueError as exc:
+                record['universe_error']=str(exc)[:160]
+            client.race_observations.append(record)
             for tok in re.findall(r"accessU\.html\?CNAME=(pw01dud[^\"'&<>\s]+)", s3):
                 tok = urllib.parse.unquote(tok)
                 if tok not in out:
@@ -309,8 +374,10 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
 
 def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None = None,
                 delay: float = 1.0, start_index: int = 0,
-                start_race: int = 0, max_races: int | None = None) -> Dict[str, Any]:
-    client = _Client(delay=delay)
+                start_race: int = 0, max_races: int | None = None,
+                existing_horses: dict | None = None) -> Dict[str, Any]:
+    started = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    client = _Client(delay=delay,stop_on_access_denied=True)
     if start_race < 0 or (max_races is not None and not 1 <= max_races <= 36):
         raise ValueError("JRA_HARVEST_RACE_WINDOW_INVALID")
     if start_index < 0 or (max_horses is not None and not 1 <= max_horses <= 1000):
@@ -331,8 +398,19 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
     if not tokens:
         raise ValueError("JRA_HARVEST_EMPTY_RANGE")
     horses, errors = [], []
+    access_refused = False
+    reused = 0
     for tok in tokens:
         try:
+            cached=(existing_horses or {}).get(_sha(tok.encode()))
+            if cached:
+                references=[r for race in getattr(client,'race_observations',[]) for r in race['runners']
+                            if r.get('horse_profile_token')==tok]
+                if any(r.get(k) and cached.get(k) and r[k]!=cached[k]
+                       for r in references for k in ('horse_name','sire','dam','damsire')):
+                    raise ValueError('OFFICIAL_CACHED_PROFILE_CARD_IDENTITY_CONFLICT')
+                horses.append(dict(cached));reused+=1
+                continue
             raw, ct = client.raw_get("/JRADB/accessU.html?" + urllib.parse.urlencode({"CNAME": tok}))
             dec = _decode(raw, ct)
             ped = parse_horse_pedigree(dec)
@@ -341,12 +419,28 @@ def harvest_day(race_date: str, *, mode: str = "results", max_horses: int | None
                 raise ValueError("PEDIGREE_IDENTITY_MISSING:"+
                                  "|".join(f"{k}={bool(ped.get(k))}" for k in ("horse_name","sire","dam","damsire"))+
                                  ":horse_profile_hash="+hashlib.sha256(tok.encode()).hexdigest()[:10])
+            references=[r for race in getattr(client,'race_observations',[]) for r in race['runners']
+                        if r.get('horse_profile_token')==tok]
+            if any(r.get(k) and ped.get(k) and r[k]!=ped[k]
+                   for r in references for k in ('horse_name','sire','dam','damsire')):
+                raise ValueError('OFFICIAL_PROFILE_CARD_IDENTITY_CONFLICT')
             horses.append({**ped, "runs": hist.get("runs") or [], "raw_sha256": _sha(raw),
-                           "profile_token_sha256": hashlib.sha256(tok.encode()).hexdigest()})
+                           "profile_token_sha256": hashlib.sha256(tok.encode()).hexdigest(),
+                           "official_profile_navigation_token":tok,
+                           "profile_identity_kind":"OBSERVED_NAVIGATION_NOT_PERMANENT_REGISTRY_ID",
+                           "official_permanent_horse_id":None,
+                           "observed_at":_dt.datetime.now(_dt.timezone.utc).isoformat()})
         except Exception as exc:  # recorded, never fabricated
             errors.append(f"{type(exc).__name__}:{exc}"[:200])
+            if isinstance(exc,urllib.error.HTTPError) and exc.code in (403,429):
+                access_refused=True
+                break
     out = {"profile": PROFILE, "official": True, "source": "www.jra.go.jp", "race_date": race_date,
-           "mode": mode, "harvested_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+           "mode": mode, "collection_started_at":started,
+           "harvested_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+           "access_refused":access_refused,
+           "reused_profile_count":reused,
+           "race_observations":getattr(client,'race_observations',[]),
            "start_index": start_index, "start_race": start_race,
            "max_races": max_races,
            "discovery_complete": max_horses is None and max_races is None,
