@@ -96,7 +96,14 @@ def _attested(path: Path, *, signer: str | None = None,
         return False
 
 
-def _clean_runs(runs: list[dict], race_day: date) -> list[dict]:
+def _clean_runs(runs: list[dict], race_day: date, *, include_environment: bool = False) -> list[dict]:
+    """Clean observed runs; extra environment fields are research opt-in only.
+
+    The default shape is deliberately unchanged: signed historical Production
+    ledgers and numerical consumers must not acquire a new input implicitly.
+    In research mode retain the directly observed going instead of losing it.
+    Weather is not a substitute for a missing going observation.
+    """
     out = []
     for r in runs:
         if not isinstance(r, dict):
@@ -121,14 +128,21 @@ def _clean_runs(runs: list[dict], race_day: date) -> list[dict]:
             weight = None
         if weight is not None and not 250 <= weight <= 850:
             weight = None
-        out.append({
+        cleaned = {
             "date": d.isoformat(), "venue": str(r.get("venue") or ""),
             "surface": _norm_surface(r.get("surface")),
             "distance_m": int(r["distance_m"]) if r.get("distance_m") is not None else None,
             "race_name": str(r.get("race_name") or r.get("race_class_text") or ""),
             "finish": finish, "field_size": field,
             "body_weight": weight,
-        })
+        }
+        if include_environment:
+            raw_going = str(r.get("going") or "").strip()
+            cleaned["going"] = ({"良": "良", "稍": "稍重", "稍重": "稍重",
+                                 "重": "重", "不": "不良", "不良": "不良"}.get(raw_going))
+            cleaned["going_raw"] = raw_going or None
+            cleaned["surface_raw"] = str(r.get("surface") or "").strip() or None
+        out.append(cleaned)
     return out
 
 

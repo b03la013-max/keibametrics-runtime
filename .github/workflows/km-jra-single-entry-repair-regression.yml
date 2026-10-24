@@ -78,6 +78,13 @@ jobs:
                       assert not any("git push origin" in s.get("run","") or "jra_pedigree_harvest.py" in s.get("run","") for s in steps)
                       print("JRA_PEDIGREE_READ_ONLY_PLAN_VALID",path,job_name)
                       continue
+                  if path.endswith('km-jra-pedigree-corpus-harvest.yml') and job_name=='plan':
+                      runs='\n'.join(s.get('run','') for s in steps)
+                      assert len(attest)==1 and 'day_plan(' in runs
+                      assert not any(x in runs for x in ('git push','collect-window','harvest_day('))
+                      assert any(s.get('uses','').startswith('actions/upload-artifact@') for s in steps[attest[0]+1:])
+                      print('JRA_PEDIGREE_SIGNED_DISCOVERY_ONLY_PLAN_VALID',path,job_name)
+                      continue
                   assert len(attest)==1, (path,job_name)
                   verified=[i for i,s in enumerate(steps) if "gh attestation verify" in s.get("run","")]
                   persisted=[i for i,s in enumerate(steps) if "git push origin" in s.get("run","")]
