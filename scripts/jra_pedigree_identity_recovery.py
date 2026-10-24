@@ -326,10 +326,18 @@ def reverify_oidc(recovery,root=ROOT,*,runner=subprocess.run):
     if recovery['sha256']!=sha_obj({k:v for k,v in recovery.items() if k!='sha256'}):
         raise ValueError('RECOVERY_REPORT_HASH')
     verify_recovery_bindings(recovery,root)
-    needed={r['corpus_file'] for r in recovery['resolved']}
+    # Rebind EVERY observation first, including post-cutoff observations. Only
+    # then omit external verifications which cannot qualify any profile/run.
+    # The booleans below are checked against the original acquisition clocks by
+    # verify_recovery_bindings; a rehashed sidecar cannot authorize this pruning.
+    needed=set()
     for r in recovery['resolved']:
-        for sid in {r['proof'],*(x['proof'] for x in r['run_bindings']),
-                    *(p for p in r.get('parent_profile_proofs',{}).values() if p)}:
+        proofs={x['proof'] for x in r['run_bindings'] if x['chronology_before_target']}
+        if r['chronology_before_target']:
+            proofs.update({r['proof'],*(p for p in r.get('parent_profile_proofs',{}).values() if p)})
+        if proofs:
+            needed.add(r['corpus_file'])
+        for sid in proofs:
             needed.add(recovery['raw_proofs'][sid]['source_envelope'])
     verified={};stopped=False
     for name in sorted(needed):
