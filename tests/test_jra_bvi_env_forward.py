@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import textwrap
 
 import pytest
 
@@ -260,3 +261,84 @@ def test_result_receipt_can_bind_only_explicit_environment_preregistration(tmp_p
     f.persist_result_receipt(request,{'receipt':'UNIT_BOUNDARY_NOT_REAL_SIGNATURE'},tmp_path)
     assert (directory/'production_result_receipt.json').exists()
     assert not (directory/'pedigree_pipeline_pre_result.json').exists()
+
+
+def _workflow_timestamp_program():
+    """Exercise the actual workflow's local gate; never simulate real OIDC."""
+    workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
+    step=workflow.split('      - name: Verify independent prediction timestamp before accepting this freeze\n',1)[1]
+    step=step.split('      - name:',1)[0]
+    program=step.split("          python - <<'PY'\n",1)[1].split('          PY\n',1)[0]
+    return compile(textwrap.dedent(program),'<workflow ENV timestamp gate>','exec')
+
+
+@pytest.mark.parametrize('case',[
+    'valid_timestamp','valid_time','expired_cutoff','before_freeze','future_timestamp',
+    'missing_timestamp','unverified_timestamp','future_freeze',
+])
+def test_workflow_requires_verified_independent_pre_cutoff_prediction_clock(tmp_path,monkeypatch,case):
+    from datetime import timedelta,timezone
+    now=datetime.now(timezone.utc)
+    start=now-timedelta(minutes=5);cutoff=now+timedelta(minutes=5)
+    stamp=now-timedelta(minutes=1)
+    if case=='expired_cutoff':cutoff=now-timedelta(seconds=1)
+    elif case=='before_freeze':stamp=start-timedelta(seconds=1)
+    elif case=='future_timestamp':stamp=now+timedelta(minutes=1)
+    elif case=='future_freeze':start=now+timedelta(minutes=1)
+    field='time' if case=='valid_time' else 'timestamp'
+    proof=[{'verificationResult':{'verifiedTimestamps':[{field:stamp.isoformat()}]}}]
+    if case=='missing_timestamp':proof=[{'verificationResult':{'verifiedTimestamps':[]}}]
+    elif case=='unverified_timestamp':proof=[{'timestamp':stamp.isoformat()}]
+    # These are explicitly synthetic clock-boundary records, NOT signed Race data.
+    frozen=tmp_path/'synthetic_prediction.json'
+    frozen.write_text(json.dumps({'frozen_at':start.isoformat(),'prediction_cutoff':cutoff.isoformat()}))
+    out=tmp_path/'runtime_out';out.mkdir()
+    (out/'pedigree_env_prediction_verification.json').write_text(json.dumps(proof))
+    output=tmp_path/'github_output'
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('OUTPUT',str(frozen));monkeypatch.setenv('GITHUB_OUTPUT',str(output))
+    program=_workflow_timestamp_program()
+    if case.startswith('valid_'):
+        exec(program,{})
+        assert output.read_text()=='admitted=true\n'
+    else:
+        with pytest.raises(SystemExit,match='INDEPENDENT_TIMESTAMP_NOT_PRE_CUTOFF'):
+            exec(program,{})
+        assert not output.exists()
+
+
+def test_workflow_runs_four_arms_once_and_preserves_production_and_independent_witness_gates():
+    workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
+    job=workflow.split('  pedigree-forward-shadow:\n',1)[1]
+    assert job.count('scripts/jra_bvi_pipeline_forward_shadow.py freeze')==1
+    assert '--environment-model "$MODEL"' in job
+    assert 'bvi_env_20261024_5e7f3b31cebd.json' in job
+    assert '/$SAFE/pedigree_env_pre_result.json' in job
+    assert '/$SAFE/pedigree_pipeline_pre_result.json' not in job
+    assert 'needs: orchestrate' in job and 'continue-on-error: true' in job
+    assert "needs.orchestrate.result == 'success'" in job
+    assert 'timeout-minutes: 15' in job and 'fetch-depth: 0' in job
+    assert 'test -f "$BASE/jra_formal_completion_verification.json" || exit 0' in job
+    assert 'test -f "runtime/final_artifacts/$RID.json" || exit 0' in job
+    assert 'test ! -f "$OUTPUT" || exit 0' in job
+    attest=job.index('uses: actions/attest@v4')
+    verify=job.index('gh attestation verify "$OUTPUT"')
+    upload=job.index('id: witness')
+    commit=job.index('git add "$OUTPUT"')
+    assert attest<verify<upload<commit
+    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml"' in job
+    assert "steps.admission.outputs.admitted == 'true' && steps.witness.outcome == 'success'" in job
+    assert "datetime.now(cutoff.tzinfo)>cutoff" in job
+    assert 'git add runtime/final_artifacts' not in job
+    assert workflow.split('  pedigree-forward-shadow:\n',1)[0].count('attestations: write')==1
+    settlement=(ROOT/'.github/workflows/km-jra-candidate-auto-postresult-closedloop.yml').read_text()
+    assert 'python scripts/jra_bvi_pipeline_forward_shadow.py settle --environment' in settlement
+
+
+def test_workflow_wiring_keeps_exact_frozen_environment_model_and_all_bound_code():
+    import hashlib
+    path=ROOT/'runtime/jra_static_owner_forward_oos/models/bvi_env_20261024_5e7f3b31cebd.json'
+    assert hashlib.sha256(path.read_bytes()).hexdigest()=='a969cc518da73b4795932f02d8f3cbc6d0ac47a1a7904907055e46958d9f0fc1'
+    publication=json.loads(path.read_text())
+    assert all(hashlib.sha256((ROOT/name).read_bytes()).hexdigest()==digest
+        for name,digest in publication['code_file_sha256'].items())
