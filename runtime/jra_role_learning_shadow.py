@@ -324,15 +324,23 @@ def persist_shadow_result(root, result):
         if json.loads(path.read_text())!=out:raise ValueError('IMMUTABLE_SHADOW_RESULT_CONFLICT')
     else:
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    records=[json.loads(p.read_text()) for p in sorted(path.parent.glob('*.json'))]
+    write_status(root/'runtime/role_rescue_shadow_status.json',records_dir=path.parent)
+    return out
+
+def write_status(path='runtime/role_rescue_shadow_status.json', *, records_dir=None):
+    """Rebuild only the disposable view from immutable per-race records."""
+    path=Path(path)
+    records_dir=Path(records_dir) if records_dir is not None else path.parent/'role_rescue_shadow_results'
+    records=[json.loads(p.read_text()) for p in sorted(records_dir.glob('*.json'))]
     ids=[r['race_id'] for r in records]
     if len(ids)!=len(set(ids)):raise ValueError('DUPLICATE_SHADOW_RACE')
     tracker={'candidate_id':CANDIDATE_ID,'distinct_races':len(ids),'forward_oos_verified_races':sum(r['oos_eligible'] for r in records),
              'status':'COLLECTING_NO_AUTOMATIC_PROMOTION','automatic_promotion':False,
              'results':[{k:r[k] for k in ('race_id','sha256','policy_fingerprint','oos_eligible')} for r in records]}
     tracker['sha256']=digest(tracker)
-    (root/'runtime/role_rescue_shadow_status.json').write_text(json.dumps(tracker,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    return out
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(json.dumps(tracker,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+    return tracker
 
 def pre_result_witness(root,shadow):
     """Verify an actual tracked addition, never infer birth from a shallow root."""
