@@ -43,12 +43,21 @@ def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         return next((i for i,x in enumerate(h) if part in x),None)
     fi,ni,mi,pi,li=idx("着順"),idx("馬番"),idx("馬名"),idx("コーナー通過順位"),idx("推定上り")
     runners=[]
+    non_finishers=[]
+    statuses={"取消":"CANCELLED", "除外":"EXCLUDED", "中止":"DID_NOT_FINISH", "失格":"DISQUALIFIED"}
     for row in chosen[1:]:
         if ni is None or ni>=len(row): continue
         no=_int(row[ni])
-        finish=_int(row[fi]) if fi is not None and fi<len(row) else None
-        if no is None or finish is None: continue
+        finish_label=_norm(row[fi]) if fi is not None and fi<len(row) else ""
+        finish=int(finish_label) if re.fullmatch(r"\d+",finish_label) else None
+        if no is None: continue
         name=_norm(row[mi] if mi is not None and mi<len(row) else "")
+        if finish is None:
+            status=statuses.get(finish_label)
+            if status:
+                non_finishers.append({"horse_no":no,"runner_id":str(no),"horse_name":name,
+                                      "finish_status":status,"raw_finish_label":finish_label})
+            continue
         passing=_positions(row[pi] if pi is not None and pi<len(row) else "")
         final3f=_flt(row[li]) if li is not None and li<len(row) else None
         runners.append({
@@ -75,6 +84,7 @@ def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     out={
         "profile":PROFILE,"official":True,"production_fact_authority":True,
         "result_derived":True,"runner_count":len(runners),"runners":runners,
+        "non_finishers":non_finishers,
         "scheduled_post_hhmm":scheduled_post,"race_environment":env,
         "lap_table":lap_table,"corner_table":corner_table,
     }

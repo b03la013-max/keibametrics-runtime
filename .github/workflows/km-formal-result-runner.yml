@@ -170,6 +170,7 @@ jobs:
                   assert review.get("official_top3")==p["official_result"]["top3"], "OFFICIAL_RESULT_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert review.get("capital",{}).get("investment")==p["settlement"]["total_investment"], "SETTLEMENT_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert review.get("capital",{}).get("return")==p["settlement"]["total_payout"], "PAYOUT_REVISION_REQUIRES_SEPARATE_REVIEW"
+                  assert int(review.get("capital",{}).get("refund") or 0)==int(p["settlement"].get("refund") or 0), "REFUND_REVISION_REQUIRES_SEPARATE_REVIEW"
               else:
                   review=build_post_result_review(p,final_artifact)
               # Only newly generated states receive an actual observation time.
@@ -184,6 +185,20 @@ jobs:
                   assert learning.get("source_review_sha256")==review.get("sha256"), "EXISTING_LEARNING_REVIEW_CONFLICT"
               else:
                   learning=build_learning_state(review,effective_time=datetime.now(timezone.utc).isoformat())
+              # Archive the actual state bytes, including its actual effective
+              # time, before any optional research or aggregate publication.
+              # A hash-only summary cannot recover a lost historical state.
+              import shutil
+              os.makedirs("runtime_out/result_checkpoint",exist_ok=True)
+              for name,value,original in (("post_result_review.json",review,existing_review),
+                                           ("learning_state.json",learning,existing_learning)):
+                  checkpoint="runtime_out/result_checkpoint/"+name
+                  if os.path.exists(original):
+                      shutil.copyfile(original,checkpoint)
+                  else:
+                      with open(checkpoint,"w",encoding="utf-8") as fh:
+                          json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              shutil.copyfile(final_path,"runtime_out/result_checkpoint/final_artifact.json")
               oos=build_oos_measurement(review,final_artifact,p)
               # Role/learning research settlement cannot block Production RESULT.
               try:
@@ -400,6 +415,15 @@ jobs:
           print("KM_RESULT_RESULT="+json.dumps(summary,separators=(",",":"),ensure_ascii=False))
           with open("runtime_out/result_checkpoint/result_summary.json","w",encoding="utf-8") as fh:
               json.dump(summary,fh,ensure_ascii=False,sort_keys=True,indent=2)
+          from pathlib import Path
+          import hashlib
+          checkpoint=Path("runtime_out/result_checkpoint")
+          inventory={path.name:{"sha256":hashlib.sha256(path.read_bytes()).hexdigest(),
+                               "bytes":path.stat().st_size}
+                     for path in sorted(checkpoint.glob("*.json")) if path.name!="checkpoint_inventory.json"}
+          with open(checkpoint/"checkpoint_inventory.json","w",encoding="utf-8") as fh:
+              json.dump({"race_id":p["race_id"],"result_receipt_sha256":res.get("receipt_sha256"),
+                         "files":inventory},fh,ensure_ascii=False,sort_keys=True,indent=2)
           PY
 
       - name: Persist automatic review and learning state
