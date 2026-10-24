@@ -27,7 +27,7 @@ def window():return {'date':'2026-10-24','mode':'results','start':0,'race_ids':[
 def data(count=10,tokens=10):
     x={'profile':'KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010','official':True,'source':'www.jra.go.jp',
        'horse_count':count,'horse_token_count':tokens,'horses':[{'profile_token_sha256':str(i),'sire':'S','dam':'D'} for i in range(count)],
-       'race_observations':[{'race_id':r} for r in ['A','B','C']]}
+       'race_observations':[{'race_id':r,'universe_status':'OBSERVED_OFFICIAL'} for r in ['A','B','C']]}
     x['sha256']=hashlib.sha256(json.dumps(x,ensure_ascii=False,sort_keys=True).encode()).hexdigest();return x
 
 
@@ -92,6 +92,13 @@ def test_changed_race_universe_is_not_admitted(tmp_path):
 
 def test_modified_producer_bytes_are_rejected():
     x=data();assert producer_valid(x);x['horse_count']=999;assert not producer_valid(x)
+
+
+def test_unresolved_runner_universe_is_not_admitted(tmp_path):
+    x=data();x['race_observations'][0]['universe_status']='UNRESOLVED'
+    x['sha256']=hashlib.sha256(json.dumps({k:v for k,v in x.items() if k!='sha256'},ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    r=collect_window(window(),tmp_path,run_id='7',verifier=lambda p:None,collector=lambda *a,**k:x)
+    assert not r['new'] and 'UNIVERSE_UNRESOLVED' in r['error']
 
 
 def test_weekday_meeting_is_not_skipped_by_new_cursor_mode():

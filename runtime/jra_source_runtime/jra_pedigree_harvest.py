@@ -389,6 +389,8 @@ def horse_tokens_for_day(client: _Client, race_date: str, *, mode: str,
             record['profile_navigation_count']=len(race_profiles)
             bound={r.get('horse_profile_token') for r in record['runners'] if r.get('horse_profile_token')}
             record['unresolved_profile_link_count']=len(race_profiles-bound)
+            record['unbound_profile_navigation_tokens']=sorted(race_profiles-bound)
+            record['official_race_navigation_token']=race
             record['universe_kind']=('OFFICIAL_CARD_LISTED_WITH_STATUS' if mode=='cards' else
                                      'OFFICIAL_RESULT_PARSED_ROWS; NONFINISHER_STATUS_NOT_INFERRED')
             if completed:

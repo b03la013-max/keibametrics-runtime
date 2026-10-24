@@ -161,6 +161,25 @@ def test_canonical_production_baseline_binds_actual_tickets_and_rejects_changed_
         f.bind_production_reference(comparison,req,final)
 
 
+def test_real_comparison_consumption_preserves_verified_source_annotations():
+    from copy import deepcopy
+    from jra_bvi_shadow_comparison import compare
+    from family_authority_guard import resolve_current_authority
+    req=real_request();saved=deepcopy(req)
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    env=json.loads(next((ROOT/'runtime/executions'/req['source_execution_id']/'SOURCE').rglob('source_receipt_envelope.json')).read_text())
+    _,authority=resolve_current_authority(ROOT)
+    compared=compare(req,mapping,source_sha=req['source_snapshot_sha256'],receipt_sha=env['receipt_sha256'],
+        algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],
+        source_artifact=env['artifact'],current_authority=authority,root=ROOT)
+    proof=f.arm_consumption(compared,req,env['artifact'],mapping,authority,execution_class='POSTCAPTURE_DIAGNOSTIC_ONLY')
+    assert len(proof)==3 and req==saved
+    assert all(p['static_execution_proof_status']=='BOUND_ACTUAL_EXECUTION' for p in proof.values())
+    req['source_checkpoint_manifest']['receipt_sha256']='0'*64
+    with pytest.raises(ValueError,match='SOURCE_ANNOTATION_INVALID'):
+        f.arm_consumption(compared,req,env['artifact'],mapping,authority)
+
+
 def test_metadata_only_enrichment_is_not_a_changed_bvi_value():
     from copy import deepcopy
     from jra_bvi_shadow_comparison import compare,PEDIGREE_FEATURES

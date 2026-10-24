@@ -129,7 +129,7 @@ def bind_production_reference(comparison, req, final, *, require_match=True):
 
 def arm_consumption(comparison, req, source, mapping, authority, *, execution_class='FORWARD_SHADOW_ACTUAL_COMPUTATION_NOT_PRODUCTION_FINAL'):
     from jra_bvi_consumption import build_bvi_consumption
-    from jra_bvi_static_proof import build_static_proof
+    from jra_bvi_static_proof import build_static_proof,SOURCE_ANNOTATIONS
     from jra_static_owner_executable import compile_static_owner
     out={}
     for name,arm in comparison['arms'].items():
@@ -144,6 +144,10 @@ def arm_consumption(comparison, req, source, mapping, authority, *, execution_cl
         formal=copy.deepcopy(prepared)
         formal.update({k:copy.deepcopy(owner[k]) for k in
             ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')})
+        # Fresh Static outputs omit transport-only SOURCE annotations. Keep
+        # their original binding; the existing verifier checks every value.
+        formal['static_prediction'].update({k:req['static_prediction'][k] for k in SOURCE_ANNOTATIONS
+                                           if k in req['static_prediction']})
         formal['krs_input_data']=copy.deepcopy(arm['krs_input'])
         formal['bvi_static_consumption_proof']=build_static_proof(prepared,raw,formal,authority,
             execution_class=execution_class)
@@ -252,7 +256,8 @@ def freeze(request, source_path, output):
     from jra_bvi_oos_metrics import preregister
     record={'operational_shadow_stop_at':shadow_stop.isoformat() if shadow_stop else None,
         'code_git_sha':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
-        'model_sha256':sha({'mapping':mapping,'engine_sha256':req.get('engine_sha256')}),
+        'model_sha256':sha({'mapping':mapping,'static_owner_fingerprint':fingerprint(),
+            'engine_sha256':contract['engine_sha256'],'parameter_map_sha256':contract['parameter_map_sha256']}),
         'comparison_protocol':preregister(comparison),
         'production_baseline':production_reference,'arm_bvi_consumption':consumption,
         'profile':PROFILE,'race_id':req['race_id'],'frozen_at':completed.isoformat(),

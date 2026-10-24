@@ -86,7 +86,7 @@ jobs:
       - name: Independently verify actual all-race intake, existing Reader consumption and frozen Production BVI
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/jra_pedigree_inventory.py --official-audit --output runtime_out/jra_bvi_full_day_audit.json
+        run: python scripts/jra_pedigree_inventory.py --official-audit --plan runtime/pedigree_intake_receipts/20261024-full-day-plan.json --output runtime_out/jra_bvi_full_day_audit.json --summary-output runtime_out/jra_bvi_full_day_summary.json
       - name: Verify real OIDC corpus, temporal gates and full BVI downstream diagnostics
         if: steps.external_window.outputs.allowed == 'true'
         env:
@@ -111,6 +111,7 @@ jobs:
           path: |
             runtime_out/jra_bvi_external_acceptance_deferred.json
             runtime_out/jra_bvi_full_day_audit.json
+            runtime_out/jra_bvi_full_day_summary.json
             runtime_out/jra_pedigree_verified_acceptance.json
             runtime_out/jra_bvi_postcapture_real_closure.json
             runtime_out/jra_bvi_pipeline_real_acceptance.json

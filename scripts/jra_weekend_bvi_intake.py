@@ -120,7 +120,8 @@ def collect_window(window,root=ROOT,*,run_id, verifier=None, collector=None):
     for file in files:
         obj=check(file)
         if (obj and obj['horse_count']==obj['horse_token_count'] and obj['horse_count']>0
-                and [r['race_id'] for r in obj.get('race_observations',[])]==window['race_ids']):
+                and [r['race_id'] for r in obj.get('race_observations',[])]==window['race_ids']
+                and all(r.get('universe_status')=='OBSERVED_OFFICIAL' for r in obj.get('race_observations',[]))):
             return {'status':'ALREADY_VERIFIED_COMPLETE','new':False,'file':str(file.relative_to(root)),
                     'harvest_sha256':obj['sha256'],'horse_count':obj['horse_count']}
     cache={}
@@ -141,6 +142,8 @@ def collect_window(window,root=ROOT,*,run_id, verifier=None, collector=None):
         observed=obj.get('race_observations') or []
         if [r['race_id'] for r in observed]!=window['race_ids']:
             raise ValueError('INTAKE_OFFICIAL_RACE_UNIVERSE_CHANGED')
+        if any(r.get('universe_status')!='OBSERVED_OFFICIAL' for r in observed):
+            raise ValueError('INTAKE_OFFICIAL_RACE_UNIVERSE_UNRESOLVED')
         if (record['access_refused'] or not obj['horse_token_count']
                 or obj['horse_count']/obj['horse_token_count']<.90):
             quarantine=receipt_dir/f'{stem}-{run_id}-quarantine.json'
@@ -200,6 +203,9 @@ def main():
             a.plan.write_text(json.dumps({'include':result},ensure_ascii=False,indent=2)+'\n')
         print(json.dumps({'include':result},ensure_ascii=False))
     elif a.action=='collect-window':
+        from jra_pedigree_corpus import _attested
+        if not _attested(a.plan,signer='km-jra-pedigree-corpus-harvest.yml',not_after=datetime.now(timezone.utc)):
+            raise ValueError('INTAKE_DAY_PLAN_OIDC_UNVERIFIED')
         window=json.loads(a.plan.read_text())['include'][a.index]
         result=collect_window(window,a.root,run_id=a.run_id)
         if os.environ.get('GITHUB_OUTPUT'):

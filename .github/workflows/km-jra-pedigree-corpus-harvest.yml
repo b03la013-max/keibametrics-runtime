@@ -21,10 +21,6 @@ on:
         default: results
         type: choice
         options: [results, cards]
-  push:
-    branches: [candidate/jra-bvi-full-day-20261024]
-    paths:
-      - '.github/workflows/km-jra-pedigree-corpus-harvest.yml'
 concurrency:
   group: km-jra-pedigree-harvest
   cancel-in-progress: false
@@ -175,3 +171,63 @@ jobs:
           path: |
             runtime/pedigree_intake_receipts/*${{ github.run_id }}*.json
             ${{ steps.acquire.outputs.file }}
+  summarize:
+    needs: [plan, harvest]
+    if: ${{ always() && needs.plan.result == 'success' && needs.harvest.result != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -q beautifulsoup4 cryptography
+      - uses: actions/download-artifact@v4
+        with:
+          name: jra-pedigree-day-plan
+          path: runtime_out
+      - name: Measure actual OIDC Reader intake, duplicates and frozen BVI once per whole day
+        id: summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SUMMARY="runtime/pedigree_intake_receipts/day-audit-${{ github.run_id }}-${{ github.run_attempt }}.json"
+          python scripts/jra_pedigree_inventory.py --official-audit \
+            --plan runtime_out/pedigree_day_plan.json --output runtime_out/jra_bvi_full_day_audit.json \
+            --summary-output "$SUMMARY"
+          echo "file=$SUMMARY" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest@v4
+        with:
+          subject-path: |
+            runtime_out/jra_bvi_full_day_audit.json
+            ${{ steps.summary.outputs.file }}
+      - name: Independently verify the daily measurement receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMMARY: ${{ steps.summary.outputs.file }}
+        run: gh attestation verify "$SUMMARY" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml"
+      - name: Persist only daily aggregate measurement, never rewrite a prediction
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+          SUMMARY: ${{ steps.summary.outputs.file }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_BRANCH" in main|candidate/jra-bvi-full-day-20261024) ;; *) exit 1 ;; esac
+          git config user.name keibametrics-runtime
+          git config user.email actions@users.noreply.github.com
+          git add "$SUMMARY"
+          git commit -m "pedigree: signed daily collection and BVI measurement [skip ci]"
+          git pull --rebase origin "$TARGET_BRANCH"
+          git push origin "HEAD:$TARGET_BRANCH"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-pedigree-full-day-measurement
+          path: |
+            runtime_out/jra_bvi_full_day_audit.json
+            runtime/pedigree_intake_receipts/day-audit-*.json
+          retention-days: 90
