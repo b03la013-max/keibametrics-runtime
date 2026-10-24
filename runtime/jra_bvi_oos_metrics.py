@@ -6,22 +6,38 @@ from jra_index_provenance_builder import BASE
 from jra_bvi_shadow_comparison import PEDIGREE_FEATURES
 
 ARMS=('A_CURRENT','B_PEDIGREE_ENHANCED_SHADOW','C_BLOODLINE_ABLATION')
+ENV_ARM='D_BVI_ENV_SHADOW'
 PROFILES=('NEWCOMER','LOW_CAREER','ESTABLISHED')
 
 
+def comparison_arms(comparison):
+    """A fourth research arm is explicit; old three-arm records are unchanged."""
+    observed=set(comparison['arms'])
+    expected=ARMS+(ENV_ARM,) if ENV_ARM in observed else ARMS
+    if observed!=set(expected):raise ValueError('BVI_OOS_COMPARISON_ARM_SET_INVALID')
+    return expected
+
+
 def preregister(comparison):
-    lists={k:comparison['arms'][k]['diagnostic_tickets'] for k in ARMS}
+    names=comparison_arms(comparison)
+    lists={k:comparison['arms'][k]['diagnostic_tickets'] for k in names}
     n=min(len(v) for v in lists.values())
-    return {'profile':'KM-JRA-BVI-CONTROLLED-COMPARISON-v1',
+    out={'profile':'KM-JRA-BVI-CONTROLLED-COMPARISON-v1',
         'equal_budget':'NORMALIZE_WHOLE_FROZEN_ARM_TO_COMMON_UNIT_BUDGET; FRACTIONAL_DIAGNOSTIC_ONLY',
         'equal_ticket_rule':'FROZEN_PREFIX_COMMON_MIN_COUNT','equal_ticket_count':n,
         'equal_ticket_subset_hashes':{k:sha(v[:n]) for k,v in lists.items()},
         'selection_uses_results':False,'production_effect':'NONE'}
+    if ENV_ARM in names:
+        out['profile']='KM-JRA-BVI-ENV-CONTROLLED-COMPARISON-v1'
+        out['arm_names']=list(names)
+        out['environment_model_sha256']=comparison['arms'][ENV_ARM]['environment_shadow_proof']['model_sha256']
+    return out
 
 
 def evaluate(pre, official, settled):
     from mec_r4_shadow import settle_ticket_list
     top=[str(x) for x in official['top3']];arms=pre['comparison']['arms']
+    names=comparison_arms(pre['comparison'])
     profiles={str(r['runner_id']):_profile_for_runner(r) for r in arms['A_CURRENT']['numerical_runners']}
     if len(profiles)!=len(arms['A_CURRENT']['numerical_runners']):raise ValueError('BVI_OOS_DUPLICATE_RUNNER')
     for a in arms.values():
@@ -85,7 +101,7 @@ def evaluate(pre, official, settled):
             'payouts':{k:v['per_100_yen'] for k,v in official['payouts'].items()}}}
         if n:
             equal_ticket={'status':'FROZEN_PREFIX_DIAGNOSTIC','ticket_count':n,
-                'arms':{name:settle_ticket_list(arms[name]['diagnostic_tickets'][:n],payout) for name in ARMS}}
+                'arms':{name:settle_ticket_list(arms[name]['diagnostic_tickets'][:n],payout) for name in names}}
         else:equal_ticket={'status':'COMMON_WIDTH_ZERO_NO_COMPARISON','ticket_count':0,'arms':{}}
     return {'race_id':pre['race_id'],'race_profile':next(iter(set(profiles.values()))) if len(set(profiles.values()))==1 else 'MIXED',
         'profiles':dict(Counter(profiles.values())),'arms':output,'equal_ticket':equal_ticket,
@@ -93,11 +109,14 @@ def evaluate(pre, official, settled):
         'predictive_improvement_demonstrated':False,'automatic_promotion':False}
 
 
-def aggregate(evaluations):
+def aggregate(evaluations, *, include_environment=False):
+    names=ARMS+(ENV_ARM,) if include_environment else ARMS
+    if include_environment and any(set(e['arms'])!=set(names) for e in evaluations):
+        raise ValueError('BVI_ENV_OOS_COHORT_ARM_SET_CHANGED')
     result={name:{p:{'runner_count':0,'bvi_changed_vs_a':0,'rank_changed_vs_a':0,'pedigree_feature_rows':0,
-        'false_positive_candidates':0,'target_roles':{role:{'n':0,'captured':0,'rank_sum':0,'market_n':0,'market_rank_sum':0} for role in ('W','P2','P3')}} for p in PROFILES} for name in ARMS}
+        'false_positive_candidates':0,'target_roles':{role:{'n':0,'captured':0,'rank_sum':0,'market_n':0,'market_rank_sum':0} for role in ('W','P2','P3')}} for p in PROFILES} for name in names}
     for e in evaluations:
-        for name in ARMS:
+        for name in names:
             for p,g in e['arms'][name]['profiles'].items():
                 out=result[name][p]
                 for k in ('runner_count','bvi_changed_vs_a','rank_changed_vs_a','pedigree_feature_rows','false_positive_candidates'):out[k]+=g[k]
@@ -105,7 +124,7 @@ def aggregate(evaluations):
                     target=out['target_roles'][role];target['n']+=1;target['captured']+=int(values['captured']);target['rank_sum']+=values['rank']
                     if values['market_rank'] is not None:target['market_n']+=1;target['market_rank_sum']+=values['market_rank']
     normalized={}
-    for name in ARMS:
+    for name in names:
         values=[e['arms'][name]['equal_budget_return_per_yen'] for e in evaluations
                 if e['arms'][name]['equal_budget_protocol_preregistered'] and e['arms'][name]['equal_budget_return_per_yen'] is not None]
         normalized[name]={'n':len(values),'mean_return_per_common_budget_unit':sum(values)/len(values) if values else None}
@@ -113,7 +132,7 @@ def aggregate(evaluations):
         'capital_modes':{name:{'observed':sum(e['arms'][name].get('no_bet') is not None for e in evaluations),
             'no_bet_count':sum(e['arms'][name].get('no_bet') is True for e in evaluations),
             'paper_count':sum(e['arms'][name].get('paper_only') is True for e in evaluations),
-            'legacy_unknown':sum(e['arms'][name].get('no_bet') is None for e in evaluations)} for name in ARMS},
+            'legacy_unknown':sum(e['arms'][name].get('no_bet') is None for e in evaluations)} for name in names},
         'race_profile_counts':dict(Counter(e['race_profile'] for e in evaluations)),
         'equal_ticket_preregistered_races':sum(e['equal_ticket']['status']=='FROZEN_PREFIX_DIAGNOSTIC' for e in evaluations),
         'mixed_race_capital_attribution':'NOT_ALLOCATED_TO_INDIVIDUAL_HORSE_PROFILES',
