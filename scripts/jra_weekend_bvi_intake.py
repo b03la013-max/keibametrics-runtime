@@ -20,6 +20,50 @@ sys.path.insert(0, str(ROOT / 'runtime/jra_source_runtime'))
 PROFILE = 'KM-JRA-WEEKEND-OFFICIAL-BVI-INTAKE-v1'
 
 
+def resolve_scheduled_target(schedule, *, run_created_at, observed_at=None):
+    """Resolve a delayed existing cron from the immutable original run clock.
+
+    GitHub's original ``created_at`` remains the anchor on later attempts. The
+    most recent past due slot is only an inferred scheduling reference, not a
+    horse observation/capture time or proof that an official race exists.
+    Discovery, acquisition clocks and cutoff checks remain unchanged.
+    """
+    schedules = {
+        '20 21 * * 5,6,0': (21, {5, 6, 0}, 'cards'),
+        '20 12 * * 6,0,1': (12, {6, 0, 1}, 'results'),
+    }
+    if not isinstance(schedule, str) or schedule not in schedules:
+        raise ValueError('INTAKE_SCHEDULE_UNSUPPORTED')
+    observed_at = observed_at if observed_at is not None else datetime.now(timezone.utc)
+    for stamp in (run_created_at, observed_at):
+        if not isinstance(stamp, datetime) or stamp.utcoffset() is None:
+            raise ValueError('INTAKE_SCHEDULE_AWARE_CLOCK_REQUIRED')
+    created = run_created_at.astimezone(timezone.utc)
+    observed = observed_at.astimezone(timezone.utc)
+    if created > observed:
+        raise ValueError('INTAKE_SCHEDULE_RUN_CREATED_IN_FUTURE')
+    hour, weekdays, mode = schedules[schedule]
+    due = None
+    for offset in range(8):
+        day = created.date() - timedelta(days=offset)
+        candidate = datetime(day.year, day.month, day.day, hour, 20, tzinfo=timezone.utc)
+        # Python Monday=0, cron Sunday=0; evaluate the cron in UTC.
+        if (candidate.weekday() + 1) % 7 in weekdays and candidate <= created:
+            due = candidate
+            break
+    if due is None or created - due >= timedelta(days=1):
+        raise ValueError('INTAKE_SCHEDULE_STALE_OR_AMBIGUOUS_REFERENCE')
+    return {
+        'schedule': schedule,
+        'run_created_at': created.isoformat(),
+        'inferred_due_at': due.isoformat(),
+        'observed_at': observed.isoformat(),
+        'date': due.astimezone(timezone(timedelta(hours=9))).date().isoformat(),
+        'mode': mode,
+        'reference_scope': 'SCHEDULING_ONLY_NOT_SOURCE_CAPTURE_OR_PREDICTION_EVIDENCE',
+    }
+
+
 def windows(plan, now=None):
     now = now or datetime.now(timezone.utc)
     jst = now.astimezone(timezone(timedelta(hours=9)))

@@ -2,6 +2,7 @@ name: KeibaMetrics JRA Official Pedigree Corpus Harvest
 run-name: JRA pedigree harvest ${{ inputs.dates || 'scheduled' }} ${{ inputs.mode || 'auto' }}
 # Public normalized facts and SHA references only; robots is not a copyright license.
 permissions:
+  actions: read
   contents: write
   id-token: write
   attestations: write
@@ -48,6 +49,7 @@ jobs:
           MODE: ${{ inputs.mode }}
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
+          GH_TOKEN: ${{ github.token }}
           PYTHONPATH: runtime:runtime/jra_source_runtime
         run: |
           python - <<'PY'
@@ -55,15 +57,28 @@ jobs:
           from pathlib import Path
           from datetime import datetime,timedelta,timezone
           from urllib.robotparser import RobotFileParser
-          from scripts.jra_weekend_bvi_intake import day_plan
+          from scripts.jra_weekend_bvi_intake import day_plan,resolve_scheduled_target
           ua='KeibaMetrics-JRA-Official-Pedigree-Harvest/1.0'
-          with urllib.request.urlopen(urllib.request.Request('https://www.jra.go.jp/robots.txt',headers={'User-Agent':ua}),timeout=20) as r:
-              rules=RobotFileParser();rules.parse(r.read(30000).decode().splitlines())
-          assert all(rules.can_fetch(ua,'https://www.jra.go.jp/JRADB/'+p) for p in ('accessD.html','accessS.html','accessU.html'))
           now=datetime.now(timezone(timedelta(hours=9)))
           mode=os.environ.get('MODE') or 'results'
-          if os.environ['EVENT']=='schedule':mode='cards' if os.environ['SCHEDULE']=='20 21 * * 5,6,0' else 'results'
-          if os.environ['EVENT']=='push':
+          schedule_target=None
+          if os.environ['EVENT']=='schedule':
+              # GitHub may start this job after JST midnight or retry it days
+              # later. Only its immutable ORIGINAL run metadata anchors the
+              # target. This is not a Source acquisition or evidence timestamp.
+              run_id=int(os.environ['GITHUB_RUN_ID'])
+              request=urllib.request.Request(
+                  'https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+str(run_id),
+                  headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'User-Agent':ua,
+                           'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(request,timeout=20) as response:run=json.load(response)
+              assert (run['id']==run_id and run['event']=='schedule'
+                      and run['head_sha']==os.environ['GITHUB_SHA']),'SCHEDULE_RUN_REFERENCE_MISMATCH'
+              schedule_target=resolve_scheduled_target(os.environ['SCHEDULE'],
+                  run_created_at=datetime.fromisoformat(run['created_at'].replace('Z','+00:00')),
+                  observed_at=now)
+              targets=[(schedule_target['date'],schedule_target['mode'])]
+          elif os.environ['EVENT']=='push':
               # Isolated owner-requested live pilot. NEVER writes main or predicts.
               assert now.date().isoformat()=='2026-10-24','DATED_PILOT_EXPIRED'
               targets=[('2026-10-24','results'),('2026-10-25','cards')]
@@ -71,13 +86,18 @@ jobs:
               day=os.environ.get('DATES') or now.date().isoformat()
               assert ',' not in day,'SINGLE_DATE_ONLY'
               targets=[(day,mode)]
+          with urllib.request.urlopen(urllib.request.Request('https://www.jra.go.jp/robots.txt',headers={'User-Agent':ua}),timeout=20) as r:
+              rules=RobotFileParser();rules.parse(r.read(30000).decode().splitlines())
+          assert all(rules.can_fetch(ua,'https://www.jra.go.jp/JRADB/'+p) for p in ('accessD.html','accessS.html','accessU.html'))
           windows=[]
           for day,mode in targets:windows.extend(day_plan(day,mode))
           for i,w in enumerate(windows):w['index']=i
           p=Path('runtime_out/pedigree_day_plan.json');p.parent.mkdir(exist_ok=True)
-          p.write_text(json.dumps({'include':windows,'planned_at':now.isoformat(),'production_effect':'NONE'},ensure_ascii=False,indent=2)+'\n')
+          p.write_text(json.dumps({'include':windows,'planned_at':now.isoformat(),
+              'schedule_target':schedule_target,'production_effect':'NONE'},ensure_ascii=False,indent=2)+'\n')
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('matrix='+json.dumps({'include':[{'index':w['index']} for w in windows]},separators=(',',':'))+'\n')
           print('OFFICIAL_TARGET_RACES',sum(len(w['race_ids']) for w in windows),'BOUNDED_BATCHES',len(windows))
+          if schedule_target:print('SCHEDULING_REFERENCE_ONLY',json.dumps(schedule_target,separators=(',',':')))
           PY
       - uses: actions/attest@v4
         with:
