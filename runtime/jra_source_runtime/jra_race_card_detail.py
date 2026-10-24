@@ -3,13 +3,56 @@ import datetime, hashlib, http.cookiejar, html, re, urllib.parse, urllib.request
 from typing import Any, Dict, List, Tuple
 
 try:
-    from .source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from .source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 except ImportError:
-    from source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-RACE-CARD-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
 USER_AGENT="KeibaMetrics-JRA-Official-Detail/1.0"
+
+class _DetailTableExtractor(_OfficialGradeTableExtractor):
+    def __init__(self):
+        super().__init__()
+        self.jockey_cells={}
+        self._jockey_link=None
+        self._row_jockeys={}
+
+    def handle_starttag(self,tag,attrs):
+        super().handle_starttag(tag,attrs)
+        if tag.lower()=="tr":self._row_jockeys={}
+        # Preserve JRA's explicit frame label only in this detail parser.
+        # Other images and the shared text-table parser remain unchanged.
+        if tag.lower()=="img" and self._cell is not None:
+            labels=[value for key,value in attrs if key=="alt"]
+            label=labels[0] if len(labels)==1 else None
+            match=re.fullmatch(r"枠([1-8])(?:白|黒|赤|青|黄|緑|橙|桃)?",label or "")
+            if match:self._cell.append(match.group(1))
+        if tag.lower()=="a" and self._cell is not None:
+            attrs=dict(attrs);token=None
+            href=urllib.parse.urlsplit(str(attrs.get('href') or ''))
+            if (href.path=='/JRADB/accessK.html' and href.netloc in ('','www.jra.go.jp')
+                    and href.scheme in ('','https')):
+                values=urllib.parse.parse_qs(href.query).get('CNAME') or []
+                if len(values)==1:token=values[0]
+            action=re.search(r'''doAction\(\s*['"](/JRADB/accessK\.html)['"]\s*,\s*['"]([^'"]+)['"]\s*\)''',
+                             str(attrs.get('onclick') or ''))
+            if token is None and action:token=urllib.parse.unquote(action.group(2))
+            if token and re.fullmatch(r'pw04kmk[0-9]{6}/[0-9A-Fa-f]{2}',token):
+                self._jockey_link={'cell':len(self._row or []),'token':token,'parts':[]}
+
+    def handle_data(self,data):
+        if self._jockey_link is not None:self._jockey_link['parts'].append(data)
+        super().handle_data(data)
+
+    def handle_endtag(self,tag):
+        if tag.lower()=='a' and self._jockey_link is not None:
+            link=self._jockey_link;label=_norm(''.join(link['parts']))
+            if label:self._row_jockeys.setdefault(link['cell'],[]).append((label,link['token']))
+            self._jockey_link=None
+        if tag.lower()=='tr' and self._row is not None:
+            self.jockey_cells[id(self._row)]=self._row_jockeys
+        super().handle_endtag(tag)
 
 def _norm(v:Any)->str:
     return re.sub(r"\s+"," ",str(v or "")).strip()
@@ -285,7 +328,9 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     jockey_token_by_name=_person_token_map("accessK")
     trainer_token_by_name=_person_token_map("accessC")
     table=None
-    for t in _html_tables(decoded):
+    extractor=_DetailTableExtractor()
+    extractor.feed(decoded)
+    for t in extractor.tables:
         if not t: continue
         h=[_norm(x) for x in t[0]]
         if "馬番" in h and any("馬名" in x for x in h) and any("前走" in x for x in h):
@@ -303,6 +348,15 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         if no is None or no<1 or no>18:continue
         ident=_parse_identity(row[identity_i] if identity_i<len(row) else "")
         person=_parse_current_person(row[person_i] if person_i<len(row) else "")
+        # The person cell may append the official pre-rating (e.g. 110 M).
+        # Its current-rider link owns the rider label/token; rating text is
+        # retained in raw but cannot become part of the current rider's name.
+        links=set(extractor.jockey_cells.get(id(row),{}).get(person_i,[]))
+        rider=next(iter(links)) if len(links)==1 else None
+        if rider:
+            current_key=re.sub(r"[▲△◇☆★\s]+","",str(person.get('jockey') or ''))
+            label_key=re.sub(r"[▲△◇☆★\s]+","",rider[0])
+            if current_key!=label_key:person['jockey']=rider[0]
         frame_no=_num(row[0]) if len(row)>0 else None
         # Previous-run scratches are history, not the current runner status.
         current_cells=[_norm(z) for i,z in enumerate(row) if i not in run_indices]
@@ -319,7 +373,7 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         tkey=re.sub(r"[▲△◇☆★\s]+","",str(ident.get("trainer") or "")).strip()
         runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,
                         "horse_profile_token":token_by_name.get(cname),
-                        "jockey_profile_token":jockey_token_by_name.get(jkey),
+                        "jockey_profile_token":rider[1] if rider else jockey_token_by_name.get(jkey),
                         "trainer_profile_token":trainer_token_by_name.get(tkey),
                         **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
