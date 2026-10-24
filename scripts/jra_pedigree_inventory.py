@@ -121,7 +121,7 @@ def official_audit(root, *, target_date=None, prediction_date=None, plan_path=No
              for k,v in sorted(groups.items(),key=lambda item:str(item[0]))]
     mapping=json.loads((root/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
     registry=json.loads((root/'mapping/jra_evidence_feature_rule_registry_v1.3_20261010.json').read_text())
-    predictions=[];counts=collections.Counter();diagnostics=[]
+    predictions=[];counts=collections.Counter();diagnostics=[];no_bet=[];no_bet_counts=collections.Counter()
     requests=sorted((root/'runtime/requests').glob(f'*{prediction_date.replace("-","")}*FORMAL.json'))
     new_files={a['file'] for a in artifacts if a['date'] in (prediction_date,target_date) and a['file']!='20261024-cards-race0-r3.json'}
     for path in requests:
@@ -159,6 +159,38 @@ def official_audit(root, *, target_date=None, prediction_date=None, plan_path=No
                  'capital':final['capital_policy_decision']['required_capital'] if final else None,
                  'new_pilot_files_available_before_cutoff':sum(datetime.fromisoformat(a['captured_at'])<=datetime.fromisoformat(req['prediction_cutoff']) for a in artifacts if a['file'] in new_files)}
         predictions.append(summary)
+    # Full20 can be valid even when the registered AKI selector correctly
+    # stops before PRE_KRS. Do not drop those horses from BVI measurement or
+    # mislabel a zero-exposure terminal as a Signed FINAL.
+    for path in sorted((root/'runtime/jra_no_bet_terminals').glob(f'*{prediction_date.replace("-","")}*.json')):
+        terminal=json.loads(path.read_text());rid=terminal['race_id']
+        if rid in {r['race_id'] for r in predictions}:continue
+        entry={'race_id':rid,'terminal_file_sha256':digest(path.read_bytes()),'status':'NUMERICAL_NO_BET_NOT_REPLAYED',
+               'decision_reason':terminal.get('decision_reason'),'krs_executed':False,'ticket_count':0,'capital':0}
+        try:
+            if terminal.get('profile')!='KM-JRA-PRODUCTION-AKI-SELECTION-NO-BET-TERMINAL-v1-20261012':
+                raise ValueError('NOT_FULL20_AKI_TERMINAL; SEPARATE_EVIDENCE_CLOSURE_REQUIRED')
+            from jra_aki_no_bet_terminal import verify_aki_no_bet_terminal
+            verification=verify_aki_no_bet_terminal(terminal,race_id=rid,require_live=True,root=root)
+            cutoff_time=datetime.fromisoformat(terminal['prediction_cutoff'])
+            if not _attested(path,signer='km-jra-formal-single-entry.yml',not_after=cutoff_time):
+                raise ValueError('NO_BET_ORIGINAL_CUTOFF_OIDC_UNVERIFIED')
+            source_dir=root/'runtime/executions'/terminal['source_execution_id']/'SOURCE'
+            sp=next((p for p in source_dir.glob('runs/*/source_receipt_envelope.json')
+                     if json.loads(p.read_text())['artifact']['source_snapshot_sha256']==terminal['source_snapshot_sha256']),None)
+            if sp is None or not _verified_source(sp) or not _attested(sp,not_after=cutoff_time):
+                raise ValueError('NO_BET_SIGNED_SOURCE_ORIGINAL_CUTOFF_UNVERIFIED')
+            from copy import deepcopy
+            req=deepcopy(terminal['failure_report']['prepared_numerical_request'])
+            req['source_snapshot_sha256']=terminal['source_snapshot_sha256']
+            source=json.loads(sp.read_text())['artifact'];proof=build_bvi_consumption(req,mapping,source)
+            no_bet_counts.update(proof['counts'])
+            entry.update(status='SIGNED_SOURCE_AND_OIDC_FULL20_AKI_NO_BET_BVI_REPLAY_VERIFIED',
+                source_snapshot_sha256=source['source_snapshot_sha256'],cutoff=terminal['prediction_cutoff'],
+                counts=proof['counts'],bvi=proof['runners'],full20_verification=verification,
+                static_krs_lineage='REGISTERED_AKI_STOP; NO_KRS_OR_FINAL_CLAIM')
+        except (ValueError,KeyError,RuntimeError) as exc:entry['reason']=str(exc)
+        no_bet.append(entry)
     # Three real signed SOURCEs, isolated current-data vs held-out inflow; NEVER OOS.
     with tempfile.TemporaryDirectory() as temp:
         before=Path(temp);(before/'runtime/pedigree_corpus').mkdir(parents=True)
@@ -244,6 +276,8 @@ def official_audit(root, *, target_date=None, prediction_date=None, plan_path=No
         'permanent_registry_horse_ids':0,'identity_scope':'EXACT_NAME_SIRE_DAM_COMPOSITE; OBSERVED_CNAME_IS_NAVIGATION_ONLY',
         'quality_groups':quality,'quality_scope':'INDEPENDENTLY_OIDC_VERIFIED_JRA_PUBLISHED_HISTORIES; VENUE_FIELD_PRESERVED_INCLUDING_NON_JRA_PAST_RUNS',
         'production_predictions':predictions,'bvi_counts':dict(counts),'inflow_diagnostics':diagnostics,
+        'numerical_no_bet_predictions':no_bet,'numerical_no_bet_bvi_counts':dict(no_bet_counts),
+        'all_race_bvi_counts':dict(counts+no_bet_counts),
         'forward_oos':score,'future_production_inflow_consumption':'PENDING_OWNER_APPROVAL_AND_NEXT_SIGNED_SOURCE',
         'predictive_improvement_demonstrated':False,'source_trust_note':'Harvest OIDC independently reverified; legacy SOURCE corpus trust follows unchanged Reader authority'}
 
@@ -255,7 +289,8 @@ if __name__=='__main__':
     a.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     if a.summary_output:
         from jra_bvi_consumption import sha
-        summary={k:v for k,v in result.items() if k not in ('quality_groups','production_predictions','inflow_diagnostics','forward_oos')}
+        summary={k:v for k,v in result.items() if k not in ('quality_groups','production_predictions','inflow_diagnostics','forward_oos','numerical_no_bet_predictions')}
+        summary['numerical_no_bet_predictions']=[{k:v for k,v in row.items() if k!='bvi'} for row in result['numerical_no_bet_predictions']]
         summary['production_predictions']=[{k:v for k,v in row.items() if k not in ('bvi','frozen_corpus_manifest')} for row in result['production_predictions']]
         summary['forward_oos']={k:v for k,v in result['forward_oos'].items() if k in ('status','policy_fingerprint','eligible_settled_races','required_forward_races','automatic_promotion')}
         summary['full_audit_file_sha256']=digest(a.output.read_bytes());summary['sha256']=sha(summary)

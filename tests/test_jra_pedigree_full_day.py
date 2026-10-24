@@ -135,3 +135,19 @@ def test_workflow_is_serial_and_never_connects_to_formal_or_krs():
     assert 'ADMISSION_OUTCOME' in text and 'test "$ADMISSION_OUTCOME" = success' in text
     assert '/krs/' not in text and 'km-jra-formal' not in text
     assert 'HEAD:$TARGET_BRANCH' in text
+
+
+def test_real_aki_no_bet_full20_bvi_is_not_misclassified_as_uncomputed():
+    from jra_aki_no_bet_terminal import verify_aki_no_bet_terminal
+    from jra_bvi_consumption import build_bvi_consumption
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    total=0
+    for race in ('NGT-20261024-R01','KYO-20261024-R04','TKY-20261024-R05'):
+        terminal=json.loads((ROOT/'runtime/jra_no_bet_terminals'/f'KM-JRA-{race}-LIVE-R1.json').read_text())
+        verified=verify_aki_no_bet_terminal(terminal,require_live=True,root=ROOT)
+        proof=build_bvi_consumption(terminal['failure_report']['prepared_numerical_request'],mapping)
+        assert verified['actual_full20'] and not verified['signed_final_verified']
+        assert len(proof['runners'])*20==verified['terminal_index_count']
+        assert verified['total_investment']==0
+        total+=len(proof['runners'])
+    assert total==40
