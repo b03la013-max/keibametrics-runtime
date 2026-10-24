@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
-from jra_bvi_env_shadow import (PROTOCOL_SHA256, _eligible_rows, evaluate_chronological,
+from jra_bvi_env_shadow import (PROTOCOL, PROTOCOL_SHA256, _eligible_rows, _features, _solve_spd, evaluate_chronological,
                                 predict, prediction_input_sha, sha, train_model, verify_model)
 
 
@@ -58,6 +59,37 @@ class ModelResearchTests(unittest.TestCase):
         self.assertFalse(m["historical_forward_oos_eligible"])
         self.assertFalse(m["model_training_eligibility"])
         self.assertFalse(m["production_authority"])
+
+    def test_cholesky_solves_known_spd_system_without_iterations(self):
+        coefs, pivot = _solve_spd([[4.0, 1.0], [1.0, 3.0]], [1.0, 2.0])
+        self.assertAlmostEqual(coefs[0], 1 / 11, places=14)
+        self.assertAlmostEqual(coefs[1], 7 / 11, places=14)
+        self.assertGreater(pivot, 0)
+        with self.assertRaisesRegex(ValueError, "NOT_SPD"):
+            _solve_spd([[0.0]], [1.0])
+
+    def test_control_satisfies_same_weighted_ridge_normal_equations(self):
+        control = self.model["stage_models"]["CONTROL"]
+        self.assertTrue(control["converged"])
+        self.assertEqual(control["solver"], "DENSE_CHOLESKY_CONTROL")
+        self.assertLess(control["normal_equation_max_abs_residual"], PROTOCOL["tolerance"])
+        self.assertEqual(control["sweeps"], 1)
+        rows, _ = _eligible_rows(self.data)
+        training = [r for r in rows if r["date"] < "2026-08-01"]
+        coefs = {t["term"]: t["coefficient"] for t in control["terms"]}
+        predictions = [math.fsum(coefs.get(k, 0) * v for k, v in _features(r, "CONTROL").items()) for r in training]
+        for term, coefficient in coefs.items():
+            penalty = 0 if json.loads(term)[0] == "intercept" else PROTOCOL["penalty"]["CONTROL"]
+            gradient = math.fsum((pred - r["target"]) * _features(r, "CONTROL").get(term, 0) / 6
+                                 for r, pred in zip(training, predictions)) + penalty * coefficient
+            self.assertLess(abs(gradient), 1e-10, term)
+
+    def test_sparse_pedigree_solvers_and_penalties_unchanged(self):
+        self.assertEqual(PROTOCOL["penalty"], {"CONTROL": 4.0, "GENERAL": 12.0, "ENVIRONMENT": 24.0, "SIRE_DAMSIRE_PAIR": 32.0})
+        for stage in ("GENERAL", "ENVIRONMENT"):
+            self.assertTrue(self.model["stage_models"][stage]["converged"])
+        self.assertEqual(PROTOCOL["minimum_composite_offspring"], 4)
+        self.assertEqual(PROTOCOL["minimum_runs"], 12)
 
     def test_determinism_and_json_round_trip(self):
         again = train_model(self.data, train_before="2026-08-01")

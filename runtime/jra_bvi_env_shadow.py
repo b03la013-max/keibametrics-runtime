@@ -37,7 +37,7 @@ PROTOCOL = {
     "minimum_runs": 12, "minimum_composite_offspring": 4,
     "distance_bucket_metres": 400, "coordinate_descent_sweeps": 400,
     "tolerance": 1e-10,
-    "control_optimizer": "EXACT_COMPLETE_FACTOR_RECENTERING_PRESERVES_FITTED_VALUES_AND_MINIMIZES_RIDGE_OFFSET",
+    "control_optimizer": "DENSE_CHOLESKY_CONTROL_STRICT_NORMAL_EQUATION_RESIDUAL",
     "label": "1-(finish-1)/(field_size-1)",
     "horse_weight": "1 / number_of_training_runs_of_exact_composite_horse",
     "ability": "shrunk_mean_of_strictly_earlier_label_dates; 3 neutral prior observations",
@@ -225,6 +225,8 @@ def _fit_stage(rows, weights, residual, stage):
             rejected[json.loads(key)[0]] += 1
             continue
         supported[key] = members
+    if stage == "CONTROL":
+        return _fit_control_cholesky(rows, weights, residual, supported, offspring)
     fitted = [0.0] * len(rows)
     coefs = {k: 0.0 for k in supported}
     max_delta = 0.0
@@ -246,19 +248,6 @@ def _fit_stage(rows, weights, residual, stage):
                 fitted[i] += delta * value
             coefs[key] = new
             max_delta = max(max_delta, abs(delta))
-        if stage == "CONTROL":
-            # Complete one-hot factors and the intercept have redundant
-            # offsets. Recenter each full-coverage factor exactly: fitted
-            # values do not change and its ridge penalty is minimized. This
-            # removes slow intercept/category drift without a new parameter.
-            intercept = _term("intercept")
-            for factor in ("class", "surface", "venue", "distance"):
-                keys = [k for k in supported if json.loads(k)[0] == factor]
-                if keys and sum(len(supported[k]) for k in keys) == len(rows):
-                    offset = sum(coefs[k] for k in keys) / len(keys)
-                    for key in keys:
-                        coefs[key] -= offset
-                    coefs[intercept] += offset
         sweeps = sweep + 1
         if max_delta < PROTOCOL["tolerance"]:
             break
@@ -271,6 +260,72 @@ def _fit_stage(rows, weights, residual, stage):
                                   "effective_weight": round(sum(weights[i] for i, _ in members), 8)}})
     return {"terms": terms, "unsupported_groups": dict(rejected), "sweeps": sweeps,
             "converged": max_delta < PROTOCOL["tolerance"], "last_max_delta": max_delta}, fitted
+
+
+def _solve_spd(matrix, rhs):
+    """Deterministic dense Cholesky, only for the small CONTROL design.
+
+    Parent/interactions keep the sparse solver. CONTROL has few categorical
+    terms but nearly redundant category/intercept offsets: solving its exact
+    same ridge normal equations avoids slow coordinate drift. No penalty,
+    feature, target, label split or result-based tuning changes.
+    """
+    n = len(rhs)
+    lower = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1):
+            value = matrix[i][j] - math.fsum(lower[i][k] * lower[j][k] for k in range(j))
+            if i == j:
+                if not math.isfinite(value) or value <= 0:
+                    raise ValueError("BVI_ENV_CONTROL_NORMAL_MATRIX_NOT_SPD")
+                lower[i][j] = math.sqrt(value)
+            else:
+                lower[i][j] = value / lower[j][j]
+    forward = [0.0] * n
+    for i in range(n):
+        forward[i] = (rhs[i] - math.fsum(lower[i][j] * forward[j] for j in range(i))) / lower[i][i]
+    coefs = [0.0] * n
+    for i in reversed(range(n)):
+        coefs[i] = (forward[i] - math.fsum(lower[j][i] * coefs[j] for j in range(i + 1, n))) / lower[i][i]
+    if not all(math.isfinite(c) for c in coefs):
+        raise ValueError("BVI_ENV_CONTROL_SOLUTION_NOT_FINITE")
+    return coefs, min(lower[i][i] for i in range(n))
+
+
+def _fit_control_cholesky(rows, weights, residual, supported, offspring):
+    keys = list(supported)
+    index = {key: j for j, key in enumerate(keys)}
+    count = len(keys)
+    matrix = [[0.0] * count for _ in range(count)]
+    rhs = [0.0] * count
+    design = []
+    for row, weight, target in zip(rows, weights, residual):
+        active = [(index[k], value) for k, value in _features(row, "CONTROL").items()
+                  if k in index and value]
+        design.append(active)
+        for j, value in active:
+            rhs[j] += weight * value * target
+            for k, other in active:
+                if k <= j:
+                    matrix[j][k] += weight * value * other
+    for j, key in enumerate(keys):
+        if json.loads(key)[0] != "intercept":
+            matrix[j][j] += PROTOCOL["penalty"]["CONTROL"]
+        for k in range(j):
+            matrix[k][j] = matrix[j][k]
+    coefs, minimum_pivot = _solve_spd(matrix, rhs)
+    equation_residual = max(abs(math.fsum(a * b for a, b in zip(row, coefs)) - target)
+                            for row, target in zip(matrix, rhs))
+    fitted = [math.fsum(coefs[j] * value for j, value in active) for active in design]
+    terms = [{"term": key, "factor": json.loads(key)[0], "coefficient": coefs[j],
+              "support": {"runs": len(supported[key]), "composite_offspring": len(offspring[key]),
+                          "effective_weight": round(sum(weights[i] for i, _ in supported[key]), 8)}}
+             for j, key in enumerate(keys)]
+    return {"terms": terms, "unsupported_groups": {}, "sweeps": 1,
+            "solver": "DENSE_CHOLESKY_CONTROL", "convergence_metric": "MAX_ABSOLUTE_NORMAL_EQUATION_RESIDUAL",
+            "converged": equation_residual < PROTOCOL["tolerance"], "last_max_delta": equation_residual,
+            "normal_equation_max_abs_residual": equation_residual,
+            "normal_matrix_dimension": count, "minimum_cholesky_diagonal": minimum_pivot}, fitted
 
 
 def _parent_distribution(rows, key):
