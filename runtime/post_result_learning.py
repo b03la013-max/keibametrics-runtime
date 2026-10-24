@@ -126,6 +126,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     inv=int(inv_raw) if inv_raw is not None else int(coverage["investment"] or 0)
     ret_raw=settlement.get("total_payout",settlement.get("return"))
     settled_inv_raw=settlement.get("settled_investment")
+    refund=int(settlement.get("refund") or 0)
+    effective_inv=int(settlement.get("effective_investment",inv-refund))
+    if not (0<=refund<=inv and effective_inv==inv-refund):
+        raise LearningError("SETTLEMENT_REFUND_INCONSISTENT")
     if settlement_status in {"PENDING","UNKNOWN"}:
         ret=None
         settled_inv=None
@@ -140,9 +144,9 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         settlement_completeness=(settled_inv/inv*100.0) if settled_inv is not None and inv>0 else None
     else:
         ret=int(ret_raw) if ret_raw is not None else None
-        settled_inv=inv
-        pfs=(ret/inv*100.0) if ret is not None and inv>0 else None
-        profit_loss=(ret-inv) if ret is not None else None
+        settled_inv=effective_inv
+        pfs=(ret/effective_inv*100.0) if ret is not None and effective_inv>0 else None
+        profit_loss=(ret+refund-inv) if ret is not None else None
         settlement_completeness=100.0 if ret is not None else None
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
@@ -209,6 +213,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "production_change_authorized":False,
       "prequential_only":True,
     }
+    # Preserve historical review hashes when the original settlement did not
+    # carry refund accounting. New settlements expose the separate denominator.
+    if refund or "effective_investment" in settlement:
+        review["capital"].update(refund=refund,effective_investment=effective_inv)
     review["pfs_improvement"]=build_pfs_improvement_assessment(review)
     review["sha256"]=_sha(review)
     return review

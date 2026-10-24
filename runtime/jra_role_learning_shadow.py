@@ -12,9 +12,11 @@ import os
 import io
 import zipfile
 import subprocess
+import re
 from pathlib import Path
 
 CANDIDATE_ID = 'JRA-ROLE-LEARNING-20261018-R1'
+OOS_SCOPE = 'CONDITIONAL_RANK_EQUAL_EXPOSURE_ONLY'
 EVIDENCE_GROUPS = {
  'course': {'same_course_fit','same_course_distance_quality','course_geometry_fit','similar_geometry_fit','distance_fit','same_distance_fit'},
  'class_form': {'class_performance','recent_form','recent_consistency','opponent_strength','hidden_class'},
@@ -306,33 +308,103 @@ def settle_shadow(shadow, result):
 def persist_shadow_result(root, result):
     root=Path(root);rid=result['race_id'];pre=root/'runtime/role_rescue_shadow'/(rid+'.json')
     if not pre.exists():return None
+    path=root/'runtime/role_rescue_shadow_results'/(rid+'.json')
+    if path.exists():
+        old=json.loads(path.read_text());shadow=json.loads(pre.read_text())
+        canonical=root/'runtime/results'/(rid+'.json')
+        if (shadow.get('sha256')!=digest({k:v for k,v in shadow.items() if k!='sha256'})
+                or old.get('sha256')!=digest({k:v for k,v in old.items() if k!='sha256'})
+                or old.get('shadow_sha256')!=shadow.get('sha256')
+                or old.get('source_sha256')!=shadow.get('source_sha256')
+                or old.get('official_raw_sha256')!=result['official_result']['raw_sha256']
+                or result['frozen_prediction_ref']['immutable_final_sha256']!=shadow['baseline_final_sha256']
+                or (old.get('result_request_sha256')!=digest(result) if 'result_request_sha256' in old
+                    else not canonical.exists() or json.loads(canonical.read_text())!=result)):
+            raise ValueError('IMMUTABLE_SHADOW_RESULT_CONFLICT')
+        write_status(root/'runtime/role_rescue_shadow_status.json',records_dir=path.parent)
+        return old  # Legacy qualification is retained as recorded, never re-signed/relabelled.
     out=settle_shadow(json.loads(pre.read_text()),result)
     shadow=json.loads(pre.read_text())
     witness=actions_pre_result_witness(shadow)
     out['persistence_witness']=witness
-    out['oos_eligible']=bool(witness.get('verified') and shadow.get('temporally_eligible')
+    out['result_request_sha256']=digest(result)
+    out['oos_candidate_id']=shadow.get('oos_candidate_id')
+    out['oos_preregistration_sha256']=shadow.get('oos_preregistration_sha256')
+    out['prediction_input_sha256']=shadow.get('prediction_input_sha256')
+    registration=witness.get('preregistration') or {}
+    out['preregistration_verified']=bool(witness.get('preregistration_verified') is True
+        and registration.get('archive_and_pins_verified') is True and registration.get('owner_approval_verified') is True)
+    out['oos_eligibility_scope']=(witness.get('preregistration') or {}).get('eligibility_scope')
+    out['oos_pin_fingerprint']=(witness.get('preregistration') or {}).get('pin_fingerprint')
+    out['role_learning_arms_oos_eligible']=None
+    out['role_learning_arms_eligibility_status']='NOT_ESTABLISHED_BY_RANK_COHORT; STATE_EXISTENCE_BEFORE_SOURCE_REQUIRES_SEPARATE_EVIDENCE'
+    out['oos_eligible']=bool(witness.get('verified') and out['preregistration_verified']
+        and out['oos_eligibility_scope']==OOS_SCOPE and shadow.get('temporally_eligible')
         and instant(shadow['observed_at']).date().isoformat()>POLICY['training_end']
         and shadow.get('classification')=='PRE_CUTOFF_SHADOW')
     if out.get('conditional_rank_evaluation'):
         out['conditional_rank_evaluation']['oos_eligible']=out['oos_eligible']
     if out.get('conditional_rank_portfolio_result'):
         out['conditional_rank_portfolio_result']['oos_eligible']=out['oos_eligible']
-    out['eligibility_status']='FORWARD_OOS_ELIGIBLE' if out['oos_eligible'] else 'PENDING_SERVER_TIMESTAMP_AND_ARTIFACT_CONTENT_WITNESS'
+    out['eligibility_status']='FORWARD_OOS_ELIGIBLE' if out['oos_eligible'] else 'PENDING_PREREGISTRATION_AND_INDEPENDENT_CONTENT_WITNESS'
     out['sha256']=digest({k:v for k,v in out.items() if k!='sha256'})
-    path=root/'runtime/role_rescue_shadow_results'/(rid+'.json')
     if path.exists():
         if json.loads(path.read_text())!=out:raise ValueError('IMMUTABLE_SHADOW_RESULT_CONFLICT')
     else:
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    records=[json.loads(p.read_text()) for p in sorted(path.parent.glob('*.json'))]
+    write_status(root/'runtime/role_rescue_shadow_status.json',records_dir=path.parent)
+    return out
+
+def write_status(path='runtime/role_rescue_shadow_status.json', *, records_dir=None):
+    """Rebuild only the disposable view from immutable per-race records."""
+    path=Path(path)
+    records_dir=Path(records_dir) if records_dir is not None else path.parent/'role_rescue_shadow_results'
+    records=[json.loads(p.read_text()) for p in sorted(records_dir.glob('*.json'))]
     ids=[r['race_id'] for r in records]
     if len(ids)!=len(set(ids)):raise ValueError('DUPLICATE_SHADOW_RACE')
-    tracker={'candidate_id':CANDIDATE_ID,'distinct_races':len(ids),'forward_oos_verified_races':sum(r['oos_eligible'] for r in records),
+    def witnessed(r):
+        witness=r.get('persistence_witness') or {};registration=witness.get('preregistration') or {}
+        return bool(r.get('oos_eligible') and r.get('preregistration_verified')
+            and witness.get('verified') and registration.get('verified')
+            and registration.get('archive_and_pins_verified') is True and registration.get('owner_approval_verified') is True
+            and r.get('oos_eligibility_scope')==registration.get('eligibility_scope')==OOS_SCOPE
+            and re.fullmatch(r'[0-9a-f]{64}',str(r.get('oos_pin_fingerprint','')))
+            and r.get('oos_pin_fingerprint')==registration.get('pin_fingerprint')
+            and r.get('oos_candidate_id')==registration.get('candidate_id')
+            and r.get('oos_preregistration_sha256')==registration.get('registration_sha256')
+            and r.get('oos_candidate_id') and r.get('oos_preregistration_sha256'))
+    pins={}
+    for r in records:
+        if witnessed(r):pins.setdefault(r['oos_candidate_id'],set()).add(r['oos_pin_fingerprint'])
+    conflicted={cid for cid,values in pins.items() if len(values)>1}
+    def qualified(r):return witnessed(r) and r['oos_candidate_id'] not in conflicted
+    cohorts={}
+    for r in records:
+        cid=r.get('oos_candidate_id') or 'LEGACY_UNREGISTERED'
+        cohort=cohorts.setdefault(cid,{'distinct_races':0,'forward_oos_verified_races':0,'days':set(),'venues':set()})
+        cohort['distinct_races']+=1;cohort['forward_oos_verified_races']+=qualified(r)
+        if qualified(r):cohort['days'].add(r['race_id'].split('-')[3]);cohort['venues'].add(r['race_id'].split('-')[2])
+    for cohort in cohorts.values():
+        cohort['days']=sorted(cohort['days']);cohort['venues']=sorted(cohort['venues'])
+        cohort['minimum_distinct_races']=60;cohort['minimum_days']=3;cohort['minimum_venues']=2
+        cohort['automatic_promotion']=False
+        cohort['eligibility_scope']=OOS_SCOPE if cohort['forward_oos_verified_races'] else None
+    for cid,cohort in cohorts.items():
+        cohort['pin_fingerprints']=sorted(pins.get(cid,set()))
+        cohort['eligibility_status']='COHORT_PIN_CONFLICT' if cid in conflicted else 'COLLECTING_NO_AUTOMATIC_PROMOTION'
+    tracker={'candidate_id':CANDIDATE_ID,'distinct_races':len(ids),'forward_oos_verified_races':sum(qualified(r) for r in records),
+             'legacy_recorded_eligible_races':sum(bool(r.get('oos_eligible')) and not r.get('preregistration_verified') for r in records),
+             'unqualified_recorded_claims':sum(bool(r.get('oos_eligible')) and not qualified(r) for r in records),
+             'cohorts':cohorts,
+             'promotion_denominator':'PER_COHORT_ONLY; legacy/global totals never satisfy a new cohort gate',
              'status':'COLLECTING_NO_AUTOMATIC_PROMOTION','automatic_promotion':False,
-             'results':[{k:r[k] for k in ('race_id','sha256','policy_fingerprint','oos_eligible')} for r in records]}
+             'results':[{**{k:r[k] for k in ('race_id','sha256','policy_fingerprint')},
+                         'oos_candidate_id':r.get('oos_candidate_id'),'recorded_oos_eligible':r.get('oos_eligible'),
+                         'oos_eligible':qualified(r)} for r in records]}
     tracker['sha256']=digest(tracker)
-    (root/'runtime/role_rescue_shadow_status.json').write_text(json.dumps(tracker,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    return out
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(json.dumps(tracker,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+    return tracker
 
 def pre_result_witness(root,shadow):
     """Verify an actual tracked addition, never infer birth from a shallow root."""
@@ -366,7 +438,187 @@ def utility_artifact_name(run_id, attempt):
     return 'krs-utility-'+str(run_id)+('' if int(attempt)==1 else '-attempt-'+str(attempt))
 
 
-def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
+def _registration_scope(reg):
+    keys=('sidecar_code_sha256','rank_code_sha256','checkpoint_code_sha256','model_sha256',
+          'model_policy_sha256','portfolio_policy_sha256','role_policy_fingerprint','model_candidate_id',
+          'sidecar_candidate_id','portfolio_candidate_id','current_authority_manifest','eligibility_scope')
+    fingerprint=digest({k:reg[k] for k in keys})
+    scope=digest({'candidate_id':reg['candidate_id'],'pin_fingerprint':fingerprint,
+        'target_race_ids':reg['target_race_ids'],'input_scope':reg.get('input_scope'),
+        'conditional_p2':reg.get('conditional_p2'),'production_effect':reg['production_effect'],
+        'minimum_forward_distinct_races':60,'minimum_forward_days':3,'minimum_forward_venues':2,
+        'no_automatic_promotion':True,'actual_purchase_authority':False,'notification_authority':False})
+    return fingerprint,scope
+
+
+def _owner_endpoint(ref):
+    match=re.fullmatch(re.escape('https://github.com/'+WITNESS_REPO+'/pull/')+
+        r'([1-9][0-9]*)#(issuecomment|pullrequestreview)-([1-9][0-9]*)',str(ref))
+    if not match:raise ValueError('OWNER_PROVIDER_REFERENCE_REQUIRED')
+    pr,kind,number=match.groups()
+    return ('issues/comments/'+number if kind=='issuecomment' else 'pulls/'+pr+'/reviews/'+number),pr,kind,int(number)
+
+
+def _owner_body(record):
+    if not isinstance(record,dict) or not isinstance(record.get('body'),str):raise ValueError('OWNER_EXPLICIT_SCOPE_APPROVAL_REQUIRED')
+    body=record['body'].strip()
+    if body.startswith('```json\n') and body.endswith('\n```'):body=body[8:-4]
+    out=json.loads(body)
+    if not isinstance(out,dict):raise ValueError('OWNER_EXPLICIT_SCOPE_APPROVAL_REQUIRED')
+    return out
+
+
+def _read_owner_approval(reg, api):
+    import base64
+    endpoint,_,_,_=_owner_endpoint(reg.get('owner_approval_ref'))
+    record=json.loads(api(endpoint));body=_owner_body(record);head=body['approved_head_sha']
+    if not re.fullmatch(r'[0-9a-f]{40}',str(head)):raise ValueError('OWNER_EXACT_HEAD_REQUIRED')
+    hashes={}
+    for path in ('runtime/jra_role_learning_shadow.py','runtime/jra_conditional_rank_shadow.py','runtime/jra_shadow_checkpoint.py'):
+        content=base64.b64decode(json.loads(api('contents/'+path+'?ref='+head))['content'])
+        hashes[path]=hashlib.sha256(content).hexdigest()
+    model=json.loads(base64.b64decode(json.loads(api('contents/research/jra_conditional_rank/model.json?ref='+head))['content']))
+    from jra_conditional_rank_shadow import policy_sha
+    if model.get('sha256')!=digest({k:v for k,v in model.items() if k!='sha256'}):raise ValueError('OWNER_HEAD_MODEL_HASH')
+    return {'endpoint':endpoint,'record':record,'approved_head_sha':head,'code_sha256':hashes,
+            'model_sha256':model['sha256'],'model_policy_sha256':policy_sha(model)}
+
+
+def snapshot_preregistration_owner_approvals(root, output):
+    """Existing CI archives authenticated read-only provider responses before SOURCE."""
+    def api(path):return subprocess.check_output(['gh','api','--hostname','github.com',
+        'repos/'+WITNESS_REPO+'/'+path],timeout=30,stderr=subprocess.DEVNULL)
+    records={}
+    for path in sorted((Path(root)/'runtime/jra_race_day_plan').glob('*.json')):
+        reg=json.loads(path.read_text()).get('forward_oos_preregistration') or {}
+        if not isinstance(reg,dict) or reg.get('active') is not True or not reg.get('owner_approval_ref'):continue
+        try:records[reg['owner_approval_ref']]=_read_owner_approval(reg,api)
+        except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError) as exc:
+            records[str(reg['owner_approval_ref'])]={'error':type(exc).__name__}
+    Path(output).write_text(json.dumps(records,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+    return records
+
+
+def _preregistration_proof(shadow, proof):
+    """Bind the existing day-plan cohort to an EARLIER CI archive, not producer time."""
+    try:
+        reg=shadow.get('oos_preregistration')
+        if not isinstance(reg,dict) or not isinstance(proof,dict):raise ValueError('PREREGISTRATION_PROOF_MISSING')
+        if (shadow.get('oos_preregistration_sha256')!=digest(reg)
+                or reg.get('sha256')!=digest({k:v for k,v in reg.items() if k!='sha256'})):
+            raise ValueError('PREREGISTRATION_HASH')
+        if reg.get('active') is not True or reg.get('status')!='OWNER_APPROVED_PREREGISTRATION':
+            raise ValueError('PREREGISTRATION_INACTIVE_OR_OWNER_APPROVAL_MISSING')
+        cid=reg.get('candidate_id');rank=shadow.get('conditional_rank_comparison') or {};portfolio=shadow.get('conditional_rank_portfolio') or {}
+        if (not isinstance(cid,str) or not re.fullmatch(r'JRA-[A-Z0-9-]{5,100}',cid)
+                or cid==rank.get('candidate_id') or shadow.get('oos_candidate_id')!=cid
+                or reg.get('model_candidate_id')!=rank.get('candidate_id')
+                or reg.get('sidecar_candidate_id')!=shadow.get('candidate_id')
+                or reg.get('portfolio_candidate_id')!=portfolio.get('candidate_id')
+                or reg.get('current_authority_manifest')!=shadow.get('authority_manifest')
+                or shadow['race_id'] not in reg.get('target_race_ids',[])):
+            raise ValueError('PREREGISTRATION_COHORT_OR_MODEL_IDENTITY')
+        if (reg.get('minimum_forward_distinct_races')!=60 or reg.get('minimum_forward_days')!=3
+                or reg.get('minimum_forward_venues')!=2 or reg.get('no_automatic_promotion') is not True
+                or reg.get('eligibility_scope')!=OOS_SCOPE or shadow.get('oos_eligibility_scope')!=OOS_SCOPE
+                or reg.get('production_effect')!='NONE' or reg.get('actual_purchase_authority') is not False
+                or reg.get('notification_authority') is not False):
+            raise ValueError('PREREGISTRATION_SCOPE')
+        pins={'sidecar_code_sha256':shadow['code_sha256'],'rank_code_sha256':rank['code_sha256'],
+              'checkpoint_code_sha256':shadow['oos_checkpoint_code_sha256'],
+              'model_sha256':rank['model_sha256'],'model_policy_sha256':rank['model_policy_sha256'],
+              'portfolio_policy_sha256':portfolio['policy_sha256'],'role_policy_fingerprint':shadow['policy_fingerprint']}
+        if any(reg.get(k)!=v for k,v in pins.items()):raise ValueError('PREREGISTRATION_CODE_MODEL_POLICY_PIN')
+        pin_fingerprint,approval_scope=_registration_scope(reg)
+        r=proof['run'];a=proof['artifact'];raw=proof['archive'];pointer=shadow['oos_preregistration_witness']
+        if not all(isinstance(x,dict) for x in (r,a,pointer)) or not isinstance(raw,bytes):
+            raise ValueError('PREREGISTRATION_PROVIDER_TYPE')
+        if (r.get('repository',{}).get('full_name')!=WITNESS_REPO
+                or r.get('head_repository',{}).get('full_name')!=WITNESS_REPO or r.get('head_branch')!='main'
+                or r.get('path')!='.github/workflows/km-jra-learning-binding-audit.yml'
+                or r.get('event') not in {'push','workflow_dispatch'} or r.get('conclusion')!='success'
+                or not re.fullmatch(r'[0-9a-f]{40}',str(r.get('head_sha','')))
+                or r.get('id')!=pointer.get('run_id') or a.get('id')!=pointer.get('artifact_id')
+                or r.get('run_attempt',1)!=pointer.get('run_attempt',1)
+                or a.get('name')!='jra-learning-mechanical-'+str(r['id'])
+                or a.get('workflow_run',{}).get('id')!=r['id']
+                or a.get('workflow_run',{}).get('head_sha')!=r.get('head_sha') or a.get('expired') is not False
+                or len(raw)>32*1024*1024 or a.get('digest')!='sha256:'+hashlib.sha256(raw).hexdigest()):
+            raise ValueError('PREREGISTRATION_PROVIDER_IDENTITY_OR_DIGEST')
+        boundary=instant(shadow['source_freeze_at'])
+        if not (instant(reg['registered_at'])<=instant(r['created_at'])<=instant(a['created_at'])
+                <=instant(a['updated_at'])<boundary<=instant(shadow['prediction_cutoff'])):
+            raise ValueError('PREREGISTRATION_NOT_INDEPENDENTLY_AVAILABLE_BEFORE_SOURCE')
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            def member(name):
+                entries=[i for i in z.infolist() if i.filename==name]
+                if len(entries)!=1 or entries[0].file_size>8*1024*1024:raise ValueError('PREREGISTRATION_ARCHIVE_MEMBER')
+                return z.read(entries[0])
+            day=shadow['race_id'].split('-')[3];day=day[:4]+'-'+day[4:6]+'-'+day[6:]
+            plan=json.loads(member('runtime/jra_race_day_plan/'+day+'.json'))
+            if plan.get('forward_oos_preregistration')!=reg:raise ValueError('PREREGISTRATION_FROZEN_BODY')
+            for path,pin in [('runtime/jra_role_learning_shadow.py','sidecar_code_sha256'),
+                             ('runtime/jra_conditional_rank_shadow.py','rank_code_sha256'),
+                             ('runtime/jra_shadow_checkpoint.py','checkpoint_code_sha256')]:
+                if hashlib.sha256(member(path)).hexdigest()!=reg[pin]:raise ValueError('PREREGISTRATION_FROZEN_CODE')
+            model=json.loads(member('research/jra_conditional_rank/model.json'))
+            from jra_conditional_rank_shadow import policy_sha
+            if (model.get('sha256')!=digest({k:v for k,v in model.items() if k!='sha256'})
+                    or model.get('sha256')!=reg['model_sha256'] or model.get('candidate_id')!=reg['model_candidate_id']
+                    or policy_sha(model)!=reg['model_policy_sha256']):raise ValueError('PREREGISTRATION_FROZEN_MODEL')
+            try:archived_owner=json.loads(member('oos-owner-approval-proofs.json')).get(reg.get('owner_approval_ref'))
+            except (ValueError,TypeError,KeyError):archived_owner=None
+        owner_verified=False;owner_reason='OWNER_PROVIDER_APPROVAL_UNVERIFIED'
+        try:
+            owner=archived_owner;record=proof.get('owner_approval_record')
+            endpoint,pr,kind,number=_owner_endpoint(reg.get('owner_approval_ref'))
+            if not isinstance(owner,dict) or not isinstance(record,dict):raise ValueError('OWNER_PROVIDER_SNAPSHOT_MISSING')
+            saved=owner['record']
+            if (any(record.get(k)!=saved.get(k) for k in ('id','body','html_url','state','commit_id','submitted_at',
+                    'created_at','updated_at','pull_request_url','issue_url'))
+                    or (record.get('user') or {}).get('login')!=(saved.get('user') or {}).get('login')):
+                raise ValueError('OWNER_APPROVAL_CHANGED_SINCE_REGISTRATION_ARCHIVE')
+            body=_owner_body(record)
+            if (owner.get('endpoint')!=endpoint or record.get('id')!=number
+                    or record.get('html_url')!=reg['owner_approval_ref']
+                    or (record.get('user') or {}).get('login','').casefold()!=WITNESS_REPO.split('/')[0].casefold()
+                    or body.get('decision')!='APPROVE_PROSPECTIVE_SHADOW_PREREGISTRATION'
+                    or body.get('candidate_id')!=cid or body.get('scope_sha256')!=approval_scope
+                    or body.get('approved_head_sha')!=owner.get('approved_head_sha')
+                    or not re.fullmatch(r'[0-9a-f]{40}',str(owner.get('approved_head_sha','')))):
+                raise ValueError('OWNER_IDENTITY_OR_EXPLICIT_SCOPE_MISMATCH')
+            api_url='https://api.github.com/repos/'+WITNESS_REPO+'/'
+            if kind=='pullrequestreview':
+                if (record.get('state')!='APPROVED' or record.get('commit_id')!=owner['approved_head_sha']
+                        or record.get('pull_request_url')!=api_url+'pulls/'+pr):raise ValueError('OWNER_REVIEW_NOT_APPROVED')
+                approved_at=instant(record['submitted_at'])
+            else:
+                if record.get('issue_url')!=api_url+'issues/'+pr:raise ValueError('OWNER_COMMENT_PR_IDENTITY')
+                approved_at=instant(record['updated_at'])
+                if instant(record['created_at'])>approved_at:raise ValueError('OWNER_COMMENT_CHRONOLOGY')
+            if not approved_at<=instant(reg['registered_at'])<instant(a['created_at']):raise ValueError('OWNER_APPROVAL_AFTER_REGISTRATION')
+            expected_codes={path:reg[key] for path,key in (
+                ('runtime/jra_role_learning_shadow.py','sidecar_code_sha256'),
+                ('runtime/jra_conditional_rank_shadow.py','rank_code_sha256'),
+                ('runtime/jra_shadow_checkpoint.py','checkpoint_code_sha256'))}
+            if (owner.get('code_sha256')!=expected_codes or owner.get('model_sha256')!=reg['model_sha256']
+                    or owner.get('model_policy_sha256')!=reg['model_policy_sha256']):raise ValueError('OWNER_APPROVED_HEAD_PIN_MISMATCH')
+            owner_verified=True;owner_reason='OWNER_EXACT_SCOPE_PROVIDER_APPROVAL_AND_EARLIER_ARCHIVE_BOUND'
+        except (ValueError,KeyError,TypeError) as exc:owner_reason=str(exc)
+        return {'verified':owner_verified,'archive_and_pins_verified':True,'owner_approval_verified':owner_verified,
+                'status':owner_reason,
+                'candidate_id':cid,'registration_sha256':digest(reg),'run_id':r['id'],'artifact_id':a['id'],
+                'eligibility_scope':OOS_SCOPE,
+                'pin_fingerprint':pin_fingerprint,
+                'owner_approval_scope_sha256':approval_scope,
+                'server_created_at':a['created_at'],'archive_digest':a['digest'],
+                'owner_approval_ref':reg.get('owner_approval_ref')}
+    except (ValueError,KeyError,TypeError,OSError,zipfile.BadZipFile) as exc:
+        return {'verified':False,'archive_and_pins_verified':False,'owner_approval_verified':False,
+                'status':str(exc),'candidate_id':shadow.get('oos_candidate_id')}
+
+
+def verify_actions_artifact(shadow, run, artifact, archive, code_bytes, *, registration_proof=None):
     """Bind GitHub server receipt time to exact archived Shadow bytes.
 
     Inputs are fetched from the fixed repository API by actions_pre_result_witness;
@@ -428,10 +680,30 @@ def verify_actions_artifact(shadow, run, artifact, archive, code_bytes):
             raise ValueError('WITNESS_ARCHIVE_MEMBER')
         if json.loads(z.read(entries[0])) != shadow:
             raise ValueError('WITNESS_FROZEN_CONTENT_MISMATCH')
+        if 'oos_preregistration' in shadow:
+            name=shadow['race_id']+'/shadow_input.json';members=[i for i in z.infolist() if i.filename==name]
+            if len(members)!=1 or members[0].file_size>16*1024*1024:raise ValueError('WITNESS_PREREGISTRATION_CHECKPOINT')
+            c=json.loads(z.read(members[0]));q=c['request']
+            if (c.get('sha256')!=digest({k:v for k,v in c.items() if k!='sha256'})
+                    or c['sha256']!=shadow.get('delivery_checkpoint_sha256')
+                    or c.get('oos_preregistration')!=shadow['oos_preregistration']
+                    or c.get('oos_preregistration_witness')!=shadow.get('oos_preregistration_witness')
+                    or c.get('oos_checkpoint_code_sha256')!=shadow.get('oos_checkpoint_code_sha256')
+                    or c.get('request_sha256')!=digest(q)
+                    or any(c.get(k)!=shadow.get(v) for k,v in (
+                        ('race_id','race_id'),('source_sha256','source_sha256'),
+                        ('runner_universe_sha256','runner_universe_sha256'),('prediction_cutoff','prediction_cutoff'),
+                        ('final_sha256','baseline_final_sha256'),('learning_input_sha256','checkpoint_learning_input_sha256')))
+                    or q.get('source_snapshot_sha256')!=shadow['source_sha256']
+                    or shadow.get('prediction_input_sha256')!=digest({'request_sha256':c['request_sha256'],'learning_states':c['learning_states']})
+                    or q['source_snapshot']['source_freeze_at']!=shadow.get('source_freeze_at')):
+                raise ValueError('WITNESS_PREREGISTRATION_CHECKPOINT_BINDING')
+    registration=_preregistration_proof(shadow,registration_proof)
     return {'verified':True,'status':'GITHUB_ARTIFACT_SERVER_RECEIPT_AND_CONTENT_VERIFIED',
             'repository':WITNESS_REPO,'run_id':run['id'],'artifact_id':artifact['id'],
             'server_created_at':artifact['created_at'],'server_updated_at':artifact['updated_at'],
             'archive_digest':artifact['digest'],'shadow_sha256':shadow['sha256'],
+            'preregistration_verified':registration['verified'],'preregistration':registration,
             'scope':'Pre-cutoff persistence only; predictive improvement and promotion remain separate.'}
 
 def actions_pre_result_witness(shadow):
@@ -440,9 +712,9 @@ def actions_pre_result_witness(shadow):
     ctx=shadow.get('actions_freeze_context') or {}
     if ctx.get('repository') != WITNESS_REPO or not str(ctx.get('run_id','')).isdigit():
         return {'verified':False,'status':'MISSING_ACTIONS_FREEZE_CONTEXT'}
-    def api(path):
+    def api(path, *, timeout=30):
         return subprocess.check_output(['gh','api','--hostname','github.com',
-            'repos/'+WITNESS_REPO+'/'+path],timeout=30,stderr=subprocess.DEVNULL)
+            'repos/'+WITNESS_REPO+'/'+path],timeout=timeout,stderr=subprocess.DEVNULL)
     try:
         rid=str(ctx['run_id']);attempt=str(ctx.get('run_attempt',''))
         utility_artifact_name(rid,attempt)
@@ -467,7 +739,30 @@ def actions_pre_result_witness(shadow):
             if (shadow.get('conditional_rank_comparison') or {}).get('model_policy_sha256'):
                 from jra_conditional_rank_shadow import policy_sha
                 if shadow['conditional_rank_comparison']['model_policy_sha256']!=policy_sha(model):raise ValueError('WITNESS_MODEL_POLICY_MISMATCH')
+        registration_proof=None
+        if 'oos_preregistration' in shadow:
+            obj=json.loads(api('contents/runtime/jra_shadow_checkpoint.py?ref='+run['head_sha']))
+            checkpoint_code=base64.b64decode(obj['content'])
+            if hashlib.sha256(checkpoint_code).hexdigest()!=shadow.get('oos_checkpoint_code_sha256'):
+                raise ValueError('WITNESS_CHECKPOINT_CODE_MISMATCH')
+            pointer=shadow.get('oos_preregistration_witness') or {}
+            if not isinstance(pointer,dict):pointer={}
+            if (type(pointer.get('run_id')) is int and pointer['run_id']>0
+                    and type(pointer.get('artifact_id')) is int and pointer['artifact_id']>0):
+                try:
+                    prior_attempt=pointer.get('run_attempt',1)
+                    if type(prior_attempt) is not int or prior_attempt<1:raise ValueError('PREREGISTRATION_ATTEMPT')
+                    prior_run=json.loads(api('actions/runs/'+str(pointer['run_id'])+'/attempts/'+str(prior_attempt),timeout=10))
+                    prior_artifact=json.loads(api('actions/artifacts/'+str(pointer['artifact_id']),timeout=10))
+                    prior_zip=api('actions/artifacts/'+str(pointer['artifact_id'])+'/zip',timeout=10)
+                    registration_proof={'run':prior_run,'artifact':prior_artifact,'archive':prior_zip}
+                    try:
+                        endpoint,*_=_owner_endpoint(shadow['oos_preregistration'].get('owner_approval_ref'))
+                        registration_proof['owner_approval_record']=json.loads(api(endpoint,timeout=10))
+                    except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError):pass
+                except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError):
+                    registration_proof=None  # Missing proof affects only Shadow qualification.
         archive=api('actions/artifacts/'+str(artifact['id'])+'/zip')
-        return verify_actions_artifact(shadow,run,artifact,archive,code_bytes)
+        return verify_actions_artifact(shadow,run,artifact,archive,code_bytes,registration_proof=registration_proof)
     except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as exc:
         return {'verified':False,'status':'UNVERIFIED_GITHUB_ARTIFACT_WITNESS','reason':type(exc).__name__+':'+str(exc)[:180]}

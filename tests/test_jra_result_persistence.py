@@ -87,6 +87,38 @@ def test_jra_snapshot_conflict_rebuilds_merged_records(tmp_path,monkeypatch):
     assert json.loads(git(remote,'show','main:'+view))=={'race_ids':['A','B']}
 
 
+def test_real_role_rescue_aggregate_conflict_rebuilds_both_races(tmp_path,monkeypatch):
+    """The Oct 24 failed RESULT saver must merge records, not choose a view."""
+    remote,a,b=repository(tmp_path)
+    view='runtime/role_rescue_shadow_status.json'
+    for root,rid,eligible in ((a,'A',True),(b,'B',False)):
+        record={'race_id':rid,'sha256':rid*64,'policy_fingerprint':'unchanged-policy','oos_eligible':eligible}
+        commit(root,view,json.dumps({'stale':rid}).encode())
+        commit(root,f'runtime/role_rescue_shadow_results/{rid}.json',json.dumps(record).encode())
+    git(b,'push','origin','HEAD:main')
+    monkeypatch.chdir(a)
+    monkeypatch.setattr(store.time,'sleep',lambda _:None)
+    store.persist(cwd=a,branch='main',attempts=2,
+                  snapshots=store.SNAPSHOTS | store.JRA_RESULT_SNAPSHOTS)
+    result=json.loads(git(remote,'show','main:'+view))
+    assert result['distinct_races']==2 and result['forward_oos_verified_races']==0
+    assert result['legacy_recorded_eligible_races']==1  # Saved legacy claim is not a registered new cohort.
+    assert [r['race_id'] for r in result['results']]==['A','B']
+    assert result['automatic_promotion'] is False
+
+
+def test_role_rescue_per_race_conflict_remains_immutable(tmp_path):
+    remote,a,b=repository(tmp_path)
+    name='runtime/role_rescue_shadow_results/SAME_RACE.json'
+    commit(a,name,b'{"signed_lineage":"first"}\n')
+    commit(b,name,b'{"signed_lineage":"different"}\n')
+    git(b,'push','origin','HEAD:main')
+    with pytest.raises(RuntimeError,match='IMMUTABLE_OR_UNKNOWN_CONFLICT'):
+        store.persist(cwd=a,branch='main',attempts=1,refresh=lambda _:pytest.fail('immutable record'),
+                      snapshots=store.SNAPSHOTS | store.JRA_RESULT_SNAPSHOTS)
+    assert (a/name).read_bytes()==b'{"signed_lineage":"first"}\n'
+
+
 def test_retry_exhaustion_keeps_local_commit_and_does_not_claim_success(tmp_path,monkeypatch):
     _,a,_=repository(tmp_path)
     commit(a,'runtime/reviews_auto/A.json',b'retained\n');head=git(a,'rev-parse','HEAD')
@@ -107,6 +139,8 @@ def test_verified_result_is_checkpointed_before_review_and_uploaded_on_failure()
     assert text.index('assert vcode<300') < text.index('result_receipt_envelope.json') < text.index('review=build_post_result_review')
     assert 'python tools/persist_local_checkpoints.py --branch main --jra-result' in text
     assert 'if: always()' in text and 'path: runtime_out/result_checkpoint/' in text
+    assert text.index('("learning_state.json",learning,existing_learning)') < text.index('oos=build_oos_measurement')
+    assert 'checkpoint_inventory.json' in text
 
 
 def _production_closed_loop_code():
@@ -162,6 +196,10 @@ def test_optional_mec_failure_preserves_real_production_review_and_learning(tmp_
              build_oos_measurement=build_oos_measurement,build_fast_reflection=build_fast_reflection)
     exec(_production_closed_loop_code(),env)
     assert env['review']==expected_review and env['learning']==expected_learning
+    checkpoint=tmp_path/'runtime_out/result_checkpoint'
+    assert json.loads((checkpoint/'learning_state.json').read_text())==expected_learning
+    assert json.loads((checkpoint/'post_result_review.json').read_text())==expected_review
+    assert (checkpoint/'final_artifact.json').read_bytes()==final_raw
     assert env['p']==result and final_path.read_bytes()==final_raw
     assert shadow_path.read_bytes()==shadow_raw
     diagnostic=env['mec_shadow_diagnostic']
