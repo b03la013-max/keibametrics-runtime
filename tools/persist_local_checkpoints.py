@@ -25,6 +25,7 @@ SNAPSHOTS = {
 JRA_RESULT_SNAPSHOTS = {
     'runtime/krs_oos_status.json',
     'runtime/source_candidate_oos_status.json',
+    'runtime/role_rescue_shadow_status.json',
     'runtime/pfs_grand_review/current.json',
     'runtime/family_prediction_utility/current.json',
 }
@@ -98,6 +99,10 @@ def rebuild(paths):
             from jra_source_candidate_promotion_gate import evaluate
             obj = evaluate([json.loads(p.read_text()) for p in
                             sorted(Path('runtime/source_candidate_oos').glob('*/result_evaluation.json'))])
+        elif path == 'runtime/role_rescue_shadow_status.json':
+            from jra_role_learning_shadow import write_status
+            write_status(path)
+            continue
         elif path == 'runtime/pfs_grand_review/current.json':
             from pfs_grand_review import write_report
             write_report(path)

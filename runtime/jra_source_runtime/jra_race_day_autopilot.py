@@ -253,6 +253,107 @@ def _blocked_cells(gap: dict) -> list[str]:
     return [f"{rid}番:{'/'.join(v)}" for rid, v in sorted(per.items(), key=lambda z: int(z[0]) if z[0].isdigit() else 99)]
 
 
+def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=None):
+    """Describe canonical stored bodies, never admit them or verify signatures.
+
+    The legacy scheduler enum is retained separately. A file's presence must
+    not become a claim of verified RESULT, actual Learning use or full closure.
+    """
+    from post_result_learning import _sha
+    from execution_store import resolve_phase
+
+    def record(relative):
+        path=root/relative
+        info={'path':relative,'present':path.is_file(),'self_hash_valid':False,'race_bound':False}
+        value={}
+        if info['present']:
+            try:
+                value=json.loads(path.read_text())
+                if not isinstance(value,dict):raise ValueError('RECORD_NOT_OBJECT')
+                info['self_hash_valid']=bool(value.get('sha256') and
+                    value['sha256']==_sha({k:v for k,v in value.items() if k!='sha256'}))
+                info['race_bound']=value.get('race_id')==rid
+            except (OSError,ValueError,TypeError) as exc:
+                info['read_error']=type(exc).__name__
+                value={}
+        return value,info
+
+    review,ri=record('runtime/reviews_auto/'+rid+'-AUTO.json')
+    learning,li=record('runtime/learning_states/'+rid+'.json')
+    capital=review.get('capital') if isinstance(review.get('capital'),dict) else {}
+    settlement=(result or {}).get('settlement') or {}
+    frozen_refs=(result or {}).get('frozen_prediction_ref') or {}
+    review_bound=bool(final and result and ri['self_hash_valid'] and ri['race_bound'] and
+        final.get('race_id')==rid and result.get('race_id')==rid and
+        isinstance(final.get('sha256'),str) and len(final['sha256'])==64 and
+        isinstance(final.get('final_receipt_sha256'),str) and len(final['final_receipt_sha256'])==64 and
+        frozen_refs.get('immutable_final_sha256')==final['sha256'] and
+        frozen_refs.get('final_receipt_sha256')==final['final_receipt_sha256'] and
+        isinstance((result.get('official_result') or {}).get('top3'),list) and
+        len(result['official_result']['top3'])==3 and
+        all(k in capital for k in ('investment','return')) and
+        review.get('immutable_final_artifact_sha256')==final.get('sha256') and
+        review.get('final_receipt_sha256')==final.get('final_receipt_sha256') and
+        review.get('official_top3')==(result.get('official_result') or {}).get('top3') and
+        all(capital.get(a)==settlement.get(b)
+            for a,b in (('investment','total_investment'),('return','total_payout'))) and
+        (capital.get('refund') or 0)==(settlement.get('refund') or 0))
+    ri['result_and_final_bound']=review_bound
+    learning_bound=bool(review_bound and li['self_hash_valid'] and li['race_bound'] and
+                        learning.get('source_review_sha256')==review.get('sha256'))
+    li.update(review_bound=learning_bound,state_id=learning.get('state_id'),
+              sha256=learning.get('sha256'),effective_time=learning.get('effective_time'),
+              consumption='NOT_ESTABLISHED_BY_STORAGE')
+    receipts=[]
+    for eid in eids or [rid+'-LIVE-R1']:
+        try:
+            phase=resolve_phase(eid,'RESULT',root=root/'runtime/executions')
+            if not phase:continue
+            envelope_path=phase['run_dir']/'result_receipt_envelope.json'
+            if envelope_path.name not in phase['manifest']['files']:continue
+            envelope=json.loads(envelope_path.read_text())
+            if not isinstance(envelope,dict):raise ValueError('RECEIPT_ENVELOPE_NOT_OBJECT')
+            receipt=envelope.get('receipt') or {}
+            if not isinstance(receipt,dict):raise ValueError('RECEIPT_NOT_OBJECT')
+            bound=bool(result and result.get('race_id')==rid and receipt.get('race_id')==rid and receipt.get('phase')=='RESULT' and
+                receipt.get('status')=='PASS' and envelope.get('receipt_sha256')==_sha(receipt) and
+                receipt.get('artifact_sha256')==_sha(result))
+            receipts.append({'path':envelope_path.relative_to(root).as_posix(),
+                'stored_manifest_verified':True,'request_payload_bound':bound,
+                'receipt_sha256':envelope.get('receipt_sha256'),
+                'signature_present':bool(envelope.get('signature')),
+                'signature_validation':'NOT_PERFORMED_BY_STATUS_RENDERER'})
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            receipts.append({'execution_id':eid,'storage_error':type(exc).__name__+':'+str(exc)[:120],
+                             'request_payload_bound':False})
+    zero_records=[]
+    if terminal:
+        for eid in eids:
+            zero,zi=record('runtime/jra_no_bet_learning/'+eid+'.json')
+            if not zi['present']:continue
+            zi['decision_bound']=bool(zi['self_hash_valid'] and zi['race_bound'] and terminal.get('race_id')==rid and
+                terminal.get('sha256')==_sha({k:v for k,v in terminal.items() if k!='sha256'}) and
+                zero.get('decision_lineage_sha256')==terminal.get('sha256') and
+                zero.get('signed_pre_race_source_receipt_sha256')==terminal.get('signed_source_receipt_sha256') and
+                zero.get('status')=='ZERO_EXPOSURE_RESULT_RECORDED' and zero.get('investment')==0 and
+                zero.get('payout')==0 and zero.get('pfs') is None and zero.get('production_effect')=='NONE')
+            zi.update(status=zero.get('status'),pfs=zero.get('pfs'),
+                      official_top3=zero.get('official_top3'),
+                      official_result_acquired_at=zero.get('post_race_official_acquired_at'),
+                      signature_or_oidc_validation='NOT_PERFORMED_BY_STATUS_RENDERER')
+            zero_records.append(zi)
+    zero_bound=any(z.get('decision_bound') for z in zero_records)
+    storage=('ZERO_EXPOSURE_RESULT_LEARNING_STORED' if zero_bound else
+             'RESULT_REVIEW_LEARNING_STORED' if learning_bound else
+             'RESULT_REQUEST_STORED' if result is not None else 'POSTRESULT_NOT_RECORDED')
+    return {'storage_state':storage,'result_request_present':result is not None,
+        'review':ri,'learning':li,'review_learning_bound':learning_bound,
+        'stored_result_receipts':receipts,'zero_exposure_records':zero_records,
+        'zero_exposure_result_learning_bound':zero_bound,
+        'evidence_scope':'CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY',
+        'signature_validation_performed':False,'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
+
+
 def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime) -> dict:
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
@@ -269,6 +370,7 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     gaps = [p for e in eids for p in glob.glob(str(root / "runtime" / "exact_gaps" / (e + ".json")))]
     if final_p.exists():
         final = json.loads(final_p.read_text(encoding="utf-8"))
+        res = None
         row["state"] = "FINAL"
         row["final_receipt_sha256"] = final.get("final_receipt_sha256")
         row["immutable_final_sha256"] = final.get("sha256")
@@ -316,6 +418,10 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
                 "profit_loss", "winning_tickets", "actual_purchase_status",
                 "actual_pfs_status",
             )}
+        if res is not None:
+            row['post_result_evidence']=_post_result_evidence(root,rid,eids,final=final,result=res)
+            row['scheduler_state_scope']='LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF'
+            row['display_state']=row['post_result_evidence']['storage_state']
     elif no_bet:
         row["state"] = "EVIDENCE_NO_BET"
         row["no_bet_terminal"] = Path(no_bet[-1]).relative_to(root).as_posix()
@@ -334,6 +440,10 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
             gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
             row["full20"] = f"{gap.get('verified_full_index_count')}/{gap.get('required_index_count')}"
             row["unclosed_cells"] = _blocked_cells(gap)
+        row['post_result_evidence']=_post_result_evidence(root,rid,eids,terminal=terminal)
+        row['display_state']=row['state']
+        if row['post_result_evidence']['zero_exposure_result_learning_bound']:
+            row['display_state']+=' / ZERO_EXPOSURE_RESULT_RECORDED'
     elif gaps:
         gap = json.loads(Path(gaps[-1]).read_text(encoding="utf-8"))
         failure = gap.get('formal_execution_failure')
@@ -539,7 +649,16 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
                           "Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal "
                           "because some runner x index cells could not be closed from official evidence; "
                           "AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; "
-                          "MISSED_WINDOW = never predicted (no late or backdated FINAL)."}
+                          "MISSED_WINDOW = never predicted (no late or backdated FINAL). "
+                          "state retains scheduler compatibility; display_state and post_result_evidence "
+                          "separate stored bodies/bindings from signature verification and full closure."}
+    observed=[r.get('post_result_evidence') or {} for r in rows]
+    idx['post_result_metrics']={'race_denominator':len(rows),
+        'result_requests_present':sum(p.get('result_request_present') is True for p in observed),
+        'review_learning_bound':sum(p.get('review_learning_bound') is True for p in observed),
+        'zero_exposure_result_learning_bound':sum(p.get('zero_exposure_result_learning_bound') is True for p in observed),
+        'stored_result_receipts_payload_bound':sum(any(x.get('request_payload_bound') for x in p.get('stored_result_receipts',[])) for p in observed),
+        'signature_validation_performed':False,'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
     plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
     plan=json.loads(plan_path.read_text()) if plan_path.exists() else {}
     cohort=(plan.get('cohort') or {})
@@ -562,8 +681,10 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
     (d / f"{race_date}.json").write_text(json.dumps(idx, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     md = [f"# JRA {race_date} 全レース状況", ""]
     for r in rows:
-        head = f"## {r.get('venue') or ''}{r.get('race_no') or ''}R {r.get('title') or ''} ({(r.get('post') or '')[11:16]}) — {r.get('state')}"
+        head = f"## {r.get('venue') or ''}{r.get('race_no') or ''}R {r.get('title') or ''} ({(r.get('post') or '')[11:16]}) — {r.get('display_state') or r.get('state')}"
         md.append(head)
+        if r.get('post_result_evidence'):
+            md.append('結果後の保存内容・SHA結合を表示。署名検証、Learning実消費、Production閉路完成は別証拠。')
         if r.get('formal_run_id'):
             md.append(f"Formal Run {r['formal_run_id']} / {r.get('formal_conclusion')} / "
                       f"最初の停止工程 {r.get('first_blocked_stage')} / {r.get('execution_error')}")

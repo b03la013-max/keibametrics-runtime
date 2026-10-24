@@ -31,3 +31,14 @@ def test_parse_official_same_day_result_detail():
     assert out["race_environment"]["distance_m"]==2000
     assert out["result_derived"] is True
     assert out["production_fact_authority"] is True
+
+
+def test_parser_preserves_withdrawal_and_nonfinish_without_fabricated_rank():
+    rows=''.join(f'<tr><td>{label}</td><td>1</td><td>{no}</td><td>馬{no}</td><td></td></tr>'
+                 for no,label in enumerate(['1','取消','除外','中止','失格'],1))
+    html=('<table><tr><th>着順</th><th>枠</th><th>馬番</th><th>馬名</th><th>コーナー通過順位</th></tr>'+rows+'</table>').encode()
+    out=parse_result_detail(html,'text/html; charset=UTF-8')
+    assert [r['horse_no'] for r in out['runners']]==[1]
+    assert [r['finish_status'] for r in out['non_finishers']]==[
+        'CANCELLED','EXCLUDED','DID_NOT_FINISH','DISQUALIFIED']
+    assert all('finish' not in r for r in out['non_finishers'])
