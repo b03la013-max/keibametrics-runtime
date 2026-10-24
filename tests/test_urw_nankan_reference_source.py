@@ -533,6 +533,8 @@ def captured(tmp_path,**kwargs):
 
 @pytest.fixture
 def fixed_chat_clock(monkeypatch,tmp_path):
+    from functools import partial
+    monkeypatch.setattr(n,'capture_race',partial(n.capture_race,now=lambda:NOW))
     from runtime import local_race_entry as entry
     class FixedDateTime(datetime):
         @classmethod
