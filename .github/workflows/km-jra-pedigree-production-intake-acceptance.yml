@@ -21,6 +21,8 @@ on:
       - "tests/test_jra_bvi_consumption.py"
       - "runtime/jra_owner_authorized_feature_rules.py"
       - "scripts/jra_bvi_pipeline_forward_shadow.py"
+      - "scripts/jra_bvi_parallel_sidecar.py"
+      - "tests/test_jra_bvi_parallel_sidecar.py"
       - "tests/test_jra_bvi_forward_shadow.py"
       - "runtime/jra_index_provenance_builder.py"
       - "runtime/jra_static_owner_forward_oos.py"
@@ -49,6 +51,8 @@ on:
       - "tests/test_jra_bvi_consumption.py"
       - "runtime/jra_owner_authorized_feature_rules.py"
       - "scripts/jra_bvi_pipeline_forward_shadow.py"
+      - "scripts/jra_bvi_parallel_sidecar.py"
+      - "tests/test_jra_bvi_parallel_sidecar.py"
       - "tests/test_jra_bvi_forward_shadow.py"
       - "runtime/jra_index_provenance_builder.py"
       - "runtime/jra_static_owner_forward_oos.py"
@@ -93,7 +97,7 @@ jobs:
                   'full_real_acceptance_pass_claimed':False},indent=2)+'\n')
           PY
       - name: Numerical lineage and temporal regression
-        run: python -m pytest -q tests/test_jra_pedigree_full_day.py tests/test_jra_bvi_proof_oos.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_consumption.py tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py tests/test_jra_bvi_environment.py tests/test_jra_bvi_env_shadow.py tests/test_jra_bvi_env_comparison.py tests/test_jra_bvi_env_forward.py
+        run: python -m pytest -q tests/test_jra_pedigree_full_day.py tests/test_jra_bvi_proof_oos.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_consumption.py tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py tests/test_jra_bvi_environment.py tests/test_jra_bvi_env_shadow.py tests/test_jra_bvi_env_comparison.py tests/test_jra_bvi_env_forward.py tests/test_jra_bvi_parallel_sidecar.py
       - name: Exact observed target environment regression
         run: python -m pytest -q tests/test_jra_bvi_env_acceptance.py
       - name: Independently verify actual all-race intake, existing Reader consumption and frozen Production BVI
