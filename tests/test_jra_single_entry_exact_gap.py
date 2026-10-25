@@ -146,7 +146,7 @@ class ProductionPreparationTest(unittest.TestCase):
         self.assertEqual(prepared["bvi_consumption_ledger"]["pedigree_corpus_manifest"],
                          compiler["pedigree_corpus_manifest"])
         self.assertEqual(prepared["bvi_consumption_ledger"]["corpus_artifact_lineage_status"],
-                         "FROZEN_SNAPSHOT_LIST_BOUND")
+                         "FROZEN_MANIFEST_NO_BVI_CORPUS_COMPONENT_REFERENCE")
         partial = report["partial_production_base_calculation"]
         self.assertEqual(partial["required_base_cells"], 26)
         self.assertEqual(partial["calculated_base_cells"], 26)

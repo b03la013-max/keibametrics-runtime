@@ -169,19 +169,50 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
                     "source_snapshot_sha256": source["artifact"]["source_snapshot_sha256"],
                     "pedigree_corpus_manifest": manifest}
         prepared = report["prepared_numerical_request"]
+        full_report = {**deepcopy(compiler), "runners": {
+            r["runner_id"]: {"merged_evidence_features": r.get("evidence_features") or {}}
+            for r in prepared["runners"]}}
+        full_report["sha256"] = sha(full_report)
+        report["source_feature_report"] = full_report
+        compiler["sha256"] = full_report["sha256"]
         prepared["source_to_evidence_feature_compiler"] = deepcopy(compiler)
-        prepared["source_to_evidence_feature_sha256"] = "b" * 64
+        prepared["source_to_evidence_feature_sha256"] = compiler["sha256"]
         intent["source_to_evidence_feature_compiler"] = {"untrusted_intent": True}
         original = deepcopy((intent, source, report, authority))
         result = self.submit(intent, source, report, authority)
         self.assertEqual(result["source_to_evidence_feature_compiler"], compiler)
-        self.assertEqual(result["source_to_evidence_feature_sha256"], "b" * 64)
+        self.assertEqual(result["source_to_evidence_feature_sha256"], compiler["sha256"])
         self.assertEqual(original, (intent, source, report, authority))
         for field in ("runners", "static_prediction", "role_registry", "pair_dispositions",
                       "third_dispositions", "krs_input_data", "capital_policy"):
             self.assertEqual(result[field], baseline[field], field)
         result["source_to_evidence_feature_compiler"]["pedigree_corpus_manifest"]["snapshots"].clear()
         self.assertEqual(prepared["source_to_evidence_feature_compiler"], compiler)
+
+    def test_foreign_or_forged_compiler_cannot_be_signed_as_actual_trace(self):
+        for mutation in ("race", "source", "feature_sha", "report_sha", "absent_report", "features"):
+            with self.subTest(mutation=mutation):
+                intent, source, report, authority = fixture()
+                prepared = report["prepared_numerical_request"]
+                full = {"race_id": intent["race_id"],
+                        "source_snapshot_sha256": source["artifact"]["source_snapshot_sha256"],
+                        "pedigree_corpus_manifest": {"snapshots": [], "snapshot_count": 0,
+                                                     "manifest_sha256": sha([])},
+                        "runners": {r["runner_id"]: {"merged_evidence_features": {}}
+                                    for r in prepared["runners"]}}
+                if mutation == "features":
+                    full["runners"]["1"]["merged_evidence_features"] = {"fabricated": {"category": "STRONG"}}
+                full["sha256"] = sha(full)
+                report["source_feature_report"] = deepcopy(full)
+                prepared["source_to_evidence_feature_compiler"] = {k:v for k,v in full.items() if k != "runners"}
+                prepared["source_to_evidence_feature_sha256"] = full["sha256"]
+                if mutation == "race": prepared["source_to_evidence_feature_compiler"]["race_id"] = "WRONG-RACE"
+                elif mutation == "source": prepared["source_to_evidence_feature_compiler"]["source_snapshot_sha256"] = "0" * 64
+                elif mutation == "feature_sha": prepared["source_to_evidence_feature_sha256"] = "0" * 64
+                elif mutation == "report_sha": report["source_feature_report"]["sha256"] = "0" * 64
+                elif mutation == "absent_report": report.pop("source_feature_report")
+                with self.assertRaisesRegex(JRAProductionAutoHandoffError, "BVI_COMPILER_"):
+                    self.submit(intent, source, report, authority)
 
     def test_legacy_handoff_does_not_invent_compiler_from_intent(self):
         intent, source, report, authority = fixture()

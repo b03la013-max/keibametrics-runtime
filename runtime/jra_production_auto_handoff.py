@@ -155,6 +155,15 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     prepared = report.get("prepared_numerical_request") or {}
     if prepared.get("family_id") != "JRA":
         raise JRAProductionAutoHandoffError("JRA_PREPARED_PRODUCTION_LEDGER_MISSING")
+    from jra_bvi_consumption import verify_compiler_lineage
+    try:
+        verify_compiler_lineage(prepared, source_snapshot_sha256=snap_sha,
+                                source_report=report.get("source_feature_report"))
+        if (prepared.get("source_to_evidence_feature_compiler") is not None
+                and report.get("source_feature_report") is None):
+            raise ValueError("BVI_COMPILER_ORIGINAL_REPORT_REQUIRED")
+    except ValueError as exc:
+        raise JRAProductionAutoHandoffError(str(exc)) from exc
     try:
         canonical_owner = compile_static_owner(
             prepared,
