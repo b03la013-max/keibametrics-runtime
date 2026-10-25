@@ -645,7 +645,7 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
     if now.tzinfo is None or now.astimezone(JST).date().isoformat() != plan['race_date']:
         raise ValueError('DISPATCH_REQUIRES_CURRENT_LOCAL_DAY')
     current = authorize(approval, plan, root, now)
-    if only_execution_id is not None and (plan.get('venue_id') != 'URW' or
+    if only_execution_id is not None and (plan.get('venue_id') not in ('URW', 'OHI') or
             only_execution_id not in {r['execution_id'] for r in plan['races']
                 if r['fields']['race_no'] in approval['race_numbers']}):
         raise ValueError('CHAT_APPROVED_URW_EXECUTION_REQUIRED')

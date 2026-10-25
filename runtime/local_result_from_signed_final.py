@@ -129,7 +129,7 @@ official_result={
 }
 # Preserve unsupported facts instead of reducing a tie/refund to a fabricated
 # single winning outcome. The existing flat LOCAL path must refuse them.
-for key in ("dead_heat","finish_groups","top3_orders","refund_runner_ids",
+for key in ("dead_heat","finish_groups","finish_rank_groups","winning_selections","top3_orders","refund_runner_ids",
             "refunds","refunded_tickets","cancelled","void"):
     if key in req:
         official_result[key]=req[key]
