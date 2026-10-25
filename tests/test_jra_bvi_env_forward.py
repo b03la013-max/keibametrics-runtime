@@ -310,17 +310,22 @@ def test_workflow_requires_verified_independent_pre_cutoff_prediction_clock(tmp_
 def test_workflow_runs_four_arms_once_and_preserves_production_and_independent_witness_gates():
     workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
     job=workflow.split('  pedigree-forward-shadow:\n',1)[1]
-    assert job.count('scripts/jra_bvi_pipeline_forward_shadow.py freeze')==1
-    assert '--environment-model "$MODEL"' in job
-    assert 'bvi_env_20261024_5e7f3b31cebd.json' in job
-    assert '/$SAFE/pedigree_env_pre_result.json' in job
-    assert '/$SAFE/pedigree_pipeline_pre_result.json' not in job
-    assert 'needs: orchestrate' in job and 'continue-on-error: true' in job
-    assert "needs.orchestrate.result == 'success'" in job
-    assert 'timeout-minutes: 15' in job and 'fetch-depth: 0' in job
-    assert 'test -f "$BASE/jra_formal_completion_verification.json" || exit 0' in job
-    assert 'test -f "runtime/final_artifacts/$RID.json" || exit 0' in job
-    assert 'test ! -f "$OUTPUT" || exit 0' in job
+    launcher=(ROOT/'scripts/jra_bvi_parallel_sidecar.py').read_text()
+    assert job.count('scripts/jra_bvi_parallel_sidecar.py --run-id')==2
+    assert job.count('--delivery-timing-only')==1  # Second invocation observes completed delivery only.
+    assert launcher.count('frozen.freeze(request_path, source_path, output,')==1
+    assert 'environment_model_path=root / MODEL' in launcher
+    assert 'bvi_env_20261024_5e7f3b31cebd.json' in launcher
+    assert '"pedigree_env_pre_result.json"' in launcher
+    assert '"pedigree_pipeline_pre_result.json"' not in launcher
+    assert 'needs: orchestrate' not in job and 'continue-on-error: true' in job
+    assert 'producer.get("conclusion") != "success"' in launcher
+    assert 'timeout-minutes: 30' in job and 'fetch-depth: 0' in job
+    assert '"production_wait_budget_minutes": 15' in launcher
+    assert '"active_research_budget_minutes": 15' in launcher
+    assert 'directory / "jra_formal_completion_verification.json"' in launcher
+    assert 'root / "runtime/final_artifacts"' in launcher
+    assert 'if output.exists():' in launcher
     attest=job.index('uses: actions/attest@v4')
     verify=job.index('gh attestation verify "$OUTPUT"')
     upload=job.index('id: witness')
