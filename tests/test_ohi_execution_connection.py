@@ -59,6 +59,7 @@ def test_structured_multiple_wins_and_one_refund_per_ticket_immutable():
     lambda t,o: o['winning_selections']['EXACTA'][0].update(payout_per_100=True),
     lambda t,o: o['winning_selections']['EXACTA'].pop(),
     lambda t,o: o.update(refund_authority=None),
+    lambda t,o: o.update(refund_authority=True),
     lambda t,o: o['refund_runner_ids'].append(1),
     lambda t,o: o['finish_rank_groups'][1].update(rank=2),
     lambda t,o: o['refund_runner_ids'].pop(),
@@ -81,7 +82,7 @@ def test_structured_requires_explicit_profile_and_all_runner_census():
     assert settle(o=o)['refund']==100
     o['nonfinishers'][0]['status']='UNKNOWN'
     with pytest.raises(LocalSettlementError,match='NONFINISHERS'):settle(o=o)
-    for alias in ('finish_order','payouts','top3'):
+    for alias in ('finish_order','payouts','top3','dead_heat'):
         o=structured();o[alias]=[5,4,3] if alias!='payouts' else {'EXACTA':1}
         with pytest.raises(LocalSettlementError,match='ALIAS'):settle(o=o)
 

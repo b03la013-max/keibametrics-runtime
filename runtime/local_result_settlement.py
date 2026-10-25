@@ -106,7 +106,7 @@ def settle_structured_research(final_ticket, official, *, profile, runner_ids):
         raise LocalSettlementError("STRUCTURED_RESEARCH_PROFILE_REQUIRED")
     if not isinstance(official, dict) or official.get("cancelled") or official.get("void"):
         raise LocalSettlementError("STRUCTURED_OFFICIAL_OUTCOME_REQUIRED")
-    if any(k in official for k in ("finish_order", "top3", "payouts", "finish_groups",
+    if any(k in official for k in ("finish_order", "top3", "payouts", "finish_groups", "dead_heat",
                                    "top3_orders", "refunds", "refunded_tickets")):
         raise LocalSettlementError("STRUCTURED_OUTCOME_ALIAS_NOT_ADMITTED")
     groups = official.get("finish_rank_groups")
@@ -136,7 +136,8 @@ def settle_structured_research(final_ticket, official, *, profile, runner_ids):
         raise LocalSettlementError("REFUND_RUNNER_IDS_INVALID")
     excluded = [money(x, "REFUND_RUNNER") for x in excluded]
     if (0 in excluded or len(set(excluded)) != len(excluded) or all_ids.intersection(excluded)
-            or (excluded and not official.get("refund_authority"))):
+            or (excluded and (not isinstance(official.get("refund_authority"), str)
+                              or not official["refund_authority"].strip()))):
         raise LocalSettlementError("REFUND_OFFICIAL_AUTHORITY_OR_UNIVERSE_INVALID")
     excluded = set(excluded)
     universe = [money(x, "FROZEN_RUNNER") for x in runner_ids]
