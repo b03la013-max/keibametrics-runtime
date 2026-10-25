@@ -88,3 +88,31 @@ def test_all_ten_official_venue_ids_use_existing_registry():
         art={'race_id':f'KM-JRA-{venue}-20261018-R10',
              'source_race_context':{'venue_id':venue,'race_date':'2026-10-18','race_no':10}}
         assert audit.result_identity(art,1)==(f'KM-JRA-{venue}-20261018-R01','2026-10-18',name)
+
+
+@pytest.mark.parametrize('duplicate_kind,expected', [
+    ('qualified_sidecar', 'IDENTITY_AUDIT_DUPLICATE_PROFILE_OBSERVATION'),
+    ('recovery_profile', 'IDENTITY_AUDIT_DUPLICATE_PROFILE_OBSERVATION'),
+    ('recovery_run', 'IDENTITY_AUDIT_DUPLICATE_RUN_BINDING'),
+])
+def test_duplicate_observations_never_inflate_qualified_sample(
+        tmp_path, monkeypatch, duplicate_kind, expected):
+    # Preserve every original file/hash and adjust the self-hashed sidecars:
+    # this would have passed the old set-equality + declared-count checks.
+    r,q,_=fixture(tmp_path,monkeypatch)
+    if duplicate_kind=='qualified_sidecar':
+        q['qualified'].append(copy.deepcopy(q['qualified'][0]))
+    elif duplicate_kind=='recovery_profile':
+        r['resolved'].append(copy.deepcopy(r['resolved'][0]))
+        q['qualified'].append(copy.deepcopy(q['qualified'][0]))
+        q['qualified_profile_locator_observations']=2
+        q['qualified_result_locator_runs']=2
+    elif duplicate_kind=='recovery_run':
+        r['resolved'][0]['run_bindings'].append(
+            copy.deepcopy(r['resolved'][0]['run_bindings'][0]))
+        q['qualified_result_locator_runs']=2
+    seal(r)
+    q['recovery_sha256']=r['sha256']
+    seal(q)
+    with pytest.raises(ValueError,match=expected):
+        audit.validate_qualification(r,q,tmp_path)
