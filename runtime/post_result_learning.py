@@ -97,6 +97,12 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
     if not isinstance(top3,list) or len(top3)!=3:
         raise LearningError("OFFICIAL_TOP3_REQUIRED")
     top3=[int(x) for x in top3]
+    official=result.get("official_result") or {}
+    from jra_candidate_postresult_closedloop import official_top3_orders
+    try:
+        orders=official_top3_orders({**official,"top3":top3})
+    except (ValueError,KeyError,TypeError) as exc:
+        raise LearningError("OFFICIAL_FINISH_GROUPS_INVALID:"+str(exc)) from exc
     ref=result.get("frozen_prediction_ref") or {}
     declared=str(ref.get("final_receipt_sha256") or "")
     actual=str(final_artifact.get("final_receipt_sha256") or "")
@@ -104,21 +110,30 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
         raise LearningError(f"FINAL_RECEIPT_MISMATCH:{declared}!={actual}")
 
     roles=_roles(final_artifact)
-    winner,p2,p3=map(str,top3)
-    role_eval={
-      "winner_w": "W" in roles.get(winner,set()),
-      "second_p2": "P2" in roles.get(p2,set()),
-      "third_p3": "P3" in roles.get(p3,set()),
-    }
-    coverage=_coverage(final_artifact,top3)
-    mec_eval=_mec_actual_coverage(final_artifact,top3)
+    role_orders=[{"winner_w":"W" in roles.get(str(order[0]),set()),
+                  "second_p2":"P2" in roles.get(str(order[1]),set()),
+                  "third_p3":"P3" in roles.get(str(order[2]),set())} for order in orders]
+    role_eval={key:any(row[key] for row in role_orders) for key in role_orders[0]}
+    coverages=[_coverage(final_artifact,order) for order in orders]
+    coverage={**coverages[0]}
+    for key,value in coverage.items():
+        if type(value) is bool:coverage[key]=any(row[key] for row in coverages)
+    coverage["matching_ticket_types"]=sorted({kind for row in coverages for kind in row["matching_ticket_types"]})
+    mec_orders=[_mec_actual_coverage(final_artifact,order) for order in orders]
+    mec_eval={**mec_orders[0]}
+    for key,value in mec_eval.items():
+        if type(value) is bool:mec_eval[key]=any(row[key] for row in mec_orders)
 
     ku=final_artifact.get("krs_prediction_utility") or {}
     if isinstance(ku,dict) and ku.get("utility_revision"):
-        krs_eval=evaluate_against_result(ku,top3,
+        def krs_for(order):return evaluate_against_result(ku,order,
             static_ranking=(final_artifact.get("static_prediction") or {}).get("ranking")
                 or (final_artifact.get("final_prediction_package") or {}).get("ranking"),
             static_roles=roles)
+        if len(orders)==1:krs_eval=krs_for(top3)
+        else:krs_eval={"classification":"DEAD_HEAT_MULTIPLE_VALID_ORDERS",
+                       "aggregation":"PER_VALID_ORDER_NO_SINGLE_RESCUE_CLASS_CLAIM",
+                       "by_valid_order":[{"top3":order,"evaluation":krs_for(order)} for order in orders]}
     else:
         krs_eval={"classification":"NOT_AVAILABLE","rescues":[],"supports":[],"misses":[]}
 
@@ -240,6 +255,14 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
             coverage["ordered_exact_ticket_coverage"] else [])
         if paper:
             review["capital"]["pfs_status"]="NOT_APPLICABLE_ZERO_EXPOSURE"
+    if len(orders)>1:
+        review.update(official_top3_orders=orders,official_finish_groups=official["finish_groups"],
+                      official_top3_is_legacy_representative=True)
+        review["prediction"]["dead_heat_order_evaluations"]=[
+            {"top3":order,"role_capture":role_order,"ticket_coverage":order_coverage,
+             "mec_coverage":order_mec}
+            for order,role_order,order_coverage,order_mec in zip(orders,role_orders,coverages,mec_orders)]
+        review["prediction"]["dead_heat_capture_aggregation"]="ANY_VALID_ORDER_PER_ROLE; JOINT_ORDERS_RETAINED"
     # Preserve historical review hashes when the original settlement did not
     # carry refund accounting. New settlements expose the separate denominator.
     if refund or "effective_investment" in settlement:

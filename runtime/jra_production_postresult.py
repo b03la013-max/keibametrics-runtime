@@ -39,6 +39,7 @@ def _dt(v):
 
 
 def verify_final(final: dict) -> None:
+    """Check the immutable body's mechanics; signature verification is separate."""
     body = {k: v for k, v in final.items() if k != "sha256"}
     if final.get("sha256") != _sha(body):
         raise ProductionPostResultError("IMMUTABLE_FINAL_HASH_INVALID")
@@ -52,12 +53,31 @@ def verify_final(final: dict) -> None:
         raise ProductionPostResultError("FINAL_RECEIPT_AFTER_POST")
 
 
+def verify_archived_final_signature(final:dict,*,root:Path,race_id:str)->None:
+    """Reuse the existing archived trust and signed-payload verifier offline."""
+    if final.get("race_id")!=race_id:
+        raise ProductionPostResultError("POSTRESULT_FINAL_RACE_ID_MISMATCH")
+    from jra_presentation import archived_trust
+    from jra_delivery import verify_signed_final
+    try:
+        health,contract=archived_trust(final,root=root)
+        verify_signed_final(final,health,contract)
+    except Exception as exc:
+        raise ProductionPostResultError("POSTRESULT_FINAL_SIGNATURE_NOT_VERIFIED:"+
+                                        type(exc).__name__+":"+str(exc)) from exc
+
+
 def settle_final(final: dict, official: dict) -> dict:
     """Settle exactly the frozen FINAL tickets against verified official payouts."""
+    from jra_candidate_postresult_closedloop import official_top3_orders, official_payout_entries
     ft = final.get("final_ticket") or {}
     tickets = list(ft.get("tickets") or [])
-    top3 = [int(x) for x in official["top3"]]
-    prices = official["payouts"]
+    try:
+        orders=official_top3_orders(official)
+        prices={kind:official_payout_entries(official,kind) for kind in BET_N}
+    except ValueError as exc:
+        raise ProductionPostResultError(str(exc)) from exc
+    top3={number for order in orders for number in order}
     refund_ids=official.get("refund_runner_ids") or []
     if (not isinstance(refund_ids,list) or any(type(x) is not int or not 1<=x<=18 for x in refund_ids)
             or len(refund_ids)!=len(set(refund_ids))):
@@ -90,16 +110,13 @@ def settle_final(final: dict, official: dict) -> dict:
             refunded_tickets.append({"bet_type":kind,"selection":sel,"stake":stake,
                                      "refund":stake,"reason":"OFFICIAL_WITHDRAWN_RUNNER"})
             continue
-        pay = prices[kind]
-        if (type(pay.get("per_100_yen")) is not int or pay["per_100_yen"] < 0
-                or not isinstance(pay.get("selection"), list)
-                or len(pay["selection"]) != BET_N[kind]
-                or any(type(x) is not int or not 1 <= x <= 18 for x in pay["selection"])
-                or len(set(pay["selection"])) != BET_N[kind]):
-            raise ProductionPostResultError("OFFICIAL_PAYOUT_INVALID")
-        win_sel = sorted(pay["selection"]) if kind == "TRIO" else list(pay["selection"])
         obs = sorted(sel) if kind == "TRIO" else sel
-        amount = (stake // 100) * int(pay["per_100_yen"]) if obs == win_sel else 0
+        matched=[pay for pay in prices[kind] if obs==
+                 (sorted(pay["selection"]) if kind=="TRIO" else pay["selection"])]
+        # A canonical combination is unique in official_payout_entries. Two
+        # distinct tied-third combinations can both pay, each ticket once.
+        pay=matched[0] if matched else None
+        amount=(stake//100)*pay["per_100_yen"] if pay is not None else 0
         ret_total += amount
         if amount:
             wins.append({"bet_type": kind, "selection": sel, "stake": stake,
@@ -109,7 +126,7 @@ def settle_final(final: dict, official: dict) -> dict:
     decision = (final.get("capital_policy_decision") or {}).get("decision")
     recommendation_only = decision == "EXECUTE_RECOMMENDATION_PORTFOLIO"
     effective_investment=stake_total-refund
-    return {
+    settled = {
         "status": "SETTLED",
         "pfs_authority": "FROZEN-RECOMMENDATION-PFS",
         "total_investment": stake_total,
@@ -129,6 +146,10 @@ def settle_final(final: dict, official: dict) -> dict:
         "actual_pfs_status": "NOT_VERIFIED",
         "note": "Settled frozen FINAL tickets at official JRA payouts. Recommendation PFS is virtual; actual purchase is recorded separately and never inferred.",
     }
+    if len(orders)>1:
+        settled.update(official_top3_orders=orders,official_finish_groups=official["finish_groups"],
+                       official_winning_combinations=prices)
+    return settled
 
 
 def build_result_request(final: dict, official: dict, evidence: dict) -> dict:
@@ -175,6 +196,10 @@ def build_result_request(final: dict, official: dict, evidence: dict) -> dict:
             "promotion_authority": False,
         },
     }
+    if official.get("top3_orders") is not None:
+        req["official_result"].update(
+            top3_orders=official["top3_orders"],finish_groups=official["finish_groups"],
+            dead_heat=True,top3_is_legacy_representative=True)
     return req
 
 
@@ -237,6 +262,7 @@ def process(root: Path, race_id: str, *, now=None) -> str:
         return "NO_PRODUCTION_FINAL"
     final = json.loads(fpath.read_text(encoding="utf-8"))
     verify_final(final)
+    verify_archived_final_signature(final,root=root,race_id=race_id)
     post = _dt(final["scheduled_post_at"])
     now = now or datetime.now(timezone.utc)
     if now <= post + timedelta(minutes=1):

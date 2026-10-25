@@ -126,6 +126,7 @@ jobs:
           review=None
           learning=None
           oos=None
+          oos_diagnostic=None
           fast_reflection=None
 
           final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
@@ -170,6 +171,8 @@ jobs:
                   assert review.get("sha256")==learning_sha({k:v for k,v in review.items() if k!="sha256"}), "EXISTING_REVIEW_HASH_INVALID"
                   assert review.get("immutable_final_artifact_sha256")==final_artifact.get("sha256"), "EXISTING_REVIEW_FINAL_CONFLICT"
                   assert review.get("official_top3")==p["official_result"]["top3"], "OFFICIAL_RESULT_REVISION_REQUIRES_SEPARATE_REVIEW"
+                  assert review.get("official_top3_orders")==p["official_result"].get("top3_orders"), "DEAD_HEAT_RESULT_REVISION_REQUIRES_SEPARATE_REVIEW"
+                  assert review.get("official_finish_groups")==p["official_result"].get("finish_groups"), "FINISH_GROUP_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert review.get("capital",{}).get("investment")==p["settlement"]["total_investment"], "SETTLEMENT_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert review.get("capital",{}).get("return")==p["settlement"]["total_payout"], "PAYOUT_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert int(review.get("capital",{}).get("refund") or 0)==int(p["settlement"].get("refund") or 0), "REFUND_REVISION_REQUIRES_SEPARATE_REVIEW"
@@ -201,11 +204,22 @@ jobs:
                       with open(checkpoint,"w",encoding="utf-8") as fh:
                           json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
               shutil.copyfile(final_path,"runtime_out/result_checkpoint/final_artifact.json")
-              oos=build_oos_measurement(review,final_artifact,p)
+              # This legacy KRS measurement consumes only official_top3.
+              # Unknown tie metrics cannot earn OOS credit or replace a file.
+              if len((p.get("official_result") or {}).get("top3_orders") or [])>1:
+                  oos_diagnostic={"status":"NOT_SETTLED","reason":"UNKNOWN_DEAD_HEAT_RANK_EVALUATION","production_effect":"NONE"}
+              else:
+                  oos=build_oos_measurement(review,final_artifact,p)
               # Role/learning research settlement cannot block Production RESULT.
               try:
-                  from jra_role_learning_shadow import persist_shadow_result
-                  role_shadow_result=persist_shadow_result(".",p)
+                  # The frozen sidecar's rank evaluator accepts one order only.
+                  # Do not silently turn a dead heat into representative-only
+                  # research KPIs or alter its preregistered code / model pins.
+                  if len((p.get("official_result") or {}).get("top3_orders") or [])>1:
+                      role_shadow_result={"status":"NOT_SETTLED","reason":"UNKNOWN_DEAD_HEAT_RANK_EVALUATION","production_effect":"NONE"}
+                  else:
+                      from jra_role_learning_shadow import persist_shadow_result
+                      role_shadow_result=persist_shadow_result(".",p)
               except Exception as exc:
                   role_shadow_result={"status":"NOT_SETTLED","reason":type(exc).__name__+":"+str(exc)}
               fast_reflection=build_fast_reflection({
@@ -244,7 +258,8 @@ jobs:
                   finish=(p.get("official_result") or {}).get("finish_order") or []
                   top3=finish[:3]
               assert isinstance(top3,list) and len(top3)>=3, "SOURCE_CANDIDATE_TOP3_MISSING"
-              candidate_eval=evaluate_source_candidate_result(candidate_pre,[int(x) for x in top3[:3]])
+              from jra_candidate_postresult_closedloop import evaluate_official_candidate_result, official_top3_orders
+              candidate_eval=evaluate_official_candidate_result(candidate_pre,p["official_result"])
               # Attribute observed result only to the immutable pre-result trace.
               frozen_transfer_sha=candidate_pre.get("jra_local_week_transfer_shadow_sha256")
               if frozen_transfer_sha:
@@ -261,8 +276,13 @@ jobs:
                   assert candidate_final_frozen.get("oos_pre_result_record_sha256")==candidate_pre.get("sha256"), "JRA_TRANSFER_FINAL_OOS_RECORD_MISMATCH"
                   with open(transfer_path,encoding="utf-8") as fh:
                       frozen_transfer=json.load(fh)
-                  transfer_eval=evaluate_jra_week_transfer_shadow_result(
-                      frozen_transfer,candidate_pre,[int(x) for x in top3[:3]])
+                  valid_orders=official_top3_orders(p["official_result"])
+                  transfer_evaluations=[evaluate_jra_week_transfer_shadow_result(
+                      frozen_transfer,candidate_pre,order) for order in valid_orders]
+                  transfer_eval=(transfer_evaluations[0] if len(valid_orders)==1 else {
+                      "status":"DEAD_HEAT_MULTIPLE_VALID_ORDERS", "production_effect":"NONE",
+                      "by_valid_order":[{"top3":order,"evaluation":evaluation}
+                                        for order,evaluation in zip(valid_orders,transfer_evaluations)]})
                   candidate_eval["jra_local_week_transfer_shadow_result"]=transfer_eval
                   candidate_eval["sha256"]=__import__("hashlib").sha256(
                       json.dumps({k:v for k,v in candidate_eval.items() if k!="sha256"},
@@ -321,14 +341,17 @@ jobs:
                   json.dump(review,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","learning_states",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(learning,fh,ensure_ascii=False,sort_keys=True,indent=2)
-              with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
-                  json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
+              if oos is not None:
+                  with open(os.path.join("runtime","krs_oos_measurements",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
+                      json.dump(oos,fh,ensure_ascii=False,sort_keys=True,indent=2)
               with open(os.path.join("runtime","jra_fast_reflections",p["race_id"]+".json"),"w",encoding="utf-8") as fh:
                   json.dump(fast_reflection,fh,ensure_ascii=False,sort_keys=True,indent=2)
 
               measurements=[]
               for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
                   if not fn.endswith(".json"): continue
+                  if oos_diagnostic is not None and fn==p["race_id"]+".json":
+                      continue  # Preserve old bytes without crediting unknown metrics.
                   with open(os.path.join("runtime","krs_oos_measurements",fn),encoding="utf-8") as fh:
                       measurements.append(json.load(fh))
               r30=evaluate_r30(measurements)
@@ -371,6 +394,7 @@ jobs:
             "krs_post_result_classification":review.get("krs",{}).get("post_result_evaluation",{}).get("classification") if review else None,
             "krs_oos_eligible":oos.get("eligible") if oos else None,
             "krs_oos_measurement_sha256":oos.get("sha256") if oos else None,
+            "krs_oos_diagnostic":oos_diagnostic,
             "krs_r30_status":r30.get("status") if r30 else None,
             "krs_r30_eligible_races":r30.get("eligible_races") if r30 else None,
             "mec_r4_shadow_diagnostic":mec_shadow_diagnostic,
