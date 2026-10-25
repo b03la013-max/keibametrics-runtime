@@ -56,3 +56,16 @@ def test_actual_dynamic_run_names_route_by_verified_workflow_path():
         other={**event,"head_branch":"untrusted"}
         assert not permits("restart-worker",other)
         assert not permits("reconcile-resolver",other)
+
+
+def test_source_completion_wakes_status_without_retrying_source():
+    import yaml
+    workflow=yaml.safe_load(WORKFLOW)
+    job=workflow['jobs']['reconcile-source']
+    assert "km-jra-source-first-runner.yml" in job['if']
+    assert "head_branch == 'main'" in job['if']
+    script=job['steps'][0]['run']
+    assert 'gh workflow run km-jra-race-day-autopilot.yml' in script
+    assert '-f mode=tick' in script
+    assert 'gh workflow run km-jra-source-first-runner.yml' not in script
+    assert 'gh run rerun' not in script

@@ -172,7 +172,7 @@ jobs:
                   assert review.get("capital",{}).get("return")==p["settlement"]["total_payout"], "PAYOUT_REVISION_REQUIRES_SEPARATE_REVIEW"
                   assert int(review.get("capital",{}).get("refund") or 0)==int(p["settlement"].get("refund") or 0), "REFUND_REVISION_REQUIRES_SEPARATE_REVIEW"
               else:
-                  review=build_post_result_review(p,final_artifact)
+                  review=build_post_result_review(p,final_artifact,review_semantics="DECISION_AWARE_V2")
               # Only newly generated states receive an actual observation time.
               # Historical states remain unchanged and temporally ineligible.
               from datetime import datetime, timezone

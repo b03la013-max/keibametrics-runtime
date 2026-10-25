@@ -85,7 +85,9 @@ def _mec_actual_coverage(final_artifact, top3):
       "semantic_tail_floor_count":mec.get("semantic_tail_floor_count"),
     }
 
-def build_post_result_review(result:dict, final_artifact:dict)->dict:
+def build_post_result_review(result:dict, final_artifact:dict, *, review_semantics="LEGACY")->dict:
+    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2"}:
+        raise LearningError("REVIEW_SEMANTICS_UNSUPPORTED")
     if not isinstance(result,dict) or not isinstance(final_artifact,dict):
         raise LearningError("INPUT_NOT_OBJECT")
     race_id=str(result.get("race_id") or "")
@@ -151,17 +153,27 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
 
+    decision_aware=review_semantics=="DECISION_AWARE_V2"
+    capital_decision=final_artifact.get("capital_policy_decision") or {}
+    ft=final_artifact.get("final_ticket") or {}
+    paper=bool(capital_decision.get("decision")=="PAPER" and ft.get("no_bet") is True
+               and not ft.get("tickets") and inv==0 and coverage["investment"]==0)
+
     if not role_eval["winner_w"]:
         first_failure="PREDICTION_ROLE_W"
     elif not role_eval["second_p2"]:
         first_failure="PREDICTION_ROLE_P2"
     elif not role_eval["third_p3"]:
         first_failure="PREDICTION_ROLE_P3"
+    elif decision_aware and paper:
+        first_failure="NONE"
     elif not coverage["ordered_pair_ticket_coverage"]:
         first_failure="ORDERED_PAIR_CONVERSION"
     elif not coverage["top3_set_ticket_coverage"]:
         first_failure="THIRD_SET_COVERAGE"
-    elif not coverage["ordered_exact_ticket_coverage"]:
+    elif not coverage["ordered_exact_ticket_coverage"] and not (
+            decision_aware and mec_eval.get("available") and
+            mec_eval.get("ordered_exact_unit_present") is False):
         first_failure="EXACT_ORIENTATION"
     elif hit_but_loss:
         first_failure="CAPITAL_EFFICIENCY"
@@ -171,6 +183,8 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     prediction_status=("PASS" if all(role_eval.values()) else "PARTIAL")
     conversion_status=("PASS" if coverage["ordered_pair_ticket_coverage"] and coverage["top3_set_ticket_coverage"] else "PARTIAL")
     capital_status=("HOLD" if settlement_status in {"PENDING","UNKNOWN"} else ("PASS" if pfs is not None and pfs>=100.0 else "PARTIAL"))
+    if decision_aware and paper:
+        conversion_status=capital_status="NOT_APPLICABLE_PAPER"
 
     review={
       "profile":LEARNING_PROFILE,
@@ -213,6 +227,19 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "production_change_authorized":False,
       "prequential_only":True,
     }
+    if decision_aware:
+        review["review_semantics"]=review_semantics
+        review["policy_compliance"]={
+            "capital_decision":capital_decision.get("decision"),
+            "paper_zero_exposure_compliant":paper if capital_decision.get("decision")=="PAPER" else None,
+            "zero_exposure_reason":"PAPER_POLICY" if paper else None,
+            "prediction_quality_is_separate":True,
+        }
+        review["failure_localization"]["residual_diagnostics"]=(
+            ["EXACT_ORIENTATION_NOT_CAPTURED"] if not paper and not
+            coverage["ordered_exact_ticket_coverage"] else [])
+        if paper:
+            review["capital"]["pfs_status"]="NOT_APPLICABLE_ZERO_EXPOSURE"
     # Preserve historical review hashes when the original settlement did not
     # carry refund accounting. New settlements expose the separate denominator.
     if refund or "effective_investment" in settlement:
