@@ -98,11 +98,16 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
         raise LearningError("OFFICIAL_TOP3_REQUIRED")
     top3=[int(x) for x in top3]
     official=result.get("official_result") or {}
-    from jra_candidate_postresult_closedloop import official_top3_orders
-    try:
-        orders=official_top3_orders({**official,"top3":top3})
-    except (ValueError,KeyError,TypeError) as exc:
-        raise LearningError("OFFICIAL_FINISH_GROUPS_INVALID:"+str(exc)) from exc
+    orders=[top3]
+    # Follow the canonical race identity, as the shared KRS adapter does.
+    # LOCAL/BAN keep their existing review schema and do not import a JRA
+    # collector or inherit JRA-specific finish-group requirements.
+    if race_id.startswith("KM-JRA-"):
+        from jra_candidate_postresult_closedloop import official_top3_orders
+        try:
+            orders=official_top3_orders({**official,"top3":top3})
+        except (ValueError,KeyError,TypeError) as exc:
+            raise LearningError("OFFICIAL_FINISH_GROUPS_INVALID:"+str(exc)) from exc
     ref=result.get("frozen_prediction_ref") or {}
     declared=str(ref.get("final_receipt_sha256") or "")
     actual=str(final_artifact.get("final_receipt_sha256") or "")

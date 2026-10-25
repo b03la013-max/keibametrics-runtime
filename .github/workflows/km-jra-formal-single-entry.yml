@@ -734,10 +734,8 @@ jobs:
 
   pedigree-forward-shadow:
     continue-on-error: true
-    needs: orchestrate
-    if: ${{ always() && needs.orchestrate.result == 'success' && needs.orchestrate.outputs.final_reused != 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -747,33 +745,20 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -q cryptography beautifulsoup4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: km-jra-single-entry-*-${{ github.run_id }}
-          path: runtime_out/pedigree_forward_input
-          merge-multiple: true
-      - name: Freeze one fixed-model A B C D comparison only while cutoff remains open
+      - name: Warm verified caches during Production wait then freeze the original Run artifact
         id: freeze
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          BASE=runtime_out/pedigree_forward_input
-          test -f "$BASE/jra_formal_completion_verification.json" || exit 0
-          REQUEST="$BASE/jra_single_entry_formal_request.json"
-          SOURCE="$BASE/jra_single_entry_source_checkpoint/source_receipt_envelope.json"
-          RID="$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["race_id"])' "$REQUEST")"
-          SAFE="$(printf '%s' "$RID" | tr -c 'A-Za-z0-9._-' '-')"
-          # Research starts only after the actual Production FINAL is durable.
-          test -f "runtime/final_artifacts/$RID.json" || exit 0
-          MODEL="runtime/jra_static_owner_forward_oos/models/bvi_env_20261024_5e7f3b31cebd.json"
-          OUTPUT="runtime/jra_static_owner_forward_oos/$SAFE/pedigree_env_pre_result.json"
-          test ! -f "$OUTPUT" || exit 0
-          # One four-arm execution, not an ABC run followed by another ABCD run.
-          # The existing priority window and model/code/time checks remain mandatory.
-          python scripts/jra_bvi_pipeline_forward_shadow.py freeze --request "$REQUEST" --source "$SOURCE" --output "$OUTPUT" --environment-model "$MODEL"
-          echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
+          # Existing job/runner count is unchanged: at most fifteen minutes of
+          # Production wait plus the original fifteen-minute active budget.
+          # Only CPU/IO signature caches warm while orchestrate runs; the launcher
+          # cannot start canonical prediction/KRS until that ORIGINAL Run has
+          # succeeded and its exact SOURCE/Request/FINAL bindings are verified.
+          python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
+            --intent-path "${{ inputs.intent_path }}" --event-sha "${{ github.sha }}"
       - name: Attest exact research prediction before cutoff
         if: steps.freeze.outputs.output != ''
         uses: actions/attest@v4
@@ -837,6 +822,14 @@ jobs:
               raise SystemExit('BVI_FORWARD_COMMIT_OR_PUBLICATION_CUTOFF_EXPIRED')
           PY
           git push origin HEAD:main
+      - name: Record observed research OIDC witness and Git stage timings
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
+            --event-sha "${{ github.sha }}" --delivery-timing-only
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -845,4 +838,6 @@ jobs:
             runtime/jra_static_owner_forward_oos/**/pedigree_env_pre_result.json
             runtime_out/pedigree_env_prediction_verification.json
             runtime_out/jra_bvi_forward_freeze_failure.json
+            runtime_out/jra_bvi_forward_timing.json
+            runtime_out/jra_bvi_forward_delivery_timing.json
           if-no-files-found: warn
