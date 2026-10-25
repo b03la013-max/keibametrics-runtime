@@ -66,6 +66,12 @@ def validate_qualification(recovery, qualification, root):
     qualified = []
     run_count = 0
     for row in recovery['resolved']:
+        # An identical signed locator/run pointer does not constitute an
+        # independent observation merely because it appears twice in a sidecar.
+        bound = [(run.get('proof'), run.get('run_index'))
+                 for run in row['run_bindings']]
+        if len(bound) != len(set(bound)):
+            raise ValueError('IDENTITY_AUDIT_DUPLICATE_RUN_BINDING')
         corpus_ok = files.get(row['corpus_file'], {}).get('qualified', False)
         source = recovery['raw_proofs'][row['proof']]['source_envelope']
         if corpus_ok and row['chronology_before_target'] and files.get(source, {}).get('qualified', False):
@@ -77,6 +83,9 @@ def validate_qualification(recovery, qualification, root):
     expected_keys = {(x['corpus_file'], x['observation_index'], x['official_profile_token'])
                      for x in qualification['qualified']}
     actual_keys = {(x['corpus_file'], x['observation_index'], x['official_profile_token']) for x in qualified}
+    if (len(expected_keys) != len(qualification['qualified'])
+            or len(actual_keys) != len(qualified)):
+        raise ValueError('IDENTITY_AUDIT_DUPLICATE_PROFILE_OBSERVATION')
     if (expected_keys != actual_keys
             or len(qualified) != qualification['qualified_profile_locator_observations']
             or run_count != qualification['qualified_result_locator_runs']):
