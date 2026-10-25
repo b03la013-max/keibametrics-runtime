@@ -137,6 +137,16 @@ class ProductionPreparationTest(unittest.TestCase):
             self.intent, self.env,
             current_authority={"manifest_id": "TEST", "family_scoped_authority": {"JRA": {}}})
         self.assertTrue(report["production_full_numerical_ready"])
+        prepared = report["prepared_numerical_request"]
+        compiler = prepared["source_to_evidence_feature_compiler"]
+        self.assertEqual(compiler["pedigree_corpus_manifest"],
+                         report["source_feature_report"]["pedigree_corpus_manifest"])
+        self.assertEqual(prepared["source_to_evidence_feature_sha256"],
+                         report["source_feature_report"]["sha256"])
+        self.assertEqual(prepared["bvi_consumption_ledger"]["pedigree_corpus_manifest"],
+                         compiler["pedigree_corpus_manifest"])
+        self.assertEqual(prepared["bvi_consumption_ledger"]["corpus_artifact_lineage_status"],
+                         "FROZEN_SNAPSHOT_LIST_BOUND")
         partial = report["partial_production_base_calculation"]
         self.assertEqual(partial["required_base_cells"], 26)
         self.assertEqual(partial["calculated_base_cells"], 26)

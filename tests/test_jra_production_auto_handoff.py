@@ -159,6 +159,38 @@ class TestJRAProductionAutohandoff(unittest.TestCase):
         self.assertEqual(self.submit(explicit, source, report, authority)["capital_policy"],
                          explicit["capital_policy"])
 
+    def test_compiler_corpus_survives_handoff_without_numerical_or_krs_change(self):
+        intent, source, report, authority = fixture()
+        baseline = self.submit(intent, source, report, authority)
+        refs = ["ATTESTED_HARVEST:" + "a" * 64]
+        manifest = {"snapshots": refs, "snapshot_count": 1,
+                    "manifest_sha256": sha(refs)}
+        compiler = {"race_id": intent["race_id"],
+                    "source_snapshot_sha256": source["artifact"]["source_snapshot_sha256"],
+                    "pedigree_corpus_manifest": manifest}
+        prepared = report["prepared_numerical_request"]
+        prepared["source_to_evidence_feature_compiler"] = deepcopy(compiler)
+        prepared["source_to_evidence_feature_sha256"] = "b" * 64
+        intent["source_to_evidence_feature_compiler"] = {"untrusted_intent": True}
+        original = deepcopy((intent, source, report, authority))
+        result = self.submit(intent, source, report, authority)
+        self.assertEqual(result["source_to_evidence_feature_compiler"], compiler)
+        self.assertEqual(result["source_to_evidence_feature_sha256"], "b" * 64)
+        self.assertEqual(original, (intent, source, report, authority))
+        for field in ("runners", "static_prediction", "role_registry", "pair_dispositions",
+                      "third_dispositions", "krs_input_data", "capital_policy"):
+            self.assertEqual(result[field], baseline[field], field)
+        result["source_to_evidence_feature_compiler"]["pedigree_corpus_manifest"]["snapshots"].clear()
+        self.assertEqual(prepared["source_to_evidence_feature_compiler"], compiler)
+
+    def test_legacy_handoff_does_not_invent_compiler_from_intent(self):
+        intent, source, report, authority = fixture()
+        intent["source_to_evidence_feature_compiler"] = {"untrusted_intent": True}
+        intent["source_to_evidence_feature_sha256"] = "f" * 64
+        result = self.submit(intent, source, report, authority)
+        self.assertNotIn("source_to_evidence_feature_compiler", result)
+        self.assertNotIn("source_to_evidence_feature_sha256", result)
+
     def test_numeric_failure_precedes_independent_static_blocker(self):
         intent, source, report, _ = fixture()
         report["production_full_numerical_ready"] = False
