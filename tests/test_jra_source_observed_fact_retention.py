@@ -328,5 +328,31 @@ class CancelledNumberRetention(unittest.TestCase):
         self.assertEqual((declared['runner_count'],active['runner_count']),(9,8))
 
 
+def test_entire_failed_original_cp932_yields_declared9_cancelled1_active8():
+    from jra_race_card_detail import resolve_cancelled_runner_numbers,runner_universes_from_detail
+    fixture=json.loads((ROOT/'tests/fixtures/jra_cancelled_20261025/original_cp932.json').read_text())
+    original=copy.deepcopy(fixture)
+    snapshot=next(s for s in fixture['sources'] if s['snapshot_sha256']==fixture['detail_snapshot_sha256'])
+    raw=gzip.decompress(base64.b64decode(snapshot['raw_gzip_b64']))
+    assert len(raw)==136226
+    assert hashlib.sha256(raw).hexdigest()==snapshot['raw_sha256']=='c896c6468a98a490307755982f29bb0c04e41f34dc3edfd222df40823fa71a1e'
+    assert b'charset=Shift_JIS' in raw or 'シュプレヒコール' in raw.decode('cp932')
+    detail=parse_race_card_detail(raw,snapshot['content_type'])
+    assert detail['runner_count']==9
+    cancelled=next(r for r in detail['runners'] if r['status']=='CANCELLED')
+    assert cancelled['horse_no'] is None and cancelled['horse_name']=='シュプレヒコール'
+    detail['source_snapshot_sha256']=snapshot['snapshot_sha256']
+    artifact={**fixture,'jra_official_race_card_detail':detail,
+              'jra_official_runner_universe':copy.deepcopy(fixture['jra_official_pdf_runner_universe'])}
+    bound=resolve_cancelled_runner_numbers(artifact,meeting_key='0820260409')
+    declared,active=runner_universes_from_detail(bound['jra_official_race_card_detail'])
+    repaired=apply_official_detail_status(bound,declared,active)
+    assert declared['runner_count']==9 and active['runner_count']==8
+    assert [(r['horse_no'],r['name']) for r in declared['runners'] if r['status']=='CANCELLED']==[(5,'シュプレヒコール')]
+    assert [r['horse_no'] for r in repaired['jra_official_runner_universe']['runners']]==[1,2,3,4,6,7,8,9]
+    assert repaired['jra_official_pdf_runner_universe']==original['jra_official_pdf_runner_universe']
+    assert fixture==original
+
+
 if __name__=='__main__':
     unittest.main()
