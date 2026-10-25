@@ -131,10 +131,12 @@ def test_paper_keeps_prediction_quality_separate_from_ticket_conversion():
     assert v2['failure_localization']['first_material_failure']=='NONE'
     assert v2['capital']['pfs'] is None and v2['capital']['status']=='NOT_APPLICABLE_PAPER'
     assert v2['conversion']['status']=='NOT_APPLICABLE_PAPER'
+    assert v2['pfs_improvement']['dominant_pfs_loss_owner']['applicability']=='NOT_APPLICABLE_ZERO_EXPOSURE'
     assert 'ORDERED_PAIR_CONVERSION' not in build_learning_state(v2)['shadow_candidates']
     f['final_prediction_package']['roles']['3']=[]
     failed=build_post_result_review(r,f,review_semantics='DECISION_AWARE_V2')
     assert failed['failure_localization']['first_material_failure']=='PREDICTION_ROLE_W'
+    assert failed['pfs_improvement']['dominant_pfs_loss_owner']['applicability']=='NOT_APPLICABLE_ZERO_EXPOSURE'
     f['final_prediction_package']['roles']['3']=['W'];assert (r,f)==before
     assert build_post_result_review(r,f)==legacy
 
