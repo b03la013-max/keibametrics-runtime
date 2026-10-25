@@ -21,7 +21,7 @@ from jra_source_candidate_oos import evaluate_result
 from jra_source_candidate_promotion_gate import bind_result
 from jra_same_day_results import _open_day, parse_result_detail, finish_groups_and_top3_orders
 from jra_race_card_detail import _date8, _post
-from source_acquisition import _decode, _html_text, utcnow
+from jra_source_runtime.source_acquisition import _decode, _html_text, utcnow
 
 PROFILE = "KM-JRA-CANDIDATE-AUTOMATIC-POSTRESULT-CLOSEDLOOP-20261010-R1"
 BET_KINDS = {"EXACTA": ("馬単", 2), "TRIO": ("3連複", 3), "TRIFECTA": ("3連単", 3)}

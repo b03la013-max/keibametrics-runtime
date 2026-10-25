@@ -1249,7 +1249,10 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if any(marker in page_text for marker in (
             "審議中", "審議しています", "成績未確定", "着順未確定", "払戻未確定", "結果未確定")):
         raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_FINAL")
-    if any(marker in page_text for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
+    # A runner's 競走中止 is DNF, not cancellation of the entire race.
+    race_notice = re.sub(r"<table\b[^>]*>.*?</table>", "", body, flags=re.S | re.I)
+    race_notice = re.sub(r"\s+", "", unicodedata.normalize("NFKC", _html_text(race_notice)))
+    if any(marker in race_notice for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
         # Cancellations require the existing authorized refund path; the flat
         # payout representation used here cannot safely settle them.
         raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
@@ -1262,23 +1265,32 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     # Use the result table's explicit status, not incidental page text. A horse
     # already excluded from the frozen active universe cannot create exposure.
     frozen_runners = set(map(str, runner_ids))
+    observed = set()
     for table in tables:
         if not table or not {"着順", "馬番", "馬名"}.issubset(set(table[0])):
             continue
         status_index, horse_index = table[0].index("着順"), table[0].index("馬番")
         for row in table[1:]:
             if len(row) <= status_index:
-                continue
+                raise FormalOrchestrationError("OFFICIAL_RESULT_RUNNER_STATE_HOLD")
             status = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[status_index]))
-            if status not in {"取消", "除外", "出走取消", "競走除外"}:
-                continue
             horse = (re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[horse_index]))
                      if len(row) > horse_index else "")
-            if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
-                raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
+            if status in {"取消", "除外", "出走取消", "競走除外"}:
+                if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
+                    raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
+                continue
+            if (not re.fullmatch(r"[1-9]\d*", horse) or horse not in frozen_runners
+                    or horse in observed):
+                raise FormalOrchestrationError("OFFICIAL_RESULT_RUNNER_STATE_HOLD")
+            if not re.fullmatch(r"[1-9]\d*", status) and status not in {"中止","競走中止","失格","競走失格"}:
+                raise FormalOrchestrationError("OFFICIAL_RESULT_RUNNER_STATE_HOLD")
+            observed.add(horse)
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
+    if observed != frozen_runners:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_RUNNER_STATE_HOLD")
     rows = sorted(finish_tables[0], key=lambda row: row["finish"])
     positions = [row["finish"] for row in rows]
     order = [row["horse_no"] for row in rows]

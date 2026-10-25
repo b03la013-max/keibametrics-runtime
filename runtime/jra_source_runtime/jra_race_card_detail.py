@@ -5,7 +5,15 @@ from typing import Any, Dict, List, Tuple
 try:
     from .source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 except ImportError:
-    from source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    # Repository callers can coexist with LOCAL's standalone source module.
+    # Never resolve that module merely because it was imported first.
+    try:
+        from jra_source_runtime.source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    except ModuleNotFoundError as exc:
+        if exc.name != "jra_source_runtime":
+            raise
+        # The external JRA bundle is deliberately a flat directory.
+        from source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-RACE-CARD-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
