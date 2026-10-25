@@ -155,6 +155,15 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     prepared = report.get("prepared_numerical_request") or {}
     if prepared.get("family_id") != "JRA":
         raise JRAProductionAutoHandoffError("JRA_PREPARED_PRODUCTION_LEDGER_MISSING")
+    from jra_bvi_consumption import verify_compiler_lineage
+    try:
+        verify_compiler_lineage(prepared, source_snapshot_sha256=snap_sha,
+                                source_report=report.get("source_feature_report"))
+        if (prepared.get("source_to_evidence_feature_compiler") is not None
+                and report.get("source_feature_report") is None):
+            raise ValueError("BVI_COMPILER_ORIGINAL_REPORT_REQUIRED")
+    except ValueError as exc:
+        raise JRAProductionAutoHandoffError(str(exc)) from exc
     try:
         canonical_owner = compile_static_owner(
             prepared,
@@ -194,6 +203,13 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
         "numeric_calculation_requirement": "FULL_REQUIRED",
         "base_index_mapping_authority": deepcopy(prepared["base_index_mapping_authority"]),
     })
+    # The intent is not the compiler output. Keep the original admitted corpus
+    # binding across this boundary without filling legacy requests from today's
+    # corpus or allowing an intent-supplied trace to replace the prepared one.
+    for name in ("source_to_evidence_feature_compiler", "source_to_evidence_feature_sha256"):
+        req.pop(name, None)
+        if name in prepared:
+            req[name] = deepcopy(prepared[name])
     # Runtime must supply an actual Base44 session. Never mint one here.
     validate_orchestration_ref(req)
     static = deepcopy(owner["static_prediction"])

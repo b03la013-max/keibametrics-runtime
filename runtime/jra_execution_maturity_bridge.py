@@ -397,6 +397,13 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     if intent.get("supplemental_evidence_pack") is not None:
         req, _ = apply_supplemental_evidence_pack(req, intent["supplemental_evidence_pack"], mapping)
     features = compile_source_to_features(source, req["runners"], mapping)
+    # Preserve the exact compiler-time corpus, including its admitted snapshot
+    # list. Reconstructing a manifest later cannot prove which inflow supplied
+    # the frozen numerical request. This is provenance, never a second read.
+    req["source_to_evidence_feature_compiler"] = {
+        k: copy.deepcopy(v) for k, v in features.items() if k != "runners"
+    }
+    req["source_to_evidence_feature_sha256"] = features["sha256"]
     gaps = []
     for runner in req["runners"]:
         rid = runner["runner_id"]

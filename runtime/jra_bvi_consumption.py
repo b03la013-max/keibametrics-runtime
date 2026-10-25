@@ -14,12 +14,61 @@ def sha(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
+def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_report=None):
+    """Bind a new compact trace to its actual Compiler output, without rereading.
+
+    A legacy request with neither field is left legacy. The full report is
+    already present at the handoff boundary; later consumers additionally
+    check which BVI components actually reference the declared corpus.
+    """
+    compiler = request.get('source_to_evidence_feature_compiler')
+    feature_sha = request.get('source_to_evidence_feature_sha256')
+    if compiler is None and feature_sha is None:
+        return None
+    if not isinstance(compiler, dict):
+        raise ValueError('BVI_COMPILER_TRACE_INVALID')
+    manifest = compiler.get('pedigree_corpus_manifest')
+    # Older digest-only traces are not upgraded into snapshot-list proof.
+    if feature_sha is None and isinstance(manifest, dict) and 'snapshots' not in manifest:
+        return manifest
+    source_sha = source_snapshot_sha256 or request.get('source_snapshot_sha256')
+    if (not isinstance(feature_sha, str) or not re.fullmatch(r'[0-9a-f]{64}', feature_sha)
+            or compiler.get('sha256') != feature_sha
+            or compiler.get('race_id') != request.get('race_id')
+            or not source_sha or compiler.get('source_snapshot_sha256') != source_sha
+            or (source_snapshot_sha256 and request.get('source_snapshot_sha256')
+                and request['source_snapshot_sha256'] != source_snapshot_sha256)):
+        raise ValueError('BVI_COMPILER_TRACE_IDENTITY_OR_HASH_MISMATCH')
+    if source_report is not None:
+        if (not isinstance(source_report, dict)
+                or source_report.get('sha256') != sha({k:v for k,v in source_report.items() if k != 'sha256'})
+                or {k:v for k,v in source_report.items() if k != 'runners'} != compiler):
+            raise ValueError('BVI_COMPILER_ORIGINAL_REPORT_MISMATCH')
+        actual = {str(r['runner_id']): r.get('evidence_features') or {} for r in request['runners']}
+        expected = {str(rid): row.get('merged_evidence_features') or {}
+                    for rid, row in (source_report.get('runners') or {}).items()}
+        if actual != expected:
+            raise ValueError('BVI_COMPILER_NUMERICAL_FEATURE_BINDING_MISMATCH')
+    if manifest is not None:
+        if not isinstance(manifest, dict):
+            raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
+        if manifest.get('snapshots') is not None:
+            refs = manifest['snapshots']
+            if (not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs)
+                    or refs != sorted(set(refs)) or len(refs) != manifest.get('snapshot_count')
+                    or sha(refs) != manifest.get('manifest_sha256')):
+                raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
+    return manifest
+
+
 def build_bvi_consumption(request, mapping, source_artifact=None):
     pedigree_features={feature for indices in mapping['index_profiles'].values() for feature in indices['BVI']}
     source_artifact=source_artifact or {}
     if source_artifact and (source_artifact.get('race_id')!=request['race_id'] or
             (request.get('source_snapshot_sha256') and request['source_snapshot_sha256']!=source_artifact.get('source_snapshot_sha256'))):
         raise ValueError('BVI_CONSUMPTION_SOURCE_BINDING_MISMATCH')
+    corpus_manifest = verify_compiler_lineage(request,
+        source_snapshot_sha256=source_artifact.get('source_snapshot_sha256'))
     cards={str(r.get('runner_id') or r.get('horse_no')):r for r in (source_artifact.get('jra_official_race_card_detail') or {}).get('runners',[])}
     histories=(source_artifact.get('jra_official_horse_history') or {}).get('runners') or {}
     rows=[]
@@ -68,19 +117,32 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             'missing_cause':'NOT_INDEPENDENTLY_ESTABLISHED_BY_LEGACY_FEATURE_ABSENCE' if dcr else None,
             'dcr_applied':dcr,'numerical_replay':'PASS'})
     static_proof=request.get('bvi_static_consumption_proof')
-    corpus_manifest=(request.get('source_to_evidence_feature_compiler') or {}).get('pedigree_corpus_manifest')
+    lineage_status = 'LEGACY_MANIFEST_DIGEST_ONLY'
+    component_bindings = Counter()
     if corpus_manifest and corpus_manifest.get('snapshots') is not None:
-        refs=corpus_manifest['snapshots']
-        if (refs!=sorted(set(refs)) or len(refs)!=corpus_manifest['snapshot_count']
-                or sha(refs)!=corpus_manifest['manifest_sha256']):
-            raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
+        digest = corpus_manifest['manifest_sha256']
+        for row in rows:
+            for component in row['components']:
+                references = {ref.removeprefix('JRA_PEDIGREE_CORPUS:')
+                              for ref in component.get('evidence_refs') or []
+                              if isinstance(ref, str) and ref.startswith('JRA_PEDIGREE_CORPUS:')}
+                state = ('MATCHED_DECLARED_MANIFEST' if references == {digest}
+                         else 'OTHER_OR_MULTIPLE_CORPUS_REFERENCES' if references
+                         else 'NO_CORPUS_REFERENCE')
+                component['corpus_manifest_binding'] = state
+                component_bindings[state] += 1
+        matched = component_bindings['MATCHED_DECLARED_MANIFEST']
+        other = component_bindings['OTHER_OR_MULTIPLE_CORPUS_REFERENCES']
+        lineage_status = ('MIXED_CORPUS_REFERENCES_NOT_FULLY_BOUND' if matched and other
+                          else 'UNMATCHED_CORPUS_TRACE_NOT_CONSUMPTION_PROOF' if other
+                          else 'FROZEN_SNAPSHOT_LIST_BOUND' if matched
+                          else 'FROZEN_MANIFEST_NO_BVI_CORPUS_COMPONENT_REFERENCE')
     if static_proof is not None:
         from jra_bvi_static_proof import verify_static_proof
         verify_static_proof(static_proof,request)
     result={'static_execution_proof':static_proof,
         'pedigree_corpus_manifest':corpus_manifest,
-        'corpus_artifact_lineage_status':('FROZEN_SNAPSHOT_LIST_BOUND' if corpus_manifest and corpus_manifest.get('snapshots') is not None
-                                        else 'LEGACY_MANIFEST_DIGEST_ONLY'),
+        'corpus_artifact_lineage_status':lineage_status,
         'static_execution_proof_status':'BOUND_ACTUAL_EXECUTION' if static_proof else 'LEGACY_NO_EXECUTION_PROOF',
         'profile':'KM-JRA-BVI-CONSUMPTION-PROOF-v1','race_id':request['race_id'],
         'production_authority':request.get('current_authority') or request.get('base_index_mapping_authority'),
@@ -100,5 +162,7 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             'no_direct_bvi_term':['ZAI_WIN','ZAI_PLACE'],
             'static_winner_ranking':'ZAI_WIN; BVI-only change does not directly change W ranking'},
         'prediction_improvement_demonstrated':False,'capital_improvement_demonstrated':False}
+    if corpus_manifest and corpus_manifest.get('snapshots') is not None:
+        result['corpus_component_bindings'] = dict(component_bindings)
     result['sha256']=sha(result)
     return result
