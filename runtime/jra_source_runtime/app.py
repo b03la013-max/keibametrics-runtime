@@ -65,6 +65,8 @@ def signed_receipt(race_id:str,status:str,artifact:Dict[str,Any],errors=None):
         "jra_person_stats_sha256":_sha_file("jra_person_stats.py"),
         "jra_race_card_detail_sha256":_sha_file("jra_race_card_detail.py"),
         "jra_market_observation_sha256":_sha_file("jra_market_observation.py"),
+        "jra_observed_context_sha256":_sha_file("jra_observed_context.py"),
+        "jra_current_environment_sha256":_sha_file("jra_current_environment.py"),
         "jra_registered_common_sha256":_sha_file("jra_registered_common.py"),
         "jra_same_day_results_sha256":_sha_file("jra_same_day_results.py"),
       }
@@ -333,6 +335,14 @@ def source_acquire(p:Dict[str,Any]):
             artifact.setdefault("warnings",[]).append("AKI_EXTERNAL_OBSERVATION_UNAVAILABLE:"+type(e).__name__+":"+str(e))
 
     artifact["prediction_cutoff"]=cutoff or None
+    # A complete second official observation must be the context used by the
+    # forthcoming Static calculation. Keep both originals; never alter a FINAL.
+    if artifact.get('aki_external_observation_status',{}).get('status')=='PASS':
+        try:
+            from jra_current_environment import bind_latest_environment
+            artifact=bind_latest_environment(artifact,cutoff)
+        except (ValueError,KeyError,TypeError,OSError,EOFError) as exc:
+            errors.append('JRA_CURRENT_ENVIRONMENT_BINDING_FAILED:'+str(exc))
     artifact["source_freeze_at"]=utcnow()
     if cutoff:
         try:

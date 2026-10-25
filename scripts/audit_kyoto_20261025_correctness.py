@@ -1,5 +1,6 @@
 """Read saved Kyoto originals and audit the proposed P0 corrections offline."""
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -11,6 +12,8 @@ from formal_request_validator import ticket_capital_metrics
 from formal_temporal_audit import build_temporal_audit
 from jra_role_exclusion_audit import build_role_exclusion_audit
 from post_result_learning import build_post_result_review,_sha
+from jra_source_runtime.jra_current_environment import bind_latest_environment
+from jra_source_runtime.jra_observed_context import resolve_observed_context
 
 
 def audit(root):
@@ -34,6 +37,7 @@ def audit(root):
         temporal=build_temporal_audit(request,request['source_snapshot'],final['final_freeze_timestamp'])
         metrics=ticket_capital_metrics(final['final_ticket']['tickets'])
         review=build_post_result_review(result,final,review_semantics='DECISION_AWARE_V2')
+        context_diagnostic=bind_latest_environment(deepcopy(request['source_snapshot']),request['prediction_cutoff'])
         if metrics['total_investment']!=final['final_ticket']['total_investment']:
             raise ValueError('FINAL_TICKET_TOTAL_MISMATCH:'+rid)
         rows.append({'race_id':rid,'role_replay':roles['status'],'role_cell_count':roles['role_cell_count'],
@@ -42,6 +46,13 @@ def audit(root):
             'legacy_review_sha256':build_post_result_review(result,final)['sha256'],
             'candidate_review_sha256':review['sha256'],
             'candidate_first_material_failure':review['failure_localization']['first_material_failure'],
+            'current_environment_diagnostic':{
+                'classification':'POST_RESULT_ORIGINAL_BYTES_ONLY_NOT_NEW_SOURCE',
+                'original_going':resolve_observed_context(request['source_snapshot']).get('going'),
+                'latest_official_going':resolve_observed_context(context_diagnostic).get('going'),
+                'binding_sha256':context_diagnostic.get('jra_current_environment_binding',{}).get('sha256'),
+                'changes':context_diagnostic.get('jra_current_environment_reconciliation',{}).get('changes'),
+                'source_issued':False,'prediction_regenerated':False},
             'pfs':review['capital']['pfs']})
     if any(hashlib.sha256((root/path).read_bytes()).hexdigest()!=digest for path,digest in originals.items()):
         raise ValueError('ORIGINAL_BYTES_CHANGED')

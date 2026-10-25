@@ -6,12 +6,15 @@
 - SOURCE完了イベントから既存AutopilotのStatus照合を起動する。SOURCEの自動rerun、別入口、手動Dispatchは追加しない。
 - FINALの資金監査を、PRE_KRSの券面なしConformanceと区別する。実際に凍結する券面から、券種・1着・Ordered Pairの投資、集中度を集計し、署名前に実投資総額と一致させる。
 - 実際のSOURCE取得・Static計算・FINAL・Cutoff・発走時刻を並べる。legacy `static_freeze_timestamp` がCutoff境界を意味する場合に、その意味を明記する。独立保存証拠やOOS資格を与えない。
+- 新規SOURCEの凍結前に、既に取得した2回目の公式出馬表を同一Race・Active馬の同一性・原本SHA・Cutoffへ束縛する。最新馬場をSource→FeatureとKRSの共通Contextへ接続し、2原本を保持する。旧署名SOURCEは明示的な新取得用Bindingを持たない限り従来のContextを保持する。取得数・KRS回数は増やさない。新しい実装HashをReceiptとPolicy fingerprintへ含め、別コード/PolicyのOOSを混合しない。
 - Current Authorityのコード・Registry・SOURCE Hashを照合した上で、全馬全RoleのRule ID、期待カテゴリ、実測カテゴリ、根拠、未充足要件を保存する。新馬PAPER専用の既存Policyも再現し、基準・候補・券面を変更しない。
 - 新規Reviewは`DECISION_AWARE_V2`で作る。PAPERの正式0点を券面変換失敗とせず、予測Roleの失敗は残す。MECの必須Semantic Unitでない三連単未捕捉を残余診断に分ける。既存Review/Learningは既存Workflowのreadbackによりそのまま保持する。従来APIの既定もLEGACYとして、過去の再現Hashを維持する。
 
 ## 実原本による検収
 
 `offline_audit.json`は京都4R〜12Rの9件・117頭・351 Roleセルを再現した事後監査。SOURCE/FINAL/RESULTの生SHAを記録し、変更していないことを再確認した。実券面の総投資は8,100円。9件とも実時計の順序は整合する。これは発走前の独立保存再証明ではない。
+
+京都11Rは保存SOURCE内の2原本で稍重→良が確認でき、従来Contextは稍重を返した。新取得用Bindingを用いる純粋な事後診断では良を返し、他8件の馬場は変わらない。新SOURCE・予測・署名は生成していない。
 
 京都5RはPAPERで予測Role成功、京都7Rは三連複保護で利益、京都8Rは正解三連単捕捉。これらを失敗として一括変更しない。京都4R・6R・9R〜12RはW Role形成の失敗を残す。
 

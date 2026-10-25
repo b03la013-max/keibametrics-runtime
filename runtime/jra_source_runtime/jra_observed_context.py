@@ -22,7 +22,7 @@ except ImportError:
 FIELDS = ("race_date", "venue_id", "race_no", "surface", "distance_m", "race_class", "scheduled_post_at")
 
 
-def resolve_observed_context(artifact):
+def resolve_primary_observed_context(artifact):
     detail = artifact.get("jra_official_race_card_detail") or {}
     snapshots = [x for x in artifact.get("sources") or []
                  if x.get("source_id") == "JRA-OFFICIAL-RACE-CARD-DETAIL"
@@ -60,6 +60,17 @@ def resolve_observed_context(artifact):
         if str(context.get(field)) != str(identity.get(field)):
             raise ValueError("JRA_DETAIL_CONTEXT_IDENTITY_MISMATCH:" + field)
     context["sha256"] = sha_obj(context)
+    return context
+
+
+def resolve_observed_context(artifact):
+    context=resolve_primary_observed_context(artifact)
+    if artifact.get('jra_current_environment_binding'):
+        try:
+            from .jra_current_environment import resolve_current_environment
+        except ImportError:
+            from jra_current_environment import resolve_current_environment
+        return resolve_current_environment(artifact,context)
     return context
 
 
