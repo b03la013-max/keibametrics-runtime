@@ -1,6 +1,15 @@
 {
- "generated_at": "2026-10-24T21:39:16.466638+09:00",
- "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; MISSED_WINDOW = never predicted (no late or backdated FINAL).",
+ "generated_at": "2026-10-25T07:13:51.807628+09:00",
+ "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; MISSED_WINDOW = never predicted (no late or backdated FINAL). state retains scheduler compatibility; display_state and post_result_evidence separate stored bodies/bindings from signature verification and full closure.",
+ "post_result_metrics": {
+  "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+  "race_denominator": 36,
+  "result_requests_present": 33,
+  "review_learning_bound": 32,
+  "signature_validation_performed": false,
+  "stored_result_receipts_payload_bound": 20,
+  "zero_exposure_result_learning_bound": 3
+ },
  "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012",
  "race_date": "2026-10-24",
  "races": [
@@ -924,10 +933,57 @@
     }
    },
    "decision_reason": "AKI_SINGLE_HEAD_FORBIDDEN",
+   "display_state": "AKI_NO_BET / ZERO_EXPOSURE_RESULT_RECORDED",
    "first_blocked_stage": "PRODUCTION_AKI_COLUMN_SELECTION",
    "full20": "240/240",
    "no_bet_terminal": "runtime/jra_no_bet_terminals/KM-JRA-NGT-20261024-R01-LIVE-R1.json",
    "post": "2026-10-24T09:45:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": null,
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R01.json",
+     "present": false,
+     "race_bound": false,
+     "review_bound": false,
+     "self_hash_valid": false,
+     "sha256": null,
+     "state_id": null
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": false,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R01-AUTO.json",
+     "present": false,
+     "race_bound": false,
+     "result_and_final_bound": false,
+     "self_hash_valid": false
+    },
+    "review_learning_bound": false,
+    "signature_validation_performed": false,
+    "storage_state": "ZERO_EXPOSURE_RESULT_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [
+     {
+      "decision_bound": true,
+      "official_result_acquired_at": "2026-10-24T09:47:59.534744+00:00",
+      "official_top3": [
+       "2",
+       "8",
+       "4"
+      ],
+      "path": "runtime/jra_no_bet_learning/KM-JRA-NGT-20261024-R01-LIVE-R1.json",
+      "pfs": null,
+      "present": true,
+      "race_bound": true,
+      "self_hash_valid": true,
+      "signature_or_oidc_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "status": "ZERO_EXPOSURE_RESULT_RECORDED"
+     }
+    ],
+    "zero_exposure_result_learning_bound": true
+   },
    "race_id": "KM-JRA-NGT-20261024-R01",
    "race_no": 1,
    "registered_intake": false,
@@ -948,6 +1004,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R01/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "6fc5bc0a045e53845ffb6fca29fa14cc756900277b97804cbeeb8e65bd34708f",
    "immutable_final_sha256": "56073001527fa8d8888b49f4bfd015457d47b7d4fd4ecaec0b6c4e6e3552ad5e",
    "krs_actual_run_count": 5000,
@@ -957,9 +1014,39 @@
     11
    ],
    "post": "2026-10-24T09:55:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T01:28:57.386121+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R01.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "4d75aa9c1221d33069ec499373d2335e9f7e86a0c7d1312ddcb6e177b46be1ea",
+     "state_id": "KM-JRA-KYO-20261024-R01-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R01-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R01",
    "race_no": 1,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -989,6 +1076,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R01/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "800d288e80fec0d7b45a58842bdf41f654c6caef25caf1dc328969ce2d479dd3",
    "immutable_final_sha256": "b0372260760e8449ae4ba295ff38e9c8abaf9a61795fd5b7b2b8547c0c8b8fc2",
    "krs_actual_run_count": 5000,
@@ -998,9 +1086,48 @@
     7
    ],
    "post": "2026-10-24T10:05:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.432385+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R01.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "1a0633700e0856fe54b2e84afecb3c6b280efb75eafa078cf0c36b53431da90d",
+     "state_id": "KM-JRA-TKY-20261024-R01-LEARNING-RECOVERY-40049940196"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R01-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R01-LIVE-R1/RESULT/runs/original-recovery-40049940196/result_receipt_envelope.json",
+      "receipt_sha256": "bd8cc1937fb10dec110aa83b4940b0a0404cf8f7b87b8e6ec7b002223356923b",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R01",
    "race_no": 1,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1033,7 +1160,7 @@
      }
     ]
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 13,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 3.000／W-AKI 0.000\nP2-AKI 0.000／P3-AKI 15.000\nASI 90.000／軸飛びリスク 10.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 12\n2着\n├─ 7\n├─ 3\n├─ 8\n└─ 10\n三連単（本線）\n1着\n└─ 12\n2着\n├─ 7\n├─ 3\n├─ 8\n└─ 10\n3着\n├─ 7\n├─ 3\n└─ 8\n点数\n├─ 馬単　4点\n├─ 三連単　9点\n└─ 合計　13点\n1点当たり\n└─ 100円\n投資額\n└─ 1,300円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "2歳未勝利（混合）［指定］",
@@ -1052,6 +1179,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R02/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "38cef7dab82dd603a7001149240592e540454d095b42faf0717fe8eb857daec4",
    "immutable_final_sha256": "95e9db5a416898ef3e27e2dae598f0f59f013acae7270b002755a9ee3541a632",
    "krs_actual_run_count": 5000,
@@ -1061,9 +1189,48 @@
     10
    ],
    "post": "2026-10-24T10:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.437604+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R02.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "882cba34c5aab42fd6f95317cc1f71f9ca040b56f5612cfb6a5ddae3d3029bad",
+     "state_id": "KM-JRA-NGT-20261024-R02-LEARNING-RECOVERY-40049932540"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R02-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R02-LIVE-R1/RESULT/runs/original-recovery-40049932540/result_receipt_envelope.json",
+      "receipt_sha256": "572d17204444ddd9a454e2c2ce6e97756119055cfcfca14ae959d54f59367d85",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R02",
    "race_no": 2,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1074,7 +1241,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 0,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 47.500／W-AKI 55.000\nP2-AKI 85.000／P3-AKI 55.000\nASI 50.000／軸飛びリスク 50.000／RSI 15.000\n外部変動 0.000／堅決着補正 0.000\n└─ 見送り\n購入判定\n└─ 見送り\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "2歳未勝利（混合）［指定］",
@@ -1093,6 +1260,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R02/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "f4e57cd29646f4ac1743ddacb8d310fe90f1b432908935141ae0df29a17f77ea",
    "immutable_final_sha256": "3f15493a7215443c869a42bb1a39af6d8fbc88d4a5771d778fc49e862b2b5214",
    "krs_actual_run_count": 5000,
@@ -1102,9 +1270,39 @@
     1
    ],
    "post": "2026-10-24T10:25:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T01:59:36.109982+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R02.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "32e101ef84ae9bf29b1529e615b147bfb556d9792c083caa12ae28963c7a7f0a",
+     "state_id": "KM-JRA-KYO-20261024-R02-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R02-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R02",
    "race_no": 2,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1134,6 +1332,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R02/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "8f23510095ee9d32365c2b063787784bd82034d2e60e9acec7e51ebab66aed80",
    "immutable_final_sha256": "53ddff063d34cebd26ef6c551b74cdceb3a293b5b203b3747ca3275f9ab634ac",
    "krs_actual_run_count": 5000,
@@ -1143,9 +1342,48 @@
     7
    ],
    "post": "2026-10-24T10:35:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.418685+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R02.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "919a8acac9234da0890a5f6f042c308926cbcae63ee72b706b2e9691ce223768",
+     "state_id": "KM-JRA-TKY-20261024-R02-LEARNING-RECOVERY-40052223669"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R02-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R02-LIVE-R1/RESULT/runs/original-recovery-40052223669/result_receipt_envelope.json",
+      "receipt_sha256": "5b7e99b9d29e5e28aa1402283ebf0776d6047e325678d7d69ad91c4a68f7b3f1",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R02",
    "race_no": 2,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1178,7 +1416,7 @@
      }
     ]
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 6,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 7.500／W-AKI 5.000\nP2-AKI 15.000／P3-AKI 15.000\nASI 85.000／軸飛びリスク 15.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 4\n2着\n├─ 7\n└─ 1\n三連単（本線）\n1着\n└─ 4\n2着\n├─ 7\n└─ 1\n3着\n├─ 7\n├─ 1\n└─ 5\n点数\n├─ 馬単　2点\n├─ 三連単　4点\n└─ 合計　6点\n1点当たり\n└─ 100円\n投資額\n└─ 600円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "2歳未勝利（混合）［指定］",
@@ -1197,6 +1435,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R03/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "9498880c566b8e0396e8262db494825f815b469b10230e13327bedf64f343220",
    "immutable_final_sha256": "d7708a8ade9dafbd21f7c4f4689d46aa76d1c9077ed7b500da636b4c1d6735a7",
    "krs_actual_run_count": 5000,
@@ -1206,9 +1445,48 @@
     4
    ],
    "post": "2026-10-24T10:45:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.426270+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R03.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "2b6c8f9d9ee3d1ef1d19c7c32cca5d8faaf78a455ab9bdf5a210ac8c57ec36e1",
+     "state_id": "KM-JRA-NGT-20261024-R03-LEARNING-RECOVERY-40052216052"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R03-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R03-LIVE-R1/RESULT/runs/original-recovery-40052216052/result_receipt_envelope.json",
+      "receipt_sha256": "82957eb7a435a0841451048890ebf4f0b7321dd275452af35da442fdf1461d17",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R03",
    "race_no": 3,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1219,7 +1497,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 21,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 40.000／W-AKI 60.000\nP2-AKI 40.000／P3-AKI 55.000\nASI 35.000／軸飛びリスク 65.000／RSI 15.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 7\n├─ 6\n├─ 10\n└─ 13\n2着\n├─ 7\n├─ 6\n└─ 10\n三連複（本線）\n1列目\n└─ 7\n2列目\n└─ 6\n3列目\n└─ 10\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 6\n3列目\n└─ 13\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 10\n3列目\n└─ 13\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 10\n3列目\n└─ 13\n三連単（頭入替）\n1着\n├─ 7\n└─ 6\n2着\n├─ 7\n├─ 6\n└─ 10\n3着\n├─ 7\n├─ 6\n├─ 10\n└─ 13\n点数\n├─ 馬単　9点\n├─ 三連複　4点\n├─ 三連単　8点\n└─ 合計　21点\n1点当たり\n└─ 100円\n投資額\n└─ 2,100円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "2歳未勝利[指定]",
@@ -1238,6 +1516,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R03/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "6e85e86bc71942bd4bbd940f309a866a668f8290910b19fd031ab7c2dc65efdb",
    "immutable_final_sha256": "b3e4e59ce129e5c7352eda708432264710fc6d73a469b4dc1006606d0d168d61",
    "krs_actual_run_count": 5000,
@@ -1247,9 +1526,39 @@
     1
    ],
    "post": "2026-10-24T10:55:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T02:30:12.629183+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R03.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "ea2b216ebdd62c25ef1301441245334ef945d1bf1390ad0cba2170eac9c96b12",
+     "state_id": "KM-JRA-KYO-20261024-R03-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R03-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R03",
    "race_no": 3,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1279,6 +1588,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R03/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "a4ee31484a5ac0ccbe3f75a3e412279008b22ec65be36dd0e39c643b52720767",
    "immutable_final_sha256": "b95be9d324a6144fdc81811abc596a0e03a0a6fcf07f87f2feaec88fe20949f9",
    "krs_actual_run_count": 5000,
@@ -1288,9 +1598,48 @@
     5
    ],
    "post": "2026-10-24T11:05:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.405115+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R03.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "c8908d25746437abec3e776941f54b6c2cd0d07877d36647821bf8b22ec4e0b3",
+     "state_id": "KM-JRA-TKY-20261024-R03-LEARNING-RECOVERY-40054389705"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R03-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R03-LIVE-R1/RESULT/runs/original-recovery-40054389705/result_receipt_envelope.json",
+      "receipt_sha256": "c939bd2b0a12da0fd622cb565c843c3e992ebe151fc3f4b7322e0a22978ce7aa",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R03",
    "race_no": 3,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1323,7 +1672,7 @@
      }
     ]
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 19,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 37.000／W-AKI 50.000\nP2-AKI 55.000／P3-AKI 55.000\nASI 27.500／軸飛びリスク 72.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 8\n└─ 7\n2着\n├─ 8\n├─ 7\n├─ 5\n└─ 10\n三連複（本線）\n1列目\n└─ 8\n2列目\n└─ 7\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 7\n3列目\n└─ 10\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 7\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 5\n3列目\n└─ 10\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 5\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 10\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 5\n3列目\n└─ 10\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 5\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 10\n3列目\n└─ 4\n三連単（頭入替）\n1着\n├─ 8\n└─ 7\n2着\n├─ 8\n└─ 7\n3着\n├─ 5\n└─ 10\n点数\n├─ 馬単　6点\n├─ 三連複　9点\n├─ 三連単　4点\n└─ 合計　19点\n1点当たり\n└─ 100円\n投資額\n└─ 1,900円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "2歳未勝利牝［指定］",
@@ -1342,6 +1691,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R04/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "313dde470605157429014b58f7af06b79528e7a9fdf6a97f74a2a9550b0913a6",
    "immutable_final_sha256": "b90bd5782be0ef91e72f348ab6780414400e9e601cbe11c7ff3222bffe5b172c",
    "krs_actual_run_count": 5000,
@@ -1351,9 +1701,48 @@
     10
    ],
    "post": "2026-10-24T11:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.412722+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R04.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "46a58253c568769d48087be5f0c83cee8f05d7d17fa3c00c88ee71f394317aad",
+     "state_id": "KM-JRA-NGT-20261024-R04-LEARNING-RECOVERY-40054382534"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R04-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R04-LIVE-R1/RESULT/runs/original-recovery-40054382534/result_receipt_envelope.json",
+      "receipt_sha256": "cf4ebb39fb83f252de1978efce7a1300ec3e22870cf98b5b8aa10130f5d5cf70",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R04",
    "race_no": 4,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -1364,7 +1753,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 21,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 31.500／W-AKI 45.000\nP2-AKI 55.000／P3-AKI 35.000\nASI 35.000／軸飛びリスク 65.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 6\n├─ 11\n└─ 3\n2着\n├─ 6\n├─ 11\n├─ 3\n└─ 2\n三連複（本線）\n1列目\n└─ 6\n2列目\n└─ 11\n3列目\n└─ 3\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 11\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 3\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 3\n3列目\n└─ 2\n三連単（頭入替）\n1着\n├─ 6\n└─ 11\n2着\n├─ 6\n├─ 11\n└─ 3\n3着\n├─ 6\n├─ 11\n├─ 3\n└─ 2\n点数\n├─ 馬単　9点\n├─ 三連複　4点\n├─ 三連単　8点\n└─ 合計　21点\n1点当たり\n└─ 100円\n投資額\n└─ 2,100円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス牝［指定］ 有",
@@ -2121,10 +2510,57 @@
     }
    },
    "decision_reason": "AKI_SINGLE_HEAD_FORBIDDEN",
+   "display_state": "AKI_NO_BET / ZERO_EXPOSURE_RESULT_RECORDED",
    "first_blocked_stage": "PRODUCTION_AKI_COLUMN_SELECTION",
    "full20": "200/200",
    "no_bet_terminal": "runtime/jra_no_bet_terminals/KM-JRA-KYO-20261024-R04-LIVE-R1.json",
    "post": "2026-10-24T11:25:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": null,
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R04.json",
+     "present": false,
+     "race_bound": false,
+     "review_bound": false,
+     "self_hash_valid": false,
+     "sha256": null,
+     "state_id": null
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": false,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R04-AUTO.json",
+     "present": false,
+     "race_bound": false,
+     "result_and_final_bound": false,
+     "self_hash_valid": false
+    },
+    "review_learning_bound": false,
+    "signature_validation_performed": false,
+    "storage_state": "ZERO_EXPOSURE_RESULT_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [
+     {
+      "decision_bound": true,
+      "official_result_acquired_at": "2026-10-24T09:47:59.534744+00:00",
+      "official_top3": [
+       "5",
+       "3",
+       "2"
+      ],
+      "path": "runtime/jra_no_bet_learning/KM-JRA-KYO-20261024-R04-LIVE-R1.json",
+      "pfs": null,
+      "present": true,
+      "race_bound": true,
+      "self_hash_valid": true,
+      "signature_or_oidc_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "status": "ZERO_EXPOSURE_RESULT_RECORDED"
+     }
+    ],
+    "zero_exposure_result_learning_bound": true
+   },
    "race_id": "KM-JRA-KYO-20261024-R04",
    "race_no": 4,
    "registered_intake": false,
@@ -2145,6 +2581,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R04/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "b493911d215b16905d3ab3b4d82367d0d4d54908d2023c443a38afddcf53a530",
    "immutable_final_sha256": "04fee6373869a5c2969ed1a065c46b1005eaad1d85ffe561b02d08f0dbbb896e",
    "krs_actual_run_count": 5000,
@@ -2154,9 +2591,39 @@
     15
    ],
    "post": "2026-10-24T11:35:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T03:01:37.206568+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R04.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "4bd2d194e546a6ae6b08fb7ec92e0e8c4525fa3dd5c4c7c4efc814a69d16d409",
+     "state_id": "KM-JRA-TKY-20261024-R04-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R04-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R04",
    "race_no": 4,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -2186,6 +2653,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R05/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "2c98089c0114e3f915adcde33d8bf52995acbd45d1edd2ed9afebb6297ced716",
    "immutable_final_sha256": "7623cb0782d552b354a5cf57e6d3f947127a0032ab756688600884bfb488be85",
    "krs_actual_run_count": 5000,
@@ -2195,9 +2663,48 @@
     8
    ],
    "post": "2026-10-24T12:05:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.397792+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R05.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "ea5e12bc21238b69da2b1948fdf4b1984cae2311008bf93fd4a765cff7e580b7",
+     "state_id": "KM-JRA-NGT-20261024-R05-LEARNING-RECOVERY-40058757672"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R05-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R05-LIVE-R1/RESULT/runs/original-recovery-40058757672/result_receipt_envelope.json",
+      "receipt_sha256": "92bd0271b0c7ba1324fcb0dc629b34bdecef9feac50f150d2599e7fb8ee76532",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R05",
    "race_no": 5,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -2208,7 +2715,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 0,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 24.000／W-AKI 30.000\nP2-AKI 0.000／P3-AKI 0.000\nASI 40.000／軸飛びリスク 60.000／RSI 25.000\n外部変動 100.000／堅決着補正 0.000\n└─ 見送り\n購入判定\n└─ 見送り\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "メイクデビュー新潟 2歳新馬[指定]",
@@ -2227,6 +2734,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R05/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "ea179b993a0721e58fc17dab107436319ef2b0cc794d6e7dabe6f82237bc2b53",
    "immutable_final_sha256": "b443d762f5a1d3bf458f7bcc739fe71d610d10a51a93c13162824ea20fe92599",
    "krs_actual_run_count": 5000,
@@ -2236,9 +2744,39 @@
     8
    ],
    "post": "2026-10-24T12:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T03:34:01.983040+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R05.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "4abd5862acefa64b34f6200ea91a59d0aefc958873bf9add4dbf5d41dd7a7b23",
+     "state_id": "KM-JRA-KYO-20261024-R05-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R05-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R05",
    "race_no": 5,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3642,10 +4180,57 @@
     }
    },
    "decision_reason": "AKI_SINGLE_HEAD_FORBIDDEN",
+   "display_state": "AKI_NO_BET / ZERO_EXPOSURE_RESULT_RECORDED",
    "first_blocked_stage": "PRODUCTION_AKI_COLUMN_SELECTION",
    "full20": "360/360",
    "no_bet_terminal": "runtime/jra_no_bet_terminals/KM-JRA-TKY-20261024-R05-LIVE-R1.json",
    "post": "2026-10-24T12:25:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": null,
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R05.json",
+     "present": false,
+     "race_bound": false,
+     "review_bound": false,
+     "self_hash_valid": false,
+     "sha256": null,
+     "state_id": null
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": false,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R05-AUTO.json",
+     "present": false,
+     "race_bound": false,
+     "result_and_final_bound": false,
+     "self_hash_valid": false
+    },
+    "review_learning_bound": false,
+    "signature_validation_performed": false,
+    "storage_state": "ZERO_EXPOSURE_RESULT_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [
+     {
+      "decision_bound": true,
+      "official_result_acquired_at": "2026-10-24T09:47:59.534744+00:00",
+      "official_top3": [
+       "14",
+       "16",
+       "2"
+      ],
+      "path": "runtime/jra_no_bet_learning/KM-JRA-TKY-20261024-R05-LIVE-R1.json",
+      "pfs": null,
+      "present": true,
+      "race_bound": true,
+      "self_hash_valid": true,
+      "signature_or_oidc_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "status": "ZERO_EXPOSURE_RESULT_RECORDED"
+     }
+    ],
+    "zero_exposure_result_learning_bound": true
+   },
    "race_id": "KM-JRA-TKY-20261024-R05",
    "race_no": 5,
    "registered_intake": false,
@@ -3666,6 +4251,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R06/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "f9b06f660008bdd79f94a4481c6964a607a442746bdcb5f81c5e3acd6abfaab7",
    "immutable_final_sha256": "9f2a0bc82b7e3964def4e204155cb26e23af56e1042dffd6bb816c0f416300d5",
    "krs_actual_run_count": 5000,
@@ -3675,9 +4261,39 @@
     8
    ],
    "post": "2026-10-24T12:35:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T04:06:02.848209+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R06.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "1c3b7d5e4a8e13dcd9da5132dbd0971f024ad8d2c7cfc7e6a8aaa3ad6785d32b",
+     "state_id": "KM-JRA-NGT-20261024-R06-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R06-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R06",
    "race_no": 6,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3707,6 +4323,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R06/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "e50f6a32c80bf53f8811fb4a15f9fdd7a4482e957983a3e57666302fecfbeda7",
    "immutable_final_sha256": "1d33d132df5afdb508e91b1c4ac3798131d5f0743b13a7831d7ac0dd60082ec2",
    "krs_actual_run_count": 5000,
@@ -3716,9 +4333,48 @@
     5
    ],
    "post": "2026-10-24T12:45:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.391417+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R06.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "994321a1236cce4a75557ba592862e2890aec343643d5942e36837f5193d491d",
+     "state_id": "KM-JRA-KYO-20261024-R06-LEARNING-RECOVERY-40060917026"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R06-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-KYO-20261024-R06-LIVE-R1/RESULT/runs/original-recovery-40060917026/result_receipt_envelope.json",
+      "receipt_sha256": "8271d916e1969def81df4142d8feecfaa511abc5aeea26b733548d0c727fc611",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R06",
    "race_no": 6,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3729,7 +4385,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 6,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 17.000／W-AKI 10.000\nP2-AKI 35.000／P3-AKI 35.000\nASI 77.500／軸飛びリスク 22.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 12\n2着\n└─ 1\n三連単（本線）\n1着\n└─ 12\n2着\n└─ 1\n3着\n├─ 11\n├─ 3\n├─ 9\n├─ 10\n└─ 7\n点数\n├─ 馬単　1点\n├─ 三連単　5点\n└─ 合計　6点\n1点当たり\n└─ 100円\n投資額\n└─ 600円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス[指定]",
@@ -3748,6 +4404,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R06/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "f067fd65240f6ee9ad172dab3cb6b57b44ac4ebe17f4b59ce5ad19e595287182",
    "immutable_final_sha256": "3355fbabb71658f9e9304d72f9692edd23cecc11266156fb030560910393a064",
    "krs_actual_run_count": 5000,
@@ -3757,9 +4414,48 @@
     7
    ],
    "post": "2026-10-24T12:55:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.366386+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R06.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "72df7c1c4a50bb272e6dcadec9716fc188957e32ea52952502fc32fcfd360af0",
+     "state_id": "KM-JRA-TKY-20261024-R06-LEARNING-RECOVERY-40065120637"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R06-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R06-LIVE-R1/RESULT/runs/original-recovery-40065120637/result_receipt_envelope.json",
+      "receipt_sha256": "4d7bbcbc3aee0ffcbb2a75cab596d00e86376c52585bd5650f58cccce98e2db7",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R06",
    "race_no": 6,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3770,7 +4466,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 0,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 10.000／W-AKI 20.000\nP2-AKI 0.000／P3-AKI 20.000\nASI 55.000／軸飛びリスク 45.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n└─ 見送り\n購入判定\n└─ 見送り\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "メイクデビュー東京 2歳新馬（混合）［指定］",
@@ -3789,6 +4485,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R07/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "a2ff959c6c23f724892c494a59957f5d44acac6016d55ef78b52a6ba323a438b",
    "immutable_final_sha256": "38fb69fb87ee2b0b630bcc5fd4b88e5e603af5b628d8c0dccd67fc782001441b",
    "krs_actual_run_count": 5000,
@@ -3798,9 +4495,39 @@
     12
    ],
    "post": "2026-10-24T13:05:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T04:38:15.263033+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R07.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "27de825729968f4fe30e2851b60ac3edde95a77700aa0e257b24bf5527f69d28",
+     "state_id": "KM-JRA-NGT-20261024-R07-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R07-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R07",
    "race_no": 7,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3830,6 +4557,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R07/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REQUEST_STORED",
    "final_receipt_sha256": "27af5f5bdf15fb8a49b2c8ee9b6ddbf19565757db3bd7b8feceab17939aa9ab1",
    "immutable_final_sha256": "8ed4064b9947efe9418e4df5991faa9899bddb04f1c3b8035979dd61a498d306",
    "krs_actual_run_count": 5000,
@@ -3839,9 +4567,48 @@
     11
    ],
    "post": "2026-10-24T13:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": null,
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R07.json",
+     "present": false,
+     "race_bound": false,
+     "review_bound": false,
+     "self_hash_valid": false,
+     "sha256": null,
+     "state_id": null
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R07-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": false,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REQUEST_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-KYO-20261024-R07-LIVE-R1/RESULT/runs/original-recovery-40063050006/result_receipt_envelope.json",
+      "receipt_sha256": "8c3edece4ea48fee7ba9e17196693546da7a15a631e51cbf798b44f4cbd1a34f",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R07",
    "race_no": 7,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3882,6 +4649,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R07/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "8b01559f2e1d2eb6020ff80595b8b44bc4e253af7497dbddf1842bc1612fe00e",
    "immutable_final_sha256": "1b8168d96ad33764515d06094b58637b8ea1fae5adf752ae9163174d2eeac18e",
    "krs_actual_run_count": 5000,
@@ -3891,9 +4659,48 @@
     9
    ],
    "post": "2026-10-24T13:25:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.377731+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R07.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "ea203b39bd1b3cad9844c292e5416234c3af7e449dc05a925a68fc0d5cce9a64",
+     "state_id": "KM-JRA-TKY-20261024-R07-LEARNING-RECOVERY-40063064118"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R07-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R07-LIVE-R1/RESULT/runs/original-recovery-40063064118/result_receipt_envelope.json",
+      "receipt_sha256": "d668bc86a31ccb542fef1dfddb79643b820fa7baff64d0c4c583388ba7a3ecf3",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R07",
    "race_no": 7,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3904,7 +4711,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 13,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 6.000／W-AKI 10.000\nP2-AKI 0.000／P3-AKI 15.000\nASI 87.500／軸飛びリスク 12.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 4\n2着\n├─ 3\n├─ 12\n├─ 1\n└─ 9\n三連単（本線）\n1着\n└─ 4\n2着\n├─ 3\n├─ 12\n├─ 1\n└─ 9\n3着\n├─ 12\n├─ 1\n└─ 9\n点数\n├─ 馬単　4点\n├─ 三連単　9点\n└─ 合計　13点\n1点当たり\n└─ 100円\n投資額\n└─ 1,300円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス牝［指定］",
@@ -3923,6 +4730,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R08/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "1515d82fb2e14210090d2eca94a78f8a40060842a50fb23495cceb9642291780",
    "immutable_final_sha256": "f27fa6072e195e94204ff8c567a61eef9d16eabf7c5500b48ac572e45d97c194",
    "krs_actual_run_count": 5000,
@@ -3932,9 +4740,48 @@
     5
    ],
    "post": "2026-10-24T13:35:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.372351+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R08.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "75de3b3ecd8a4b2ce490362ff1a9a1b814c24f9a00c073bd02022750e7a14d7f",
+     "state_id": "KM-JRA-NGT-20261024-R08-LEARNING-RECOVERY-40065114367"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R08-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R08-LIVE-R1/RESULT/runs/original-recovery-40065114367/result_receipt_envelope.json",
+      "receipt_sha256": "1b9723c7335521ea16dbe022248e568f00aaddfb43f09abaa9452d0b75829583",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R08",
    "race_no": 8,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -3945,7 +4792,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 10,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 22.500／W-AKI 25.000\nP2-AKI 20.000／P3-AKI 55.000\nASI 75.000／軸飛びリスク 25.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 7\n└─ 6\n2着\n├─ 7\n└─ 6\n三連複（本線）\n1列目\n└─ 7\n2列目\n└─ 6\n3列目\n└─ 3\n三連複（押さえ）\n1列目\n└─ 7\n2列目\n└─ 6\n3列目\n└─ 2\n三連単（頭入替）\n1着\n├─ 7\n└─ 6\n2着\n├─ 7\n└─ 6\n3着\n├─ 8\n├─ 9\n└─ 5\n点数\n├─ 馬単　2点\n├─ 三連複　2点\n├─ 三連単　6点\n└─ 合計　10点\n1点当たり\n└─ 100円\n投資額\n└─ 1,000円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス若手騎手",
@@ -3964,6 +4811,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R08/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "003dada4d0dae720ea31061f624b758b0d5978ac6d41b6eaa8a6f86eb9054b17",
    "immutable_final_sha256": "46366ce31067fc394192ca6571038ca9881097d3b2f160df6029f4040906ed47",
    "krs_actual_run_count": 5000,
@@ -3973,9 +4821,39 @@
     5
    ],
    "post": "2026-10-24T13:45:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T05:09:51.756763+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R08.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "9f18b2711628711c9681bac818b0b5abd52894e493cfc1e58beb6a47ed4d7b26",
+     "state_id": "KM-JRA-KYO-20261024-R08-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R08-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R08",
    "race_no": 8,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4005,6 +4883,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R08/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "13ae2df39f7121fc2820d5f0d48c07d308252ee00ac064bd667138f3660e7329",
    "immutable_final_sha256": "824ba39378d959130da52d8fad10dab4a30f4a539d3021063c3cbf3d159a855a",
    "krs_actual_run_count": 5000,
@@ -4014,9 +4893,48 @@
     5
    ],
    "post": "2026-10-24T13:55:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.359203+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R08.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "381e8f5bf7f543fc9cb74a03d120e91e58213c1c917405439b95ce698c6a2f2e",
+     "state_id": "KM-JRA-TKY-20261024-R08-LEARNING-RECOVERY-40065127335"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R08-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R08-LIVE-R1/RESULT/runs/original-recovery-40065127335/result_receipt_envelope.json",
+      "receipt_sha256": "8035a46f2872790b97df9e3f6d240314a5526ec622ca353af5819eaf798eb9d3",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R08",
    "race_no": 8,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4027,7 +4945,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 6,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 24.000／W-AKI 20.000\nP2-AKI 35.000／P3-AKI 55.000\nASI 70.000／軸飛びリスク 30.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 10\n2着\n└─ 11\n三連複（本線）\n1列目\n└─ 10\n2列目\n└─ 11\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 11\n3列目\n└─ 7\n三連単（本線）\n1着\n└─ 10\n2着\n└─ 11\n3着\n├─ 3\n├─ 9\n└─ 13\n点数\n├─ 馬単　1点\n├─ 三連複　2点\n├─ 三連単　3点\n└─ 合計　6点\n1点当たり\n└─ 100円\n投資額\n└─ 600円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス[指定]",
@@ -4046,6 +4964,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R09/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "821f13aac5f17d2b74b6540241c65acd0ec5338e0e8f420fc48f2952a6f5e7bb",
    "immutable_final_sha256": "c13d2bbe6865c91a2cd1d561c6cc68a9fefe572f10f5c28ac7875843caa8e912",
    "krs_actual_run_count": 5000,
@@ -4055,9 +4974,48 @@
     7
    ],
    "post": "2026-10-24T14:05:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.354370+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R09.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "7eb0022951f0ba3b84fed31c1c314fe660c2fec4463367c4e8be1a9bf5876ab7",
+     "state_id": "KM-JRA-NGT-20261024-R09-LEARNING-RECOVERY-40067201288"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R09-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R09-LIVE-R1/RESULT/runs/original-recovery-40067201288/result_receipt_envelope.json",
+      "receipt_sha256": "acaec510e9306ff1eb7e0c93739996574b08f26df15af3f40c839556b181aeed",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R09",
    "race_no": 9,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4068,7 +5026,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 15,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 23.500／W-AKI 35.000\nP2-AKI 35.000／P3-AKI 30.000\nASI 50.000／軸飛びリスク 50.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 13\n└─ 16\n2着\n├─ 13\n├─ 16\n└─ 9\n三連複（本線）\n1列目\n└─ 13\n2列目\n└─ 16\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 13\n2列目\n└─ 16\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 13\n2列目\n└─ 16\n3列目\n└─ 11\n三連複（押さえ）\n1列目\n└─ 16\n2列目\n└─ 9\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 16\n2列目\n└─ 9\n3列目\n└─ 11\n三連単（本線）\n1着\n└─ 13\n2着\n├─ 16\n└─ 9\n3着\n├─ 16\n├─ 9\n├─ 4\n└─ 11\n点数\n├─ 馬単　4点\n├─ 三連複　5点\n├─ 三連単　6点\n└─ 合計　15点\n1点当たり\n└─ 100円\n投資額\n└─ 1,500円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "稲光特別 3歳以上1勝クラス（混合）［指定］",
@@ -4087,6 +5045,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R09/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "2d4825237d6a8299362006dc6badc108956ce9f085a8fdd94d1be6c9f0a54373",
    "immutable_final_sha256": "28599cab0ac4078c91016ff4176f5cec8f47ab8e96b84613492b22db4b990b49",
    "krs_actual_run_count": 5000,
@@ -4096,9 +5055,39 @@
     2
    ],
    "post": "2026-10-24T14:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T05:41:53.873973+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R09.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "909889423ef797411e5a9913e84026bcf9840bd626733fca21f5aa2167f1932a",
+     "state_id": "KM-JRA-KYO-20261024-R09-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R09-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R09",
    "race_no": 9,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4139,6 +5128,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R09/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "e10a957258959bc1582aed422597bba328d9cfafeaf294d8112e5820eeb074f6",
    "immutable_final_sha256": "b8d6cd0c2b1789f509b1658aed8a3922cf4fabb2e9714eff6f13e05d86803b06",
    "krs_actual_run_count": 5000,
@@ -4148,9 +5138,48 @@
     9
    ],
    "post": "2026-10-24T14:25:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.348945+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R09.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "84059069d6358457fda4d4065311322f5a87452a2ae92fb5c6ff9a24c7d3e6a2",
+     "state_id": "KM-JRA-TKY-20261024-R09-LEARNING-RECOVERY-40067208369"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R09-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R09-LIVE-R1/RESULT/runs/original-recovery-40067208369/result_receipt_envelope.json",
+      "receipt_sha256": "d74335aec47368f6ce33fe3a60bbcf1ce7473addc1fd91806730d4f294ec63dc",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R09",
    "race_no": 9,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4172,7 +5201,7 @@
      }
     ]
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 30,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 33.000／W-AKI 40.000\nP2-AKI 70.000／P3-AKI 35.000\nASI 60.000／軸飛びリスク 40.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 11\n├─ 12\n└─ 6\n2着\n├─ 11\n├─ 12\n├─ 6\n├─ 13\n└─ 2\n三連複（本線）\n1列目\n└─ 11\n2列目\n└─ 12\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 12\n3列目\n└─ 13\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 12\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 6\n3列目\n└─ 13\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 6\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 11\n2列目\n└─ 13\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 12\n2列目\n└─ 6\n3列目\n└─ 13\n三連複（押さえ）\n1列目\n└─ 12\n2列目\n└─ 6\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 12\n2列目\n└─ 13\n3列目\n└─ 2\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 13\n3列目\n└─ 2\n三連単（頭入替）\n1着\n├─ 11\n└─ 12\n2着\n├─ 11\n├─ 12\n└─ 6\n3着\n├─ 11\n├─ 12\n├─ 6\n└─ 2\n点数\n├─ 馬単　12点\n├─ 三連複　10点\n├─ 三連単　8点\n└─ 合計　30点\n1点当たり\n└─ 100円\n投資額\n└─ 3,000円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "精進湖特別 3歳以上2勝クラス（混合）［指定］",
@@ -4191,6 +5220,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R10/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "d3f501862d68ffc96cb289b83dd0fa992e3d532c881d68bb660c8793a48af86d",
    "immutable_final_sha256": "e9c75e0984372846aba00506acea7c77f2e9ad237b40c8ca9676311516c03272",
    "krs_actual_run_count": 5000,
@@ -4200,9 +5230,48 @@
     13
    ],
    "post": "2026-10-24T14:40:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.344188+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R10.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "1ce52611801b50451fee41ee02684f1f91b51309a6f109f8885fda91e22894e0",
+     "state_id": "KM-JRA-NGT-20261024-R10-LEARNING-RECOVERY-40069277060"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R10-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R10-LIVE-R1/RESULT/runs/original-recovery-40069277060/result_receipt_envelope.json",
+      "receipt_sha256": "b76d9fbc71752c944ee105a90b2641f104764ce186cba2e22658f0a2b07ff55e",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R10",
    "race_no": 10,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4213,7 +5282,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 8,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 27.500／W-AKI 35.000\nP2-AKI 35.000／P3-AKI 35.000\nASI 80.000／軸飛びリスク 20.000／RSI 15.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 11\n2着\n├─ 15\n└─ 6\n三連単（本線）\n1着\n└─ 11\n2着\n├─ 15\n└─ 6\n3着\n├─ 15\n├─ 6\n├─ 13\n└─ 4\n点数\n├─ 馬単　2点\n├─ 三連単　6点\n└─ 合計　8点\n1点当たり\n└─ 100円\n投資額\n└─ 800円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "菅名岳特別 3歳以上2勝クラス[指定]",
@@ -4232,6 +5301,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R10/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "cbd644af7e5093c5cb0539ad581625fa605e1844e21284611e5cf86903ffa2e5",
    "immutable_final_sha256": "447a6c2315e6778ac79079b7a3ebb81a0065870c34546037fbd3bb631f682cf4",
    "krs_actual_run_count": 5000,
@@ -4241,9 +5311,39 @@
     4
    ],
    "post": "2026-10-24T14:50:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T06:13:38.634940+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R10.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "59f559550bd3b54c92e6f9755225b66329642f3112b71d41853b77a137577697",
+     "state_id": "KM-JRA-KYO-20261024-R10-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R10-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R10",
    "race_no": 10,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4295,6 +5395,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R10/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "959c6375bf279cbea1695717e1a3c054e369df44cafeee58e784585390ea606d",
    "immutable_final_sha256": "00ceec12a6dae3d7d09c35b3c12bb0173938a5e1223916486f4e86d3abe9ac03",
    "krs_actual_run_count": 5000,
@@ -4304,9 +5405,48 @@
     4
    ],
    "post": "2026-10-24T15:01:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.339113+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R10.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "b0e0e6bac0e5a35660224c97dade078345086f400984b086a0568aa410411419",
+     "state_id": "KM-JRA-TKY-20261024-R10-LEARNING-RECOVERY-40071401085"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R10-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R10-LIVE-R1/RESULT/runs/original-recovery-40071401085/result_receipt_envelope.json",
+      "receipt_sha256": "05377546f57f632523033e60c3d12b84c6e10ce064c6f9fcff0cf7139d2cbb6e",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R10",
    "race_no": 10,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4317,7 +5457,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 24,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 6.500／W-AKI 5.000\nP2-AKI 0.000／P3-AKI 0.000\nASI 92.500／軸飛びリスク 7.500／RSI 25.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 10\n2着\n├─ 12\n├─ 11\n├─ 9\n└─ 5\n三連単（本線）\n1着\n└─ 10\n2着\n├─ 12\n├─ 11\n├─ 9\n└─ 5\n3着\n├─ 12\n├─ 11\n├─ 9\n├─ 5\n├─ 13\n└─ 1\n点数\n├─ 馬単　4点\n├─ 三連単　20点\n└─ 合計　24点\n1点当たり\n└─ 100円\n投資額\n└─ 2,400円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "日本農業新聞杯 3歳以上3勝クラス（混合）［指定］ 有",
@@ -4336,6 +5476,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R11/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "2c82e710981c2a453d502e0b050e984e6ec84d2238513c78d26fe2ef75ad94ab",
    "immutable_final_sha256": "93402b618151cc0243ed68280f4b15f7e691fcd9ffa4111a9715925742f7395b",
    "krs_actual_run_count": 5000,
@@ -4345,9 +5486,39 @@
     8
    ],
    "post": "2026-10-24T15:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T06:45:28.530819+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R11.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "a7f03522540869346790e295319acc8af13ad4c31f2c93db7800850c6a9347f7",
+     "state_id": "KM-JRA-NGT-20261024-R11-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R11-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R11",
    "race_no": 11,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4377,6 +5548,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R11/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "e4fc55d19730d1311875a9bd3c0282d2e8e0dc680857ce8d181b4f3ddc889b17",
    "immutable_final_sha256": "6d981859779df13a605cace38b360bbe503ec97e3d4c549c62521deac6d6176f",
    "krs_actual_run_count": 5000,
@@ -4386,9 +5558,39 @@
     15
    ],
    "post": "2026-10-24T15:30:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T07:15:58.261066+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R11.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "474719c18db5640c009d0e8418beffc3daab8d82944e9e5ba9161e175875e8e5",
+     "state_id": "KM-JRA-KYO-20261024-R11-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R11-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R11",
    "race_no": 11,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4418,6 +5620,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R11/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "063b8cf27a74b66b037b3124642c2f3f07986c892f72b85946c633786f9615bf",
    "immutable_final_sha256": "7da895989da83bfe99a353afe7fe575ceedec3b47e05fc65f99e93f85a63d219",
    "krs_actual_run_count": 5000,
@@ -4427,9 +5630,48 @@
     5
    ],
    "post": "2026-10-24T15:45:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.330654+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R11.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "36aaf7918afb70e6729bab71f40202209f741e9c3a84bc1ad5dad035a3fb7870",
+     "state_id": "KM-JRA-TKY-20261024-R11-LEARNING-RECOVERY-40073390531"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R11-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R11-LIVE-R1/RESULT/runs/original-recovery-40073390531/result_receipt_envelope.json",
+      "receipt_sha256": "55386cc3fcd11a618a171b8ce65e50c53ec23e26d75349c3caa934c7aef6ceee",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R11",
    "race_no": 11,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4440,7 +5682,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 31,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 31.000／W-AKI 30.000\nP2-AKI 55.000／P3-AKI 55.000\nASI 67.500／軸飛びリスク 32.500／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 10\n└─ 5\n2着\n├─ 10\n├─ 5\n├─ 9\n└─ 8\n三連複（本線）\n1列目\n└─ 10\n2列目\n└─ 5\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 5\n3列目\n└─ 8\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 5\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 9\n3列目\n└─ 8\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 9\n3列目\n└─ 1\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 9\n3列目\n└─ 12\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 9\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 8\n3列目\n└─ 1\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 8\n3列目\n└─ 12\n三連複（押さえ）\n1列目\n└─ 10\n2列目\n└─ 8\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 9\n3列目\n└─ 8\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 9\n3列目\n└─ 1\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 9\n3列目\n└─ 12\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 9\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 8\n3列目\n└─ 1\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 8\n3列目\n└─ 12\n三連複（押さえ）\n1列目\n└─ 5\n2列目\n└─ 8\n3列目\n└─ 4\n三連単（頭入替）\n1着\n├─ 10\n└─ 5\n2着\n├─ 10\n└─ 5\n3着\n├─ 9\n├─ 8\n├─ 1\n└─ 12\n点数\n├─ 馬単　6点\n├─ 三連複　17点\n├─ 三連単　8点\n└─ 合計　31点\n1点当たり\n└─ 100円\n投資額\n└─ 3,100円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "アルテミスステークス 2歳オープン（国際）牝（指定）",
@@ -4459,6 +5701,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-NGT-20261024-R12/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "513af8eb6a2401527ece8a0f43e44134c33699bf04dbda303785e4020838230f",
    "immutable_final_sha256": "c800b52704c10fff107dc02416eb83576383fc23177ab25c17405b6b8b4695d3",
    "krs_actual_run_count": 5000,
@@ -4468,9 +5711,48 @@
     1
    ],
    "post": "2026-10-24T16:01:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.335119+00:00",
+     "path": "runtime/learning_states/KM-JRA-NGT-20261024-R12.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "9712bdff3d6904e8725596a4994cbd71dc717239c5549d2c524f01d7fe948d18",
+     "state_id": "KM-JRA-NGT-20261024-R12-LEARNING-RECOVERY-40073382681"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-NGT-20261024-R12-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-NGT-20261024-R12-LIVE-R1/RESULT/runs/original-recovery-40073382681/result_receipt_envelope.json",
+      "receipt_sha256": "1915d87b787d5e2c9a0877984e13a86f60de2d712ea3ac08c125c47d00716742",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-NGT-20261024-R12",
    "race_no": 12,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4481,7 +5763,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 14,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 17.500／W-AKI 25.000\nP2-AKI 35.000／P3-AKI 15.000\nASI 65.000／軸飛びリスク 35.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 1\n2着\n├─ 12\n└─ 16\n三連単（本線）\n1着\n└─ 1\n2着\n├─ 12\n└─ 16\n3着\n├─ 12\n├─ 16\n├─ 7\n├─ 11\n├─ 4\n├─ 8\n└─ 15\n点数\n├─ 馬単　2点\n├─ 三連単　12点\n└─ 合計　14点\n1点当たり\n└─ 100円\n投資額\n└─ 1,400円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上1勝クラス[指定] 有",
@@ -4500,6 +5782,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261024-R12/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "ebc21c129bbdce1c457222a2b7337a1d04f148bb0fde25141e8ebcee82102cb5",
    "immutable_final_sha256": "19a6481519e427b162330c17ebc3688efec103f0b1c1e87c307c0b3c5d2487d9",
    "krs_actual_run_count": 5000,
@@ -4509,9 +5792,39 @@
     6
    ],
    "post": "2026-10-24T16:15:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T07:46:35.063143+00:00",
+     "path": "runtime/learning_states/KM-JRA-KYO-20261024-R12.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "93524a687583b3fd23cf49159025ce8967a24c09cb719a4f5c2e2f6ca355492b",
+     "state_id": "KM-JRA-KYO-20261024-R12-LEARNING-NEXT"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-KYO-20261024-R12-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-KYO-20261024-R12",
    "race_no": 12,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4541,6 +5854,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261024-R12/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "6d5412618fda73449043d87afae3fb5b2150e84735e804f3e28ebf4e16054b69",
    "immutable_final_sha256": "c63ff2598a1e2d538682ffeb5f10c8ee2d78f39fade27f6ea68dfae3e1e88252",
    "krs_actual_run_count": 5000,
@@ -4550,9 +5864,48 @@
     3
    ],
    "post": "2026-10-24T16:30:00+09:00",
+   "post_result_evidence": {
+    "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
+    "learning": {
+     "consumption": "NOT_ESTABLISHED_BY_STORAGE",
+     "effective_time": "2026-10-24T09:44:34.323626+00:00",
+     "path": "runtime/learning_states/KM-JRA-TKY-20261024-R12.json",
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "0d9fab4e2492b2566f69f80525ca5767cfa22bc9945b0f49a5872fac6c709479",
+     "state_id": "KM-JRA-TKY-20261024-R12-LEARNING-RECOVERY-40075383270"
+    },
+    "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
+    "result_request_present": true,
+    "review": {
+     "path": "runtime/reviews_auto/KM-JRA-TKY-20261024-R12-AUTO.json",
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
+    },
+    "review_learning_bound": true,
+    "signature_validation_performed": false,
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261024-R12-LIVE-R1/RESULT/runs/original-recovery-40075383270/result_receipt_envelope.json",
+      "receipt_sha256": "dc123ce5f095a54e36028134ffbcbd6878ef29d84ffb8412bf766d1b9111df42",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
+    "zero_exposure_records": [],
+    "zero_exposure_result_learning_bound": false
+   },
    "race_id": "KM-JRA-TKY-20261024-R12",
    "race_no": 12,
    "registered_intake": false,
+   "scheduler_state_scope": "LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF",
    "settlement": {
     "actual_pfs_status": "NOT_VERIFIED",
     "actual_purchase_status": "UNVERIFIED",
@@ -4563,7 +5916,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 13,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 9.500／W-AKI 5.000\nP2-AKI 0.000／P3-AKI 15.000\nASI 95.000／軸飛びリスク 5.000／RSI 25.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 8\n2着\n├─ 5\n├─ 4\n├─ 3\n└─ 9\n三連単（本線）\n1着\n└─ 8\n2着\n├─ 5\n├─ 4\n├─ 3\n└─ 9\n3着\n├─ 5\n├─ 4\n└─ 9\n点数\n├─ 馬単　4点\n├─ 三連単　9点\n└─ 合計　13点\n1点当たり\n└─ 100円\n投資額\n└─ 1,300円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上2勝クラス（混合）［指定］",

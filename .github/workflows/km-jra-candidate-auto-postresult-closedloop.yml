@@ -63,7 +63,7 @@ jobs:
         run: python runtime/jra_static_owner_forward_oos.py settle
       - name: Settle separately frozen current-policy bloodline pipeline
         continue-on-error: true
-        run: python scripts/jra_bvi_pipeline_forward_shadow.py settle
+        run: python scripts/jra_bvi_pipeline_forward_shadow.py settle --environment
       - name: Update no-promotion Candidate OOS scorecard
         run: |
           python - <<'PY'
