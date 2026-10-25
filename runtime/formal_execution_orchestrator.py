@@ -22,7 +22,8 @@ sys.path.insert(0, "runtime")
 
 from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
 from local_prestart_gate import validate_window, PrestartError
-from execution_store import ExecutionStoreError, materialize_phase, persist_phase, resolve_phase
+from execution_store import (ExecutionStoreError, materialize_phase, persist_phase, resolve_phase,
+                             require_public_storage, require_public_json_files)
 from formal_import_closure import FormalImportClosureError, build_closure
 from family_authority_guard import load_authority, validate_request_context, verify_execution_completion
 from entry_transport_fallback import build_legacy_formal_request, validate_fallback_request
@@ -552,19 +553,21 @@ def _load(path: str | pathlib.Path) -> Dict[str, Any]:
 
 
 def _write(path: pathlib.Path, value: Any) -> None:
+    require_public_storage(value)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8")
 
 
 def _copy_json_dir(src: pathlib.Path, dst: pathlib.Path) -> None:
+    files = sorted(p for p in src.iterdir() if p.is_file() and p.suffix == ".json") if src.exists() else []
+    require_public_json_files(files)
     if dst.exists():
         shutil.rmtree(dst)
     dst.mkdir(parents=True, exist_ok=True)
     if not src.exists():
         return
-    for p in src.iterdir():
-        if p.is_file() and p.suffix == ".json":
-            shutil.copy2(p, dst / p.name)
+    for p in files:
+        shutil.copy2(p, dst / p.name)
 
 
 def _reset_runtime_out(runtime_out: pathlib.Path) -> None:

@@ -11,6 +11,8 @@ import json
 import os
 import re
 import socket
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,6 +25,12 @@ SOURCE_SCHEMA = "KM-SOURCE-SNAPSHOT-v1"
 DEFAULT_MAX_BYTES = int(os.environ.get("KM_SOURCE_MAX_BYTES", "2000000"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("KM_SOURCE_TIMEOUT_SECONDS", "20"))
 DEFAULT_FETCH_WORKERS = max(1, min(int(os.environ.get("KM_SOURCE_FETCH_WORKERS", "6")), 12))
+SOURCE_USER_AGENT = "KeibaMetrics-SourceAcquisition/1.0 (+formal evidence capture)"
+_ROBOTS_CACHE: Dict[str, Dict[str, Any]] = {}
+_ROBOTS_LOCK = threading.RLock()
+_ROBOTS_TTL = 300.0
+_ROBOTS_MAX_BYTES = 131072
+_POLICY_MAX_WAIT = 30.0
 DEFAULT_ALLOWED_HOSTS = [
     "keiba.go.jp",
     "*.keiba.go.jp",
@@ -138,9 +146,162 @@ def validate_public_url(url: str) -> urllib.parse.SplitResult:
 
 
 class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    def __init__(self):
+        self.access_policies = []
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         validate_public_url(newurl)
+        # A permitted original URL must not bypass a different path/origin's
+        # robots policy through an otherwise safe HTTP redirect.
+        self.access_policies.append(_source_access_policy(newurl, timeout=DEFAULT_TIMEOUT_SECONDS))
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class _RobotsNoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _literal_robots_policy(text: str, robots_url: str) -> Dict[str, Any]:
+    # Parse the deliberately limited literal rules here. CPython robotparser's
+    # internal default-group representation differs by version; no access
+    # decision may depend on entries/default_entry or silently lose '*'.
+    # Unsupported rules remain UNKNOWN, never an allow.
+    default_groups = 0
+    groups = []
+    group = None
+    directives = False
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            raise ValueError("ROBOTS_MALFORMED_LINE")
+        key, value = (part.strip() for part in line.split(":", 1))
+        key = key.lower()
+        if key in ("allow", "disallow", "crawl-delay", "request-rate") and group is None:
+            raise ValueError("ROBOTS_DIRECTIVE_WITHOUT_AGENT")
+        if key in ("allow", "disallow") and (any(ch in value for ch in "*$%") or value and not value.startswith("/")):
+            raise ValueError("ROBOTS_UNSUPPORTED_RULE_PATTERN")
+        if key == "user-agent":
+            if not value or value != "*" and not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+                raise ValueError("ROBOTS_AGENT_INVALID")
+            if group is None or directives:
+                group = {"agents": [], "rules": [], "delay": 0}
+                groups.append(group)
+            group["agents"].append(value.lower())
+            directives = False
+            default_groups += value == "*"
+        if key == "crawl-delay" and not re.fullmatch(r"\d+", value):
+            raise ValueError("ROBOTS_UNSUPPORTED_CRAWL_DELAY")
+        if key == "request-rate" and not re.fullmatch(r"[1-9]\d*/[1-9]\d*", value):
+            raise ValueError("ROBOTS_UNSUPPORTED_REQUEST_RATE")
+        if key in ("allow", "disallow", "crawl-delay", "request-rate"):
+            directives = True
+            if key in ("allow", "disallow") and value:
+                group["rules"].append((urllib.parse.quote(value), key == "allow"))
+            elif key == "crawl-delay":
+                group["delay"] = max(group["delay"], int(value))
+            elif key == "request-rate":
+                requests, seconds = map(int, value.split("/"))
+                group["delay"] = max(group["delay"], seconds / requests)
+    if default_groups > 1:
+        raise ValueError("ROBOTS_REPEATED_DEFAULT_GROUP_UNSUPPORTED")
+    product = SOURCE_USER_AGENT.split("/", 1)[0].lower()
+    matches = [(len(agent), entry) for entry in groups for agent in entry["agents"]
+               if agent != "*" and agent in product]
+    selected = ([entry for length, entry in matches if length == max(n for n, _ in matches)]
+                if matches else [entry for entry in groups if "*" in entry["agents"]])
+    return {"rules": [rule for entry in selected for rule in entry["rules"]],
+            "delay": max([0] + [entry["delay"] for entry in selected])}
+
+
+def _http_backoff_seconds(headers: Dict[str, str]) -> float:
+    value = headers.get("retry-after") or headers.get("Retry-After")
+    if not value:
+        return 0.0
+    try:
+        return (float(value) if str(value).isdigit() else max(0.0,
+            (email.utils.parsedate_to_datetime(value) - datetime.datetime.now(datetime.timezone.utc)).total_seconds()))
+    except (TypeError, ValueError, OverflowError):
+        return 60.0
+
+
+def _source_access_policy(url: str, *, timeout: float) -> Dict[str, Any]:
+    """Check public crawler access before the existing SOURCE GET.
+
+    This is not a data licence or a Production-consumer authorization. No
+    caller-supplied flag bypasses it. Cache/rate state is shared by this
+    process's existing parallel fetch workers; failures never trigger retries.
+    """
+    parsed = validate_public_url(url)
+    origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    robots_url = origin + "/robots.txt"
+    with _ROBOTS_LOCK:
+        now = time.monotonic()
+        cached = _ROBOTS_CACHE.get(origin)
+        if cached is None or now >= cached["expires_at"]:
+            previous_next_request = (cached or {}).get("next_request_at", 0)
+            wait = max(0.0, previous_next_request - now)
+            if wait > _POLICY_MAX_WAIT:
+                raise ValueError("SOURCE_POLICY_RETRY_NOT_READY:" + robots_url)
+            if wait:
+                time.sleep(wait)
+                if time.monotonic() + 0.001 < previous_next_request:
+                    raise ValueError("SOURCE_POLICY_RETRY_NOT_READY:CLOCK_DID_NOT_ADVANCE")
+            validate_public_url(robots_url)
+            request = urllib.request.Request(robots_url, headers={
+                "User-Agent": SOURCE_USER_AGENT, "Accept": "text/plain",
+                "Accept-Encoding": "identity"}, method="GET")
+            try:
+                with urllib.request.build_opener(_RobotsNoRedirect()).open(request, timeout=timeout) as response:
+                    if (response.geturl() != robots_url or int(response.status) != 200
+                            or str(response.headers.get("content-type", "")).split(";", 1)[0].strip().lower() != "text/plain"
+                            or str(response.headers.get("content-encoding", "identity")).lower() not in ("", "identity")):
+                        raise ValueError("ROBOTS_HTTP_IDENTITY_OR_ENCODING")
+                    raw = response.read(_ROBOTS_MAX_BYTES + 1)
+                    if len(raw) > _ROBOTS_MAX_BYTES:
+                        raise ValueError("ROBOTS_MAX_BYTES")
+                    text = raw.decode("utf-8-sig", errors="strict")
+                    if ("\x00" in text or "<html" in text.lower() or "<!doctype" in text.lower()
+                            or (text.strip() and not re.search(r"(?im)^\s*user-agent\s*:", text))):
+                        raise ValueError("ROBOTS_BODY_NOT_POLICY")
+                    cached = {**_literal_robots_policy(text, robots_url), "robots_status": "POLICY_READ",
+                        "robots_sha256": hashlib.sha256(raw).hexdigest()}
+            except urllib.error.HTTPError as exc:
+                if exc.code in (404, 410):
+                    cached = {"rules": [], "robots_status": "ABSENT_HTTP_" + str(exc.code),
+                        "robots_sha256": None, "delay": 0}
+                else:
+                    _ROBOTS_CACHE[origin] = {"error": "SOURCE_POLICY_ROBOTS_UNKNOWN:HTTP_" + str(exc.code),
+                        "expires_at": now + max(30.0, _http_backoff_seconds(dict(exc.headers or {}))),
+                        "next_request_at": previous_next_request}
+                    raise ValueError("SOURCE_POLICY_ROBOTS_UNKNOWN:HTTP_" + str(exc.code)) from exc
+            except (OSError, ValueError, UnicodeError) as exc:
+                _ROBOTS_CACHE[origin] = {"error": "SOURCE_POLICY_ROBOTS_UNKNOWN:" + type(exc).__name__,
+                    "expires_at": now + 30.0, "next_request_at": previous_next_request}
+                raise ValueError("SOURCE_POLICY_ROBOTS_UNKNOWN:" + type(exc).__name__) from exc
+            cached.update(expires_at=time.monotonic() + _ROBOTS_TTL,
+                          next_request_at=max(previous_next_request, time.monotonic() + cached["delay"]))
+            _ROBOTS_CACHE[origin] = cached
+        if cached.get("error"):
+            raise ValueError(cached["error"])
+        target = urllib.parse.urlparse(urllib.parse.unquote(url))
+        target = urllib.parse.quote(urllib.parse.urlunparse(("", "", target.path, target.params, target.query, ""))) or "/"
+        applicable = [(len(path), allowed) for path, allowed in cached["rules"] if target.startswith(path)]
+        if not max(applicable, default=(0, True))[1]:
+            raise ValueError("SOURCE_POLICY_ROBOTS_DISALLOWED:" + robots_url)
+        wait = max(0.0, cached["next_request_at"] - time.monotonic())
+        if wait > _POLICY_MAX_WAIT:
+            raise ValueError("SOURCE_POLICY_RETRY_NOT_READY:" + robots_url)
+        if wait:
+            time.sleep(wait)
+            if time.monotonic() + 0.001 < cached["next_request_at"]:
+                raise ValueError("SOURCE_POLICY_RETRY_NOT_READY:CLOCK_DID_NOT_ADVANCE")
+        cached["next_request_at"] = time.monotonic() + cached["delay"]
+        return {"robots_url": robots_url, "robots_status": cached["robots_status"],
+                "robots_sha256": cached["robots_sha256"], "user_agent": SOURCE_USER_AGENT,
+                "automatic_access_allowed": True, "data_licence_granted": False}
 
 
 class _TextExtractor(HTMLParser):
@@ -410,12 +571,14 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
     validate_public_url(url)
     max_bytes = min(int(spec.get("max_bytes") or DEFAULT_MAX_BYTES), DEFAULT_MAX_BYTES)
     timeout = min(int(spec.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS), 60)
+    access_policy = _source_access_policy(url, timeout=timeout)
     req_headers = {
-        "User-Agent": "KeibaMetrics-SourceAcquisition/1.0 (+formal evidence capture)",
+        "User-Agent": SOURCE_USER_AGENT,
         "Accept": str(spec.get("accept") or "text/html,application/json,application/xml,text/plain;q=0.9,*/*;q=0.1"),
         "Accept-Language": str(spec.get("accept_language") or "ja,en;q=0.5"),
     }
-    opener = urllib.request.build_opener(_SafeRedirect())
+    redirect = _SafeRedirect()
+    opener = urllib.request.build_opener(redirect)
     request = urllib.request.Request(url, headers=req_headers, method="GET")
     fetched_at = utcnow()
     try:
@@ -434,7 +597,7 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
             allowed_content = ("text/", "application/json", "application/xml", "application/xhtml+xml")
             if ctype and not any(x in ctype for x in allowed_content):
                 raise ValueError("SOURCE_CONTENT_TYPE_NOT_ALLOWED:" + ctype)
-            return snapshot_from_bytes(
+            snapshot, errors = snapshot_from_bytes(
                 spec,
                 raw,
                 final_url=final_url,
@@ -443,10 +606,13 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
                 fetched_at=fetched_at,
                 prediction_cutoff=prediction_cutoff,
             )
+            snapshot["source_access_policy"] = {**access_policy, "redirect_policies": redirect.access_policies}
+            snapshot["snapshot_sha256"] = sha_obj({k:v for k,v in snapshot.items() if k != "snapshot_sha256"})
+            return snapshot, errors
     except urllib.error.HTTPError as e:
         raw = e.read(max_bytes + 1)
         headers = {k.lower(): v for k, v in e.headers.items()}
-        return snapshot_from_bytes(
+        snapshot, errors = snapshot_from_bytes(
             spec,
             raw[:max_bytes],
             final_url=e.geturl() or url,
@@ -455,6 +621,18 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
             fetched_at=fetched_at,
             prediction_cutoff=prediction_cutoff,
         )
+        # Respect server backoff for later requests as well; never retry this
+        # fetch, and never sleep beyond the bounded SOURCE policy wait.
+        retry_after = headers.get("retry-after")
+        if retry_after:
+            delay = _http_backoff_seconds(headers)
+            origin = urllib.parse.urlunsplit(urllib.parse.urlsplit(e.geturl() or url)[:2] + ("", "", ""))
+            with _ROBOTS_LOCK:
+                if origin in _ROBOTS_CACHE:
+                    _ROBOTS_CACHE[origin]["next_request_at"] = max(_ROBOTS_CACHE[origin]["next_request_at"], time.monotonic() + delay)
+        snapshot["source_access_policy"] = {**access_policy, "redirect_policies": redirect.access_policies}
+        snapshot["snapshot_sha256"] = sha_obj({k:v for k,v in snapshot.items() if k != "snapshot_sha256"})
+        return snapshot, errors
 
 
 def _merge_evidence(snapshots: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:

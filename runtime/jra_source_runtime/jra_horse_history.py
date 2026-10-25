@@ -7,7 +7,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Tuple
 
-from source_acquisition import _SafeRedirect, _decode, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+from source_acquisition import _SafeRedirect, _decode, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-HORSE-HISTORY-v1.1-20260927"
 BASE="https://www.jra.go.jp/JRADB/accessU.html"
@@ -53,7 +53,9 @@ def _person_tokens(decoded:str)->Dict[str,List[str]]:
 
 def parse_horse_history(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
-    tables=_html_tables(decoded)
+    extractor=_OfficialGradeTableExtractor()
+    extractor.feed(decoded)
+    tables=extractor.tables
     chosen=None
     for table in tables:
         if not table:continue

@@ -3,13 +3,72 @@ import datetime, hashlib, http.cookiejar, html, re, urllib.parse, urllib.request
 from typing import Any, Dict, List, Tuple
 
 try:
-    from .source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from .source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 except ImportError:
-    from source_acquisition import _decode, _html_text, _html_tables, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
+    from source_acquisition import _decode, _html_text, _OfficialGradeTableExtractor, sha_obj, snapshot_from_bytes, utcnow, validate_public_url
 
 PROFILE="KM-JRA-OFFICIAL-RACE-CARD-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
 USER_AGENT="KeibaMetrics-JRA-Official-Detail/1.0"
+
+class _DetailTableExtractor(_OfficialGradeTableExtractor):
+    def __init__(self):
+        super().__init__()
+        self.jockey_cells={}
+        self._jockey_link=None
+        self._row_jockeys={}
+        self.horse_cells={}
+        self._horse_link=None
+        self._row_horses={}
+
+    def handle_starttag(self,tag,attrs):
+        super().handle_starttag(tag,attrs)
+        if tag.lower()=="tr":
+            self._row_jockeys={}
+            self._row_horses={}
+        # Preserve JRA's explicit frame label only in this detail parser.
+        # Other images and the shared text-table parser remain unchanged.
+        if tag.lower()=="img" and self._cell is not None:
+            labels=[value for key,value in attrs if key=="alt"]
+            label=labels[0] if len(labels)==1 else None
+            match=re.fullmatch(r"枠([1-8])(?:白|黒|赤|青|黄|緑|橙|桃)?",label or "")
+            if match:self._cell.append(match.group(1))
+        if tag.lower()=="a" and self._cell is not None:
+            attrs=dict(attrs);token=None
+            href=urllib.parse.urlsplit(str(attrs.get('href') or ''))
+            if (href.path=='/JRADB/accessU.html' and href.netloc in ('','www.jra.go.jp')
+                    and href.scheme in ('','https')):
+                values=urllib.parse.parse_qs(href.query).get('CNAME') or []
+                if len(values)==1 and re.fullmatch(r'pw01dud[0-9]+/[0-9A-Fa-f]{2}',values[0]):
+                    self._horse_link={'cell':len(self._row or []),'token':values[0],'parts':[]}
+            if (href.path=='/JRADB/accessK.html' and href.netloc in ('','www.jra.go.jp')
+                    and href.scheme in ('','https')):
+                values=urllib.parse.parse_qs(href.query).get('CNAME') or []
+                if len(values)==1:token=values[0]
+            action=re.search(r'''doAction\(\s*['"](/JRADB/accessK\.html)['"]\s*,\s*['"]([^'"]+)['"]\s*\)''',
+                             str(attrs.get('onclick') or ''))
+            if token is None and action:token=urllib.parse.unquote(action.group(2))
+            if token and re.fullmatch(r'pw04kmk[0-9]{6}/[0-9A-Fa-f]{2}',token):
+                self._jockey_link={'cell':len(self._row or []),'token':token,'parts':[]}
+
+    def handle_data(self,data):
+        if self._horse_link is not None:self._horse_link['parts'].append(data)
+        if self._jockey_link is not None:self._jockey_link['parts'].append(data)
+        super().handle_data(data)
+
+    def handle_endtag(self,tag):
+        if tag.lower()=='a' and self._horse_link is not None:
+            link=self._horse_link;label=re.sub(r'\s+','',''.join(link['parts']))
+            self._row_horses.setdefault(link['cell'],[]).append((label,link['token']))
+            self._horse_link=None
+        if tag.lower()=='a' and self._jockey_link is not None:
+            link=self._jockey_link;label=_norm(''.join(link['parts']))
+            if label:self._row_jockeys.setdefault(link['cell'],[]).append((label,link['token']))
+            self._jockey_link=None
+        if tag.lower()=='tr' and self._row is not None:
+            self.jockey_cells[id(self._row)]=self._row_jockeys
+            self.horse_cells[id(self._row)]=self._row_horses
+        super().handle_endtag(tag)
 
 def _norm(v:Any)->str:
     return re.sub(r"\s+"," ",str(v or "")).strip()
@@ -285,7 +344,9 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     jockey_token_by_name=_person_token_map("accessK")
     trainer_token_by_name=_person_token_map("accessC")
     table=None
-    for t in _html_tables(decoded):
+    extractor=_DetailTableExtractor()
+    extractor.feed(decoded)
+    for t in extractor.tables:
         if not t: continue
         h=[_norm(x) for x in t[0]]
         if "馬番" in h and any("馬名" in x for x in h) and any("前走" in x for x in h):
@@ -300,16 +361,34 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     for row in table[1:]:
         if no_i>=len(row):continue
         no=_num(row[no_i])
-        if no is None or no<1 or no>18:continue
         ident=_parse_identity(row[identity_i] if identity_i<len(row) else "")
-        person=_parse_current_person(row[person_i] if person_i<len(row) else "")
-        frame_no=_num(row[0]) if len(row)>0 else None
         # Previous-run scratches are history, not the current runner status.
         current_cells=[_norm(z) for i,z in enumerate(row) if i not in run_indices]
         cancelled=any("出走取消" in z or z=="取消" for z in current_cells)
         excluded=any("競走除外" in z or z=="除外" for z in current_cells)
         if cancelled and excluded:raise ValueError("JRA_CURRENT_RUNNER_STATUS_AMBIGUOUS")
         status="CANCELLED" if cancelled else "EXCLUDED" if excluded else "ACTIVE"
+        if no is None:
+            if not ident.get('horse_name'):continue
+            if status=='ACTIVE':raise ValueError('JRA_DETAIL_RUNNER_NUMBER_MISSING')
+            # Only this row's exact official identity link may own an unnumbered scratch.
+            horse_links=extractor.horse_cells.get(id(row),{}).get(identity_i,[])
+            if (len(horse_links)!=1
+                    or horse_links[0][0]!=re.sub(r'\s+','',ident['horse_name'])):
+                raise ValueError('JRA_DETAIL_CANCELLED_IDENTITY_AMBIGUOUS')
+        elif no<1 or no>18:
+            raise ValueError('JRA_DETAIL_RUNNER_NUMBER_INVALID')
+        person=_parse_current_person(row[person_i] if person_i<len(row) else "")
+        # The person cell may append the official pre-rating (e.g. 110 M).
+        # Its current-rider link owns the rider label/token; rating text is
+        # retained in raw but cannot become part of the current rider's name.
+        links=set(extractor.jockey_cells.get(id(row),{}).get(person_i,[]))
+        rider=next(iter(links)) if len(links)==1 else None
+        if rider:
+            current_key=re.sub(r"[▲△◇☆★\s]+","",str(person.get('jockey') or ''))
+            label_key=re.sub(r"[▲△◇☆★\s]+","",rider[0])
+            if current_key!=label_key:person['jockey']=rider[0]
+        frame_no=_num(row[0]) if len(row)>0 else None
         recent=[]
         for i in run_indices:
             x=_parse_recent(row[i] if i<len(row) else "")
@@ -317,9 +396,9 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
         cname=re.sub(r"\s+","",str(ident.get("horse_name") or "")).strip()
         jkey=re.sub(r"[▲△◇☆★\s]+","",str(person.get("jockey") or "")).strip()
         tkey=re.sub(r"[▲△◇☆★\s]+","",str(ident.get("trainer") or "")).strip()
-        runners.append({"runner_id":str(no),"horse_no":no,"frame_no":frame_no,"status":status,
-                        "horse_profile_token":token_by_name.get(cname),
-                        "jockey_profile_token":jockey_token_by_name.get(jkey),
+        runners.append({"runner_id":str(no) if no is not None else None,"horse_no":no,"frame_no":frame_no,"status":status,
+                        "horse_profile_token":horse_links[0][1] if no is None else token_by_name.get(cname),
+                        "jockey_profile_token":rider[1] if rider else jockey_token_by_name.get(jkey),
                         "trainer_profile_token":trainer_token_by_name.get(tkey),
                         **ident,**person,"recent_runs":recent})
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
@@ -347,6 +426,83 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
+def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->Dict[str,Any]:
+    """Bind unnumbered scratches to the same-race PDF, never frame/order.
+
+    Only new SOURCE acquisition calls this. Without complete one-to-one official
+    identity agreement, unresolved detail rows cannot form a runner universe.
+    """
+    detail=artifact.get('jra_official_race_card_detail') or {}
+    rows=detail.get('runners') or []
+    if not any(r.get('horse_no') is None for r in rows):return artifact
+    try:
+        from .jra_observed_context import resolve_observed_context
+        from .jra_official_pdf import official_pdf_url
+    except ImportError:
+        from jra_observed_context import resolve_observed_context
+        from jra_official_pdf import official_pdf_url
+    context=resolve_observed_context(artifact)
+    if context.get('context_source')!='JRA_OFFICIAL_DETAILED_CARD':
+        raise ValueError('JRA_CANCELLED_NUMBER_DETAIL_EVIDENCE_REQUIRED')
+    pdf=artifact.get('jra_official_pdf_runner_universe') or {}
+    expected_url=official_pdf_url(context['race_date'],context['venue_id'],meeting_key)
+    if (pdf.get('source_id')!='JRA-OFFICIAL-RACE-PDF'
+            or pdf.get('race_no')!=context['race_no']
+            or pdf.get('official_pdf_url')!=expected_url
+            or pdf.get('runner_universe_sha256')!=sha_obj({k:v for k,v in pdf.items() if k!='runner_universe_sha256'})):
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_IDENTITY_INVALID')
+    snapshots=[s for s in artifact.get('sources') or []
+               if s.get('source_id')=='JRA-OFFICIAL-RACE-PDF'
+               and s.get('snapshot_sha256')==pdf.get('source_snapshot_sha256')]
+    if len(snapshots)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_SNAPSHOT_REQUIRED')
+    snap=snapshots[0]
+    if (snap.get('official') is not True or snap.get('authority')!='JRA_OFFICIAL'
+            or snap.get('cutoff_relation')!='PRE_CUTOFF'
+            or snap.get('raw_sha256')!=pdf.get('raw_sha256')
+            or snap.get('final_url')!=expected_url):
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_EVIDENCE_INVALID')
+    names={};numbers=set()
+    for row in pdf.get('runners') or []:
+        name=re.sub(r'\s+','',str(row.get('name') or ''));no=row.get('horse_no')
+        if not name or name in names or type(no) is not int or not 1<=no<=18 or no in numbers:
+            raise ValueError('JRA_CANCELLED_NUMBER_PDF_IDENTITY_AMBIGUOUS')
+        names[name]=no;numbers.add(no)
+    if len(rows)!=len(names) or len(rows)!=pdf.get('runner_count'):
+        raise ValueError('JRA_CANCELLED_NUMBER_DECLARED_COUNT_MISMATCH')
+    seen_names=set();seen_numbers=set();seen_profiles=set();resolved=[]
+    for row in rows:
+        name=re.sub(r'\s+','',str(row.get('horse_name') or ''))
+        profile=row.get('horse_profile_token');no=row.get('horse_no')
+        if name not in names or name in seen_names:
+            raise ValueError('JRA_CANCELLED_NUMBER_DETAIL_IDENTITY_AMBIGUOUS')
+        if profile and profile in seen_profiles:
+            raise ValueError('JRA_CANCELLED_NUMBER_PROFILE_AMBIGUOUS')
+        if row.get('status') not in {'ACTIVE','CANCELLED','EXCLUDED'}:
+            raise ValueError('JRA_CANCELLED_NUMBER_STATUS_INVALID')
+        current=dict(row)
+        if no is None:
+            if (row.get('status') not in {'CANCELLED','EXCLUDED'}
+                    or not re.fullmatch(r'pw01dud[0-9]+/[0-9A-Fa-f]{2}',str(profile or ''))):
+                raise ValueError('JRA_CANCELLED_NUMBER_EXPLICIT_IDENTITY_REQUIRED')
+            no=names[name]
+            current.update(horse_no=no,runner_id=str(no),horse_number_binding={
+                'method':'EXACT_UNIQUE_SAME_RACE_OFFICIAL_NAME',
+                'horse_name':name,'horse_profile_token':profile,
+                'detail_source_snapshot_sha256':detail['source_snapshot_sha256'],
+                'pdf_source_snapshot_sha256':pdf['source_snapshot_sha256']})
+        if type(no) is not int or no!=names[name] or no in seen_numbers:
+            raise ValueError('JRA_CANCELLED_NUMBER_NUMERIC_IDENTITY_CONFLICT')
+        seen_names.add(name);seen_numbers.add(no)
+        if profile:seen_profiles.add(profile)
+        resolved.append(current)
+    # Commit the derived view only after every identity has been proven.
+    bound={**detail,'runners':resolved}
+    bound['sha256']=sha_obj({k:v for k,v in bound.items() if k!='sha256'})
+    artifact['jra_official_race_card_detail']=bound
+    artifact['jra_official_race_card_detail_sha256']=sha_obj(bound)
+    return artifact
+
+
 def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:str,*,race_date:str,meeting_key:str,race_no:int)->Dict[str,Any]:
     raw,headers,final,tokens=_discover_and_fetch(race_date,meeting_key,race_no)
     spec={"source_id":"JRA-OFFICIAL-RACE-CARD-DETAIL","source_class":"OFFICIAL_JRA_RACE_CARD_DETAIL","authority":"JRA_OFFICIAL",
@@ -365,7 +521,8 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
         from .jra_observed_context import bind_observed_context
     except ImportError:
         from jra_observed_context import bind_observed_context
-    return bind_observed_context(artifact)
+    artifact=bind_observed_context(artifact)
+    return resolve_cancelled_runner_numbers(artifact,meeting_key=meeting_key)
 
 
 def fetch_race_card_reobservation(prediction_cutoff:str,*,race_date:str,meeting_key:str,race_no:int)->Tuple[Dict[str,Any],Dict[str,Any]]:
@@ -391,6 +548,7 @@ def fetch_race_card_reobservation(prediction_cutoff:str,*,race_date:str,meeting_
 def runner_universes_from_detail(detail:Dict[str,Any])->Tuple[Dict[str,Any],Dict[str,Any]]:
     runners=[]
     for x in detail.get("runners") or []:
+        if x.get('horse_no') is None:raise ValueError('JRA_DETAIL_RUNNER_NUMBER_UNRESOLVED')
         name=str(x.get("horse_name") or "").strip()
         if not name: continue
         runners.append({

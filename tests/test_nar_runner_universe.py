@@ -9,9 +9,89 @@ from nar_runner_universe import (
     PROFILE,
     enrich_source_artifact,
     extract_runner_universe_from_tables,
+    enrich_unsigned_nankan_declared_artifact,
     validate_krs_horses,
     validate_request_runners,
 )
+
+
+def unsigned_nankan_sample(*, cancelled=False):
+    """Reuse authored provider facts; no original HTML, HTTP or signing."""
+    import hashlib
+    from runtime import urw_nankan_reference_source as n
+    from test_urw_nankan_reference_source import DAY, DAY_ID, NOW, detailed_card, program
+    raw=detailed_card()
+    if cancelled:
+        raw=raw.replace(b'<td class="cs-odds">-</td>', '<td class="cs-odds">取消</td>'.encode(), 1)
+    race=n.parse_program(program(),n.ORIGIN+'/program/'+DAY_ID+'.do',DAY)[0]
+    receipt={'provider':n.PROVIDER,'url':n.ORIGIN+'/uma_shosai/'+DAY_ID+'01.do',
+             'http_status':200,'fetched_at':NOW.isoformat(),'raw_sha256':hashlib.sha256(raw).hexdigest(),
+             'source_policy':{'usage_scope':'USER_PERSONAL_NONCOMMERCIAL_PRIVATE_ONLY_NOT_PUBLIC_REDISTRIBUTION',
+                              'classification':'TEST_SYNTHETIC_ONLY'}}
+    source=n.build_unsigned_source_snapshot(raw,race,receipt,race_id='TEST-SYNTHETIC-NANKAN-UNSIGNED')
+    return source,race,source['parsed_nankan_facts']
+
+
+def test_unsigned_nankan_declared_adapter_preserves_provider_time_and_formal_boundary():
+    import copy
+    from runtime.local_physical.source_acquisition import verify_source_artifact
+    source,race,facts=unsigned_nankan_sample(cancelled=True)
+    before=copy.deepcopy(source)
+    out=enrich_unsigned_nankan_declared_artifact(source,race,facts)
+    assert source==before
+    declared=out['declared_runner_universe']
+    assert declared['provider']=='NANKAN_OFFICIAL' and declared['universe_type']=='DECLARED'
+    assert declared['runner_count']==2 and [x['body_weight'] for x in declared['runners']]==[481,481]
+    assert [x['status'] for x in out['runner_status_registry']]==['CANCELLED','ACTIVE_DECLARED']
+    assert declared['source_fetched_at']==source['sources'][0]['fetched_at']
+    assert out['declared_fact_binding']['input_source_snapshot_sha256']==source['source_snapshot_sha256']
+    assert out['formal_ready'] is False and out['signed_source_claim'] is False and out['active_verified'] is False
+    assert 'official_runner_universe' not in out and 'active_runner_universe' not in out
+    assert verify_source_artifact(out)==(False,['SOURCE_NOT_FORMAL_READY'])
+    assert validate_request_runners(out,[{'runner_id':'2','name':facts[1]['name']}])==(False,['OFFICIAL_RUNNER_UNIVERSE_MISSING'])
+
+
+@pytest.mark.parametrize('damage',['provider','formal','formal_claim','public','raw','facts','context','source_id','relation','listed_name','time'])
+def test_unsigned_nankan_adapter_refuses_rehashed_fact_identity_or_authority_changes(damage):
+    import copy
+    from runtime.local_physical.source_acquisition import sha_obj
+    source,race,facts=unsigned_nankan_sample()
+    facts=copy.deepcopy(facts)
+    if damage=='provider':source['provider']='NAR_OFFICIAL'
+    elif damage=='formal':source['formal_ready']=True
+    elif damage=='formal_claim':source['formal_source_claim']=True
+    elif damage=='public':source['public_redistribution_authorized']=True
+    elif damage=='raw':source['sources'][0]['raw_gzip_b64']='not-an-archive'
+    elif damage=='facts':facts[0]['current_body_weight']=999
+    elif damage=='context':source['source_race_context']['race_no']=2
+    elif damage=='source_id':
+        source['sources'][0]['source_id']='NANKAN-CARD:WRONG-RACE'
+        source['sources'][0]['snapshot_sha256']=sha_obj({k:v for k,v in source['sources'][0].items() if k!='snapshot_sha256'})
+    elif damage=='relation':
+        source['sources'][0]['cutoff_relation']='POST_CUTOFF'
+        source['sources'][0]['snapshot_sha256']=sha_obj({k:v for k,v in source['sources'][0].items() if k!='snapshot_sha256'})
+    elif damage=='listed_name':source['declared_runner_universe']={'runners':[{'runner_id':'1','name':'別馬'}]}
+    elif damage=='time':source['prediction_cutoff']=source['scheduled_post_at']
+    source['source_snapshot_sha256']=sha_obj({k:v for k,v in source.items() if k!='source_snapshot_sha256'})
+    with pytest.raises(ValueError):enrich_unsigned_nankan_declared_artifact(source,race,facts)
+
+
+def test_unsigned_nankan_declared_facts_reach_shared_candidate_29_arithmetic_only():
+    from runtime.local_nar_evidence_candidate import compile_parsed_candidate_evidence
+    from runtime.local_fullnumerical_candidate import materialize_candidate
+    source,race,facts=unsigned_nankan_sample()
+    out=enrich_unsigned_nankan_declared_artifact(source,race,facts)
+    normalized=out['normalized_evidence']['nankan_runner_facts']
+    raw={r['runner_id']:{**r,'race_card_source_id':normalized['source_id'],
+                         'race_card_snapshot_sha256':normalized['snapshot_sha256'],
+                         'race_card_fetched_at':normalized['fetched_at']} for r in normalized['value']}
+    request={'race':{**race,'venue':'URW','class':'C3'},
+             'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in facts]}
+    result=materialize_candidate(compile_parsed_candidate_evidence(out,request,raw))
+    assert result['candidate_full_numerical_summary']['required_count']==58
+    assert result['candidate_full_numerical_summary']['unresolved_count']==0
+    assert result['candidate_full_numerical_summary']['production_authority'] is False
+    assert normalized['snapshot_sha256']==out['sources'][0]['snapshot_sha256']
 
 
 def sample_tables():

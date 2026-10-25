@@ -4,6 +4,13 @@ on:
     branches: [main]
     paths:
       - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_pedigree_inventory.py"
+      - "tests/test_jra_pedigree_full_day.py"
+      - "runtime/jra_bvi_environment.py"
+      - "runtime/jra_bvi_env_shadow.py"
+      - "scripts/jra_bvi_env_acceptance.py"
+      - "tests/test_jra_bvi_env*.py"
+      - "runtime/jra_static_owner_forward_oos/models/bvi_env_*.json"
       - "scripts/jra_bvi_pipeline_real_acceptance.py"
       - "runtime/jra_bvi_shadow_comparison.py"
       - "runtime/jra_bvi_consumption.py"
@@ -25,6 +32,13 @@ on:
     branches: [main]
     paths:
       - "scripts/jra_pedigree_live_acceptance.py"
+      - "scripts/jra_pedigree_inventory.py"
+      - "tests/test_jra_pedigree_full_day.py"
+      - "runtime/jra_bvi_environment.py"
+      - "runtime/jra_bvi_env_shadow.py"
+      - "scripts/jra_bvi_env_acceptance.py"
+      - "tests/test_jra_bvi_env*.py"
+      - "runtime/jra_static_owner_forward_oos/models/bvi_env_*.json"
       - "scripts/jra_bvi_pipeline_real_acceptance.py"
       - "runtime/jra_bvi_shadow_comparison.py"
       - "runtime/jra_bvi_consumption.py"
@@ -45,7 +59,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  attestations: read
+  attestations: write
+  id-token: write
 jobs:
   prove:
     runs-on: ubuntu-latest
@@ -58,7 +73,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -q cryptography pytest beautifulsoup4
-      - name: Protect live Production from historical external diagnostics during Oct17-18 freeze
+      - name: Protect live Production from historical external diagnostics during live freezes
         id: external_window
         run: |
           python - <<'PY'
@@ -66,7 +81,7 @@ jobs:
           from datetime import datetime,timedelta,timezone
           from pathlib import Path
           day=datetime.now(timezone(timedelta(hours=9))).date().isoformat()
-          allowed=day not in ('2026-10-17','2026-10-18')
+          allowed=day not in ('2026-10-17','2026-10-18','2026-10-25')
           with open(os.environ['GITHUB_OUTPUT'],'a') as out:
               out.write('allowed='+str(allowed).lower()+'\n')
           if not allowed:
@@ -78,7 +93,13 @@ jobs:
                   'full_real_acceptance_pass_claimed':False},indent=2)+'\n')
           PY
       - name: Numerical lineage and temporal regression
-        run: python -m pytest -q tests/test_jra_bvi_proof_oos.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_consumption.py tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py
+        run: python -m pytest -q tests/test_jra_pedigree_full_day.py tests/test_jra_bvi_proof_oos.py tests/test_jra_production_auto_handoff.py tests/test_jra_bvi_consumption.py tests/test_krs_prediction_utility.py tests/test_jra_bvi_forward_shadow.py tests/test_jra_bvi_real_pipeline.py tests/test_jra_index_provenance_trace.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_static_owner_executable.py tests/test_jra_bvi_official_corpus_repair.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_owner_authorized_rules.py tests/test_jra_bvi_environment.py tests/test_jra_bvi_env_shadow.py tests/test_jra_bvi_env_comparison.py tests/test_jra_bvi_env_forward.py
+      - name: Exact observed target environment regression
+        run: python -m pytest -q tests/test_jra_bvi_env_acceptance.py
+      - name: Independently verify actual all-race intake, existing Reader consumption and frozen Production BVI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/jra_pedigree_inventory.py --official-audit --plan runtime/pedigree_intake_receipts/20261024-full-day-plan.json --output runtime_out/jra_bvi_full_day_audit.json --summary-output runtime_out/jra_bvi_full_day_summary.json
       - name: Verify real OIDC corpus, temporal gates and full BVI downstream diagnostics
         if: steps.external_window.outputs.allowed == 'true'
         env:
@@ -96,15 +117,44 @@ jobs:
       - name: Reverify signed forward results and retain separate policy cohorts
         if: steps.external_window.outputs.allowed == 'true'
         run: python scripts/jra_bvi_pipeline_forward_shadow.py settle
+      - name: Recover actual environment facts and evaluate frozen research-only ENV model
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXTERNAL_ALLOWED: ${{ steps.external_window.outputs.allowed }}
+          ENV_MODEL_CODE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$EXTERNAL_ALLOWED" = true ]; then
+            python scripts/jra_bvi_env_acceptance.py --abc-artifact runtime_out/jra_bvi_pipeline_real_acceptance.json --run-external
+          else
+            python scripts/jra_bvi_env_acceptance.py
+          fi
+      - name: Attest unvalidated research model publication bytes
+        id: env_model_attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: runtime_out/bvi_env/bvi_env_model_publication.json
+      - name: Independently verify research model OIDC before reporting a freeze
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify runtime_out/bvi_env/bvi_env_model_publication.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-production-intake-acceptance.yml" \
+            --format json > runtime_out/bvi_env/model_oidc_verification.json
+          python scripts/jra_bvi_pipeline_forward_shadow.py settle --environment
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jra-real-signed-pedigree-corpus-intake
           path: |
             runtime_out/jra_bvi_external_acceptance_deferred.json
+            runtime_out/jra_bvi_full_day_audit.json
+            runtime_out/jra_bvi_full_day_summary.json
             runtime_out/jra_pedigree_verified_acceptance.json
             runtime_out/jra_bvi_postcapture_real_closure.json
             runtime_out/jra_bvi_pipeline_real_acceptance.json
+            runtime_out/bvi_env/
+            runtime/jra_static_owner_forward_oos/pedigree_env_current.json
             runtime/jra_static_owner_forward_oos/pedigree_pipeline_current.json
             runtime/jra_static_owner_forward_oos/**/pedigree_evaluation_*.json
           if-no-files-found: warn

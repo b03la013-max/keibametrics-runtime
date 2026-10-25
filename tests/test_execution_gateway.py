@@ -1,4 +1,8 @@
+import json
 import pathlib
+import subprocess
+import sys
+import textwrap
 
 import pytest
 
@@ -181,3 +185,60 @@ def test_explicit_active_bundle_mismatch_still_fails_closed(tmp_path):
     result=assess_runtime_health(health,gateway=gateway,repo_root=tmp_path)
     assert result["status"]=="FAIL"
     assert "RUNTIME_BUNDLE_HASH_MISMATCH" in result["errors"]
+
+
+def _run_source_parallel_ci(tmp_path, *, promoted_mutation=None, gateway_mutation=None):
+    """Execute the actual CI assertion, with a genuinely different checkout."""
+    repo = pathlib.Path(__file__).resolve().parents[1]
+    workflow = (repo / ".github/workflows/km-local-source-parallel-staged-acceptance.yml").read_text()
+    body = workflow.split("          python - <<'PY'\n", 1)[1].rsplit("          PY", 1)[0]
+    profiles = tmp_path / "profiles"
+    profiles.mkdir()
+    gateway = json.loads((repo / "profiles/current_execution_gateway.json").read_text())
+    promoted = json.loads((repo / "profiles/local_source_parallel_staged_20260928_R1.json").read_text())
+    if promoted_mutation:
+        promoted_mutation(promoted)
+    if gateway_mutation:
+        gateway_mutation(gateway)
+    (profiles / "current_execution_gateway.json").write_text(json.dumps(gateway))
+    (profiles / "local_source_parallel_staged_20260928_R1.json").write_text(json.dumps(promoted))
+    candidate = tmp_path / "runtime/local_physical/source_acquisition.py"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("unreleased candidate code\n")
+    return subprocess.run([sys.executable, "-c", textwrap.dedent(body)], cwd=tmp_path,
+                          capture_output=True, text=True)
+
+
+def test_source_parallel_ci_accepts_candidate_without_claiming_deployment(tmp_path):
+    result = _run_source_parallel_ci(tmp_path)
+    assert result.returncode == 0, result.stderr
+    audit = json.loads(result.stdout)
+    assert audit["lifecycle_state"] == "HISTORICAL_PROMOTION_RECORD_VERIFIED"
+    assert audit["checkout_state"] == "UNDEPLOYED_CANDIDATE"
+    assert audit["live_runtime_observed"] is False
+    assert audit["automatic_activation"] is False
+    assert audit["active_source_sha256"] != audit["checkout_source_sha256"]
+
+
+def test_source_parallel_ci_rejects_inconsistent_promotion_profile(tmp_path):
+    result = _run_source_parallel_ci(tmp_path, promoted_mutation=lambda st: st.update(active_runtime_profile="wrong"))
+    assert result.returncode != 0
+
+
+def test_source_parallel_ci_historical_git_revision_is_diagnostic_when_bundle_matches(tmp_path):
+    result = _run_source_parallel_ci(tmp_path, promoted_mutation=lambda st: st.update(active_runtime_git_revision="historical-other-commit"))
+    assert result.returncode == 0, result.stderr
+    audit = json.loads(result.stdout)
+    assert audit["historical_revision_matches_current"] is False
+    assert audit["checkout_state"] == "UNDEPLOYED_CANDIDATE"
+
+
+def test_source_parallel_ci_rejects_redefined_active_bundle(tmp_path):
+    def corrupt(gateway):
+        gateway["families"]["LOCAL"]["active_bundle_sha256"]["source_acquisition_sha256"] = "wrong"
+    assert _run_source_parallel_ci(tmp_path, gateway_mutation=corrupt).returncode != 0
+
+
+def test_source_parallel_ci_rejects_unrecognized_lifecycle(tmp_path):
+    result = _run_source_parallel_ci(tmp_path, promoted_mutation=lambda st: st.update(status="GREEN"))
+    assert result.returncode != 0

@@ -362,10 +362,35 @@ def apply_official_detail_status(artifact, declared, active):
     expected={n for n,s in statuses.items() if s=='ACTIVE'}
     if identities(active['runners'])!={n:name for n,name in identities(declared['runners']).items() if n in expected}:
         raise ValueError('JRA_DETAIL_ACTIVE_DECLARED_STATUS_MISMATCH')
-    rows=[{**r,'status':statuses[int(r['horse_no'])],
-           'status_source_id':declared['source_id'],
-           'status_source_snapshot_sha256':declared.get('source_snapshot_sha256')}
-          for r in pdf['runners']]
+    detail_rows={int(r['horse_no']):r for r in declared['runners']}
+    rows=[]; completed=[]; conflicts=[]
+    for r in pdf['runners']:
+        no=int(r['horse_no'])
+        row={**r,'status':statuses[no],
+             'status_source_id':declared['source_id'],
+             'status_source_snapshot_sha256':declared.get('source_snapshot_sha256')}
+        # The identity sets were reconciled above. The same official detail
+        # page can therefore retain a printed fact that the PDF text parser
+        # missed. Existing PDF values remain immutable; disagreements are
+        # diagnostic and do not create a new admission condition.
+        for field in ('assigned_weight','frame_no'):
+            previous=row.get(field); observed=detail_rows[no].get(field)
+            if observed is None:
+                continue
+            if previous is None:
+                row[field]=observed
+                provenance={'source_id':declared['source_id'],
+                            'source_snapshot_sha256':declared.get('source_snapshot_sha256')}
+                row['detail_fact_sources']={**(row.get('detail_fact_sources') or {}),field:provenance}
+                completed.append({'horse_no':no,'field':field,'value':observed,**provenance})
+            elif previous!=observed:
+                conflicts.append({'horse_no':no,'field':field,
+                                  'pdf_value':previous,'detail_value':observed})
+        rows.append(row)
+    if completed or conflicts:
+        reconciliation=artifact.setdefault('official_runner_universe_reconciliation',{})
+        if completed:reconciliation['completed_detail_facts']=completed
+        if conflicts:reconciliation['detail_fact_conflicts']=conflicts
     listed={**pdf,'universe_type':'DECLARED','runners':rows,'runner_count':len(rows)}
     listed['runner_universe_sha256']=sha_obj({k:v for k,v in listed.items() if k!='runner_universe_sha256'})
     selected=[r for r in rows if r['status']=='ACTIVE']

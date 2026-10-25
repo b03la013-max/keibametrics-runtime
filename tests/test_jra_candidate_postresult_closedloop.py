@@ -73,6 +73,36 @@ def test_official_top3_and_price_table_must_reconcile():
     assert result["top3"]==[4,8,3]
     with pytest.raises(PendingOfficialResult,match="MISMATCH"):
         verify_official_result(parsed,price_text().replace("4-8 1,240", "8-4 1,240"),["3","4","8"])
+
+
+@pytest.mark.parametrize('status',['CANCELLED','EXCLUDED'])
+def test_withdrawal_requires_official_refund_declaration(status):
+    parsed={'official':True,'runners':[
+        {'runner_id':str(h),'horse_no':h,'finish':i+1} for i,h in enumerate([4,8,3])],
+        'non_finishers':[{'runner_id':'7','horse_no':7,'finish_status':status}]}
+    with pytest.raises(PendingOfficialResult,match='REFUND_DECLARATION_REQUIRED'):
+        verify_official_result(parsed,price_text(),['3','4','7','8'])
+    out=verify_official_result(parsed,price_text()+' 返還 返還馬番　7番　返還同枠6枠',['3','4','7','8'])
+    assert out['refund_runner_ids']==[7] and out['non_finishers']==parsed['non_finishers']
+
+
+@pytest.mark.parametrize('status',['DID_NOT_FINISH','DISQUALIFIED'])
+def test_nonfinish_does_not_imply_refund(status):
+    parsed={'official':True,'runners':[
+        {'runner_id':str(h),'horse_no':h,'finish':i+1} for i,h in enumerate([4,8,3])],
+        'non_finishers':[{'runner_id':'7','horse_no':7,'finish_status':status}]}
+    assert verify_official_result(parsed,price_text(),['3','4','7','8'])['refund_runner_ids']==[]
+    with pytest.raises(ValueError,match='NONCANCELLATION'):
+        verify_official_result(parsed,price_text()+' 返還馬番7番',['3','4','7','8'])
+
+
+def test_dead_heat_is_not_silently_settled_as_one_order():
+    parsed={'official':True,'runners':[
+        {'runner_id':'4','horse_no':4,'finish':1},
+        {'runner_id':'8','horse_no':8,'finish':2},
+        {'runner_id':'3','horse_no':3,'finish':2}]}
+    with pytest.raises(PendingOfficialResult,match='DEAD_HEAT_MANUAL_ADJUDICATION'):
+        verify_official_result(parsed,price_text(),['3','4','8'])
     with pytest.raises(ValueError,match="UNIVERSE"):
         verify_official_result(parsed,price_text(),["1","3","4"])
 

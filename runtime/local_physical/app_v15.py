@@ -52,6 +52,12 @@ def _require_source_receipt(payload: Dict[str, Any], race_id: str) -> Dict[str, 
     valid, errors = verify_source_artifact(env.get("artifact") or {})
     if not valid:
         raise HTTPException(422, "SOURCE_ARTIFACT_INVALID:" + ",".join(errors))
+    # Current LOCAL registry/runtime owns the NAR runner consumer only.
+    # A generic SOURCE signature proves bytes, not authority for a new provider
+    # to skip the PRE_KRS/FINAL runner checks. SOURCE-only verification stays
+    # independent; a different consumer needs its own approved implementation.
+    if (env.get("artifact") or {}).get("source_manifest_profile") != NAR_MANIFEST_PROFILE:
+        raise HTTPException(422, "SOURCE_CONSUMER_NOT_AUTHORIZED")
     return env
 
 

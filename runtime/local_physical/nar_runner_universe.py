@@ -243,6 +243,104 @@ def enrich_source_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
     return artifact
 
 
+def enrich_unsigned_nankan_declared_artifact(
+    artifact: Dict[str, Any], race: Dict[str, Any], parsed_facts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Adapt verified bytes to the existing DECLARED shape, without activation.
+
+    This is an offline, unsigned schema adapter.  It is not registered as a
+    formal provider consumer and never creates a verified ACTIVE universe.
+    """
+    import base64
+    import copy
+    from datetime import datetime
+    import gzip
+    from runtime.urw_nankan_reference_source import ORIGIN, parse_card, verify_history_asof
+    from runtime.local_physical.source_acquisition import verify_source_artifact
+
+    if (artifact.get("provider") != "NANKAN_OFFICIAL"
+            or artifact.get("formal_ready") is not False
+            or artifact.get("active_verified") is not False
+            or any(artifact.get(key, False) is not False for key in
+                   ("production_authority", "formal_source_claim", "signed_source_claim", "source_signature_claim", "public_redistribution_authorized"))
+            or any(key in artifact for key in ("official_runner_universe", "active_runner_universe"))):
+        raise ValueError("NANKAN_UNSIGNED_DECLARED_BOUNDARY_REQUIRED")
+    _, errors = verify_source_artifact(artifact)
+    if errors != ["SOURCE_NOT_FORMAL_READY"]:
+        raise ValueError("NANKAN_UNSIGNED_SNAPSHOT_INVALID:" + ",".join(errors))
+    context = {"venue_id": "URW", "race_date": race.get("race_date"), "race_no": race.get("race_no")}
+    if race.get("venue_id") != "URW" or artifact.get("source_race_context") != context:
+        raise ValueError("NANKAN_DECLARED_RACE_CONTEXT_MISMATCH")
+    url = ORIGIN + "/uma_shosai/" + str(race.get("provider_race_id")) + ".do"
+    sources = artifact.get("sources") or []
+    if (len(sources) != 1 or sources[0].get("authority") != "NANKAN_OFFICIAL"
+            or sources[0].get("requested_url") != url or sources[0].get("final_url") != url
+            or sources[0].get("source_id") != "NANKAN-CARD:" + str(race.get("provider_race_id"))
+            or sources[0].get("cutoff_relation") != "PRE_CUTOFF"):
+        raise ValueError("NANKAN_DECLARED_CARD_SOURCE_MISMATCH")
+    card = sources[0]
+    if (artifact.get("prediction_cutoff") != race.get("prediction_cutoff")
+            or artifact.get("scheduled_post_at") != race.get("scheduled_post_at")):
+        raise ValueError("NANKAN_DECLARED_CUTOFF_BINDING_MISMATCH")
+    try:
+        fetched, frozen, cutoff, post = [datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            for value in (card["fetched_at"], artifact["source_freeze_at"],
+                          race["prediction_cutoff"], race["scheduled_post_at"])]
+        if any(point.tzinfo is None for point in (fetched, frozen, cutoff, post)) or not fetched <= frozen or not fetched < cutoff < post:
+            raise ValueError("NANKAN_DECLARED_PRESTART_TIME_REQUIRED")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("NANKAN_DECLARED_TIME_BINDING_INVALID") from exc
+    raw = gzip.decompress(base64.b64decode(card["raw_gzip_b64"], validate=True))
+    observed = parse_card(raw, race, url)
+    verify_history_asof(observed, card["fetched_at"])
+    if not isinstance(parsed_facts, list) or _sha(parsed_facts) != _sha(observed):
+        raise ValueError("NANKAN_DECLARED_PARSED_FACTS_MISMATCH")
+    if "parsed_nankan_facts" in artifact and _sha(artifact["parsed_nankan_facts"]) != _sha(observed):
+        raise ValueError("NANKAN_DECLARED_EMBEDDED_FACTS_MISMATCH")
+    declared = []
+    statuses = []
+    for row in observed:
+        if row.get("status") not in {"ACTIVE_DECLARED", "CANCELLED"} or row.get("active_verified") is not False:
+            raise ValueError("NANKAN_DECLARED_STATUS_INVALID")
+        declared.append({"runner_id": row["runner_id"], "horse_no": row["horse_no"],
+            "name": row["name"], "canonical_name": canonical_name(row["name"]),
+            "frame_no": row.get("frame_no"), "body_weight": row.get("current_body_weight"),
+            "body_weight_change": row.get("current_body_weight_change")})
+        statuses.append({"runner_id": row["runner_id"], "name": row["name"], "status": row["status"],
+            "reason": "EXPLICIT_NANKAN_CARD_CANCELLATION" if row["status"] == "CANCELLED" else "NANKAN_CARD_DECLARATION_ONLY_NOT_VERIFIED_ACTIVE",
+            "evidence_sources": [card["source_id"]], "provider": "NANKAN_OFFICIAL", "active_verified": False})
+    prior = (artifact.get("declared_runner_universe") or {}).get("runners")
+    if prior is not None and [{"runner_id": r.get("runner_id"), "name": r.get("name")} for r in prior] != [
+            {"runner_id": r["runner_id"], "name": r["name"]} for r in declared]:
+        raise ValueError("NANKAN_DECLARED_LISTED_IDENTITY_MISMATCH")
+    universe = {"profile": PROFILE, "provider": "NANKAN_OFFICIAL", "universe_type": "DECLARED",
+        "source_id": card["source_id"], "source_snapshot_sha256": card["snapshot_sha256"],
+        "source_fetched_at": card["fetched_at"], "raw_sha256": card["raw_sha256"],
+        "runner_count": len(declared), "runners": declared, "active_verified": False,
+        "formal_ready": False, "production_authority": False}
+    universe["runner_universe_sha256"] = _sha(universe)
+    out = copy.deepcopy(artifact)
+    out["declared_runner_universe"] = universe
+    out["runner_status_registry"] = statuses
+    out["runner_status_registry_sha256"] = _sha(statuses)
+    out.setdefault("normalized_evidence", {})["nankan_runner_facts"] = {
+        "value": copy.deepcopy(observed), "provider": "NANKAN_OFFICIAL",
+        "source_id": card["source_id"], "snapshot_sha256": card["snapshot_sha256"],
+        "raw_sha256": card["raw_sha256"], "fetched_at": card["fetched_at"],
+        "production_authority": False, "active_verified": False, "formal_ready": False}
+    out["normalized_evidence_sha256"] = _sha(out["normalized_evidence"])
+    out["declared_fact_binding"] = {"input_source_snapshot_sha256": artifact["source_snapshot_sha256"],
+        "source_id": card["source_id"], "snapshot_sha256": card["snapshot_sha256"],
+        "raw_sha256": card["raw_sha256"], "fetched_at": card["fetched_at"],
+        "source_race_context": context, "parsed_facts_sha256": _sha(observed),
+        "declared_runner_universe_sha256": universe["runner_universe_sha256"],
+        "runner_status_registry_sha256": out["runner_status_registry_sha256"],
+        "provider": "NANKAN_OFFICIAL", "formal_ready": False, "active_verified": False}
+    out["declared_fact_binding"]["sha256"] = _sha(out["declared_fact_binding"])
+    out["source_snapshot_sha256"] = _sha({k: v for k, v in out.items() if k != "source_snapshot_sha256"})
+    return out
+
+
 def validate_request_runners(
     artifact: Dict[str, Any],
     runners: Any,

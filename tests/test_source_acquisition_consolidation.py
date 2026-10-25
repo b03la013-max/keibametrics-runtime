@@ -122,3 +122,83 @@ def test_post_cutoff_failure_hint_requires_new_id_when_cutoff_changes():
     assert diagnostic['code'] == 'SOURCE_ACQUISITION_NOT_FROZEN'
     assert diagnostic['resume_hint'] == 'NEW_EXECUTION_ID_IF_CUTOFF_CHANGES_KEEP_PRIOR_SOURCE_BASIS'
     assert diagnostic['failure_class'] == 'SOURCE_OR_RUNNER_UNIVERSE'
+
+
+def _source_consumer_endpoints():
+    """Exercise existing endpoints with crypto/signers stubbed, never a POST."""
+    import types
+    from runtime.local_physical.source_acquisition import SOURCE_PROFILE
+    source = Path('runtime/local_physical/app_v15.py').read_text()
+    nodes = {n.name:n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)}
+    calls = []
+    class EndpointHold(Exception):
+        def __init__(self, status, detail):
+            self.status, self.detail = status, detail
+            super().__init__(detail)
+    legacy = types.SimpleNamespace(validate_family=lambda p:None, verify_envelope=lambda p:True,
+        pre_krs=lambda p:calls.append('pre_krs') or {'receipt':{'status':'NO_SIGNING_TEST'}},
+        final=lambda p:calls.append('final') or {'receipt':{'status':'NO_SIGNING_TEST'}},
+        SIGNER='SYNTHETIC_ONLY', FAMILY='LOCAL')
+    scope = {'Dict':dict, 'Any':object, 'legacy':legacy, 'HTTPException':EndpointHold,
+        'verify_source_artifact':lambda artifact:(True, []), 'SOURCE_PROFILE':SOURCE_PROFILE,
+        'NAR_MANIFEST_PROFILE':'KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923',
+        'validate_krs_horses':lambda source,data:(data.get('valid', False), ['TEST_RUNNER_MISMATCH'])}
+    for name in ('_require_source_receipt','source_verify','pre_krs','final'):
+        node=nodes[name];node.decorator_list=[]
+        exec(compile(ast.Module(body=[node],type_ignores=[]),'existing_source_consumer_endpoints','exec'), scope)
+    return scope, calls, EndpointHold
+
+
+def _source_consumer_payload(profile):
+    return {'race_id':'SYNTHETIC-URW-CONSUMER',
+        'source_receipt':{'receipt':{'phase':'SOURCE','status':'SOURCE_FROZEN','race_id':'SYNTHETIC-URW-CONSUMER'},
+            'artifact':{'source_manifest_profile':profile,
+                'official_runner_universe':{'runners':[{'runner_id':'1'}]}}},
+        'krs_input_data':{'valid':True}, 'final_prediction_package':{'ranking':[1]},
+        'final_ticket':{'tickets':[{'selection':[1],'stake':100}]}}
+
+
+@pytest.mark.parametrize('profile', [None, '', 'UNKNOWN', 'NANKAN_OFFICIAL', 'KM-URW-NANKAN-PRIVATE-REFERENCE-v1'])
+@pytest.mark.parametrize('endpoint', ['pre_krs','final'])
+def test_unknown_source_consumer_never_reaches_formal_handler(profile, endpoint):
+    scope, calls, Hold = _source_consumer_endpoints()
+    with pytest.raises(Hold, match='SOURCE_CONSUMER_NOT_AUTHORIZED'):
+        scope[endpoint](_source_consumer_payload(profile))
+    assert calls == []
+
+
+@pytest.mark.parametrize('endpoint', ['pre_krs','final'])
+def test_current_nar_consumer_preserves_valid_universe_handler(endpoint):
+    scope, calls, _ = _source_consumer_endpoints()
+    scope[endpoint](_source_consumer_payload(scope['NAR_MANIFEST_PROFILE']))
+    assert calls == [endpoint]
+
+
+@pytest.mark.parametrize('endpoint', ['pre_krs','final'])
+def test_current_nar_consumer_still_rejects_invalid_universe(endpoint):
+    scope, calls, Hold = _source_consumer_endpoints()
+    payload = _source_consumer_payload(scope['NAR_MANIFEST_PROFILE'])
+    if endpoint == 'pre_krs':payload['krs_input_data']['valid'] = False
+    else:payload['final_ticket']['tickets'][0]['selection'] = [999]
+    with pytest.raises(Hold, match='SOURCE_(?:FINAL_)?RUNNER_UNIVERSE_MISMATCH'):
+        scope[endpoint](payload)
+    assert calls == []
+
+
+def test_generic_source_signature_verification_does_not_grant_formal_consumer():
+    scope, calls, Hold = _source_consumer_endpoints()
+    payload = _source_consumer_payload('UNREGISTERED-NANKAN-SYNTHETIC')
+    # The SOURCE-only verification endpoint remains distinct from consumption.
+    result = scope['source_verify'](payload['source_receipt'])
+    assert result['verified'] is True and result['signature_valid'] is True
+    with pytest.raises(Hold, match='SOURCE_CONSUMER_NOT_AUTHORIZED'):
+        scope['pre_krs'](payload)
+    assert calls == []
+
+
+def test_signature_failure_remains_first_source_failure():
+    scope, calls, Hold = _source_consumer_endpoints()
+    scope['legacy'].verify_envelope = lambda p:False
+    with pytest.raises(Hold, match='SOURCE_RECEIPT_SIGNATURE_INVALID'):
+        scope['pre_krs'](_source_consumer_payload('UNREGISTERED'))
+    assert calls == []

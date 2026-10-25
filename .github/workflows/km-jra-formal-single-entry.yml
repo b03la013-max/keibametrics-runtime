@@ -78,12 +78,31 @@ jobs:
           git fetch -q origin main
           if git cat-file -e "origin/main:runtime/final_artifacts/$RID.json" 2>/dev/null; then
             git show "origin/main:runtime/final_artifacts/$RID.json" > runtime_out/jra_existing_signed_final.json
-            python -m pip install --disable-pip-version-check -q cryptography==45.0.7
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final runtime_out/jra_existing_signed_final.json \
-              --output-dir runtime_out/existing_final_readback \
-              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              > runtime_out/existing_final_readback.txt
-            { echo '## Existing Signed FINAL — canonical read-back'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            # Reuse immutable presentation timestamps/bytes on repeated requests.
+            mkdir -p runtime_out/existing_final_readback
+            for name in publication.json canonical_tree.txt presentation.json presentation_detail.json presentation.md; do
+              if git cat-file -e "origin/main:runtime/jra_delivery/$RID/$name" 2>/dev/null; then
+                git show "origin/main:runtime/jra_delivery/$RID/$name" > "runtime_out/existing_final_readback/$name"
+              fi
+            done
+            if [ -f runtime_out/existing_final_readback/presentation.json ]; then
+              # The archived signer verifies the stored FINAL without live Health.
+              python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+              FINAL_SHA="$(PYTHONPATH=runtime python -c 'import json;from jra_production_postresult import verify_final;f=json.load(open("runtime_out/jra_existing_signed_final.json"));verify_final(f);print(f["sha256"])')"
+              PYTHONPATH=runtime python runtime/jra_presentation.py \
+                --directory runtime_out/existing_final_readback --expected-race-id "$RID" \
+                --final runtime_out/jra_existing_signed_final.json \
+                --expected-final-sha256 "$FINAL_SHA" > runtime_out/existing_final_readback.txt
+            else
+              python -m pip install --disable-pip-version-check -q cryptography==45.0.7
+              PYTHONPATH=runtime python runtime/jra_delivery.py --final runtime_out/jra_existing_signed_final.json \
+                --readback-only \
+                --output-dir runtime_out/existing_final_readback \
+                --expected-race-id "$RID" \
+                --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                > runtime_out/existing_final_readback.txt
+            fi
+            { echo '## Existing Signed FINAL — completed presentation'; echo '```'; cat runtime_out/existing_final_readback.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             echo 'reused=true' >> "$GITHUB_OUTPUT"
           else
             echo 'reused=false' >> "$GITHUB_OUTPUT"
@@ -596,18 +615,16 @@ jobs:
             done
           fi
           test -n "$RUN_ID"
-          # A post-signature publication failure must not erase a valid signed FINAL.
-          # Completion still requires the independently validated canonical summary below.
-          gh run watch "$RUN_ID" --exit-status || echo "CANONICAL_JOB_FAILED_VERIFY_SIGNED_COMPLETION_SEPARATELY"
-          gh run view "$RUN_ID" --json status,conclusion,url > runtime_out/canonical_job_status.json
+          # Canonical Production artifact is uploaded before independent Shadow finishes.
+          # Keep all existing completion/receipt validation below; only the wait changes.
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-          gh run download "$RUN_ID" --name "krs-utility-$RUN_ID" --dir runtime_out/canonical_formal
+          PYTHONPATH=runtime python runtime/jra_formal_artifact_wait.py --run-id "$RUN_ID" --output runtime_out/canonical_formal
           PYTHONPATH=runtime python - <<'PY'
           import json
           from pathlib import Path
           from jra_single_entry_outcome import verify_formal_completion_summary
           request=json.loads(Path("runtime_out/jra_single_entry_formal_request.json").read_text())
-          summaries=list(Path("runtime_out/canonical_formal").glob("*/formal_execution_summary.json"))
+          summaries=list(Path("runtime_out/canonical_formal").glob("**/formal_execution_summary.json"))
           assert len(summaries)==1, "JRA_CANONICAL_FORMAL_SUMMARY_REQUIRED"
           summary=json.loads(summaries[0].read_text())
           result=verify_formal_completion_summary(summary,request)
@@ -735,7 +752,7 @@ jobs:
           pattern: km-jra-single-entry-*-${{ github.run_id }}
           path: runtime_out/pedigree_forward_input
           merge-multiple: true
-      - name: Freeze current-policy bloodline comparison only while cutoff remains open
+      - name: Freeze one fixed-model A B C D comparison only while cutoff remains open
         id: freeze
         continue-on-error: true
         env:
@@ -748,12 +765,59 @@ jobs:
           SOURCE="$BASE/jra_single_entry_source_checkpoint/source_receipt_envelope.json"
           RID="$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["race_id"])' "$REQUEST")"
           SAFE="$(printf '%s' "$RID" | tr -c 'A-Za-z0-9._-' '-')"
-          OUTPUT="runtime/jra_static_owner_forward_oos/$SAFE/pedigree_pipeline_pre_result.json"
+          # Research starts only after the actual Production FINAL is durable.
+          test -f "runtime/final_artifacts/$RID.json" || exit 0
+          MODEL="runtime/jra_static_owner_forward_oos/models/bvi_env_20261024_5e7f3b31cebd.json"
+          OUTPUT="runtime/jra_static_owner_forward_oos/$SAFE/pedigree_env_pre_result.json"
           test ! -f "$OUTPUT" || exit 0
-          python scripts/jra_bvi_pipeline_forward_shadow.py freeze --request "$REQUEST" --source "$SOURCE" --output "$OUTPUT"
+          # One four-arm execution, not an ABC run followed by another ABCD run.
+          # The existing priority window and model/code/time checks remain mandatory.
+          python scripts/jra_bvi_pipeline_forward_shadow.py freeze --request "$REQUEST" --source "$SOURCE" --output "$OUTPUT" --environment-model "$MODEL"
           echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
-      - name: Commit immutable comparison before cutoff without delaying Production
+      - name: Attest exact research prediction before cutoff
         if: steps.freeze.outputs.output != ''
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ steps.freeze.outputs.output }}
+      - name: Verify independent prediction timestamp before accepting this freeze
+        id: admission
+        if: steps.freeze.outputs.output != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTPUT: ${{ steps.freeze.outputs.output }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "$OUTPUT" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml" \
+            --format json > runtime_out/pedigree_env_prediction_verification.json
+          python - <<'PY'
+          import json,os
+          from datetime import datetime
+          def dt(value):return datetime.fromisoformat(value.replace('Z','+00:00'))
+          frozen=json.load(open(os.environ['OUTPUT']))
+          start=dt(frozen['frozen_at']);cutoff=dt(frozen['prediction_cutoff'])
+          now=datetime.now(cutoff.tzinfo)
+          proofs=json.load(open('runtime_out/pedigree_env_prediction_verification.json'))
+          stamps=[dt(stamp.get('timestamp') or stamp['time'])
+              for proof in proofs
+              for stamp in (proof.get('verificationResult') or {}).get('verifiedTimestamps',[])]
+          if not (start<=now<=cutoff and any(start<=stamp<=now for stamp in stamps)):
+              raise SystemExit('BVI_ENV_PREDICTION_INDEPENDENT_TIMESTAMP_NOT_PRE_CUTOFF')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('admitted=true\n')
+          PY
+      - name: Independently save exact prediction and OIDC proof before Git publication
+        id: witness
+        if: steps.admission.outputs.admitted == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-pedigree-env-pre-cutoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.freeze.outputs.output }}
+            runtime_out/pedigree_env_prediction_verification.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Commit immutable comparison before cutoff without delaying Production
+        if: steps.admission.outputs.admitted == 'true' && steps.witness.outcome == 'success'
         env:
           OUTPUT: ${{ steps.freeze.outputs.output }}
         run: |
@@ -761,7 +825,7 @@ jobs:
           git config user.name keibametrics-runtime
           git config user.email actions@users.noreply.github.com
           git add "$OUTPUT"
-          git commit -m "shadow: freeze current-policy BVI A B C before result [skip ci]"
+          git commit -m "shadow: freeze fixed-model BVI A B C D before result [skip ci]"
           git pull --rebase origin main
           python - <<'PY'
           import json,os,subprocess
@@ -778,6 +842,7 @@ jobs:
         with:
           name: jra-pedigree-forward-shadow-${{ github.run_id }}
           path: |
-            runtime/jra_static_owner_forward_oos/**/pedigree_pipeline_pre_result.json
+            runtime/jra_static_owner_forward_oos/**/pedigree_env_pre_result.json
+            runtime_out/pedigree_env_prediction_verification.json
             runtime_out/jra_bvi_forward_freeze_failure.json
           if-no-files-found: warn

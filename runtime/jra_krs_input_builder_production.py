@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime
 from math import isfinite
 from pathlib import Path
 
@@ -10,6 +11,34 @@ REQUIRED = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","K
 
 class KRSInputBridgeError(ValueError):
     pass
+
+
+def _source_context(request):
+    """Read already-frozen SOURCE context; never fetch or create a new admission gate."""
+    source = request.get("source_snapshot") or {}
+    if (not isinstance(source, dict) or source.get("family_id") != "JRA"
+            or source.get("race_id") != request.get("race_id")
+            or not request.get("source_snapshot_sha256")):
+        return {}, "NO_BOUND_SOURCE_CONTEXT"
+    from jra_source_runtime.source_acquisition import sha_obj
+    source_sha = sha_obj({k:v for k,v in source.items() if k != "source_snapshot_sha256"})
+    if (source_sha != request['source_snapshot_sha256']
+            or source.get('source_snapshot_sha256',source_sha) != source_sha):
+        return {}, "NO_BOUND_SOURCE_CONTEXT"
+    try:
+        freeze = datetime.fromisoformat(source["source_freeze_at"].replace("Z", "+00:00"))
+        cutoff = datetime.fromisoformat(request["prediction_cutoff"].replace("Z", "+00:00"))
+        source_cutoff = datetime.fromisoformat(source["prediction_cutoff"].replace("Z", "+00:00"))
+        if not (freeze.tzinfo and cutoff.tzinfo and freeze <= cutoff == source_cutoff):
+            return {}, "SOURCE_CONTEXT_TIME_INELIGIBLE"
+        from jra_source_runtime.jra_observed_context import resolve_observed_context
+        return resolve_observed_context(source), "FROZEN_SOURCE_CONTEXT"
+    except (AttributeError, KeyError, TypeError, ValueError, OSError, EOFError):
+        return {}, "SOURCE_CONTEXT_NOT_VERIFIABLE"
+
+
+def _missing(value):
+    return value is None or str(value).strip().lower() in ("", "unknown")
 
 
 def _value(cc, name):
@@ -90,6 +119,7 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
     race_id=req.get("race_id")
     if not race_id:
         raise KRSInputBridgeError("RACE_ID_MISSING")
+    context, context_status = _source_context(req)
     environment=copy.deepcopy(req.get("environment") or {})
     if not environment:
         environment={
@@ -97,16 +127,29 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
             "weather":race.get("weather","unknown"),
             "source_cutoff":req.get("prediction_cutoff"),
         }
+    # The existing builder looked only at the sparse request race dictionary,
+    # so observed weather and going became unknown/null in all live inputs.
+    # Fill missing metadata from the same frozen official SOURCE only. Explicit
+    # simulation/environment choices, all HSV formulae and Physics are unchanged.
+    filled = {}
+    if _missing(environment.get("weather")) and context.get("weather"):
+        environment["weather"] = context["weather"]
+        filled["environment.weather"] = context["weather"]
+    krs_race={
+        "race_id":race_id,
+        "venue":race.get("venue") or req.get("venue_id"),
+        "surface":race.get("surface"),
+        "distance":race.get("distance"),
+        "course":race.get("course") or race.get("direction"),
+        "going":race.get("going"),
+        "class":race.get("class"),
+    }
+    for target, source_field in (("going", "going"), ("class", "race_class")):
+        if _missing(krs_race.get(target)) and context.get(source_field):
+            krs_race[target] = context[source_field]
+            filled["race." + target] = context[source_field]
     req["krs_input_data"]={
-        "race":{
-            "race_id":race_id,
-            "venue":race.get("venue") or req.get("venue_id"),
-            "surface":race.get("surface"),
-            "distance":race.get("distance"),
-            "course":race.get("course") or race.get("direction"),
-            "going":race.get("going"),
-            "class":race.get("class"),
-        },
+        "race":krs_race,
         "environment":environment,
         "horses":[build_runner_input(r) for r in runners],
         "simulation":{
@@ -120,5 +163,8 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
         "mapping_authority":bridge_profile,
         "canonical_index_mapping_authority":(req.get("base_index_mapping_authority") or {}).get("mapping_id"),
         "index_provenance_hash":req.get("index_provenance_hash"),
+        "source_context_status":context_status,
+        "observed_context_sha256":context.get("sha256"),
+        "filled_source_context_fields":filled,
     }
     return req

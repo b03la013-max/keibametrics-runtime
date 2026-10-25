@@ -129,6 +129,45 @@ def _ticket_key(t):
         return bt,tuple(sel)
     raise FormalValidationError(f"UNSUPPORTED_BET_TYPE:{bt}")
 
+
+def ticket_capital_metrics(tickets):
+    """Measure executable exposure from canonical tickets, never preflight totals."""
+    total = 0
+    head_stake, pair_stake, bet_type_stake = {}, {}, {}
+    seen = set()
+    for ticket in tickets:
+        bt, selection = _ticket_key(ticket)
+        stake = ticket.get("stake")
+        if type(stake) is not int or stake <= 0 or stake % 100:
+            raise FormalValidationError(f"BAD_STAKE:{ticket}")
+        key = (bt, selection)
+        if key in seen:
+            raise FormalValidationError("DUPLICATE_CANONICAL_TICKET")
+        seen.add(key)
+        total += stake
+        bet_type_stake[bt] = bet_type_stake.get(bt, 0) + stake
+        if bt in {"EXACTA", "TRIFECTA"}:
+            head = selection[0]
+            pair = ">".join(selection[:2])
+            head_stake[head] = head_stake.get(head, 0) + stake
+            pair_stake[pair] = pair_stake.get(pair, 0) + stake
+    max_head = max(head_stake, key=head_stake.get) if head_stake else None
+    max_pair = max(pair_stake, key=pair_stake.get) if pair_stake else None
+    return {
+        "metrics_scope": "FINAL_EXECUTABLE_TICKETS",
+        "ticket_count": len(tickets),
+        "total_investment": total,
+        "head_stake": head_stake,
+        "max_head": max_head,
+        "max_head_stake": head_stake.get(max_head, 0),
+        "head_capital_concentration": round(head_stake.get(max_head, 0) / total, 6) if total else 0.0,
+        "pair_stake": pair_stake,
+        "max_pair": max_pair,
+        "max_pair_stake": pair_stake.get(max_pair, 0),
+        "pair_capital_concentration": round(pair_stake.get(max_pair, 0) / total, 6) if total else 0.0,
+        "bet_type_stake": bet_type_stake,
+    }
+
 def validate_tickets(req, purchased_pairs):
     tickets=req.get("tickets")
     if not isinstance(tickets,list) or not tickets: raise FormalValidationError("TICKETS_EMPTY")

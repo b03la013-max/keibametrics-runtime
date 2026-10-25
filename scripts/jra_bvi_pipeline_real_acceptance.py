@@ -56,7 +56,7 @@ def evaluate():
             source_artifact=source,current_authority=authority,root=ROOT)
         a=comparison['arms']['A_CURRENT']; b=comparison['arms']['B_PEDIGREE_ENHANCED_SHADOW'];c=comparison['arms']['C_BLOODLINE_ABLATION']
         from copy import deepcopy
-        from jra_bvi_static_proof import build_static_proof,verify_static_proof
+        from jra_bvi_static_proof import build_static_proof,verify_static_proof,SOURCE_ANNOTATIONS
         from jra_static_owner_executable import compile_static_owner
         proof_req=deepcopy(req)
         proof_req['runners']=deepcopy(a['numerical_runners'])
@@ -64,6 +64,8 @@ def evaluate():
             source_receipt_sha256=env['receipt_sha256'],frozen_at=req['static_freeze_timestamp'],prediction_cutoff=req['prediction_cutoff'])
         proof_formal=deepcopy(proof_req)
         proof_formal.update({k:deepcopy(a['owner'][k]) for k in ('static_prediction','role_registry','pair_dispositions','third_dispositions','purchased_heads')})
+        proof_formal['static_prediction'].update({k:req['static_prediction'][k] for k in SOURCE_ANNOTATIONS
+                                                 if k in req['static_prediction']})
         static_proof=build_static_proof(proof_req,proof_owner,proof_formal,authority,execution_class="POSTCAPTURE_REPLAY_NOT_FORMAL_PREDICTION")
         verify_static_proof(static_proof,proof_formal)
 

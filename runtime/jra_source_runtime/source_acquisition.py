@@ -191,6 +191,18 @@ def _html_tables(decoded: str) -> List[List[List[str]]]:
     return parser.tables
 
 
+class _OfficialGradeTableExtractor(_TableExtractor):
+    """Opt-in retention of printed JRA grade labels; shared text parsing stays unchanged."""
+
+    def handle_starttag(self, tag: str, attrs):
+        super().handle_starttag(tag, attrs)
+        if tag.lower() == "img" and self._cell is not None:
+            labels = [value for name, value in attrs if name == "alt"]
+            label = labels[0] if len(labels) == 1 else None
+            if label and re.fullmatch(r"(?:G[ⅠⅡⅢ123]|Jpn[ⅠⅡⅢ123]|リステッド)", label):
+                self._cell.append(" " + label + " ")
+
+
 def _decode(raw: bytes, content_type: str) -> str:
     charset = "utf-8"
     m = re.search(r"charset\s*=\s*['\"]?([^;\s'\"]+)", content_type or "", re.I)

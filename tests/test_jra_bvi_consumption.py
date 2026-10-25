@@ -39,6 +39,19 @@ def test_tampered_bvi_is_rejected():
     with pytest.raises(ValueError,match='NUMERICAL_MISMATCH'):build_bvi_consumption(req,mapping)
 
 
+def test_frozen_corpus_snapshot_binding_is_trace_only_and_rejects_tamper():
+    from jra_bvi_consumption import sha
+    req,mapping=inputs();before=deepcopy(req['runners'])
+    refs=['ATTESTED_HARVEST:'+'a'*64]
+    req.setdefault('source_to_evidence_feature_compiler',{})['pedigree_corpus_manifest']={
+        'snapshots':refs,'snapshot_count':1,'manifest_sha256':sha(refs)}
+    out=build_bvi_consumption(req,mapping)
+    assert out['corpus_artifact_lineage_status']=='FROZEN_SNAPSHOT_LIST_BOUND'
+    assert req['runners']==before
+    req['source_to_evidence_feature_compiler']['pedigree_corpus_manifest']['snapshots']=['tampered']
+    with pytest.raises(ValueError,match='CORPUS_MANIFEST_BINDING_INVALID'):build_bvi_consumption(req,mapping)
+
+
 @pytest.mark.parametrize('venue,no',[('TKY','03'),('TKY','04'),('NGT','03'),('NGT','04')])
 def test_oct17_real_formal_bridge_annotations_preserve_frozen_static(venue,no):
     from jra_bvi_static_proof import verify_static_proof

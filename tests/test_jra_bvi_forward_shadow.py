@@ -161,6 +161,25 @@ def test_canonical_production_baseline_binds_actual_tickets_and_rejects_changed_
         f.bind_production_reference(comparison,req,final)
 
 
+def test_real_comparison_consumption_preserves_verified_source_annotations():
+    from copy import deepcopy
+    from jra_bvi_shadow_comparison import compare
+    from family_authority_guard import resolve_current_authority
+    req=real_request();saved=deepcopy(req)
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    env=json.loads(next((ROOT/'runtime/executions'/req['source_execution_id']/'SOURCE').rglob('source_receipt_envelope.json')).read_text())
+    _,authority=resolve_current_authority(ROOT)
+    compared=compare(req,mapping,source_sha=req['source_snapshot_sha256'],receipt_sha=env['receipt_sha256'],
+        algorithm_freeze_at=req['static_freeze_timestamp'],cutoff=req['prediction_cutoff'],
+        source_artifact=env['artifact'],current_authority=authority,root=ROOT)
+    proof=f.arm_consumption(compared,req,env['artifact'],mapping,authority,execution_class='POSTCAPTURE_DIAGNOSTIC_ONLY')
+    assert len(proof)==3 and req==saved
+    assert all(p['static_execution_proof_status']=='BOUND_ACTUAL_EXECUTION' for p in proof.values())
+    req['source_checkpoint_manifest']['receipt_sha256']='0'*64
+    with pytest.raises(ValueError,match='SOURCE_ANNOTATION_INVALID'):
+        f.arm_consumption(compared,req,env['artifact'],mapping,authority)
+
+
 def test_metadata_only_enrichment_is_not_a_changed_bvi_value():
     from copy import deepcopy
     from jra_bvi_shadow_comparison import compare,PEDIGREE_FEATURES
@@ -192,6 +211,80 @@ def test_oct18_shadow_defers_to_other_due_production_from_real_cohort(tmp_path):
     req,ids=_actual_oct18_priority_fixture(tmp_path)
     with pytest.raises(ValueError,match='DEFER_PRODUCTION_PENDING:.*TKY'):
         f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-18T09:00:00+09:00'))
+
+
+def test_oct25_and_future_shadow_fail_closed_without_official_plan(tmp_path):
+    for day in ('2026-10-25','2026-11-01'):
+        with pytest.raises(ValueError,match='DEFER_OFFICIAL_DAY_PLAN_MISSING'):
+            f.production_priority_window({'race_date':day},root=tmp_path)
+
+
+def _normal_oct25_plan(tmp_path):
+    import shutil
+    target=tmp_path/'runtime/jra_race_day_plan/2026-10-25.json'
+    target.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT/'runtime/jra_race_day_plan/2026-10-25.json',target)
+    plan=json.loads(target.read_text())
+    assert plan['all_races'] and 'cohort' not in plan
+    return plan
+
+
+def test_actual_oct25_all_races_plan_defers_without_official_schedule_not_keyerror(tmp_path):
+    _normal_oct25_plan(tmp_path)
+    req={'race_date':'2026-10-25','race_id':'KM-JRA-NGT-20261025-R01'}
+    with pytest.raises(ValueError,match='DEFER_OFFICIAL_SCHEDULE_MISSING'):
+        f.production_priority_window(req,root=tmp_path)
+
+
+def _normal_oct25_schedule(tmp_path):
+    from jra_source_runtime.jra_race_day_autopilot import tick
+    plan=_normal_oct25_plan(tmp_path)
+    venues=sorted({r['venue'] for r in plan['forward_oos_preregistration']['targets']})
+    # Scheduling unit boundary only: injected rows are not real future SOURCE,
+    # predictions, OOS freezes or replacements for the provisional program.
+    def resolve(day,venue):
+        rows=[]
+        for n in range(1,13):
+            minutes=9*60+50+30*(n-1)
+            rows.append({'race_no':n,'post_time':f'{minutes//60:02d}:{minutes%60:02d}',
+                         'title':'UNITTEST ONLY','raw':'SYNTHETIC_UNIT_SCHEDULE_ROW_NOT_OOS'})
+        return 'UNITTEST',rows
+    tick(tmp_path,'2026-10-25',datetime.fromisoformat('2026-10-25T08:00:00+09:00'),
+         meetings=lambda day:venues,resolve=resolve,resolver_runs={},
+         dispatch=lambda *a,**k:pytest.fail('No live dispatch permitted in this unit test'))
+    req={'race_date':'2026-10-25','race_id':'KM-JRA-NGT-20261025-R01',
+         'scheduled_post_at':'2026-10-25T09:50:00+09:00','prediction_cutoff':'2026-10-25T09:45:00+09:00'}
+    return req,tmp_path/'runtime/jra_race_day_plan/2026-10-25.schedule.json'
+
+
+def test_normal_all_races_uses_existing_autopilot_schedule_without_registrations(tmp_path):
+    req,path=_normal_oct25_schedule(tmp_path)
+    assert not (tmp_path/'runtime/jra_race_registrations').exists()
+    stop=f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T08:30:00+09:00'))
+    assert stop==datetime.fromisoformat('2026-10-25T08:40:00+09:00')
+    with pytest.raises(ValueError,match='DEFER_PRODUCTION_PENDING'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T09:00:00+09:00'))
+
+
+@pytest.mark.parametrize('change',['missing_peer','missing_official_row','wrong_post_day','wrong_window','current_post'])
+def test_normal_all_races_rejects_incomplete_or_inconsistent_official_schedule(tmp_path,change):
+    req,path=_normal_oct25_schedule(tmp_path);schedule=json.loads(path.read_text())
+    peer='KM-JRA-TKY-20261025-R01'
+    if change=='missing_peer':schedule.pop(peer)
+    elif change=='missing_official_row':schedule[peer].pop('official_day_row')
+    elif change=='wrong_post_day':schedule[peer]['post']='2026-10-24T09:50:00+09:00'
+    elif change=='wrong_window':schedule[peer]['dispatch_window_open']='2026-10-25T08:00:00+09:00'
+    else:req['scheduled_post_at']='2026-10-25T09:55:00+09:00'
+    path.write_text(json.dumps(schedule))
+    with pytest.raises(ValueError,match='BVI_SHADOW_DEFER_'):
+        f.production_priority_window(req,root=tmp_path,now=datetime.fromisoformat('2026-10-25T08:30:00+09:00'))
+
+
+def test_freeze_uses_dynamic_production_priority_and_explicit_code_lineage():
+    text=(ROOT/'scripts/jra_bvi_pipeline_forward_shadow.py').read_text()
+    assert "day>='2026-10-25'" in text
+    assert "{day.replace" in text and "'code_git_sha':" in text
+    assert "'model_sha256':" in text
 
 
 def test_oct18_shadow_stops_before_next_dispatch_and_requires_useful_slack(tmp_path):

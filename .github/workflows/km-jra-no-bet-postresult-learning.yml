@@ -80,7 +80,8 @@ jobs:
               except (ValueError,KeyError,TypeError):
                   continue
           # Bounded official traffic; never request a future or missing result.
-          pending.sort(key=lambda p:p[0])
+          # Current meeting first: unresolved older captures must not starve today.
+          pending.sort(key=lambda p:p[0],reverse=True)
           captures=0
           for _,path,intent,t,key,rn in pending[:4]:
               try:
@@ -124,44 +125,47 @@ jobs:
         env:
           PYTHONPATH: runtime
         run: |
-          set -euo pipefail
-          for path in runtime_out/capture/*.json; do
-            test -f "$path"
-            gh attestation verify "$path" --repo "$GITHUB_REPOSITORY" >/dev/null
-            BASE="$(basename "$path")"
-            TERMINAL="runtime/jra_no_bet_terminals/$BASE"
-            test -f "$TERMINAL"
-            gh attestation verify "$TERMINAL" --repo "$GITHUB_REPOSITORY" >/dev/null
-          done
           python - <<'PY'
           from pathlib import Path
-          import json
+          import json,os,subprocess
           from jra_no_bet_postresult_learning import build_no_bet_learning
           count=0
           for path in sorted(Path("runtime_out/capture").glob("*.json")):
-              source=json.loads(path.read_text(encoding="utf-8"))
-              terminal=json.loads((Path("runtime/jra_no_bet_terminals")/path.name).read_text(encoding="utf-8"))
-              result=source["official_result_detail"]
-              out=build_no_bet_learning(
-                  terminal,result,
-                  race_no=source["race_no"],
-                  acquired_at=source["result_capture_timestamp"],
-                  result_source_snapshot_sha256=source["source_snapshot"]["snapshot_sha256"],
-                  official_capture_verified=True,
-              )
-              dest=Path("runtime_out/learning")/path.name
-              dest.parent.mkdir(parents=True,exist_ok=True)
-              dest.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
-              count+=1
-          assert count>0
+              terminal_path=Path("runtime/jra_no_bet_terminals")/path.name
+              try:
+                  for subject in (path,terminal_path):
+                      subprocess.run(["gh","attestation","verify",str(subject),"--repo",os.environ["GITHUB_REPOSITORY"]],check=True,timeout=60)
+              except (subprocess.SubprocessError,OSError) as exc:
+                  print("NO_BET_LEARNING_BLOCKED",path.stem,type(exc).__name__)
+                  continue
+              try:
+                  source=json.loads(path.read_text(encoding="utf-8"))
+                  terminal=json.loads((Path("runtime/jra_no_bet_terminals")/path.name).read_text(encoding="utf-8"))
+                  result=source["official_result_detail"]
+                  out=build_no_bet_learning(
+                      terminal,result,
+                      race_no=source["race_no"],
+                      acquired_at=source["result_capture_timestamp"],
+                      result_source_snapshot_sha256=source["source_snapshot"]["snapshot_sha256"],
+                      official_capture_verified=True,
+                  )
+                  dest=Path("runtime_out/learning")/path.name
+                  dest.parent.mkdir(parents=True,exist_ok=True)
+                  dest.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+                  count+=1
+              except (ValueError,KeyError,TypeError) as exc:
+                  print("NO_BET_LEARNING_BLOCKED",path.stem,type(exc).__name__,str(exc)[:160])
+                  continue
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write("learned="+("true" if count else "false")+"\n")
           print("JRA_SIGNED_ZERO_EXPOSURE_RESULT_LEARNING",count)
           PY
       - uses: actions/attest-build-provenance@v2
-        if: steps.capture.outputs.captured == 'true'
+        if: steps.settle.outputs.learned == 'true'
         with:
           subject-path: runtime_out/learning/*.json
       - uses: actions/upload-artifact@v4
-        if: steps.capture.outputs.captured == 'true'
+        if: steps.settle.outputs.learned == 'true'
         with:
           name: jra-zero-bet-official-result-learning-oidc
           path: |
@@ -169,7 +173,7 @@ jobs:
             runtime_out/learning/*.json
           if-no-files-found: error
       - name: Persist immutable zero-bet Learning, exclude from PFS and OOS
-        if: steps.capture.outputs.captured == 'true'
+        if: steps.settle.outputs.learned == 'true'
         run: |
           set -euo pipefail
           mkdir -p runtime/jra_no_bet_learning

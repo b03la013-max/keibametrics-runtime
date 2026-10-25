@@ -146,6 +146,8 @@ jobs:
           PERSIST_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          python runtime/execution_store.py assert-public "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
+          python runtime/execution_store.py assert-public --json-only runtime_out
           test -d "runtime/executions/$EXECUTION_ID" || exit 0
           mkdir -p "runtime/execution_reports/$EXECUTION_ID"
           if [ -f runtime_out/orchestration_report.json ]; then
@@ -165,8 +167,13 @@ jobs:
           path: .km_fast_cache
           key: ${{ steps.meta.outputs.cache_prefix }}${{ matrix.execution_id }}-${{ github.run_id }}
 
+      - name: Check public artifact storage scope
+        id: public_storage
+        if: always()
+        run: python runtime/execution_store.py assert-public --json-only runtime_out
+
       - name: Upload orchestration evidence
-        if: always() && hashFiles('runtime_out/*.json') != ''
+        if: always() && steps.public_storage.outcome == 'success' && hashFiles('runtime_out/*.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: km-formal-single-entry-${{ steps.meta.outputs.execution_id }}-${{ github.run_id }}
@@ -248,6 +255,8 @@ jobs:
           PERSIST_BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          python runtime/execution_store.py assert-public "runtime/executions/$EXECUTION_ID" "runtime/execution_reports/$EXECUTION_ID"
+          python runtime/execution_store.py assert-public --json-only runtime_out
           if [ ! -d "runtime/executions/$EXECUTION_ID" ]; then
             exit 0
           fi
@@ -271,8 +280,13 @@ jobs:
           git commit -m "execution: checkpoint $EXECUTION_ID [skip ci]"
           python tools/persist_local_checkpoints.py --branch "$PERSIST_BRANCH"
 
+      - name: Check public RESULT artifact storage scope
+        id: public_storage
+        if: always()
+        run: python runtime/execution_store.py assert-public --json-only runtime_out
+
       - name: Upload RESULT continuation evidence
-        if: always() && hashFiles('runtime_out/*.json') != ''
+        if: always() && steps.public_storage.outcome == 'success' && hashFiles('runtime_out/*.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: km-formal-result-${{ matrix.execution_id }}-${{ github.run_id }}

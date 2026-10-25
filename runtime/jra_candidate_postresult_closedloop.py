@@ -90,7 +90,8 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
     rows = list(parsed.get("runners") or [])
     if parsed.get("official") is not True or not rows:
         raise PendingOfficialResult("JRA_OFFICIAL_RESULT_TABLE_MISSING")
-    ids = [str(r.get("runner_id")) for r in rows]
+    non_finishers=list(parsed.get("non_finishers") or [])
+    ids = [str(r.get("runner_id")) for r in rows+non_finishers]
     if len(set(ids)) != len(ids) or not set(ids).issubset(set(frozen_runner_ids)):
         raise ValueError("OFFICIAL_RESULT_RUNNER_UNIVERSE_MISMATCH")
     top = {}
@@ -109,7 +110,22 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
         found = sorted(spec["selection"]) if kind == "TRIO" else spec["selection"]
         if found != expected:
             raise PendingOfficialResult("OFFICIAL_PAYOUT_TOP3_MISMATCH:" + kind)
-    return {"top3": actual, "payouts": payouts}
+    # Only the explicit official refund horse-number declaration authorizes
+    # refunds. A non-finish, fall or disqualification is not a cancellation.
+    # Keep the returned numeric finishers compatible with same-day features.
+    match=re.search(r"返還馬番\s*((?:\d{1,2}\s*番(?:\s*[、・,]\s*)?\s*)+)",payout_text)
+    refunded=[int(x) for x in re.findall(r"(\d{1,2})\s*番",match.group(1))] if match else []
+    if len(refunded)!=len(set(refunded)) or not set(map(str,refunded))<=set(frozen_runner_ids):
+        raise ValueError("OFFICIAL_REFUND_RUNNER_UNIVERSE_MISMATCH")
+    withdrawn={int(r["horse_no"]) for r in non_finishers if r.get("finish_status") in {"CANCELLED","EXCLUDED"}}
+    not_refundable={int(r["horse_no"]) for r in non_finishers if r.get("finish_status") in {"DID_NOT_FINISH","DISQUALIFIED"}}
+    if not withdrawn<=set(refunded):
+        raise PendingOfficialResult("OFFICIAL_REFUND_DECLARATION_REQUIRED")
+    if not_refundable & set(refunded):
+        raise ValueError("OFFICIAL_REFUND_NONCANCELLATION_STATUS")
+    return {"top3": actual, "payouts": payouts, "refund_runner_ids":refunded,
+            "non_finishers":non_finishers,
+            "refund_declaration":match.group(0) if match else None}
 
 
 def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sha256: str, source_url: str) -> dict:

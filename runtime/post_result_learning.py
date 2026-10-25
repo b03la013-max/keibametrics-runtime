@@ -1,7 +1,7 @@
 from __future__ import annotations
 import hashlib, json
 from typing import Any
-from krs_prediction_utility import evaluate_against_result
+from jra_krs_measurement import evaluate_against_result
 from family_pfs_improvement import build_pfs_improvement_assessment
 
 LEARNING_PROFILE="KM-FAMILY-POSTRESULT-CLOSED-LOOP-v1.0-20260921"
@@ -85,7 +85,9 @@ def _mec_actual_coverage(final_artifact, top3):
       "semantic_tail_floor_count":mec.get("semantic_tail_floor_count"),
     }
 
-def build_post_result_review(result:dict, final_artifact:dict)->dict:
+def build_post_result_review(result:dict, final_artifact:dict, *, review_semantics="LEGACY")->dict:
+    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2"}:
+        raise LearningError("REVIEW_SEMANTICS_UNSUPPORTED")
     if not isinstance(result,dict) or not isinstance(final_artifact,dict):
         raise LearningError("INPUT_NOT_OBJECT")
     race_id=str(result.get("race_id") or "")
@@ -113,7 +115,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
 
     ku=final_artifact.get("krs_prediction_utility") or {}
     if isinstance(ku,dict) and ku.get("utility_revision"):
-        krs_eval=evaluate_against_result(ku,top3)
+        krs_eval=evaluate_against_result(ku,top3,
+            static_ranking=(final_artifact.get("static_prediction") or {}).get("ranking")
+                or (final_artifact.get("final_prediction_package") or {}).get("ranking"),
+            static_roles=roles)
     else:
         krs_eval={"classification":"NOT_AVAILABLE","rescues":[],"supports":[],"misses":[]}
 
@@ -123,6 +128,10 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     inv=int(inv_raw) if inv_raw is not None else int(coverage["investment"] or 0)
     ret_raw=settlement.get("total_payout",settlement.get("return"))
     settled_inv_raw=settlement.get("settled_investment")
+    refund=int(settlement.get("refund") or 0)
+    effective_inv=int(settlement.get("effective_investment",inv-refund))
+    if not (0<=refund<=inv and effective_inv==inv-refund):
+        raise LearningError("SETTLEMENT_REFUND_INCONSISTENT")
     if settlement_status in {"PENDING","UNKNOWN"}:
         ret=None
         settled_inv=None
@@ -137,12 +146,18 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         settlement_completeness=(settled_inv/inv*100.0) if settled_inv is not None and inv>0 else None
     else:
         ret=int(ret_raw) if ret_raw is not None else None
-        settled_inv=inv
-        pfs=(ret/inv*100.0) if ret is not None and inv>0 else None
-        profit_loss=(ret-inv) if ret is not None else None
+        settled_inv=effective_inv
+        pfs=(ret/effective_inv*100.0) if ret is not None and effective_inv>0 else None
+        profit_loss=(ret+refund-inv) if ret is not None else None
         settlement_completeness=100.0 if ret is not None else None
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
+
+    decision_aware=review_semantics=="DECISION_AWARE_V2"
+    capital_decision=final_artifact.get("capital_policy_decision") or {}
+    ft=final_artifact.get("final_ticket") or {}
+    paper=bool(capital_decision.get("decision")=="PAPER" and ft.get("no_bet") is True
+               and not ft.get("tickets") and inv==0 and coverage["investment"]==0)
 
     if not role_eval["winner_w"]:
         first_failure="PREDICTION_ROLE_W"
@@ -150,11 +165,15 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
         first_failure="PREDICTION_ROLE_P2"
     elif not role_eval["third_p3"]:
         first_failure="PREDICTION_ROLE_P3"
+    elif decision_aware and paper:
+        first_failure="NONE"
     elif not coverage["ordered_pair_ticket_coverage"]:
         first_failure="ORDERED_PAIR_CONVERSION"
     elif not coverage["top3_set_ticket_coverage"]:
         first_failure="THIRD_SET_COVERAGE"
-    elif not coverage["ordered_exact_ticket_coverage"]:
+    elif not coverage["ordered_exact_ticket_coverage"] and not (
+            decision_aware and mec_eval.get("available") and
+            mec_eval.get("ordered_exact_unit_present") is False):
         first_failure="EXACT_ORIENTATION"
     elif hit_but_loss:
         first_failure="CAPITAL_EFFICIENCY"
@@ -164,6 +183,8 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
     prediction_status=("PASS" if all(role_eval.values()) else "PARTIAL")
     conversion_status=("PASS" if coverage["ordered_pair_ticket_coverage"] and coverage["top3_set_ticket_coverage"] else "PARTIAL")
     capital_status=("HOLD" if settlement_status in {"PENDING","UNKNOWN"} else ("PASS" if pfs is not None and pfs>=100.0 else "PARTIAL"))
+    if decision_aware and paper:
+        conversion_status=capital_status="NOT_APPLICABLE_PAPER"
 
     review={
       "profile":LEARNING_PROFILE,
@@ -206,11 +227,28 @@ def build_post_result_review(result:dict, final_artifact:dict)->dict:
       "production_change_authorized":False,
       "prequential_only":True,
     }
+    if decision_aware:
+        review["review_semantics"]=review_semantics
+        review["policy_compliance"]={
+            "capital_decision":capital_decision.get("decision"),
+            "paper_zero_exposure_compliant":paper if capital_decision.get("decision")=="PAPER" else None,
+            "zero_exposure_reason":"PAPER_POLICY" if paper else None,
+            "prediction_quality_is_separate":True,
+        }
+        review["failure_localization"]["residual_diagnostics"]=(
+            ["EXACT_ORIENTATION_NOT_CAPTURED"] if not paper and not
+            coverage["ordered_exact_ticket_coverage"] else [])
+        if paper:
+            review["capital"]["pfs_status"]="NOT_APPLICABLE_ZERO_EXPOSURE"
+    # Preserve historical review hashes when the original settlement did not
+    # carry refund accounting. New settlements expose the separate denominator.
+    if refund or "effective_investment" in settlement:
+        review["capital"].update(refund=refund,effective_investment=effective_inv)
     review["pfs_improvement"]=build_pfs_improvement_assessment(review)
     review["sha256"]=_sha(review)
     return review
 
-def build_learning_state(review:dict)->dict:
+def build_learning_state(review:dict, *, effective_time=None)->dict:
     ff=(review.get("failure_localization") or {}).get("first_material_failure")
     pfs_improvement=review.get("pfs_improvement") or build_pfs_improvement_assessment(review)
     shadow=[]
@@ -255,5 +293,13 @@ def build_learning_state(review:dict)->dict:
       "forbidden":["RETROACTIVE_PREDICTION_REWRITE","AUTOMATIC_NUMERIC_WEIGHT_CHANGE","RESULT_DERIVED_FEATURE_REWRITE"],
       "production_change_authorized":False,
     }
+    if effective_time is not None:
+        from datetime import datetime
+        when=datetime.fromisoformat(effective_time.replace('Z','+00:00'))
+        if when.tzinfo is None:
+            raise LearningError("LEARNING_TIMEZONE_REQUIRED")
+        state["effective_time"]=when.isoformat()
+        state["learning_validity"]="FAMILY-CANDIDATE"
+        state["prediction_use"]="SHADOW_REVIEW_CONTEXT_ONLY"
     state["sha256"]=_sha(state)
     return state

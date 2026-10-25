@@ -112,6 +112,36 @@ def test_single_scratch_including_prior_top_candidate_is_removed(cancel_top):
     assert all(removed not in {x["head"], x["second"], x["third"]} for x in out["third_dispositions"])
 
 
+@pytest.mark.parametrize("reason", [
+    "EXPLICIT_OFFICIAL_ODDS_CANCELLATION",
+    "EXPLICIT_RACE_CARD_CANCELLATION",
+])
+def test_official_scratch_reason_from_card_or_odds_preserves_active_only(reason):
+    # Official NAR enrichment produces both reasons. This test is a derived
+    # contract fixture, NOT a new Signed SOURCE or forward OOS evidence.
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture(("7",))
+    record = next(row for row in source["artifact"]["runner_status_registry"]
+                  if row["runner_id"] == "7")
+    record["reason"] = reason
+    prediction, _ = build_formal_static(req, source, numeric, policy=policy, now=now)
+    assert "7" not in prediction["static_prediction"]["ranking"]
+    assert all("7" not in {pair["head"], pair["second"]}
+               for pair in prediction["pair_dispositions"])
+    assert all("7" not in {leg["head"], leg["second"], leg["third"]}
+               for leg in prediction["third_dispositions"])
+
+
+def test_card_scratch_requires_card_source_witness():
+    req, source, numeric, policy, now = _cancelled_runner_contract_fixture(("7",))
+    record = next(row for row in source["artifact"]["runner_status_registry"]
+                  if row["runner_id"] == "7")
+    record["reason"] = "EXPLICIT_RACE_CARD_CANCELLATION"
+    record["evidence_sources"] = [next(s["source_id"] for s in source["artifact"]["sources"]
+        if s.get("official") and s.get("source_class") != "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT")]
+    with pytest.raises(StaticOwnerError, match="OFFICIAL_CARD_RUNNER_MISMATCH"):
+        build_formal_static(req, source, numeric, policy=policy, now=now)
+
+
 def test_poststart_clock_cannot_create_formal_static_from_saved_source():
     req, source, numeric, policy, _ = replay_fixture()
     from datetime import timedelta

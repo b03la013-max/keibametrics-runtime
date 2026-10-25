@@ -21,7 +21,8 @@ def evidence_terminal_eligible(report):
 def verify_formal_completion_summary(summary, request):
     """Validate the canonical external worker's verification summary.
 
-    The caller must obtain this artifact from the successful canonical run.
+    The caller must obtain this artifact from the trusted canonical Production
+    job. Independent optional Shadow jobs may still be running.
     This content check does not independently verify cryptographic signatures.
     Replay and acceptance success cannot become Production pre-race success.
     """

@@ -69,6 +69,10 @@ jobs:
           assert date.fromisoformat(day) < date.today(), "BACKFILL_REQUIRES_HISTORICAL_RACE"
           assert 0<=start<36
           filename=f"runtime/pedigree_corpus/{day.replace('-','')}-results-race{start}-r3.json"
+          existing=sorted(Path('runtime/pedigree_corpus').glob(f"{day.replace('-','')}-results-race{start}-r3*.json"))
+          full=[p for p in existing if (lambda j:j.get('horse_count',0)>0 and j.get('horse_count')==j.get('horse_token_count'))(json.loads(p.read_text()))]
+          if full:filename=str(full[0])
+          elif existing:filename=filename[:-5]+'-retry-'+os.environ['GITHUB_RUN_ID']+'.json'
           with open(os.environ["GITHUB_OUTPUT"],"a") as out:
               for k,v in dict(skip="false",date=day,start_race=start,
                               filename=filename,manual=str(manual).lower()).items():
@@ -99,6 +103,7 @@ jobs:
           DATE: ${{ steps.window.outputs.date }}
           START: ${{ steps.window.outputs.start_race }}
           FILE: ${{ steps.window.outputs.filename }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p runtime_out
@@ -108,11 +113,26 @@ jobs:
             echo "exhausted=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          PYTHONPATH=runtime:runtime/jra_source_runtime \
-            python runtime/jra_source_runtime/jra_pedigree_harvest.py \
-              --date "$DATE" --mode results --start-race "$START" \
-              --max-races 3 --delay 1.3 --out-dir runtime/pedigree_corpus \
-              | tee runtime_out/pedigree_harvest_window.log
+          PYTHONPATH=runtime:runtime/jra_source_runtime python - <<'PY' | tee runtime_out/pedigree_harvest_window.log
+          import os,json
+          from pathlib import Path
+          from datetime import datetime,timezone
+          from jra_pedigree_corpus import _verified_harvest
+          from jra_pedigree_harvest import harvest_day
+          cache={}
+          for p in Path('runtime/pedigree_corpus').glob(os.environ['DATE'].replace('-','')+'-results-race*.json'):
+              data=_verified_harvest(p,not_after=datetime.now(timezone.utc))
+              if data:
+                  for h in data['horses']:cache.setdefault(h['profile_token_sha256'],h)
+          obj=harvest_day(os.environ['DATE'],mode='results',start_race=int(os.environ['START']),
+                          max_races=3,delay=1.3,existing_horses=cache)
+          if not obj.get('exhausted_window'):
+              assert obj['horse_token_count'] and obj['horse_count']/obj['horse_token_count']>=.90
+              assert not obj.get('access_refused'),'JRA_ACCESS_REFUSED_NO_BYPASS'
+              path=Path(os.environ['FILE']);assert not path.exists(),'IMMUTABLE_HARVEST'
+              path.write_text(json.dumps(obj,ensure_ascii=False,indent=1)+'\n')
+          print(json.dumps({k:v for k,v in obj.items() if k not in ('horses','race_observations')},ensure_ascii=False))
+          PY
           if [ -f "$FILE" ]; then
             echo "new=true" >> "$GITHUB_OUTPUT"
             echo "exhausted=false" >> "$GITHUB_OUTPUT"
@@ -181,13 +201,18 @@ jobs:
           MANUAL: ${{ steps.window.outputs.manual }}
           IS_NEW: ${{ steps.harvest.outputs.new }}
           EXHAUSTED: ${{ steps.harvest.outputs.exhausted }}
+          FILE: ${{ steps.window.outputs.filename }}
         run: |
           if [ "$MANUAL" = "true" ]; then exit 0; fi
+          if [ -f "$FILE" ];then
+            FULL="$(python -c 'import json,os;j=json.load(open(os.environ["FILE"]));print(str(j["horse_count"]==j["horse_token_count"]).lower())')"
+            if [ "$FULL" != true ];then echo PARTIAL_CORPUS_RETAINED_CURSOR_RETRY_PENDING;exit 0;fi
+          fi
           if [ "$IS_NEW" != "true" ] && [ "$EXHAUSTED" != "true" ]; then
              # Prior file already committed: advance once if it matches cursor.
              echo "CURSOR_ALREADY_PUBLISHED_WINDOW"
           fi
-          python scripts/jra_pedigree_backfill_cursor.py --next \
+          python scripts/jra_pedigree_backfill_cursor.py --next --official-calendar \
              $([ "$EXHAUSTED" = "true" ] && echo --exhausted)
       - name: Commit verified facts plus cursor; no raw HTML or fake historic OOS
         if: steps.window.outputs.skip != 'true'
