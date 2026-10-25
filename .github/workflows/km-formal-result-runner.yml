@@ -127,6 +127,7 @@ jobs:
           learning=None
           oos=None
           oos_diagnostic=None
+          krs_oos_aggregate_exclusions=[]
           fast_reflection=None
 
           final_path=os.path.join("runtime","final_artifacts",p["race_id"]+".json")
@@ -351,7 +352,23 @@ jobs:
               for fn in sorted(os.listdir(os.path.join("runtime","krs_oos_measurements"))):
                   if not fn.endswith(".json"): continue
                   if oos_diagnostic is not None and fn==p["race_id"]+".json":
+                      krs_oos_aggregate_exclusions.append({"race_id":p["race_id"],"reason":"UNKNOWN_DEAD_HEAT_RANK_EVALUATION"})
                       continue  # Preserve old bytes without crediting unknown metrics.
+                  # Recheck older measurements on every later race too. The
+                  # original measurement remains immutable, but a canonical
+                  # tied result cannot support this single-order evaluator.
+                  canonical_result_path=os.path.join("runtime","results",fn)
+                  if os.path.exists(canonical_result_path):
+                      try:
+                          with open(canonical_result_path,encoding="utf-8") as fh:
+                              canonical_result=json.load(fh)
+                          historical_orders=(canonical_result.get("official_result") or {}).get("top3_orders") or []
+                      except Exception as exc:
+                          krs_oos_aggregate_exclusions.append({"race_id":fn[:-5],"reason":"UNKNOWN_CANONICAL_RESULT:"+type(exc).__name__})
+                          continue
+                      if len(historical_orders)>1:
+                          krs_oos_aggregate_exclusions.append({"race_id":fn[:-5],"reason":"UNKNOWN_DEAD_HEAT_RANK_EVALUATION"})
+                          continue
                   with open(os.path.join("runtime","krs_oos_measurements",fn),encoding="utf-8") as fh:
                       measurements.append(json.load(fh))
               r30=evaluate_r30(measurements)
@@ -395,6 +412,7 @@ jobs:
             "krs_oos_eligible":oos.get("eligible") if oos else None,
             "krs_oos_measurement_sha256":oos.get("sha256") if oos else None,
             "krs_oos_diagnostic":oos_diagnostic,
+            "krs_oos_aggregate_exclusions":krs_oos_aggregate_exclusions,
             "krs_r30_status":r30.get("status") if r30 else None,
             "krs_r30_eligible_races":r30.get("eligible_races") if r30 else None,
             "mec_r4_shadow_diagnostic":mec_shadow_diagnostic,

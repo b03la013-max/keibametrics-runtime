@@ -3,7 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
@@ -49,6 +51,66 @@ def run(terminal,result):
     )
 
 class TestZeroStakeOfficialResultLearning(unittest.TestCase):
+    def test_runtime_only_fresh_process_closes_no_bet_without_flat_source_path(self):
+        """Other collected suites must not supply the missing source import."""
+        runtime=Path(__file__).resolve().parents[1]/'runtime'
+        code='''
+import json,sys
+sys.path.insert(0,sys.argv[1])
+assert not any(p.endswith('/jra_source_runtime') for p in sys.path)
+from jra_no_bet_postresult_learning import build_no_bet_learning,JRANoBetLearningError
+terminal,result=json.load(sys.stdin)
+arguments=dict(race_no=5,acquired_at='2026-10-10T13:00:00+09:00',
+    result_source_snapshot_sha256='a'*64)
+try:
+    build_no_bet_learning(terminal,result,official_capture_verified=False,**arguments)
+except JRANoBetLearningError as exc:
+    assert 'CAPTURE_NOT_VERIFIED' in str(exc)
+else:
+    raise AssertionError('UNVERIFIED_CAPTURE_ACCEPTED')
+out=build_no_bet_learning(terminal,result,official_capture_verified=True,**arguments)
+assert 'jra_source_runtime.jra_same_day_results' in sys.modules
+assert 'source_acquisition' not in sys.modules
+assert 'jra_same_day_results' not in sys.modules
+assert not any(p.endswith('/jra_source_runtime') for p in sys.path)
+print(json.dumps(out))
+'''
+        for tied in (False,True):
+            with self.subTest(dead_heat=tied),tempfile.TemporaryDirectory() as cwd:
+                terminal,result=build_input()
+                if tied:
+                    result['runners'][2]['finish']=2
+                    result['sha256']=_hash({k:v for k,v in result.items()
+                                           if k not in ('sha256','race_no','source_snapshot_sha256')})
+                proc=subprocess.run([sys.executable,'-I','-c',code,str(runtime)],
+                    input=json.dumps([terminal,result]),capture_output=True,text=True,
+                    cwd=cwd,timeout=15)
+                self.assertEqual(proc.returncode,0,proc.stderr)
+                out=json.loads(proc.stdout)
+                self.assertEqual(out['investment'],0)
+                self.assertIsNone(out['pfs'])
+                self.assertFalse(out['eligible_for_production_prediction_kpi'])
+                self.assertEqual('official_top3_orders' in out,tied)
+
+    def test_same_day_result_helper_imports_in_each_clean_supported_mode(self):
+        runtime=Path(__file__).resolve().parents[1]/'runtime'
+        code='''
+import importlib,json,sys
+sys.path.insert(0,sys.argv[1])
+module=importlib.import_module(sys.argv[2])
+rows=[{'horse_no':n,'finish':r} for n,r in [(9,1),(11,2),(10,3),(14,3)]]
+out=module.finish_groups_and_top3_orders(rows)
+assert out['top3_orders']==[[9,11,10],[9,11,14]]
+print(json.dumps(out['top3_orders']))
+'''
+        for directory,module in ((runtime,'jra_source_runtime.jra_same_day_results'),
+                                 (runtime/'jra_source_runtime','jra_same_day_results')):
+            with self.subTest(module=module),tempfile.TemporaryDirectory() as cwd:
+                proc=subprocess.run([sys.executable,'-I','-c',code,str(directory),module],
+                                    capture_output=True,text=True,cwd=cwd,timeout=15)
+                self.assertEqual(proc.returncode,0,proc.stderr)
+                self.assertEqual(json.loads(proc.stdout),[[9,11,10],[9,11,14]])
+
     def test_closed_zero_bet_learns_availability_not_prediction_pfs(self):
         terminal,result=build_input()
         t,r=deepcopy((terminal,result))

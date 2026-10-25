@@ -7,8 +7,12 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
 
-from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
-from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+if __package__:
+    from .source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+    from .jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+else:
+    from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+    from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
 
 PROFILE="KM-JRA-OFFICIAL-SAME-DAY-RESULT-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"

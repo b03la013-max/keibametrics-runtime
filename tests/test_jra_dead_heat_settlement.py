@@ -343,6 +343,15 @@ def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_produc
     measurement.parent.mkdir(parents=True)
     old=b'{"eligible":true,"opaque_historic_measurement":"do not overwrite"}\n'
     if case=='dead_heat':measurement.write_bytes(old)
+    # A subsequent ordinary race must not count a previous tied measurement.
+    # Keep the old result and measurement exactly as found.
+    historic_rid=FACTS['records'][1]['race_id']
+    historic_measurement=measurement.parent/f'{historic_rid}.json'
+    historic_measurement.write_bytes(old)
+    historic_result=tmp_path/'runtime/results'/f'{historic_rid}.json'
+    historic_result.parent.mkdir(parents=True)
+    historic_raw=json.dumps({'official_result':official(FACTS['records'][1])}).encode()
+    historic_result.write_bytes(historic_raw)
     seen=[]
     def aggregate(rows):
         seen.extend(rows)
@@ -357,3 +366,6 @@ def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_produc
     else:
         assert seen==[env['oos']]
         assert json.loads(measurement.read_text())==env['oos']
+    assert historic_measurement.read_bytes()==old
+    assert historic_result.read_bytes()==historic_raw
+    assert {'race_id':historic_rid,'reason':'UNKNOWN_DEAD_HEAT_RANK_EVALUATION'} in env['krs_oos_aggregate_exclusions']
