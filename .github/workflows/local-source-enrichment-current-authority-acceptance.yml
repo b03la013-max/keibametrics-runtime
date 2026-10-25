@@ -20,10 +20,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Verify R9 authority graph and live runtime
+      - name: Verify archived R9 graph and current gateway runtime
         run: |
           python - <<'PY'
-          import json, pathlib, urllib.request
+          import json, pathlib, urllib.request, sys
+          sys.path.insert(0,"runtime")
+          from family_runtime_contract import load_contracts
+          from execution_gateway import load_gateway, family_config, assess_runtime_health
           def j(p): return json.load(open(p,encoding="utf-8"))
           auth=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20260924_R9.json")
           suite=j("profiles/KM_LOCAL_SUITE_MANIFEST_20260924_R7.json")
@@ -31,7 +34,6 @@ jobs:
           contract=j("profiles/family_runtime_contracts_20260924_R9.json")
           reg=j("profiles/local_information_source_registry_v1.9_20260924.json")
           closure=j("governance/KM-LOCAL-SOURCE-ENRICHMENT-CLOSURE-20260924-R1.json")
-          loader=pathlib.Path("runtime/family_runtime_contract.py").read_text(encoding="utf-8")
 
           assert auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20260924-R9"
           assert auth["predecessor"]=="KM-FAMILY-CURRENT-AUTHORITY-20260923-R8"
@@ -78,12 +80,17 @@ jobs:
           assert closure["production_runtime_acceptance"]["actual_run_count"]==5000
           assert closure["production_numeric_authority"]["numerical_change"] is False
           assert closure["boundaries"]["unknown_future_real_race_empirical_acceptance"]=="PENDING"
-          assert "family_runtime_contracts_20260924_R9.json" in loader
+          # R9 bytes remain a pinned historical control. Live acceptance must
+          # resolve the current canonical gateway, never demand R9 deployment.
+          gateway=load_gateway()
+          current=load_contracts()
+          assert current["profile_id"]==gateway["runtime_contract"]
+          cfg=family_config("LOCAL",gateway)
 
-          with urllib.request.urlopen("https://witnessstrictimage-production.up.railway.app/health",timeout=60) as r:
+          with urllib.request.urlopen(cfg["external_endpoint"].rstrip("/")+"/health",timeout=60) as r:
               h=json.loads(r.read().decode())
           assert h["status"]=="READY",h
-          assert h["runtime_revision"]==local["runtime"],h
+          assert assess_runtime_health(h,"LOCAL",gateway,pathlib.Path("."))["status"]=="PASS"
           assert h["jma_weather_evidence_profile"]==local["jma_weather_evidence"],h
           assert h["point_in_time_population_profile"]==local["point_in_time_population_ledger"],h
           print("LOCAL_SOURCE_ENRICHMENT_CURRENT_AUTHORITY_PASS")

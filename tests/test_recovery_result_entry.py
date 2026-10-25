@@ -154,6 +154,13 @@ def test_unfrozen_finisher_or_duplicate_dnf_cannot_be_ignored():
         _parse_refund_fixture(_refund_snapshot('中止'), (3,10,11))
 
 
+@pytest.mark.parametrize('notice',['競走取り止め','競走取止','開催中止','競走中止'])
+def test_race_cancellation_inside_notice_table_is_not_hidden_by_runner_dnf(notice):
+    snapshot=_refund_snapshot('競走中止',notice=f'<table><tr><td>{notice}</td></tr></table>')
+    with pytest.raises(o.FormalOrchestrationError,match='CANCELLATION_HOLD'):
+        _parse_refund_fixture(snapshot)
+
+
 def test_refund_hold_stops_before_settlement_learning_and_completion(monkeypatch, tmp_path):
     def acquire(*args, **kwargs):
         _parse_refund_fixture(_refund_snapshot('取消'))

@@ -1249,16 +1249,23 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if any(marker in page_text for marker in (
             "審議中", "審議しています", "成績未確定", "着順未確定", "払戻未確定", "結果未確定")):
         raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_FINAL")
-    # A runner's 競走中止 is DNF, not cancellation of the entire race.
-    race_notice = re.sub(r"<table\b[^>]*>.*?</table>", "", body, flags=re.S | re.I)
-    race_notice = re.sub(r"\s+", "", unicodedata.normalize("NFKC", _html_text(race_notice)))
-    if any(marker in race_notice for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
+    tables = _html_tables(html)
+    # Do not discard notices merely because the provider puts them in a
+    # table. Only the exact status cell of an individual result row is DNF.
+    runner_dnf_mentions = 0
+    for table in tables:
+        if table and {"着順", "馬番", "馬名"}.issubset(set(table[0])):
+            index=table[0].index("着順")
+            runner_dnf_mentions += sum(
+                re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[index]))=="競走中止"
+                for row in table[1:] if len(row)>index)
+    if (any(marker in page_text for marker in ("競走取り止め", "競走取止", "開催中止"))
+            or page_text.count("競走中止") > runner_dnf_mentions):
         # Cancellations require the existing authorized refund path; the flat
         # payout representation used here cannot safely settle them.
         raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
     if not _official_result_identity_matches(page_text, race_context):
         raise FormalOrchestrationError("OFFICIAL_RESULT_PAGE_RACE_IDENTITY_HOLD")
-    tables = _html_tables(html)
     # Cancellation/exclusion rows have no numeric finishing position and are
     # omitted by the shared finish parser. Do not silently settle their frozen
     # exposure as a loss: this flat payout path has no refund accounting.
