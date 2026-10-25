@@ -145,6 +145,15 @@ def classify_dominant_pfs_loss_owner(
     first = _first_failure(review)
     explicit = _normalize_layer_loss_evidence(layer_loss_evidence)
 
+    capital=review.get("capital") or {}
+    if (capital.get("pfs_status")=="NOT_APPLICABLE_ZERO_EXPOSURE"
+            and capital.get("investment")==0 and capital.get("return") in (None,0)):
+        return {
+            "owner":"UNKNOWN", "applicability":"NOT_APPLICABLE_ZERO_EXPOSURE",
+            "basis":"NO_RECOMMENDATION_CAPITAL_AT_RISK",
+            "loss_value":0, "confidence":"HIGH", "evidence":{},
+        }
+
     if explicit:
         owner, loss = max(explicit.items(), key=lambda item: item[1])
         return {
@@ -211,7 +220,7 @@ def build_pfs_improvement_assessment(
     )
 
     if pfs is None:
-        pfs_status = "UNKNOWN"
+        pfs_status = ("NOT_APPLICABLE" if dominant.get("applicability")=="NOT_APPLICABLE_ZERO_EXPOSURE" else "UNKNOWN")
     elif pfs >= 100.0:
         pfs_status = "PROFITABLE"
     else:

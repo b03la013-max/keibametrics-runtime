@@ -165,7 +165,7 @@ def test_optional_mec_failure_preserves_real_production_review_and_learning(tmp_
     final_raw=(root/'runtime/final_artifacts'/f'{rid}.json').read_bytes()
     result_raw=(root/'runtime/results'/f'{rid}.json').read_bytes()
     final=json.loads(final_raw);result=json.loads(result_raw)
-    expected_review=build_post_result_review(result,final)
+    expected_review=build_post_result_review(result,final,review_semantics="DECISION_AWARE_V2")
     stamp='2026-10-18T14:00:00+00:00'
     expected_learning=build_learning_state(expected_review,effective_time=stamp)
     final_path=tmp_path/'runtime/final_artifacts'/f'{rid}.json'

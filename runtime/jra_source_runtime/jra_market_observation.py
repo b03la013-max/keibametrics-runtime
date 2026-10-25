@@ -1,6 +1,9 @@
 from __future__ import annotations
 from typing import Any, Dict
-from source_acquisition import sha_obj, utcnow
+try:
+    from .source_acquisition import sha_obj, utcnow
+except ImportError:
+    from source_acquisition import sha_obj, utcnow
 
 PROFILE="KM-JRA-OFFICIAL-MARKET-OBSERVATION-v1.0-20260926"
 

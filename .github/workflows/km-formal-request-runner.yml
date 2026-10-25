@@ -727,6 +727,19 @@ jobs:
               utility_contract.get("system_objective_order") if isinstance(utility_contract,dict) else None
           )
           final_package["prediction_utility_metrics"]={k:conformance.get(k) for k in ["runner_count","ranking_complete","active_w_count","active_p2_count","active_p3_count","purchased_head_count","noncapitalized_active_w","expected_pair_count","pair_purchase_count","pair_protect_count","pair_exclude_count","pair_purchase_density","expected_third_count","third_purchase_count","third_protect_count","third_exclude_count","third_purchase_density","head_stake","max_head","max_head_stake","head_capital_concentration","bet_type_stake","total_investment"]}
+          from formal_request_validator import ticket_capital_metrics
+          final_exposure=ticket_capital_metrics(tickets)
+          assert final_exposure["total_investment"]==expected_total, "FINAL_CAPITAL_METRICS_TOTAL_MISMATCH"
+          final_package["prediction_utility_metrics"].update(final_exposure)
+          from formal_temporal_audit import build_temporal_audit
+          final_package["temporal_audit"]=build_temporal_audit(req, source_artifact, final_freeze_timestamp)
+          # Explanation is observational: keep the signed registered selection
+          # and fail only this audit if an optional explanation cannot replay.
+          from jra_role_exclusion_audit import build_role_exclusion_audit
+          try:
+              final_package["role_exclusion_audit"]=build_role_exclusion_audit(req,resolved_authority_obj,'.')
+          except (KeyError,ValueError,TypeError,OSError) as exc:
+              final_package["role_exclusion_audit"]={"status":"HOLD","reason":str(exc)[:300],"production_effect":"NONE"}
           if mec is not None:
               final_package["prediction_utility_metrics"].update({
                   "mec_profile":mec["profile"],
@@ -836,6 +849,8 @@ jobs:
             "scheduled_post_at":req.get("scheduled_post_at"),
             "temporal_mode":temporal_mode,
             "static_freeze_timestamp":req.get("static_freeze_timestamp"),
+            "static_computed_at":req.get("static_computed_at"),
+            "temporal_audit":final_package["temporal_audit"],
             "final_freeze_timestamp":final_freeze_timestamp,
             "source_snapshot_sha256":conformance["source_snapshot_sha256"],
             "index_provenance_hash":req.get("index_provenance_hash"),
