@@ -51,6 +51,37 @@ def run(terminal,result):
     )
 
 class TestZeroStakeOfficialResultLearning(unittest.TestCase):
+    def test_legacy_runner_id_only_rows_keep_original_body_and_support_ties(self):
+        for tied in (False,True):
+            with self.subTest(dead_heat=tied):
+                terminal,result=build_input()
+                for row in result['runners']:row.pop('horse_no')
+                if tied:result['runners'][2]['finish']=2
+                result['sha256']=_hash({k:v for k,v in result.items()
+                                       if k not in ('sha256','race_no','source_snapshot_sha256')})
+                before=deepcopy((terminal,result))
+                out=run(terminal,result)
+                self.assertEqual((terminal,result),before)
+                self.assertEqual(out['official_top3'],['2','1','3'] if tied else ['2','3','1'])
+                self.assertEqual(out['investment'],0)
+                self.assertIsNone(out['pfs'])
+                if tied:self.assertEqual(out['official_top3_orders'],[[2,1,3],[2,3,1]])
+
+    def test_provided_horse_number_or_other_runner_cannot_override_signed_universe(self):
+        for mutation in ('wrong_horse','horse_bool','horse_string','other_id'):
+            with self.subTest(mutation=mutation):
+                terminal,result=build_input()
+                for row in result['runners']:row.pop('horse_no')
+                row=result['runners'][0]
+                if mutation=='other_id':row['runner_id']='99'
+                else:row['horse_no']={'wrong_horse':3,'horse_bool':True,'horse_string':'2'}[mutation]
+                result['sha256']=_hash({k:v for k,v in result.items()
+                                       if k not in ('sha256','race_no','source_snapshot_sha256')})
+                before=deepcopy(result)
+                with self.assertRaisesRegex(JRANoBetLearningError,'HORSE_NUMBER_MISMATCH|RUNNER_MISMATCH'):
+                    run(terminal,result)
+                self.assertEqual(result,before)
+
     def test_runtime_only_fresh_process_closes_no_bet_without_flat_source_path(self):
         """Other collected suites must not supply the missing source import."""
         runtime=Path(__file__).resolve().parents[1]/'runtime'

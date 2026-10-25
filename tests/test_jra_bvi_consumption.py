@@ -43,13 +43,65 @@ def test_frozen_corpus_snapshot_binding_is_trace_only_and_rejects_tamper():
     from jra_bvi_consumption import sha
     req,mapping=inputs();before=deepcopy(req['runners'])
     refs=['ATTESTED_HARVEST:'+'a'*64]
-    req.setdefault('source_to_evidence_feature_compiler',{})['pedigree_corpus_manifest']={
-        'snapshots':refs,'snapshot_count':1,'manifest_sha256':sha(refs)}
+    req['source_to_evidence_feature_compiler']={
+        'race_id':req['race_id'],'source_snapshot_sha256':req['source_snapshot_sha256'],
+        'sha256':'b'*64,'pedigree_corpus_manifest':{
+            'snapshots':refs,'snapshot_count':1,'manifest_sha256':sha(refs)}}
+    req['source_to_evidence_feature_sha256']='b'*64
     out=build_bvi_consumption(req,mapping)
-    assert out['corpus_artifact_lineage_status']=='FROZEN_SNAPSHOT_LIST_BOUND'
+    assert out['corpus_artifact_lineage_status']=='UNMATCHED_CORPUS_TRACE_NOT_CONSUMPTION_PROOF'
     assert req['runners']==before
     req['source_to_evidence_feature_compiler']['pedigree_corpus_manifest']['snapshots']=['tampered']
     with pytest.raises(ValueError,match='CORPUS_MANIFEST_BINDING_INVALID'):build_bvi_consumption(req,mapping)
+
+
+@pytest.mark.parametrize('mutation',['race','source','sha','partial'])
+def test_unrelated_compiler_metadata_is_not_corpus_consumption(mutation):
+    from jra_bvi_consumption import sha
+    req,mapping=inputs()
+    compiler={'race_id':req['race_id'],'source_snapshot_sha256':req['source_snapshot_sha256'],
+              'sha256':'b'*64,'pedigree_corpus_manifest':{
+                  'snapshots':[],'snapshot_count':0,'manifest_sha256':sha([])}}
+    req['source_to_evidence_feature_compiler']=compiler
+    req['source_to_evidence_feature_sha256']='b'*64
+    if mutation=='race':compiler['race_id']='OTHER-RACE'
+    elif mutation=='source':compiler['source_snapshot_sha256']='0'*64
+    elif mutation=='sha':req['source_to_evidence_feature_sha256']='0'*64
+    else:req.pop('source_to_evidence_feature_sha256')
+    with pytest.raises(ValueError,match='BVI_COMPILER_TRACE_'):build_bvi_consumption(req,mapping)
+
+
+def test_actual_compiler_report_manifest_binds_original_components_without_rewriting_them():
+    from jra_bvi_consumption import sha
+    p=ROOT/'runtime/exact_gaps/KM-JRA-TKY-20261025-R01-LIVE-R1.json'
+    report=json.loads(p.read_text());req=deepcopy(report['prepared_numerical_request'])
+    source_sha=report['source_checkpoint_manifest']['source_snapshot_sha256']
+    req['source_snapshot_sha256']=source_sha
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    original=deepcopy(req['runners'])
+    req['source_to_evidence_feature_compiler']={k:v for k,v in report['source_feature_report'].items() if k!='runners'}
+    req['source_to_evidence_feature_sha256']=report['source_feature_report']['sha256']
+    out=build_bvi_consumption(req,mapping)
+    assert out['corpus_artifact_lineage_status']=='FROZEN_SNAPSHOT_LIST_BOUND'
+    assert out['corpus_component_bindings']['MATCHED_DECLARED_MANIFEST']>0
+    assert req['runners']==original
+    assert [r['bvi_value'] for r in out['runners']]==[r['canonical_components']['BVI']['value'] for r in original]
+
+
+def test_mixed_supplemental_corpus_is_isolated_not_claimed_wholly_new():
+    report=json.loads((ROOT/'runtime/exact_gaps/KM-JRA-TKY-20261025-R01-LIVE-R1.json').read_text())
+    req=deepcopy(report['prepared_numerical_request'])
+    req['source_snapshot_sha256']=report['source_checkpoint_manifest']['source_snapshot_sha256']
+    req['source_to_evidence_feature_compiler']={k:v for k,v in report['source_feature_report'].items() if k!='runners'}
+    req['source_to_evidence_feature_sha256']=report['source_feature_report']['sha256']
+    original=req['runners'][0]['evidence_features']['pedigree_surface']
+    original['evidence_refs']=[x for x in original['evidence_refs'] if not x.startswith('JRA_PEDIGREE_CORPUS:')]+['JRA_PEDIGREE_CORPUS:'+'f'*64]
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    rebuilt=materialize_index_provenance(attach_production_ledger_to_request(req,mapping))
+    out=build_bvi_consumption(rebuilt,mapping)
+    assert out['corpus_artifact_lineage_status']=='MIXED_CORPUS_REFERENCES_NOT_FULLY_BOUND'
+    assert out['corpus_component_bindings']['OTHER_OR_MULTIPLE_CORPUS_REFERENCES']==1
+    assert out['corpus_component_bindings']['MATCHED_DECLARED_MANIFEST']>0
 
 
 @pytest.mark.parametrize('venue,no',[('TKY','03'),('TKY','04'),('NGT','03'),('NGT','04')])

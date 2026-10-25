@@ -1,0 +1,68 @@
+{
+  "classification": "LEGACY_NO_BET_SCHEMA_AND_RECOVERED_MAIN_RECEIPT_COUNT_COMPATIBILITY",
+  "audited_at": "2026-10-25T11:50:31.213082+00:00",
+  "previous_b_commit": "a936c3a4c5192e0078481652ad4e127dc524c5f1",
+  "parent_reported_latest_main": "5cd8d39524004c12dec9029ce9bfc95a07b20514",
+  "reported_ci_failures": [
+    {
+      "run": 40189774164,
+      "job": 121158091261,
+      "issue": "Legacy official result rows have runner_id and finish without horse_no."
+    },
+    {
+      "run": 40189774128,
+      "job": 121158091090,
+      "issue": "Current main has 33 original receipts after recovery; historic default expected 20."
+    }
+  ],
+  "no_bet_compatibility": {
+    "source_body_and_source_hash_unchanged": true,
+    "horse_number_view": "LOCAL_COPY_FROM_ALREADY_UNIVERSE_BOUND_CANONICAL_RUNNER_ID",
+    "provided_horse_number_mismatch_rejected": true,
+    "other_runner_id_rejected": true,
+    "normal_and_dead_heat_supported": true,
+    "original_aki_no_bet_test_modified_or_skipped": false,
+    "investment": 0,
+    "pfs": null
+  },
+  "main_receipt_fixture": {
+    "default_expected_receipts": 33,
+    "expected_learning_states": 32,
+    "verified_existing_main_payload_files": 246,
+    "main_payload_sha256": "96b62d1c18cb8a4da190d6c30ff0ca866d9bcef6d77d05781da5857abbe65d5b",
+    "current33_root": "/workspace/scratch/c3703925e24c/closeout_status_current33_fixture",
+    "test_env_expected_receipts": "UNSET_USES_DEFAULT_33",
+    "legacy20_root": "/workspace/scratch/c3703925e24c/closeout_status_legacy20_fixture",
+    "legacy_test_env": "KM_STATUS_EXPECTED_RECEIPTS=20",
+    "legacy_original_receipt_races": 20,
+    "new_original_receipt_races": 13,
+    "status_renderer_signature_verification_remains_false": true,
+    "fixture_build_is_readonly_view_not_receipt_or_state_generation": true
+  },
+  "tests": {
+    "full_eight_suites_current_main_data": {
+      "tests_passed": 91,
+      "subtests_passed": 15,
+      "skipped": 0,
+      "junit": "evidence/jra_20261025_dead_heat/legacy_compat_regression.xml"
+    },
+    "aki_plus_no_bet_pair": {
+      "tests_passed": 21,
+      "subtests_passed": 15
+    },
+    "current_main33_status": {
+      "tests_passed": 8
+    },
+    "historical20_status_explicit_env": {
+      "tests_passed": 8,
+      "junit": "evidence/jra_20261025_dead_heat/status_legacy20_regression.xml"
+    }
+  },
+  "new_runtime_posts": 0,
+  "new_result_signatures": 0,
+  "new_production_learning_states": 0,
+  "new_forward_oos_credit": 0,
+  "numerical_policy_or_gate_changes": 0,
+  "new_followup_scope": false,
+  "sha256": "41bad64d29dd54f0a8aedd7bfdf502529a9c6de68ed5f59de70d7be955fa1774"
+}
