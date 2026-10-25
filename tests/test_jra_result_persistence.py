@@ -101,7 +101,8 @@ def test_real_role_rescue_aggregate_conflict_rebuilds_both_races(tmp_path,monkey
     store.persist(cwd=a,branch='main',attempts=2,
                   snapshots=store.SNAPSHOTS | store.JRA_RESULT_SNAPSHOTS)
     result=json.loads(git(remote,'show','main:'+view))
-    assert result['distinct_races']==2 and result['forward_oos_verified_races']==1
+    assert result['distinct_races']==2 and result['forward_oos_verified_races']==0
+    assert result['legacy_recorded_eligible_races']==1  # Saved legacy claim is not a registered new cohort.
     assert [r['race_id'] for r in result['results']]==['A','B']
     assert result['automatic_promotion'] is False
 

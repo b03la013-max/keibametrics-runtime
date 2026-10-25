@@ -52,6 +52,17 @@ def pack(root, request, final, *, created_at=None):
            'learning_states':states, 'learning_input_sha256':digest(states),
            'created_at':created_at or datetime.now(timezone.utc).isoformat(),
            'production_effect':'NONE', 'oos_eligible':False}
+    # The existing day plan owns the prospective cohort. A retry restores this
+    # exact snapshot; later registration edits never relabel an old freeze.
+    day=datetime.strptime(final['race_id'].split('-')[3],'%Y%m%d').date().isoformat()
+    plan_path=root/'runtime/jra_race_day_plan'/(day+'.json')
+    if plan_path.exists():
+        plan=json.loads(plan_path.read_text())
+        if isinstance(plan.get('forward_oos_preregistration'),dict):
+            out['oos_preregistration']=plan['forward_oos_preregistration']
+            out['oos_preregistration_sha256']=digest(out['oos_preregistration'])
+            out['oos_preregistration_witness']=plan.get('forward_oos_preregistration_witness')
+            out['oos_checkpoint_code_sha256']=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     out['sha256'] = digest(out)
     validate(root, out)
     return out
@@ -78,6 +89,8 @@ def validate(root, checkpoint):
     verify_frozen_inputs(root,q,f)
     if c['policy_sha256'] != digest(POLICY) or c['code_sha256'] != {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in CODES}:
         raise ValueError('SHADOW_CHECKPOINT_CODE_POLICY')
+    if ('oos_preregistration' in c and c.get('oos_preregistration_sha256')!=digest(c['oos_preregistration'])):
+        raise ValueError('SHADOW_CHECKPOINT_PREREGISTRATION_HASH')
     model = json.loads((root/MODEL).read_text())
     if model['sha256'] != digest({k:v for k,v in model.items() if k!='sha256'}) or model['sha256'] != c['model_sha256']:
         raise ValueError('SHADOW_CHECKPOINT_MODEL')
@@ -268,6 +281,14 @@ def execute(root, checkpoint, *, verify_final, clock=None):
         out['delivery_checkpoint_sha256'] = c['sha256']
         out['prediction_input_sha256'] = digest({'request_sha256':c['request_sha256'], 'learning_states':c['learning_states']})
         out['checkpoint_learning_input_sha256'] = c['learning_input_sha256']
+        if 'oos_preregistration' in c:
+            out['oos_preregistration']=c['oos_preregistration']
+            out['oos_preregistration_sha256']=c['oos_preregistration_sha256']
+            out['oos_preregistration_witness']=c.get('oos_preregistration_witness')
+            out['oos_candidate_id']=c['oos_preregistration'].get('candidate_id')
+            out['oos_eligibility_scope']=c['oos_preregistration'].get('eligibility_scope')
+            out['source_freeze_at']=c['request']['source_snapshot']['source_freeze_at']
+            out['oos_checkpoint_code_sha256']=c['oos_checkpoint_code_sha256']
         out['sha256'] = digest({k:v for k,v in out.items() if k!='sha256'})
         # Late computation never publishes a new frozen artifact, regardless of its start time.
         if instant(now()) > cutoff: raise ValueError('SHADOW_CHECKPOINT_FINISHED_AFTER_CUTOFF')
@@ -287,6 +308,8 @@ def restore(root, checkpoint, shadow, *, witness):
             or shadow.get('runner_universe_sha256') != c['runner_universe_sha256']
             or shadow.get('prediction_input_sha256') != digest({'request_sha256':c['request_sha256'],'learning_states':c['learning_states']})
             or shadow.get('code_sha256') != c['code_sha256'][CODES[0]]
+            or shadow.get('oos_preregistration') != c.get('oos_preregistration')
+            or shadow.get('oos_preregistration_witness') != c.get('oos_preregistration_witness')
             or (shadow.get('additional_input_sha256') and shadow['additional_input_sha256'].get(MODEL) != c['model_sha256'])
             or not witness(shadow).get('verified')):
         raise ValueError('SHADOW_RESTORE_ORIGINAL_WITNESS_REQUIRED')
