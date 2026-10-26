@@ -8,6 +8,8 @@ on:
   pull_request:
     branches: [main, fix/jra-oct25-deadheat-lineage-closeout, research/ohi-oct26-frozen-review]
     paths:
+      - "runtime/local_nankan_card_identity_evidence.py"
+      - "tests/test_local_nankan_card_identity_evidence.py"
       - "runtime/local_history_identity_research.py"
       - "tests/test_local_evidence_quality_audit.py"
       - "scripts/local_pedigree_person_audit.py"
@@ -81,6 +83,7 @@ jobs:
       - name: Focused family regression tests
         run: |
           python -m pytest -q \
+            tests/test_local_nankan_card_identity_evidence.py \
             tests/test_local_history_identity_research.py \
             tests/test_local_evidence_quality_audit.py \
             tests/test_local_pedigree_person_evidence.py \
