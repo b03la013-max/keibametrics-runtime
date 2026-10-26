@@ -9,6 +9,7 @@ import statistics
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from runtime.local_history_identity_research import transfer_facts
 
 PROFILE = "KM-LOCAL-NAR-EVIDENCE-CANDIDATE-v0.1-20260923"
 DEFAULT_REGISTRY = "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
@@ -637,12 +638,13 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     put("NCI", "class_change_pressure", pressure,
         f"previous-current class delta={None if prev_class is None or missing_urw_class else prev_class-current_class}",
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
-    is_jra_transfer = bool(starts and _norm(starts[0].get("venue","")).startswith("J"))
+    transfer_identity = transfer_facts(starts)
+    previous_start_is_jra = transfer_identity["latest_observed_start_is_jra"]
     transfer_class = None
-    if starts and not missing_urw_class:
-        transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if is_jra_transfer else 0.8))
+    if starts and not missing_urw_class and previous_start_is_jra is not None:
+        transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if previous_start_is_jra else 0.8))
     put("NCI", "transfer_class", transfer_class,
-        f"latest venue={starts[0].get('venue') if starts else None}; JRA transfer={is_jra_transfer}",
+        f"latest venue={starts[0].get('venue') if starts else None}; previous observed start JRA={previous_start_is_jra}; actual registration transfer UNKNOWN",
         coverage=1 if transfer_class is not None else 0, raw_metric=transfer_class)
     # class_relative_time is populated in a second cross-runner pass.
     put("NCI", "class_relative_time", None,
@@ -655,6 +657,7 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         "candidate_missing_count": len(missing_components),
         "candidate_component_count": sum(len(v) for v in reg["common_component_sets"].values()),
         "raw_candidate_evidence": raw,
+        "observed_transfer_identity": transfer_identity,
     }
 
 
