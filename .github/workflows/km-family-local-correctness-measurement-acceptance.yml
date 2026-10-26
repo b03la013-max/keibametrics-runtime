@@ -97,3 +97,45 @@ jobs:
       - name: Lint workflow
         run: |
           ./actionlint -color .github/workflows/km-family-local-correctness-measurement-acceptance.yml
+
+
+      - name: Package exact existing OHI entry code only
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/runtime
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,subprocess,sys,tempfile,zipfile
+          from pathlib import Path
+          root=Path.cwd()
+          manifest_path=root/'profiles/ohi_private_entry_code_transport_20261026.json'
+          manifest=json.loads(manifest_path.read_text())
+          assert manifest['code_ref']=='d61f5c563238be2c812ef4bf912bd5b872b84fed'
+          assert manifest['private_inputs_included'] is False
+          assert manifest['production_authority'] is False
+          destination=root/'ohi-code-transport'
+          destination.mkdir()
+          archive=destination/'ohi-existing-entry-code.zip'
+          with zipfile.ZipFile(archive,'x',zipfile.ZIP_DEFLATED) as bundle:
+              for item in manifest['files']:
+                  relative=item['path']
+                  p=Path(relative)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert p.parts[0] in ('runtime','mapping','profiles')
+                  assert p.suffix in ('.py','.json') and 'executions' not in p.parts
+                  expected=subprocess.check_output(['git','show',manifest['code_ref']+':'+relative])
+                  assert len(expected)==item['bytes']
+                  assert hashlib.sha256(expected).hexdigest()==item['sha256']
+                  bundle.writestr(relative,expected)
+              bundle.writestr('CODE_TRANSPORT_MANIFEST.json',json.dumps(manifest,sort_keys=True))
+          with tempfile.TemporaryDirectory() as temporary:
+              with zipfile.ZipFile(archive) as bundle:bundle.extractall(temporary)
+              environment=dict(os.environ,PYTHONPATH=temporary+os.pathsep+str(Path(temporary)/'runtime'))
+              subprocess.run([sys.executable,'-c','import runtime.ohi_single_race_research'],cwd=temporary,env=environment,check=True)
+          (destination/'sha256.json').write_text(json.dumps({'code_ref':manifest['code_ref'],'archive_sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'file_count':len(manifest['files']),'private_inputs_included':False},indent=2))
+          PY
+      - name: Publish code transport without private SOURCE or predictions
+        uses: actions/upload-artifact@v4
+        with:
+          name: ohi-existing-entry-code-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ohi-code-transport/
+          retention-days: 7
