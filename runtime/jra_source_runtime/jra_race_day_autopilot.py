@@ -1087,11 +1087,19 @@ def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
     run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
-    run("git", "add", *paths)
-    if run("git", "diff", "--cached", "--quiet").returncode != 0:
-        run("git", "commit", "-m", f"autopilot: race-day state and status {race_date} [skip ci]")
-    elif not run("git","rev-list","origin/main..HEAD").stdout.strip():
-        return
+    if run('git','add',*paths).returncode!=0:
+        raise RuntimeError('AUTOPILOT_STATE_GIT_ADD_FAILED_NO_SEND')
+    difference=run('git','diff','--cached','--quiet')
+    if difference.returncode not in (0,1):
+        raise RuntimeError('AUTOPILOT_STATE_GIT_DIFF_FAILED_NO_SEND')
+    if difference.returncode==1:
+        if run("git", "commit", "-m", f"autopilot: race-day state and status {race_date} [skip ci]").returncode!=0:
+            raise RuntimeError('AUTOPILOT_STATE_GIT_COMMIT_FAILED_NO_SEND')
+    else:
+        ahead=run('git','rev-list','origin/main..HEAD')
+        if ahead.returncode!=0:
+            raise RuntimeError('AUTOPILOT_STATE_GIT_AHEAD_FAILED_NO_SEND')
+        if not ahead.stdout.strip():return
     for i in range(5):
         if _rebase_generated(root, race_date) and \
                 run("git", "push", "origin", "HEAD:main").returncode == 0:

@@ -50,5 +50,7 @@ jobs:
       - run: python -m pytest -q tests/test_jra_result_persistence.py tests/test_persist_local_checkpoints_scratch.py
       - run: python -m pytest -q tests/test_jra_presentation.py tests/test_jra_ticket_tree_renderer.py
 
+      - name: Fetch exact pre-sidecar workflow baseline for immutable prefix comparison
+        run: git fetch --no-tags --depth=1 origin b0a377ae06a2d3d15bc47863585e18388e4fea46
       - name: Verify calendar denial isolation, Collector trust and fixed BVI boundaries offline
         run: python -m pytest -q tests/test_jra_calendar_failure_diagnostics.py tests/test_jra_meeting_universe_resolution.py tests/test_jra_pedigree_plan_faults.py tests/test_jra_weekend_bvi_intake.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_bvi_parallel_sidecar.py tests/test_family_runtime_contract.py

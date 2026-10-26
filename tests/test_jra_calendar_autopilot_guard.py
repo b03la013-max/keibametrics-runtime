@@ -328,3 +328,32 @@ def test_t6_cohort_registration_is_not_a_new_formal_intake_when_calendar_is_deni
     assert index['cohort_metrics']['registered_intakes']==0
     assert before=={p:p.read_bytes() for p in before}
     assert not (tmp_path/'runtime/executions').exists()
+
+
+@pytest.mark.parametrize('failure',['add','diff','commit','ahead'])
+def test_t9_git_failure_cannot_be_reported_as_published_or_send_a_resolver(tmp_path,monkeypatch,failure):
+    remote,worker=repository(tmp_path)
+    path=worker/f'runtime/jra_race_day_plan/{DATE}.json';path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({'entries':[{'venue':'東京','races':[1]}]}))
+    actual_run=a.subprocess.run;commands=[];sent=[]
+    def faulty(command,*args,**kwargs):
+        commands.append(command)
+        target=(failure=='add' and command[:2]==['git','add'] or
+                failure=='diff' and command[:4]==['git','diff','--cached','--quiet'] or
+                failure=='commit' and command[:2]==['git','commit'] or
+                failure=='ahead' and command[:2]==['git','rev-list'])
+        if target:return subprocess.CompletedProcess(command,128,'','injected Git publication failure')
+        if failure=='ahead' and command[:4]==['git','diff','--cached','--quiet']:
+            return subprocess.CompletedProcess(command,0,'','')
+        return actual_run(command,*args,**kwargs)
+    monkeypatch.setattr(a.subprocess,'run',faulty)
+    out=a.tick(worker,DATE,NOW,resolve=lambda *args:('official',RACES),resolver_runs=[],
+        publish=lambda:a._commit(worker,DATE),dispatch=lambda *args:sent.append(args))
+    assert sent==[] and out[0]['status']=='CLAIM_PUBLISH_FAILED_NO_SEND'
+    state=json.loads(path.with_name(DATE+'.state.json').read_text())
+    assert state[RID]['dispatch_state']=='CLAIM_PUBLISH_FAILED_NO_SEND'
+    assert 'dispatched_at' not in state[RID]
+    assert not any(c[:2]==['git','push'] for c in commands)
+    monkeypatch.setattr(a.subprocess,'run',actual_run)
+    assert int(git(remote,'rev-list','--count','main'))==1
+    assert not (worker/'runtime/executions').exists()
