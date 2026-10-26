@@ -258,6 +258,36 @@ def readback(output):
     if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_legacy(r),re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(r)).replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')):raise ValueError('OHI_READBACK_BODY_MISMATCH')
     return r,render(r)
 
+def material_input_sha256(observation):
+    """Compare numerical inputs, excluding audit prices and receipt metadata.
+
+    This does not declare an old SOURCE current or change its profile. A fresh
+    accepted observation remains separately saved, even when calculation reuse
+    is appropriate. Target changes are reflected in the reconciled facts.
+    """
+    def semantic(value):
+        if isinstance(value,dict):
+            return {k:semantic(v) for k,v in value.items() if k not in {
+                'raw','provenance','source_raw_sha256','source_url','local_evidence_id'}}
+        if isinstance(value,list):return [semantic(v) for v in value]
+        return value
+    race=observation['race']
+    return sha({'race':{k:race[k] for k in ('venue_id','race_date','race_no','provider_race_id','distance','course_family','surface','scheduled_post_at','prediction_cutoff')},
+                'facts':semantic(observation['facts']),'price_consumption':False})
+
+def revision_decision(existing_output,observation,*,source_dir):
+    """An explicit scheduling caller can check material changes without KRS."""
+    check_source_time(observation,'MATERIAL_CHANGE_CHECK')
+    verify_observation(observation,source_dir)
+    frozen,_=readback(existing_output);old=load(Path(existing_output)/'observation.json')
+    if any(frozen['race'][k]!=observation['race'][k] for k in ('venue_id','race_date','race_no','provider_race_id')):raise ValueError('OHI_REVISION_OTHER_RACE')
+    unchanged=material_input_sha256(old)==material_input_sha256(observation)
+    return seal({'decision':'REUSE_FROZEN_ORIGINAL' if unchanged else 'NEW_IMMUTABLE_REVISION_REQUIRED',
+        'prediction_sha256':frozen['sha256'],'original_freeze':frozen['freeze_at'],
+        'new_observation_sha256':observation['sha256'],'new_source_profile':observation['source_profile'],
+        'material_input_unchanged':unchanged,'original_profile_and_classification_preserved':True,
+        'prediction_or_krs_reexecuted':False,'observed_at':utcnow().isoformat()})
+
 def main():
     p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--source-dir');g.add_argument('--query');g.add_argument('--readback');p.add_argument('--output');p.add_argument('--model');p.add_argument('--engine');p.add_argument('--params');p.add_argument('--diagnostic',action='store_true');p.add_argument('--source-contract',choices=['v1','v2'],default='v2');a=p.parse_args()
     if a.readback:

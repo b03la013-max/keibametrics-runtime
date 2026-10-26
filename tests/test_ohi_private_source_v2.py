@@ -75,6 +75,25 @@ class GenuineR02(unittest.TestCase):
     def test_mixed_race_link_rejected(self):
         row=self.change_row(2).replace('</li>','<a href="/syousai/'+self.race['provider_day_id']+'01.do">Other</a></li>')
         with self.assertRaisesRegex(NankanError,'RACE_LINK_IDENTITY'):self.observation(changes=self.changed_raw(row))
+    def test_unnumbered_cancel_binding_must_restore_unique_universe(self):
+        import re
+        card,n=re.subn(r'(<td[^>]*class="[^"]*umaban[^"]*"[^>]*>)\s*1\s*(</td>)',r'\1取消\2',decode(self.raw['card']),count=1)
+        self.assertEqual(1,n)
+        good=self.changed_raw(self.change_row(2))
+        accepted=self.observation(card=card.encode('cp932'),changes=good)
+        self.assertEqual(13,len(accepted['facts']))
+        for number in ('2','15'):
+            bad=decode(good).replace('1番',number+'番').encode('cp932')
+            with self.subTest(number=number),self.assertRaisesRegex(NankanError,'DUPLICATE_OR_GAP'):
+                self.observation(card=card.encode('cp932'),changes=bad)
+    def test_material_receipt_changes_do_not_recompute_input(self):
+        from runtime.ohi_single_race_research import material_input_sha256
+        old=self.observation();other=copy.deepcopy(old)
+        other['source']['fetched_at']='2099-01-01T00:00:00+00:00'
+        other['facts'][0]['history_observations'][0]['provenance']['source_raw_sha256']='different'
+        self.assertEqual(material_input_sha256(old),material_input_sha256(other))
+        other['facts'][0]['current_body_weight']=501
+        self.assertNotEqual(material_input_sha256(old),material_input_sha256(other))
     def test_jockey_direction_not_link_order(self):
         f=self.observation()['facts'][0];old=f['current_jockey']
         row=self.change_row(2,kind='騎手変更').replace('</div></li>',f'<p class="nk23_c-block01__text2">変更後 <a href="/kis_info/8888.do">新騎手</a></p><p class="nk23_c-block01__text2">変更前 <a href="/kis_info/9999.do">{old}</a></p></div></li>')

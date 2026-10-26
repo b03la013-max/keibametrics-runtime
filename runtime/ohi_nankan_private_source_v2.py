@@ -146,7 +146,7 @@ def observed_market(raw,receipt,race,declared):
         if win is not None and win<=0 or lo is not None and not 0<lo<=hi:raise NankanError('OHI_ODDS_VALUE_INVALID')
         rows.append(dict(runner_id=cells[0],provider_horse_id=by_no[cells[0]]['provider_horse_id'],name=cells[1],status='CANCELLED' if cancelled else 'ACTIVE_DECLARED',win_odds=win,place_low=lo,place_high=hi,betting_membership_observed=bool(win and lo)))
     if len({r['runner_id'] for r in rows})!=len(rows) or {r['runner_id'] for r in rows}!=set(by_no):raise NankanError('OHI_ODDS_UNIVERSE_MISMATCH')
-    return dict(status='MARKET_PRICES_OBSERVED_AUDIT_ONLY' if any(r['win_odds'] is not None for r in rows) else 'MARKET_ROWS_OBSERVED_PRICES_UNPUBLISHED',source=receipt,rows=rows,prices_consumed=False,active_verified=False)
+    return dict(status='MARKET_PRICES_OBSERVED_AUDIT_ONLY' if any(r[k] is not None for r in rows for k in ('win_odds','place_low','place_high')) else 'MARKET_ROWS_OBSERVED_PRICES_UNPUBLISHED',source=receipt,rows=rows,prices_consumed=False,active_verified=False)
 
 def observe(race,card,cardmeta,changes,chgmeta,receipts,*,program_races,odds=None):
     for raw,meta in [(card,cardmeta),(changes,chgmeta)]+([odds] if odds else []):
@@ -161,6 +161,12 @@ def observe(race,card,cardmeta,changes,chgmeta,receipts,*,program_races,odds=Non
     # dated official change item with the identical provider horse ID.
     declared=[{**d,'runner_id':cancels[d['provider_horse_id']]['runner_id']}
         if d.get('runner_id') is None else d for d in declared]
+    numbers=[d.get('runner_id') for d in declared]
+    if (len(set(numbers))!=len(numbers) or any(not isinstance(n,str) or not re.fullmatch(r'[1-9]|1[0-6]',n) for n in numbers)
+            or {int(n) for n in numbers}!=set(range(1,len(numbers)+1))):
+        raise NankanError('OHI_BOUND_DECLARED_NUMBER_DUPLICATE_OR_GAP')
+    if {d['runner_id'] for d in declared if d['status']=='ACTIVE_DECLARED'} & {d['runner_id'] for d in declared if d['status']=='CANCELLED'}:
+        raise NankanError('OHI_ACTIVE_CANCELLED_NUMBER_COLLISION')
     menu=market_menu(card,cardmeta['url'],race)
     if menu['url']:
         if odds is None:raise NankanError('OHI_OBSERVED_ODDS_REQUIRED')
