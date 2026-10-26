@@ -158,7 +158,7 @@ def selection(o,pred,rid):
     mec=build_mec_plan(req);valid=validate_mec_plan(mec)
     if valid.get('mec_verified') is not True:raise ValueError('OHI_MEC_INVALID:'+str(valid))
     capital=resolve_capital_policy(req,mec);tickets=[] if capital['no_bet'] else mec['tickets']
-    tree=render_ticket_tree({'static_prediction':{'ranking':ranking},'final_ticket':{'tickets':tickets,'total_investment':sum(t['stake'] for t in tickets)}})
+    tree=render_ticket_tree({'static_prediction':{'ranking':ranking},'capital_policy_decision':{'decision':'PAPER'},'final_ticket':{'tickets':tickets,'total_investment':sum(t['stake'] for t in tickets)}})
     if len(tree['reflattened_tickets'])!=len(tickets) or tree['total_investment']!=sum(t['stake'] for t in tickets):raise ValueError('OHI_TREE_STAKE_MISMATCH')
     return dict(semantic_request=req,mec=mec,mec_validation=valid,capital=capital,tickets=tickets,tree=tree,research_paper_only=True,actual_investment_reserved=0,selection_semantics='EXPLICIT_RESEARCH_ROLE_HYPOTHESIS_PROJECTION_NOT_PAST_FROZEN_TICKETS',krs_selection_effect='OBSERVED_FOR_AUDIT_NOT_A_NEW_PURCHASE_POLICY',conditional_exact_materiality='UNVALIDATED_NO_NEW_TRIFECTA_AUTHORITY')
 
@@ -194,11 +194,11 @@ def run(o,output,model_path,engine,params,*,source_dir,diagnostic=False):
     write(output/'readback-manifest.json',seal({'prediction_sha256':result['sha256'],'answer_sha256':hashlib.sha256(body.encode()).hexdigest(),'files':{str(p.relative_to(output)):hashlib.sha256(p.read_bytes()).hexdigest() for p in output.rglob('*') if p.is_file()},'screen_ack':False,'private_remote_readback':False}))
     return result
 
-def render(result):
+def _render_legacy(result):
     r=result['race'];n=result['numerical_summary'];b=result['owners']['BASELINE'];c=result['owners']['OHI_FIXED_CANDIDATE']
     out=[f"大井 {r['race_date']} {r['race_no']}R　{r['race_name']}",f"分類：{result['classification']}",f"発走 {r['scheduled_post_at']}／LOCAL研究Cutoff {r['prediction_cutoff']}（公式発売締切ではありません）",f"SOURCE {result['source_fetched_at']}／Freeze {result['freeze_at']}",f"Source SHA {result['source_sha256']}／原本SHA {result['sha256']}",f"全{len(result['all_runners'])}頭×29＝{n['required_count']}セル。実計算{n['calculated_count']}・規定中立{n['ruled_neutral_count']}・未解決{n['unresolved_count']}。full_numerical_complete={n['full_numerical_complete']}。",f"変更情報：{result['changes_status']}。価格：{result['price_status']['status']}。集合は公式Card＋日付付き変更の観測、Verified Activeではありません。","非Productionの独立PAPER比較です。正式FINAL、較正済み勝率、実購入指示ではありません。固定CandidateはOHI v2.1研究basisで、現行正式v2.3 Ownerへ昇格していません。","","|馬番・馬名|Baseline順位／Role|固定OHI Candidate順位／Role|中立セル（UNKNOWN）|","|---|---|---|---|"]
     for f in result['all_runners']:
-        i=f['runner_id'];cells=result['numerical_cells'][i];missing=[k for k,v in cells.items() if v['terminal_status']=='RULED-NEUTRAL']
+        i=f['runner_id'];cells=result['numerical_cells'][i];missing=[k for k in n['required_indices'] if cells[k]['terminal_status']=='RULED-NEUTRAL']
         out.append(f"|{i} {f['name']}|{b['ranking'].index(i)+1}／{'・'.join(b['roles'][i]) or '採用なし'}|{c['ranking'].index(i)+1}／{'・'.join(c['role_columns'][i]) or '採用なし'}|{len(missing)}：{', '.join(missing)}|")
     out+=['','欠測理由（原本）：']
     for f in result['all_runners']:out.append(f"{f['runner_id']} {f['name']}：履歴{len(f['starts'])}走、"+'／'.join(f['missingness']))
@@ -213,8 +213,14 @@ def render(result):
     out+=['','結論：2案を合算しません。既存モデルの予測・MEC試算が成立した私有研究原本です。Candidateの優位・EV・将来成績は未証明です。馬体重・当日馬場は未観測で、後から更新が出た場合は新Revisionで再照合が必要です。', '','全馬29指数（N＝規定中立、C＝実計算。Provenanceはprediction-original.json内の各セル）：']
     for f in result['all_runners']:
         out+=['',f"{f['runner_id']} {f['name']}"]
-        out.append('／'.join(f"{key} {v['value']:.3f} [{'N' if v['terminal_status']=='RULED-NEUTRAL' else 'C'}]" for key,v in result['numerical_cells'][f['runner_id']].items()))
+        out.append('／'.join(f"{key} {result['numerical_cells'][f['runner_id']][key]['value']:.3f} [{'N' if result['numerical_cells'][f['runner_id']][key]['terminal_status']=='RULED-NEUTRAL' else 'C'}]" for key in n['required_indices']))
     return '\n\n'.join(out)+'\n'
+
+def render(result):
+    # Presentation-only v1.1: CommonMark tables need adjacent row lines.
+    # Preserve every original content line, number and ticket; no recompute.
+    body=re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(result))
+    return body.replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')
 
 def readback(output):
     output=Path(output);m=load(output/'readback-manifest.json');r=load(output/'prediction-original.json')
@@ -222,8 +228,8 @@ def readback(output):
     for relative,digest in m['files'].items():
         if '..' in Path(relative).parts or Path(relative).is_absolute() or hashlib.sha256((output/relative).read_bytes()).hexdigest()!=digest:raise ValueError('OHI_READBACK_FILE_MISMATCH')
     body=(output/'answer.md').read_text()
-    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body!=render(r):raise ValueError('OHI_READBACK_BODY_MISMATCH')
-    return r,body
+    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_legacy(r)):raise ValueError('OHI_READBACK_BODY_MISMATCH')
+    return r,render(r)
 
 def main():
     p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--source-dir');g.add_argument('--query');g.add_argument('--readback');p.add_argument('--output');p.add_argument('--model');p.add_argument('--engine');p.add_argument('--params');p.add_argument('--diagnostic',action='store_true');a=p.parse_args()
