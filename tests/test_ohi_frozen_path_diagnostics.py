@@ -22,6 +22,21 @@ def portfolio(roles,no_bet=False):
 
 
 class FrozenPathEvaluation(unittest.TestCase):
+    def test_other_day_same_runner_numbers_cannot_supply_result(self):
+        race={'provider_race_id':'2026102620110101','race_no':1,'race_date':'2026-10-26','venue_id':'OHI'}
+        label={'provider_race_id':race['provider_race_id'],'rank_groups':[['4'],['7'],['5']]}
+        m.verify_label_identity(label,race)
+        for change in ({'provider_race_id':'2026102720110201'}, {'provider_race_id':None},
+                       {'race_date':'2026-10-27'}, {'venue_id':'URW'}, {'race_no':2},
+                       {'source_url':'https://www.nankankeiba.com/result/2026102720110201.do'}):
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                m.verify_label_identity({**label,**change},race)
+
+    def test_duplicate_race_labels_do_not_silently_replace_evidence(self):
+        for rows in ([{'race_no':1},{'race_no':1}], {'1':{'finish_groups':[]},'01':{'finish_groups':[]}}):
+            with self.subTest(rows=rows),self.assertRaisesRegex(ValueError,'DUPLICATE_RACE'):
+                m.top3_labels({'races':rows})
+
     def test_unordered_hit_does_not_mean_ordered_role_success(self):
         groups=[['4'],['7'],['5']]
         tickets=[ticket('TRIO',[4,5,7]),ticket('EXACTA',[4,5])]

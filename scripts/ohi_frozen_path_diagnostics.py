@@ -48,16 +48,35 @@ def role_ids(pred, column): return [i for i in pred['ranking'] if column in role
 def top3_labels(labels):
     """Accept a private diagnostic list or independently collected full results."""
     rows=labels.get('races',{}) if labels else {}
-    if isinstance(rows,list):return {int(r['race_no']):r for r in rows}
+    if isinstance(rows,list):
+        out={}
+        for row in rows:
+            number=int(row['race_no'])
+            if number in out:raise ValueError('LABEL_DUPLICATE_RACE')
+            out[number]=row
+        return out
     if not isinstance(rows,dict):raise ValueError('LABEL_RACES_REQUIRED')
     out={}
     for number,row in rows.items():
+        if int(number) in out:raise ValueError('LABEL_DUPLICATE_RACE')
         groups=[];slots=0
         for group in row['finish_groups']:
             groups.append(list(map(str,group)));slots+=len(group)
             if slots>=3:break
         out[int(number)]={**row,'rank_groups':groups}
     return out
+
+
+def verify_label_identity(label,race):
+    """A matching runner number alone cannot bind an outcome to a Race."""
+    if not label:return
+    if label.get('provider_race_id')!=race['provider_race_id']:
+        raise ValueError('LABEL_PROVIDER_RACE_IDENTITY')
+    for key in ('race_no','race_date','venue_id'):
+        if key in label and label[key]!=race[key]:
+            raise ValueError('LABEL_RACE_CONTEXT:'+key)
+    if 'source_url' in label and label['source_url']!='https://www.nankankeiba.com/result/'+race['provider_race_id']+'.do':
+        raise ValueError('LABEL_RESULT_URL_IDENTITY')
 
 
 def cluster_sensitivity(rows,key,floor):
@@ -214,6 +233,7 @@ def build(root, labels, *, engine_path, model_path):
         folder=base/('live-r01-v1' if number==1 else f'live-r{number:02d}-v2')
         before={str(p.relative_to(folder)):hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.rglob('*') if p.is_file()}
         result,_=readback(folder);label=labels_by_no.get(number) or {};groups=label.get('rank_groups');ids={str(r['runner_id']) for r in result['all_runners']}
+        verify_label_identity(label,result['race'])
         if groups is not None and (len(groups)<2 or len(groups[0])!=1 or any(i not in ids for g in groups for i in g)
                 or len([i for g in groups for i in g])!=len({i for g in groups for i in g})):
             raise ValueError('LABEL_RANK_GROUP_OR_UNIVERSE')
