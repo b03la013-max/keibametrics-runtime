@@ -92,9 +92,9 @@ def dated_changes(raw,receipt,race):
     if provider.date()!=date.fromisoformat(race['race_date']) or provider>observed:raise NankanError('OHI_CHANGE_TIMESTAMP_CONTRADICTION')
     return dict(status='EXPLICIT_NO_CHANGES_TODAY',provider_display_at=provider.isoformat(),source=receipt,items=[],active_verified=False,absence_is_no_change=False)
 
-def parse_single_card(raw,race,url,*,excluded_rows=None,card_observations=None):
+def parse_single_card(raw,race,url,*,excluded_rows=None,card_observations=None,history_parser=None):
     complete_document(raw)
-    rows=_parse_card(raw,race,url,excluded_rows=excluded_rows,single_card=True,card_observations=card_observations)
+    rows=_parse_card(raw,race,url,excluded_rows=excluded_rows,single_card=True,card_observations=card_observations,history_parser=history_parser)
     for row in rows:
         for run in row['starts']:
             when=datetime.strptime(run['date'],'%y.%m.%d').date()
@@ -206,7 +206,7 @@ def _history_observation(run,*,slot,race,source_raw_sha256,source_url,provider_h
         reason='ORDINARY_DNF_FINISH_UNKNOWN' if status=='DNF' else 'OBSERVED_ORDINARY_START')
     return observation
 
-def _parse_card(raw,race,url,*,excluded_rows=None,single_card=False,card_observations=None):
+def _parse_card(raw,race,url,*,excluded_rows=None,single_card=False,card_observations=None,history_parser=None):
     if url!=ORIGIN+'/uma_shosai/'+race['provider_race_id']+'.do':raise NankanError('NANKAN_CARD_URL_IDENTITY')
     dom=DOM(decode(raw)).root;raw_sha256=hashlib.sha256(raw).hexdigest()
     header=_verify_race_header(dom,race,verify_runner_count=not single_card)
@@ -277,7 +277,7 @@ def _parse_card(raw,race,url,*,excluded_rows=None,single_card=False,card_observa
         for slot in range(1,6):
             cells=row.all('td',f'cs-z{slot}')
             run=one(cells,'NANKAN_HISTORY_SLOT_NOT_UNIQUE') if cells else None
-            observed=_history_observation(run,slot=slot,race=race,
+            observed=(history_parser or _history_observation)(run,slot=slot,race=race,
                 source_raw_sha256=raw_sha256,source_url=url,
                 provider_horse_id=horse.attrs['href'].split('/')[-1][:-3])
             observations.append(observed)

@@ -47,11 +47,13 @@ def check_source_time(o,stage,*,diagnostic=False):
         raise ValueError('OHI_SOURCE_OR_CUTOFF_EXPIRED:'+stage)
     return dict(stage=stage,observed_at=now.isoformat(),classification='POSTCUTOFF_OR_OFFLINE_DIAGNOSTIC' if diagnostic else CLASS)
 
-def capture(day,number,folder):
+def capture(day,number,folder,*,source_contract="v1"):
     folder=private_root(folder)
     if folder.exists():raise ValueError('OHI_CAPTURE_REVISION_ALREADY_EXISTS')
     folder.mkdir(parents=True,mode=0o700)
-    client=Client();receipts=[]
+    if source_contract not in ("v1","v2"):raise ValueError("OHI_SOURCE_CONTRACT_UNKNOWN")
+    from runtime.ohi_nankan_private_source_v2 import OhiClient,market_menu
+    client=OhiClient() if source_contract=="v2" else Client();receipts=[]
     def get(name,url):
         meta,raw=client.get(url);(folder/(name+'.raw.html')).write_bytes(raw);write(folder/(name+'.receipt.json'),meta);receipts.append(meta);return raw,meta
     calendar,cm=get('calendar',ORIGIN+'/calendar/000000.do')
@@ -70,6 +72,11 @@ def capture(day,number,folder):
     changes_links={urljoin(cardmeta['url'],a.attrs.get('href','')) for a in dom.all('a') if '/henko_info/' in a.attrs.get('href','')}
     if changes_links!={ORIGIN+'/henko_info/00000000000000.do'}:raise ValueError('OHI_CHANGES_LINK_IDENTITY')
     changes,chgmeta=get('changes',next(iter(changes_links)))
+    if source_contract=="v2":
+        from runtime.ohi_nankan_private_source_v2 import observe as observe_v2
+        menu=market_menu(card,cardmeta['url'],race)
+        odds=get('odds',menu['url']) if menu['url'] else None
+        return observe_v2(race,card,cardmeta,changes,chgmeta,receipts,program_races=races,odds=odds)
     return observe(race,card,cardmeta,changes,chgmeta,receipts,program_races=races)
 
 def observe(race,card,cardmeta,changes,chgmeta,receipts,*,program_races):
@@ -119,7 +126,14 @@ def verify_observation(o,source_dir):
     races=parse_program(program,pm['url'],day);race=next((r for r in races if r['race_no']==o['race']['race_no']),None)
     if race!=o['race']:raise ValueError('OHI_SAVED_RACE_PROGRAM_MISMATCH')
     card,cardmeta=docs['card'];changes,chgmeta=docs['changes']
-    rebuilt=observe(race,card,cardmeta,changes,chgmeta,receipts,program_races=races)
+    if o.get('source_profile')=='OHI-NANKAN-PRIVATE-SINGLE-SCOPED-CHANGES-MARKET-v2-20261026':
+        from runtime.ohi_nankan_private_source_v2 import observe as observe_v2,market_menu
+        menu=market_menu(card,cardmeta['url'],race);odds=None
+        if menu['url']:
+            raw=(source_dir/'odds.raw.html').read_bytes();meta=load(source_dir/'odds.receipt.json');receipts.append(meta);odds=(raw,meta)
+        rebuilt=observe_v2(race,card,cardmeta,changes,chgmeta,receipts,program_races=races,odds=odds)
+    else:
+        rebuilt=observe(race,card,cardmeta,changes,chgmeta,receipts,program_races=races)
     if rebuilt!=o:raise ValueError('OHI_SAVED_OBSERVATION_FACTS_OR_RECEIPTS_MISMATCH')
     return True
 
@@ -171,8 +185,12 @@ def run(o,output,model_path,engine,params,*,source_dir,diagnostic=False):
     root=Path(__file__).resolve().parents[1]
     dependencies=['runtime/ohi_nankan_private_source.py','runtime/ohi_single_race_research.py','runtime/urw_nankan_reference_source.py','runtime/urw_reference_source_policy.py','runtime/local_fullnumerical_production.py','runtime/local_nar_evidence_candidate.py','runtime/local_fullnumerical_candidate.py','runtime/local_krs_bridge_candidate.py','runtime/local_race_key_shadow_owner.py','runtime/minimum_efficient_coverage.py','runtime/capital_policy.py','mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json','mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json','profiles/ohi_single_race_nonproduction_20261026.json','profiles/family_user_capital_default_20261003_R1.json']
     profile=load(root/dependencies[-2])
+    if o.get('source_profile')=='OHI-NANKAN-PRIVATE-SINGLE-SCOPED-CHANGES-MARKET-v2-20261026':
+        dependencies+=['runtime/ohi_nankan_private_source_v2.py','profiles/ohi_single_race_source_v2_20261026.json']
+        source_contract=load(root/dependencies[-1])
+        if source_contract['source_profile']!=o['source_profile'] or source_contract['production_authority'] is not False or source_contract['price_consumption'] is not False:raise ValueError('OHI_SOURCE_CONTRACT_BINDING')
     if (profile.get('profile')!=PROFILE or profile.get('formal_admission') is not False or profile.get('source_max_age_seconds')!=600 or profile.get('fixed_ohi_candidate_model')!=MODEL or profile.get('engine_sha256')!=ENGINE or profile.get('parameters_sha256')!=PARAM or profile.get('krs_runs_per_owner')!=5000 or profile.get('krs_seed')!=1 or profile.get('runtime_post_allowed') is not False or profile.get('real_purchase') is not False):raise ValueError('OHI_RESEARCH_PROFILE_BINDING')
-    manifest=seal(dict(profile=PROFILE,source_sha256=o['sha256'],model_sha256=MODEL,engine_sha256=ENGINE,parameters_sha256=PARAM,dependency_sha256={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in dependencies},formal_authority=False,production_effect='NONE'))
+    manifest=seal(dict(profile=PROFILE,source_profile=o['source_profile'],source_sha256=o['sha256'],model_sha256=MODEL,engine_sha256=ENGINE,parameters_sha256=PARAM,dependency_sha256={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in dependencies},formal_authority=False,production_effect='NONE'))
     write(output/'execution-manifest.json',manifest)
     write(output/'observation.json',o);model=load(model_path)
     if model['sha256']!=MODEL or sha({k:v for k,v in model.items() if k!='sha256'})!=MODEL or model['venue_id']!='OHI':raise ValueError('OHI_FIXED_MODEL_REQUIRED')
@@ -232,7 +250,7 @@ def readback(output):
     return r,render(r)
 
 def main():
-    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--source-dir');g.add_argument('--query');g.add_argument('--readback');p.add_argument('--output');p.add_argument('--model');p.add_argument('--engine');p.add_argument('--params');p.add_argument('--diagnostic',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--source-dir');g.add_argument('--query');g.add_argument('--readback');p.add_argument('--output');p.add_argument('--model');p.add_argument('--engine');p.add_argument('--params');p.add_argument('--diagnostic',action='store_true');p.add_argument('--source-contract',choices=['v1','v2'],default='v2');a=p.parse_args()
     if a.readback:
         result,body=readback(a.readback);print(body);return
     if not all((a.output,a.model,a.engine,a.params)):p.error('calculation requires output/model/engine/params')
@@ -248,7 +266,7 @@ def main():
             print(json.dumps({'readback_at':utcnow().isoformat(),'original_freeze':result['freeze_at'],'current_source_rechecked':False,'original_generation_classification_preserved':True,'current_freshness_not_asserted':True,'prediction_or_krs_reexecuted':False}),file=sys.stderr)
             print(body);return
         source_dir=str(Path(a.output).with_name(Path(a.output).name+'.source'))
-        observation=capture(intent['race_date'],intent['race_no'],source_dir);write(Path(source_dir)/'observation.json',observation)
+        observation=capture(intent['race_date'],intent['race_no'],source_dir,source_contract=a.source_contract);write(Path(source_dir)/'observation.json',observation)
     result=run(load(Path(source_dir)/'observation.json'),a.output,a.model,a.engine,a.params,source_dir=source_dir,diagnostic=a.diagnostic)
     print(json.dumps({'classification':result['classification'],'sha256':result['sha256'],'race':result['race'],'numerical_summary':result['numerical_summary']},ensure_ascii=False))
 if __name__=='__main__':main()
