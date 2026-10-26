@@ -204,7 +204,7 @@ def test_saved_oct24_36_races_preserve_finals_and_separate_storage_from_signatur
     finals={p:p.read_bytes() for p in (root/'runtime/final_artifacts').glob('*20261024*.json')}
     rows=[race_status(root,rid,s,{},dt.datetime(2026,10,24,20,tzinfo=JST)) for rid,s in schedule.items()]
     expected_learning=int(os.environ.get('KM_STATUS_EXPECTED_LEARNING','32'))
-    expected_receipts=int(os.environ.get('KM_STATUS_EXPECTED_RECEIPTS','20'))
+    expected_receipts=int(os.environ.get('KM_STATUS_EXPECTED_RECEIPTS','33'))
     assert len(rows)==36 and len(finals)==33
     assert Counter(r['state'] for r in rows)=={
         'SETTLED_SIGNED_RESULT_LEARNED':expected_learning,'SETTLED':33-expected_learning,'AKI_NO_BET':3}

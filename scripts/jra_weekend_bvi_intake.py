@@ -136,6 +136,40 @@ def day_plan(race_date, mode, *, client=None):
             for start in range(0,len(races),3)]
 
 
+def write_plan_failure(path, exc, *, stage, targets=(), planned_at=None,
+                       schedule_target=None, failed_at=None):
+    """Keep a failed discovery observable without fabricating an empty plan.
+
+    These clocks describe this attempt only. The diagnostic is not a SOURCE,
+    attested harvest, Reader admission, or proof that the day has no races.
+    """
+    from jra_race_day_resolver import official_navigation_failure
+    failure = official_navigation_failure(exc, stage=stage)
+    record = {
+        'status': 'PLAN_FAILED', 'stage': stage,
+        'planned_at': (planned_at or datetime.now(timezone.utc)).isoformat(),
+        'failed_at': (failed_at or datetime.now(timezone.utc)).isoformat(),
+        'requested_targets': [{'date': day, 'mode': mode} for day, mode in targets],
+        'schedule_target': schedule_target,
+        'error': failure,
+        'access_refused': failure['http_status'] in (403, 429),
+        'official_target_races': None, 'bounded_batches': None,
+        'downstream': {
+            name: {'status': 'NOT_EXECUTED_PLAN_FAILED', 'success_count': None}
+            for name in ('Harvest', 'OIDC', 'Reader')
+        },
+        'evidence_scope': 'WORKFLOW_PLAN_FAILURE_ONLY_NOT_SOURCE_OR_CORPUS_ADMISSION',
+        'forward_oos_increment': 0,
+        'production_effect': 'NONE',
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # An original attempt's diagnostic must not be silently replaced either.
+    with path.open('x', encoding='utf-8') as out:
+        out.write(json.dumps(record, ensure_ascii=False, indent=2) + '\n')
+    return record
+
+
 def producer_valid(obj):
     body={k:v for k,v in obj.items() if k!='sha256'}
     return (obj.get('official') is True and obj.get('source')=='www.jra.go.jp'
@@ -241,7 +275,13 @@ def main():
     p.add_argument('--root',type=Path,default=ROOT);p.add_argument('--run-id');p.add_argument('--index',type=int)
     a=p.parse_args()
     if a.action=='day-plan':
-        result=day_plan(a.date,a.mode)
+        try:
+            result=day_plan(a.date,a.mode)
+        except Exception as exc:
+            if a.plan:
+                write_plan_failure(a.plan.with_suffix('.failure.json'), exc,
+                                   stage='OFFICIAL_DAY_DISCOVERY', targets=[(a.date,a.mode)])
+            raise
         if a.plan:
             a.plan.parent.mkdir(parents=True,exist_ok=True)
             if a.plan.exists():raise ValueError('INTAKE_PLAN_IMMUTABLE')
