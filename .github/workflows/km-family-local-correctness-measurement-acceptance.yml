@@ -112,6 +112,8 @@ jobs:
           assert manifest['code_ref']=='d61f5c563238be2c812ef4bf912bd5b872b84fed'
           assert manifest['private_inputs_included'] is False
           assert manifest['production_authority'] is False
+          if subprocess.run(['git','cat-file','-e',manifest['code_ref']+'^{commit}'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
+              subprocess.run(['git','fetch','--no-tags','--depth=1','origin',manifest['code_ref']],check=True)
           destination=root/'ohi-code-transport'
           destination.mkdir()
           archive=destination/'ohi-existing-entry-code.zip'
