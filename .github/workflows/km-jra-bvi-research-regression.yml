@@ -32,3 +32,16 @@ jobs:
           tests/test_jra_bvi_next_candidate.py
           research/jra_bvi_next/test_identity_label_audit.py
           research/jra_bvi_next/test_identity_label_times.py
+          research/jra_bvi_next/test_environment_quality.py
+
+      - name: Audit retained JRA harvest going observations (not a signed SOURCE Reader)
+        run: >-
+          python research/jra_bvi_next/environment_quality.py
+          --repository .
+          --output "${RUNNER_TEMP}/bvi_env_retained_harvest_quality.json"
+      - name: Save non-Production retained-harvest quality evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-retained-harvest-going-quality
+          path: ${{ runner.temp }}/bvi_env_retained_harvest_quality.json
+          if-no-files-found: error
