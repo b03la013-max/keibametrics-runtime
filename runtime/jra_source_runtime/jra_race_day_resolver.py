@@ -24,6 +24,38 @@ NAME_TO_CODE = {name: code for code, (_, name) in VENUES.items()}
 ID_TO_CODE = {vid: code for code, (vid, _) in VENUES.items()}
 
 
+def official_navigation_failure(exc, *, race_date=None, stage="OFFICIAL_CALENDAR"):
+    """Diagnostic only: denied/unknown navigation never proves no meetings.
+
+    Preserve the original exception and the existing client/retry policy.
+    Only public response metadata is retained; cookies and credentials are not.
+    Observation clocks belong to the caller, not to the failure identity.
+    """
+    from jra_pedigree_harvest import retryable_official_error
+    request = getattr(exc, "official_request", {}) or {}
+    headers = getattr(exc, "headers", None) or {}
+    public_headers = {k: str(headers.get(k)) for k in
+                      ("Date", "Content-Type", "Retry-After", "Server", "Location")
+                      if headers.get(k) is not None}
+    url = request.get("url") or getattr(exc, "url", None)
+    if not url and race_date:
+        from jra_source_manifest import calendar_url
+        url = calendar_url(race_date)
+    status = getattr(exc, "code", None)
+    status = status if isinstance(status, int) else None
+    return {"status": "OFFICIAL_CALENDAR_UNAVAILABLE", "stage": stage,
+            "http_status": status, "url": url,
+            "method": request.get("method", "GET"),
+            "request_phase": request.get("phase", "UNKNOWN"),
+            "attempt": request.get("attempt"),
+            "exception_class": type(exc).__name__, "error": str(exc)[:300],
+            "retryable": retryable_official_error(exc), "access_denied": status == 403,
+            "response_headers": public_headers,
+            "access_denial_cause": "UNDETERMINED" if status == 403 else None,
+            "source_accepted": False, "official_non_meeting_proven": False,
+            "recovery_condition": "NEXT_EXISTING_SCHEDULE_AFTER_AUTHORIZED_ACCESS_RECOVERS"}
+
+
 def venue_code(venue: str) -> str:
     v = str(venue or "").strip().replace("競馬場", "")
     code = NAME_TO_CODE.get(v) or ID_TO_CODE.get(v.upper())
@@ -119,8 +151,22 @@ def resolve_meetings(race_date: str) -> List[str]:
     if not m:
         raise ValueError("JRA_RESOLVER_ENTRY_TOKEN_NOT_FOUND")
     s1 = c.post("/JRADB/accessD.html", m.group(1))
-    codes = sorted(set(re.findall(r"pw01drl00(\d{2})\d{8}" + d8 + r"/[0-9A-Fa-f]{2}", s1)))
-    return [VENUES[c_][1] for c_ in codes if c_ in VENUES]
+    # An HTTP 200 error/login body without the existing official day-link
+    # structure is unresolved, not proof that this date has no meetings.
+    observed = re.findall(r"pw01drl00(\d{2})\d{8}(\d{8})/[0-9A-Fa-f]{2}", s1)
+    if not observed or not any(code in VENUES for code, _ in observed):
+        raise ValueError("JRA_RESOLVER_MEETING_UNIVERSE_UNRESOLVED")
+    for _, day in observed:
+        try:
+            _dt.datetime.strptime(day, "%Y%m%d")
+        except ValueError as exc:
+            raise ValueError("JRA_RESOLVER_MEETING_UNIVERSE_UNRESOLVED") from exc
+    codes = sorted({code for code, day in observed if day == d8})
+    # Other dates' links do not prove a complete universe for this date.
+    # No affirmative official no-meeting structure has been established here.
+    if not codes or any(code not in VENUES for code in codes):
+        raise ValueError("JRA_RESOLVER_MEETING_UNIVERSE_UNRESOLVED")
+    return [VENUES[code][1] for code in codes]
 
 
 def resolve_day(race_date: str, venue: str, *, deadline_monotonic=None):

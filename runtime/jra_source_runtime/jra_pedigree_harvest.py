@@ -127,7 +127,13 @@ class _Client:
                             raise ValueError("JRA_HARVEST_PAGE_TOO_LARGE")
                     raw = b"".join(chunks)
                     self.last_response = {'url':url, 'raw_sha256':_sha(raw),
-                                          'fetched_at':_dt.datetime.now(_dt.timezone.utc).isoformat()}
+                                          'fetched_at':_dt.datetime.now(_dt.timezone.utc).isoformat(),
+                                          'http_status':getattr(r, 'status', None),
+                                          'response_url':r.geturl(),
+                                          'redirected':r.geturl() != url,
+                                          'response_headers':{k:str(r.headers.get(k)) for k in
+                                              ('Date','Content-Type','Retry-After','Server','Location')
+                                              if r.headers.get(k) is not None}}
                     return _decode(raw, r.headers.get("content-type", ""))
             except (OSError, http.client.HTTPException) as exc:
                 exc.official_request = {"url": url, "method": req.get_method(),

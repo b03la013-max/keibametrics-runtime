@@ -55,6 +55,7 @@ jobs:
       - name: Install JRA SOURCE runtime dependencies
         run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
       - name: Plan every official race, dispatch due races, publish status index
+        id: day
         env:
           GH_TOKEN: ${{ github.token }}
           RACE_DATE: ${{ steps.start.outputs.race_date }}
@@ -80,7 +81,7 @@ jobs:
           D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
           python runtime/jra_source_runtime/jra_race_day_autopilot.py --repo-root . --date "$D" --publish-only
       - name: Continue with fresh worker before hosted job limit
-        if: always() && steps.start.outcome == 'success'
+        if: always() && steps.start.outcome == 'success' && steps.day.outcome == 'success' && steps.day.outputs.continue_worker == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RACE_DATE: ${{ steps.start.outputs.race_date }}
