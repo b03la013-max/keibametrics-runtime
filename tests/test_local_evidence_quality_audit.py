@@ -2,7 +2,7 @@ import copy
 from datetime import datetime,timezone
 import unittest
 from runtime.local_evidence_quality_audit import (
-    BASE9, audit_runner, component_quality, history_course_observation, passing_path_observation,
+    BASE9, audit_runner, component_quality, history_course_observation, passing_path_observation, class_witness_audit,
 )
 
 
@@ -71,6 +71,20 @@ class EvidenceQualityAuditTests(unittest.TestCase):
     def test_naive_timestamp_cannot_establish_cutoff_purity(self):
         runner=self.runner();runner['evidence_features']['component_0']['source_timestamp']='2026-10-26T01:00:00'
         with self.assertRaisesRegex(ValueError,'WITHOUT_ZONE'):audit_runner(runner,{'provider_race_id':'x'},'2026-10-26T14:25:00+09:00')
+
+    def test_nonmissing_class_52_does_not_certify_observed_class(self):
+        raw={'starts':[{'class_parse_state':'PARSED_CLASS_ORDINAL','class_score':52},
+            {'class_parse_state':'CLASS_UNRESOLVED_CANONICAL_NEUTRAL','class_score':52}]}
+        features={'class_level':{'missing':False,'score':52},
+            'current_class':{'missing':False,'score':52,'source_fact':'class=3歳; state=CLASS_UNRESOLVED_CANONICAL_NEUTRAL'},
+            'previous_class':{'missing':False,'score':52}}
+        before=copy.deepcopy((raw,features));r=class_witness_audit(raw,features)
+        self.assertEqual(1,r['parsed_history_class_count']);self.assertEqual(1,r['unresolved_history_class_count'])
+        self.assertFalse(r['current_class_witness_observed'])
+        self.assertTrue(r['affected_components']['HPI-L.class_level']['numerical_nonmissing'])
+        self.assertEqual(52,r['affected_components']['NCI.current_class']['existing_score_retained'])
+        self.assertNotIn('NCI.previous_class',r['affected_components'])
+        self.assertEqual(before,(raw,features))
 
 
 if __name__=='__main__':unittest.main()

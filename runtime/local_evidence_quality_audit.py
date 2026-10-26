@@ -60,6 +60,52 @@ DERIVED_FEATURE_INPUTS={
     'W-AKI':['running_style_repro'],'ASI':['position_maintenance'],
     'T3I-L':['same_distance','third_corner_progression','position_maintenance','good_weight_range'],
 }
+UNRESOLVED_CLASS='CLASS_UNRESOLVED_CANONICAL_NEUTRAL'
+
+
+def class_witness_audit(raw,features):
+    """Do not confuse a non-NULL fallback ordinal with an observed class."""
+    starts=raw.get('starts') or []
+    states=[s.get('class_parse_state','STATE_NOT_RECORDED') for s in starts]
+    unresolved=sum(s==UNRESOLVED_CLASS for s in states)
+    other_unknown=sum(s not in (UNRESOLVED_CLASS,'PARSED_CLASS_ORDINAL') for s in states)
+    current_feature=features.get('current_class') or {}
+    m=re.search(r'\bstate=([A-Z_]+)',str(current_feature.get('source_fact') or ''))
+    current_state=m[1] if m else 'STATE_NOT_RECORDED'
+    current_unknown=current_state!='PARSED_CLASS_ORDINAL'
+    latest_unknown=bool(states) and states[0]!='PARSED_CLASS_ORDINAL'
+    history_unknown=bool(unresolved or other_unknown)
+    dependencies={
+        'HPI-L.class_level':history_unknown,
+        'HPI-L.opponent_strength':history_unknown,
+        'NCI.current_class':current_unknown,
+        'NCI.race_set_level':current_unknown,
+        'NCI.previous_class':latest_unknown,
+        'NCI.recent_opponent_class':history_unknown,
+        'NCI.class_change_pressure':current_unknown or latest_unknown,
+        'NCI.transfer_class':current_unknown or latest_unknown,
+    }
+    affected={}
+    for name,uncertain in dependencies.items():
+        f=features.get(name.split('.',1)[1])
+        if uncertain and f is not None:
+            affected[name]={'numerical_nonmissing':not bool(f.get('missing')),
+                'existing_score_retained':f.get('score'),'existing_rule_id':f.get('rule_id'),
+                'construct_qualification':'COMPUTABLE_DOES_NOT_ESTABLISH_FULLY_OBSERVED_CLASS',
+                'observed_class_witness_complete':False,
+                'source_fact':f.get('source_fact'),'source_timestamp':f.get('source_timestamp'),
+                'evidence_refs':copy.deepcopy(f.get('evidence_refs') or []),
+                'no_new_missingness_or_score_policy':True}
+    return {'history_count':len(starts),'history_class_state_counts':dict(Counter(states)),
+        'unresolved_history_class_count':unresolved,'other_unknown_history_class_count':other_unknown,
+        'parsed_history_class_count':sum(s=='PARSED_CLASS_ORDINAL' for s in states),
+        'history_class_witness_fraction':sum(s=='PARSED_CLASS_ORDINAL' for s in states)/len(starts) if starts else None,
+        'current_class_state':current_state,'current_class_witness_observed':not current_unknown,
+        'latest_class_state':states[0] if states else 'NO_HISTORY',
+        'affected_components':affected,
+        'unknown_class_is_weak':False,'scores_and_missingness_flags_modified':False,
+        'component_nonmissing_fraction_semantics':'NUMERICAL_INPUT_NON_NULL_RATE_NOT_OBSERVED_CLASS_OR_VALIDATED_MEASUREMENT_RATE',
+        'class_relative_time_warning':'EXISTING_SAME_DISTANCE_TIME_PERCENTILE_HAS_NO_CLASS_GOING_OR_VENUE_ADJUSTMENT'}
 
 def sha(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,
@@ -132,6 +178,10 @@ def audit_runner(numerical_runner, race, cutoff):
     post=[s for s in times if _clock(s)>_clock(cutoff)]
     if post:raise ValueError('QUALITY_POSTCUTOFF_COMPONENT_SOURCE')
     raw=numerical_runner['raw_candidate_evidence'];starts=raw.get('starts') or []
+    class_audit=class_witness_audit(raw,features)
+    for index in ('HPI-L','NCI'):
+        base[index]['uncertain_class_inputs']={k:v for k,v in class_audit['affected_components'].items() if k.startswith(index+'.')}
+        base[index]['nonmissing_fraction_semantics']='NUMERICAL_INPUT_NON_NULL_RATE_NOT_OBSERVED_CLASS_WITNESS_RATE'
     current_venue={'OHI':'大井','URW':'浦和','FNB':'船橋','KAW':'川崎'}.get(race.get('venue_id'),race.get('venue_id'))
     comparable=[]
     for start in starts:
@@ -183,6 +233,7 @@ def audit_runner(numerical_runner, race, cutoff):
                                  'current_rule_uses':'HORSE_NUMBER_PERCENTILE_WITH_FIRST_CALL_SCORE_NOT_FRAME_NUMBER',
                                  'causal_frame_advantage_measured':False},
             'jockey_independent_population_source_count':0,
+            'observed_class_witness':class_audit,
             'same_horse_jockey_history_only':True,'post_cutoff_components':len(post)}
     result['timestamp_missing_components']=sum(not f.get('source_timestamp') for f in features.values())
     if sha(numerical_runner)!=before:raise ValueError('QUALITY_MUTATED_ORIGINAL_RUNNER')
@@ -248,6 +299,15 @@ def audit_day(root,index_path):
                                  'complete_named_2_3_4_count':sum(x['complete_2_3_4_corner_path'] for x in passing),
                                  'call_count_distribution':dict(Counter(x['call_count'] for x in passing))},
          'calculated_derived_cells_with_neutral_base_present':sum(h['derived_calculated_while_some_base_neutral'] for h in all_runners),
+         'observed_class_witness_summary':{
+             'history_starts':sum(h['observed_class_witness']['history_count'] for h in all_runners),
+             'parsed_history_classes':sum(h['observed_class_witness']['parsed_history_class_count'] for h in all_runners),
+             'unresolved_history_classes':sum(h['observed_class_witness']['unresolved_history_class_count'] for h in all_runners),
+             'other_unknown_history_classes':sum(h['observed_class_witness']['other_unknown_history_class_count'] for h in all_runners),
+             'runners_with_unresolved_history_class':sum(h['observed_class_witness']['unresolved_history_class_count']>0 for h in all_runners),
+             'current_class_state_counts':dict(Counter(h['observed_class_witness']['current_class_state'] for h in all_runners)),
+             'nonmissing_components_with_uncertain_class_inputs':sum(sum(v['numerical_nonmissing'] for v in h['observed_class_witness']['affected_components'].values()) for h in all_runners),
+             'nonmissing_rate_is_measurement_rate':False},
          'independent_card_raw_sha_count':len({r['card_raw_sha256'] for r in rows}),
          'card_source_age_at_freeze_seconds':{'minimum':min(r['card_age_at_freeze_seconds'] for r in rows),'maximum':max(r['card_age_at_freeze_seconds'] for r in rows)},
          'rules_weights_formulas_modified':False,'production_authority':False,'registered_oos_credit':0,

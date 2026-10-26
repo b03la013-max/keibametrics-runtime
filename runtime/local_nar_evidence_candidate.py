@@ -9,7 +9,6 @@ import statistics
 import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-from runtime.local_history_identity_research import transfer_facts
 
 PROFILE = "KM-LOCAL-NAR-EVIDENCE-CANDIDATE-v0.1-20260923"
 DEFAULT_REGISTRY = "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
@@ -638,6 +637,9 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     put("NCI", "class_change_pressure", pressure,
         f"previous-current class delta={None if prev_class is None or missing_urw_class else prev_class-current_class}",
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
+    # Parser-only cold transports do not consume numerical helpers. Numerical
+    # execution requires the actual helper; no silent fallback is permitted.
+    from runtime.local_history_identity_research import transfer_facts
     transfer_identity = transfer_facts(starts)
     previous_start_is_jra = transfer_identity["latest_observed_start_is_jra"]
     transfer_class = None
