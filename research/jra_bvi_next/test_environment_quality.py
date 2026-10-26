@@ -153,3 +153,52 @@ def test_absent_damsire_does_not_invent_parent_or_training_id(tmp_path):
     assert audit["counts"]["flat_runs_with_missing_damsire"] == 1
     assert audit["strict_training_eligible"] == 0
     assert audit["classification"].startswith("POST_CAPTURE_RETAINED_HARVEST_SUBSET")
+
+
+def replace_clock(path, **changes):
+    value = json.loads(path.read_text())
+    for key, updated in changes.items():
+        if updated is None:
+            value.pop(key, None)
+        else:
+            value[key] = updated
+    value["sha256"] = m.harvest_sha(value)
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return path
+
+
+def test_claimed_producer_clock_is_not_independent_availability(tmp_path):
+    finish_only = replace_clock(
+        saved(tmp_path / "finish.json", [horse("A", [run()])]),
+        collection_started_at=None,
+        harvested_at="2026-10-26T11:00:00+00:00",
+    )
+    no_clock = replace_clock(
+        saved(tmp_path / "missing.json", [horse("B", [run()])]),
+        collection_started_at=None, harvested_at=None,
+    )
+    report = m.audit_snapshots([finish_only, no_clock])
+    counts = report["counts"]
+    assert counts["source_clock_finish_self_declared_only"] == 1
+    assert counts["source_clock_no_self_declared_clock"] == 1
+    assert counts["missing_source_collection_clock"] == 2
+    assert counts["flat_direct_going_observed"] == 2
+    assert counts["flat_direct_going_with_self_declared_clock"] == 1
+    assert counts["flat_direct_going_without_self_declared_clock"] == 1
+    assert counts["proxy_runs_without_self_declared_capture_clock"] == 1
+    assert not report["github_oidc_reverified_by_this_audit"]
+    assert report["strict_training_eligible"] == 0
+    assert "NOT_INDEPENDENT_AVAILABILITY" in report["capture_clock_claim_class"]
+
+
+@pytest.mark.parametrize("changes,reason", [
+    ({"collection_started_at": "yesterday"}, "ENV_SOURCE_CLOCK_INVALID"),
+    ({"collection_started_at": "2026-10-26T11:00:00"}, "ENV_SOURCE_CLOCK_WITHOUT_TIMEZONE"),
+    ({"collection_started_at": "2026-10-26T12:00:00+00:00",
+      "harvested_at": "2026-10-26T10:00:00+00:00"}, "ENV_SOURCE_CLOCK_REVERSED"),
+])
+def test_malformed_naive_or_reversed_producer_clock_is_rejected(tmp_path, changes, reason):
+    f = saved(tmp_path / "bad-clock.json", [horse("A", [run()])])
+    replace_clock(f, **changes)
+    with pytest.raises(ValueError, match=reason):
+        m.audit_snapshots([f])
