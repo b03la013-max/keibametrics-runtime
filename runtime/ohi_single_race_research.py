@@ -309,5 +309,6 @@ def main():
         source_dir=str(Path(a.output).with_name(Path(a.output).name+'.source'))
         observation=capture(intent['race_date'],intent['race_no'],source_dir,source_contract=a.source_contract);write(Path(source_dir)/'observation.json',observation)
     result=run(load(Path(source_dir)/'observation.json'),a.output,a.model,a.engine,a.params,source_dir=source_dir,diagnostic=a.diagnostic)
-    print(json.dumps({'classification':result['classification'],'sha256':result['sha256'],'race':result['race'],'numerical_summary':result['numerical_summary']},ensure_ascii=False))
+    print(render(result))
+    print(json.dumps({'classification':result['classification'],'sha256':result['sha256'],'race':result['race'],'numerical_summary':result['numerical_summary']},ensure_ascii=False),file=sys.stderr)
 if __name__=='__main__':main()
