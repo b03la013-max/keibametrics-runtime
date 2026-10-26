@@ -69,7 +69,32 @@ def load_claimed_harvest(path: Path) -> tuple[dict, str]:
     return source, hashlib.sha256(raw).hexdigest()
 
 
-def observation(horse: dict, run: dict, capture_race_day: str) -> tuple[tuple, dict] | None:
+def claimed_clock_state(source: dict) -> str:
+    """Producer timestamps are quality metadata, never independent OIDC clocks."""
+    parsed = {}
+    for key in ("collection_started_at", "harvested_at"):
+        raw = source.get(key)
+        if not raw:
+            continue
+        try:
+            value = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("ENV_SOURCE_CLOCK_INVALID") from exc
+        if value.tzinfo is None:
+            raise ValueError("ENV_SOURCE_CLOCK_WITHOUT_TIMEZONE")
+        parsed[key] = value
+    if (len(parsed) == 2
+            and parsed["harvested_at"] < parsed["collection_started_at"]):
+        raise ValueError("ENV_SOURCE_CLOCK_REVERSED")
+    if "collection_started_at" in parsed:
+        return "START_SELF_DECLARED"
+    if "harvested_at" in parsed:
+        return "FINISH_SELF_DECLARED_ONLY"
+    return "NO_SELF_DECLARED_CLOCK"
+
+
+def observation(horse: dict, run: dict, capture_race_day: str,
+                clock_claimed: bool = False) -> tuple[tuple, dict] | None:
     if not isinstance(run, dict):
         return None
     horse_parts = tuple(str(horse.get(k) or "").strip() for k in
@@ -103,6 +128,7 @@ def observation(horse: dict, run: dict, capture_race_day: str) -> tuple[tuple, d
         "going_missing": going_raw == "",
         "going_invalid": bool(going_raw and going not in GOINGS),
         "damsire_missing": not bool(str(horse.get("damsire") or "").strip()),
+        "clock_claimed": clock_claimed,
     }
 
 
@@ -115,13 +141,16 @@ def audit_snapshots(paths: list[Path]) -> dict:
         source, raw_sha = load_claimed_harvest(path)
         manifest.append((path.name, raw_sha))
         counts["source_files"] += 1
-        if not source.get("collection_started_at"):
+        clock_state = claimed_clock_state(source)
+        counts["source_clock_" + clock_state.lower()] += 1
+        if clock_state != "START_SELF_DECLARED":
             counts["missing_source_collection_clock"] += 1
+        clock_claimed = clock_state != "NO_SELF_DECLARED_CLOCK"
         for horse in source["horses"]:
             counts["source_horse_observations"] += 1
             for run in horse["runs"]:
                 counts["source_run_observations"] += 1
-                item = observation(horse, run, source["race_date"])
+                item = observation(horse, run, source["race_date"], clock_claimed)
                 if item is None:
                     counts["invalid_or_current_run_observations"] += 1
                     continue
@@ -133,6 +162,8 @@ def audit_snapshots(paths: list[Path]) -> dict:
     for witnessed in observations.values():
         counts["deduplicated_provisional_runs"] += 1
         counts["repeated_provisional_observations"] += len(witnessed) - 1
+        if not any(x["clock_claimed"] for x in witnessed):
+            counts["proxy_runs_without_self_declared_capture_clock"] += 1
         surfaces = {w["surface"] for w in witnessed}
         labels = {w["label"] for w in witnessed}
         if len(surfaces) != 1 or len(labels) != 1:
@@ -154,6 +185,10 @@ def audit_snapshots(paths: list[Path]) -> dict:
             counts["invalid_direct_going_runs"] += 1
         elif values:
             counts["flat_direct_going_observed"] += 1
+            if any(x["clock_claimed"] for x in witnessed):
+                counts["flat_direct_going_with_self_declared_clock"] += 1
+            else:
+                counts["flat_direct_going_without_self_declared_clock"] += 1
             goings[next(iter(values))] += 1
             if any(x["going_missing"] for x in witnessed):
                 counts["observed_with_missing_duplicate"] += 1
@@ -174,6 +209,7 @@ def audit_snapshots(paths: list[Path]) -> dict:
         "source_original_manifest_sha256": canonical_sha(manifest),
         "source_self_hashes_checked": counts["source_files"],
         "github_oidc_reverified_by_this_audit": False,
+        "capture_clock_claim_class": "SOURCE_SELF_DECLARED_ONLY; NOT_INDEPENDENT_AVAILABILITY",
         "official_horse_id_confirmed": 0,
         "independent_race_bound_labels_confirmed": 0,
         "strict_training_eligible": 0,
