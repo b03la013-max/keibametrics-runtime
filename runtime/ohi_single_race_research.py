@@ -238,7 +238,16 @@ def render(result):
     # Presentation-only v1.1: CommonMark tables need adjacent row lines.
     # Preserve every original content line, number and ticket; no recompute.
     body=re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(result))
-    return body.replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')
+    body=body.replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')
+    for name,port in result['portfolios'].items():
+        cap=port['capital']
+        if cap['no_bet']:
+            marker='【'+name+'】';begin=body.index(marker);end=body.find('【',begin+len(marker));end=len(body) if end<0 else end
+            section=body[begin:end]
+            section=section.replace(f"未使用 {cap['unused_budget']:,}円。",f"互換性計算上の余剰 {cap['unused_budget']:,}円／未投下の研究上限 {cap['capital_limit']:,}円。")
+            section+='\nNO-BET理由：'+cap['reason']+f" 必要MEC {cap['required_capital']:,}円、上限 {cap['capital_limit']:,}円。未実行ではありません。\n\n"
+            body=body[:begin]+section+body[end:]
+    return body
 
 def readback(output):
     output=Path(output);m=load(output/'readback-manifest.json');r=load(output/'prediction-original.json')
@@ -246,7 +255,7 @@ def readback(output):
     for relative,digest in m['files'].items():
         if '..' in Path(relative).parts or Path(relative).is_absolute() or hashlib.sha256((output/relative).read_bytes()).hexdigest()!=digest:raise ValueError('OHI_READBACK_FILE_MISMATCH')
     body=(output/'answer.md').read_text()
-    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_legacy(r)):raise ValueError('OHI_READBACK_BODY_MISMATCH')
+    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_legacy(r),re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(r)).replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')):raise ValueError('OHI_READBACK_BODY_MISMATCH')
     return r,render(r)
 
 def main():

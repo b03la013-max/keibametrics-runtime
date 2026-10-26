@@ -62,5 +62,22 @@ class GenuineR02(unittest.TestCase):
         with self.assertRaisesRegex(NankanError,'ODDS_REQUIRED'):self.observation(card=raw.encode('cp932'))
     def test_old_v1_still_rejects_new_history_shape(self):
         with self.assertRaisesRegex(NankanError,'DESCRIPTOR_NOT_UNIQUE'):v1.parse_single_card(self.raw['card'],self.race,self.meta['card']['url'])
+    def test_odds_prices_are_explicit_finite_audit_only(self):
+        facts=self.observation()['facts']
+        def market(value):
+            rows=''.join(f'<tr><td>{f["runner_id"]}</td><td>{f["name"]}</td><td>{value}</td><td>1.0-2.0</td></tr>' for f in facts)
+            raw=decode(self.raw['card']).replace('</main>',f'<table class="nk23_c-table04__table">{rows}</table></main>').encode('cp932')
+            meta={**self.meta['card'],'url':v1.ORIGIN+'/odds/'+self.race['provider_race_id']+'01.do','raw_sha256':hashlib.sha256(raw).hexdigest()}
+            return v2.observed_market(raw,meta,self.race,facts)
+        good=market('2.5');self.assertFalse(good['prices_consumed']);self.assertEqual(14,len(good['rows']))
+        for bad in ('THIS_IS_NOT_AN_ODDS','9'*400,'0'):
+            with self.subTest(value=bad),self.assertRaises(NankanError):market(bad)
+    def test_mixed_race_link_rejected(self):
+        row=self.change_row(2).replace('</li>','<a href="/syousai/'+self.race['provider_day_id']+'01.do">Other</a></li>')
+        with self.assertRaisesRegex(NankanError,'RACE_LINK_IDENTITY'):self.observation(changes=self.changed_raw(row))
+    def test_jockey_direction_not_link_order(self):
+        f=self.observation()['facts'][0];old=f['current_jockey']
+        row=self.change_row(2,kind='騎手変更').replace('</div></li>',f'<p class="nk23_c-block01__text2">変更後 <a href="/kis_info/8888.do">新騎手</a></p><p class="nk23_c-block01__text2">変更前 <a href="/kis_info/9999.do">{old}</a></p></div></li>')
+        with self.assertRaisesRegex(NankanError,'JOCKEY_DIRECTION'):self.observation(changes=self.changed_raw(row))
 
 if __name__=='__main__':unittest.main()

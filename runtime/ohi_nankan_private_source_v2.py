@@ -4,7 +4,7 @@ The original v1 acceptance remains available. Market observations are audit
 only and are never copied into numerical/Owner/Capital price inputs.
 """
 from __future__ import annotations
-import copy,re
+import copy,re,math
 from datetime import datetime,date,timezone,timedelta
 from urllib.parse import urljoin,urlsplit
 from runtime import ohi_nankan_private_source as v1
@@ -83,7 +83,7 @@ def scoped_changes(raw,receipt,race,declared,program_races):
         number=match[1] if match else None
         if number not in programs or number in seen or row.attrs.get('id')!=f'{int(number):02d}':raise NankanError('OHI_CHANGE_RACE_IDENTITY')
         seen.add(number);pr=programs[number]
-        if '/syousai/'+pr['provider_race_id']+'.do' not in {a.attrs.get('href') for a in row.all('a')}:raise NankanError('OHI_CHANGE_RACE_LINK_IDENTITY')
+        if {a.attrs.get('href') for a in row.all('a') if a.attrs.get('href','').startswith('/syousai/')}!={'/syousai/'+pr['provider_race_id']+'.do'}:raise NankanError('OHI_CHANGE_RACE_LINK_IDENTITY')
         changes=row.all('div','nk23_c-block01__list2__item')
         if not changes:raise NankanError('OHI_EMPTY_CHANGE_RACE_ROW')
         target=int(number)==race['race_no']
@@ -100,7 +100,13 @@ def scoped_changes(raw,receipt,race,declared,program_races):
             hid=horse.attrs['href'].split('/')[-1][:-3];d=by_horse.get(hid)
             if d is None or d['name']!=horse.text() or d.get('runner_id') not in (None,m[1]):raise NankanError('OHI_CHANGE_HORSE_IDENTITY')
             riders=[a.text() for a in c.all('a') if a.attrs.get('href','').startswith('/kis_info/')]
-            if kind=='騎手変更' and (len(riders)!=2 or d.get('current_jockey')!=riders[-1]):raise NankanError('OHI_CHANGED_JOCKEY_CARD_NOT_UPDATED')
+            if kind=='騎手変更':
+                before=[];after=[]
+                for detail in c.all('p','nk23_c-block01__text2'):
+                    label=detail.text();names=[a.text() for a in detail.all('a') if a.attrs.get('href','').startswith('/kis_info/')]
+                    if re.match(r'^変更前(?:\s|[:：])',label):before+=names
+                    if re.match(r'^変更後(?:\s|[:：])',label):after+=names
+                if len(before)!=1 or len(after)!=1 or len(riders)!=2 or d.get('current_jockey')!=after[0]:raise NankanError('OHI_CHANGED_JOCKEY_DIRECTION_OR_CARD_NOT_UPDATED')
             items.append(dict(runner_id=m[1],provider_horse_id=hid,name=d['name'],change_type=kind,
                 status='CANCELLED' if kind!='騎手変更' else 'ACTIVE_DECLARED',jockey_names_observed=riders,raw=c.text(),active_verified=False))
     if len({(i['runner_id'],i['change_type']) for i in items})!=len(items):raise NankanError('OHI_DUPLICATE_TARGET_CHANGE')
@@ -131,9 +137,12 @@ def observed_market(raw,receipt,race,declared):
         if not cells:continue
         if len(cells) not in (3,4) or cells[0] not in by_no or cells[1]!=by_no[cells[0]]['name']:raise NankanError('OHI_ODDS_RUNNER_IDENTITY')
         cancelled=any(x.replace(' ','') in ('取消','出走取消','除外','競走除外') for x in cells[2:])
+        if not cancelled and cells[2] not in ('-','--','---','―','－','未発売') and not re.fullmatch(r'\d+(?:\.\d+)?',cells[2]):raise NankanError('OHI_ODDS_PRICE_STATE_UNKNOWN')
         win=float(cells[2]) if not cancelled and re.fullmatch(r'\d+(?:\.\d+)?',cells[2]) else None
         place=re.fullmatch(r'(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)',cells[3]) if len(cells)==4 and not cancelled else None
+        if len(cells)==4 and not cancelled and not place and cells[3] not in ('-','--','---','―','－','未発売'):raise NankanError('OHI_PLACE_ODDS_STATE_UNKNOWN')
         lo,hi=(float(place[1]),float(place[2])) if place else (None,None)
+        if any(x is not None and not math.isfinite(x) for x in (win,lo,hi)):raise NankanError('OHI_ODDS_NONFINITE')
         if win is not None and win<=0 or lo is not None and not 0<lo<=hi:raise NankanError('OHI_ODDS_VALUE_INVALID')
         rows.append(dict(runner_id=cells[0],provider_horse_id=by_no[cells[0]]['provider_horse_id'],name=cells[1],status='CANCELLED' if cancelled else 'ACTIVE_DECLARED',win_odds=win,place_low=lo,place_high=hi,betting_membership_observed=bool(win and lo)))
     if len({r['runner_id'] for r in rows})!=len(rows) or {r['runner_id'] for r in rows}!=set(by_no):raise NankanError('OHI_ODDS_UNIVERSE_MISMATCH')
