@@ -272,7 +272,9 @@ def material_input_sha256(observation):
         if isinstance(value,list):return [semantic(v) for v in value]
         return value
     race=observation['race']
-    return sha({'race':{k:race[k] for k in ('venue_id','race_date','race_no','provider_race_id','distance','course_family','surface','scheduled_post_at','prediction_cutoff')},
+    # numerical() forwards the whole race object and derives class from its
+    # race_name. Bind every race fact rather than a handpicked identity subset.
+    return sha({'race':semantic(race),
                 'facts':semantic(observation['facts']),'price_consumption':False})
 
 def revision_decision(existing_output,observation,*,source_dir):

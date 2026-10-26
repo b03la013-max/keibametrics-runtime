@@ -94,6 +94,8 @@ class GenuineR02(unittest.TestCase):
         self.assertEqual(material_input_sha256(old),material_input_sha256(other))
         other['facts'][0]['current_body_weight']=501
         self.assertNotEqual(material_input_sha256(old),material_input_sha256(other))
+        corrected=copy.deepcopy(old);corrected['race']['race_name']='B2'
+        self.assertNotEqual(material_input_sha256(old),material_input_sha256(corrected))
     def test_jockey_direction_not_link_order(self):
         f=self.observation()['facts'][0];old=f['current_jockey']
         row=self.change_row(2,kind='騎手変更').replace('</div></li>',f'<p class="nk23_c-block01__text2">変更後 <a href="/kis_info/8888.do">新騎手</a></p><p class="nk23_c-block01__text2">変更前 <a href="/kis_info/9999.do">{old}</a></p></div></li>')
