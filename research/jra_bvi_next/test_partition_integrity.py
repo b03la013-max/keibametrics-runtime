@@ -52,7 +52,7 @@ def test_current_report_reconciles_both_time_partitions_without_promotion(report
     (lambda x: x.update(predictive_improvement_demonstrated=True), "INCUMBENT_REJECTION_NOT_PRESERVED"),
     (lambda x: x.update(protocol_sha256="0" * 64), "PROTOCOL_SHA_MISMATCH"),
     (lambda x: x["partitions"]["TEST"]["arms"]["GENERAL_ONLY"].update(mse=0.6), "HORSE_SEEN_WEIGHTED_AGGREGATE_MISMATCH"),
-    (lambda x: x["partitions"]["TEST"]["groups"]["horse_seen"]["False"]["GENERAL_ONLY"].update(n=789), "MODEL_SAMPLE_MISMATCH"),
+    (lambda x: x["partitions"]["TEST"]["groups"]["horse_seen"]["False"]["GENERAL_ONLY"].update(n=789), "HORSE_SEEN_SAMPLE_NONPARTITION"),
     (lambda x: x["partitions"]["TEST"]["groups"]["horse_seen"]["False"]["GENERAL_ONLY"].update(composite_horses=661), "COMPOSITE_HORSE_COUNT_NONPARTITION"),
     (lambda x: x["partitions"]["TEST"]["groups"]["venue"]["東京"]["GENERAL_ONLY"].update(mse=0.1), "GROUP_WEIGHTED_AGGREGATE_MISMATCH"),
 ])
