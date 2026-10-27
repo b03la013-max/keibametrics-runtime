@@ -75,8 +75,8 @@ Reproduce without collecting or mutating SOURCE:
 
 ```bash
 python -m pytest -q research/jra_bvi_next/test_partition_integrity.py
-python research/jra_bvi_next/partition_integrity.py \\
-  --input research/jra_bvi_next/evidence/current_corpus_evaluation.json \\
+python research/jra_bvi_next/partition_integrity.py \
+  --input research/jra_bvi_next/evidence/current_corpus_evaluation.json \
   --output /tmp/bvi_historical_partition_integrity.json
 ```
 
