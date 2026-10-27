@@ -1,0 +1,11 @@
+# Research-only candidate. No deployment authorized or performed.
+FROM python:3.13-slim
+WORKDIR /opt/km-pilot
+COPY pilot-transport-requirements.txt /opt/km-pilot/requirements.txt
+RUN python -m pip install --no-cache-dir -r /opt/km-pilot/requirements.txt
+COPY ohi_private_pilot_worker.py /opt/km-pilot/ohi_private_pilot_worker.py
+ENV OHI_FIXED_CODE_ROOT=/opt/km-inputs/code
+ENV OHI_FIXED_ASSET_ROOT=/opt/km-inputs/assets
+ENV OHI_FIXED_CONTRACT_PATH=/opt/km-inputs/forward-contract.json
+# Actual private endpoint/bucket/credentials/bootstrap SHA are bound only after approval.
+CMD ["python", "-u", "/opt/km-pilot/ohi_private_pilot_worker.py"]
