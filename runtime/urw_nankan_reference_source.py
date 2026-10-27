@@ -18,6 +18,8 @@ import math
 import os
 from pathlib import Path
 import re
+import socket
+import ssl
 import tempfile
 import time
 import unicodedata
@@ -58,6 +60,32 @@ class ObservedRedirect(NankanError):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,req,fp,code,msg,headers,newurl):
         raise ObservedRedirect(req.full_url,newurl,code)
+
+
+def failure_observation(error,url,phase,observed_at):
+    """Observe a failed request without changing its policy, exception or retry."""
+    chain=[];seen=set();current=error
+    while isinstance(current,BaseException) and id(current) not in seen:
+        seen.add(id(current));chain.append(current)
+        reason=getattr(current,'reason',None)
+        current=(reason if isinstance(reason,BaseException) else
+                 current.__cause__ or current.__context__)
+    if isinstance(error,ObservedRedirect):classification='REDIRECT_CONFLICT'
+    elif isinstance(error,urllib.error.HTTPError):classification='HTTP_ERROR'
+    elif any(isinstance(item,socket.gaierror) for item in chain):classification='DNS_ERROR'
+    elif any(isinstance(item,ssl.SSLError) for item in chain):classification='TLS_ERROR'
+    elif phase=='ROBOTS' and isinstance(error,ValueError):classification='ROBOTS_RESPONSE_INVALID'
+    else:classification='NETWORK_ERROR'
+    leaf=chain[-1] if chain else error
+    result={'classification':classification,'phase':phase,'url':url,'observed_at':observed_at,
+        'exception_types':[type(item).__name__ for item in chain],
+        'leaf_exception_type':type(leaf).__name__,'message':str(leaf)[:240]}
+    errno=getattr(leaf,'errno',None)
+    if type(errno) is int:result['errno']=errno
+    if isinstance(error,urllib.error.HTTPError):result['http_status']=error.code
+    elif isinstance(error,ObservedRedirect):
+        result.update(http_status=error.receipt['http_status'],location=error.receipt['location'])
+    return result
 
 
 def url_scope(url):
@@ -201,6 +229,14 @@ class Client:
                 if state.get('robots_status')==404 and state.get('text') is not None:raise ValueError('CACHE_404_BODY')
             except (OSError,ValueError) as exc:raise NankanError('SOURCE_POLICY_ROBOTS_UNKNOWN') from exc
             def persist():cache.write_text(json.dumps(state,sort_keys=True)+'\n')
+            def record_robots_failure(exc):
+                observation=failure_observation(exc,ROBOTS,'ROBOTS',self.now().isoformat())
+                if state.get('failure') and 'failure_observation' not in state:
+                    state['failure_observation']=None
+                state.setdefault('failure_observation',observation)
+                state['last_failure_observation']=observation
+                return {'failure_observation':state['failure_observation'],
+                        'last_failure_observation':observation,'cached_failure':False}
             if self.clock()>=state.get('expires_at',0):
                 self._wait(state);state['next_at']=self.clock()+10
                 req=urllib.request.Request(ROBOTS,headers={'User-Agent':USER_AGENT,'Accept':'text/plain','Accept-Encoding':'identity'},method='GET')
@@ -219,14 +255,20 @@ class Client:
                     if exc.code==404:
                         state.update(robots_status=404,text=None,robots_sha256=None)
                     else:
+                        observed=record_robots_failure(exc)
                         state.update(robots_status=exc.code,failure='SOURCE_POLICY_ROBOTS_UNKNOWN',expires_at=max(self.clock()+30,state['next_at']))
-                        persist();raise NankanError('SOURCE_POLICY_ROBOTS_UNKNOWN',robots_url=ROBOTS,http_status=exc.code) from exc
+                        persist();raise NankanError('SOURCE_POLICY_ROBOTS_UNKNOWN',robots_url=ROBOTS,http_status=exc.code,**observed) from exc
                 except (OSError,ValueError,ObservedRedirect) as exc:
+                    observed=record_robots_failure(exc)
                     state.update(failure='SOURCE_POLICY_ROBOTS_UNKNOWN',expires_at=self.clock()+30)
-                    persist();raise NankanError('SOURCE_POLICY_ROBOTS_UNKNOWN',robots_url=ROBOTS) from exc
-                state.pop('failure',None);state['expires_at']=self.clock()+300;state['checked_at']=self.now().isoformat()
+                    persist();raise NankanError('SOURCE_POLICY_ROBOTS_UNKNOWN',robots_url=ROBOTS,**observed) from exc
+                state.pop('failure',None);state.pop('failure_observation',None);state.pop('last_failure_observation',None)
+                state['expires_at']=self.clock()+300;state['checked_at']=self.now().isoformat()
                 state['robots_fetched_clock']=self.clock();persist()
-            if state.get('failure'):raise NankanError(state['failure'],robots_url=ROBOTS)
+            if state.get('failure'):
+                raise NankanError(state['failure'],robots_url=ROBOTS,cached_failure=True,
+                    failure_observation=state.get('failure_observation'),
+                    last_failure_observation=state.get('last_failure_observation'))
             if state.get('robots_status')==404:
                 decision={'allowed':True,'crawl_delay_seconds':10,'matched_rule':'ROBOTS_ABSENT_HTTP_404_NOT_DENIAL'}
             elif state.get('robots_status')==200:
@@ -249,11 +291,20 @@ class Client:
                     raw=response.read(MAX_BYTES+1)
                     if len(raw)>MAX_BYTES:raise NankanError('NANKAN_MAX_BYTES')
             except ObservedRedirect as exc:
-                exc.receipt.update(fetched_at=self.now().isoformat(),source_policy=policy)
+                observed_at=self.now().isoformat()
+                exc.receipt.update(fetched_at=observed_at,source_policy=policy,
+                    failure_observation=failure_observation(exc,url,'DATA_GET',observed_at))
                 exc.receipt=reference_metadata(exc.receipt)
                 raise
             except urllib.error.HTTPError as exc:
-                state['next_at']=max(state['next_at'],_retry_at(exc.headers,self.clock()));persist();raise
+                state['next_at']=max(state['next_at'],_retry_at(exc.headers,self.clock()));persist()
+                exc.receipt=reference_metadata({'url':url,'http_status':exc.code,'source_policy':policy,
+                    'failure_observation':failure_observation(exc,url,'DATA_GET',self.now().isoformat())})
+                raise
+            except OSError as exc:
+                exc.receipt=reference_metadata({'url':url,'source_policy':policy,
+                    'failure_observation':failure_observation(exc,url,'DATA_GET',self.now().isoformat())})
+                raise
             return reference_metadata({'url':url,'http_status':200,'fetched_at':self.now().isoformat(),
                     'raw_sha256':hashlib.sha256(raw).hexdigest(),'source_policy':policy}),raw
 
