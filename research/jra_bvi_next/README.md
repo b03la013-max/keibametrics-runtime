@@ -38,6 +38,48 @@ MSE: general 0.090600883 -> ENV 0.090941934. The original historical model
 `7dbed8a0…` (a different model from future incumbent D) reproduces every stored
 Validation/Test MSE and MAE within 1e-12 by read-only replay.
 
+## 2026-10-28 historical partition consistency audit (no refit)
+
+The read-only `partition_integrity.py` cross-checks every stored arm's MSE/MAE
+against the sample-weighted reported train-seen/train-unseen and venue/surface
+partitions. It rejects forged aggregates, inconsistent sample sizes, claim
+changes or an altered protocol SHA. The source report's raw SHA is carried into
+an Actions artifact. This **reconciles stored aggregate arithmetic only**; it
+cannot reverify independent horse IDs, underlying race labels or OIDC provenance.
+
+The reported composite-horse train-disjoint subset has a different direction
+from the overall test cohort. Exact historical comparisons are:
+
+| Partition | Cohort | Runs | General MSE | ENV MSE | ENV−General MSE |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Validation | All | 1,546 | 0.084643879 | 0.085200597 | +0.000556718 |
+| Validation | Train-unseen composite horses | 254 | 0.105844896 | 0.106308435 | +0.000463539 |
+| Test | All | 2,771 | 0.090216978 | 0.090452100 | +0.000235122 |
+| Test | Train-unseen composite horses | 790 | 0.106238393 | 0.105878681 | −0.000359713 |
+| Test | Train-seen composite horses | 1,981 | 0.083827822 | 0.084300157 | +0.000472335 |
+
+The apparent test-subset benefit reverses on validation and is **not** a
+prospectively pre-registered, independent-horse-ID or independent-race-label
+result. Validation/test horse-set disjointness has not been established.
+Training remains timestamp-split, not officially qualified; cross-race
+opponent ability and calibrated cluster inference remain unavailable. Neither
+subgroup selection nor MAE changes justify overturning the full-test
+`REJECT_HISTORICAL_INCREMENT`. The existing control-only arm is an ablation;
+the parent-permutation arm is one fixed-seed placebo, **not** two independent
+randomized negative controls. Further negative controls are unexecuted.
+Brier/logloss are intentionally NULL because this is a continuous rank target,
+not verified binary calibrated probability forecasting. Prediction, KRS, ticket
+and PFS increments remain unmeasured by this aggregate audit.
+
+Reproduce without collecting or mutating SOURCE:
+
+```bash
+python -m pytest -q research/jra_bvi_next/test_partition_integrity.py
+python research/jra_bvi_next/partition_integrity.py \\
+  --input research/jra_bvi_next/evidence/current_corpus_evaluation.json \\
+  --output /tmp/bvi_historical_partition_integrity.json
+```
+
 ## Statistical structure and limits
 
 The existing fixed CONTROL weighted-ridge implementation is reused read-only.
