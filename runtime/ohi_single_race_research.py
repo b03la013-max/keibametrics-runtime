@@ -4,7 +4,7 @@ Reuse frozen LOCAL arithmetic, OHI conditional model, KRS Engine, Common MEC
 and Family capital default. This profile is not registered OOS or an Owner.
 """
 from __future__ import annotations
-import argparse,copy,hashlib,json,os,re,subprocess,sys,time
+import argparse,copy,hashlib,json,math,os,re,subprocess,sys,time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timezone
 from pathlib import Path
@@ -234,7 +234,7 @@ def _render_legacy(result):
         out.append('／'.join(f"{key} {result['numerical_cells'][f['runner_id']][key]['value']:.3f} [{'N' if result['numerical_cells'][f['runner_id']][key]['terminal_status']=='RULED-NEUTRAL' else 'C'}]" for key in n['required_indices']))
     return '\n\n'.join(out)+'\n'
 
-def render(result):
+def _render_v1_1(result):
     # Presentation-only v1.1: CommonMark tables need adjacent row lines.
     # Preserve every original content line, number and ticket; no recompute.
     body=re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(result))
@@ -249,13 +249,33 @@ def render(result):
             body=body[:begin]+section+body[end:]
     return body
 
+def render(result):
+    # Keep the old render byte-compatible for immutable historical readback.
+    # Only the current display describes observations actually in the original.
+    total=len(result['all_runners'])
+    def numeric(value):return type(value) in (int,float) and math.isfinite(value)
+    weights=sum(numeric(f.get('current_body_weight')) and f['current_body_weight']>0
+                for f in result['all_runners'])
+    changes=sum(numeric(f.get('current_body_weight_change')) for f in result['all_runners'])
+    status=(f'馬体重は{weights}/{total}頭、増減は{changes}/{total}頭で観測済みです。'
+            if weights or changes else f'馬体重・増減は全{total}頭で未観測です。')
+    source=result.get('source') or {}
+    track=((source.get('normalized_evidence') or {}).get('track_condition') or {}).get('value')
+    going={v for v in (result['race'].get('going'),
+        (result.get('current_state') or {}).get('official_going'),track)
+        if isinstance(v,str) and v in ('良','稍重','重','不良')}
+    status+=('当日馬場は未観測です。' if not going else
+             '当日馬場は原本内の観測値が矛盾しています。' if len(going)>1 else
+             '当日馬場は「'+next(iter(going))+'」と観測されています。')
+    return _render_v1_1(result).replace('馬体重・当日馬場は未観測で、',status)
+
 def readback(output):
     output=Path(output);m=load(output/'readback-manifest.json');r=load(output/'prediction-original.json')
     if m['sha256']!=sha({k:v for k,v in m.items() if k!='sha256'}) or r['sha256']!=sha({k:v for k,v in r.items() if k!='sha256'}) or m['prediction_sha256']!=r['sha256']:raise ValueError('OHI_ORIGINAL_HASH_MISMATCH')
     for relative,digest in m['files'].items():
         if '..' in Path(relative).parts or Path(relative).is_absolute() or hashlib.sha256((output/relative).read_bytes()).hexdigest()!=digest:raise ValueError('OHI_READBACK_FILE_MISMATCH')
     body=(output/'answer.md').read_text()
-    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_legacy(r),re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(r)).replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')):raise ValueError('OHI_READBACK_BODY_MISMATCH')
+    if hashlib.sha256(body.encode()).hexdigest()!=m['answer_sha256'] or body not in (render(r),_render_v1_1(r),_render_legacy(r),re.sub(r'(?m)(^\|[^\n]*\|)\n\n(?=\|)',r'\1\n',_render_legacy(r)).replace('└─ 推奨（実購入未確認）','└─ ペーパー（非Production・実購入対象外）')):raise ValueError('OHI_READBACK_BODY_MISMATCH')
     return r,render(r)
 
 def material_input_sha256(observation):
@@ -293,9 +313,14 @@ def revision_decision(existing_output,observation,*,source_dir):
 def main():
     p=argparse.ArgumentParser();g=p.add_mutually_exclusive_group(required=True);g.add_argument('--source-dir');g.add_argument('--query');g.add_argument('--readback');p.add_argument('--output');p.add_argument('--model');p.add_argument('--engine');p.add_argument('--params');p.add_argument('--diagnostic',action='store_true');p.add_argument('--source-contract',choices=['v1','v2'],default='v2');a=p.parse_args()
     if a.readback:
-        result,body=readback(a.readback);print(body);return
+        result,body=readback(private_root(a.readback));print(body);return
     if not all((a.output,a.model,a.engine,a.params)):p.error('calculation requires output/model/engine/params')
-    source_dir=a.source_dir
+    # Bind assets to the caller's cwd before calculations use repository mappings.
+    # Private paths remain unnormalised until their existing absolute/symlink check.
+    invocation_cwd=Path.cwd()
+    model_path,engine,params=(str(Path(value).absolute()) for value in (a.model,a.engine,a.params))
+    a.output=str(private_root(a.output))
+    source_dir=str(private_root(a.source_dir)) if a.source_dir else None
     if a.query:
         if a.diagnostic:p.error('query capture is prestart only; saved source diagnostic is separate')
         from runtime.local_race_entry import resolve_chat_intent
@@ -308,7 +333,10 @@ def main():
             print(body);return
         source_dir=str(Path(a.output).with_name(Path(a.output).name+'.source'))
         observation=capture(intent['race_date'],intent['race_no'],source_dir,source_contract=a.source_contract);write(Path(source_dir)/'observation.json',observation)
-    result=run(load(Path(source_dir)/'observation.json'),a.output,a.model,a.engine,a.params,source_dir=source_dir,diagnostic=a.diagnostic)
+    try:
+        os.chdir(Path(__file__).resolve().parents[1])
+        result=run(load(Path(source_dir)/'observation.json'),a.output,model_path,engine,params,source_dir=source_dir,diagnostic=a.diagnostic)
+    finally:os.chdir(invocation_cwd)
     print(render(result))
     print(json.dumps({'classification':result['classification'],'sha256':result['sha256'],'race':result['race'],'numerical_summary':result['numerical_summary']},ensure_ascii=False),file=sys.stderr)
 if __name__=='__main__':main()
