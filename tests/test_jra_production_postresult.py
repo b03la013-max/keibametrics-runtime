@@ -54,7 +54,9 @@ class TestProductionPostResult(unittest.TestCase):
         s = settle_final(final(), OFFICIAL)
         self.assertEqual(s["total_investment"], 300)
         self.assertEqual(s["total_payout"], 1230 + 9870)
-        self.assertEqual(s["actual_purchase_status"], "NOT_PURCHASED_RECOMMENDATION_ONLY")
+        self.assertEqual(s["actual_purchase_status"], "UNVERIFIED")
+        self.assertIsNone(s['actual_purchase_pfs'])
+        self.assertEqual(s['capital_exposure_class'],'RECOMMENDATION')
         self.assertEqual(len(s["winning_tickets"]), 2)
 
     def test_request_feeds_canonical_review(self):

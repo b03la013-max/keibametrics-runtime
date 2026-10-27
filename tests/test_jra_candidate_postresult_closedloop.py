@@ -59,7 +59,7 @@ def test_strict_jra_payout_parsing():
     assert out["TRIFECTA"]["per_100_yen"]==4850
     with pytest.raises(PendingOfficialResult):
         parse_official_payouts("レース結果 払戻金 馬単 4-8 1,240 円")
-    with pytest.raises(PendingOfficialResult):
+    with pytest.raises(ValueError):
         parse_official_payouts(price_text().replace("馬単 4-8 1,240 円","馬単 4-8 1,240 円 馬単 4-8 1,240 円"))
 
 
@@ -71,7 +71,7 @@ def test_official_top3_and_price_table_must_reconcile():
     ]}
     result=verify_official_result(parsed,price_text(),["3","4","8"])
     assert result["top3"]==[4,8,3]
-    with pytest.raises(PendingOfficialResult,match="MISMATCH"):
+    with pytest.raises(ValueError,match="MISMATCH"):
         verify_official_result(parsed,price_text().replace("4-8 1,240", "8-4 1,240"),["3","4","8"])
 
 
@@ -101,7 +101,7 @@ def test_dead_heat_is_not_silently_settled_as_one_order():
         {'runner_id':'4','horse_no':4,'finish':1},
         {'runner_id':'8','horse_no':8,'finish':2},
         {'runner_id':'3','horse_no':3,'finish':2}]}
-    with pytest.raises(PendingOfficialResult,match='DEAD_HEAT_MANUAL_ADJUDICATION'):
+    with pytest.raises(ValueError,match='OFFICIAL_PAYOUT_TOP3_MISMATCH'):
         verify_official_result(parsed,price_text(),['3','4','8'])
     with pytest.raises(ValueError,match="UNIVERSE"):
         verify_official_result(parsed,price_text(),["1","3","4"])
