@@ -94,6 +94,54 @@ def test_new_verified_receipt_is_saved_to_existing_store_then_reused(tmp_path):
     assert {p:p.read_bytes() for p in before}==before
 
 
+@pytest.mark.parametrize('declaration',[
+    {'family_id':'LOCAL'},{'family_id':'BAN'},{'family_id':None},
+    {'result_lane':'PRIVATE_RESEARCH'},{'result_lane':'SOURCE_DERIVED_CANDIDATE'},
+])
+def test_explicit_other_family_or_nonproduction_lane_cannot_enter_jra_result_signing(tmp_path,declaration):
+    request,envelope,eid=fixture(tmp_path);request.update(declaration);calls=[]
+    def call(path,payload):calls.append(path);pytest.fail('WRONG_AUTHORITY_DOMAIN_MUST_NOT_CALL')
+    with pytest.raises(production.ProductionPostResultError,match='PRODUCTION_JRA_REQUIRED'):
+        execute(tmp_path,request,call)
+    assert calls==[] and not (tmp_path/'runtime/executions').exists()
+
+
+@pytest.mark.parametrize('verification_failure',['refused','disconnected'])
+def test_received_response_survives_verification_failure_and_retry_does_not_resign(tmp_path,verification_failure):
+    request,envelope,eid=fixture(tmp_path);calls=[]
+    def broken(path,payload):
+        calls.append(path)
+        if path=='/result':return 200,envelope
+        if verification_failure=='disconnected':raise ConnectionError('offline verification disconnected')
+        return 200,{'valid':False}
+    with pytest.raises((production.ProductionPostResultError,ConnectionError)):
+        execute(tmp_path,request,broken,'first-run')
+    assert calls==['/result','/verify']
+    checkpoint=tmp_path/'runtime_out/result_checkpoint'
+    before={p:p.read_bytes() for p in checkpoint.iterdir() if p.is_file()}
+    assert json.loads((checkpoint/'result_receipt_envelope.json').read_text())==envelope
+    assert resolve_phase(eid,'RESULT',root=tmp_path/'runtime/executions') is None
+    assert not (tmp_path/'runtime/learning_states').exists()
+    calls.clear()
+    def recovered(path,payload):
+        calls.append(path);assert path=='/verify';return 200,{'valid':True}
+    result,diagnostic=execute(tmp_path,request,recovered,'retry-run')
+    assert calls==['/verify'] and result==envelope and diagnostic['result_resigning'] is False
+    assert {p:p.read_bytes() for p in before}==before
+
+
+@pytest.mark.parametrize('only_file',['result_request.json','result_receipt_envelope.json'])
+def test_partial_local_response_checkpoint_never_requests_an_unknown_second_signature(tmp_path,only_file):
+    request,envelope,eid=fixture(tmp_path);checkpoint=tmp_path/'runtime_out/result_checkpoint'
+    checkpoint.mkdir(parents=True)
+    value=request if only_file=='result_request.json' else envelope
+    path=checkpoint/only_file;path.write_text(json.dumps(value));before=path.read_bytes();calls=[]
+    def call(route,payload):calls.append(route);pytest.fail('PARTIAL_RAW_CHECKPOINT_MUST_HOLD')
+    with pytest.raises(production.ProductionPostResultError,match='LOCAL_CHECKPOINT_INCOMPLETE'):
+        execute(tmp_path,request,call)
+    assert calls==[] and path.read_bytes()==before
+
+
 def test_actual_workflow_uses_reuse_before_signing_and_isolates_optional_bvi_typeerror(tmp_path,monkeypatch):
     workflow=(ROOT/'.github/workflows/km-formal-result-runner.yml').read_text()
     assert workflow.index('res,result_receipt_reuse=reuse_or_submit_production_result')<workflow.index('code,res=call("/result",p)')

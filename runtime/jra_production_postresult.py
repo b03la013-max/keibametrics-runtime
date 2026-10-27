@@ -320,7 +320,8 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
     from execution_store import resolve_phase,persist_phase,phase_root
     root=Path(root);checkpoint=Path(checkpoint);race_id=request.get('race_id')
     if (not isinstance(race_id,str) or not re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}',race_id)
-            or str(request.get('result_lane') or '').upper()=='SOURCE_DERIVED_CANDIDATE'):
+            or request.get('family_id','JRA')!='JRA'
+            or str(request.get('result_lane') or 'PRODUCTION').upper()!='PRODUCTION'):
         raise ProductionPostResultError('RESULT_REUSE_PRODUCTION_JRA_REQUIRED')
     final=json.loads((root/'runtime/final_artifacts'/(race_id+'.json')).read_text())
     verify_final(final)
@@ -339,7 +340,11 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
         raise ProductionPostResultError('RESULT_REUSE_CHECKPOINT_INCOMPLETE')
     if phase is None:
         # Local post-signature recovery may precede immutable publication.
-        if (checkpoint/'result_receipt_envelope.json').exists():saved_dir=checkpoint
+        local_files=[(checkpoint/name).exists() for name in ('result_request.json','result_receipt_envelope.json')]
+        if any(local_files):
+            if not all(local_files):
+                raise ProductionPostResultError('RESULT_REUSE_LOCAL_CHECKPOINT_INCOMPLETE')
+            saved_dir=checkpoint
         elif any((phase_root(execution_id,'RESULT',executions)/'runs').glob('*')):
             raise ProductionPostResultError('RESULT_REUSE_PARTIAL_CHECKPOINT_UNRESOLVED')
     if saved_dir is not None:
@@ -352,6 +357,19 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
         code,response=call('/result',request)
         if not 200<=code<300:raise ProductionPostResultError('RESULT_SUBMISSION_HTTP_FAILURE:'+str(code))
         reused=False
+    # Keep the received original bytes locally even when verification is
+    # refused or disconnected. These files are not verified phase admission.
+    checkpoint.mkdir(parents=True,exist_ok=True)
+    for name,value in (('result_request.json',request),('result_receipt_envelope.json',response)):
+        target=checkpoint/name
+        if target.exists():
+            if json.loads(target.read_text())!=value:
+                raise ProductionPostResultError('RESULT_REUSE_LOCAL_CHECKPOINT_CONFLICT')
+        elif saved_dir is not None:
+            target.write_bytes((saved_dir/name).read_bytes())
+        else:
+            with target.open('x',encoding='utf-8') as fh:
+                json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
     receipt=response.get('receipt') or {}
     if (receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS' or receipt.get('errors')
             or receipt.get('race_id')!=race_id or receipt.get('artifact_sha256')!=_sha(request)
@@ -364,17 +382,6 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
     code,verification=call('/verify',response)
     if not 200<=code<300 or verification.get('valid') is not True:
         raise ProductionPostResultError('RESULT_REUSE_SIGNATURE_NOT_VERIFIED')
-    checkpoint.mkdir(parents=True,exist_ok=True)
-    for name,value in (('result_request.json',request),('result_receipt_envelope.json',response)):
-        target=checkpoint/name
-        if target.exists():
-            if json.loads(target.read_text())!=value:
-                raise ProductionPostResultError('RESULT_REUSE_LOCAL_CHECKPOINT_CONFLICT')
-        elif saved_dir is not None:
-            target.write_bytes((saved_dir/name).read_bytes())
-        else:
-            with target.open('x',encoding='utf-8') as fh:
-                json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
     if phase is None:
         persist_phase(execution_id,'RESULT',str(run_id),checkpoint,root=executions,github_sha=github_sha)
     return response,{'status':'VERIFIED_REUSE' if reused else 'NEW_VERIFIED_RESULT_RECEIPT',
