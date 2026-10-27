@@ -33,12 +33,24 @@ jobs:
           research/jra_bvi_next/test_identity_label_audit.py
           research/jra_bvi_next/test_identity_label_times.py
           research/jra_bvi_next/test_environment_quality.py
+          research/jra_bvi_next/test_partition_integrity.py
 
       - name: Audit retained JRA harvest going observations (not a signed SOURCE Reader)
         run: >-
           python research/jra_bvi_next/environment_quality.py
           --repository .
           --output "${RUNNER_TEMP}/bvi_env_retained_harvest_quality.json"
+      - name: Reconcile historical train-disjoint model diagnostics without refit
+        run: >-
+          python research/jra_bvi_next/partition_integrity.py
+          --input research/jra_bvi_next/evidence/current_corpus_evaluation.json
+          --output "${RUNNER_TEMP}/bvi_historical_partition_integrity.json"
+      - name: Save non-Production heldout aggregate audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-historical-heldout-aggregate-audit
+          path: ${{ runner.temp }}/bvi_historical_partition_integrity.json
+          if-no-files-found: error
       - name: Save non-Production retained-harvest quality evidence
         uses: actions/upload-artifact@v4
         with:
