@@ -1,0 +1,77 @@
+name: OHI non-production official SOURCE actor canary
+run-name: OHI research SOURCE canary (no raw published)
+
+on:
+  push:
+    branches:
+      - research/ohi-nonprod-actor-preflight-20261027
+    paths:
+      - .github/workflows/ohi-nonprod-source-actor-canary.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohi-research-canary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  private-source-actor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
+    steps:
+      - name: Check out immutable research-only branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify existing authorized official Client reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import urllib.request
+          from runtime.ohi_nankan_private_source_v2 import OhiClient
+          from runtime.urw_nankan_reference_source import ORIGIN, NankanError
+          # The original private Client alone governs robots, URL scope,
+          # user agent, request interval, redirects and timeout. No fallback.
+          url = ORIGIN + '/calendar/000000.do'
+          proxy_schemes = sorted(k for k in urllib.request.getproxies()
+                                 if k in ('http', 'https', 'all'))
+          try:
+              receipt, raw = OhiClient().get(url)
+              if receipt.get('http_status') != 200 or not raw:
+                  raise RuntimeError('CANARY_OFFICIAL_CALENDAR_RESPONSE_INVALID')
+              # The only data retained are local in the ephemeral runner RAM.
+              # No raw, URL-derived data, SHA, private models, or artifacts
+              # are emitted to public logs or the repository.
+              print(json.dumps({
+                  'actor': 'GITHUB_STANDARD_PUBLIC_REPO_RESEARCH_CANARY',
+                  'result': 'OFFICIAL_CLIENT_HTTP200',
+                  'robots_checked': True,
+                  'source_date_accepted': 'NOT_CHECKED',
+                  'full_prediction_calculated': False,
+                  'production_activated': False,
+                  'private_raw_persisted': False,
+                  'effective_proxy_protocols': proxy_schemes
+              }, sort_keys=True))
+          except Exception as exc:
+              code = exc.receipt.get('code', 'NANKAN_HOLD') if isinstance(exc, NankanError) else type(exc).__name__
+              print(json.dumps({
+                  'actor': 'GITHUB_STANDARD_PUBLIC_REPO_RESEARCH_CANARY',
+                  'result': 'SOURCE_NOT_ACCEPTED',
+                  'error_code': code,
+                  'error_type': type(exc).__name__,
+                  'effective_proxy_protocols': proxy_schemes,
+                  'full_prediction_calculated': False,
+                  'private_raw_persisted': False,
+                  'production_activated': False
+              }, sort_keys=True))
+              raise SystemExit(1)
+          PY
