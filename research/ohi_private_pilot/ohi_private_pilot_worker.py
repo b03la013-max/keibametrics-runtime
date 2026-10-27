@@ -1,6 +1,6 @@
 """Thin private OHI R1 pilot: inherited SOURCE/calculation only, private S3 and log relay.
 
-This file is a reviewed deployment candidate, not an active worker or a new model.
+This file is a deployment candidate with local boundary tests, not an active worker.
 No Production endpoint is invoked. It refuses the wrong actor/date, a public
 GitHub log destination, missing private bindings, or a late/stale SOURCE.
 """
@@ -97,6 +97,18 @@ def zip_original(original,source,body,*,fresh_source=None):
   z.writestr('delivery/complete-answer.txt',body.encode())
  return buf.getvalue()
 
+def verify_fixed_inputs(env):
+ code=Path(env['OHI_FIXED_CODE_ROOT']).resolve();assets=Path(env['OHI_FIXED_ASSET_ROOT']).resolve()
+ contract=json.loads(Path(env['OHI_FIXED_CONTRACT_PATH']).read_text())
+ if contract['prediction_code_ref']!='d61f5c563238be2c812ef4bf912bd5b872b84fed':raise ValueError('FIXED_CODE_REF_CONFLICT')
+ for relative,expected in contract['prediction_dependency_sha256'].items():
+  if digest((code/relative).read_bytes())!=expected:raise ValueError('FIXED_DEPENDENCY_SHA_CONFLICT:'+relative)
+ model=assets/'existing_conditioned_owner_retrained.json';engine=assets/'KRS-Engine_v1.1.0_PORTABLE.py';params=code/'runtime/local_physical/parameter_map_v0.1-provisional.json'
+ if digest(model.read_bytes())!=MODEL_BYTES or digest(engine.read_bytes())!=ENGINE or digest(params.read_bytes())!=PARAMS:raise ValueError('FIXED_PRIVATE_ASSET_SHA_CONFLICT')
+ model_data=json.loads(model.read_text())
+ if model_data.get('sha256')!=MODEL or seal({k:v for k,v in model_data.items()if k!='sha256'})['sha256']!=MODEL:raise ValueError('FIXED_MODEL_CANONICAL_SHA_CONFLICT')
+ return code,model,engine,params
+
 def main():
  now=datetime.now(timezone.utc);require_actor(os.environ,now);store=PrivateStore(os.environ)
  probe=(json.dumps({'purpose':'PRIVATE_STORE_PREFLIGHT_NOT_PREDICTION','date':TARGET_DAY,'race_no':RACE_NO,'created_at':now.isoformat()},sort_keys=True)+'\n').encode()
@@ -109,14 +121,7 @@ def main():
  for entry in inventory['files']:
   p=target/entry['path']
   if p.stat().st_size!=entry['bytes']or digest(p.read_bytes())!=entry['SHA256']:raise ValueError('PRIVATE_FIXED_BOOTSTRAP_MEMBER_SHA_CONFLICT')
- code=Path(os.environ['OHI_FIXED_CODE_ROOT']).resolve();assets=Path(os.environ['OHI_FIXED_ASSET_ROOT']).resolve();contract=json.loads(Path(os.environ['OHI_FIXED_CONTRACT_PATH','OHI_BOOTSTRAP_KEY','OHI_BOOTSTRAP_SHA256']).read_text())
- if contract['prediction_code_ref']!='d61f5c563238be2c812ef4bf912bd5b872b84fed':raise ValueError('FIXED_CODE_REF_CONFLICT')
- for relative,expected in contract['prediction_dependency_sha256'].items():
-  if digest((code/relative).read_bytes())!=expected:raise ValueError('FIXED_DEPENDENCY_SHA_CONFLICT:'+relative)
- model=assets/'existing_conditioned_owner_retrained.json';engine=assets/'KRS-Engine_v1.1.0_PORTABLE.py';params=code/'runtime/local_physical/parameter_map_v0.1-provisional.json'
- if digest(model.read_bytes())!=MODEL_BYTES or digest(engine.read_bytes())!=ENGINE or digest(params.read_bytes())!=PARAMS:raise ValueError('FIXED_PRIVATE_ASSET_SHA_CONFLICT')
- model_data=json.loads(model.read_text())
- if model_data.get('sha256')!=MODEL or seal({k:v for k,v in model_data.items()if k!='sha256'})['sha256']!=MODEL:raise ValueError('FIXED_MODEL_CANONICAL_SHA_CONFLICT')
+ code,model,engine,params=verify_fixed_inputs(os.environ)
  sys.path[:0]=[str(code),str(code/'runtime')]
  from runtime.ohi_single_race_research import capture,run,readback,revision_decision,write,render,check_source_time
  os.chdir(code)
