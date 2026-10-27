@@ -17,7 +17,7 @@ on:
       - 'tests/test_local_production_numerical_closure.py'
       - '.github/workflows/local-runtime-correctness-regression.yml'
   pull_request:
-    paths: ['runtime/**', 'tests/**', 'research/utility/**', '.github/workflows/local-runtime-correctness-regression.yml']
+    paths: ['runtime/**', 'tests/**', 'scripts/ohi_paper_day_review.py', 'research/utility/**', '.github/workflows/local-runtime-correctness-regression.yml']
   workflow_dispatch:
 
 permissions:
@@ -73,6 +73,9 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/runtime:${{ github.workspace }}
         run: python -m pytest -q tests/test_nankan_transport_failure_receipt.py tests/test_ohi_cli_render_correctness.py
+      - name: Test OHI rendered PAPER result reader
+        # Read-only research result parsing; never changes the formal RESULT admission.
+        run: python -m pytest -q tests/test_ohi_paper_result_reader.py
       - name: Compile LOCAL runtime modules
         run: |
           python -m py_compile             runtime/local_physical/app.py             runtime/local_physical/app_v15.py             runtime/local_physical/source_acquisition.py             runtime/local_physical/nar_source_manifest.py             runtime/local_physical/nar_runner_universe.py \
