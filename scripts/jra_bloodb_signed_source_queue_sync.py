@@ -152,6 +152,7 @@ def collect_specs(root:Path, *, now:datetime, horizon_h:int=36,
             "jra_signed_source_artifact_sha256":origin["source_artifact_sha256"],
             "queue_authority":"DIAGNOSTIC_SOURCE_ED25519_NOT_OIDC_VERIFIED",
             "production_authority":False,"bvi_population_authority":False,
+            "calculate_bvi_diagnostic":True,
         })
         stats["signed_source_ready"]+=1
     return sorted(specs,key=lambda x:(x["prediction_cutoff"],x["race_id"])),stats
@@ -192,6 +193,7 @@ def synchronize(root:Path,queue_path:Path=QUEUE,*,now=None,horizon_h:int=36,
             if rid in merged:
                 if _identity_for_merge(merged[rid])!=_identity_for_merge(item):
                     raise BloodBError("SIGNED_QUEUE_RACE_ID_CONFLICT:"+rid)
+                merged[rid]["calculate_bvi_diagnostic"] = True
             else:
                 merged[rid]=item
                 added.append(rid)
