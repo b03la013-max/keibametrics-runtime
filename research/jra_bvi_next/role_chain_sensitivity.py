@@ -67,6 +67,43 @@ def stage_delta(before, after):
     }
 
 
+def krs_bridge_delta(baseline, varied):
+    """Measure existing KRS *input* changes, never simulation outcomes."""
+    from jra_krs_input_builder_production import build_krs_input
+
+    def bridge(record):
+        x = deepcopy(record)
+        roles = x["static_prediction"]["roles"]
+        for runner in x["runners"]:
+            runner["static_roles"] = roles[str(runner["runner_id"])]
+        return build_krs_input(x)["krs_input_data"]
+
+    a, b = bridge(baseline), bridge(varied)
+    if a["race"] != b["race"] or a["environment"] != b["environment"] or a["simulation"] != b["simulation"]:
+        raise ValueError("KRS_BRIDGE_CONTROLLED_RACE_ENVIRONMENT_OR_SEED_CHANGED")
+    left = {int(x["horse_no"]): x for x in a["horses"]}
+    right = {int(x["horse_no"]): x for x in b["horses"]}
+    if set(left) != set(right) or len(left) != len(a["horses"]) or len(right) != len(b["horses"]):
+        raise ValueError("KRS_BRIDGE_RUNNER_UNIVERSE_CHANGED")
+    counts = Counter()
+    for no in left:
+        p, q = left[no], right[no]
+        for group in ("hsv", "static"):
+            if set(p[group]) != set(q[group]):
+                raise ValueError("KRS_BRIDGE_INPUT_FIELDS_CHANGED")
+            for key in p[group]:
+                counts[group + ":" + key] += p[group][key] != q[group][key]
+        counts["runner_input_changed"] += p != q
+        counts["static_roles_changed"] += p["static_roles"] != q["static_roles"]
+    return {"changed_input_runners": counts["runner_input_changed"],
+            "changed_hsv_cells": sum(v for k, v in counts.items() if k.startswith("hsv:")),
+            "changed_static_numeric_cells": sum(v for k, v in counts.items() if k.startswith("static:")),
+            "changed_static_roles": counts["static_roles_changed"],
+            "changed_static_columns": {k.removeprefix("static:"): v for k, v in counts.items()
+                                       if k.startswith("static:") and v},
+            "krs_executed": False, "krs_output_changed": None}
+
+
 def _validate_source(req):
     if req.get("family_id") != "JRA" or req.get("current_authority_manifest") != AUTHORITY:
         raise ValueError("ARCHIVED_RACE_SCOPE_OR_AUTHORITY_MISMATCH")
@@ -113,6 +150,7 @@ def probe(request, authority, root):
     saved = state(request)
     replayed = state(baseline)
     delta = stage_delta(replayed, state(varied))
+    krs_bridge = krs_bridge_delta(baseline, varied)
     return {
         "race_id": request["race_id"],
         "status": "RECOMPUTED_REGISTERED_AKI_IN_MEMORY",
@@ -123,6 +161,7 @@ def probe(request, authority, root):
         "runner_count": len(b), "bvi_changed_runners": changed,
         "recomputed_index_changed_runners": dict(metric_counts),
         "registered_aki_stage_delta": delta,
+        "krs_input_probe": krs_bridge,
         "downstream": {
             "krs_executed": False, "krs_changed": None,
             "mec_executed": False, "mec_changed": None,
@@ -160,6 +199,10 @@ def run(root=ROOT):
             totals["pair_decision_changes"] += result["registered_aki_stage_delta"]["pair_decision_symmetric_difference"]
             totals["third_decision_changes"] += result["registered_aki_stage_delta"]["third_decision_symmetric_difference"]
             totals["ranking_changed_races"] += result["registered_aki_stage_delta"]["static_ranking_changed"]
+            totals["krs_input_changed_runners"] += result["krs_input_probe"]["changed_input_runners"]
+            totals["krs_input_static_numeric_changed_cells"] += result["krs_input_probe"]["changed_static_numeric_cells"]
+            totals["krs_input_hsv_changed_cells"] += result["krs_input_probe"]["changed_hsv_cells"]
+            totals["krs_input_role_changes"] += result["krs_input_probe"]["changed_static_roles"]
             outcomes.append({**result, "original_request_raw_sha256": file_sha})
         except Exception as exc:
             totals["blocked_races"] += 1
@@ -179,6 +222,7 @@ def run(root=ROOT):
         "shared_pedigree_value_effect": None,
         "registered_role_policy": "UNCHANGED_R51_REGISTERED_AKI; IN_MEMORY_REPLAY_ONLY",
         "KRS_MEC_TICKET_CAPITAL_ACTUAL_DIFF": None,
+        "KRS_input_measured_but_simulation_not_executed": True,
         "unknown_downstream_is_zero": False,
         "production_effect": "NONE", "purchase_authority": False,
         "forward_oos_increment": 0, "model_selection": "REJECT_HISTORICAL_INCREMENT",
@@ -202,6 +246,9 @@ def main():
                       "totals": report["totals"], "report_sha256": report["sha256"],
                       "unresolved_downstream": report["KRS_MEC_TICKET_CAPITAL_ACTUAL_DIFF"]},
                      ensure_ascii=False))
+    if report["totals"].get("blocked_races", 0) or (
+            report["totals"].get("archived_exact_replay_races") != report["archived_request_count"]):
+        raise SystemExit("RESEARCH_PARTIAL_BLOCKED_OR_ARCHIVE_REPLAY_MISMATCH")
 
 
 if __name__ == "__main__":

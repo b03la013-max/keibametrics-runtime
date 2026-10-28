@@ -63,3 +63,27 @@ def test_real_d_fixed_sha_and_authority_read_only():
     authority = __import__("json").loads(
         (root / "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261012_R51.json").read_text())
     assert r.guard_authority(authority, root) == r.D_SHA256
+
+
+def test_krs_bridge_only_counts_inputs_not_simulations(monkeypatch):
+    import types
+    import sys
+
+    def synthetic_bridge(record):
+        return {"krs_input_data": {
+            "race": {"race_id": "R"},
+            "environment": {"weather": "UNKNOWN"},
+            "simulation": {"run_count": 5000, "master_seed": 1},
+            "horses": [{"horse_no": 1, "hsv": {"speed": 70},
+                        "static": {"tpi": record["measure"], "zai_win": 50},
+                        "static_roles": ["W"]}],
+        }}
+    monkeypatch.setitem(sys.modules, "jra_krs_input_builder_production",
+                        types.SimpleNamespace(build_krs_input=synthetic_bridge))
+    one = {**fixture(), "measure": 50, "runners": [{"runner_id": 1}]}
+    two = {**fixture(), "measure": 51, "runners": [{"runner_id": 1}]}
+    out = r.krs_bridge_delta(one, two)
+    assert out["changed_input_runners"] == 1
+    assert out["changed_static_numeric_cells"] == 1
+    assert out["changed_hsv_cells"] == 0
+    assert out["krs_executed"] is False and out["krs_output_changed"] is None

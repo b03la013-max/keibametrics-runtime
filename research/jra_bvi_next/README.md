@@ -159,3 +159,33 @@ Large datasets, all coefficients and runner-level proposals stay in a separate
 research artifact. This directory contains only code, tests, lightweight group
 metrics, parameter/file hashes and read-only audits. No new collection, external
 KRS, Dispatch, paid API, Merge or Deploy is part of this work.
+
+
+## 2026-10-29 registered AKI role/Pair/Third scalar boundary (post-capture)
+
+The offline-only \`role_chain_sensitivity.py\` reruns the unmodified R51
+registered AKI decision logic on two in-memory copies of each of the 30
+archived 2026-10-25 formal requests (400 runners). It verifies archived
+SOURCE hashes, checks fixed-D raw SHA, and separately compares the saved
+decision to the original replay. Its intervention is exactly +1 BVI scalar
+capped at 100, **not** a simulated change to real pedigree features.
+
+The first CI acceptance of this tool reproduced all 30 archived AKI role
+decisions. The +1 intervention changed BVI/TPI/SRI/F3S/T3I in 400 runners,
+ZAI_WIN/ZAI_PLACE in zero, and registered W/P2/P3 role memberships, Pair
+decisions, Third decisions and ranking in **zero**. This is a measured
+historical boundary outcome, not a universal proof that bloodline data
+cannot change role selection. Registered policy may react at another
+magnitude or at a different evidence gate.
+
+The KRS-input extension measures the existing pure input bridge with the
+same authorized in-memory role output. It **does not execute KRS** and must
+never infer simulated W/P2/P3, MEC, ticket counts, same-budget Capital,
+purchase cost, or PFS. All such outputs remain NULL. No result label is
+consulted, no prospective Freeze or OOS credit is minted, and no input
+request, formal FINAL, or Production formula is changed.
+
+The research CI saves an explicit per-race and aggregate role-chain JSON
+artifact. An incomplete archived re-evaluation or mismatched original
+registered AKI replay now fails the research check instead of converting
+a partial replay into success.
