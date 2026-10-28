@@ -5,11 +5,17 @@ No Production endpoint is invoked. It refuses the wrong actor/date, a public
 GitHub log destination, missing private bindings, or a late/stale SOURCE.
 """
 from __future__ import annotations
-import base64,hashlib,io,json,os,shutil,sys,tempfile,zipfile
+import argparse,base64,hashlib,io,json,os,re,sys,tempfile,traceback,zipfile
 from datetime import datetime,timezone,timedelta
 from pathlib import Path
 
 TARGET_DAY='2026-10-28';RACE_NO=1
+RACE_ID='2026102820110301'
+BOOTSTRAP_KEY='bootstrap/OHI_FIXED_INPUTS_20261028_TRANSPORT_R2.zip'
+BOOTSTRAP_SHA='cb58d1947e4cdb7685de3d26d80b90209f2f81b48fb2628846858b0190a032f9'
+BOOTSTRAP_BYTES=171281
+MAX_BUCKET_BYTES=1_000_000_000
+STAGE='ACTOR_BINDING'
 PROJECT='25ce549e-de35-4138-9c8f-490e407c7b81'
 ENVIRONMENT='90201e32-e372-465b-8e80-a205a39ba440'
 SERVICE='f6d3c60e-34f2-43fa-9247-a71f7b209bf9'
@@ -24,6 +30,52 @@ def seal(d):return {**d,'sha256':digest(json.dumps(d,ensure_ascii=False,sort_key
 def validate_record(d):
  if d.get('sha256')!=seal({k:v for k,v in d.items()if k!='sha256'})['sha256']:raise ValueError('PRIVATE_RECORD_SHA_MISMATCH')
  return d
+def stage(name):
+ global STAGE
+ STAGE=name
+
+def require_execution_window(now):
+ if now.tzinfo is None:raise ValueError('PRIVATE_PILOT_TIMEZONE_REQUIRED')
+ local=now.astimezone(JST)
+ if local.date().isoformat()!=TARGET_DAY:raise ValueError('PRIVATE_PILOT_EXACT_DATE_NOT_ACTIVE')
+ if local.hour<14:raise ValueError('PRIVATE_PILOT_BEFORE_SINGLE_RUN_WINDOW')
+ if local>=datetime(2026,10,28,14,25,tzinfo=JST):raise ValueError('PRIVATE_PILOT_CUTOFF_PASSED')
+ # The captured official Program's cutoff is still independently enforced.
+
+def require_resource_limits(root=Path('/sys/fs/cgroup')):
+ try:
+  if (root/'cpu.max').is_file():
+   quota,period=(root/'cpu.max').read_text().split()
+   memory=int((root/'memory.max').read_text())
+  else:
+   quota=(root/'cpu/cpu.cfs_quota_us').read_text().strip()
+   period=(root/'cpu/cpu.cfs_period_us').read_text().strip()
+   memory=int((root/'memory/memory.limit_in_bytes').read_text())
+  quota,period=int(quota),int(period)
+ except (OSError,ValueError):raise ValueError('PRIVATE_PILOT_RESOURCE_LIMITS_UNVERIFIED') from None
+ if quota<=0 or period<=0 or quota>period or not 0<memory<=512*1024*1024:
+  raise ValueError('PRIVATE_PILOT_RESOURCE_LIMITS_EXCEED_APPROVAL')
+ return {'vCPU_limit':quota/period,'memory_limit_bytes':memory,'verified_from_cgroup':True}
+
+def require_race(race):
+ if (race.get('race_date'),race.get('race_no'),race.get('provider_race_id'))!=(TARGET_DAY,RACE_NO,RACE_ID):
+  raise ValueError('PRIVATE_PILOT_OFFICIAL_RACE_ID_CONFLICT')
+
+def hold_event(error):
+ # Report actual failure location without logging credentials, URLs or Raw.
+ location=STAGE
+ functions={'numerical':'INDICES_29','feature_pack':'OWNERS','predict_conditioned_owner':'OWNERS',
+            'simulate':'KRS','build_candidate_krs':'KRS','selection':'MEC_CAPITAL_TICKETS',
+            'build_mec_plan':'MEC','resolve_capital_policy':'CAPITAL','render_ticket_tree':'ALL_TICKETS_RENDER'}
+ for frame in traceback.extract_tb(error.__traceback__):
+  if frame.name in functions:location=functions[frame.name]
+ candidate=getattr(error,'receipt',{})
+ candidate=candidate.get('code','') if isinstance(candidate,dict) else ''
+ if not isinstance(candidate,str):candidate=''
+ if not candidate and isinstance(error,ValueError):candidate=str(error).split(':',1)[0]
+ code=candidate if re.fullmatch(r'(?:PRIVATE_|FIXED_|OHI_|SOURCE_|NANKAN_)[A-Z0-9_]{1,100}',candidate or '') else 'PILOT_EXTERNAL_OR_SOURCE_HOLD'
+ return {'schema':'KM_OHI_PRIVATE_PILOT_HOLD_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,
+         'stage':location,'error_type':type(error).__name__,'error_code':code,'new_Production_or_OOS':0}
 def require_actor(env,now):
  if env.get('GITHUB_ACTIONS','').lower()=='true':raise ValueError('PRIVATE_BODY_PUBLIC_GITHUB_LOG_FORBIDDEN')
  if (env.get('RAILWAY_PROJECT_ID'),env.get('RAILWAY_ENVIRONMENT_ID'),env.get('RAILWAY_SERVICE_ID'))!=(PROJECT,ENVIRONMENT,SERVICE):raise ValueError('PRIVATE_PILOT_ACTOR_NOT_BOUND')
@@ -52,7 +104,12 @@ class PrivateStore:
   self.bucket=env['OHI_S3_BUCKET'];self.client=boto3.client('s3',endpoint_url=env['OHI_S3_ENDPOINT'],aws_access_key_id=env['OHI_S3_ACCESS_KEY_ID'],aws_secret_access_key=env['OHI_S3_SECRET_ACCESS_KEY'],region_name=env.get('OHI_S3_REGION','auto'),config=Config(connect_timeout=15,read_timeout=30,retries={'max_attempts':2}))
  def get(self,key):
   from botocore.exceptions import ClientError
-  try:return self.client.get_object(Bucket=self.bucket,Key=key)['Body'].read()
+  try:
+   stream=self.client.get_object(Bucket=self.bucket,Key=key)['Body']
+   try:data=stream.read(200_000_001)
+   finally:stream.close()
+   if len(data)>200_000_000:raise ValueError('PRIVATE_STORE_OBJECT_LIMIT')
+   return data
   except ClientError as e:
    if e.response.get('Error',{}).get('Code')in ['NoSuchKey','404']:return None
    raise
@@ -62,6 +119,11 @@ class PrivateStore:
   keys=sorted(x['Key']for x in rows.get('Contents',[])if x['Key'].endswith('.json'))
   return self.get(keys[-1])if keys else None
  def put_new_and_read(self,key,data):
+  # Dedicated research bucket only; a truncated inventory cannot prove capacity.
+  rows=self.client.list_objects_v2(Bucket=self.bucket,MaxKeys=1000)
+  if rows.get('IsTruncated'):raise ValueError('PRIVATE_BUCKET_CAPACITY_UNVERIFIED')
+  if sum(x['Size']for x in rows.get('Contents',[]))+len(data)>MAX_BUCKET_BYTES:
+   raise ValueError('PRIVATE_BUCKET_APPROVED_SIZE_EXCEEDED')
   # A conditional create prevents overwriting any old frozen object.
   self.client.put_object(Bucket=self.bucket,Key=key,Body=data,IfNoneMatch='*',ContentType='application/octet-stream')
   actual=self.get(key)
@@ -69,21 +131,29 @@ class PrivateStore:
   return {'key':key,'bytes':len(data),'sha256':digest(actual),'actual_object_GET':True}
 
 def body_events(body,record,limit=1200):
+ if not isinstance(limit,int) or limit<=0:raise ValueError('PRIVATE_DELIVERY_CHUNK_SIZE_INVALID')
+ validate_record(record)
+ if (record.get('date'),record.get('race_no'),record.get('race_id'))!=(TARGET_DAY,RACE_NO,RACE_ID):raise ValueError('PRIVATE_DELIVERY_RECORD_RACE_CONFLICT')
  delivery_id=digest((record['sha256']+':'+datetime.now(timezone.utc).isoformat()).encode())
  raw=body.encode('utf-8');parts=[raw[i:i+limit]for i in range(0,len(raw),limit)]
- yield {'schema':'KM_OHI_PRIVATE_DELIVERY_BEGIN_V1','date':TARGET_DAY,'race_no':RACE_NO,'delivery_id':delivery_id,'parts':len(parts),'bytes':len(raw),'body_sha256':digest(raw),'record':record}
- for i,part in enumerate(parts):yield {'schema':'KM_OHI_PRIVATE_BODY_CHUNK_V1','date':TARGET_DAY,'race_no':RACE_NO,'delivery_id':delivery_id,'part':i,'parts':len(parts),'body_sha256':digest(raw),'utf8_part_b64':base64.b64encode(part).decode('ascii')}
- yield {'schema':'KM_OHI_PRIVATE_DELIVERY_END_V1','date':TARGET_DAY,'race_no':RACE_NO,'delivery_id':delivery_id,'parts':len(parts),'body_sha256':digest(raw)}
+ if not raw or record.get('body_bytes')!=len(raw) or record.get('body_sha256')!=digest(raw):raise ValueError('PRIVATE_DELIVERY_RECORD_BODY_CONFLICT')
+ yield {'schema':'KM_OHI_PRIVATE_DELIVERY_BEGIN_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'delivery_id':delivery_id,'parts':len(parts),'bytes':len(raw),'body_sha256':digest(raw),'record':record}
+ for i,part in enumerate(parts):yield {'schema':'KM_OHI_PRIVATE_BODY_CHUNK_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'delivery_id':delivery_id,'part':i,'parts':len(parts),'body_sha256':digest(raw),'utf8_part_b64':base64.b64encode(part).decode('ascii')}
+ yield {'schema':'KM_OHI_PRIVATE_DELIVERY_END_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'delivery_id':delivery_id,'parts':len(parts),'body_sha256':digest(raw)}
 
 def assemble_body(events):
  begins=[e for e in events if e.get('schema')=='KM_OHI_PRIVATE_DELIVERY_BEGIN_V1'];ends=[e for e in events if e.get('schema')=='KM_OHI_PRIVATE_DELIVERY_END_V1'];chunks=[e for e in events if e.get('schema')=='KM_OHI_PRIVATE_BODY_CHUNK_V1']
  if len(begins)!=1 or len(ends)!=1:raise ValueError('PRIVATE_DELIVERY_BOUNDARIES_MISSING_OR_DUPLICATE')
  begin,end=begins[0],ends[0];n=begin['parts'];ids=[e['part']for e in chunks]
- if sorted(ids)!=list(range(n))or len(ids)!=len(set(ids)):raise ValueError('PRIVATE_DELIVERY_CHUNKS_INCOMPLETE_OR_DUPLICATE')
- if any(e['date']!=TARGET_DAY or e['race_no']!=RACE_NO or e['body_sha256']!=begin['body_sha256']or e['parts']!=n or e['delivery_id']!=begin['delivery_id'] for e in [*chunks,end]):raise ValueError('PRIVATE_DELIVERY_IDENTITY_CONFLICT')
+ if type(n)is not int or n<1:raise ValueError('PRIVATE_DELIVERY_PART_COUNT_INVALID')
+ if any(type(i)is not int for i in ids)or sorted(ids)!=list(range(n))or len(ids)!=len(set(ids)):raise ValueError('PRIVATE_DELIVERY_CHUNKS_INCOMPLETE_OR_DUPLICATE')
+ if any(e.get('date')!=TARGET_DAY or e.get('race_no')!=RACE_NO or e.get('race_id')!=RACE_ID or e['body_sha256']!=begin['body_sha256']or e['parts']!=n or e['delivery_id']!=begin['delivery_id'] for e in [begin,*chunks,end]):raise ValueError('PRIVATE_DELIVERY_IDENTITY_CONFLICT')
  raw=b''.join(base64.b64decode(e['utf8_part_b64'],validate=True)for e in sorted(chunks,key=lambda e:e['part']))
  if len(raw)!=begin['bytes']or digest(raw)!=begin['body_sha256']:raise ValueError('PRIVATE_DELIVERY_BODY_SHA_MISMATCH')
- return raw.decode('utf-8'),validate_record(begin['record'])
+ record=validate_record(begin['record'])
+ if (record.get('date'),record.get('race_no'),record.get('race_id'))!=(TARGET_DAY,RACE_NO,RACE_ID):raise ValueError('PRIVATE_DELIVERY_RECORD_RACE_CONFLICT')
+ if record.get('body_bytes')!=len(raw) or record.get('body_sha256')!=digest(raw):raise ValueError('PRIVATE_DELIVERY_RECORD_BODY_CONFLICT')
+ return raw.decode('utf-8'),record
 
 def zip_original(original,source,body,*,fresh_source=None):
  buf=io.BytesIO()
@@ -101,6 +171,7 @@ def verify_fixed_inputs(env):
  code=Path(env['OHI_FIXED_CODE_ROOT']).resolve();assets=Path(env['OHI_FIXED_ASSET_ROOT']).resolve()
  contract=json.loads(Path(env['OHI_FIXED_CONTRACT_PATH']).read_text())
  if contract['prediction_code_ref']!='d61f5c563238be2c812ef4bf912bd5b872b84fed':raise ValueError('FIXED_CODE_REF_CONFLICT')
+ if len(contract['prediction_dependency_sha256'])!=17:raise ValueError('FIXED_DEPENDENCY_COUNT_CONFLICT')
  for relative,expected in contract['prediction_dependency_sha256'].items():
   if digest((code/relative).read_bytes())!=expected:raise ValueError('FIXED_DEPENDENCY_SHA_CONFLICT:'+relative)
  model=assets/'existing_conditioned_owner_retrained.json';engine=assets/'KRS-Engine_v1.1.0_PORTABLE.py';params=code/'runtime/local_physical/parameter_map_v0.1-provisional.json'
@@ -109,65 +180,139 @@ def verify_fixed_inputs(env):
  if model_data.get('sha256')!=MODEL or seal({k:v for k,v in model_data.items()if k!='sha256'})['sha256']!=MODEL:raise ValueError('FIXED_MODEL_CANONICAL_SHA_CONFLICT')
  return code,model,engine,params
 
-def main():
- now=datetime.now(timezone.utc);require_actor(os.environ,now);store=PrivateStore(os.environ)
- probe=(json.dumps({'purpose':'PRIVATE_STORE_PREFLIGHT_NOT_PREDICTION','date':TARGET_DAY,'race_no':RACE_NO,'created_at':now.isoformat()},sort_keys=True)+'\n').encode()
- store.put_new_and_read('OHI/'+TARGET_DAY+'/R01/store-probes/'+digest(probe)+'.json',probe)
- seed=store.get(os.environ['OHI_BOOTSTRAP_KEY'])
- if seed is None or digest(seed)!=os.environ['OHI_BOOTSTRAP_SHA256']:raise ValueError('PRIVATE_FIXED_BOOTSTRAP_SHA_CONFLICT')
- target=Path(os.environ['OHI_FIXED_CODE_ROOT']).resolve().parent
- if target!=Path('/opt/km-inputs'):raise ValueError('PRIVATE_FIXED_BOOTSTRAP_PATH_NOT_BOUND')
+def prepare_bootstrap(store,env):
+ stage('BOOTSTRAP_GET_AND_SHA')
+ if env['OHI_BOOTSTRAP_KEY']!=BOOTSTRAP_KEY or env['OHI_BOOTSTRAP_SHA256']!=BOOTSTRAP_SHA:
+  raise ValueError('PRIVATE_TRANSPORT_R2_BINDING_CONFLICT')
+ seed=store.get(BOOTSTRAP_KEY)
+ if seed is None or len(seed)!=BOOTSTRAP_BYTES or digest(seed)!=BOOTSTRAP_SHA:raise ValueError('PRIVATE_FIXED_BOOTSTRAP_SHA_CONFLICT')
+ target=Path(env['OHI_FIXED_CODE_ROOT']).resolve().parent
+ if (target,Path(env['OHI_FIXED_CODE_ROOT']).resolve(),Path(env['OHI_FIXED_ASSET_ROOT']).resolve(),Path(env['OHI_FIXED_CONTRACT_PATH']).resolve())!=(Path('/opt/km-inputs'),Path('/opt/km-inputs/code'),Path('/opt/km-inputs/assets'),Path('/opt/km-inputs/forward-contract.json')):
+  raise ValueError('PRIVATE_FIXED_BOOTSTRAP_PATH_NOT_BOUND')
+ stage('BOOTSTRAP_ALL_MEMBERS')
  safe_extract(seed,target);inventory=json.loads((target/'INPUT_SHA256_Manifest.json').read_text())
+ if len(inventory['files'])!=25:raise ValueError('PRIVATE_TRANSPORT_R2_INVENTORY_CONFLICT')
+ with zipfile.ZipFile(io.BytesIO(seed))as z:
+  if set(z.namelist())!={x['path']for x in inventory['files']}|{'INPUT_SHA256_Manifest.json'}:
+   raise ValueError('PRIVATE_TRANSPORT_R2_INVENTORY_CONFLICT')
  for entry in inventory['files']:
   p=target/entry['path']
   if p.stat().st_size!=entry['bytes']or digest(p.read_bytes())!=entry['SHA256']:raise ValueError('PRIVATE_FIXED_BOOTSTRAP_MEMBER_SHA_CONFLICT')
- code,model,engine,params=verify_fixed_inputs(os.environ)
+ stage('FIXED_ASSET_SHA')
+ paths=verify_fixed_inputs(env)
+ return paths,{'actual_object_GET':True,'bytes':len(seed),'sha256':digest(seed),'payload_members_verified':25,
+               'fixed_dependencies_verified':17,'model_canonical_sha256':MODEL,'engine_sha256':ENGINE,'parameter_map_sha256':PARAMS}
+
+def delivery_body(frozen,body):
+ # Presentation-only correction of a legacy unconditional missing-weight line.
+ # prediction/answer.md, its manifest, its Freeze and every number stay intact.
+ body=body.replace('馬体重・当日馬場は未観測で、','当日情報は原本SOURCE時点の観測であり、')
+ rows=['','保存済みSOURCEの馬体重（元Freeze時点。現在の鮮度を意味しません）：',
+       '|馬番・馬名|馬体重kg|増減kg|','|---|---:|---:|']
+ for f in frozen['all_runners']:
+  weight=f.get('current_body_weight');change=f.get('current_body_weight_change')
+  rows.append(f"|{f['runner_id']} {f['name']}|{weight if weight is not None else 'UNKNOWN'}|{change if change is not None else 'UNKNOWN'}|")
+ return body+'\n'+'\n'.join(rows)+'\n'
+
+def main(*,execute=False):
+ now=datetime.now(timezone.utc);stage('ACTOR_BINDING');require_actor(os.environ,now)
+ resources=None
+ if execute:
+  stage('SINGLE_RUN_TIME_WINDOW');require_execution_window(now)
+  stage('RESOURCE_LIMITS');resources=require_resource_limits()
+ stage('PRIVATE_STORE_PREFLIGHT');store=PrivateStore(os.environ)
+ probe=(json.dumps({'purpose':'PRIVATE_STORE_PREFLIGHT_NOT_PREDICTION','date':TARGET_DAY,'race_no':RACE_NO,'created_at':now.isoformat()},sort_keys=True)+'\n').encode()
+ probe_receipt=store.put_new_and_read('OHI/'+TARGET_DAY+'/R01/store-probes/'+digest(probe)+'.json',probe)
+ (code,model,engine,params),bootstrap=prepare_bootstrap(store,os.environ)
+ if not execute:
+  print(json.dumps({'schema':'KM_OHI_PRIVATE_BOOTSTRAP_READY_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,
+                    'bootstrap':bootstrap,'private_store_probe':probe_receipt,'prediction_calculated':False,'new_KRS_calls':0,
+                    'relay_completed':False,'Production_changes':0,'OOS_credit':0}),flush=True)
+  return 0
  sys.path[:0]=[str(code),str(code/'runtime')]
  from runtime.ohi_single_race_research import capture,run,readback,revision_decision,write,render,check_source_time
  os.chdir(code)
+ stage('EXISTING_PRIVATE_ORIGINAL_READBACK')
  root=Path(tempfile.mkdtemp(prefix='km-ohi-private-pilot-')).resolve();root.chmod(0o700);prefix='OHI/2026-10-28/R01/';old_record_bytes=store.latest_record(prefix);prior=None
  if old_record_bytes:
   old_record=validate_record(json.loads(old_record_bytes));b=store.get(old_record['archive']['key'])
   if b is None or digest(b)!=old_record['archive']['sha256']:raise ValueError('PRIVATE_EXISTING_ARCHIVE_SHA_CONFLICT')
   safe_extract(b,root/'prior');prior=root/'prior/prediction';old,_=readback(prior)
+  require_race(old['race'])
   if old['race']['race_date']!=TARGET_DAY or old['race']['race_no']!=RACE_NO or old['sha256']!=old_record['prediction_sha256']:raise ValueError('PRIVATE_EXISTING_ORIGINAL_OTHER_RACE')
  source=root/'current-source'
+ stage('OFFICIAL_SOURCE')
  try:
   obs=capture(TARGET_DAY,RACE_NO,str(source),source_contract='v2');write(source/'observation.json',obs)
- except Exception:
+  require_race(obs['race'])
+ except Exception as exc:
   if prior:
+   print(json.dumps(hold_event(exc)),flush=True)
    frozen,body=readback(prior)
    body='過去Freezeの完成原本。今回の最新SOURCE再照合は未成立。最新性・新規発走前成功を保証しません。\n\n'+body
-   fallback=seal({**{k:v for k,v in old_record.items()if k!='sha256'},'mode':'PAST_FREEZE_READBACK_SOURCE_RECHECK_FAILED','body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'current_source_verified':False,'new_prestart_credit':0})
+   fallback=seal({**{k:v for k,v in old_record.items()if k!='sha256'},'race_id':RACE_ID,'mode':'PAST_FREEZE_READBACK_SOURCE_RECHECK_FAILED','body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'current_source_verified':False,'new_KRS_calls':0,'new_prestart_credit':0})
    for event in body_events(body,fallback):print(json.dumps(event,ensure_ascii=False,separators=(',',':')),flush=True)
    return 3
   raise
  decision=None
+ stage('MATERIAL_REVISION_CHECK')
  if prior:
   decision=revision_decision(prior,obs,source_dir=source);write(source/'revision-decision.json',decision)
  if decision and decision['decision']=='REUSE_FROZEN_ORIGINAL':
   frozen,body=readback(prior);original=prior;calculation_source=root/'prior/source';mode='REUSE_WITH_SEPARATE_FRESH_SOURCE_CHECK';new_KRS=0
  else:
+  stage('FIXED_INDICES_OWNERS_KRS_MEC_CAPITAL')
   original=root/'prediction';frozen=run(obs,str(original),str(model),str(engine),str(params),source_dir=str(source));frozen,body=readback(original);calculation_source=source;mode='NEW_PRESTART_IMMUTABLE_ORIGINAL';new_KRS=2
+ stage('COMPLETED_ORIGINAL_READBACK');require_race(frozen['race'])
  check_source_time(obs,'BEFORE_PRIVATE_PERSISTENCE')
  if frozen['classification']!='OHI_SINGLE_RACE_PRESTART_NONPRODUCTION_NOT_REGISTERED_OOS':raise ValueError('PRIVATE_CLASSIFICATION_CONFLICT')
- if any(not x['receipt']['actual_engine_executed']or x['receipt']['runs']!=5000 or x['receipt']['seed']!=1 for x in frozen['krs'].values()):raise ValueError('FIXED_KRS_RECEIPT_CONFLICT')
- # Keep the completed body intact. Fresh checks do not become a new old Freeze.
+ if set(frozen['krs'])!={'BASELINE','OHI_FIXED_CANDIDATE'} or any(not x['receipt']['actual_engine_executed']or x['receipt']['runs']!=5000 or x['receipt']['seed']!=1 for x in frozen['krs'].values()):raise ValueError('FIXED_KRS_RECEIPT_CONFLICT')
+ original_body_sha=digest(body.encode());body=delivery_body(frozen,body)
+ # Keep all calculated rows/tickets. Fresh checks do not become a new old Freeze.
  if decision:body='最新SOURCE照合（旧Freezeを変更しない）：'+json.dumps(decision,ensure_ascii=False)+'\n\n'+body
+ stage('PRIVATE_ORIGINAL_PUT_GET')
  archive=zip_original(original,calculation_source,body,fresh_source=source);archive_key=prefix+'revisions/'+frozen['sha256']+'/'+digest(archive)+'.zip';arch=store.put_new_and_read(archive_key,archive)
- record=seal({'classification':frozen['classification'],'date':TARGET_DAY,'race_no':RACE_NO,'prediction_sha256':frozen['sha256'],'source_sha256':frozen['source_sha256'],'freeze_at':frozen['freeze_at'],'cutoff':frozen['race']['prediction_cutoff'],'fresh_observation_sha256':obs['sha256'],'fresh_source_receipt_times':[r['fetched_at']for r in obs['receipts']],'current_source_verified':True,'mode':mode,'new_KRS_calls':new_KRS,'archive':arch,'body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'Production_changes':0,'OOS_credit':0})
+ record=seal({'classification':frozen['classification'],'date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'prediction_sha256':frozen['sha256'],'source_sha256':frozen['source_sha256'],'freeze_at':frozen['freeze_at'],'cutoff':frozen['race']['prediction_cutoff'],'fresh_observation_sha256':obs['sha256'],'fresh_source_receipt_times':[r['fetched_at']for r in obs['receipts']],'current_source_verified':True,'mode':mode,'new_KRS_calls':new_KRS,'archive':arch,'body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'original_rendered_body_sha256':original_body_sha,'delivery_presentation_only':True,'actor':{'project_id':PROJECT,'environment_id':ENVIRONMENT,'service_id':SERVICE,'deployment_id':os.environ.get('RAILWAY_DEPLOYMENT_ID')},'resource_limits':resources,'bootstrap':bootstrap,'protected_Work_original_sha256':os.environ.get('OHI_PROTECTED_WORK_ORIGINAL_SHA256'),'relation_to_Work_original':'SAME_RACE_SEPARATE_ACTOR_NOT_AN_OVERWRITE','Production_changes':0,'OOS_credit':0})
  # Every record is immutable; latest is selected from the timestamped record journal.
  stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
- store.put_new_and_read(prefix+'records/'+stamp+'-'+record['sha256']+'.json',(json.dumps(record,ensure_ascii=False,sort_keys=True)+'\n').encode())
+ stage('PRIVATE_RECORD_PUT_GET');store.put_new_and_read(prefix+'records/'+stamp+'-'+record['sha256']+'.json',(json.dumps(record,ensure_ascii=False,sort_keys=True)+'\n').encode())
+ stage('COMPLETE_BODY_RELAY')
  check_source_time(obs,'PRIVATE_DELIVERY_EMIT');events=list(body_events(body,record));reconstructed,rec=assemble_body(events)
  if reconstructed!=body:raise ValueError('PRIVATE_LOCAL_RELAY_BODY_CONFLICT')
  for event in events:print(json.dumps(event,ensure_ascii=False,separators=(',',':')),flush=True)
  # A private outbox/log emit is not a claim of chat screen delivery or user ACK.
  return 0
 
+def cli(argv=None):
+ parser=argparse.ArgumentParser(description='Private R2 bootstrap check by default; explicitly arm the single prestart run.')
+ mode=parser.add_mutually_exclusive_group()
+ mode.add_argument('--bootstrap-only',action='store_true',help='Verify private PUT/GET and all R2 inputs; no SOURCE or calculation.')
+ mode.add_argument('--execute',action='store_true',help='Run only 2026-10-28 14:00 <= JST < 14:25 with verified resource limits.')
+ mode.add_argument('--execute-child',action='store_true',help=argparse.SUPPRESS)
+ args=parser.parse_args(argv)
+ if args.execute:
+  # The process group belongs exclusively to this pilot, including Engine children.
+  # The parent has a real wall-clock deadline; worker threads cannot delay shutdown.
+  import signal,subprocess
+  now=datetime.now(timezone.utc);stage('SINGLE_RUN_TIME_WINDOW');require_execution_window(now)
+  timeout=(datetime(2026,10,28,14,25,tzinfo=JST)-now).total_seconds()
+  process=subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'--execute-child'],start_new_session=True)
+  try:return process.wait(timeout=timeout)
+  except subprocess.TimeoutExpired:
+   try:os.killpg(process.pid,signal.SIGTERM)
+   except ProcessLookupError:pass
+   try:process.wait(timeout=5)
+   except subprocess.TimeoutExpired:
+    try:os.killpg(process.pid,signal.SIGKILL)
+    except ProcessLookupError:pass
+    process.wait()
+   stage('PILOT_WALL_CLOCK_DEADLINE');raise ValueError('PRIVATE_PILOT_CUTOFF_PASSED') from None
+ return main(execute=args.execute_child)
+
 if __name__=='__main__':
- try:raise SystemExit(main())
+ try:raise SystemExit(cli())
  except Exception as e:
   # Never dump Raw, keys, model contents, or HTTP response bodies to logs.
-  print(json.dumps({'schema':'KM_OHI_PRIVATE_PILOT_HOLD_V1','date':TARGET_DAY,'race_no':RACE_NO,'error_type':type(e).__name__,'error_code':str(e)if isinstance(e,ValueError)and str(e).startswith(('PRIVATE_','FIXED_','OHI_'))else'PILOT_EXTERNAL_OR_SOURCE_HOLD','new_Production_or_OOS':0}),flush=True)
+  print(json.dumps(hold_event(e)),flush=True)
   raise SystemExit(2)
+
