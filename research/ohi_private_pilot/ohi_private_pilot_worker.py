@@ -130,6 +130,75 @@ class PrivateStore:
   if actual!=data:raise ValueError('PRIVATE_STORE_ACTUAL_BYTE_READBACK_MISMATCH')
   return {'key':key,'bytes':len(data),'sha256':digest(actual),'actual_object_GET':True}
 
+def claim_single_run(store,prefix,now,env):
+ stage('SINGLE_RUN_CLAIM')
+ claim=seal({'purpose':'ONE_APPROVED_PRIVATE_EXECUTION_NOT_COMPLETION','date':TARGET_DAY,
+             'race_no':RACE_NO,'race_id':RACE_ID,'claimed_at':now.isoformat(),
+             'project_id':PROJECT,'environment_id':ENVIRONMENT,'service_id':SERVICE,
+             'deployment_id':env.get('RAILWAY_DEPLOYMENT_ID'),'prediction_calculated':False})
+ try:
+  return store.put_new_and_read(prefix+'single-run/execute-claim.json',
+         (json.dumps(claim,sort_keys=True)+'\n').encode())
+ except Exception as exc:
+  response=getattr(exc,'response',{})
+  code=(response.get('Error')or{}).get('Code') if isinstance(response,dict) else None
+  status=(response.get('ResponseMetadata')or{}).get('HTTPStatusCode') if isinstance(response,dict) else None
+  if code in ('PreconditionFailed','ConditionalRequestConflict','412')or status==412:
+   raise ValueError('PRIVATE_PILOT_EXECUTION_ALREADY_CLAIMED') from None
+  raise
+ # The claim is never replaced, removed or automatically retried, even on failure.
+
+def protected_work_binding(env):
+ stage('PROTECTED_WORK_BINDINGS')
+ names=('OHI_PROTECTED_WORK_ARCHIVE_KEY','OHI_PROTECTED_WORK_ARCHIVE_SHA256',
+        'OHI_PROTECTED_WORK_ARCHIVE_BYTES','OHI_PROTECTED_WORK_ORIGINAL_SHA256')
+ values=[env.get(name)for name in names]
+ if not all(values):raise ValueError('PRIVATE_PROTECTED_WORK_BINDINGS_INCOMPLETE')
+ key,archive_sha,size,prediction_sha=values
+ if not re.fullmatch('[0-9a-f]{64}',archive_sha)or not re.fullmatch('[0-9a-f]{64}',prediction_sha):
+  raise ValueError('PRIVATE_PROTECTED_WORK_BINDINGS_INVALID')
+ try:size=int(size)
+ except (TypeError,ValueError):raise ValueError('PRIVATE_PROTECTED_WORK_BINDINGS_INVALID') from None
+ if not 0<size<=200_000_000:raise ValueError('PRIVATE_PROTECTED_WORK_BINDINGS_INVALID')
+ return key,archive_sha,size,prediction_sha
+
+def protected_work_original(store,env,root,readback):
+ key,archive_sha,size,prediction_sha=protected_work_binding(env)
+ stage('PROTECTED_WORK_ORIGINAL_READBACK')
+ data=store.get(key)
+ if data is None or len(data)!=size or digest(data)!=archive_sha:raise ValueError('PRIVATE_PROTECTED_WORK_ARCHIVE_SHA_CONFLICT')
+ folder=safe_extract(data,Path(root)/'protected-work')
+ manifest=json.loads((folder/'SHA_Manifest.json').read_text())
+ if manifest.get('race_id')!=RACE_ID or manifest.get('prediction_sha256')!=prediction_sha:
+  raise ValueError('PRIVATE_PROTECTED_WORK_MANIFEST_IDENTITY_CONFLICT')
+ inventory=manifest.get('files')
+ if not isinstance(inventory,list)or not inventory:raise ValueError('PRIVATE_PROTECTED_WORK_MANIFEST_INVALID')
+ names=set()
+ for entry in inventory:
+  relative=entry['path'];path=Path(relative)
+  if relative in names or path.is_absolute()or'..'in path.parts:raise ValueError('PRIVATE_PROTECTED_WORK_MANIFEST_PATH_CONFLICT')
+  names.add(relative);raw=(folder/path).read_bytes()
+  if type(entry['bytes'])is not int or len(raw)!=entry['bytes']or digest(raw)!=entry['SHA256']:
+   raise ValueError('PRIVATE_PROTECTED_WORK_MEMBER_SHA_CONFLICT')
+ actual={str(p.relative_to(folder))for p in folder.rglob('*')if p.is_file()}
+ if actual!=names|{'SHA_Manifest.json'}:raise ValueError('PRIVATE_PROTECTED_WORK_MANIFEST_INVENTORY_CONFLICT')
+ original=folder/'original';source=folder/'source';frozen,body=readback(original)
+ require_race(frozen['race'])
+ if frozen['sha256']!=prediction_sha or frozen.get('classification')!='OHI_SINGLE_RACE_PRESTART_NONPRODUCTION_NOT_REGISTERED_OOS':
+  raise ValueError('PRIVATE_PROTECTED_WORK_PREDICTION_CONFLICT')
+ observation=validate_record(json.loads((source/'observation.json').read_text()))
+ if observation.get('race')!=frozen['race']or observation['sha256']!=frozen['source_sha256']:
+  raise ValueError('PRIVATE_PROTECTED_WORK_SOURCE_CONFLICT')
+ record=seal({'classification':frozen['classification'],'date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,
+              'prediction_sha256':frozen['sha256'],'source_sha256':frozen['source_sha256'],
+              'freeze_at':frozen['freeze_at'],'cutoff':frozen['race']['prediction_cutoff'],
+              'mode':'PROTECTED_WORK_ORIGINAL_READBACK','origin_actor':'CHATGPT_WORK',
+              'archive':{'key':key,'bytes':len(data),'sha256':digest(data),'actual_object_GET':True},
+              'body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),
+              'current_source_verified':False,'new_KRS_calls':0,'new_prestart_credit':0,
+              'manifest_payload_members_verified':len(names),'Production_changes':0,'OOS_credit':0})
+ return original,source,record
+
 def body_events(body,record,limit=1200):
  if not isinstance(limit,int) or limit<=0:raise ValueError('PRIVATE_DELIVERY_CHUNK_SIZE_INVALID')
  validate_record(record)
@@ -220,9 +289,17 @@ def main(*,execute=False):
  if execute:
   stage('SINGLE_RUN_TIME_WINDOW');require_execution_window(now)
   stage('RESOURCE_LIMITS');resources=require_resource_limits()
- stage('PRIVATE_STORE_PREFLIGHT');store=PrivateStore(os.environ)
- probe=(json.dumps({'purpose':'PRIVATE_STORE_PREFLIGHT_NOT_PREDICTION','date':TARGET_DAY,'race_no':RACE_NO,'created_at':now.isoformat()},sort_keys=True)+'\n').encode()
- probe_receipt=store.put_new_and_read('OHI/'+TARGET_DAY+'/R01/store-probes/'+digest(probe)+'.json',probe)
+  # This fixed R1 already has a completed Work original. Missing references
+  # cannot turn it into a new race or consume the single approved run claim.
+  protected_work_binding(os.environ)
+ stage('PRIVATE_STORE_PREFLIGHT');store=PrivateStore(os.environ);prefix=f'OHI/{TARGET_DAY}/R{RACE_NO:02d}/'
+ claim_receipt=None
+ if execute:
+  # The immutable claim also proves private PUT/GET, before any other run write.
+  claim_receipt=claim_single_run(store,prefix,now,os.environ);probe_receipt=claim_receipt
+ else:
+  probe=(json.dumps({'purpose':'PRIVATE_STORE_PREFLIGHT_NOT_PREDICTION','date':TARGET_DAY,'race_no':RACE_NO,'created_at':now.isoformat()},sort_keys=True)+'\n').encode()
+  probe_receipt=store.put_new_and_read(prefix+'store-probes/'+digest(probe)+'.json',probe)
  (code,model,engine,params),bootstrap=prepare_bootstrap(store,os.environ)
  if not execute:
   print(json.dumps({'schema':'KM_OHI_PRIVATE_BOOTSTRAP_READY_V1','date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,
@@ -232,12 +309,15 @@ def main(*,execute=False):
  sys.path[:0]=[str(code),str(code/'runtime')]
  from runtime.ohi_single_race_research import capture,run,readback,revision_decision,write,render,check_source_time
  os.chdir(code)
- stage('EXISTING_PRIVATE_ORIGINAL_READBACK')
- root=Path(tempfile.mkdtemp(prefix='km-ohi-private-pilot-')).resolve();root.chmod(0o700);prefix='OHI/2026-10-28/R01/';old_record_bytes=store.latest_record(prefix);prior=None
+ root=Path(tempfile.mkdtemp(prefix='km-ohi-private-pilot-')).resolve();root.chmod(0o700)
+ prior,prior_source,old_record=protected_work_original(store,os.environ,root,readback)
+ stage('EXISTING_PRIVATE_ORIGINAL_READBACK');old_record_bytes=store.latest_record(prefix)
  if old_record_bytes:
   old_record=validate_record(json.loads(old_record_bytes));b=store.get(old_record['archive']['key'])
-  if b is None or digest(b)!=old_record['archive']['sha256']:raise ValueError('PRIVATE_EXISTING_ARCHIVE_SHA_CONFLICT')
+  if (old_record.get('date'),old_record.get('race_no'))!=(TARGET_DAY,RACE_NO)or old_record.get('race_id')not in (None,RACE_ID):raise ValueError('PRIVATE_EXISTING_ORIGINAL_OTHER_RACE')
+  if b is None or len(b)!=old_record['archive']['bytes']or digest(b)!=old_record['archive']['sha256']:raise ValueError('PRIVATE_EXISTING_ARCHIVE_SHA_CONFLICT')
   safe_extract(b,root/'prior');prior=root/'prior/prediction';old,_=readback(prior)
+  prior_source=root/'prior/source'
   require_race(old['race'])
   if old['race']['race_date']!=TARGET_DAY or old['race']['race_no']!=RACE_NO or old['sha256']!=old_record['prediction_sha256']:raise ValueError('PRIVATE_EXISTING_ORIGINAL_OTHER_RACE')
  source=root/'current-source'
@@ -259,7 +339,7 @@ def main(*,execute=False):
  if prior:
   decision=revision_decision(prior,obs,source_dir=source);write(source/'revision-decision.json',decision)
  if decision and decision['decision']=='REUSE_FROZEN_ORIGINAL':
-  frozen,body=readback(prior);original=prior;calculation_source=root/'prior/source';mode='REUSE_WITH_SEPARATE_FRESH_SOURCE_CHECK';new_KRS=0
+  frozen,body=readback(prior);original=prior;calculation_source=prior_source;mode='REUSE_WITH_SEPARATE_FRESH_SOURCE_CHECK';new_KRS=0
  else:
   stage('FIXED_INDICES_OWNERS_KRS_MEC_CAPITAL')
   original=root/'prediction';frozen=run(obs,str(original),str(model),str(engine),str(params),source_dir=str(source));frozen,body=readback(original);calculation_source=source;mode='NEW_PRESTART_IMMUTABLE_ORIGINAL';new_KRS=2
@@ -272,7 +352,7 @@ def main(*,execute=False):
  if decision:body='最新SOURCE照合（旧Freezeを変更しない）：'+json.dumps(decision,ensure_ascii=False)+'\n\n'+body
  stage('PRIVATE_ORIGINAL_PUT_GET')
  archive=zip_original(original,calculation_source,body,fresh_source=source);archive_key=prefix+'revisions/'+frozen['sha256']+'/'+digest(archive)+'.zip';arch=store.put_new_and_read(archive_key,archive)
- record=seal({'classification':frozen['classification'],'date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'prediction_sha256':frozen['sha256'],'source_sha256':frozen['source_sha256'],'freeze_at':frozen['freeze_at'],'cutoff':frozen['race']['prediction_cutoff'],'fresh_observation_sha256':obs['sha256'],'fresh_source_receipt_times':[r['fetched_at']for r in obs['receipts']],'current_source_verified':True,'mode':mode,'new_KRS_calls':new_KRS,'archive':arch,'body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'original_rendered_body_sha256':original_body_sha,'delivery_presentation_only':True,'actor':{'project_id':PROJECT,'environment_id':ENVIRONMENT,'service_id':SERVICE,'deployment_id':os.environ.get('RAILWAY_DEPLOYMENT_ID')},'resource_limits':resources,'bootstrap':bootstrap,'protected_Work_original_sha256':os.environ.get('OHI_PROTECTED_WORK_ORIGINAL_SHA256'),'relation_to_Work_original':'SAME_RACE_SEPARATE_ACTOR_NOT_AN_OVERWRITE','Production_changes':0,'OOS_credit':0})
+ record=seal({'classification':frozen['classification'],'date':TARGET_DAY,'race_no':RACE_NO,'race_id':RACE_ID,'prediction_sha256':frozen['sha256'],'source_sha256':frozen['source_sha256'],'freeze_at':frozen['freeze_at'],'cutoff':frozen['race']['prediction_cutoff'],'fresh_observation_sha256':obs['sha256'],'fresh_source_receipt_times':[r['fetched_at']for r in obs['receipts']],'current_source_verified':True,'mode':mode,'new_KRS_calls':new_KRS,'archive':arch,'body_sha256':digest(body.encode()),'body_bytes':len(body.encode()),'original_rendered_body_sha256':original_body_sha,'delivery_presentation_only':True,'actor':{'project_id':PROJECT,'environment_id':ENVIRONMENT,'service_id':SERVICE,'deployment_id':os.environ.get('RAILWAY_DEPLOYMENT_ID')},'resource_limits':resources,'bootstrap':bootstrap,'single_run_claim':claim_receipt,'prior_original_origin':old_record.get('origin_actor',old_record.get('prior_original_origin','RAILWAY_RESEARCH_WORKER'))if old_record else None,'protected_Work_original_sha256':os.environ.get('OHI_PROTECTED_WORK_ORIGINAL_SHA256'),'relation_to_Work_original':'SAME_RACE_SEPARATE_ACTOR_NOT_AN_OVERWRITE','Production_changes':0,'OOS_credit':0})
  # Every record is immutable; latest is selected from the timestamped record journal.
  stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
  stage('PRIVATE_RECORD_PUT_GET');store.put_new_and_read(prefix+'records/'+stamp+'-'+record['sha256']+'.json',(json.dumps(record,ensure_ascii=False,sort_keys=True)+'\n').encode())
