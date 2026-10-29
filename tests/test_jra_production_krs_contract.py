@@ -5,6 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 import sys
 import unittest
+import hashlib
+import json
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
 from jra_production_krs_contract import (
@@ -32,7 +34,9 @@ def request(count=20000):
 
 def executed(payload):
     sim=payload["input_data"]["simulation"]
-    return {"run_receipt":{
+    output={'summary':[]}
+    raw=json.dumps(output,separators=(',',':'))
+    return {"output":output,"output_canonical_json":raw,"run_receipt":{
         "receipt_sha256":"c"*64,
         "receipt":{
             "status":"EXECUTED",
@@ -44,7 +48,7 @@ def executed(payload):
             "engine_sha256":ENGINE,
             "input_class":payload["input_class"],
             "input_sha256":"a"*64,
-            "output_sha256":"b"*64,
+            "output_sha256":hashlib.sha256(raw.encode()).hexdigest(),
         }
     }}
 

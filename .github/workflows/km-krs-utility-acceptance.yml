@@ -1,13 +1,52 @@
 name: KeibaMetrics KRS Utility Acceptance
 
 on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/km-krs-utility-acceptance.yml"
+      - "runtime/krs_prediction_utility.py"
+      - "runtime/jra_krs_utility_measurement.py"
+      - "runtime/jra_production_krs_contract.py"
+      - "runtime/jra_krs_legacy_input_binding.py"
+      - "runtime/jra_krs_request_checkpoint.py"
+      - "runtime/jra_learning_intake.py"
+      - "runtime/jra_role_rescue_shadow.py"
+      - "runtime/race_day_fast_reflection.py"
+      - ".github/workflows/km-formal-request-runner.yml"
+      - "tests/test_jra_execution_assurance.py"
+      - "tests/test_jra_krs_failure_evidence.py"
+      - "tests/test_jra_krs_durable_checkpoint.py"
+      - "tests/test_jra_krs_legacy_input_binding.py"
+      - "tests/test_jra_shadow_registration_portability.py"
+      - "scripts/verify_jra_shadow_registration.py"
+      - "scripts/*jra_day_review.py"
+      - "scripts/jra_full_day_postrace_review.py"
+      - "tests/test_jra_day_review.py"
+      - "evidence/jra_day_review_20261017/payload*"
   push:
     branches: [ main ]
     paths:
       - ".github/workflows/km-krs-utility-acceptance.yml"
       - "runtime/krs_prediction_utility.py"
-      - "tests/test_krs_prediction_utility.py"
+      - "runtime/jra_krs_utility_measurement.py"
+      - "runtime/jra_production_krs_contract.py"
+      - "runtime/jra_krs_legacy_input_binding.py"
+      - "runtime/jra_krs_request_checkpoint.py"
+      - "runtime/jra_learning_intake.py"
+      - "runtime/jra_role_rescue_shadow.py"
+      - "runtime/race_day_fast_reflection.py"
       - ".github/workflows/km-formal-request-runner.yml"
+      - "tests/test_jra_execution_assurance.py"
+      - "tests/test_jra_krs_failure_evidence.py"
+      - "tests/test_jra_krs_durable_checkpoint.py"
+      - "tests/test_jra_krs_legacy_input_binding.py"
+      - "tests/test_jra_shadow_registration_portability.py"
+      - "scripts/verify_jra_shadow_registration.py"
+      - "scripts/*jra_day_review.py"
+      - "scripts/jra_full_day_postrace_review.py"
+      - "tests/test_jra_day_review.py"
+      - "evidence/jra_day_review_20261017/payload*"
   workflow_dispatch:
 
 jobs:
@@ -20,7 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --quiet pyyaml
+          python -m pip install --quiet pyyaml pytest cryptography beautifulsoup4
           python - <<'PY'
           import re, yaml
           from pathlib import Path
@@ -38,3 +77,4 @@ jobs:
           print("FORMAL_WORKFLOW_SYNTAX_PASS")
           PY
           python tests/test_krs_prediction_utility.py
+          python -m pytest -q tests/test_jra_day_review.py tests/test_jra_execution_assurance.py tests/test_jra_krs_failure_evidence.py tests/test_jra_krs_durable_checkpoint.py tests/test_jra_krs_legacy_input_binding.py tests/test_jra_shadow_registration_portability.py tests/test_race_day_fast_path.py tests/test_ohi_20261008_result_reflection_regression.py tests/test_krs_oos_promotion_gate.py tests/test_jra_production_krs_contract.py tests/test_jra_production_postresult.py tests/test_jra_no_bet_postresult_learning.py tests/test_pfs_grand_review.py tests/test_jra_production_fullnumerical_to_krs.py tests/test_jra_candidate_postresult_closedloop.py

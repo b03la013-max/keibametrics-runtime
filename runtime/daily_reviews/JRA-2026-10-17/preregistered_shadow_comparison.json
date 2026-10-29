@@ -1,0 +1,268 @@
+{
+  "arms": {
+    "A_CURRENT_PRODUCTION": "Exact existing FINAL tickets; policy unchanged",
+    "B_SELECTIVE_CORE_ONLY": "Existing R3 CORE tickets only; no added combinations",
+    "C_AKI_TRIGGER_SELECTIVE": "If any official AKI column trigger is REVIEW use CORE_ONLY, otherwise existing FINAL tickets; never repair missing Pair",
+    "D_STATIC_TOP3_BOX": "All 6 TRIFECTA permutations of frozen Static top3; 100 yen each; skip unavailable bet type",
+    "E_SOURCE_MARKET_TOP3_BOX": "All 6 TRIFECTA permutations of same Signed SOURCE popularity top3; 100 yen each; skip incomplete market"
+  },
+  "baseline": "A Current Production; D/E matched budget comparator separately",
+  "baseline_authority": "KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+  "bvi_abc": "Existing admitted same-race pre-frozen distinct A/B/C only; A=B is not added-information evidence",
+  "candidate_id": "JRA-POST-OCT17-PAIRED-SHADOW-20261017-R1",
+  "capital_impact": "0 actual yen; hypothetical exposure per arm only; no purchase",
+  "definition_sha256": {
+    "/workspace/scratch/ab7e656e13a3/km-day-review/profiles/KM_FAMILY_CURRENT_AUTHORITY_20261012_R51.json": "e256a69b3b46ea67f4e768d9e58883f7bd735e36a3d7318687eab376f5ddf7d8",
+    "profiles/family_runtime_contracts_20261008_R28.json": "18f12729947b0542e2af6998613937037c6031ea9a6b1783722b638817736b2e",
+    "profiles/jra_aki_v21_columns_20261011_v1.json": "0e1e133f8ccf830567f0f2119a858f6b139d02d37bb8599e3801cb2d67f8e06d",
+    "profiles/jra_aki_v21_components_20261011_v1.json": "c2413998bd4662f990589fe6f69b11b66d39a1efbc1599b6bdb4aa7753adcf95",
+    "runtime/capital_policy.py": "bbd3c259ebb0e9399152e56dbbc356ee853e99939e9f60d50e7ed3ebe62ff9ae",
+    "runtime/jra_aki_dispatch.py": "a9f514371ef7f647340a571266c64f19094acf6276195f39f192e010bc7beb0f",
+    "runtime/jra_aki_v21.py": "4e4faff41d7312bcebac7440dc855dccb133b762dddfe0e29737fb25bfbaaaea",
+    "runtime/jra_learning_intake.py": "8a3c66f8e2f383394c9441a40717c63a0a43863a48a6e79a9250c6879b0eb45a",
+    "runtime/jra_production_krs_contract.py": "b414c36723cf097884c7cf4bcfe4db6f761f817b2bf15d407268264f61f0fd16",
+    "runtime/jra_role_rescue_shadow.py": "9495c2d2dc1c9381d91db619890a0c2bb683e4f7d56a932115c0a25b045557f7",
+    "runtime/jra_static_owner_executable.py": "8f47f72d0bac49c57ec06193685da47b7c7abb917a23eec065ea8672bb680ec8",
+    "runtime/minimum_efficient_coverage.py": "0f436e0078f9ced18191b31c6d56ac202835b3a9633f612fd7df00480a28d1b5",
+    "runtime/race_day_fast_reflection.py": "3c3c8de9b930aa9ac8769a1ce66c7bf38742bac354e79391f30b8f40b4943b27",
+    "scripts/jra_execution_assurance_review.py": "707008bc94074ac968c6b39b15ffdf241f698f4471482f11eac060f974eba9da"
+  },
+  "eligible": "Unknown future races after this commit and Owner activation; freeze same SOURCE/universe/cutoff before result",
+  "false_positive_cost": "Track additional losing tickets and yen separately; no win-probability interpretation of KRS frequency",
+  "family": "JRA",
+  "historical_oct17_count_in_forward_sample": 0,
+  "learning": "runtime/jra_learning_intake.py validates Shadow context only; no automatic numerical application",
+  "negative_control": "Unchanged Production arm exactly reproduces frozen tickets; same-input duplicate must have zero delta",
+  "per_candidate": [
+    {
+      "algorithm": "Exact existing FINAL tickets; policy unchanged",
+      "baseline": "A_CURRENT_PRODUCTION",
+      "candidate_id": "A_CURRENT_PRODUCTION-JRA-20261017-R1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Hypothetical losing ticket yen",
+      "family": "JRA",
+      "historical_screen": "CONTROL/BASELINE; NOT AN APPROVED NEW POLICY",
+      "negative_control": "A frozen tickets reproduce exactly",
+      "policy_fingerprint": "988c098b53e1a6aa6e5b008efae0262104721ad49cec76eab776b02a1b458c63",
+      "primary_metric": "Paired profit/loss and robust PFS",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "same_source_cutoff_universe_required": true,
+      "secondary_metric": "Lost baseline hits; ticket width; drawdown",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    },
+    {
+      "algorithm": "Existing R3 CORE tickets only; no added combinations",
+      "baseline": "A_CURRENT_PRODUCTION",
+      "candidate_id": "B_SELECTIVE_CORE_ONLY-JRA-20261017-R1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Hypothetical losing ticket yen",
+      "family": "JRA",
+      "historical_screen": "REJECTED FOR PROMOTION: loses KYO11 positive-control protection hit; negative-control research only",
+      "negative_control": "A frozen tickets reproduce exactly",
+      "policy_fingerprint": "1c302c85a16345964c45154eb84ea4b96f8784720d408e5b80bbec14dbc27ea6",
+      "primary_metric": "Paired profit/loss and robust PFS",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "same_source_cutoff_universe_required": true,
+      "secondary_metric": "Lost baseline hits; ticket width; drawdown",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    },
+    {
+      "algorithm": "If any official AKI column trigger is REVIEW use CORE_ONLY, otherwise existing FINAL tickets; never repair missing Pair",
+      "baseline": "A_CURRENT_PRODUCTION",
+      "candidate_id": "C_AKI_TRIGGER_SELECTIVE-JRA-20261017-R1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Hypothetical losing ticket yen",
+      "family": "JRA",
+      "historical_screen": "REJECTED FOR PROMOTION: loses KYO11 positive-control protection hit; negative-control research only",
+      "negative_control": "A frozen tickets reproduce exactly",
+      "policy_fingerprint": "19981fd249d227d73a65efbb9b881493d4e6e3ebe25b6620054c414ea7e045ba",
+      "primary_metric": "Paired profit/loss and robust PFS",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "same_source_cutoff_universe_required": true,
+      "secondary_metric": "Lost baseline hits; ticket width; drawdown",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    },
+    {
+      "algorithm": "All 6 TRIFECTA permutations of frozen Static top3; 100 yen each; skip unavailable bet type",
+      "baseline": "A_CURRENT_PRODUCTION",
+      "candidate_id": "D_STATIC_TOP3_BOX-JRA-20261017-R1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Hypothetical losing ticket yen",
+      "family": "JRA",
+      "historical_screen": "CONTROL/BASELINE; NOT AN APPROVED NEW POLICY",
+      "negative_control": "A frozen tickets reproduce exactly",
+      "policy_fingerprint": "04a99a417a307fca09d2ff2e8942a081e78a43af6a7b7d7cf465791874bc0fcc",
+      "primary_metric": "Paired profit/loss and robust PFS",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "same_source_cutoff_universe_required": true,
+      "secondary_metric": "Lost baseline hits; ticket width; drawdown",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    },
+    {
+      "algorithm": "All 6 TRIFECTA permutations of same Signed SOURCE popularity top3; 100 yen each; skip incomplete market",
+      "baseline": "A_CURRENT_PRODUCTION",
+      "candidate_id": "E_SOURCE_MARKET_TOP3_BOX-JRA-20261017-R1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Hypothetical losing ticket yen",
+      "family": "JRA",
+      "historical_screen": "CONTROL/BASELINE; NOT AN APPROVED NEW POLICY",
+      "negative_control": "A frozen tickets reproduce exactly",
+      "policy_fingerprint": "1acd47f2786301aaca2c5ab0b3c52c7eddf8e06b171848c67038afc9d45f302d",
+      "primary_metric": "Paired profit/loss and robust PFS",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "same_source_cutoff_universe_required": true,
+      "secondary_metric": "Lost baseline hits; ticket width; drawdown",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    },
+    {
+      "algorithm": "runtime/jra_role_rescue_shadow.py; at most one already-observed unique actionable KRS proposal per column; no Pair/Third/ticket creation",
+      "baseline": "Frozen Static roles",
+      "candidate_id": "JRA-KRS-UNIQUE-ROLE-REVIEW-ONE-PER-COLUMN-v1",
+      "capital_impact": "0 actual yen",
+      "false_positive_cost": "Added false role count; no actual stake",
+      "family": "JRA",
+      "negative_control": "Already-held Static roles must never become unique rescues",
+      "policy_fingerprint": "33f726246aab8f6fe2a757d986cb7a2237e4c35278340d693e61570ddb52ef72",
+      "primary_metric": "Incremental Winner/P2/P3 capture per added role; fixed one-per-column width",
+      "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+      "required_sample": {
+        "distinct_races": 60,
+        "minimum_meeting_days": 3,
+        "minimum_venues": 2,
+        "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+      },
+      "secondary_metric": "False-positive additions; distinct Pair feasibility; Unique Harm",
+      "status": "SHADOW ONLY / OWNER ACTIVATION PENDING",
+      "stop_reject": [
+        "Any post-cutoff freeze or target-result leakage",
+        "Source/universe mismatch",
+        "Changed fingerprint",
+        "Missing signed FINAL for Production comparator",
+        "Nonpositive paired primary gain or positive-control loss at fixed review point"
+      ],
+      "venues": [
+        "TKY",
+        "KYO",
+        "NGT"
+      ]
+    }
+  ],
+  "policy_fingerprint": "fb480c4dcf93c3d31e75cad13af541cf91f2d563652eff11eb04999ad7e76cc7",
+  "primary_capital_metric": "Paired recommendation profit/loss; weighted PFS plus largest-return-excluded PFS",
+  "primary_prediction_metric": "Ordered Exact capture at fixed candidate width; separately Winner/P2/P3 capture",
+  "production_policy_change": false,
+  "promotion_authority": "Current Authority + explicit Owner decision; no auto promotion at 30/60",
+  "registered_at": "2026-10-17T09:54:57.230865+00:00",
+  "required_sample": {
+    "distinct_races": 60,
+    "minimum_meeting_days": 3,
+    "minimum_venues": 2,
+    "precision": "Design pilot only, not a power claim; preserve all abstentions/failures"
+  },
+  "secondary_metrics": [
+    "Candidate/false-positive width",
+    "KRS unique rescue/harm",
+    "Role/Pair/Third retention",
+    "Investment",
+    "Drawdown",
+    "Hit-but-loss"
+  ],
+  "status": "PREREGISTERED FOR OWNER REVIEW / NOT ACTIVATED",
+  "stop_reject": [
+    "Any post-cutoff freeze or target-result leakage",
+    "Source/universe mismatch",
+    "Changed fingerprint",
+    "Missing signed FINAL for Production comparator",
+    "Nonpositive paired primary gain or positive-control loss at fixed review point"
+  ],
+  "venues": [
+    "TKY",
+    "KYO",
+    "NGT"
+  ]
+}
