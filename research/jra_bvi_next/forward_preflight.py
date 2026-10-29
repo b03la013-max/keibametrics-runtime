@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import date
 from pathlib import Path
 
 from partition_integrity import audit_report
@@ -42,11 +41,14 @@ def assess(authority: dict, static_oos: dict, pedigree_oos: dict,
     require(pedigree_oos.get("eligible_settled_races") == 0
             and pedigree_oos.get("unpooled_race_count") == 0
             and not pedigree_oos.get("cohorts"), "PEDIGREE_OOS_COHORT_NOT_AT_ZERO_BASELINE")
-    require(set((pedigree_oos.get("arms") or {}).keys())
-            == {"A_CURRENT", "B_BVI_OFF", "C_BVI_PEDIGREE", "D_BVI_ENV"} or
-            (len(pedigree_oos.get("arms") or {}) == 4
-             and "A_CURRENT" in pedigree_oos["arms"]),
-            "FOUR_ARM_COHORT_SHAPE_CHANGED")
+    require(set((pedigree_oos.get("arms") or {}).keys()) == {
+                "A_CURRENT", "B_PEDIGREE_ENHANCED_SHADOW",
+                "C_BLOODLINE_ABLATION", "D_BVI_ENV_SHADOW",
+            }, "FOUR_ARM_COHORT_SHAPE_CHANGED")
+    require(pedigree_oos.get("automatic_promotion") is False
+            and pedigree_oos.get("production_effect") == "NONE"
+            and pedigree_oos.get("required_forward_races") == 30,
+            "PEDIGREE_OOS_SAFETY_POLICY_CHANGED")
     comparison = audit_report(historical)
     full_test = comparison["partitions"]["TEST"]["all"]
     full_validation = comparison["partitions"]["VALIDATION"]["all"]
