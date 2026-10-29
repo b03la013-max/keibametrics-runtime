@@ -189,3 +189,44 @@ The research CI saves an explicit per-race and aggregate role-chain JSON
 artifact. An incomplete archived re-evaluation or mismatched original
 registered AKI replay now fails the research check instead of converting
 a partial replay into success.
+
+
+## 2026-10-30 week-end non-Production preflight for 2026-10-31
+
+The offline \`forward_preflight.py\` audits the **current** R51 JRA Scope,
+fixed-D raw bytes, both untouched forward-OOS ledgers (zero eligible races),
+and the previously published held-out aggregate arithmetic via
+\`partition_integrity.audit_report\`. If a 2026-10-31 race-day plan exists in
+this checkout, it checks its date and family. It does **not** fetch or assume
+a fresh official entry card, repair an absent plan, register an experiment,
+create a SOURCE/FINAL, execute KRS, or count any prospective OOS.
+
+The already-rejected hierarchical historical ENV model is **not** an
+approved future candidate. Holding this PR before Saturday is not an
+independently archived, timestamped prospective registration. The output
+explicitly preserves null for unspecified race counts, ticket effects and
+PFS, and zero for genuinely unperformed research freezes/OOS. A new
+prospective candidate needs its own pre-race exact code/model/policy scope,
+Owner approval, independent immutable time witness, fresh official race
+identity/runner universe, and distinct result follow-up. Do not backfill
+these from the existing model, GitHub commit time or historical results.
+
+The existing approved natural backfill on 2026-10-30 04:00 JST collected
+43 profile observations / 257 run observations for the 2026-09-13
+race3 historical window, FULL with OIDC attestation. These are not
+independent unique horse/run additions or race-bound learning labels;
+no extra collector was dispatched by this research PR. The model
+decision remains REJECT_HISTORICAL_INCREMENT; known 30-race/400-runner
+scalar BVI+1 changes KRS **input** and no AKI roles, with external KRS
+simulation, ticket, Capital and PFS still unmeasured.
+
+Reproduce the 10/31 protection check without network or side effects:
+
+\`\`\`bash
+python -m pytest -q research/jra_bvi_next/test_forward_preflight.py
+python research/jra_bvi_next/forward_preflight.py --repository . \
+  --output /tmp/jra_bvi_20261031_research_preflight.json
+\`\`\`
+
+Neither this script nor its CI artifact is a future experiment registration
+or evidence of real 10/31 Prediction/Delivery success.
