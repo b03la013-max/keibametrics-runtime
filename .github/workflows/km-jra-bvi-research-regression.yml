@@ -35,6 +35,7 @@ jobs:
           research/jra_bvi_next/test_environment_quality.py
           research/jra_bvi_next/test_partition_integrity.py
           research/jra_bvi_next/test_role_chain_sensitivity.py
+          research/jra_bvi_next/test_forward_preflight.py
 
       - name: Audit retained JRA harvest going observations (not a signed SOURCE Reader)
         run: >-
@@ -51,6 +52,17 @@ jobs:
           python research/jra_bvi_next/role_chain_sensitivity.py
           --repository .
           --output "${RUNNER_TEMP}/bvi_role_chain_sensitivity.json"
+      - name: Audit 10/31 research readiness, never register or dispatch
+        run: >-
+          python research/jra_bvi_next/forward_preflight.py
+          --repository .
+          --output "${RUNNER_TEMP}/bvi_20261031_research_preflight.json"
+      - name: Save read-only unregistered future research preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: jra-bvi-20261031-research-unregistered-preflight
+          path: ${{ runner.temp }}/bvi_20261031_research_preflight.json
+          if-no-files-found: error
       - name: Save non-Production role-chain diagnostic
         uses: actions/upload-artifact@v4
         with:
