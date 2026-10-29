@@ -96,3 +96,21 @@ def test_stored_comparison_remains_rejected_even_if_subset_seems_better(snapshot
     assert out["historical_validation"]["n"] == 1546
     assert out["historical_validation"]["delta_mse_env_minus_general"] > 0
     assert out["historical_candidate_decision"] == "REJECT_HISTORICAL_INCREMENT"
+
+
+def test_replaced_arm_cannot_pass_a_four_arm_count_check(snapshots):
+    x = copy.deepcopy(snapshots)
+    x[2]["arms"]["UNREGISTERED_INJECTED_ARM"] = x[2]["arms"].pop("D_BVI_ENV_SHADOW")
+    with pytest.raises(ValueError, match="FOUR_ARM_COHORT_SHAPE_CHANGED"):
+        call(x)
+
+
+def test_pedigree_oos_autopromotion_and_policy_drift_rejected(snapshots):
+    x = copy.deepcopy(snapshots)
+    x[2]["automatic_promotion"] = True
+    with pytest.raises(ValueError, match="PEDIGREE_OOS_SAFETY_POLICY_CHANGED"):
+        call(x)
+    x = copy.deepcopy(snapshots)
+    x[2]["production_effect"] = "AUTO_PROMOTE"
+    with pytest.raises(ValueError, match="PEDIGREE_OOS_SAFETY_POLICY_CHANGED"):
+        call(x)
