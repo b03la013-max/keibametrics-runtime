@@ -24,6 +24,8 @@ from execution_gateway import load_gateway, normalize_request, family_config, ar
 from execution_store import (materialize_phase, verify_result_reuse,
                              require_public_storage, require_public_artifact_paths)
 from race_day_fast_reflection import build_fast_reflection
+from local_result_settlement import settle_frozen_tickets, LocalSettlementError
+from family_runtime_contract import require_receipt_binding
 
 RUNTIME_OUT = os.environ.get("KM_RUNTIME_OUT", "runtime_out")
 
@@ -114,40 +116,36 @@ if (fin.get("receipt") or {}).get("race_id")!=rid:
 endpoint=str(family_config("LOCAL",gateway).get("external_endpoint") or "").rstrip("/")
 if not endpoint.startswith("https://"):
     raise SystemExit("CANONICAL_LOCAL_EXTERNAL_ENDPOINT_INVALID")
+signer=family_config("LOCAL",gateway).get("receipt_signer_key_id")
+require_receipt_binding(fin,family="LOCAL",race_id=rid,phase="FINAL",signer=signer)
 
-tickets=((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
 top3=[int(x) for x in req["finish_order"][:3]]
 payouts={str(k).upper():int(v) for k,v in (req.get("payouts") or {}).items()}
-total_investment=sum(int(t.get("stake") or 0) for t in tickets)
-total_return=0
-winning=[]
-by_type={}
-for t in tickets:
-    bt=str(t.get("bet_type") or "").upper()
-    sel=[int(x) for x in (t.get("selection") or [])]
-    st=int(t.get("stake") or 0)
-    b=by_type.setdefault(bt,{"investment":0,"return":0,"wins":[]})
-    b["investment"]+=st
-    hit=(bt=="EXACTA" and sel==top3[:2]) or (bt=="TRIO" and set(sel)==set(top3)) or (bt=="TRIFECTA" and sel==top3)
-    if hit and (bt not in payouts or payouts[bt] <= 0):
-        # An unpublished winning payout is unknown, never a zero return.
-        # Stop before sending or signing a COMPLETE settlement.
-        raise SystemExit("RESULT_WINNING_PAYOUT_NOT_READY:"+bt)
-    if hit and bt in payouts:
-        r=st*payouts[bt]//100
-        total_return+=r; b["return"]+=r
-        win={"bet_type":bt,"selection":sel,"stake":st,"payout_per_100":payouts[bt],"return":r}
-        winning.append(win); b["wins"].append(win)
+official_result={
+    "finish_order":[int(x) for x in req["finish_order"]],
+    "result_available_at":req["result_available_at"],
+    "source":req.get("source") or "USER_SUPPLIED_RESULT",
+    "payouts":payouts,
+}
+# Preserve unsupported facts instead of reducing a tie/refund to a fabricated
+# single winning outcome. The existing flat LOCAL path must refuse them.
+for key in ("dead_heat","finish_groups","finish_rank_groups","winning_selections","top3_orders","refund_runner_ids",
+            "refunds","refunded_tickets","cancelled","void"):
+    if key in req:
+        official_result[key]=req[key]
+try:
+    accounted=settle_frozen_tickets((fin.get("artifact") or {}).get("final_ticket"),official_result)
+except LocalSettlementError as exc:
+    raise SystemExit(str(exc)) from exc
+total_investment=accounted["investment"]
+total_return=accounted["return"]
+winning=accounted["winning_tickets"]
+by_type=accounted["by_type"]
 
 result_payload={
   "family_id":"LOCAL","race_id":rid,
   "final_receipt":fin,
-  "official_result":{
-    "finish_order":[int(x) for x in req["finish_order"]],
-    "result_available_at":req["result_available_at"],
-    "source":req.get("source") or "USER_SUPPLIED_RESULT",
-    "payouts":payouts
-  },
+  "official_result":official_result,
   "result_available_at":req["result_available_at"],
   "settlement":{
     "status":"COMPLETE",
@@ -164,7 +162,9 @@ def post(path,payload):
         method="POST",
         payload=payload,
         timeout=180,
-        attempts=4,
+        # A timeout after sending /result may already have signed a receipt.
+        # Recover the existing RESULT; never blindly repeat the side effect.
+        attempts=1 if path=="/result" else 4,
     )
     if status>=300:
         raise SystemExit(f"RUNTIME_POST_FAILED:{path}:{status}:{json.dumps(body,ensure_ascii=False)}")
@@ -194,6 +194,7 @@ else:
     ver=post("/verify",res)
 if (res.get("receipt") or {}).get("status")!="PASS":
     raise SystemExit("RESULT_NOT_PASS:"+json.dumps(res,ensure_ascii=False))
+require_receipt_binding(res,family="LOCAL",race_id=rid,phase="RESULT",signer=signer)
 if not ver.get("verified"):
     raise SystemExit("RESULT_SIGNATURE_VERIFY_FAILED")
 

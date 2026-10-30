@@ -128,9 +128,9 @@ def test_result_refundable_frozen_runner_cannot_silently_become_loss(status):
         _parse_refund_fixture(_refund_snapshot(status))
 
 
-@pytest.mark.parametrize('status', ['取消', '除外', None, '中止', '失格'])
+@pytest.mark.parametrize('status', ['取消', '除外', None, '中止', '競走中止', '失格', '競走失格'])
 def test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout(status):
-    runners = (3,10,11) if status in {'取消','除外'} else (1,3,10,11)
+    runners = (3,10,11) if status in {'取消','除外',None} else (1,3,10,11)
     order, payouts = _parse_refund_fixture(_refund_snapshot(status), runners)
     assert order == [10,3,11]
     assert payouts == {'EXACTA':770,'TRIO':640,'TRIFECTA':2250}
@@ -138,9 +138,27 @@ def test_result_preexcluded_or_nonrefundable_runner_preserves_normal_payout(stat
 
 def test_result_missing_payout_and_full_cancel_remain_held():
     with pytest.raises(o.FormalOrchestrationError, match='PAYOUT_NOT_READY'):
-        _parse_refund_fixture(_refund_snapshot(None, payouts=False))
+        _parse_refund_fixture(_refund_snapshot(None, payouts=False), (3,10,11))
     with pytest.raises(o.FormalOrchestrationError, match='CANCELLATION_HOLD'):
         _parse_refund_fixture(_refund_snapshot(None, notice='競走取り止め'))
+
+
+@pytest.mark.parametrize('status', [None, '', 'UNKNOWN', '未確定', '-'])
+def test_every_frozen_runner_requires_explicit_final_state(status):
+    with pytest.raises(o.FormalOrchestrationError, match='RUNNER_STATE_HOLD'):
+        _parse_refund_fixture(_refund_snapshot(status))
+
+
+def test_unfrozen_finisher_or_duplicate_dnf_cannot_be_ignored():
+    with pytest.raises(o.FormalOrchestrationError, match='RUNNER_STATE_HOLD'):
+        _parse_refund_fixture(_refund_snapshot('中止'), (3,10,11))
+
+
+@pytest.mark.parametrize('notice',['競走取り止め','競走取止','開催中止','競走中止'])
+def test_race_cancellation_inside_notice_table_is_not_hidden_by_runner_dnf(notice):
+    snapshot=_refund_snapshot('競走中止',notice=f'<table><tr><td>{notice}</td></tr></table>')
+    with pytest.raises(o.FormalOrchestrationError,match='CANCELLATION_HOLD'):
+        _parse_refund_fixture(snapshot)
 
 
 def test_refund_hold_stops_before_settlement_learning_and_completion(monkeypatch, tmp_path):

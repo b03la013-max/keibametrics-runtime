@@ -16,7 +16,7 @@ from runtime.local_production_static_owner import build_formal_static, bind_urw_
 
 
 def resolve_chat_intent(query, *, now=None):
-    """Resolve one explicit URW race to the existing two-path entry.
+    """Resolve one explicit URW/OHI race without borrowing another venue's scope.
 
     This is a callable Work/CLI entry, not a claim that ChatGPT automatically
     invokes GitHub. Existing authorized FORMAL requests keep their own path.
@@ -24,24 +24,30 @@ def resolve_chat_intent(query, *, now=None):
     import unicodedata
     from runtime.local_race_key_intake import JST
     text = unicodedata.normalize('NFKC', str(query))
-    matches = re.findall(r'(?:浦和|URW)\s*(?:第)?\s*(\d{1,2})\s*(?:R|レース|競走)', text, re.I)
+    matches = re.findall(r'(浦和|URW|大井|OHI)\s*(?:第)?\s*(\d{1,2})\s*(?:R|レース|競走)', text, re.I)
     all_numbers = re.findall(r'(\d{1,2})\s*(?:R|レース|競走)', text, re.I)
-    if len(matches) != 1 or len(all_numbers) != 1 or not 1 <= int(matches[0]) <= 12:
+    if len(matches) != 1 or len(all_numbers) != 1 or not 1 <= int(matches[0][1]) <= 12:
         raise ValueError('CHAT_ONE_EXPLICIT_URW_RACE_REQUIRED')
-    if any(name in text for name in ('川崎', '船橋', '大井', '盛岡', '金沢', '名古屋', 'JRA', 'ばんえい')):
+    venue = 'OHI' if matches[0][0].upper() in ('大井', 'OHI') else 'URW'
+    if (any(name in text for name in ('川崎', '船橋', '盛岡', '金沢', '名古屋', 'JRA', 'ばんえい'))
+            or (venue == 'OHI' and re.search(r'浦和|URW', text, re.I))
+            or (venue == 'URW' and re.search(r'大井|OHI', text, re.I))):
         raise ValueError('CHAT_AMBIGUOUS_OR_OUT_OF_SCOPE_VENUE')
     dates = re.findall(r'\d{4}-\d{2}-\d{2}', text)
+    dates += ['-'.join((y, m.zfill(2), d.zfill(2))) for y, m, d in
+              re.findall(r'(\d{4})/(\d{1,2})/(\d{1,2})', text)]
     dates += ['-'.join((y, m.zfill(2), d.zfill(2))) for y, m, d in re.findall(r'(\d{4})年(\d{1,2})月(\d{1,2})日', text)]
     if len(set(dates)) > 1:
         raise ValueError('CHAT_AMBIGUOUS_RACE_DATE')
-    if not dates and any(word in text for word in ('明日', '昨日', 'あす', 'あした')):
+    if not dates and (re.search(r'\d{1,2}月\d{1,2}日|\d{1,2}/\d{1,2}|\d{4}[-/]', text)
+            or any(word in text for word in ('明日', '昨日', 'あす', 'あした', '明後日', '一昨日', '来週', '先週', '翌日', '次開催'))):
         raise ValueError('CHAT_EXPLICIT_DATE_REQUIRED_FOR_OTHER_DAY')
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError('CHAT_NOW_TIMEZONE_REQUIRED')
     day = date.fromisoformat(dates[0]) if dates else now.astimezone(JST).date()
-    return {'family_id': 'LOCAL', 'venue_id': 'URW', 'race_date': day.isoformat(),
-            'race_no': int(matches[0]), 'prediction_mode': 'AUTO',
+    return {'family_id': 'LOCAL', 'venue_id': venue, 'race_date': day.isoformat(),
+            'race_no': int(matches[0][1]), 'prediction_mode': 'AUTO',
             'requested_formal': '正式' in text}
 
 
@@ -49,7 +55,7 @@ def _chat_final(intent):
     """Search every Formal revision of this race; never generate a FINAL."""
     from runtime.local_race_key_gate import readback_final
     day = date.fromisoformat(intent['race_date']).strftime('%Y%m%d')
-    prefix = f"KM-LOCAL-URW-{day}-R{intent['race_no']:02d}-"
+    prefix = f"KM-LOCAL-{intent['venue_id']}-{day}-R{intent['race_no']:02d}-"
     reports = []
     for path in sorted((o.ROOT/'runtime/executions').glob(prefix+'*')):
         if not re.fullmatch(re.escape(prefix) + r'(?:LIVE|FORMAL)-R[1-9]\d*', path.name):
@@ -79,6 +85,7 @@ def chat_formal_status(intent):
     from runtime.family_authority_guard import resolve_current_authority
     from runtime import local_race_day_dispatcher as dispatcher
     now = datetime.now(timezone.utc)
+    venue = intent['venue_id']
     blockers = []
     observation = {'status': 'BLOCKED', 'checked_at': now.isoformat(), 'runtime_post_count': 0}
     def block(stage, code):
@@ -88,7 +95,7 @@ def chat_formal_status(intent):
         observation['current_authority_manifest'] = authority['manifest_id']
         owner = json.loads((o.ROOT/'profiles/local_production_static_owner_20261014_v1.json').read_text())
         observation['owner_venues'] = owner.get('venues', [])
-        if (owner.get('enabled') is not True or 'URW' not in owner.get('venues', [])
+        if (owner.get('enabled') is not True or venue not in owner.get('venues', [])
                 or owner.get('family_authority_basis') != authority['manifest_id']):
             block('AUTHORIZATION', 'VENUE_OWNER_NOT_AUTHORIZED')
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -100,10 +107,10 @@ def chat_formal_status(intent):
             block('NUMERICAL', 'PRODUCTION_NUMERICAL_AUTHORITY_NOT_READY')
         if any(numeric.get(k) is not True for k in ('prediction_consumption_authorized',
                 'krs_consumption_authorized', 'ticket_consumption_authorized', 'capital_consumption_authorized')):
-            block('AUTHORIZATION', 'URW_NUMERICAL_DOWNSTREAM_CONSUMPTION_NOT_AUTHORIZED')
+            block('AUTHORIZATION', venue+'_NUMERICAL_DOWNSTREAM_CONSUMPTION_NOT_AUTHORIZED')
     except (OSError, ValueError, KeyError, TypeError) as exc:
         block('NUMERICAL', 'NUMERICAL_AUTHORITY_UNRESOLVED:'+str(exc))
-    name = intent['race_date']+'-URW'
+    name = intent['race_date']+'-'+venue
     plan_path = o.ROOT/'runtime/local_race_day_plan'/(name+'.json')
     approval_path = o.ROOT/'profiles/local_autonomous_approvals'/(name+'.json')
     observation.update(plan_path=str(plan_path), approval_path=str(approval_path))
@@ -114,7 +121,7 @@ def chat_formal_status(intent):
             raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
         plan = json.loads(plan_path.read_text())
         approval = json.loads(approval_path.read_text())
-        if (plan.get('venue_id'), plan.get('race_date')) != ('URW', intent['race_date']):
+        if (plan.get('venue_id'), plan.get('race_date')) != (venue, intent['race_date']):
             raise ValueError('CHAT_DATED_PLAN_IDENTITY_MISMATCH')
         if dispatcher.sha({k:v for k,v in plan.items() if k != 'plan_sha256'}) != plan.get('plan_sha256'):
             raise ValueError('DAY_PLAN_SHA_MISMATCH')
@@ -134,7 +141,7 @@ def chat_formal_status(intent):
     observation['code'] = blockers[0]['code'] if blockers else None
     observation['last_verified_stage'] = 'CURRENT_AUTHORITY' if observation.get('current_authority_manifest') else 'NONE'
     observation['resume_from'] = 'EXISTING_DATED_AUTHORIZED_RACE_KEY_WORKFLOW'
-    observation['required_action'] = ('Qualify the URW Owner and authorized consumers, then approve the exact dated race/plan/runtime/cost scope; '
+    observation['required_action'] = ('Qualify the '+venue+' Owner and authorized consumers, then approve the exact dated race/plan/runtime/cost scope; '
         'the existing workflow must acquire and verify fresh Signed SOURCE. Reference supplies no Formal authority.') if blockers else 'Use the existing claim-before-dispatch worker for this race only.'
     return observation
 
@@ -430,9 +437,85 @@ def reference_answer_content_check(parts, body):
             'scope': 'SUPPLIED_BODY_ONLY_NOT_CHATGPT_RENDER_OR_USER_RECEIPT'}
 
 
+def ohi_formal_answer(final, intent):
+    """Render only the verified OHI original; no rank, role or ticket policy.
+
+    Ancillary bytes come from the same hash-checked execution manifests.
+    KRS content must match the receipt digest bound by the verified FINAL.
+    A historic readback never becomes a new prestart prediction/delivery.
+    """
+    eid = final['execution_id']
+    if intent['venue_id'] != 'OHI' or not final.get('signed_final_pass'):
+        raise ValueError('OHI_VERIFIED_ORIGINAL_REQUIRED')
+    formal = o.resolve_phase(eid, 'FORMAL', root=o.ROOT/'runtime/executions')
+    source = o.resolve_phase(eid, 'SOURCE', root=o.ROOT/'runtime/executions')
+    src_env = o._load_checkpoint_json(source, 'source_receipt_envelope.json')
+    src = src_env['artifact']
+    context = src['source_race_context']
+    if any(str(context.get(k)).replace('/', '-') != str(intent[k])
+           for k in ('venue_id', 'race_date', 'race_no')):
+        raise ValueError('OHI_ANSWER_SOURCE_IDENTITY_MISMATCH')
+    saved_final = o._load_checkpoint_json(formal, 'final_receipt_envelope.json')
+    if saved_final.get('receipt_sha256') != final['final_receipt_sha256']:
+        raise ValueError('OHI_ANSWER_FINAL_REVISION_MISMATCH')
+    art = saved_final['artifact']
+    krs = o._load_checkpoint_json(formal, 'krs_receipt_envelope.json')
+    if (not krs or krs.get('receipt_sha256') != art.get('krs_receipt_sha256')
+            or o._sha_obj(krs['receipt']) != krs['receipt_sha256']
+            or o._sha_obj(krs['artifact']) != krs['receipt'].get('artifact_sha256')
+            or krs['receipt'].get('race_id') != eid or krs['receipt'].get('family') != 'LOCAL'
+            or krs['receipt'].get('phase') != 'KRS_RUN' or krs['receipt'].get('status') != 'EXECUTED'):
+        raise ValueError('OHI_ANSWER_KRS_FINAL_BINDING_REQUIRED')
+    fpp = art['final_prediction_package']; roles = fpp.get('roles') or {}
+    ranking = list(map(str, fpp.get('ranking') or []))
+    runners = src['active_runner_universe']['runners']
+    ids = [str(r['runner_id']) for r in runners]
+    if len(set(ids)) != len(ids) or len(set(ranking)) != len(ranking) or set(ranking)-set(ids):
+        raise ValueError('OHI_ANSWER_RUNNER_UNIVERSE_MISMATCH')
+    if set(map(str, roles))-set(ids):
+        raise ValueError('OHI_ANSWER_ROLE_UNIVERSE_MISMATCH')
+    summary = {str(r['horse_no']): r for r in krs['artifact']['raw_output'].get('summary', [])}
+    if set(summary) != set(ids):
+        raise ValueError('OHI_ANSWER_KRS_ALL_RUNNERS_REQUIRED')
+    historic = datetime.now(timezone.utc) >= datetime.fromisoformat(final['prediction_cutoff'])
+    parts = [f"大井 {intent['race_date']} {intent['race_no']}R／{eid}",
+        '分類：'+('HISTORICAL_SIGNED_ORIGINAL_READBACK_NOT_NEW_FORWARD' if historic else 'EXISTING_SIGNED_FINAL_READBACK'),
+        '発走：'+final['scheduled_post_at']+'／Cutoff：'+final['prediction_cutoff'],
+        'SOURCE：'+src['source_freeze_at']+'／Freeze：'+final['freeze_time'],
+        'SOURCE SHA：'+src_env['receipt_sha256']+'／FINAL SHA：'+final['final_receipt_sha256'],
+        '全馬評価（原本の順位・Role。順位未登録はUNKNOWN）',
+        '|馬番・馬名|順位|Role|SSR-W|SSR-P2|SSR-P3|', '|---|---:|---|---:|---:|---:|']
+    for r in runners:
+        rid = str(r['runner_id']); s = summary[rid]
+        cells = [rid+' '+str(r.get('name') or r.get('canonical_name') or 'UNKNOWN'),
+                 str(ranking.index(rid)+1) if rid in ranking else 'UNKNOWN',
+                 '/'.join(roles.get(rid) or []) or '採用なし',
+                 *[str(s.get(k, 'UNKNOWN')) for k in ('SSR-W', 'SSR-P2', 'SSR-P3')]]
+        parts.append('|'+ '|'.join(x.replace('|','／') for x in cells)+'|')
+    for col in ('W', 'P2', 'P3'):
+        parts.append(col+'：'+', '.join(rid for rid in ids if col in (roles.get(rid) or [])))
+    a = krs['artifact']
+    parts += ['KRS：'+str(a['actual_run_count'])+'回／seed '+str(a['seed'])+
+              '／未較正の実行支持頻度。実勝率・EVではありません。',
+        '原本数値完了状態：'+json.dumps(fpp.get('actual_numerical_calculation'), ensure_ascii=False),
+        '展開・判断・UNKNOWN・根拠の完全正本（値を変更しない）',
+        '```json\n'+json.dumps(fpp, ensure_ascii=False, indent=2)+'\n```',
+        final['canonical_tree'],
+        '結論：'+('過去原本の読戻しです。新しい事前予測・実購入の推奨ではありません。' if historic else
+                  '上記は署名済み原本の全選択票です。実購入・ユーザー受領は未確認です。'),
+        '原本参照：runtime/executions/'+eid+'/FORMAL/LATEST.json',
+        '通知・実画面・再読込・本人ACKは、この本文生成だけでは成立しません。']
+    body = ''
+    previous = ''
+    for part in parts:
+        body += ('\n' if part.startswith('|') and previous.startswith('|') else '\n\n') + part
+        previous = part
+    return body.lstrip()+'\n'
+
+
 def run_chat(intent, *, output, run_id):
     """FINAL first, authorized existing dispatch second, independent reference third."""
-    if (intent.get('family_id') != 'LOCAL' or intent.get('venue_id') != 'URW'
+    if (intent.get('family_id') != 'LOCAL' or intent.get('venue_id') not in ('URW', 'OHI')
             or type(intent.get('race_no')) is not int or not 1 <= intent['race_no'] <= 12):
         raise ValueError('CHAT_ONE_EXPLICIT_URW_RACE_REQUIRED')
     date.fromisoformat(intent['race_date'])
@@ -485,6 +568,21 @@ def run_chat(intent, *, output, run_id):
             +'\n総投資額: '+str(final['rendered_investment'])+'円\n\n'
             +'全馬・役割の正本:\n```json\n'+json.dumps(final['canonical_prediction']['prediction_package'],ensure_ascii=False,indent=2)
             +'\n```\n\n'+final['canonical_tree']+'\n\n通知・ユーザー受領は未確認です。\n')
+        if intent['venue_id'] == 'OHI':
+            message = ohi_formal_answer(final, intent)
+            report['temporal_class'] = ('HISTORICAL_SIGNED_ORIGINAL_READBACK_NOT_NEW_FORWARD'
+                if datetime.now(timezone.utc) >= datetime.fromisoformat(final['prediction_cutoff'])
+                else 'EXISTING_SIGNED_FINAL_READBACK')
+    elif intent['venue_id'] == 'OHI':
+        # OHI uses its own existing formal dispatcher. URW's independent
+        # SOURCE/S1/reference/v2 contracts grant no OHI calculation authority.
+        formal = report['formal']
+        report['reference'] = {'status': 'NOT_APPLICABLE', 'code': 'OHI_REFERENCE_NOT_ADMITTED'}
+        message = ('大井 '+intent['race_date']+f" {intent['race_no']}R\n"
+            +'分類：未計算／実行未成立（NO-BETではありません）\n'
+            +'完成原本：同一日・同一Raceの有効な署名原本なし\n'
+            +'停止条件：'+json.dumps(formal['blockers'], ensure_ascii=False)+'\n'
+            +'全馬評価・KRS・選択票は未生成です。浦和のREFERENCEや別Raceの票で補完しません。\n')
     else:
         formal = report['formal']
         try:
@@ -865,7 +963,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument('--request')
-    inputs.add_argument('--query', help='Explicit URW race text: verified FINAL, authorized existing dispatch, or independent REFERENCE')
+    inputs.add_argument('--query', help='Explicit URW/OHI race: verified FINAL or authorized existing dispatch; independent REFERENCE is URW-only')
     parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
     parser.add_argument('--output', required=True)
     parser.add_argument('--run-id', required=True)
