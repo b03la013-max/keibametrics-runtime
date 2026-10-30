@@ -1,0 +1,65 @@
+{
+  "recovery_profile": "KM-ASTRA-RECOVERY-DELTA-REBASELINE-20260930-R1",
+  "issued_at": "2026-09-30T22:20:00+09:00",
+  "canonical_start_branch": "main",
+  "canonical_start_sha": "cd350ad95a501ef37965b03417af63d348ab894c",
+  "prior_astra": {
+    "branch": "audit/execution-recasting",
+    "pr": 111,
+    "status": "OPEN / DRAFT / DO_NOT_MERGE_AS_IS",
+    "relation_to_current_main": "DIVERGED",
+    "ahead_by": 2,
+    "behind_by": 56,
+    "report": "research/recasting/REPORT.md"
+  },
+  "post_astra_delta": {
+    "merged_common_exact_shadow": {
+      "pr": 114,
+      "merge_sha": "7f5500fdb3c41a2e723df67ba12c649f18a2e513",
+      "profile": "KM-COMMON-EXACT-CONTINUITY-FORWARD-SHADOW-20260930-R1",
+      "tracker": "KM-COMMON-EXACT-CONTINUITY-OOS-TRACKER-v1.0-20260930",
+      "current_oos_count": 0,
+      "target": 30,
+      "activation_at": "2026-10-01T00:00:00+09:00",
+      "production_effect": "NONE"
+    },
+    "fnb_candidate": {
+      "pr": 113,
+      "profile": "KM-LOCAL-FNB-v2.2-CANDIDATE-20260930-R1",
+      "production": "v2.1-FNB unchanged",
+      "status": "SHADOW-ONLY / PROMOTION-HOLD"
+    },
+    "fnb_day_regression": {
+      "date": "2026-09-30",
+      "races": 12,
+      "investment_yen": 65200,
+      "return_yen": 35300,
+      "pfs_pct": 54.14,
+      "first_material_failure_counts": {
+        "prediction_role": 2,
+        "conversion": 8,
+        "capital": 2
+      },
+      "exact_semantic_only_races": [
+        "R04",
+        "R05",
+        "R07",
+        "R08",
+        "R09",
+        "R11",
+        "R12"
+      ],
+      "evidence_class": "KNOWN-RESULT / CORRELATED DAY REGRESSION / NOT OOS"
+    }
+  },
+  "mandatory_first_action": "BUILD_DELTA_REBASELINE_LEDGER",
+  "classification": [
+    "KEEP",
+    "UPDATE",
+    "REOPEN",
+    "INVALIDATE",
+    "REDO"
+  ],
+  "production_policy_changes_authorized": false,
+  "automatic_promotion": false
+}
