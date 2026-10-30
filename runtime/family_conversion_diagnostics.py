@@ -105,7 +105,7 @@ def _purchased_exact(final_ticket:Dict[str,Any])->set[tuple[int,int,int]]:
 
 def build_diagnostics(req:Dict[str,Any], final_ticket:Dict[str,Any],
                       final_package:Dict[str,Any], krs_utility:Dict[str,Any],
-                      generated_at:str, basis_sha256:str)->Dict[str,Any]:
+                      generated_at:str, basis_sha256:str, *, candidate_tickets=None)->Dict[str,Any]:
     roles=_roles(req,final_package)
     registry=_role_rows(req)
     material_pairs=_material_pairs(req)
@@ -218,6 +218,9 @@ def build_diagnostics(req:Dict[str,Any], final_ticket:Dict[str,Any],
         "existing_common_exact_oos_arms_changed":False,
         "existing_local_mec_r5_arms_changed":False,
     }
+    if req.get("family_capital_conversion_measurement") is True:
+        out["capital_conversion_measurement"]=measure_capital_conversion(
+            req,final_ticket,final_package,krs_utility,candidate_tickets=candidate_tickets)
     out["sha256"]=_sha({k:v for k,v in out.items() if k!="sha256"})
     return out
 
@@ -258,3 +261,60 @@ def verify_signed_final_binding(final_envelope:Dict[str,Any], diagnostic:Dict[st
         "final_receipt_sha256":final_envelope.get("receipt_sha256"),
         "production_effect":"NONE",
     }
+
+
+def measure_capital_conversion(req, final_ticket, final_package, krs_utility, *, candidate_tickets=None, market=None):
+    """Opt-in result-blind measurement using existing materiality definitions.
+
+    No selection, probability, capital policy or Family-specific feature mapping.
+    Missing price/exclusion evidence remains missing; no force-buy inference.
+    """
+    from collections import defaultdict
+    import math
+    family=str(req.get('family_id','')).upper()
+    if family not in {'LOCAL','JRA','BAN'}:raise ValueError('FAMILY_SCOPE_REQUIRED')
+    tickets=copy.deepcopy(candidate_tickets if candidate_tickets is not None else final_ticket.get('tickets',[]))
+    exposure={k:defaultdict(int) for k in ('head','pair','third','tier','bet_type')}
+    purchased_pairs=set();purchased_exact=set();trios=set()
+    for t in tickets:
+        bt=t['bet_type'].upper();ids=tuple(map(int,t['selection']));stake=t['stake']
+        if bt not in {'EXACTA','TRIFECTA','TRIO'} or len(ids)!=(2 if bt=='EXACTA' else 3) or len(set(ids))!=len(ids):raise ValueError('TICKET_IDENTITY_INVALID')
+        if isinstance(stake,bool) or not isinstance(stake,(int,float)) or not math.isfinite(stake) or stake<=0:raise ValueError('STAKE_INVALID')
+        exposure['bet_type'][bt]+=stake;exposure['tier'][str(t.get('mec_tier') or 'UNCLASSIFIED')]+=stake
+        if bt=='TRIO':trios.add(tuple(sorted(ids)))
+        else:
+            exposure['head'][str(ids[0])]+=stake;exposure['pair']['>'.join(map(str,ids[:2]))]+=stake;purchased_pairs.add(ids[:2])
+            if bt=='TRIFECTA':exposure['third']['>'.join(map(str,ids))]+=stake;purchased_exact.add(ids)
+    baseline=final_ticket.get('tickets',[]);material=_material_pairs(req);thirds=_explicit_thirds(req);lost=[]
+    for pair,mechanism in sorted(material.items()):
+        if pair in purchased_pairs:continue
+        connected=[copy.deepcopy(v) for k,v in thirds.items() if k[:2]==pair]
+        # Attribution includes oriented tickets only. Trio has no unique Head.
+        removed=sum(t['stake'] for t in baseline if t['bet_type'] in {'EXACTA','TRIFECTA'} and tuple(map(int,t['selection'][:2]))==pair)
+        lost.append({'head':pair[0],'second':pair[1],'prediction_materiality':mechanism['status'],'stage_path_reason':mechanism.get('reason'),'third_worlds':connected,'removed_oriented_capital':removed,'exclusion_reason':'NOT_RECORDED_PER_PAIR','krs_support':[copy.deepcopy(x) for x in krs_utility.get('actionable_ordered_pair_proposals',[]) if (int(x['head']),int(x['second']))==pair],'market_price':'UNKNOWN','purchase_required':False})
+    continuity=[{'exact':list(k),'third_status':v.get('status'),'reason':v.get('reason'),'pair_present':k[:2] in purchased_pairs,'trio_present':tuple(sorted(k)) in trios,'exact_present':k in purchased_exact,'force_purchase':False} for k,v in sorted(thirds.items()) if v.get('status') in {'PURCHASE','PROTECT','MATERIAL'}]
+    total=sum(t['stake'] for t in tickets)
+    unknown=[{'runner_id':str(rid),'reason':reason,'roles':_roles(req,final_package).get(str(rid),[])} for rid,reason in final_package.get('uncertainty',{}).items() if any(x in str(reason).upper() for x in ('UNKNOWN','INSUFFICIENT'))]
+    recoverability=[]
+    price_status='HOLD / TICKET_PRICE_SNAPSHOT_NOT_SUPPLIED'
+    if market is not None:
+        def clock(v):
+            value=dt.datetime.fromisoformat(str(v).replace('Z','+00:00'))
+            if value.tzinfo is None:raise ValueError('MARKET_NAIVE_TIME')
+            return value
+        if (market.get('race_id')!=req['race_id'] or not market.get('source_ref')
+                or clock(market['observed_at'])>=clock(req['prediction_cutoff'])):
+            raise ValueError('MARKET_TEMPORAL_OR_IDENTITY_INVALID')
+        prices=market.get('ticket_decimal_prices') or {}
+        core=[t for t in tickets if t.get('mec_tier')=='CORE']
+        for t in core:
+            key=t['bet_type']+':'+'>'.join(map(str,t['selection']))
+            price=prices.get(key)
+            if isinstance(price,bool) or not isinstance(price,(float,int)) or not math.isfinite(price) or price<=0:
+                continue
+            gross=t['stake']*price
+            recoverability.append({'ticket':key,'snapshot_gross':gross,'portfolio_capital':total,
+                'snapshot_core_hit_recovers_portfolio':gross>=total,'not_probability_or_ev':True})
+        if core and len(recoverability)==len(core):price_status='SNAPSHOT_COMPLETE / NOT_A_RETURN_GUARANTEE'
+        else:price_status='HOLD / CORE_TICKET_PRICE_COVERAGE_INCOMPLETE'
+    return {'status':'CANDIDATE_MEASUREMENT / NON-PRODUCTION','family_id':family,'race_id':req['race_id'],'portfolio_sha256':_sha(tickets),'baseline_ticket_sha256':_sha(baseline),'ticket_count':len(tickets),'investment':total,'exposure':{k:dict(v) for k,v in exposure.items()},'density':{k:{cell:stake/total for cell,stake in cells.items()} for k,cells in exposure.items() if total},'core_density':exposure['tier'].get('CORE',0)/total if total else None,'protection_burden':exposure['tier'].get('TAIL',0)+exposure['tier'].get('PROTECTION',0),'unclassified_tier_capital':exposure['tier'].get('UNCLASSIFIED',0),'material_pair_losses':lost,'pair_third_continuity':continuity,'unknown_role_review':unknown,'core_hit_recoverability':price_status,'core_price_observations':recoverability,'expected_value':None,'kelly':None,'actual_purchase_pfs':None,'production_effect':'NONE','selector_changed':False,'family_numeric_authority_changed':False}
