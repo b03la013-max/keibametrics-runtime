@@ -118,3 +118,29 @@ def test_existing_learning_binding_automatic_checks_stay_offline():
             elif 'python -m pytest' in step.get('run','') or 'python -m unittest' in step.get('run',''):
                 assert not step.get('if')
     assert set(selected)==expected
+
+
+@pytest.mark.parametrize('event', ['pull_request', 'push', 'workflow_dispatch'])
+def test_existing_source_closure_oidc_recomputations_require_manual_event(event):
+    workflow=ROOT/'.github/workflows/km-jra-production-source-closure-real.yml'
+    doc=yaml.load(workflow.read_text(),Loader=yaml.BaseLoader)
+    assert {'pull_request','push','workflow_dispatch'}<=set(doc['on'])
+    job=doc['jobs']['source-closure']
+    assert not job.get('if')  # Normal offline regression stays automatic.
+    names={'Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE',
+           'Recompute source-verified real Kyoto R09 Production evidence after new evaluators'}
+    selected=[]
+    for step in job['steps']:
+        if step.get('name') in names:
+            condition=step['if']
+            assert condition=="github.event_name == 'workflow_dispatch'"
+            assert 'GH_TOKEN' in (step.get('env') or {})
+            enabled=eval(condition.replace('github.event_name',repr(event)),{'__builtins__':{}},{})
+            assert enabled is (event=='workflow_dispatch')
+            selected.append(step['name'])
+        elif 'python -m pytest' in step.get('run',''):
+            assert not step.get('if')
+        else:
+            assert not {'GH_TOKEN','GITHUB_TOKEN'} & set(step.get('env') or {})
+    assert set(selected)==names
+    assert any('python -m pytest' in step.get('run','') and not step.get('if') for step in job['steps'])
