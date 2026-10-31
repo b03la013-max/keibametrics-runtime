@@ -243,6 +243,8 @@ def build_result_request(final: dict, official: dict, evidence: dict) -> dict:
         req["official_result"].update(
             top3_orders=official["top3_orders"],finish_groups=official["finish_groups"],
             dead_heat=True,top3_is_legacy_representative=True)
+    if official.get('declared_cancellation_context') is not None:
+        req['official_result']['declared_cancellation_context'] = official['declared_cancellation_context']
     # Capture metadata is post-result evidence only. It cannot create an old
     # SOURCE, FINAL, receipt, clock witness, or Forward OOS admission.
     if evidence.get('raw_base64') is not None:
@@ -390,6 +392,75 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
                      'request_sha256':_sha(request),'receipt_sha256':response['receipt_sha256']}
 
 
+def _source_bound_result_universe(root: Path, final: dict):
+    """Reuse the immutable SOURCE store and existing crypto/OIDC verifiers.
+
+    A cancelled declared runner belongs to RESULT, but never becomes an active
+    prediction runner. An arbitrary in-file PASS or public key is insufficient.
+    """
+    from execution_store import resolve_phase
+    from jra_pedigree_corpus import _verified_source, _attested
+    stage = ((final.get('final_prediction_package') or {}).get('execution_stage_manifest')
+             or {}).get('SIGNED_SOURCE_RECEIPT_VERIFIED') or {}
+    race = final.get('race_id')
+    execution_id = stage.get('execution_id')
+    if (not isinstance(race, str) or not isinstance(execution_id, str)
+            or not re.fullmatch(re.escape(race) + r'-LIVE-R[1-9]\d*', execution_id)):
+        raise ProductionPostResultError('RESULT_SOURCE_EXECUTION_BINDING_INVALID')
+    saved = resolve_phase(execution_id, 'SOURCE', root=root / 'runtime/executions')
+    if saved is None or 'source_receipt_envelope.json' not in saved['manifest']['files']:
+        raise ProductionPostResultError('RESULT_ORIGINAL_SOURCE_CHECKPOINT_MISSING')
+    path = saved['run_dir'] / 'source_receipt_envelope.json'
+    checked = _verified_source(path)
+    if checked is None:
+        raise ProductionPostResultError('RESULT_SOURCE_SIGNATURE_OR_SNAPSHOT_INVALID')
+    envelope = json.loads(path.read_text())
+    source = envelope['artifact']
+    if (checked.get('race_id') != race or source.get('race_id') != race
+            or envelope.get('receipt_sha256') != stage.get('receipt_sha256')
+            or checked.get('source_snapshot_sha256') != final.get('source_snapshot_sha256')
+            or checked.get('source_snapshot_sha256') != stage.get('source_snapshot_sha256')):
+        raise ProductionPostResultError('RESULT_ORIGINAL_SOURCE_FINAL_BINDING_MISMATCH')
+    if not _attested(path, signer='km-jra-source-first-runner.yml',
+                     not_after=_dt(final['prediction_cutoff'])):
+        raise ProductionPostResultError('RESULT_SOURCE_OIDC_NOT_VERIFIED')
+    declared = (source.get('jra_declared_runner_universe') or {}).get('runners')
+    active = (source.get('official_runner_universe') or {}).get('runners')
+    def ids(rows):
+        if not isinstance(rows, list) or not rows:
+            raise ProductionPostResultError('RESULT_SOURCE_UNIVERSE_MISSING')
+        out = []
+        for row in rows:
+            if (not isinstance(row, dict) or type(row.get('horse_no')) is not int
+                    or not 1 <= row['horse_no'] <= 18
+                    or str(row.get('runner_id')) != str(row['horse_no'])):
+                raise ProductionPostResultError('RESULT_SOURCE_RUNNER_IDENTITY_INVALID')
+            out.append(str(row['runner_id']))
+        if len(out) != len(set(out)):
+            raise ProductionPostResultError('RESULT_SOURCE_UNIVERSE_DUPLICATE')
+        return out
+    declared_ids, active_ids = ids(declared), ids(active)
+    cancelled = {str(row['runner_id']) for row in declared
+                 if row.get('status') in {'CANCELLED', 'EXCLUDED'}}
+    ranking = (final.get('static_prediction') or {}).get('ranking')
+    if (any(row.get('status') not in {'ACTIVE', 'CANCELLED', 'EXCLUDED'} for row in declared)
+            or any(row.get('status') != 'ACTIVE' for row in active)
+            or not isinstance(ranking, list) or len(ranking) != len(set(map(str, ranking)))
+            or set(map(str, ranking)) != set(active_ids)
+            or set(active_ids) != set(declared_ids) - cancelled):
+        raise ProductionPostResultError('RESULT_DECLARED_ACTIVE_FINAL_BINDING_MISMATCH')
+    # The exception below concerns runners already excluded by the original
+    # pre-prediction SOURCE, never a newly withdrawn active runner. Certify no
+    # signed ticket can create a refund liability outside that active set.
+    for ticket in (final.get('final_ticket') or {}).get('tickets') or []:
+        selection = ticket.get('selection')
+        if (not isinstance(selection, list) or not selection
+                or any(type(number) is not int or str(number) not in set(active_ids)
+                       for number in selection)):
+            raise ProductionPostResultError('RESULT_FROZEN_TICKET_OUTSIDE_ACTIVE_SOURCE')
+    return declared_ids, cancelled
+
+
 def process(root: Path, race_id: str, *, now=None) -> str:
     out = root / "runtime" / "results" / (race_id + ".json")
     if out.exists():
@@ -423,7 +494,20 @@ def process(root: Path, race_id: str, *, now=None) -> str:
                                     int(intent["race_no"]))
         stage="VERIFY_OFFICIAL_RESULT"
         ranking = [str(x) for x in (final.get("static_prediction") or {}).get("ranking") or []]
-        official = verify_official_result(evidence["parsed"], evidence["text"], ranking)
+        parsed = evidence['parsed']
+        result_ids = [str(row.get('runner_id')) for row in
+                      list(parsed.get('runners') or []) + list(parsed.get('non_finishers') or [])]
+        # Normal existing RESULT retains the exact PR348 path and its existing
+        # gates. Restore SOURCE only for unique extra result rows that could be
+        # legitimate declared cancellations outside the frozen active set.
+        if len(result_ids) == len(set(result_ids)) and set(result_ids) - set(ranking):
+            stage="VERIFY_SIGNED_SOURCE_UNIVERSE"
+            declared_ids, source_cancelled = _source_bound_result_universe(root, final)
+            stage="VERIFY_OFFICIAL_RESULT"
+            official = verify_official_result(parsed, evidence['text'], declared_ids,
+                                             source_cancelled_runner_ids=source_cancelled)
+        else:
+            official = verify_official_result(parsed, evidence['text'], ranking)
         stage="SETTLE_IMMUTABLE_FINAL"
         req = build_result_request(final, official, evidence)
         cpre = root / "runtime" / "source_candidate_oos" / race_id / "pre_result.json"

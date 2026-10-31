@@ -8,6 +8,7 @@ run-name: JRA Production post-result ${{ inputs.race_id || 'scheduled' }}
 permissions:
   contents: write
   actions: write
+  attestations: read
 
 on:
   schedule:
@@ -43,6 +44,7 @@ jobs:
         id: execute
         env:
           RACE_ID: ${{ inputs.race_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p runtime_out/postresult

@@ -177,7 +177,8 @@ def official_payout_entries(official:dict,kind:str)->list[dict]:
     return out
 
 
-def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: list[str]) -> dict:
+def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: list[str], *,
+                           source_cancelled_runner_ids=None) -> dict:
     rows = list(parsed.get("runners") or [])
     if parsed.get("official") is not True or not rows:
         raise PendingOfficialResult("JRA_OFFICIAL_RESULT_TABLE_MISSING")
@@ -185,6 +186,15 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
     ids = [str(r.get("runner_id")) for r in rows+non_finishers]
     if len(set(ids)) != len(ids) or set(ids) != set(map(str,frozen_runner_ids)):
         raise ValueError("OFFICIAL_RESULT_RUNNER_UNIVERSE_MISMATCH")
+    if source_cancelled_runner_ids is not None:
+        cancelled = set(map(str, source_cancelled_runner_ids))
+        if not cancelled <= set(map(str, frozen_runner_ids)):
+            raise ValueError('OFFICIAL_CANCELLED_SOURCE_UNIVERSE_MISMATCH')
+        if any(str(row['runner_id']) in cancelled for row in rows):
+            raise ValueError('OFFICIAL_CANCELLED_RUNNER_FINISHED')
+        if any(str(row['runner_id']) in cancelled and row.get('finish_status') not in
+               {'CANCELLED', 'EXCLUDED'} for row in non_finishers):
+            raise ValueError('OFFICIAL_SOURCE_CANCELLATION_STATUS_MISMATCH')
     try:
         grouped=finish_groups_and_top3_orders(rows)
     except ValueError as exc:
@@ -206,13 +216,26 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
         raise ValueError("OFFICIAL_REFUND_RUNNER_UNIVERSE_MISMATCH")
     withdrawn={int(r["horse_no"]) for r in non_finishers if r.get("finish_status") in {"CANCELLED","EXCLUDED"}}
     not_refundable={int(r["horse_no"]) for r in non_finishers if r.get("finish_status") in {"DID_NOT_FINISH","DISQUALIFIED"}}
-    if not withdrawn<=set(refunded):
+    # A source-bound cancelled runner outside the frozen active universe has
+    # zero signed-ticket exposure, certified by the Production caller. Its
+    # cancellation row remains context, not an inferred cash refund. Preserve
+    # the existing explicit-refund gate for every active/post-SOURCE withdrawal.
+    preexcluded = set(map(int, source_cancelled_runner_ids or []))
+    if not (withdrawn - preexcluded)<=set(refunded):
         raise PendingOfficialResult("OFFICIAL_REFUND_DECLARATION_REQUIRED")
     if not_refundable & set(refunded):
         raise ValueError("OFFICIAL_REFUND_NONCANCELLATION_STATUS")
-    return {**checked, "refund_runner_ids":refunded,
+    out = {**checked, "refund_runner_ids":refunded,
             "non_finishers":non_finishers,
             "refund_declaration":match.group(0) if match else None}
+    if preexcluded:
+        out['declared_cancellation_context'] = {
+            'source_cancelled_before_prediction': sorted(preexcluded),
+            'outside_frozen_active_universe': True,
+            'signed_ticket_exposure': 0,
+            'official_refund_declaration_status': 'OBSERVED' if match else 'NOT_OBSERVED',
+            'global_official_refund_zero_claimed': False}
+    return out
 
 
 def evaluate_official_candidate_result(pre:dict,official:dict)->dict:

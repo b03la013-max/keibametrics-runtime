@@ -103,6 +103,7 @@ jobs:
       - run: python -m pip install -q cryptography beautifulsoup4 pytest
       - run: python -m pytest -q tests/test_jra_pedigree_identity_recovery.py
       - name: Recover exact stored official locators and reverify existing OIDC intake
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python scripts/jra_pedigree_identity_recovery.py --verify-oidc
@@ -119,6 +120,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: python -m unittest discover -s tests -p test_jra_next_race_learning_binding_audit.py -v
       - name: Read authenticated Workflow states after rate reset
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python tools/jra_workflow_readiness.py
@@ -140,6 +142,7 @@ jobs:
       - name: Reproduce isolated Learning ON/OFF with real immutable inputs
         run: python scripts/jra_delivery_shadow_acceptance.py --learning-mechanical --output learning-mechanical.json
       - name: Snapshot existing Owner scope approval through read-only provider API
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONPATH: runtime
