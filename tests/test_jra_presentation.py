@@ -10,6 +10,136 @@ sys.path.insert(0, str(ROOT / 'runtime'))
 from jra_presentation import build_presentation, save_presentation, read_presentation
 
 
+def test_complete_body_contains_every_frozen_index_role_and_ticket_without_rewriting(tmp_path, monkeypatch):
+    from jra_presentation import complete_body
+    import urllib.request
+    f, _, _ = fixture()
+    saved = save_presentation(tmp_path, build())
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    original = copy.deepcopy(f)
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda *a, **kw: pytest.fail('completed body fetched network'))
+    checked = read_presentation(tmp_path, final=f)
+    text = complete_body(checked, f)
+    for runner in checked['detail']['ranking']:
+        assert runner['name'] in text
+        for index, value in runner['indices'].items():
+            assert index in text and str(value) in text
+    assert checked['detail']['canonical_tree'] in text
+    assert f['sha256'] in text and f['final_freeze_timestamp'] in text
+    for receipt in checked['detail']['receipts'].values():
+        assert receipt['receipt_sha256'] in text
+    for ticket in f['final_ticket']['tickets']:
+        separator = '→' if ticket['bet_type'] in ('EXACTA', 'TRIFECTA') else '－'
+        assert separator.join(map(str, ticket['selection'])) in text
+    assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    assert f == original and saved == checked
+
+
+def test_complete_body_cli_rejects_forged_saved_values_before_output(tmp_path, monkeypatch, capsys):
+    import runpy
+    f, _, _ = fixture()
+    save_presentation(tmp_path, build())
+    _rewrite_self_hashes(tmp_path, lambda d: d['ranking'][0]['indices'].update(HPI=99))
+    monkeypatch.setattr(sys, 'argv', ['jra_presentation.py', '--complete-body', '--directory', str(tmp_path),
+        '--expected-race-id', f['race_id'], '--expected-final-sha256', f['sha256'],
+        '--final', str(ROOT / 'runtime/final_artifacts/KM-JRA-KYO-20261017-R07.json')])
+    with pytest.raises(ValueError, match='CANONICAL_PROJECTION'):
+        runpy.run_path(str(ROOT / 'runtime/jra_presentation.py'), run_name='__main__')
+    assert capsys.readouterr().out == ''
+
+
+def test_complete_body_paper_never_promotes_mec_reference():
+    from jra_presentation import complete_body
+    _, h, c = fixture()
+    f = json.loads((ROOT / 'runtime/final_artifacts/KM-JRA-KYO-20261017-R05.json').read_text())
+    b = build_presentation(f, health=h, contract=c, generated_at='2026-10-17T04:40:00Z')
+    text = complete_body(b, f)
+    assert '|正式券面なし|原本のPAPER|0|' in text
+    assert '正式券面 0点・0円' in text
+    assert 'MEC参考 8点・800円（正式券面と別）' in text
+    assert b['detail']['tickets'] == []
+
+
+def test_complete_body_all13_evidence_and_original_component_rules():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    bundle = build()
+    text = complete_body(bundle, f)
+    indices = ('HPI', 'SSI', 'CFI', 'RFI', 'BVI', 'JTI', 'CSI',
+               'TRI', 'BWI', 'GCI', 'PRI', 'KGI', 'VMI')
+    for row in bundle['detail']['ranking']:
+        traces = f['final_prediction_package']['index_provenance_replay']['runners'][row['number']]['base_index_trace']
+        for index in indices:
+            trace = traces[index]
+            assert index + '原本値：' + str(row['indices'][index]) in text
+            assert index + '原本Evidence：' + str(trace.get('source_fact') or 'UNKNOWN') in text
+            assert str(trace.get('rule_id') or 'UNKNOWN') in text
+            expected = [{key: value for key, value in component.items()
+                         if key in ('feature', 'rule_id', 'feature_rule_id', 'category',
+                                    'category_score', 'weight', 'weighted_contribution', 'evidence_refs')}
+                        for component in trace.get('components') or []]
+            assert index + '構成Rule・原本入力：' + json.dumps(expected, ensure_ascii=False, sort_keys=True) in text
+
+
+def test_complete_body_preserves_all_pair_and_third_dispositions():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    text = complete_body(build(), f)
+    assert 'Head-local Pair（凍結Disposition全件）\n' + json.dumps(
+        f['pair_dispositions'], ensure_ascii=False, sort_keys=True) in text
+    assert 'Pair-conditioned Third（凍結Disposition全件）\n' + json.dumps(
+        f['third_dispositions'], ensure_ascii=False, sort_keys=True) in text
+
+
+def test_complete_body_prints_bound_source_receipt():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    bundle = build()
+    source = f['final_prediction_package']['execution_stage_manifest']['SIGNED_SOURCE_RECEIPT_VERIFIED']
+    assert bundle['detail']['source']['receipt_sha256'] == source['receipt_sha256']
+    text = complete_body(bundle, f)
+    assert 'SOURCE Receipt：' + source['receipt_sha256'] in text
+    assert source['source_snapshot_sha256'] in text
+
+
+def test_expanded_read_model_never_rewrites_original_or_saved_times(tmp_path):
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    original_final = copy.deepcopy(f)
+    saved = save_presentation(tmp_path, build())
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
+    original_bundle = copy.deepcopy(saved)
+    checked = read_presentation(tmp_path, final=f)
+    complete_body(checked, f)
+    assert f == original_final and checked == original_bundle
+    assert {path.name: path.read_bytes() for path in tmp_path.iterdir()} == before
+    assert checked['manifest']['profile'] == 'KM-JRA-FINAL-PRESENTATION-v1'
+    assert checked['manifest']['generated_at'] == saved['manifest']['generated_at']
+
+
+def test_delivery_complete_body_is_default_offline_and_preserves_saved_projection(tmp_path, monkeypatch, capsys):
+    import runpy
+    import urllib.request
+    f, _, _ = fixture()
+    save_presentation(tmp_path, build())
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    monkeypatch.setattr(urllib.request, 'urlopen', lambda *a, **kw: pytest.fail('readback called network'))
+    monkeypatch.setattr(sys, 'argv', ['jra_delivery.py', '--readback-only',
+        '--final', str(ROOT / 'runtime/final_artifacts/KM-JRA-KYO-20261017-R07.json'),
+        '--output-dir', str(tmp_path), '--run-url', 'https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38998786014'])
+    with pytest.raises(SystemExit) as done:
+        runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
+    assert done.value.code == 0
+    assert '全馬20指数（保存済み数値・再計算なし）' in capsys.readouterr().out
+    assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    sys.argv.append('--compact-body')
+    with pytest.raises(SystemExit) as done:
+        runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
+    assert done.value.code == 0
+    assert capsys.readouterr().out == read_presentation(tmp_path, final=f)['text']
+    assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+
+
 def fixture():
     final = json.loads((ROOT / 'runtime/final_artifacts/KM-JRA-KYO-20261017-R07.json').read_text())
     health = json.loads((ROOT / 'evidence/jra_bvi_phase3_20261017/runtime_health.json').read_text())['krs']['body']
@@ -148,7 +278,10 @@ def test_delivery_cli_timeout_preserves_final_and_compact_readback(tmp_path, mon
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert done.value.code == 0
     assert capsys.readouterr().out == first
-    assert read_presentation(tmp_path, final=f, expected_race_id=f['race_id'], expected_final_sha256=f['sha256'])['text'] == first
+    from jra_presentation import complete_body
+    saved = read_presentation(tmp_path, final=f, expected_race_id=f['race_id'], expected_final_sha256=f['sha256'])
+    assert complete_body(saved, f) == first
+    assert (tmp_path / 'presentation.md').read_text() == saved['text']
     monkeypatch.setattr(sys, 'argv', ['jra_presentation.py', '--directory', str(tmp_path),
                                     '--expected-race-id', f['race_id'], '--expected-final-sha256', f['sha256'], '--final', str(final_path)])
     runpy.run_path(str(ROOT / 'runtime/jra_presentation.py'), run_name='__main__')
@@ -245,7 +378,9 @@ def test_legacy_final_readback_without_presentation_uses_no_runtime(tmp_path, mo
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert done.value.code == 0
     saved = read_presentation(tmp_path, final=f)
-    assert capsys.readouterr().out == saved['text']
+    from jra_presentation import complete_body
+    assert capsys.readouterr().out == complete_body(saved, f)
+    assert (tmp_path / 'presentation.md').read_text() == saved['text']
     assert saved['detail']['presentation_before_post'] is False
     assert not (tmp_path / 'publication.json').exists()
     assert not (tmp_path / 'availability_receipt.json').exists()
