@@ -335,6 +335,7 @@ def complete_body(bundle, final):
     lines += ['', 'Capital理由：' + str(d['capital'].get('reason') or '原本に記載なし'),
               'Capital未使用額（原本値）：' + str(d['capital'].get('unused_budget', 'UNKNOWN')),
               'SOURCE Freeze：' + str(d['source'].get('source_freeze_at', 'UNKNOWN')),
+              'SOURCE Receipt：' + str(d['source'].get('receipt_sha256', 'UNKNOWN')),
               'Prediction Cutoff：' + d['prediction_cutoff'],
               'FINAL Freeze：' + final['final_freeze_timestamp'],
               'FINAL SHA：' + final['sha256'],
@@ -343,6 +344,10 @@ def complete_body(bundle, final):
         receipt = d['receipts'][phase]
         lines.append(phase + ' Receipt：' + receipt['receipt_sha256'] +
                      '／署名検証=' + str(receipt['signature_verified']))
+    lines += ['', 'Head-local Pair（凍結Disposition全件）',
+              json.dumps(d['pairs'], ensure_ascii=False, sort_keys=True),
+              'Pair-conditioned Third（凍結Disposition全件）',
+              json.dumps(d['thirds'], ensure_ascii=False, sort_keys=True)]
     package = final['final_prediction_package']
     replay = package['index_provenance_replay']['runners']
     coverage = package.get('source_to_evidence_feature_runner_coverage') or {}
@@ -352,9 +357,19 @@ def complete_body(bundle, final):
         traces = replay[rid].get('base_index_trace') or {}
         lines += ['', '馬番 ' + rid + ' ' + (row['name'] or '')]
         # These are bound source facts, not newly inferred pace/course opinions.
-        for index in ('CFI', 'PRI'):
+        for index in (*groups[0], *groups[1]):
             trace = traces.get(index) or {}
+            lines.append(index + '原本値：' + str(row['indices'][index]) +
+                         '／Rule=' + str(trace.get('rule_id') or 'UNKNOWN') +
+                         '／coverage_weight=' + str(trace.get('coverage_weight', 'UNKNOWN')))
             lines.append(index + '原本Evidence：' + str(trace.get('source_fact') or 'UNKNOWN'))
+            component_rules = [{key: value for key, value in component.items()
+                                if key in ('feature', 'rule_id', 'feature_rule_id',
+                                           'category', 'category_score', 'weight',
+                                           'weighted_contribution', 'evidence_refs')}
+                               for component in trace.get('components') or []]
+            lines.append(index + '構成Rule・原本入力：' +
+                         json.dumps(component_rules, ensure_ascii=False, sort_keys=True))
         features = (coverage.get(rid, {}).get('source_feature_trace') or {}).get('features') or {}
         missing = {}
         for name, feature in features.items():

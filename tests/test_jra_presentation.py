@@ -60,6 +60,63 @@ def test_complete_body_paper_never_promotes_mec_reference():
     assert b['detail']['tickets'] == []
 
 
+def test_complete_body_all13_evidence_and_original_component_rules():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    bundle = build()
+    text = complete_body(bundle, f)
+    indices = ('HPI', 'SSI', 'CFI', 'RFI', 'BVI', 'JTI', 'CSI',
+               'TRI', 'BWI', 'GCI', 'PRI', 'KGI', 'VMI')
+    for row in bundle['detail']['ranking']:
+        traces = f['final_prediction_package']['index_provenance_replay']['runners'][row['number']]['base_index_trace']
+        for index in indices:
+            trace = traces[index]
+            assert index + '原本値：' + str(row['indices'][index]) in text
+            assert index + '原本Evidence：' + str(trace.get('source_fact') or 'UNKNOWN') in text
+            assert str(trace.get('rule_id') or 'UNKNOWN') in text
+            expected = [{key: value for key, value in component.items()
+                         if key in ('feature', 'rule_id', 'feature_rule_id', 'category',
+                                    'category_score', 'weight', 'weighted_contribution', 'evidence_refs')}
+                        for component in trace.get('components') or []]
+            assert index + '構成Rule・原本入力：' + json.dumps(expected, ensure_ascii=False, sort_keys=True) in text
+
+
+def test_complete_body_preserves_all_pair_and_third_dispositions():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    text = complete_body(build(), f)
+    assert 'Head-local Pair（凍結Disposition全件）\n' + json.dumps(
+        f['pair_dispositions'], ensure_ascii=False, sort_keys=True) in text
+    assert 'Pair-conditioned Third（凍結Disposition全件）\n' + json.dumps(
+        f['third_dispositions'], ensure_ascii=False, sort_keys=True) in text
+
+
+def test_complete_body_prints_bound_source_receipt():
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    bundle = build()
+    source = f['final_prediction_package']['execution_stage_manifest']['SIGNED_SOURCE_RECEIPT_VERIFIED']
+    assert bundle['detail']['source']['receipt_sha256'] == source['receipt_sha256']
+    text = complete_body(bundle, f)
+    assert 'SOURCE Receipt：' + source['receipt_sha256'] in text
+    assert source['source_snapshot_sha256'] in text
+
+
+def test_expanded_read_model_never_rewrites_original_or_saved_times(tmp_path):
+    from jra_presentation import complete_body
+    f, _, _ = fixture()
+    original_final = copy.deepcopy(f)
+    saved = save_presentation(tmp_path, build())
+    before = {path.name: path.read_bytes() for path in tmp_path.iterdir()}
+    original_bundle = copy.deepcopy(saved)
+    checked = read_presentation(tmp_path, final=f)
+    complete_body(checked, f)
+    assert f == original_final and checked == original_bundle
+    assert {path.name: path.read_bytes() for path in tmp_path.iterdir()} == before
+    assert checked['manifest']['profile'] == 'KM-JRA-FINAL-PRESENTATION-v1'
+    assert checked['manifest']['generated_at'] == saved['manifest']['generated_at']
+
+
 def test_delivery_complete_body_is_default_offline_and_preserves_saved_projection(tmp_path, monkeypatch, capsys):
     import runpy
     import urllib.request
