@@ -573,6 +573,85 @@ def _missing_reason(source_family: str, fact_state: Any) -> str:
         return "NON_SOURCE_VENUE_BINDING_REQUIRED"
     return "SOURCE_FACT_STATUS_UNAVAILABLE_OR_EVALUATOR_REQUIRED"
 
+def _feature_origin(value: Any) -> Dict[str, Any]:
+    """Describe registered inputs; never promote a category into a measurement.
+
+    This is non-numerical trace metadata, not a rule registry or admission gate.
+    Exact rule IDs deliberately fail open to UNKNOWN *metadata*, while normal
+    Production validation continues to fail closed for unregistered inputs.
+    """
+    out = {
+        "value_type": "UNKNOWN_CATEGORY_EVALUATION" if isinstance(value, dict) else "MISSING",
+        "evidence_origin_type": "UNKNOWN" if isinstance(value, dict) else "MISSING",
+        "category_is_direct_measurement": False,
+        "new_raw_observation_credit": False,
+        "typing_basis": "EXACT_RULE_ID_AND_PRESERVED_SOURCE_FACT; NON_NUMERICAL",
+    }
+    if not isinstance(value, dict):
+        return out
+    rule = str(value.get("rule_id") or "")
+    observed_inputs = {
+        "JRA-BODYWEIGHT-DELTA-BAND-v1", "JRA-MARKET-RANK-BAND-v1",
+        "JRA-WEIGHT-EQUAL-CONDITION-v1", "JRA-HANDICAP-RELIEF-BAND-v1",
+        "KM-JRA-OA-WEIGHT-LOAD-RELATIVE-v1",
+    }
+    assessments = {
+        "JRA-WORKOUT-CAPABILITY-COMMENT-v1", "KM-JRA-OA-WORKOUT-FINAL-RATING-v1",
+    }
+    estimates = {
+        "KM-JRA-JOCKEY-QUALITY-v1", "KM-JRA-TRAINER-QUALITY-v1",
+        "KM-JRA-OA-TRAINER-CAREER-CLASS-v1",
+        "KM-JRA-OA-PEDIGREE-SIRE-SURFACE-v1", "KM-JRA-OA-PEDIGREE-SIRE-DISTANCE-v1",
+        "KM-JRA-OA-PEDIGREE-SIRE-CLASS-v1", "KM-JRA-OA-PEDIGREE-SIRE-DEBUT-v1",
+        "KM-JRA-OA-PEDIGREE-SIRE-SPRINT-v1", "KM-JRA-OA-PEDIGREE-SIRE-TRACK-v1",
+        "KM-JRA-OA-PEDIGREE-DAMSIRE-SURFACE-v1", "KM-JRA-OA-PEDIGREE-DAMSIRE-CLASS-FALLBACK-v1",
+        "KM-JRA-OA-PEDIGREE-DAMSIRE-DISTANCE-FALLBACK-v1",
+        "KM-JRA-OA-PEDIGREE-PHYSICAL-FIT-v1", "KM-JRA-OA-PEDIGREE-PHYSICAL-FIT-DAMSIRE-FALLBACK-v1",
+    }
+    proxies = {
+        "KM-JRA-OA-DASH-FRONT-RATE-v1", "KM-JRA-OA-START-NOT-BEHIND-RATE-v1",
+        "KM-JRA-OA-LAYOFF-READINESS-v1", "KM-JRA-OA-PHYSICAL-READINESS-BW-v1",
+        "KM-JRA-OA-PREPARATION-CONTINUITY-v1", "KM-JRA-OA-TARGET-INTENT-CONTINUITY-v1",
+        "KM-JRA-OA-OPPONENT-CLASS-FACED-v1", "KM-JRA-OA-PRESSURE-RESILIENCE-v1",
+        "KM-JRA-OA-PACE-RESILIENCE-v1", "KM-JRA-OA-SAMEDAY-DRAW-BIAS-v1",
+        "KM-JRA-OA-SAMEDAY-STYLE-FIT-v1", "KM-JRA-OA-RECENT-SPEED-MARGIN-v1",
+        "KM-JRA-OA-MARKET-STABILITY-CROSS-RACE-v1",
+    }
+    derived = {
+        "JRA-EVIDENCE-PERCENTILE-CLOSING-v1", "JRA-EVIDENCE-PERCENTILE-RECENT-PERFORMANCE-v1",
+        "JRA-EVIDENCE-PERCENTILE-RECENT-SPEED-v1",
+        "JRA-RECENT-CONSISTENCY-RATE-v1", "KM-JRA-BODYWEIGHT-RANGE-FIT-v1",
+        "KM-JRA-CLASS-PERFORMANCE-v1", "KM-JRA-OA-CLASS-PERFORMANCE-v1",
+        "KM-JRA-GOING-FIT-v1", "KM-JRA-OA-GOING-FIT-SAMEDAY-v1",
+        "KM-JRA-OA-CLOSING-GAIN-v1", "KM-JRA-OA-COURSE-GEOMETRY-SURFACE-FIT-v1",
+        "KM-JRA-OA-EARLY-POSITION-v1", "KM-JRA-OA-FINISH-MARGIN-BEST-v1",
+        "KM-JRA-OA-HIDDEN-CLASS-PEAK-v1", "KM-JRA-OA-JOCKEY-HORSE-PAIRING-v1",
+        "KM-JRA-OA-MARKET-FORM-MISMATCH-v1", "KM-JRA-OA-POSITION-REPRODUCIBILITY-v1",
+        "KM-JRA-OA-PROGRESSION-v1", "KM-JRA-OA-SIMILAR-GEOMETRY-FIT-v1",
+        "KM-JRA-OA-SPEED-RELIABILITY-v1", "KM-JRA-OA-TURN-DIRECTION-FIT-v1",
+        "KM-JRA-ROTATION-FIT-v1", "KM-JRA-SAME-COURSE-FIT-v1",
+        "KM-JRA-SAME-DISTANCE-FIT-v1", "KM-JRA-SURFACE-FIT-v1",
+    }
+    for origin, rules in (
+        ("OBSERVED_FACT", observed_inputs), ("REGISTERED_ASSESSMENT", assessments),
+        ("EMPIRICAL_ESTIMATE", estimates), ("PROXY", proxies),
+        ("REGISTERED_DERIVED_EVALUATION", derived),
+    ):
+        if rule in rules:
+            out["evidence_origin_type"] = origin
+            break
+    if rule == "KM-JRA-OA-DISTANCE-FIT-v1":
+        # The same authorized feature can use self-history or a sire fallback.
+        # Neither a feature name nor its source authority proves which was used.
+        fact = str(value.get("source_fact") or "")
+        if fact.startswith("distance_fit (newcomer, sire distance record): "):
+            out["evidence_origin_type"] = "EMPIRICAL_ESTIMATE"
+        elif "same_surface_within_200m_normalized_finish=" in fact:
+            out["evidence_origin_type"] = "REGISTERED_DERIVED_EVALUATION"
+    if out["evidence_origin_type"] != "UNKNOWN":
+        out["value_type"] = "REGISTERED_CATEGORY_EVALUATION"
+    return out
+
 def _build_feature_trace(
     runner: Dict[str, Any],
     generated: Dict[str, Any],
@@ -619,6 +698,11 @@ def _build_feature_trace(
             "source_authority": value.get("source_authority") if isinstance(value, dict) else None,
             "evidence_refs": copy.deepcopy(value.get("evidence_refs") or []) if isinstance(value, dict) else [],
             "source_fact": value.get("source_fact") if isinstance(value, dict) else None,
+            "evidence_origin": _feature_origin(value),
+            # Legacy canonical ledger labels such as OFFICIALLY_UNPUBLISHED
+            # mean an absent eligible feature. They cannot prove nonpublication:
+            # a published history can simply fail a rule's sample minimum.
+            "source_nonpublication_status": "NOT_ESTABLISHED" if state == "MISSING" else None,
             "target_bindings": copy.deepcopy(targets.get(feature) or []),
         }
     summary = {
@@ -633,6 +717,11 @@ def _build_feature_trace(
         "fact_available_feature_count": sum(1 for x in rows.values() if x["fact_available"] is True),
         "fact_unavailable_feature_count": sum(1 for x in rows.values() if x["fact_available"] is False),
         "fact_status_unknown_feature_count": sum(1 for x in rows.values() if x["fact_available"] is None),
+        "evidence_origin_counts": {
+            origin: sum(1 for x in rows.values() if x["evidence_origin"]["evidence_origin_type"] == origin)
+            for origin in sorted({x["evidence_origin"]["evidence_origin_type"] for x in rows.values()})
+        },
+        "legacy_dcr_missing_labels_prove_source_nonpublication": False,
     }
     payload = {"schema": TRACE_SCHEMA, "summary": summary, "features": rows}
     payload["sha256"] = _sha(payload)
@@ -885,6 +974,36 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
 
 def attach_source_features_to_request(request: Dict[str, Any], source_artifact: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
     req = copy.deepcopy(request)
+    ledger = req.get("index_provenance_ledger")
+    if isinstance(ledger, dict) and ledger:
+        # A prepared numerical request already pins its actual feature set and
+        # corpus. Recompiling here can admit later corpus inflow while retaining
+        # the old index ledger, producing a false feature->consumer trace.
+        # Reuse only the existing bound request; all normal downstream SOURCE,
+        # Full20, Static, PRE_KRS and FINAL verification still runs unchanged.
+        source_sha = source_artifact.get("source_snapshot_sha256")
+        if (source_artifact.get("race_id") != req.get("race_id")
+                or source_sha != req.get("source_snapshot_sha256")
+                or ledger.get("race_id") != req.get("race_id")
+                or ledger.get("mapping_id") != mapping.get("mapping_id")):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_IDENTITY_MISMATCH")
+        rows = {str(r.get("runner_id")): r for r in req.get("runners") or []}
+        if not rows or set(rows) != set(ledger.get("runners") or {}):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_RUNNER_MISMATCH")
+        for rid, runner in rows.items():
+            expected = ledger["runners"][rid].get("feature_snapshot_sha256")
+            if not expected or expected != _sha(runner.get("evidence_features") or {}):
+                raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_HASH_MISMATCH:" + rid)
+        from jra_evidence_to_base_production import build_production_ledger
+        if (ledger.get("sha256") != _sha({k: v for k, v in ledger.items() if k != "sha256"})
+                or ledger != build_production_ledger(req["race_id"], req["runners"], mapping)):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_LEDGER_MISMATCH")
+        from jra_bvi_consumption import verify_compiler_lineage
+        if (not isinstance(req.get("source_to_evidence_feature_compiler"), dict)
+                or not req.get("source_to_evidence_feature_sha256")):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_COMPILER_UNAVAILABLE")
+        verify_compiler_lineage(req, source_snapshot_sha256=source_sha)
+        return req
     report = compile_source_to_features(source_artifact, req.get("runners") or [], mapping)
     try:
         from jra_source_objective_evaluator import build_source_objective_candidate

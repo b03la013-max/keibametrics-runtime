@@ -43,6 +43,7 @@ jobs:
           python -m pip install --disable-pip-version-check -q pytest cryptography PyMuPDF fastapi beautifulsoup4
           python -m pytest -q tests/test_jra_official_fact_evaluator_production.py tests/test_jra_static_owner_executable.py tests/test_jra_single_entry_exact_gap.py tests/test_jra_owner_authorized_rules.py tests/test_jra_pedigree_harvest_backfill.py tests/test_jra_bvi_official_corpus_repair.py
       - name: Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -91,6 +92,7 @@ jobs:
           print(json.dumps(result, ensure_ascii=False, indent=2))
           PY
       - name: Recompute source-verified real Kyoto R09 Production evidence after new evaluators
+        if: github.event_name == 'workflow_dispatch'
         env:
           PYTHONPATH: runtime:runtime/jra_source_runtime
           GH_TOKEN: ${{ github.token }}

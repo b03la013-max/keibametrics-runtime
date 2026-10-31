@@ -125,6 +125,17 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
         if not out:
             continue
         payload={"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
+        try:
+            observations=parse_workout_history(raw,content_type,official_universe)
+            if observations["records"]:
+                payload["observed_workout_history"]=observations
+        except ValueError as exc:
+            # Retention is independent of the established numerical feed gate.
+            # A rejected optional history never changes the legacy table or
+            # grants any feature/category authority.
+            payload["observed_workout_history"]={
+                "status":"REJECTED", "records":[], "reason":str(exc),
+                "production_feature_admission":False}
         parsed_candidates.append(payload)
         if expected is not None:
             got={int(x["horse_no"]):_norm(x["horse_name"]) for x in payload["runners"]}
@@ -136,8 +147,9 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
 
 class _SpeedTables(HTMLParser):
     """Preserve multi-row speed-table headers without shifting data columns."""
-    def __init__(self):
+    def __init__(self, *, max_rowspan=8):
         super().__init__(convert_charrefs=True)
+        self.max_rowspan=max_rowspan
         self.tables=[]; self.table=None; self.row=None; self.cell=None
         self.depth=0; self.spans={}; self.width=1; self.height=1
 
@@ -155,7 +167,7 @@ class _SpeedTables(HTMLParser):
             self.cell=[]; a=dict(attrs)
             try: self.width=int(a.get("colspan",1)); self.height=int(a.get("rowspan",1))
             except (ValueError,TypeError): raise ValueError("SPEED_HEADER_INVALID_SPAN")
-            if not 1<=self.width<=32 or not 1<=self.height<=8:
+            if not 1<=self.width<=32 or not 1<=self.height<=self.max_rowspan:
                 raise ValueError("SPEED_HEADER_INVALID_SPAN")
         elif self.cell is not None and tag in ("br","div","p"):
             self.cell.append(" ")
@@ -181,6 +193,82 @@ class _SpeedTables(HTMLParser):
             self.depth-=1
             if self.depth==0:
                 self.tables.append(self.table); self.table=None
+
+
+def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None)->Dict[str,Any]:
+    """Retain dated observations, never infer a workout category or eligibility.
+
+    The existing compact/latest-row numerical feed and complete-universe gate
+    remain separate. Rowspan copies identity only within the captured table;
+    each dated row must still match its official horse number and name.
+    """
+    reader=_SpeedTables(max_rowspan=128)
+    reader.feed(_decode(raw,content_type))
+    expected=None
+    if official_universe:
+        expected={int(x.get("horse_no") or x.get("runner_id")):_norm(x.get("name"))
+                  for x in official_universe.get("runners") or []}
+    records={}
+    for table in reader.tables:
+        if not table:continue
+        header=[re.sub(r"\s+","",str(x)) for x in table[0]]
+        required=("馬番","馬名","日付","コース","馬場","乗り役","調教タイム","位置","脚色","評価")
+        if not all(any(key in x for x in header) for key in required):continue
+        indices=[next(i for i,x in enumerate(header) if key in x) for key in required]
+        ni,mi,di,ci,gi,ri,ti,pi,li,ei=indices
+        for row in table[1:]:
+            if di>=len(row) or not str(row[di]).strip():continue
+            m=re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})(?:\D|$)",str(row[di]).strip())
+            if not m:raise ValueError("WORKOUT_HISTORY_DATE_NOT_OBSERVED")
+            if max(indices)+1>=len(row):raise ValueError("WORKOUT_HISTORY_ROW_INCOMPLETE")
+            if not re.fullmatch(r"\d{1,2}",str(row[ni]).strip()):
+                raise ValueError("WORKOUT_HISTORY_RUNNER_ID_NOT_OBSERVED")
+            no=int(str(row[ni]).strip());name=_norm(row[mi])
+            if not 1<=no<=18 or not name:raise ValueError("WORKOUT_HISTORY_RUNNER_IDENTITY_INVALID")
+            if expected is not None and expected.get(no)!=name:
+                raise ValueError("WORKOUT_HISTORY_OFFICIAL_IDENTITY_MISMATCH:"+str(no))
+            day=datetime.date(*(int(x) for x in m.groups())).isoformat()
+            record={"runner_id":str(no),"horse_no":no,"horse_name":name,
+                    "workout_date":day,"course":str(row[ci]).strip(),
+                    "going_raw":str(row[gi]).strip(),"rider_raw":str(row[ri]).strip(),
+                    "workout_time_and_partner_raw":str(row[ti]).strip(),
+                    "position_raw":str(row[pi]).strip(),"gait":str(row[li]).strip(),
+                    "assessment":str(row[ei]).strip(),"rating":str(row[ei+1]).strip()}
+            # No source-page hash in fact identity: the same session on type=1
+            # and type=2 is one observation with multiple retained source refs.
+            fact_sha=sha_obj(record)
+            records[fact_sha]={**record,"source_fact_sha256":fact_sha}
+    rows=sorted(records.values(),key=lambda r:(int(r["runner_id"]),r["workout_date"],r["source_fact_sha256"]))
+    observed={int(r["runner_id"]) for r in rows}
+    return {"profile":"KM-JRA-WORKOUT-HISTORY-OBSERVATIONS-v1",
+            "status":"OBSERVATIONS_ONLY","records":rows,"record_count":len(rows),
+            "observed_runner_count":len(observed),"raw_sha256":hashlib.sha256(raw).hexdigest(),
+            "official_identity_verified":expected is not None,
+            "full_official_universe_match":expected is not None and observed==set(expected),
+            "production_feature_admission":False}
+
+
+def _retain_workout_observations(base,candidate,snapshot):
+    observed=candidate.get("observed_workout_history") or {}
+    if not observed:return
+    retained=base.setdefault("observed_workout_history",{
+        "profile":"KM-JRA-WORKOUT-HISTORY-OBSERVATIONS-v1","status":"OBSERVATIONS_ONLY",
+        "records":[],"rejected_attempts":[],"production_feature_admission":False})
+    if observed.get("status")=="REJECTED":
+        retained["rejected_attempts"].append({"source_snapshot_sha256":snapshot["snapshot_sha256"],
+                                              "reason":observed.get("reason")})
+        return
+    if observed.get("raw_sha256")!=snapshot.get("raw_sha256"):
+        raise ValueError("WORKOUT_HISTORY_RAW_BINDING_MISMATCH")
+    ref={k:snapshot.get(k) for k in ("source_id","snapshot_sha256","raw_sha256","fetched_at","cutoff_relation")}
+    records={r["source_fact_sha256"]:r for r in retained["records"]}
+    for row in observed.get("records") or []:
+        key=row["source_fact_sha256"]
+        if key not in records:records[key]={**row,"source_refs":[]}
+        if ref not in records[key]["source_refs"]:records[key]["source_refs"].append(ref)
+    retained["records"]=sorted(records.values(),key=lambda r:(int(r["runner_id"]),r["workout_date"],r["source_fact_sha256"]))
+    retained["record_count"]=len(retained["records"])
+    retained["observed_runner_count"]=len({r["runner_id"] for r in retained["records"]})
 
 
 def parse_speed(raw:bytes,content_type:str="")->Dict[str,Any]:
@@ -223,6 +311,86 @@ def _reconcile(parsed:Dict[str,Any],artifact:Dict[str,Any]):
     for no in sorted(set(got)-set(official)): errs.append(f"EXTRA_RUNNER:{no}")
     return {"verified":not errs,"official_count":len(official),"source_count":len(got),"errors":errs}
 
+
+def _normalize_declared_cancelled_workout(parsed:Dict[str,Any], artifact:Dict[str,Any], raw:bytes, content_type:str=""):
+    """Remove only exact officially cancelled identities from a complete feed.
+
+    Normal feeds keep the existing path. A cancellation exception requires the
+    same page date/venue/race, complete declared-name identity, an independently
+    declared CANCELLED status, and an exact remaining Active universe.
+    Unknown extras, partial feeds and identity mismatches remain rejected by
+    the unchanged _reconcile gate. No rating, clock or feature is inferred.
+    """
+    if _reconcile(parsed, artifact)["verified"]:
+        return parsed
+    declared_obj=artifact.get("jra_declared_runner_universe") or {}
+    declared_rows=declared_obj.get("runners") or []
+    active_rows=(artifact.get("jra_official_runner_universe") or {}).get("runners") or []
+    source_rows=parsed.get("runners") or []
+    def strict_number(row):
+        def convert(value):
+            if type(value) is int and 1<=value<=18:
+                return value
+            if isinstance(value,str) and re.fullmatch(r"(?:[1-9]|1[0-8])",value):
+                return int(value)
+            raise ValueError("WORKOUT_RUNNER_NUMBER_INVALID")
+        no=convert(row.get("horse_no") if "horse_no" in row else row.get("runner_id"))
+        if "runner_id" in row and convert(row["runner_id"])!=no:
+            raise ValueError("WORKOUT_RUNNER_NUMBER_ID_CONFLICT")
+        return no
+    try:
+        declared={strict_number(r):r for r in declared_rows}
+        active={strict_number(r):r for r in active_rows}
+        got={strict_number(r):r for r in source_rows}
+    except (TypeError,ValueError,KeyError):
+        return parsed
+    if (not active or len(declared)!=len(declared_rows) or len(got)!=len(source_rows)
+            or len(active)!=len(active_rows) or set(got)!=set(declared)):
+        return parsed
+    cancelled={no for no,r in declared.items() if r.get("status")=="CANCELLED"}
+    if (not cancelled or set(declared)-cancelled!=set(active)
+            or declared_obj.get("universe_type")!="DECLARED"
+            or not declared_obj.get("runner_universe_sha256")
+            or not declared_obj.get("source_snapshot_sha256")
+            or any(not declared[no].get("status_source_id") or not declared[no].get("status_source_snapshot_sha256") for no in cancelled)):
+        return parsed
+    for no,row in declared.items():
+        if (not _norm(row.get("name")) or _norm(row.get("name"))!=_norm(got[no].get("horse_name"))
+                or (no in active and (_norm(active[no].get("name"))!=_norm(row.get("name")) or row.get("status")!="ACTIVE" or active[no].get("status")!="ACTIVE"))):
+            return parsed
+    decoded=_decode(raw,content_type)
+    title=re.search(r"<title[^>]*>(.*?)</title>",decoded,re.I|re.S)
+    identity=re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日\s+([^\d<]+?)(\d{1,2})R",title.group(1) if title else "")
+    if not identity:
+        return parsed
+    actual_day=f"{int(identity[1]):04d}-{int(identity[2]):02d}-{int(identity[3]):02d}"
+    context=artifact.get("source_race_context") or {}
+    expected_venue=(artifact.get("jra_race_context") or {}).get("venue_name")
+    try:
+        same=(actual_day==context.get("race_date") and _norm(identity[4])==_norm(expected_venue)
+              and int(identity[5])==int(context.get("race_no")))
+    except (TypeError,ValueError):
+        return parsed
+    if not same:
+        return parsed
+    import copy
+    out=copy.deepcopy(parsed)
+    out["runners"]=[r for r in out["runners"] if int(r["horse_no"]) in active]
+    out["runner_count"]=len(out["runners"])
+    out["cancelled_runner_exclusions"]={
+        "basis":"EXACT_DECLARED_IDENTITIES_AND_EXPLICIT_CANCELLED_STATUS",
+        "declared_universe_sha256":declared_obj.get("runner_universe_sha256"),
+        "declared_source_snapshot_sha256":declared_obj.get("source_snapshot_sha256"),
+        "original_source_runner_count":len(got),
+        "excluded":[{"horse_no":no,"name":declared[no].get("name"),"status":"CANCELLED",
+                     "status_source_id":declared[no].get("status_source_id"),
+                     "status_source_snapshot_sha256":declared[no].get("status_source_snapshot_sha256")} for no in sorted(cancelled)],
+        "page_identity":{"race_date":actual_day,"venue_name":_norm(identity[4]),"race_no":int(identity[5])},
+    }
+    if not _reconcile(out,artifact)["verified"]:
+        return parsed
+    return out
+
 def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*,require_workout:bool=False):
     ctx=artifact.get("source_race_context") or {}
     warnings=[];errors=[];snaps=[]
@@ -253,6 +421,8 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
                 snaps.append(snap)
                 candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"))
                 candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
+                _retain_workout_observations(base,candidate,snap)
+                candidate=_normalize_declared_cancelled_workout(candidate,artifact,raw,h.get("content-type",""))
                 candidate["runner_universe_match"]=_reconcile(candidate,artifact)
                 if candidate["runner_universe_match"]["verified"]:
                     workout=candidate

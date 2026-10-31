@@ -7,6 +7,20 @@ on:
       - "runtime/jra_pedigree_corpus.py"
       - "runtime/jra_owner_authorized_feature_rules.py"
       - "tests/test_jra_owner_authorized_rules.py"
+      - "tests/test_jra_feature_origin_trace.py"
+      - "tests/test_jra_owner_current_environment.py"
+      - "tests/test_jra_workout_history_observations.py"
+      - "tests/test_jra_class_zero_corpus.py"
+      - "tests/test_jra_precalculated_trace_reuse.py"
+      - "tests/test_jra_registered_common_cancelled.py"
+      - "tests/test_jra_current_equipment_observation.py"
+      - ".github/workflows/km-jra-person-stats-v11-acceptance.yml"
+      - "tests/test_jra_bvi_production_intake_ci_guard.py"
+      - ".github/workflows/km-jra-pedigree-production-intake-acceptance.yml"
+      - ".github/workflows/km-jra-production-krs-20000-external-acceptance.yml"
+      - ".github/workflows/km-jra-pedigree-live-smoke.yml"
+      - ".github/workflows/km-jra-hsn12-v17-adapter-coverage.yml"
+      - ".github/workflows/km-jra-production-source-closure-real.yml"
       - "tests/test_jra_source_observed_fact_retention.py"
       - "tests/test_jra_source_grade_context_retention.py"
       - "tests/test_jra_pedigree_harvest_backfill.py"
@@ -62,7 +76,7 @@ jobs:
       - name: Replay actual Tokyo R8 transport and status failure
         run: python -m pytest -q tests/test_jra_resolver_transport_recovery.py tests/test_jra_race_day_autopilot.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_autopilot_continuity.py tests/test_execution_store.py tests/test_jra_execution_maturity_bridge.py
       - name: Verify observed SOURCE facts with synthetic and archived raw fixtures
-        run: python -m pytest -q tests/test_jra_source_runtime.py tests/test_jra_owner_authorized_rules.py tests/test_jra_source_observed_fact_retention.py tests/test_jra_source_grade_context_retention.py
+        run: python -m pytest -q tests/test_jra_source_runtime.py tests/test_jra_owner_authorized_rules.py tests/test_jra_source_observed_fact_retention.py tests/test_jra_source_grade_context_retention.py tests/test_jra_class_zero_corpus.py tests/test_jra_precalculated_trace_reuse.py tests/test_jra_registered_common_cancelled.py tests/test_jra_current_equipment_observation.py tests/test_jra_bvi_production_intake_ci_guard.py tests/test_jra_feature_origin_trace.py tests/test_jra_owner_current_environment.py tests/test_jra_workout_history_observations.py
       - name: Verify actual capital, clock semantics, and decision-aware reviews
         run: python -m pytest -q tests/test_kyoto_20261025_correctness.py tests/test_jra_current_environment.py tests/test_jra_production_postresult.py tests/test_family_pfs_improvement.py tests/test_jra_result_persistence.py
       - name: Check Production boundaries and Single Entry outcomes

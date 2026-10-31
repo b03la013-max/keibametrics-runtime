@@ -12,8 +12,10 @@ on:
       - "runtime/jra_source_runtime/jra_registered_common.py"
       - "runtime/jra_source_runtime/jra_person_stats.py"
       - "runtime/jra_source_to_evidence_features.py"
+  workflow_dispatch:
 jobs:
   diagnostic:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
