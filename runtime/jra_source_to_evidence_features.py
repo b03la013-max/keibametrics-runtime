@@ -885,6 +885,36 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
 
 def attach_source_features_to_request(request: Dict[str, Any], source_artifact: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
     req = copy.deepcopy(request)
+    ledger = req.get("index_provenance_ledger")
+    if isinstance(ledger, dict) and ledger:
+        # A prepared numerical request already pins its actual feature set and
+        # corpus. Recompiling here can admit later corpus inflow while retaining
+        # the old index ledger, producing a false feature->consumer trace.
+        # Reuse only the existing bound request; all normal downstream SOURCE,
+        # Full20, Static, PRE_KRS and FINAL verification still runs unchanged.
+        source_sha = source_artifact.get("source_snapshot_sha256")
+        if (source_artifact.get("race_id") != req.get("race_id")
+                or source_sha != req.get("source_snapshot_sha256")
+                or ledger.get("race_id") != req.get("race_id")
+                or ledger.get("mapping_id") != mapping.get("mapping_id")):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_IDENTITY_MISMATCH")
+        rows = {str(r.get("runner_id")): r for r in req.get("runners") or []}
+        if not rows or set(rows) != set(ledger.get("runners") or {}):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_RUNNER_MISMATCH")
+        for rid, runner in rows.items():
+            expected = ledger["runners"][rid].get("feature_snapshot_sha256")
+            if not expected or expected != _sha(runner.get("evidence_features") or {}):
+                raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_HASH_MISMATCH:" + rid)
+        from jra_evidence_to_base_production import build_production_ledger
+        if (ledger.get("sha256") != _sha({k: v for k, v in ledger.items() if k != "sha256"})
+                or ledger != build_production_ledger(req["race_id"], req["runners"], mapping)):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_LEDGER_MISMATCH")
+        from jra_bvi_consumption import verify_compiler_lineage
+        if (not isinstance(req.get("source_to_evidence_feature_compiler"), dict)
+                or not req.get("source_to_evidence_feature_sha256")):
+            raise SourceToFeatureError("PRECALCULATED_SOURCE_FEATURE_COMPILER_UNAVAILABLE")
+        verify_compiler_lineage(req, source_snapshot_sha256=source_sha)
+        return req
     report = compile_source_to_features(source_artifact, req.get("runners") or [], mapping)
     try:
         from jra_source_objective_evaluator import build_source_objective_candidate

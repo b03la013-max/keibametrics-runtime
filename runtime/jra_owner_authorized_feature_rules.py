@@ -141,6 +141,12 @@ def class_rank(text: Any) -> int | None:
     return None
 
 
+def _class_at_least(text: Any, minimum: int) -> bool:
+    """Preserve the valid zero class (maiden/newcomer); reject only unknowns."""
+    rank = class_rank(text)
+    return rank is not None and rank >= minimum
+
+
 def decode_passing_positions(digits: str, field_size: Any) -> list[int] | None:
     s = str(digits or "")
     try:
@@ -712,7 +718,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                     ped("pedigree_distance", "sire", sire, lambda r: r["surface"] == surface and r.get("distance_m") is not None
                         and abs(int(r["distance_m"]) - int(distance)) <= 200, 3, 8, f"surface={surface}; distance={distance}±200")
             if cur_class is not None:
-                ped("pedigree_class", "sire", sire, lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 3, 6,
+                ped("pedigree_class", "sire", sire, lambda r: _class_at_least(r.get("race_name"), cur_class), 3, 6,
                     f"class_rank>={cur_class}")
             # Damsire fallbacks: only when the sire sample is unmet, with a
             # stricter minimum, a distinct rule id and the damsire named.
@@ -723,7 +729,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                     rule=FALLBACK_RULES["pedigree_distance"])
             if cur_class is not None and "pedigree_class" not in feats:
                 ped("pedigree_class", "damsire", damsire,
-                    lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 4, 10,
+                    lambda r: _class_at_least(r.get("race_name"), cur_class), 4, 10,
                     f"DAMSIRE_FALLBACK; class_rank>={cur_class}", rule=FALLBACK_RULES["pedigree_class"])
             physical_fit("sire", sire, RULES["physical_pedigree_fit"])
             if "physical_pedigree_fit" not in feats:
