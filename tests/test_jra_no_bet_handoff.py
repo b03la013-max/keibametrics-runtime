@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 import subprocess
+import re
+import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'runtime/jra_source_runtime'))
@@ -80,3 +82,22 @@ def test_corrupt_zero_stake_record_does_not_block_independent_final_worker(tmp_p
     monkeypatch.setattr(autopilot.subprocess,'run',lambda args,**kwargs:calls.append(args))
     assert autopilot.request_postresult_worker(tmp_path,DATE,NOW,publish=lambda:None)=='ACKNOWLEDGED'
     assert calls==[['gh','workflow','run','km-jra-production-postresult.yml','--ref','main']]
+
+
+@pytest.mark.parametrize('workflow_name,job,allowed_events',[
+    ('km-jra-no-bet-postresult-learning.yml','official-result-ingest',
+     {'schedule','workflow_dispatch'}),
+    ('km-jra-candidate-auto-postresult-closedloop.yml','result-to-learning',
+     {'schedule','workflow_dispatch','workflow_run'}),
+])
+@pytest.mark.parametrize('event',['pull_request','push','schedule','workflow_dispatch','workflow_run'])
+def test_official_postresult_only_runs_for_existing_operation_events(workflow_name,job,allowed_events,event):
+    workflow=(ROOT/'.github/workflows'/workflow_name).read_text()
+    condition=re.search(r'(?m)^  '+re.escape(job)+r':\n    if: (.+)$',workflow)
+    assert condition, 'Official capture must have a job-level event guard'
+    accepted=[]
+    for clause in condition[1].split(' || '):
+        match=re.fullmatch(r"github\.event_name == '([a-z_]+)'",clause)
+        assert match, 'Official capture must explicitly allow operational events'
+        accepted.append(match[1])
+    assert (event in accepted) is (event in allowed_events)
