@@ -4,7 +4,11 @@ import datetime as dt
 import json
 from pathlib import Path
 from types import SimpleNamespace
+import sys
 import pytest
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path[:0]=[str(ROOT/'runtime'),str(ROOT/'runtime/jra_source_runtime')]
 import jra_race_day_resolver as resolver
 import jra_race_day_autopilot as autopilot
 
