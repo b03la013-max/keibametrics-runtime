@@ -737,7 +737,7 @@ jobs:
           # and fail only this audit if an optional explanation cannot replay.
           from jra_role_exclusion_audit import build_role_exclusion_audit
           try:
-              final_package["role_exclusion_audit"]=build_role_exclusion_audit(req,resolved_authority_obj,'.')
+              final_package["role_exclusion_audit"]=build_role_exclusion_audit({**req,"runners":aki_signed_runners},resolved_authority_obj,'.')
           except (KeyError,ValueError,TypeError,OSError) as exc:
               final_package["role_exclusion_audit"]={"status":"HOLD","reason":str(exc)[:300],"production_effect":"NONE"}
           if mec is not None:

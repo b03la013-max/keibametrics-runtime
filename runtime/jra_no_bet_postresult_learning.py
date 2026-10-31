@@ -26,7 +26,8 @@ def _time(value):
         return None
 
 def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
-                          result_source_snapshot_sha256,official_capture_verified=False):
+                          result_source_snapshot_sha256,official_capture_verified=False,
+                          scheduled_post_at=None):
     """Zero investment and payout are recorded; PFS is undefined, not 100%.
     
     The external caller must independently verify the official JRA raw source
@@ -41,6 +42,8 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
     if not (isinstance(official_result,dict)
             and official_result.get("official") is True
             and official_result.get("result_derived") is True
+            and type(race_no) is int and 1<=race_no<=12
+            and str(terminal.get("race_id") or "").endswith(f"-R{race_no:02d}")
             and official_result.get("race_no") == race_no):
         raise JRANoBetLearningError("OFFICIAL_RESULT_IDENTITY_INVALID")
     if not (isinstance(result_source_snapshot_sha256,str)
@@ -55,7 +58,9 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
         raise JRANoBetLearningError("OFFICIAL_RESULT_CONTENT_HASH_INVALID")
     taken=_time(acquired_at)
     decided=_time(terminal.get("created_at"))
-    if not taken or not decided or taken<=decided:
+    post=_time(terminal.get("scheduled_post_at") or scheduled_post_at)
+    if (not taken or not decided or taken<=decided
+            or (post is not None and taken<=post)):
         raise JRANoBetLearningError("POSTRESULT_CHRONOLOGY_INVALID")
     results=official_result.get("runners")
     if not isinstance(results,list) or len(results)<3:
@@ -83,6 +88,28 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
             raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_MISMATCH")
         finish_rows.append({**row,"horse_no":horse_no})
         seen.add(rid)
+    non_finishers=official_result.get("non_finishers",[])
+    if not isinstance(non_finishers,list):
+        raise JRANoBetLearningError("OFFICIAL_RESULT_NON_FINISHERS_INVALID")
+    for row in non_finishers:
+        if not isinstance(row,dict):
+            raise JRANoBetLearningError("OFFICIAL_RESULT_ROW_BAD")
+        rid=str(row.get("runner_id") or "")
+        if not rid or rid in seen or rid not in terminal["index_universe"]:
+            raise JRANoBetLearningError("OFFICIAL_RESULT_RUNNER_MISMATCH")
+        if row.get("finish_status") not in ("CANCELLED","EXCLUDED","DID_NOT_FINISH","DISQUALIFIED"):
+            raise JRANoBetLearningError("OFFICIAL_RESULT_NON_FINISHER_STATUS_INVALID")
+        try:
+            horse_no=int(rid)
+        except ValueError as exc:
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_INVALID") from exc
+        if str(horse_no)!=rid or not 1<=horse_no<=18:
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_INVALID")
+        if "horse_no" in row and (type(row["horse_no"]) is not int or row["horse_no"]!=horse_no):
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_MISMATCH")
+        seen.add(rid)
+    if seen!=set(terminal["index_universe"]):
+        raise JRANoBetLearningError("OFFICIAL_RESULT_UNIVERSE_INCOMPLETE")
     from jra_source_runtime.jra_same_day_results import finish_groups_and_top3_orders
     try:
         grouped=finish_groups_and_top3_orders(finish_rows)
@@ -100,6 +127,8 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
         "post_race_official_acquired_at":taken.isoformat(),
         "official_top3":top3,
         "official_finish_count":len(results),
+        "official_non_finisher_count":len(non_finishers),
+        "official_runner_universe_count":len(seen),
         "decision":"NO_BET",
         "reason":terminal["decision_reason"],
         "status":"ZERO_EXPOSURE_RESULT_RECORDED",

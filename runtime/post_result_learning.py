@@ -86,13 +86,16 @@ def _mec_actual_coverage(final_artifact, top3):
     }
 
 def build_post_result_review(result:dict, final_artifact:dict, *, review_semantics="LEGACY")->dict:
-    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2"}:
+    if review_semantics not in {"LEGACY", "DECISION_AWARE_V2", "DECISION_AWARE_V3"}:
         raise LearningError("REVIEW_SEMANTICS_UNSUPPORTED")
     if not isinstance(result,dict) or not isinstance(final_artifact,dict):
         raise LearningError("INPUT_NOT_OBJECT")
     race_id=str(result.get("race_id") or "")
     if not race_id or race_id!=str(final_artifact.get("race_id") or ""):
         raise LearningError("RACE_ID_MISMATCH")
+    if review_semantics=="DECISION_AWARE_V3" and (
+            final_artifact.get("family_id")!="JRA" or not race_id.startswith("KM-JRA-")):
+        raise LearningError("DECISION_AWARE_V3_JRA_ONLY")
     top3=(result.get("official_result") or {}).get("top3")
     if not isinstance(top3,list) or len(top3)!=3:
         raise LearningError("OFFICIAL_TOP3_REQUIRED")
@@ -173,7 +176,7 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
     hit=bool(settlement.get("winning_tickets")) or bool(coverage["matching_ticket_types"])
     hit_but_loss=bool(hit and pfs is not None and pfs<100.0)
 
-    decision_aware=review_semantics=="DECISION_AWARE_V2"
+    decision_aware=review_semantics in {"DECISION_AWARE_V2", "DECISION_AWARE_V3"}
     capital_decision=final_artifact.get("capital_policy_decision") or {}
     ft=final_artifact.get("final_ticket") or {}
     paper=bool(capital_decision.get("decision")=="PAPER" and ft.get("no_bet") is True
@@ -268,6 +271,45 @@ def build_post_result_review(result:dict, final_artifact:dict, *, review_semanti
              "mec_coverage":order_mec}
             for order,role_order,order_coverage,order_mec in zip(orders,role_orders,coverages,mec_orders)]
         review["prediction"]["dead_heat_capture_aggregation"]="ANY_VALID_ORDER_PER_ROLE; JOINT_ORDERS_RETAINED"
+    if review_semantics=="DECISION_AWARE_V3":
+        # All three role captures are independent observations. A missed winner
+        # does not make the actual second/third horse's Role capture unobservable.
+        independent=["PREDICTION_ROLE_"+role for role,key in
+                     (("W","winner_w"),("P2","second_p2"),("P3","third_p3"))
+                     if not role_eval[key]]
+        dependent=[]
+        conversion_independent=[]
+        # ANY-per-Role aggregation across dead-heat orders is not a joint
+        # capture. Downstream eligibility must hold within one valid order.
+        joint_cases=review["prediction"].get("dead_heat_order_evaluations") or [
+            {"role_capture":role_eval,"ticket_coverage":coverage,"mec_coverage":mec_eval}]
+        pair_prerequisites=any(row["role_capture"]["winner_w"] and
+                               row["role_capture"]["second_p2"] for row in joint_cases)
+        all_roles=any(all(row["role_capture"].values()) for row in joint_cases)
+        exact_prerequisites=any(all(row["role_capture"].values()) and
+            row["ticket_coverage"]["ordered_pair_ticket_coverage"] and
+            row["ticket_coverage"]["top3_set_ticket_coverage"] and not (
+                row["mec_coverage"].get("available") and
+                row["mec_coverage"].get("ordered_exact_unit_present") is False)
+            for row in joint_cases)
+        if not paper:
+            for name,covered,eligible in (
+                    ("ORDERED_PAIR_CONVERSION",coverage["ordered_pair_ticket_coverage"],pair_prerequisites),
+                    ("THIRD_SET_COVERAGE",coverage["top3_set_ticket_coverage"],all_roles),
+                    ("EXACT_ORIENTATION",coverage["ordered_exact_ticket_coverage"],
+                     exact_prerequisites)):
+                if not covered:
+                    (conversion_independent if eligible else dependent).append(name)
+        review["failure_localization"].update(
+            independent_role_failures=independent,
+            secondary_independent_role_failures=[x for x in independent if x!=first_failure],
+            independent_conversion_failures=conversion_independent,
+            dependent_conversion_failures=dependent,
+            capital_failure="HIT_BUT_LOSS" if hit_but_loss else None,
+            joint_pair_role_capture_any_valid_order=pair_prerequisites,
+            joint_all_role_capture_any_valid_order=all_roles,
+            downstream_dependencies_are_diagnostics=True,
+        )
     # Preserve historical review hashes when the original settlement did not
     # carry refund accounting. New settlements expose the separate denominator.
     if refund or "effective_investment" in settlement:
@@ -291,6 +333,15 @@ def build_learning_state(review:dict, *, effective_time=None)->dict:
         shadow.append(ff)
     elif ff=="CAPITAL_EFFICIENCY":
         shadow.append("CAPITAL_ALLOCATION_EFFICIENCY")
+
+    v3=review.get("review_semantics")=="DECISION_AWARE_V3"
+    if v3:
+        if not str(review.get("race_id") or "").startswith("KM-JRA-"):
+            raise LearningError("DECISION_AWARE_V3_JRA_ONLY")
+        failures=review.get("failure_localization") or {}
+        if ff in (failures.get("dependent_conversion_failures") or []):
+            shadow=[]
+        shadow.extend(failures.get("independent_role_failures") or [])
 
     krs=(review.get("krs") or {}).get("post_result_evaluation") or {}
     if krs.get("classification")=="UNIQUE-RESCUE":
@@ -321,6 +372,12 @@ def build_learning_state(review:dict, *, effective_time=None)->dict:
       "forbidden":["RETROACTIVE_PREDICTION_REWRITE","AUTOMATIC_NUMERIC_WEIGHT_CHANGE","RESULT_DERIVED_FEATURE_REWRITE"],
       "production_change_authorized":False,
     }
+    if v3:
+        state["review_semantics"]="DECISION_AWARE_V3"
+        state["reference_metrics"].update({
+            key:(review.get("failure_localization") or {}).get(key,[])
+            for key in ("independent_role_failures","secondary_independent_role_failures",
+                        "independent_conversion_failures","dependent_conversion_failures")})
     if effective_time is not None:
         from datetime import datetime
         when=datetime.fromisoformat(effective_time.replace('Z','+00:00'))
