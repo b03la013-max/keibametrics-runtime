@@ -75,9 +75,9 @@ jobs:
           selected=__import__("os").environ.get("RACE_ID_FILTER","")
           files=select_no_bet_paths(Path("runtime/jra_no_bet_terminals"),selected)
           pending=[]
+          recorded_pending=[]
           for path in files:
               target=Path("runtime/jra_no_bet_learning")/path.name
-              if target.exists():continue
               intent=Path("runtime/jra_formal_intents")/path.name
               if not intent.exists():continue
               try:
@@ -88,6 +88,11 @@ jobs:
                       raise ValueError("NO_BET_INTENT_OR_SELECTED_RACE_MISMATCH")
                   post=datetime.fromisoformat(i["scheduled_post_at"].replace("Z","+00:00"))
                   if not (post+timedelta(minutes=10)<=now<=post+timedelta(days=7)):continue
+                  if target.exists():
+                      race=t["race_id"]
+                      if not (Path("runtime/reviews_auto")/(race+"-AUTO.json")).exists() or not (Path("runtime/learning_states")/(race+".json")).exists():
+                          recorded_pending.append((post,str(target)))
+                      continue
                   key=((i.get("jra_source") or {}).get("jra_meeting_key") or "")
                   rn=int(i["race_no"])
                   if len(str(key))!=10 or not 1<=rn<=12:continue
@@ -97,6 +102,10 @@ jobs:
           # Bounded official traffic; never request a future or missing result.
           # Current meeting first: unresolved older captures must not starve today.
           pending.sort(key=lambda p:p[0],reverse=True)
+          recorded_pending.sort(key=lambda p:p[0],reverse=True)
+          recorded=Path("runtime_out/recorded_candidates.json")
+          recorded.parent.mkdir(parents=True,exist_ok=True)
+          recorded.write_text(json.dumps([p for _,p in recorded_pending[:4]])+"\n",encoding="utf-8")
           captures=0
           for _,path,intent,t,key,rn in pending[:4]:
               try:
@@ -128,6 +137,7 @@ jobs:
                   continue
           with open(__import__("os").environ["GITHUB_OUTPUT"],"a") as f:
               f.write("captured="+("true" if captures else "false")+"\n")
+              f.write("recorded="+("true" if recorded_pending else "false")+"\n")
           print("JRA_POSTRESULT_OFFICIAL_CAPTURED",captures)
           PY
       - uses: actions/attest-build-provenance@v2
@@ -136,7 +146,7 @@ jobs:
           subject-path: runtime_out/capture/*.json
       - name: Verify OIDC capture and NO_BET decision before learning
         id: settle
-        if: steps.capture.outputs.captured == 'true'
+        if: steps.capture.outputs.captured == 'true' || steps.capture.outputs.recorded == 'true'
         env:
           PYTHONPATH: runtime
           RACE_ID_FILTER: ${{ inputs.race_id }}
@@ -149,6 +159,7 @@ jobs:
           from jra_no_bet_postresult_learning import (build_no_bet_learning,
               select_no_bet_paths,persist_no_bet_review_state,verify_no_bet_oidc,_hash)
           count=0
+          subjects=[]
           selected=os.environ.get("RACE_ID_FILTER","")
           for path in select_no_bet_paths(Path("runtime_out/capture"),selected):
               terminal_path=Path("runtime/jra_no_bet_terminals")/path.name
@@ -195,21 +206,59 @@ jobs:
                       # Do not publish canonical files without their complete
                       # current-run OIDC subjects when another Race succeeds.
                       raise RuntimeError("NO_BET_PROJECTION_OUTPUT_WRITE_FAILED") from exc
+                  subjects.extend([str(dest)]+[str(Path("runtime_out")/kind/path.name) for kind in ("reviews","states")])
                   count+=1
               except (ValueError,KeyError,TypeError,subprocess.SubprocessError,OSError) as exc:
                   print("NO_BET_LEARNING_BLOCKED",path.stem,type(exc).__name__,str(exc)[:160])
                   continue
+          # Reuse an attested registered zero-exposure result. Never recapture,
+          # rewrite or reattest that original Learning to fill missing views.
+          recorded=Path("runtime_out/recorded_candidates.json")
+          allowed=set(json.loads(recorded.read_text())) if recorded.exists() else set()
+          for path in select_no_bet_paths(Path("runtime/jra_no_bet_learning"),selected):
+              if str(path) not in allowed:continue
+              terminal_path=Path("runtime/jra_no_bet_terminals")/path.name
+              try:
+                  learning=json.loads(path.read_text(encoding="utf-8"))
+                  terminal=json.loads(terminal_path.read_text(encoding="utf-8"))
+                  if learning["race_id"]!=terminal["race_id"] or (selected and learning["race_id"]!=selected):
+                      raise ValueError("NO_BET_RECORDED_OR_SELECTED_RACE_MISMATCH")
+                  intent=json.loads((Path("runtime/jra_formal_intents")/path.name).read_text(encoding="utf-8"))
+                  if intent["race_id"]!=terminal["race_id"]:raise ValueError("NO_BET_INTENT_RACE_MISMATCH")
+                  proofs={
+                      "learning":verify_no_bet_oidc(path,kind="learning",not_before=learning["post_race_official_acquired_at"],
+                          not_after=datetime.now(timezone.utc).isoformat()),
+                      "terminal":verify_no_bet_oidc(terminal_path,kind="terminal",not_before=terminal["created_at"],
+                          not_after=terminal.get("prediction_cutoff") or intent["prediction_cutoff"]),
+                  }
+                  for subject,parsed,proof in ((path,learning,proofs["learning"]),(terminal_path,terminal,proofs["terminal"])):
+                      raw=subject.read_bytes()
+                      if sha256(raw).hexdigest()!=proof["artifact_file_sha256"] or json.loads(raw)!=parsed:
+                          raise ValueError("NO_BET_VERIFIED_ARTIFACT_CONTENT_CHANGED")
+                  try:
+                      projection=persist_no_bet_review_state(".",terminal,learning,execution_id=path.stem,
+                          effective_time=datetime.now(timezone.utc).isoformat(),official_capture_verified=True,
+                          official_oidc_proofs=learning.get("official_oidc_proofs") or proofs)
+                      for kind,value in (("reviews",projection["review"]),("states",projection["state"])):
+                          saved=Path("runtime_out")/kind/path.name
+                          saved.parent.mkdir(parents=True,exist_ok=True)
+                          saved.write_text(json.dumps(value,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+                  except OSError as exc:
+                      raise RuntimeError("NO_BET_PROJECTION_OUTPUT_WRITE_FAILED") from exc
+                  subjects.extend(str(Path("runtime_out")/kind/path.name) for kind in ("reviews","states"))
+                  count+=1
+              except (ValueError,KeyError,TypeError,subprocess.SubprocessError,OSError) as exc:
+                  print("NO_BET_RECORDED_PROJECTION_BLOCKED",path.stem,type(exc).__name__,str(exc)[:160])
+                  continue
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
               fh.write("learned="+("true" if count else "false")+"\n")
+              if subjects:fh.write("subjects<<KM_NO_BET_SUBJECTS\n"+"\n".join(subjects)+"\nKM_NO_BET_SUBJECTS\n")
           print("JRA_SIGNED_ZERO_EXPOSURE_RESULT_LEARNING",count)
           PY
       - uses: actions/attest-build-provenance@v2
         if: steps.settle.outputs.learned == 'true'
         with:
-          subject-path: |
-            runtime_out/learning/*.json
-            runtime_out/reviews/*.json
-            runtime_out/states/*.json
+          subject-path: ${{ steps.settle.outputs.subjects }}
       - uses: actions/upload-artifact@v4
         if: steps.settle.outputs.learned == 'true'
         with:
@@ -227,7 +276,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p runtime/jra_no_bet_learning
-          cp runtime_out/learning/*.json runtime/jra_no_bet_learning/
+          if compgen -G 'runtime_out/learning/*.json' > /dev/null; then
+            cp runtime_out/learning/*.json runtime/jra_no_bet_learning/
+          fi
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
           git add runtime/jra_no_bet_learning runtime/reviews_auto runtime/learning_states
@@ -237,7 +288,7 @@ jobs:
               if git pull --rebase origin main; then
                 # A FINAL on another path can arrive without a rebase conflict.
                 # Recheck this run's exact targets after every successful rebase.
-                python -c 'import json; from pathlib import Path; from jra_no_bet_postresult_learning import require_no_bet_final_absent; require_no_bet_final_absent(".",[json.loads(p.read_text())["race_id"] for p in Path("runtime_out/learning").glob("*.json")])'
+                python -c 'import json; from pathlib import Path; from jra_no_bet_postresult_learning import require_no_bet_final_absent; require_no_bet_final_absent(".",[json.loads(p.read_text())["race_id"] for p in Path("runtime_out/states").glob("*.json")])'
                 if git push origin HEAD:main; then exit 0; fi
               fi
               git rebase --abort || true

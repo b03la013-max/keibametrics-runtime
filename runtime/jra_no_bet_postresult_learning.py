@@ -56,6 +56,7 @@ def verify_no_bet_oidc(path,*,kind,not_before,not_after,source_digest=None):
     """
     repository="b03la013-max/keibametrics-runtime"
     workflows={"capture":"km-jra-no-bet-postresult-learning.yml",
+               "learning":"km-jra-no-bet-postresult-learning.yml",
                "terminal":"km-jra-formal-single-entry.yml"}
     if kind not in workflows or (kind=="capture" and source_digest is None):
         raise JRANoBetLearningError("NO_BET_OIDC_ORIGIN_REQUIRED")
@@ -233,10 +234,13 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
     return obj
 
 
-def build_no_bet_review_state(terminal,learning,*,effective_time,official_capture_verified=False):
+def build_no_bet_review_state(terminal,learning,*,effective_time,official_capture_verified=False,
+                            official_oidc_proofs=None):
     """Project the verified zero-exposure branch without inventing a FINAL.
 
     The producer retains its existing SOURCE/terminal and capture OIDC checks.
+    Registered-result backfill instead verifies the original Learning and
+    Terminal OIDC subjects; those original bytes are never changed or reattested.
     The shared State builder admits only candidate Shadow context; it grants
     neither numeric Production learning nor prediction/PFS sample eligibility.
     """
@@ -292,8 +296,9 @@ def build_no_bet_review_state(terminal,learning,*,effective_time,official_captur
         "eligible_for_production_prediction_kpi":False,"eligible_for_market_superiority_promotion":False,
         "production_change_authorized":False,"prequential_only":True,
     }
-    if "official_oidc_proofs" in learning:
-        review["source_evidence"]["official_oidc_proofs"]=deepcopy(learning["official_oidc_proofs"])
+    proofs=official_oidc_proofs if official_oidc_proofs is not None else learning.get("official_oidc_proofs")
+    if proofs is not None:
+        review["source_evidence"]["official_oidc_proofs"]=deepcopy(proofs)
     if learning.get("official_top3_orders") is not None:
         for key in ("official_top3_orders","official_finish_groups","official_top3_is_legacy_representative"):
             review[key]=deepcopy(learning[key])
@@ -311,7 +316,7 @@ def build_no_bet_review_state(terminal,learning,*,effective_time,official_captur
 
 
 def persist_no_bet_review_state(root,terminal,learning,*,execution_id,effective_time,
-                               official_capture_verified=False):
+                               official_capture_verified=False,official_oidc_proofs=None):
     """Append original zero-bet data and its Review/State using the existing writer."""
     race_id=terminal.get("race_id") or ""
     if (not isinstance(execution_id,str) or not execution_id.startswith(race_id+"-")
@@ -334,7 +339,8 @@ def persist_no_bet_review_state(root,terminal,learning,*,execution_id,effective_
             raise JRANoBetLearningError("NO_BET_PROJECTION_EFFECTIVE_TIME_INVALID")
         effective_time=original_time.isoformat()
     projection=build_no_bet_review_state(terminal,learning,effective_time=effective_time,
-                                        official_capture_verified=official_capture_verified)
+                                        official_capture_verified=official_capture_verified,
+                                        official_oidc_proofs=official_oidc_proofs)
     files={root/"runtime/jra_no_bet_learning"/(execution_id+".json"):learning,
            root/"runtime/reviews_auto"/(race_id+"-AUTO.json"):projection["review"],
            root/"runtime/learning_states"/(race_id+".json"):projection["state"]}

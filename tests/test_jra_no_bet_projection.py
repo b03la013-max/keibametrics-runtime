@@ -26,14 +26,15 @@ def project(terminal,learning,**kwargs):
 def verified_oidc_fixture(command):
     from hashlib import sha256
     path=Path(command[3]);workflow=command[command.index('--signer-workflow')+1]
-    capture=workflow.endswith('km-jra-no-bet-postresult-learning.yml')
-    code='1'*40 if capture else '2'*40
+    terminal=workflow.endswith('km-jra-formal-single-entry.yml')
+    capture=not terminal and '--source-digest' in command
+    code='2'*40 if terminal else '1'*40 if capture else '3'*40
     certificate={'issuer':'https://token.actions.githubusercontent.com',
        'subjectAlternativeName':'https://github.com/'+workflow+'@refs/heads/main',
        'sourceRepositoryDigest':code,'sourceRepositoryRef':'refs/heads/main','runnerEnvironment':'github-hosted',
        'runInvocationURI':'https://github.com/b03la013-max/keibametrics-runtime/actions/runs/123/attempts/1'}
     value={'verificationResult':{'signature':{'certificate':certificate},
-       'verifiedTimestamps':[{'timestamp':'2026-10-10T13:00:01+09:00' if capture else '2026-10-10T12:11:00+09:00'}],
+       'verifiedTimestamps':[{'timestamp':'2026-10-10T12:11:00+09:00' if terminal else '2026-10-10T13:00:01+09:00'}],
        'statement':{'subject':[{'digest':{'sha256':sha256(path.read_bytes()).hexdigest()}}]}}}
     return SimpleNamespace(stdout=json.dumps([value])),value
 
@@ -179,8 +180,9 @@ def test_missing_state_is_created_at_new_actual_time_not_old_capture_time(tmp_pa
 def test_late_final_after_rebase_stops_the_existing_push_step(tmp_path,monkeypatch):
     import os,subprocess,sys
     require_no_bet_final_absent(tmp_path,[RACE])
-    folder=tmp_path/'runtime_out/learning';folder.mkdir(parents=True)
+    folder=tmp_path/'runtime_out/states';folder.mkdir(parents=True)
     (folder/(RACE+'-LIVE-R1.json')).write_text(json.dumps({'race_id':RACE}))
+    (tmp_path/'runtime_out/learning').mkdir()
     bindir=tmp_path/'bin';bindir.mkdir();fake=bindir/'git'
     fake.write_text('#!'+sys.executable+'\n'+
         "from pathlib import Path\nimport sys\nargs=sys.argv[1:]\n"+
@@ -365,6 +367,69 @@ def test_partial_canonical_write_never_gets_published_with_another_success(tmp_p
         assert (tmp_path/f'runtime/learning_states/{RACE}.json').exists()==(fault=='output_write')
     else:
         exec(code,{})
-        assert (tmp_path/'output').read_text()=='learned=true\n'
+        assert (tmp_path/'output').read_text().startswith('learned=true\n')
         assert (tmp_path/f'runtime/learning_states/{second}.json').exists()
         assert not any(RACE in p for p in writes) # validation failure remains Race-local
+
+
+@pytest.mark.parametrize('fault',['valid','unverified_learning','tampered_hash','expired'])
+def test_existing_attested_learning_backfills_only_views_without_recapture_or_original_rewrite(tmp_path,monkeypatch,fault):
+    import subprocess,shutil
+    from datetime import datetime,timezone
+    import jra_same_day_results
+    terminal,result=build_input();learning=run(terminal,result);eid=RACE+'-LIVE-R1'
+    if fault=='tampered_hash':learning['sha256']='f'*64
+    original=json.dumps(learning,ensure_ascii=False,indent=4)+'\n\n'
+    files={f'runtime/jra_no_bet_terminals/{eid}.json':terminal,
+           f'runtime/jra_formal_intents/{eid}.json':{'race_id':RACE,
+               'prediction_cutoff':'2026-10-10T12:18:00+09:00','scheduled_post_at':'2026-10-10T12:25:00+09:00'}}
+    for path,value in files.items():
+        p=tmp_path/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value))
+    learning_path=tmp_path/f'runtime/jra_no_bet_learning/{eid}.json'
+    learning_path.parent.mkdir(parents=True);learning_path.write_text(original)
+    before=learning_path.read_bytes();calls=[]
+    def no_recapture(*args,**kwargs):raise AssertionError('EXISTING_LEARNING_MUST_NOT_RECAPTURE_OFFICIAL_SOURCE')
+    monkeypatch.setattr(jra_same_day_results,'_open_day',no_recapture)
+    monkeypatch.setattr(jra_same_day_results,'_fetch_race',no_recapture)
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):return cls(2026,10,20 if fault=='expired' else 10,4,30,tzinfo=timezone.utc)
+    monkeypatch.setattr(__import__('datetime'),'datetime',Clock)
+    def verify(command,**kwargs):
+        calls.append(command)
+        if fault=='unverified_learning' and Path(command[3]).parent.name=='jra_no_bet_learning':
+            raise subprocess.CalledProcessError(1,command)
+        return verified_oidc_fixture(command)[0]
+    monkeypatch.setattr(subprocess,'run',verify)
+    monkeypatch.chdir(tmp_path);monkeypatch.setenv('GITHUB_REPOSITORY','b03la013-max/keibametrics-runtime')
+    monkeypatch.setenv('GITHUB_SHA','1'*40);monkeypatch.setenv('GITHUB_OUTPUT',str(tmp_path/'output'))
+    monkeypatch.setenv('RACE_ID_FILTER',RACE)
+    text=(ROOT/'.github/workflows/km-jra-no-bet-postresult-learning.yml').read_text()
+    bodies=list(re.finditer(r"(?m)^          python - <<'PY'\n(.*?)(?m:^          PY)$",text,re.S))
+    def execute(i):exec(compile('\n'.join(line[10:] for line in bodies[i][1].splitlines()),'<offline-existing-record-worker>','exec'),{})
+    execute(0);execute(1)
+    assert learning_path.read_bytes()==before
+    assert not (tmp_path/'runtime_out/capture').exists() and not (tmp_path/'runtime_out/learning').exists()
+    assert not (tmp_path/'runtime/final_artifacts').exists()
+    if fault=='valid':
+        state=json.loads((tmp_path/f'runtime/learning_states/{RACE}.json').read_text())
+        review=json.loads((tmp_path/f'runtime/reviews_auto/{RACE}-AUTO.json').read_text())
+        assert state['source_no_bet_result_sha256']==learning['sha256']
+        assert state['effective_time']=='2026-10-10T04:30:00+00:00'
+        assert state['effective_time']!=learning['post_race_official_acquired_at']
+        assert review['source_evidence']['official_oidc_proofs']['learning']['source_digest']=='3'*40
+        assert review['capital']['pfs'] is None and review['capital']['investment']==0
+        assert not review['signed_final_verified'] and state['production_change_authorized'] is False
+        output=(tmp_path/'output').read_text();assert 'learned=true\n' in output
+        subjects=output.split('subjects<<KM_NO_BET_SUBJECTS\n')[1].split('\nKM_NO_BET_SUBJECTS')[0].splitlines()
+        assert subjects==[f'runtime_out/reviews/{eid}.json',f'runtime_out/states/{eid}.json']
+        assert len(calls)==2 and all('runtime_out/capture' not in c[3] for c in calls)
+        # A later normal worker sees complete views and does no repeated work.
+        shutil.rmtree(tmp_path/'runtime_out');(tmp_path/'output').write_text('');calls.clear()
+        execute(0);execute(1)
+        assert calls==[] and 'learned=false' in (tmp_path/'output').read_text()
+    else:
+        assert not (tmp_path/'runtime/reviews_auto').exists()
+        assert not (tmp_path/'runtime/learning_states').exists()
+        assert 'learned=false' in (tmp_path/'output').read_text()
+        if fault=='expired':assert calls==[]
