@@ -125,6 +125,17 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
         if not out:
             continue
         payload={"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
+        try:
+            observations=parse_workout_history(raw,content_type,official_universe)
+            if observations["records"]:
+                payload["observed_workout_history"]=observations
+        except ValueError as exc:
+            # Retention is independent of the established numerical feed gate.
+            # A rejected optional history never changes the legacy table or
+            # grants any feature/category authority.
+            payload["observed_workout_history"]={
+                "status":"REJECTED", "records":[], "reason":str(exc),
+                "production_feature_admission":False}
         parsed_candidates.append(payload)
         if expected is not None:
             got={int(x["horse_no"]):_norm(x["horse_name"]) for x in payload["runners"]}
@@ -136,8 +147,9 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
 
 class _SpeedTables(HTMLParser):
     """Preserve multi-row speed-table headers without shifting data columns."""
-    def __init__(self):
+    def __init__(self, *, max_rowspan=8):
         super().__init__(convert_charrefs=True)
+        self.max_rowspan=max_rowspan
         self.tables=[]; self.table=None; self.row=None; self.cell=None
         self.depth=0; self.spans={}; self.width=1; self.height=1
 
@@ -155,7 +167,7 @@ class _SpeedTables(HTMLParser):
             self.cell=[]; a=dict(attrs)
             try: self.width=int(a.get("colspan",1)); self.height=int(a.get("rowspan",1))
             except (ValueError,TypeError): raise ValueError("SPEED_HEADER_INVALID_SPAN")
-            if not 1<=self.width<=32 or not 1<=self.height<=8:
+            if not 1<=self.width<=32 or not 1<=self.height<=self.max_rowspan:
                 raise ValueError("SPEED_HEADER_INVALID_SPAN")
         elif self.cell is not None and tag in ("br","div","p"):
             self.cell.append(" ")
@@ -181,6 +193,82 @@ class _SpeedTables(HTMLParser):
             self.depth-=1
             if self.depth==0:
                 self.tables.append(self.table); self.table=None
+
+
+def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None)->Dict[str,Any]:
+    """Retain dated observations, never infer a workout category or eligibility.
+
+    The existing compact/latest-row numerical feed and complete-universe gate
+    remain separate. Rowspan copies identity only within the captured table;
+    each dated row must still match its official horse number and name.
+    """
+    reader=_SpeedTables(max_rowspan=128)
+    reader.feed(_decode(raw,content_type))
+    expected=None
+    if official_universe:
+        expected={int(x.get("horse_no") or x.get("runner_id")):_norm(x.get("name"))
+                  for x in official_universe.get("runners") or []}
+    records={}
+    for table in reader.tables:
+        if not table:continue
+        header=[re.sub(r"\s+","",str(x)) for x in table[0]]
+        required=("馬番","馬名","日付","コース","馬場","乗り役","調教タイム","位置","脚色","評価")
+        if not all(any(key in x for x in header) for key in required):continue
+        indices=[next(i for i,x in enumerate(header) if key in x) for key in required]
+        ni,mi,di,ci,gi,ri,ti,pi,li,ei=indices
+        for row in table[1:]:
+            if di>=len(row) or not str(row[di]).strip():continue
+            m=re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})(?:\D|$)",str(row[di]).strip())
+            if not m:raise ValueError("WORKOUT_HISTORY_DATE_NOT_OBSERVED")
+            if max(indices)+1>=len(row):raise ValueError("WORKOUT_HISTORY_ROW_INCOMPLETE")
+            if not re.fullmatch(r"\d{1,2}",str(row[ni]).strip()):
+                raise ValueError("WORKOUT_HISTORY_RUNNER_ID_NOT_OBSERVED")
+            no=int(str(row[ni]).strip());name=_norm(row[mi])
+            if not 1<=no<=18 or not name:raise ValueError("WORKOUT_HISTORY_RUNNER_IDENTITY_INVALID")
+            if expected is not None and expected.get(no)!=name:
+                raise ValueError("WORKOUT_HISTORY_OFFICIAL_IDENTITY_MISMATCH:"+str(no))
+            day=datetime.date(*(int(x) for x in m.groups())).isoformat()
+            record={"runner_id":str(no),"horse_no":no,"horse_name":name,
+                    "workout_date":day,"course":str(row[ci]).strip(),
+                    "going_raw":str(row[gi]).strip(),"rider_raw":str(row[ri]).strip(),
+                    "workout_time_and_partner_raw":str(row[ti]).strip(),
+                    "position_raw":str(row[pi]).strip(),"gait":str(row[li]).strip(),
+                    "assessment":str(row[ei]).strip(),"rating":str(row[ei+1]).strip()}
+            # No source-page hash in fact identity: the same session on type=1
+            # and type=2 is one observation with multiple retained source refs.
+            fact_sha=sha_obj(record)
+            records[fact_sha]={**record,"source_fact_sha256":fact_sha}
+    rows=sorted(records.values(),key=lambda r:(int(r["runner_id"]),r["workout_date"],r["source_fact_sha256"]))
+    observed={int(r["runner_id"]) for r in rows}
+    return {"profile":"KM-JRA-WORKOUT-HISTORY-OBSERVATIONS-v1",
+            "status":"OBSERVATIONS_ONLY","records":rows,"record_count":len(rows),
+            "observed_runner_count":len(observed),"raw_sha256":hashlib.sha256(raw).hexdigest(),
+            "official_identity_verified":expected is not None,
+            "full_official_universe_match":expected is not None and observed==set(expected),
+            "production_feature_admission":False}
+
+
+def _retain_workout_observations(base,candidate,snapshot):
+    observed=candidate.get("observed_workout_history") or {}
+    if not observed:return
+    retained=base.setdefault("observed_workout_history",{
+        "profile":"KM-JRA-WORKOUT-HISTORY-OBSERVATIONS-v1","status":"OBSERVATIONS_ONLY",
+        "records":[],"rejected_attempts":[],"production_feature_admission":False})
+    if observed.get("status")=="REJECTED":
+        retained["rejected_attempts"].append({"source_snapshot_sha256":snapshot["snapshot_sha256"],
+                                              "reason":observed.get("reason")})
+        return
+    if observed.get("raw_sha256")!=snapshot.get("raw_sha256"):
+        raise ValueError("WORKOUT_HISTORY_RAW_BINDING_MISMATCH")
+    ref={k:snapshot.get(k) for k in ("source_id","snapshot_sha256","raw_sha256","fetched_at","cutoff_relation")}
+    records={r["source_fact_sha256"]:r for r in retained["records"]}
+    for row in observed.get("records") or []:
+        key=row["source_fact_sha256"]
+        if key not in records:records[key]={**row,"source_refs":[]}
+        if ref not in records[key]["source_refs"]:records[key]["source_refs"].append(ref)
+    retained["records"]=sorted(records.values(),key=lambda r:(int(r["runner_id"]),r["workout_date"],r["source_fact_sha256"]))
+    retained["record_count"]=len(retained["records"])
+    retained["observed_runner_count"]=len({r["runner_id"] for r in retained["records"]})
 
 
 def parse_speed(raw:bytes,content_type:str="")->Dict[str,Any]:
@@ -333,6 +421,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
                 snaps.append(snap)
                 candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"))
                 candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
+                _retain_workout_observations(base,candidate,snap)
                 candidate=_normalize_declared_cancelled_workout(candidate,artifact,raw,h.get("content-type",""))
                 candidate["runner_universe_match"]=_reconcile(candidate,artifact)
                 if candidate["runner_universe_match"]["verified"]:
