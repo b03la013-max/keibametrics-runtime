@@ -253,6 +253,51 @@ def test_d7_provider_acceptance_without_inbox_is_not_arrival(prepared):
         delivery.verify_self_mail_arrival(final,**args,now=lambda:transport.at)
 
 
+@pytest.mark.parametrize('preserve_folding_whitespace',[False,True])
+def test_d7_folded_single_sha_headers_preserve_exact_source_binding(prepared,monkeypatch,preserve_folding_whitespace):
+    final,args,transport,at,bundle=prepared
+    send(prepared)
+    # Wire headers fold onto an indented continuation line under SMTP policy.
+    assert b'X-KeibaMetrics-Source-SHA256:\r\n ' in transport.sent[0]
+    if preserve_folding_whitespace:
+        # Email parser versions can preserve initial FWS in unstructured values.
+        # Preserve the actual unfolded value rather than normalizing it in the fixture.
+        original=policy.default.header_factory
+        def factory(name,value):
+            return value if name.lower().startswith('x-keibametrics-') and name.lower().endswith('-sha256') else original(name,value)
+        source_parse=type(policy.default).header_source_parse
+        def preserve_source_fws(self,lines):
+            name,value=lines[0].split(':',1)
+            if name.lower().startswith('x-keibametrics-') and name.lower().endswith('-sha256'):
+                return name, ''.join([value]+lines[1:]).rstrip('\r\n')
+            return source_parse(self,lines)
+        monkeypatch.setattr(type(policy.default),'header_source_parse',preserve_source_fws)
+        monkeypatch.setattr(policy,'default',policy.default.clone(header_factory=factory))
+        parsed=BytesParser(policy=policy.default).parsebytes(transport.sent[0])
+        assert str(parsed['X-KeibaMetrics-Source-SHA256']).startswith(' ')
+    record=delivery.verify_self_mail_arrival(final,**args,now=lambda:at)
+    assert record['DESTINATION_ARRIVAL_CONFIRMED'] is True
+
+
+@pytest.mark.parametrize('kind',['altered_hash','duplicate_header','internal_space','non_hex','too_long'])
+def test_d7_sha_header_folding_never_weakens_hash_or_uniqueness(prepared,kind):
+    final,args,transport,at,bundle=prepared
+    send(prepared)
+    def change(raw):
+        message=BytesParser(policy=policy.default).parsebytes(raw)
+        key='X-KeibaMetrics-Source-SHA256';original=str(message[key]).strip()
+        if kind=='duplicate_header':message[key]=original
+        else:
+            value={'altered_hash':('0' if original[0]!='0' else '1')+original[1:],
+                   'internal_space':original[:32]+' '+original[32:],
+                   'non_hex':'g'+original[1:],'too_long':original+'0'}[kind]
+            message.replace_header(key,value)
+        return message.as_bytes()
+    transport.change=change
+    with pytest.raises(ValueError,match='RECEIVED_SOURCE_BINDING_INVALID'):
+        delivery.verify_self_mail_arrival(final,**args,now=lambda:at)
+
+
 def test_d8_race_claim_suppresses_unconditional_resend_and_body_revision(prepared):
     final,args,transport,at,bundle=prepared
     first=send(prepared);calls=len(transport.sent)

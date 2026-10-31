@@ -323,6 +323,7 @@ def verify_self_mail_arrival(final, *, presentation_dir, root, private_store,
                              authorization=None, transport=None, part_bytes=250000, now=None):
     """Inbox/MIME readback only; this never sends or marks a human ACK."""
     import hashlib
+    import re
     from email import policy
     from email.parser import BytesParser
     from email.utils import parsedate_to_datetime
@@ -372,7 +373,9 @@ def verify_self_mail_arrival(final, *, presentation_dir, root, private_store,
                 or message.get_all('X-KeibaMetrics-Part')!=[f"{number}/{len(plan['chunks'])}"]):
             raise ValueError('JRA_DELIVERY_RECEIVED_DESTINATION_OR_PART_INVALID')
         for field,value in (('Final',plan['final_sha256']),('Source',plan['source_sha256']),('Body',plan['body_sha256'])):
-            if message.get_all('X-KeibaMetrics-'+field+'-SHA256')!=[value]:
+            headers=message.get_all('X-KeibaMetrics-'+field+'-SHA256',[])
+            actual=str(headers[0]).strip() if len(headers)==1 else ''
+            if not re.fullmatch(r'[0-9a-f]{64}',actual) or actual!=value:
                 raise ValueError('JRA_DELIVERY_RECEIVED_SOURCE_BINDING_INVALID')
         attachments=list(message.iter_attachments())
         if len(attachments)!=1 or attachments[0].get_payload(decode=True)!=chunk.encode():
