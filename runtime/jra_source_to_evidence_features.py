@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Tuple
 from jra_official_fact_evaluator_production import official_production_observations, _observed_runs
 
 from jra_evidence_feature_normalizer_production import comment_band, workout_final_1f_band, rate_band, market_rank_band, bodyweight_delta_band
+from jra_krs_input_builder_production import _missing as _missing_jra_value
 
 PROFILE = "KM-JRA-SOURCE-TO-EVIDENCE-FEATURE-COMPILER-v1.4-20260926"
 POLICY_ID = "KM-JRA-SOURCE-TO-FEATURE-POLICY-v1.3-20260926"
@@ -227,7 +228,13 @@ def _registered_common_workout_features(rid: str, artifact: Dict[str, Any]) -> D
         # Do not infer stable_readiness from a workout assessment. That feature
         # requires a trainer/stable comment or separately authorized readiness
         # evaluator; workout evidence alone is not semantically equivalent.
-    if x.get("final1f") is not None:
+    course=x.get("course")
+    # Reuse JRA's case-insensitive missing predicate. These exact translated
+    # absence labels also mean no observed course; other course names keep the
+    # existing normalizer behavior, without a new course whitelist or band.
+    if str(course).strip().lower() in {"不明","不詳","未取得","未確認","未公表","未発表","n/a"}:
+        course=None
+    if x.get("final1f") is not None and not _missing_jra_value(course):
         cat=workout_final_1f_band(x.get("final1f"),x.get("course"))
         fact=f"Registered pre-race workout final1F={x.get('final1f')} sec on {x.get('course')}; raw={x.get('workout_time_raw')}."
         out["workout_speed"]=_feature(cat,"JRA-WORKOUT-FINAL1F-BAND-v1",refs,fact,authority="REGISTERED_JRA_COMMON")
