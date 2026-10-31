@@ -1005,7 +1005,7 @@ jobs:
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
             readback=()
             if [ "$REUSED_PRODUCTION" = "true" ]; then readback=(--readback-only); fi
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+            PYTHONPATH=runtime python runtime/jra_delivery.py --save-complete-body --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" \
               --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
@@ -1019,16 +1019,21 @@ jobs:
           fi
 
       - name: Persist immutable FINAL or acceptance artifact
-        if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          REUSED_PRODUCTION: ${{ steps.production_readback.outputs.reused }}
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ "$REUSED_PRODUCTION" != "true" ]; then
           if [ -d runtime/final_artifacts ]; then git add runtime/final_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/acceptance_artifacts ]; then git add runtime/acceptance_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/role_rescue_shadow ]; then git add runtime/role_rescue_shadow/*.json 2>/dev/null || true; fi
+          fi
+          # Reused FINALs may add the missing complete-body derivative only.
           if [ -d runtime/jra_delivery ]; then git add runtime/jra_delivery; fi
           if ! git diff --cached --quiet; then
             git commit -m "runtime: persist immutable FINAL/acceptance artifact [skip ci]"
@@ -1036,6 +1041,7 @@ jobs:
           fi
 
       - name: Verify canonical FINAL availability after publication
+        id: jra_canonical_availability
         if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
@@ -1057,6 +1063,24 @@ jobs:
               git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"
               python tools/persist_local_checkpoints.py --branch main
             fi
+          fi
+
+      - name: Owner-authorized self delivery of the completed JRA FINAL
+        continue-on-error: true
+        if: steps.request.outputs.candidate_parallel != 'true' && vars.KM_JRA_SELF_DELIVERY_ENABLED == 'true' && (steps.jra_canonical_availability.outcome == 'success' || steps.production_readback.outputs.reused == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+          KM_JRA_SELF_DELIVERY_ENABLED: ${{ vars.KM_JRA_SELF_DELIVERY_ENABLED }}
+          KM_JRA_DELIVERY_CONFIG_PATH: ${{ vars.KM_JRA_DELIVERY_CONFIG_PATH }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
+          if [[ "$RID" == KM-JRA-* ]] && [ -f "runtime/final_artifacts/$RID.json" ]; then
+            PYTHONPATH=runtime python runtime/jra_delivery.py --send-event \
+              --final "runtime/final_artifacts/$RID.json" --output-dir "runtime/jra_delivery/$RID" \
+              --published-ref "$(git rev-parse HEAD)" \
+              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
 
       - name: Audit canonical JRA delivery evidence (read-only)

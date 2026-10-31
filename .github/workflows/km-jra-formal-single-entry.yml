@@ -413,6 +413,22 @@ jobs:
           subject-path: runtime_out/jra_production_no_bet_terminal.json
 
 
+      - name: Prepare canonical SOURCE and OIDC-bound JRA NO-BET presentation
+        continue-on-error: true
+        if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json;print(json.load(open("runtime_out/jra_production_no_bet_terminal.json"))["race_id"])')"
+          PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_delivery.py \
+            --no-bet-terminal runtime_out/jra_production_no_bet_terminal.json \
+            --intent "$INTENT_FILE" --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json \
+            --producer-sha "$GITHUB_SHA" --output-dir "runtime/jra_delivery/$RID" \
+            --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            > runtime_out/jra_no_bet_completed_presentation.txt
+
       - name: Upload signed-source JRA zero-investment terminal
         if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
         uses: actions/upload-artifact@v4
@@ -427,6 +443,8 @@ jobs:
         id: candidate_parallel
         shell: bash
         env:
+          KM_JRA_SELF_DELIVERY_ENABLED: ${{ vars.KM_JRA_SELF_DELIVERY_ENABLED }}
+          KM_JRA_DELIVERY_CONFIG_PATH: ${{ vars.KM_JRA_DELIVERY_CONFIG_PATH }}
           GH_TOKEN: ${{ github.token }}
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
           INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
@@ -484,6 +502,8 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add "$GAP_TARGET"
           if [ -n "$NO_BET_TARGET" ]; then
+            RID="$(python -c 'import json,os;print(json.load(open(os.environ["INTENT_FILE"]))["race_id"])')"
+            if [ -d "runtime/jra_delivery/$RID" ]; then git add "runtime/jra_delivery/$RID"; fi
             git add "$NO_BET_TARGET"
           fi
           if [ "$DISPATCH_ELIGIBLE" = "true" ]; then
@@ -496,6 +516,32 @@ jobs:
               git rebase --abort 2>/dev/null || true
               sleep $((attempt*2))
             done
+          fi
+          # Independent exact remote bytes prove persistence even if the legacy
+          # bounded push loop exhausted its attempts. Delivery precedes only the
+          # separate Candidate wait; SOURCE/numerics/KRS are never rerun here.
+          if [ -n "$NO_BET_TARGET" ]; then
+            RID="$(python -c 'import json,os;print(json.load(open(os.environ["INTENT_FILE"]))["race_id"])')"
+            CANONICAL_REF="$(git rev-parse HEAD)"
+            if PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_delivery.py \
+              --no-bet-terminal "$NO_BET_TARGET" --output-dir "runtime/jra_delivery/$RID" \
+              --verify-canonical-ref "$CANONICAL_REF" \
+              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              > runtime_out/jra_no_bet_canonical_readback.json; then
+              echo "no_bet_canonical_readback_verified=true" >> "$GITHUB_OUTPUT"
+              if [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]; then
+                PYTHONPATH=runtime:runtime/jra_source_runtime python runtime/jra_delivery.py --send-event \
+                  --no-bet-terminal "$NO_BET_TARGET" --output-dir "runtime/jra_delivery/$RID" \
+                  --intent "$INTENT_FILE" --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json \
+                  --producer-sha "$GITHUB_SHA" --published-ref "$CANONICAL_REF" \
+                  --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+                  > runtime_out/jra_no_bet_delivery_event.json \
+                  || echo "::warning::JRA NO-BET delivery HOLD; private receipt retains attempted/accepted/UNKNOWN state"
+              fi
+            else
+              echo "no_bet_canonical_readback_verified=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::JRA NO-BET canonical remote readback HOLD; no mail attempted"
+            fi
           fi
           # A Production evidence NO_BET remains a valid zero-exposure
           # terminal decision even when a late OOS Candidate is impossible.
