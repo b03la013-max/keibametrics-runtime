@@ -223,6 +223,86 @@ def _reconcile(parsed:Dict[str,Any],artifact:Dict[str,Any]):
     for no in sorted(set(got)-set(official)): errs.append(f"EXTRA_RUNNER:{no}")
     return {"verified":not errs,"official_count":len(official),"source_count":len(got),"errors":errs}
 
+
+def _normalize_declared_cancelled_workout(parsed:Dict[str,Any], artifact:Dict[str,Any], raw:bytes, content_type:str=""):
+    """Remove only exact officially cancelled identities from a complete feed.
+
+    Normal feeds keep the existing path. A cancellation exception requires the
+    same page date/venue/race, complete declared-name identity, an independently
+    declared CANCELLED status, and an exact remaining Active universe.
+    Unknown extras, partial feeds and identity mismatches remain rejected by
+    the unchanged _reconcile gate. No rating, clock or feature is inferred.
+    """
+    if _reconcile(parsed, artifact)["verified"]:
+        return parsed
+    declared_obj=artifact.get("jra_declared_runner_universe") or {}
+    declared_rows=declared_obj.get("runners") or []
+    active_rows=(artifact.get("jra_official_runner_universe") or {}).get("runners") or []
+    source_rows=parsed.get("runners") or []
+    def strict_number(row):
+        def convert(value):
+            if type(value) is int and 1<=value<=18:
+                return value
+            if isinstance(value,str) and re.fullmatch(r"(?:[1-9]|1[0-8])",value):
+                return int(value)
+            raise ValueError("WORKOUT_RUNNER_NUMBER_INVALID")
+        no=convert(row.get("horse_no") if "horse_no" in row else row.get("runner_id"))
+        if "runner_id" in row and convert(row["runner_id"])!=no:
+            raise ValueError("WORKOUT_RUNNER_NUMBER_ID_CONFLICT")
+        return no
+    try:
+        declared={strict_number(r):r for r in declared_rows}
+        active={strict_number(r):r for r in active_rows}
+        got={strict_number(r):r for r in source_rows}
+    except (TypeError,ValueError,KeyError):
+        return parsed
+    if (not active or len(declared)!=len(declared_rows) or len(got)!=len(source_rows)
+            or len(active)!=len(active_rows) or set(got)!=set(declared)):
+        return parsed
+    cancelled={no for no,r in declared.items() if r.get("status")=="CANCELLED"}
+    if (not cancelled or set(declared)-cancelled!=set(active)
+            or declared_obj.get("universe_type")!="DECLARED"
+            or not declared_obj.get("runner_universe_sha256")
+            or not declared_obj.get("source_snapshot_sha256")
+            or any(not declared[no].get("status_source_id") or not declared[no].get("status_source_snapshot_sha256") for no in cancelled)):
+        return parsed
+    for no,row in declared.items():
+        if (not _norm(row.get("name")) or _norm(row.get("name"))!=_norm(got[no].get("horse_name"))
+                or (no in active and (_norm(active[no].get("name"))!=_norm(row.get("name")) or row.get("status")!="ACTIVE" or active[no].get("status")!="ACTIVE"))):
+            return parsed
+    decoded=_decode(raw,content_type)
+    title=re.search(r"<title[^>]*>(.*?)</title>",decoded,re.I|re.S)
+    identity=re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日\s+([^\d<]+?)(\d{1,2})R",title.group(1) if title else "")
+    if not identity:
+        return parsed
+    actual_day=f"{int(identity[1]):04d}-{int(identity[2]):02d}-{int(identity[3]):02d}"
+    context=artifact.get("source_race_context") or {}
+    expected_venue=(artifact.get("jra_race_context") or {}).get("venue_name")
+    try:
+        same=(actual_day==context.get("race_date") and _norm(identity[4])==_norm(expected_venue)
+              and int(identity[5])==int(context.get("race_no")))
+    except (TypeError,ValueError):
+        return parsed
+    if not same:
+        return parsed
+    import copy
+    out=copy.deepcopy(parsed)
+    out["runners"]=[r for r in out["runners"] if int(r["horse_no"]) in active]
+    out["runner_count"]=len(out["runners"])
+    out["cancelled_runner_exclusions"]={
+        "basis":"EXACT_DECLARED_IDENTITIES_AND_EXPLICIT_CANCELLED_STATUS",
+        "declared_universe_sha256":declared_obj.get("runner_universe_sha256"),
+        "declared_source_snapshot_sha256":declared_obj.get("source_snapshot_sha256"),
+        "original_source_runner_count":len(got),
+        "excluded":[{"horse_no":no,"name":declared[no].get("name"),"status":"CANCELLED",
+                     "status_source_id":declared[no].get("status_source_id"),
+                     "status_source_snapshot_sha256":declared[no].get("status_source_snapshot_sha256")} for no in sorted(cancelled)],
+        "page_identity":{"race_date":actual_day,"venue_name":_norm(identity[4]),"race_no":int(identity[5])},
+    }
+    if not _reconcile(out,artifact)["verified"]:
+        return parsed
+    return out
+
 def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*,require_workout:bool=False):
     ctx=artifact.get("source_race_context") or {}
     warnings=[];errors=[];snaps=[]
@@ -253,6 +333,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
                 snaps.append(snap)
                 candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"))
                 candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
+                candidate=_normalize_declared_cancelled_workout(candidate,artifact,raw,h.get("content-type",""))
                 candidate["runner_universe_match"]=_reconcile(candidate,artifact)
                 if candidate["runner_universe_match"]["verified"]:
                     workout=candidate

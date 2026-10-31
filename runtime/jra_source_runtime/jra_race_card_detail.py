@@ -20,12 +20,15 @@ class _DetailTableExtractor(_OfficialGradeTableExtractor):
         self.horse_cells={}
         self._horse_link=None
         self._row_horses={}
+        self.equipment_cells={}
+        self._row_equipment={}
 
     def handle_starttag(self,tag,attrs):
         super().handle_starttag(tag,attrs)
         if tag.lower()=="tr":
             self._row_jockeys={}
             self._row_horses={}
+            self._row_equipment={}
         # Preserve JRA's explicit frame label only in this detail parser.
         # Other images and the shared text-table parser remain unchanged.
         if tag.lower()=="img" and self._cell is not None:
@@ -33,6 +36,11 @@ class _DetailTableExtractor(_OfficialGradeTableExtractor):
             label=labels[0] if len(labels)==1 else None
             match=re.fullmatch(r"枠([1-8])(?:白|黒|赤|青|黄|緑|橙|桃)?",label or "")
             if match:self._cell.append(match.group(1))
+            # Retain only a positively printed marker in its own table cell.
+            # The caller binds the current horse-number cell; a previous-run
+            # marker or a page legend cannot become current equipment.
+            if label=="ブリンカー着用":
+                self._row_equipment.setdefault(len(self._row or []),set()).add("BLINKERS")
         if tag.lower()=="a" and self._cell is not None:
             attrs=dict(attrs);token=None
             href=urllib.parse.urlsplit(str(attrs.get('href') or ''))
@@ -68,6 +76,7 @@ class _DetailTableExtractor(_OfficialGradeTableExtractor):
         if tag.lower()=='tr' and self._row is not None:
             self.jockey_cells[id(self._row)]=self._row_jockeys
             self.horse_cells[id(self._row)]=self._row_horses
+            self.equipment_cells[id(self._row)]=self._row_equipment
         super().handle_endtag(tag)
 
 def _norm(v:Any)->str:
@@ -401,6 +410,14 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
                         "jockey_profile_token":rider[1] if rider else jockey_token_by_name.get(jkey),
                         "trainer_profile_token":trainer_token_by_name.get(tkey),
                         **ident,**person,"recent_runs":recent})
+        if "BLINKERS" in extractor.equipment_cells.get(id(row),{}).get(no_i,set()):
+            # Observation only. No equipment_effect score/category, first-use
+            # inference or past-equipment assumption is authorized here.
+            runners[-1]["observed_current_equipment"]={
+                "blinkers_worn":True,
+                "evidence_type":"JRA_OFFICIAL_CURRENT_HORSE_NUMBER_CELL_MARKER",
+                "marker_alt":"ブリンカー着用",
+            }
     if not runners: raise ValueError("JRA_DETAIL_RUNNERS_EMPTY")
     weather=None; going=None; going_surface=None
     # Official markup: <span class="cap">天候</span><span class="txt">晴</span>
