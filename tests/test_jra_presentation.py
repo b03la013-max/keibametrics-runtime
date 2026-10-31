@@ -60,20 +60,26 @@ def test_complete_body_paper_never_promotes_mec_reference():
     assert b['detail']['tickets'] == []
 
 
-def test_delivery_complete_body_is_optional_offline_and_preserves_saved_projection(tmp_path, monkeypatch, capsys):
+def test_delivery_complete_body_is_default_offline_and_preserves_saved_projection(tmp_path, monkeypatch, capsys):
     import runpy
     import urllib.request
     f, _, _ = fixture()
     save_presentation(tmp_path, build())
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
     monkeypatch.setattr(urllib.request, 'urlopen', lambda *a, **kw: pytest.fail('readback called network'))
-    monkeypatch.setattr(sys, 'argv', ['jra_delivery.py', '--complete-body', '--readback-only',
+    monkeypatch.setattr(sys, 'argv', ['jra_delivery.py', '--readback-only',
         '--final', str(ROOT / 'runtime/final_artifacts/KM-JRA-KYO-20261017-R07.json'),
         '--output-dir', str(tmp_path), '--run-url', 'https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38998786014'])
     with pytest.raises(SystemExit) as done:
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert done.value.code == 0
     assert '全馬20指数（保存済み数値・再計算なし）' in capsys.readouterr().out
+    assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    sys.argv.append('--compact-body')
+    with pytest.raises(SystemExit) as done:
+        runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
+    assert done.value.code == 0
+    assert capsys.readouterr().out == read_presentation(tmp_path, final=f)['text']
     assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir()}
 
 
@@ -215,7 +221,10 @@ def test_delivery_cli_timeout_preserves_final_and_compact_readback(tmp_path, mon
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert done.value.code == 0
     assert capsys.readouterr().out == first
-    assert read_presentation(tmp_path, final=f, expected_race_id=f['race_id'], expected_final_sha256=f['sha256'])['text'] == first
+    from jra_presentation import complete_body
+    saved = read_presentation(tmp_path, final=f, expected_race_id=f['race_id'], expected_final_sha256=f['sha256'])
+    assert complete_body(saved, f) == first
+    assert (tmp_path / 'presentation.md').read_text() == saved['text']
     monkeypatch.setattr(sys, 'argv', ['jra_presentation.py', '--directory', str(tmp_path),
                                     '--expected-race-id', f['race_id'], '--expected-final-sha256', f['sha256'], '--final', str(final_path)])
     runpy.run_path(str(ROOT / 'runtime/jra_presentation.py'), run_name='__main__')
@@ -312,7 +321,9 @@ def test_legacy_final_readback_without_presentation_uses_no_runtime(tmp_path, mo
         runpy.run_path(str(ROOT / 'runtime/jra_delivery.py'), run_name='__main__')
     assert done.value.code == 0
     saved = read_presentation(tmp_path, final=f)
-    assert capsys.readouterr().out == saved['text']
+    from jra_presentation import complete_body
+    assert capsys.readouterr().out == complete_body(saved, f)
+    assert (tmp_path / 'presentation.md').read_text() == saved['text']
     assert saved['detail']['presentation_before_post'] is False
     assert not (tmp_path / 'publication.json').exists()
     assert not (tmp_path / 'availability_receipt.json').exists()

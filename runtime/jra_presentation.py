@@ -380,8 +380,12 @@ if __name__ == '__main__':
     parser.add_argument('--expected-final-sha256', required=True)
     parser.add_argument('--final', required=True)
     parser.add_argument('--expected-authority')
-    parser.add_argument('--complete-body', action='store_true',
-                        help='Expand verified saved Full20, roles, frozen tickets and evidence; preserve originals.')
+    display = parser.add_mutually_exclusive_group()
+    display.add_argument('--complete-body', dest='complete_body', action='store_true',
+                        help='Expand verified saved Full20, roles, tickets and evidence (default); preserve originals.')
+    display.add_argument('--compact-body', dest='complete_body', action='store_false',
+                        help='Return the original compact saved text unchanged.')
+    parser.set_defaults(complete_body=True)
     args = parser.parse_args()
     final = json.loads(Path(args.final).read_text())
     bundle = read_presentation(args.directory, final=final,

@@ -82,7 +82,10 @@ if __name__=='__main__':
     p.add_argument('--run-url',required=True);p.add_argument('--published-ref')
     p.add_argument('--readback-only',action='store_true',help='Render an existing Signed FINAL with archived verification material; no live Health or publication.')
     p.add_argument('--expected-race-id');p.add_argument('--expected-final-sha256');p.add_argument('--expected-authority')
-    p.add_argument('--complete-body',action='store_true',help='Output verified Full20, roles, exact tickets and evidence without changing saved Presentation.')
+    display=p.add_mutually_exclusive_group()
+    display.add_argument('--complete-body',dest='complete_body',action='store_true',help='Output verified Full20, roles, exact tickets and evidence (default).')
+    display.add_argument('--compact-body',dest='complete_body',action='store_false',help='Output the original compact saved text unchanged.')
+    p.set_defaults(complete_body=True)
     a=p.parse_args()
     if a.readback_only and a.published_ref:
         p.error('--readback-only cannot publish availability')
