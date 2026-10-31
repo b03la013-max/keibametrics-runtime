@@ -295,6 +295,83 @@ def save_presentation(directory, bundle):
     return bundle
 
 
+def complete_body(bundle, final):
+    """Display frozen values from a verified bundle, retaining the saved bytes.
+
+    This is an expanded read model, not a new prediction, publication receipt,
+    notification or eligibility decision. Callers must first use build_presentation
+    or read_presentation, both of which verify the signed canonical projection.
+    """
+    d = bundle['detail']
+    if (bundle['manifest']['final_sha256'] != final['sha256']
+            or d['race_id'] != final['race_id']):
+        raise ValueError('JRA_PRESENTATION_EXPECTED_BASIS_MISMATCH')
+
+    def cell(value):
+        return str(value).replace('|', '\\|').replace('\r', ' ').replace('\n', ' ')
+
+    lines = [bundle['text'].rstrip(), '', '全馬20指数（保存済み数値・再計算なし）']
+    groups = [('HPI', 'SSI', 'CFI', 'RFI', 'BVI', 'JTI', 'CSI'),
+              ('TRI', 'BWI', 'GCI', 'PRI', 'KGI', 'VMI'),
+              ('DCR', 'TPI', 'ZAI_WIN', 'ZAI_PLACE', 'SRI', 'F3S', 'T3I')]
+    for columns in groups:
+        lines += ['', '|馬番|' + '|'.join(columns) + '|',
+                  '|---|' + '|'.join('---' for _ in columns) + '|']
+        for row in d['ranking']:
+            lines.append('|' + cell(row['number']) + '|' +
+                         '|'.join(cell(row['indices'][key]) for key in columns) + '|')
+    lines += ['', '全馬Role（空欄は原本でRole指定なし）', '', '|馬番|馬名|Role|', '|---|---|---|']
+    for row in d['ranking']:
+        lines.append('|' + '|'.join(cell(x) for x in
+                     (row['number'], row['name'] or '馬名未収録', ','.join(row['roles']))) + '|')
+    lines += ['', '正式券面の個別原本（MEC参考券を追加しない）', '',
+              '|券種|方向・組合せ|Stake円|', '|---|---|---|']
+    for ticket in d['tickets']:
+        separator = '→' if ticket['bet_type'] in ('EXACTA', 'TRIFECTA') else '－'
+        lines.append('|' + '|'.join(cell(x) for x in
+                     (BET_LABEL[ticket['bet_type']], separator.join(map(str, ticket['selection'])), ticket['stake'])) + '|')
+    if not d['tickets']:
+        lines.append('|正式券面なし|原本の' + cell(d['status']) + '|0|')
+    lines += ['', 'Capital理由：' + str(d['capital'].get('reason') or '原本に記載なし'),
+              'Capital未使用額（原本値）：' + str(d['capital'].get('unused_budget', 'UNKNOWN')),
+              'SOURCE Freeze：' + str(d['source'].get('source_freeze_at', 'UNKNOWN')),
+              'Prediction Cutoff：' + d['prediction_cutoff'],
+              'FINAL Freeze：' + final['final_freeze_timestamp'],
+              'FINAL SHA：' + final['sha256'],
+              '完全本文SHAはこの出力全体のバイト列を対象とする。保存・通知・到達・ACKは別検収。']
+    for phase in ('PRE_KRS', 'KRS', 'FINAL'):
+        receipt = d['receipts'][phase]
+        lines.append(phase + ' Receipt：' + receipt['receipt_sha256'] +
+                     '／署名検証=' + str(receipt['signature_verified']))
+    package = final['final_prediction_package']
+    replay = package['index_provenance_replay']['runners']
+    coverage = package.get('source_to_evidence_feature_runner_coverage') or {}
+    lines += ['', '基礎指数Evidence・不確実性（計算済み≠全面実測）']
+    for row in d['ranking']:
+        rid = row['number']
+        traces = replay[rid].get('base_index_trace') or {}
+        lines += ['', '馬番 ' + rid + ' ' + (row['name'] or '')]
+        # These are bound source facts, not newly inferred pace/course opinions.
+        for index in ('CFI', 'PRI'):
+            trace = traces.get(index) or {}
+            lines.append(index + '原本Evidence：' + str(trace.get('source_fact') or 'UNKNOWN'))
+        features = (coverage.get(rid, {}).get('source_feature_trace') or {}).get('features') or {}
+        missing = {}
+        for name, feature in features.items():
+            if feature.get('production_feature_state') == 'MISSING' and any(
+                    x.get('kind') == 'BASE_INDEX' for x in feature.get('target_bindings') or []):
+                reason = feature.get('missing_reason') or 'UNKNOWN'
+                missing.setdefault(reason, []).append(name)
+        for reason, names in sorted(missing.items()):
+            lines.append('未取得・未生成 ' + reason + '：' + ','.join(sorted(names)))
+        dcr_indices = [index for index, trace in traces.items()
+                       if trace.get('information_status') == 'INFORMATION_INSUFFICIENT_DCR_ART3']
+        lines.append('DCRによる情報不足処理：' + (','.join(sorted(dcr_indices)) or '記録なし'))
+        if not features:
+            lines.append('構成別欠測理由：UNKNOWN（この原本にはFeature Trace未収録）')
+    return '\n'.join(lines) + '\n'
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Read saved presentation; no execution or notification.')
@@ -303,8 +380,12 @@ if __name__ == '__main__':
     parser.add_argument('--expected-final-sha256', required=True)
     parser.add_argument('--final', required=True)
     parser.add_argument('--expected-authority')
+    parser.add_argument('--complete-body', action='store_true',
+                        help='Expand verified saved Full20, roles, frozen tickets and evidence; preserve originals.')
     args = parser.parse_args()
-    print(read_presentation(args.directory, final=json.loads(Path(args.final).read_text()),
+    final = json.loads(Path(args.final).read_text())
+    bundle = read_presentation(args.directory, final=final,
                             expected_race_id=args.expected_race_id,
                             expected_final_sha256=args.expected_final_sha256,
-                            expected_authority=args.expected_authority)['text'], end='')
+                            expected_authority=args.expected_authority)
+    print(complete_body(bundle, final) if args.complete_body else bundle['text'], end='')

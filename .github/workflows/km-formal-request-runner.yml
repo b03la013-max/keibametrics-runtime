@@ -1005,12 +1005,13 @@ jobs:
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
             readback=()
             if [ "$REUSED_PRODUCTION" = "true" ]; then readback=(--readback-only); fi
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+            PYTHONPATH=runtime python runtime/jra_delivery.py --complete-body --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" \
               --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               "${readback[@]}" \
               > krs-artifacts/completed_presentation.txt
+            sha256sum krs-artifacts/completed_presentation.txt > krs-artifacts/completed_presentation.sha256
             cp "runtime/jra_delivery/$RID"/presentation* krs-artifacts/
             if [ -f "runtime/jra_delivery/$RID/canonical_tree.txt" ]; then
               cp "runtime/jra_delivery/$RID/canonical_tree.txt" krs-artifacts/canonical_tree.txt
@@ -1046,10 +1047,11 @@ jobs:
             echo "JRA_CANONICAL_PUBLICATION_FAILED_SIGNED_FINAL_PRESERVED" >&2; exit 1
           fi
           if [ -f "runtime/jra_delivery/$RID/publication.json" ]; then
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+            PYTHONPATH=runtime python runtime/jra_delivery.py --complete-body --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" --published-ref "$(git rev-parse HEAD)" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               > krs-artifacts/completed_presentation.txt
+            sha256sum krs-artifacts/completed_presentation.txt > krs-artifacts/completed_presentation.sha256
             cp "runtime/jra_delivery/$RID/availability_receipt.json" krs-artifacts/
             cp "runtime/jra_delivery/$RID/presentation_availability.json" krs-artifacts/
             git add "runtime/jra_delivery/$RID"

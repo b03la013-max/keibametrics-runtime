@@ -82,18 +82,19 @@ if __name__=='__main__':
     p.add_argument('--run-url',required=True);p.add_argument('--published-ref')
     p.add_argument('--readback-only',action='store_true',help='Render an existing Signed FINAL with archived verification material; no live Health or publication.')
     p.add_argument('--expected-race-id');p.add_argument('--expected-final-sha256');p.add_argument('--expected-authority')
+    p.add_argument('--complete-body',action='store_true',help='Output verified Full20, roles, exact tickets and evidence without changing saved Presentation.')
     a=p.parse_args()
     if a.readback_only and a.published_ref:
         p.error('--readback-only cannot publish availability')
     final=json.loads(Path(a.final).read_text())
     out=Path(a.output_dir)
-    from jra_presentation import build_presentation, save_presentation, read_presentation
+    from jra_presentation import build_presentation, save_presentation, read_presentation, complete_body
     if (out/'presentation.json').exists() and not a.published_ref:
         # A completed answer is recovered before any current Health or SOURCE
         # call. Recheck original signatures with the historical trusted key.
         bundle=read_presentation(out,final=final,expected_race_id=a.expected_race_id,
             expected_final_sha256=a.expected_final_sha256,expected_authority=a.expected_authority)
-        print(bundle['text'],end='')
+        print(complete_body(bundle,final) if a.complete_body else bundle['text'],end='')
         sys.exit(0)
     if a.readback_only:
         from jra_presentation import archived_trust
@@ -101,7 +102,7 @@ if __name__=='__main__':
         bundle=save_presentation(out,build_presentation(final,health=health,contract=contract,
             generated_at=datetime.now(timezone.utc).isoformat(),expected_race_id=a.expected_race_id,
             expected_final_sha256=a.expected_final_sha256,expected_authority=a.expected_authority))
-        print(bundle['text'],end='')
+        print(complete_body(bundle,final) if a.complete_body else bundle['text'],end='')
         sys.exit(0)
     from family_authority_guard import resolve_current_authority
     root=Path(__file__).resolve().parents[1]
@@ -183,4 +184,4 @@ if __name__=='__main__':
                     or old.get('presentation_sha256')!=bundle['manifest']['sha256']):
                 raise ValueError('JRA_PRESENTATION_AVAILABILITY_CONFLICT')
         else:target.write_text(json.dumps(availability,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    print(bundle['text'],end='')
+    print(complete_body(bundle,final) if a.complete_body else bundle['text'],end='')
