@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import http.cookiejar
+import itertools
 import re
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
 
-from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
-from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+if __package__:
+    from .source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+    from .jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+else:
+    try:
+        from jra_source_runtime.source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+        from jra_source_runtime.jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+    except ModuleNotFoundError as exc:
+        if exc.name != "jra_source_runtime":
+            raise
+        from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+        from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
 
 PROFILE="KM-JRA-OFFICIAL-SAME-DAY-RESULT-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
@@ -25,6 +36,38 @@ def _flt(v:Any):
 
 def _positions(v:Any)->List[int]:
     return [int(x) for x in re.findall(r"\d{1,2}",str(v or ""))]
+
+def finish_groups_and_top3_orders(runners:List[Dict[str,Any]])->Dict[str,Any]:
+    """Preserve official competition ranks, including a tie crossing third.
+
+    A third-place tie has ranks 1, 2, 3, 3, 5, not four distinct ranks.
+    Enumerating the permissible orders does not choose a preferred tied horse.
+    This helper deliberately does not change the historic parsed SOURCE body.
+    """
+    groups={};seen=set()
+    for row in runners:
+        rank=row.get("finish");number=row.get("horse_no")
+        if (type(rank) is not int or rank<1 or type(number) is not int
+                or not 1<=number<=18 or number in seen):
+            raise ValueError("JRA_OFFICIAL_FINISH_GROUP_INVALID")
+        if str(row.get("runner_id",number))!=str(number):
+            raise ValueError("JRA_OFFICIAL_FINISH_RUNNER_ID_MISMATCH")
+        seen.add(number);groups.setdefault(rank,[]).append(number)
+    orders=[[]];next_rank=1
+    for rank,numbers in sorted(groups.items()):
+        if len(orders[0])>=3:break
+        if rank!=next_rank:
+            raise ValueError("JRA_OFFICIAL_TOP3_RANK_GROUP_INCOMPLETE")
+        numbers=sorted(numbers)
+        take=min(len(numbers),3-len(orders[0]))
+        orders=[prefix+list(p) for prefix in orders
+                for p in itertools.permutations(numbers,take)]
+        next_rank+=len(numbers)
+    if not orders or len(orders[0])!=3:
+        raise ValueError("JRA_OFFICIAL_TOP3_RANK_GROUP_INCOMPLETE")
+    return {"finish_groups":[{"finish":rank,"horse_numbers":sorted(numbers)}
+                              for rank,numbers in sorted(groups.items())],
+            "top3_orders":sorted(orders),"dead_heat":len(orders)>1}
 
 def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
@@ -91,36 +134,153 @@ def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
+class OfficialResultNavigationError(ValueError):
+    def __init__(self, code, stage, *, client=None):
+        super().__init__(code)
+        self.error_code = code
+        self.first_failed_stage = stage
+        self.official_navigation = list(getattr(client, 'result_navigation', []))
+        self.diagnostic = {'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
+                                         for row in self.official_navigation]}
+
+
+def _navigation_observation(client, stage, *, token=None):
+    import hashlib
+    record = {**dict(client.last_response), 'stage': stage,
+              'method': 'POST' if token is not None else 'GET'}
+    if token is not None:
+        record['cname_sha256'] = hashlib.sha256(token.encode()).hexdigest()
+    client.result_navigation.append(record)
+
+
+def _result_post(client, token, referer):
+    """The existing official client/session, bound to accessS rather than cards."""
+    if client.last_response.get('response_url') != referer:
+        raise OfficialResultNavigationError('JRA_RESULT_SESSION_REFERER_MISMATCH',
+                                            'RESULT_NAVIGATION', client=client)
+    client.post('/JRADB/accessS.html', token)
+    final = client.last_response.get('response_url')
+    parsed = urllib.parse.urlsplit(final or '')
+    if (parsed.scheme != 'https' or parsed.hostname != 'www.jra.go.jp'
+            or parsed.path != '/JRADB/accessS.html' or client.last_raw is None):
+        raise OfficialResultNavigationError('JRA_RESULT_RESPONSE_ENDPOINT_MISMATCH',
+                                            'RESULT_NAVIGATION', client=client)
+    return final, client.last_raw, client.last_headers
+
+
 def _open_day(race_date:str,meeting_key:str):
-    d=_date8(race_date)
-    key=re.sub(r"\D","",str(meeting_key or ""))
-    if not re.fullmatch(r"\d{10}",key):
-        raise ValueError("JRA_MEETING_KEY_INVALID")
-    jar=http.cookiejar.CookieJar()
-    opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-    u0,r0,h0=_fetch(opener,_calendar_url(race_date))
-    s0=_decode(r0,h0.get("content-type",""))
-    tokens=re.findall(r"doAction\('/JRADB/accessS\.html'\s*,\s*'([^']+)'\)",s0)
-    entry=next((x for x in tokens if str(x).startswith("pw01sli00")),tokens[0] if tokens else None)
-    if not entry:
-        raise ValueError("JRA_RESULT_ENTRY_TOKEN_NOT_FOUND")
-    u1,r1,h1=_post(opener,entry,u0)
-    s1=_decode(r1,h1.get("content-type",""))
-    m=re.search(r"(pw01srl00"+re.escape(key)+re.escape(d)+r"/[0-9A-Fa-f]{2})",s1)
-    if not m:
-        raise ValueError("JRA_RESULT_DAY_TOKEN_NOT_FOUND")
-    day=m.group(1)
-    u2,r2,h2=_post(opener,day,u1)
-    s2=_decode(r2,h2.get("content-type",""))
-    return opener,u2,s2,key,d
+    if __package__:
+        from .jra_pedigree_harvest import _Client, _day_navigation
+        from .jra_race_day_resolver import VENUES
+    else:
+        from jra_pedigree_harvest import _Client, _day_navigation
+        from jra_race_day_resolver import VENUES
+    import time
+    d = _date8(race_date)
+    key = str(meeting_key or '')
+    if (not re.fullmatch(r'\d{10}', key) or key[:2] not in VENUES
+            or key[2:6] != d[:4] or int(key[6:8]) < 1 or int(key[8:10]) < 1):
+        raise OfficialResultNavigationError('JRA_MEETING_KEY_INVALID', 'RESULT_INPUT')
+    client = _Client(delay=1.0, deadline_monotonic=time.monotonic()+180,
+                     stop_on_access_denied=True, referer_chain=True)
+    client.result_navigation = []
+    # _day_navigation already follows only the observed official result entry,
+    # archive form, published month/checksum, and requested-day tokens.
+    # Record every successful request without inventing tokens or an archive URL.
+    original_get, original_post = client.get, client.post
+    def get(path):
+        try: result = original_get(path)
+        except Exception as exc:
+            exc.first_failed_stage = 'RESULT_CALENDAR'
+            raise
+        _navigation_observation(client, 'RESULT_CALENDAR')
+        return result
+    def post(path, token):
+        stage = ('RESULT_ARCHIVE' if token.startswith('pw01skl') else
+                 'RESULT_DAY' if token.startswith('pw01srl') else
+                 'RESULT_DETAIL' if token.startswith('pw01sde') else 'RESULT_ENTRY')
+        if path != '/JRADB/accessS.html':
+            raise OfficialResultNavigationError('JRA_RESULT_ENDPOINT_INVALID',stage,client=client)
+        try: result = original_post(path,token)
+        except Exception as exc:
+            exc.first_failed_stage = stage
+            raise
+        _navigation_observation(client,stage,token=token)
+        return result
+    client.get, client.post = get, post
+    try:
+        page, entry, days, _ = _day_navigation(client,race_date,'results')
+    except Exception as exc:
+        aliases = {'JRA_HARVEST_ENTRY_TOKEN_NOT_FOUND':'JRA_RESULT_ENTRY_TOKEN_NOT_OBSERVED',
+                   'JRA_HARVEST_ARCHIVE_ENTRY_NOT_OBSERVED':'JRA_RESULT_ARCHIVE_SELECTION_REQUIRED',
+                   'JRA_HARVEST_ARCHIVE_FORM_NOT_OBSERVED':'JRA_RESULT_ARCHIVE_FORM_NOT_OBSERVED'}
+        if str(exc) in aliases:
+            raise OfficialResultNavigationError(aliases[str(exc)],'RESULT_NAVIGATION',client=client) from exc
+        if not hasattr(exc,'first_failed_stage'):exc.first_failed_stage='RESULT_NAVIGATION'
+        exc.official_navigation=list(client.result_navigation)
+        exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
+                                      for row in client.result_navigation]}
+        raise
+    expected = r'pw01srl\d{2}'+re.escape(key+d)+r'/[0-9A-Fa-f]{2}'
+    target = [token for token in days if re.fullmatch(expected,token)]
+    if len(target) != 1:
+        code = 'JRA_RESULT_MEETING_KEY_MISMATCH' if days else 'JRA_RESULT_DAY_TOKEN_NOT_OBSERVED'
+        raise OfficialResultNavigationError(code,'RESULT_DAY_SELECTION',client=client)
+    day_html = client.post(page,target[0])
+    if not re.search(r'pw01sde\d{2}'+re.escape(key)+r'\d{2}'+d+r'/[0-9A-Fa-f]{2}',day_html):
+        raise OfficialResultNavigationError('JRA_RESULT_DAY_HTML_UNRECOGNIZED','RESULT_DAY_BODY',client=client)
+    return client, client.last_response['response_url'], day_html, key, d
+
+
+def validate_result_identity(raw, content_type, key, day, race_no):
+    if __package__:
+        from .jra_race_day_resolver import VENUES
+    else:
+        from jra_race_day_resolver import VENUES
+    from bs4 import BeautifulSoup
+    decoded = _decode(raw,content_type)
+    soup = BeautifulSoup(decoded,'html.parser')
+    header_nodes = soup.select('.race_header')
+    date_pattern = (r'(\d{4})年(\d{1,2})月(\d{1,2})日[（(][^）)]*[）)]\s*'
+                    r'(\d+)回(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d+)日')
+    if header_nodes:
+        # JRA prints the race number as an image alt in this same header;
+        # global text flattening drops it and can mix footer/navigation races.
+        if len(header_nodes)!=1:
+            raise OfficialResultNavigationError('JRA_RESULT_PRINTED_IDENTITY_NOT_OBSERVED','RESULT_DETAIL_IDENTITY')
+        header=header_nodes[0]
+        dates=header.select('.date_line .cell.date')
+        numbers=header.select('.race_number')
+        date=re.fullmatch(date_pattern,dates[0].get_text(' ',strip=True)) if len(dates)==1 else None
+        labels=([x.get('alt') for x in numbers[0].select('img[alt]')] if len(numbers)==1 else [])
+        number=re.fullmatch(r'(\d+)レース',labels[0]) if len(labels)==1 else None
+        if not date or not number:
+            raise OfficialResultNavigationError('JRA_RESULT_PRINTED_IDENTITY_NOT_OBSERVED','RESULT_DETAIL_IDENTITY')
+        y,m,d,meeting,venue,meeting_day=date.groups();rn=number[1]
+    else:
+        # Retain legacy textual headers, only before the result table. Do not
+        # borrow a target identity from another race in the page footer.
+        prefix=re.split(r'<table\b',decoded,maxsplit=1,flags=re.I)[0]
+        heads=re.findall(date_pattern+r'\s+(\d+)レース',_html_text(prefix))
+        if len(set(heads))!=1:
+            raise OfficialResultNavigationError('JRA_RESULT_PRINTED_IDENTITY_NOT_OBSERVED','RESULT_DETAIL_IDENTITY')
+        y,m,d,meeting,venue,meeting_day,rn=heads[0]
+    actual = (f'{int(y):04d}{int(m):02d}{int(d):02d}',venue,int(meeting),int(meeting_day),int(rn))
+    expected = (day,VENUES[key[:2]][1],int(key[6:8]),int(key[8:10]),int(race_no))
+    if actual != expected:
+        raise OfficialResultNavigationError('JRA_RESULT_PRINTED_IDENTITY_MISMATCH','RESULT_DETAIL_IDENTITY')
+    return {'race_date':f'{day[:4]}-{day[4:6]}-{day[6:]}','meeting_key':key,
+            'venue':venue,'meeting_no':int(meeting),'meeting_day':int(meeting_day),'race_no':int(rn)}
+
 
 def _fetch_race(opener,referer:str,day_html:str,key:str,d:str,race_no:int,prediction_cutoff:str):
     prefix="pw01sde01"+key+f"{int(race_no):02d}"+d
     m=re.search(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",day_html)
     if not m:
         raise ValueError(f"JRA_RESULT_RACE_TOKEN_NOT_FOUND:{race_no}")
-    fetched=utcnow()
-    final,raw,headers=_post(opener,m.group(1),referer)
+    final,raw,headers=_result_post(opener,m.group(1),referer)
+    fetched=opener.last_response.get("fetched_at") or utcnow()
+    validate_result_identity(raw,headers.get("content-type",""),key,d,race_no)
     spec={
         "source_id":f"JRA-OFFICIAL-SAME-DAY-R{int(race_no):02d}-DETAIL",
         "source_class":"OFFICIAL_JRA_SAME_DAY_RESULT","authority":"JRA_OFFICIAL",

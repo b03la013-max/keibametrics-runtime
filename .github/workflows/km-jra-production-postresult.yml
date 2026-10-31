@@ -8,6 +8,7 @@ run-name: JRA Production post-result ${{ inputs.race_id || 'scheduled' }}
 permissions:
   contents: write
   actions: write
+  attestations: read
 
 on:
   schedule:
@@ -40,16 +41,23 @@ jobs:
       - name: Settlement regression
         run: python -m pytest -q tests/test_jra_production_postresult.py
       - name: Fetch official result and write RESULT request for each due FINAL
+        id: execute
         env:
           RACE_ID: ${{ inputs.race_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          mkdir -p runtime_out/postresult
+          status=0
           if [ -n "${RACE_ID:-}" ]; then
-            python runtime/jra_production_postresult.py --race-id "$RACE_ID"
+            python runtime/jra_production_postresult.py --race-id "$RACE_ID" --health-out runtime_out/postresult/production.json || status=$?
           else
-            python runtime/jra_production_postresult.py --days 3
+            python runtime/jra_production_postresult.py --days 3 --health-out runtime_out/postresult/production.json || status=$?
           fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
       - name: Commit RESULT requests and dispatch the canonical Result Runner
+        id: persist
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -66,6 +74,29 @@ jobs:
             [ "$i" -eq 3 ] && exit 1
           done
           for f in "${NEW[@]}"; do
-            gh workflow run km-formal-result-runner.yml --ref main -f request_path="$f"
+            if ! gh workflow run km-formal-result-runner.yml --ref main -f request_path="$f"; then
+              echo "$f" >> runtime_out/postresult/result_runner_dispatch_failures.txt
+            fi
             sleep 5
           done
+          test ! -s runtime_out/postresult/result_runner_dispatch_failures.txt
+      - name: Aggregate execution health after preserving successful RESULT requests
+        id: health
+        if: always()
+        run: |
+          status=0
+          python runtime/jra_postresult_health.py \
+            --health-file production=runtime_out/postresult/production.json \
+            --lane-exit production="${{ steps.execute.outputs.exit_code }}" \
+            --step-outcome persistence="${{ steps.persist.outcome }}" \
+            --output runtime_out/postresult/execution_health.json || status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-production-execution-health-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime_out/postresult/
+          if-no-files-found: warn
+      - name: Reflect material result failures in GitHub Checks
+        if: always()
+        run: test "${{ steps.health.outputs.exit_code }}" = "0"

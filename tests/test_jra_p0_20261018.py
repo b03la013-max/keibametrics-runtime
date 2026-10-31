@@ -150,6 +150,7 @@ def signed_fixture():
     health={'status':'READY','engine':{'sha256':'engine'},'parameter_map':{'sha256':'jra-param'},
             'receipt_signer':{'ready':True,'key_id':'test','public_key_b64':b64encode(key.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw)).decode()}}
     final={'family_id':'JRA','temporal_mode':'FORMAL-PRE-RACE','race_id':'KM-JRA-TKY-20261018-R01',
+           'prediction_cutoff':'2026-10-18T09:55:00+09:00',
            'scheduled_post_at':'2026-10-18T10:00:00+09:00','final_freeze_timestamp':'2026-10-18T09:50:00+09:00',
            'final_prediction_package':{'execution_stage_manifest':{'PRE_KRS':{'status':'PASS'}}},
            'final_ticket':{'no_bet':False,'tickets':[{'bet_type':'EXACTA','selection':[1,2],'stake':100}],

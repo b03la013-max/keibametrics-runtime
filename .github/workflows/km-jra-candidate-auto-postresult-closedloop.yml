@@ -30,6 +30,7 @@ concurrency:
 
 jobs:
   result-to-learning:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -53,18 +54,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p runtime_out/postresult
+          status=0
           if [ -n "$RACE_ID" ]; then
-            python runtime/jra_candidate_postresult_closedloop.py --race-id "$RACE_ID"
+            python runtime/jra_candidate_postresult_closedloop.py --race-id "$RACE_ID" --health-out runtime_out/postresult/candidate.json || status=$?
           else
-            python runtime/jra_candidate_postresult_closedloop.py --days 3
+            python runtime/jra_candidate_postresult_closedloop.py --days 3 --health-out runtime_out/postresult/candidate.json || status=$?
           fi
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
       - name: Settle separate Static Owner cohort against official results
-        continue-on-error: true
-        run: python runtime/jra_static_owner_forward_oos.py settle
+        id: static
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
+        run: |
+          status=0
+          python runtime/jra_static_owner_forward_oos.py settle --budget-seconds 180 --health-out runtime_out/postresult/static.json || status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
       - name: Settle separately frozen current-policy bloodline pipeline
-        continue-on-error: true
-        run: python scripts/jra_bvi_pipeline_forward_shadow.py settle --environment
+        id: bvi
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
+        run: |
+          status=0
+          python scripts/jra_bvi_pipeline_forward_shadow.py settle --environment > runtime_out/postresult/bvi.json 2> runtime_out/postresult/bvi.stderr.txt || status=$?
+          cat runtime_out/postresult/bvi.json
+          cat runtime_out/postresult/bvi.stderr.txt
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
       - name: Update no-promotion Candidate OOS scorecard
+        id: scorecard
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
         run: |
           python - <<'PY'
           import json,sys
@@ -83,13 +99,19 @@ jobs:
                             "production_effect":"NONE","automatic_promotion":False},ensure_ascii=False))
           PY
       - name: Bridge verified Candidate results to preregistered PFS schema
+        id: bridge
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
         run: |
           python runtime/jra_candidate_pfs_bridge.py
       - name: Rebuild aggregate Candidate PFS and Family utility from settled records
+        id: metrics
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
         run: |
           python runtime/pfs_grand_review.py
           python runtime/family_prediction_utility.py
       - name: Persist only newly observed result/settlement/learning
+        id: persist
+        if: ${{ !cancelled() && steps.execute.outcome == 'success' }}
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
@@ -110,3 +132,30 @@ jobs:
             sleep $((attempt * 2))
           done
           exit 1
+      - name: Aggregate execution health after preserving successful lanes
+        id: health
+        if: always()
+        run: |
+          status=0
+          python runtime/jra_postresult_health.py \
+            --health-file candidate=runtime_out/postresult/candidate.json \
+            --health-file static=runtime_out/postresult/static.json \
+            --bvi-report runtime_out/postresult/bvi.json \
+            --lane-exit candidate="${{ steps.execute.outputs.exit_code }}" \
+            --lane-exit static="${{ steps.static.outputs.exit_code }}" \
+            --lane-exit bvi="${{ steps.bvi.outputs.exit_code }}" \
+            --step-outcome scorecard="${{ steps.scorecard.outcome }}" \
+            --step-outcome bridge="${{ steps.bridge.outcome }}" \
+            --step-outcome metrics="${{ steps.metrics.outcome }}" \
+            --step-outcome persistence="${{ steps.persist.outcome }}" \
+            --output runtime_out/postresult/execution_health.json || status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-candidate-execution-health-${{ github.run_id }}-${{ github.run_attempt }}
+          path: runtime_out/postresult/
+          if-no-files-found: warn
+      - name: Reflect material result failures in GitHub Checks
+        if: always()
+        run: test "${{ steps.health.outputs.exit_code }}" = "0"

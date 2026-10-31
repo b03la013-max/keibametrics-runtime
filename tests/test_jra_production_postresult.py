@@ -54,7 +54,9 @@ class TestProductionPostResult(unittest.TestCase):
         s = settle_final(final(), OFFICIAL)
         self.assertEqual(s["total_investment"], 300)
         self.assertEqual(s["total_payout"], 1230 + 9870)
-        self.assertEqual(s["actual_purchase_status"], "NOT_PURCHASED_RECOMMENDATION_ONLY")
+        self.assertEqual(s["actual_purchase_status"], "UNVERIFIED")
+        self.assertIsNone(s['actual_purchase_pfs'])
+        self.assertEqual(s['capital_exposure_class'],'RECOMMENDATION')
         self.assertEqual(len(s["winning_tickets"]), 2)
 
     def test_request_feeds_canonical_review(self):
@@ -135,3 +137,110 @@ def test_legacy_zero_refund_review_hash_is_unchanged_by_refund_support():
     req['settlement'].pop('effective_investment')
     review=build_post_result_review(req,final())
     assert 'refund' not in review['capital'] and 'effective_investment' not in review['capital']
+
+
+def _portable_source_checkpoint(tmp_path):
+    """Small synthetic crypto fixture; no private Raw or retained key files."""
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from execution_store import persist_phase
+    f = final()
+    race = f['race_id']
+    execution = race + '-LIVE-R1'
+    active = [{'runner_id': n, 'horse_no': int(n), 'status': 'ACTIVE'}
+              for n in f['static_prediction']['ranking']]
+    source = {'race_id': race, 'family_id': 'JRA', 'source_freeze_at': '2026-10-11T06:00:00Z',
+              'official_runner_universe': {'runners': active},
+              'jra_declared_runner_universe': {'runners': active + [
+                  {'runner_id': '13', 'horse_no': 13, 'status': 'CANCELLED'}]}}
+    source['source_snapshot_sha256'] = _sha(source)
+    receipt = {'race_id': race, 'family': 'JRA', 'phase': 'SOURCE', 'status': 'PASS',
+               'errors': [], 'artifact_sha256': _sha(source)}
+    key = Ed25519PrivateKey.generate()
+    envelope = {'artifact': source, 'receipt': receipt, 'receipt_sha256': _sha(receipt),
+                'github_repository': 'b03la013-max/keibametrics-runtime',
+                'signature_alg': 'Ed25519',
+                'signer_trust_class': 'GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION',
+                'receipt_public_key_b64': base64.b64encode(key.public_key().public_bytes(
+                    serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode(),
+                'signature': base64.b64encode(key.sign(json.dumps(receipt, ensure_ascii=False,
+                    sort_keys=True, separators=(',', ':')).encode())).decode()}
+    stage = {'execution_id': execution, 'receipt_sha256': envelope['receipt_sha256'],
+             'source_snapshot_sha256': source['source_snapshot_sha256']}
+    f['source_snapshot_sha256'] = source['source_snapshot_sha256']
+    f['final_prediction_package']['execution_stage_manifest'] = {
+        'SIGNED_SOURCE_RECEIPT_VERIFIED': stage}
+    f['sha256'] = _sha({k: v for k, v in f.items() if k != 'sha256'})
+    checkpoint = tmp_path / 'synthetic_input'
+    checkpoint.mkdir()
+    (checkpoint / 'source_receipt_envelope.json').write_text(json.dumps(envelope))
+    stored = persist_phase(execution, 'SOURCE', 'synthetic-1', checkpoint,
+                           root=tmp_path / 'runtime/executions')
+    return f, Path(stored['path']) / 'source_receipt_envelope.json'
+
+
+def test_portable_source_checkpoint_binds_crypto_declared_active_and_ticket_exposure(tmp_path, monkeypatch):
+    import jra_production_postresult as module
+    import jra_pedigree_corpus as trust
+    f, path = _portable_source_checkpoint(tmp_path)
+    calls = []
+    monkeypatch.setattr(trust, '_attested', lambda p, **kw: calls.append((p, kw)) or True)
+    declared, cancelled = module._source_bound_result_universe(tmp_path, f)
+    assert set(declared) == {'1', '2', '4', '6', '13'} and cancelled == {'13'}
+    assert calls[0][0] == path
+    assert calls[0][1]['signer'] == 'km-jra-source-first-runner.yml'
+    assert calls[0][1]['not_after'].isoformat() == f['prediction_cutoff']
+    f['final_ticket']['tickets'][0]['selection'] = [4, 13]
+    with pytest.raises(ValueError, match='FROZEN_TICKET_OUTSIDE_ACTIVE_SOURCE'):
+        module._source_bound_result_universe(tmp_path, f)
+
+
+def test_portable_source_oidc_failure_or_original_bytes_tamper_is_not_accepted(tmp_path, monkeypatch):
+    import jra_production_postresult as module
+    import jra_pedigree_corpus as trust
+    f, path = _portable_source_checkpoint(tmp_path)
+    monkeypatch.setattr(trust, '_attested', lambda *a, **k: False)
+    with pytest.raises(ValueError, match='SOURCE_OIDC_NOT_VERIFIED'):
+        module._source_bound_result_universe(tmp_path, f)
+    path.write_text('{}')
+    with pytest.raises(ValueError, match='EXECUTION_STORE_FILE_HASH_MISMATCH'):
+        module._source_bound_result_universe(tmp_path, f)
+
+
+def _portable_normal_process(tmp_path, monkeypatch, parsed):
+    import jra_production_postresult as module
+    import jra_candidate_postresult_closedloop as result_module
+    from datetime import datetime, timezone
+    f = final()
+    output = tmp_path / 'runtime/final_artifacts' / (f['race_id'] + '.json')
+    output.parent.mkdir(parents=True)
+    output.write_text(json.dumps(f))
+    monkeypatch.setattr(module, 'verify_archived_final_signature', lambda *a, **k: None)
+    monkeypatch.setattr(module.subprocess, 'check_output', lambda *a, **k: '2026-10-11T06:00:00+00:00')
+    monkeypatch.setattr(module, '_intent_for', lambda *a: {
+        'race_date': '2026-10-11', 'race_no': 11, 'jra_source': {'jra_meeting_key': '0520260403'}})
+    def source_must_not_be_called(*a):
+        raise AssertionError('NORMAL_RESULT_NEW_SOURCE_GATE')
+    monkeypatch.setattr(module, '_source_bound_result_universe', source_must_not_be_called)
+    evidence = {'parsed': parsed,
+                'text': '払戻金 単勝 4 200円 馬単 4-2 1230円 3連複 2-4-6 2210円 3連単 4-2-6 9870円',
+                'url': 'https://www.jra.go.jp/JRADB/accessS.html', 'sha256': 'a' * 64,
+                'captured_at': '2026-10-11T07:00:00Z'}
+    monkeypatch.setattr(result_module, 'fetch_jra_result', lambda *a: evidence)
+    return module.process(tmp_path, f['race_id'], now=datetime(2026, 10, 11, 8, tzinfo=timezone.utc))
+
+
+def test_portable_normal_old_checkpoint_needs_no_new_source_or_oidc_gate(tmp_path, monkeypatch):
+    parsed = {'official': True, 'runners': [
+        {'runner_id': str(n), 'horse_no': n, 'finish': i + 1} for i, n in enumerate([4, 2, 6, 1])],
+        'non_finishers': []}
+    assert _portable_normal_process(tmp_path, monkeypatch, parsed) == 'RESULT_REQUEST_WRITTEN'
+
+
+def test_portable_duplicate_normal_universe_uses_old_strict_path(tmp_path, monkeypatch):
+    parsed = {'official': True, 'runners': [
+        {'runner_id': str(n), 'horse_no': n, 'finish': i + 1} for i, n in enumerate([4, 2, 6, 1, 1])],
+        'non_finishers': []}
+    with pytest.raises(ValueError, match='RUNNER_UNIVERSE_MISMATCH'):
+        _portable_normal_process(tmp_path, monkeypatch, parsed)

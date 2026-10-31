@@ -970,37 +970,58 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
 
 
 def request_postresult_worker(root, race_date, now, *, publish, send=None):
-    """Hand results to the existing independent workflow, never wait for RESULT."""
+    """Hand FINAL and zero-exposure decisions to their existing result workers."""
     path=root/'runtime/jra_race_day_plan'/f'{race_date}.state.json'
     state=json.loads(path.read_text()) if path.exists() else {}
-    previous=state.get('_postresult_worker') or {}
-    if previous.get('requested_at') and (now-_dt.datetime.fromisoformat(previous['requested_at'])).total_seconds()<1800:
-        return 'RECENT_RESULT_WORKER_REQUEST'
     d8=_dt.date.fromisoformat(race_date).strftime('%Y%m%d')
-    finals=list((root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'))
     due_final=False
-    for final_path in finals:
+    for final_path in (root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'):
         if (root/'runtime/learning_states'/final_path.name).exists():continue
         try:
             due_final |= _dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])<now
         except (OSError,ValueError,KeyError,TypeError):
             continue  # Status index owns this race's checkpoint integrity failure.
-    if not due_final:
-        return 'NO_DUE_FINAL'
-    state['_postresult_worker']={'requested_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
-    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
-    publish()
-    try:
-        if send is None:
-            subprocess.run(['gh','workflow','run','km-jra-production-postresult.yml','--ref','main'],
-                           check=True,cwd=root,capture_output=True,text=True,timeout=30)
-        else:send()
-        result='ACKNOWLEDGED'
-    except (subprocess.SubprocessError,OSError):
-        result='UNKNOWN_NO_IMMEDIATE_RETRY'
-    state=json.loads(path.read_text());state['_postresult_worker']['state']=result
-    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
-    return result
+    due_no_bet=False
+    for terminal_path in (root/'runtime/jra_no_bet_terminals').glob(f'KM-JRA-*-{d8}-R*.json'):
+        if (root/'runtime/jra_no_bet_learning'/terminal_path.name).exists():continue
+        if not (root/'runtime/jra_formal_intents'/terminal_path.name).exists():continue
+        try:
+            terminal=json.loads(terminal_path.read_text())
+            intent=json.loads((root/'runtime/jra_formal_intents'/terminal_path.name).read_text())
+            if not isinstance(terminal,dict) or not isinstance(intent,dict):continue
+            post=_dt.datetime.fromisoformat(terminal.get('scheduled_post_at') or intent['scheduled_post_at'])
+            # The dedicated worker verifies terminal and official OIDC captures.
+            # Match its existing acquisition window; never make a result early.
+            due_no_bet |= (terminal.get('decision')=='NO_BET' and
+                           terminal.get('total_investment')==0 and
+                           post+_dt.timedelta(minutes=10)<=now<=post+_dt.timedelta(days=7))
+        except (OSError,ValueError,KeyError,TypeError):
+            continue
+    outcomes=[]
+    for key, eligible, workflow in (
+        ('_postresult_worker',due_final,'km-jra-production-postresult.yml'),
+        ('_no_bet_postresult_worker',due_no_bet,'km-jra-no-bet-postresult-learning.yml'),
+    ):
+        if not eligible:continue
+        previous=state.get(key) or {}
+        if previous.get('requested_at') and (now-_dt.datetime.fromisoformat(previous['requested_at'])).total_seconds()<1800:
+            outcomes.append('RECENT_RESULT_WORKER_REQUEST');continue
+        state[key]={'requested_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
+        path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        publish()
+        try:
+            if send is None or key!='_postresult_worker':
+                subprocess.run(['gh','workflow','run',workflow,'--ref','main'],
+                               check=True,cwd=root,capture_output=True,text=True,timeout=30)
+            else:send()
+            result='ACKNOWLEDGED'
+        except (subprocess.SubprocessError,OSError):
+            result='UNKNOWN_NO_IMMEDIATE_RETRY'
+        state=json.loads(path.read_text());state[key]['state']=result
+        path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        outcomes.append(result)
+    return next((x for x in outcomes if x!='RECENT_RESULT_WORKER_REQUEST'),
+                outcomes[0] if outcomes else 'NO_DUE_FINAL')
 
 
 def merge_dispatch_state(remote: dict, local: dict) -> dict:
@@ -1009,7 +1030,7 @@ def merge_dispatch_state(remote: dict, local: dict) -> dict:
     for key, value in local.items():
         if key == "_result_runner_dispatched":
             out[key] = sorted(set(remote.get(key) or []) | set(value or []))
-        elif key=='_postresult_worker' and key in out:
+        elif key in ('_postresult_worker','_no_bet_postresult_worker') and key in out:
             out[key]=max([out[key],value],key=lambda x:x.get('requested_at',''))
         elif key not in out:
             out[key] = value
