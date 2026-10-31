@@ -24,14 +24,20 @@ def cohort():
     return build_registrations(discovery,authority,observed_at='2026-10-17T00:00:00+09:00')
 
 
-def test_official_36_intakes_do_not_trigger_source_or_claim_execution(tmp_path):
+def test_official_36_managed_races_register35_flat_without_source_or_claim(tmp_path):
     plan,records=cohort()
-    assert persist_registrations(tmp_path,plan,records)==36
-    assert sum(r['planned_required_cells'] for r in records.values())==9000
+    # The unchanged official fixture includes Tokyo9's9-runner jump race.
+    assert len(plan['management_race_ids'])==36
+    assert len(plan['scope_exclusions'])==1
+    assert plan['scope_exclusions'][0]['race_id']=='KM-JRA-TKY-20261018-R09'
+    assert plan['scope_exclusions'][0]['status']=='HOLD'
+    assert persist_registrations(tmp_path,plan,records)==35
+    assert sum(r['planned_required_cells'] for r in records.values())==8820
     assert sum(r['executed_cells'] for r in records.values())==0
     assert not (tmp_path/'runtime/jra_formal_intents').exists()
     assert {r['runner_universe_status'] for r in records.values()}=={'PENDING_OFFICIAL_PDF'}
-    assert len(plan['cohort']['race_ids'])==36
+    assert len(plan['cohort']['race_ids'])==35
+    assert 'KM-JRA-TKY-20261018-R09' not in records
     r=next(iter(records.values()))
     verify_registration(r,plan,race_id=r['race_id'],official_post=datetime.fromisoformat(r['intake_intent']['scheduled_post_at']))
     r['executed_cells']=20
@@ -198,10 +204,15 @@ def test_real_cohort_36_races_isolated_dispatch_and_official_time_update(tmp_pat
     for minute in range(8*60,17*60,5):
         when=datetime.fromisoformat(f'2026-10-18T{minute//60:02}:{minute%60:02}:00+09:00')
         tick(tmp_path,'2026-10-18',when,resolve=lambda date,venue:official[venue],dispatch=send,publish=lambda:None)
-    assert len(attempts)==len(set(attempts))==36
+    assert len(plan['management_race_ids'])==36
+    assert len(attempts)==len(set(attempts))==35
+    assert ('東京',9) not in attempts
     index=json.loads((tmp_path/'runtime/jra_race_day_status/2026-10-18.json').read_text())
-    assert index['cohort_metrics']['denominator']==36
-    assert index['cohort_metrics']['dispatch_acknowledged']==35
+    assert len(index['races'])==36
+    assert index['cohort_metrics']['denominator']==35
+    assert index['cohort_metrics']['dispatch_acknowledged']==34
     assert index['cohort_metrics']['final_artifacts_present']==0
     schedule=json.loads((tmp_path/'runtime/jra_race_day_plan/2026-10-18.schedule.json').read_text())
+    assert schedule['KM-JRA-TKY-20261018-R09']['status']=='SCOPE_HOLD'
+    assert next(r for r in index['races'] if r['race_id']=='KM-JRA-TKY-20261018-R09')['state']=='SCOPE_HOLD'
     assert schedule['KM-JRA-TKY-20261018-R01']['registration_reconciliation']['post_changed']

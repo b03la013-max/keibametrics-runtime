@@ -34,7 +34,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from jra_race_day_resolver import (JST, VENUES, resolve_day, resolve_meetings,
-                                   venue_code, official_navigation_failure)
+                                   venue_code, official_navigation_failure,
+                                   official_jump_race, JUMP_SCOPE_REASON)
 
 PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012"
 DEFAULT_WINDOW = (55, 30)
@@ -184,6 +185,18 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
     schedule_path = plan_dir / f"{race_date}.schedule.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     schedule = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else {}
+    # Existing approved Scope exclusions are management rows, never dispatch
+    # entries. Preserve them even when the registered cohort contains flat only.
+    for held in plan.get('scope_exclusions') or []:
+        rid=held.get('race_id') or ''
+        if (held.get('race_type')!='JUMP' or held.get('status') not in {'HOLD','SCOPE_HOLD'}
+                or held.get('action')!='EXCLUDE_FROM_FLAT_DISPATCH_ONLY'
+                or not rid.startswith('KM-JRA-') or race_date.replace('-','') not in rid):
+            continue
+        previous=schedule.get(rid) or {}
+        details={k:held[k] for k in ('post','title','venue','race_no','official_day_row') if k in held}
+        schedule[rid]={**details,**previous,'status':'SCOPE_HOLD'}
+        schedule[rid].setdefault('scope_hold_reason',held.get('reason') or JUMP_SCOPE_REASON)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
     days: dict = cache.setdefault("days", {}) if cache is not None else {}
@@ -249,10 +262,18 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
         hh, mm = map(int, race["post_time"].split(":"))
         d = _dt.date.fromisoformat(race_date)
         post = _dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
+        previous_schedule = schedule.get(rid) or {}
         schedule[rid] = {"post": post.isoformat(), "title": race.get("title"), "venue": venue,
                          "race_no": race_no, "official_day_row": race.get("raw"),
                          "dispatch_window_open": (post - _dt.timedelta(minutes=window[0])).isoformat(),
                          "dispatch_window_close": (post - _dt.timedelta(minutes=window[1])).isoformat()}
+        if official_jump_race(race):
+            prior_hold = previous_schedule if previous_schedule.get("status") == "SCOPE_HOLD" else {}
+            schedule[rid] = {**prior_hold, **schedule[rid], "status": "SCOPE_HOLD"}
+            schedule[rid].setdefault("scope_hold_reason", JUMP_SCOPE_REASON)
+            out.append({"race_id": rid, "status": "SCOPE_HOLD",
+                        "reason": schedule[rid]["scope_hold_reason"]})
+            continue  # No registration/claim/recovery/dispatch for the jump lane.
         if venue in routing:
             schedule[rid].update(routing_basis='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED',
                                  source_accepted=False)
