@@ -210,6 +210,24 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
         req.pop(name, None)
         if name in prepared:
             req[name] = deepcopy(prepared[name])
+    # Keep the per-runner audit from the same original report verified above.
+    # Do not recompile against a later corpus merely to populate presentation.
+    req.pop("source_to_evidence_feature_runner_coverage", None)
+    source_report = report.get("source_feature_report")
+    if isinstance(source_report, dict):
+        report_rows = source_report.get("runners") or {}
+        fields = ("factual_runner_updates", "generated_production_feature_count",
+                  "shadow_observation_count", "merge_conflicts", "source_only_formal_base_ready",
+                  "source_only_coverage", "automation_gap", "coverage", "source_fact_availability",
+                  "source_feature_trace", "source_feature_trace_summary")
+        # Older reports without a detailed trace remain explicitly unproved;
+        # their missing presentation detail is never filled from today's corpus.
+        if report_rows and all(all(name in row for name in fields) for row in report_rows.values()):
+            req["source_to_evidence_feature_runner_coverage"] = {
+                str(rid): {**{name: deepcopy(row[name]) for name in fields},
+                           "rule_evaluator_inputs_sha256": (row.get("rule_evaluator_inputs") or {}).get("sha256")}
+                for rid, row in report_rows.items()
+            }
     # Runtime must supply an actual Base44 session. Never mint one here.
     validate_orchestration_ref(req)
     static = deepcopy(owner["static_prediction"])

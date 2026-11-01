@@ -25,6 +25,7 @@ from statistics import mean, pstdev
 from typing import Any
 
 from jra_evidence_feature_normalizer_production import comment_band, percentile_band, rate_band
+from jra_source_runtime.jra_observed_context import resolve_observed_context
 
 PROFILE = "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.1-20261010"
 RULE_AUTHORITY = "OWNER-AUTHORIZED-NEW-RULE-20261010 / UNVALIDATED"
@@ -141,6 +142,12 @@ def class_rank(text: Any) -> int | None:
     return None
 
 
+def _class_at_least(text: Any, minimum: int) -> bool:
+    """Preserve the valid zero class (maiden/newcomer); reject only unknowns."""
+    rank = class_rank(text)
+    return rank is not None and rank >= minimum
+
+
 def decode_passing_positions(digits: str, field_size: Any) -> list[int] | None:
     s = str(digits or "")
     try:
@@ -242,7 +249,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         return {}
     sha = str(source.get("source_snapshot_sha256") or "")
     freeze, cutoff = _dt(source.get("source_freeze_at")), _dt(source.get("prediction_cutoff"))
-    ctx = source.get("jra_race_context") or {}
+    ctx = resolve_observed_context(source)
     day = _date((source.get("source_race_context") or {}).get("race_date") or ctx.get("race_date"))
     if not (sha and freeze and cutoff and freeze <= cutoff and day):
         return {}
@@ -304,9 +311,21 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         g = (race.get("race_environment") or {}).get("going")
         if g:
             today_going = str(g)
-    env_now = (source.get("jra_official_race_card_detail") or {}).get("race_environment") or {}
-    if env_now.get("going") and _surface(env_now.get("going_surface")) == surface:
-        today_going = str(env_now["going"])
+    # The receipt-bound context may come from a later official reobservation.
+    # A retained primary card must not restore its earlier going after that
+    # context has been independently checked by the shared resolver.
+    going_refs = []
+    going_source = "same_day_official"
+    if ctx.get("going") or ctx.get("track_condition"):
+        today_going = str(ctx.get("going") or ctx["track_condition"])
+        going_source = "receipt_bound_official_context"
+        if ctx.get("context_source_snapshot_sha256"):
+            going_refs.append("SOURCE-SNAPSHOT:" + ctx["context_source_snapshot_sha256"])
+    else:
+        env_now = (source.get("jra_official_race_card_detail") or {}).get("race_environment") or {}
+        if env_now.get("going") and _surface(env_now.get("going_surface")) == surface:
+            today_going = str(env_now["going"])
+            going_source = "primary_official_card"
     top3_front, top3_inner, sd_refs = [], [], []
     for race in same_day:
         runners = [r for r in race.get("runners") or [] if isinstance(r, dict)]
@@ -577,8 +596,8 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         if today_going and surface:
             gr = [r for r in runs if r.get("surface") == surface and str(r.get("going") or "") == today_going]
             if len(gr) >= k:
-                put("going_fit", percentile_band(mean(_nf(r) for r in gr)), href + sd_refs,
-                    f"today_going_from_same_day_official={today_going}; normalized_finish={mean(_nf(r) for r in gr):.3f}; runs={len(gr)}", len(gr))
+                put("going_fit", percentile_band(mean(_nf(r) for r in gr)), href + sd_refs + going_refs,
+                    f"today_going_from_{going_source}={today_going}; normalized_finish={mean(_nf(r) for r in gr):.3f}; runs={len(gr)}", len(gr))
         if len(top3_front) >= 6 and len(early) >= k:
             bias = sum(top3_front) / len(top3_front)
             style = mean(early)
@@ -712,7 +731,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                     ped("pedigree_distance", "sire", sire, lambda r: r["surface"] == surface and r.get("distance_m") is not None
                         and abs(int(r["distance_m"]) - int(distance)) <= 200, 3, 8, f"surface={surface}; distance={distance}±200")
             if cur_class is not None:
-                ped("pedigree_class", "sire", sire, lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 3, 6,
+                ped("pedigree_class", "sire", sire, lambda r: _class_at_least(r.get("race_name"), cur_class), 3, 6,
                     f"class_rank>={cur_class}")
             # Damsire fallbacks: only when the sire sample is unmet, with a
             # stricter minimum, a distinct rule id and the damsire named.
@@ -723,7 +742,7 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                     rule=FALLBACK_RULES["pedigree_distance"])
             if cur_class is not None and "pedigree_class" not in feats:
                 ped("pedigree_class", "damsire", damsire,
-                    lambda r: (class_rank(r.get("race_name")) or -1) >= cur_class, 4, 10,
+                    lambda r: _class_at_least(r.get("race_name"), cur_class), 4, 10,
                     f"DAMSIRE_FALLBACK; class_rank>={cur_class}", rule=FALLBACK_RULES["pedigree_class"])
             physical_fit("sire", sire, RULES["physical_pedigree_fit"])
             if "physical_pedigree_fit" not in feats:

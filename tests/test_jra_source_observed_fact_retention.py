@@ -104,7 +104,7 @@ class ObservedFactRetention(unittest.TestCase):
     def test_saved_oct18_cards_retain_frames_and_current_rider_identity(self):
         paths=sorted((ROOT/'runtime/requests').glob('KM-JRA-*-20261018-*-FORMAL.json'))
         if not paths:self.skipTest('stored official cards missing')
-        runners=0;rider_recoveries=0
+        runners=0;rider_recoveries=0;equipment_observations=0
         for path in paths:
             request=json.loads(path.read_text())
             source=request['source_snapshot']; old=source['jra_official_race_card_detail']
@@ -124,8 +124,17 @@ class ObservedFactRetention(unittest.TestCase):
                         self.assertIsNone(before['jockey_profile_token'])
                         self.assertRegex(after['jockey_profile_token'],r'^pw04kmk[0-9]{6}/[0-9A-Fa-f]{2}$')
                         rider_recoveries+=1
+                    self.assertNotIn('observed_current_equipment',before)
+                    if 'observed_current_equipment' in after:
+                        self.assertEqual(after['observed_current_equipment'],{
+                            'blinkers_worn':True,
+                            'evidence_type':'JRA_OFFICIAL_CURRENT_HORSE_NUMBER_CELL_MARKER',
+                            'marker_alt':'ブリンカー着用'})
+                        self.assertIs(after['observed_current_equipment']['blinkers_worn'],True)
+                        equipment_observations+=1
                     unchanged=set(before)|set(after)
-                    unchanged-={'frame_no','jockey','jockey_profile_token','recent_runs'}
+                    unchanged-={'frame_no','jockey','jockey_profile_token','recent_runs',
+                                'observed_current_equipment'}
                     self.assertEqual({k:before.get(k) for k in unchanged},
                                      {k:after.get(k) for k in unchanged})
                     self.assertEqual(len(before['recent_runs']),len(after['recent_runs']))
@@ -139,6 +148,7 @@ class ObservedFactRetention(unittest.TestCase):
                     runners+=1
         self.assertEqual((len(paths),runners),(34,437))
         self.assertEqual(rider_recoveries,10)
+        self.assertEqual(equipment_observations,61)
 
     def test_saved_tokyo11_omitted_weights_reach_existing_feature_rule(self):
         from jra_race_card_detail import runner_universes_from_detail
