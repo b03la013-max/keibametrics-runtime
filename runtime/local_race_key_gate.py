@@ -18,6 +18,60 @@ class RaceKeyGateError(ValueError):
     pass
 
 
+
+def attest_numeric_quality(entry_report: dict) -> dict:
+    """Report numeric evidence separately from SOURCE/FINAL lifecycle receipts.
+
+    Historical FNB FULL-LIFECYCLE-DEGRADED records can have zero calculated
+    indices and every required cell RULED-HOLD.  Their signatures and
+    lifecycle events must remain readable, but must never be described as
+    complete numerical calculations. This metadata-only audit changes no
+    Owner, numeric mapping, role, ticket, KRS or signature authority.
+    """
+    completion = entry_report.get("completion")
+    coverage = completion.get("numeric_coverage") if isinstance(completion, dict) else None
+    if not isinstance(coverage, dict):
+        return {"status": "NUMERICAL_COUNTS_NOT_REPORTED",
+                "all_cells_calculated": False,
+                "reported_numeric_value_closure": False,
+                "independent_evidence_verification": "NOT_PERFORMED"}
+    keys = ("required_count", "calculated_count", "ruled_neutral_count",
+            "ruled_hold_count", "not_applicable_count", "unresolved_count")
+    values = {}
+    for key in keys:
+        raw = coverage.get(key, 0 if key not in {"required_count", "calculated_count"} else None)
+        if type(raw) is not int or raw < 0:
+            return {"status": "NUMERICAL_COUNTS_INVALID",
+                    "all_cells_calculated": False,
+                    "reported_numeric_value_closure": False,
+                    "independent_evidence_verification": "NOT_PERFORMED"}
+        values[key] = raw
+    required = values["required_count"]
+    calculated = values["calculated_count"]
+    neutral = values["ruled_neutral_count"]
+    hold = values["ruled_hold_count"]
+    na = values["not_applicable_count"]
+    unresolved = values["unresolved_count"]
+    if required <= 0 or calculated + neutral + hold + na + unresolved != required:
+        status = "NUMERICAL_COUNTS_INVALID"
+    elif hold or unresolved:
+        status = "NUMERICAL_HELD_OR_UNRESOLVED"
+    elif na:
+        status = "NUMERICAL_NOT_APPLICABLE_PRESENT"
+    elif calculated == 0:
+        status = "NUMERICAL_RULED_NEUTRAL_ONLY"
+    elif neutral:
+        status = "NUMERICAL_CALCULATED_WITH_RULED_NEUTRAL"
+    else:
+        status = "NUMERICAL_ALL_CALCULATED_REPORTED"
+    valid = status not in {"NUMERICAL_COUNTS_INVALID", "NUMERICAL_HELD_OR_UNRESOLVED",
+                            "NUMERICAL_NOT_APPLICABLE_PRESENT"}
+    return {**values, "status": status,
+            "all_cells_calculated": status == "NUMERICAL_ALL_CALCULATED_REPORTED",
+            "reported_numeric_value_closure": valid,
+            "independent_evidence_verification": "NOT_PERFORMED"}
+
+
 def readback_final(execution_id, job_status='readback', *, repo_root=None,
                    allow_network=True, _verified_final_response=None):
     """Recover canonical LOCAL content; never generate or POST a prediction.
