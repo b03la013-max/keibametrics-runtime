@@ -307,6 +307,7 @@ def certify(request: dict, entry_report: dict) -> dict:
         "prestart_delivery_pass": False,
         "service_completion": False,
         "user_received_at": None,
+        "numeric_evidence_quality": attest_numeric_quality(entry_report),
     }
     if status == "HOLD":
         code = str(entry_report.get("code") or "")
