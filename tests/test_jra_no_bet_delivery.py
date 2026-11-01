@@ -259,14 +259,14 @@ def mock_canonical_api(monkeypatch,artifact_path,directory,*,kind='SIGNED_FINAL'
     artifact=json.loads(Path(artifact_path).read_text());race=artifact['race_id']
     files={'runtime/final_artifacts/'+race+'.json':Path(artifact_path)} if kind=='SIGNED_FINAL' else {
         'runtime/jra_no_bet_terminals/'+artifact['source_execution_id']+'.json':Path(artifact_path)}
-    names=['presentation.json','presentation_detail.json','presentation.md','complete_body.json','complete_body.txt'] if kind=='SIGNED_FINAL' else [
-        'no_bet_presentation.json','no_bet_presentation_detail.json','no_bet_presentation.md']
+    names=['presentation.json','presentation_detail.json','presentation.md'] if kind=='SIGNED_FINAL' else []
     files.update({'runtime/jra_delivery/'+race+'/'+name:Path(directory)/name for name in names})
     original=projection.subprocess.run
     def gh(command,**kwargs):
         if command[:2]!=['gh','api']:return original(command,**kwargs)
         assert '--method' in command and command[command.index('--method')+1]=='GET'
         relative=command[4].split('/contents/',1)[1].split('?ref=',1)[0]
+        assert 'complete_body' not in relative and 'no_bet_presentation' not in relative
         if missing:return SimpleNamespace(returncode=1,stdout='',stderr='not found')
         value=files[relative].read_bytes()
         return SimpleNamespace(returncode=0,stdout=hashlib.sha1(b'blob '+str(len(value)).encode()+b'\0'+value).hexdigest()+'\n',stderr='')
@@ -292,13 +292,10 @@ def test_global_flag_does_not_activate_disabled_private_scope(tmp_path,monkeypat
     assert result['reason']=='OWNER_C_SCOPE_NOT_ACTIVATED' and result['send_attempted'] is False
 
 
-def test_signed_completion_event_requires_remote_saved_body_and_keeps_receipt_private(prepared_signed,tmp_path,monkeypatch):
+def test_signed_completion_event_creates_exact_body_privately_without_public_mutation(prepared_signed,tmp_path,monkeypatch):
     final,args,transport,at,bundle=prepared_signed
     artifact=tmp_path/'final.json';artifact.write_text(json.dumps(final))
-    delivery.save_complete_body(final,args['presentation_dir'],root=ROOT,created_at=at.isoformat())
-    before=(args['presentation_dir']/'complete_body.json').read_bytes()
-    delivery.save_complete_body(final,args['presentation_dir'],root=ROOT,created_at='2099-01-01T00:00:00Z')
-    assert before==(args['presentation_dir']/'complete_body.json').read_bytes()
+    public_before={p:p.read_bytes() for p in Path(args['presentation_dir']).iterdir()}
     mock_canonical_api(monkeypatch,artifact,args['presentation_dir'])
     cfg=config_file(tmp_path,args['authorization'],args['private_store'])
     monkeypatch.setenv('KM_JRA_SELF_DELIVERY_ENABLED','true');monkeypatch.setenv('KM_JRA_DELIVERY_CONFIG_PATH',str(cfg))
@@ -306,6 +303,12 @@ def test_signed_completion_event_requires_remote_saved_body_and_keeps_receipt_pr
     monkeypatch.setattr(delivery,'GmailSelfTransport',lambda **kwargs:transport)
     result=delivery.dispatch_owner_delivery_event(artifact,presentation_dir=args['presentation_dir'],root=ROOT,
                     canonical_ref='3'*40,now=lambda:at)
+    assert {p:p.read_bytes() for p in Path(args['presentation_dir']).iterdir()}==public_before
+    private=Path(args['private_store'])/'canonical'/final['race_id']/final['sha256']
+    before=(private/'complete_body.json').read_bytes()
+    delivery.save_complete_body(final,private,root=ROOT,created_at='2099-01-01T00:00:00Z')
+    assert (private/'complete_body.json').read_bytes()==before
+    assert all(not p.stat().st_mode&0o077 for p in (Path(args['private_store']),private))
     assert result['NOTIFICATION_SENT'] is True and result['DESTINATION_ARRIVAL_CONFIRMED'] is True
     assert result['delivered_before_cutoff'] is True and result['USER_ACKNOWLEDGED'] is None
     assert all(value not in json.dumps(result) for value in ('PRIVATE_FAKE_SECRET','owner@example.invalid','offline-1'))
@@ -323,7 +326,6 @@ def test_signed_completion_event_requires_remote_saved_body_and_keeps_receipt_pr
 def test_completion_event_remote_mismatch_never_reaches_oauth(prepared_signed,tmp_path,monkeypatch):
     final,args,transport,at,bundle=prepared_signed
     artifact=tmp_path/'final.json';artifact.write_text(json.dumps(final))
-    delivery.save_complete_body(final,args['presentation_dir'],root=ROOT,created_at=at.isoformat())
     mock_canonical_api(monkeypatch,artifact,args['presentation_dir'],missing=True)
     cfg=config_file(tmp_path,args['authorization'],args['private_store'])
     monkeypatch.setenv('KM_JRA_SELF_DELIVERY_ENABLED','true');monkeypatch.setenv('KM_JRA_DELIVERY_CONFIG_PATH',str(cfg))
@@ -331,6 +333,28 @@ def test_completion_event_remote_mismatch_never_reaches_oauth(prepared_signed,tm
     with pytest.raises(ValueError,match='CANONICAL_REMOTE_EXACT_BYTES_NOT_VERIFIED'):
         delivery.dispatch_owner_delivery_event(artifact,presentation_dir=args['presentation_dir'],root=ROOT,
                     canonical_ref='3'*40,now=lambda:at)
+
+
+def test_complete_body_rejects_public_output_before_any_projection_or_directory_creation(tmp_path,monkeypatch):
+    root=tmp_path/'checkout';directory=root/'runtime/jra_delivery/new-race'
+    with pytest.raises(ValueError,match='PRIVATE_BODY_OUTSIDE_REPOSITORY_REQUIRED'):
+        delivery.save_complete_body({},directory,root=root)
+    assert not directory.exists()
+
+
+def test_private_event_invalid_store_never_reaches_gmail_or_writes_public_body(prepared_signed,tmp_path,monkeypatch):
+    final,args,transport,at,bundle=prepared_signed
+    artifact=tmp_path/'final.json';artifact.write_text(json.dumps(final))
+    public_before={p:p.read_bytes() for p in Path(args['presentation_dir']).iterdir()}
+    args['private_store'].mkdir(mode=0o755)
+    cfg=config_file(tmp_path,args['authorization'],args['private_store'])
+    monkeypatch.setenv('KM_JRA_SELF_DELIVERY_ENABLED','true');monkeypatch.setenv('KM_JRA_DELIVERY_CONFIG_PATH',str(cfg))
+    monkeypatch.setattr(delivery,'GmailSelfTransport',lambda **kwargs:pytest.fail('OAuth constructor reached'))
+    with pytest.raises(ValueError,match='PRIVATE_BODY_DIRECTORY_0700_REQUIRED'):
+        delivery.dispatch_owner_delivery_event(artifact,presentation_dir=args['presentation_dir'],root=ROOT,
+                    canonical_ref='3'*40,now=lambda:at)
+    assert not list(args['private_store'].iterdir())
+    assert {p:p.read_bytes() for p in Path(args['presentation_dir']).iterdir()}==public_before
 
 
 def test_unknown_event_send_retains_private_attempt_and_no_false_provider_acceptance(case,tmp_path,monkeypatch):

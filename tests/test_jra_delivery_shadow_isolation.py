@@ -580,26 +580,28 @@ class CrossRunReadbackTests(unittest.TestCase):
     main()
    self.assertEqual(seen,[f['sha256']]);self.assertEqual(output.read_text(),'reused=true\nartifact_run_id=123\n')
 
- def test_reused_workflow_preserves_original_but_can_save_verified_complete_body(self):
+ def test_reused_workflow_preserves_original_and_only_public_compact_output(self):
   steps=yaml.safe_load((ROOT/'.github/workflows/km-formal-request-runner.yml').read_text())['jobs']['formal-run']['steps']
   publication=next(x for x in steps if x.get('name')=='Verify signed JRA FINAL and prepare exact canonical publication')
   self.assertIn('production_readback.outputs.reused',publication['env']['REUSED_PRODUCTION'])
   self.assertIn('readback=(--readback-only)',publication['run'])
-  self.assertIn('--save-complete-body',publication['run'])
+  self.assertIn('--compact-body',publication['run']);self.assertNotIn('--save-complete-body',publication['run'])
   persist=next(x for x in steps if x.get('name')=='Persist immutable FINAL or acceptance artifact')
   self.assertEqual(persist['if'],"steps.request.outputs.candidate_parallel != 'true'")
   self.assertIn('production_readback.outputs.reused',persist['env']['REUSED_PRODUCTION'])
-  protected,derivatives=persist['run'].split('# Reused FINALs may add the missing complete-body derivative only.',1)
+  protected,derivatives=persist['run'].split('# Stage only the established compact publication; full mail bodies stay private.',1)
   self.assertIn('if [ "$REUSED_PRODUCTION" != "true" ]; then',protected)
   for path in ('runtime/final_artifacts','runtime/acceptance_artifacts','runtime/mec_shadow_artifacts','runtime/role_rescue_shadow'):
    self.assertIn('git add '+path,protected);self.assertNotIn(path,derivatives)
-  self.assertIn('git add runtime/jra_delivery',derivatives)
+  self.assertNotIn('git add runtime/jra_delivery',derivatives)
+  self.assertIn('-name presentation.json',derivatives);self.assertNotIn('-name complete_body',derivatives)
   availability=next(x for x in steps if x.get('name')=='Verify canonical FINAL availability after publication')
   self.assertIn("production_readback.outputs.reused == 'false'",availability['if'])
   sender=next(x for x in steps if x.get('name')=='Owner-authorized self delivery of the completed JRA FINAL')
   self.assertIn("vars.KM_JRA_SELF_DELIVERY_ENABLED == 'true'",sender['if'])
   self.assertIn("steps.jra_canonical_availability.outcome == 'success' || steps.production_readback.outputs.reused == 'true'",sender['if'])
   self.assertIn('--send-event',sender['run']);self.assertIn('--published-ref "$(git rev-parse HEAD)"',sender['run'])
+  self.assertIn('> /dev/null',sender['run'])
   self.assertLess(steps.index(publication),steps.index(persist));self.assertLess(steps.index(persist),steps.index(availability))
   self.assertLess(steps.index(availability),steps.index(sender))
   compute=next(x for x in steps if x.get('id')=='formal_execution')
@@ -608,7 +610,7 @@ class CrossRunReadbackTests(unittest.TestCase):
   self.assertIn('REUSED_FINAL_READBACK_PUBLICATION_UNVERIFIED',audit['run'])
   self.assertNotIn('--published-ref',publication['run'])
 
- def test_reused_persist_shell_stages_only_body_derivative_without_original_recommit(self):
+ def test_reused_persist_shell_never_stages_new_complete_body_or_original_recommit(self):
   import os,subprocess
   steps=yaml.safe_load((ROOT/'.github/workflows/km-formal-request-runner.yml').read_text())['jobs']['formal-run']['steps']
   script=next(x['run'] for x in steps if x.get('name')=='Persist immutable FINAL or acceptance artifact')
@@ -633,9 +635,10 @@ class CrossRunReadbackTests(unittest.TestCase):
    (tools/'persist_local_checkpoints.py').write_text('from pathlib import Path\nPath("offline_persist_called").write_text("called")\n')
    result=subprocess.run(['bash','-c',script],cwd=root,env={**git_env,'REUSED_PRODUCTION':'true'},capture_output=True,text=True,timeout=10)
    self.assertEqual(result.returncode,0,result.stderr)
-   changed=subprocess.check_output(['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],cwd=root,env=git_env,text=True).splitlines()
-   self.assertEqual(changed,['runtime/jra_delivery/race/complete_body.json','runtime/jra_delivery/race/complete_body.txt'])
-   self.assertTrue((root/'offline_persist_called').exists())
+   changed=subprocess.check_output(['git','diff','--name-only','HEAD'],cwd=root,env=git_env,text=True).splitlines()
+   self.assertEqual(changed,[])
+   self.assertFalse((root/'offline_persist_called').exists())
+   self.assertEqual(subprocess.check_output(['git','ls-files','--','runtime/jra_delivery/race/complete_body.*'],cwd=root,env=git_env,text=True),'')
    for name,raw in originals.items():self.assertEqual((root/name).read_bytes(),raw)
 
  def test_cross_run_checkpoint_compute_restores_existing_shadow_offline(self):

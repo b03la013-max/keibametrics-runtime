@@ -244,8 +244,8 @@ def test_genuine_parent_final_required_before_canonical_entry(tmp_path,monkeypat
         assert report['parent_final_verified']['external_krs_calls']==0
 
 
-REVIEWED_DELIVERY_PREFIX_SHA256='99e682bc49d44c77d9f9d60c106be1ea6916469fd76f7577d2eaeca9a60a8c4a'
-REVIEWED_NO_BET_PROJECTION_STEP_SHA256='e4c17d9b6719ec922ba4183dade2095821d2a4f0db6e41dfb7bee7a397795b8e'
+REVIEWED_DELIVERY_PREFIX_SHA256='56e0fc7fad5deac4ea6dc58741dc1a2e7d769dccac9f97d5d8fdbc4da8d9269c'
+REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256='336f50e2f61c2c3cfafa66a204c3f533a58a5df06030309664ee4e98e4f52a38'
 
 
 def _assert_production_prefix_boundary(workflow,original):
@@ -264,12 +264,13 @@ def _assert_production_prefix_boundary(workflow,original):
     expected=yaml.load(baseline,Loader=yaml.BaseLoader)
     assert set(actual['jobs'])==set(expected['jobs'])
     steps=actual['jobs']['orchestrate']['steps']
-    name='Prepare canonical SOURCE and OIDC-bound JRA NO-BET presentation'
-    additions=[step for step in steps if step.get('name')==name]
-    assert len(additions)==1
-    encoded=json.dumps(additions[0],ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()
-    assert hashlib.sha256(encoded).hexdigest()==REVIEWED_NO_BET_PROJECTION_STEP_SHA256
-    steps.remove(additions[0])
+    assert not any(step.get('name')=='Prepare canonical SOURCE and OIDC-bound JRA NO-BET presentation' for step in steps)
+    # Public read-back retains its original compact projection; only the two
+    # explicit display switches/header are reversed for the old prefix check.
+    readback=next(step for step in steps if step.get('id')=='final_readback')
+    assert readback['run'].count('--compact-body')==2
+    readback['run']=readback['run'].replace(' --compact-body','').replace(
+        'Existing Signed FINAL — compact presentation','Existing Signed FINAL — completed presentation')
     # The existing upload must remain a separate original step, never shell text.
     assert len([step for step in steps if step.get('name')==
                 'Upload signed-source JRA zero-investment terminal'
@@ -280,17 +281,12 @@ def _assert_production_prefix_boundary(workflow,original):
     for key in ('KM_JRA_SELF_DELIVERY_ENABLED','KM_JRA_DELIVERY_CONFIG_PATH'):
         assert candidate['env'].pop(key)=='${{ vars.'+key+' }}'
     run=candidate['run']
-    extra='''  RID="$(python -c 'import json,os;print(json.load(open(os.environ["INTENT_FILE"]))["race_id"])')"
-  if [ -d "runtime/jra_delivery/$RID" ]; then git add "runtime/jra_delivery/$RID"; fi
-'''
-    assert run.count(extra)==1
-    run=run.replace(extra,'',1)
-    start=run.index('# Independent exact remote bytes prove persistence even if the legacy\n')
+    start=run.index('# The existing Owner event verifies the public Terminal and generates\n')
     end=run.index('# A Production evidence NO_BET remains a valid zero-exposure\n',start)
     delivery=run[start:end]
-    assert delivery.index('--verify-canonical-ref')<delivery.index('--send-event')
-    assert 'if [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]; then' in delivery
-    assert 'no_bet_canonical_readback_verified=false' in delivery
+    assert hashlib.sha256(delivery.encode()).hexdigest()==REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256
+    assert 'if [ -n "$NO_BET_TARGET" ] && [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]; then' in delivery
+    assert '> /dev/null' in delivery and 'runtime_out/jra_no_bet_delivery_event.json' not in delivery
     candidate['run']=run[:start]+run[end:]
     # Exact original objects include all old source commands, numeric/KRS
     # dispatch, upload, retry/temporal guards, schedule and job metadata.
@@ -313,7 +309,7 @@ def test_fixed_model_five_code_files_and_production_prefix_are_unchanged():
     assert 'BVI_ENV_PREDICTION_INDEPENDENT_TIMESTAMP_NOT_PRE_CUTOFF' in sidecar
 
 
-@pytest.mark.parametrize('mutation',['source_step','upload_step','projection_guard','trigger'])
+@pytest.mark.parametrize('mutation',['source_step','upload_step','private_delivery_guard','trigger'])
 def test_resealing_a_non_delivery_change_cannot_bypass_original_production_boundary(monkeypatch,mutation):
     workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
     original=s.subprocess.check_output(['git','show','b0a377ae06a2d3d15bc47863585e18388e4fea46:.github/workflows/km-jra-formal-single-entry.yml'],cwd=ROOT,text=True)
@@ -326,12 +322,13 @@ def test_resealing_a_non_delivery_change_cannot_bypass_original_production_bound
         first['run']=first['run'].replace('km-jra-source-first-runner.yml','UNAPPROVED-SOURCE.yml',1)
     elif mutation=='upload_step':
         steps[:]=[step for step in steps if step.get('name')!='Upload signed-source JRA zero-investment terminal']
-    elif mutation=='projection_guard':
-        next(step for step in steps if step.get('name')=='Prepare canonical SOURCE and OIDC-bound JRA NO-BET presentation')['if']='true'
+    elif mutation=='private_delivery_guard':
+        step=next(step for step in steps if step.get('id')=='candidate_parallel')
+        step['run']=step['run'].replace('&& [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]','&& true',1)
     else:value['on']['workflow_dispatch']['inputs']['intent_path']['required']='false'
     altered=yaml.dump(value,sort_keys=False)+marker+sidecar
     # Even an accidental new whole-prefix hash cannot authorize these changes:
-    # original objects and the exact new readonly projection guard still bind.
+    # original objects and the exact private delivery block still bind.
     monkeypatch.setattr(sys.modules[__name__],'REVIEWED_DELIVERY_PREFIX_SHA256',
         hashlib.sha256(altered.split(marker)[0].encode()).hexdigest())
     with pytest.raises(AssertionError):_assert_production_prefix_boundary(altered,original)

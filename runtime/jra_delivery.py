@@ -180,10 +180,10 @@ def _delivery_chunks(body,part_bytes):
 
 
 def save_complete_body(final,directory,*,root,created_at=None):
-    """Additional immutable full-text derivative; never rewrite saved compact files."""
+    """Private immutable full text; never add mail content to the public checkout."""
     import hashlib
     from jra_presentation import read_presentation,complete_body
-    directory=Path(directory)
+    directory=_private_delivery_directory(directory,root=root)
     bundle=read_presentation(directory,final=final,root=root,
         expected_race_id=final['race_id'],expected_final_sha256=final['sha256'])
     text=complete_body(bundle,final)
@@ -191,6 +191,8 @@ def save_complete_body(final,directory,*,root,created_at=None):
              'final_sha256':final['sha256'],'source_sha256':bundle['manifest']['source_sha256'],
              'presentation_sha256':bundle['manifest']['sha256'],'body_sha256':hashlib.sha256(text.encode()).hexdigest()}
     manifest_path=directory/'complete_body.json';text_path=directory/'complete_body.txt'
+    if manifest_path.is_symlink() or text_path.is_symlink():
+        raise ValueError('JRA_DELIVERY_PRIVATE_BODY_SYMLINK')
     if manifest_path.exists():
         old=json.loads(manifest_path.read_text())
         if (old.get('sha256')!=_sha({k:v for k,v in old.items() if k!='sha256'})
@@ -200,23 +202,83 @@ def save_complete_body(final,directory,*,root,created_at=None):
         return old
     if text_path.exists() and text_path.read_bytes()!=text.encode():
         raise ValueError('JRA_DELIVERY_IMMUTABLE_COMPLETE_BODY_CONFLICT')
-    if not text_path.exists():text_path.write_bytes(text.encode())
+    if not text_path.exists():_create_private_body_file(text_path,text.encode())
     record={**binding,'created_at':created_at or datetime.now(timezone.utc).isoformat()}
     _delivery_time(record['created_at'])
     record['sha256']=_sha(record)
-    manifest_path.write_text(json.dumps(record,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
-    return record
+    _create_private_body_file(manifest_path,(json.dumps(record,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+    # Return the original winner's immutable timestamp after a concurrent save.
+    return save_complete_body(final,directory,root=root,created_at=created_at)
+
+
+def _create_private_body_file(path,raw):
+    import os
+    import tempfile
+    fd,name=tempfile.mkstemp(prefix='.body-',dir=path.parent)
+    try:
+        with os.fdopen(fd,'wb') as stream:
+            stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        try:os.link(name,path)  # Atomic no-replace on the existing shared POSIX Store.
+        except FileExistsError:pass
+    finally:os.unlink(name)
+
+
+def _private_delivery_directory(directory,*,root,create=False):
+    """Use the existing POSIX private Store only; this is not a network backend."""
+    directory=Path(directory).absolute();root=Path(root).resolve()
+    if any(p.is_symlink() for p in (directory,*directory.parents)):
+        raise ValueError('JRA_DELIVERY_PRIVATE_BODY_SYMLINK')
+    directory=directory.resolve()
+    if directory==root or root in directory.parents:
+        raise ValueError('JRA_DELIVERY_PRIVATE_BODY_OUTSIDE_REPOSITORY_REQUIRED')
+    if create:directory.mkdir(mode=0o700,parents=True,exist_ok=True)
+    if not directory.is_dir() or directory.stat().st_mode&0o077:
+        raise ValueError('JRA_DELIVERY_PRIVATE_BODY_DIRECTORY_0700_REQUIRED')
+    return directory
+
+
+def _prepare_private_event_presentation(artifact_path,*,presentation_dir,private_store,root,kind,
+                                        intent_path=None,source_envelope_path=None,producer_sha=None,trust=None):
+    """Copy verified compact inputs privately; generate no new public mail body."""
+    import re
+    artifact=json.loads(Path(artifact_path).read_text())
+    if (not re.fullmatch(r'KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}',str(artifact.get('race_id')))
+            or not re.fullmatch(r'[0-9a-f]{64}',str(artifact.get('sha256')))):
+        raise ValueError('JRA_DELIVERY_PRIVATE_BODY_BASIS_INVALID')
+    store=_private_delivery_directory(private_store,root=root,create=True)
+    directory=store/'canonical'/artifact['race_id']/artifact['sha256']
+    for p in (store/'canonical',directory.parent,directory):
+        _private_delivery_directory(p,root=root,create=True)
+    if kind=='SIGNED_FINAL':
+        from jra_presentation import read_presentation
+        read_presentation(presentation_dir,final=artifact,root=root,
+            expected_race_id=artifact['race_id'],expected_final_sha256=artifact['sha256'])
+        for name in ('presentation.json','presentation_detail.json','presentation.md'):
+            path=directory/name;raw=(Path(presentation_dir)/name).read_bytes()
+            if path.is_symlink() or (path.exists() and path.read_bytes()!=raw):
+                raise ValueError('JRA_DELIVERY_IMMUTABLE_PRIVATE_BODY_CONFLICT')
+            if not path.exists():_create_private_body_file(path,raw)
+        save_complete_body(artifact,directory,root=root)
+    elif kind=='NO_BET':
+        from jra_no_bet_presentation import build_no_bet_presentation,save_no_bet_presentation
+        if any((directory/name).is_symlink() for name in
+                ('no_bet_presentation.json','no_bet_presentation_detail.json','no_bet_presentation.md')):
+            raise ValueError('JRA_DELIVERY_PRIVATE_BODY_SYMLINK')
+        save_no_bet_presentation(directory,build_no_bet_presentation(artifact_path,intent_path=intent_path,
+            source_envelope_path=source_envelope_path,root=root,producer_sha=producer_sha,trust=trust))
+    else:raise ValueError('JRA_DELIVERY_EVENT_KIND_INVALID')
+    return directory
 
 
 def verify_canonical_delivery_readback(artifact_path,*,presentation_dir,root,kind,canonical_ref,now=None):
-    """Read exact GitHub commit metadata; local bytes must match every stored blob."""
+    """Bind public signed originals/compact blobs to a separately private exact body."""
     import hashlib
     import re
     import subprocess
     from urllib.parse import quote
     if not re.fullmatch(r'[0-9a-f]{40}',str(canonical_ref)):
         raise ValueError('JRA_DELIVERY_CANONICAL_COMMIT_REQUIRED')
-    root=Path(root).resolve();directory=Path(presentation_dir)
+    root=Path(root).resolve();directory=_private_delivery_directory(presentation_dir,root=root)
     artifact=json.loads(Path(artifact_path).read_text());race=artifact['race_id']
     if not re.fullmatch(r'KM-JRA-[A-Z]{3}-[0-9]{8}-R[0-9]{2}',race):
         raise ValueError('JRA_DELIVERY_RACE_ID_INVALID')
@@ -228,14 +290,14 @@ def verify_canonical_delivery_readback(artifact_path,*,presentation_dir,root,kin
             raise ValueError('JRA_DELIVERY_COMPLETE_BODY_NOT_SAVED')
         expected=save_complete_body(artifact,directory,root=root)
         files={'runtime/final_artifacts/'+race+'.json':Path(artifact_path)}
-        names=['presentation.json','presentation_detail.json','presentation.md','complete_body.json','complete_body.txt']
+        names=['presentation.json','presentation_detail.json','presentation.md']
         body_sha=expected['body_sha256']
     elif kind=='NO_BET':
         execution=artifact.get('source_execution_id')
         if not re.fullmatch(re.escape(race)+r'-[A-Za-z0-9._-]{1,100}',str(execution)):
             raise ValueError('JRA_DELIVERY_NO_BET_EXECUTION_ID_INVALID')
         files={'runtime/jra_no_bet_terminals/'+execution+'.json':Path(artifact_path)}
-        names=['no_bet_presentation.json','no_bet_presentation_detail.json','no_bet_presentation.md']
+        names=[]  # Full NO-BET text is private, never a required public GitBlob.
         body_sha=hashlib.sha256((directory/'no_bet_presentation.md').read_bytes()).hexdigest()
     else:raise ValueError('JRA_DELIVERY_EVENT_KIND_INVALID')
     files.update({'runtime/jra_delivery/'+race+'/'+name:directory/name for name in names})
@@ -612,12 +674,19 @@ def dispatch_owner_delivery_event(artifact_path,*,presentation_dir,root,kind='SI
     authorization=config.get(field) or {}
     if authorization.get('enabled') is not True:
         return {**summary,'reason':'OWNER_C_SCOPE_NOT_ACTIVATED'}
+    private_store=config.get('private_store')
+    if not isinstance(private_store,str) or not private_store:raise ValueError('JRA_DELIVERY_SHARED_PRIVATE_STORE_REQUIRED')
     if kind=='SIGNED_FINAL':
         _self_delivery_authorization(authorization)
+    else:
+        _no_bet_delivery_authorization(authorization)
+    presentation_dir=_prepare_private_event_presentation(artifact_path,presentation_dir=presentation_dir,
+        private_store=private_store,root=root,kind=kind,intent_path=intent_path,
+        source_envelope_path=source_envelope_path,producer_sha=producer_sha,trust=trust)
+    if kind=='SIGNED_FINAL':
         artifact=json.loads(Path(artifact_path).read_text())
         plan=_complete_delivery_plan(artifact,presentation_dir,root,config.get('part_bytes',250000))
     else:
-        _no_bet_delivery_authorization(authorization)
         plan=_no_bet_delivery_plan(artifact_path,presentation_dir=presentation_dir,intent_path=intent_path,
             source_envelope_path=source_envelope_path,root=root,producer_sha=producer_sha,
             part_bytes=config.get('part_bytes',250000),trust=trust)
@@ -631,8 +700,6 @@ def dispatch_owner_delivery_event(artifact_path,*,presentation_dir,root,kind='SI
     oauth=config.get('gmail_oauth') or {}
     transport=GmailSelfTransport(client_id=oauth.get('client_id'),client_secret=oauth.get('client_secret'),
                                  refresh_token=oauth.get('refresh_token'))
-    private_store=config.get('private_store')
-    if not isinstance(private_store,str) or not private_store:raise ValueError('JRA_DELIVERY_SHARED_PRIVATE_STORE_REQUIRED')
     try:
         receipt=_send_verified_delivery_plan(plan,root=root,private_store=private_store,authorization=authorization,
                       transport=transport,now=now,part_bytes=config.get('part_bytes',250000))
@@ -701,6 +768,7 @@ if __name__=='__main__':
         if not all((a.intent,a.source_envelope,a.producer_sha)) or a.published_ref:
             p.error('NO-BET projection requires --intent, --source-envelope, --producer-sha and cannot publish as FINAL')
         from jra_no_bet_presentation import build_no_bet_presentation,save_no_bet_presentation
+        _private_delivery_directory(a.output_dir,root=Path(__file__).resolve().parents[1],create=True)
         bundle=save_no_bet_presentation(a.output_dir,build_no_bet_presentation(a.no_bet_terminal,
             intent_path=a.intent,source_envelope_path=a.source_envelope,
             root=Path(__file__).resolve().parents[1],producer_sha=a.producer_sha))
