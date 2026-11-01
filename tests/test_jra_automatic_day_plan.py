@@ -231,6 +231,11 @@ def test_commit_contains_generated_plan_and_all_registrations_in_same_existing_t
 
 
 def test_existing_cli_prepares_plan_before_regular_tick_and_leaves_no_new_dispatcher(runtime,monkeypatch):
+    class FixedPlanClock(dt.datetime):
+        @classmethod
+        def now(cls,tz=None):
+            return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+    monkeypatch.setattr(autopilot._dt,'datetime',FixedPlanClock)
     events=[];original_tick=autopilot.tick
     monkeypatch.delenv('GITHUB_OUTPUT',raising=False)
     monkeypatch.setattr(autopilot,'resolve_meetings',lambda d:['東京','京都'])
