@@ -49,6 +49,16 @@ def attest_cell_grid(materialized: dict, *, expected_indices: list[str],
             or any(not isinstance(x, str) or not x for x in expected_runner_ids)
             or len(set(expected_runner_ids)) != len(expected_runner_ids)):
         issues.append("FROZEN_RUNNER_MANIFEST_INVALID")
+    # Malformed caller manifests are a FAIL, not an uncaught TypeError during
+    # set/dictionary operations on untrusted checkpoint JSON.
+    if not isinstance(expected_indices, list):
+        expected_indices = []
+    else:
+        expected_indices = [x for x in expected_indices if isinstance(x, str)]
+    if not isinstance(expected_runner_ids, list):
+        expected_runner_ids = []
+    else:
+        expected_runner_ids = [x for x in expected_runner_ids if isinstance(x, str)]
     if not isinstance(materialized, dict):
         materialized = {}
         issues.append("MATERIALIZED_ARTIFACT_MISSING")
@@ -60,8 +70,9 @@ def attest_cell_grid(materialized: dict, *, expected_indices: list[str],
         runners = []
     observed_ids = [r.get("runner_id") if isinstance(r, dict) else None for r in runners]
     if (len(observed_ids) != len(expected_runner_ids)
+            or any(not isinstance(i, str) for i in observed_ids)
             or len(set(str(i) for i in observed_ids)) != len(observed_ids)
-            or set(observed_ids) != set(expected_runner_ids)):
+            or set(str(i) for i in observed_ids) != set(expected_runner_ids)):
         issues.append("RUNNER_UNIVERSE_MISMATCH")
 
     totals = {name: 0 for name in STATUSES}
