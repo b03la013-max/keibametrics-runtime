@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, datetime, gzip, json, re, urllib.request
+import base64, datetime, gzip, hashlib, json, re, unicodedata, urllib.request
 from typing import Any, Dict, List, Tuple
 import fitz
 
@@ -229,6 +229,61 @@ def parse_runner_universe_from_pages(pages:List[str], race_no:int)->Dict[str,Any
     base["runner_universe_sha256"]=sha_obj(base)
     return base
 
+def _split_name_geometry_proof(blocks, horse_no, name):
+    """Exact name fragments on one baseline, bound to a printed horse number.
+
+    Text sorting can put a neighbouring column's jockey between spaced name
+    glyphs. Never concatenate page text: only the same block/baseline/font is
+    eligible, and a unique nearby left-hand printed number must also agree.
+    """
+    normalize=lambda text:re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(text)))
+    expected=normalize(name)
+    if not expected or not _kana_name(expected) or type(horse_no) is not int or not 1<=horse_no<=18:
+        return None
+    spans=[s for b in blocks if b.get('type')==0 for l in b.get('lines',[]) for s in l.get('spans',[])]
+    def baseline(span):
+        return float(span.get('origin',(0,span['bbox'][1]))[1])
+    hits=[]
+    for block in blocks:
+        groups=[]
+        for line in block.get('lines',[]):
+            for span in line.get('spans',[]):
+                text=normalize(span.get('text',''))
+                if not text:continue
+                group=next((g for g in groups if abs(baseline(g[0])-baseline(span))<=.5),None)
+                if group is None:groups.append([span])
+                else:group.append(span)
+        runs=[]
+        for baseline_spans in groups:
+            run=[]
+            for span in sorted(baseline_spans,key=lambda s:s['bbox'][0]):
+                size=float(span['size'])
+                if not _kana_name(normalize(span['text'])):
+                    if run:runs.append(run)
+                    run=[]
+                    continue
+                if run and (not -.5<=span['bbox'][0]-run[-1]['bbox'][2]<=1.5*size
+                            or abs(float(run[0]['size'])-size)>.05*float(run[0]['size'])):
+                    runs.append(run);run=[]
+                run.append(span)
+            if run:runs.append(run)
+        for group in runs:
+            if normalize(''.join(s['text'] for s in group))!=expected:continue
+            box=[min(s['bbox'][0] for s in group),min(s['bbox'][1] for s in group),
+                 max(s['bbox'][2] for s in group),max(s['bbox'][3] for s in group)]
+            size=float(group[0]['size'])
+            numbers=[s for s in spans if normalize(s.get('text','')).isdigit()
+                     and .7*size<=float(s.get('size',0))<=1.25*size
+                     and 0<=box[0]-s['bbox'][2]<=3*size
+                     and min(box[3],s['bbox'][3])>max(box[1],s['bbox'][1])]
+            if len(numbers)!=1 or normalize(numbers[0]['text'])!=str(horse_no):continue
+            hits.append({'horse_no':horse_no,'name':expected,'name_bbox':box,
+                         'printed_number':normalize(numbers[0]['text']),
+                         'number_bbox':list(numbers[0]['bbox']),
+                         'proof':'EXACT_SAME_BLOCK_BASELINE_NAME_AND_PRINTED_NUMBER'})
+    return hits[0] if len(hits)==1 else None
+
+
 def reconcile_pdf_column_with_detail(
     artifact:Dict[str,Any], race_no:int, detail_active:Dict[str,Any]
 )->Tuple[Dict[str,Any],Dict[str,Any]]:
@@ -259,6 +314,7 @@ def reconcile_pdf_column_with_detail(
             if clip is None:
                 continue
             target_text=page.get_text("text",clip=clip,sort=True)
+            target_blocks=page.get_text("dict",clip=clip)['blocks']
             page_no=i+1
             clip_coords=[round(float(clip.x0),3),round(float(clip.y0),3),
                          round(float(clip.x1),3),round(float(clip.y1),3)]
@@ -280,6 +336,7 @@ def reconcile_pdf_column_with_detail(
     lines=target_text.splitlines()
     missing=[]
     proofs=[]
+    geometry_proofs=[]
     for r in detail_runners:
         name=re.sub(r"\s+","",str(r.get("canonical_name") or r.get("name") or ""))
         if not name:
@@ -292,7 +349,14 @@ def reconcile_pdf_column_with_detail(
         pat="[^ァ-ヶー]{0,400}".join(re.escape(ch) for ch in name)
         hit=next((ln for ln in lines if re.search(pat,ln)),None)
         if hit is None:
-            missing.append({"horse_no":r.get("horse_no"),"name":name,"reason":"PDF_NAME_NOT_FOUND"})
+            proof=_split_name_geometry_proof(target_blocks,r.get('horse_no'),name)
+            normalized_names=[re.sub(r'\s+','',unicodedata.normalize('NFKC',str(x.get('canonical_name') or x.get('name') or ''))) for x in detail_runners]
+            if (proof is None or len(set(normalized_names))!=len(normalized_names)
+                    or hashlib.sha256(raw).hexdigest()!=snap.get('raw_sha256')):
+                missing.append({"horse_no":r.get("horse_no"),"name":name,"reason":"PDF_NAME_NOT_FOUND"})
+            else:
+                geometry_proofs.append(proof)
+                proofs.append({'horse_no':int(r['horse_no']),'name':name})
         else:
             proofs.append({"horse_no":int(r.get("horse_no")),"name":name})
 
@@ -340,6 +404,10 @@ def reconcile_pdf_column_with_detail(
         "production_authority":"JRA_OFFICIAL_PDF",
         "detail_role":"ROW_MAPPING_ONLY_AFTER_PDF_PRESENCE_PROOF",
     }
+    if geometry_proofs:
+        out['pdf_split_name_geometry_proofs']=geometry_proofs
+        out['runner_universe_sha256']=sha_obj({k:v for k,v in out.items() if k!='runner_universe_sha256'})
+        diag['pdf_split_name_geometry_proofs']=geometry_proofs
     diag["sha256"]=sha_obj(diag)
     return out,diag
 
