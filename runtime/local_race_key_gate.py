@@ -72,6 +72,56 @@ def attest_numeric_quality(entry_report: dict) -> dict:
             "independent_evidence_verification": "NOT_PERFORMED"}
 
 
+
+def attest_frozen_numeric_counts(entry_report: dict, materialized: dict | None,
+                                 mandatory: dict | None) -> dict:
+    """Cross-check REPORT counts against separately persisted FORMAL artifacts.
+
+    The FORMAL checkpoint reader validates its existing manifest hashes.
+    Matching counts are consistency evidence only: not fresh official SOURCE,
+    independent index evaluation, signer verification, or Delivery success.
+    Missing historical files remain UNKNOWN; this never changes a policy gate.
+    """
+    reported = attest_numeric_quality(entry_report)
+    keys = ("required_count", "calculated_count", "ruled_neutral_count",
+            "ruled_hold_count", "not_applicable_count", "unresolved_count")
+    if reported["status"] in {"NUMERICAL_COUNTS_NOT_REPORTED",
+                              "NUMERICAL_COUNTS_INVALID"}:
+        return {"status": "NUMERICAL_REPORT_COUNTS_UNVERIFIED",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    if not isinstance(materialized, dict) or not isinstance(mandatory, dict):
+        return {"status": "NUMERICAL_FROZEN_CHECKPOINT_UNAVAILABLE",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    a, b = materialized.get("numeric_coverage"), mandatory.get("numeric_coverage")
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return {"status": "NUMERICAL_FROZEN_COVERAGE_UNAVAILABLE",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    def take(obj):
+        values = {}
+        for key in keys:
+            val = obj.get(key, 0 if key not in {"required_count", "calculated_count"} else None)
+            if type(val) is not int or val < 0:
+                return None
+            values[key] = val
+        return values
+    expected = {key: reported[key] for key in keys}
+    mat, stage = take(a), take(b)
+    valid = mat is not None and stage is not None and expected == mat == stage
+    if valid:
+        valid = (mat["required_count"] > 0
+                 and sum(mat[k] for k in keys if k != "required_count")
+                 == mat["required_count"])
+    return {"status": ("NUMERICAL_FROZEN_COUNTS_CONSISTENT" if valid
+                       else "NUMERICAL_FROZEN_COUNTS_MISMATCH"),
+            "consistency_verified": bool(valid),
+            "independent_index_evaluation": "NOT_PERFORMED",
+            "qualifier": "EXISTING_FORMAL_MANIFEST_READBACK_NOT_FRESH_SIGNATURE",
+            "numeric_quality_status": reported["status"]}
+
+
 def readback_final(execution_id, job_status='readback', *, repo_root=None,
                    allow_network=True, _verified_final_response=None):
     """Recover canonical LOCAL content; never generate or POST a prediction.
@@ -338,6 +388,10 @@ def certify(request: dict, entry_report: dict) -> dict:
         raise RaceKeyGateError("SIGNED_FINAL_VERIFICATION_REQUIRED")
     if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != eid:
         raise RaceKeyGateError("FINAL_TEMPORAL_RACE_MISMATCH")
+    report["numeric_checkpoint_consistency"] = attest_frozen_numeric_counts(
+        entry_report,
+        o._load_checkpoint_json(formal, "numerical_materialization_summary.json"),
+        o._load_checkpoint_json(formal, "mandatory_stage_manifest.json"))
     return {**report, "status": "FULL_LIFECYCLE_EXECUTION_PASS",
             "formal_final_proven": True, "completion": True,
             "final_receipt_sha256": final["receipt_sha256"]}
