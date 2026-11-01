@@ -446,6 +446,9 @@ def fetch_and_enrich_official_pdf(
             raise ValueError("JRA_OFFICIAL_PDF_POST_CUTOFF")
         if serr:
             raise ValueError("JRA_OFFICIAL_PDF_SNAPSHOT_ERROR:"+"|".join(serr))
+    # Preserve the actually fetched official Raw even if both legacy parsers
+    # fail. Keeping evidence does not admit a runner universe or a SOURCE PASS.
+    artifact["sources"]=list(artifact.get("sources") or [])+[snapshot]
     doc=fitz.open(stream=raw,filetype="pdf")
     try:
         universe=parse_runner_universe_from_doc(doc,int(race_no))
@@ -457,7 +460,6 @@ def fetch_and_enrich_official_pdf(
     universe["raw_sha256"]=snapshot["raw_sha256"]
     universe["official_pdf_url"]=final_url
     universe["runner_universe_sha256"]=sha_obj({k:v for k,v in universe.items() if k!="runner_universe_sha256"})
-    artifact["sources"]=list(artifact.get("sources") or [])+[snapshot]
     artifact["jra_official_pdf_runner_universe"]=universe
     artifact["jra_official_pdf_runner_universe_sha256"]=sha_obj(universe)
     artifact["jra_declared_runner_universe"]={**universe,"universe_type":"DECLARED"}
