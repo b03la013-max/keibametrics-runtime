@@ -485,3 +485,28 @@ def test_prebootstrap_rebase_time_cannot_backdate_plan_observation(runtime,monke
     plan=read_plan(runtime)
     assert plan['automatic_generation']['observed_at']==after.isoformat()
     assert plan['cohort']['registered_at']==after.isoformat()
+
+
+@pytest.mark.parametrize('old_origin',[None,'schedule','state'])
+def test_scope_projection_preserves_observed_temporal_history_without_new_miss(runtime,old_origin):
+    cache={};assert create(runtime,cache)
+    plan_path=runtime/f'runtime/jra_race_day_plan/{DAY}.json';original_plan=plan_path.read_bytes()
+    rid='KM-JRA-KYO-20261108-R04';schedule_path=plan_path.with_name(DAY+'.schedule.json')
+    old_temporal='MISSED_WINDOW' if old_origin else None
+    state_path=plan_path.with_name(DAY+'.state.json')
+    if old_origin=='schedule':
+        schedule_path.write_text(json.dumps({rid:{'status':old_temporal,'legacy_evidence':'kept'}}))
+    if old_origin=='state':
+        state_path.write_text(json.dumps({rid:{'dispatch_state':'MISSED_WINDOW','claimed_at':NOW.isoformat()}},
+                                        sort_keys=True,indent=1)+'\n')
+        original_state=state_path.read_bytes()
+    for repeat in range(2):
+        tick(runtime,cache,dispatch=lambda *a:pytest.fail('fixture before intake'))
+        row=json.loads(schedule_path.read_text())[rid]
+        status=autopilot.race_status(runtime,rid,row,{},NOW)
+        assert row['status']==status['state']=='SCOPE_HOLD'
+        assert status['scope_decision']['race_type']=='JUMP'
+        assert status['temporal_status']==old_temporal
+        if old_origin=='schedule':assert row['legacy_evidence']=='kept'
+        if old_origin=='state':assert state_path.read_bytes()==original_state
+        assert plan_path.read_bytes()==original_plan

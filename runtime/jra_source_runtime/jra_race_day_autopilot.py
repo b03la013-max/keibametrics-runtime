@@ -197,7 +197,15 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             continue
         previous=schedule.get(rid) or {}
         details={k:held[k] for k in ('post','title','venue','race_no','official_day_row') if k in held}
-        schedule[rid]={**details,**previous,'status':'SOURCE_HOLD' if held.get('status')=='SOURCE_HOLD' else 'SCOPE_HOLD'}
+        scope_status='SOURCE_HOLD' if held.get('status')=='SOURCE_HOLD' else 'SCOPE_HOLD'
+        temporal=previous.get('temporal_status')
+        if (previous.get('status')=='MISSED_WINDOW'
+                or (state.get(rid) or {}).get('dispatch_state')=='MISSED_WINDOW'):
+            temporal='MISSED_WINDOW'
+        schedule[rid]={**details,**previous,'status':scope_status,
+                       'scope_decision':{'race_type':held['race_type'],'status':scope_status,
+                                         'reason':held.get('reason') or JUMP_SCOPE_REASON},
+                       'temporal_status':temporal}
         schedule[rid].setdefault('scope_hold_reason',held.get('reason') or JUMP_SCOPE_REASON)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
@@ -682,6 +690,9 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
     row["registered_intake"]=sched.get("registered_intake",False)
+    if sched.get('scope_decision'):
+        row['scope_decision']=sched['scope_decision']
+        row['temporal_status']=sched.get('temporal_status')
     if sched.get('current_official_row_hold'):
         row['current_official_row_hold']=sched['current_official_row_hold']
     if sched.get('routing_basis')=='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':
