@@ -189,13 +189,15 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
     # entries. Preserve them even when the registered cohort contains flat only.
     for held in plan.get('scope_exclusions') or []:
         rid=held.get('race_id') or ''
-        if (held.get('race_type')!='JUMP' or held.get('status') not in {'HOLD','SCOPE_HOLD'}
+        automatic=bool(plan.get('automatic_generation'))
+        if (held.get('race_type') not in ({'JUMP','UNKNOWN','FLAT'} if automatic else {'JUMP'})
+                or held.get('status') not in ({'HOLD','SCOPE_HOLD','SOURCE_HOLD'} if automatic else {'HOLD','SCOPE_HOLD'})
                 or held.get('action')!='EXCLUDE_FROM_FLAT_DISPATCH_ONLY'
                 or not rid.startswith('KM-JRA-') or race_date.replace('-','') not in rid):
             continue
         previous=schedule.get(rid) or {}
         details={k:held[k] for k in ('post','title','venue','race_no','official_day_row') if k in held}
-        schedule[rid]={**details,**previous,'status':'SCOPE_HOLD'}
+        schedule[rid]={**details,**previous,'status':'SOURCE_HOLD' if held.get('status')=='SOURCE_HOLD' else 'SCOPE_HOLD'}
         schedule[rid].setdefault('scope_hold_reason',held.get('reason') or JUMP_SCOPE_REASON)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
@@ -259,6 +261,30 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             out.append({"race_id": rid, "status": "NOT_ON_OFFICIAL_CARD"})
             schedule[rid] = {"status": "NOT_ON_OFFICIAL_CARD"}
             continue
+        if plan.get('automatic_generation'):
+            from jra_race_day_registration import automatic_row_hold
+            hold=automatic_row_hold(race)
+            if hold:
+                _,status,reason=hold
+                existing_pipeline=((root/'runtime/final_artifacts'/(rid+'.json')).exists() or
+                    bool(list((root/'runtime/jra_no_bet_terminals').glob(rid+'-LIVE-*.json'))) or
+                    bool(list((root/'runtime/jra_formal_intents').glob(rid+'-LIVE-*.json'))) or
+                    (rid in state and (state[rid] or {}).get('dispatch_state')!='CLAIM_PUBLISH_FAILED_NO_SEND'))
+                if existing_pipeline:
+                    previous=schedule.setdefault(rid,{})
+                    own_hold=previous.get('current_official_row_hold') or {}
+                    if (previous.get('status')==own_hold.get('status') and
+                            previous.get('scope_hold_reason')==own_hold.get('reason')):
+                        previous.pop('status',None);previous.pop('scope_hold_reason',None)
+                    previous['current_official_row_hold']={'status':status,'reason':reason}
+                    out.append({'race_id':rid,'status':'ALREADY_DISPATCHED','reason':reason})
+                else:
+                    schedule[rid]={**schedule.get(rid,{}),'venue':venue,'race_no':race_no,
+                        'title':race.get('title'),'official_day_row':race.get('raw'),
+                        'status':status,'scope_hold_reason':reason,
+                        'current_official_row_hold':{'status':status,'reason':reason}}
+                    out.append({'race_id':rid,'status':status,'reason':reason})
+                continue  # No claim/recovery/send; keep already-running actors and canonical artifacts.
         hh, mm = map(int, race["post_time"].split(":"))
         d = _dt.date.fromisoformat(race_date)
         post = _dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
@@ -656,6 +682,8 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
     row["registered_intake"]=sched.get("registered_intake",False)
+    if sched.get('current_official_row_hold'):
+        row['current_official_row_hold']=sched['current_official_row_hold']
     if sched.get('routing_basis')=='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':
         row.update(routing_basis=sched['routing_basis'],fresh_source_accepted=False,
                    plan_registration_verified=row['registered_intake'],registered_intake=False)
@@ -1290,6 +1318,13 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
+    plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
+    if plan_path.exists():
+        plan=json.loads(plan_path.read_text())
+        if plan.get('automatic_generation'):
+            paths.append(plan_path.relative_to(root).as_posix())
+            paths.extend(f"runtime/jra_race_registrations/{race_date}/{rid}.json"
+                         for rid in plan['cohort']['race_ids'])
     run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
     if run('git','add',*paths).returncode!=0:
         raise RuntimeError('AUTOPILOT_STATE_GIT_ADD_FAILED_NO_SEND')
@@ -1346,6 +1381,83 @@ def _worker_output(continuation, reason):
         'reason':reason},ensure_ascii=False),flush=True)
 
 
+def ensure_day_plan(root, race_date, now, *, default_all, cache,
+                    meetings=resolve_meetings, resolve=resolve_day):
+    """Existing worker creates its missing dated Plan before new intake.
+
+    An existing Plan is never regenerated. Partial/failed official discovery
+    cannot authorize intake; existing SOURCE/Formal/RESULT workers are untouched.
+    Plan/registration files join the existing atomic Git claim publication.
+    """
+    plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
+    if plan_path.exists() or not default_all:
+        return True
+    started=time.monotonic()
+    days=cache.setdefault('days',{})
+    try:
+        if 'meetings' not in cache:
+            try:cache['meetings']=meetings(race_date)
+            except Exception as exc:cache['meetings']=exc
+        venues=cache['meetings']
+        if isinstance(venues,Exception):raise venues
+        if not isinstance(venues,(list,tuple)) or len(set(venues))!=len(venues):
+            raise ValueError('JRA_OFFICIAL_CALENDAR_RESPONSE_INVALID')
+        if not venues:return True  # Existing no-meetings path remains unchanged.
+        discovery={'status':'DISCOVERED','race_date':race_date,'venues':[]}
+        for venue in venues:
+            if venue not in days:
+                try:days[venue]=resolve(race_date,venue)
+                except Exception as exc:days[venue]=exc
+            day=days[venue]
+            if isinstance(day,Exception):raise day
+            key,rows=day
+            if (not rows or len(rows)>12 or
+                    any(type(row.get('race_no')) is not int for row in rows) or
+                    [row.get('race_no') for row in rows]!=list(range(1,len(rows)+1))):
+                raise ValueError('OFFICIAL_RACE_SEQUENCE_NOT_PROVEN')
+            discovery['venues'].append({'venue':venue,'venue_id':VENUES[venue_code(venue)][0],
+                                        'meeting_key':key,'races':rows})
+        observed=now+_dt.timedelta(seconds=time.monotonic()-started)
+        from family_authority_guard import resolve_current_authority
+        from jra_race_day_registration import build_registrations,persist_registrations,sha
+        _,authority=resolve_current_authority(root=root,now=observed)
+        import os
+        provenance={'producer':'EXISTING_JRA_RACE_DAY_AUTOPILOT',
+            'observed_at':observed.isoformat(),'source_discovery_sha256':sha(discovery),
+            'source_discovery':discovery,
+            'authority_manifest':authority['manifest_id'],'authority_sha256':sha(authority),
+            'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
+            'workflow_ref':os.environ.get('GITHUB_WORKFLOW_REF'),
+            'event_name':os.environ.get('GITHUB_EVENT_NAME'),'actor':os.environ.get('GITHUB_ACTOR'),
+            'checkout_sha':os.environ.get('GITHUB_SHA'),
+            'day_level_unattended_acceptance':'NOT_ESTABLISHED_BY_PLAN_CREATION_ALONE'}
+        plan,records=build_registrations(discovery,authority,observed_at=observed.isoformat(),
+                                         automatic_generation=provenance)
+        persist_registrations(root,plan,records)
+        schedule_path=plan_path.with_name(f'{race_date}.schedule.json')
+        if schedule_path.exists():
+            schedule=json.loads(schedule_path.read_text())
+            key=race_date+':ALL'
+            if (schedule.get(key) or {}).get('status')=='OFFICIAL_DAY_PLAN_UNAVAILABLE':
+                schedule.pop(key)
+                schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        return True
+    except Exception as exc:
+        # Use the existing fault/status lifecycle; no fallback all-races intake.
+        directory=root/'runtime/jra_race_day_plan';directory.mkdir(parents=True,exist_ok=True)
+        schedule_path=directory/f'{race_date}.schedule.json';state_path=directory/f'{race_date}.state.json'
+        schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
+        stage='OFFICIAL_CALENDAR' if isinstance(cache.get('meetings'),Exception) else 'OFFICIAL_DAY_PLAN'
+        fault=official_navigation_failure(exc,race_date=race_date,stage=stage)
+        key=race_date+':ALL'
+        schedule[key]=_failure_record(schedule.get(key) or {},'OFFICIAL_DAY_PLAN_UNAVAILABLE',fault,now)
+        schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        if not state_path.exists():state_path.write_text('{}\n')
+        state=json.loads(state_path.read_text())
+        write_status(root,race_date,now,schedule,state)
+        return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", default="../..")
@@ -1388,7 +1500,11 @@ def main(argv=None):
         no_meetings=False
         calendar_denied=False
         try:
-            res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache,
+            now=_dt.datetime.now(JST)  # Rebase time precedes official discovery, not its observation.
+            ready=ensure_day_plan(root,a.date,now,default_all=a.all_races_default,cache=cache,
+                                  meetings=resolve_meetings,resolve=resolve_day)
+            now=_dt.datetime.now(JST)  # Bootstrap discovery can consume the remaining dispatch window.
+            res = tick(root, a.date, now, default_all=a.all_races_default and ready, cache=cache,
                        publish=lambda:_commit(root,a.date),meetings=resolve_meetings,resolve=resolve_day)
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
             no_meetings=[r.get('status') for r in res]==['NO_OFFICIAL_MEETINGS']
