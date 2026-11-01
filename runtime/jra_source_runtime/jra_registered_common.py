@@ -84,9 +84,99 @@ def _last_lap(v:Any):
     nums=re.findall(r"\d{2}\.\d",s)
     return float(nums[-1]) if nums else None
 
-def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None)->Dict[str,Any]:
+def _detailed_workout_tables(decoded:str):
+    # Workout identity cells span a narrative row and dated historical rows.
+    # Reuse the existing bounded span parser without changing speed-table limits.
+    parser=_SpeedTables(max_rowspan=128)
+    parser.feed(decoded)
+    out=[]
+    for table in parser.tables:
+        if not table: continue
+        header=[re.sub(r"\s+","",str(x or "")) for x in table[0]]
+        if all(any(k in x for x in header) for k in ("馬番","馬名","コース","調教タイム","評価")):
+            out.append((header,table[1:]))
+    return out
+
+
+def _workout_narrative_row(header,row,date_i,course_i,time_i):
+    # The provider's colspan narrative expands beyond the dated-row header.
+    # It repeats one prose cell across date/course/clock positions, not three
+    # independently printed facts; preserve the identity spans but skip it.
+    return (len(row)>len(header) and None not in (date_i,course_i,time_i)
+            and max(date_i,course_i,time_i)<len(row)
+            and row[date_i]==row[course_i]==row[time_i])
+
+
+def _workout_observed_day(observed_at):
+    if observed_at is None: return None
+    try:
+        moment=datetime.datetime.fromisoformat(str(observed_at).replace("Z","+00:00"))
+        if moment.tzinfo is None: raise ValueError("naive observation")
+        return moment.astimezone(datetime.timezone(datetime.timedelta(hours=9))).date().isoformat()
+    except (ValueError,TypeError): raise ValueError("NETKEIBA_WORKOUT_OBSERVATION_TIME_INVALID")
+
+
+def _dated_workout_rows(header,rows,*,observed_at:str|None=None):
+    def column(label): return next((i for i,x in enumerate(header) if label in x),None)
+    def value(row,index): return str(row[index] or "").strip() if index is not None and index<len(row) else ""
+    ni,mi,ci,ti,gi,di=[column(k) for k in ("馬番","馬名","コース","調教タイム","脚色","日付")]
+    evaluation=[i for i,x in enumerate(header) if "評価" in x]
+    ei=evaluation[0] if evaluation else None
+    # A spanned 評価 header has separate caption and rating cells.
+    ri=evaluation[-1] if len(evaluation)>1 else None
+    groups={}
+    for row in rows:
+        if _workout_narrative_row(header,row,di,ci,ti): continue
+        number=re.fullmatch(r"\d+",value(row,ni))
+        if number is None: continue
+        no=int(number.group()); name=_norm(value(row,mi))
+        if not 1<=no<=18 or not name: continue
+        assessment=value(row,ei)
+        rating=value(row,ri) if ri is not None else (str(row[-1] or "").strip() if row else "")
+        rating=rating.upper() if rating.upper() in {"A","B","C","D"} else ""
+        course=value(row,ci);clock=value(row,ti)
+        day=re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})(?:\([^)]*\))?",value(row,di))
+        workout_date=None
+        if day:
+            try: workout_date=datetime.date(*map(int,day.groups())).isoformat()
+            except ValueError: raise ValueError("NETKEIBA_WORKOUT_DATE_INVALID")
+        elif di is not None and course and _last_lap(clock) is not None:
+            raise ValueError("NETKEIBA_WORKOUT_DATE_INVALID")
+        record={"runner_id":str(no),"horse_no":no,"horse_name":name,"course":course,
+                "workout_time_raw":clock,"final1f":_last_lap(clock),"gait":value(row,gi),
+                "assessment":assessment,"rating":rating}
+        if workout_date is not None: record["workout_date"]=workout_date
+        group=groups.setdefault(no,[])
+        if group and group[0]["horse_name"]!=name:
+            raise ValueError("NETKEIBA_WORKOUT_REPEATED_NUMBER_IDENTITY_MISMATCH")
+        group.append(record)
+    observed_day=_workout_observed_day(observed_at)
+    out=[]
+    for no,records in groups.items():
+        actual=[x for x in records if x["course"] and x["final1f"] is not None]
+        # The narrative/colspan row is never substituted for a clock record.
+        # No averaging or scoring: keep each actual historical observation.
+        if actual:
+            actual=list({tuple(sorted(x.items())):x for x in actual}.values())
+            if observed_day is not None and any(x.get("workout_date","")>observed_day for x in actual):
+                raise ValueError("NETKEIBA_WORKOUT_DATE_AFTER_OBSERVATION")
+            dates=[x.get("workout_date") for x in actual]
+            if any(dates) and not all(dates):
+                raise ValueError("NETKEIBA_WORKOUT_MIXED_DATED_CLOCK_ROWS")
+            chosen=max(actual,key=lambda x:x.get("workout_date") or "")
+            if sum(x.get("workout_date")==chosen.get("workout_date") for x in actual)>1:
+                raise ValueError("NETKEIBA_WORKOUT_LATEST_DATE_AMBIGUOUS")
+            selected=dict(chosen)
+            if all(dates): selected["workout_history"]=sorted(actual,key=lambda x:x["workout_date"],reverse=True)
+        else:
+            selected=dict(records[0])
+        out.append(selected)
+    return sorted(out,key=lambda x:x["horse_no"])
+
+
+def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None,*,observed_at:str|None=None)->Dict[str,Any]:
     decoded=_decode(raw,content_type)
-    tables=_find_tables(decoded,["馬番","馬名","コース","調教タイム","評価"])
+    tables=_detailed_workout_tables(decoded)
     schema="DETAILED"
     if not tables:
         tables=_find_tables(decoded,["馬番","馬名","評価"])
@@ -122,11 +212,13 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
             out.append({"runner_id":str(no),"horse_no":no,"horse_name":name,"course":course,
                         "workout_time_raw":t,"final1f":_last_lap(t),"gait":gait,
                         "assessment":comment,"rating":rating})
+        if schema=="DETAILED":
+            out=_dated_workout_rows(h,rows,observed_at=observed_at)
         if not out:
             continue
         payload={"runner_count":len(out),"schema":schema,"runners":sorted(out,key=lambda x:x["horse_no"])}
         try:
-            observations=parse_workout_history(raw,content_type,official_universe)
+            observations=parse_workout_history(raw,content_type,official_universe,observed_at=observed_at)
             if observations["records"]:
                 payload["observed_workout_history"]=observations
         except ValueError as exc:
@@ -195,7 +287,7 @@ class _SpeedTables(HTMLParser):
                 self.tables.append(self.table); self.table=None
 
 
-def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None)->Dict[str,Any]:
+def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|None=None,*,observed_at:str|None=None)->Dict[str,Any]:
     """Retain dated observations, never infer a workout category or eligibility.
 
     The existing compact/latest-row numerical feed and complete-universe gate
@@ -209,6 +301,7 @@ def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[s
         expected={int(x.get("horse_no") or x.get("runner_id")):_norm(x.get("name"))
                   for x in official_universe.get("runners") or []}
     records={}
+    observed_day=_workout_observed_day(observed_at)
     for table in reader.tables:
         if not table:continue
         header=[re.sub(r"\s+","",str(x)) for x in table[0]]
@@ -217,8 +310,9 @@ def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[s
         indices=[next(i for i,x in enumerate(header) if key in x) for key in required]
         ni,mi,di,ci,gi,ri,ti,pi,li,ei=indices
         for row in table[1:]:
+            if _workout_narrative_row(header,row,di,ci,ti):continue
             if di>=len(row) or not str(row[di]).strip():continue
-            m=re.match(r"^(\d{4})/(\d{1,2})/(\d{1,2})(?:\D|$)",str(row[di]).strip())
+            m=re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})(?:\([^)]*\))?",str(row[di]).strip())
             if not m:raise ValueError("WORKOUT_HISTORY_DATE_NOT_OBSERVED")
             if max(indices)+1>=len(row):raise ValueError("WORKOUT_HISTORY_ROW_INCOMPLETE")
             if not re.fullmatch(r"\d{1,2}",str(row[ni]).strip()):
@@ -228,6 +322,8 @@ def parse_workout_history(raw:bytes,content_type:str="",official_universe:Dict[s
             if expected is not None and expected.get(no)!=name:
                 raise ValueError("WORKOUT_HISTORY_OFFICIAL_IDENTITY_MISMATCH:"+str(no))
             day=datetime.date(*(int(x) for x in m.groups())).isoformat()
+            if observed_day is not None and day>observed_day:
+                raise ValueError("NETKEIBA_WORKOUT_DATE_AFTER_OBSERVATION")
             record={"runner_id":str(no),"horse_no":no,"horse_name":name,
                     "workout_date":day,"course":str(row[ci]).strip(),
                     "going_raw":str(row[gi]).strip(),"rider_raw":str(row[ri]).strip(),
@@ -419,7 +515,7 @@ def enrich_with_registered_common(artifact:Dict[str,Any],prediction_cutoff:str,*
                     f"NETKEIBA-WORKOUT-{wi}","REGISTERED_COMMON_NETKEIBA_WORKOUT"
                 )
                 snaps.append(snap)
-                candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"))
+                candidate=parse_workout(raw,h.get("content-type",""),artifact.get("jra_official_runner_universe"),observed_at=snap["fetched_at"])
                 candidate["source_snapshot_sha256"]=snap["snapshot_sha256"]
                 _retain_workout_observations(base,candidate,snap)
                 candidate=_normalize_declared_cancelled_workout(candidate,artifact,raw,h.get("content-type",""))

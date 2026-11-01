@@ -307,3 +307,118 @@ def test_registered_common_workout_selects_official_universe_matching_table():
     ]}
     x=parse_workout(raw,"text/html; charset=utf-8",official)
     assert [r["horse_name"] for r in x["runners"]]==["リゼスカーレット","アイファーティアラ"]
+
+
+def _fictional_spanned_workout(*,numbers=(1,2,3),days=('2026/10/21','2026/10/28'),duplicate=False):
+    header='<tr>'+''.join('<th>'+x+'</th>' for x in ['枠','馬番','印','馬名','日付','コース','馬場','乗り役','調教タイム','位置','脚色'])+'<th colspan="2">評価</th><th>映像</th></tr>'
+    rows=[]
+    for no in numbers:
+        actual=list(days)+([days[-1]] if duplicate else [])
+        span=1+len(actual)
+        rows.append(f'<tr><td rowspan="{span}">{min(no,8)}</td><td rowspan="{span}">{no}</td><td rowspan="{span}">--</td><td rowspan="{span}">テスト{no} 前走</td><td colspan="25">時計ではない説明</td></tr>')
+        for day in actual:
+            seconds='11.8' if day==max(days) else '12.5'
+            rows.append(f'<tr><td>{day}(水)</td><td>ＣＷ</td><td>良</td><td>助手</td><td>81.0(15.0) 66.0(15.0) {seconds}({seconds})</td><td>7</td><td>馬也</td><td>動き良好</td><td>B</td><td></td></tr>')
+    return ('<html><table>'+header+''.join(rows)+'</table></html>').encode()
+
+
+def test_workout_spans_bind_printed_identity_course_clock_and_history():
+    from jra_registered_common import parse_workout
+    rows=parse_workout(_fictional_spanned_workout(numbers=(1,9)),observed_at='2026-11-01T00:00:00+00:00')['runners']
+    assert [x['horse_no'] for x in rows]==[1,9]
+    assert all(x['course']=='ＣＷ' and x['final1f']==11.8 and x['gait']=='馬也' and x['rating']=='B' for x in rows)
+    assert all(x['workout_date']=='2026-10-28' and [h['workout_date'] for h in x['workout_history']]==['2026-10-28','2026-10-21'] for x in rows)
+    assert all(x['assessment']=='動き良好' for x in rows)
+
+
+def test_workout_visible_partial_rows_do_not_complete_official_universe():
+    from jra_registered_common import parse_workout,_reconcile
+    expected={'runners':[{'horse_no':no,'name':f'テスト{no}'} for no in range(1,18)]}
+    parsed=parse_workout(_fictional_spanned_workout(),official_universe=expected)
+    assert parsed['runner_count']==3
+    gate=_reconcile(parsed,{'jra_official_runner_universe':expected})
+    assert gate['verified'] is False
+    assert len(gate['errors'])==14
+
+
+def test_workout_exact_repeated_observation_is_not_a_second_history_sample():
+    from jra_registered_common import parse_workout
+    parsed=parse_workout(_fictional_spanned_workout(duplicate=True))
+    assert all(len(x['workout_history'])==2 for x in parsed['runners'])
+
+
+def test_workout_conflicting_latest_date_is_rejected():
+    import pytest
+    from jra_registered_common import parse_workout
+    raw=_fictional_spanned_workout(numbers=(1,),duplicate=True)
+    # Same printed date with different observed clock cannot be selected by order.
+    old=b'11.8(11.8)';at=raw.rfind(old);raw=raw[:at]+b'11.7(11.7)'+raw[at+len(old):]
+    with pytest.raises(ValueError,match='LATEST_DATE_AMBIGUOUS'):parse_workout(raw)
+
+
+def test_workout_later_training_date_cannot_precede_observation():
+    import pytest
+    from jra_registered_common import parse_workout
+    with pytest.raises(ValueError,match='DATE_AFTER_OBSERVATION'):
+        parse_workout(_fictional_spanned_workout(),observed_at='2026-10-20T23:00:00+00:00')
+    # JRA observation dates are JST, including observations before UTC midnight.
+    rows=parse_workout(_fictional_spanned_workout(days=('2026/10/28',)),observed_at='2026-10-27T23:30:00+00:00')['runners']
+    assert rows[0]['workout_date']=='2026-10-28'
+
+
+def test_workout_single_digit_or_invalid_dates_cannot_escape_temporal_check():
+    import pytest
+    from jra_registered_common import parse_workout
+    for day in ('2026/11/2','2026/02/30','翌日',''):
+        with pytest.raises(ValueError,match='DATE_AFTER_OBSERVATION|DATE_INVALID'):
+            parse_workout(_fictional_spanned_workout(days=(day,)),observed_at='2026-11-01T00:00:00+00:00')
+    x=parse_workout(_fictional_spanned_workout(days=('2026/1/2',)),observed_at='2026-11-01T00:00:00+00:00')
+    assert x['runners'][0]['workout_date']=='2026-01-02'
+
+
+def test_workout_compact_assessment_contract_is_unchanged():
+    from jra_registered_common import parse_workout
+    raw='<table><tr><th>馬番</th><th>馬名</th><th>評価</th></tr><tr><td>1</td><td>テスト</td><td>B</td></tr></table>'.encode()
+    x=parse_workout(raw)
+    assert x['schema']=='COMPACT_ASSESSMENT' and x['runner_count']==1
+    assert x['runners'][0]=={'runner_id':'1','horse_no':1,'horse_name':'テスト','course':'','workout_time_raw':'','final1f':None,'gait':'','assessment':'テスト','rating':'B'}
+
+
+def test_workout_span_limit_does_not_relax_existing_speed_parser():
+    import pytest
+    from jra_registered_common import _SpeedTables,parse_workout
+    raw=_fictional_spanned_workout(numbers=(1,),days=tuple(f'2026/10/{d:02d}' for d in range(1,11)))
+    with pytest.raises(ValueError,match='SPEED_HEADER_INVALID_SPAN'):_SpeedTables().feed(raw.decode())
+    assert len(parse_workout(raw)['runners'][0]['workout_history'])==10
+
+
+def test_workout_history_reaches_observation_retention_without_full_feed_admission():
+    from jra_registered_common import parse_workout,_retain_workout_observations,_reconcile
+    import hashlib
+    raw=_fictional_spanned_workout(duplicate=True)
+    official={'runners':[{'horse_no':no,'name':f'テスト{no}'} for no in range(1,18)]}
+    candidate=parse_workout(raw,official_universe=official,observed_at='2026-11-01T00:00:00+00:00')
+    observed=candidate['observed_workout_history']
+    assert observed['record_count']==6 and observed['observed_runner_count']==3
+    assert observed['official_identity_verified'] is True
+    assert observed['full_official_universe_match'] is False
+    assert observed['production_feature_admission'] is False
+    snap={'source_id':'TEST-WORKOUT','snapshot_sha256':'snapshot-1','raw_sha256':hashlib.sha256(raw).hexdigest(),'fetched_at':'2026-11-01T00:00:00+00:00','cutoff_relation':'PRE_CUTOFF'}
+    base={}
+    _retain_workout_observations(base,candidate,snap)
+    _retain_workout_observations(base,candidate,{**snap,'snapshot_sha256':'snapshot-2'})
+    retained=base['observed_workout_history']
+    assert retained['record_count']==6
+    assert all(len(x['source_refs'])==2 for x in retained['records'])
+    assert retained['production_feature_admission'] is False
+    assert _reconcile(candidate,{'jra_official_runner_universe':official})['verified'] is False
+
+
+def test_workout_observation_history_does_not_admit_future_or_wrong_identity():
+    from jra_registered_common import parse_workout_history
+    import pytest
+    with pytest.raises(ValueError,match='DATE_AFTER_OBSERVATION'):
+        parse_workout_history(_fictional_spanned_workout(days=('2026/11/2',)),observed_at='2026-11-01T00:00:00+00:00')
+    wrong={'runners':[{'horse_no':no,'name':f'ベツ{no}'} for no in range(1,4)]}
+    with pytest.raises(ValueError,match='OFFICIAL_IDENTITY_MISMATCH'):
+        parse_workout_history(_fictional_spanned_workout(),official_universe=wrong)
