@@ -317,6 +317,9 @@ def test_referenced_tampering_cannot_be_authorized_by_unsigned_report(tmp_path):
         assert proof.get('signed_result_final_verified') is False,kind
         assert verified['status']=='FAILED',(kind,verified)
         assert verified['performed'] is True,kind
+        # The nested receipt preserves an attempted verification. The public
+        # completion flag requires successful verification, never an attempt.
+        assert proof['signature_validation_performed'] is False,kind
         assert verified['first_blocker'],kind
         assert proof['production_closed_loop_claim']=='NOT_ESTABLISHED_BY_STORAGE_AUDIT'
 
