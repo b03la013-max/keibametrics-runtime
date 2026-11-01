@@ -429,9 +429,9 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
 def _cancelled_numbers_from_target_pdf(artifact,detail,snap,race_no):
     """Recover printed scratch numbers when legacy PDF parsing selected a peer race.
 
-    A unique, unsplit horse-name word must overlap a unique printed number to
-    its immediate left. No list position, missing-number subtraction or frame
-    number is used. The existing strict column proof then verifies every name.
+    An independently numbered row must prove the horse-number column before
+    a scratch's printed number can be consumed. Frame/order/gap inference is
+    never used. The existing strict column proof then verifies every name.
     """
     import base64,gzip,fitz
     try:
@@ -465,10 +465,37 @@ def _cancelled_numbers_from_target_pdf(artifact,detail,snap,race_no):
                         anchors.append((page_no,word,words))
             if len(anchors)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_NAME_ANCHOR_AMBIGUOUS')
             page_no,anchor,words=anchors[0]
+            # A sole frame glyph also lies to the left of a horse name. Learn
+            # the printed horse-number column from at least two other, already
+            # explicitly numbered DETAIL identities; never from this scratch.
+            witnesses=[]
+            for known in rows:
+                known_no=known.get('horse_no')
+                if type(known_no) is not int or known.get('status')!='ACTIVE':continue
+                known_name=re.sub(r'\s+','',str(known.get('horse_name') or ''))
+                known_anchors=[w for w in words if re.sub(r'\s+','',str(w[4]))==known_name]
+                if len(known_anchors)!=1:continue
+                ka=known_anchors[0]
+                matches=[]
+                for w in words:
+                    hit=re.fullmatch(r'(?:白|黒|赤|青|黄|緑|橙|桃)?([1-9]|1[0-8])',str(w[4]))
+                    if (hit and int(hit.group(1))==known_no and 0<=ka[0]-w[2]<=40
+                            and min(ka[3],w[3])>max(ka[1],w[1])):matches.append(w)
+                if len(matches)==1:
+                    witnesses.append({'horse_no':known_no,'frame_no':known.get('frame_no'),
+                                      'number_bbox':list(matches[0][:4])})
+            if (len({w['horse_no'] for w in witnesses})<2
+                    or not any(type(w['frame_no']) is int and w['horse_no']!=w['frame_no']
+                               for w in witnesses)):
+                raise ValueError('JRA_CANCELLED_NUMBER_PDF_NUMBER_COLUMN_UNPROVEN')
+            edges=sorted(w['number_bbox'][2] for w in witnesses)
+            if edges[-1]-edges[0]>3.0:
+                raise ValueError('JRA_CANCELLED_NUMBER_PDF_NUMBER_COLUMN_AMBIGUOUS')
+            edge=edges[len(edges)//2]
             numbers=[]
             for word in words:
                 match=re.fullmatch(r'(?:白|黒|赤|青|黄|緑|橙|桃)?([1-9]|1[0-8])',str(word[4]))
-                if (match and 0<=anchor[0]-word[2]<=40
+                if (match and abs(word[2]-edge)<=3.0 and 0<=anchor[0]-word[2]<=40
                         and min(anchor[3],word[3])>max(anchor[1],word[1])):
                     numbers.append((int(match.group(1)),word))
             if len(numbers)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_PRINTED_NUMBER_AMBIGUOUS')
@@ -476,7 +503,8 @@ def _cancelled_numbers_from_target_pdf(artifact,detail,snap,race_no):
             row.update(horse_no=no,runner_id=str(no))
             proofs[name]={'method':'EXPLICIT_SAME_RACE_PDF_PRINTED_NUMBER',
                           'pdf_page_number':page_no,'printed_number':str(word[4]),
-                          'number_bbox':list(word[:4]),'name_bbox':list(anchor[:4])}
+                          'number_bbox':list(word[:4]),'name_bbox':list(anchor[:4]),
+                          'number_column_witnesses':witnesses}
     declared,_=runner_universes_from_detail({**detail,'runners':rows})
     recovered,diag=reconcile_pdf_column_with_detail(artifact,int(race_no),declared)
     return recovered,proofs,diag
@@ -501,22 +529,35 @@ def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->
     if context.get('context_source')!='JRA_OFFICIAL_DETAILED_CARD':
         raise ValueError('JRA_CANCELLED_NUMBER_DETAIL_EVIDENCE_REQUIRED')
     pdf=artifact.get('jra_official_pdf_runner_universe') or {}
+    missing_pdf_view=not pdf
     expected_url=official_pdf_url(context['race_date'],context['venue_id'],meeting_key)
-    if (pdf.get('source_id')!='JRA-OFFICIAL-RACE-PDF'
+    if not missing_pdf_view and (pdf.get('source_id')!='JRA-OFFICIAL-RACE-PDF'
             or pdf.get('race_no')!=context['race_no']
             or pdf.get('official_pdf_url')!=expected_url
             or pdf.get('runner_universe_sha256')!=sha_obj({k:v for k,v in pdf.items() if k!='runner_universe_sha256'})):
         raise ValueError('JRA_CANCELLED_NUMBER_PDF_IDENTITY_INVALID')
     snapshots=[s for s in artifact.get('sources') or []
-               if s.get('source_id')=='JRA-OFFICIAL-RACE-PDF'
-               and s.get('snapshot_sha256')==pdf.get('source_snapshot_sha256')]
-    if len(snapshots)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_SNAPSHOT_REQUIRED')
+               if s.get('source_id')=='JRA-OFFICIAL-RACE-PDF']
+    # The existing strict reconciler uses the first PDF. Refuse competing
+    # revisions rather than verify one snapshot and consume a different one.
+    if (len(snapshots)!=1 or (not missing_pdf_view
+            and snapshots[0].get('snapshot_sha256')!=pdf.get('source_snapshot_sha256'))):
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_SNAPSHOT_REQUIRED')
     snap=snapshots[0]
     if (snap.get('official') is not True or snap.get('authority')!='JRA_OFFICIAL'
             or snap.get('cutoff_relation')!='PRE_CUTOFF'
-            or snap.get('raw_sha256')!=pdf.get('raw_sha256')
+            or (missing_pdf_view and snap.get('snapshot_sha256')!=sha_obj({k:v for k,v in snap.items() if k!='snapshot_sha256'}))
+            or (not missing_pdf_view and snap.get('raw_sha256')!=pdf.get('raw_sha256'))
             or snap.get('final_url')!=expected_url):
         raise ValueError('JRA_CANCELLED_NUMBER_PDF_EVIDENCE_INVALID')
+    if missing_pdf_view:
+        try:
+            acquired=datetime.datetime.fromisoformat(str(snap.get('fetched_at') or '').replace('Z','+00:00'))
+            cutoff=datetime.datetime.fromisoformat(str(artifact.get('prediction_cutoff') or '').replace('Z','+00:00'))
+            if acquired.tzinfo is None or cutoff.tzinfo is None or acquired>cutoff:
+                raise ValueError('AFTER_TARGET_CUTOFF')
+        except (TypeError,ValueError) as exc:
+            raise ValueError('JRA_CANCELLED_NUMBER_PDF_TARGET_TEMPORAL_BINDING_REQUIRED') from exc
     recovery_proofs={};recovery_diag=None
     pdf_names={re.sub(r'\s+','',str(r.get('name') or '')) for r in pdf.get('runners') or []}
     detail_names={re.sub(r'\s+','',str(r.get('horse_name') or '')) for r in rows}
@@ -564,6 +605,17 @@ def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->
     bound['sha256']=sha_obj({k:v for k,v in bound.items() if k!='sha256'})
     artifact['jra_official_race_card_detail']=bound
     artifact['jra_official_race_card_detail_sha256']=sha_obj(bound)
+    if missing_pdf_view:
+        # Only a fully verified target-column Raw/name/printed-number proof
+        # reaches this point. Let the existing caller reconcile cancellations
+        # and create the Active universe; no failed legacy view is fabricated.
+        artifact['jra_official_pdf_runner_universe']=pdf
+        artifact['jra_official_pdf_runner_universe_sha256']=sha_obj(pdf)
+        artifact['jra_declared_runner_universe']={**pdf,'universe_type':'DECLARED'}
+        artifact['jra_official_runner_universe']=pdf
+        artifact['jra_official_runner_universe_sha256']=sha_obj(pdf)
+        artifact['official_runner_universe']=pdf
+        artifact['official_runner_universe_sha256']=pdf['runner_universe_sha256']
     return artifact
 
 
