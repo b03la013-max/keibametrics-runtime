@@ -147,3 +147,58 @@ def test_historical_fnb_real_signed_source_can_materialize_full29_without_policy
     assert out["production_numerical_authority"]["krs_consumption_authorized"] is False
     assert out["production_numerical_authority"]["ticket_consumption_authorized"] is False
     assert out["production_numerical_authority"]["capital_consumption_authorized"] is False
+
+    # R5: inspect the actual 12x29 terminal grid, not merely three count ledgers.
+    # These expected manifests come from the archived race intent, not the
+    # materializer's own self-reported universe.
+    import copy
+    from runtime.local_numeric_cell_integrity import attest_cell_grid
+
+    expected_ids = [r["runner_id"] for r in request["runners"]]
+    def check(value):
+        return attest_cell_grid(value, expected_indices=request["required_indices"],
+                                expected_runner_ids=expected_ids)
+
+    verified = check(out)
+    assert verified["status"] == "CELL_GRID_CONSISTENT", verified["issues"]
+    assert verified["required_cells"] == 348
+    assert verified["observed_terminal_cells"] == 348
+    assert verified["calculated_cells"] > 0
+    assert verified["numeric_value_closure_structurally_verified"] is True
+    assert verified["independent_arithmetic_recalculation"] == "NOT_PERFORMED"
+    assert verified["source_signature_and_license_verification"] == "NOT_PERFORMED"
+    assert verified["prediction_krs_ticket_capital_authorization"] == "NOT_EVALUATED_OR_GRANTED"
+    assert verified["formal_final_delivery_proof"] == "NOT_PERFORMED"
+
+    idx = request["required_indices"][0]
+    tampered = copy.deepcopy(out)
+    tampered["runners"][0]["canonical_components"][idx]["rule_id"] = "TAMPERED_RULE"
+    assert not check(tampered)["structural_consistency_verified"]
+    assert any("RUNNER_CELL_HASH_MISMATCH" in e for e in check(tampered)["issues"])
+
+    tampered = copy.deepcopy(out)
+    tampered["numeric_coverage"]["calculated_count"] += 1
+    assert "COVERAGE_COUNTER_MISMATCH:calculated_count" in check(tampered)["issues"]
+
+    tampered = copy.deepcopy(out)
+    tampered["runners"].pop()
+    assert "RUNNER_UNIVERSE_MISMATCH" in check(tampered)["issues"]
+
+    tampered = copy.deepcopy(out)
+    tampered["runners"][0]["canonical_components"][idx]["source_fact"] = None
+    assert any("CELL_PROVENANCE_MISSING" in e for e in check(tampered)["issues"])
+
+    tampered = copy.deepcopy(out)
+    tampered["required_indices"] = list(reversed(out["required_indices"]))
+    assert "INDEX_MANIFEST_MISMATCH" in check(tampered)["issues"]
+
+
+def test_cell_grid_requires_valid_frozen_manifests_even_if_artifact_claims_success():
+    from runtime.local_numeric_cell_integrity import attest_cell_grid
+    r = attest_cell_grid({"full_numerical_closure": True,
+                          "strict_full_numerical_ready": True},
+                         expected_indices=[], expected_runner_ids=[])
+    assert r["status"] == "CELL_GRID_INTEGRITY_FAILED"
+    assert not r["numeric_value_closure_structurally_verified"]
+    assert "FROZEN_29_INDEX_MANIFEST_INVALID" in r["issues"]
+    assert "FROZEN_RUNNER_MANIFEST_INVALID" in r["issues"]
