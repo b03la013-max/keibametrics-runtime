@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "runtime"))
 SPEC = importlib.util.spec_from_file_location("bvi_cycle", Path(__file__).resolve().parents[1] / "runtime/jra_bvi_research_cycle.py")
 cycle = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(cycle)

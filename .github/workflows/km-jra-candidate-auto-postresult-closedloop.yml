@@ -48,7 +48,7 @@ jobs:
         run: |
           python -m py_compile runtime/jra_candidate_postresult_closedloop.py runtime/jra_static_owner_forward_oos.py runtime/jra_research_settlement_manifest.py
           python -m pip install --disable-pip-version-check -q pytest
-          python -m pytest -q tests/test_jra_candidate_postresult_closedloop.py tests/test_jra_candidate_pfs_bridge.py tests/test_pfs_grand_review.py tests/test_family_prediction_utility.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_result_recovery.py tests/test_jra_research_settlement_manifest.py tests/test_jra_bvi_research_cycle.py
+          python -m pytest -q tests/test_jra_candidate_postresult_closedloop.py tests/test_jra_candidate_pfs_bridge.py tests/test_pfs_grand_review.py tests/test_family_prediction_utility.py tests/test_jra_static_owner_forward_oos.py tests/test_jra_result_recovery.py tests/test_jra_research_settlement_manifest.py tests/test_jra_bvi_research_cycle.py tests/test_jra_bvi_successor_research.py
       - name: Fetch official result, settle immutable Candidate tickets and record learning
         id: execute
         continue-on-error: true
@@ -124,7 +124,7 @@ jobs:
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
-          for path in runtime/jra_static_owner_forward_oos runtime/source_candidate_oos runtime/source_candidate_results runtime/source_candidate_oos_status.json runtime/pfs_grand_review/current.json runtime/family_prediction_utility/current.json research/bvi_research_cycle; do
+          for path in runtime/jra_static_owner_forward_oos runtime/source_candidate_oos runtime/source_candidate_results runtime/source_candidate_oos_status.json runtime/pfs_grand_review/current.json runtime/family_prediction_utility/current.json research/bvi_research_cycle research/bvi_successor; do
             if [ -e "$path" ]; then git add "$path"; fi
           done
           if git diff --cached --quiet; then
@@ -161,6 +161,7 @@ jobs:
             runtime_out/jra_research_settlement_manifest.json
             runtime_out/research_settlement/
             research/bvi_research_cycle/current.json
+            research/bvi_successor/
           if-no-files-found: error
       - name: Require every mandatory operational stage to finish
         if: ${{ always() }}

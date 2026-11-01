@@ -2,7 +2,7 @@
 
 The existing postresult schedule can call
 `python scripts/jra_bvi_research_cycle.py --settlement-manifest runtime_out/jra_research_settlement_manifest.json`.
-It does not create a new schedule, fetch a result, refit a model, call KRS,
+It does not create a new schedule, fetch a result, refit fixed D, call KRS,
 create a prediction freeze, add an OOS race or authorize Production. The
 existing read-only ChatGPT monitor stays a monitor.
 
@@ -58,3 +58,5 @@ Self-consistent rehashing is not authority: complete immutable hypothesis,
 milestone and audit payloads are compared to recomputed expected content.
 Record hashes are bound into the evidence fingerprint; an edited ACCEPTED,
 promotion, utility or OOS claim cannot be smuggled through a recomputed hash.
+
+Successor extension (BVI研究所3): the same audit can run a separate byte-bound exploratory diagnostic when an existing Collector summary is available. See `../bvi_successor/README.md`. This is a separate dataset/model/protocol and does not advance fixed-D or Static Owner OOS. The prior NOT_EXECUTED claim remains correct for qualified future successor fitting/publication/execution, but exploratory fits and two rolling chronological comparisons have now actually executed. `--successor-summary` selects an existing inherited summary for an explicit diagnostic; the scheduled default reads only already persisted day-audits.

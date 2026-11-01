@@ -1,7 +1,8 @@
 """Non-production BVI research audit and idempotent cohort continuation.
 
-This consumes existing canonical ledgers. It never fetches a result, fits a
-model, signs a prediction, changes an OOS count, or authorizes Production.
+This consumes existing canonical ledgers. The separate successor adapter may
+fit exploratory models from byte-bound inherited admissions. It never fetches
+a result, refits fixed D, signs a prediction, changes OOS or authorizes Production.
 """
 from __future__ import annotations
 
@@ -284,7 +285,7 @@ def milestone_record(group, refs, event_key):
         "hypothesis_exploration_continues": True, "automatic_promotion": False})
 
 
-def run(root, *, output=None, corpus_summary=None, settlement_manifest=None, basis=None, observed_at=None):
+def run(root, *, output=None, corpus_summary=None, successor_summary=None, settlement_manifest=None, basis=None, observed_at=None):
     root = Path(root).resolve()
     registered_at = observed_at or datetime.now(timezone.utc).isoformat()
     clock(registered_at)
@@ -325,6 +326,16 @@ def run(root, *, output=None, corpus_summary=None, settlement_manifest=None, bas
         hypotheses.append(record)
     review_events = []
     failures = []
+    # The existing daily audit is also the research trigger. No extra cron or
+    # monitor actor; changed data get a distinct, never-Production diagnostic.
+    try:
+        from jra_bvi_successor_research import run as run_successor
+        successor = run_successor(root, observed_at=registered_at, summary_path=successor_summary)
+        if successor.get("status") == "BLOCKED":
+            failures.append({"stage": "SUCCESSOR_DIAGNOSTIC", "reason": "FIT_OR_POPULATION_UNUSABLE"})
+    except (ValueError, KeyError, OSError, TypeError) as exc:
+        successor = {"status": "BLOCKED", "reason": str(exc), "forward_oos_increment": 0}
+        failures.append({"stage": "SUCCESSOR_DIAGNOSTIC", "reason": str(exc)})
     for group in cohorts:
         if group["reported_settled_count"] < 30:
             continue
@@ -355,6 +366,9 @@ def run(root, *, output=None, corpus_summary=None, settlement_manifest=None, bas
                    "historical_basis": comparisons, "hypothesis_ids": [x["hypothesis_id"] for x in hypotheses],
                    "hypothesis_record_sha256": {x["hypothesis_id"]: x["sha256"] for x in hypotheses},
                    "review_events": review_events, "failures": failures, "settlement": settlement}
+    # Liveness clocks are not new evidence or a reason to refit.
+    fingerprint["successor_research"] = {k:v for k,v in successor.items()
+                                         if k not in {"last_checked_at", "sha256"}}
     evidence_sha = sha(fingerprint)
     status = "BLOCKED" if failures else "PARTIAL"
     manifest = sealed({"profile": PROFILE, "status": status, "audit_execution_complete": not failures,
@@ -365,7 +379,7 @@ def run(root, *, output=None, corpus_summary=None, settlement_manifest=None, bas
             "held_for_quality": len(hypotheses), "rejected_historical_candidates": int(comparisons["decision"] == "REJECT_HISTORICAL_INCREMENT"),
             "milestone_review_events": len(review_events), "failures": len(failures)},
         "persistent_research_enabled": True, "stop_at_30": False, "forward_oos_increment": 0,
-        "new_candidate_fit": "NOT_EXECUTED", "prediction_utility_success": False,
+        "new_candidate_fit": successor.get("new_candidate_fit", "NOT_EXECUTED"), "prediction_utility_success": False,
         "production_improvement_success": False, "production_effect": "NONE", "purchase_authority": False})
     # Repeated daily audit of identical evidence does not manufacture new events.
     event_path = output / "audits" / (evidence_sha + ".json")
@@ -390,11 +404,12 @@ def main():
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--output", type=Path)
     parser.add_argument("--corpus-summary", type=Path)
+    parser.add_argument("--successor-summary", type=Path)
     parser.add_argument("--settlement-manifest", type=Path)
     parser.add_argument("--basis", type=Path)
     args = parser.parse_args()
     try:
-        record = run(args.root, output=args.output, corpus_summary=args.corpus_summary,
+        record = run(args.root, output=args.output, corpus_summary=args.corpus_summary, successor_summary=args.successor_summary,
                      settlement_manifest=args.settlement_manifest, basis=args.basis)
     except (ValueError, KeyError, OSError) as exc:
         # A crash is visible to the mandatory workflow gate, never SUCCESS.
