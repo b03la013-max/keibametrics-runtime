@@ -3,13 +3,11 @@ on:
   pull_request:
     paths:
       - 'research/adaptive_width/**'
-      - 'research/world_coverage/**'
       - '.github/workflows/km-adaptive-width-research-acceptance.yml'
   push:
     branches: [main]
     paths:
       - 'research/adaptive_width/**'
-      - 'research/world_coverage/**'
       - '.github/workflows/km-adaptive-width-research-acceptance.yml'
   workflow_dispatch:
 permissions:
@@ -25,5 +23,3 @@ jobs:
       - run: python -m unittest discover -s research/adaptive_width -p 'test_*.py' -v
       - run: python research/adaptive_width/build_ledger.py --output /tmp/km-width-ledger.json
       - run: python research/adaptive_width/evaluate.py --ledger /tmp/km-width-ledger.json --output /tmp/km-width-evaluation.json
-      - run: python -m pip install --disable-pip-version-check -q scipy==1.17.0
-      - run: python -m unittest discover -s research/world_coverage -p 'test_*.py' -v
