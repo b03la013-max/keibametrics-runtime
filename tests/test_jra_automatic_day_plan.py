@@ -507,6 +507,8 @@ def test_scope_projection_preserves_observed_temporal_history_without_new_miss(r
         assert row['status']==status['state']=='SCOPE_HOLD'
         assert status['scope_decision']['race_type']=='JUMP'
         assert status['temporal_status']==old_temporal
+        assert status['dispatch_eligibility']['eligible'] is False
+        assert status['dispatch_eligibility']['blocking_stage']=='SCOPE'
         if old_origin=='schedule':assert row['legacy_evidence']=='kept'
         if old_origin=='state':assert state_path.read_bytes()==original_state
         assert plan_path.read_bytes()==original_plan

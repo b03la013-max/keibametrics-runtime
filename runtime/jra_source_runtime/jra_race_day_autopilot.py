@@ -205,7 +205,10 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
         schedule[rid]={**details,**previous,'status':scope_status,
                        'scope_decision':{'race_type':held['race_type'],'status':scope_status,
                                          'reason':held.get('reason') or JUMP_SCOPE_REASON},
-                       'temporal_status':temporal}
+                       'temporal_status':temporal,
+                       'dispatch_eligibility':{'eligible':False,
+                           'blocking_stage':'SOURCE' if scope_status=='SOURCE_HOLD' else 'SCOPE',
+                           'reason':held.get('reason') or JUMP_SCOPE_REASON}}
         schedule[rid].setdefault('scope_hold_reason',held.get('reason') or JUMP_SCOPE_REASON)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
@@ -693,6 +696,7 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
     if sched.get('scope_decision'):
         row['scope_decision']=sched['scope_decision']
         row['temporal_status']=sched.get('temporal_status')
+        row['dispatch_eligibility']=sched.get('dispatch_eligibility')
     if sched.get('current_official_row_hold'):
         row['current_official_row_hold']=sched['current_official_row_hold']
     if sched.get('routing_basis')=='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':
