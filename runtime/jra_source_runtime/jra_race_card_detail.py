@@ -426,6 +426,62 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
+def _cancelled_numbers_from_target_pdf(artifact,detail,snap,race_no):
+    """Recover printed scratch numbers when legacy PDF parsing selected a peer race.
+
+    A unique, unsplit horse-name word must overlap a unique printed number to
+    its immediate left. No list position, missing-number subtraction or frame
+    number is used. The existing strict column proof then verifies every name.
+    """
+    import base64,gzip,fitz
+    try:
+        from .jra_official_pdf import _column_clip_for_race,reconcile_pdf_column_with_detail
+    except ImportError:
+        from jra_official_pdf import _column_clip_for_race,reconcile_pdf_column_with_detail
+    if not snap.get('raw_gzip_b64'):
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_RAW_REQUIRED')
+    try:
+        raw=gzip.decompress(base64.b64decode(str(snap['raw_gzip_b64'])))
+    except Exception as exc:
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_RAW_INVALID') from exc
+    if hashlib.sha256(raw).hexdigest()!=snap.get('raw_sha256'):
+        raise ValueError('JRA_CANCELLED_NUMBER_PDF_RAW_HASH_MISMATCH')
+    rows=[dict(r) for r in detail.get('runners') or []]
+    proofs={}
+    with fitz.open(stream=raw,filetype='pdf') as doc:
+        for row in rows:
+            if row.get('horse_no') is not None:continue
+            name=re.sub(r'\s+','',str(row.get('horse_name') or ''))
+            if (row.get('status') not in {'CANCELLED','EXCLUDED'}
+                    or not re.fullmatch(r'pw01dud[0-9]+/[0-9A-Fa-f]{2}',str(row.get('horse_profile_token') or ''))):
+                raise ValueError('JRA_CANCELLED_NUMBER_EXPLICIT_IDENTITY_REQUIRED')
+            anchors=[]
+            for page_no,page in enumerate(doc,1):
+                clip=_column_clip_for_race(page,int(race_no))
+                if clip is None:continue
+                words=[w for w in page.get_text('words') if clip.contains(fitz.Rect(w[:4]))]
+                for word in words:
+                    if re.sub(r'\s+','',str(word[4]))==name:
+                        anchors.append((page_no,word,words))
+            if len(anchors)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_NAME_ANCHOR_AMBIGUOUS')
+            page_no,anchor,words=anchors[0]
+            numbers=[]
+            for word in words:
+                match=re.fullmatch(r'(?:白|黒|赤|青|黄|緑|橙|桃)?([1-9]|1[0-8])',str(word[4]))
+                if (match and 0<=anchor[0]-word[2]<=40
+                        and min(anchor[3],word[3])>max(anchor[1],word[1])):
+                    numbers.append((int(match.group(1)),word))
+            if len(numbers)!=1:raise ValueError('JRA_CANCELLED_NUMBER_PDF_PRINTED_NUMBER_AMBIGUOUS')
+            no,word=numbers[0]
+            row.update(horse_no=no,runner_id=str(no))
+            proofs[name]={'method':'EXPLICIT_SAME_RACE_PDF_PRINTED_NUMBER',
+                          'pdf_page_number':page_no,'printed_number':str(word[4]),
+                          'number_bbox':list(word[:4]),'name_bbox':list(anchor[:4])}
+    declared,_=runner_universes_from_detail({**detail,'runners':rows})
+    recovered,diag=reconcile_pdf_column_with_detail(artifact,int(race_no),declared)
+    return recovered,proofs,diag
+
+
 def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->Dict[str,Any]:
     """Bind unnumbered scratches to the same-race PDF, never frame/order.
 
@@ -461,6 +517,11 @@ def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->
             or snap.get('raw_sha256')!=pdf.get('raw_sha256')
             or snap.get('final_url')!=expected_url):
         raise ValueError('JRA_CANCELLED_NUMBER_PDF_EVIDENCE_INVALID')
+    recovery_proofs={};recovery_diag=None
+    pdf_names={re.sub(r'\s+','',str(r.get('name') or '')) for r in pdf.get('runners') or []}
+    detail_names={re.sub(r'\s+','',str(r.get('horse_name') or '')) for r in rows}
+    if pdf_names!=detail_names:
+        pdf,recovery_proofs,recovery_diag=_cancelled_numbers_from_target_pdf(artifact,detail,snap,context['race_no'])
     names={};numbers=set()
     for row in pdf.get('runners') or []:
         name=re.sub(r'\s+','',str(row.get('name') or ''));no=row.get('horse_no')
@@ -490,6 +551,9 @@ def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->
                 'horse_name':name,'horse_profile_token':profile,
                 'detail_source_snapshot_sha256':detail['source_snapshot_sha256'],
                 'pdf_source_snapshot_sha256':pdf['source_snapshot_sha256']})
+            if name in recovery_proofs:
+                current['horse_number_binding'].update(recovery_proofs[name],
+                    strict_pdf_column_proof_sha256=recovery_diag['sha256'])
         if type(no) is not int or no!=names[name] or no in seen_numbers:
             raise ValueError('JRA_CANCELLED_NUMBER_NUMERIC_IDENTITY_CONFLICT')
         seen_names.add(name);seen_numbers.add(no)
