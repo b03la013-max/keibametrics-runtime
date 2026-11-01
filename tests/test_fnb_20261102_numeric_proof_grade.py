@@ -61,3 +61,9 @@ def test_bad_values_bools_negatives_and_zeros_are_rejected():
         r["completion"]["numeric_coverage"]["calculated_count"] = bad
         assert attest_numeric_quality(r)["status"] == "NUMERICAL_COUNTS_INVALID"
     assert attest_numeric_quality(report(0, 0))["status"] == "NUMERICAL_COUNTS_INVALID"
+
+def test_race_key_certification_wires_numeric_quality_without_changing_lifecycle():
+    import inspect
+    from runtime.local_race_key_gate import certify
+    src = inspect.getsource(certify)
+    assert '"numeric_evidence_quality": attest_numeric_quality(entry_report)' in src
