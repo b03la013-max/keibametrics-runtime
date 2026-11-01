@@ -6,10 +6,17 @@ Production prediction, actual purchase, or signed RESULT authority.
 from __future__ import annotations
 
 import argparse
+import base64
+import http.client
+import http.cookiejar
 import hashlib
 import json
 import re
 import sys
+import time as clock
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,8 +26,7 @@ sys.path.insert(0, str(HERE / "jra_source_runtime"))
 
 from jra_source_candidate_oos import evaluate_result
 from jra_source_candidate_promotion_gate import bind_result
-from jra_same_day_results import _open_day, parse_result_detail
-from jra_race_card_detail import _date8, _post
+from jra_same_day_results import parse_result_detail
 from source_acquisition import _decode, _html_text, utcnow
 
 PROFILE = "KM-JRA-CANDIDATE-AUTOMATIC-POSTRESULT-CLOSEDLOOP-20261010-R1"
@@ -29,6 +35,118 @@ BET_KINDS = {"EXACTA": ("馬単", 2), "TRIO": ("3連複", 3), "TRIFECTA": ("3連
 
 class PendingOfficialResult(ValueError):
     pass
+
+
+class OfficialResultAcquisitionError(ValueError):
+    """Typed unresolved official observation; absence is never a race result."""
+    def __init__(self, reason, *, category, retryable=False, **evidence):
+        super().__init__(reason)
+        self.category = category
+        self.retryable = retryable
+        self.evidence = evidence
+
+
+def result_failure(exc):
+    """Public failure metadata, with no cookie/token/credential output."""
+    if isinstance(exc, OfficialResultAcquisitionError):
+        return {"status": "PENDING" if exc.retryable else "BLOCKED",
+                "category": exc.category, "retryable": exc.retryable,
+                "reason": str(exc), **exc.evidence}
+    if isinstance(exc, urllib.error.HTTPError):
+        denied = exc.code in (401, 403, 429)
+        retryable = 500 <= exc.code <= 599
+        return {"status": "PENDING" if retryable else "BLOCKED",
+                "category": "OFFICIAL_ACCESS_DENIED" if denied else "OFFICIAL_HTTP_UNAVAILABLE"
+                    if retryable else "OFFICIAL_REQUEST_REJECTED",
+                "retryable": retryable, "http_status": exc.code,
+                "reason": type(exc).__name__ + ":" + str(exc)}
+    if isinstance(exc, PendingOfficialResult):
+        manual = any(x in str(exc) for x in ("AMBIGUOUS", "NOT_UNIQUE", "DEAD_HEAT", "FORMAT_INVALID", "MISMATCH"))
+        return {"status": "BLOCKED" if manual else "PENDING",
+                "category": "OFFICIAL_RESULT_ADJUDICATION_REQUIRED" if manual else "RESULT_NOT_FINAL",
+                "retryable": not manual, "reason": str(exc)}
+    from jra_pedigree_harvest import retryable_official_error
+    transient = retryable_official_error(exc)
+    return {"status": "PENDING" if transient else "BLOCKED",
+            "category": "OFFICIAL_ACQUISITION_UNAVAILABLE" if transient else "RESULT_INTEGRITY_OR_PARSER_ERROR",
+            "retryable": transient, "reason": type(exc).__name__ + ":" + str(exc)}
+
+
+class _ResultNavigationClient:
+    """Existing official result navigation, retaining the actual response bytes.
+
+    Uses the Collector's already observed archive-form parser; it never guesses
+    a checksum or tries another authority after access denial. Transient reads
+    use the same URL, opener and POST token, with at most three attempts.
+    """
+    def __init__(self):
+        class OfficialRedirectOnly(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                target = urllib.parse.urlsplit(newurl)
+                if target.scheme != "https" or target.netloc != "www.jra.go.jp":
+                    raise ValueError("JRA_RESULT_REDIRECT_AUTHORITY_FORBIDDEN")
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), OfficialRedirectOnly())
+        self.last_url = "https://www.jra.go.jp/"
+        self.last_raw = b""
+        self.last_headers = {}
+        self.retry_count = 0
+
+    def _request(self, path, token=None):
+        from jra_race_card_detail import _fetch
+        from jra_pedigree_harvest import retryable_official_error
+        if token is None:
+            if not re.fullmatch(r"/keiba/calendar\d{4}/\d{4}/\d{1,2}/\d{4}\.html", path):
+                raise ValueError("JRA_RESULT_CALENDAR_PATH_INVALID")
+        elif path != "/JRADB/accessS.html":
+            raise ValueError("JRA_RESULT_NAVIGATION_ENDPOINT_INVALID")
+        data = None if token is None else urllib.parse.urlencode({"cname": token}).encode()
+        for attempt in range(3):
+            clock.sleep(0.7 if attempt == 0 else 3 * 2 ** (attempt - 1))
+            try:
+                result = _fetch(self.opener, "https://www.jra.go.jp" + path,
+                                data=data, referer=self.last_url)
+                self.last_url, self.last_raw, self.last_headers = result
+                target = urllib.parse.urlsplit(self.last_url)
+                if (target.scheme != "https" or target.netloc != "www.jra.go.jp"
+                        or target.path != path):
+                    raise ValueError("JRA_RESULT_RESPONSE_AUTHORITY_OR_PATH_INVALID")
+                return _decode(self.last_raw, self.last_headers.get("content-type", ""))
+            except (OSError, http.client.HTTPException) as exc:
+                if (isinstance(exc, urllib.error.HTTPError) and exc.code in (401, 403, 429)):
+                    raise  # no retries, alternate origin, identity or token probing
+                if not retryable_official_error(exc) or attempt == 2:
+                    raise
+                self.retry_count += 1
+
+    def get(self, path):
+        return self._request(path)
+
+    def post(self, path, token):
+        return self._request(path, token)
+
+
+def verify_result_context(raw, content_type, race_date, meeting_key, race_no):
+    """Bind the original result heading, independently of its navigation token."""
+    from bs4 import BeautifulSoup
+    from jra_race_day_resolver import VENUES
+    soup = BeautifulSoup(_decode(raw, content_type), "html.parser")
+    head = soup.find("h1")
+    text = head.get_text(" ", strip=True) if head is not None else ""
+    match = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})日[（(][^）)]*[）)]\s*(\d+)回"
+                      r"(札幌|函館|福島|新潟|東京|中山|中京|京都|阪神|小倉)(\d+)日\s*(\d+)レース", text)
+    if not match:
+        raise OfficialResultAcquisitionError("JRA_RESULT_ORIGINAL_HEADING_UNREADABLE", category="RESULT_PARSER_ERROR")
+    year, month, day, meeting, venue, meeting_day, number = match.groups()
+    identity = (f"{int(year):04d}-{int(month):02d}-{int(day):02d}", venue,
+                int(meeting), int(meeting_day), int(number))
+    expected = (race_date, VENUES[meeting_key[:2]][1], int(meeting_key[6:8]),
+                int(meeting_key[8:]), int(race_no))
+    if identity != expected:
+        raise OfficialResultAcquisitionError("JRA_RESULT_ORIGINAL_RACE_CONTEXT_MISMATCH", category="RESULT_IDENTITY_CONFLICT")
+    return {"race_date": identity[0], "venue": identity[1], "meeting_no": identity[2],
+            "meeting_day": identity[3], "race_no": identity[4], "heading_verified": True}
 
 
 def canonical_sha(value):
@@ -137,6 +255,9 @@ def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sh
     if not tickets:
         raise ValueError("FROZEN_MEC_TICKETS_MISSING")
     purchases = []
+    refunded = {int(x) for x in official.get("refund_runner_ids") or []}
+    if not refunded <= {int(x) for x in pre["ranking"]} or refunded.intersection(actual):
+        raise ValueError("OFFICIAL_REFUND_RUNNER_UNIVERSE_OR_FINISH_CONFLICT")
     seen = set()
     stake_total = 0
     return_total = 0
@@ -156,9 +277,13 @@ def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sh
         pay = prices[kind]
         winner = sorted(pay["selection"]) if kind == "TRIO" else pay["selection"]
         observed = sorted(sel) if kind == "TRIO" else sel
-        amount = (stake // 100) * pay["per_100_yen"] if observed == winner else 0
-        purchases.append({"bet_type":kind,"selection":sel,"stake":stake,"recommended_return":amount,
-                          "win":amount>0})
+        refund = bool(refunded.intersection(sel))
+        amount = stake if refund else (stake // 100) * pay["per_100_yen"] if observed == winner else 0
+        purchase = {"bet_type":kind,"selection":sel,"stake":stake,"recommended_return":amount,
+                    "win":amount>0 and not refund}
+        if refund:
+            purchase["official_refund"] = True
+        purchases.append(purchase)
         stake_total += stake
         return_total += amount
     required = int((final.get("capital") or {}).get("required_capital") or 0)
@@ -210,29 +335,105 @@ def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sh
     return {"result_evaluation":bound,"settlement":report,"learning":learning}
 
 
-def fetch_jra_result(race_date: str, meeting_key: str, race_no: int) -> dict:
-    opener, referer, day_html, key, d = _open_day(race_date, meeting_key)
-    needle="pw01sde01"+key+f"{int(race_no):02d}"+d
-    m=re.search(r"("+re.escape(needle)+r"/[0-9A-Fa-f]{2})",day_html)
-    if not m:
-        raise PendingOfficialResult("JRA_OFFICIAL_RESULT_RACE_NOT_PUBLISHED")
-    fetched=utcnow()
-    url,raw,headers=_post(opener,m.group(1),referer)
-    parsed=parse_result_detail(raw,headers.get("content-type",""))
-    return {"parsed":parsed,"text":_html_text(_decode(raw,headers.get("content-type",""))),
-            "sha256":hashlib.sha256(raw).hexdigest(),"captured_at":fetched,
-            "url":url, "source_authority":"JRA_OFFICIAL_POST_RESULT"}
+def fetch_jra_result(race_date: str, meeting_key: str, race_no: int, *, client=None) -> dict:
+    """Resolve a historical date through the already approved archive reader.
+
+    The old first-menu-only reader could not find older frozen dates once the
+    live menu advanced. Never substitute today's race, derive a token checksum,
+    or call missing navigation proof a non-existent race.
+    """
+    from jra_pedigree_harvest import _day_navigation
+    from jra_race_day_resolver import VENUES
+    date = datetime.fromisoformat(str(race_date)).date().isoformat()
+    key = str(meeting_key or "")
+    if (not re.fullmatch(r"\d{10}", key) or key[:2] not in VENUES
+            or key[2:6] != date[:4] or type(race_no) is not int or not 1 <= race_no <= 12):
+        raise OfficialResultAcquisitionError("JRA_RESULT_REQUEST_IDENTITY_INVALID",
+                                             category="RACE_REQUEST_NOT_VALID")
+    client = client or _ResultNavigationClient()
+    try:
+        page, entry, days, pattern = _day_navigation(client, date, "results")
+    except ValueError as exc:
+        # The Collector parser itself verifies the observed official archive
+        # form. Unexpected markup is BLOCKED, not an infinite pending result.
+        if isinstance(exc, OfficialResultAcquisitionError):
+            raise
+        raise OfficialResultAcquisitionError(str(exc), category="RESULT_DAY_RESOLUTION_FAILED") from exc
+    matches = [token for token in days if re.fullmatch(
+        r"pw01srl\d{2}" + re.escape(key + date.replace("-", "")) + r"/[0-9A-Fa-f]{2}", token)]
+    if not matches:
+        raise OfficialResultAcquisitionError("JRA_RESULT_REQUESTED_DAY_NOT_OBSERVED",
+                                             category="RESULT_DAY_NOT_OBSERVED", retryable=True)
+    if len(matches) != 1:
+        raise OfficialResultAcquisitionError("JRA_RESULT_DAY_NAVIGATION_AMBIGUOUS", category="RESULT_DAY_RESOLUTION_FAILED")
+    day_html = client.post(page, matches[0])
+    tokens = sorted(set(re.findall(pattern, day_html)))
+    candidates = [token for token in tokens if re.fullmatch(
+        r"pw01sde\d{2}" + re.escape(key + f"{race_no:02d}" + date.replace("-", "")) + r"/[0-9A-Fa-f]{2}", token)]
+    if not candidates:
+        # Missing navigation is not independent proof that a race never existed.
+        raise OfficialResultAcquisitionError("JRA_OFFICIAL_RESULT_RACE_NOT_OBSERVED",
+                                             category="RACE_NOT_OBSERVED", retryable=True)
+    if len(candidates) != 1:
+        raise OfficialResultAcquisitionError("JRA_RESULT_RACE_NAVIGATION_AMBIGUOUS", category="RESULT_DAY_RESOLUTION_FAILED")
+    client.post(page, candidates[0])
+    raw, headers = client.last_raw, client.last_headers
+    plain = _html_text(_decode(raw, headers.get("content-type", "")))
+    if any(label in plain for label in ("該当するレースはありません", "該当する競走はありません")):
+        raise OfficialResultAcquisitionError("JRA_OFFICIAL_RACE_DOES_NOT_EXIST",
+                                             category="RACE_NOT_FOUND", retryable=False)
+    context = verify_result_context(raw, headers.get("content-type", ""), date, key, race_no)
+    try:
+        parsed = parse_result_detail(raw, headers.get("content-type", ""))
+    except ValueError as exc:
+        text = _html_text(_decode(raw, headers.get("content-type", "")))
+        if any(label in text for label in ("成績未確定", "結果未確定", "レース前")):
+            raise PendingOfficialResult("JRA_OFFICIAL_RESULT_NOT_FINAL") from exc
+        raise OfficialResultAcquisitionError(str(exc), category="RESULT_PARSER_ERROR") from exc
+    return {"parsed": parsed, "text": _html_text(_decode(raw, headers.get("content-type", ""))),
+            "sha256": hashlib.sha256(raw).hexdigest(), "captured_at": utcnow(),
+            "url": client.last_url, "source_authority": "JRA_OFFICIAL_POST_RESULT",
+            "raw_base64": base64.b64encode(raw).decode(), "content_type": headers.get("content-type", ""),
+            "context_verification": context, "retry_count": getattr(client, "retry_count", 0)}
 
 
 def process(root:Path, race_id:str)->str:
     race_dir=root/"runtime"/"source_candidate_oos"/race_id
     result_path=race_dir/"result_evaluation.json"
-    if result_path.exists(): return "ALREADY_SETTLED"
+    required = ["result_evaluation", "settlement", "learning", "official_result_observation"]
+    has_output = any((race_dir / (key + ".json")).exists() for key in required)
     pre_path=race_dir/"pre_result.json"; final_path=race_dir/"candidate_final.json"
-    if not pre_path.exists() or not final_path.exists(): return "PRE_RESULT_NOT_FROZEN"
+    if not pre_path.exists() or not final_path.exists():
+        if has_output:
+            raise ValueError("CANDIDATE_EXISTING_SETTLEMENT_FROZEN_INPUT_MISSING")
+        return "PRE_RESULT_NOT_FROZEN"
     pre=json.loads(pre_path.read_text(encoding="utf-8"))
     final=json.loads(final_path.read_text(encoding="utf-8"))
     _verified_pre_frozen(pre,final,race_id)
+    if has_output:
+        existing = {key: json.loads((race_dir / (key + ".json")).read_text()) for key in required
+                    if (race_dir / (key + ".json")).exists()}
+        original = existing.get("official_result_observation")
+        if original is not None:
+            if (original.get("race_id") != race_id or original.get("status") != "OFFICIAL_POST_RESULT_SNAPSHOT"
+                    or not re.fullmatch(r"[0-9a-f]{64}", str(original.get("raw_sha256", "")))
+                    or not str(original.get("url", "")).startswith("https://www.jra.go.jp/")
+                    or datetime.fromisoformat(original["captured_at"]) <= datetime.fromisoformat(pre["scheduled_post_at"])):
+                raise ValueError("CANDIDATE_EXISTING_RESULT_OBSERVATION_INVALID")
+            expected = settle_frozen_candidate(pre, final,
+                {"top3": original["result_top3"], "payouts": original["payouts"],
+                 "refund_runner_ids": original.get("refund_runner_ids", [])},
+                source_sha256=original["raw_sha256"], source_url=original["url"])
+            if any(existing[key] != value for key, value in expected.items() if key in existing):
+                raise ValueError("CANDIDATE_EXISTING_SETTLEMENT_ARTIFACT_CONFLICT")
+            for key, value in expected.items():
+                target = race_dir / (key + ".json")
+                if key not in existing:
+                    with target.open("x", encoding="utf-8") as stream:
+                        json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
+            return "ALREADY_SETTLED" if len(existing) == len(required) else "SETTLED_RECOMMENDATION"
+        # A crash before persisting the observation requires a new official
+        # read, then exact comparison of all previously written output bytes.
     post=datetime.fromisoformat(str(pre["scheduled_post_at"]).replace("Z","+00:00"))
     if datetime.now(timezone.utc)<=post+timedelta(minutes=1): return "RESULT_NOT_YET_DUE"
     # Repo commit identity is independent of in-file timestamps.
@@ -255,11 +456,19 @@ def process(root:Path, race_id:str)->str:
                  "raw_sha256":evidence["sha256"],"captured_at":evidence["captured_at"],
                  "url":evidence["url"],"result_top3":outcome["top3"],
                  "payouts":outcome["payouts"],"signed_result_receipt_verified":False}
+    if outcome.get("non_finishers") or outcome.get("refund_runner_ids"):
+        source_meta.update(non_finishers=outcome["non_finishers"], refund_runner_ids=outcome["refund_runner_ids"],
+                           refund_declaration=outcome["refund_declaration"])
     artifacts["official_result_observation"]=source_meta
-    for key,obj in artifacts.items():
+    for key in ("official_result_observation", "result_evaluation", "settlement", "learning"):
+        obj = artifacts[key]
         p=race_dir/(key+".json")
-        if p.exists():raise ValueError("RESULT_IMMUTABILITY_VIOLATION:"+key)
-        p.write_text(json.dumps(obj,ensure_ascii=False,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+        if p.exists():
+            if json.loads(p.read_text()) != obj:
+                raise ValueError("RESULT_IMMUTABILITY_VIOLATION:"+key)
+            continue
+        with p.open("x", encoding="utf-8") as stream:
+            json.dump(obj, stream, ensure_ascii=False, sort_keys=True, indent=2)
     return "SETTLED_RECOMMENDATION"
 
 
@@ -274,7 +483,9 @@ def main():
     dirs=[root/"runtime"/"source_candidate_oos"/args.race_id] if args.race_id else sorted(
         (root/"runtime"/"source_candidate_oos").glob("KM-JRA-*-R??"))
     today=datetime.now(timezone.utc)
+    from jra_research_settlement_manifest import summarize_races
     results=[]
+    access_suspended = False
     for d in dirs:
         pre=d/"pre_result.json"
         if not pre.exists():continue
@@ -283,14 +494,21 @@ def main():
             post=datetime.fromisoformat(str(x["scheduled_post_at"]).replace("Z","+00:00"))
             if not args.race_id and not (0 <= (today-post).total_seconds() <= args.days*86400):
                 continue
+            if access_suspended and not (d / "result_evaluation.json").exists():
+                results.append({"race_id": d.name, "status": "BLOCKED", "retryable": False,
+                                "category": "OFFICIAL_ACCESS_SUSPENDED"})
+                continue
             status=process(root,d.name)
-        except PendingOfficialResult as exc:
-            status="PENDING:"+str(exc)
         except Exception as exc:
-            status="BLOCKED:"+type(exc).__name__+":"+str(exc)
+            failure = result_failure(exc)
+            if failure.get("category") == "OFFICIAL_ACCESS_DENIED":
+                access_suspended = True
+            results.append({"race_id": d.name, **failure})
+            continue
         results.append({"race_id":d.name,"status":status})
-    print(json.dumps({"profile":PROFILE,"processed":results},ensure_ascii=False))
-    if args.race_id and results and results[0]["status"].startswith("BLOCKED:"):
+    manifest = summarize_races(results)
+    print(json.dumps({"profile":PROFILE,"processed":results,"processing_manifest": manifest},ensure_ascii=False))
+    if manifest["status"] in {"PARTIAL", "BLOCKED", "PENDING"}:
         raise SystemExit(2)
 
 
