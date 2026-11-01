@@ -62,7 +62,8 @@ def test_actual_18_dated_rows_keep_official_identity_and_three_repeated_rows_are
     assert hashlib.sha256(REQUEST.read_bytes()).hexdigest() == before_digest
 
 
-def test_latest_rows_and_numerical_feed_reconciliation_are_unchanged():
+def test_legacy_values_stay_unchanged_while_dated_history_is_restored():
+    before_digest = hashlib.sha256(REQUEST.read_bytes()).hexdigest()
     q, source, snaps = source_and_snapshots()
     # Golden normalized payload digests from exact PR350 blob
     # 58566d3a3f885b6338d36a147cdd8c1d9c56b613, over the verified retained Raw.
@@ -71,13 +72,42 @@ def test_latest_rows_and_numerical_feed_reconciliation_are_unchanged():
                 "NETKEIBA-WORKOUT-2": "0ed38895e4ba6685ec267c5221b48f7c834c9e9485266ac552a4c8b7f91e761b",
                 "NETKEIBA-WORKOUT-3": "0ed38895e4ba6685ec267c5221b48f7c834c9e9485266ac552a4c8b7f91e761b"}
     for sid, (raw, snapshot) in snaps.items():
-        new = candidate.parse_workout(raw, snapshot["content_type"], source["jra_official_runner_universe"])
-        new.pop("observed_workout_history", None)
-        assert candidate.sha_obj(new) == expected[sid]
+        new = candidate.parse_workout(raw, snapshot["content_type"], source["jra_official_runner_universe"],
+                                      observed_at=snapshot["fetched_at"])
+        legacy = deepcopy(new)
+        observations = legacy.pop("observed_workout_history", None)
+        for runner in legacy["runners"]:
+            runner.pop("workout_date", None)
+            runner.pop("workout_history", None)
+        # Only these added dated-observation fields are excluded. Every old
+        # identity, clock, assessment, rating and course stays in the golden.
+        assert candidate.sha_obj(legacy) == expected[sid]
+        if sid.endswith(("-2", "-3")):
+            assert observations["production_feature_admission"] is False
+            assert observations["raw_sha256"] == snapshot["raw_sha256"]
+            histories = {r["runner_id"]: r["workout_history"] for r in new["runners"]}
+            assert {rid: len(rows) for rid, rows in histories.items()} == (
+                {"1": 7, "2": 9, "3": 2} if sid.endswith("-2") else {"1": 1, "2": 1, "3": 1})
+            for runner in new["runners"]:
+                rows = histories[runner["runner_id"]]
+                assert runner["workout_date"] == max(r["workout_date"] for r in rows) == "2026-10-28"
+                for row in rows:
+                    assert row["runner_id"] == runner["runner_id"]
+                    assert row["horse_name"] == runner["horse_name"]
+                    assert row["workout_date"] <= snapshot["fetched_at"][:10]
+                    assert any(all(row[a] == fact[b] for a, b in (
+                        ("runner_id", "runner_id"), ("horse_name", "horse_name"),
+                        ("workout_date", "workout_date"), ("course", "course"),
+                        ("workout_time_raw", "workout_time_and_partner_raw"),
+                        ("gait", "gait"), ("assessment", "assessment"), ("rating", "rating")))
+                        for fact in observations["records"])
+        else:
+            assert all("workout_date" not in r and "workout_history" not in r for r in new["runners"])
         reconciled = candidate._reconcile(new, source)
         assert reconciled["verified"] is False
         assert reconciled["official_count"] == 15
         assert reconciled["source_count"] == (16 if sid.endswith(("-0", "-1")) else 3)
+    assert hashlib.sha256(REQUEST.read_bytes()).hexdigest() == before_digest
 
 
 def test_existing_acquisition_attempts_retain_partial_history_but_cannot_admit_three_of_fifteen():
