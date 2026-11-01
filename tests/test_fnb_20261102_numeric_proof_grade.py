@@ -114,3 +114,36 @@ def test_missing_numeric_checkpoint_must_not_be_fabricated():
     assert p["independent_index_evaluation"] == "NOT_PERFORMED"
     assert attest_frozen_numeric_counts(base, {"numeric_coverage": {}}, {"numeric_coverage": {}})[
         "status"] == "NUMERICAL_FROZEN_COUNTS_MISMATCH"
+
+
+def test_historical_fnb_real_signed_source_can_materialize_full29_without_policy_promotion():
+    """Archived 2026-10-02 signed SOURCE; historical diagnostic, NOT 11/2 LIVE."""
+    import json
+    import sys
+    from pathlib import Path
+    from runtime import formal_execution_orchestrator as o
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "runtime"))
+    from local_fullnumerical_production import materialize_production
+
+    eid = "LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC"
+    frozen_source = o.resolve_phase(eid, "SOURCE")
+    assert frozen_source is not None
+    envelope = o._load_checkpoint_json(frozen_source, "source_receipt_envelope.json")
+    assert envelope["receipt"]["status"] == "SOURCE_FROZEN"
+    src = envelope["artifact"]
+    assert src["source_race_context"]["venue_id"] == "FNB"
+    request = json.loads((root / "runtime" / "formal_intents" /
+                          "KM-LOCAL-FNB-20261002-R04-LIVE-R1.json").read_text(encoding="utf-8"))
+    assert len(request["runners"]) == 12
+    out = materialize_production(src, request, request["required_indices"])
+    counts = out["numeric_coverage"]
+    assert counts["required_count"] == 12 * 29
+    assert counts["unresolved_count"] == 0
+    assert counts["ruled_hold_count"] == 0
+    assert counts["calculated_count"] > 0
+    assert out["strict_full_numerical_ready"] is True
+    assert out["production_numerical_authority"]["prediction_consumption_authorized"] is False
+    assert out["production_numerical_authority"]["krs_consumption_authorized"] is False
+    assert out["production_numerical_authority"]["ticket_consumption_authorized"] is False
+    assert out["production_numerical_authority"]["capital_consumption_authorized"] is False
