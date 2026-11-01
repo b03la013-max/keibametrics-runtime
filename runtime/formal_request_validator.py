@@ -455,6 +455,10 @@ def validate_request(req):
 
 def validate_production_authority(req):
     """Hard boundary: Production Formal Runner must never consume Candidate/Shadow numerics."""
+    if str(req.get("family_id", "JRA")).upper() == "JRA":
+        from jra_source_runtime.jra_race_day_resolver import explicit_current_jump_context, JUMP_SCOPE_REASON
+        if explicit_current_jump_context(req):
+            raise FormalValidationError(JUMP_SCOPE_REASON)
     auth=req.get("base_index_mapping_authority")
     if not isinstance(auth,dict):
         raise FormalValidationError("PRODUCTION_MAPPING_AUTHORITY_MISSING")

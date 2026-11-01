@@ -36,13 +36,43 @@ def official_jump_race(race: Dict[str, Any]) -> bool:
     surface = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(race.get("surface") or "")))
     if surface.startswith("障") or surface in {"芝→ダート", "ダート→芝"}:
         return True
-    for field in ("title", "race_name", "raw", "official_day_row"):
+    for field in ("title", "race_name", "raw", "official_day_row", "raw_race_context"):
         header = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(race.get(field) or "")))
         if ("障害" in header or "ジャンプ" in header
                 or re.search(r"(?:^|\s)障[0-9]", header)
                 or re.search(r"(?<![A-Za-z0-9])J[・.]G(?:I{1,3}|[123])?(?![A-Za-z0-9])", header)):
             return True
     return False
+
+
+def explicit_current_jump_context(payload: Dict[str, Any]) -> bool:
+    """Inspect only explicit current race headers, never history or Raw bundles.
+
+    Missing headers remain unknown; this does not establish a flat Scope
+    witness or allow a dedicated jump owner through the regular JRA lane.
+    """
+    if not isinstance(payload, dict):
+        return False
+    def header(value):
+        return {key: value[key] for key in
+                ("surface", "title", "race_name", "raw_race_context", "official_day_row")
+                if isinstance(value.get(key), str)}
+    headers = [header(payload)]
+    if isinstance(payload.get("race"), dict):
+        headers.append(header(payload["race"]))
+    intent_resolver = payload.get("intent_resolver")
+    if isinstance(intent_resolver, dict) and isinstance(intent_resolver.get("official_day_row"), str):
+        headers.append({"official_day_row": intent_resolver["official_day_row"]})
+    for current in (payload, payload.get("source_snapshot")):
+        if not isinstance(current, dict):
+            continue
+        context = current.get("jra_race_context")
+        if isinstance(context, dict):
+            headers.append(header(context))
+        detail = current.get("jra_official_race_card_detail")
+        if isinstance(detail, dict) and isinstance(detail.get("race_context"), dict):
+            headers.append(header(detail["race_context"]))
+    return any(official_jump_race(header) for header in headers)
 
 
 def official_navigation_failure(exc, *, race_date=None, stage="OFFICIAL_CALENDAR"):
