@@ -13,7 +13,9 @@ def failure_row(race_id, exc, stage, **references):
     code = str(getattr(exc, 'error_code', None) or str(exc)).split(':', 1)[0][:300]
     detail = str(exc)[:1000]
     probe = (code + ' ' + detail).upper()
-    if isinstance(exc, json.JSONDecodeError) or any(x in probe for x in ('HASH', 'SHA256', 'SIGNATURE', 'UNIVERSE', 'MISMATCH',
+    if code.startswith('OWNER_B_'):
+        status = 'BLOCKED_OWNER_APPROVAL'
+    elif isinstance(exc, json.JSONDecodeError) or any(x in probe for x in ('HASH', 'SHA256', 'SIGNATURE', 'UNIVERSE', 'MISMATCH',
                                 'IMMUTAB', 'CONFLICT', 'INTEGRITY', 'IDENTITY')):
         status = 'BLOCKED_RESULT_INTEGRITY'
     elif any(x in probe for x in ('CUTOFF', 'PROSPECTIVE', 'WITNESS', 'TIMEZONE', 'TEMPORAL')):

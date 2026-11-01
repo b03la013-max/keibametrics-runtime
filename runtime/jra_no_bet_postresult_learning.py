@@ -319,6 +319,15 @@ def persist_no_bet_review_state(root,terminal,learning,*,execution_id,effective_
                                official_capture_verified=False,official_oidc_proofs=None):
     """Append original zero-bet data and its Review/State using the existing writer."""
     race_id=terminal.get("race_id") or ""
+    from jra_production_postresult import require_owner_b_recovery
+    recovery=require_owner_b_recovery(root,race_id,required_operation='NO_BET_REVIEW_STATE_ONLY')
+    if recovery and execution_id!=Path(recovery['original_ref']).stem:
+        raise JRANoBetLearningError('OWNER_B_RECOVERY_EXECUTION_OUTSIDE_APPROVAL')
+    if recovery:
+        approved_learning=json.loads((Path(root)/recovery['original_ref']).read_bytes())
+        approved_terminal=json.loads((Path(root)/'runtime/jra_no_bet_terminals'/(execution_id+'.json')).read_bytes())
+        if learning!=approved_learning or terminal!=approved_terminal:
+            raise JRANoBetLearningError('OWNER_B_RECOVERY_CONSUMER_ORIGINAL_MISMATCH')
     if (not isinstance(execution_id,str) or not execution_id.startswith(race_id+"-")
             or not re.fullmatch(r"[A-Za-z0-9_.-]+",execution_id)
             or terminal.get("source_execution_id") not in (None,execution_id)):

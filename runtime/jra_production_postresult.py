@@ -30,6 +30,72 @@ class ProductionPostResultError(ValueError):
     pass
 
 
+# These two historical repairs require the separately requested Owner B.
+# All other races retain their existing, already authorized natural path.
+OWNER_B_RECOVERY_SCOPES = {
+    'KM-JRA-TKY-20261031-R06': ('FORMAL_RESULT_SETTLEMENT_REVIEW_STATE',
+        'runtime/final_artifacts/KM-JRA-TKY-20261031-R06.json'),
+    'KM-JRA-TKY-20261031-R05': ('NO_BET_REVIEW_STATE_ONLY',
+        'runtime/jra_no_bet_learning/KM-JRA-TKY-20261031-R05-LIVE-R1.json'),
+}
+OWNER_B_POLICY_FILES = ('runtime/jra_production_postresult.py',
+    'runtime/jra_no_bet_postresult_learning.py',
+    '.github/workflows/km-jra-no-bet-postresult-learning.yml')
+
+
+def require_owner_b_recovery(root, race_id, *, now=None, required_operation=None):
+    """Reuse the existing committed Owner-record pattern for exact repairs only.
+
+    Code integration is not an approval. No approval record is created here;
+    it may be committed only after the Owner's separate, explicit decision.
+    This is a repository governance record, not a new cryptographic signer.
+    """
+    scope=OWNER_B_RECOVERY_SCOPES.get(race_id) if isinstance(race_id,str) else None
+    if scope is None:return None
+    root=Path(root);operation,original_ref=scope
+    relative=f'profiles/jra_postresult_recovery_approvals/{race_id}.json'
+    path=root/relative
+    try:
+        if required_operation is not None and required_operation!=operation:
+            raise ValueError('OPERATION_OUTSIDE_APPROVAL')
+        if path.is_symlink():raise ValueError('SYMLINK')
+        raw=path.read_bytes();record=json.loads(raw)
+        original=root/original_ref
+        if original.is_symlink():raise ValueError('ORIGINAL_SYMLINK')
+        policy={}
+        for name in OWNER_B_POLICY_FILES:
+            policy_path=root/name
+            if policy_path.is_symlink():raise ValueError('POLICY_SYMLINK')
+            policy_raw=policy_path.read_bytes()
+            if subprocess.check_output(['git','show','HEAD:'+name],cwd=root,timeout=10,
+                    stderr=subprocess.DEVNULL)!=policy_raw:raise ValueError('POLICY_NOT_COMMITTED')
+            policy[name]=hashlib.sha256(policy_raw).hexdigest()
+        if policy['runtime/jra_production_postresult.py']!=hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+            raise ValueError('EXECUTING_POLICY_NOT_COMMITTED')
+        if (record.get('decision')!='AUTHORIZE_JRA_POSTRESULT_RECOVERY'
+                or record.get('race_id')!=race_id or record.get('operation')!=operation
+                or record.get('original_ref')!=original_ref
+                or record.get('artifact_file_sha256')!=hashlib.sha256(original.read_bytes()).hexdigest()
+                or record.get('policy_source_sha256')!=_sha(policy)
+                or record.get('current_authority_manifest')!='KM-FAMILY-CURRENT-AUTHORITY-20261012-R51'
+                or record.get('authorized_by')!='b03la013-max'
+                or not isinstance(record.get('authorization_ref'),str)
+                or not record['authorization_ref'].strip()
+                or _dt(record.get('authorized_at'))>(now or datetime.now(timezone.utc))):
+            raise ValueError('CONTENT_OR_PIN')
+        # An uncommitted workspace file or environment variable cannot grant B.
+        committed=subprocess.check_output(['git','show','HEAD:'+relative],cwd=root,timeout=10,
+                                           stderr=subprocess.DEVNULL)
+        if committed!=raw:raise ValueError('NOT_COMMITTED_RECORD')
+    except (OSError,ValueError,TypeError,AttributeError,subprocess.SubprocessError) as exc:
+        error=ProductionPostResultError('OWNER_B_APPROVAL_REQUIRED:'+str(race_id))
+        error.first_failed_stage='OWNER_B_AUTHORIZATION'
+        raise error from exc
+    return {'operation':operation,'original_ref':original_ref,
+            'authorization_record':relative,
+            'authorization_record_sha256':hashlib.sha256(raw).hexdigest()}
+
+
 def _sha(obj) -> str:
     return hashlib.sha256(json.dumps(obj, ensure_ascii=False, sort_keys=True,
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -325,6 +391,7 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
             or request.get('family_id','JRA')!='JRA'
             or str(request.get('result_lane') or 'PRODUCTION').upper()!='PRODUCTION'):
         raise ProductionPostResultError('RESULT_REUSE_PRODUCTION_JRA_REQUIRED')
+    require_owner_b_recovery(root,race_id,required_operation='FORMAL_RESULT_SETTLEMENT_REVIEW_STATE')
     final=json.loads((root/'runtime/final_artifacts'/(race_id+'.json')).read_text())
     verify_final(final)
     verify_archived_final_signature(final,root=root,race_id=race_id)
@@ -462,6 +529,7 @@ def _source_bound_result_universe(root: Path, final: dict):
 
 
 def process(root: Path, race_id: str, *, now=None) -> str:
+    require_owner_b_recovery(root,race_id,now=now,required_operation='FORMAL_RESULT_SETTLEMENT_REVIEW_STATE')
     out = root / "runtime" / "results" / (race_id + ".json")
     if out.exists():
         return "ALREADY_RESULTED"

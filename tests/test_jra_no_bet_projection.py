@@ -70,7 +70,7 @@ def test_workflow_both_stages_use_same_optional_selector_and_no_broad_copy_befor
     assert text.index('projection=persist_no_bet_review_state(')<text.index('dest=Path("runtime_out/learning")/path.name')
     # Keep the embedded Python parseable without starting a worker.
     embedded=list(re.finditer(r"(?m)^          python - <<'PY'\n(.*?)(?m:^          PY)$",text,re.S))
-    assert len(embedded)==2
+    assert len(embedded)==3  # capture, settle, and final Owner B health reflection
     for match in embedded:
         ast.parse('\n'.join(line[10:] for line in match[1].splitlines()))
 
