@@ -388,10 +388,16 @@ def certify(request: dict, entry_report: dict) -> dict:
         raise RaceKeyGateError("SIGNED_FINAL_VERIFICATION_REQUIRED")
     if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != eid:
         raise RaceKeyGateError("FINAL_TEMPORAL_RACE_MISMATCH")
+    # Checkpoint fixtures and older executions may omit either numerical
+    # artifact. The existing manifest is the authority for file existence;
+    # missing evidence is UNKNOWN, never fabricated as matching counts.
+    frozen_files = (formal.get("manifest") or {}).get("files") or {}
     report["numeric_checkpoint_consistency"] = attest_frozen_numeric_counts(
         entry_report,
-        o._load_checkpoint_json(formal, "numerical_materialization_summary.json"),
-        o._load_checkpoint_json(formal, "mandatory_stage_manifest.json"))
+        o._load_checkpoint_json(formal, "numerical_materialization_summary.json")
+        if "numerical_materialization_summary.json" in frozen_files else None,
+        o._load_checkpoint_json(formal, "mandatory_stage_manifest.json")
+        if "mandatory_stage_manifest.json" in frozen_files else None)
     return {**report, "status": "FULL_LIFECYCLE_EXECUTION_PASS",
             "formal_final_proven": True, "completion": True,
             "final_receipt_sha256": final["receipt_sha256"]}
