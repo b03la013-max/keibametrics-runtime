@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from datetime import datetime
 from math import isfinite
 from pathlib import Path
 
 REQUIRED = ["HPI","SSI","CFI","RFI","BVI","JTI","CSI","TRI","BWI","GCI","PRI","KGI","VMI","DCR","TPI","ZAI_WIN","ZAI_PLACE","SRI","F3S","T3I"]
+STATIC_ROLE_BINDING_VERSION = "JRA-CURRENT-STATIC-HORSE-ROLES-v1"
 
 
 class KRSInputBridgeError(ValueError):
@@ -57,7 +59,7 @@ def _mean(*xs):
     return sum(xs)/len(xs)
 
 
-def build_runner_input(runner):
+def build_runner_input(runner, *, static_roles=None):
     cc=runner.get("canonical_components")
     if not isinstance(cc,dict):
         raise KRSInputBridgeError(f"CANONICAL_COMPONENTS_MISSING:{runner.get('runner_id')}")
@@ -105,9 +107,38 @@ def build_runner_input(runner):
         "name":str(runner.get("name") or ""),
         "hsv":{k:round(v,6) for k,v in hsv.items()},
         "static":{k:round(v,6) for k,v in static.items()},
-        "static_roles":copy.deepcopy(runner.get("static_roles") or []),
+        "static_roles":copy.deepcopy((runner.get("static_roles") or []) if static_roles is None else static_roles),
         "uncertainty_scale":round(1.0 + max(0.0, 70.0-vals["DCR"])/100.0,6),
     }
+
+
+def _canonical_static_role_map(request, runners):
+    """Project the caller-validated JRA Static; do not select or union Roles.
+
+    Current requests use horse -> Roles, separately from prepared runner rows.
+    Legacy requests without that authoritative shape keep their old embedded
+    runner metadata. Authority/signature validation remains with the caller.
+    """
+    static=request.get("static_prediction") or {}
+    if (request.get("family_id")!="JRA" or static.get("production_authority") is not True
+            or "roles" not in static):
+        return None
+    roles=static["roles"]
+    if not isinstance(roles,dict):
+        raise KRSInputBridgeError("KRS_STATIC_ROLE_MAP_INVALID")
+    universe={str(r["runner_id"]) for r in runners}
+    if not roles:
+        return {h:[] for h in universe}  # explicit authoritative no-role map
+    if set(roles)<=set(("W","P2","P3")):
+        return None  # legacy column -> runners shape; preserve old behavior
+    normalized={str(h):columns for h,columns in roles.items()}
+    if len(normalized)!=len(roles) or set(normalized)!=universe:
+        raise KRSInputBridgeError("KRS_STATIC_ROLE_UNIVERSE_MISMATCH")
+    for h,columns in normalized.items():
+        if (not isinstance(columns,list) or any(c not in ("W","P2","P3") for c in columns)
+                or len(columns)!=len(set(columns))):
+            raise KRSInputBridgeError("KRS_STATIC_ROLE_INVALID:"+h)
+    return normalized
 
 
 def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-20260921"):
@@ -115,6 +146,7 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
     runners=req.get("runners")
     if not isinstance(runners,list) or len(runners)<2:
         raise KRSInputBridgeError("RUNNERS_INVALID")
+    role_map=_canonical_static_role_map(req,runners)
     race=req.get("race") or req.get("race_identity") or {}
     race_id=req.get("race_id")
     if not race_id:
@@ -151,7 +183,8 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
     req["krs_input_data"]={
         "race":krs_race,
         "environment":environment,
-        "horses":[build_runner_input(r) for r in runners],
+        "horses":[build_runner_input(r,static_roles=role_map[str(r["runner_id"])]) if role_map is not None
+                  else build_runner_input(r) for r in runners],
         "simulation":{
             "run_count":int(req.get("run_count",5000)),
             "master_seed":int(req.get("seed",1)),
@@ -167,4 +200,10 @@ def build_krs_input(request, bridge_profile="JRA-KRS-HSV-BRIDGE-v1.0-PRODUCTION-
         "observed_context_sha256":context.get("sha256"),
         "filled_source_context_fields":filled,
     }
+    if role_map is not None:
+        req["explicit_engine_hsv_provenance"].update(
+            static_role_binding_version=STATIC_ROLE_BINDING_VERSION,
+            static_role_map_sha256=hashlib.sha256(json.dumps(role_map,ensure_ascii=False,
+                sort_keys=True,separators=(",",":")).encode("utf-8")).hexdigest(),
+        )
     return req
