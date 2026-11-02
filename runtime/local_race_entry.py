@@ -879,9 +879,15 @@ def _fnb_private_chat_route(args):
                 'reason':'FNB_PRIVATE_WORK_ROOT_NOT_CONNECTED',
                 'recipient_delivery_ack':False,'registered_oos_increment':0}
     else:
-        result=complete(args.query,Path(args.private_root),
-                        diagnostic_only=args.diagnostic_only,
-                        emit_private_body=args.display)
+        try:
+            result=complete(args.query,Path(args.private_root),
+                            diagnostic_only=args.diagnostic_only,
+                            emit_private_body=args.display)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            result={'status':'EXECUTION_HOLD_NOT_NO_BET',
+                    'first_failed_stage':'FNB_QUERY_OR_PRIVATE_EXECUTION',
+                    'reason':str(exc).split(':')[0],
+                    'recipient_delivery_ack':False,'registered_oos_increment':0}
     if args.display and result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER':
         print(result['body'],end='')
     else:
