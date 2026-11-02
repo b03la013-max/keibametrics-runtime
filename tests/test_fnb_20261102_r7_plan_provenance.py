@@ -243,3 +243,18 @@ def test_r7_existing_dispatcher_rejects_self_hashed_fnb_plan_before_authority(mo
     monkeypatch.setattr(family_authority_guard,"resolve_current_authority",forbidden)
     with pytest.raises(ValueError, match="FNB_DAY_PLAN_OFFICIAL_RAW_INTEGRITY_REQUIRED"):
         dispatcher.authorization({},forged,tmp_path,datetime(2026,11,2,9,tzinfo=JST))
+
+
+
+def test_r7_patched_race_execution_identity_and_duplicate_post_time_are_rejected():
+    plan=_fixture_plan()
+    plan["races"][4]["execution_id"]="LOCAL-KM-LOCAL-KAW-20261102-R05-LIVE-R1-EXEC"
+    p=verify_fnb_plan(_rehash(plan),DAY)
+    assert not p["raw_integrity_verified"]
+    assert any("RACE_IDENTITY_OR_DRAFT_SCOPE_INVALID" in x for x in p["issues"])
+    plan=_fixture_plan()
+    plan["races"][1]["fields"]["scheduled_post_at"]=plan["races"][0]["fields"]["scheduled_post_at"]
+    plan["races"][1]["fields"]["prediction_cutoff"]=plan["races"][0]["fields"]["prediction_cutoff"]
+    p=verify_fnb_plan(_rehash(plan),DAY)
+    assert not p["raw_integrity_verified"]
+    assert "PLAN_POST_TIMES_NOT_STRICTLY_ASCENDING" in p["issues"]
