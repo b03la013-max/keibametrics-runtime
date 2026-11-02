@@ -76,6 +76,8 @@ jobs:
             tests/test_fnb_20261102_r9_numeric_disposition.py \
             tests/test_fnb_20261102_r9_60r_observation.py \
             tests/test_fnb_20261102_r9_history_asof.py \
+            tests/test_fnb_20261102_r10_historical_closedloop.py \
+            tests/test_fnb_20261102_r10_gateway_readonly_health.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -101,6 +103,8 @@ jobs:
             runtime/local_fnb_r9_numeric_disposition.py \
             runtime/local_fnb_r9_60r_observation.py \
             runtime/local_fnb_r9_history_asof.py \
+            runtime/local_fnb_r10_historical_closedloop.py \
+            runtime/local_fnb_r10_gateway_readonly_health.py \
             runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
 
@@ -185,5 +189,46 @@ jobs:
         with:
           name: fnb-r9-60r-${{ github.run_id }}
           path: fnb-r9-60r-matrix.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 independently verified historical Signed RESULT settlement
+        run: |
+          python - <<'PY'
+          from runtime.local_fnb_r10_historical_closedloop import inspect_historical
+          import hashlib,json
+          from pathlib import Path
+          audit=inspect_historical()
+          assert audit['status']=='RETROSPECTIVE_R06_CRYPTO_AND_FROZEN_SETTLEMENT_VERIFIED'
+          assert audit['all_three_stored_ed25519_signatures_verified_with_archived_key'] is True
+          assert audit['ticket_audit']['total_stake']==5900
+          assert audit['ticket_audit']['total_payout']==9320
+          receipt={'schema':'KM-FNB-R10-HISTORICAL-SIGNED-SETTLEMENT-RECEIPT-v1',
+                   'classification':'RETROSPECTIVE_NOT_REGISTERED_OOS_NOT_NEW_LIVE',
+                   'audit':audit}
+          receipt['sha256']=hashlib.sha256(json.dumps(receipt,sort_keys=True,
+              ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r10-historical-settlement.json').write_text(
+             json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'status':audit['status'],
+             'recommendation_pfs_percent':audit['settled_pfs_percent'],
+             'signatures_verified_with_archived_public_key':3,
+             'actual_purchase_verified':False,'new_11_02_prediction':False}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-historical-settlement-${{ github.run_id }}
+          path: fnb-r10-historical-settlement.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 single read-only GET canonical LOCAL Gateway health
+        run: |
+          python -m runtime.local_fnb_r10_gateway_readonly_health \
+            --output fnb-r10-local-gateway-health.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-local-gateway-health-${{ github.run_id }}
+          path: fnb-r10-local-gateway-health.json
           if-no-files-found: warn
           retention-days: 30
