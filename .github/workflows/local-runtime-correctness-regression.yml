@@ -81,6 +81,9 @@ jobs:
             tests/test_fnb_20261102_r10_signed_identity.py \
             tests/test_fnb_20261102_r11_prestart_emergency.py \
             tests/test_fnb_20261102_r11_venue_temporal.py \
+            tests/test_fnb_20261102_r12_official_change_scope.py \
+            tests/test_fnb_20261102_r12_historical_krs_witness.py \
+            tests/test_fnb_20261102_r12_hpi_source_arithmetic.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -111,6 +114,9 @@ jobs:
             runtime/local_fnb_r10_signed_race_identity.py \
             runtime/local_fnb_r11_prestart_emergency.py \
             runtime/local_fnb_r11_venue_temporal.py \
+            runtime/local_fnb_r12_official_change_scope.py \
+            runtime/local_fnb_r12_historical_krs_witness.py \
+            runtime/local_fnb_r12_hpi_source_arithmetic.py \
             runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
 
@@ -292,5 +298,47 @@ jobs:
         with:
           name: fnb-r11-prestart-${{ github.run_id }}
           path: fnb-r11-20261102-prestart-readiness.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R12 real archived evidence independent HPI6 and signed KRS chain
+        run: |
+          python - <<'PY'
+          import sys,json,hashlib
+          from pathlib import Path
+          sys.path.insert(0,str(Path('runtime').resolve()))
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r12_historical_krs_witness import attest_archived_krs
+          from runtime.local_fnb_r12_hpi_source_arithmetic import verify_hpi_six
+          from local_fullnumerical_production import materialize_production
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase=o.resolve_phase(eid,'SOURCE')
+          src=o._load_checkpoint_json(phase,'source_receipt_envelope.json')['artifact']
+          intent=json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          mat=materialize_production(src,intent,intent['required_indices'])
+          arithmetic=verify_hpi_six(mat)
+          krs=attest_archived_krs()
+          assert arithmetic['status']=='HPI_SIX_PARSED_START_ARITHMETIC_VERIFIED',arithmetic['errors']
+          assert arithmetic['checked_cells']==72
+          assert krs['status']=='ARCHIVED_FNB_R04_KRS_SIGNED_LINEAGE_VERIFIED'
+          assert krs['actual_run_count']==5000
+          assert krs['seed_is_one'] is False
+          payload={'classification':'RETROSPECTIVE_NOT_20261102_LIVE_NOT_REGISTERED_OOS',
+                   'real_hpi_six_arithmetic':arithmetic,
+                   'signed_krs_chain':krs,
+                   'numerical_consumer_authority_granted':False,
+                   'new_signed_final':False,'new_live_delivery_ack':False}
+          payload['sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
+               ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r12-hpi-krs-receipt.json').write_text(
+              json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'hpi_arithmetic_cells':arithmetic['checked_cells'],
+                           'krs_signed_phases':len(krs['signed_phase_envelopes_verified']),
+                           'historical_sim_count':krs['actual_run_count']},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r12-hpi-krs-${{ github.run_id }}
+          path: fnb-r12-hpi-krs-receipt.json
           if-no-files-found: warn
           retention-days: 30
