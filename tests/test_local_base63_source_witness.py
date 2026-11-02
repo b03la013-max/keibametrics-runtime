@@ -17,7 +17,7 @@ def registry():
     return json.loads((ROOT/"mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json").read_text())
 
 def fixture():
-    header='<h4>2026年10月2日 船橋 第4競走 16:15発走</h4><h3>Ｃ３一</h3><li>ダート 1500ｍ（左） 天候：曇 馬場：重</li>'
+    header='<h4>2026年10月2日 船橋 第4競走 16:15発走</h4><section class="raceTitle"><h3>Ｃ３一</h3><li>ダート 1500ｍ（左） 天候：曇 馬場：重</li></section>'
     rows=[['枠番','馬番','競走馬','騎手']]
     for no in (1,2):
         descriptors=[f'{no} 26.09.{d:02d} 良 5頭 船橋 左1500 {no}番' for d in (25,18,11,4)]+[f'{no} 26.08.28 良 5頭 船橋 左1500 {no}番']

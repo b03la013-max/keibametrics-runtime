@@ -74,6 +74,9 @@ def jockey(value):
 
 def grade(value):
     t=compact(value).upper()
+    known={"A1","A2","A3","B1","B2","B3","C1","C2","C3"}
+    if any(code not in known for code in re.findall(r"[ABC]\d+",t)):
+        return NEUTRAL,"CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
     rank_patterns=[(r"(?<![A-Z0-9])(?:JPN1|JPNI|G1|GI|S1|I)(?![A-Z0-9])",100),
         (r"(?<![A-Z0-9])(?:JPN2|JPNII|G2|GII|S2)(?![A-Z0-9])",96),
         (r"(?<![A-Z0-9])(?:JPN3|JPNIII|G3|GIII|S3)(?![A-Z0-9])",92)]
@@ -116,8 +119,10 @@ class OriginalTables(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.stack=[];self.tables=[];self.text=[];self.headings=[];self.heading=None
+        self.sections=[];self.race_title_headings=[]
     def handle_starttag(self,tag,attrs):
-        if tag in ("h3","h4"):self.heading=[tag,[]]
+        if tag=="section":self.sections.append("raceTitle" in dict(attrs).get("class","").split())
+        if tag in ("h3","h4"):self.heading=[tag,[],any(self.sections)]
         if tag=="table":self.stack.append({"rows":[],"row":None,"cell":None})
         elif self.stack and tag=="tr":self.stack[-1]["row"]=[]
         elif self.stack and tag in ("td","th"):self.stack[-1]["cell"]=[]
@@ -129,7 +134,11 @@ class OriginalTables(HTMLParser):
             if frame["cell"] is not None:frame["cell"].append(data)
     def handle_endtag(self,tag):
         if self.heading is not None and self.heading[0]==tag:
-            self.headings.append([tag," ".join(" ".join(self.heading[1]).split())]);self.heading=None
+            text=" ".join(" ".join(self.heading[1]).split())
+            self.headings.append([tag,text])
+            if tag=="h3" and self.heading[2]:self.race_title_headings.append(text)
+            self.heading=None
+        if tag=="section" and self.sections:self.sections.pop()
         if not self.stack:return
         current=self.stack[-1]
         if tag in ("td","th") and current["cell"] is not None:
@@ -180,7 +189,11 @@ def official_context(parser,request):
     matches=re.findall(r"(ダート|芝)(\d{3,4})m\(([左右])\).*?天候[:：](.*?)馬場[:：](不良|稍重|良|重)",text)
     if len(matches)!=1:raise ValueError("OFFICIAL_CONTEXT_HEADER_AMBIGUOUS")
     surface,distance,direction,weather,going=matches[0]
-    titles=[v for tag,v in parser.headings if tag=="h3" and grade(v)[1]!="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"]
+    # Only the official raceTitle region supplies the race name. Other h3
+    # headings (e.g. the odds tab) are never class/name identity evidence.
+    all_titles=parser.race_title_headings
+    if len(all_titles)!=1:raise ValueError("OFFICIAL_RAW_RACE_TITLE_AMBIGUOUS")
+    titles=[v for v in all_titles if grade(v)[1]!="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"]
     context={"venue":request["venue_id"],"distance":int(distance),
         "direction":"LEFT" if direction=="左" else "RIGHT","surface":"DIRT" if surface=="ダート" else "TURF",
         "weather":weather.strip("、,;；:"),"going":going,"race_titles":titles,
@@ -194,9 +207,23 @@ def official_context(parser,request):
         raise ValueError("OFFICIAL_REQUEST_DIRECTION_CONFLICT")
     if race.get("surface") and str(race["surface"]).upper()!=context["surface"]:
         raise ValueError("OFFICIAL_REQUEST_SURFACE_CONFLICT")
-    if race.get("class") and (grade(race["class"])[1]=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL" or
-            not any(grade(x)[0]==grade(race["class"])[0] for x in titles)):
-        raise ValueError("OFFICIAL_REQUEST_CLASS_CONFLICT")
+    if race.get("class"):
+        class_label=compact(race["class"])
+        if grade(race["class"])[1]=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL":
+            # An age category is an identity label, not an ordinal grade. Only
+            # accept the exact official race name plus the same literal class
+            # label (or its explicit age-category prefix); never use 52==52 as
+            # identity evidence or invent a class score for an unparsed label.
+            named=[v for v in all_titles if compact(v)==compact(race.get("name") or "")]
+            if (len(named)!=1 or grade(named[0])[1]!="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+                    or not (compact(named[0])==class_label or
+                        re.fullmatch(r"[2-9]歳(?:以上|以下)?",class_label) and compact(named[0]).startswith(class_label))):
+                raise ValueError("OFFICIAL_REQUEST_CLASS_CONFLICT")
+            context["race_titles"]=named
+            context["class_identity_basis"]="EXACT_OFFICIAL_RACE_NAME_AND_UNRESOLVED_LITERAL_CLASS_LABEL"
+            context["class_score_status"]="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+        elif not any(grade(x)[0]==grade(race["class"])[0] for x in titles):
+            raise ValueError("OFFICIAL_REQUEST_CLASS_CONFLICT")
     return context
 
 def source_snapshot_audit(source):
@@ -503,13 +530,17 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
         put("DCR","bodyweight_range_coverage",100*coverage(int(cur is not None)+len(bw),6),1,{"observations":int(cur is not None)+len(bw)})
         put("DCR","same_day_gci_coverage",100*coverage(management["prior_result_count"],max(1,request["race_no"]-1)),1,{"raw_verified_prior_races":management["prior_race_numbers"]})
         put("DCR","late_odds_changes_coverage",100 if management["odds_source_present"] else 0,1,{"raw_verified_odds_source_present":management["odds_source_present"]})
-        curclass,state=grade(str(race.get("class") or ""));prev=starts[0]["class_score"] if starts else None
-        for name,value,obs,reason in (("current_class",curclass,{"class":race.get("class"),"parse_state":state},None),
+        class_label=str(race.get("class") or (context.get("race_titles") or [""])[0])
+        curclass,state=grade(class_label);prev=starts[0]["class_score"] if starts else None
+        unresolved_current_class=state=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+        current_value=None if unresolved_current_class else curclass
+        current_reason="CURRENT_CLASS_UNRESOLVED_CANONICAL_NEUTRAL" if unresolved_current_class else None
+        for name,value,obs,reason in (("current_class",current_value,{"class":class_label,"parse_state":state},current_reason),
              ("previous_class",prev,starts[0]["race_name"] if starts else None,"NO_RECENT_CLASS"),
              ("recent_opponent_class",decay_mean(classes),classes,"NO_RECENT_CLASS"),
-             ("race_set_level",curclass,{"class":race.get("class"),"parse_state":state},None),
-             ("class_change_pressure",clip(50+(prev-curclass)*D("1.5")) if prev is not None else None,{"previous":prev,"current":curclass},"NO_PREVIOUS_CLASS"),
-             ("transfer_class",clip(50+((prev or NEUTRAL)-curclass)*(D("1.2") if starts and compact(starts[0]["venue"]).startswith("J") else D(".8"))) if starts else None,{"previous":prev,"current":curclass},"NO_PREVIOUS_CLASS")):
+             ("race_set_level",current_value,{"class":class_label,"parse_state":state},current_reason),
+             ("class_change_pressure",clip(50+(prev-curclass)*D("1.5")) if prev is not None and not unresolved_current_class else None,{"previous":prev,"current":curclass},current_reason or "NO_PREVIOUS_CLASS"),
+             ("transfer_class",clip(50+((prev or NEUTRAL)-curclass)*(D("1.2") if starts and compact(starts[0]["venue"]).startswith("J") else D(".8"))) if starts and not unresolved_current_class else None,{"previous":prev,"current":curclass},current_reason or "NO_PREVIOUS_CLASS")):
             cov=D(len(classes))/5 if name=="recent_opponent_class" else int(value is not None)
             put("NCI",name,value,cov,obs,reason)
         observations[rid]={"horse":horse,"components":components,"current_distance":distance}
