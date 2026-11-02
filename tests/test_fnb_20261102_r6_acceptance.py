@@ -181,3 +181,26 @@ def test_r6_historical_full29_replay_is_deterministic_and_unconsumed():
               "ticket_consumption_authorized", "capital_consumption_authorized"):
         assert a["production_numerical_authority"][k] is False
         assert b["production_numerical_authority"][k] is False
+
+
+
+def test_r6_cutoff_expiry_cannot_be_reclassified_as_prestart_delivery():
+    from runtime.local_fnb_r6_readonly_acceptance import cutoff_disposition
+    fields = {
+        "scheduled_post_at": "2026-11-02T14:45:00+09:00",
+        "prediction_cutoff": "2026-11-02T14:40:00+09:00",
+    }
+    assert cutoff_disposition(fields, now=datetime.fromisoformat(
+        "2026-11-02T14:39:00+09:00")) == (
+            "PRE_CUTOFF_WINDOW_OBSERVED_AUTHORIZATION_STILL_REQUIRED")
+    assert cutoff_disposition(fields, now=datetime.fromisoformat(
+        "2026-11-02T14:40:00+09:00")) == (
+            "CUTOFF_EXPIRED_DIAGNOSTIC_ONLY_NO_RETROACTIVE_PRESTART")
+    assert cutoff_disposition(fields, now=datetime.fromisoformat(
+        "2026-11-02T15:00:00+09:00")) == (
+            "CUTOFF_EXPIRED_DIAGNOSTIC_ONLY_NO_RETROACTIVE_PRESTART")
+    assert cutoff_disposition(None, now=NOW) == "OFFICIAL_CUTOFF_NOT_PROVEN"
+    assert cutoff_disposition({
+        "scheduled_post_at": "2026-11-02T14:45:00+09:00",
+        "prediction_cutoff": "2026-11-02T14:50:00+09:00",
+    }, now=NOW) == "OFFICIAL_CUTOFF_INVALID"
