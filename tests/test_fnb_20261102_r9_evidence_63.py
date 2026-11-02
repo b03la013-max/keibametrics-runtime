@@ -39,6 +39,11 @@ def test_r9_real_fnb_756_component_records_have_source_lineage(real):
     assert result["runner_count"]==12
     assert result["expected_component_records"]==756
     assert result["recorded_components_verified"]==756
+    assert result["missing_component_records"]==274
+    assert result["observed_component_records"]==482
+    assert sum(v["missing_component_records"] for v in
+               result["per_index_evidence_quality"].values())==274
+    assert result["calculated_index_does_not_mean_all_components_observed"] is True
     assert result["missing_not_weak"] is True
     assert result["source_to_feature_transform_arithmetic_independently_verified"] is False
 
