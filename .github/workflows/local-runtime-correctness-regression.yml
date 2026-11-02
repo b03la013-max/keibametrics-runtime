@@ -73,6 +73,8 @@ jobs:
             tests/test_fnb_20261102_r8_official_changes.py \
             tests/test_fnb_20261102_r9_delivery.py \
             tests/test_fnb_20261102_r9_evidence_63.py \
+            tests/test_fnb_20261102_r9_numeric_disposition.py \
+            tests/test_fnb_20261102_r9_60r_observation.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -95,9 +97,11 @@ jobs:
             runtime/local_fnb_r8_missingness_census.py \
             runtime/local_fnb_r9_method_audit.py \
             runtime/local_fnb_r9_evidence_63.py \
+            runtime/local_fnb_r9_numeric_disposition.py \
+            runtime/local_fnb_r9_60r_observation.py \
             runtime/local_evidence_to_base_production.py
 
-      - name: FNB R7 historical signed-store numerical replay receipt
+      - name: FNB R9 historical signed-store numerical and feature receipts
         run: |
           python - <<'PY'
           import sys, json, hashlib
@@ -143,7 +147,7 @@ jobs:
               'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
           payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
               ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
-          Path('fnb-r7-historical-numerical-receipt.json').write_text(
+          Path('fnb-r9-historical-numerical-receipt.json').write_text(
               json.dumps(payload,sort_keys=True,ensure_ascii=False,indent=2)+'\n')
           print(json.dumps({'source_race':eid,'required':348,
               'calculated':mat['numeric_coverage']['calculated_count'],
@@ -153,18 +157,29 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fnb-r7-historical-numerical-${{ github.run_id }}
-          path: fnb-r7-historical-numerical-receipt.json
+          name: fnb-r9-historical-numerical-${{ github.run_id }}
+          path: fnb-r9-historical-numerical-receipt.json
           if-no-files-found: warn
           retention-days: 30
-      - name: FNB R7 official-raw bound dated read-only acceptance
+      - name: FNB R9 day 1 official-raw bound dated read-only acceptance
         run: |
           python -m runtime.local_fnb_r6_readonly_acceptance \
-            --root . --date 2026-11-02 --output fnb-r7-readonly-acceptance.json
+            --root . --date 2026-11-02 --output fnb-r9-readonly-acceptance.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fnb-r7-readonly-${{ github.run_id }}
-          path: fnb-r7-readonly-acceptance.json
+          name: fnb-r9-readonly-${{ github.run_id }}
+          path: fnb-r9-readonly-acceptance.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R9 read-only five-day 60R repository receipt matrix
+        run: |
+          python -m runtime.local_fnb_r9_60r_observation \
+            --root . --start-date 2026-11-02 --output fnb-r9-60r-matrix.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r9-60r-${{ github.run_id }}
+          path: fnb-r9-60r-matrix.json
           if-no-files-found: warn
           retention-days: 30
