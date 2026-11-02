@@ -86,6 +86,7 @@ jobs:
             tests/test_fnb_20261102_r12_hpi_source_arithmetic.py \
             tests/test_fnb_20261102_r13_rider_lineage.py \
             tests/test_fnb_20261102_r13_private_numeric.py \
+            tests/test_fnb_20261102_r14_live_source_probe.py \
             tests/test_fnb_20261102_r14_private_dual_krs.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
@@ -124,6 +125,7 @@ jobs:
             runtime/local_fnb_r13_private_source_admission.py \
             runtime/local_fnb_r13_private_single_numeric.py \
             runtime/local_fnb_r13_private_numeric_document.py \
+            runtime/local_fnb_r14_live_source_probe.py \
             runtime/local_fnb_r14_private_dual_krs.py \
             runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
@@ -417,3 +419,14 @@ jobs:
           path: fnb-r13-private-numeric-safe-receipt.json
           if-no-files-found: warn
           retention-days: 30
+      - name: FNB R14 current Nov 2 1R primary NAR Raw inspection (ephemeral)
+        run: |
+          python -m runtime.local_fnb_r14_live_source_probe \
+            --race-no 1 --output fnb-r14-live-r01-sanitized.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r14-live-r01-sanitized-${{ github.run_id }}
+          path: fnb-r14-live-r01-sanitized.json
+          if-no-files-found: warn
+          retention-days: 7
