@@ -43,7 +43,7 @@ def test_r11_prior_signed_result_may_only_inform_later_race():
     assert state["current_track_bias_status"]=="OBSERVED_PRIOR_RACE_ONLY_NOT_CALIBRATED"
 
 
-@pytest.mark.parametrize("num", [1,3,12])
+@pytest.mark.parametrize("num", [3,4,12])
 def test_r11_same_or_future_race_result_forbidden(num):
     source,request=fixture(3)
     source["fnb_same_day_result_observations"]=[prior(num)]
