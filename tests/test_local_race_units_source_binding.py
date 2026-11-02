@@ -95,6 +95,18 @@ def test_existing_v03_overrides_consume_canonical_units_from_the_same_archive():
     assert a["candidate_v03_policy"]["weight_change_from_v01"] is False
 
 
+@pytest.mark.parametrize("code,name",[("FNB","船橋"),("URW","浦和"),("OHI","大井"),("KAW","川崎")])
+def test_v03_profile_and_pedigree_cohort_venue_aliases_match_in_both_directions(code,name):
+    from runtime.local_evidence_routing_candidate_v03 import _venue_eq
+    assert _venue_eq(code,name) and _venue_eq(name,code)
+    assert _venue_eq(code,name+"ナ")
+    assert not _venue_eq("UNKNOWN",name)
+    assert not _venue_eq(code,name+"以外")
+    assert not _venue_eq(code,name+"_typo")
+    assert not _venue_eq(name+"_typo",code)
+    assert not _venue_eq(code,"ナ"+name)
+
+
 def young_race_archive():
     rid="KM-LOCAL-FNB-20261002-R01-LIVE-R1"
     checkpoint=resolve_phase("LOCAL-"+rid+"-EXEC","SOURCE")

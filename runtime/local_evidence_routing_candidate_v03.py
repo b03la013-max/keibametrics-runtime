@@ -15,6 +15,7 @@ from local_nar_evidence_candidate import (
     _clamp,
     _going_group,
     _norm,
+    VENUE_NAMES,
     resolve_race_units,
 )
 
@@ -79,9 +80,15 @@ def _recency_weighted(xs: List[float | None], *, max_items: int = 8) -> float | 
 
 
 def _venue_eq(a: Any, b: Any) -> bool:
-    aa = _norm(a).replace("ナ", "")
-    bb = _norm(b).replace("ナ", "")
-    return bool(aa and bb and (aa == bb or aa in bb or bb in aa))
+    aa = _norm(a).removesuffix("ナ")
+    bb = _norm(b).removesuffix("ナ")
+    aa = VENUE_NAMES.get(aa.upper(), aa)
+    bb = VENUE_NAMES.get(bb.upper(), bb)
+    # Unknown labels such as 船橋_typo or 浦和以外 are not the canonical
+    # venue. Code/name normalization must never turn substring overlap into
+    # a qualified same-venue population.
+    known = set(VENUE_NAMES.values())
+    return aa in known and bb in known and aa == bb
 
 
 def _history_perf(rows: List[Dict[str, Any]], pred) -> Tuple[float | None, float, int]:
