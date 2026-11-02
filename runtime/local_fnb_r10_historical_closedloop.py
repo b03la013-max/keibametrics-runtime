@@ -17,6 +17,7 @@ from pathlib import Path
 from runtime import formal_execution_orchestrator as o
 
 EID = "LOCAL-KM-LOCAL-FNB-20261001-R06-LIVE-R1-EXEC"
+RACE_ID = "KM-LOCAL-FNB-20261001-R06-LIVE-R1"
 PROFILE = "KM-FNB-R10-HISTORICAL-SIGNED-SETTLEMENT-WITNESS-v1"
 TRUST_FILE = "evidence/family_audit_20261016/runtime_health.json"
 
@@ -42,7 +43,7 @@ def _assert_envelope(envelope, *, expected_phase, expected_status,
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     receipt, artifact = envelope["receipt"], envelope["artifact"]
     if (receipt.get("family") != "LOCAL" or receipt.get("phase") != expected_phase
-            or receipt.get("race_id") != EID
+            or receipt.get("race_id") != RACE_ID
             or receipt.get("status") != expected_status or receipt.get("errors")
             or envelope.get("signer_key_id") != profile["receipt_signer_key_id"]
             or envelope.get("signature_alg") != "Ed25519"
