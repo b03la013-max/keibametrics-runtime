@@ -294,7 +294,9 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             finally:tree_temp.unlink(missing_ok=True)
         from runtime.local_fnb_r6_numeric_readback import frozen_numeric_readback
         numeric_grade = frozen_numeric_readback(execution_id, formal, root)
-        return {**report,**payload,**numeric_grade,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        from runtime.local_fnb_r7_ticket_disposition import attest_ticket_decision
+        ticket_disposition = attest_ticket_decision(artifact, final_verified=True)
+        return {**report,**payload,**numeric_grade,'ticket_disposition':ticket_disposition,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
             'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
@@ -481,6 +483,12 @@ def main() -> int:
                 f"RULED-HOLD={grade.get('ruled_hold_count', 'UNKNOWN')}; "
                 f"frozen-ledger={check.get('status', 'NOT_VERIFIED')}\n\n"
                 "Independent arithmetic: NOT_PERFORMED; recipient delivery: UNPROVEN\n\n"
+            )
+            decision = result.get("ticket_disposition") or {}
+            content += (
+                f"Ticket disposition: {decision.get('status', 'NOT_VERIFIED')}; "
+                f"recommendation stake={decision.get('recommendation_investment', 'UNKNOWN')}; "
+                "PFS=NULL until independent settlement; actual purchase UNKNOWN\\n\\n"
             )
             if included:
                 content += (f"FINAL receipt: {result['final_receipt_sha256']}\n\n"
