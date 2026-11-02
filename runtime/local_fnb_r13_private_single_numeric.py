@@ -86,6 +86,14 @@ def execute(*,source_artifact,request,private_root,
     path.mkdir(parents=True,exist_ok=True)
     frozen=_encoded(result)
     frozen_sha=_atomic_private_write(path/"numerical_materialization.json",frozen)
+    from runtime.local_fnb_r13_private_numeric_document import render_full_numeric
+    display=render_full_numeric(result,classification=SCOPE if not diagnostic_only
+        else "HISTORICAL_DIAGNOSTIC_ONLY_NOT_PRESTART_NOT_REGISTERED_OOS",
+        race_id=race_key)
+    display_bytes=(display["body"]+"\n").encode("utf-8")
+    display_sha=_atomic_private_write(path/"all_horse_29_index_report.md",display_bytes)
+    if display["full_numeric_cells"]!=len(result["runners"])*29:
+        raise ValueError("FNB_PRIVATE_REPORT_29_GRID_NOT_COMPLETE")
     package={
         "classification":SCOPE if not diagnostic_only else
           "HISTORICAL_DIAGNOSTIC_ONLY_NOT_PRESTART_NOT_REGISTERED_OOS",
@@ -97,6 +105,10 @@ def execute(*,source_artifact,request,private_root,
         "prestart_source_acquired_and_calculated_proven":(not diagnostic_only and now<cutoff),
         "numerical_materialization_file":"numerical_materialization.json",
         "numerical_materialization_sha256":frozen_sha,
+        "private_readable_document_file":"all_horse_29_index_report.md",
+        "private_readable_document_sha256":display_sha,
+        "private_readable_index_cells":display["full_numeric_cells"],
+        "private_document_is_not_complete_prediction_or_delivery_ack":True,
         "runner_count":len(result["runners"]),
         "required_29_index_cells":len(result["runners"])*29,
         "numeric_coverage":result["numeric_coverage"],
@@ -118,7 +130,8 @@ def execute(*,source_artifact,request,private_root,
     receipt=_encoded(package)
     receipt_sha=_atomic_private_write(path/"private_numerical_receipt.json",receipt)
     if ((path/"private_numerical_receipt.json").read_bytes()!=receipt or
-            _sha((path/"numerical_materialization.json").read_bytes())!=frozen_sha):
+            _sha((path/"numerical_materialization.json").read_bytes())!=frozen_sha or
+            _sha((path/"all_horse_29_index_report.md").read_bytes())!=display_sha):
         raise ValueError("FNB_PRIVATE_NUMERIC_READBACK_VERIFICATION_FAILED")
     return {"status":"PRIVATE_NUMERIC_DIAGNOSTIC_COMPLETE_NOT_FORMAL",
             "classification":package["classification"],
@@ -130,6 +143,8 @@ def execute(*,source_artifact,request,private_root,
             "unknown_components":components["missing_component_records"],
             "private_receipt_sha256":receipt_sha,
             "private_materialization_sha256":frozen_sha,
+            "private_readable_document_sha256":display_sha,
+            "private_readable_index_cells":display["full_numeric_cells"],
             "full_private_readback_verified":True,
             "private_root":str(path),
             "signed_final_or_delivery_claim":False,
