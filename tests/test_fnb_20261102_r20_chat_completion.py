@@ -2,7 +2,11 @@
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 import pytest
 from runtime import local_fnb_r20_chat_completion as r20
@@ -10,6 +14,47 @@ from runtime import local_fnb_r20_chat_completion as r20
 NOW=datetime(2026,11,2,7,30,tzinfo=timezone.utc)
 RACE="KM-LOCAL-FNB-20261102-R05-PRIVATE-R1"
 QUERY="2026-11-02 船橋5R"
+
+def _minimal_work_cli(tmp_path, extra):
+    """Run actual private-entry code without any unrelated Formal modules."""
+    package=tmp_path/"minimal-transport"
+    runtime=package/"runtime"
+    runtime.mkdir(parents=True)
+    original=Path(__file__).resolve().parents[1]/"runtime"
+    for name in ("local_race_entry.py", "local_fnb_r20_chat_completion.py",
+                 "local_fnb_r19_chat_readback.py", "local_fnb_r14_private_dual_krs.py",
+                 "local_fnb_r13_private_single_numeric.py",
+                 "local_fnb_r13_private_source_admission.py"):
+        shutil.copyfile(original/name,runtime/name)
+    env=os.environ.copy()
+    env["PYTHONPATH"]=str(package)
+    env.pop("KM_FNB_PRIVATE_WORK_ROOT",None)
+    return subprocess.run([sys.executable,"-m","runtime.local_race_entry",*extra],
+                          cwd=package,env=env,capture_output=True,text=True,timeout=15)
+
+@pytest.mark.parametrize("query,reason",[
+    ("2026-11-02 船橋12レースのケイバメトリクス調査願います",
+     "PRIVATE_WORK_BUNDLE_NOT_PREPARED"),
+    ("2026-11-02 船橋12R 浦和11R", "FNB_CHAT_EXACTLY_ONE_RACE_REQUIRED"),
+])
+def test_normal_fnb_cli_reaches_private_gate_without_formal_stack(tmp_path,query,reason):
+    public=tmp_path/"unused-public-output"
+    result=_minimal_work_cli(tmp_path,["--query",query,"--private-root",str(tmp_path/"private"),
+        "--output",str(public),"--run-id","R21-PRIVATE-ACTOR-ACCEPTANCE"])
+    assert result.returncode==2,result.stderr
+    body=json.loads(result.stdout)
+    assert body["status"]=="EXECUTION_HOLD_NOT_NO_BET"
+    assert body["reason"]==reason
+    assert body["recipient_delivery_ack"] is False
+    assert body["registered_oos_increment"]==0
+    assert not public.exists()
+    assert "ImportError" not in result.stderr
+
+def test_cli_help_does_not_require_unrelated_formal_dependencies(tmp_path):
+    result=_minimal_work_cli(tmp_path,["--help"])
+    assert result.returncode==0,result.stderr
+    assert "--private-root" in result.stdout
+    assert "--persist-checkpoints" in result.stdout
 
 def _put(root,name,payload):
     p=root/name

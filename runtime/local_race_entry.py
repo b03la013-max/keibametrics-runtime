@@ -7,12 +7,36 @@ import os
 import re
 import json
 from pathlib import Path
-from runtime import formal_execution_orchestrator as o
-from runtime.local_fullnumerical_production import materialize_production
-from runtime.local_numerical_authority_gate import assess
-from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
-from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
-from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
+def _parse_entry_arguments():
+    parser = argparse.ArgumentParser(description=__doc__)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--request')
+    inputs.add_argument('--query', help='Explicit URW or FNB Race; FNB uses separately isolated private Work owner/source packets')
+    parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
+    parser.add_argument('--private-root', help='Explicit private Work directory for FNB, outside the public repository')
+    parser.add_argument('--diagnostic-only', action='store_true', help='No retroactive FNB prestart claim after cutoff')
+    parser.add_argument('--output', required=True)
+    parser.add_argument('--run-id', required=True)
+    parser.add_argument('--github-sha')
+    parser.add_argument('--persist-checkpoints', action='store_true',
+                        help='Use existing strict main-branch Git persistence before further stages')
+    return parser.parse_args()
+
+
+# A private FNB Work transport does not need the unrelated Formal/URW stack.
+# Parse the real CLI first so that missing Formal dependencies cannot prevent
+# the already isolated R20 route from executing. Imported/full-repository use
+# keeps the original dependencies and authority guards unchanged.
+_ENTRY_CLI_ARGS = _parse_entry_arguments() if __name__ == '__main__' else None
+_PRIVATE_FNB_CLI = bool(_ENTRY_CLI_ARGS is not None and _ENTRY_CLI_ARGS.query
+                        and re.search(r'(?:船橋|FNB)', _ENTRY_CLI_ARGS.query, re.I))
+if not _PRIVATE_FNB_CLI:
+    from runtime import formal_execution_orchestrator as o
+    from runtime.local_fullnumerical_production import materialize_production
+    from runtime.local_numerical_authority_gate import assess
+    from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
+    from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
+    from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
 
 
 def resolve_chat_intent(query, *, now=None):
@@ -900,19 +924,7 @@ def _fnb_private_chat_route(args):
     return 0 if result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER' else 2
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    inputs = parser.add_mutually_exclusive_group(required=True)
-    inputs.add_argument('--request')
-    inputs.add_argument('--query', help='Explicit URW or FNB Race; FNB uses separately isolated private Work owner/source packets')
-    parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
-    parser.add_argument('--private-root', help='Explicit private Work directory for FNB, outside the public repository')
-    parser.add_argument('--diagnostic-only', action='store_true', help='No retroactive FNB prestart claim after cutoff')
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--run-id', required=True)
-    parser.add_argument('--github-sha')
-    parser.add_argument('--persist-checkpoints', action='store_true',
-                        help='Use existing strict main-branch Git persistence before further stages')
-    args = parser.parse_args()
+    args = _ENTRY_CLI_ARGS if _ENTRY_CLI_ARGS is not None else _parse_entry_arguments()
     # FNB private research must not fall through to URW-only formal/reference
     # routes, and no horse-level source or tickets may enter --output.
     if args.query and re.search(r'(?:船橋|FNB)', args.query, re.I):
