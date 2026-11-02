@@ -39,10 +39,13 @@ def test_r9_real_fnb_756_component_records_have_source_lineage(real):
     assert result["runner_count"]==12
     assert result["expected_component_records"]==756
     assert result["recorded_components_verified"]==756
-    assert result["missing_component_records"]==274
-    assert result["observed_component_records"]==482
+    # Standard distance_m/Japanese-venue binding restores 62 existing Raw inputs.
+    # Historical 274/482 baseline is retained in the separate Before ledger.
+    assert result["missing_component_records"]==212
+    # This legacy counter includes Proxy and DCR management, not 544 abilities.
+    assert result["observed_component_records"]==544
     assert sum(v["missing_component_records"] for v in
-               result["per_index_evidence_quality"].values())==274
+               result["per_index_evidence_quality"].values())==212
     assert result["calculated_index_does_not_mean_all_components_observed"] is True
     assert result["missing_not_weak"] is True
     assert result["source_to_feature_transform_arithmetic_independently_verified"] is False
@@ -81,3 +84,4 @@ def test_r9_cross_race_signed_source_is_not_usable_for_feature_proof(real):
     result=audit_63(m,reg,altered,src)
     assert result["status"]=="FEATURE_LINEAGE_HOLD"
     assert "FNB_SOURCE_OR_INTENT_RACE_IDENTITY_INVALID" in result["issues"]
+

@@ -39,7 +39,7 @@ def test_r13_real_private_noncommercial_12_horses_348_cells_756_features_29_form
     assert grade["29_index_cells"]==348
     assert grade["calculated"]==312
     assert grade["neutral"]==36
-    assert grade["unknown_components"]==274
+    assert grade["unknown_components"]==212
     assert grade["full_private_readback_verified"] is True
     assert grade["signed_final_or_delivery_claim"] is False
     assert grade["registered_oos_increment"]==0
@@ -116,3 +116,4 @@ def test_r13_cli_reads_private_source_and_writes_only_private_document(saved,tmp
     assert "private_root" not in output
     assert (private/RACE/"all_horse_29_index_report.md").is_file()
     assert (private/RACE/"private_numerical_receipt.json").is_file()
+

@@ -38,7 +38,7 @@ def test_r14_real_archived_one_trigger_outputs_full29_and_reports_no_krs(tmp_pat
     saved=json.loads((path/"private_pipeline_checkpoint.json").read_text())
     assert saved["source_readonly_private_numerical"]["calculated"]==312
     assert saved["source_readonly_private_numerical"]["neutral"]==36
-    assert saved["source_readonly_private_numerical"]["unknown_components"]==274
+    assert saved["source_readonly_private_numerical"]["unknown_components"]==212
     assert saved["first_uncompleted_stage"]=="FIXED_OWNER_INPUT_NOT_PROVIDED"
     assert saved["owner_six_methods_proven"] is False
     assert saved["pfs"] is None
@@ -156,3 +156,4 @@ def test_r18_cli_private_body_not_ready_is_not_faked(archived,tmp_path,monkeypat
               "--private-root",str(tmp_path/"private"),
               "--diagnostic-only",
               "--emit-full-private-body"])
+

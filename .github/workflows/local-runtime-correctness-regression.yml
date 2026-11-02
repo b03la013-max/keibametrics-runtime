@@ -94,6 +94,8 @@ jobs:
             tests/test_fnb_20261102_r19_chat_readback.py \
             tests/test_fnb_20261102_r20_chat_completion.py \
             tests/test_fnb_20261102_r21_entry_dispatch.py \
+            tests/test_local_base63_source_witness.py \
+            tests/test_local_race_units_source_binding.py \
             tests/test_fnb_20261102_r14_private_dual_krs.py \
             tests/test_fnb_20261102_r14_private_work_entry.py \
             tests/test_nar_auxiliary_evidence.py
@@ -390,7 +392,8 @@ jobs:
               saved=(private/'private_numerical_receipt.json').read_bytes()
               assert grade['29_index_cells']==348
               assert grade['calculated']==312 and grade['neutral']==36
-              assert grade['unknown_components']==274
+              # Current replay restores 62 archived inputs; Before retains 274.
+              assert grade['unknown_components']==212
               assert grade['private_materialization_sha256']==hashlib.sha256(full).hexdigest()
               assert grade['private_readable_document_sha256']==hashlib.sha256(readable).hexdigest()
               assert grade['private_receipt_sha256']==hashlib.sha256(saved).hexdigest()
@@ -519,3 +522,4 @@ jobs:
           path: fnb-r16-browser-private-sanitized.json
           if-no-files-found: warn
           retention-days: 30
+

@@ -14,6 +14,10 @@ PROFILE = "KM-LOCAL-NAR-EVIDENCE-CANDIDATE-v0.1-20260923"
 DEFAULT_REGISTRY = "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
 RECENCY = [0.30, 0.25, 0.20, 0.15, 0.10]
 NEUTRAL = 52.0
+VENUE_NAMES = {"URW": "浦和", "FNB": "船橋", "OHI": "大井", "KAW": "川崎",
+               "MOR": "盛岡", "MIZ": "水沢", "KSM": "笠松", "NGY": "名古屋",
+               "SON": "園田", "HIM": "姫路", "KCH": "高知", "SAG": "佐賀",
+               "MON": "門別", "KNZ": "金沢"}
 
 
 class LocalCandidateEvidenceError(ValueError):
@@ -38,6 +42,46 @@ def _jockey_name(s: Any) -> str:
     t = _norm(s)
     t = re.sub(r"[（(].*$", "", t)
     return t.replace("☆", "").replace("▲", "").replace("△", "").strip()
+
+
+def resolve_race_units(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Read the existing LOCAL intent schema without changing scoring rules.
+
+    Formal intents use distance_m and may label race.venue in Japanese. Both
+    scoring passes must consume those same units. Conflicting explicit fields
+    are a HOLD; never replace them with distance=0 or an inferred direction.
+    This resolves schema fields only. Official Raw/intent physical-context
+    agreement remains a separate SOURCE gate (also checked by the witness).
+    """
+    race = request.get("race") or {}
+    reverse = {v: k for k, v in VENUE_NAMES.items()}
+    supplied = [v for v in (request.get("venue_id"), race.get("venue_id"), race.get("venue"))
+                if v not in (None, "")]
+    ids = [reverse.get(_norm(v), _norm(v).upper()) for v in supplied]
+    if any(v not in VENUE_NAMES for v in ids):
+        raise LocalCandidateEvidenceError("LOCAL_RACE_VENUE_ID_UNRESOLVED")
+    known = {v for v in ids if v in VENUE_NAMES}
+    if len(known) > 1:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_VENUE_FIELDS_CONFLICT")
+    venue = next(iter(known)) if known else (ids[0] if ids else "")
+    distances = []
+    for key in ("distance_m", "distance"):
+        value = race.get(key)
+        if value in (None, ""):
+            continue
+        if isinstance(value, bool) or not re.fullmatch(r"\d+", str(value)):
+            raise LocalCandidateEvidenceError("LOCAL_RACE_DISTANCE_UNIT_INVALID")
+        distances.append(int(value))
+    if len(set(distances)) > 1:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_DISTANCE_FIELDS_CONFLICT")
+    direction = str(race.get("direction") or "").upper()
+    if direction and direction not in {"LEFT", "RIGHT"}:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_DIRECTION_INVALID")
+    if not direction:
+        # Preserve the existing known-venue fallback for legacy intent inputs.
+        direction = "LEFT" if venue in {"URW", "FNB", "KAW", "MOR"} else "RIGHT"
+    return {"venue_id": venue, "venue_name": VENUE_NAMES.get(venue, venue),
+            "distance_m": distances[0] if distances else 0, "direction": direction}
 
 
 def _load(path: str | Path) -> Dict[str, Any]:
@@ -380,15 +424,12 @@ def _same_venue_name(historical: str, current: str) -> bool:
 def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dict[str, Any],
                        reg: Dict[str, Any], field_size: int) -> Dict[str, Any]:
     race = request.get("race") or {}
-    venue = str(race.get("venue") or race.get("venue_id") or request.get("venue_id") or "")
-    venue_name = {"URW": "浦和", "FNB": "船橋", "OHI": "大井", "KAW": "川崎",
-                  "MOR": "盛岡", "MIZ": "水沢", "KSM": "笠松", "NGY": "名古屋",
-                  "SON": "園田", "HIM": "姫路", "KCH": "高知", "SAG": "佐賀",
-                  "MON": "門別", "KNZ": "金沢"}.get(venue.upper(), venue)
-    distance = int(race.get("distance") or 0)
+    units = resolve_race_units(request)
+    venue, venue_name = units["venue_id"], units["venue_name"]
+    distance = units["distance_m"]
     going = str(((source.get("normalized_evidence") or {}).get("track_condition") or {}).get("value")
                 or race.get("going") or "")
-    direction = "LEFT" if venue.upper() in {"URW", "FNB", "KAW", "MOR"} else "RIGHT"
+    direction = units["direction"]
     surface = str(race.get("surface") or "dirt").upper()
     race_date_s = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
     try:
@@ -609,13 +650,21 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     put("DCR", "bodyweight_range_coverage", 100*bw_cov,
         f"bodyweight observations={int(current_bw is not None)+len(historical_bw)}/6", coverage=1, raw_metric=bw_cov)
     prev_result_keys = [k for k in (source.get("normalized_evidence") or {}) if re.fullmatch(r"same_day_r\d+_result_tables", k)]
+    normalized = source.get("normalized_evidence") or {}
+    prior_result_refs = [value for key in prev_result_keys
+                         for value in (normalized[key].get("source_id"),
+                                       normalized[key].get("snapshot_sha256")) if value]
     race_no = int(request.get("race_no") or race.get("race_no") or 1)
     same_day_cov = min(1.0, len(prev_result_keys)/max(1,race_no-1))
     put("DCR", "same_day_gci_coverage", 100*same_day_cov,
-        f"same-day prior official result sources={len(prev_result_keys)}/{max(0,race_no-1)}", coverage=1, raw_metric=same_day_cov)
+        f"same-day prior official result sources={len(prev_result_keys)}/{max(0,race_no-1)}", coverage=1, raw_metric=same_day_cov,
+        extra_refs=prior_result_refs)
     odds_present = isinstance((source.get("normalized_evidence") or {}).get("odds_tables"), dict)
+    odds_evidence = normalized.get("odds_tables") if odds_present else {}
+    odds_refs = [odds_evidence[key] for key in ("source_id", "snapshot_sha256") if odds_evidence.get(key)]
     put("DCR", "late_odds_changes_coverage", 100.0 if odds_present else 0.0,
-        f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present)
+        f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present,
+        extra_refs=odds_refs)
 
     current_class, cls_state = _class_score(str(race.get("class") or ""))
     # URW's missing header class is UNKNOWN, not an observed C3/52 ordinal.
@@ -676,7 +725,8 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
     reg = _load(registry_path)
     raw_field = json.loads(json.dumps(raw_field, ensure_ascii=False))
     race = request.get("race") or {}
-    venue = str(race.get("venue_id") or race.get("venue") or request.get("venue_id") or "").upper()
+    units = resolve_race_units(request)
+    venue = units["venue_id"]
     if venue in {"URW", "浦和"}:
         race_day_text = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
         try:
@@ -760,7 +810,7 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
 
     # Cross-runner comparable-time percentile for NCI.class_relative_time.
     race = request.get("race") or {}
-    current_distance = int(race.get("distance") or 0)
+    current_distance = units["distance_m"]
     best_times: Dict[str, float] = {}
     for c in compiled:
         times = []
@@ -824,6 +874,7 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
         "official_runner_universe_sha256": source_artifact.get("official_runner_universe_sha256"),
         "runner_count": len(compiled),
         "result_derived_features": 0,
+        "resolved_race_units": units,
     }
     request["candidate_evidence_compiler"]["sha256"] = _sha(request["candidate_evidence_compiler"])
     return request
