@@ -106,6 +106,21 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
             folder/"baseline_candidate_6methods_alternative_trees.md",text_bytes)
         status="NUMERIC_KRS_SIX_ALTERNATIVE_TREES_STRUCTURED_DELIVERY_UNPROVEN"
         first_failure="SIGNED_FORMAL_ROLE_SEMANTIC_AND_RECIPIENT_ACK_NOT_PROVEN"
+    full_delivery=None
+    full_delivery_hold=None
+    if constructed is not None:
+        from runtime.local_fnb_r18_full_private_delivery import verified_full_delivery
+        try:
+            full_delivery=verified_full_delivery(
+                race_id=race_id,private_root=root,
+                semantics=frozen_semantics,portfolios=portfolios,
+                diagnostic_only=diagnostic_only)
+            status="FULL_PRIVATE_PRESENTATION_READY_DELIVERY_ACK_UNVERIFIED"
+            first_failure="ACTUAL_RECIPIENT_ACK_OR_FORMAL_SIGNATURE_NOT_PROVEN"
+        except ValueError as exc:
+            full_delivery_hold=str(exc).split(":")[0]
+            status="SIX_TREES_EXIST_FULL_DELIVERY_CONTENT_HOLD"
+            first_failure=full_delivery_hold
     receipt={
       "profile":PROFILE,
       "classification":("POSTCUTOFF_DIAGNOSTIC_ONLY" if diagnostic_only else
@@ -121,6 +136,8 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
       "frozen_mec_source_and_owner_receipts":(
           constructed["plan_evidence"] if constructed is not None else None),
       "six_method_rendered_private_tree_sha256":ticket_tree_sha,
+      "complete_private_full_horse_delivery_presentation":full_delivery,
+      "full_presentation_first_missing_field":full_delivery_hold,
       "model_w_p2_p3_decision_proven":False,
       "owner_six_methods_proven":ticket_grade is not None and ticket_grade["complete"],
       "user_ticket_rendered_and_acknowledged":False,
@@ -138,6 +155,9 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         "numeric_cells":num["29_index_cells"],
         "krs_two_owners_done":downstream is not None,
         "six_alternative_method_trees_rendered":ticket_tree_sha is not None,
+        "complete_all_horse_29_index_dual_owner_six_method_body_sha256":(
+            full_delivery["full_body_sha256"] if full_delivery else None),
+        "complete_presentation_content_verified":full_delivery is not None,
         "formal_final_or_delivery_done":False,
         "private_checkpoint_readback_verified":
             hashlib.sha256((folder/"private_pipeline_checkpoint.json").read_bytes()).hexdigest()==sha,
