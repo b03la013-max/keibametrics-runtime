@@ -118,8 +118,6 @@ def complete(query, private_root, *, now=None, diagnostic_only=False, emit_priva
         if any(semantics[x].get("original_prediction_sha256")!=owner_inputs[x].get("original_prediction_sha256")
                for x in ("BASELINE","CANDIDATE")):
             raise ValueError("FNB_R20_OWNER_SEMANTIC_KRS_MODEL_FREEZE_MISMATCH")
-        engine=_asset_path(bundle.get("engine"),ENGINE_SHA,"ENGINE")
-        params=_asset_path(bundle.get("params"),MAP_SHA,"MAP")
         if sources[0]=="source":
             source=_load_json(root,bundle["source"],"SOURCE")
             if isinstance(source,dict) and "artifact" in source and "receipt" in source:
@@ -135,6 +133,9 @@ def complete(query, private_root, *, now=None, diagnostic_only=False, emit_priva
                    capture_time=captured_at,private_output=root,
                    public_repo=public_repo,diagnostic_only=diagnostic_only)
             source=json.loads((root/race_id/"unsigned_official_card_artifact.json").read_bytes())
+        # Verify source identity/immutable bytes before even resolving executable assets.
+        engine=_asset_path(bundle.get("engine"),ENGINE_SHA,"ENGINE")
+        params=_asset_path(bundle.get("params"),MAP_SHA,"MAP")
         from runtime.local_fnb_r14_private_work_entry import run
         run(source=source,request=request,root=root,public_repo=public_repo,
             owners=owner_inputs,frozen_semantics=semantics,
