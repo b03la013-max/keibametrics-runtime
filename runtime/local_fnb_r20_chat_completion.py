@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from runtime.local_fnb_r19_chat_readback import parse_intent, readback
@@ -91,7 +92,7 @@ def complete(query, private_root, *, now=None, diagnostic_only=False, emit_priva
         request=_load_json(root,bundle.get("request"),"REQUEST")
         race_id=request.get("race_id")
         prefix=f"KM-LOCAL-FNB-{intent['race_date'].replace('-','')}-R{intent['race_no']:02d}"
-        if (not isinstance(race_id,str) or not (race_id==prefix or race_id.startswith(prefix+"-"))
+        if (not isinstance(race_id,str) or not re.fullmatch(re.escape(prefix)+r"(?:-[A-Za-z0-9_]+)*",race_id)
                 or request.get("venue_id")!="FNB"
                 or request.get("race_date")!=intent["race_date"]
                 or request.get("race_no")!=intent["race_no"]):
