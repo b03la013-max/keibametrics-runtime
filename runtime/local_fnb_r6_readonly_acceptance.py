@@ -28,6 +28,24 @@ def _json(path: Path):
     return value
 
 
+
+def cutoff_disposition(fields: dict | None, *, now: datetime) -> str:
+    """Never convert post-cutoff diagnostic work into prestart success."""
+    if not isinstance(fields, dict):
+        return "OFFICIAL_CUTOFF_NOT_PROVEN"
+    try:
+        post = datetime.fromisoformat(str(fields["scheduled_post_at"]).replace("Z", "+00:00"))
+        cutoff = datetime.fromisoformat(str(fields["prediction_cutoff"]).replace("Z", "+00:00"))
+    except (TypeError, ValueError, KeyError):
+        return "OFFICIAL_CUTOFF_NOT_PROVEN"
+    if post.tzinfo is None or cutoff.tzinfo is None or cutoff >= post:
+        return "OFFICIAL_CUTOFF_INVALID"
+    if now.tzinfo is None:
+        return "OBSERVATION_CLOCK_INVALID"
+    if now >= cutoff:
+        return "CUTOFF_EXPIRED_DIAGNOSTIC_ONLY_NO_RETROACTIVE_PRESTART"
+    return "PRE_CUTOFF_WINDOW_OBSERVED_AUTHORIZATION_STILL_REQUIRED"
+
 def inspect(root: Path, race_date: str, *, now: datetime | None = None,
             numeric_assessor=None, authority_resolver=None) -> dict:
     """Check existing signed-execution prerequisites without granting them.
@@ -152,6 +170,7 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
         races.append({
             "race_no": n,
             "scheduled_post_at": (planned or {}).get("fields", {}).get("scheduled_post_at"),
+            "cutoff_disposition": cutoff_disposition((planned or {}).get("fields"), now=now),
             "runner_count": (planned or {}).get("declared_runner_universe", {}).get("runner_count"),
             "planned_required_cells": None if planned is None else
                 29 * len((planned.get("declared_runner_universe") or {}).get("runners") or []),
@@ -177,6 +196,7 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
         "production_numeric_materialization_ready": materialization_ready,
         "numeric_consumption": consumption,
         "dated_plan_exists_and_valid": plan is not None,
+        "plan_validation_scope": "FILE_IDENTITY_SHA_AND_RACE_SET_ONLY_NOT_FRESH_OFFICIAL",
         "dated_approval_present": approval is not None,
         "formal_live_authorized_by_this_witness": False,
         "blockers": blockers,
