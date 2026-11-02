@@ -179,6 +179,8 @@ def main(argv=None):
     p.add_argument("--candidate-frozen-semantics")
     p.add_argument("--owner-method-portfolios")
     p.add_argument("--diagnostic-only",action="store_true")
+    p.add_argument("--emit-full-private-body",action="store_true",
+        help="Explicitly print verified complete B/C full body only in private non-CI Work actor")
     args=p.parse_args(argv)
     owner_files=[args.baseline_owner,args.candidate_owner]
     if any(owner_files) and not all(owner_files):
@@ -222,7 +224,22 @@ def main(argv=None):
     if browser_capture is not None:
         receipt["private_official_browser_import_sha256"]=browser_capture["source_artifact_sha256"]
         receipt["private_official_browser_source_signed"]=False
-    print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
+    if args.emit_full_private_body:
+        import os
+        if os.environ.get("GITHUB_ACTIONS")=="true" or os.environ.get("CI")=="true":
+            raise ValueError("FNB_PRIVATE_HORSE_OR_TICKET_BODY_PUBLIC_CI_LOG_FORBIDDEN")
+        name=receipt.get("complete_all_horse_29_index_dual_owner_six_method_body_sha256")
+        if not receipt.get("complete_presentation_content_verified") or not name:
+            raise ValueError("FNB_COMPLETE_SIX_METHOD_PRIVATE_DELIVERY_BODY_NOT_READY")
+        body_file=Path(args.private_root).resolve()/request["race_id"]/"FULL_ALL_HORSES_BC_SIX_METHODS.md"
+        data=body_file.read_bytes()
+        if hashlib.sha256(data).hexdigest()!=name:
+            raise ValueError("FNB_PRIVATE_COMPLETE_DELIVERY_BODY_BYTES_CHANGED")
+        # This is an intentional private user-visible renderer, never a
+        # public Actions artifact, external delivery or recipient ACK.
+        print(data.decode("utf-8"))
+    else:
+        print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
     return 0
 
 
