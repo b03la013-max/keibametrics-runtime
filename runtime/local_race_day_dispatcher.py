@@ -796,8 +796,32 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
     return state
 
 
+def worker_pending_races(state):
+    """Keep an already claimed race under observation without redispatching it.
+
+    A workflow acknowledgement is not a verified FINAL. In particular the
+    phase-B single-race worker must not retire just because no unclaimed race
+    remains. The caller still enforces the existing approved worker lease;
+    RESULT waiting and recipient acknowledgement are separate contracts.
+    """
+    pending = []
+    for cell in state.get('races', {}).values():
+        if (cell.get('status') in {'WAIT_DISPATCH_WINDOW', 'HOLD_PRE_DISPATCH'}
+                and not cell.get('manual_recovery_required') and not cell.get('claimed_at')):
+            pending.append(cell)
+        elif (cell.get('claimed_at') and cell.get('status') in {
+                'DISPATCH_ACKNOWLEDGED_MONITOR_CHECKPOINTS',
+                'HOLD_AMBIGUOUS_DISPATCH_NO_AUTOMATIC_RETRY'}):
+            final = cell.get('final_readback') or {}
+            if not (final.get('signed_final_pass') is True
+                    and final.get('prestart_final_pass') is True
+                    and final.get('render_available') is True):
+                pending.append(cell)
+    return pending
+
+
 def run_worker(approval, step, *, clock=lambda:datetime.now(timezone.utc), sleep=time.sleep):
-    """One existing dispatcher, bounded lease; no RESULT waits or self dispatch."""
+    """One existing dispatcher, bounded lease; monitor claims, never self dispatch."""
     seconds = approval.get('worker_seconds', 0)
     if (type(seconds) is not int or not 0 <= seconds <= 21000
             or seconds and not approval.get('worker_duration_approval_ref')):
@@ -805,9 +829,7 @@ def run_worker(approval, step, *, clock=lambda:datetime.now(timezone.utc), sleep
     end = clock() + timedelta(seconds=seconds)
     while True:
         state = step()
-        pending = [c for c in state.get('races',{}).values()
-                   if c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
-                   and not c.get('manual_recovery_required') and not c.get('claimed_at')]
+        pending = worker_pending_races(state)
         remaining = (end-clock()).total_seconds()
         if not pending or remaining <= 0:
             return state
@@ -904,9 +926,7 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
                 report['venues'][venue]['worker_state'] = state
                 # Each venue retains its OWN reviewed duration and race budget.
                 if (time.monotonic()-started < approval.get('worker_seconds', 0)
-                        and any(c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
-                            and not c.get('manual_recovery_required') and not c.get('claimed_at')
-                            for c in state.get('races',{}).values())):
+                        and worker_pending_races(state)):
                     pending.append((venue, approval, step, started))
             except Exception as exc:
                 report['venues'][venue].update(status='HOLD_WORKER', original_error=f'{type(exc).__name__}:{exc}')

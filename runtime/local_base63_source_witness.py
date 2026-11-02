@@ -568,6 +568,60 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
                 "missing":sum(row["components"][c]["missing"] for c in weights),"all_components_missing":all(row["components"][c]["missing"] for c in weights)})
     return all_rows,result
 
+def defined_raw_formula_witness(horses, race_day):
+    """Articles 67/68 raw statistics; never a 0..100 Component mapping.
+
+    Prior weight must be observed in the latest dated history and reconcile
+    with the official current weight/change. The finish points remain
+    selected horse-history rows, not a qualified pedigree population.
+    """
+    target = date.fromisoformat(str(race_day).replace('/', '-'))
+    weights, points = [], []
+    for rid, horse in horses.items():
+        history = sorted((h for h in horse['history'] if h['date'] < target),
+                         key=lambda h: h['date'], reverse=True)
+        previous = history[0].get('body_weight') if history else None
+        current, change = horse.get('body_weight'), horse.get('body_weight_change')
+        metric = {'runner_id': rid, 'current_weight_kg': current,
+                  'official_change_kg': change, 'previous_observed_weight_kg': previous,
+                  'previous_race_date': history[0]['date'].isoformat() if history else None,
+                  'weight_change_percentage': None, 'component_score': None,
+                  'weight_change_reason': None, 'status': 'UNKNOWN',
+                  'formula': 'official_change_kg / previous_observed_weight_kg * 100'}
+        if (current is None or change is None or previous is None
+                or current <= 0 or previous <= 0):
+            metric['reason'] = 'CURRENT_CHANGE_OR_LATEST_PRIOR_WEIGHT_NOT_OBSERVED'
+        elif number(current) - number(change) != number(previous):
+            metric.update(status='HOLD', reason='OFFICIAL_WEIGHT_CHANGE_PRIOR_WEIGHT_CONFLICT')
+        else:
+            with localcontext() as ctx:
+                ctx.prec = 40
+                metric.update(status='RAW_METRIC_CALCULATED_NOT_COMPONENT_SCORE',
+                              weight_change_percentage=str(number(change) / number(previous) * 100))
+        weights.append(metric)
+        for h in history:
+            rank, size = h.get('finish'), h.get('field_size')
+            valid = (type(rank) is int and type(size) is int and 1 <= rank <= size)
+            point = {1: 5, 2: 3, 3: 2}.get(rank) if valid else None
+            point_status = ('RAW_POINTS_ONLY_NOT_BVI_SCORE' if point is not None
+                            else 'NO_TOP3_POINT_DEFINED' if valid else 'UNKNOWN')
+            points.append({'runner_id': rid, 'history_date': h['date'].isoformat(),
+                'venue': h.get('venue'), 'distance_m': h.get('distance'),
+                'finish': rank, 'field_size': size,
+                'article67_finish_points': point,
+                'status': point_status,
+                'component_score': None, 'qualified_pedigree_population': False,
+                'source_selection': 'TARGET_HORSE_LISTED_HISTORY_NOT_INDEPENDENT_ALL_RACE_CORPUS'})
+    return {'basis': ['LOCAL_ARTICLE_67_FINISH_POINTS', 'LOCAL_ARTICLE_68_WEIGHT_CHANGE_RATE'],
+            'bodyweight_rows': weights, 'history_point_rows': points,
+            'bodyweight_calculated': sum(r['status'] == 'RAW_METRIC_CALCULATED_NOT_COMPONENT_SCORE' for r in weights),
+            'bodyweight_unknown': sum(r['status'] == 'UNKNOWN' for r in weights),
+            'bodyweight_hold': sum(r['status'] == 'HOLD' for r in weights),
+            'history_points_calculated': sum(r['status'] == 'RAW_POINTS_ONLY_NOT_BVI_SCORE' for r in points),
+            'new_component_scores': 0, 'missing15_closed': 0, 'new_observations': 0,
+            'prediction_consumption_authorized': False}
+
+
 def verify(source,request,registry,materialized=None,*,context=None):
     """Return real-source audit; no Producer or network call occurs here."""
     with localcontext() as ctx:
@@ -629,4 +683,5 @@ def verify(source,request,registry,materialized=None,*,context=None):
         "independent_parser_used":True,"production_compiler_called":False,"provider_license_or_source_signature_verified_here":False,
         "model_consumers_authorized":False,"predictive_validity_proven":False,"new_independent_raw_acquired":0,
         "mismatches":mismatch,"component_ledger":rows,"base_index_ledger":indices,
+        "defined_raw_formula_witness":defined_raw_formula_witness(horses,request['race_date']),
         "raw_parsed_runners":_json(horses)}
