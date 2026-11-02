@@ -58,6 +58,15 @@ def resolve_current_jockey(source: dict, horse_no: int, *, parser=None) -> dict:
     if (facts.get("race_card_source_id")!=rc["source_id"] or
             facts.get("race_card_snapshot_sha256")!=rc["snapshot_sha256"]):
         raise ValueError("FNB_RECORDED_RIDER_FROZEN_CARD_PROVENANCE_MISMATCH")
+    # The parsed row inherits rc's hash, so comparing these two alone is
+    # circular: compare with the separately persisted ORIGINAL source row.
+    sources=source.get("sources") or []
+    cards=[x for x in sources if isinstance(x,dict) and
+           x.get("source_id")==rc["source_id"] and
+           x.get("source_class")=="OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"
+           and x.get("official") is True]
+    if len(cards)!=1 or cards[0].get("snapshot_sha256")!=rc["snapshot_sha256"]:
+        raise ValueError("FNB_RECORDED_RIDER_FROZEN_CARD_PROVENANCE_MISMATCH")
     return {"horse_no":horse_no, "current_jockey":str(rider),
             "race_card_source_id":rc["source_id"],
             "race_card_snapshot_sha256":rc["snapshot_sha256"],
