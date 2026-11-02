@@ -58,3 +58,16 @@ def test_r14_one_owner_is_not_silently_run_as_both(tmp_path,archived):
     source,request=archived
     with pytest.raises(ValueError,match="FNB_PRIVATE_BOTH_FROZEN_OWNER_PACKETS_REQUIRED"):
         _run(source,request,tmp_path,owners={"BASELINE":{}})
+
+
+def test_r14_fixed_owner_must_match_all_real_12_horse_ids(tmp_path,archived):
+    source,request=archived
+    first=_run(source,request,tmp_path)
+    numeric=json.loads((tmp_path/"private"/RID/"private_numerical_receipt.json").read_text())
+    sha=numeric["numerical_materialization_sha256"]
+    wrong={"numerical_materialization_sha256":sha,
+           "horses":[{"horse_no":99,"hsv":{},"static":{}}]}
+    with pytest.raises(ValueError,match="FNB_PRIVATE_OWNER_ACTIVE_RUNNER_UNIVERSE_MISMATCH"):
+        _run(source,request,tmp_path,
+             owners={"BASELINE":wrong,"CANDIDATE":wrong})
+    assert not (tmp_path/"private"/RID/"private_dual_krs_receipt.json").exists()
