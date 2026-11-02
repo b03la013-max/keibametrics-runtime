@@ -77,7 +77,10 @@ def frozen_numeric_readback(execution_id: str, formal: dict, root: Path) -> dict
             "NUMERICAL_COUNTS_INVALID", "NUMERICAL_COUNTS_NOT_REPORTED"
         } else ("NUMERICALLY_NEUTRALIZED" if quality["status"] ==
                   "NUMERICAL_RULED_NEUTRAL_ONLY" else "NUMERICALLY_TERMINALIZED"))
+        from runtime.local_fnb_r9_numeric_disposition import classify
+        numeric_disposition = classify(quality, consistency)
         return {**result, "numeric_evidence_verdict": severity,
+                "fnb_numerical_disposition": numeric_disposition,
                 "numeric_evidence_quality": quality,
                 "numeric_checkpoint_consistency": consistency,
                 "frozen_execution_class": (completion.get("execution_class", "UNKNOWN")
