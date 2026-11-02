@@ -296,7 +296,12 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         numeric_grade = frozen_numeric_readback(execution_id, formal, root)
         from runtime.local_fnb_r7_ticket_disposition import attest_ticket_decision
         ticket_disposition = attest_ticket_decision(artifact, final_verified=True)
-        return {**report,**payload,**numeric_grade,'ticket_disposition':ticket_disposition,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        from runtime.local_fnb_r8_delivery_completeness import audit_presentation
+        official_universe = src.get('official_runner_universe') or {}
+        expected_ids = [str(r.get('runner_id')) for r in official_universe.get('runners', [])
+                        if isinstance(r, dict) and r.get('runner_id') is not None]
+        delivery_document_audit = audit_presentation(artifact, expected_ids)
+        return {**report,**payload,**numeric_grade,'ticket_disposition':ticket_disposition,'delivery_document_audit':delivery_document_audit,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
             'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
@@ -489,6 +494,11 @@ def main() -> int:
                 f"Ticket disposition: {decision.get('status', 'NOT_VERIFIED')}; "
                 f"recommendation stake={decision.get('recommendation_investment', 'UNKNOWN')}; "
                 "PFS=NULL until independent settlement; actual purchase UNKNOWN\\n\\n"
+            )
+            document = result.get('delivery_document_audit') or {}
+            content += (
+                f"Document completeness: {document.get('status', 'NOT_VERIFIED')}; "
+                f"missing={document.get('missing', ['NO_DOCUMENT_AUDIT'])}\\n\\n"
             )
             if included:
                 content += (f"FINAL receipt: {result['final_receipt_sha256']}\n\n"
