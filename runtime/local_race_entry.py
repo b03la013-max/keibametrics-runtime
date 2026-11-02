@@ -873,14 +873,18 @@ def _fnb_private_chat_route(args):
     from runtime.local_fnb_r20_chat_completion import complete
     if args.persist_checkpoints:
         raise ValueError('FNB_PRIVATE_RESEARCH_GIT_PERSISTENCE_FORBIDDEN')
-    if not args.private_root:
+    # Private Work may bind its isolated durable store through an existing
+    # environment variable. This is not a Production authorization or a
+    # network/cloud-computer actor. No public fallback path is allowed.
+    private_root = args.private_root or os.environ.get('KM_FNB_PRIVATE_WORK_ROOT')
+    if not private_root:
         result={'status':'EXECUTION_HOLD_NOT_NO_BET',
                 'first_failed_stage':'PRIVATE_WORK_ACTOR',
                 'reason':'FNB_PRIVATE_WORK_ROOT_NOT_CONNECTED',
                 'recipient_delivery_ack':False,'registered_oos_increment':0}
     else:
         try:
-            result=complete(args.query,Path(args.private_root),
+            result=complete(args.query,Path(private_root),
                             diagnostic_only=args.diagnostic_only,
                             emit_private_body=args.display)
         except (ValueError, OSError, KeyError, TypeError) as exc:
