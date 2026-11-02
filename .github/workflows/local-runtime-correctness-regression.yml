@@ -447,3 +447,68 @@ jobs:
           path: fnb-r15-mobile-official-r02-readonly.json
           if-no-files-found: warn
           retention-days: 7
+      - name: FNB R16 archived actual browser bytes + all29 private execution receipt
+        run: |
+          python - <<'PY'
+          import base64,gzip,json,hashlib,tempfile
+          from pathlib import Path
+          from datetime import datetime,timezone
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r16_private_browser_capture import ingest
+          from runtime.local_fnb_r14_private_work_entry import run
+          race='KM-LOCAL-FNB-20261002-R04-LIVE-R1'
+          saved=o.resolve_phase('LOCAL-'+race+'-EXEC','SOURCE')
+          source=o._load_checkpoint_json(saved,'source_receipt_envelope.json')['artifact']
+          cards=[c for c in source['sources'] if c.get('source_class')==
+                 'OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT']
+          assert len(cards)==1
+          card=cards[0]
+          request=json.loads(Path('runtime/formal_intents/'+race+'.json').read_text())
+          with tempfile.TemporaryDirectory(prefix='fnb-r16-private-') as tmp:
+              html=Path(tmp)/'nar_actual_original.html'
+              html.write_bytes(gzip.decompress(base64.b64decode(card['raw_gzip_b64'])))
+              private=Path(tmp)/'private_store'
+              imported=ingest(html_path=html,request=request,
+                  observed_url=card['requested_url'],
+                  capture_time=source['source_freeze_at'],
+                  private_output=private,public_repo=Path.cwd(),
+                  now=datetime.now(timezone.utc),diagnostic_only=True)
+              assert imported['status']=='FNB_BROWSER_SOURCE_IMPORTED_TO_PRIVATE_RESEARCH_UNSIGNED'
+              art=json.loads((private/race/'unsigned_official_card_artifact.json').read_text())
+              diagnostic=run(source=art,request=request,root=private,
+                  public_repo=Path.cwd(),now=datetime.now(timezone.utc),
+                  diagnostic_only=True)
+              assert diagnostic['numeric_cells']==348
+              assert diagnostic['private_checkpoint_readback_verified'] is True
+              assert diagnostic['krs_two_owners_done'] is False
+              receipt={'schema':'KM-FNB-R16-REAL-ARCHIVED-BROWSER-SOURCE-TO-NUMERIC-v1',
+                       'classification':'20261002_HISTORICAL_DIAGNOSTIC_NOT_20261102_LIVE',
+                       'raw_sha256':imported['raw_sha256'],
+                       'imported_source_sha256':imported['source_artifact_sha256'],
+                       'official_stored_source_signed_by_this_import':False,
+                       'declared_runner_count':imported['declared_runner_count'],
+                       'full_29_numeric_cell_count':diagnostic['numeric_cells'],
+                       'full_private_three_stage_readback':True,
+                       'new_live_source_signed':False,
+                       'new_20261102_prediction':False,
+                       'fixed_two_owner_krs_5000_seed1':False,
+                       'six_ticket_methods_computed':False,
+                       'recipient_delivery_ack':False,
+                       'registered_oos_increment':0,
+                       'public_raw_or_horse_data_exported':False}
+              receipt['sha256']=hashlib.sha256(json.dumps(receipt,
+                  sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+              Path('fnb-r16-browser-private-sanitized.json').write_text(
+                  json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+              print(json.dumps({'status':'HISTORICAL_R16_REAL_BROWSER_SOURCE_NUMERIC_PASS',
+                   'runners':receipt['declared_runner_count'],
+                   'cells':receipt['full_29_numeric_cell_count'],
+                   'public_raw_exported':False},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r16-browser-private-sanitized-${{ github.run_id }}
+          path: fnb-r16-browser-private-sanitized.json
+          if-no-files-found: warn
+          retention-days: 30
