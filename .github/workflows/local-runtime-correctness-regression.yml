@@ -78,6 +78,7 @@ jobs:
             tests/test_fnb_20261102_r9_history_asof.py \
             tests/test_fnb_20261102_r10_historical_closedloop.py \
             tests/test_fnb_20261102_r10_gateway_readonly_health.py \
+            tests/test_fnb_20261102_r10_signed_identity.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -105,6 +106,7 @@ jobs:
             runtime/local_fnb_r9_history_asof.py \
             runtime/local_fnb_r10_historical_closedloop.py \
             runtime/local_fnb_r10_gateway_readonly_health.py \
+            runtime/local_fnb_r10_signed_race_identity.py \
             runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
 
@@ -230,5 +232,50 @@ jobs:
         with:
           name: fnb-r10-local-gateway-health-${{ github.run_id }}
           path: fnb-r10-local-gateway-health.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 actual trusted-Gateway GET R04 signed FINAL and numeric readback
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          from runtime.local_race_key_gate import readback_final
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          result=readback_final(eid,'historical-r10',repo_root=Path.cwd(),allow_network=True)
+          report={'scope':'HISTORICAL_FNB_20261002_R04_READBACK_NOT_20261102_LIVE',
+              'status':result.get('status'), 'signed_final_pass':result.get('signed_final_pass'),
+              'prestart_final_pass':result.get('prestart_final_pass'),
+              'numeric_evidence_quality':result.get('numeric_evidence_quality'),
+              'numeric_checkpoint_consistency':result.get('numeric_checkpoint_consistency'),
+              'delivery_document_audit':result.get('delivery_document_audit'),
+              'presentation_sha256':result.get('presentation_sha256'),
+              'canonical_tree_sha256':result.get('tree_sha256'),
+              'verification_scope':result.get('verification_scope'),
+              'fresh_signature_verification':result.get('fresh_signature_verification'),
+              'readback_reason':result.get('reason'),
+              'receipt_not_an_ack':result.get('user_received_at') is None,
+              'new_signed_source_or_final_generated':False,
+              'registered_forward_oos_increment':0}
+          report['sha256']=hashlib.sha256(json.dumps(report,sort_keys=True,ensure_ascii=False,
+                      separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r10-historical-signed-final-readback.json').write_text(
+              json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'status':report['status'],
+              'numeric_quality':(report.get('numeric_evidence_quality') or {}).get('status'),
+              'verified_before_cutoff':report['prestart_final_pass']},ensure_ascii=False))
+          assert report['signed_final_pass'] is True, result.get('reason')
+          assert report['prestart_final_pass'] is True
+          assert report['numeric_evidence_quality']['calculated_count']==0
+          assert report['numeric_evidence_quality']['ruled_hold_count']==348
+          assert result.get('prestart_delivery_pass') is False
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-historical-final-readback-${{ github.run_id }}
+          path: |
+            fnb-r10-historical-signed-final-readback.json
+            runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_tree.txt
+            runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_presentation.json
           if-no-files-found: warn
           retention-days: 30
