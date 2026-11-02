@@ -116,6 +116,21 @@ def audit_63(materialized, registry, intent, source_artifact):
                 missing[idx]+=1
     expected_cells=63*len(rows)
     verified=sum(counts.values())
+    missing_total=sum(missing.values())
+    observed_total=verified-missing_total
+    per_index={}
+    for name,components in sets.items():
+        expected_per_index=len(components)*len(rows)
+        missing_per_index=missing[name]
+        per_index[name]={
+            "required_component_records":expected_per_index,
+            "recorded_feature_records":counts[name],
+            "missing_component_records":missing_per_index,
+            "observed_component_records":counts[name]-missing_per_index,
+            "observed_ratio":round(
+                (counts[name]-missing_per_index)/expected_per_index,6)
+                if expected_per_index else None,
+            "calculated_index_may_have_missing_components":True}
     if verified!=expected_cells:
         fail("COMPONENT_63_COVERAGE_INCOMPLETE")
     return {"profile":PROFILE,
@@ -124,6 +139,14 @@ def audit_63(materialized, registry, intent, source_artifact):
             "race_id":intent.get("race_id"),"runner_count":len(rows),
             "expected_component_records":expected_cells,
             "recorded_components_verified":verified,
+            "observed_component_records":observed_total,
+            "missing_component_records":missing_total,
+            "observed_component_fraction":round(observed_total/expected_cells,6)
+                if expected_cells else None,
+            "missing_component_fraction":round(missing_total/expected_cells,6)
+                if expected_cells else None,
+            "per_index_evidence_quality":per_index,
+            "calculated_index_does_not_mean_all_components_observed":True,
             "verified_by_index":dict(counts),
             "missing_by_index":dict(missing),
             "missing_not_weak":True,
