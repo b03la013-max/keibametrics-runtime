@@ -63,6 +63,23 @@ def verify(*, source_artifact:dict, request:dict):
         accepted.append(origin)
     if num==1 and accepted:
         raise ValueError("FNB_R01_CANNOT_HAVE_SAME_DAY_PRIOR_RESULT")
+    # First-day or no verified earlier result cannot truthfully claim a
+    # measured same-day bias. Official "going" is a different observed fact;
+    # do not confuse it with a learned current GCI/TVGCI adjustment.
+    venue_context=request.get("venue_prediction_context")
+    if venue_context is not None and not isinstance(venue_context,dict):
+        raise ValueError("FNB_VENUE_PREDICTION_CONTEXT_INVALID")
+    venue_context=venue_context or {}
+    if not accepted:
+        allowed=("UNVERIFIED_CURRENT","SIGNED_SOURCE_RECHECK_REQUIRED",
+                 "UNKNOWN","CURRENT_UNKNOWN","NOT_VERIFIED")
+        status=venue_context.get("current_track_state")
+        if status is not None and status not in allowed:
+            raise ValueError("FNB_FIRST_DAY_BIAS_CLAIM_WITHOUT_PRIOR_OBSERVATION")
+        for name in ("current_gci_value","same_day_track_bias_score",
+                     "same_day_gci","current_tvgci_value"):
+            if venue_context.get(name) is not None:
+                raise ValueError("FNB_FIRST_DAY_UNSUPPORTED_CURRENT_BIAS_NUMERIC")
     return {
         "profile":PROFILE,
         "status":("FIRST_RACE_CURRENT_TRACK_BIAS_UNVERIFIED" if num==1 else
