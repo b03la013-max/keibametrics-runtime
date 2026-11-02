@@ -75,7 +75,7 @@ def test_r18_actual_six_mec_trees_all7x29_and_two_owner_krs_in_full_document(tmp
     assert body.count("#### EXACTA")==2
     assert body.count("#### TRIO")==2
     assert body.count("#### TRIFECTA")==2
-    assert body.count("| HPI-L |")==7
+    assert body.count("|HPI-L|")==7
     assert "POSTCUTOFF_DIAGNOSTIC_NOT_PRESTART" in body
     assert "未較正" in body
     assert result["full_body_sha256"]==hashlib.sha256(file.read_bytes()).hexdigest()
