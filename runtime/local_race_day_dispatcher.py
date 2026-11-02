@@ -263,6 +263,11 @@ def authorization(approval, plan, root, now):
         if not verified['raw_integrity_verified']:
             raise ValueError('FNB_DAY_PLAN_OFFICIAL_RAW_INTEGRITY_REQUIRED:'
                              + ','.join(verified['issues'][:5]))
+        from runtime.local_fnb_r8_day_semantics import audit_day
+        semantics = audit_day(plan, plan['race_date'])
+        if semantics['status'] != 'FNB_DAY_SEMANTICS_CONSISTENT':
+            raise ValueError('FNB_DAY_SEMANTIC_RAW_REPLAY_REQUIRED:'
+                             + ','.join(semantics['issues'][:5]))
     from runtime.family_authority_guard import resolve_current_authority
     from runtime.execution_gateway import family_config
     _, current = resolve_current_authority(root=root, now=now)
