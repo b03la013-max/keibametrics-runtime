@@ -144,6 +144,13 @@ def materialize_production(
         copy.deepcopy(request),
         PRODUCTION_EVIDENCE_REGISTRY,
     )
+    # R9 FNB anti-hindsight input preflight. Reject a future-dated or
+    # same-race historical result before materializer acceptance. This is an
+    # execution-correctness check, NOT a new score, weight or consumer scope.
+    fnb_history_check = None
+    if request.get("venue_id") == "FNB":
+        from runtime.local_fnb_r9_history_asof import assert_result_blind
+        fnb_history_check = assert_result_blind(compiled, source_artifact, request)
     attach_research(compiled, source_artifact)
 
     # Reuse the already regression-tested deterministic arithmetic engine. Its
@@ -157,6 +164,8 @@ def materialize_production(
 
     out = copy.deepcopy(impl)
     out["runners"] = _rewrite(out.get("runners") or [])
+    if fnb_history_check is not None:
+        out["fnb_historical_asof_preflight"] = fnb_history_check
 
     rows = []
     counts = {"CALCULATED": 0, "RULED-NEUTRAL": 0, "RULED-HOLD": 0, "NOT-APPLICABLE": 0}
