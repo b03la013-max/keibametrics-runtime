@@ -94,3 +94,25 @@ def test_r13_cross_race_ledger_source_identity_fails(saved,tmp_path):
     with pytest.raises(ValueError,match="PRIVATE_SOURCE_RACE_IDENTITY_MISMATCH"):
         admit(source=source,request=bad,purpose=PURPOSE,
               classification=SCOPE,destination=tmp_path,public_repo_root=ROOT)
+
+
+
+def test_r13_cli_reads_private_source_and_writes_only_private_document(saved,tmp_path,capsys):
+    from runtime.local_fnb_r13_private_single_numeric import main
+    source,req=saved
+    source_path=tmp_path/"official_source.json"
+    intent_path=tmp_path/"race_intent.json"
+    source_path.write_text(json.dumps(source,ensure_ascii=False),encoding="utf-8")
+    intent_path.write_text(json.dumps(req,ensure_ascii=False),encoding="utf-8")
+    private=tmp_path/"private_store"
+    assert main(["--source-artifact",str(source_path),
+                 "--request",str(intent_path),
+                 "--private-output",str(private),
+                 "--diagnostic-only"])==0
+    output=capsys.readouterr().out
+    summary=json.loads(output)
+    assert summary["runner_count"]==12
+    assert summary["29_index_cells"]==348
+    assert "private_root" not in output
+    assert (private/RACE/"all_horse_29_index_report.md").is_file()
+    assert (private/RACE/"private_numerical_receipt.json").is_file()
