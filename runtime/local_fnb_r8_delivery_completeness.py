@@ -11,6 +11,13 @@ def audit_presentation(artifact, runner_ids):
             not isinstance(v,list) or not set(v)<=set(("W","P2","P3"))
             for v in roles.values()):
         missing.append("ALL_RUNNER_ROLE_MATRIX_MISSING")
+    if not required:
+        missing.append("OFFICIAL_RUNNER_UNIVERSE_NOT_PROVEN")
+    numerical=pkg.get("numerical_cells_by_runner")
+    if (not isinstance(numerical,dict) or set(numerical)!=required
+            or any(not isinstance(v,dict) or len(v)!=29
+                   for v in numerical.values())):
+        missing.append("ALL_RUNNERS_29_INDICES_NOT_MATERIALIZED")
     ticket=artifact.get("final_ticket") or {}
     rows=ticket.get("tickets")
     if not isinstance(rows,list):
