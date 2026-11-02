@@ -77,14 +77,14 @@ jobs:
             runtime/local_fnb_r7_arithmetic_witness.py \
             runtime/local_evidence_to_base_production.py
 
-      - name: FNB R6 dated read-only acceptance
+      - name: FNB R7 official-raw bound dated read-only acceptance
         run: |
           python -m runtime.local_fnb_r6_readonly_acceptance \
-            --root . --date 2026-11-02 --output fnb-r6-readonly-acceptance.json
+            --root . --date 2026-11-02 --output fnb-r7-readonly-acceptance.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fnb-r6-readonly-${{ github.run_id }}
-          path: fnb-r6-readonly-acceptance.json
+          name: fnb-r7-readonly-${{ github.run_id }}
+          path: fnb-r7-readonly-acceptance.json
           if-no-files-found: warn
           retention-days: 30
