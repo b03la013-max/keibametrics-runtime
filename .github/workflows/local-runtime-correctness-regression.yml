@@ -79,6 +79,57 @@ jobs:
             runtime/local_fnb_r7_ticket_disposition.py \
             runtime/local_evidence_to_base_production.py
 
+      - name: FNB R7 historical signed-store numerical replay receipt
+        run: |
+          python - <<'PY'
+          import sys, json, hashlib
+          from pathlib import Path
+          sys.path.insert(0, str(Path('runtime').resolve()))
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_numeric_cell_integrity import attest_cell_grid
+          from runtime.local_fnb_r7_arithmetic_witness import verify_arithmetic
+          from local_fullnumerical_production import materialize_production
+          eid = 'LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase = o.resolve_phase(eid, 'SOURCE')
+          assert phase is not None
+          env = o._load_checkpoint_json(phase, 'source_receipt_envelope.json')
+          assert env['receipt']['status'] == 'SOURCE_FROZEN'
+          intent = json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          mat = materialize_production(env['artifact'], intent, intent['required_indices'])
+          reg = json.loads(Path('mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json').read_text())
+          mapping = json.loads(Path('mapping/local_full_numerical_mapping_v1.0_production_20261008.json').read_text())
+          arithmetic = verify_arithmetic(mat, reg, mapping)
+          cells = attest_cell_grid(mat, expected_indices=intent['required_indices'],
+                   expected_runner_ids=[r['runner_id'] for r in intent['runners']])
+          assert arithmetic['status'] == '12_OF_29_INDEPENDENT_ARITHMETIC_VERIFIED', arithmetic['issues']
+          assert cells['status'] == 'CELL_GRID_CONSISTENT', cells['issues']
+          assert mat['numeric_coverage']['required_count'] == 348
+          authority = mat['production_numerical_authority']
+          keys = ['prediction_consumption_authorized','krs_consumption_authorized',
+                  'ticket_consumption_authorized','capital_consumption_authorized']
+          assert all(authority[k] is False for k in keys)
+          payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
+              'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
+              'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic,
+              'consumer_permissions':{k:authority[k] for k in keys},
+              'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
+          payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
+              ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r7-historical-numerical-receipt.json').write_text(
+              json.dumps(payload,sort_keys=True,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps({'source_race':eid,'required':348,
+              'calculated':mat['numeric_coverage']['calculated_count'],
+              'independent_arithmetic_cells':arithmetic['checked_cells'],
+              'receipt_sha256':payload['receipt_sha256']},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r7-historical-numerical-${{ github.run_id }}
+          path: fnb-r7-historical-numerical-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: FNB R7 official-raw bound dated read-only acceptance
         run: |
           python -m runtime.local_fnb_r6_readonly_acceptance \
