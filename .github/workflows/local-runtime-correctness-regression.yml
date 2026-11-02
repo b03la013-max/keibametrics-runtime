@@ -348,3 +348,70 @@ jobs:
           path: fnb-r12-hpi-krs-receipt.json
           if-no-files-found: warn
           retention-days: 30
+      - name: FNB R13 real archived private 29index all-horse frozen document and readback
+        run: |
+          python - <<'PY'
+          import hashlib,json,tempfile
+          from datetime import datetime,timezone
+          from pathlib import Path
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r13_private_single_numeric import execute
+          from runtime.local_fnb_r12_historical_krs_witness import attest_archived_krs
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase=o.resolve_phase(eid,'SOURCE')
+          art=o._load_checkpoint_json(phase,'source_receipt_envelope.json')['artifact']
+          intent=json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          assert attest_archived_krs()['signed_phase_envelopes_verified']==[
+              'SOURCE','PRE_KRS','KRS_RUN','FINAL']
+          with tempfile.TemporaryDirectory(prefix='fnb-private-no-public-') as temp:
+              grade=execute(source_artifact=art,request=intent,private_root=Path(temp),
+                            repo_root=Path.cwd(),
+                            now=datetime.now(timezone.utc),diagnostic_only=True)
+              private=Path(grade['private_root'])
+              full=(private/'numerical_materialization.json').read_bytes()
+              readable=(private/'all_horse_29_index_report.md').read_bytes()
+              saved=(private/'private_numerical_receipt.json').read_bytes()
+              assert grade['29_index_cells']==348
+              assert grade['calculated']==312 and grade['neutral']==36
+              assert grade['unknown_components']==274
+              assert grade['private_materialization_sha256']==hashlib.sha256(full).hexdigest()
+              assert grade['private_readable_document_sha256']==hashlib.sha256(readable).hexdigest()
+              assert grade['private_receipt_sha256']==hashlib.sha256(saved).hexdigest()
+              assert grade['full_private_readback_verified'] is True
+              assert grade['signed_final_or_delivery_claim'] is False
+              # NEVER upload full indexed horses or official private SOURCE from
+              # this public GitHub repo Actions; only aggregate SHA witness.
+              receipt={'schema':'KM-FNB-R13-PRIVATE-NUMERIC-EXECUTION-RECEIPT-v1',
+                  'classification':'20261002_HISTORIC_DIAGNOSTIC_NOT_20261102_LIVE',
+                  'runner_count':grade['runner_count'],
+                  'required_29_cells':grade['29_index_cells'],
+                  'calculated_cells':grade['calculated'],
+                  'ruled_neutral_cells':grade['neutral'],
+                  'missing_feature_components':grade['unknown_components'],
+                  'all_horse_numeric_sha256':grade['private_materialization_sha256'],
+                  'all_horse_document_sha256':grade['private_readable_document_sha256'],
+                  'private_receipt_sha256':grade['private_receipt_sha256'],
+                  'three_private_files_readback_verified':True,
+                  'full_private_content_published_to_public_github':False,
+                  'source_privacy':'PRIVATE_NONCOMMERCIAL_RESEARCH_ONLY',
+                  'formal_consumer_scope_authorized':False,
+                  'new_daily_signed_final':False,
+                  'no_bet_calculated':False,
+                  'current_krs_5000x2_seed1':False,
+                  'recipient_delivery_ack':False,
+                  'forward_oos_increment':0}
+              receipt['sha256']=hashlib.sha256(json.dumps(receipt,
+                  sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+              Path('fnb-r13-private-numeric-safe-receipt.json').write_text(
+                  json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+              print(json.dumps({'status':'R13_PRIVATE_RESEARCH_NUMERICAL_PASS',
+                 'runners':receipt['runner_count'],'cells':receipt['required_29_cells'],
+                 'private_bytes_verified':True,'registered_oos':False},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r13-private-numeric-sanitized-${{ github.run_id }}
+          path: fnb-r13-private-numeric-safe-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
