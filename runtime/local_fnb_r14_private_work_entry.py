@@ -127,8 +127,13 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
-    for flag in ("source-artifact","request","private-root"):
+    source_group=p.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--source-artifact")
+    source_group.add_argument("--private-browser-html")
+    for flag in ("request","private-root"):
         p.add_argument("--"+flag,required=True)
+    p.add_argument("--browser-original-url")
+    p.add_argument("--browser-captured-at")
     for flag in ("baseline-owner","candidate-owner","engine","params"):
         p.add_argument("--"+flag)
     p.add_argument("--owner-method-portfolios")
@@ -139,10 +144,25 @@ def main(argv=None):
         raise ValueError("BOTH_OWNER_PACKETS_REQUIRED_NOT_ONE")
     owner_data={"BASELINE":json.loads(Path(owner_files[0]).read_text()),
                 "CANDIDATE":json.loads(Path(owner_files[1]).read_text())} if all(owner_files) else None
-    source=json.loads(Path(args.source_artifact).read_text())
     request=json.loads(Path(args.request).read_text())
-    if isinstance(source,dict) and "artifact" in source and "receipt" in source:
-        source=source["artifact"]
+    browser_capture=None
+    if args.private_browser_html:
+        if not args.browser_original_url or not args.browser_captured_at:
+            raise ValueError("FNB_BROWSER_HTML_EXACT_URL_AND_CAPTURE_TIME_REQUIRED")
+        from runtime.local_fnb_r16_private_browser_capture import ingest
+        browser_capture=ingest(
+            html_path=Path(args.private_browser_html),request=request,
+            observed_url=args.browser_original_url,
+            capture_time=args.browser_captured_at,
+            private_output=Path(args.private_root),
+            public_repo=Path(__file__).resolve().parents[1],
+            diagnostic_only=args.diagnostic_only)
+        private_source=Path(args.private_root)/request["race_id"]/"unsigned_official_card_artifact.json"
+        source=json.loads(private_source.read_text(encoding="utf-8"))
+    else:
+        source=json.loads(Path(args.source_artifact).read_text(encoding="utf-8"))
+        if isinstance(source,dict) and "artifact" in source and "receipt" in source:
+            source=source["artifact"]
     receipt=run(source=source,request=request,root=Path(args.private_root),
         public_repo=Path(__file__).resolve().parents[1],
         owners=owner_data,
@@ -151,6 +171,9 @@ def main(argv=None):
         engine=Path(args.engine) if args.engine else None,
         params=Path(args.params) if args.params else None,
         diagnostic_only=args.diagnostic_only)
+    if browser_capture is not None:
+        receipt["private_official_browser_import_sha256"]=browser_capture["source_artifact_sha256"]
+        receipt["private_official_browser_source_signed"]=False
     print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
     return 0
 
