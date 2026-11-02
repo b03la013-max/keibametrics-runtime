@@ -67,3 +67,33 @@ def test_fnb_r8_missing_odds_requires_explicit_unknown_not_active():
     plan["plan_sha256"] = sha({k:v for k,v in plan.items() if k!="plan_sha256"})
     result = audit_day(plan, "2026-11-02")
     assert "ODDS_UNKNOWN_REASON_MISSING" in str(result["issues"])
+
+def test_fnb_r8_dispatcher_rejects_raw_semantic_mutation_before_owner(monkeypatch,tmp_path):
+    import pytest
+    from runtime import local_race_day_dispatcher as d
+    from runtime import family_authority_guard
+    p=full_plan()
+    p["races"][0]["runner_status_registry"][0]["status"]="CANCELLED"
+    p["plan_sha256"]=sha({k:v for k,v in p.items() if k!="plan_sha256"})
+    def unexpected(**_):
+        raise AssertionError("MUST_REJECT_BEFORE_OWNER_AND_SOURCE_SEND")
+    monkeypatch.setattr(family_authority_guard,"resolve_current_authority",unexpected)
+    with pytest.raises(ValueError,match="FNB_DAY_SEMANTIC_RAW_REPLAY_REQUIRED"):
+        d.authorization({},p,tmp_path,__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc))
+
+
+def test_fnb_r8_valid_raw_12race_plan_reaches_existing_owner_gate(monkeypatch,tmp_path):
+    from runtime import local_race_day_dispatcher as d
+    from runtime import family_authority_guard
+    p=full_plan()
+    def expected(**_):
+        raise ValueError("EXISTING_OWNER_AUTHORITY_GATE_REACHED")
+    monkeypatch.setattr(family_authority_guard,"resolve_current_authority",expected)
+    try:
+        d.authorization({},p,tmp_path,__import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc))
+    except ValueError as err:
+        assert str(err)=="EXISTING_OWNER_AUTHORITY_GATE_REACHED"
+    else:
+        raise AssertionError("NOT_ALLOWED_TO_AUTHENTICATE_WITHOUT_REAL_OWNER")
