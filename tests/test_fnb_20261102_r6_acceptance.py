@@ -111,11 +111,17 @@ def test_r6_owner_label_and_plan_alone_do_not_grant_approval(tmp_path):
     (d / "2026-11-02-FNB.json").write_text(json.dumps(plan), encoding="utf-8")
     proof = witness(tmp_path, "2026-11-02", now=NOW,
                     numeric_assessor=_fake_numeric, authority_resolver=_fake_authority)
-    assert proof["dated_plan_exists_and_valid"]
+    assert proof["dated_plan_shallow_manifest_consistent"]
+    # R7 closes R6's false-positive: a self-hashed 12R shell with invented
+    # clock/runner and no official raw must not be labelled a valid plan.
+    assert not proof["dated_plan_exists_and_valid"]
+    assert not proof["dated_plan_official_raw_reparsed"]
+    assert any(x.startswith("FNB_DATED_PLAN_INVALID:FNB_PLAN_RAW_NOT_VERIFIED")
+               for x in proof["blockers"])
     assert not proof["dated_approval_present"]
     assert not proof["formal_live_authorized_by_this_witness"]
     assert "FNB_DATED_OWNER_APPROVAL_NOT_OBSERVED" in proof["blockers"]
-    assert proof["races"][0]["planned_required_cells"] == 29
+    assert proof["races"][0]["planned_required_cells"] is None
     assert proof["current_day_calculated_cells_verified"] == 0
 
 
