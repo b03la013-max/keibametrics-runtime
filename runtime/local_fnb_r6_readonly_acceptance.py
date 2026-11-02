@@ -111,6 +111,7 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
     plan_path = root / "runtime/local_race_day_plan" / f"{race_date}-FNB.json"
     approval_path = root / "profiles/local_autonomous_approvals" / f"{race_date}-FNB.json"
     plan, approval = None, None
+    manifest_consistent, plan_proof = False, None
     if not plan_path.is_file():
         block("FNB_DATED_OFFICIAL_DAY_PLAN_NOT_OBSERVED")
     else:
@@ -122,10 +123,21 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
                                                             if k != "plan_sha256"})):
                 raise ValueError("DAY_PLAN_IDENTITY_OR_SHA_MISMATCH")
             rows = plan.get("races")
+            if not isinstance(rows, list):
+                raise ValueError("FNB_COMPLETE_OFFICIAL_12R_PLAN_REQUIRED")
             numbers = [r["fields"]["race_no"] for r in rows]
-            if (not isinstance(rows, list) or sorted(numbers) != list(range(1, 13))
+            if (sorted(numbers) != list(range(1, 13))
                     or any(type(n) is not int for n in numbers)):
                 raise ValueError("FNB_COMPLETE_OFFICIAL_12R_PLAN_REQUIRED")
+            manifest_consistent = True
+            # A self-hashed 12R list may contain invented schedules, horses
+            # or SOURCE references. Only separately reparsed official raw may
+            # qualify the plan as an observed discovery corpus.
+            from runtime.local_fnb_r7_plan_provenance import verify_fnb_plan
+            plan_proof = verify_fnb_plan(plan, race_date)
+            if not plan_proof["raw_integrity_verified"]:
+                raise ValueError("FNB_PLAN_RAW_NOT_VERIFIED:"
+                                 + ",".join(plan_proof["issues"][:5]))
         except (OSError, ValueError, KeyError, TypeError) as exc:
             plan = None
             block("FNB_DATED_PLAN_INVALID:" + str(exc))
@@ -196,7 +208,11 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
         "production_numeric_materialization_ready": materialization_ready,
         "numeric_consumption": consumption,
         "dated_plan_exists_and_valid": plan is not None,
-        "plan_validation_scope": "FILE_IDENTITY_SHA_AND_RACE_SET_ONLY_NOT_FRESH_OFFICIAL",
+        "dated_plan_shallow_manifest_consistent": manifest_consistent,
+        "dated_plan_official_raw_reparsed": bool(
+            plan_proof and plan_proof["raw_integrity_verified"]),
+        "dated_plan_raw_provenance": plan_proof,
+        "plan_validation_scope": "FROZEN_NAR_CARD_RAW_REPARSE_NOT_CURRENT_SOURCE_OR_SIGNED_FINAL",
         "dated_approval_present": approval is not None,
         "formal_live_authorized_by_this_witness": False,
         "blockers": blockers,
