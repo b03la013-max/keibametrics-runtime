@@ -157,6 +157,9 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             raise RaceKeyGateError('READBACK_SIGNED_SOURCE_MISSING')
         final = o._load_checkpoint_json(formal,'final_receipt_envelope.json') or {}
         signed_source = o._load_checkpoint_json(source,'source_receipt_envelope.json') or {}
+        from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+        signed_race_id = local_receipt_race_id(
+            execution_id, signed_source.get('artifact') or {})
         flags = o._load_checkpoint_json(formal,'receipt_verifications.json') or {}
         temporal = o._load_checkpoint_json(formal,'final_before_post_verification.json') or {}
         if any(flags.get(p) is not True for p in ('SOURCE','PRE_KRS','KRS_RUN','FINAL')):
@@ -176,7 +179,7 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             receipt,artifact=envelope.get('receipt') or {},envelope.get('artifact') or {}
             if (receipt.get('family')!='LOCAL' or receipt.get('phase')!=phase
                     or receipt.get('status')!=status or receipt.get('errors')
-                    or receipt.get('race_id')!=execution_id or artifact.get('race_id',execution_id)!=execution_id
+                    or receipt.get('race_id')!=signed_race_id or artifact.get('race_id',signed_race_id)!=signed_race_id
                     or envelope.get('signature_alg')!='Ed25519'
                     or envelope.get('signer_key_id')!=cfg['receipt_signer_key_id']
                     or receipt.get('engine_sha256')!=cfg['engine_sha256']
@@ -187,7 +190,7 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         artifact=final['artifact']; receipt=final['receipt']; src=signed_source['artifact']
         if (artifact.get('source_receipt_sha256')!=signed_source['receipt_sha256']
                 or artifact.get('source_snapshot_sha256')!=src.get('source_snapshot_sha256')
-                or temporal.get('execution_id')!=execution_id or temporal.get('race_id')!=execution_id
+                or temporal.get('execution_id')!=execution_id or temporal.get('race_id')!=signed_race_id
                 or temporal.get('final_receipt_sha256')!=final['receipt_sha256']
                 or temporal.get('verified') is not True):
             raise RaceKeyGateError('READBACK_SOURCE_OR_TEMPORAL_LINEAGE_MISMATCH')
@@ -338,6 +341,8 @@ def certify(request: dict, entry_report: dict) -> dict:
     # the manual five-field trigger was supplied incorrectly. Never turn such
     # a SOURCE into a formal pre-race basis.
     artifact = signed_source.get("artifact") or {}
+    from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+    signed_race_id = local_receipt_race_id(eid, artifact)
     official = artifact.get("source_race_context") or {}
     official_day = str(official.get("race_date") or "").replace("/", "-")
     if (official.get("venue_id") != request.get("venue_id")
@@ -397,7 +402,7 @@ def certify(request: dict, entry_report: dict) -> dict:
             or temporal.get("verified") is not True or final.get("receipt_sha256") is None
             or (final.get("receipt") or {}).get("status") != "PASS"):
         raise RaceKeyGateError("SIGNED_FINAL_VERIFICATION_REQUIRED")
-    if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != eid:
+    if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != signed_race_id:
         raise RaceKeyGateError("FINAL_TEMPORAL_RACE_MISMATCH")
     # Checkpoint fixtures and older executions may omit either numerical
     # artifact. The existing manifest is the authority for file existence;
@@ -435,6 +440,11 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
         return {**report,'status':'TERMINAL_ERROR' if job_status=='failure' else 'NO_SIGNED_FINAL',
                 'reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
     final=o._load_checkpoint_json(phase,'final_receipt_envelope.json') or {}
+    from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+    try:
+        expected_signed_race_id = local_receipt_race_id(execution_id)
+    except ValueError as exc:
+        return {**report, 'status': 'HOLD', 'reason': str(exc)}
     flags=o._load_checkpoint_json(phase,'receipt_verifications.json') or {}
     temporal=o._load_checkpoint_json(phase,'final_before_post_verification.json') or {}
     if final.get('receipt',{}).get('status')!='PASS' or flags.get('FINAL') is not True:
@@ -446,7 +456,7 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
     http, verification = request_json(endpoint+'/verify', method='POST', payload=final,
                                       timeout=20, attempts=1)
     if (http >= 300 or verification.get('valid') is not True
-            or final.get('receipt', {}).get('race_id') != execution_id):
+            or final.get('receipt', {}).get('race_id') != expected_signed_race_id):
         return {**report, 'status': 'HOLD', 'reason': 'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED'}
     return readback_final(execution_id,job_status,allow_network=False,
                           _verified_final_response=verification)
