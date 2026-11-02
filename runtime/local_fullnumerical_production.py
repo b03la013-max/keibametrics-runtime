@@ -149,12 +149,16 @@ def materialize_production(
     # execution-correctness check, NOT a new score, weight or consumer scope.
     fnb_history_check = None
     fnb_venue_temporal_preflight = None
+    fnb_official_change_preflight = None
     if request.get("venue_id") == "FNB":
         from runtime.local_fnb_r9_history_asof import assert_result_blind
         from runtime.local_fnb_r11_venue_temporal import verify as verify_fnb_temporal
+        from runtime.local_fnb_r12_official_change_scope import reconcile as reconcile_fnb_changes
         fnb_history_check = assert_result_blind(compiled, source_artifact, request)
         fnb_venue_temporal_preflight = verify_fnb_temporal(
             source_artifact=source_artifact, request=request)
+        fnb_official_change_preflight = reconcile_fnb_changes(
+            source_artifact, request, source_artifact.get("official_day_change_receipt"))
     attach_research(compiled, source_artifact)
 
     # Reuse the already regression-tested deterministic arithmetic engine. Its
@@ -172,6 +176,8 @@ def materialize_production(
         out["fnb_historical_asof_preflight"] = fnb_history_check
     if fnb_venue_temporal_preflight is not None:
         out["fnb_venue_temporal_preflight"] = fnb_venue_temporal_preflight
+    if fnb_official_change_preflight is not None:
+        out["fnb_official_change_preflight"] = fnb_official_change_preflight
 
     rows = []
     counts = {"CALCULATED": 0, "RULED-NEUTRAL": 0, "RULED-HOLD": 0, "NOT-APPLICABLE": 0}
