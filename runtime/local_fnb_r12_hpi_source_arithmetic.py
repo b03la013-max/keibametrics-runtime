@@ -40,7 +40,7 @@ def recent_weighted(values):
     return sum(v*w for v,w in slots)/sum(w for _,w in slots)
 
 
-def reconstruct_one(raw):
+def reconstruct_one(raw, field_size):
     starts=raw.get("starts") or []
     if not isinstance(starts,list):
         raise ValueError("HPI_HISTORY_STARTS_NOT_LIST")
@@ -59,9 +59,7 @@ def reconstruct_one(raw):
         class_score=run.get("class_score")
         class_vals.append(None if class_score is None else d(class_score))
         field=run.get("field_size")
-        field=(field if field is not None else raw.get("race_field_size"))
-        if field is None:
-            field=12
+        field=(field if field is not None else field_size)
         opponent.append(clamp(Decimal("0.75")*
             d(class_score if class_score is not None else 52)+
             Decimal("0.25")*clamp(Decimal(50)+
@@ -87,7 +85,7 @@ def verify_hpi_six(materialized):
     for horse in runners:
         rid=str(horse.get("runner_id"))
         try:
-            expected=reconstruct_one(horse["raw_candidate_evidence"])
+            expected=reconstruct_one(horse["raw_candidate_evidence"],len(runners))
             records=horse["evidence_features"]
             for component in COMPONENTS:
                 item=records[component]
