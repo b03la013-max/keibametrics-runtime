@@ -143,3 +143,41 @@ def test_r6_read_only_repo_replay_never_infers_formal_from_snapshot():
     assert fake["source_checkpoint"] != "SIGNED_SOURCE_VERIFIED"
     assert fake["formal_checkpoint"] != "FINAL_DELIVERED"
     assert fake["pfs"] is None
+
+
+
+def test_r6_historical_full29_replay_is_deterministic_and_unconsumed():
+    """Same archived pre-cutoff raw+frozen intent; no 11/02 production claims.
+
+    This is a reproducibility witness, NOT independent reimplementation of
+    the mathematical formula or a permission to feed numbers to KRS.
+    """
+    import copy
+    import sys
+    sys.path.insert(0, str(ROOT / "runtime"))
+    from local_fullnumerical_production import materialize_production
+
+    source = orchestrator.resolve_phase(OLD_EID, "SOURCE")
+    assert source is not None
+    envelope = orchestrator._load_checkpoint_json(source, "source_receipt_envelope.json")
+    assert envelope["receipt"]["status"] == "SOURCE_FROZEN"
+    frozen_source = envelope["artifact"]
+    intent_path = ROOT / "runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json"
+    intent = json.loads(intent_path.read_text(encoding="utf-8"))
+    a = materialize_production(copy.deepcopy(frozen_source), copy.deepcopy(intent),
+                               intent["required_indices"])
+    b = materialize_production(copy.deepcopy(frozen_source), copy.deepcopy(intent),
+                               intent["required_indices"])
+    assert a["numeric_coverage"] == b["numeric_coverage"]
+    assert a["index_terminalization_hash"] == b["index_terminalization_hash"]
+    assert a["index_provenance_hash"] == b["index_provenance_hash"]
+    assert [(r["runner_id"], r["numerical_index_sha256"]) for r in a["runners"]] == [
+        (r["runner_id"], r["numerical_index_sha256"]) for r in b["runners"]]
+    assert a["numeric_coverage"]["required_count"] == 348
+    assert a["numeric_coverage"]["ruled_hold_count"] == 0
+    assert a["numeric_coverage"]["unresolved_count"] == 0
+    assert a["numeric_coverage"]["calculated_count"] > 0
+    for k in ("prediction_consumption_authorized", "krs_consumption_authorized",
+              "ticket_consumption_authorized", "capital_consumption_authorized"):
+        assert a["production_numerical_authority"][k] is False
+        assert b["production_numerical_authority"][k] is False
