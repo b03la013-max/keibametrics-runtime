@@ -292,7 +292,9 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
                 temp.write(tree_bytes);tree_temp=Path(temp.name)
             try:os.replace(tree_temp,tree_path)
             finally:tree_temp.unlink(missing_ok=True)
-        return {**report,**payload,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        from runtime.local_fnb_r6_numeric_readback import frozen_numeric_readback
+        numeric_grade = frozen_numeric_readback(execution_id, formal, root)
+        return {**report,**payload,**numeric_grade,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
             'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
@@ -468,6 +470,18 @@ def main() -> int:
                         and result.get('render_available') is True
                         and isinstance(result.get('canonical_tree'), str))
             content = f"### {args.execution_id}\n\nStatus: {result['status']}\n\n"
+            # Surface frozen numerical degradation alongside the verified
+            # ticket tree without modifying that canonical signed payload.
+            grade = result.get("numeric_evidence_quality") or {}
+            check = result.get("numeric_checkpoint_consistency") or {}
+            content += (
+                f"Numeric grade: {grade.get('status', 'NOT_REPORTED')}; "
+                f"CALCULATED={grade.get('calculated_count', 'UNKNOWN')}/"
+                f"{grade.get('required_count', 'UNKNOWN')}; "
+                f"RULED-HOLD={grade.get('ruled_hold_count', 'UNKNOWN')}; "
+                f"frozen-ledger={check.get('status', 'NOT_VERIFIED')}\n\n"
+                "Independent arithmetic: NOT_PERFORMED; recipient delivery: UNPROVEN\n\n"
+            )
             if included:
                 content += (f"FINAL receipt: {result['final_receipt_sha256']}\n\n"
                             f"FINAL artifact: {result.get('original_final_artifact_sha256')}\n\n"
