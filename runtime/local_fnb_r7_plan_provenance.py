@@ -14,6 +14,7 @@ import gzip
 import hashlib
 import json
 import re
+import io
 from urllib.parse import urlsplit, parse_qs
 
 from runtime.local_race_day_dispatcher import sha
@@ -50,7 +51,7 @@ def _parse_raw(snapshot):
         raise ValueError("OFFICIAL_CARD_RAW_MISSING_OR_OVERSIZE")
     try:
         packed = base64.b64decode(encoded, validate=True)
-        with gzip.GzipFile(fileobj=__import__("io").BytesIO(packed), mode="rb") as f:
+        with gzip.GzipFile(fileobj=io.BytesIO(packed), mode="rb") as f:
             raw = f.read(MAX_CARD_BYTES + 1)
     except (ValueError, OSError, EOFError) as exc:
         raise ValueError("OFFICIAL_CARD_RAW_DECODE_FAILED") from exc
@@ -94,6 +95,44 @@ def verify_fnb_plan(plan: dict, race_date: str) -> dict:
         if not isinstance(saved, list):
             saved = []
             fail("PLAN_OFFICIAL_SNAPSHOTS_MISSING")
+        # The official daily RaceList must independently link exactly the
+        # same 12 races. A collection of 12 individual cards alone does not
+        # prove a coherent official meeting.
+        menus = [x for x in saved if isinstance(x, dict)
+                 and x.get("source_class") == "OFFICIAL_DAY_MENU"]
+        if len(menus) != 1:
+            fail("PLAN_DAY_MENU_COUNT_NOT_ONE")
+        else:
+            menu = menus[0]
+            try:
+                from runtime.local_race_day_dispatcher import CardLinks
+                u = urlsplit(str(menu.get("final_url") or ""))
+                q = parse_qs(u.query)
+                if ((u.scheme, u.hostname, u.path) != (
+                        "https", "www.keiba.go.jp", "/KeibaWeb/TodayRaceInfo/RaceList")
+                        or q.get("k_babaCode") != ["19"]
+                        or q.get("k_raceDate") != [race_date.replace("-", "/")]):
+                    raise ValueError("DAY_MENU_URL_IDENTITY_INVALID")
+                if (menu.get("official") is not True
+                        or menu.get("authority") != "NAR_OFFICIAL"
+                        or menu.get("http_status") != 200
+                        or menu.get("snapshot_sha256") !=
+                           sha({k: v for k, v in menu.items()
+                                if k != "snapshot_sha256"})):
+                    raise ValueError("DAY_MENU_AUTHORITY_OR_HASH_INVALID")
+                packed = base64.b64decode(menu["raw_gzip_b64"], validate=True)
+                with gzip.GzipFile(fileobj=io.BytesIO(packed)) as stream:
+                    raw = stream.read(MAX_CARD_BYTES + 1)
+                if (len(raw) > MAX_CARD_BYTES
+                        or hashlib.sha256(raw).hexdigest() != menu.get("raw_sha256")
+                        or len(raw) != menu.get("byte_count")):
+                    raise ValueError("DAY_MENU_RAW_HASH_INVALID")
+                links = CardLinks("FNB", race_date)
+                links.feed(_decode(raw, str(menu.get("content_type") or "")))
+                if sorted(links.races) != list(range(1, 13)):
+                    raise ValueError("DAY_MENU_NOT_ALL_12_RACES")
+            except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+                fail("PLAN_DAY_MENU_NOT_VERIFIED:" + str(exc))
         cards = {}
         for snapshot in saved:
             if not isinstance(snapshot, dict):
