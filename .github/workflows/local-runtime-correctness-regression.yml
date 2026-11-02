@@ -114,6 +114,9 @@ jobs:
           arithmetic = verify_arithmetic(mat, reg, mapping)
           from runtime.local_fnb_r8_arithmetic_29 import verify_29
           arithmetic29 = verify_29(mat, reg, mapping)
+          from runtime.local_fnb_r8_missingness_census import census
+          missingness = census(mat)
+          assert missingness['ruled_neutral']==36 and missingness['calculated']==312
           assert arithmetic29['status'] == '29_OF_29_RECORDED_FEATURE_ARITHMETIC_PASS', arithmetic29['issues']
           cells = attest_cell_grid(mat, expected_indices=intent['required_indices'],
                    expected_runner_ids=[r['runner_id'] for r in intent['runners']])
@@ -127,7 +130,7 @@ jobs:
           payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
               'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
               'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
-              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29,
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness,
               'consumer_permissions':{k:authority[k] for k in keys},
               'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
           payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
