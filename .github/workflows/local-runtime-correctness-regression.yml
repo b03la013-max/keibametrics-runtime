@@ -79,6 +79,8 @@ jobs:
             tests/test_fnb_20261102_r10_historical_closedloop.py \
             tests/test_fnb_20261102_r10_gateway_readonly_health.py \
             tests/test_fnb_20261102_r10_signed_identity.py \
+            tests/test_fnb_20261102_r11_prestart_emergency.py \
+            tests/test_fnb_20261102_r11_venue_temporal.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -107,6 +109,8 @@ jobs:
             runtime/local_fnb_r10_historical_closedloop.py \
             runtime/local_fnb_r10_gateway_readonly_health.py \
             runtime/local_fnb_r10_signed_race_identity.py \
+            runtime/local_fnb_r11_prestart_emergency.py \
+            runtime/local_fnb_r11_venue_temporal.py \
             runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
 
@@ -277,5 +281,16 @@ jobs:
             fnb-r10-historical-signed-final-readback.json
             runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_tree.txt
             runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_presentation.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R11 actual November 2 prestart window and 12R readiness (read-only)
+        run: |
+          python -m runtime.local_fnb_r11_prestart_emergency \
+            --root . --output fnb-r11-20261102-prestart-readiness.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r11-prestart-${{ github.run_id }}
+          path: fnb-r11-20261102-prestart-readiness.json
           if-no-files-found: warn
           retention-days: 30
