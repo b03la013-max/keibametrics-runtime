@@ -10,7 +10,7 @@ import re
 
 PROFILE="KM-FNB-R12-OFFICIAL-DAY-CHANGES-SCOPE-v1"
 
-def reconcile(source, request, day_list=None):
+def reconcile(source, request, day_list=None, *, rider_resolver=None):
     context=source.get("source_race_context") or {}
     race=request.get("race") or {}
     day=str(request.get("race_date") or race.get("race_date") or "").replace("/","-")
@@ -73,11 +73,17 @@ def reconcile(source, request, day_list=None):
         else:
             if horse not in active_by:
                 raise ValueError("FNB_CHANGE_JOCKEY_ON_INACTIVE_HORSE")
+            from runtime.local_fnb_r13_rider_lineage import resolve_current_jockey
+            resolver=rider_resolver or resolve_current_jockey
+            # The official ACTIVE universe does not necessarily carry a rider.
+            # Read current_jockey from that race's recorded NAR card, never
+            # from secondary news or a generic (possibly absent) row field.
+            evidenced=resolver(source,horse)
             expected=item.get("new_jockey")
-            actual=active_by[horse].get("jockey")
+            actual=evidenced.get("current_jockey") if isinstance(evidenced,dict) else None
             if (not isinstance(expected,str) or not expected.strip() or
                     not isinstance(actual,str) or not actual.strip() or
-                    re.sub(r"\s+","",expected)!=re.sub(r"\s+","",actual)):
+                    re.sub(r"\\s+","",expected)!=re.sub(r"\\s+","",actual)):
                 raise ValueError("FNB_CHANGE_JOCKEY_NOT_APPLIED")
     status=("TARGET_KNOWN_CHANGES_RECONCILED" if own else
             "OTHER_RACE_ONLY_NO_KNOWN_TARGET_NOTICE" if other else
