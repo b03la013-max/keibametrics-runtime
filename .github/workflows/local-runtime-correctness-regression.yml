@@ -71,6 +71,8 @@ jobs:
             tests/test_fnb_20261102_r8_delivery.py \
             tests/test_fnb_20261102_r8_missingness.py \
             tests/test_fnb_20261102_r8_official_changes.py \
+            tests/test_fnb_20261102_r9_delivery.py \
+            tests/test_fnb_20261102_r9_evidence_63.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -91,6 +93,8 @@ jobs:
             runtime/local_fnb_r8_arithmetic_29.py \
             runtime/local_fnb_r8_delivery_completeness.py \
             runtime/local_fnb_r8_missingness_census.py \
+            runtime/local_fnb_r9_method_audit.py \
+            runtime/local_fnb_r9_evidence_63.py \
             runtime/local_evidence_to_base_production.py
 
       - name: FNB R7 historical signed-store numerical replay receipt
@@ -117,6 +121,9 @@ jobs:
           arithmetic29 = verify_29(mat, reg, mapping)
           from runtime.local_fnb_r8_missingness_census import census
           missingness = census(mat)
+          from runtime.local_fnb_r9_evidence_63 import audit_63
+          evidence63 = audit_63(mat, reg, intent, env['artifact'])
+          assert evidence63['status'] == 'ALL_63_COMPONENT_RECORDS_LINEAGE_VERIFIED', evidence63['issues']
           assert missingness['ruled_neutral']==36 and missingness['calculated']==312
           assert arithmetic29['status'] == '29_OF_29_RECORDED_FEATURE_ARITHMETIC_PASS', arithmetic29['issues']
           cells = attest_cell_grid(mat, expected_indices=intent['required_indices'],
@@ -131,7 +138,7 @@ jobs:
           payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
               'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
               'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
-              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness,
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness, 'feature_63_record_lineage':evidence63,
               'consumer_permissions':{k:authority[k] for k in keys},
               'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
           payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
