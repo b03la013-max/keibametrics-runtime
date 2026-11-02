@@ -66,6 +66,8 @@ jobs:
             tests/test_fnb_20261102_r7_plan_provenance.py \
             tests/test_fnb_20261102_r7_arithmetic_witness.py \
             tests/test_fnb_20261102_r7_ticket_disposition.py \
+            tests/test_fnb_20261102_r8_semantics.py \
+            tests/test_fnb_20261102_r8_arithmetic.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -77,6 +79,13 @@ jobs:
             runtime/local_fnb_r7_plan_provenance.py \
             runtime/local_fnb_r7_arithmetic_witness.py \
             runtime/local_fnb_r7_ticket_disposition.py \
+            runtime/local_fnb_r8_card_raw_check.py \
+            runtime/local_fnb_r8_odds_raw_check.py \
+            runtime/local_fnb_r8_single_race_semantics.py \
+            runtime/local_fnb_r8_day_semantics.py \
+            runtime/local_fnb_r8_arithmetic_first.py \
+            runtime/local_fnb_r8_arithmetic_roles.py \
+            runtime/local_fnb_r8_arithmetic_29.py \
             runtime/local_evidence_to_base_production.py
 
       - name: FNB R7 historical signed-store numerical replay receipt
@@ -99,6 +108,9 @@ jobs:
           reg = json.loads(Path('mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json').read_text())
           mapping = json.loads(Path('mapping/local_full_numerical_mapping_v1.0_production_20261008.json').read_text())
           arithmetic = verify_arithmetic(mat, reg, mapping)
+          from runtime.local_fnb_r8_arithmetic_29 import verify_29
+          arithmetic29 = verify_29(mat, reg, mapping)
+          assert arithmetic29['status'] == '29_OF_29_RECORDED_FEATURE_ARITHMETIC_PASS', arithmetic29['issues']
           cells = attest_cell_grid(mat, expected_indices=intent['required_indices'],
                    expected_runner_ids=[r['runner_id'] for r in intent['runners']])
           assert arithmetic['status'] == '12_OF_29_INDEPENDENT_ARITHMETIC_VERIFIED', arithmetic['issues']
@@ -111,7 +123,7 @@ jobs:
           payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
               'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
               'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
-              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic,
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29,
               'consumer_permissions':{k:authority[k] for k in keys},
               'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
           payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
