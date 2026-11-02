@@ -225,3 +225,21 @@ def test_r7_frozen_numeric_rejects_counters_forged_against_original_manifest(tmp
     assert proof["numeric_evidence_quality"]["all_cells_calculated"] is False
     assert proof["numeric_checkpoint_consistency"]["consistency_verified"] is False
     assert proof["numeric_readback_error"]=="NUMERIC_REPORT_MATERIALIZED_MANIFEST_MISMATCH"
+
+
+
+def test_r7_existing_dispatcher_rejects_self_hashed_fnb_plan_before_authority(monkeypatch,tmp_path):
+    import pytest
+    from runtime import local_race_day_dispatcher as dispatcher
+
+    valid=_fixture_plan()
+    valid["races"][0]["fields"]["scheduled_post_at"]="2026-11-02T14:55:00+09:00"
+    forged=_rehash(valid)
+    # Even with a self-consistent SHA and twelve numbered rows, the existing
+    # actual authorization pathway must reject the stale/forged official clock.
+    def forbidden(**_):
+        raise AssertionError("MUST_FAIL_BEFORE_CURRENT_AUTHORITY_OR_DISPATCH")
+    from runtime import family_authority_guard
+    monkeypatch.setattr(family_authority_guard,"resolve_current_authority",forbidden)
+    with pytest.raises(ValueError, match="FNB_DAY_PLAN_OFFICIAL_RAW_INTEGRITY_REQUIRED"):
+        dispatcher.authorization({},forged,tmp_path,datetime(2026,11,2,9,tzinfo=JST))
