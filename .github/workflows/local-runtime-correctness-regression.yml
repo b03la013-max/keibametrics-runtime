@@ -87,6 +87,7 @@ jobs:
             tests/test_fnb_20261102_r13_rider_lineage.py \
             tests/test_fnb_20261102_r13_private_numeric.py \
             tests/test_fnb_20261102_r14_live_source_probe.py \
+            tests/test_fnb_20261102_r15_mobile_official_readonly.py \
             tests/test_fnb_20261102_r14_private_dual_krs.py \
             tests/test_fnb_20261102_r14_private_work_entry.py \
             tests/test_nar_auxiliary_evidence.py
@@ -127,6 +128,7 @@ jobs:
             runtime/local_fnb_r13_private_single_numeric.py \
             runtime/local_fnb_r13_private_numeric_document.py \
             runtime/local_fnb_r14_live_source_probe.py \
+            runtime/local_fnb_r15_mobile_official_readonly.py \
             runtime/local_fnb_r14_private_dual_krs.py \
             runtime/local_fnb_r14_private_work_entry.py \
             runtime/local_fullnumerical_production.py \
@@ -430,5 +432,16 @@ jobs:
         with:
           name: fnb-r14-live-r01-sanitized-${{ github.run_id }}
           path: fnb-r14-live-r01-sanitized.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: FNB R15 check NAR official mobile R02 without changing robot/ACL policy
+        run: |
+          python -m runtime.local_fnb_r15_mobile_official_readonly \
+            --race-no 2 --output fnb-r15-mobile-official-r02-readonly.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r15-official-mobile-r02-${{ github.run_id }}
+          path: fnb-r15-mobile-official-r02-readonly.json
           if-no-files-found: warn
           retention-days: 7
