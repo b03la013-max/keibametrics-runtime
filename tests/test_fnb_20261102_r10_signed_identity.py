@@ -76,3 +76,22 @@ def test_all_3_existing_signed_gate_readers_use_canonical_fnb_race():
     assert 'str(temporal.get("race_id")) != signed_race_id' in cert
     assert "expected_signed_race_id = local_receipt_race_id(execution_id)" in terminal
     assert "final.get('receipt', {}).get('race_id') != expected_signed_race_id" in terminal
+
+
+
+def test_real_r04_frozen_certification_distinguishes_signed_formal_from_348_holds():
+    import json
+    from pathlib import Path
+    root=Path(__file__).resolve().parents[1]
+    intent=json.loads((root/"runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json").read_text())
+    entry=json.loads((root/"runtime/execution_reports"/EID/
+                      "36976101101-formal.json").read_text())
+    certified=local_race_key_gate.certify(intent,entry)
+    assert certified["source_verified"] is True
+    assert certified["formal_final_proven"] is True
+    assert certified["status"]=="FULL_LIFECYCLE_EXECUTION_PASS"
+    assert certified["numeric_evidence_quality"]["calculated_count"]==0
+    assert certified["numeric_evidence_quality"]["ruled_hold_count"]==348
+    assert certified["fnb_numerical_disposition"]["grade"]==(
+        "FROZEN_NUMERICAL_HELD_NOT_A_CALCULATED_FULL29")
+    assert certified["fnb_complete_prediction_delivery_proven"] is False
