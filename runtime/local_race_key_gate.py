@@ -409,6 +409,13 @@ def certify(request: dict, entry_report: dict) -> dict:
         if "numerical_materialization_summary.json" in frozen_files else None,
         o._load_checkpoint_json(formal, "mandatory_stage_manifest.json")
         if "mandatory_stage_manifest.json" in frozen_files else None)
+    if request.get("venue_id")=="FNB":
+        from runtime.local_fnb_r9_numeric_disposition import classify
+        report["fnb_numerical_disposition"]=classify(
+            report["numeric_evidence_quality"],report["numeric_checkpoint_consistency"])
+        # Historic signatures record lifecycle only. This metadata cannot
+        # substitute for dual-owner signed prediction or recipient ACK.
+        report["fnb_complete_prediction_delivery_proven"]=False
     return {**report, "status": "FULL_LIFECYCLE_EXECUTION_PASS",
             "formal_final_proven": True, "completion": True,
             "final_receipt_sha256": final["receipt_sha256"]}
