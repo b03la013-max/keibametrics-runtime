@@ -254,6 +254,15 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
 
 def authorization(approval, plan, root, now):
     """Approval is an owner-maintained repository record, not inferred from a race request."""
+    # R7 FNB-specific guard: a self-hashed day plan is not official evidence.
+    # This executes on the EXISTING dated dispatcher before it can authorize
+    # a GitHub Actions handoff. It neither activates FNB nor grants any scope.
+    if plan.get('venue_id') == 'FNB':
+        from runtime.local_fnb_r7_plan_provenance import verify_fnb_plan
+        verified = verify_fnb_plan(plan, plan.get('race_date'))
+        if not verified['raw_integrity_verified']:
+            raise ValueError('FNB_DAY_PLAN_OFFICIAL_RAW_INTEGRITY_REQUIRED:'
+                             + ','.join(verified['issues'][:5]))
     from runtime.family_authority_guard import resolve_current_authority
     from runtime.execution_gateway import family_config
     _, current = resolve_current_authority(root=root, now=now)
