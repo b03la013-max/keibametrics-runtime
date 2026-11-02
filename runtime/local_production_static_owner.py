@@ -83,6 +83,12 @@ def _card_heading(source_artifact: dict, *, expected_race: dict | None = None) -
             page = raw.decode("cp932")
     except (ValueError, OSError, UnicodeError) as exc:
         raise StaticOwnerError("OFFICIAL_RACE_CARD_DECODE_FAILED") from exc
+    if expected_race is not None and expected_race.get("venue_id") == "FNB":
+        cards = [x for x in sources if x.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"
+                 and x.get("official") is True]
+        if len(cards) != 1:
+            raise StaticOwnerError("FNB_STATIC_ONE_OFFICIAL_CARD_REQUIRED")
+        _fnb_card_binding(main, raw, source_artifact, expected_race)
     parser = _VisibleText()
     parser.feed(page)
     visible = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", unescape("".join(parser.fragments))))
@@ -94,10 +100,17 @@ def _card_heading(source_artifact: dict, *, expected_race: dict | None = None) -
         # printed race header before its distance/class can feed calculation.
         y, m, d = map(int, str(expected_race["race_date"]).split("-"))
         printed = re.sub(r"\s+", "", head)
-        pattern = (rf"{y}年{m}月{d}日.{{0,30}}浦和.{{0,12}}"
+        name = "船橋" if expected_race.get("venue_id") == "FNB" else "浦和"
+        pattern = (rf"{y}年{m}月{d}日.{{0,30}}{name}.{{0,12}}"
                    rf"第{int(expected_race['race_no'])}競走")
         if not re.search(pattern, printed):
-            raise StaticOwnerError("URW_NUMERICAL_CARD_BODY_IDENTITY_MISMATCH")
+            code = "FNB_STATIC" if name == "船橋" else "URW_NUMERICAL"
+            raise StaticOwnerError(code + "_CARD_BODY_IDENTITY_MISMATCH")
+        if name == "船橋":
+            posts = re.findall(pattern + r"(\d{1,2}:\d{2})発走", printed)
+            expected = _dt(expected_race["scheduled_post_at"]).astimezone(JST).strftime("%H:%M")
+            if len(posts) != 1 or datetime.strptime(posts[0], "%H:%M").strftime("%H:%M") != expected:
+                raise StaticOwnerError("FNB_STATIC_CARD_BODY_POST_MISMATCH")
     candidates = []
     for match in re.finditer(r"(?:ダート|芝)[^0-9]{0,24}(\d{3,4})\s*[mｍ]|(\d{3,4})\s*[mｍ][^0-9]{0,24}(?:ダート|芝)", head):
         candidates.append((int(match.group(1) or match.group(2)), match.group(0)))
@@ -112,11 +125,48 @@ def _card_heading(source_artifact: dict, *, expected_race: dict | None = None) -
     # URW headers also use B3イC1ア / C2選抜馬. Preserve each explicitly
     # printed class token for the existing class transform; never invent one.
     from urllib.parse import parse_qs, urlsplit
-    if parse_qs(urlsplit(main.get("final_url", "")).query).get("k_babaCode") == ["18"]:
+    if parse_qs(urlsplit(main.get("final_url", "")).query).get("k_babaCode") in (["18"], ["19"]):
         classes = re.findall(r"(?<![A-Z0-9])([ABC][1-3])(?=[^A-Z0-9]|$)", head.upper())
         class_label = "_".join(dict.fromkeys(classes)) if classes else "UNKNOWN"
     return {"distance": dist, "surface": surface, "class": class_label,
             "header_witness": witness, "header_sha256": hashlib.sha256(head.encode()).hexdigest()}
+
+
+def _fnb_card_binding(card, raw, source, request):
+    """FNB input integrity only; no Owner, numerical or signing permission."""
+    from urllib.parse import parse_qs, urlsplit
+    if (card.get("authority") != "NAR_OFFICIAL" or card.get("http_status") != 200
+            or hashlib.sha256(raw).hexdigest() != card.get("raw_sha256")
+            or _sha({k: v for k, v in card.items() if k != "snapshot_sha256"}) != card.get("snapshot_sha256")):
+        raise StaticOwnerError("FNB_STATIC_CARD_RAW_OR_SNAPSHOT_SHA_MISMATCH")
+    for field in ("requested_url", "final_url"):
+        url = urlsplit(str(card.get(field) or ""))
+        query = parse_qs(url.query)
+        if (url.scheme != "https" or url.hostname != "www.keiba.go.jp"
+                or url.username is not None or url.password is not None or url.fragment
+                or url.port not in (None, 443)
+                or url.path != "/KeibaWeb/TodayRaceInfo/DebaTable"
+                or any(query.get(k) != [v] for k, v in {
+                    "k_babaCode": "19", "k_raceDate": request["race_date"].replace("-", "/"),
+                    "k_raceNo": str(request["race_no"])}.items())):
+            raise StaticOwnerError("FNB_STATIC_CARD_URL_IDENTITY_MISMATCH")
+    fetched, freeze, cutoff = (_dt(card.get("fetched_at")), _dt(source.get("source_freeze_at")),
+                               _dt(request.get("prediction_cutoff")))
+    if (not fetched <= freeze < cutoff < _dt(request.get("scheduled_post_at"))
+            or _dt(source.get("prediction_cutoff")) != cutoff
+            or card.get("cutoff_relation") != "PRE_CUTOFF"
+            or card.get("post_cutoff_or_ineligible") is True):
+        raise StaticOwnerError("FNB_STATIC_CARD_FREEZE_OR_CUTOFF_MISMATCH")
+
+
+def _owner_seed(request):
+    if request.get("venue_id") == "FNB":
+        value = request.get("seed", 1)
+        if type(value) is not int or value != 1:
+            raise StaticOwnerError("FNB_STATIC_MASTER_SEED1_REQUIRED")
+        return value
+    # Preserve the existing authorized KAW/other-venue default exactly.
+    return int(str(request["race_date"]).replace("-", "") + str(request["race_no"]).zfill(2))
 
 
 def _start_date(raw: str) -> datetime | None:
@@ -188,7 +238,7 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
 def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: datetime) -> dict:
     obs = []
     observed_day = None
-    if venue_name == "浦和" and row.get("race_card_fetched_at"):
+    if venue_name in {"浦和", "船橋"} and row.get("race_card_fetched_at"):
         observed_day = _dt(row["race_card_fetched_at"]).astimezone(JST).date()
     for start in row.get("starts") or []:
         past = _start_date(start.get("date"))
@@ -205,7 +255,11 @@ def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: dateti
         finish = int(start.get("finish") or 0)
         if field < 2 or finish < 1 or finish > field:
             continue
-        same_venue = str(start.get("venue") or "").replace("ナ", "") == venue_name
+        if venue_name == "船橋":
+            label = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(start.get("venue") or "")))
+            same_venue = label in {"船橋", "船橋ナ", "FNB"}
+        else:
+            same_venue = str(start.get("venue") or "").replace("ナ", "") == venue_name
         same_distance = start.get("distance") == distance
         exact = same_venue and same_distance
         pos = start.get("content_positions") or []
@@ -217,7 +271,7 @@ def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: dateti
                     "last_turn": pos[-1] if pos else None,
                     "race_name": start.get("race_name"),
                     "raw_reference": start.get("raw")})
-    if venue_name == "浦和":
+    if venue_name in {"浦和", "船橋"}:
         # Provider tables and resumed observations need not retain newest-first
         # order. "Recent" is the latest observed date, never the first row.
         # This corrects source ordering only; the existing ordinal keys stay.
@@ -270,6 +324,8 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
     source = envelope.get("artifact") or {}
     if source.get("formal_ready") is not True or _dt(source.get("source_freeze_at")) >= cutoff:
         raise StaticOwnerError("OFFICIAL_SOURCE_NOT_PRESTART_FROZEN")
+    if venue == "FNB" and _dt(source.get("source_freeze_at")) > now:
+        raise StaticOwnerError("FNB_STATIC_SOURCE_FREEZE_AFTER_OWNER_CLOCK")
     official = source.get("source_race_context") or {}
     if (official.get("venue_id") != venue
             or str(official.get("race_date") or "").replace("/", "-") != request.get("race_date")
@@ -330,7 +386,7 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         rid = str(row["runner_id"])
         if str(parsed[rid]["name"]) != str(row["name"]):
             raise StaticOwnerError("OFFICIAL_CARD_NAME_MISMATCH")
-    header = _card_heading(source, expected_race=request if venue == "URW" else None)
+    header = _card_heading(source, expected_race=request if venue in {"URW", "FNB"} else None)
     day = _dt(request["scheduled_post_at"]).astimezone(JST).replace(hour=0, minute=0, second=0, microsecond=0)
     facts = {rid: _runner_facts(parsed[rid], venue_name=VENUE_NAMES[venue],
                                 distance=header["distance"], race_day=day) for rid in ids}
@@ -401,7 +457,7 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         "runners": enriched,
         "required_indices": numerical["required_indices"],
         "run_count": 5000,
-        "seed": int(str(request["race_date"]).replace("-", "") + str(request["race_no"]).zfill(2)),
+        "seed": _owner_seed(request),
         "static_prediction_frozen": True,
         "static_prediction": {
             "status": "FROZEN / OWNER-AUTHORIZED / RULE-BASED-UNVALIDATED / RESULT-BLIND",
