@@ -37,9 +37,21 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         if (not isinstance(owners,dict) or set(owners)!=
                 {"BASELINE","CANDIDATE"}):
             raise ValueError("FNB_PRIVATE_BOTH_FROZEN_OWNER_PACKETS_REQUIRED")
+        frozen_path=folder/"numerical_materialization.json"
+        frozen_bytes=frozen_path.read_bytes()
+        if hashlib.sha256(frozen_bytes).hexdigest()!=num["private_materialization_sha256"]:
+            raise ValueError("FNB_PRIVATE_FROZEN_29_INDEX_BYTES_CHANGED")
+        frozen=json.loads(frozen_bytes)
+        runner_ids={int(row["runner_id"]) for row in frozen.get("runners",[])}
+        if not runner_ids or len(runner_ids)!=len(frozen.get("runners",[])):
+            raise ValueError("FNB_PRIVATE_NUMERICAL_ACTIVE_UNIVERSE_INVALID")
         for owner in ("BASELINE","CANDIDATE"):
             if owners[owner].get("numerical_materialization_sha256")!=num["private_materialization_sha256"]:
                 raise ValueError("FNB_PRIVATE_OWNER_NOT_BOUND_TO_SAME_29_INDEX_FREEZE:"+owner)
+            own_horses=owners[owner].get("horses")
+            if not isinstance(own_horses,list) or {
+                    int(h.get("horse_no")) for h in own_horses if isinstance(h,dict)}!=runner_ids:
+                raise ValueError("FNB_PRIVATE_OWNER_ACTIVE_RUNNER_UNIVERSE_MISMATCH:"+owner)
         if engine is None or params is None:
             raise ValueError("FNB_PRIVATE_DUAL_KRS_ENGINE_AND_MAP_REQUIRED")
         downstream=dual_krs_execute(inputs=owners,engine=Path(engine),
