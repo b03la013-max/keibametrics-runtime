@@ -16,7 +16,7 @@ from pathlib import Path
 from runtime.local_numerical_authority_gate import assess as assess_numeric
 from runtime.local_race_day_dispatcher import sha as plan_sha
 
-PROFILE = "KM-FNB-R6-READONLY-ACCEPTANCE-WITNESS-v1"
+PROFILE = "KM-FNB-R7-READONLY-ACCEPTANCE-WITNESS-v2"
 CONSUMERS = ("prediction_consumption_authorized", "krs_consumption_authorized",
              "ticket_consumption_authorized", "capital_consumption_authorized")
 
@@ -222,6 +222,10 @@ def inspect(root: Path, race_date: str, *, now: datetime | None = None,
         "current_day_delivery_ack_verified": 0,
         "evidence_scope": "COUNTS_ARE_VERIFIED_IN_THIS_READ_ONLY_REPOSITORY_CHECK_ONLY",
         "runtime_and_private_store_not_queried": True,
+        "official_current_day_source_license_verified": False,
+        "production_full_execution_proven": False,
+        "registered_oos_increment": 0,
+        "none_of_the_missing_receipts_equal_no_bet": True,
         "new_github_workflow_dispatches": 0, "new_runtime_posts": 0,
         "production_changed": False,
     }
