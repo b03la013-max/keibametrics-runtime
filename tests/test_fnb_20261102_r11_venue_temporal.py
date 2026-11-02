@@ -78,3 +78,22 @@ def test_r11_older_real_materializer_stays_behaviorally_compatible():
     assert temporal["current_track_bias_status"]=="UNVERIFIED_CURRENT"
     assert temporal["race_no"]==4
     assert temporal["no_future_or_same_race_results_used"] is True
+
+
+
+def test_r11_first_race_invented_current_bias_must_hold():
+    src,request=fixture(1)
+    request["venue_prediction_context"]={"current_track_state":"CURRENT_TRACK_BIAS_CONFIRMED"}
+    with pytest.raises(ValueError,match="FNB_FIRST_DAY_BIAS_CLAIM_WITHOUT_PRIOR_OBSERVATION"):
+        verify(source_artifact=src,request=request)
+    src,request=fixture(1)
+    request["venue_prediction_context"]={"current_gci_value":68.5}
+    with pytest.raises(ValueError,match="FNB_FIRST_DAY_UNSUPPORTED_CURRENT_BIAS_NUMERIC"):
+        verify(source_artifact=src,request=request)
+
+
+def test_r11_nonfirst_race_missing_prior_result_cannot_claim_bias():
+    src,request=fixture(2)
+    request["venue_prediction_context"]={"same_day_track_bias_score":70}
+    with pytest.raises(ValueError,match="FNB_FIRST_DAY_UNSUPPORTED_CURRENT_BIAS_NUMERIC"):
+        verify(source_artifact=src,request=request)
