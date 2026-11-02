@@ -861,18 +861,52 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     return report
 
 
+
+def _fnb_private_chat_route(args):
+    """FNB normal chat→existing private Work R20→R19, separate from URW Formal.
+
+    No public git checkpointer, new actor or model. Only the explicit private
+    Work directory can hold original NAR bytes and the two immutable B/C
+    owner source/model/KRS inputs. No required packets -> visible HOLD, never
+    a fabricated ticket or computed NO-BET.
+    """
+    from runtime.local_fnb_r20_chat_completion import complete
+    if args.persist_checkpoints:
+        raise ValueError('FNB_PRIVATE_RESEARCH_GIT_PERSISTENCE_FORBIDDEN')
+    if not args.private_root:
+        result={'status':'EXECUTION_HOLD_NOT_NO_BET',
+                'first_failed_stage':'PRIVATE_WORK_ACTOR',
+                'reason':'FNB_PRIVATE_WORK_ROOT_NOT_CONNECTED',
+                'recipient_delivery_ack':False,'registered_oos_increment':0}
+    else:
+        result=complete(args.query,Path(args.private_root),
+                        diagnostic_only=args.diagnostic_only,
+                        emit_private_body=args.display)
+    if args.display and result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER':
+        print(result['body'],end='')
+    else:
+        print(json.dumps({k:v for k,v in result.items() if k!='body'},
+                         ensure_ascii=False,default=str))
+    return 0 if result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER' else 2
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument('--request')
-    inputs.add_argument('--query', help='Explicit URW race text: verified FINAL, authorized existing dispatch, or independent REFERENCE')
+    inputs.add_argument('--query', help='Explicit URW or FNB Race; FNB uses separately isolated private Work owner/source packets')
     parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
+    parser.add_argument('--private-root', help='Explicit private Work directory for FNB, outside the public repository')
+    parser.add_argument('--diagnostic-only', action='store_true', help='No retroactive FNB prestart claim after cutoff')
     parser.add_argument('--output', required=True)
     parser.add_argument('--run-id', required=True)
     parser.add_argument('--github-sha')
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
     args = parser.parse_args()
+    # FNB private research must not fall through to URW-only formal/reference
+    # routes, and no horse-level source or tickets may enter --output.
+    if args.query and re.search(r'(?:船橋|FNB)', args.query, re.I):
+        return _fnb_private_chat_route(args)
     output = Path(args.output).resolve()
     preserve_existing_reference = False
     try:
