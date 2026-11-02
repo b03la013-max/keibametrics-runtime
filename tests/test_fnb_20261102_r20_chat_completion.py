@@ -107,3 +107,15 @@ def test_public_ci_does_not_emit_horses(tmp_path,monkeypatch):
     monkeypatch.setenv("GITHUB_ACTIONS","true")
     result=r20.complete(QUERY,tmp_path,now=NOW,emit_private_body=True)
     assert result["reason"]=="PRIVATE_HORSE_OR_TICKET_BODY_PUBLIC_CI_FORBIDDEN"
+
+def test_race_id_path_traversal_is_rejected_before_private_write(tmp_path):
+    manifest_path=_bundle(tmp_path)
+    manifest=json.loads(manifest_path.read_text())
+    malicious={"race_id":RACE+"-../../escape","venue_id":"FNB",
+               "family_id":"LOCAL","race_date":"2026-11-02","race_no":5,
+               "prediction_cutoff":"2026-11-02T07:45:00+00:00"}
+    manifest["request"]=_put(tmp_path,"input/request-malicious.json",malicious)
+    manifest_path.write_text(json.dumps(manifest))
+    result=r20.complete(QUERY,tmp_path,now=NOW)
+    assert result["reason"]=="FNB_R20_REQUEST_RACE_IDENTITY_MISMATCH"
+    assert not (tmp_path/"escape").exists()
