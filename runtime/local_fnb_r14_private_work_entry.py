@@ -22,7 +22,8 @@ PROFILE="KM-FNB-R14-PRIVATE-ONE-TRIGGER-NUMERIC-AND-KRS-v1"
 
 def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         engine:Path|None=None,params:Path|None=None,
-        owners:dict|None=None,now=None,diagnostic_only=False):
+        owners:dict|None=None,portfolios:dict|None=None,
+        now=None,diagnostic_only=False):
     now=now or datetime.now(timezone.utc)
     num=numeric_execute(source_artifact=source,request=request,
         private_root=root,repo_root=public_repo,now=now,
@@ -60,6 +61,35 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
                  diagnostic_only=diagnostic_only,now=now)
         status="NUMERIC_AND_TWO_OWNER_KRS_COMPLETE_ROLES_TICKETS_NOT_FORMED"
         first_failure="W_P2_P3_MEC_SIX_TICKET_METHODS_NOT_EXECUTED"
+    ticket_grade=None
+    ticket_tree_sha=None
+    if portfolios is not None:
+        if downstream is None:
+            raise ValueError("FNB_TICKETS_WITHOUT_TWO_OWNER_KRS_FORBIDDEN")
+        from runtime.local_fnb_r9_method_audit import audit_methods
+        ticket_grade=audit_methods(portfolios)
+        if not ticket_grade["complete"]:
+            raise ValueError("FNB_SIX_ALTERNATIVE_METHOD_TREES_FAILED:"+",".join(
+                ticket_grade["failures"][:6]))
+        text_lines=["# 船橋 B／C各3方式｜私有独立券面・購入は未実施",
+                    "この検収は既に作られた券面の正規表示であり、予測生成・本人ACKではありません。",""]
+        for name in ("BASELINE","CANDIDATE"):
+            text_lines.append("## "+name+"（他Ownerとは別の代替券面）")
+            for method in ("EXACTA","TRIO","TRIFECTA"):
+                v=portfolios[name][method]
+                text_lines.append("### "+method+"／"+str(v["point_count"])+
+                    "点／"+str(v["total_investment"])+"円／未使用"+
+                    str(v["unused_capital"])+"円")
+                if v["no_bet"]:
+                    text_lines.append("計算済みNO-BET："+v["reason"])
+                else:
+                    text_lines.append(v["canonical_tree"])
+                text_lines.append("")
+        text_bytes=("\n".join(text_lines)+"\n").encode("utf-8")
+        ticket_tree_sha=_atomic_private_write(
+            folder/"baseline_candidate_6methods_alternative_trees.md",text_bytes)
+        status="NUMERIC_KRS_SIX_ALTERNATIVE_TREES_STRUCTURED_DELIVERY_UNPROVEN"
+        first_failure="SIGNED_FORMAL_ROLE_SEMANTIC_AND_RECIPIENT_ACK_NOT_PROVEN"
     receipt={
       "profile":PROFILE,
       "classification":("POSTCUTOFF_DIAGNOSTIC_ONLY" if diagnostic_only else
@@ -70,8 +100,10 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
       "dual_real_krs_execution":downstream,
       "all29_source_feature_receipt_verified":num["full_private_readback_verified"],
       "two_owners_5000_seed1_executed":downstream is not None,
+      "existing_six_method_ticket_tree_audit":ticket_grade,
+      "six_method_rendered_private_tree_sha256":ticket_tree_sha,
       "model_w_p2_p3_decision_proven":False,
-      "owner_six_methods_proven":False,
+      "owner_six_methods_proven":ticket_grade is not None and ticket_grade["complete"],
       "user_ticket_rendered_and_acknowledged":False,
       "actual_purchase":False,
       "pfs":None,
@@ -86,6 +118,7 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         "private_pipeline_receipt_sha256":sha,
         "numeric_cells":num["29_index_cells"],
         "krs_two_owners_done":downstream is not None,
+        "six_alternative_method_trees_rendered":ticket_tree_sha is not None,
         "formal_final_or_delivery_done":False,
         "private_checkpoint_readback_verified":
             hashlib.sha256((folder/"private_pipeline_checkpoint.json").read_bytes()).hexdigest()==sha,
@@ -98,6 +131,7 @@ def main(argv=None):
         p.add_argument("--"+flag,required=True)
     for flag in ("baseline-owner","candidate-owner","engine","params"):
         p.add_argument("--"+flag)
+    p.add_argument("--owner-method-portfolios")
     p.add_argument("--diagnostic-only",action="store_true")
     args=p.parse_args(argv)
     owner_files=[args.baseline_owner,args.candidate_owner]
@@ -111,7 +145,10 @@ def main(argv=None):
         source=source["artifact"]
     receipt=run(source=source,request=request,root=Path(args.private_root),
         public_repo=Path(__file__).resolve().parents[1],
-        owners=owner_data,engine=Path(args.engine) if args.engine else None,
+        owners=owner_data,
+        portfolios=(json.loads(Path(args.owner_method_portfolios).read_text())
+            if args.owner_method_portfolios else None),
+        engine=Path(args.engine) if args.engine else None,
         params=Path(args.params) if args.params else None,
         diagnostic_only=args.diagnostic_only)
     print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
