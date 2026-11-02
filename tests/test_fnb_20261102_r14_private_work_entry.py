@@ -121,3 +121,38 @@ def test_r14_unformed_six_methods_are_not_fake_no_bet(tmp_path,archived):
     source,request=archived
     with pytest.raises(ValueError,match="FNB_TICKETS_WITHOUT_TWO_OWNER_KRS_FORBIDDEN"):
         _run(source,request,tmp_path,portfolios={"BASELINE":{},"CANDIDATE":{}})
+
+
+
+def test_r18_cli_public_ci_forbids_private_full_body(archived,tmp_path,monkeypatch,capsys):
+    from runtime.local_fnb_r14_private_work_entry import main
+    source,request=archived
+    src=tmp_path/"source.json"
+    req=tmp_path/"request.json"
+    src.write_text(json.dumps(source,ensure_ascii=False),encoding="utf-8")
+    req.write_text(json.dumps(request,ensure_ascii=False),encoding="utf-8")
+    monkeypatch.setenv("GITHUB_ACTIONS","true")
+    with pytest.raises(ValueError,match="PUBLIC_CI_LOG_FORBIDDEN"):
+        main(["--source-artifact",str(src),
+              "--request",str(req),
+              "--private-root",str(tmp_path/"private"),
+              "--diagnostic-only",
+              "--emit-full-private-body"])
+    assert "PRIVATE_29_INDEX" not in capsys.readouterr().out
+
+
+def test_r18_cli_private_body_not_ready_is_not_faked(archived,tmp_path,monkeypatch):
+    from runtime.local_fnb_r14_private_work_entry import main
+    source,request=archived
+    src=tmp_path/"source.json"
+    req=tmp_path/"request.json"
+    src.write_text(json.dumps(source,ensure_ascii=False),encoding="utf-8")
+    req.write_text(json.dumps(request,ensure_ascii=False),encoding="utf-8")
+    monkeypatch.delenv("GITHUB_ACTIONS",raising=False)
+    monkeypatch.delenv("CI",raising=False)
+    with pytest.raises(ValueError,match="COMPLETE_SIX_METHOD_PRIVATE_DELIVERY_BODY_NOT_READY"):
+        main(["--source-artifact",str(src),
+              "--request",str(req),
+              "--private-root",str(tmp_path/"private"),
+              "--diagnostic-only",
+              "--emit-full-private-body"])
