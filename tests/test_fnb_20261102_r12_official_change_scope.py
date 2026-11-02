@@ -55,12 +55,18 @@ def test_r12_target_known_jockey_change_validates_final_frozen_rider():
     src,req,day=fixture()
     day["notices"]=[{"race_no":4,"event_type":"JOCKEY_CHANGE",
                      "horse_no":1,"new_jockey":"本田正重"}]
-    result=reconcile(src,req,day)
+    # Synthetic parsed-card fixture: the official active runner list may lack
+    # a jockey column; the actual default resolver is separately tested
+    # against an archived real signed source.
+    def parsed_rider(source, horse):
+        assert horse==1
+        return {"current_jockey":source["official_runner_universe"]["runners"][0]["jockey"]}
+    result=reconcile(src,req,day,rider_resolver=parsed_rider)
     assert result["status"]=="TARGET_KNOWN_CHANGES_RECONCILED"
     bad=copy.deepcopy(src)
     bad["official_runner_universe"]["runners"][0]["jockey"]="別騎手"
     with pytest.raises(ValueError,match="FNB_CHANGE_JOCKEY_NOT_APPLIED"):
-        reconcile(bad,req,day)
+        reconcile(bad,req,day,rider_resolver=parsed_rider)
 
 
 def test_r12_cancelled_horse_must_not_remain_in_active_universe():
