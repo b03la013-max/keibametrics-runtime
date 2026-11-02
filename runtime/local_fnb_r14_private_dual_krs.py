@@ -85,6 +85,10 @@ def execute(*,inputs:dict,engine:Path,params:Path,private_output:Path,
         raise ValueError("FNB_KRS_DIFFERENT_RACE_CONDITIONS")
     folder=root/race_id
     folder.mkdir(parents=True,exist_ok=True)
+    os.chmod(folder,0o700)
+    if (not diagnostic_only and inputs["BASELINE"]["original_prediction_sha256"]==
+                            inputs["CANDIDATE"]["original_prediction_sha256"]):
+        raise ValueError("FNB_KRS_TWO_DISTINCT_FROZEN_OWNER_PREDICTIONS_REQUIRED")
     results={}
     for owner in OWNERS:
         original=inputs[owner]
@@ -132,6 +136,7 @@ def execute(*,inputs:dict,engine:Path,params:Path,private_output:Path,
             "seed_stability_status":(rendered.get("seed_stability_audit") or {}).get("status"),
             "uncalibrated_occurrences_not_win_probability":True,
             "external_ed25519_signed_receipt":False,
+            "frozen_owner_sha_claim_independently_signed_verified":False,
             "ticket_purchase_proven":False}
     manifest={
         "profile":PROFILE,
@@ -140,6 +145,7 @@ def execute(*,inputs:dict,engine:Path,params:Path,private_output:Path,
         "race_id":race_id,"owners":results,"active_runners":list(cohort["BASELINE"]),
         "engine_sha256":ENGINE_SHA,"parameter_map_sha256":MAP_SHA,
         "private_model_output_persisted_and_bytes_readback":True,
+        "owner_source_sha_independently_frozen_here":False,
         "official_source_signature_issued_here":False,
         "formal_scope_or_numerical_consumer_changed":False,
         "w_p2_p3_common_decision_formed_here":False,
