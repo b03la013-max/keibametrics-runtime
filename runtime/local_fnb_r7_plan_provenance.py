@@ -171,6 +171,8 @@ def verify_fnb_plan(plan: dict, race_date: str) -> dict:
                     or fields.get("race_date") != race_date
                     or row.get("race_key") !=
                        f"FNB-{race_date.replace('-', '')}-{prefix}-LIVE-R1"
+                    or row.get("execution_id") !=
+                       f"LOCAL-KM-LOCAL-FNB-{race_date.replace('-', '')}-{prefix}-LIVE-R1-EXEC"
                     or row.get("intent_status") !=
                        "DRAFT_NOT_FORMAL_STATIC_NOT_DISPATCHED"):
                 fail(prefix + ":RACE_IDENTITY_OR_DRAFT_SCOPE_INVALID")
@@ -238,10 +240,15 @@ def verify_fnb_plan(plan: dict, race_date: str) -> dict:
                 })
             except (ValueError, OSError, TypeError, KeyError, AttributeError) as exc:
                 fail(prefix + ":" + str(exc))
+        if len(cards) != 12:
+            fail("PLAN_OFFICIAL_CARD_COUNT_NOT_12")
         if sorted(numbers) != list(range(1, 13)):
             fail("PLAN_12_RACE_SET_MISSING_OR_DUPLICATE")
-        if sorted(posts, key=lambda x: x[0]) != sorted(posts, key=lambda x: x[1]):
-            fail("PLAN_POST_TIMES_NOT_ASCENDING")
+        ordered_posts = [t for _, t in sorted(posts, key=lambda item: item[0])]
+        if len(ordered_posts) != 12 or any(
+                ordered_posts[i] >= ordered_posts[i+1]
+                for i in range(len(ordered_posts)-1)):
+            fail("PLAN_POST_TIMES_NOT_STRICTLY_ASCENDING")
         if len(observations) != 12:
             fail("PLAN_OFFICIAL_RAW_COVERAGE_NOT_12_OF_12")
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
