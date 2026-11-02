@@ -80,3 +80,42 @@ def test_r16_mismatched_raw_bytes_fail_closed(original,tmp_path):
     bad.write_bytes(b"<html>not a NAR card</html>")
     with pytest.raises(ValueError):
         _run(tmp_path,original,html_path=bad)
+
+
+
+def test_r16_actual_one_trigger_work_browser_to_full29(original,tmp_path,capsys):
+    from runtime.local_fnb_r14_private_work_entry import main
+    art,card,request=original
+    html=tmp_path/"desktop_browser_original_bytes.html"
+    html.write_bytes(gzip.decompress(base64.b64decode(card["raw_gzip_b64"])))
+    request_file=tmp_path/"race_request.json"
+    request_file.write_text(json.dumps(request,ensure_ascii=False),encoding="utf-8")
+    private=tmp_path/"full_private_pipeline"
+    rc=main(["--private-browser-html",str(html),
+             "--browser-original-url",card["requested_url"],
+             "--browser-captured-at",art["source_freeze_at"],
+             "--request",str(request_file),
+             "--private-root",str(private),
+             "--diagnostic-only"])
+    assert rc==0
+    printed=json.loads(capsys.readouterr().out)
+    assert printed["numeric_cells"]==348
+    assert printed["krs_two_owners_done"] is False
+    assert printed["formal_final_or_delivery_done"] is False
+    assert printed["private_official_browser_source_signed"] is False
+    assert (private/RID/"unsigned_official_card_artifact.json").is_file()
+    assert (private/RID/"numerical_materialization.json").is_file()
+    assert (private/RID/"all_horse_29_index_report.md").is_file()
+    assert (private/RID/"private_pipeline_checkpoint.json").is_file()
+
+
+def test_r16_browser_cli_requires_original_url_and_capture_time(original,tmp_path):
+    from runtime.local_fnb_r14_private_work_entry import main
+    html=tmp_path/"blank.html"
+    html.write_text("placeholder")
+    request=tmp_path/"request.json"
+    request.write_text(json.dumps(original[2],ensure_ascii=False))
+    with pytest.raises(ValueError,match="FNB_BROWSER_HTML_EXACT_URL_AND_CAPTURE_TIME_REQUIRED"):
+        main(["--private-browser-html",str(html),
+              "--request",str(request),
+              "--private-root",str(tmp_path/"out")])
