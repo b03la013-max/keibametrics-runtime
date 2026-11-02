@@ -54,6 +54,15 @@ def test_r13_real_private_noncommercial_12_horses_348_cells_756_features_29_form
     assert assertion["recipient_delivery_ack_verified"] is False
     assert assertion["pfs"] is None
     assert folder.parent==tmp_path
+    pretty=(folder/"all_horse_29_index_report.md").read_text(encoding="utf-8")
+    assert "全馬29指数" in pretty
+    assert pretty.count("| HPI-L |")==12
+    assert pretty.count("| RSI |")==12
+    assert "CALCULATED" in pretty and "RULED-NEUTRAL" in pretty
+    assert "未計算" in pretty and "NO-BETではない" in pretty
+    assert hashlib.sha256((folder/"all_horse_29_index_report.md").read_bytes()).hexdigest()==assertion["private_readable_document_sha256"]
+    assert assertion["private_readable_index_cells"]==348
+    assert assertion["recipient_delivery_ack_verified"] is False
 
 def test_r13_missing_v2_plan_cannot_disqualify_private_independent_numeric(saved,tmp_path):
     source,req=saved
