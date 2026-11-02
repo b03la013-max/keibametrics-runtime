@@ -75,6 +75,7 @@ jobs:
             tests/test_fnb_20261102_r9_evidence_63.py \
             tests/test_fnb_20261102_r9_numeric_disposition.py \
             tests/test_fnb_20261102_r9_60r_observation.py \
+            tests/test_fnb_20261102_r9_history_asof.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
@@ -99,6 +100,8 @@ jobs:
             runtime/local_fnb_r9_evidence_63.py \
             runtime/local_fnb_r9_numeric_disposition.py \
             runtime/local_fnb_r9_60r_observation.py \
+            runtime/local_fnb_r9_history_asof.py \
+            runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
 
       - name: FNB R9 historical signed-store numerical and feature receipts
@@ -118,6 +121,7 @@ jobs:
           assert env['receipt']['status'] == 'SOURCE_FROZEN'
           intent = json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
           mat = materialize_production(env['artifact'], intent, intent['required_indices'])
+          assert mat['fnb_historical_asof_preflight']['status'] == 'PRE_RACE_DATED_HISTORY_CHECKED'
           reg = json.loads(Path('mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json').read_text())
           mapping = json.loads(Path('mapping/local_full_numerical_mapping_v1.0_production_20261008.json').read_text())
           arithmetic = verify_arithmetic(mat, reg, mapping)
@@ -142,7 +146,7 @@ jobs:
           payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
               'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
               'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
-              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness, 'feature_63_record_lineage':evidence63,
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness, 'feature_63_record_lineage':evidence63, 'fnb_historical_asof_preflight':mat['fnb_historical_asof_preflight'],
               'consumer_permissions':{k:authority[k] for k in keys},
               'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
           payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
