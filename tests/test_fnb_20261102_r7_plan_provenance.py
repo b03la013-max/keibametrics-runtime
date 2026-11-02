@@ -184,3 +184,44 @@ def test_r7_observed_raw_day_plan_still_cannot_authorize_formal(tmp_path):
     assert not result["fnb_static_owner_authorized"]
     assert result["races"][0]["planned_required_cells"]==58
     assert all(r["pfs"] is None for r in result["races"])
+
+
+
+def test_r7_frozen_numeric_rejects_wrong_race_report_even_if_counts_appear_valid(tmp_path):
+    from runtime import formal_execution_orchestrator as o
+    from runtime.local_fnb_r6_numeric_readback import frozen_numeric_readback
+    root=Path(__file__).resolve().parents[1]
+    eid="LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC"
+    original=o.resolve_phase(eid,"FORMAL")
+    assert original is not None
+    run_id=original["latest"]["run_id"]
+    report=json.loads((root/"runtime/execution_reports"/eid/(run_id+".json")).read_text())
+    report["race_id"]="KM-LOCAL-FNB-20261002-R01-LIVE-R1"
+    target=tmp_path/"runtime/execution_reports"/eid
+    target.mkdir(parents=True)
+    (target/(run_id+".json")).write_text(json.dumps(report))
+    proof=frozen_numeric_readback(eid,original,tmp_path)
+    assert proof["numeric_evidence_quality"]["status"]=="NUMERICAL_COUNTS_NOT_REPORTED"
+    assert proof["numeric_checkpoint_consistency"]["consistency_verified"] is False
+    assert "NUMERIC_LEDGER_READBACK_FAILED" in proof["numeric_readback_error"]
+
+
+def test_r7_frozen_numeric_rejects_counters_forged_against_original_manifest(tmp_path):
+    from runtime import formal_execution_orchestrator as o
+    from runtime.local_fnb_r6_numeric_readback import frozen_numeric_readback
+    root=Path(__file__).resolve().parents[1]
+    eid="LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC"
+    original=o.resolve_phase(eid,"FORMAL")
+    assert original is not None
+    run_id=original["latest"]["run_id"]
+    report=json.loads((root/"runtime/execution_reports"/eid/(run_id+".json")).read_text())
+    report["completion"]["numeric_coverage"]["calculated_count"]=348
+    report["completion"]["numeric_coverage"]["ruled_hold_count"]=0
+    target=tmp_path/"runtime/execution_reports"/eid
+    target.mkdir(parents=True)
+    (target/(run_id+".json")).write_text(json.dumps(report))
+    proof=frozen_numeric_readback(eid,original,tmp_path)
+    assert proof["numeric_evidence_quality"]["status"]=="NUMERICAL_UNVERIFIED_FROZEN_COUNTER_MISMATCH"
+    assert proof["numeric_evidence_quality"]["all_cells_calculated"] is False
+    assert proof["numeric_checkpoint_consistency"]["consistency_verified"] is False
+    assert proof["numeric_readback_error"]=="NUMERIC_REPORT_MATERIALIZED_MANIFEST_MISMATCH"
