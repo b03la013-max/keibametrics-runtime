@@ -296,11 +296,13 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         numeric_grade = frozen_numeric_readback(execution_id, formal, root)
         from runtime.local_fnb_r7_ticket_disposition import attest_ticket_decision
         ticket_disposition = attest_ticket_decision(artifact, final_verified=True)
-        from runtime.local_fnb_r8_delivery_completeness import audit_presentation
+        from runtime.local_fnb_r8_delivery_completeness import audit_venue_presentation
         official_universe = src.get('official_runner_universe') or {}
         expected_ids = [str(r.get('runner_id')) for r in official_universe.get('runners', [])
                         if isinstance(r, dict) and r.get('runner_id') is not None]
-        delivery_document_audit = audit_presentation(artifact, expected_ids)
+        official_venue = (src.get('source_race_context') or {}).get('venue_id')
+        delivery_document_audit = audit_venue_presentation(
+            artifact, expected_ids, official_venue)
         return {**report,**payload,**numeric_grade,'ticket_disposition':ticket_disposition,'delivery_document_audit':delivery_document_audit,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
