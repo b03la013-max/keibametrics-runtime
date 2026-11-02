@@ -116,3 +116,13 @@ def audit_presentation(artifact, runner_ids):
         "signed_source_or_calculation_verified_here":False,
         "full_content_not_a_delivery_receipt":True}
     return result
+
+
+def audit_venue_presentation(artifact, runner_ids, venue_id):
+    """The FNB research delivery overlay must not mark other venues incomplete."""
+    if venue_id != "FNB":
+        return {"status":"NOT_APPLICABLE_NON_FNB",
+                "missing":[], "prestart_delivery_pass":False,
+                "recipient_ack":False,"user_received_at":None,
+                "overlaid_venue":"FNB", "current_venue":venue_id}
+    return audit_presentation(artifact, runner_ids)
