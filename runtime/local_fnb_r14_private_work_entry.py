@@ -121,6 +121,19 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
             full_delivery_hold=str(exc).split(":")[0]
             status="SIX_TREES_EXIST_FULL_DELIVERY_CONTENT_HOLD"
             first_failure=full_delivery_hold
+    # Persist the exact inputs needed to reproduce the full presentation.
+    # Boolean checkpoint fields alone cannot attest that horse cells or
+    # selected tickets were actually present in the saved body.
+    presentation_artifacts=None
+    if full_delivery is not None:
+        _atomic_private_write(folder/"frozen_owner_semantics.json",_encoded(frozen_semantics))
+        _atomic_private_write(folder/"six_alternative_method_portfolios.json",_encoded(portfolios))
+        names=["numerical_materialization.json","private_dual_krs_receipt.json",
+               "frozen_owner_semantics.json","six_alternative_method_portfolios.json"]
+        names += [owner+suffix for owner in ("BASELINE","CANDIDATE")
+                  for suffix in ("_krs_input.json","_krs_output.json")]
+        presentation_artifacts={name:hashlib.sha256((folder/name).read_bytes()).hexdigest()
+                                for name in names}
     receipt={
       "profile":PROFILE,
       "classification":("POSTCUTOFF_DIAGNOSTIC_ONLY" if diagnostic_only else
@@ -137,6 +150,7 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
           constructed["plan_evidence"] if constructed is not None else None),
       "six_method_rendered_private_tree_sha256":ticket_tree_sha,
       "complete_private_full_horse_delivery_presentation":full_delivery,
+      "presentation_artifact_sha256":presentation_artifacts,
       "full_presentation_first_missing_field":full_delivery_hold,
       "model_w_p2_p3_decision_proven":False,
       "owner_six_methods_proven":ticket_grade is not None and ticket_grade["complete"],
@@ -244,3 +258,4 @@ def main(argv=None):
 
 
 if __name__=="__main__":raise SystemExit(main())
+

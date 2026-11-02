@@ -18,7 +18,8 @@ PROFILE="KM-FNB-R18-ALL-HORSE-DUAL-OWNER-SIX-METHOD-FULL-DELIVERY-v1"
 def text(v):
     return str(v).replace("\n"," ").replace("\r"," ").replace("|","／")
 
-def verified_full_delivery(*,race_id,private_root,semantics,portfolios,diagnostic_only=False):
+def verified_full_delivery(*,race_id,private_root,semantics,portfolios,diagnostic_only=False,
+                           persist=True):
     path=Path(private_root).resolve()/race_id
     num_file=path/"numerical_materialization.json"
     if not num_file.is_file():
@@ -149,9 +150,11 @@ def verified_full_delivery(*,race_id,private_root,semantics,portfolios,diagnosti
     if cell_count!=len(runners)*29:
         raise ValueError("FNB_R18_ALL_ACTIVE_29_CELLS_NOT_RENDERED")
     body="\n".join(lines)+"\n"
-    digest=_atomic_private_write(path/"FULL_ALL_HORSES_BC_SIX_METHODS.md",body.encode("utf-8"))
-    if hashlib.sha256((path/"FULL_ALL_HORSES_BC_SIX_METHODS.md").read_bytes()).hexdigest()!=digest:
-        raise ValueError("FNB_R18_PRIVATE_DELIVERY_DOCUMENT_READBACK_FAIL")
+    digest=hashlib.sha256(body.encode("utf-8")).hexdigest()
+    if persist:
+        saved=_atomic_private_write(path/"FULL_ALL_HORSES_BC_SIX_METHODS.md",body.encode("utf-8"))
+        if saved!=digest or hashlib.sha256((path/"FULL_ALL_HORSES_BC_SIX_METHODS.md").read_bytes()).hexdigest()!=digest:
+            raise ValueError("FNB_R18_PRIVATE_DELIVERY_DOCUMENT_READBACK_FAIL")
     return {"status":"FULL_PRESENTATION_READY_RECIPIENT_ACK_UNVERIFIED",
             "race_id":race_id,
             "all_horses":len(runners),"all_29_index_cells":cell_count,
@@ -163,3 +166,4 @@ def verified_full_delivery(*,race_id,private_root,semantics,portfolios,diagnosti
             "signed_final_verified_by_document":False,
             "recipient_delivery_ack":False,
             "registered_oos_increment":0}
+
