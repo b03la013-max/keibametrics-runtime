@@ -23,6 +23,7 @@ PROFILE="KM-FNB-R14-PRIVATE-ONE-TRIGGER-NUMERIC-AND-KRS-v1"
 def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         engine:Path|None=None,params:Path|None=None,
         owners:dict|None=None,portfolios:dict|None=None,
+        frozen_semantics:dict|None=None,
         now=None,diagnostic_only=False):
     now=now or datetime.now(timezone.utc)
     num=numeric_execute(source_artifact=source,request=request,
@@ -63,6 +64,21 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
         first_failure="W_P2_P3_MEC_SIX_TICKET_METHODS_NOT_EXECUTED"
     ticket_grade=None
     ticket_tree_sha=None
+    constructed=None
+    if frozen_semantics is not None:
+        if downstream is None or portfolios is not None:
+            raise ValueError("FNB_R17_FROZEN_SEMANTICS_REQUIRES_KRS_AND_NO_OTHER_PORTFOLIO")
+        from runtime.local_fnb_r17_method_constructor import construct
+        frozen_krs_path=folder/"private_dual_krs_receipt.json"
+        if not frozen_krs_path.is_file():
+            raise ValueError("FNB_R17_ACTUAL_BOTH_OWNER_KRS_RECEIPT_MISSING")
+        krs_proof=json.loads(frozen_krs_path.read_text(encoding="utf-8"))
+        constructed=construct(
+            race_id=race_id,owner_semantics=frozen_semantics,private_root=root,
+            dual_krs_manifest=krs_proof,
+            source_snapshot_sha256=source.get("source_snapshot_sha256"),
+            numerical_materialization_sha256=num["private_materialization_sha256"])
+        portfolios=constructed["owners"]
     if portfolios is not None:
         if downstream is None:
             raise ValueError("FNB_TICKETS_WITHOUT_TWO_OWNER_KRS_FORBIDDEN")
@@ -101,6 +117,9 @@ def run(*,source:dict,request:dict,root:Path,public_repo:Path,
       "all29_source_feature_receipt_verified":num["full_private_readback_verified"],
       "two_owners_5000_seed1_executed":downstream is not None,
       "existing_six_method_ticket_tree_audit":ticket_grade,
+      "frozen_mec_six_method_generator_proven":constructed is not None,
+      "frozen_mec_source_and_owner_receipts":(
+          constructed["plan_evidence"] if constructed is not None else None),
       "six_method_rendered_private_tree_sha256":ticket_tree_sha,
       "model_w_p2_p3_decision_proven":False,
       "owner_six_methods_proven":ticket_grade is not None and ticket_grade["complete"],
@@ -136,12 +155,16 @@ def main(argv=None):
     p.add_argument("--browser-captured-at")
     for flag in ("baseline-owner","candidate-owner","engine","params"):
         p.add_argument("--"+flag)
+    p.add_argument("--baseline-frozen-semantics")
+    p.add_argument("--candidate-frozen-semantics")
     p.add_argument("--owner-method-portfolios")
     p.add_argument("--diagnostic-only",action="store_true")
     args=p.parse_args(argv)
     owner_files=[args.baseline_owner,args.candidate_owner]
     if any(owner_files) and not all(owner_files):
         raise ValueError("BOTH_OWNER_PACKETS_REQUIRED_NOT_ONE")
+    if bool(args.baseline_frozen_semantics)!=bool(args.candidate_frozen_semantics):
+        raise ValueError("BOTH_FROZEN_OWNER_SEMANTIC_SNAPSHOTS_REQUIRED")
     owner_data={"BASELINE":json.loads(Path(owner_files[0]).read_text()),
                 "CANDIDATE":json.loads(Path(owner_files[1]).read_text())} if all(owner_files) else None
     request=json.loads(Path(args.request).read_text())
@@ -168,6 +191,11 @@ def main(argv=None):
         owners=owner_data,
         portfolios=(json.loads(Path(args.owner_method_portfolios).read_text())
             if args.owner_method_portfolios else None),
+        frozen_semantics=({
+            "BASELINE":json.loads(Path(args.baseline_frozen_semantics).read_text()),
+            "CANDIDATE":json.loads(Path(args.candidate_frozen_semantics).read_text())}
+            if args.baseline_frozen_semantics and args.candidate_frozen_semantics
+            else None),
         engine=Path(args.engine) if args.engine else None,
         params=Path(args.params) if args.params else None,
         diagnostic_only=args.diagnostic_only)
