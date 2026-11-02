@@ -69,3 +69,18 @@ def test_urw_chat_intent_remains_urw():
       now=datetime(2026,11,2,tzinfo=timezone.utc))
     assert intent["venue_id"]=="URW"
     assert intent["race_no"]==6
+
+
+def test_private_work_env_auto_connects_existing_store(monkeypatch,tmp_path,capsys):
+    _argv(monkeypatch,"船橋8R",tmp_path)
+    monkeypatch.setenv("KM_FNB_PRIVATE_WORK_ROOT",str(tmp_path/"private"))
+    invoked=[]
+    def fake_complete(query, root, **kwargs):
+        invoked.append((query,root))
+        return {"status":"EXECUTION_HOLD_NOT_NO_BET",
+                "reason":"PRIVATE_WORK_BUNDLE_NOT_PREPARED"}
+    monkeypatch.setattr(private,"complete",fake_complete)
+    assert entry.main()==2
+    assert json.loads(capsys.readouterr().out)["reason"]=="PRIVATE_WORK_BUNDLE_NOT_PREPARED"
+    assert invoked==[("船橋8R",tmp_path/"private")]
+    assert not (tmp_path/"public-output").exists()
