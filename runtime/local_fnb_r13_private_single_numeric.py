@@ -149,3 +149,36 @@ def execute(*,source_artifact,request,private_root,
             "private_root":str(path),
             "signed_final_or_delivery_claim":False,
             "registered_oos_increment":0}
+
+
+def main(argv=None):
+    """Local Work/isolated actor entry. Reads pre-provided official SOURCE files.
+
+    It never fetches a provider page or writes public GitHub/Actions.
+    An existing LIVE client must first provide authentic official Source and
+    current request in its separately approved private workspace.
+    """
+    import argparse
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--source-artifact",required=True,type=Path)
+    ap.add_argument("--request",required=True,type=Path)
+    ap.add_argument("--private-output",required=True,type=Path)
+    ap.add_argument("--diagnostic-only",action="store_true")
+    args=ap.parse_args(argv)
+    source=json.loads(args.source_artifact.read_text(encoding="utf-8"))
+    request=json.loads(args.request.read_text(encoding="utf-8"))
+    if "artifact" in source and "receipt" in source:
+        # The signed envelope is not independently authenticated by this
+        # numerical CLI; verify it through the existing LOCAL receipt gate.
+        source=source["artifact"]
+    receipt=execute(source_artifact=source,request=request,
+            private_root=args.private_output,
+            diagnostic_only=args.diagnostic_only)
+    # Caller logs only aggregate status and bytes SHA. No full horse facts.
+    summary={k:v for k,v in receipt.items() if k!="private_root"}
+    print(json.dumps(summary,ensure_ascii=False,sort_keys=True))
+    return 0
+
+
+if __name__=="__main__":
+    raise SystemExit(main())
