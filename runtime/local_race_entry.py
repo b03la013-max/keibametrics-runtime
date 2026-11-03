@@ -11,16 +11,20 @@ def _parse_entry_arguments():
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument('--request')
+    inputs.add_argument('--research-intent', help='Explicit isolated private FNB research descriptor; grants no Formal scope')
     inputs.add_argument('--query', help='Explicit URW or FNB Race; FNB uses separately isolated private Work owner/source packets')
     parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
     parser.add_argument('--private-root', help='Explicit private Work directory for FNB, outside the public repository')
     parser.add_argument('--diagnostic-only', action='store_true', help='No retroactive FNB prestart claim after cutoff')
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--run-id', required=True)
+    parser.add_argument('--output')
+    parser.add_argument('--run-id')
     parser.add_argument('--github-sha')
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.research_intent is None and (args.output is None or args.run_id is None):
+        parser.error('--output and --run-id are required outside the explicit research route')
+    return args
 
 
 # A private FNB Work transport does not need the unrelated Formal/URW stack.
@@ -28,8 +32,9 @@ def _parse_entry_arguments():
 # the already isolated R20 route from executing. Imported/full-repository use
 # keeps the original dependencies and authority guards unchanged.
 _ENTRY_CLI_ARGS = _parse_entry_arguments() if __name__ == '__main__' else None
-_PRIVATE_FNB_CLI = bool(_ENTRY_CLI_ARGS is not None and _ENTRY_CLI_ARGS.query
-                        and re.search(r'(?:船橋|FNB)', _ENTRY_CLI_ARGS.query, re.I))
+_PRIVATE_FNB_CLI = bool(_ENTRY_CLI_ARGS is not None and
+                        (_ENTRY_CLI_ARGS.research_intent is not None or
+                         (_ENTRY_CLI_ARGS.query and re.search(r'(?:船橋|FNB)', _ENTRY_CLI_ARGS.query, re.I))))
 if not _PRIVATE_FNB_CLI:
     from runtime import formal_execution_orchestrator as o
     from runtime.local_fullnumerical_production import materialize_production
@@ -925,6 +930,23 @@ def _fnb_private_chat_route(args):
 
 def main():
     args = _ENTRY_CLI_ARGS if _ENTRY_CLI_ARGS is not None else _parse_entry_arguments()
+    if args.research_intent is not None:
+        if args.persist_checkpoints:
+            raise ValueError('FNB_PRIVATE_RESEARCH_GIT_PERSISTENCE_FORBIDDEN')
+        from runtime.local_fnb_research_runtime import run_intent, ResearchHold
+        try:
+            research = run_intent(args.research_intent)
+        except (ResearchHold, ValueError, OSError, KeyError, TypeError) as error:
+            print(json.dumps({'status': 'RESEARCH_EXECUTION_HOLD_NOT_NO_BET',
+                'exception_type': type(error).__name__,
+                'reason': str(error).partition(':')[0] if re.fullmatch('[A-Z][A-Z0-9_]{0,119}', str(error).partition(':')[0]) else 'RESEARCH_INPUT_OR_COMPONENT_UNVERIFIED',
+                'formal_final': False, 'registered_OOS_increment': 0, 'actual_purchase': False}))
+            return 2
+        print(json.dumps({key: research[key] for key in ('profile', 'race_id',
+            'index_cells', 'completion_reused', 'new_engine_executions_this_call',
+            'output_directory', 'formal_final', 'recipient_delivery_proven',
+            'registered_OOS_increment')}, ensure_ascii=False))
+        return 0
     # FNB private research must not fall through to URW-only formal/reference
     # routes, and no horse-level source or tickets may enter --output.
     if args.query and re.search(r'(?:船橋|FNB)', args.query, re.I):

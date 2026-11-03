@@ -107,6 +107,11 @@ jobs:
             tests/test_local_fnb_multisource.py \
             tests/test_local_historical_population_observations.py \
             tests/test_local_fnb_context_static_candidate.py \
+            tests/test_fnb_research_runtime.py \
+            tests/test_local_fnb_semantic_closure.py \
+            tests/test_local_fnb_csv_source_admission.py \
+            tests/test_local_historical_identity_observations.py \
+            tests/test_local_fnb_csv_capture_actor.py \
             tests/test_fnb_20261102_r14_private_dual_krs.py \
             tests/test_fnb_20261102_r14_private_work_entry.py \
             tests/test_nar_auxiliary_evidence.py
@@ -157,7 +162,7 @@ jobs:
             runtime/local_evidence_to_base_production.py
 
       - name: Compile isolated research and FNB context transport
-        run: python -m py_compile runtime/local_base15_research_candidates.py runtime/local_fnb_venue_context_binding.py runtime/local_fnb_observation_context.py runtime/local_race_day_dispatcher.py runtime/local_nar_csv_reference.py runtime/local_fnb_multisource.py runtime/local_historical_population_observations.py runtime/local_fnb_context_static_candidate.py
+        run: python -m py_compile runtime/local_base15_research_candidates.py runtime/local_fnb_venue_context_binding.py runtime/local_fnb_observation_context.py runtime/local_race_day_dispatcher.py runtime/local_nar_csv_reference.py runtime/local_fnb_multisource.py runtime/local_historical_population_observations.py runtime/local_fnb_context_static_candidate.py runtime/local_fnb_research_runtime.py runtime/local_fnb_semantic_closure.py runtime/local_fnb_csv_source_admission.py runtime/local_historical_identity_observations.py runtime/local_fnb_csv_capture_actor.py
       - name: FNB R9 historical signed-store numerical and feature receipts
         run: |
           python - <<'PY'
