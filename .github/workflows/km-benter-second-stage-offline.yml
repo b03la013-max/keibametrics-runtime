@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - 'runtime/analysis/benter_second_stage.py'
+      - 'runtime/analysis/_benter_second_stage_legacy.py'
+      - 'runtime/analysis/closing_odds_*.py'
+      - 'tests/analysis/test_closing_odds.py'
+      - 'tests/fixtures/analysis/**'
+      - 'docs/JRA_CLOSING_ODDS_RESEARCH.md'
+      - '.github/workflows/km-jra-closing-odds-manual.yml'
       - 'runtime/analysis/benter_index_diagnostics.py'
       - 'tests/analysis/test_benter_second_stage.py'
       - 'tests/analysis/test_benter_index_diagnostics.py'
@@ -25,7 +31,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install numpy==2.3.5 scipy==1.17.0 pytest==8.4.2
-      - run: python -m pytest -q tests/analysis/test_benter_second_stage.py tests/analysis/test_benter_index_diagnostics.py
+      - run: python -m pytest -q tests/analysis/test_benter_second_stage.py tests/analysis/test_benter_index_diagnostics.py tests/analysis/test_closing_odds.py
       - name: Read-only Phase 0.6 recomputation of stored inputs
         if: github.event.pull_request.number == 363
         run: |
@@ -90,3 +96,29 @@ jobs:
                   for i, piece in enumerate(pieces):
                       print("P06_FILE_CHUNK " + json.dumps({"name":file.name,"i":i,"text":piece},ensure_ascii=True))
           PY
+      - name: Verify Phase 0 byte compatibility on the stored cohort (no HTTP)
+        if: github.event.pull_request.base.ref == 'research/benter-index-diagnostics-20261103'
+        run: |
+          python - <<'PYCODE'
+          import hashlib, json, socket, sys, tempfile
+          from datetime import date
+          from pathlib import Path
+          def forbidden(*args, **kwargs):
+              raise AssertionError("OFFLINE_COMPATIBILITY_TEST_HAS_NO_NETWORK")
+          socket.socket.connect = forbidden
+          sys.path.insert(0, str(Path("runtime/analysis").resolve()))
+          import _benter_second_stage_legacy as legacy
+          import closing_odds_analysis as closing
+          assert hashlib.sha256(Path(legacy.__file__).read_bytes()).hexdigest() == "d1e24264cd3f26a7e874d7e782e1b83e1bdee291b29b1c9ef5b174c9106eb1e7"
+          with tempfile.TemporaryDirectory() as temporary:
+              one, two = Path(temporary)/"old", Path(temporary)/"closing"
+              options = dict(bootstrap_reps=1000, shuffle_reps=200, seed=20261103)
+              old = legacy.run(Path.cwd(), date(2026,10,11), date(2026,11,1), date(2026,11,3), one, **options)
+              result = closing.run(Path.cwd(), date(2026,10,11), date(2026,11,1), date(2026,11,3), two, **options)
+              for name in ["summary.json", "summary.md", "ledger.csv"]:
+                  assert (one/name).read_bytes() == (two/name).read_bytes(), name
+              print("CLOSING_COMPATIBILITY " + json.dumps({"n_primary_races":result["n_primary_races"],
+                    "n_closing_races":result["n_closing_races"], "summary_byte_identical":True,
+                    "summary_sha256":hashlib.sha256((two/"summary.json").read_bytes()).hexdigest(),
+                    "external_requests":0, "manual_workflow_executed":False}))
+          PYCODE
