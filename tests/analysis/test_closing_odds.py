@@ -203,6 +203,36 @@ def test_existing_capture_causes_zero_requests(tmp_path):
     assert result["skipped_existing"] == 1
 
 
+def test_offline_archived_day_to_closing_collection_without_result_request(tmp_path):
+    day_token = 'pw01srl10052026041120261101/E2'
+    odds_token = 'pw151ou1005202604110920261101Z/B7'
+    def link(path, token):
+        return f"<a onclick=\"doAction('{path}','{token}')\">合成リンク</a>".encode()
+    class SavedWebsite:
+        count = 0
+        requests = []
+        def load_robots(self): self.count += 1
+        def get(self, url):
+            assert url == 'https://www.jra.go.jp/keiba/calendar2026/2026/11/1101.html'
+            self.count += 1
+            return link('/JRADB/accessS.html','pw01sli00/AF'), 'text/html', '2026-11-03T01:00:00Z'
+        def post(self, action, referer):
+            self.count += 1
+            self.requests.append(action)
+            if action[1] == 'pw01sli00/AF': raw = link('/JRADB/accessS.html',day_token)
+            elif action[1] == day_token: raw = link('/JRADB/accessO.html',odds_token)
+            elif action[1] == odds_token: raw = FIXTURE.read_bytes()
+            else: raise AssertionError('UNOBSERVED_OR_UNNECESSARY_REQUEST')
+            return raw, 'text/html; charset=utf-8', '2026-11-03T01:00:00Z'
+    website = SavedWebsite()
+    plan = [dict(race_id=RID, race_date='2026-11-01', post_at='2026-11-01T14:25:00+09:00',
+                 meeting_key='0520260411', active_runner_ids=['1','2','3','4'], nonstarters={'5':'CANCELLED','6':'EXCLUDED'})]
+    result = collector.collect(tmp_path,plan,website)
+    assert result['saved'] == 1 and result['failures'] == [] and result['requests'] == 5
+    assert website.requests == [('/JRADB/accessS.html','pw01sli00/AF'),
+                                ('/JRADB/accessS.html',day_token),('/JRADB/accessO.html',odds_token)]
+
+
 def test_concurrent_capture_writers_publish_exactly_one_file(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     value = capture()
