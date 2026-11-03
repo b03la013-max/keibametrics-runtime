@@ -9,6 +9,7 @@
     "jti_half_life_days": 180.0,
     "jti_pilot_minimum_effective_races": 5.0,
     "stable_pilot_minimum_independent_races": 10,
+    "tri_good_run_maximum_finish": 3,
     "all_origin": "NEW_UNADOPTED_RESEARCH_CHOICES_NOT_FORMAL_CANON"
   },
   "inherited_requirements": {
@@ -518,8 +519,10 @@
         "field_size",
         "finish",
         "horse_id",
+        "jockey_active_source_sha256",
         "jockey_active_verified",
         "jockey_id",
+        "official_jockey_status",
         "race_id",
         "stable_id"
       ],
@@ -712,12 +715,17 @@
         "distance_m",
         "work_time_seconds",
         "good_run_preparation",
+        "good_run_result_source_sha256",
+        "good_run_result_event_at",
+        "good_run_result_race_id",
+        "good_run_result_finish",
+        "good_run_result_field_size",
         "race_id"
       ],
       "identity_fields": [
         "horse_id"
       ],
-      "raw_recipe": "negative absolute distance of current work seconds from same-horse matched good-preparation median, divided by matched-history range; zero range gives UNKNOWN, faster is not automatically better",
+      "raw_recipe": "negative absolute distance of current work seconds from same-horse matched preparation preceding a verified historical Top3 result, divided by matched-history range; Top3 label is a new research choice; zero range gives UNKNOWN, faster is not automatically better",
       "transform_candidate": "100*(count(reference_raw<target_raw)+0.5*count(reference_raw==target_raw))/N",
       "transform_origin": "NEW_RESEARCH_MIDRANK_HYPOTHESIS_NOT_CANONICAL_FORMULA",
       "neutral_semantics": "50 is an empirical midrank, not the formal missing terminal52",

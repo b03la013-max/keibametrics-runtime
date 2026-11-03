@@ -14,7 +14,7 @@ import hashlib
 import json
 import math
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 
@@ -24,6 +24,7 @@ MIN_REFERENCE_ENTITIES = 3  # New research choice, not an inherited requirement.
 JTI_HALF_LIFE_DAYS = 180.0  # Research choice; Article14 specifies decay, not this number.
 MIN_JTI_EFFECTIVE_RACES = 5.0  # New research pilot floor, not Article14 text.
 MIN_STABLE_RACE_COUNT = 10  # New research pilot floor; not claimed as canon.
+TRI_GOOD_RUN_MAX_FINISH = 3  # New research label, not an inherited good-run definition.
 CANON_BVI_CONDITION_RACES = 30  # Article67 condition set, NOT thirty per parent.
 CODING_PROTOCOL = "KM-LOCAL-BASE15-OBSERVATIONAL-RUBRIC-v0.1-20261103"
 
@@ -96,7 +97,7 @@ RULE_SPECS = [
           "negative mean two-dimensional Gower distance from target to Top3 offspring; weight range uses complete group, style is pre-Freeze singleton-derived [0,1]",
           ["parent_id"], ["RFIg-L", "BWI-L", "HPI-L"]),
     _spec("JTI-L", "stable_combo", 15, [14], "jockey x stable observed Top3 performance",
-          ["jockey_id", "stable_id", "finish", "race_id", "horse_id", "event_at", "jockey_active_verified"],
+          ["jockey_id", "stable_id", "finish", "race_id", "horse_id", "event_at", "jockey_active_verified", "jockey_active_source_sha256", "official_jockey_status"],
           "race-cluster mean I(finish<=3), exponentially weighted 2^(-age_days/180) in the declared complete twelve-month frame",
           ["jockey_id", "stable_id"], ["JTI-L.venue", "CSI-L.stable_venue_class_distance", "HPI-L"]),
     _spec("CSI-L", "stable_venue_class_distance", 25, [17], "stable's exactly matching venue/class/distance observed Top3 performance",
@@ -108,8 +109,8 @@ RULE_SPECS = [
           "four prespecified evidence dimensions each present=1/absent=0, mean; two coders must agree; missing context is UNKNOWN, not absent",
           ["horse_id", "speaker_id"], ["CCI", "TRI"], "EVIDENCE_QUALITY_ONLY_NO_ABILITY_UPLIFT"),
     _spec("CSI-L", "tri_vertical_comparison", 15, [16, 17], "same horse's preparation resemblance to its own past good-run preparation",
-          ["horse_id", "work_type", "effort", "distance_m", "work_time_seconds", "good_run_preparation", "race_id"],
-          "negative absolute distance of current work seconds from same-horse matched good-preparation median, divided by matched-history range; zero range gives UNKNOWN, faster is not automatically better",
+          ["horse_id", "work_type", "effort", "distance_m", "work_time_seconds", "good_run_preparation", "good_run_result_source_sha256", "good_run_result_event_at", "good_run_result_race_id", "good_run_result_finish", "good_run_result_field_size", "race_id"],
+          "negative absolute distance of current work seconds from same-horse matched preparation preceding a verified historical Top3 result, divided by matched-history range; Top3 label is a new research choice; zero range gives UNKNOWN, faster is not automatically better",
           ["horse_id"], ["TRI", "CCI", "BWI-L"]),
     _spec("BWI-L", "weight_change_reason_rate", 15, [18, 68], "independently evidenced weight-change reason compatibility",
           ["horse_id", "current_weight_kg", "previous_weight_kg", "official_delta_kg", "reason_evidence_id", "reason_expected_delta_low_kg", "reason_expected_delta_high_kg"],
@@ -252,6 +253,31 @@ def _validate_entity(spec: Mapping, entity: Mapping, freeze: datetime,
             if name in ("parent_id", "sire_id", "damsire_id", "stable_id", "jockey_id"):
                 if _required(row, name) != entity[name]:
                     raise Ineligible(f"ENTITY_IDENTITY_MISMATCH:{name}")
+    if spec["component"] == "stable_combo":
+        status_sha = _required(entity, "jockey_active_source_sha256")
+        if status_sha not in sources:
+            raise Ineligible("JOCKEY_ACTIVE_SOURCE_NOT_BOUND")
+        status_source = sources[status_sha]
+        if status_source.get("authority") != "NAR_OFFICIAL":
+            raise Ineligible("JOCKEY_ACTIVE_OFFICIAL_SOURCE_REQUIRED")
+        statuses = _required(status_source, "official_jockey_status")
+        if not isinstance(statuses, Mapping):
+            raise Ineligible("JOCKEY_ACTIVE_STATUS_MAPPING_REQUIRED")
+        jockey_id = entity["jockey_id"]
+        if jockey_id not in statuses:
+            raise Ineligible("JOCKEY_ACTIVE_SAME_ID_STATUS_MISSING")
+        status = statuses[jockey_id]
+        if not isinstance(status, Mapping) or status.get("jockey_id") != jockey_id:
+            raise Ineligible("JOCKEY_ACTIVE_SOURCE_IDENTITY_MISMATCH")
+        _validate_source_fact({"source_sha256": status_sha,
+                               "event_at": _required(status, "event_at")}, freeze, sources)
+        jst = timezone(timedelta(hours=9))
+        prediction_date = freeze.astimezone(jst).date()
+        if (_time(status["event_at"]).astimezone(jst).date() != prediction_date or
+                _time(status_source["observed_at"]).astimezone(jst).date() != prediction_date):
+            raise Ineligible("JOCKEY_ACTIVE_NOT_VERIFIED_ON_PREDICTION_JST_DATE")
+        if status.get("active") is not True:
+            raise Ineligible("JOCKEY_NOT_OFFICIALLY_ACTIVE")
     if spec["component"] == "physical_style_fit" or spec["index"] in ("CSI-L", "BWI-L") and spec["component"] != "stable_venue_class_distance":
         current = _required(entity, "current")
         _validate_source_fact(current, freeze, sources)
@@ -260,6 +286,20 @@ def _validate_entity(spec: Mapping, entity: Mapping, freeze: datetime,
             raise Ineligible("CURRENT_PERMANENT_HORSE_ID_REQUIRED")
         if _required(current, "horse_id") != entity.get("horse_id", current["horse_id"]):
             raise Ineligible("CURRENT_SAME_HORSE_IDENTITY_MISMATCH")
+        if spec["component"] == "tri_vertical_comparison":
+            for row in rows:
+                if row.get("good_run_preparation") is True:
+                    outcome = {"source_sha256": _required(row, "good_run_result_source_sha256"),
+                               "event_at": _required(row, "good_run_result_event_at")}
+                    _validate_source_fact(outcome, freeze, sources)
+                    finish_fact = {"finish": _required(row, "good_run_result_finish"),
+                                   "field_size": _required(row, "good_run_result_field_size")}
+                    if _rank(finish_fact, "finish") > TRI_GOOD_RUN_MAX_FINISH:
+                        raise Ineligible("TRI_GOOD_RUN_LABEL_NOT_TOP3")
+                    if _required(row, "good_run_result_race_id") != row["race_id"]:
+                        raise Ineligible("TRI_GOOD_RUN_RESULT_RACE_MISMATCH")
+                    if _time(outcome["event_at"]) <= _time(row["event_at"]):
+                        raise Ineligible("TRI_GOOD_RUN_RESULT_MUST_FOLLOW_PREPARATION")
         for name in ("speaker_id", "transport_id"):
             if name in spec["identity_fields"] and _required(current, name) != entity[name]:
                 raise Ineligible(f"CURRENT_IDENTITY_MISMATCH:{name}")
@@ -418,6 +458,8 @@ def raw_metric(rule_id: str, entity: Mapping, freeze: datetime, selector: Mappin
         _required(current, "coding_protocol")
         depart = _time(_required(current, "transport_departure_at"))
         arrive = _time(_required(current, "transport_arrival_at"))
+        if _time(_required(current, "baseline_event_at")) > depart:
+            raise Ineligible("TRANSPORT_BASELINE_NOT_BEFORE_DEPARTURE")
         if not depart < arrive <= _time(current["event_at"]) < freeze:
             raise Ineligible("ACTUAL_TRANSPORT_TIMING_INVALID")
         return (_grade(current, "current_state_grade")-_grade(current, "prior_state_grade"))/2, detail
@@ -477,6 +519,11 @@ def evaluate_candidate(rule_id: str, packet: Mapping) -> dict:
         if spec["index"] == "BVIg-L":
             for name in ("venue", "distance_m", "surface", "going", "class", "sand_era"):
                 _required(selector["exact_conditions"], name)
+        if spec["component"] == "stable_venue_class_distance":
+            for name in ("venue", "class", "distance_m"):
+                _required(selector["exact_conditions"], name)
+            if selector.get("contrast_fields"):
+                raise Ineligible("CSI_STABLE_EXACT_CONDITIONS_CANNOT_BE_CONTRASTED")
         race_ids = _required(selector, "condition_race_ids")
         if not isinstance(race_ids, list) or len(race_ids) != len(set(race_ids)):
             raise Ineligible("CONDITION_RACE_IDS_NOT_UNIQUE")
@@ -508,6 +555,8 @@ def evaluate_candidate(rule_id: str, packet: Mapping) -> dict:
                 fact = {"source_sha256": _required(current, prefix+"_source_sha256"),
                         "event_at": _required(current, prefix+"_event_at")}
                 _validate_source_fact(fact, freeze, sources)
+                if _time(fact["event_at"]) > _time(current["event_at"]):
+                    raise Ineligible("CAUSE_EVIDENCE_AFTER_CURRENT_OBSERVATION")
                 if _required(current, prefix+"_evidence_id") != sources[fact["source_sha256"]]["source_id"]:
                     raise Ineligible("INDEPENDENT_CAUSE_SOURCE_ID_MISMATCH")
         observed_race_ids = {r["race_id"] for e in [target]+references for r in e["rows"]}
@@ -541,6 +590,7 @@ def research_specification() -> dict:
                     "jti_half_life_days": JTI_HALF_LIFE_DAYS,
                     "jti_pilot_minimum_effective_races": MIN_JTI_EFFECTIVE_RACES,
                     "stable_pilot_minimum_independent_races": MIN_STABLE_RACE_COUNT,
+                    "tri_good_run_maximum_finish": TRI_GOOD_RUN_MAX_FINISH,
                     "all_origin": "NEW_UNADOPTED_RESEARCH_CHOICES_NOT_FORMAL_CANON"},
                 inherited_requirements={"article67_minimum_comparable_condition_races": CANON_BVI_CONDITION_RACES,
                     "not_added": "no parent-specific thirty-race requirement"},

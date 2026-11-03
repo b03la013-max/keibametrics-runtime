@@ -673,6 +673,11 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
         if only_execution_id is not None and eid != only_execution_id:
             continue
         cell = state['races'].setdefault(eid, {})
+        # A previous tick's successful derivative does not verify the current
+        # checkpoint. Clear it before reading LATEST so a missing/replaced or
+        # unreadable FINAL cannot retire the worker on a stale success flag.
+        cell.pop('final_readback', None)
+        cell.pop('monitor_error', None)
         try:
             cell.update(checkpoint_status(root, eid))
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -697,8 +702,10 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
                     if cell['stages']['FINAL']['status']=='NOT_OBSERVED' and now >= cutoff-timedelta(seconds=approval['minimum_remaining_seconds']):
                         cell['deadline_alert']='FINAL_NOT_OBSERVED_DEADLINE_APPROACHING_OR_EXPIRED'
                     if cell['stages']['FINAL']['status']!='NOT_OBSERVED':
-                        from runtime.local_race_key_gate import terminal_state
-                        cell['final_readback']=terminal_state(eid, (cell.get('actions_run') or {}).get('status','unknown'))
+                        from runtime.local_race_key_gate import readback_final
+                        cell['final_readback']=readback_final(
+                            eid, (cell.get('actions_run') or {}).get('status','unknown'),
+                            repo_root=root)
                 except Exception as exc:
                     cell['monitor_error']=str(exc)
             if cell['stages']['FINAL']['status']=='NOT_OBSERVED' and now >= cutoff:
@@ -721,8 +728,8 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             cell['status'] = 'EXISTING_RACE_READ_BACK_OR_APPROVED_CHECKPOINT_RESUME_ONLY'
             if execute and cell['stages']['FINAL']['status']!='NOT_OBSERVED':
                 try:
-                    from runtime.local_race_key_gate import terminal_state
-                    cell['final_readback']=terminal_state(eid,'existing')
+                    from runtime.local_race_key_gate import readback_final
+                    cell['final_readback']=readback_final(eid,'existing',repo_root=root)
                 except Exception as exc:
                     cell['monitor_error']=str(exc)
             continue

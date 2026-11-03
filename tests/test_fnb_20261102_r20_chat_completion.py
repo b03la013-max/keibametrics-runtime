@@ -94,6 +94,27 @@ def test_no_source_no_bet_is_not_calculated(tmp_path,monkeypatch):
     assert r["first_failed_stage"]=="SOURCE_PRODUCER"
     assert r["recipient_delivery_ack"] is False
 
+@pytest.mark.parametrize("message,expected",[
+    ("SOURCE_DNS_RESOLUTION_FAILED:private-provider", "SOURCE_DNS_RESOLUTION_FAILED"),
+    ("SOURCE_DNS_EMPTY", "SOURCE_DNS_EMPTY"),
+    ("SOURCE_POLICY_ROBOTS_DISALLOWED:https://private-provider", "SOURCE_ACCESS_POLICY_BLOCKED"),
+    ("SOURCE_HTTP_STATUS:503 private-response", "SOURCE_HTTP_STATUS_FAILED"),
+    ("private-URL-with-ROBOTS-and-POLICY-text", "SOURCE_CONNECTION_FAILED"),
+])
+def test_source_failure_layer_is_preserved_without_private_exception(tmp_path,message,expected):
+    calls=[]
+    def source(**kw):
+        calls.append(kw)
+        raise ValueError(message)
+    result=r20.complete(QUERY,tmp_path,now=NOW,producers={"source":source})
+    assert len(calls)==1
+    assert result["status"]=="EXECUTION_HOLD_NOT_NO_BET"
+    assert result["first_failed_stage"]=="SOURCE"
+    assert result["reason"]==expected
+    assert "private-" not in json.dumps(result)
+    assert not (tmp_path/"inbox").exists()
+    assert result["registered_oos_increment"]==0
+
 def test_expired_cutoff_is_diagnostic_only(tmp_path):
     _bundle(tmp_path,cutoff="2026-11-02T07:00:00+00:00")
     r=r20.complete(QUERY,tmp_path,now=NOW)

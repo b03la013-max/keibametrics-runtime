@@ -187,9 +187,19 @@ def _build_from_producers(intent,root,clock,diagnostic_only,producers):
         raise ProducerHold("SOURCE_PRODUCER","SOURCE_PRODUCER_NOT_CONNECTED")
     try:captured=producers["source"](intent=dict(intent),private_root=root,now=clock())
     except ValueError as exc:
-        code=str(exc)
-        stage="SOURCE_ACCESS_POLICY_BLOCKED" if "POLICY" in code or "ROBOTS" in code else "SOURCE_CONNECTION_FAILED"
-        raise ProducerHold("SOURCE",stage) from exc
+        # Preserve the first actual layer without disclosing a private URL,
+        # credential or Raw embedded in an arbitrary producer exception.
+        # Match known error prefixes, not substrings supplied by a callback.
+        code=str(exc).partition(":")[0]
+        if code in {"SOURCE_DNS_RESOLUTION_FAILED", "SOURCE_DNS_EMPTY"}:
+            failure=code
+        elif code.startswith("SOURCE_POLICY_"):
+            failure="SOURCE_ACCESS_POLICY_BLOCKED"
+        elif code == "SOURCE_HTTP_STATUS":
+            failure="SOURCE_HTTP_STATUS_FAILED"
+        else:
+            failure="SOURCE_CONNECTION_FAILED"
+        raise ProducerHold("SOURCE",failure) from exc
     request,source=captured["request"],captured["source"]
     _request_identity(request,intent)
     observed=_prestart(request,clock,diagnostic_only)

@@ -32,7 +32,7 @@ def fixture(component):
     entities = []
     for e in range(4):
         ent = dict(entity_id=f"SYNTHETIC-ENTITY-{e}", horse_id=f"NAR:HORSE{e}",
-                   jockey_active_verified=True, rows=[])
+                   jockey_active_verified=True, jockey_active_source_sha256="b"*64, rows=[])
         for name in s["identity_fields"]:
             ent[name] = f"NAR:{name.upper()}{e}"
         for i in range(len(selector["condition_race_ids"])):
@@ -42,7 +42,10 @@ def fixture(component):
                        last_corner_rank=6, last_corner_name="4C", body_weight_kg=450+i,
                        style_fraction=0.25, style_basis="PRE_FREEZE_SINGLETON_HISTORY",
                        work_type="TRAINING", effort="EASY", work_time_seconds=50.0+i%3,
-                       good_run_preparation=True)
+                       good_run_preparation=True, good_run_result_source_sha256=sha,
+                       good_run_result_event_at=f"2026-09-{i%30+1:02d}T14:00:00+09:00",
+                       good_run_result_race_id=f"SYNTHETIC-R{i}",
+                       good_run_result_finish=1, good_run_result_field_size=10)
             for name in s["identity_fields"]:
                 if name in ("parent_id", "sire_id", "damsire_id", "stable_id", "jockey_id"):
                     row[name] = ent[name]
@@ -88,7 +91,13 @@ def fixture(component):
     return dict(classification=m.CLASSIFICATION, freeze_at="2026-10-02T12:00:00+09:00",
                 selector=selector, selector_sha256=m.canonical_sha256(selector),
                 sources={sha: dict(raw_sha256=sha, source_id="SYNTHETIC-NOT-MEASURED",
-                                   observed_at="2026-10-01T12:00:00+09:00", qualification="ELIGIBLE_PRIVATE_RESEARCH")},
+                                   observed_at="2026-10-01T12:00:00+09:00", qualification="ELIGIBLE_PRIVATE_RESEARCH"),
+                         "b"*64: dict(raw_sha256="b"*64, source_id="SYNTHETIC-JOCKEY-STATUS-NOT-MEASURED",
+                                      authority="NAR_OFFICIAL", observed_at="2026-10-02T11:00:00+09:00",
+                                      qualification="ELIGIBLE_PRIVATE_RESEARCH",
+                                      official_jockey_status={e["jockey_id"]:dict(jockey_id=e["jockey_id"],
+                                          active=True,event_at="2026-10-02T10:00:00+09:00")
+                                          for e in entities if "jockey_id" in e})},
                 target=entities[0], references=entities[1:])
 
 
@@ -282,6 +291,92 @@ class CandidateTests(unittest.TestCase):
         p = fixture(c)
         p["target"]["jockey_active_verified"] = False
         self.assertIn("CURRENT_JOCKEY_OR_COMPLETE_TWELVE_MONTH_FRAME_UNVERIFIED", self.evaluate(c, p)["missing_reasons"])
+
+    def test_stable_exact_conditions_cannot_be_omitted_or_bypassed(self):
+        c = "CSI-L.stable_venue_class_distance"
+        for field in ("venue", "class", "distance_m"):
+            with self.subTest(field=field):
+                p = fixture(c)
+                p["selector"]["exact_conditions"].pop(field)
+                p["selector_sha256"] = m.canonical_sha256(p["selector"])
+                self.assertIn("OBSERVATION_MISSING:"+field, self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["selector"]["contrast_fields"] = ["class"]
+        p["selector_sha256"] = m.canonical_sha256(p["selector"])
+        self.assertIn("CSI_STABLE_EXACT_CONDITIONS_CANNOT_BE_CONTRASTED", self.evaluate(c, p)["missing_reasons"])
+
+    def test_tri_good_run_label_requires_bound_completed_result(self):
+        c = "CSI-L.tri_vertical_comparison"
+        for field in ("good_run_result_source_sha256", "good_run_result_event_at", "good_run_result_race_id"):
+            with self.subTest(field=field):
+                p = fixture(c)
+                p["target"]["rows"][0].pop(field)
+                self.assertIsNone(self.evaluate(c, p)["score"])
+        for when, reason in (("2026-10-03T00:00:00+09:00", "POST_FREEZE_SOURCE_OR_EVENT"),
+                             ("2026-09-01T11:00:00+09:00", "TRI_GOOD_RUN_RESULT_MUST_FOLLOW_PREPARATION")):
+            p = fixture(c)
+            p["target"]["rows"][0]["good_run_result_event_at"] = when
+            self.assertIn(reason, self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["target"]["rows"][0]["good_run_result_finish"] = 4
+        self.assertIn("TRI_GOOD_RUN_LABEL_NOT_TOP3", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["target"]["rows"][0]["good_run_result_race_id"] = "UNRELATED-RACE"
+        self.assertIn("TRI_GOOD_RUN_RESULT_RACE_MISMATCH", self.evaluate(c, p)["missing_reasons"])
+
+    def test_cause_evidence_must_not_follow_the_observation(self):
+        for c, prefix in (("BWI-L.weight_change_reason_rate", "reason"), ("BWI-L.age_growth", "growth_cause")):
+            with self.subTest(c=c):
+                p = fixture(c)
+                p["target"]["current"][prefix+"_event_at"] = "2026-10-01T12:00:01+09:00"
+                p["sources"]["a"*64]["observed_at"] = "2026-10-01T13:00:00+09:00"
+                self.assertIn("CAUSE_EVIDENCE_AFTER_CURRENT_OBSERVATION", self.evaluate(c, p)["missing_reasons"])
+
+    def test_transport_comparison_baseline_must_precede_departure(self):
+        c = "BWI-L.transport_season"
+        p = fixture(c)
+        p["target"]["current"]["baseline_event_at"] = "2026-10-01T10:30:00+09:00"
+        self.assertIn("TRANSPORT_BASELINE_NOT_BEFORE_DEPARTURE", self.evaluate(c, p)["missing_reasons"])
+
+    def test_jti_current_active_status_requires_bound_same_id_official_source(self):
+        c = "JTI-L.stable_combo"
+        p = fixture(c)
+        p["target"].pop("jockey_active_source_sha256")
+        self.assertIn("OBSERVATION_MISSING:jockey_active_source_sha256", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["target"]["jockey_active_source_sha256"] = "c"*64
+        self.assertIn("JOCKEY_ACTIVE_SOURCE_NOT_BOUND", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["sources"]["b"*64]["authority"] = "THIRD_PARTY"
+        self.assertIn("JOCKEY_ACTIVE_OFFICIAL_SOURCE_REQUIRED", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        statuses = p["sources"]["b"*64]["official_jockey_status"]
+        statuses.pop(p["target"]["jockey_id"])
+        self.assertIn("JOCKEY_ACTIVE_SAME_ID_STATUS_MISSING", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["sources"]["b"*64]["official_jockey_status"][p["target"]["jockey_id"]]["jockey_id"] = "NAR:OTHER"
+        self.assertIn("JOCKEY_ACTIVE_SOURCE_IDENTITY_MISMATCH", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["sources"]["b"*64]["official_jockey_status"][p["target"]["jockey_id"]]["active"] = False
+        self.assertIn("JOCKEY_NOT_OFFICIALLY_ACTIVE", self.evaluate(c, p)["missing_reasons"])
+
+    def test_jti_active_status_requires_same_jst_date_and_pre_freeze_event(self):
+        c = "JTI-L.stable_combo"
+        p = fixture(c)
+        # A UTC date of Oct1 can still be the prediction JST date of Oct2.
+        for st in p["sources"]["b"*64]["official_jockey_status"].values():
+            st["event_at"] = "2026-10-01T15:30:00+00:00"
+        p["sources"]["b"*64]["observed_at"] = "2026-10-01T16:00:00+00:00"
+        self.assertIsNotNone(self.evaluate(c, p)["score"])
+        p = fixture(c)
+        p["sources"]["b"*64]["official_jockey_status"][p["target"]["jockey_id"]]["event_at"] = "2026-10-01T14:59:59+00:00"
+        self.assertIn("JOCKEY_ACTIVE_NOT_VERIFIED_ON_PREDICTION_JST_DATE", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["sources"]["b"*64]["observed_at"] = p["freeze_at"]
+        self.assertIn("POST_FREEZE_SOURCE_OR_EVENT", self.evaluate(c, p)["missing_reasons"])
+        p = fixture(c)
+        p["sources"]["b"*64]["official_jockey_status"][p["target"]["jockey_id"]]["event_at"] = p["freeze_at"]
+        self.assertIn("POST_FREEZE_SOURCE_OR_EVENT", self.evaluate(c, p)["missing_reasons"])
 
     def test_profile_json_is_exact_code_specification(self):
         actual = json.loads((ROOT / "profiles/local_base15_research_candidates_v0.1_20261103.json").read_text())

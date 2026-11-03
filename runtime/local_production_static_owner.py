@@ -514,6 +514,11 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         request_["venue_prediction_context"] = context
         ledger["fnb_venue_context_sha256"] = context["sha256"]
         ledger["fnb_venue_context_producer"] = context["producer"]
+        # Preserving an adopted carrier is not predictive consumption. The
+        # generic historical ordinal above does not interpret FPR/FSD/LCC,
+        # reachable ranges or stage costs; report this material limitation.
+        ledger["fnb_context_predictive_consumption"] = False
+        ledger["fnb_context_use"] = "PRESERVED_VERBATIM_NOT_USED_IN_ORDINAL_RANKING"
         ledger["fnb_venue_context_temporal_verification"] = fnb_context_temporal_receipt(request, envelope)
         ledger["formal_intent_sha256"] = _sha(request_)
         ledger.pop("sha256", None)
