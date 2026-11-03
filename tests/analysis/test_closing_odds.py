@@ -100,6 +100,24 @@ def test_raw_and_parsed_integrity_atomic_no_overwrite(tmp_path):
     assert reader.validate_capture(value, race_id=RID)["parsed"]["n_active"] == 4
 
 
+def test_official_final_time_cell_and_frame_rowspan_preserve_horse_columns():
+    html = '<h1>単勝・複勝オッズ 2026年11月1日 4回東京11日 9レース</h1>'
+    html += '<div class="refresh_line"><div class="cell time"><strong>最終オッズ</strong></div></div>'
+    html += '<table><tr><th>枠</th><th>馬番</th><th>馬名</th><th>単勝</th></tr>'
+    html += '<tr><td rowspan="2">1</td><td>1</td><td>合成甲</td><td>2.4</td></tr>'
+    html += '<tr><td>2</td><td>合成乙</td><td>3.8</td></tr></table>'
+    value = capture(html, expected_active=[1,2])
+    assert [(x['horse_no'],x['win_odds']) for x in value['parsed']['runners']] == [(1,2.4),(2,3.8)]
+    assert value['parsed']['closing_marker'] == '最終オッズ'
+    for changed in [html.replace('最終オッズ','10時20分現在'),
+                    html.replace('<strong>最終オッズ</strong>','<a href="#">最終オッズ</a>'),
+                    html.replace('class="cell time"','class="menu"')]:
+        with pytest.raises(ValueError,match='STATUS_NOT_EXPLICIT'):
+            capture(changed)
+    with pytest.raises(ValueError,match='SPAN_INVALID'):
+        capture(html.replace('rowspan="2"','rowspan="99"'))
+
+
 def test_exact_observed_accessO_token_generic_menu_not_accepted():
     html = """<a onclick="return doAction('/JRADB/accessO.html','pw15oli00/6D')">オッズ</a>
     <a onclick="return doAction('/JRADB/accessO.html', 'pw151ouS306202604090320260927Z/15')">最終オッズ</a>"""
