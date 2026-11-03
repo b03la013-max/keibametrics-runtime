@@ -1,5 +1,11 @@
 name: Benter second-stage offline analysis regression
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/analysis/**'
+      - 'tests/analysis/**'
+      - '.github/workflows/km-benter-second-stage-offline.yml'
   pull_request:
     paths:
       - 'runtime/analysis/benter_second_stage.py'
