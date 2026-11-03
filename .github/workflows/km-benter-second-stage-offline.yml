@@ -9,7 +9,10 @@ on:
   pull_request:
     paths:
       - 'runtime/analysis/benter_second_stage.py'
+      - 'runtime/analysis/benter_index_diagnostics.py'
       - 'tests/analysis/test_benter_second_stage.py'
+      - 'tests/analysis/test_benter_index_diagnostics.py'
+      - 'docs/BENTER_INDEX_DIAGNOSTICS.md'
       - '.github/workflows/km-benter-second-stage-offline.yml'
 permissions:
   contents: read
@@ -28,4 +31,68 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install numpy==2.3.5 scipy==1.17.0 pytest==8.4.2
-      - run: python -m pytest -q tests/analysis/test_benter_second_stage.py
+      - run: python -m pytest -q tests/analysis/test_benter_second_stage.py tests/analysis/test_benter_index_diagnostics.py
+      - name: Read-only Phase 0.6 recomputation of stored inputs
+        if: github.event.pull_request.number == 363
+        run: |
+          python - <<'PY'
+          import csv, hashlib, json, socket, sys, tempfile
+          from datetime import date
+          from pathlib import Path
+          def forbidden(*args, **kwargs):
+              raise AssertionError("NO_EXTERNAL_CONNECTIONS_DURING_OFFLINE_RECOMPUTATION")
+          socket.socket.connect = forbidden
+          sys.path.insert(0, str(Path("runtime/analysis").resolve()))
+          import benter_index_diagnostics as d
+          source = Path("runtime/reports/benter_second_stage/2026-11-03-phase05/index_diagnostics.json")
+          with tempfile.TemporaryDirectory(prefix="benter-phase06-") as temporary:
+              outputs = []
+              for suffix in ["one", "two"]:
+                  out = Path(temporary) / suffix
+                  result = d.run(Path.cwd(), date(2026,10,11), date(2026,11,1), date(2026,11,3),
+                                 out, bootstrap_reps=1000, shuffle_reps=200, reuse_single=source)
+                  outputs.append(out)
+              names = ["summary.json","summary.md","ledger.csv","index_diagnostics.json",
+                       "index_diagnostics.md","index_ledger.csv"]
+              for name in names:
+                  assert (outputs[0]/name).read_bytes() == (outputs[1]/name).read_bytes(), name
+              old_phase0 = json.loads(Path("runtime/reports/benter_second_stage/2026-11-03/summary.json").read_text())
+              current_phase0 = json.loads((outputs[0]/"summary.json").read_text())
+              difference = {
+                  "old_input_count":len(old_phase0["input_files_sha256"]),
+                  "current_input_count":len(current_phase0["input_files_sha256"]),
+                  "input_manifests_equal":old_phase0["input_files_sha256"] == current_phase0["input_files_sha256"],
+                  "old_software":old_phase0["software"], "current_software":current_phase0["software"],
+                  "old_summary_sha":"33ef9bd3ed2a72115dcbc0f00712c0161741b49b9526f3d261b6e9f2dce33a5a",
+                  "current_summary_sha":hashlib.sha256((outputs[0]/"summary.json").read_bytes()).hexdigest(),
+                  "current_primary":current_phase0["series"]["pre_signature"]["chronological"]["evaluation"],
+                  "old_primary":old_phase0["series"]["pre_signature"]["chronological"]["evaluation"]}
+              print("P06_BASELINE_DIFF " + json.dumps(difference,ensure_ascii=True))
+              assert difference["input_manifests_equal"], "Original input inventory changed"
+              for model in ["M","F","C"]:
+                  a=current_phase0["series"]["pre_signature"]["chronological"]["evaluation"]["models"][model]["rho2"]
+                  c=old_phase0["series"]["pre_signature"]["chronological"]["evaluation"]["models"][model]["rho2"]
+                  assert abs(a-c)<1e-9, (model,a,c)
+              assert current_phase0["software"]["code_sha256"] == old_phase0["software"]["code_sha256"]
+              assert hashlib.sha256(Path("runtime/reports/benter_second_stage/2026-11-03/summary.json").read_bytes()).hexdigest() == difference["old_summary_sha"]
+              print("P06_RESULT " + json.dumps({
+                  "cohort": result["cohort"]["n_races"],
+                  "free": result["joint_L2"]["chronological"],
+                  "offset": result["joint_L2_offset"]["chronological"],
+                  "composition": result["composition_efficiency"],
+                  "WF_free": result["joint_L2"]["walk_forward"]["cumulative_delta_rho2"],
+                  "WF_offset": result["joint_L2_offset"]["walk_forward"]["cumulative_delta_rho2"],
+                  "input_count": len(result["input_files_sha256"]),
+                  "byte_identical_files": len(names)
+              }, ensure_ascii=True))
+              for file in sorted(outputs[0].iterdir()):
+                  raw = file.read_bytes()
+                  git_sha = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+                  emit = file.name in {"index_diagnostics.json","index_diagnostics.md","generation.json","summary.json","summary.md"}
+                  body = raw.decode("utf-8")
+                  pieces = [body[i:i+4000] for i in range(0,len(body),4000)] if emit else []
+                  print("P06_FILE_META " + json.dumps({"name":file.name, "bytes":len(raw),
+                      "sha256":hashlib.sha256(raw).hexdigest(), "git_blob":git_sha, "chunks":len(pieces)}))
+                  for i, piece in enumerate(pieces):
+                      print("P06_FILE_CHUNK " + json.dumps({"name":file.name,"i":i,"text":piece},ensure_ascii=True))
+          PY
