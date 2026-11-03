@@ -24,7 +24,8 @@ def fixture(tmp_path):
         evidence.append({'path': name, 'url': url, 'sha256': hashlib.sha256(raw).hexdigest()})
     record = {'schema': 'KM-NAR-OFFERED-CSV-PRIVATE-USE-EVIDENCE-v1', 'provider': 'NAR_OFFICIAL',
               'owner_instruction_ref': 'SYNTHETIC_TEST_ONLY',
-              'observed_endpoints': {'daily': d.DAILY_URL, 'monthly': d.MONTHLY_URL},
+              'observed_endpoints': {'daily': d.DAILY_URL, 'monthly': d.MONTHLY_URL,
+                                     'daily_odds': d.DAILY_ODDS_URL},
               'scope_assessment': {'third_party_redistribution': False, 'formal_source_signing': False},
               'published_basis': evidence,
               'capability': {'method': 'GET', 'valid_from': '2026-11-03T00:00:00+09:00',
@@ -85,6 +86,45 @@ def test_original_exact_bytes_and_cache_keep_capture_time(tmp_path, monkeypatch)
     assert not first['receipt']['active_universe_verified']
 
 
+@pytest.mark.parametrize('marker_kind', ['record', 'malformed', 'broken_symlink'])
+def test_current_suspension_stops_before_network_and_ledger(tmp_path, monkeypatch, marker_kind):
+    kw, opener, _ = run(tmp_path, monkeypatch)
+    marker = Path(kw['usage_path']).parent / d.SUSPENSION_FILENAME
+    if marker_kind == 'broken_symlink':
+        marker.symlink_to('missing-stop-record')
+    else:
+        marker.write_text('{}' if marker_kind == 'record' else 'not-json')
+    with pytest.raises(d.DownloadHold, match='SOURCE_SUSPENDED'):
+        d.download_csv(**kw)
+    with pytest.raises(d.DownloadHold, match='SOURCE_SUSPENDED'):
+        d.verify_usage_record(kw['usage_path'], kw['usage_sha256'], d.DAILY_URL)
+    assert opener.calls == []
+    assert not (Path(kw['private_root']) / 'offered_csv_ledger.json').exists()
+
+
+def test_private_store_suspension_also_stops_separate_usage_directory(tmp_path, monkeypatch):
+    kw, opener, _ = run(tmp_path, monkeypatch)
+    other_root = tmp_path / 'other-private'
+    other_root.mkdir(mode=0o700)
+    (other_root / d.SUSPENSION_FILENAME).write_text('{}')
+    with pytest.raises(d.DownloadHold, match='SOURCE_SUSPENDED'):
+        d.download_csv(**{**kw, 'private_root': other_root})
+    assert opener.calls == []
+
+
+def test_new_suspension_does_not_relabel_cached_original_as_available(tmp_path, monkeypatch):
+    kw, opener, _ = run(tmp_path, monkeypatch)
+    first = d.download_csv(**kw)
+    root = Path(kw['private_root'])
+    original = root / first['receipt']['raw_file']
+    retained = original.read_bytes()
+    (root / d.SUSPENSION_FILENAME).write_text('{}')
+    with pytest.raises(d.DownloadHold, match='SOURCE_SUSPENDED'):
+        d.download_csv(**kw)
+    assert len(opener.calls) == 1
+    assert original.read_bytes() == retained
+
+
 def test_failed_request_consumes_rate_reservation_no_retry(tmp_path, monkeypatch):
     kw, opener, raw = run(tmp_path, monkeypatch)
     opener.failure = OSError('synthetic network failure')
@@ -128,6 +168,17 @@ def test_monthly_cadence_24h(tmp_path, monkeypatch):
     assert cached['cache_reused'] and len(opener.calls) == 1
     new = d.download_csv(**{**kw, 'clock': lambda: NOW + timedelta(days=1)})
     assert not new['cache_reused'] and len(opener.calls) == 2
+
+
+def test_separately_offered_daily_odds_has_independent_cadence(tmp_path, monkeypatch):
+    kw, opener, raw = run(tmp_path, monkeypatch)
+    d.download_csv(**kw)
+    opener.url = d.DAILY_ODDS_URL
+    odds = d.download_csv(**{**kw, 'period': 'daily_odds'})
+    cached = d.download_csv(**{**kw, 'period': 'daily_odds'})
+    assert odds['new_http_requests'] == 1 and cached['new_http_requests'] == 0
+    assert len(opener.calls) == 2
+    assert odds['receipt']['source_url'] == d.DAILY_ODDS_URL
 
 
 def test_no_fresh_claim_on_clock_regression(tmp_path, monkeypatch):

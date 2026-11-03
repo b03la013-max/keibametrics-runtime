@@ -136,6 +136,7 @@ def materialize_preliminary(raw, *, capture, race, repo_root=None,
         "active_runner_universe_verified": False, "formal_source_admitted": False,
         "production_numeric_consumers_authorized": False}
     raw_field = {}
+    from runtime.local_fnb_csv_source_admission import printed_csv_market
     for runner in parsed["runners"]:
         fields = runner["prestart_reference_fields"]
         rid = str(runner["runner_number"])
@@ -145,7 +146,8 @@ def materialize_preliminary(raw, *, capture, race, repo_root=None,
             "current_body_weight": _number(fields["馬体重"], True),
             "current_body_weight_change": _number(fields["馬体重増減"], True),
             "sire": fields["父馬名"], "dam": fields["母馬名"], "damsire": fields["母父馬名"],
-            "trainer": fields["調教師"], "starts": [], "odds": None, "popularity": None,
+            "trainer": fields["調教師"], "starts": [],
+            **printed_csv_market(runner,listed_count=len(parsed['runners']),capture=capture),
             "horse_id": None, "sire_id": None, "damsire_id": None,
             "jockey_id": None, "stable_id": None,
             "race_card_source_id": source_id, "race_card_snapshot_sha256": snapshot,

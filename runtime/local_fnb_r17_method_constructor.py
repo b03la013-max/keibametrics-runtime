@@ -52,6 +52,16 @@ def _validate_owner(owner,req,expected_race,active,source_sha,numeric_sha,krs_re
     for key in ("pair_dispositions","third_dispositions"):
         if not isinstance(req.get(key),list):
             raise ValueError("FNB_R17_SEMANTIC_"+key+"_MISSING:"+owner)
+        # Only frozen material/structural terminals can enter the existing
+        # Common consumer. Candidate possibilities cannot become a six-method
+        # computed NO-BET merely because the consumer selected no tickets.
+        if any(not isinstance(row,dict) or row.get("status") not in
+                {"PURCHASE","PROTECT","EXCLUDE","SEMANTIC_ONLY"} for row in req[key]):
+            raise ValueError("FNB_R17_UNRESOLVED_SEMANTIC_SELECTION:"+owner+":"+key)
+    if any(any(marker in str(row.get("status") or "").upper()
+               for marker in ("UNKNOWN","UNRESOLVED","UNADOPTED","PENDING"))
+            for row in req["role_registry"]):
+        raise ValueError("FNB_R17_UNRESOLVED_ROLE_SELECTION:"+owner)
     if (not isinstance(krs_receipt,dict) or
             krs_receipt.get("owner")!=owner or
             krs_receipt.get("source_original_prediction_sha256")!=model_sha or
@@ -97,6 +107,8 @@ def construct(*,race_id,owner_semantics,private_root,dual_krs_manifest,
             raise ValueError("FNB_R17_BASELINE_CANDIDATE_SAME_MODEL_FORBIDDEN")
         frozen_models.add(model)
         mec=build_mec_plan(req,strict_head_closure=True,min_stake=100)
+        if mec.get("orphan_thirds"):
+            raise ValueError("FNB_R17_ORPHAN_MATERIAL_THIRD_WITHOUT_PAIR:"+owner)
         validation=validate_mec_plan(mec)
         if not validation["mec_verified"]:
             raise ValueError("FNB_R17_FAMILY_MEC_NOT_VERIFIED")
@@ -152,6 +164,8 @@ def construct(*,race_id,owner_semantics,private_root,dual_krs_manifest,
            "method_alternative_trees_sha256":sha(method_out),
            "source_snapshot_sha256":source_snapshot_sha256,
            "numeric_sha256":numerical_materialization_sha256}
+        if mec.get("pair_local_third_transport"):
+            plan_receipts[owner]["pair_local_third_transport"]=deepcopy(mec["pair_local_third_transport"])
     result=audit_methods(all_methods)
     if not result["complete"]:
         raise ValueError("FNB_R17_GENERATED_SIX_CANONICAL_METHODS_FAILED:"+

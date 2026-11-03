@@ -210,3 +210,30 @@ def test_request_cannot_change_after_assessment_even_with_same_race_id(mutation)
  args,_,_=inputs();out=assess(**args);mutation(args['request'])
  with pytest.raises(ValueError,match='ASSESSED_REQUEST_OR_HASH_MISMATCH'):
   compile_research_numeric(out,args['request'])
+
+
+def test_csv_class_is_observed_title_and_condition_not_caller_override():
+ from runtime.local_fnb_csv_source_admission import _observed_csv_class,CsvAdmissionHold
+ parsed={'race_reference_fields':{'レース名':'Ｃ２五 六 七ア','条件':'サラブレッド系 一般'}}
+ assert _observed_csv_class(parsed,{'race':{}})=='Ｃ２五 六 七ア サラブレッド系 一般'
+ assert _observed_csv_class(parsed,{'race':{'class':'C2'}})=='Ｃ２五 六 七ア サラブレッド系 一般'
+ with pytest.raises(CsvAdmissionHold,match='CLASS_CONFLICT'):
+  _observed_csv_class(parsed,{'race':{'class':'G1'}})
+ unresolved={'race_reference_fields':{'レース名':'未定','条件':'サラブレッド系 一般'}}
+ assert _observed_csv_class(unresolved,{'race':{}})=='未定 サラブレッド系 一般'
+ with pytest.raises(CsvAdmissionHold,match='CLASS_CONFLICT'):
+  _observed_csv_class(unresolved,{'race':{'class':'G1'}})
+
+
+@pytest.mark.parametrize('mark',['▲','△','☆','★','◇'])
+def test_official_apprentice_prefix_is_not_missing_or_double_subtracted(mark):
+ from runtime.local_fnb_csv_source_admission import _carried_load
+ assert _carried_load(mark+'51')==51
+ assert _carried_load('56.0')==56
+
+
+def test_unbounded_or_nonfinite_printed_number_stays_missing():
+ from runtime.local_fnb_csv_source_admission import _number,_carried_load
+ assert _number('9'*500) is None
+ assert _number('Infinity') is None
+ assert _carried_load('▲'+'9'*500) is None

@@ -1,6 +1,7 @@
 """Synthetic transport/semantic tests; never real SOURCE or LIVE claims."""
 from copy import deepcopy
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,43 @@ def test_preliminary_field_identity_rejects_external_numerical_runner_injection(
         runtime.run_preliminary({'race_id':args['request']['race_id'],'race_date':'2026-11-03',
             'runners':[{'runner_id':'99'}]},assessment['parsed_reference'],args['raw'],
             args['request'],private_root='unused',engine='unused',params='unused')
+
+
+def test_exact_signed_receipt_and_assessment_bytes_survive_private_save_and_inventory(tmp_path):
+    assessment={'classification':'SYNTHETIC_NOT_SOURCE','source_candidate':{'raw_sha256':'a'*64}}
+    receipt={'receipt':{'race_id':'SYNTHETIC'},'signature':'SYNTHETIC_NOT_A_SIGNATURE'}
+    assessment_raw=b'{ "classification": "SYNTHETIC_NOT_SOURCE", "source_candidate": {"raw_sha256": "'+b'a'*64+b'"} }\n'
+    receipt_raw=b'{\n  "signature": "SYNTHETIC_NOT_A_SIGNATURE", "receipt": {"race_id":"SYNTHETIC"}\n}\n'
+    originals={'csv_source_assessment.json':runtime._source_original(assessment,assessment_raw,'CSV_ASSESSMENT'),
+        'csv_source_receipt_envelope.json':runtime._source_original(receipt,receipt_raw,'SYNTHETIC_ONLY')}
+    metadata=runtime._save_source_originals(tmp_path,originals)
+    assert (tmp_path/'csv_source_assessment.json').read_bytes()==assessment_raw
+    assert (tmp_path/'csv_source_receipt_envelope.json').read_bytes()==receipt_raw
+    assert metadata['csv_source_receipt_envelope.json']['representation']=='EXACT_SUPPLIED_JSON_BYTES'
+    inventory=[{'path':p.name,'sha256':runtime.common.digest(p.read_bytes())}
+        for p in tmp_path.iterdir() if p.is_file()]
+    manifest=tmp_path/'manifest.json'
+    manifest.write_bytes(runtime.common.encoded({'private_artifacts':inventory}))
+    runtime.common._verify_saved_manifest(manifest)
+    (tmp_path/'csv_source_receipt_envelope.json').write_bytes(b'changed')
+    with pytest.raises(ValueError,match='ORIGINAL_BYTES_CHANGED'):
+        runtime.common._verify_saved_manifest(manifest)
+
+
+def test_original_bytes_must_match_the_actual_mapping_used_by_source_verifier():
+    with pytest.raises(ValueError,match='MAPPING_BYTES_MISMATCH'):
+        runtime._source_original({'receipt':'actually-verified'},b'{"receipt":"other"}','SOURCE_RECEIPT')
+    with pytest.raises(ValueError,match='JSON_INVALID'):
+        runtime._source_original({},b'not-json','SOURCE_RECEIPT')
+
+
+def test_mapping_only_input_is_serialized_without_claiming_original_transport_bytes():
+    original=runtime._source_original({'signature':'synthetic'},None,'SOURCE_RECEIPT')
+    assert json.loads(original['raw'])=={'signature':'synthetic'}
+    assert original['provenance']['representation']=='CANONICAL_ENCODING_OF_SUPPLIED_MAPPING_NOT_TRANSPORT_BODY'
+    assert original['provenance']['signature_or_source_qualification_issued_here'] is False
+
+
+def test_qualified_source_save_cannot_omit_verified_receipt_original(tmp_path):
+    with pytest.raises(ValueError,match='ORIGINALS_REQUIRED_OR_CHANGED'):
+        runtime._save_source_originals(tmp_path,{'csv_source_assessment.json':runtime._source_original({},None,'CSV')})

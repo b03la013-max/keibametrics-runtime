@@ -15,6 +15,7 @@ from pathlib import Path
 import base64
 import hashlib
 import json
+import math
 import re
 
 from runtime.local_nar_csv_reference import inspect_zip, _norm, _dt
@@ -44,9 +45,98 @@ def _number(value, integer=False):
     if not re.fullmatch(r"[+-]?\d+(?:\.\d+)?", text):
         return None
     number = float(text)
+    if not math.isfinite(number):
+        return None
     if integer and not number.is_integer():
         return None
     return int(number) if integer else number
+
+
+def _carried_load(value):
+    # The CSV's printed numeric part already includes the apprentice allowance.
+    # Keep the existing preliminary consumer's exact mark/number convention.
+    return _number(re.sub(r"^[▲△☆★◇]", "", str(value or "").strip()))
+
+
+def printed_csv_market(row, *, listed_count, capture, quote=None,
+                       quote_raw_sha256=None, quote_observed_at=None):
+    """Transport printed prestart cells; never infer a rank from odds."""
+    popularity_text = (row.get('outcome_fields_separated') or {}).get('人気','')
+    def rank(value):
+        result = _number(value,True)
+        return result if result is not None and 1 <= result <= listed_count else None
+    card_rank = rank(popularity_text)
+    quote_rank = rank((quote or {}).get('raw_popularity'))
+    conflict = card_rank is not None and quote_rank is not None and card_rank != quote_rank
+    popularity = None if conflict else card_rank if card_rank is not None else quote_rank
+    odds = _number((quote or {}).get('raw_quote'))
+    if odds is None or odds <= 0:
+        odds = None
+    card_provenance = {**deepcopy((row.get('field_provenance') or {}).get('人気') or {}),
+        'raw_cell':popularity_text,'captured_at':capture['captured_at']}
+    odds_rank_provenance = {'zip_raw_sha256':quote_raw_sha256,'table':'odds',
+        'csv_row':(quote or {}).get('csv_row'),'csv_column':10,
+        'raw_cell':(quote or {}).get('raw_popularity'),'verified_at':quote_observed_at}
+    provenance = {'popularity':{
+        **(card_provenance if card_rank is not None else odds_rank_provenance),
+        'state':'OBSERVED_PRINTED_PRESTART' if popularity is not None else 'UNKNOWN',
+        'reason':'CONFLICTING_PRINTED_RANKS_NOT_REORDERED' if conflict else
+            'PRINTED_RANK_UNAVAILABLE_OR_INVALID' if popularity is None else None,
+        'printed_observations':[card_provenance,odds_rank_provenance],
+        'rank_inferred_from_odds':False},
+        'odds':{'state':'OBSERVED_PRINTED_PRESTART' if odds is not None else 'UNKNOWN',
+            'raw_cell':(quote or {}).get('raw_quote'),
+            'zip_raw_sha256':quote_raw_sha256,'table':'odds',
+            'csv_row':(quote or {}).get('csv_row'),'csv_column':8,
+            'verified_at':quote_observed_at,'rank_inferred_from_odds':False}}
+    return {'odds':odds,'popularity':popularity,'market_provenance':provenance}
+
+
+def _observed_csv_class(parsed, request):
+    from runtime.local_nar_evidence_candidate import _class_score
+    fields = parsed["race_reference_fields"]
+    observed = " ".join(str(fields.get(k) or "").strip() for k in ("レース名", "条件")).strip()
+    requested = str((request.get("race") or {}).get("class") or "").strip()
+    if requested and _norm(requested) != _norm(observed):
+        # Reuse the existing ordinal parser; no new class scale or inference.
+        actual_score, actual_state = _class_score(observed)
+        expected_score, expected_state = _class_score(requested)
+        if (expected_state != "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+                and (actual_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+                     or actual_score != expected_score)):
+            raise CsvAdmissionHold("CSV_REQUEST_CLASS_CONFLICT_WITH_OFFICIAL_FIELDS")
+    return observed
+
+
+def bind_csv_race_context(parsed, request):
+    """Consume actual CSV units through the existing intent unit convention."""
+    from runtime.local_nar_evidence_candidate import resolve_race_units
+    out = deepcopy(request)
+    race = out.get("race") or {}
+    if not isinstance(race,dict):
+        raise CsvAdmissionHold("CSV_REQUEST_RACE_CONTEXT_OBJECT_REQUIRED")
+    units = resolve_race_units(out)
+    actual = parsed["race_identity"]
+    distance_supplied = any(race.get(k) not in (None, "") for k in ("distance_m", "distance"))
+    if (units["venue_id"] != "FNB" or distance_supplied and units["distance_m"] != actual["distance_m"]
+            or race.get("direction") and units["direction"] != actual["turn"]):
+        raise CsvAdmissionHold("CSV_REQUEST_PHYSICAL_CONTEXT_CONFLICT")
+    if race.get("turn") and str(race["turn"]).upper() != actual["turn"]:
+        raise CsvAdmissionHold("CSV_REQUEST_PHYSICAL_CONTEXT_CONFLICT")
+    if race.get("surface"):
+        surface = {"ダート":"DIRT","芝":"TURF"}.get(str(race["surface"]),str(race["surface"]).upper())
+        if surface != actual["surface"]:
+            raise CsvAdmissionHold("CSV_REQUEST_PHYSICAL_CONTEXT_CONFLICT")
+    for key in ("date","race_date"):
+        if race.get(key) and str(race[key]).replace("/","-") != actual["race_date"]:
+            raise CsvAdmissionHold("CSV_REQUEST_PHYSICAL_CONTEXT_CONFLICT")
+    if race.get("race_no") is not None and str(race["race_no"]) != str(actual["race_no"]):
+        raise CsvAdmissionHold("CSV_REQUEST_PHYSICAL_CONTEXT_CONFLICT")
+    race.update(venue="船橋",distance_m=actual["distance_m"],direction=actual["turn"],
+        surface=actual["surface"],race_date=actual["race_date"],race_no=actual["race_no"],
+        **{"class":_observed_csv_class(parsed,request)})
+    out["race"] = race
+    return out
 
 
 def _decision(verifier, **kwargs):
@@ -104,9 +194,16 @@ def assess(*, raw, capture, request, encoding, header_mode, freeze_at, actor_id,
             and rights.get("retrieval_method") == capture["retrieval_method"]
             and rights.get("actor_id") == actor_id and bool(rights.get("permission_ref"))
             and bool(SHA.fullmatch(str(rights.get("permission_sha256", ""))))
-            and rights.get("private_retention_authorized") is True
-            and rights.get("cloud_processing_authorized") is True
-            and rights.get("retrieval_method_authorized") is True
+            and ((rights.get("private_retention_authorized") is True
+                  and rights.get("cloud_processing_authorized") is True
+                  and rights.get("retrieval_method_authorized") is True)
+                 or (rights.get("qualification_contract") == "PRIVATE_OFFERED_CSV_PROCESSING_SCOPE_ONLY"
+                     and rights.get("scope") == "SINGLE_RACE_PRESTART_NONPRODUCTION_NOT_REGISTERED_OOS"
+                     and rights.get("exact_profile_adoption_verified") is True
+                     and rights.get("private_processing_scope_verified") is True
+                     and rights.get("provider_licence_granted") is False
+                     and SHA.fullmatch(str(rights.get("adopted_profile_sha256", ""))) is not None
+                     and SHA.fullmatch(str(rights.get("owner_adoption_sha256", ""))) is not None))
             and _dt(rights["effective_from"]) <= captured
             and now < _dt(rights["effective_until"]))
     except (KeyError, ValueError, TypeError):
@@ -155,6 +252,12 @@ def assess(*, raw, capture, request, encoding, header_mode, freeze_at, actor_id,
     candidate = None; parsed_rows = None; reconciliation = []
     if changes_ok:
         csv_rows = {str(r["runner_number"]): r for r in parsed["runners"]}
+        win_quotes = {}
+        market_contract = (changes.get('current_state_verification_mode') ==
+            'FRESH_OFFICIAL_CARD_AND_COMPLETE_POSITIVE_WIN_SET_AS_OF_SNAPSHOT')
+        if market_contract:
+            from runtime.local_fnb_csv_current_universe import _odds
+            win_quotes = _odds(changes_raw,race['race_date'],race['race_no'])
         official = {}; events = changes.get("events") or []
         for row in changes.get("runners") or []:
             rid = str(row.get("horse_no"))
@@ -191,12 +294,15 @@ def assess(*, raw, capture, request, encoding, header_mode, freeze_at, actor_id,
                         "official_current_value":current["jockey"],"official_change_raw_sha256":change_digest})
                     jockey = current["jockey"]
             parsed_rows[rid] = {"runner_id":rid,"horse_no":int(rid),"frame_no":_number(fields["枠番"],True),
-                "name":row["horse_name"],"current_jockey":jockey,"current_load":_number(fields["負担重量"]),
+                "name":row["horse_name"],"current_jockey":jockey,"current_load":_carried_load(fields["負担重量"]),
                 "age":_number(fields["齢"],True),"sex_age":fields["性"]+fields["齢"],
                 "current_body_weight":_number(fields["馬体重"],True),
                 "current_body_weight_change":_number(fields["馬体重増減"],True),
                 "sire":fields["父馬名"],"dam":fields["母馬名"],"damsire":fields["母父馬名"],
-                "trainer":fields["調教師"],"starts":[],"odds":None,"popularity":None,
+                "trainer":fields["調教師"],"starts":[],
+                **printed_csv_market(row,listed_count=len(parsed['runners']),capture=capture,
+                    quote=win_quotes.get(rid),quote_raw_sha256=change_digest if market_contract else None,
+                    quote_observed_at=changes['observed_at'] if market_contract else None),
                 "horse_id":None,"sire_id":None,"damsire_id":None,"jockey_id":None,"stable_id":None,
                 "race_card_source_id":"NAR-CSV-"+capture["raw_sha256"],
                 "race_card_snapshot_sha256":parsed["sha256"],"race_card_fetched_at":capture["captured_at"],
@@ -236,7 +342,20 @@ def assess(*, raw, capture, request, encoding, header_mode, freeze_at, actor_id,
                 "formal_source_admitted":False,"production_numeric_consumers_authorized":False,
                 "permanent_ids_inferred":False,"dated_individual_history_available":False,"csv_publisher_updated_at":None,
                 "csv_publisher_updated_at_status":"NOT_PROVIDED_NOT_INFERRED_FROM_FETCH"}
+            if market_contract:
+                candidate['current_market_original_format'] = 'NAR_DAILY_ODDS_CSV'
+                odds_source_id = 'NAR-CSV-ODDS-'+change_digest
+                candidate['normalized_evidence']['odds_tables'] = {
+                    'source_id':odds_source_id,
+                    'snapshot_sha256':sha({'raw_sha256':change_digest,'win_rows':win_quotes}),
+                    'value':deepcopy(win_quotes),'format':'ACTUAL_CSV_INDIVIDUAL_WIN_ROWS_NOT_HTML',
+                    'raw_sha256':change_digest,'observed_at':changes['observed_at'],
+                    'receipt_sha256':changes['receipt_sha256'],'provider_raw_is_unchanged':True}
             candidate["official_runner_universe_sha256"] = sha(candidate["active_runner_universe"])
+            if rights.get("qualification_contract") == "PRIVATE_OFFERED_CSV_PROCESSING_SCOPE_ONLY":
+                candidate["permission_evidence"].update(qualification_contract=rights["qualification_contract"],
+                    provider_licence_granted=False, adopted_profile_sha256=rights["adopted_profile_sha256"],
+                    owner_adoption_sha256=rights["owner_adoption_sha256"])
             candidate["declared_runner_universe"]["runner_universe_sha256"] = sha(candidate["declared_runner_universe"]["runners"])
             candidate["active_runner_universe"]["runner_universe_sha256"] = candidate["official_runner_universe_sha256"]
             candidate["sha256"] = sha(candidate)
@@ -274,6 +393,7 @@ class CsvConsumerBinding:
     profile_approval_verifier: object
     source_receipt_verifier: object
     actor_id: str = ""
+    private_profile_path: str | None = None
 
 
 def _bound_request(assessment, request):
@@ -299,6 +419,37 @@ def compile_research_numeric(assessment, request, *, repo_root=None):
             or source.get("formal_source_admitted") is not False
             or source.get("production_numeric_consumers_authorized") is not False):
         raise CsvAdmissionHold("CSV_RESEARCH_CANDIDATE_HASH_ID_OR_SCOPE_INVALID")
+    parsed = assessment.get("parsed_reference") or {}
+    card = source["sources"][0]
+    capture = parsed.get("capture") or {}
+    if (capture.get("raw_sha256") != card.get("raw_sha256")
+            or capture.get("source_url") != card.get("requested_url")
+            or capture.get("captured_at") != card.get("fetched_at")):
+        raise CsvAdmissionHold("CSV_RESEARCH_PARSED_REFERENCE_CAPTURE_MISMATCH")
+    replay = inspect_zip(base64.b64decode(card["raw_b64"],validate=True),capture=capture,
+        race=source["source_race_context"],
+        encoding=parsed.get("encoding_caller_supplied_not_auto_detected"),
+        header_mode=parsed.get("header_mode_caller_supplied_not_verified_by_manual"),
+        now=_dt(source["source_freeze_at"]))
+    if replay != parsed or parsed.get("sha256") != card.get("parsed_csv_sha256"):
+        raise CsvAdmissionHold("CSV_RESEARCH_PARSED_REFERENCE_RAW_REPLAY_MISMATCH")
+    quotes = {}; quote_sha = None; quote_observed = None
+    if source.get('current_market_original_format') == 'NAR_DAILY_ODDS_CSV':
+        from runtime.local_fnb_csv_current_universe import _odds
+        evidence = source['official_change_evidence']
+        odds_raw = base64.b64decode(evidence['raw_b64'],validate=True)
+        quote_sha = hashlib.sha256(odds_raw).hexdigest()
+        if quote_sha != evidence['raw_sha256']:
+            raise CsvAdmissionHold('CSV_RESEARCH_MARKET_ORIGINAL_SHA_MISMATCH')
+        quotes = _odds(odds_raw,request['race_date'],request['race_no'])
+        quote_observed = evidence['observed_at']
+    replay_rows = {str(r['runner_number']):r for r in replay['runners']}
+    for rid,row in source['parsed_runner_evidence'].items():
+        expected_market = printed_csv_market(replay_rows[rid],listed_count=len(replay['runners']),
+            capture=capture,quote=quotes.get(rid),quote_raw_sha256=quote_sha,
+            quote_observed_at=quote_observed)
+        if any(row.get(key) != value for key,value in expected_market.items()):
+            raise CsvAdmissionHold('CSV_RESEARCH_PRINTED_MARKET_RAW_REPLAY_MISMATCH')
     # Existing engine modules use their established import convention.
     import sys
     root = Path(repo_root or Path(__file__).resolve().parents[1]).resolve()
@@ -307,9 +458,7 @@ def compile_research_numeric(assessment, request, *, repo_root=None):
     from runtime.local_fullnumerical_candidate import materialize_candidate
     registry = root/"mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
     mapping = root/"mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json"
-    intent = deepcopy(request)
-    if not (intent.get("race") or {}).get("class"):
-        intent.setdefault("race", {})["class"] = assessment["parsed_reference"]["race_reference_fields"]["条件"]
+    intent = bind_csv_race_context(replay,request)
     compiled = compile_parsed_candidate_evidence(source, intent,
                         source["parsed_runner_evidence"], registry)
     numeric = materialize_candidate(compiled, registry, mapping)
@@ -334,7 +483,11 @@ def consume_with_approved_profile(assessment, request, *, binding, source_receip
     """
     _bound_request(assessment,request)
     root = Path(repo_root or Path(__file__).resolve().parents[1]).resolve()
-    path = root/"profiles/local_fnb_nar_csv_source_candidate_v0.1_20261103.json"
+    path = (Path(binding.private_profile_path) if isinstance(binding,CsvConsumerBinding)
+        and binding.private_profile_path is not None else
+        root/"profiles/local_fnb_nar_csv_source_candidate_v0.1_20261103.json")
+    if path.is_symlink():
+        raise CsvAdmissionHold("CSV_PRIVATE_PROFILE_SYMLINK_FORBIDDEN")
     raw = path.read_bytes(); profile = json.loads(raw)
     if (profile.get("profile_id") != PROFILE or profile.get("enabled") is not True
             or profile.get("status") != "APPROVED_PRIVATE_NONPRODUCTION_CSV_PROFILE"):
@@ -351,6 +504,11 @@ def consume_with_approved_profile(assessment, request, *, binding, source_receip
         profile_sha256=binding.profile_sha256,scope=binding.scope,request=request)
     source = assessment.get("source_candidate") or {}
     rights = source.get("permission_evidence") or {}
+    if rights.get("qualification_contract") == "PRIVATE_OFFERED_CSV_PROCESSING_SCOPE_ONLY":
+        if (profile.get("qualification_contract") != rights["qualification_contract"]
+                or rights.get("adopted_profile_sha256") != binding.profile_sha256
+                or rights.get("owner_adoption_sha256") != adoption.get("approval_sha256")):
+            raise CsvAdmissionHold("CSV_EXACT_PRIVATE_PROCESSING_VARIANT_NOT_ADOPTED")
     if (binding.actor_id != rights.get("actor_id") or not binding.actor_id
             or not _dt(rights["effective_from"]) <= verified_now < _dt(rights["effective_until"])):
         raise CsvAdmissionHold("CSV_PROVIDER_QUALIFICATION_EXPIRED_OR_ACTOR_MISMATCH")
@@ -379,5 +537,8 @@ def consume_with_approved_profile(assessment, request, *, binding, source_receip
             "scope":binding.scope,"approval_ref":adoption["approval_ref"],
             "approval_sha256":adoption["approval_sha256"],"source_receipt_sha256":signature["receipt_sha256"],
             "profile_sha256":binding.profile_sha256,"adapter_code_sha256":binding.adapter_code_sha256,
+            "qualification_contract":rights.get("qualification_contract", "LEGACY_EXTERNAL_PROVIDER_RIGHTS_GATE"),
+            "signature_scope":signature.get("signature_scope", "EXTERNAL_SOURCE_RECEIPT"),
+            "normalized_candidate_signature_issued":signature.get("normalized_candidate_signature_issued"),
             "formal_R13_R20_admission":False,"production_numeric_consumers_authorized":False,
             "owner_scope_granted":False,"registered_OOS_increment":0}}

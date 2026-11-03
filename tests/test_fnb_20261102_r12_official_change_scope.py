@@ -79,6 +79,17 @@ def test_r12_cancelled_horse_must_not_remain_in_active_universe():
     assert result["status"]=="TARGET_KNOWN_CHANGES_RECONCILED"
 
 
+def test_r12_current_rider_whitespace_is_not_a_change_contradiction():
+    src,req,day=fixture()
+    day["notices"]=[{"race_no":4,"event_type":"JOCKEY_CHANGE",
+                     "horse_no":1,"new_jockey":"所　蛍"}]
+    result=reconcile(src,req,day,rider_resolver=lambda *_:{"current_jockey":"所蛍"})
+    assert result["status"]=="TARGET_KNOWN_CHANGES_RECONCILED"
+    assert result["no_change_guarantee"] is False
+    with pytest.raises(ValueError,match="FNB_CHANGE_JOCKEY_NOT_APPLIED"):
+        reconcile(src,req,day,rider_resolver=lambda *_:{"current_jockey":"別騎手"})
+
+
 def test_r12_changed_post_time_must_be_reflected_not_retroactive():
     src,req,day=fixture()
     day["notices"]=[{"race_no":4,"event_type":"POST_TIME_CHANGE",

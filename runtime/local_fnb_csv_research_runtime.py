@@ -28,6 +28,7 @@ from runtime.local_nar_csv_reference import inspect_zip
 
 PROFILE = 'KM-FNB-CSV-FIXED-MODEL-RESEARCH-RUNTIME-v1-20261103'
 PRELIMINARY = 'PRELIMINARY_LISTED_CSV_RESEARCH_NOT_ACTIVE_NOT_SOURCE_NOT_PRESTART_NOT_OOS'
+DERIVED_REFERENCE = 'PRIVATE_UNSIGNED_DERIVED_REFERENCE_NOT_SOURCE_NOT_ACTIVE_NOT_PRESTART_NOT_OOS'
 
 
 def _clock():
@@ -105,11 +106,89 @@ def _bridge_aliases(numerical):
     return out
 
 
+def _source_original(value, supplied_bytes, label):
+    """Retain caller bytes exactly, or identify a serialized mapping honestly."""
+    if not isinstance(value,dict):
+        raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINAL_MAPPING_REQUIRED')
+    if supplied_bytes is None:
+        raw = common.encoded(value)
+        basis = 'CANONICAL_ENCODING_OF_SUPPLIED_MAPPING_NOT_TRANSPORT_BODY'
+    else:
+        if not isinstance(supplied_bytes,bytes):
+            raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINAL_BYTES_REQUIRED')
+        try:
+            decoded = json.loads(supplied_bytes)
+        except (ValueError,UnicodeDecodeError) as error:
+            raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINAL_JSON_INVALID') from error
+        if decoded != value:
+            raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINAL_MAPPING_BYTES_MISMATCH')
+        raw = supplied_bytes
+        basis = 'EXACT_SUPPLIED_JSON_BYTES'
+    return {'raw':raw,'provenance':{'sha256':common.digest(raw),'bytes':len(raw),
+        'representation':basis,'original_kind':label,
+        'signature_or_source_qualification_issued_here':False}}
+
+
+def _save_source_originals(folder, originals):
+    """SOURCE originals share the immutable inventory/readback of every output."""
+    metadata = {}
+    for name in ('csv_source_assessment.json','csv_source_receipt_envelope.json'):
+        original = originals.get(name) if isinstance(originals,dict) else None
+        if (not isinstance(original,dict) or not isinstance(original.get('raw'),bytes)
+                or original.get('provenance',{}).get('sha256') != common.digest(original['raw'])
+                or original.get('provenance',{}).get('bytes') != len(original['raw'])):
+            raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINALS_REQUIRED_OR_CHANGED')
+        saved = common._immutable(folder/name,original['raw'])
+        metadata[name] = {**original['provenance'],'saved_sha256':saved['sha256']}
+    common._immutable(folder/'qualified_source_originals_provenance.json',common.encoded(metadata))
+    return metadata
+
+
+def _qualified_identity(numerical, admission, originals):
+    """Separate revalidation trace time from the same frozen execution inputs.
+
+    All signed capture/raw/freeze/Active/rights/Profile facts remain in the
+    identity. Only named wrapper trace fields and their aggregate assessment
+    hash pointer are excluded; exact original bytes still enter the saved
+    inventory and numerical provenance.
+    """
+    assessment = json.loads(originals['csv_source_assessment.json']['raw'])
+    receipt = json.loads(originals['csv_source_receipt_envelope.json']['raw'])
+    assessment_identity = deepcopy(assessment)
+    for key in ('sha256','assessed_at','verified_at','actual_generated_at'):
+        assessment_identity.pop(key,None)
+    numeric_identity = deepcopy(numerical)
+    consumer = numeric_identity.get('csv_research_consumer') or {}
+    consumer.pop('actual_generated_at',None)
+    consumer.pop('assessment_sha256',None)
+    admission_identity = deepcopy(admission)
+    for key in ('verified_at','assessed_at'):
+        admission_identity.pop(key,None)
+    return {'numerical_content_sha256':sha(numeric_identity),
+        'assessment_content_sha256':sha(assessment_identity),
+        'source_receipt_canonical_sha256':sha(receipt),
+        'admission':admission_identity}
+
+
 def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, params,
-             admission=None, owner_decision=None, owner_decision_bytes=None, source_freeze_at=None):
+             admission=None, owner_decision=None, owner_decision_bytes=None, source_freeze_at=None,
+             qualified_source_originals=None,derived_document_path=None,derived_document_sha256=None):
     # A qualified prestart wrapper must recheck the real process clock at each
     # phase. A preliminary wrapper always retains its non-prestart class.
     approved = admission is not None
+    derived = None
+    if derived_document_path is not None or derived_document_sha256 is not None:
+        if approved or derived_document_path is None or derived_document_sha256 is None:
+            raise common.ResearchHold('DERIVED_REFERENCE_NOT_QUALIFIED_SOURCE_AND_PIN_REQUIRED')
+        common._pinned(derived_document_path,derived_document_sha256)
+        from runtime.local_fnb_id_linked_race_reference import load_document
+        derived = load_document(derived_document_path,now=_clock())
+        if (derived['document_sha256'] != derived_document_sha256
+                or derived['numerical'] != numerical or derived['parsed'] != parsed
+                or derived['raw'] != raw or derived['request'] != request):
+            raise common.ResearchHold('DERIVED_REFERENCE_REPLAY_INPUT_MISMATCH')
+        source_freeze_at = derived['availability']['available_at']
+    classification = common.PRESTART_CLASSIFICATION if approved else DERIVED_REFERENCE if derived else PRELIMINARY
     stamp = lambda: (common._prestart_clock(request,
         not_before=source_freeze_at or parsed['capture']['captured_at']) if approved else _clock())
     common._pinned(common.REPO/'runtime/local_fnb_context_static_candidate.py', common.MODEL_SHA)
@@ -119,6 +198,11 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     observed = stamp()
     code_paths = tuple(common.REPO/name for name in (
         'runtime/local_fnb_csv_research_runtime.py', 'runtime/local_fnb_semantic_closure.py',
+        'runtime/local_fnb_csv_postresult.py', 'runtime/capital_policy.py',
+        'runtime/local_fnb_r13_private_numeric_document.py',
+        'runtime/local_fnb_r17_method_constructor.py', 'runtime/jra_ticket_tree_renderer.py',
+        'runtime/minimum_efficient_coverage.py',
+        'profiles/family_user_capital_default_20261003_R1.json',
         'runtime/local_krs_bridge_candidate.py', 'runtime/local_fnb_research_runtime.py',
         'runtime/local_fnb_csv_preliminary_numeric.py', 'runtime/local_nar_csv_reference.py',
         'runtime/local_fnb_csv_source_admission.py', 'runtime/local_base63_source_witness.py',
@@ -126,29 +210,51 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         'mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json',
         'mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json'))
     code_pins = {str(p.relative_to(common.REPO)): common.digest(p.read_bytes()) for p in code_paths}
+    if derived:
+        extra_paths = ('runtime/local_fnb_id_linked_race_reference.py','runtime/local_fnb_id_history_reference.py')
+        code_paths += tuple(common.REPO/name for name in extra_paths)
+        code_pins.update({name:common.digest((common.REPO/name).read_bytes()) for name in extra_paths})
+    numerical_original_sha256 = common.digest(common.encoded(numerical))
     recipe = {'raw_sha256': common.digest(raw), 'parsed_sha256': sha(parsed),
-        'numerical_sha256': common.digest(common.encoded(numerical)),
+        'numerical_sha256':numerical_original_sha256,
         'request_sha256': sha(request), 'admission': admission, 'code_pins': code_pins,
         'source_freeze_at':source_freeze_at or parsed['capture']['captured_at'],
         'model_code_sha256': common.MODEL_SHA, 'engine_sha256': common.ENGINE_SHA,
         'parameter_map_sha256': common.MAP_SHA,
         'owner_decision_sha256': (owner_decision or {}).get('decision_sha256')}
+    if approved:
+        if not isinstance(qualified_source_originals,dict):
+            raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINALS_REQUIRED_OR_CHANGED')
+        identity = _qualified_identity(numerical,admission,qualified_source_originals)
+        # Keep actual original hashes in the immutable manifest/inventory, not
+        # as a reason to rerun identical KRS after a new verification timestamp.
+        recipe.pop('numerical_sha256')
+        recipe['admission'] = identity.pop('admission')
+        recipe['qualified_input_identity'] = identity
+    if derived:
+        recipe.update(derived_document_sha256=derived_document_sha256,
+            derived_availability=deepcopy(derived['availability']),
+            reference_owner_decision=deepcopy(derived['reference_owner_decision']))
     folder = common._private_root(Path(private_root)/request['race_id']/sha(recipe))
     final = folder/'csv_research_execution_manifest.json'
     if final.exists():
         saved = common._verify_saved_manifest(final)
         if (saved.get('input_recipe') != recipe or saved.get('profile') != PROFILE
                 or saved.get('race_id') != request['race_id']
-                or saved.get('classification') != (common.PRESTART_CLASSIFICATION if approved else PRELIMINARY)
+                or saved.get('classification') != classification
                 or saved.get('official_active_universe_verified') is not approved
                 or saved.get('prestart_computation_claim') is not approved
-                or any(saved.get(k) is not False for k in ('computed_no_bet', 'formal_final',
+                or any(saved.get(k) is not False for k in ('formal_final',
                     'recipient_delivery_proven','actual_purchase'))
                 or saved.get('registered_OOS_increment') != 0
                 or saved.get('PFS') is not None
                 or saved.get('KRS') != json.loads((folder/'krs/research_krs_receipt.json').read_bytes())
                 or saved.get('original_strict_MEC') != json.loads((folder/'original_strict_mec.json').read_bytes())):
             raise common.ResearchHold('CSV_SAVED_RECIPE_MISMATCH')
+        exports = saved.get('postresult_method_exports',{}).get('methods',{})
+        expected_no_bet = len(exports)==3 and all(v.get('status')=='COMPUTED_NO_BET' for v in exports.values())
+        if saved.get('computed_no_bet') is not expected_no_bet:
+            raise common.ResearchHold('CSV_SAVED_METHOD_TERMINAL_MISMATCH')
         return {**saved, 'completion_reused': True, 'new_engine_executions_this_call': 0}
     # Lock/claim before an Engine call: a partial run is inspected, not silently
     # re-dispatched. Completion recovery uses only immutable saved originals.
@@ -158,6 +264,12 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     common._immutable(claim, common.encoded({'recipe': recipe, 'observed_at': observed.isoformat()}))
     common._immutable(folder/'original.zip', raw)
     common._immutable(folder/'parsed_csv.json', common.encoded(parsed))
+    if approved:
+        _save_source_originals(folder,qualified_source_originals)
+    if derived:
+        common._immutable(folder/'derived_reference_document.json',derived['document_raw'])
+        common._immutable(folder/'derived_reference_availability.json',common.encoded(derived['availability']))
+        common._immutable(folder/'reference_owner_decision_original.json',derived['owner_decision_bytes'])
     common._immutable(folder/'race_request.json', common.encoded(request))
     common._immutable(folder/'numerical/numerical_materialization.json', common.encoded(numerical))
     if owner_decision_bytes is not None:
@@ -167,10 +279,9 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     numeric_doc.setdefault('required_indices', numerical['candidate_full_numerical_summary']['required_indices'])
     for row in numeric_doc['runners']:
         row.setdefault('numerical_missing_components', row.get('candidate_missing_components', []))
-    document = render_full_numeric(numeric_doc, classification=PRELIMINARY if not approved
-        else common.PRESTART_CLASSIFICATION, race_id=request['race_id'])
+    document = render_full_numeric(numeric_doc, classification=classification, race_id=request['race_id'])
     common._immutable(folder/'numerical/all_horse_29_index_report.md', (document['body']+'\n').encode())
-    packet = observation_packet(parsed, raw=raw, generated_at=stamp().isoformat(),
+    packet = deepcopy(derived['observation_packet']) if derived else observation_packet(parsed, raw=raw, generated_at=stamp().isoformat(),
         source_snapshot_sha256=(numerical.get('candidate_current_state') or {})['source_snapshot_sha256'],
         source_receipt_sha256=(admission or {}).get('source_receipt_sha256'),
         source_freeze_at=source_freeze_at)
@@ -181,7 +292,7 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     packet['sha256'] = sha({k:v for k,v in packet.items() if k != 'sha256'})
     context = build_context(packet, generated_at=stamp().isoformat())
     upstream, bridge = common.build_upstream(_bridge_aliases(numerical),
-        numerical_sha256=recipe['numerical_sha256'])
+        numerical_sha256=numerical_original_sha256)
     prediction = predict(context, frozen_at=stamp().isoformat(), upstream_krs_input=upstream)
     for name, value in (('observations.json',packet),('context.json',context),
                          ('existing_hsv_bridge.json',upstream),('hsv_provenance.json',bridge),
@@ -197,6 +308,13 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     strict = execute_strict_mec(prediction, evaluated_at=stamp().isoformat())
     common._immutable(folder/'semantic_inventory.json', common.encoded(semantics))
     common._immutable(folder/'original_strict_mec.json', common.encoded(strict))
+    if approved:
+        from runtime.local_fnb_csv_postresult import export_strict_methods
+        method_exports = export_strict_methods(folder=folder,request=request,prediction=prediction,
+            strict=strict,krs=krs,clock=stamp,execution_recipe_sha256=sha(recipe))
+        common._immutable(folder/'strict_method_capital_exports.json',common.encoded(method_exports))
+    else:
+        method_exports = {'status':'PRELIMINARY_NOT_ELIGIBLE_FOR_PRESTART_EXPORT','methods':{}}
     body = common._render_private_body(folder, prediction, krs, strict, None,
         private_owner_decision=owner_decision, request=request,
         static_original_saved_at=prediction['freeze_at'])
@@ -204,29 +322,49 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         prefix = ('# CSV掲載馬の予備研究・正式Active集合未検証\n\n'
             '公式SOURCE入場・正式署名・発走前完全予測・本人Deliveryの成功件数は0です。'
             'モデル内部のactive_runnersは計算に渡したCSV掲載馬であり、当日の確定出走集合ではありません。'
-            'CSVにない個別過去走は作成せず、ContextはUNKNOWNを保持します。\n\n')
+            +('個別過去走は派生文書内の実在原本とID接続を再解析して使用し、欠測部分はUNKNOWNを保持します。\n\n'
+              if derived else 'CSVにない個別過去走は作成せず、ContextはUNKNOWNを保持します。\n\n'))
         body = prefix.encode()+body
+    elif method_exports['methods']:
+        body += ('\n## 券種別の厳格MEC・Capital確定原本（独立代替案）\n\n'+
+            '\n'.join('### '+method+'\n\n```json\n'+common.encoded(detail).decode().rstrip()+
+                '\n```\n\n```text\n'+detail.get('canonical_tree','PAPER／選択券面なし')+'\n```\n'
+                for method,detail in method_exports['methods'].items())).encode()
     body_receipt = common._immutable(folder/'complete_csv_research_body.md', body)
     if code_pins != {str(p.relative_to(common.REPO)): common.digest(p.read_bytes()) for p in code_paths}:
         raise common.ResearchHold('CSV_RUNTIME_CODE_CHANGED_DURING_EXECUTION')
     completed = stamp()
-    result = {'profile':PROFILE, 'classification':common.PRESTART_CLASSIFICATION if approved else PRELIMINARY,
+    terminals = method_exports['methods']
+    selection_complete = len(terminals)==3 and all(v.get('status') in ('SELECTED_FROZEN','COMPUTED_NO_BET')
+                                                  for v in terminals.values())
+    computed_no_bet = selection_complete and all(v['status']=='COMPUTED_NO_BET' for v in terminals.values())
+    result = {'profile':PROFILE, 'classification':classification,
         'race_id':request['race_id'], 'input_recipe':recipe, 'generated_at':completed.isoformat(),
         'listed_runners':[str(row['runner_number']) for row in parsed['runners']],
         'official_active_universe_verified':approved,
         'qualified_csv_source_admission':admission,
         'model_id':prediction['model_id'], 'model_code_sha256':common.MODEL_SHA,
+        'numerical_original_sha256':numerical_original_sha256,
         'index_cells':len(numerical['runners'])*29, 'KRS':krs, 'original_strict_MEC':strict,
-        'computed_no_bet':False, 'complete_tickets':strict.get('tickets'),
+        'computed_no_bet':computed_no_bet,
+        'complete_tickets':{method:detail['tickets'] for method,detail in terminals.items()} if selection_complete else None,
+        'strict_mec_pre_capital_tickets':strict.get('tickets'),'selection_complete':selection_complete,
+        'postresult_method_exports':method_exports,
         'prestart_computation_claim':approved, 'formal_final':False,
         'recipient_delivery_proven':False, 'registered_OOS_increment':0,
         'actual_purchase':False, 'complete_private_body':body_receipt,
         'output_directory':str(folder), 'PFS':None,
         'private_artifacts':[{'path':str(p.relative_to(folder)), 'sha256':common.digest(p.read_bytes())}
             for p in sorted(folder.rglob('*')) if p.is_file()]}
+    if derived:
+        result.update(derived_document_sha256=derived_document_sha256,
+            reference_owner_decision=deepcopy(derived['reference_owner_decision']),
+            source_freeze_at=source_freeze_at,derived_reference_is_not_source_qualification=True)
     if approved:
         result.update(prediction_cutoff=request['prediction_cutoff'],
-            prestart_computation_completed_at=completed.isoformat())
+            prestart_computation_completed_at=completed.isoformat(),
+            qualified_source_originals={name:deepcopy(value['provenance'])
+                for name,value in qualified_source_originals.items()})
     common._immutable(final, common.encoded(result))
     if approved:
         try:
@@ -261,7 +399,8 @@ def _execute(numerical, parsed, raw, request, **kwargs):
 
 
 def run_qualified(assessment, request, *, binding, source_receipt, private_root,
-                  engine, params, owner_decision_path, owner_decision_sha256):
+                  engine, params, owner_decision_path, owner_decision_sha256,
+                  assessment_original_bytes=None, source_receipt_original_bytes=None):
     """Existing trusted CSV gates remain prerequisites; never issue a signature."""
     admitted = consume_with_approved_profile(assessment, request, binding=binding,
         source_receipt=source_receipt, now=_clock())
@@ -269,11 +408,15 @@ def run_qualified(assessment, request, *, binding, source_receipt, private_root,
     decision, decision_raw = common.verify_private_owner_decision(owner_decision_path,
         owner_decision_sha256, request=request, source=source)
     raw = base64.b64decode(source['sources'][0]['raw_b64'], validate=True)
+    originals = {
+        'csv_source_assessment.json':_source_original(assessment,assessment_original_bytes,'CSV_ASSESSMENT'),
+        'csv_source_receipt_envelope.json':_source_original(source_receipt,source_receipt_original_bytes,
+            'EXTERNAL_SOURCE_RECEIPT_AS_VERIFIED_BY_BOUND_GATE')}
     return _execute(admitted['numerical'], assessment['parsed_reference'], raw, request,
         private_root=private_root,engine=engine,params=params,
         admission=admitted['csv_private_profile_admission'],
         owner_decision=decision,owner_decision_bytes=decision_raw,
-        source_freeze_at=source['source_freeze_at'])
+        source_freeze_at=source['source_freeze_at'],qualified_source_originals=originals)
 
 
 def run_preliminary(numerical, parsed, raw, request, *, private_root, engine, params):
@@ -299,6 +442,16 @@ def run_preliminary(numerical, parsed, raw, request, *, private_root, engine, pa
         raise common.ResearchHold('CSV_PRELIMINARY_RECOMPUTATION_OR_WITNESS_MISMATCH')
     return _execute(numerical,parsed,raw,request,private_root=private_root,
         engine=engine,params=params)
+
+
+def run_derived_document(path, pin, *, private_root,engine,params):
+    """Explicit private derived-reference entry; never a SOURCE/Profile grant."""
+    common._pinned(path,pin)
+    from runtime.local_fnb_id_linked_race_reference import load_document
+    loaded = load_document(path,now=_clock())
+    return _execute(loaded['numerical'],loaded['parsed'],loaded['raw'],loaded['request'],
+        private_root=private_root,engine=engine,params=params,
+        derived_document_path=path,derived_document_sha256=pin)
 
 
 def main(argv=None):

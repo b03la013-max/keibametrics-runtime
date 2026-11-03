@@ -23,11 +23,13 @@ import zipfile
 
 DAILY_URL = 'https://www.keiba.go.jp/KeibaWeb/DataDownload/RaceDataDownload?type=daily'
 MONTHLY_URL = 'https://www.keiba.go.jp/KeibaWeb/DataDownload/RaceDataDownload?k_month=11&k_year=2026&type=monthly'
-LIMITS = {'daily': 120, 'monthly': 86400}
+DAILY_ODDS_URL = 'https://www.keiba.go.jp/KeibaWeb/DataDownload/OddsDataDownload?type=daily'
+LIMITS = {'daily': 120, 'monthly': 86400, 'daily_odds': 120}
 MAX_BYTES = 4_000_000
 MAX_UNCOMPRESSED = 32_000_000
 MAX_SECONDS = 45
 PROFILE = 'KM-NAR-OFFERED-CSV-PRIVATE-DOWNLOAD-v1'
+SUSPENSION_FILENAME = 'OFFERED_CSV_SOURCE_SUSPENSION_CURRENT.json'
 
 
 class DownloadHold(ValueError):
@@ -76,9 +78,23 @@ def _immutable(path, raw):
             os.fsync(file.fileno())
 
 
+def _assert_not_suspended(*directories):
+    """A current private stop record overrides older limited-use evidence.
+
+    Any record presence is fail-closed, including a broken symlink or malformed
+    record. It cannot expire or be waived by caller flags/clock manipulation.
+    Originals and old captures remain available through ordinary file readback.
+    """
+    for directory in directories:
+        marker = Path(directory) / SUSPENSION_FILENAME
+        if marker.exists() or marker.is_symlink():
+            raise DownloadHold('OFFERED_CSV_SOURCE_SUSPENDED:' + str(marker))
+
+
 def verify_usage_record(path, expected_sha256, url):
     """Verify pinned evidence and exact capability, without broader rights flags."""
     path = Path(path)
+    _assert_not_suspended(path.parent)
     if path.is_symlink() or not re.fullmatch('[0-9a-f]{64}', str(expected_sha256)):
         raise DownloadHold('OFFERED_CSV_USAGE_PIN_REQUIRED')
     raw = path.read_bytes()
@@ -139,7 +155,8 @@ def download_csv(*, period, private_root, usage_path, usage_sha256, clock=_now, 
         raise DownloadHold('OFFERED_CSV_PUBLIC_CI_DISABLED')
     if period not in LIMITS:
         raise DownloadHold('OFFERED_CSV_PERIOD_REQUIRED')
-    url = {'daily': DAILY_URL, 'monthly': MONTHLY_URL}[period]
+    _assert_not_suspended(private_root, Path(usage_path).parent)
+    url = {'daily': DAILY_URL, 'monthly': MONTHLY_URL, 'daily_odds': DAILY_ODDS_URL}[period]
     usage = verify_usage_record(usage_path, usage_sha256, url)
     root = _private(private_root)
     lock_path = root / 'offered_csv.lock'

@@ -26,6 +26,13 @@ DEFAULT_MAX_BYTES = int(os.environ.get("KM_SOURCE_MAX_BYTES", "2000000"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("KM_SOURCE_TIMEOUT_SECONDS", "20"))
 DEFAULT_FETCH_WORKERS = max(1, min(int(os.environ.get("KM_SOURCE_FETCH_WORKERS", "6")), 12))
 SOURCE_USER_AGENT = "KeibaMetrics-SourceAcquisition/1.0 (+formal evidence capture)"
+# Specifically offered original CSV downloads only. This adds binary capture,
+# not CSV parsing, Runner/Consumer authority, a Provider licence or a new signer.
+OFFERED_NAR_CSV_ZIP_URLS = frozenset({
+    "https://www.keiba.go.jp/KeibaWeb/DataDownload/RaceDataDownload?type=daily",
+    "https://www.keiba.go.jp/KeibaWeb/DataDownload/OddsDataDownload?type=daily",
+    "https://www.keiba.go.jp/KeibaWeb/DataDownload/RaceDataDownload?k_month=11&k_year=2026&type=monthly",
+})
 _ROBOTS_CACHE: Dict[str, Dict[str, Any]] = {}
 _ROBOTS_LOCK = threading.RLock()
 _ROBOTS_TTL = 300.0
@@ -598,7 +605,12 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
                     raise ValueError("SOURCE_DECOMPRESSED_MAX_BYTES_EXCEEDED")
             ctype = str(headers.get("content-type") or "").lower()
             allowed_content = ("text/", "application/json", "application/xml", "application/xhtml+xml")
-            if ctype and not any(x in ctype for x in allowed_content):
+            offered_csv_zip = (ctype.split(";")[0].strip() == "application/zip"
+                and url in OFFERED_NAR_CSV_ZIP_URLS and final_url == url
+                and spec.get("source_class") == "OFFICIAL_NAR_CSV_ZIP_CAPTURE"
+                and spec.get("authority") == "NAR_OFFICIAL" and spec.get("official") is True
+                and not spec.get("extract"))
+            if ctype and not any(x in ctype for x in allowed_content) and not offered_csv_zip:
                 raise ValueError("SOURCE_CONTENT_TYPE_NOT_ALLOWED:" + ctype)
             snapshot, errors = snapshot_from_bytes(
                 spec,
@@ -609,6 +621,11 @@ def fetch_source(spec: Dict[str, Any], prediction_cutoff: str) -> Tuple[Dict[str
                 fetched_at=fetched_at,
                 prediction_cutoff=prediction_cutoff,
             )
+            if offered_csv_zip:
+                # Bind the provider's documented archive timestamp into the
+                # original signed snapshot; fetching later does not reset it.
+                snapshot["archive_content_disposition"] = headers.get("content-disposition")
+                snapshot["archive_capture_completed_at"] = utcnow()
             snapshot["source_access_policy"] = {**access_policy, "redirect_policies": redirect.access_policies}
             snapshot["snapshot_sha256"] = sha_obj({k:v for k,v in snapshot.items() if k != "snapshot_sha256"})
             return snapshot, errors

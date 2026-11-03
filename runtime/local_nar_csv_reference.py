@@ -41,6 +41,10 @@ SCHEMAS = {
            ("組番馬番1", "組番馬番2", "組番馬番3", "払戻金（円）", "人気")]),
 }
 _HORSE_OUTCOMES = ("着順", "タイム", "着差", "上がり3F", "人気")
+# Popularity is kept out of ability inputs, but an official daily archive may
+# carry it before the race. Its presence alone is not a completed-race result.
+_HORSE_RESULT_FIELDS = ("着順", "タイム", "着差", "上がり3F")
+_PRESTART_STATUS_LITERALS = {"出走取消": "CANCELLED", "競走除外": "EXCLUDED"}
 _RACE_OUTCOMES = tuple(["上がり4F", "上がり3F"] + [f"ハロンタイム{i}" for i in range(1, 16)]
     + [f"コーナー通過順{i}" for i in range(1, 9)])
 # The offered original 2026-11 monthly ZIP uses ASCII 1 for these two
@@ -70,6 +74,16 @@ def _dt(value):
 
 def _norm(value):
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value)))
+
+
+def _has_horse_result(row):
+    # Actual offered CSV uses these notice literals in 着差 and zero as the
+    # absent clock for a scratch. They are not completed-race measurements.
+    # 競走中止 remains a result; a real finish/time always remains a result.
+    return (bool(row.get("着順"))
+        or str(row.get("タイム", "")).strip() not in {"", "0", "0.0"}
+        or str(row.get("上がり3F", "")).strip() not in {"", "0", "0.0"}
+        or bool(row.get("着差")) and row["着差"] not in _PRESTART_STATUS_LITERALS)
 
 
 def _observed_download_url(value):
@@ -187,7 +201,7 @@ def inspect_zip(raw, *, capture, race, encoding, header_mode, now=None):
         if number in numbers or name in names:
             raise ValueError("NAR_CSV_DUPLICATE_RUNNER_NOT_RECONCILED")
         numbers.add(number); names.add(name)
-        outcome_present |= any(row.get(k) for k in _HORSE_OUTCOMES)
+        outcome_present |= _has_horse_result(row)
         # Names are labels, never permanent horse/parent/jockey/stable IDs.
         runners.append({"runner_number": number, "horse_name": row["馬名"],
             "horse_id": None, "sire_id": None, "damsire_id": None, "jockey_id": None, "stable_id": None,

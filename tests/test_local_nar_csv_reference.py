@@ -12,13 +12,17 @@ NOW = datetime.fromisoformat("2026-11-03T03:20:00+00:00")
 RACE = {"venue_id": "FNB", "race_date": "2026-11-03", "race_no": 2}
 
 
-def original(*, outcomes=False, wrong_count=False, header=True, encoding="utf-8", duplicate=False):
+def original(*, outcomes=False, wrong_count=False, header=True, encoding="utf-8", duplicate=False,
+             popularity="", status_literal=""):
     race = dict.fromkeys(SCHEMAS["racelist"], "")
     race.update(競馬場="船橋", 競走年月日="20261103", レース番号="2", 発走時刻="1245", 頭数="2" if wrong_count else "1", 距離="1200", 芝ダート区分="ダート", 回り="左")
     horse = dict.fromkeys(SCHEMAS["horselist"], "")
     horse.update(競馬場="船橋", 競走年月日="20261103", レース番号="2", 馬番="1", 馬名="合成テスト馬", 父馬名="合成父", 騎手名="合成騎手")
     if outcomes:
         horse.update(着順="1", タイム="1140")
+    horse["人気"] = popularity
+    if status_literal:
+        horse.update(着差=status_literal,タイム="0")
     b = io.BytesIO()
     with zipfile.ZipFile(b, "w") as z:
         for name, row in [("racelist", race), ("horselist", horse)]:
@@ -61,6 +65,36 @@ def test_target_outcomes_are_separate_never_prestart_features():
     assert p["candidate_prestart_claim"] is False
     assert "着順" not in p["runners"][0]["prestart_reference_fields"]
     assert p["runners"][0]["outcome_fields_separated"]["着順"] == "1"
+
+
+def test_daily_prestart_popularity_is_separate_not_completed_result():
+    b=original(popularity="1")
+    p=inspect_zip(b,capture=capture(b),race=RACE,encoding="utf-8",header_mode="present",now=NOW)
+    assert p["target_outcome_fields_present"] is False
+    assert "人気" not in p["runners"][0]["prestart_reference_fields"]
+    assert p["runners"][0]["outcome_fields_separated"]["人気"] == "1"
+    assert p["active_universe_verified"] is False
+    b=original(outcomes=True,popularity="1")
+    p=inspect_zip(b,capture=capture(b),race=RACE,encoding="utf-8",header_mode="present",now=NOW)
+    assert p["target_outcome_fields_present"] is True
+
+
+@pytest.mark.parametrize("literal",["出走取消","競走除外"])
+def test_prestart_status_notice_and_missing_zero_clock_are_not_completed_result(literal):
+    b=original(status_literal=literal)
+    p=inspect_zip(b,capture=capture(b),race=RACE,encoding="utf-8",header_mode="present",now=NOW)
+    assert p["target_outcome_fields_present"] is False
+    assert p["runners"][0]["outcome_fields_separated"]["着差"] == literal
+    assert p["active_universe_verified"] is False
+    b=original(outcomes=True,status_literal=literal)
+    p=inspect_zip(b,capture=capture(b),race=RACE,encoding="utf-8",header_mode="present",now=NOW)
+    assert p["target_outcome_fields_present"] is True
+
+
+def test_did_not_finish_remains_actual_race_result():
+    b=original(status_literal="競走中止")
+    p=inspect_zip(b,capture=capture(b),race=RACE,encoding="utf-8",header_mode="present",now=NOW)
+    assert p["target_outcome_fields_present"] is True
 
 
 @pytest.mark.parametrize("field,wrong", [("distance_m", 1500), ("surface", "TURF"), ("turn", "RIGHT"),

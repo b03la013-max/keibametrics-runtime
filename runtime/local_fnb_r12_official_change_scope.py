@@ -83,7 +83,7 @@ def reconcile(source, request, day_list=None, *, rider_resolver=None):
             actual=evidenced.get("current_jockey") if isinstance(evidenced,dict) else None
             if (not isinstance(expected,str) or not expected.strip() or
                     not isinstance(actual,str) or not actual.strip() or
-                    re.sub(r"\\s+","",expected)!=re.sub(r"\\s+","",actual)):
+                    re.sub(r"\s+","",expected)!=re.sub(r"\s+","",actual)):
                 raise ValueError("FNB_CHANGE_JOCKEY_NOT_APPLIED")
     status=("TARGET_KNOWN_CHANGES_RECONCILED" if own else
             "OTHER_RACE_ONLY_NO_KNOWN_TARGET_NOTICE" if other else
