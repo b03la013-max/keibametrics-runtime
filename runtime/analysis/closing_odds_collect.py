@@ -146,9 +146,10 @@ def collection_plan(root, start, end, asof):
             rejected.append({"race_id": race.race_id, "reason": "SAVED_MEETING_KEY_MISSING"})
             continue
         result = inputs.read(Path(root) / "runtime/results" / (race.race_id + ".json"))["official_result"]
-        _, nonstarters, _ = b.result_outcome(result)
+        _, nonstarters, finishes = b.result_outcome(result)
         plan.append({"race_id": race.race_id, "race_date": race.race_date, "post_at": race.post_at,
-                     "meeting_key": key, "active_runner_ids": list(race.ids), "nonstarters": nonstarters})
+                     "meeting_key": key, "active_runner_ids": list(race.ids), "nonstarters": nonstarters,
+                     "finisher_ids": sorted(finishes, key=int)})
     return plan, rejected, inputs.manifest
 
 
@@ -195,9 +196,11 @@ def collect(root, plan, client):
             action = closing_action(day_html, key, day8, race_no)
             raw, content_type, captured = client.post(action, referer)
             url = BASE + action[0]
-            kwargs = dict(race_id=rid, expected_active=context["active_runner_ids"], expected_nonstarters=context["nonstarters"])
+            kwargs = dict(race_id=rid)
             capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
                                            request_cname=action[1], **kwargs)
+            reader.reconcile_universe(capture["parsed"], expected_active=context["active_runner_ids"],
+                                      expected_nonstarters=context["nonstarters"], finisher_ids=context.get("finisher_ids", ()))
             reader.save_capture(directory, capture)
             saved += 1
         except Exception as exc:

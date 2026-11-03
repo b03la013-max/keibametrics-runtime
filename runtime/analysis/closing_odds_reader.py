@@ -225,8 +225,14 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
         seen.add(no)
         state = row[status_i] if status_i is not None else ""
         name = row[name_i] if name_i is not None else None
-        status = NONSTARTERS.get(state, "ACTIVE")
         price = row[oi].replace(",", "")
+        # The official closing-odds table has no finish/status column. Its
+        # price cell explicitly prints 取消/除外 for non-starters.
+        price_status = NONSTARTERS.get(price)
+        state_status = NONSTARTERS.get(state)
+        if price_status and state_status and price_status != state_status:
+            raise ValueError("CLOSING_NONSTARTER_STATUS_CONFLICT")
+        status = state_status or price_status or "ACTIVE"
         if status == "ACTIVE":
             if not re.fullmatch(r"\d+(?:\.\d+)?", price):
                 raise ValueError("CLOSING_ACTIVE_PRICE_MISSING")
@@ -258,6 +264,36 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
     return {"race_id": race_id, "closing_marker": marker[0], "runners": runners,
             "n_active": len(active), "popularity_missing": sum(r["status"] == "ACTIVE" and r["popularity_rank"] is None for r in runners),
             "interpretation": "Explicit official closing odds; unsigned research evidence, not a RESULT receipt"}
+
+
+def reconcile_universe(parsed, *, expected_active, expected_nonstarters, finisher_ids=()):
+    """Research-only reconciliation of explicit official non-starter rows.
+
+    Older stored RESULTs may omit a cancellation field. Never infer a missing
+    horse's status from finish-order absence: require an explicit 取消/除外
+    row in the separately captured final table, and reject every conflict.
+    """
+    expected = {str(int(x)) for x in expected_active}
+    known = {str(int(k)):v for k,v in expected_nonstarters.items()}
+    rows = {row["runner_id"]:row for row in parsed["runners"]}
+    active = {k for k,v in rows.items() if v["status"] == "ACTIVE"}
+    nonstarters = {k:v["status"] for k,v in rows.items() if v["status"] != "ACTIVE"}
+    if set(rows) - expected - set(known):
+        raise ValueError("CLOSING_UNKNOWN_RUNNER_IDENTITY")
+    for rid, status in nonstarters.items():
+        if rid in known and known[rid] not in {status, "OFFICIAL_NON_STARTER_REFUND"}:
+            raise ValueError("CLOSING_NONSTARTER_UNIVERSE_MISMATCH")
+    additional = {k:v for k,v in nonstarters.items() if k in expected}
+    if additional and not finisher_ids:
+        raise ValueError("CLOSING_NONSTARTER_RECONCILIATION_EVIDENCE_MISSING")
+    if set(nonstarters) & {str(int(x)) for x in finisher_ids}:
+        raise ValueError("CLOSING_NONSTARTER_FINISHER_CONFLICT")
+    if active != expected - set(additional) or active & set(known):
+        raise ValueError("CLOSING_ACTIVE_UNIVERSE_MISMATCH")
+    return {"active_runner_ids": sorted(active, key=int),
+            "additional_official_nonstarters_not_in_stored_result": dict(sorted(additional.items(), key=lambda x:int(x[0]))),
+            "evidence": "EXPLICIT_FINAL_ODDS_NONSTARTER_ROW_NOT_FINISH_ORDER_INFERENCE",
+            "stored_result_modified": False}
 
 
 def decode_html(raw, content_type=""):

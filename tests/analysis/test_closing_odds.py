@@ -129,6 +129,28 @@ def test_exact_observed_accessO_token_generic_menu_not_accepted():
         collector.closing_action(html + html.replace("Z/15", "Z/CA"), "0620260409", "20260927", 3)
 
 
+def test_explicit_price_cell_nonstarters_reconcile_but_absence_never_does():
+    html = '<h2>2026年11月1日 東京 9レース</h2><h3>最終オッズ</h3>'
+    html += '<table><tr><th>馬番</th><th>単勝</th></tr>'
+    html += ''.join(f'<tr><td>{i}</td><td>{price}</td></tr>' for i,price in [(1,'2.4'),(2,'3.8'),(3,'取消'),(4,'除外')])+'</table>'
+    value=capture(html,expected_active=[1,2],expected_nonstarters={'3':'CANCELLED','4':'EXCLUDED'})
+    parsed=value['parsed']
+    admission=reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={},finisher_ids=[1,2])
+    assert admission['active_runner_ids']==['1','2']
+    assert admission['additional_official_nonstarters_not_in_stored_result']=={'3':'CANCELLED','4':'EXCLUDED'}
+    assert admission['stored_result_modified'] is False
+    with pytest.raises(ValueError,match='FINISHER_CONFLICT'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={},finisher_ids=[1,2,3])
+    with pytest.raises(ValueError,match='EVIDENCE_MISSING'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={})
+    with pytest.raises(ValueError,match='NONSTARTER_UNIVERSE'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,4],expected_nonstarters={'3':'EXCLUDED'},finisher_ids=[1,2])
+    with pytest.raises(ValueError,match='ACTIVE_UNIVERSE'):
+        reader.reconcile_universe(parsed,expected_active=[1,2,3,4,5],expected_nonstarters={},finisher_ids=[1,2])
+    with pytest.raises(ValueError,match='ACTIVE_PRICE_MISSING'):
+        capture(html.replace('取消','---'))
+
+
 @pytest.mark.parametrize("mode", ["00", "10"])
 def test_actual_current_and_archive_day_links_require_exact_identity(mode):
     token = f"pw01srl{mode}082026041120261101/C0"
@@ -299,6 +321,35 @@ def test_paired_series_reads_validated_captures_and_rejects_temporal_or_identity
     report2, _ = closing.compare(root, date(2026,10,11), date(2026,11,1), date(2026,11,2), bootstrap_reps=3, shuffle_reps=3)
     assert report2["n_closing_races"] == 0
     assert report2["exclusion_counts"]["CLOSING_CAPTURE_AFTER_ASOF"] == 1
+
+
+def test_nonstarter_omitted_by_stored_result_is_removed_from_both_paired_series(tmp_path):
+    root=tmp_path/'data'
+    dataset(root,40)
+    rid='KM-JRA-TKY-20261011-R01'
+    result_path=root/'runtime/results'/(rid+'.json')
+    value=json.loads(result_path.read_text())
+    order=value['official_result']['finish_order']
+    cancelled=order[-1]
+    value['official_result']['finish_order']=[n for n in order if n!=cancelled]
+    write_json(result_path,value)  # Synthetic older RESULT deliberately omits the cancellation field.
+    originals={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*.json')}
+    html='<h2>2026年10月11日 東京 1レース</h2><h3>最終オッズ</h3>'
+    html+='<table><tr><th>馬番</th><th>単勝</th></tr>'
+    html+=''.join(f'<tr><td>{i}</td><td>{"取消" if i==cancelled else i*2.1}</td></tr>' for i in range(1,7))+'</table>'
+    cap=reader.build_capture(html.encode(),race_id=rid,url='https://www.jra.go.jp/JRADB/accessO.html',captured_at='2026-11-03T01:00:00+09:00')
+    reader.save_capture(root/'runtime/closing_odds',cap)
+    report,rows=closing.compare(root,date(2026,10,11),date(2026,11,1),date(2026,11,3),bootstrap_reps=3,shuffle_reps=3)
+    assert report['n_closing_races']==1 and report['n_runners']==5
+    assert report['pre_signature_paired']['n_runners']==5
+    assert report['n_additional_nonstarters_removed_from_both_series']==1
+    assert report['explicit_closing_nonstarter_reconciliation'][0]['additional_official_nonstarters_not_in_stored_result']=={str(cancelled):'CANCELLED'}
+    assert str(cancelled) not in [x['runner_id'] for x in rows]
+    assert sum(x['m'] for x in rows)==pytest.approx(1.)
+    assert np.mean([x['z'] for x in rows])==pytest.approx(0.,abs=1e-12)
+    assert np.std([x['z'] for x in rows])==pytest.approx(1.)
+    assert report['pre_signature_paired']['full_in_sample']['models']['M']['LL0']==pytest.approx(-np.log(5))
+    assert originals=={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in originals}
 
 
 def test_no_production_imports_and_manual_only_workflow():

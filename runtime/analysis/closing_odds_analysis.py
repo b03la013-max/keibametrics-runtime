@@ -22,7 +22,7 @@ except ImportError:
 def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, seed=b.SEED):
     inputs = b.Inputs(root)
     series, _, _ = inputs.load(start, end, asof)
-    paired, closing, ledger, excluded = [], [], [], []
+    paired, closing, ledger, excluded, reconciliation = [], [], [], [], []
     limit = datetime.combine(asof, time.max, tzinfo=b.JST)
     for race in series["pre_signature"]:
         path = Path(root) / "runtime/closing_odds" / (race.race_id + ".json")
@@ -33,7 +33,20 @@ def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, se
             capture = inputs.read(path)
             result = inputs.read(Path(root) / "runtime/results" / (race.race_id + ".json"))["official_result"]
             _, nonstarters, finishes = b.result_outcome(result)
-            reader.validate_capture(capture, race_id=race.race_id, expected_active=race.ids, expected_nonstarters=nonstarters)
+            reader.validate_capture(capture, race_id=race.race_id)
+            admission = reader.reconcile_universe(capture["parsed"], expected_active=race.ids,
+                                                  expected_nonstarters=nonstarters, finisher_ids=finishes)
+            dropped = admission["additional_official_nonstarters_not_in_stored_result"]
+            if dropped:
+                positions = [i for i,rid in enumerate(race.ids) if rid not in dropped]
+                if not np.isclose(race.y[positions].sum(), 1.):
+                    raise ValueError("CLOSING_NONSTARTER_WINNER_CONFLICT")
+                values = race.zai[positions]
+                sd = values.std()
+                market = race.m[positions] / race.m[positions].sum()
+                race = replace(race, ids=tuple(race.ids[i] for i in positions), zai=values,
+                               z=(values-values.mean())/sd if sd else np.zeros_like(values),
+                               m=market, y=race.y[positions])
             observed = reader.timestamp(capture["captured_at"])
             if observed > limit:
                 raise ValueError("CLOSING_CAPTURE_AFTER_ASOF")
@@ -44,6 +57,8 @@ def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, se
             market = (1 / odds) / (1 / odds).sum()
             closing.append(replace(race, m=market))
             paired.append(race)
+            if dropped:
+                reconciliation.append({"race_id":race.race_id, "raw_sha256":capture["raw_sha256"], **admission})
             for j, horse in enumerate(race.ids):
                 ledger.append({"race_id": race.race_id, "post_at": race.post_at, "runner_id": horse,
                                "horse_no": int(horse), "zai_win": float(race.zai[j]), "z": float(race.z[j]),
@@ -61,6 +76,8 @@ def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, se
               "period": {"from": start.isoformat(), "to": end.isoformat(), "asof": asof.isoformat()},
               "n_primary_races": len(series["pre_signature"]), "n_closing_races": len(closing),
               "n_runners": sum(len(r.ids) for r in closing), "comparison_population": "SAME_PAIRED_RACES_ONLY",
+              "explicit_closing_nonstarter_reconciliation": reconciliation,
+              "n_additional_nonstarters_removed_from_both_series": sum(len(x["additional_official_nonstarters_not_in_stored_result"]) for x in reconciliation),
               "pre_signature_paired": b.analyze(paired, **options), "closing": b.analyze(closing, **options),
               "excluded_races": excluded, "exclusion_counts": dict(sorted(Counter(r["reason"] for r in excluded).items())),
               "input_files_sha256": dict(sorted(inputs.manifest.items())),
@@ -69,6 +86,7 @@ def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, se
               "notes": ["Only paired races are compared; closing never replaces pre-signature observations.",
                         "Capture time is not the historical market-close time; post time remains the frozen scheduled time.",
                         "FINAL signatures are not cryptographically reverified by this research calculator.",
+                        "Explicit final-table nonstarters omitted by older RESULTs are removed from BOTH paired series; their probabilities and model z are recomputed. Original default summary and signed RESULT are unchanged.",
                         "No closing captures means 0R; the original summary/ledger remain unchanged."]}
     for path, expected in inputs.manifest.items():
         if hashlib.sha256((Path(root) / path).read_bytes()).hexdigest() != expected:
@@ -90,6 +108,7 @@ def render(report):
         control = data["shuffle_control"]["chronological_out_of_sample"]["p95"]
         lines.append(f"| {name} | {score['models']['M']['rho2']:.6f} | {score['delta_rho2']:+.6f} | {interval} | {control:.6f} |")
     lines += ["", "取得時刻は過去の市場締切時刻ではありません。人気や払戻から単勝価格を補完しません。",
+              f"公式最終表の取消・除外を両比較系列から除外した追加頭数: {report.get('n_additional_nonstarters_removed_from_both_series',0)}。元RESULT・既存summaryは不変。",
               "通常のsummary.jsonは変更せず、比較結果を別ファイルへ出力します。", ""]
     return "\n".join(lines)
 
