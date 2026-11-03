@@ -126,6 +126,17 @@ def test_actual_current_and_archive_day_links_require_exact_identity(mode):
         collector.result_day_action(html + html.replace("/C0", "/AB"), "0820260411", "20261101")
 
 
+def test_archived_day_exposes_exact_closing_link_not_a_derived_result_token():
+    token = "pw151ou1008202604110120261101Z/0F"
+    html = f"<a onclick=\"return doAction('/JRADB/accessO.html','{token}')\">1レースオッズ</a>"
+    assert collector.closing_action(html, "0820260411", "20261101", 1) == ("/JRADB/accessO.html", token)
+    for key, day, no in [("0520260411", "20261101", 1), ("0820260411", "20261031", 1), ("0820260411", "20261101", 2)]:
+        with pytest.raises(ValueError, match="NAVIGATION_NOT_UNIQUE"):
+            collector.closing_action(html, key, day, no)
+    with pytest.raises(ValueError, match="NAVIGATION_NOT_UNIQUE"):
+        collector.closing_action(html.replace("Z/0F", "Z/0FBAD"), "0820260411", "20261101", 1)
+
+
 def test_network_requires_owner_and_preflight_and_respects_robots(monkeypatch):
     with pytest.raises(ValueError, match="OWNER_APPROVAL"):
         collector.OfficialClient(approval_ref=None, robots_reviewed=True, terms_reviewed=True)

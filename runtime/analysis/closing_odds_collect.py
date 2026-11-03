@@ -52,11 +52,13 @@ def result_day_action(html, meeting_key, date8):
 
 
 def closing_action(html, meeting_key, date8, race_no):
-    prefix = "pw151ouS3" + meeting_key + f"{race_no:02d}" + date8 + "Z/"
-    action = select_action(html, prefix=prefix, path="/JRADB/accessO.html")
-    if not re.fullmatch(re.escape(prefix) + r"[0-9A-Fa-f]{2}", action[1]):
-        raise ValueError("CLOSING_NAVIGATION_TOKEN_INVALID")
-    return action
+    suffix = meeting_key + f"{race_no:02d}" + date8 + "Z/"
+    pattern = re.compile(r"pw151ou(?:S3|10)" + re.escape(suffix) + r"[0-9A-Fa-f]{2}")
+    selected = [(path, token) for path, token in actions(html)
+                if path == "/JRADB/accessO.html" and pattern.fullmatch(token)]
+    if len(selected) != 1:
+        raise ValueError("OFFICIAL_CLOSING_NAVIGATION_NOT_UNIQUE")
+    return selected[0]
 
 
 def require_approval(approval_ref, robots_reviewed, terms_reviewed):
@@ -187,23 +189,15 @@ def collect(root, plan, client):
                 days[key, day] = (reader.decode_html(r2, ct)[0], BASE + action[0])
             day_html, referer = days[key, day]
             race_no = int(reader.identity(rid)[5])
-            action = select_action(day_html, prefix="pw01sde01" + key + f"{race_no:02d}" + day8 + "/")
+            # The real archived day page exposes each race's exact closing-odds
+            # link. Follow that observed link directly, without fetching a
+            # result page or deriving a token/checksum from a sibling race.
+            action = closing_action(day_html, key, day8, race_no)
             raw, content_type, captured = client.post(action, referer)
             url = BASE + action[0]
             kwargs = dict(race_id=rid, expected_active=context["active_runner_ids"], expected_nonstarters=context["nonstarters"])
-            try:
-                capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
-                                               request_cname=action[1], **kwargs)
-            except ValueError as exc:
-                # A result page containing only popularity is not an odds source.
-                # Identity failure stays fatal, even when another odds link exists.
-                if "HEADER" in str(exc):
-                    raise
-                closing = closing_action(reader.decode_html(raw, content_type)[0], key, day8, race_no)
-                raw, content_type, captured = client.post(closing, url)
-                url = BASE + closing[0]
-                capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
-                                               request_cname=closing[1], **kwargs)
+            capture = reader.build_capture(raw, url=url, captured_at=captured, content_type=content_type,
+                                           request_cname=action[1], **kwargs)
             reader.save_capture(directory, capture)
             saved += 1
         except Exception as exc:
