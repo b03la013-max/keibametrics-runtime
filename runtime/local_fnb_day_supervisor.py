@@ -178,6 +178,8 @@ def _hold(cell, stage, code, now):
 
 
 def load_binding(path, expected):
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
     path = Path(path).absolute()
     if path.is_symlink() or not DIGEST.fullmatch(str(expected)):
         raise ValueError('PINNED_PRIVATE_BINDING_REQUIRED')
@@ -188,9 +190,13 @@ def load_binding(path, expected):
     namespace = {'__name__':'_km_fnb_day_' + expected, '__file__':str(path)}
     exec(compile(data, str(path), 'exec'), namespace)
     result = namespace['get_day_binding']()
-    for key in ('discover_day', 'verify_discovery', 'authorize_race', 'execute_race', 'inspect_race'):
+    for key in ('authorize_race', 'execute_race', 'inspect_race'):
         if not callable(result.get(key)):
             raise ValueError('QUALIFIED_DAY_BINDING_FUNCTION_MISSING_' + key.upper())
+    if not result.get('discovery_routes'):
+        for key in ('discover_day', 'verify_discovery'):
+            if not callable(result.get(key)):
+                raise ValueError('QUALIFIED_DAY_BINDING_FUNCTION_MISSING_' + key.upper())
     result['_binding_sha256'] = expected
     return result
 
@@ -209,7 +215,31 @@ def activated(plan, race, binding, activation):
     return True
 
 
+def delivery_target(activation):
+    if not activation:
+        return None
+    fields = ('delivery_recipient_id', 'delivery_route_id')
+    if not all(isinstance(activation.get(k), str) and activation[k].strip() for k in fields):
+        return None
+    return {k:activation[k] for k in fields}
+
+
+def _resume_mutations(plan, race, binding, activation, cell, execute, clock):
+    if not execute:
+        return False
+    try:
+        activated(plan, race, binding, activation)
+        authorizer = binding.get('authorize_resume_mutations', binding['authorize_race'])
+        permitted = authorizer(race=race, activation=activation, plan=plan, now=clock()) is True
+        if not permitted: cell['activation_hold'] = 'CURRENT_RESUME_SOURCE_OWNER_AUTHORITY_NOT_VERIFIED'
+        return permitted
+    except ValueError as error:
+        cell['activation_hold'] = safe_code(str(error)); return False
+
+
 def tick(plan, private_root, *, binding=None, activation=None, execute=False, clock=lambda:datetime.now(timezone.utc)):
+    if execute and os.environ.get('GITHUB_ACTIONS') == 'true':
+        raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
     root = _private_root(private_root)
     now = clock(); stamp(now.isoformat())
     rows = validate_plan(plan, now)
@@ -221,6 +251,14 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
         state.update(observed_at=now.isoformat(), latest_discovery_sha256=sha(plan), execute_requested=execute,
                      production_authority_granted=False, actual_purchase=False, forward_oos_increment=0)
         save = lambda: put(path, state)
+        put(root / ('FNB_' + plan['race_date'] + '_LAST_DISCOVERY.json'), plan)
+        observed_numbers = {str(r['race_no']) for r in rows}
+        for key, prior in state['races'].items():
+            prior['observed_in_latest_discovery'] = key in observed_numbers
+            if key not in observed_numbers:
+                prior.pop('completion', None); prior.pop('delivery', None); prior.pop('result_learning', None)
+                prior['status'] = 'NOT_IN_CURRENT_DISCOVERY_RECONCILIATION_REQUIRED'
+            prior['original_verified_this_tick'] = False
         for race in rows:
             key = str(race['race_no'])
             cell = state['races'].setdefault(key, {'race_no':race['race_no'], 'race_id':race['race_id'],
@@ -228,6 +266,7 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             if cell.get('race_id') != race['race_id']:
                 _hold(cell, 'REVISION', 'CLAIMED_RACE_REVISION_CHANGED_NO_AUTOMATIC_REDISPATCH', now); save(); continue
             cell['official_post_at'] = race['scheduled_post_at']
+            cell['observed_in_latest_discovery'] = True
             cell['prediction_cutoff'] = race.get('prediction_cutoff')
             if cell.get('claim'):
                 # Never resend an ambiguous dispatch, even after a process restart.
@@ -239,17 +278,10 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 try:
                     result = binding['inspect_race'](race=race, private_root=root, now=clock()) if binding else {}
                     if verify_prediction(root, race, result, clock()):
+                        cell['original_verified_this_tick'] = True
                         cell.update(status='VERIFIED_PRESTART_ORIGINAL', completion=result, stages=result['stages'])
-                        permitted = False
-                        if execute:
-                            try:
-                                activated(plan, race, binding, activation)
-                                authorizer = binding.get('authorize_resume_mutations', binding['authorize_race'])
-                                permitted = authorizer(race=race, activation=activation, plan=plan, now=clock()) is True
-                                if not permitted:
-                                    cell['activation_hold'] = 'CURRENT_RESUME_SOURCE_OWNER_AUTHORITY_NOT_VERIFIED'
-                            except ValueError as error: cell['activation_hold'] = safe_code(str(error))
-                        _deliver(binding, root, race, cell, clock, save, allow_mutation=permitted)
+                        permitted = _resume_mutations(plan, race, binding, activation, cell, execute, clock)
+                        _deliver(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
                         _post_result(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
                     elif cell.get('status') not in {'HOLD', 'MISSED_WINDOW'}:
                         cell['status'] = 'ACK_OR_AMBIGUOUS_DISPATCH_MONITOR_ORIGINALS'
@@ -258,6 +290,30 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 except Exception as error:
                     _hold(cell, 'ORIGINAL_READBACK', safe_code(str(error)), clock())
                 save(); continue
+            # Reuse a pre-existing original even if this supervisor did not
+            # create it. A corrupt or already-running original must not cause
+            # a fresh generic executor dispatch.
+            if binding:
+                try:
+                    existing = binding['inspect_race'](race=race, private_root=root, now=clock())
+                    if verify_prediction(root, race, existing, clock()):
+                        cell['original_verified_this_tick'] = True
+                        cell['claim'] = {'kind':'EXISTING_ORIGINAL_READBACK_NO_DISPATCH',
+                            'race_sha256':sha(race),'observed_at':clock().isoformat(),
+                            'delivery_target':delivery_target(activation)}
+                        cell.update(status='VERIFIED_PRESTART_ORIGINAL', completion=existing, stages=existing['stages'])
+                        permitted = _resume_mutations(plan, race, binding, activation, cell, execute, clock)
+                        _deliver(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
+                        _post_result(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
+                        save(); continue
+                    if existing.get('status') not in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL'):
+                        cell['claim'] = {'kind':'EXISTING_EXECUTION_RECONCILIATION_NO_DISPATCH',
+                            'race_sha256':sha(race),'observed_at':clock().isoformat(),
+                            'delivery_target':delivery_target(activation)}
+                        _hold(cell, 'EXISTING_EXECUTION', 'EXISTING_EXECUTION_OR_PARTIAL_ORIGINAL_REQUIRES_READBACK', clock())
+                        save(); continue
+                except Exception as error:
+                    _hold(cell,'ORIGINAL_READBACK',safe_code(str(error)),clock()); save(); continue
             # A missing Cutoff is never inferred from the official post. The
             # observed post nevertheless proves that a new prestart execution
             # is no longer possible. Classify time expiry before other missing
@@ -300,7 +356,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 if clock() >= cutoff:
                     raise ValueError('CUTOFF_EXPIRED_DURING_PREFLIGHT')
                 cell['claim'] = {'claimed_at':clock().isoformat(), 'race_sha256':sha(race),
-                    'actor_id':activation['actor_id'], 'approval_ref':activation['approval_ref']}
+                    'actor_id':activation['actor_id'], 'approval_ref':activation['approval_ref'],
+                    'delivery_target':delivery_target(activation)}
                 cell['status'] = 'CLAIM_DURABLE_BEFORE_EXECUTION'
                 save()
                 if clock() >= cutoff:
@@ -322,14 +379,16 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                           safe_code(acknowledgement.get('reason')), clock()); save()
                 result = binding['inspect_race'](race=race, private_root=root, now=clock())
                 if verify_prediction(root, race, result, clock()):
+                    cell['original_verified_this_tick'] = True
                     cell.update(status='VERIFIED_PRESTART_ORIGINAL', completion=result, stages=result['stages'])
-                    _deliver(binding, root, race, cell, clock, save, allow_mutation=True)
+                    _deliver(binding, activation, root, race, cell, clock, save, allow_mutation=True)
                     _post_result(binding, activation, root, race, cell, clock, save, allow_mutation=True)
             except Exception as error:
                 _hold(cell, 'EXECUTION' if cell.get('claim') else 'PREFLIGHT', safe_code(str(error)), clock())
             save()
         verified = [c for c in state['races'].values() if c.get('completion')
-                    and c.get('status') in {'VERIFIED_PRESTART_ORIGINAL', 'DELIVERED_PRESTART'}]
+                    and c.get('observed_in_latest_discovery') is True
+                    and c.get('original_verified_this_tick') is True]
         state['counts'] = {'discovered':len(rows), 'dispatched':sum(c['dispatch_count'] for c in state['races'].values()),
             'verified_prestart_originals':len(verified),
             'verified_prestart_recipient_deliveries':sum(c.get('status') == 'DELIVERED_PRESTART' for c in state['races'].values()),
@@ -338,23 +397,29 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
         save(); return state
 
 
-def _deliver(binding, root, race, cell, clock, save, *, allow_mutation=False):
+def _deliver(binding, activation, root, race, cell, clock, save, *, allow_mutation=False):
     if not binding or not callable(binding.get('inspect_delivery')):
         return
     completion = cell['completion']
     receipt = binding['inspect_delivery'](race=race, completion=completion, private_root=root, now=clock())
+    expected = cell.get('claim',{}).get('delivery_target') or delivery_target(activation)
     if receipt.get('recipient_ack_verified') is True:
         data = json.loads(original(root, receipt['original']))
-        if (data.get('race_id') != race['race_id'] or data.get('body_sha256') != completion['body_original']['sha256']
+        if (not expected or any(data.get(k) != v for k,v in expected.items())
+                or data.get('race_id') != race['race_id'] or data.get('body_sha256') != completion['body_original']['sha256']
                 or data.get('recipient_ack_verified') is not True
                 or stamp(data['received_at']) < stamp(completion['prediction_freeze_at'])
                 or not stamp(data['received_at']) < stamp(race['prediction_cutoff'])
                 or stamp(data['received_at']) > clock()):
             raise ValueError('RECIPIENT_ACK_RECEIPT_IDENTITY_OR_CLOCK_MISMATCH')
         cell.update(status='DELIVERED_PRESTART', delivery=receipt); return
-    if (not allow_mutation or cell.get('delivery_claim') or not callable(binding.get('deliver'))
+    if (not allow_mutation or not expected or not activation or activation.get('delivery_enabled') is not True
+            or not activation.get('delivery_approval_ref') or not callable(binding.get('authorize_delivery'))
+            or cell.get('delivery_claim') or not callable(binding.get('deliver'))
             or clock() >= stamp(race['prediction_cutoff'])):
         return
+    if binding['authorize_delivery'](race=race, activation=activation, completion=completion, now=clock()) is not True:
+        raise ValueError('OWNER_RECIPIENT_DELIVERY_NOT_AUTHORIZED')
     key = race['race_id'] + ':' + completion['body_original']['sha256']
     cell['delivery_claim'] = {'idempotency_key':key, 'claimed_at':clock().isoformat()}; save()
     # Ambiguous delivery is reconciled with inspect_delivery, never blindly re-sent.
@@ -388,16 +453,117 @@ def _post_result(binding, activation, root, race, cell, clock, save, *, allow_mu
     binding['execute_result_learning'](race=race, completion=cell['completion'], idempotency_key=key, private_root=root, now=clock())
 
 
+def discover_available(binding, *, day, private_root, clock, failed_routes=None):
+    """Use only the explicit, independently qualified official discovery routes.
+
+    Route callbacks own transport rights/rates and actual Raw/receipt checks.
+    A failed route is not retried in this worker lease; its failure does not
+    authorize the next route. The selected plan is returned without rewriting
+    any bytes covered by its existing discovery verifier.
+    """
+    routes = binding.get('discovery_routes')
+    if not routes:
+        return binding['discover_day'](day=day, venue_id='FNB', now=clock()), binding
+    from runtime.local_fnb_multisource import PROVIDERS
+    if not isinstance(routes, (list, tuple)):
+        raise ValueError('EXPLICIT_DISCOVERY_ROUTES_REQUIRED')
+    failed = failed_routes if failed_routes is not None else set()
+    attempts, seen = [], set()
+    root = _private_root(private_root)
+    def save_receipt(receipt):
+        # Keep earlier failed-route evidence when the next tick skips it.
+        # The latest pointer is convenient; it is not the only retained copy.
+        from runtime.urw_nankan_reference_source import immutable
+        immutable(root / ('FNB_' + day + '_DISCOVERY_ROUTE_' + sha(receipt) + '.json'), encoded(receipt))
+        put(root / ('FNB_' + day + '_DISCOVERY_ROUTE_RECEIPT.json'), receipt)
+    for route in routes:
+        provider = route.get('provider') if isinstance(route, dict) else None
+        if isinstance(provider, str) and (provider in seen or provider in failed):
+            continue
+        if isinstance(provider, str): seen.add(provider)
+        try:
+            if (provider not in PROVIDERS or PROVIDERS[provider][1] != 'OFFICIAL'
+                    or not callable(route.get('discover_day')) or not callable(route.get('verify_discovery'))):
+                raise ValueError('QUALIFIED_OFFICIAL_DISCOVERY_ROUTE_REQUIRED')
+            observed = clock()
+            plan = route['discover_day'](day=day, venue_id='FNB', now=observed)
+            after = clock()
+            if after < observed: raise ValueError('DISCOVERY_CLOCK_REGRESSION')
+            if not isinstance(plan, dict) or plan.get('race_date') != day:
+                raise ValueError('DISCOVERY_RETURNED_DIFFERENT_REQUESTED_DAY')
+            validate_plan(plan, after)
+            before = sha(plan)
+            if route['verify_discovery'](plan=plan, now=after) is not True:
+                raise ValueError('QUALIFIED_OFFICIAL_DISCOVERY_NOT_VERIFIED')
+            if sha(plan) != before:
+                raise ValueError('OFFICIAL_DISCOVERY_MUTATED_BY_VERIFIER')
+            attempts.append({'provider':provider, 'status':'EXISTING_DISCOVERY_VERIFIER_PASSED', 'plan_sha256':before})
+            receipt = {'profile':PROFILE, 'race_date':day, 'venue_id':'FNB',
+                       'observed_at':clock().isoformat(), 'attempts':attempts,
+                       'selected_provider':provider, 'authority_granted_here':False}
+            save_receipt(receipt)
+            active = dict(binding)
+            active['verify_discovery'] = route['verify_discovery']
+            return plan, active
+        except Exception as error:
+            if isinstance(provider, str): failed.add(provider)
+            attempts.append({'provider':provider if isinstance(provider, str) else None,
+                             'status':'HOLD', 'code':safe_code(str(error))})
+    save_receipt({'profile':PROFILE, 'race_date':day, 'venue_id':'FNB',
+                  'observed_at':clock().isoformat(), 'attempts':attempts,
+                  'selected_provider':None, 'authority_granted_here':False})
+    raise ValueError('ALL_EXPLICIT_OFFICIAL_DISCOVERY_ROUTES_UNAVAILABLE')
+
+
 def supervise(*, day, private_root, binding, activation, worker_seconds=0,
               clock=lambda:datetime.now(timezone.utc), sleep=time.sleep):
+    if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day:
+        raise ValueError('CANONICAL_REQUESTED_DAY_REQUIRED')
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
     if type(worker_seconds) is not int or not 0 <= worker_seconds <= 21000:
         raise ValueError('BOUNDED_WORKER_LEASE_REQUIRED')
     if worker_seconds and (not activation.get('worker_duration_approval_ref') or worker_seconds > activation.get('approved_worker_seconds',0)):
         raise ValueError('EXACT_WORKER_DURATION_APPROVAL_REQUIRED')
+    root = _private_root(private_root)
     end = clock() + timedelta(seconds=worker_seconds)
+    discovery_failed = False
+    failed_discovery_routes = set()
+    active_binding = binding
     while True:
-        plan = binding['discover_day'](day=day, venue_id='FNB', now=clock())
-        state = tick(plan, private_root, binding=binding, activation=activation, execute=True, clock=clock)
+        try:
+            if discovery_failed:
+                # Do not retry a failed Provider acquisition in this lease.
+                # Continue read-only monitoring of already claimed originals.
+                plan = json.loads((root / ('FNB_' + day + '_LAST_DISCOVERY.json')).read_bytes())
+            else:
+                plan, active_binding = discover_available(binding, day=day, private_root=root,
+                    clock=clock, failed_routes=failed_discovery_routes)
+            if plan.get('race_date') != day:
+                raise ValueError('DISCOVERY_RETURNED_DIFFERENT_REQUESTED_DAY')
+            state = tick(plan, root, binding=active_binding, activation=activation,
+                         execute=not discovery_failed, clock=clock)
+        except Exception as error:
+            failure = {'profile':PROFILE,'race_date':day,'venue_id':'FNB',
+                'stage':'DAY_DISCOVERY_OR_MONITOR','code':safe_code(str(error)),
+                'observed_at':clock().isoformat(),'status':'DISCOVERY_HOLD_NOT_NO_BET',
+                'provider_retry_in_this_lease':False,'new_prediction_execution_proven':False}
+            put(root / ('FNB_' + day + '_SUPERVISOR_FAILURE.json'), failure)
+            discovery_failed = True
+            if not (root / ('FNB_' + day + '_LAST_DISCOVERY.json')).is_file():
+                return {**failure,'races':{},'counts':{'discovered':0,'dispatched':0,
+                    'verified_prestart_originals':0,'verified_prestart_recipient_deliveries':0,
+                    'no_bet_races':0,'verified_result_learning_races':0}}
+            try:
+                cached = json.loads((root / ('FNB_' + day + '_LAST_DISCOVERY.json')).read_bytes())
+                if cached.get('race_date') != day:
+                    raise ValueError('CACHED_DISCOVERY_REQUESTED_DAY_MISMATCH')
+                state = tick(cached, root, binding=active_binding, activation=activation, execute=False, clock=clock)
+                state['discovery_failure'] = failure
+            except Exception:
+                return {**failure,'races':{},'counts':{'discovered':0,'dispatched':0,
+                    'verified_prestart_originals':0,'verified_prestart_recipient_deliveries':0,
+                    'no_bet_races':0,'verified_result_learning_races':0}}
         if clock() >= end:
             return state
         sleep(min(30, max(0, (end-clock()).total_seconds())))
@@ -420,6 +586,8 @@ def main(argv=None):
     plan = json.loads(Path(args.discovery_json).read_bytes())
     binding = activation = None
     if args.execute:
+        if os.environ.get('GITHUB_ACTIONS') == 'true':
+            raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
         binding = load_binding(args.binding, args.binding_sha256)
         data = Path(args.activation).read_bytes()
         if hashlib.sha256(data).hexdigest() != args.activation_sha256:
@@ -429,6 +597,12 @@ def main(argv=None):
         state = supervise(day=plan['race_date'], private_root=args.private_root,
                           binding=binding, activation=activation, worker_seconds=args.worker_seconds)
     else:
+        if args.execute and binding.get('discovery_routes'):
+            # One-shot execution needs the selected route's verifier too.
+            # Loading a routes-only binding must not fall through to tick's
+            # legacy singular verify_discovery callback.
+            plan, binding = discover_available(binding, day=plan['race_date'],
+                private_root=args.private_root, clock=lambda:datetime.now(timezone.utc))
         state = tick(plan, args.private_root, binding=binding, activation=activation, execute=args.execute)
     print(json.dumps({'profile':PROFILE,'race_date':state['race_date'],'counts':state['counts'],
         'prediction_authority_granted':False,'actual_purchase':False},ensure_ascii=False))

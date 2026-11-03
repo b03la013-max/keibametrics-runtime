@@ -134,6 +134,12 @@ def acquire(binding, *, url, intent, actor_id, now, private_root, consumer_verif
     """
     now = stamp(now); _binding(binding, url, actor_id, now); identity = race_identity(intent)
     root = private_directory(private_root)
+    # A failed earlier origin must not leave this attempt using its old clock.
+    start = stamp((clock or (lambda: datetime.now(timezone.utc)))())
+    if start < now: raise MultisourceHold('MULTISOURCE_CLOCK_REGRESSION')
+    _binding(binding, url, actor_id, start)
+    if intent.get('prediction_cutoff') and start >= stamp(intent['prediction_cutoff']):
+        raise MultisourceHold('MULTISOURCE_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
     response = binding.fetch(url=url, intent=deepcopy(intent), now=now)
     raw = response.get('raw')
     if (not isinstance(raw, bytes) or not raw or len(raw) > 4_000_000
@@ -149,13 +155,28 @@ def acquire(binding, *, url, intent, actor_id, now, private_root, consumer_verif
     if captured > after: raise MultisourceHold('MULTISOURCE_CAPTURE_IN_FUTURE')
     if intent.get('prediction_cutoff') and after >= stamp(intent['prediction_cutoff']):
         raise MultisourceHold('MULTISOURCE_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
+    # Preserve a valid original even when that Provider's format parser fails.
+    # Saving its bytes does not admit its fields or declare an Active universe.
+    digest = sha_bytes(raw)
+    immutable(root/(digest+'.raw'), raw)
+    capture = {'profile':PROFILE, 'provider':binding.provider, 'source_url':url,
+        'http_status':200, 'retrieval_method':response['retrieval_method'],
+        'captured_at':response['captured_at'], 'raw_sha256':digest, 'raw_bytes':len(raw),
+        'transport_code_sha256':binding.code_sha256, 'permission_ref':binding.permission_ref,
+        'permission_sha256':binding.permission_sha256, 'access_policy':deepcopy(response['access_policy']),
+        'status':'RAW_CAPTURED_FORMAT_AND_ADMISSION_NOT_VERIFIED',
+        'format_verified':False, 'formal_source_admitted':False, 'registered_oos_increment':0}
+    capture['sha256'] = sha(capture)
+    immutable(root/(capture['sha256']+'.capture.json'),
+              (json.dumps(capture,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
     parsed = binding.parse(raw=raw, url=url, content_type=response.get('content_type'))
+    if (not isinstance(parsed, dict) or not isinstance(parsed.get('identity'), dict)
+            or not isinstance(parsed.get('fields'), list)):
+        raise MultisourceHold('MULTISOURCE_PARSED_FORMAT_UNVERIFIED')
     if race_identity(parsed['identity']) != identity:
         raise MultisourceHold('MULTISOURCE_PROVIDER_RACE_MISMATCH')
     if race_condition_conflicts(intent,parsed['identity']):
         raise MultisourceHold('MULTISOURCE_RACE_CONDITION_CONFLICT')
-    digest = sha_bytes(raw)
-    immutable(root/(digest+'.raw'), raw)
     observations = []
     for field in parsed.get('fields', []):
         if not isinstance(field.get('field'), str) or not field['field']:
@@ -181,13 +202,20 @@ def acquire(binding, *, url, intent, actor_id, now, private_root, consumer_verif
             'raw_sha256': digest, 'captured_at': response['captured_at'],
             'tier': tier, 'rule_id': rule if tier == TIERS[1] else None,
             'formal_source_admitted': False})
+    # Parsing and an external Consumer verifier may themselves take time.
+    final = stamp((clock or (lambda: datetime.now(timezone.utc)))())
+    if final < after: raise MultisourceHold('MULTISOURCE_CLOCK_REGRESSION')
+    _binding(binding, url, actor_id, final)
+    if intent.get('prediction_cutoff') and final >= stamp(intent['prediction_cutoff']):
+        raise MultisourceHold('MULTISOURCE_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
     packet = {'profile': PROFILE, 'provider': binding.provider,
         'provider_authority': PROVIDERS[binding.provider][1], 'source_url': url,
         'retrieval_method': response['retrieval_method'], 'http_status': 200,
         'raw_bytes': len(raw), 'raw_sha256': digest, 'captured_at': response['captured_at'],
-        'acquisition_started_at': now.isoformat(), 'acquisition_verified_at': after.isoformat(),
+        'acquisition_started_at': now.isoformat(), 'acquisition_verified_at': final.isoformat(),
         'identity': deepcopy(parsed['identity']), 'encoding': parsed.get('encoding'),
         'permission_ref': binding.permission_ref, 'permission_sha256': binding.permission_sha256,
+        'raw_capture_receipt_sha256':capture['sha256'],
         'usage_qualification': 'EXTERNAL_TRUSTED_BINDING_REQUIRED_NOT_GRANTED_HERE',
         'transport_code_sha256': binding.code_sha256, 'access_policy': deepcopy(response['access_policy']),
         'observations': observations, 'formal_source_admitted': False,
@@ -206,17 +234,29 @@ def acquire_available(targets, bindings, *, intent, actor_id, now, private_root,
     target, hidden alternate-host retry or unqualified default GET is executed.
     """
     packets, receipts, seen = [], [], set()
+    original_now = stamp(now)
     for target in targets:
-        key = (target['provider'], target['url'])
+        provider = target.get('provider') if isinstance(target, dict) else None
+        url = target.get('url') if isinstance(target, dict) else None
+        if not isinstance(provider, str) or not isinstance(url, str):
+            receipts.append({'provider':None, 'url':None, 'status':'HOLD',
+                'reason':'MULTISOURCE_EXPLICIT_TARGET_REQUIRED', 'formal_SOURCE':False, 'raw_sha256':None})
+            continue
+        key = (provider, url)
         if key in seen: continue
         seen.add(key)
         try:
-            p = acquire(bindings.get(target['provider']), url=target['url'],
-                        intent=intent, actor_id=actor_id, now=now, private_root=private_root, clock=clock)
+            observed = stamp(clock()) if clock else datetime.now(timezone.utc)
+            if observed < original_now: raise MultisourceHold('MULTISOURCE_CLOCK_REGRESSION')
+            p = acquire(bindings.get(provider), url=url,
+                        intent=intent, actor_id=actor_id, now=observed, private_root=private_root, clock=clock)
             packets.append(p)
             receipts.append({'provider':target['provider'],'url':target['url'],
                 'status':'RAW_CAPTURED_NOT_FORMAL_ADMISSION','raw_sha256':p['raw_sha256']})
-        except (ValueError,OSError) as exc:
+        except Exception as exc:
+            # Each explicitly installed Provider owns its independent parser
+            # and transport. Their ordinary failures cannot abort later ones.
+            # Process interruption/SystemExit are deliberately not swallowed.
             if isinstance(exc,OSError):
                 code='MULTISOURCE_TRANSPORT_OS_ERROR'
             else:
@@ -224,8 +264,16 @@ def acquire_available(targets, bindings, *, intent, actor_id, now, private_root,
             if not re.fullmatch('[A-Z][A-Z0-9_]{0,119}', code): code='MULTISOURCE_PRIVATE_TRANSPORT_FAILED'
             receipts.append({'provider':target['provider'],'url':target['url'],'status':'HOLD',
                 'reason':code,'formal_SOURCE':False,'raw_sha256':None})
-    return {'packets':packets,'provider_receipts':receipts,'formal_source_admitted':False,
-            'automatic_fallback_authority_granted':False,'registered_oos_increment':0}
+    result = {'packets':packets,'provider_receipts':receipts,'formal_source_admitted':False,
+              'automatic_fallback_authority_granted':False,'registered_oos_increment':0}
+    receipt = {'profile':PROFILE, 'identity':deepcopy(intent), 'provider_receipts':receipts,
+               'formal_source_admitted':False, 'registered_oos_increment':0}
+    receipt['sha256'] = sha(receipt)
+    root = private_directory(private_root)
+    immutable(root/('MULTISOURCE_ATTEMPTS_'+receipt['sha256']+'.json'),
+              (json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+    result['attempt_receipt_sha256'] = receipt['sha256']
+    return result
 
 
 def import_user_reference(raw, *, expected_sha256):
@@ -281,7 +329,8 @@ def reconcile(packets, *, identity):
         'independent_provider_agreement_claimed':False,'numeric_consumer_changes':0}
 
 
-def r20_source_frontend(official_producer, *, official_verifier, supplemental_producers=()):
+def r20_source_frontend(official_producer, *, official_verifier, supplemental_producers=(),
+                        official_fallbacks=(), official_provider=None, clock=None):
     """Plug into existing FNB_PRODUCERS.py ['source'] without changing R20 gates.
 
     The existing admitted official producer/cryptographic verifier are explicit
@@ -289,29 +338,81 @@ def r20_source_frontend(official_producer, *, official_verifier, supplemental_pr
     packets are preserved privately and cannot rewrite official SOURCE fields.
     """
     def produce(*, intent, private_root, now):
-        if not callable(official_producer) or not callable(official_verifier):
-            raise MultisourceHold('MULTISOURCE_FORMAL_PRODUCER_NOT_CONNECTED')
-        captured = official_producer(intent=intent,private_root=private_root,now=now)
-        if not isinstance(captured,dict) or set(('request','source'))-captured.keys():
-            raise MultisourceHold('MULTISOURCE_OFFICIAL_CAPTURE_REQUIRED')
-        if race_condition_conflicts(intent,captured['request']):
-            raise MultisourceHold('MULTISOURCE_RACE_CONDITION_CONFLICT')
-        before = sha(captured['source']); captured_before = sha(captured)
-        decision = official_verifier(captured=deepcopy(captured),intent=deepcopy(intent),now=now)
-        if (not isinstance(decision,dict) or decision.get('passed') is not True
-                or decision.get('source_artifact_sha256') != before):
-            raise MultisourceHold('MULTISOURCE_OFFICIAL_ADMISSION_UNVERIFIED')
-        extras = []
-        for producer in supplemental_producers:
-            if not callable(producer): raise MultisourceHold('MULTISOURCE_SUPPLEMENTAL_BINDING_REQUIRED')
-            item = producer(intent=intent,private_root=private_root,now=now)
-            if race_identity(item['identity']) != race_identity(intent):
-                raise MultisourceHold('MULTISOURCE_CROSS_RACE_JOIN')
-            extras.append(item)
-        if sha(captured) != captured_before: raise MultisourceHold('MULTISOURCE_OFFICIAL_SOURCE_MUTATED')
         root = private_directory(private_root)
+        routes = []
+        if callable(official_producer) and callable(official_verifier):
+            routes.append({'provider':official_provider or 'EXISTING_PRIMARY',
+                           'produce':official_producer, 'verify':official_verifier})
+        primary_count = len(routes)
+        routes.extend(official_fallbacks)
+        if not routes: raise MultisourceHold('MULTISOURCE_FORMAL_PRODUCER_NOT_CONNECTED')
+        attempts = []
+        seen = set()
+        captured = decision = None
+        last_code = 'MULTISOURCE_FORMAL_PRODUCER_NOT_CONNECTED'
+        def current():
+            observed = stamp(clock()) if clock else datetime.now(timezone.utc)
+            if observed < stamp(now): raise MultisourceHold('MULTISOURCE_CLOCK_REGRESSION')
+            if intent.get('prediction_cutoff') and observed >= stamp(intent['prediction_cutoff']):
+                raise MultisourceHold('MULTISOURCE_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
+            return observed
+        for index, route in enumerate(routes):
+            provider = route.get('provider') if isinstance(route,dict) else None
+            if isinstance(provider,str) and provider in seen: continue
+            if isinstance(provider,str): seen.add(provider)
+            try:
+                if (not (provider == 'EXISTING_PRIMARY' and index < primary_count) and
+                        (provider not in PROVIDERS or PROVIDERS[provider][1] != 'OFFICIAL')):
+                    raise MultisourceHold('MULTISOURCE_EXPLICIT_OFFICIAL_BINDING_REQUIRED')
+                if not callable(route.get('produce')) or not callable(route.get('verify')):
+                    raise MultisourceHold('MULTISOURCE_FORMAL_PRODUCER_NOT_CONNECTED')
+                candidate = route['produce'](intent=deepcopy(intent),private_root=root,now=current())
+                if not isinstance(candidate,dict) or set(('request','source'))-candidate.keys():
+                    raise MultisourceHold('MULTISOURCE_OFFICIAL_CAPTURE_REQUIRED')
+                if race_condition_conflicts(intent,candidate['request']):
+                    raise MultisourceHold('MULTISOURCE_RACE_CONDITION_CONFLICT')
+                before = sha(candidate['source']); captured_before = sha(candidate)
+                verified = route['verify'](captured=deepcopy(candidate),intent=deepcopy(intent),now=current())
+                current()
+                if (not isinstance(verified,dict) or verified.get('passed') is not True
+                        or verified.get('source_artifact_sha256') != before):
+                    raise MultisourceHold('MULTISOURCE_OFFICIAL_ADMISSION_UNVERIFIED')
+                if sha(candidate) != captured_before:
+                    raise MultisourceHold('MULTISOURCE_OFFICIAL_SOURCE_MUTATED')
+                captured, decision = candidate, verified
+                attempts.append({'provider':provider, 'status':'EXISTING_OFFICIAL_VERIFIER_PASSED',
+                                 'source_artifact_sha256':before})
+                break
+            except Exception as error:
+                last_code = 'MULTISOURCE_TRANSPORT_OS_ERROR' if isinstance(error,OSError) else str(error).partition(':')[0]
+                if not re.fullmatch('[A-Z][A-Z0-9_]{0,119}',last_code):
+                    last_code = 'MULTISOURCE_PRIVATE_TRANSPORT_FAILED'
+                attempts.append({'provider':provider if isinstance(provider,str) else None,
+                                 'status':'HOLD','reason':last_code})
+        if captured is None:
+            receipt = {'profile':PROFILE,'identity':deepcopy(intent),'official_attempts':attempts,
+                       'formal_source_admitted':False,'registered_oos_increment':0}
+            receipt['sha256'] = sha(receipt)
+            immutable(root/('MULTISOURCE_'+receipt['sha256']+'.json'),
+                      (json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+            raise MultisourceHold(last_code)
+        extras, supplemental_attempts = [], []
+        for producer in supplemental_producers:
+            try:
+                if not callable(producer): raise MultisourceHold('MULTISOURCE_SUPPLEMENTAL_BINDING_REQUIRED')
+                item = producer(intent=deepcopy(intent),private_root=root,now=current())
+                if race_identity(item['identity']) != race_identity(intent):
+                    raise MultisourceHold('MULTISOURCE_CROSS_RACE_JOIN')
+                extras.append(item)
+            except Exception as error:
+                code = str(error).partition(':')[0]
+                if not re.fullmatch('[A-Z][A-Z0-9_]{0,119}',code): code='MULTISOURCE_PRIVATE_TRANSPORT_FAILED'
+                supplemental_attempts.append({'status':'HOLD','reason':code})
+        if sha(captured) != captured_before: raise MultisourceHold('MULTISOURCE_OFFICIAL_SOURCE_MUTATED')
+        current()
         receipt = {'profile':PROFILE,'identity':deepcopy(intent),'official_artifact_sha256':before,
             'official_admission':decision,'supplemental_packets':extras,
+            'official_attempts':attempts,'supplemental_attempts':supplemental_attempts,
             'source_bytes_rewritten':False,'formal_scope_granted_here':False,
             'supplemental_numeric_consumption':False,'registered_oos_increment':0}
         receipt['sha256'] = sha(receipt)

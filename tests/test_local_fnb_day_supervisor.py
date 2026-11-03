@@ -11,6 +11,12 @@ from runtime import local_fnb_day_supervisor as s
 NOW = datetime(2026, 11, 3, 7, 10, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def synthetic_private_actor_environment(monkeypatch):
+    # Only local synthetic callbacks run in these fixtures; no Provider I/O.
+    monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+
+
 def plan():
     return {'profile':s.PLAN_PROFILE,'race_date':'2026-11-03','venue_id':'FNB','observed_at':'2026-11-03T07:00:00Z',
         'races':[{'race_no':n,'race_id':f'KM-LOCAL-FNB-20261103-R{n:02d}',
@@ -23,6 +29,8 @@ def activation():
     return {'enabled':True,'race_date':'2026-11-03','venue_id':'FNB','race_numbers':[5,6],
             'actor_id':'SYNTHETIC_FIXTURE_ONLY','approval_ref':'SYNTHETIC_NOT_OWNER_APPROVAL',
             'classification':s.CLASSIFICATION,'binding_sha256':'b'*64,'max_dispatches':2,
+            'delivery_enabled':True,'delivery_approval_ref':'SYNTHETIC_SELF_ONLY',
+            'delivery_recipient_id':'SYNTHETIC_OWNER_SELF','delivery_route_id':'SYNTHETIC_PRIVATE_ROUTE',
             'supervisor_code_sha256':hashlib.sha256(Path(s.__file__).read_bytes()).hexdigest()}
 
 
@@ -40,6 +48,7 @@ def binding(root, *, complete=False, hold_first=False):
             'authorize_race':lambda **k:True,'execute_race':execute_race,
             'inspect_race':lambda **k:available.get(k['race']['race_no'],{}),
             'inspect_delivery':lambda **k:{'recipient_ack_verified':False},
+            'authorize_delivery':lambda **k:True,
             'deliver':lambda **k:delivered.append(k['race']['race_no']),
             'sent':sent,'delivered':delivered,'available':available}
 

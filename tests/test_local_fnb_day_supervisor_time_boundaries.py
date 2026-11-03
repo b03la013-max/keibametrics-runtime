@@ -10,6 +10,11 @@ from runtime import local_fnb_day_supervisor as s
 from test_local_fnb_day_supervisor import plan, activation, binding, completion, NOW
 
 
+@pytest.fixture(autouse=True)
+def synthetic_private_actor_environment(monkeypatch):
+    monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+
+
 @pytest.mark.parametrize('known_cutoff',[False,True])
 def test_past_post_without_actor_is_time_terminal_without_invented_cutoff(tmp_path,known_cutoff):
     p=plan()
@@ -76,6 +81,7 @@ def test_same_body_recipient_ack_is_required_for_delivery(tmp_path):
     def inspect(**kw):
         c=kw['completion']
         data={'race_id':kw['race']['race_id'],'body_sha256':'0'*64 if wrong[0] else c['body_original']['sha256'],
+              'delivery_recipient_id':'SYNTHETIC_OWNER_SELF','delivery_route_id':'SYNTHETIC_PRIVATE_ROUTE',
               'recipient_ack_verified':True,'received_at':NOW.isoformat()}
         raw=s.encoded(data); name=f"{kw['race']['race_no']}_ack.json"; (tmp_path/name).write_bytes(raw)
         return {'recipient_ack_verified':True,'original':{'path':name,'sha256':hashlib.sha256(raw).hexdigest()}}
@@ -155,3 +161,79 @@ def test_expired_resume_authority_preserves_readback_but_blocks_mutation(tmp_pat
     assert state['counts']['verified_prestart_originals']==2
     assert b['delivered']==[]
     assert all(c['activation_hold']=='CURRENT_RESUME_SOURCE_OWNER_AUTHORITY_NOT_VERIFIED' for c in state['races'].values())
+
+
+def test_wrong_person_or_route_receipt_never_counts_as_owner_delivery(tmp_path):
+    b=binding(tmp_path,complete=True)
+    s.tick(plan(),tmp_path,binding=b,activation=activation(),execute=True,clock=lambda:NOW)
+    def other_person(**kw):
+        data={'race_id':kw['race']['race_id'],'body_sha256':kw['completion']['body_original']['sha256'],
+              'delivery_recipient_id':'WRONG_OTHER_PERSON','delivery_route_id':'UNAPPROVED_ROUTE',
+              'recipient_ack_verified':True,'received_at':NOW.isoformat()}
+        raw=s.encoded(data);name=f"wrong_{kw['race']['race_no']}_ack.json";(tmp_path/name).write_bytes(raw)
+        return {'recipient_ack_verified':True,'original':{'path':name,'sha256':hashlib.sha256(raw).hexdigest()}}
+    b['inspect_delivery']=other_person
+    state=s.tick(plan(),tmp_path,binding=b,activation=activation(),execute=True,clock=lambda:NOW)
+    assert state['counts']['verified_prestart_recipient_deliveries']==0
+    assert state['counts']['verified_prestart_originals']==2
+
+
+def test_delivery_send_requires_its_own_enabled_approved_route(tmp_path):
+    b=binding(tmp_path,complete=True);a=activation();a['delivery_enabled']=False
+    s.tick(plan(),tmp_path,binding=b,activation=a,execute=True,clock=lambda:NOW)
+    assert not b['delivered']
+
+
+def test_public_ci_guard_precedes_discovery_and_binding_code(tmp_path,monkeypatch):
+    calls=[];b=binding(tmp_path);b['discover_day']=lambda **k:calls.append(k)
+    monkeypatch.setenv('GITHUB_ACTIONS','true')
+    with pytest.raises(ValueError,match='PUBLIC_CI_FORBIDDEN'):
+        s.supervise(day='2026-11-03',private_root=tmp_path,binding=b,activation=activation(),worker_seconds=0,clock=lambda:NOW)
+    assert calls==[]
+    p=tmp_path/'binding.py';p.write_text('raise RuntimeError("must not run")')
+    with pytest.raises(ValueError,match='PUBLIC_CI_FORBIDDEN'):
+        s.load_binding(p,hashlib.sha256(p.read_bytes()).hexdigest())
+
+
+def test_omitted_discovery_race_cannot_retain_current_success(tmp_path):
+    b=binding(tmp_path,complete=True)
+    s.tick(plan(),tmp_path,binding=b,activation=activation(),execute=True,clock=lambda:NOW)
+    p=plan();p['races']=p['races'][1:]
+    b['available'].clear();(tmp_path/'5_body.md').write_text('bad')
+    state=s.tick(p,tmp_path,binding=b,activation=activation(),execute=True,clock=lambda:NOW)
+    assert state['counts']['verified_prestart_originals']==0
+    assert state['races']['5']['observed_in_latest_discovery'] is False
+
+
+def test_discovery_failure_is_durable_and_not_automatically_retried(tmp_path):
+    calls=[];b=binding(tmp_path)
+    def fail(**kw):calls.append(kw);raise ValueError('PROVIDER_RATE_LIMIT_UNKNOWN_RETRY_AFTER')
+    b['discover_day']=fail
+    state=s.supervise(day='2026-11-03',private_root=tmp_path,binding=b,activation=activation(),clock=lambda:NOW)
+    assert len(calls)==1 and state['status']=='DISCOVERY_HOLD_NOT_NO_BET'
+    saved=json.loads((tmp_path/'FNB_2026-11-03_SUPERVISOR_FAILURE.json').read_bytes())
+    assert saved['provider_retry_in_this_lease'] is False
+
+
+def test_existing_complete_original_is_reused_before_any_new_dispatch(tmp_path):
+    b=binding(tmp_path)
+    for r in plan()['races']:b['available'][r['race_no']]=completion(tmp_path,r)
+    state=s.tick(plan(),tmp_path,binding=b,activation=activation(),execute=True,clock=lambda:NOW)
+    assert b['sent']==[] and state['counts']['dispatched']==0
+    assert state['counts']['verified_prestart_originals']==2
+
+
+@pytest.mark.parametrize('day',['../2026-11-03','20261103','2026-11-03/../../other'])
+def test_supervise_requires_canonical_requested_day_before_writing(tmp_path,day):
+    root=tmp_path/'not-created'
+    with pytest.raises(ValueError):
+        s.supervise(day=day,private_root=root,binding=binding(tmp_path),activation=activation(),clock=lambda:NOW)
+    assert not root.exists()
+
+
+def test_wrong_day_discovery_callback_cannot_execute_or_be_counted(tmp_path):
+    b=binding(tmp_path)
+    state=s.supervise(day='2026-11-04',private_root=tmp_path,binding=b,activation=activation(),clock=lambda:NOW)
+    assert state['status']=='DISCOVERY_HOLD_NOT_NO_BET'
+    assert state['code']=='DISCOVERY_RETURNED_DIFFERENT_REQUESTED_DAY'
+    assert not b['sent']
