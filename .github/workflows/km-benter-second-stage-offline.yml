@@ -50,7 +50,25 @@ jobs:
                        "index_diagnostics.md","index_ledger.csv"]
               for name in names:
                   assert (outputs[0]/name).read_bytes() == (outputs[1]/name).read_bytes(), name
-              assert hashlib.sha256((outputs[0]/"summary.json").read_bytes()).hexdigest() == "33ef9bd3ed2a72115dcbc0f00712c0161741b49b9526f3d261b6e9f2dce33a5a"
+              old_phase0 = json.loads(Path("runtime/reports/benter_second_stage/2026-11-03/summary.json").read_text())
+              current_phase0 = json.loads((outputs[0]/"summary.json").read_text())
+              difference = {
+                  "old_input_count":len(old_phase0["input_files_sha256"]),
+                  "current_input_count":len(current_phase0["input_files_sha256"]),
+                  "input_manifests_equal":old_phase0["input_files_sha256"] == current_phase0["input_files_sha256"],
+                  "old_software":old_phase0["software"], "current_software":current_phase0["software"],
+                  "old_summary_sha":"33ef9bd3ed2a72115dcbc0f00712c0161741b49b9526f3d261b6e9f2dce33a5a",
+                  "current_summary_sha":hashlib.sha256((outputs[0]/"summary.json").read_bytes()).hexdigest(),
+                  "current_primary":current_phase0["series"]["pre_signature"]["chronological"]["evaluation"],
+                  "old_primary":old_phase0["series"]["pre_signature"]["chronological"]["evaluation"]}
+              print("P06_BASELINE_DIFF " + json.dumps(difference,ensure_ascii=True))
+              assert difference["input_manifests_equal"], "Original input inventory changed"
+              for model in ["M","F","C"]:
+                  a=current_phase0["series"]["pre_signature"]["chronological"]["evaluation"]["models"][model]["rho2"]
+                  c=old_phase0["series"]["pre_signature"]["chronological"]["evaluation"]["models"][model]["rho2"]
+                  assert abs(a-c)<1e-9, (model,a,c)
+              assert current_phase0["software"]["code_sha256"] == old_phase0["software"]["code_sha256"]
+              assert hashlib.sha256(Path("runtime/reports/benter_second_stage/2026-11-03/summary.json").read_bytes()).hexdigest() == difference["old_summary_sha"]
               print("P06_RESULT " + json.dumps({
                   "cohort": result["cohort"]["n_races"],
                   "free": result["joint_L2"]["chronological"],
