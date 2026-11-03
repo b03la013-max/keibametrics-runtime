@@ -82,7 +82,7 @@ jobs:
               for file in sorted(outputs[0].iterdir()):
                   raw = file.read_bytes()
                   git_sha = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
-                  emit = file.name in {"index_diagnostics.json","index_diagnostics.md","generation.json"}
+                  emit = file.name in {"index_diagnostics.json","index_diagnostics.md","generation.json","summary.json","summary.md"}
                   body = raw.decode("utf-8")
                   pieces = [body[i:i+4000] for i in range(0,len(body),4000)] if emit else []
                   print("P06_FILE_META " + json.dumps({"name":file.name, "bytes":len(raw),
