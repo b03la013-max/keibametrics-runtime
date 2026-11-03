@@ -498,4 +498,24 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
               "canonical_production_suite_changed": False,
               "formal_intent_sha256": _sha(request_)}
     ledger["sha256"] = _sha(ledger)
+    if venue == "FNB":
+        # FNB v2.1 requires the actual frozen Venue Context before Static.
+        # The three generic mechanism names above are not a substitute. This
+        # preserves a separately adopted producer's content without creating
+        # a model, extending the current KAW-only policy, or changing ranks.
+        from runtime.local_fnb_venue_context_binding import (
+            FnbVenueContextError, bind_fnb_frozen_venue_context, fnb_context_temporal_receipt,
+        )
+        try:
+            context = bind_fnb_frozen_venue_context(
+                request, envelope, policy, ids, static_freeze_at=now.isoformat())
+        except FnbVenueContextError as exc:
+            raise StaticOwnerError(str(exc)) from exc
+        request_["venue_prediction_context"] = context
+        ledger["fnb_venue_context_sha256"] = context["sha256"]
+        ledger["fnb_venue_context_producer"] = context["producer"]
+        ledger["fnb_venue_context_temporal_verification"] = fnb_context_temporal_receipt(request, envelope)
+        ledger["formal_intent_sha256"] = _sha(request_)
+        ledger.pop("sha256", None)
+        ledger["sha256"] = _sha(ledger)
     return request_, ledger
