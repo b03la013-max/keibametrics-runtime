@@ -57,7 +57,7 @@ def compare(root, start, end, asof, *, bootstrap_reps=1000, shuffle_reps=200, se
             market = (1 / odds) / (1 / odds).sum()
             closing.append(replace(race, m=market))
             paired.append(race)
-            if dropped:
+            if dropped or admission["explicit_nonstarters_already_outside_model"]:
                 reconciliation.append({"race_id":race.race_id, "raw_sha256":capture["raw_sha256"], **admission})
             for j, horse in enumerate(race.ids):
                 ledger.append({"race_id": race.race_id, "post_at": race.post_at, "runner_id": horse,

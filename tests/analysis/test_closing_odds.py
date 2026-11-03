@@ -139,6 +139,11 @@ def test_explicit_price_cell_nonstarters_reconcile_but_absence_never_does():
     assert admission['active_runner_ids']==['1','2']
     assert admission['additional_official_nonstarters_not_in_stored_result']=={'3':'CANCELLED','4':'EXCLUDED'}
     assert admission['stored_result_modified'] is False
+    outside=reader.reconcile_universe(parsed,expected_active=[1,2],expected_nonstarters={},finisher_ids=[1,2])
+    assert outside['additional_official_nonstarters_not_in_stored_result']=={}
+    assert outside['explicit_nonstarters_already_outside_model']=={'3':'CANCELLED','4':'EXCLUDED'}
+    with pytest.raises(ValueError,match='UNKNOWN_RUNNER_IDENTITY'):
+        reader.reconcile_universe(parsed,expected_active=[1],expected_nonstarters={},finisher_ids=[1,2])
     with pytest.raises(ValueError,match='FINISHER_CONFLICT'):
         reader.reconcile_universe(parsed,expected_active=[1,2,3,4],expected_nonstarters={},finisher_ids=[1,2,3])
     with pytest.raises(ValueError,match='EVIDENCE_MISSING'):

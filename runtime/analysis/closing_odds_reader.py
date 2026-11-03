@@ -278,13 +278,14 @@ def reconcile_universe(parsed, *, expected_active, expected_nonstarters, finishe
     rows = {row["runner_id"]:row for row in parsed["runners"]}
     active = {k for k,v in rows.items() if v["status"] == "ACTIVE"}
     nonstarters = {k:v["status"] for k,v in rows.items() if v["status"] != "ACTIVE"}
-    if set(rows) - expected - set(known):
+    if active - expected:
         raise ValueError("CLOSING_UNKNOWN_RUNNER_IDENTITY")
     for rid, status in nonstarters.items():
         if rid in known and known[rid] not in {status, "OFFICIAL_NON_STARTER_REFUND"}:
             raise ValueError("CLOSING_NONSTARTER_UNIVERSE_MISMATCH")
     additional = {k:v for k,v in nonstarters.items() if k in expected}
-    if additional and not finisher_ids:
+    outside = {k:v for k,v in nonstarters.items() if k not in expected and k not in known}
+    if (additional or outside) and not finisher_ids:
         raise ValueError("CLOSING_NONSTARTER_RECONCILIATION_EVIDENCE_MISSING")
     if set(nonstarters) & {str(int(x)) for x in finisher_ids}:
         raise ValueError("CLOSING_NONSTARTER_FINISHER_CONFLICT")
@@ -292,6 +293,7 @@ def reconcile_universe(parsed, *, expected_active, expected_nonstarters, finishe
         raise ValueError("CLOSING_ACTIVE_UNIVERSE_MISMATCH")
     return {"active_runner_ids": sorted(active, key=int),
             "additional_official_nonstarters_not_in_stored_result": dict(sorted(additional.items(), key=lambda x:int(x[0]))),
+            "explicit_nonstarters_already_outside_model": dict(sorted(outside.items(), key=lambda x:int(x[0]))),
             "evidence": "EXPLICIT_FINAL_ODDS_NONSTARTER_ROW_NOT_FINISH_ORDER_INFERENCE",
             "stored_result_modified": False}
 
