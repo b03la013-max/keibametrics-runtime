@@ -101,7 +101,10 @@ def test_no_source_no_bet_is_not_calculated(tmp_path,monkeypatch):
     ("SOURCE_HTTP_STATUS:503 private-response", "SOURCE_HTTP_STATUS_FAILED"),
     ("private-URL-with-ROBOTS-and-POLICY-text", "SOURCE_CONNECTION_FAILED"),
 ])
-def test_source_failure_layer_is_preserved_without_private_exception(tmp_path,message,expected):
+def test_source_failure_layer_is_preserved_without_private_exception(tmp_path,monkeypatch,message,expected):
+    # A synthetic private Work callback, never an actual provider in public CI.
+    monkeypatch.delenv("CI",raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS",raising=False)
     calls=[]
     def source(**kw):
         calls.append(kw)
