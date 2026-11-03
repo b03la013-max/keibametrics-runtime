@@ -1,168 +1,95 @@
-# Benter Phase 0 / 0.5 offline measurement
+# Benter Phase 0.6: corrected offline diagnostics
 
-This research CLI reads existing JRA FINAL, SOURCE, RESULT and Status artifacts.
-It never imports into or invokes Production prediction, delivery or postresult.
-There is no schedule, provider fetch, signing, authentication or purchase code.
-The implementation is stacked on Draft PR #362. Both PRs remain unmerged.
+This is research CODE/CI only. #362 and #363 remain Draft/unmerged.
+There is no Production policy, index weight, AKI, MEC, Capital, ticket or
+autopilot/delivery/postresult/source execution change. No external odds fetch,
+deploy, signing, OAuth, Gmail or purchase is performed.
 
-## One manual command after each raceday
+## Correction of the Phase0.5 design
 
-With Python 3.12, numpy 2.3.5 and scipy 1.17.0 installed, run from this branch:
+The old all-14-coefficient L2 penalized market beta. Its beta0.374986,
+holdout increment -0.0889239663 and WF increment -0.0534915444 were values from
+a defective design and must NOT be interpreted as the indices' effects.
+The old asof and signed/Frozen inputs remain unchanged.
 
-```bash
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 runtime/analysis/benter_index_diagnostics.py --from 2026-10-11 --to 2026-11-07 --asof 2026-11-08 --out runtime/reports/benter_second_stage/2026-11-08
-```
+The corrected objective is mean race negative log likelihood plus
+lambda/2 times the sum of squared INDEX coefficients only. Beta has no L2
+penalty. A separate offset version fixes beta to the M estimate of the
+current training sample. For nested validation, estimate that offset again
+on each INNER training fold, not on all outer training dates.
 
-Replace `--to`, `--asof` and the output directory on each update. The output
-directory must not already exist, even if empty. The CLI runs Phase 0 and 0.5
-together. It publishes a completed directory by rename after all calculations
-and input SHA read-back checks. It produces:
+Lambda grid is .0001, .001, .01, .1, 1, 10, 100, 1000. Inner expanding-date
+validation selects lambda without outer holdout/future dates. The holdout
+lambda curve is descriptive and never used for tuning. As lambda tends to
+infinity, both free-beta and offset models approach M. Tests compare the
+whole probability vectors, not just a rounded delta.
 
-- `summary.json`, `summary.md`, `ledger.csv`, `generation.json` from Phase 0;
-- `index_diagnostics.json`, `index_diagnostics.md`, `index_ledger.csv` from 0.5;
-- `ledger_final_odds.csv` only if explicitly final odds are already stored.
+F-joint uses only 13 standardized indices (beta fixed0), with the same
+historical lambda selection and L2. It contains market-derived VMI, so its
+standalone rho2 is not evidence of market independence. An auxiliary
+12-index F-joint excluding VMI is also reported. Compare holdout standalone
+rho2 of ZAI_WIN, JTI, KGI and both F-joints without copying fitted weights to
+Production. Sign stability uses1000 race-bootstrap refits conditional on the
+historically selected lambda; the selection uncertainty is not fully covered.
 
-For the existing 2026-11-03 asof, preserve the original directory and use a new
-qualified directory such as `2026-11-03-phase05`. No past asof is overwritten.
-Runtime-dependent generation time lives only in `generation.json`. Pin input
-SHA, code SHA, software versions, seeds and thread counts when reproducing bytes.
+## Tests and quality axes
 
-An automatic schedule is a proposal only and needs separate adoption. Do not
-add this module to race-day autopilot, delivery or postresult.
+Keep200 within-race shuffle runs as descriptive controls. This revision
+chooses the permitted **resolution-limit labeling** route, not a new
+bootstrap p-value method. The plus-one minimum p1/201 exceeds .05/13.
+Holm's decision is RESOLUTION_INSUFFICIENT, not a definitive negative finding.
 
-## Frozen Phase 0 and the resolved Claude comparison
+Delete the point-estimate priority ordering. Use a canonical-order table of
+default/exact50/fallback/DCR/UNVALIDATED rates versus standalone rho2 instead.
+Standalone means no explicit ln(m) covariate; it does not prove independence
+from the market. The numeric-cell denominator is2349 x13, separate from
+Required Component evidence denominators.
 
-Owner clarified that Claude used a split at a raceday boundary and centered
-ZAI without dividing by its within-race standard deviation. #362 uses the
-specified post-time half split and within-race standardization. The difference
-is therefore closed by the Owner's explanation; Claude's unpublished script
-has not been independently executed here.
+VMI is treated as MARKET_REPHRASING_CONTROL. Record observed component
+features from each frozen VMI trace; compare them with the registered
+manifest. The manifest may also name expert_support/external_index_support.
+Do not silently equate those potential components with data actually consumed.
+A value exactly50 alone is not proof of imputation; preserve lawful DCR.
 
-`benter_second_stage.py` and the old asof remain byte-identical. A new run's
-`summary.json` is the unchanged Phase 0 result, including its historical
-comparison annotation. The new `summary.md` replaces the obsolete unresolved
-annotation, and `index_diagnostics.json.reference_resolution` is the explicit
-correction record. A test compares its Phase 0 JSON with a standalone #362 run.
+## Current read-only recomputation
 
-## Preregistered diagnostic choices
+The existing178-race single-index M/F/C and resampling outputs may be reused
+only with matching from/to/asof, seeds, repetitions, exact race membership and
+verified SHA for every original input. Missing or changed inputs fail closed.
+This does not reuse the defective joint model: free-beta, offset and F-joint
+models are recalculated. The historical defective value is preserved and
+explicitly annotated. New outputs use a new asof directory only.
 
-The audit denominator is runner x index cells (2349 x 13 in this cohort),
-not the Required Component denominators of prior Base13 evidence audits.
-Zero numeric cell omissions does not establish 100% observed evidence.
+Hosted PR CI may run this recomputation against stored repository inputs,
+with socket connections disabled during analysis. It is not an external
+data acquisition or a Production execution. SHA read-back and byte
+determinism checks protect original data.
 
-- Cohort: the same Phase 0-eligible races and active runners. No new missing
-  value imputation. A genuinely missing Base13 value excludes its whole race
-  from that index; the joint model requires all 13. Counts are explicit.
-- Standardization: population SD within each race after non-starter removal;
-  constant columns become zero. A value of exactly 50 is a diagnostic flag,
-  not sufficient evidence of imputation. Explicit fallback/DCR and
-  `UNVALIDATED` are counted separately. Their counts overlap, so they are not
-  added. The displayed default rate is the union of exact-50 and fallback/DCR.
-- A default-rate annotation of at least 25% means "reference" for this report;
-  this is not a change to any Production threshold or missing-data rule.
-- Per-index: same M/F/C fit, strict temporal half split, paired holdout race
-  bootstrap 1000 plus train/holdout refit sensitivity, within-race shuffle200
-  and expanding-date walk-forward as #362. Seeds remain 20261103.
-- Holm: one-sided Monte Carlo p=(1+count(null >= observed))/(B+1), applied to
-  all 13 hypotheses. With B=200 the minimum p is 1/201, greater than .05/13.
-  Thus the requested run cannot resolve a Holm rejection, even for a very
-  strong effect. Report that limitation, not "no information proven".
-  Increasing the control to e.g. 1999 at the 500-race reassessment is a design
-  proposal only; this run keeps the requested 200.
-- Joint model: 13 standardized indices plus log market probability, L2 on
-  **all 14 coefficients**, objective mean race NLL + lambda/2 * ||theta||².
-  Candidate lambdas are .0001, .001, .01, .1, 1, 10, fixed before measurement.
-  Select by summed validation log loss over inner expanding-date folds of
-  outer training only. No future validation day or outer holdout is used.
-  With no inner history, use the fixed default lambda=1. Date-WF selects
-  again using only dates strictly before the target date. Grid ties prefer
-  stronger regularization. No post-result tuning of the grid.
-- Coefficient sign stability: 1000 race-bootstrap refits of the chronological
-  training sample, holding its training-selected lambda fixed. Sign changes
-  are relative to the original training coefficient. This is conditional on
-  model selection and is not an adoption or causal confidence interval.
-- Current weights: read the stored formula source as an AST, never import it.
-  The supplied 11 weights sum to 1. BVI and VMI have direct weight0 in that
-  `ZAI_WIN` expression. They may affect other Derived indices. Compare raw
-  score weights and standardized diagnostic coefficients with their different
-  units explicit; never copy the fitted coefficients to Production.
-- Rank indices by held-out increment, show WF evidence/default rates beside
-  them, and treat every ranking as exploratory until the fixed test is rerun
-  after 500 eligible races. No new weight is implemented.
+## Future manual update example — DO NOT EXECUTE NOW
 
-For the current 178-race measurement, BWI, JTI and CFI have the three highest
-held-out point increments, but every one of their confidence intervals crosses
-zero and every per-index expanding-date cumulative increment is negative.
-Therefore the table is a diagnostic ranking, not a proven repair priority or
-an adoption list. JTI's sample/evaluator binding, BWI's timestamp/range binding
-and CFI/GCI's course/going evidence are reasonable correctness inspection
-targets. Full-runner workout evidence for TRI/newcomer RFI remains a separate
-evidence-quality task; a nonmissing index number does not establish that feed.
+For11/7-11/8 results, after the required stored inputs exist, from this branch:
 
-The joint model selected lambda1 from its inner historical folds and produced
-a held-out increment of -0.088924. Its market coefficient was shrunk to0.375
-because this preregistered L2 penalizes all14 coefficients. Stable signs alone
-do not demonstrate market increment. An unpenalized-market nuisance coefficient
-would be a different design, to consider separately at the 500-race review;
-this run is not adjusted after observing the result.
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python3 runtime/analysis/benter_index_diagnostics.py --from 2026-10-11 --to 2026-11-08 --asof 2026-11-09 --out runtime/reports/benter_second_stage/2026-11-09-phase06
 
-## Odds timing and provider research (SPEC only)
+This single command runs corrected Phase0+0.5 together. Do not overwrite a past
+asof directory. Do not supply a historical reuse cache for a different period.
 
-The main snapshot, signing timestamp and frozen scheduled post remain those
-of #362. Report race-level min/median/max minutes to post. Bands are <=10,
-10< t <=30, 30< t <=60 and >60. The band-refitted M is an in-sample diagnostic;
-also show each band's held-out M and ZAI increment under the same globally
-trained Phase 0 coefficients. Do not interpret band differences as a causal
-timing effect: race composition differs across bands.
+After the cumulative cohort exceeds200 races, examine the lower bound of the
+out-of-sample delta-rho2 interval, the expanding-date WF cumulative increment,
+and beta's stability across train dates/bootstrap samples. Inspect free-beta
+and offset results together, separate VMI from nonmarket controls, and retain
+the500-race reassessment requirement. Do not tune weights or infer EV from
+these preliminary measurements. Automatic scheduling remains a proposal only.
 
-Explicit final odds, when present, are a secondary cohort. Compare pre-sign
-and final prices on paired races and the same original train/test membership.
-Post-time observations alone are not proof that prices are final.
+## Closing odds and backfill
 
-JRA says its odds/results pages expose final odds for completed races:
-https://www.jra.go.jp/faq/pop02/1_1.html
+Closing-odds acquisition is separate work: pure parser/format tests and a
+manual-only, approval-gated workflow. It is not invoked by this CLI or CI.
+Current0 closing-odds races must not be filled using the winner's payout or
+a pre-race snapshot relabeled as final.
 
-The existing `jra_market_observation.py` reads race-card detail prices and has
-no explicit final-price classification. Stored `official_result` inputs do
-not supply a final-price series for the current cohort. The same JRA provider
-can in principle supply the data, but capturing/classifying it and binding
-Race ID, active universe, observation time and SHA needs a separate reader
-change. No new provider or fetch is implemented in Phase0.5.
-
-JRA-VAN DataLab documents realtime and 5-10 minute odds histories:
-https://jra-van.jp/dlb/ddata.html
-
-It is an alternative with separate licensing/environment/retention review,
-not an adopted source. The availability of historical pre-sign snapshots for
-each particular race must be proven, not inferred from current final odds.
-
-## Arrival forecasts and backfill (SPEC only)
-
-Count one raceday per calendar date across venues. The eight-day empirical
-pace is a conditional extrapolation; venue mix, weather, legitimate NO-BET,
-scope and runtime reliability can change it. Status enums are copied without
-reclassification. Technical recovery is an upper-bound *future* scenario;
-it never recreates an absent pre-race FINAL after the deadline.
-
-Forecast calendar dates were checked visually against the official PDFs:
-
-- https://www.jra.go.jp/keiba/program/2026/pdf/nittei.pdf
-- https://www.jra.go.jp/keiba/program/2027/pdf/nittei.pdf
-- https://www.jra.go.jp/news/202609/092805.html
-
-The 2027 published calendar is subject to official approval and future
-changes. The hardcoded offline calendar extends through March2027 and is not
-a Discovery feed. Beyond that horizon, emit no invented arrival date.
-
-Backfill is conditionally feasible as **a separate replay cohort** only when
-pre-post raw bytes, versions, identities, cancellations, timestamps, evidence
-corpus and odds were archived. Run outcome-blind feature replay with the
-original rules/code. Later person stats, updated corpus or a current result
-page cannot establish a past feature snapshot. Absent authentic pre-race
-signature/freeze cannot be supplied retrospectively. Never add replay to the
-178 original observations or genuine Forward OOS.
-
-Engineering estimate if inputs are complete: 1-2 person-days for inventory
-and temporal proof, 2-4 for offline replay adapter, 1-2 for independent review
-and regression, total4-8. This is a planning estimate, not implementation or
-a delivery commitment.
+Original Phase0 calculator/output compatibility is verified by tests.
+Generation time remains separate. Keep original SOURCE/FINAL/RESULT and past
+asof files unchanged. Backfill is conditionally feasible only as a separate
+replay cohort with provable historical raw bytes, versions, identities and
+prices. It is not authentic pre-race freeze or Forward OOS.

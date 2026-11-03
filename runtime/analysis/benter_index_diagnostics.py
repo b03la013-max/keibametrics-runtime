@@ -6,6 +6,7 @@ research measurements, never new index values, predictions or betting policy.
 from __future__ import annotations
 
 import argparse
+import copy
 import ast
 import csv
 import hashlib
@@ -28,7 +29,7 @@ except ImportError:
 INDICES = ("HPI", "SSI", "CFI", "RFI", "JTI", "CSI", "TRI", "BWI", "GCI", "PRI", "KGI", "BVI", "VMI")
 SUPPLIED_WEIGHTS = dict(HPI=.20, SSI=.17, CFI=.10, RFI=.08, JTI=.05,
                         CSI=.05, TRI=.05, BWI=.05, GCI=.08, PRI=.12, KGI=.05)
-LAMBDA_GRID = (.0001, .001, .01, .1, 1., 10.)
+LAMBDA_GRID = (.0001, .001, .01, .1, 1., 10., 100., 1000.)
 REFERENCE_RATE = .25  # Reporting annotation only, never a numeric input rule.
 REFERENCE_RESOLUTION = (
     "Owner確認によりClaude試算との差異は解決済み：監査側は開催日境界で分割し、"
@@ -107,7 +108,9 @@ def trace_audit(value, trace):
             "fallback_or_DCR_rule": bool(fallback), "UNVALIDATED": "UNVALIDATED" in joined,
             "trace_missing": not bool(trace), "default_or_fallback_union": exact or bool(fallback),
             "rule_id": trace.get("rule_id"), "value": numeric,
-            "coverage_weight": trace.get("coverage_weight")}
+            "coverage_weight": trace.get("coverage_weight"),
+            "component_features": sorted({str(c["feature"]) for c in trace.get("components", [])
+                                           if isinstance(c, dict) and c.get("feature")})}
 
 
 def load_indices(root, races, phase0_rows, inputs, *, indices=INDICES):
@@ -137,7 +140,8 @@ def load_indices(root, races, phase0_rows, inputs, *, indices=INDICES):
         rate = counts["default_or_fallback_union"] / n if n else None
         audit[index] = {"n_runners": n, "counts": counts, "default_or_fallback_rate": rate,
                         "reference_only_high_default_rate": bool(rate is not None and rate >= REFERENCE_RATE),
-                        "rule_id_counts": dict(sorted(Counter(c["rule_id"] or "MISSING" for c in cells).items()))}
+                        "rule_id_counts": dict(sorted(Counter(c["rule_id"] or "MISSING" for c in cells).items())),
+                        "component_feature_counts": dict(sorted(Counter(f for c in cells for f in c["component_features"]).items()))}
     rows = []
     for row in phase0_rows:
         if row["series"] != "pre_signature":
@@ -158,8 +162,31 @@ def standardize(matrix):
     return np.divide(matrix - matrix.mean(axis=0), std, out=np.zeros_like(matrix), where=std > 0)
 
 
+def label_multiple_testing(single):
+    results = single["indices"]
+    ps = {k: r["shuffle_p_one_sided"] for k, r in results.items()}
+    adjusted = holm(ps)
+    repetitions = single["multiple_testing"]["shuffle_repetitions"]
+    sufficient = 1 / (repetitions + 1) <= .05 / len(results)
+    for index, result in results.items():
+        decision = result["measurement"]["decision"]
+        unadjusted = decision["Yes_No"] == "Yes" and ps[index] <= .05
+        result.update(holm_adjusted_p=adjusted[index], unadjusted_signal=unadjusted,
+                      holm_reject=(unadjusted and adjusted[index] <= .05) if sufficient else None,
+                      holm_decision="EVALUATED" if sufficient else "RESOLUTION_INSUFFICIENT",
+                      interpretation="EXPLORATORY_ONLY_NOT_ADOPTION")
+    single["multiple_testing"].update(
+        method=f"HOLM_SHUFFLE_P_{len(results)}_RESOLUTION_EXPLICIT",
+        n_hypotheses=len(results), alpha=.05, minimum_shuffle_p=1 / (repetitions + 1),
+        first_holm_threshold=.05 / len(results),
+        resolution_sufficient_for_any_rejection=sufficient,
+        decision_method="RESOLUTION_LIMIT_LABEL_NOT_BOOTSTRAP_P",
+        limitation="200 plus-one shuffle p values cannot resolve p<=0.05/13; the 200 runs remain descriptive controls.")
+    return single
+
+
 def per_index(races, arrays, audits, *, indices=INDICES, bootstrap_reps=1000, shuffle_reps=200, seed=b.SEED):
-    results, p_values = {}, {}
+    results = {}
     for j, index in enumerate(indices):
         eligible = [replace(r, zai=arrays[r.race_id][:, j], z=standardize(arrays[r.race_id][:, j:j + 1])[:, 0])
                     for r in races if np.isfinite(arrays[r.race_id][:, j]).all()]
@@ -170,23 +197,9 @@ def per_index(races, arrays, audits, *, indices=INDICES, bootstrap_reps=1000, sh
             p = (1 + sum(x >= delta for x in null)) / (1 + len(null))
         else:
             p = 1.
-        p_values[index] = p
         results[index] = {"audit": audits[index], "measurement": compact(measured), "shuffle_p_one_sided": p,
                           "excluded_races_with_missing_index": len(races) - len(eligible)}
-    adjusted = holm(p_values)
-    for index, result in results.items():
-        decision = result["measurement"]["decision"]
-        unadjusted = decision["Yes_No"] == "Yes" and p_values[index] <= .05
-        reject = unadjusted and adjusted[index] <= .05
-        result.update(holm_adjusted_p=adjusted[index], unadjusted_signal=unadjusted,
-                      holm_reject=reject, interpretation="EXPLORATORY_SIGNAL_NOT_ADOPTION" if reject else
-                      "CANDIDATE_ONLY_AFTER_MULTIPLE_TESTING" if unadjusted else "NO_CONFIRMED_INCREMENT")
-    return {"indices": results, "multiple_testing": {"method": f"HOLM_STEP_DOWN_{len(indices)}_ONE_SIDED_SHUFFLE_P_VALUES",
-            "n_hypotheses": len(indices), "alpha": .05, "minimum_shuffle_p": 1 / (shuffle_reps + 1),
-            "first_holm_threshold": .05 / len(indices),
-            "resolution_sufficient_for_any_rejection": 1 / (shuffle_reps + 1) <= .05 / len(indices),
-            "limitation": "200 shuffles cannot resolve p<=0.05/13 with the plus-one correction; lack of Holm rejection is not proof of no information."}}
-
+    return label_multiple_testing({"indices": results, "multiple_testing": {"shuffle_repetitions": shuffle_reps}})
 
 @dataclass(frozen=True)
 class VectorRace:
@@ -211,27 +224,53 @@ class MultiChoices:
         lp = u - maxima[self.base.groups] - np.log(den)[self.base.groups]
         return np.add.reduceat(self.base.y * lp, self.base.starts), ex / den[self.base.groups]
 
-    def fit(self, strength, weights=None):
+    def fit(self, strength, weights=None, *, beta_fixed=None):
+        """L2 ONLY on index coefficients. Market beta is free or an offset."""
         if strength <= 0:
             raise ValueError("L2_STRENGTH_MUST_BE_POSITIVE")
         w = np.ones(len(self.races)) if weights is None else np.asarray(weights, float)
         if not np.isfinite(w).all() or np.any(w < 0) or w.sum() <= 0:
             raise ValueError("INVALID_RACE_WEIGHTS")
-        def objective(theta):
+        n = self.x.shape[1] - 1
+        # Reparameterization prevents a stiff Hessian when lambda is huge.
+        scale = np.full(n, 1 / math.sqrt(max(1., strength)))
+        mask = np.r_[np.ones(n), 0.]
+        def unpack(eta):
+            return np.r_[eta[:n] * scale, eta[-1] if beta_fixed is None else beta_fixed]
+        derivative_scale = np.r_[scale, 1.] if beta_fixed is None else scale
+        def objective(eta):
+            theta = unpack(eta)
             ll, p = self.evaluate(theta)
             expected = np.add.reduceat(p[:, None] * self.x, self.base.starts, axis=0)
-            return (-float(w @ ll) / w.sum() + .5 * strength * float(theta @ theta),
-                    np.sum(w[:, None] * (expected - self.target), axis=0) / w.sum() + strength * theta)
-        initial = np.zeros(self.x.shape[1]); initial[-1] = 1.
+            gradient = np.sum(w[:, None] * (expected - self.target), axis=0) / w.sum()
+            gradient += strength * mask * theta
+            if beta_fixed is not None:
+                gradient = gradient[:-1]
+            return (-float(w @ ll) / w.sum() + .5 * strength * float(theta[:-1] @ theta[:-1]),
+                    gradient * derivative_scale)
+        initial = np.zeros(n + (beta_fixed is None))
+        if beta_fixed is None:
+            initial[-1] = 1.
         result = minimize(objective, initial, jac=True, method="BFGS", options={"gtol": 1e-8, "maxiter": 1000})
         gradient = float(np.max(np.abs(objective(result.x)[1])))
-        if not np.isfinite(result.x).all() or gradient > 1e-6:
+        theta = unpack(result.x)
+        if not np.isfinite(theta).all() or gradient > 1e-6:
             raise ValueError("JOINT_L2_NOT_CONVERGED")
-        return result.x, {"optimizer_success": bool(result.success), "gradient_max_abs": gradient}
+        return theta, {"optimizer_success": bool(result.success), "gradient_max_abs": gradient,
+                       "market_beta_penalized": False, "market_beta_fixed": beta_fixed is not None}
+
+def beta_constraint(choices, mode, weights=None):
+    if mode == "free":
+        return None
+    if mode == "offset":
+        return choices.base.fit("M", weights)["beta"]
+    if mode == "features_only":
+        return 0.
+    raise ValueError("UNKNOWN_JOINT_MODE")
 
 
-def select_lambda(training, *, grid=LAMBDA_GRID):
-    """Inner expanding-date validation sees ONLY the supplied training races."""
+def select_lambda(training, *, grid=LAMBDA_GRID, mode="free"):
+    """Nested date WF; offsets are fitted on each INNER training fold."""
     if not grid or any(x <= 0 for x in grid):
         raise ValueError("INVALID_LAMBDA_GRID")
     days = sorted({r.race.race_date for r in training})
@@ -242,25 +281,23 @@ def select_lambda(training, *, grid=LAMBDA_GRID):
         if not past:
             continue
         train, test = MultiChoices(past), MultiChoices(now)
+        fixed = beta_constraint(train, mode)
         row = {"validation_date": day, "training_dates": sorted({r.race.race_date for r in past}),
-               "training_races": len(past), "validation_races": len(now), "validation_LL": {}}
+               "training_races": len(past), "validation_races": len(now), "validation_LL": {},
+               "mode": mode, "inner_training_beta_offset": fixed}
         assert max(row["training_dates"]) < day
         for strength in grid:
-            theta, _ = train.fit(strength)
+            theta, _ = train.fit(strength, beta_fixed=fixed)
             total = float(test.evaluate(theta)[0].sum())
             losses[strength][0] -= total; losses[strength][1] += len(now)
             row["validation_LL"][str(strength)] = total
         folds.append(row)
-    if folds:
-        selected = min(grid, key=lambda k: (losses[k][0] / losses[k][1], -k))
-    else:
-        selected = 1. if 1. in grid else max(grid)
+    selected = min(grid, key=lambda k: (losses[k][0] / losses[k][1], -k)) if folds else (1. if 1. in grid else max(grid))
     return {"selected_lambda": float(selected), "grid": list(grid), "inner_folds": folds,
             "status": "PAST_DATES_ONLY_SELECTED" if folds else "NO_INNER_HISTORY_FIXED_DEFAULT",
             "validation_mean_NLL": {str(k): v[0] / v[1] if v[1] else None for k, v in losses.items()},
-            "objective": "MEAN_RACE_NLL_PLUS_LAMBDA_OVER_2_TIMES_L2_ALL_14_COEFFICIENTS",
-            "selection_training_dates": days}
-
+            "objective": "MEAN_RACE_NLL_PLUS_LAMBDA_OVER_2_TIMES_INDEX_L2_ONLY",
+            "market_beta_penalized": False, "mode": mode, "selection_training_dates": days}
 
 def joint_score(test, theta, market):
     choices = MultiChoices(test)
@@ -271,7 +308,7 @@ def joint_score(test, theta, market):
             "rho2": 1 - ll / ll0, "M_rho2": 1 - lm / ll0, "delta_rho2": (lm - ll) / ll0}
 
 
-def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=b.SEED, grid=LAMBDA_GRID):
+def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=b.SEED, grid=LAMBDA_GRID, mode="free"):
     ordered = sorted(races, key=lambda r: (b.timestamp(r.post_at), r.race_id))
     training, testing = strict_split(ordered)
     vectors = {r.race_id: VectorRace(r, standardize(arrays[r.race_id])) for r in ordered
@@ -279,14 +316,22 @@ def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=
     train = [vectors[r.race_id] for r in training if r.race_id in vectors]
     test = [vectors[r.race_id] for r in testing if r.race_id in vectors]
     if not train or not test:
-        return {"status": "INSUFFICIENT_COMPLETE_CASES", "n_races": len(vectors)}
-    tuning = select_lambda(train, grid=grid)
+        return {"status": "INSUFFICIENT_COMPLETE_CASES", "n_races": len(vectors), "mode": mode}
+    tuning = select_lambda(train, grid=grid, mode=mode)
     choices = MultiChoices(train); strength = tuning["selected_lambda"]
-    theta, optimizer = choices.fit(strength)
+    fixed = beta_constraint(choices, mode)
+    theta, optimizer = choices.fit(strength, beta_fixed=fixed)
     market = choices.base.fit("M")
-    result = {"status": "EXPLORATORY_L2_NOT_PRODUCTION", "n_races": len(vectors), "training_races": len(train),
-              "test_races": len(test), "excluded_incomplete_races": len(ordered) - len(vectors),
-              "tuning": tuning, "optimizer": optimizer, "chronological": joint_score(test, theta, market)}
+    result = {"status": "EXPLORATORY_L2_NOT_PRODUCTION", "mode": mode,
+              "n_races": len(vectors), "training_races": len(train), "test_races": len(test),
+              "excluded_incomplete_races": len(ordered) - len(vectors),
+              "tuning": tuning, "optimizer": optimizer, "chronological": joint_score(test, theta, market),
+              "lambda_sensitivity": []}
+    # The holdout curve is descriptive; lambda selection above never uses it.
+    for value in grid:
+        coef, _ = choices.fit(value, beta_fixed=fixed)
+        result["lambda_sensitivity"].append({"lambda": value, "evaluation": joint_score(test, coef, market),
+                                             "beta": float(coef[-1]), "index_coefficient_norm": float(np.linalg.norm(coef[:-1]))})
     rng = np.random.default_rng(seed); draws = []
     fixed_delta, refit_delta = [], []
     testing_choices = MultiChoices(test)
@@ -295,7 +340,8 @@ def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=
     for _ in range(bootstrap_reps):
         w = np.bincount(rng.integers(0, len(train), len(train)), minlength=len(train))
         tw = np.bincount(rng.integers(0, len(test), len(test)), minlength=len(test))
-        coef, _ = choices.fit(strength, w); draws.append(coef)
+        coef, _ = choices.fit(strength, w, beta_fixed=beta_constraint(choices, mode, w))
+        draws.append(coef)
         ll0 = float(tw @ testing_choices.base.ll0)
         fixed_delta.append(float(tw @ (original_m - original_c)) / ll0)
         mfit = choices.base.fit("M", w)
@@ -311,15 +357,15 @@ def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=
             "conditional_holdout": compact(b.distribution(fixed_delta)),
             "training_and_holdout_refit": compact(b.distribution(refit_delta)),
             "lambda_held_fixed": strength,
-            "interpretation": "COEFFICIENT_SIGN_STABILITY_CONDITIONAL_ON_TRAINING_SELECTED_LAMBDA; not post-selection confidence"}
+            "interpretation": "SIGN_STABILITY_CONDITIONAL_ON_SELECTED_LAMBDA; offset beta refitted on each bootstrap training sample"}
     daily, ll, lm, ll0 = [], 0., 0., 0.
     vr = list(vectors.values())
     for day in sorted({r.race.race_date for r in vr}):
         past = [r for r in vr if r.race.race_date < day]; now = [r for r in vr if r.race.race_date == day]
         row = {"date": day, "training_races": len(past), "n_races": len(now)}
         if past:
-            tuned = select_lambda(past, grid=grid); trained = MultiChoices(past)
-            coef, _ = trained.fit(tuned["selected_lambda"])
+            tuned = select_lambda(past, grid=grid, mode=mode); trained = MultiChoices(past)
+            coef, _ = trained.fit(tuned["selected_lambda"], beta_fixed=beta_constraint(trained, mode))
             scored = joint_score(now, coef, trained.base.fit("M"))
             row.update(status="NESTED_PAST_DATES_ONLY", tuning=tuned, evaluation=scored,
                        coefficients={k: float(v) for k, v in zip(names, coef)})
@@ -328,9 +374,9 @@ def joint_analysis(races, arrays, *, indices=INDICES, bootstrap_reps=1000, seed=
             row["status"] = "NO_PRIOR_TRAINING_NOT_SCORED"
         daily.append(row)
     result["walk_forward"] = {"daily": daily, "cumulative_delta_rho2": (lm - ll) / ll0 if ll0 else None,
-                              "cumulative_LL0": ll0, "cumulative_LL": ll, "cumulative_M_LL": lm}
+                              "cumulative_LL0": ll0, "cumulative_LL": ll, "cumulative_M_LL": lm,
+                              "cumulative_rho2": 1 - ll / ll0 if ll0 else None}
     return result
-
 
 def odds_sensitivity(races, final_races, rows, primary):
     by_race = {r["race_id"]: float(r["minutes_to_post"]) for r in rows
@@ -480,72 +526,116 @@ def reconcile_phase0_markdown(text):
     return "\n".join(out) + "\n"
 
 
+def quality_axes(single):
+    rows = []
+    for index in INDICES:
+        r = single["indices"][index]; audit = r["audit"]; n = audit["n_runners"]
+        measurement = r["measurement"]; hold = measurement.get("chronological", {}).get("evaluation")
+        rows.append({"index": index, "n_runners": n, "missing": audit["counts"]["missing"],
+            "exact_50_rate": audit["counts"]["exact_50"] / n if n else None,
+            "default_or_fallback_rate": audit["default_or_fallback_rate"],
+            "fallback_DCR_rate": audit["counts"]["fallback_or_DCR_rule"] / n if n else None,
+            "UNVALIDATED_rate": audit["counts"]["UNVALIDATED"] / n if n else None,
+            "standalone_rho2_full": measurement.get("full_in_sample", {}).get("models", {}).get("F", {}).get("rho2"),
+            "standalone_rho2_holdout": hold["models"]["F"]["rho2"] if hold else None,
+            "market_derived_control": index == "VMI",
+            "component_feature_counts": audit.get("component_feature_counts", {}) if index == "VMI" else {}})
+    return {"status": "MARKET_INCREMENT_NOT_DISTINGUISHABLE_NO_RANKING", "rows": rows,
+            "standalone_definition": "No explicit ln(m) covariate; NOT evidence of independence from market. VMI is a market-derived control.",
+            "production_change": False}
+
+
+def reuse_single_index(path, inputs, races, audits, start, end, asof, bootstrap_reps, shuffle_reps, seed):
+    path = Path(path).resolve()
+    if not path.is_relative_to(inputs.root):
+        raise ValueError("CACHE_MUST_BE_WITHIN_INPUT_REPOSITORY")
+    old = inputs.read(path)
+    if old["period"] != {"from": start.isoformat(), "to": end.isoformat(), "asof": asof.isoformat(), "timezone": "Asia/Tokyo"}:
+        raise ValueError("CACHE_PERIOD_MISMATCH")
+    conf = old["configuration"]
+    if (conf["bootstrap_reps"], conf["shuffle_reps"], conf["seed"]) != (bootstrap_reps, shuffle_reps, seed):
+        raise ValueError("CACHE_RESAMPLING_MISMATCH")
+    actual_ids = [r.race_id for r in sorted(races, key=lambda r: (b.timestamp(r.post_at), r.race_id))]
+    if old["cohort"]["race_ids"] != actual_ids:
+        raise ValueError("CACHE_COHORT_MISMATCH")
+    for name, expected in old["input_files_sha256"].items():
+        source = (inputs.root / name).resolve()
+        if not source.is_relative_to(inputs.root) or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+            raise ValueError("CACHE_INPUT_SHA_MISMATCH:" + name)
+    single = copy.deepcopy(old["single_index"])
+    for index in INDICES:
+        single["indices"][index]["audit"] = audits[index]
+    single["multiple_testing"]["shuffle_repetitions"] = shuffle_reps
+    single["reuse_provenance"] = {"path": path.relative_to(inputs.root).as_posix(),
+        "sha256": inputs.manifest[path.relative_to(inputs.root).as_posix()],
+        "input_SHA_verified": True, "unchanged_MFC_contract": True}
+    return label_multiple_testing(single), old
+
+
 def render_markdown(s):
-    lines = ["# 指数別の市場上積み診断・Phase 0.5", "",
-        "SPEC / CODE: 実装済。CIはPRのRun証拠で確認。DEPLOYED / LIVE: 未実施。", "",
-        f"{s['period']['from']}〜{s['period']['to']}、asof {s['period']['asof']}。{s['cohort']['n_races']}R・{s['cohort']['n_runners']}頭。",
-        "既存の指数・重み・Policy・券面に変更なし。500R到達後に同じ設計で再検証する。", "",
-        REFERENCE_RESOLUTION, "", "## 指数別・後半評価", "",
-        "補完率は『50.0ちょうど又は明示fallback/DCR規則』の和集合。50.0だけで補完と断定しない。25%以上は参考表示（分析上の注記）。", "",
-        "| 指数 | 補完等率 | 欠損頭 | 50頭 | fallback/DCR頭 | UNVALIDATED頭 | 単独ρ² | Δρ² | 95%区間 | shuffle95%点 | Holm p | 判定 | WF累積 |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|---:|"]
-    for k in INDICES:
-        r = s["single_index"]["indices"][k]; a = r["audit"]; m = r["measurement"]
-        if "chronological" not in m:
-            lines.append(f"| {k} | — | {a['counts']['missing']} | — | — | — | — | — | — | — | — | 未評価 | — |")
+    lines = ["# Phase 0.6 — 指数診断の設計修正", "",
+        "SPEC / CODE: 実装済。CIはPR Runで検収。DEPLOYED / LIVE: 未実施。", "",
+        f"{s['period']['from']}〜{s['period']['to']} / asof {s['period']['asof']}。{s['cohort']['n_races']}R・{s['cohort']['n_runners']}頭。",
+        "本番の指数・重み・買い目に変更なし。市場上積みでBase13の優先順位を付けない。", "",
+        "## 旧設計の訂正", "",
+        "旧Phase0.5の後半Δρ²=-0.0889239663、WF=-0.0534915444、β=0.374985839は、市場βまで正則化した設計欠陥による値。指数の効果として解釈しない。元asofは変更せず履歴として保持。", "",
+        "## 修正L2の後半評価とWF", "",
+        "| 方式 | λ | 後半Δρ² | 95%区間 | WF累積Δρ² | β |",
+        "|---|---:|---:|---|---:|---:|"]
+    for key, label in [("joint_L2", "指数のみL2・β罰則なし"), ("joint_L2_offset", "M推定βをオフセット")]:
+        j = s[key]
+        if "chronological" not in j:
             continue
-        e = m["chronological"]["evaluation"]; interval = m["bootstrap"]["conditional_holdout"]["ci95"]
-        note = "参考/" if a["reference_only_high_default_rate"] else ""
-        label = "Holm通過・研究候補" if r["holm_reject"] else "候補止まり" if r["unadjusted_signal"] else "上積み未確認"
-        lines.append(f"| {k} | {a['default_or_fallback_rate']:.1%} | {a['counts']['missing']} | {a['counts']['exact_50']} | {a['counts']['fallback_or_DCR_rule']} | {a['counts']['UNVALIDATED']} | {e['models']['F']['rho2']:.6f} | {e['delta_rho2']:.6f} | [{interval[0]:.6f}, {interval[1]:.6f}] | {m['decision']['shuffle_p95']:.6f} | {r['holm_adjusted_p']:.6f} | {note}{label} | {m['walk_forward']['cumulative_delta_rho2']:.6f} |")
-    mt = s["single_index"]["multiple_testing"]
-    lines += ["", f"Holmの分解能：最小p={mt['minimum_shuffle_p']:.6f}、最初の閾値={mt['first_holm_threshold']:.6f}。200対照ではHolm有意判定に届かない。対照数を増やす案は提案に留め、今回の200回は維持。", "",
-              "## 同時L2モデル", ""]
-    joint = s["joint_L2"]
-    if "chronological" in joint:
-        e = joint["chronological"]
-        lines += [f"後半Δρ²={e['delta_rho2']:.8f}、λ={joint['tuning']['selected_lambda']}。λは学習期間内の開催日WFで選び、日次WFも各日より前だけで選び直す。",
-                  f"累積WF Δρ²={joint['walk_forward']['cumulative_delta_rho2']:.8f}。L2は13係数と市場βを含む全14係数へ適用。", "",
-                  "| 指数 | 現行ZAI直接重み | L2係数（レース内1SD） | bootstrap符号変化率 |", "|---|---:|---:|---:|"]
-        weights = s["current_weights"].get("weights") or {}
-        for k in list(INDICES) + ["ln_m"]:
-            c = joint["coefficients"][k]
-            w = weights.get(k, "対象外")
-            lines.append(f"| {k} | {w} | {c['coefficient']:.6f} | {c['sign_flip_fraction']:.1%} |")
-        lines += ["", "現行重みは元指数の1点あたり、L2はレース内1SDあたり。尺度が異なり、そのまま置換できない。BVI/VMIは現行ZAI_WINの直接式に入らない。",
-                  "符号変化率は学習側bootstrap 1000回で、学習内で選んだλを固定した条件付き診断。正則化選択自体の不確実性を含む採用保証ではない。", ""]
-    timing = s["odds_sensitivity"]
-    lines += ["## オッズ観測時点", "", f"発走前分数（Frozen予定発走基準）：{timing['minutes_to_post']}。", "",
-              "| 帯（分） | 全R | 帯内再推定Mρ²（学習内） | 後半R | 固定学習Mρ² | 固定学習ZAI Δρ² |", "|---|---:|---:|---:|---:|---:|"]
-    for r in timing["bands"]:
-        e = r.get("fixed_global_training_holdout")
-        lines.append(f"| {r['minutes_band']} | {r['n_races']} | {r.get('full_band_refitted_M_rho2','—')} | {r['holdout_races']} | {e['models']['M']['rho2'] if e else '—'} | {e['delta_rho2'] if e else '—'} |")
-    lines += ["", f"明示的な確定オッズ：{timing['secondary_final_odds']['n_available_final_odds_races']}R。主系列との時点差の影響は、対応する複数時点がなく未確定。帯別差にはRace構成の差も混在する。",
-              "既存JRA公式サイトが最終オッズを公開している。現行保存入力には確定として分類・結合された系列がない。新Providerは必須ではなく、既存取得元への取得/Reader結合追加がSPECとして必要。今回は取得を実装しない。", "",
-              "## データ到達見通し", "", "| 日付 | 管理R | FINAL | 適格R | FINAL除外理由 | FINALなしの元Status |", "|---|---:|---:|---:|---|---|"]
-    arr = s["arrival"]
-    for r in arr["daily"]:
-        lines.append(f"| {r['date']} | {r['managed_status_races']} | {r['FINAL_files']} | {r['eligible_races']} | {r['FINAL_exclusion_reasons']} | {r['no_FINAL_original_status_counts']} |")
-    lines += ["", f"実績平均：{arr['mean_eligible_races_per_raceday']:.3f}R/開催日。1開催日は全場をまとめた同一日。", "",
-              "| シナリオ（将来のみ） | R/日 | 目標 | 追加開催日 | 推計到達日 | 短縮開催日 | 短縮暦日 |", "|---|---:|---:|---:|---|---:|---:|"]
-    for name, r in arr["scenarios"].items():
-        for e in r["estimates"]:
-            lines.append(f"| {name} | {r['races_per_raceday']:.3f} | {e['target']} | {e['additional_racedays']} | {e['estimated_date']} | {e['racedays_saved_vs_baseline']} | {e['calendar_days_saved_vs_baseline']} |")
-    lines += ["", "公式公表日割に同じ平均ペースを当てた条件付き見積もり。過去の署名なしRaceを事前成功へ復元する計画ではなく、正規NO-BETや障害Scopeを解除する案でもない。", ""]
-    lines += ["- " + x for x in arr["top3_actions_proposal_only"]]
-    lines += ["", "## バックフィルSPEC", "", "**条件付き可**：発走前Raw・観測オッズ・当時のCorpus/Rule/Codeが完全に残る場合、別REPLAY母数として実行可能。現在のページや後年Corpusから欠落した当時情報は復元できない。正式178Rや真正OOSへ加算しない。",
-              "在庫・時点証明1〜2人日、完全入力がある場合のAdapter2〜4人日、レビュー・回帰1〜2人日、合計4〜8人日の工数見積もり。未実装。", "",
-              "## Base13優先順位案（提案のみ）", ""]
-    for p in s["priority_proposal"]:
-        lines.append(f"- {p['rank']}: {p['index']} — 後半Δρ²={p['delta_rho2']:.6f}、WF={p['walk_forward_delta']:.6f}、補完等率={p['default_rate']:.1%}。{p['proposal']}")
-    lines += ["", "未知未来500Rで再検証するまで採用しない。係数・閾値・KRS Physics・Capitalは変更しない。", "", "## 未確定仕様と解釈", ""]
+        ci = j["bootstrap"]["conditional_holdout"]["ci95"]
+        lines.append(f"| {label} | {j['tuning']['selected_lambda']} | {j['chronological']['delta_rho2']:.8f} | [{ci[0]:.8f}, {ci[1]:.8f}] | {j['walk_forward']['cumulative_delta_rho2']:.8f} | {j['coefficients']['ln_m']['coefficient']:.8f} |")
+    lines += ["", "λは各外側学習区間内の開催日WFのみで選択。オフセットβも内側学習区間ごとにMから推定し、内側評価日や外側後半を使用しない。", "",
+              "| λ | β罰則なしΔρ² | オフセットΔρ² |", "|---|---:|---:|"]
+    free = s["joint_L2"].get("lambda_sensitivity", []); offset = s["joint_L2_offset"].get("lambda_sensitivity", [])
+    for a, c in zip(free, offset):
+        lines.append(f"| {a['lambda']} | {a['evaluation']['delta_rho2']:.9f} | {c['evaluation']['delta_rho2']:.9f} |")
+    lines += ["", "この後半曲線は感度表示のみ。λ選択には使わない。λ→∞で指数係数が0へ向かい、両方式ともMへ一致することを試験する。", "",
+              "## 係数と符号変化率", "",
+              "| 指数 | 現行重み | β罰則なし係数 | 符号変化率 | オフセット係数 | 符号変化率 |",
+              "|---|---:|---:|---:|---:|---:|"]
+    for index in list(INDICES) + ["ln_m"]:
+        if "coefficients" not in s["joint_L2"]:
+            continue
+        a = s["joint_L2"]["coefficients"][index]; c = s["joint_L2_offset"]["coefficients"][index]
+        weight = (s["current_weights"].get("weights") or {}).get(index, "—")
+        lines.append(f"| {index} | {weight} | {a['coefficient']:.8f} | {a['sign_flip_fraction']:.1%} | {c['coefficient']:.8f} | {c['sign_flip_fraction']:.1%} |")
+    lines += ["", "係数はレース内1SDあたり。現行重みと尺度が異なる。符号変化率は学習内選択済みλを固定した1000回bootstrap。", "",
+              "## 指数別検定", "",
+              "200回シャッフルは記述対照として維持。Holmはbootstrap pへ変更せず、13検定に分解能が足りないことを判定欄へ明示する。", "",
+              "| 指数 | 後半Δρ² | 95%区間 | shuffle95%点 | Holm判定 | WF累積 |",
+              "|---|---:|---|---:|---|---:|"]
+    for index in INDICES:
+        r = s["single_index"]["indices"][index]; m = r["measurement"]
+        if "chronological" not in m:
+            continue
+        ci = m["bootstrap"]["conditional_holdout"]["ci95"]
+        label = "200対照では分解能不足" if r["holm_decision"] == "RESOLUTION_INSUFFICIENT" else str(r["holm_reject"])
+        lines.append(f"| {index} | {m['decision']['delta_rho2']:.8f} | [{ci[0]:.8f}, {ci[1]:.8f}] | {m['decision']['shuffle_p95']:.8f} | {label} | {m['walk_forward']['cumulative_delta_rho2']:.8f} |")
+    lines += ["", "最小p=1/201、Holm初期閾値=.05/13。分解能不足を有意差なしの証明としない。今回の補正前の正の上積みも未確認。", "",
+              "## Base13の2軸表（順位なし）", "",
+              "単独ρ²はln mを明示的に入れないモデルの予測力であり、市場との独立性を示す値ではない。50.0単独では補完と断定せず、fallback/DCRとUNVALIDATEDを分離。", "",
+              "| 指数 | 補完等率 | fallback/DCR率 | UNVALIDATED率 | 単独ρ²（全期間） | 単独ρ²（後半） | 市場由来対照 |",
+              "|---|---:|---:|---:|---:|---:|---|"]
+    for r in s["base13_quality_predictive_axes"]["rows"]:
+        lines.append(f"| {r['index']} | {r['default_or_fallback_rate']:.1%} | {r['fallback_DCR_rate']:.1%} | {r['UNVALIDATED_rate']:.1%} | {r['standalone_rho2_full']} | {r['standalone_rho2_holdout']} | {'VMI: 市場の言い換え対照' if r['market_derived_control'] else '—'} |")
+    vmi = s["VMI_market_control"]
+    lines += ["", "実際に消費されたVMI成分件数：" + b.canonical(vmi["observed_component_features"]) + "。",
+              "登録Manifestにはexpert_support等もあるが、現在のVMI消費と将来の別データ構成を混同しない。", "",
+              "## ZAI_WINの合成効率", "",
+              "| モデル（市場変数ln mなし） | 後半単独ρ² |", "|---|---:|"]
+    for name, value in s["composition_efficiency"]["holdout_rho2"].items():
+        lines.append(f"| {name} | {value} |")
+    lines += ["", "F-joint13はVMIを含むため市場由来情報を含む。VMIを除いたF-joint12を補助として併記。単独予測力の改善と市場上積みは別で、新係数・重みは実装しない。", "",
+              "## 運用・未確定事項", "",
+              "確定オッズは別PRのコード/fixture試験まで。外部取得Workflow、11/7〜11/8の手動更新例は実行していない。200R超でΔρ²区間下限・WF累積・β安定性を確認し、500R前に採用判断しない。", ""]
     lines += ["- " + x for x in s["method_notes"]]
-    lines += ["", "## 正規情報源", ""]
-    lines += ["- " + u for u in arr["calendar_sources"] + [timing["final_odds_source_research"]["official_documentation"], timing["final_odds_source_research"]["alternative_requires_owner_license_review"]]]
     return "\n".join(lines) + "\n"
 
-
-def run(root, start, end, asof, out, *, bootstrap_reps=1000, shuffle_reps=200, seed=b.SEED):
+def run(root, start, end, asof, out, *, bootstrap_reps=1000, shuffle_reps=200, seed=b.SEED, reuse_single=None):
     root, out = Path(root).resolve(), Path(out).resolve()
     if out.exists():
         raise FileExistsError("OUTPUT_MUST_BE_NEW_DIRECTORY")
@@ -558,10 +648,17 @@ def run(root, start, end, asof, out, *, bootstrap_reps=1000, shuffle_reps=200, s
     if not races:
         raise ValueError("NO_ELIGIBLE_PHASE0_COHORT")
     arrays, audits, ledger = load_indices(root, races, rows, inputs)
-    single = per_index(races, arrays, audits, bootstrap_reps=bootstrap_reps, shuffle_reps=shuffle_reps, seed=seed)
-    joint = joint_analysis(races, arrays, bootstrap_reps=bootstrap_reps, seed=seed)
-    # Phase 0 functions and file bytes are untouched. Its own report is created
-    # in an owned staging directory and published together with Phase 0.5.
+    previous = None
+    if reuse_single is not None:
+        single, previous = reuse_single_index(reuse_single, inputs, races, audits, start, end, asof, bootstrap_reps, shuffle_reps, seed)
+    else:
+        single = per_index(races, arrays, audits, bootstrap_reps=bootstrap_reps, shuffle_reps=shuffle_reps, seed=seed)
+    joint = joint_analysis(races, arrays, bootstrap_reps=bootstrap_reps, seed=seed, mode="free")
+    offset = joint_analysis(races, arrays, bootstrap_reps=bootstrap_reps, seed=seed, mode="offset")
+    features = joint_analysis(races, arrays, bootstrap_reps=bootstrap_reps, seed=seed, mode="features_only")
+    no_vmi_indices = tuple(k for k in INDICES if k != "VMI")
+    no_vmi = {k: np.delete(v, INDICES.index("VMI"), axis=1) for k, v in arrays.items()}
+    features_no_vmi = joint_analysis(races, no_vmi, indices=no_vmi_indices, bootstrap_reps=bootstrap_reps, seed=seed, mode="features_only")
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".benter-index-", dir=out.parent) as temp:
         staged = Path(temp) / "new-asof"
@@ -570,60 +667,77 @@ def run(root, start, end, asof, out, *, bootstrap_reps=1000, shuffle_reps=200, s
         timing = odds_sensitivity(races, series["final_odds"], rows, phase0["series"]["pre_signature"])
         arrival = arrival_forecast(races, audit, root, inputs, asof=asof)
         weights = weights_from_source(root, inputs)
-        priority = []
-        ranked = sorted(INDICES, key=lambda k: (-single["indices"][k]["measurement"].get("decision", {}).get("delta_rho2", -math.inf), k))
-        for i, k in enumerate(ranked, 1):
-            r = single["indices"][k]; m = r["measurement"]
-            if "chronological" not in m:
-                continue
-            priority.append({"rank": i, "index": k, "delta_rho2": m["decision"]["delta_rho2"],
-                "walk_forward_delta": m["walk_forward"]["cumulative_delta_rho2"], "default_rate": r["audit"]["default_or_fallback_rate"],
-                "proposal": "適格Evidenceの保持・時点とConsumer接続を先に点検し、500Rで同じ設計を再試験。重み採用はしない。"})
-        summary = {"schema": "BENTER_INDEX_DIAGNOSTICS_OFFLINE_V1", "classification": "OFFLINE_RESEARCH_NOT_PRODUCTION",
+        mapping_path = root / "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"
+        mapping = inputs.read(mapping_path) if mapping_path.exists() else {}
+        declared_vmi = {k: v["VMI"] for k, v in mapping.get("index_profiles", {}).items() if isinstance(v, dict) and "VMI" in v}
+        legacy_path = root / "runtime/reports/benter_second_stage/2026-11-03-phase05/index_diagnostics.json"
+        legacy = previous if previous is not None else inputs.read(legacy_path) if legacy_path.exists() else None
+        legacy_joint = legacy["joint_L2"] if legacy else None
+        legacy_defect = {"status": "DESIGN_DEFECT_MARKET_BETA_PENALIZED_NOT_INDEX_EFFECT",
+            "historical_period": "2026-10-11/2026-11-01",
+            "source_path": legacy_path.relative_to(root).as_posix() if legacy_path.exists() else None,
+            "old_holdout_delta_rho2": legacy_joint["chronological"]["delta_rho2"] if legacy_joint else -.08892396626557722,
+            "old_WF_delta_rho2": legacy_joint["walk_forward"]["cumulative_delta_rho2"] if legacy_joint else -.053491544425462584,
+            "old_beta": legacy_joint["coefficients"]["ln_m"]["coefficient"] if legacy_joint else .37498583861061147}
+        p0 = phase0["series"]["pre_signature"]
+        composition = {"interpretation": "No explicit market covariate is NOT statistical independence from market",
+            "holdout_rho2": {
+                "ZAI_WIN": p0.get("chronological", {}).get("evaluation", {}).get("models", {}).get("F", {}).get("rho2"),
+                "JTI": single["indices"]["JTI"]["measurement"].get("chronological", {}).get("evaluation", {}).get("models", {}).get("F", {}).get("rho2"),
+                "KGI": single["indices"]["KGI"]["measurement"].get("chronological", {}).get("evaluation", {}).get("models", {}).get("F", {}).get("rho2"),
+                "F_joint13_includes_market_derived_VMI": features.get("chronological", {}).get("rho2"),
+                "F_joint12_excludes_VMI": features_no_vmi.get("chronological", {}).get("rho2")},
+            "weight_change_implemented": False}
+        summary = {"schema": "BENTER_INDEX_DIAGNOSTICS_OFFLINE_V2_PHASE06", "classification": "OFFLINE_RESEARCH_NOT_PRODUCTION",
             "period": phase0["period"], "cohort": {"n_races": len(races), "n_runners": sum(len(r.ids) for r in races),
                 "race_ids": [r.race_id for r in sorted(races, key=lambda r: (b.timestamp(r.post_at), r.race_id))],
                 "same_phase0_rules": True, "phase0_input_file_count": len(phase0["input_files_sha256"])},
             "configuration": {"indices": list(INDICES), "bootstrap_reps": bootstrap_reps, "shuffle_reps": shuffle_reps,
                 "seed": seed, "high_default_reference_annotation_threshold": REFERENCE_RATE,
-                "primary_KPI": "CHRONOLOGICAL_OUT_OF_SAMPLE_INCREMENT", "lambda_grid": list(LAMBDA_GRID)},
-            "single_index": single, "joint_L2": joint, "odds_sensitivity": timing, "arrival": arrival,
-            "current_weights": weights, "priority_proposal": priority,
+                "primary_KPI": "CHRONOLOGICAL_OUT_OF_SAMPLE_INCREMENT", "lambda_grid": list(LAMBDA_GRID),
+                "market_beta_penalized": False},
+            "single_index": single, "joint_L2": joint, "joint_L2_offset": offset,
+            "F_joint": features, "F_joint_without_VMI": features_no_vmi,
+            "legacy_design_defect": legacy_defect, "composition_efficiency": composition,
+            "base13_quality_predictive_axes": quality_axes(single),
+            "VMI_market_control": {"role": "MARKET_REPHRASING_CONTROL",
+                "observed_component_features": audits["VMI"].get("component_feature_counts", {}),
+                "declared_manifest_profiles": declared_vmi,
+                "evidence_path": "final_prediction_package.index_provenance_replay.runners[*].base_index_trace.VMI.components",
+                "not_an_independent_non_market_signal": True},
+            "odds_sensitivity": timing, "arrival": arrival, "current_weights": weights,
+            "priority_proposal": {"status": "MARKET_INCREMENT_NOT_DISTINGUISHABLE", "ranking": None,
+                                  "replacement": "DATA_QUALITY_X_STANDALONE_RHO2", "production_change": False},
             "reference_resolution": {"status": "CLOSED_BY_OWNER_EXPLANATION", "explanation": REFERENCE_RESOLUTION,
                 "independent_Claude_code_reexecution": False, "old_phase0_asof_unchanged": True},
             "software": {"numpy": np.__version__, "scipy": b.scipy.__version__,
-                "phase05_code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                "phase0_code_sha256": hashlib.sha256(Path(b.__file__).read_bytes()).hexdigest()},
+                "phase06_code_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                "phase0_code_sha256": hashlib.sha256(Path(getattr(b, "CALCULATOR_SOURCE", b.__file__)).read_bytes()).hexdigest()},
             "input_files_sha256": dict(sorted(inputs.manifest.items())),
             "phase0_summary_sha256": hashlib.sha256((staged / "summary.json").read_bytes()).hexdigest(),
             "method_notes": [
-                "50.0ちょうどは既定値候補の指標であり、単独では補完と断定しない。fallback/DCRとUNVALIDATEDは別列・和集合を明示。UNVALIDATEDは欠損や無許可の断定ではない。",
-                "真の欠損は新たに補完せず、その指数又は同時モデルからRace全体を除外。同じ178Rを基準に減少があれば明記。",
-                "補完等率25%以上の参考注記は今回の表示上の分析基準。Productionの閾値・数値規則ではない。",
-                "単独ρ²・Δρ²・bootstrap・shuffleは#362と同じ発走順前後半。日付WFと日付ブロックCVは別の診断。",
-                "Holm pは(1+shuffle>=観測の回数)/(B+1)。200回・13検定では分解能不足。Holm非有意を情報なしの証明と解釈しない。",
-                "L2候補λは事前固定。選択は外側学習データ内の過去開催日→次開催日のみ。全14係数（市場βも含む）を正則化し、未来の開催日は選択に使わない。",
-                "同時モデルのbootstrapは学習内選択済みλを固定。符号変化率は条件付き診断であり、係数の因果効果・新Production重みではない。",
-                "市場を含む相関した指数の係数と現行の元スコア重みは尺度・目的が異なる。係数の大小をそのまま採用しない。",
-                "オッズ時点帯はRace構成と交絡。確定オッズ又は同一Raceの複数時点がなく、時点に対するKPIの不変性は未証明。",
-                "既存signed/Frozen SOURCE・FINAL・RESULTは読取のみ。暗号署名の再検証、真正Forward OOS、実購入PFSを成立させる処理ではない。",
-                "Phase0 summary.jsonは変更しない。Owner説明による未再現注記訂正は新asofのsummary.mdとreference_resolutionに記録し、過去asofは保存する。",
+                "50.0単独で補完と断定しない。fallback/DCRとUNVALIDATEDは別集計。値欠損0は原典実測100%ではない。",
+                "指数別のM/F/C、1000回bootstrap、200対照の分布は#362と同じ。検定法は変えずHolm判定の分解能不足を明示する方式を選択。",
+                "市場βの罰則は0。オフセット版のβは各内側/外側/再標本化学習区間だけでMから推定。λ候補は100、1000を追加し、後半曲線でλを選ばない。",
+                "F-jointはβ=0で13指数のL2のみ。VMIを含むため市場由来情報を含む。VMI除外12指数版は補助診断。",
+                "単独ρ²は市場との独立性を証明しない。点推定で改修優先順位を付けず、データ品質と単独予測力の2軸を示す。",
+                "符号変化率は選択済みλ固定のbootstrapで、モデル選択の不確実性を全部含む区間ではない。",
+                "旧-0.0889等は市場βまで縮約した設計欠陥による値として保持し、指数の効果と解釈しない。旧asof・Frozen原本は上書きしない。",
+                "オッズ時点効果と確定オッズ比較は未確定。新しい外部取得、本番Workflow、将来更新例は実行しない。",
+                "手設定重み・Policy・Base13/Derived7・AKI・MEC・Capital・買い目は変更しない。真正Forward OOSや実購入PFSは成立させない。",
             ]}
-        # Independent read-back protects every input, including newly read Status
-        # and formula text, before any completed output directory is published.
         changed = [p for p, h in inputs.manifest.items() if hashlib.sha256((root / p).read_bytes()).hexdigest() != h]
         if changed:
             raise ValueError("INPUT_SHA_CHANGED_DURING_ANALYSIS:" + ",".join(changed))
-        (staged / "index_diagnostics.json").write_text(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        (staged / "index_diagnostics.json").write_text(json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
         (staged / "index_diagnostics.md").write_text(render_markdown(summary), encoding="utf-8")
         phase0_md = staged / "summary.md"
         phase0_md.write_text(reconcile_phase0_markdown(phase0_md.read_text()), encoding="utf-8")
         with (staged / "index_ledger.csv").open("w", encoding="utf-8", newline="") as handle:
-            fields = list(ledger[0])
-            writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
+            writer = csv.DictWriter(handle, fieldnames=list(ledger[0]), lineterminator="\n")
             writer.writeheader(); writer.writerows(ledger)
         staged.rename(out)
     return summary
-
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
@@ -635,8 +749,9 @@ def main(argv=None):
     p.add_argument("--bootstrap-reps", type=int, default=1000)
     p.add_argument("--shuffle-reps", type=int, default=200)
     p.add_argument("--seed", type=int, default=b.SEED)
+    p.add_argument("--reuse-single", type=Path, help="Reuse only SHA-verified unchanged per-index statistics")
     a = p.parse_args(argv)
-    s = run(a.root, a.start, a.end, a.asof, a.out, bootstrap_reps=a.bootstrap_reps, shuffle_reps=a.shuffle_reps, seed=a.seed)
+    s = run(a.root, a.start, a.end, a.asof, a.out, bootstrap_reps=a.bootstrap_reps, shuffle_reps=a.shuffle_reps, seed=a.seed, reuse_single=a.reuse_single)
     print(b.canonical({"n_races": s["cohort"]["n_races"], "n_runners": s["cohort"]["n_runners"],
         "joint_holdout_delta_rho2": s["joint_L2"].get("chronological", {}).get("delta_rho2"), "output": str(a.out)}))
 

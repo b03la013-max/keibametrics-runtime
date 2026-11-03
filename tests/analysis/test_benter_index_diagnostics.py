@@ -175,3 +175,69 @@ def test_production_import_isolation():
             assert not (node.module or '').startswith('jra_')
         if isinstance(node, __import__('ast').Import):
             assert not any(n.name.startswith('jra_') for n in node.names)
+
+
+def test_market_beta_has_zero_penalty_when_indices_are_zero():
+    races, arrays = synthetic(120)
+    vr = [d.VectorRace(r, np.zeros((len(r.ids), 13))) for r in races]
+    c = d.MultiChoices(vr)
+    market = c.base.fit("M")
+    for strength in [.0001, 1., 1000., 1e10]:
+        theta, receipt = c.fit(strength)
+        assert receipt["market_beta_penalized"] is False
+        assert np.allclose(theta[:-1], 0, atol=1e-10)
+        assert theta[-1] == pytest.approx(market["beta"], abs=1e-5)
+
+
+def test_infinite_lambda_free_beta_and_offset_converge_to_market():
+    races, arrays = synthetic(160)
+    train, test = d.strict_split(races)
+    training = d.MultiChoices([d.VectorRace(r, d.standardize(arrays[r.race_id])) for r in train])
+    testing = d.MultiChoices([d.VectorRace(r, d.standardize(arrays[r.race_id])) for r in test])
+    market = training.base.fit("M")
+    _, market_p = testing.base.evaluate("M", market)
+    for fixed in [None, market["beta"]]:
+        theta, _ = training.fit(1e10, beta_fixed=fixed)
+        assert np.linalg.norm(theta[:-1]) < 1e-7
+        assert theta[-1] == pytest.approx(market["beta"], abs=1e-5)
+        assert np.allclose(testing.evaluate(theta)[1], market_p, atol=1e-6)
+        assert abs(d.joint_score([d.VectorRace(r, d.standardize(arrays[r.race_id])) for r in test],
+                                theta, market)["delta_rho2"]) < 1e-6
+
+
+def test_offset_lambda_uses_each_inner_training_market_not_outer_market():
+    races, arrays = synthetic(120, per_day=15)
+    vr = [d.VectorRace(r, d.standardize(arrays[r.race_id])) for r in races]
+    tuned = d.select_lambda(vr, grid=(.1, 100., 1000.), mode="offset")
+    for fold in tuned["inner_folds"]:
+        past = [r for r in vr if r.race.race_date < fold["validation_date"]]
+        expected = d.MultiChoices(past).base.fit("M")["beta"]
+        assert fold["inner_training_beta_offset"] == pytest.approx(expected)
+        assert max(fold["training_dates"]) < fold["validation_date"]
+
+
+def test_features_only_model_does_not_consume_market_covariate():
+    races, arrays = synthetic(100)
+    vr = [d.VectorRace(r, d.standardize(arrays[r.race_id])) for r in races]
+    original = d.MultiChoices(vr)
+    theta, _ = original.fit(.1, beta_fixed=0.)
+    changed = [d.VectorRace(b.replace(r.race, m=r.race.m[::-1].copy()), r.x) for r in vr]
+    other, _ = d.MultiChoices(changed).fit(.1, beta_fixed=0.)
+    assert theta[-1] == other[-1] == 0.
+    np.testing.assert_allclose(theta, other, atol=1e-8)
+
+
+def test_holm_resolution_is_a_label_not_a_false_negative_claim():
+    example = {"indices": {k: {"measurement": {"decision": {"Yes_No": "No"}},
+                               "shuffle_p_one_sided": .2} for k in d.INDICES},
+               "multiple_testing": {"shuffle_repetitions": 200}}
+    labeled = d.label_multiple_testing(example)
+    assert labeled["multiple_testing"]["decision_method"] == "RESOLUTION_LIMIT_LABEL_NOT_BOOTSTRAP_P"
+    assert all(r["holm_reject"] is None and r["holm_decision"] == "RESOLUTION_INSUFFICIENT"
+               for r in labeled["indices"].values())
+
+
+def test_vmi_market_components_are_retained_as_provenance():
+    cell = d.trace_audit(70, {"rule_id": "OBSERVED", "components": [
+        {"feature":"market_rank"}, {"feature":"market_stability"}, {"feature":"market_mismatch"}]})
+    assert cell["component_features"] == ["market_mismatch", "market_rank", "market_stability"]
