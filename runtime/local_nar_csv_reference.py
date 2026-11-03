@@ -43,6 +43,18 @@ SCHEMAS = {
 _HORSE_OUTCOMES = ("着順", "タイム", "着差", "上がり3F", "人気")
 _RACE_OUTCOMES = tuple(["上がり4F", "上がり3F"] + [f"ハロンタイム{i}" for i in range(1, 16)]
     + [f"コーナー通過順{i}" for i in range(1, 9)])
+# The offered original 2026-11 monthly ZIP uses ASCII 1 for these two
+# payback headings. Keep the documented field keys while accepting only the
+# exact observed variants; do not normalize arbitrary headers or reorder data.
+_OBSERVED_HEADER_ALIASES = {"payback": {27: "馬複人気1", 31: "馬単人気1"}}
+
+
+def _header_matches(header, schema, kind):
+    if len(header) != len(schema):
+        return False
+    aliases = _OBSERVED_HEADER_ALIASES.get(kind, {})
+    return all(actual == expected or aliases.get(i) == actual
+               for i, (actual, expected) in enumerate(zip(header, schema)))
 
 
 def _hash(raw):
@@ -126,7 +138,7 @@ def inspect_zip(raw, *, capture, race, encoding, header_mode, now=None):
             rows = list(csv.reader(io.StringIO(content.decode(encoding, errors="strict"), newline=""), strict=True))
             schema = SCHEMAS[kind]
             if header_mode == "present":
-                if not rows or tuple(rows.pop(0)) != schema:
+                if not rows or not _header_matches(rows.pop(0), schema, kind):
                     raise ValueError("NAR_CSV_DOCUMENTED_HEADER_MISMATCH")
             out = []
             for number, row in enumerate(rows, 2 if header_mode == "present" else 1):
