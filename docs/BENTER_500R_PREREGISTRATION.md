@@ -125,6 +125,9 @@ bootstrapはmaster+200とする。固定列順はHPI, SSI, CFI, RFI, JTI, CSI, T
 必要な改修は分析層だけのseries adapterであり、検証済みclosing captureから作った
 同一Race集合のmを渡し、元FINALの13値・traceをそのまま読む。
 Base13の事後再計算、SOURCE更新、古い署名の付替えはしない。
+publicリポジトリへRawを除いたcaptureを保存する場合、現行ReaderのRaw再検証を省略して
+検証済みと扱ってはならない。非公開Raw保管先からraw_sha256で解決し、同じRawを再解析する
+オフラインadapterも必要となる。非公開Rawが失われた場合はRaw未検証として主判定をHOLDする。
 WFの主bootstrap区間と再推定シャッフル、9,999回の実行証拠も現行の保存値とは別に必要である。
 これらが未実装・未検収のまま500R PASSとはしない。
 
