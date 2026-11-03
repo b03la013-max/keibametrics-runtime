@@ -66,12 +66,20 @@ class Tables(HTMLParser):
         self.text, self.tables, self.table, self.row, self.cell = [], [], None, None, None
         self.suppressed = 0
         self.nested = 0
+        self.headings, self.heading = [], None
+        self.link_depth = self.nav_depth = 0
 
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style"}:
             self.suppressed += 1
         if self.suppressed:
             return
+        if tag == "a":
+            self.link_depth += 1
+        if tag == "nav":
+            self.nav_depth += 1
+        if tag in {"h1", "h2", "h3", "h4", "caption", "title"}:
+            self.heading = []
         if tag == "table":
             if self.table is not None:
                 self.nested += 1
@@ -90,6 +98,13 @@ class Tables(HTMLParser):
             return
         if self.suppressed:
             return
+        if tag in {"h1", "h2", "h3", "h4", "caption", "title"} and self.heading is not None:
+            self.headings.append(norm("".join(self.heading)))
+            self.heading = None
+        if tag == "a":
+            self.link_depth = max(0, self.link_depth - 1)
+        if tag == "nav":
+            self.nav_depth = max(0, self.nav_depth - 1)
         if tag in {"td", "th"} and self.cell is not None:
             self.row.append(norm("".join(self.cell)))
             self.cell = None
@@ -108,6 +123,8 @@ class Tables(HTMLParser):
     def handle_data(self, data):
         if not self.suppressed:
             self.text.append(data)
+            if self.heading is not None and not self.link_depth and not self.nav_depth:
+                self.heading.append(data)
             if self.cell is not None:
                 self.cell.append(data)
 
@@ -129,7 +146,8 @@ def parse_closing_html(html, race_id, *, expected_active=None, expected_nonstart
     actual = {(int(y), int(m), int(d), v, int(r)) for y, m, d, v, r in headers}
     if actual != {expected_header}:
         raise ValueError("CLOSING_RACE_HEADER_AMBIGUOUS_OR_MISMATCH")
-    marker = re.search(r"(?:最終|確定)(?:単勝)?オッズ|レース結果|競走成績", text)
+    # Menu links to a final/result page are not evidence that this table is final.
+    marker = re.search(r"(?:最終|確定)(?:単勝)?オッズ|レース結果|競走成績", " ".join(parser.headings))
     if marker is None:
         raise ValueError("CLOSING_STATUS_NOT_EXPLICIT")
     candidates = []

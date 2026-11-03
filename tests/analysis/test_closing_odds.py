@@ -59,6 +59,8 @@ def test_popularity_alone_and_payout_are_never_a_price_source():
         capture(FIXTURE.read_text().replace("単勝オッズ</th>", "単勝人気</th>"))
     with pytest.raises(ValueError, match="STATUS_NOT_EXPLICIT"):
         capture(FIXTURE.read_text().replace("レース結果・確定単勝オッズ", "出馬表"))
+    with pytest.raises(ValueError, match="STATUS_NOT_EXPLICIT"):
+        capture(FIXTURE.read_text().replace("レース結果・確定単勝オッズ", "<a href='/results'>レース結果・最終オッズ</a>"))
     value = capture(FIXTURE.read_text().replace("<th>人気</th>", "<th>別項目</th>"))
     assert value["parsed"]["popularity_missing"] == 4
     assert all(r["popularity_rank"] is None for r in value["parsed"]["runners"])
