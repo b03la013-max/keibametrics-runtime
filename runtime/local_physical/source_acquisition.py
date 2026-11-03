@@ -44,6 +44,9 @@ DEFAULT_ALLOWED_HOSTS = [
     "*.kawasaki-keiba.jp",
     "f-keiba.com",
     "*.f-keiba.com",
+    # Host scope only; robots/provider rights/admission are still independent gates.
+    "nankankeiba.com",
+    "*.nankankeiba.com",
     "sonoda-himeji.jp",
     "*.sonoda-himeji.jp",
     "nagoyakeiba.com",
