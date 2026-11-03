@@ -37,6 +37,20 @@ def select_action(html, *, prefix, path=None):
     return selected[0]
 
 
+def result_day_action(html, meeting_key, date8):
+    """Select an actual current/archive link; never manufacture its checksum.
+
+    The official results menu uses srl10 for recent archived results and srl00
+    in older saved fixtures. Both must match the exact saved meeting and date.
+    """
+    pattern = re.compile(r"pw01srl(?:00|10)" + re.escape(meeting_key + date8) + r"/[0-9A-Fa-f]{2}")
+    selected = [(path, token) for path, token in actions(html)
+                if path == "/JRADB/accessS.html" and pattern.fullmatch(token)]
+    if len(selected) != 1:
+        raise ValueError("OFFICIAL_RESULT_DAY_NAVIGATION_NOT_UNIQUE")
+    return selected[0]
+
+
 def closing_action(html, meeting_key, date8, race_no):
     prefix = "pw151ouS3" + meeting_key + f"{race_no:02d}" + date8 + "Z/"
     action = select_action(html, prefix=prefix, path="/JRADB/accessO.html")
@@ -168,7 +182,7 @@ def collect(root, plan, client):
                 r0, ct, _ = client.get(calendar)
                 entry = select_action(reader.decode_html(r0, ct)[0], prefix="pw01sli00")
                 r1, ct, _ = client.post(entry, calendar)
-                action = select_action(reader.decode_html(r1, ct)[0], prefix="pw01srl00" + key + day8 + "/")
+                action = result_day_action(reader.decode_html(r1, ct)[0], key, day8)
                 r2, ct, _ = client.post(action, BASE + entry[0])
                 days[key, day] = (reader.decode_html(r2, ct)[0], BASE + action[0])
             day_html, referer = days[key, day]

@@ -111,6 +111,21 @@ def test_exact_observed_accessO_token_generic_menu_not_accepted():
         collector.closing_action(html + html.replace("Z/15", "Z/CA"), "0620260409", "20260927", 3)
 
 
+@pytest.mark.parametrize("mode", ["00", "10"])
+def test_actual_current_and_archive_day_links_require_exact_identity(mode):
+    token = f"pw01srl{mode}082026041120261101/C0"
+    html = f"<a onclick=\"doAction('/JRADB/accessS.html','{token}')\">対象日</a>"
+    html += "<a onclick=\"doAction('/JRADB/accessS.html','pw01srl10052026041120261101/E2')\">隣の場</a>"
+    assert collector.result_day_action(html, "0820260411", "20261101") == ("/JRADB/accessS.html", token)
+    for key, day in [("0820260410", "20261101"), ("0820260411", "20261031")]:
+        with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+            collector.result_day_action(html, key, day)
+    with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+        collector.result_day_action(html.replace("/C0", "/C0BAD"), "0820260411", "20261101")
+    with pytest.raises(ValueError, match="DAY_NAVIGATION_NOT_UNIQUE"):
+        collector.result_day_action(html + html.replace("/C0", "/AB"), "0820260411", "20261101")
+
+
 def test_network_requires_owner_and_preflight_and_respects_robots(monkeypatch):
     with pytest.raises(ValueError, match="OWNER_APPROVAL"):
         collector.OfficialClient(approval_ref=None, robots_reviewed=True, terms_reviewed=True)
