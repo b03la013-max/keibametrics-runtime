@@ -261,6 +261,16 @@ def test_frozen_completion_readback_does_not_call_source_or_engine_again(monkeyp
     assert a['new_prediction_executed'] and b['new_prediction_executed'] is False
     assert a['body_sha256']==b['body_sha256'] and source.call_count==1 and engine.call_count==1
     assert not b['recipient_delivery_ack']
+    # A different damaged research cache cannot hide a valid signed Formal
+    # original. The same normal entry must prefer that saved signed result.
+    monkeypatch.delenv('CI',raising=False);monkeypatch.delenv('GITHUB_ACTIONS',raising=False)
+    monkeypatch.setattr(r20,'readback',lambda *a,**k:{'status':'FULL_DELIVERY_NOT_COMPLETED',
+        'first_failed_stage':'BODY_BYTES','reason':'SYNTHETIC_DAMAGED_RESEARCH_CACHE'})
+    binding['entry_mode']=m.MODE
+    binding['reference']=lambda **kw:pytest.fail('signed Formal original must be preferred')
+    normal=r20.complete('2026-11-06 船橋1R',tmp_path,now=NOW,producers=binding)
+    assert normal['status']==m.READY and normal['body_sha256']==a['body_sha256']
+    assert source.call_count==engine.call_count==1
     index=json.loads((tmp_path/m._index_path(i)).read_bytes())
     original=tmp_path/index['execution_original']['path'];original.write_bytes(original.read_bytes()+b' ')
     with pytest.raises(ValueError,match='PRIVATE_ORIGINAL_BYTES_CHANGED'):
@@ -306,6 +316,29 @@ def test_public_ci_cannot_start_the_bounded_provider(monkeypatch,tmp_path):
     monkeypatch.setenv('CI','true')
     with pytest.raises(m.ProducerHold,match='PUBLIC_CI_FORBIDDEN'):
         BoundedCardProducer(root=tmp_path,observed_cards={},robots_path=tmp_path/'none',actor_id='SYNTHETIC')
+
+
+def test_parser_failure_keeps_http_original_without_a_second_request(monkeypatch,tmp_path):
+    from io import BytesIO
+    from runtime import local_fnb_bounded_rakuten_producer as provider
+    monkeypatch.delenv('CI',raising=False);monkeypatch.delenv('GITHUB_ACTIONS',raising=False)
+    raw=b'SYNTHETIC_INVALID_CARD_FOR_FAILURE_REPLAY'
+    url='https://keiba.rakuten.co.jp/race_card/list/RACEID/202611061914080501'
+    robots=tmp_path/'robots.txt';robots.write_bytes(b'SYNTHETIC_ROBOTS')
+    monkeypatch.setattr(provider,'ROBOTS_SHA',m.sha(robots.read_bytes()))
+    response=BytesIO(raw);response.status=200;response.url=url
+    transport=Mock();transport.open.return_value=response
+    monkeypatch.setattr(provider.urllib.request,'build_opener',Mock(return_value=transport))
+    producer=provider.BoundedCardProducer(root=tmp_path/'http',
+        observed_cards={'2026-11-06-R01':{'url':url,'observed_program_raw_sha256':'a'*64}},
+        robots_path=robots,actor_id='SYNTHETIC')
+    with pytest.raises(ValueError,match='HEADING'):
+        producer(intent={'venue_id':'FNB','race_date':'2026-11-06','race_no':1},private_root=tmp_path,now=NOW)
+    originals=list((tmp_path/'http').glob('*/**/original.html'))
+    assert len(originals)==1 and originals[0].read_bytes()==raw
+    assert (originals[0].parent/'capture.json').is_file()
+    assert not (originals[0].parent/'parsed.json').exists()
+    assert transport.open.call_count==1
 
 
 

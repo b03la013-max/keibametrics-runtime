@@ -922,7 +922,8 @@ def _fnb_private_chat_route(args):
                     'reason':str(exc).split(':')[0],
                     'recipient_delivery_ack':False,'registered_oos_increment':0}
     ready=result.get('status') in ('VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER',
-                                  'VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER')
+                                  'VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER',
+                                  'VERIFIED_REFERENCE_BODY_READY_TO_RENDER')
     if args.display and ready:
         print(result['body'],end='')
     else:

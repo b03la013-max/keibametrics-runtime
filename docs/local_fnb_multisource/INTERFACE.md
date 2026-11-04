@@ -1,5 +1,39 @@
 # FNB multi-provider private frontend — v0.1, 2026-11-03
 
+Operational priority (Owner instruction, 2026-11-04): deliver an independently
+classified REFERENCE from existing evidence while Formal adoption is pending.
+Repair the first actual failure and reuse the current calculator, model,
+Engine, Selection and store. New predictive models, coefficients, policies,
+Authority layers and duplicate execution services are frozen. Judge progress
+by prestart complete predictions, user-visible delivery and later settlement.
+This process change grants no Production, source, signing or purchase scope.
+
+The existing `local_fnb_rakuten_reference.publish_saved_reference` adapter reads
+verified 29-index/Static/KRS/S1/S2/R16 originals, compares a permitted current
+card when supplied, and saves an unsigned REFERENCE body and manifest. Missing
+formal signatures or formal Owner activation are not REFERENCE prerequisites.
+It preserves UNKNOWN, original SOURCE/Freeze and every original ticket/stake.
+Changed model inputs require a new immutable calculation revision; an unprinted
+history direction remains unknown rather than being guessed. A failed parser
+keeps the actual HTTP Raw so repair can be verified offline.
+
+An existing private `FNB_PRODUCERS.py` may supply a `reference` callback returning
+the exact indexed publication folder. R20 checks a saved signed completion
+first, then reads the independent REFERENCE before repeating an unchanged
+Formal attempt. An explicit Formal request still attempts Formal and can return
+REFERENCE alongside its actual first failure. The normal entry's single
+`read_saved_reference` consumer owns body/Race/all-horse/time checks; a trusted
+binding need not repeat those same checks. Source capture, Owner, Engine,
+Selection, signing and notification are never invoked by frozen readback.
+The URW ordinal compiler and URW-only identities are not reused as FNB scores.
+
+Reuse the existing request, SOURCE and adoption artifacts as the execution
+context; do not add another context/Profile/Authority service. Formal's source
+authenticity, Active, time, signature, Owner scope, numerical, KRS, MEC/Capital
+and actual-array checks remain at their relevant trust/publication boundaries.
+Natural scheduling, user acknowledgement and Formal acceptance are measured
+separately from a saved or displayed REFERENCE.
+
 This is a research integration interface, not an enabled Provider or an adopted
 numerical/Owner policy. Current Production SOURCE, Consumer, signer, Runtime,
 URLs and deployment remain unchanged.

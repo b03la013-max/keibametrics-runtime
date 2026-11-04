@@ -62,12 +62,15 @@ class BoundedCardProducer:
             capture={'url':url,'final_url':final,'http_status':status,'sha256':common.digest(raw),'size':len(raw),
                 'started_at':now.isoformat(),'completed_at':captured_at.isoformat(),'user_agent':UA,
                 'rate_interval_seconds':61,'no_retry':True,'qualified_SOURCE':False,'Active_verified':False}
+            tag=common.digest(common.encoded(capture));path=self.root/key/tag;path.mkdir(parents=True,mode=0o700)
+            # A parser failure must retain its actual HTTP evidence; otherwise
+            # debugging the same Raw requires an unnecessary second request.
+            for name,data in [('original.html',raw),('capture.json',common.encoded(capture))]:
+                common._immutable(path/name,data)
             parsed=parse_card(raw,capture=capture,race=intent,now=captured_at)
+            common._immutable(path/'parsed.json',common.encoded(parsed))
             post=datetime.fromisoformat(parsed['race_identity']['scheduled_post_at'])
             cutoff=post-timedelta(seconds=300)
-            tag=common.digest(common.encoded(capture));path=self.root/key/tag;path.mkdir(parents=True,mode=0o700)
-            for name,data in [('original.html',raw),('capture.json',common.encoded(capture)),('parsed.json',common.encoded(parsed))]:
-                common._immutable(path/name,data)
             require(captured_at<cutoff,'PRESTART_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
             rid='KM-LOCAL-FNB-'+intent['race_date'].replace('-','')+'-R'+str(intent['race_no']).zfill(2)+'-ALT-R17-'+tag[:12]
             if intent.get('race_id'):

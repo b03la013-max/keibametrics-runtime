@@ -186,7 +186,7 @@ def parse_card(raw, *, capture, race, now=None):
                 current['non_completed_history'].append({'date':event_day.isoformat(),'printed_status':finish,'provenance':evidence})
                 continue
             field=one(info.find(cls='numberInfo'),'HISTORY_FIELD').text(); fs=re.fullmatch(r'(\d+)頭',compact(field))
-            course=re.search(r'(?<!\d)(\d{3,4})([左右直])([ダ芝])',alltext)
+            course=re.search(r'(?<!\d)(\d{3,4})([左右直]?)([ダ芝])',alltext)
             if not fs or not course: raise ValueError('RAKUTEN_HISTORY_FIELD_DISTANCE_UNOBSERVED')
             n,f=int(fs[1]),int(finish)
             if not 1<=f<=n: raise ValueError('RAKUTEN_HISTORY_FINISH_OUTSIDE_FIELD')
@@ -203,7 +203,7 @@ def parse_card(raw, *, capture, race, now=None):
             ride=re.search(re.escape(course[0])+r'\s+(\d+|-)人\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(?:(?:\d+:)?\d{2,3}\.\d\s+\(|\d{3,4}k)',alltext)
             run={'date':event_day.strftime('%y.%m.%d'),'event_date':event_day.isoformat(),
                 'venue':event[1],'finish':f,'field_size':n,'distance':int(course[1]),
-                'direction':{'左':'LEFT','右':'RIGHT','直':'STRAIGHT'}[course[2]],
+                'direction':{'左':'LEFT','右':'RIGHT','直':'STRAIGHT'}.get(course[2]),
                 'surface':{'ダ':'DIRT','芝':'TURF'}[course[3]],
                 'going':{'稍':'稍重','不':'不良'}.get(go,go),
                 'race_name':descriptor or race_name,'content_positions':positions,
@@ -262,6 +262,11 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
         'race':{'venue':'船橋','distance_m':identity['distance_m'],'surface':identity['surface'],
             'direction':'LEFT','class':identity['race_name'],'name':identity['race_name']},
         'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in parsed['runners']]}
+    if race.get('race_id') is not None:
+        prefix='KM-LOCAL-FNB-'+identity['race_date'].replace('-','')+'-R'+str(identity['race_no']).zfill(2)
+        if not re.fullmatch(re.escape(prefix)+r'-RAKUTEN-REFERENCE-[A-Za-z0-9_-]+',str(race['race_id'])):
+            raise ValueError('RAKUTEN_REFERENCE_REVISION_IDENTITY_INVALID')
+        request['race_id']=race['race_id']
     source={'schema':PROFILE,'classification':CLASSIFICATION,'source_freeze_at':parsed['captured_at'],
         'source_snapshot_sha256':snapshot,'sources':[{'source_id':PROVIDER+'-'+parsed['raw_sha256'],
             'snapshot_sha256':snapshot,'raw_sha256':parsed['raw_sha256'],'format':'text/html',
@@ -318,3 +323,188 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
         'source':source,'raw_field':raw_field,'observation_packet':packet,
         'generated_at':generated.isoformat(),'arithmetic29':arithmetic,
         'provider_reference_only':True}
+
+
+def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder,
+                            destination, current_card_folder=None, now=None):
+    """Present existing real calculations independently of Formal admission.
+
+    This small adapter reuses the saved-input verifier and immutable store.
+    It runs no calculator, Owner, KRS, Selection, signer or notification. A new
+    observation is compared with the original inputs, never substituted into
+    their frozen calculations. Material changes require a separate revision.
+    """
+    from runtime import local_fnb_saved_paper_tickets as saved
+    from runtime.local_fnb_saved_exact_paper import read_previous
+    from runtime import local_fnb_research_runtime as common
+    from runtime.local_reference_delivery import sha
+    observed = _stamp(now or datetime.now(timezone.utc))
+    source_folder, exact_folder = Path(source_folder), Path(exact_folder)
+    previous, inventory, _ = read_previous(paper_folder)
+    inputs = saved.verify_saved_run(source_folder, inventory, observed_at=observed.isoformat())
+    request, pred = inputs['request'], inputs['prediction']
+    if any(request.get(k) != intent.get(k) for k in ('venue_id','race_date','race_no')):
+        raise ValueError('REFERENCE_SAVED_RACE_IDENTITY_MISMATCH')
+    cutoff = _stamp(request['prediction_cutoff'])
+    if observed >= cutoff:
+        raise ValueError('REFERENCE_NEW_PUBLICATION_AFTER_CUTOFF_DIAGNOSTIC_REQUIRED')
+    # Reuse the existing immutable Exact receipt, including its complete S1/S2
+    # predecessor. No new selection or reinterpretation of a zero portfolio.
+    receipt = json.loads((exact_folder/'exact_recovery_receipt.json').read_bytes())
+    for name, proof in receipt['files'].items():
+        path = exact_folder/name
+        if path.is_symlink() or not path.resolve().is_relative_to(exact_folder.resolve()):
+            raise ValueError('REFERENCE_ORIGINAL_PATH_INVALID')
+        data = path.read_bytes()
+        if proof != {'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}:
+            raise ValueError('REFERENCE_EXACT_ORIGINAL_HASH_MISMATCH')
+    exact = json.loads((exact_folder/'exact_paper_portfolio.json').read_bytes())
+    if (exact['race_id'] != pred['race_id'] or previous['race_id'] != pred['race_id']
+            or exact['static_prediction_sha256'] != pred['sha256']
+            or exact['source_snapshot_sha256'] != pred['source_snapshot_sha256']
+            or exact['KRS_output_sha256'] != hashlib.sha256(inputs['raw']['krs/execution_output.json']).hexdigest()
+            or _stamp(exact['selected_at']) > observed):
+        raise ValueError('REFERENCE_PREDICTION_SELECTION_REVISION_MISMATCH')
+    original = inputs['documents']['parsed_provider_card.json']
+    card_folder = Path(current_card_folder) if current_card_folder else None
+    capture = json.loads((card_folder/'capture.json').read_bytes()) if card_folder else original['capture']
+    raw = (card_folder/'original.html').read_bytes() if card_folder else inputs['raw']['original_provider_card.html']
+    card = parse_card(raw, capture=capture, race=intent, now=observed)
+    # These are the actual facts consumed by the unchanged numerical/context
+    # producers. Provenance timestamps and market observations are not facts
+    # that can silently refresh a frozen model.
+    ignored = {'field_provenance','provenance','race_card_source_id','race_card_snapshot_sha256',
+               'race_card_fetched_at','runner_number','odds','popularity'}
+    def facts(value):
+        if isinstance(value, dict):
+            return {k:facts(v) for k,v in value.items() if k not in ignored}
+        if isinstance(value, list):
+            return [facts(v) for v in value]
+        return value
+    if card['race_identity'] != original['race_identity'] or facts(card['runners']) != facts(original['runners']):
+        raise ValueError('REFERENCE_MATERIAL_INPUT_CHANGE_NEW_CALCULATION_REVISION_REQUIRED')
+    note = one(Document(raw.decode('utf-8')).root.find(cls='raceNote'),'RACE_NOTE').text()
+    # A visible row marker can prevent stale reuse. Absence is only an observed
+    # page fact, never certification of the final Active set or changes feed.
+    tbody = one(Document(raw.decode('utf-8')).root.find('tbody','raceCard'),'CARD_BODY')
+    # Current withdrawal status belongs to the current profile/number cells;
+    # past-start withdrawals elsewhere in a row must not exclude today's horse.
+    withdrawn = [r.text()[:150] for r in tbody.children if isinstance(r, Node) and r.tag == 'tr'
+                 and any(re.search(r'取消|除外', c.text()) or
+                         re.search(r'cancel|exclude|scratch', c.attrs.get('class',''), re.I)
+                         for c in r.children if isinstance(c, Node) and c.tag in ('td','th')
+                         and any(k in c.attrs.get('class','').split() for k in ('number','name','profile','weightDistance')))]
+    if withdrawn:
+        raise ValueError('REFERENCE_CURRENT_WITHDRAWAL_NEW_REVISION_REQUIRED')
+    ranks = {c:{r['runner_id']:r for r in pred['column_rankings'][c]['rows']} for c in ('W','P2','P3')}
+    krs = {str(r['horse_no']):r for r in inputs['krs_output']['summary']}
+    summary = inputs['numerical']['candidate_full_numerical_summary']
+    def jp(value): return _stamp(value).astimezone(timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S JST')
+    fresh_observation = card_folder is not None
+    lines = [f"# 船橋{intent['race_no']}R｜独立REFERENCE", '',
+        '分類：REFERENCE／非Production／正式署名なし／登録OOS加点0。',
+        f"{request['race_date']} {request['race']['name']}／発走 {jp(request['scheduled_post_at'])}／Cutoff {jp(request['prediction_cutoff'])}",
+        f"計算SOURCE取得 {jp(pred['source_freeze_at'])}／Static Freeze {jp(pred['freeze_at'])}",
+        f"出走表の照合に用いた取得時刻 {jp(card['captured_at'])}／今回の本文保存 {jp(observed)}",
+        ('今回取得した出走表と元計算の掲載馬・履歴・騎手・斤量・馬体重を照合し一致。'
+         if fresh_observation else '保存済み出走表を再利用。当日変更の最新照合は未実施。'),
+        f"掲載{card['listed_count']}頭。現在欄に取消・除外表示を認めず。専用変更一覧と最終Activeは未認証。",
+        '観測したRaceヘッダー：'+note,
+        '今回の出走表取得時刻で元の指数・KRSの時刻を更新していません。天候・馬場の新観測は元計算へ未反映。',
+        f"29指数×{card['listed_count']}頭={summary['required_count']}セル：算出{summary['calculated_count']}、規定中立{summary['ruled_neutral_count']}、未解決{summary['unresolved_count']}。",
+        f"欠測構成要素{summary['candidate_neutral_missing_component_count']}。正式Full29完了ではありません。", '',
+        '|馬番|馬名|W参考順位|P2参考順位|P3参考順位|参考Role|SSR-W|SSR-P2|SSR-P3|',
+        '|---:|---|---|---|---|---|---:|---:|---:|']
+    required_parts=[]
+    for horse in card['runners']:
+        rid=horse['runner_id']
+        rank_values=[str(ranks[c][rid]['rank']) if ranks[c][rid]['rank'] is not None else 'UNKNOWN' for c in ('W','P2','P3')]
+        row='|'+ '|'.join([rid,horse['name'],*rank_values,','.join(pred['roles'][rid]) or '既知・非Front',
+            *[f"{krs[rid][key]:.4f}" for key in ('SSR-W','SSR-P2','SSR-P3')]])+'|'
+        lines.append(row);required_parts.append(row)
+    lines += ['', '順位は同順位を含む既存Pareto評価です。UNKNOWNは弱いという意味ではありません。',
+        'W参考候補：'+','.join(pred['column_rankings']['W']['front']),
+        'P2参考候補：'+','.join(pred['column_rankings']['P2']['front']),
+        'P3参考候補：'+','.join(pred['column_rankings']['P3']['front']),
+        'UNKNOWN保護：'+','.join(pred['column_rankings']['W']['unknown_protected']),
+        '', '## 展開・不確実性',
+        '船橋過去走の通過順による既存World仮説を再利用。現在の戦術意図・当日バイアスはUNKNOWN。']
+    for horse in inputs['context']['runners']:
+        worlds=sorted({p['world_hypothesis'] for p in horse.get('paths',[])})
+        lines.append(f"- {horse['runner_id']}番：{','.join(worlds) or 'UNKNOWN'}／船橋過去観測{horse['input_observations']}走。")
+    for row in pred['head_local_P2']:
+        lines.append(f"- W {row['head']} → P2：{','.join(row['ranking']['front']) or 'UNKNOWN'}")
+    for row in pred['pair_conditioned_Third']:
+        lines.append(f"- Pair {row['head']}→{row['second']} → P3：{','.join(row['ranking']['front']) or 'UNKNOWN'}")
+    lines += ['', 'KRS：既存Engine v1.1.0、5000回・seed1の実出力を再利用。新規実行0。SSRは未較正の出現率で実勝率・EVではありません。',
+        '', '## 最終参考結論',
+        '既知のW/P2/P3候補は上記のとおり。UNKNOWN馬を一律に下位へ置かず、候補数と予算上限を保った独立PAPER案として扱います。',
+        'FORMALは別系列。SOURCE/Active資格、正式Owner採用、署名、配送接続を本REFERENCEで代替しません。',
+        '', '## 元の全29指数・全Role・S1/S2/R16全券面とStake（元の分類・時刻を保持）',
+        (exact_folder/'COMPLETE_PREDICTION_AND_ALL_TICKETS.md').read_text()]
+    body='\n'.join(lines)+'\n'
+    manifest={'classification':'REFERENCE','venue_id':'FNB','race_date':request['race_date'],
+        'race_no':request['race_no'],'race_id':pred['race_id'],'revision':'REFERENCE-'+card['raw_sha256'][:16],
+        'scheduled_post_at':request['scheduled_post_at'],'prediction_cutoff':request['prediction_cutoff'],
+        'prepared_at':observed.isoformat(),'forecast_frozen_at':pred['freeze_at'],
+        'source_fetched_at':pred['source_freeze_at'],'source_sha256':pred['source_snapshot_sha256'],
+        'source_raw_sha256':hashlib.sha256(inputs['raw']['original_provider_card.html']).hexdigest(),
+        'observation_capture':capture,'observation_raw_sha256':card['raw_sha256'],
+        'current_observation_compared':fresh_observation,'input_facts_unchanged':True,
+        'active_verified':False,'current_changes_feed_verified':False,'runner_count':card['listed_count'],
+        'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in card['runners']],
+        'model_sha256':pred['model_code_sha256'],'static_sha256':pred['sha256'],
+        'KRS_output_sha256':exact['KRS_output_sha256'],'KRS_runs':5000,'KRS_seed':1,'new_KRS':0,
+        'formal_final_proven':False,'signed_final_claim':False,'recipient_delivery_ack':False,
+        'natural_delivery_verified':False,'actual_purchase':False,'registered_OOS_increment':0,
+        'required_parts':required_parts,'body_sha256':hashlib.sha256(body.encode()).hexdigest(),
+        'selected_paper_tickets':{k:{'ticket_sha256':v['ticket_sha256'],'points':v['point_count'],
+            'required_MEC':v['required_MEC'],'within_cap_amount':v['within_existing_cap_eligible_paper_amount']}
+            for k,v in exact['portfolio']['methods'].items()}}
+    manifest['sha256']=sha(manifest)
+    folder=common._private_root(Path(destination)/'references'/request['race_date']/f"R{request['race_no']:02d}"/manifest['revision'])
+    # Idempotent calls retain the original preparation time and frozen body.
+    if (folder/'manifest.json').exists():
+        return read_saved_reference(folder,intent,now=observed)
+    common._immutable(folder/'observation.html',raw)
+    common._immutable(folder/'answer.md',body.encode())
+    common._immutable(folder/'manifest.json',common.encoded(manifest))
+    return read_saved_reference(folder,intent,now=observed)
+
+
+def read_saved_reference(folder, intent, *, now=None):
+    """Verify the frozen bytes; never rerun or retimestamp their prediction."""
+    from runtime.local_reference_delivery import sha
+    from runtime.local_fnb_research_runtime import _private_root
+    folder=Path(folder);observed=_stamp(now or datetime.now(timezone.utc))
+    _private_root(folder)
+    manifest=json.loads((folder/'manifest.json').read_bytes())
+    body=(folder/'answer.md').read_text();raw=(folder/'observation.html').read_bytes()
+    if (manifest.get('sha256') != sha({k:v for k,v in manifest.items() if k!='sha256'})
+            or any(manifest.get(k)!=intent.get(k) for k in ('venue_id','race_date','race_no'))
+            or manifest.get('classification')!='REFERENCE'
+            or hashlib.sha256(body.encode()).hexdigest()!=manifest['body_sha256']
+            or hashlib.sha256(raw).hexdigest()!=manifest['observation_raw_sha256']
+            or any(part not in body for part in manifest['required_parts'])
+            or any(part not in body for part in ('W参考候補：','P2参考候補：','P3参考候補：',
+                '## 最終参考結論','## 元の全29指数・全Role・S1/S2/R16全券面とStake'))
+            or len(manifest['required_parts'])!=manifest['runner_count']
+            or any(manifest.get(k) is not False for k in ('formal_final_proven','signed_final_claim',
+                'recipient_delivery_ack','natural_delivery_verified','actual_purchase'))):
+        raise ValueError('REFERENCE_FROZEN_PUBLICATION_INTEGRITY_HOLD')
+    capture=manifest['observation_capture']
+    card=parse_card(raw,capture=capture,race=intent,
+        now=_stamp(capture.get('completed_at') or capture.get('captured_at')))
+    if ([{'runner_id':r['runner_id'],'name':r['name']} for r in card['runners']]!=manifest['runners']
+            or any(not part.startswith('|'+r['runner_id']+'|'+r['name']+'|')
+                for part,r in zip(manifest['required_parts'],manifest['runners']))
+            or not _stamp(manifest['source_fetched_at'])<=_stamp(manifest['forecast_frozen_at'])
+                <=_stamp(manifest['prepared_at'])< _stamp(manifest['prediction_cutoff'])
+            or _stamp(card['captured_at'])>_stamp(manifest['prepared_at'])
+            or _stamp(manifest['prepared_at'])>observed):
+        raise ValueError('REFERENCE_FROZEN_IDENTITY_OR_TIME_HOLD')
+    return {'status':'VERIFIED_REFERENCE_BODY_READY_TO_RENDER','classification':'REFERENCE',
+        'intent':intent,'manifest':manifest,'body':body,'body_sha256':manifest['body_sha256'],
+        'private_readback_verified':True,'prestart_at_readback':observed<_stamp(manifest['prediction_cutoff']),
+        'new_prediction_executed':False,'formal_final_proven':False,'recipient_delivery_ack':False,
+        'registered_oos_increment':0,'publication_folder':str(folder)}

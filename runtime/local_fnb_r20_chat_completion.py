@@ -432,22 +432,56 @@ def _complete(query, private_root, *, now, diagnostic_only,emit_private_body,pro
         return _hold(intent,"PRIVATE_DELIVERY","PRIVATE_HORSE_OR_TICKET_BODY_PUBLIC_CI_FORBIDDEN")
     existing=readback(query,root,now)
     # Never re-run or silently replace a complete immutable original.
-    if existing["status"]=="VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER":
+    formal_index=root/'formal_single_owner_intents'/f"{intent['race_date']}-R{intent['race_no']:02d}"/'completion.json'
+    if existing["status"]=="VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER" and not formal_index.exists():
         return {"profile":PROFILE,**existing,"source":"EXISTING_COMPLETE_ORIGINAL_READBACK",
                 "new_prediction_executed":False}
-    if existing.get("first_failed_stage") in ("REVISION","BODY_BYTES","CONTENT"):
+    if existing.get("first_failed_stage") in ("REVISION","BODY_BYTES","CONTENT") and not formal_index.exists():
         return _hold(intent,existing["first_failed_stage"],existing["reason"])
     name=f"FNB_{intent['race_date']}_R{intent['race_no']:02d}_private_bundle.json"
     manifest_path=_private_target(root,"inbox/"+name)
-    if not manifest_path.is_file():
+    if not manifest_path.is_file() or formal_index.exists():
         if _public_ci():
             return _hold(intent,"WORK_ACTOR","PRIVATE_PRODUCER_EXECUTION_PUBLIC_CI_FORBIDDEN")
         try:
             connected=producers if producers is not None else _binding(root)
             if isinstance(connected,dict) and connected.get('entry_mode')=='FNB_ALTERNATIVE_PROVIDER_SINGLE_OWNER_V1':
-                if diagnostic_only:raise ProducerHold('MODE','ALTERNATIVE_FORMAL_ROUTE_DIAGNOSTIC_EXECUTION_NOT_AUTHORIZED')
-                from runtime.local_fnb_alternative_connection import run as run_single
-                return run_single(intent,root,connected,clock=clock)
+                from runtime.local_fnb_alternative_connection import run as run_single, _index_path
+                # Look up a real signed completion first. Otherwise an already
+                # connected independent REFERENCE can be read without another
+                # HTTP/Owner attempt at an unchanged known Formal failure.
+                reference=connected.get('reference')
+                def independent_reference(formal):
+                    if not callable(reference):return None
+                    try:
+                        folder=reference(intent=deepcopy(intent),private_root=root,now=clock())
+                        if folder is None:return None
+                        from runtime.local_fnb_rakuten_reference import read_saved_reference
+                        result=read_saved_reference(folder,intent,now=clock())
+                        result['formal']=deepcopy(formal)
+                        return result
+                    except (ValueError,OSError,KeyError,TypeError):
+                        # A broken reference cannot block a separately valid
+                        # Formal execution or disguise its first failed stage.
+                        return None
+                if (callable(reference) and not (root/_index_path(intent)).exists()
+                        and '正式' not in query and 'FORMAL' not in query.upper()):
+                    result=independent_reference(connected.get('formal_first_failure') or
+                        {'status':'NOT_EXECUTED_NO_SIGNED_FINAL_FOUND'})
+                    if result is not None:return result
+                try:
+                    if diagnostic_only:raise ProducerHold('MODE','ALTERNATIVE_FORMAL_ROUTE_DIAGNOSTIC_EXECUTION_NOT_AUTHORIZED')
+                    return run_single(intent,root,connected,clock=clock)
+                except ProducerHold as exc:
+                    formal=_hold(intent,exc.stage,exc.code)
+                    result=independent_reference(formal)
+                    if result is not None:return result
+                    raise
+                except (ValueError,OSError,KeyError,TypeError):
+                    formal=_hold(intent,'READBACK','SIGNED_ORIGINAL_RECONCILIATION_REQUIRED')
+                    result=independent_reference(formal)
+                    if result is not None:return result
+                    raise
             _build_from_producers(intent,root,clock,diagnostic_only,connected)
         except ProducerHold:
             raise
