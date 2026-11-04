@@ -226,8 +226,16 @@ def parse_card(raw, *, capture, race, now=None):
     ids=[r['runner_id'] for r in runners]
     if len(ids)<2 or len(ids)!=len(set(ids)) or set(map(int,ids))!=set(range(1,len(ids)+1)):
         raise ValueError('RAKUTEN_LISTED_UNIVERSE_INCOMPLETE_OR_DUPLICATE')
+    # Read only the current Race header. Historical stateInfo cells are not
+    # observations of today's weather or going.
+    header_text = note.text()
+    weather = re.search(r'天候\s*[:：]\s*(小雨|小雪|晴|曇|雨|雪)(?:\s|$)', header_text)
+    going = re.search(r'(?:ダ|芝)\s*[:：]\s*(稍重|不良|良|重)(?:\s|$)', header_text)
+    conditions = {'weather':weather[1] if weather else None,
+                  'going':going[1] if going else None}
     return {'profile':PROFILE,'classification':CLASSIFICATION,'race_identity':identity,
         'provider':PROVIDER,'raw_sha256':digest,'captured_at':captured.isoformat(),'source_url':url,
+        'current_conditions':conditions,
         'runners':runners,'listed_count':len(runners),'active_universe_verified':False,
         'current_changes_verified':False,'formal_source_admitted':False,
         'automated_use_licence_issued_here':False,'independent_upstream_sources_proven':False}
@@ -271,7 +279,11 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
         'source_snapshot_sha256':snapshot,'sources':[{'source_id':PROVIDER+'-'+parsed['raw_sha256'],
             'snapshot_sha256':snapshot,'raw_sha256':parsed['raw_sha256'],'format':'text/html',
             'requested_url':parsed['source_url'],'fetched_at':parsed['captured_at'],'official':False,'authority':PROVIDER}],
-        'normalized_evidence':{'track_condition':{'value':None},'weather':{'value':None}},
+        'normalized_evidence':{key:{'value':parsed['current_conditions'][field],
+            'source_id':PROVIDER+'-'+parsed['raw_sha256'],'raw_sha256':parsed['raw_sha256'],
+            'fetched_at':parsed['captured_at'],'locator':'div.raceNote',
+            'qualification':'REFERENCE_ONLY_NOT_SOURCE_ADMISSION'}
+            for key,field in (('track_condition','going'),('weather','weather'))},
         'active_runner_universe_verified':False,'formal_source_admitted':False,
         'production_numeric_consumers_authorized':False}
     raw_field={r['runner_id']:deepcopy(r) for r in parsed['runners']}
@@ -381,7 +393,12 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
         if isinstance(value, list):
             return [facts(v) for v in value]
         return value
-    if card['race_identity'] != original['race_identity'] or facts(card['runners']) != facts(original['runners']):
+    consumed_state = inputs['numerical']['candidate_current_state']
+    consumed_conditions = {'going':consumed_state.get('official_going') or None,
+                           'weather':consumed_state.get('official_weather') or None}
+    if (card['race_identity'] != original['race_identity']
+            or facts(card['runners']) != facts(original['runners'])
+            or card['current_conditions'] != consumed_conditions):
         raise ValueError('REFERENCE_MATERIAL_INPUT_CHANGE_NEW_CALCULATION_REVISION_REQUIRED')
     note = one(Document(raw.decode('utf-8')).root.find(cls='raceNote'),'RACE_NOTE').text()
     # A visible row marker can prevent stale reuse. Absence is only an observed
@@ -410,7 +427,7 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
          if fresh_observation else '保存済み出走表を再利用。当日変更の最新照合は未実施。'),
         f"掲載{card['listed_count']}頭。現在欄に取消・除外表示を認めず。専用変更一覧と最終Activeは未認証。",
         '観測したRaceヘッダー：'+note,
-        '今回の出走表取得時刻で元の指数・KRSの時刻を更新していません。天候・馬場の新観測は元計算へ未反映。',
+        '今回の出走表取得時刻で元の指数・KRSの時刻を更新していません。印字天候・馬場は元計算で消費した値と照合済みです。',
         f"29指数×{card['listed_count']}頭={summary['required_count']}セル：算出{summary['calculated_count']}、規定中立{summary['ruled_neutral_count']}、未解決{summary['unresolved_count']}。",
         f"欠測構成要素{summary['candidate_neutral_missing_component_count']}。正式Full29完了ではありません。", '',
         '|馬番|馬名|W参考順位|P2参考順位|P3参考順位|参考Role|SSR-W|SSR-P2|SSR-P3|',
@@ -464,8 +481,22 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
     manifest['sha256']=sha(manifest)
     folder=common._private_root(Path(destination)/'references'/request['race_date']/f"R{request['race_no']:02d}"/manifest['revision'])
     # Idempotent calls retain the original preparation time and frozen body.
+    # The same observation bytes can also be consumed by a corrected, separate
+    # calculation revision. Never return the previous calculation's body then.
+    calculation_keys=('race_id','source_sha256','source_raw_sha256','model_sha256',
+                      'static_sha256','KRS_output_sha256','selected_paper_tickets')
     if (folder/'manifest.json').exists():
-        return read_saved_reference(folder,intent,now=observed)
+        previous_publication=read_saved_reference(folder,intent,now=observed)
+        if all(previous_publication['manifest'].get(k)==manifest[k] for k in calculation_keys):
+            return previous_publication
+        manifest['revision']+='-'+sha({k:manifest[k] for k in calculation_keys})[:16]
+        manifest['sha256']=sha({k:v for k,v in manifest.items() if k!='sha256'})
+        folder=common._private_root(folder.parent/manifest['revision'])
+        if (folder/'manifest.json').exists():
+            previous_publication=read_saved_reference(folder,intent,now=observed)
+            if not all(previous_publication['manifest'].get(k)==manifest[k] for k in calculation_keys):
+                raise ValueError('REFERENCE_PREDICTION_SELECTION_REVISION_MISMATCH')
+            return previous_publication
     common._immutable(folder/'observation.html',raw)
     common._immutable(folder/'answer.md',body.encode())
     common._immutable(folder/'manifest.json',common.encoded(manifest))
@@ -507,4 +538,8 @@ def read_saved_reference(folder, intent, *, now=None):
         'intent':intent,'manifest':manifest,'body':body,'body_sha256':manifest['body_sha256'],
         'private_readback_verified':True,'prestart_at_readback':observed<_stamp(manifest['prediction_cutoff']),
         'new_prediction_executed':False,'formal_final_proven':False,'recipient_delivery_ack':False,
+        'source_age_seconds_at_readback':(observed-_stamp(manifest['source_fetched_at'])).total_seconds(),
+        'observation_age_seconds_at_readback':(observed-_stamp(card['captured_at'])).total_seconds(),
+        'source_within_existing_600s':0 <= (observed-_stamp(manifest['source_fetched_at'])).total_seconds() <= 600,
+        'observation_within_existing_600s':0 <= (observed-_stamp(card['captured_at'])).total_seconds() <= 600,
         'registered_oos_increment':0,'publication_folder':str(folder)}
