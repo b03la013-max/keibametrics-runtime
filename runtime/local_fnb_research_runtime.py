@@ -390,14 +390,14 @@ def _verify_saved_manifest(path, *, recipe=None, race_id=None):
 
 
 def _render_private_body(folder, prediction, krs, strict, paper_result, *, private_owner_decision=None, request=None,
-                         static_original_saved_at=None):
+                         static_original_saved_at=None, computational_field_label='Active'):
     approved = private_owner_decision is not None
     lines = ['# FNB・単一Race事前研究' if approved else '# FNB・単一Race研究Diagnostic', '',
         ('本人承認の固定モデルによる非Production事前研究です。正式FINAL、独立B/C、真正Forward OOS、実購入の認定はありません。本人表示の実績は別途検収します。'
          if approved else '未採用研究です。正式FINAL、発走前本人Delivery、独立B/C、真正Forward OOS、実購入の認定はありません。'),
         '旧KRSを再利用した場合、新規KRS実行数は0です。SSRは未較正頻度であり実勝率・EVではありません。', '',
         (folder / 'numerical/all_horse_29_index_report.md').read_text(), '',
-        '## 全Active W/P2/P3・Role', '',
+        '## 全'+computational_field_label+' W/P2/P3・Role', '',
         '|馬番|W順位／区間|P2順位／区間|P3順位／区間|Role|',
         '|---:|---|---|---|---|']
     for runner in prediction['active_runners']:
@@ -418,7 +418,7 @@ def _render_private_body(folder, prediction, krs, strict, paper_result, *, priva
                 'private_owner_decision': private_owner_decision,
                 'recipient_delivery_proven': False}).decode().rstrip(), '```']
     output = json.loads((folder / 'krs/execution_output.json').read_bytes())
-    lines += ['', '## 全Active KRS', '', '|馬番|馬名|SSR-W|SSR-P2|SSR-P3|SSR-T3|',
+    lines += ['', '## 全'+computational_field_label+' KRS', '', '|馬番|馬名|SSR-W|SSR-P2|SSR-P3|SSR-T3|',
               '|---:|---|---:|---:|---:|---:|']
     for row in output['summary']:
         lines.append('|' + str(row['horse_no']) + '|' + row['name'] + '|' +

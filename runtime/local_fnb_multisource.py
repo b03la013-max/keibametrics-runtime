@@ -26,11 +26,23 @@ PROVIDERS = {
     'NANKAN_OFFICIAL': ('www.nankankeiba.com', 'OFFICIAL'),
     'FKEIBA_OFFICIAL': ('www.f-keiba.com', 'OFFICIAL'),
     'RAKUTEN_KEIBA': ('keiba.rakuten.co.jp', 'NON_OFFICIAL'),
+    'JBIS_SEARCH': ('www.jbis.or.jp', 'NON_OFFICIAL'),
+    'UMANITY_NAR': ('nar.umanity.jp', 'NON_OFFICIAL'),
+    'SPAIA_LEGACY': ('v1.spaia-keiba.com', 'NON_OFFICIAL'),
     'SPAIA_KEIBA': ('spaia-keiba.com', 'NON_OFFICIAL'),
     'SBO_NAR': ('nar.k-ba.net', 'NON_OFFICIAL'),
     'KICHIUMA': ('kichiuma-chiho.net', 'NON_OFFICIAL'),
     'STATS_KEIBA': ('stats-keiba.com', 'NON_OFFICIAL'),
 }
+SOURCE_STRATEGY = 'KM-FNB-PROVIDER-INDEPENDENT-NO-NAR-CENTRAL-20261104'
+RETIRED_EXECUTION_PROVIDERS = frozenset(('NAR_OFFICIAL', 'NAR_OFFICIAL_CSV'))
+# Historical URL/provenance validation above remains available. Retirement
+# affects new acquisition, never the source label of an archived original.
+
+
+def execution_targets(targets):
+    return [deepcopy(t) for t in targets if isinstance(t, dict)
+            and t.get('provider') not in RETIRED_EXECUTION_PROVIDERS]
 _SHA = re.compile('[0-9a-f]{64}')
 
 
@@ -114,6 +126,8 @@ class ProviderBinding:
 def _binding(binding, url, actor_id, now):
     if not isinstance(binding, ProviderBinding):
         raise MultisourceHold('MULTISOURCE_PROVIDER_BINDING_NOT_CONNECTED')
+    if binding.provider in RETIRED_EXECUTION_PROVIDERS:
+        raise MultisourceHold('MULTISOURCE_NAR_CENTRAL_RETIRED_ARCHIVE_ONLY')
     validate_url(binding.provider, url)
     if (url not in binding.exact_urls or not _SHA.fullmatch(binding.code_sha256)
             or not _SHA.fullmatch(binding.permission_sha256) or not binding.permission_ref
@@ -245,6 +259,11 @@ def acquire_available(targets, bindings, *, intent, actor_id, now, private_root,
         key = (provider, url)
         if key in seen: continue
         seen.add(key)
+        if provider in RETIRED_EXECUTION_PROVIDERS:
+            receipts.append({'provider':provider,'url':url,'status':'RETIRED_ARCHIVE_ONLY',
+                'reason':'MULTISOURCE_NAR_CENTRAL_RETIRED_ARCHIVE_ONLY',
+                'formal_SOURCE':False,'raw_sha256':None})
+            continue
         try:
             observed = stamp(clock()) if clock else datetime.now(timezone.utc)
             if observed < original_now: raise MultisourceHold('MULTISOURCE_CLOCK_REGRESSION')

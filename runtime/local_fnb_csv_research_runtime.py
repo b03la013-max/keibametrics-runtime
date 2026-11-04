@@ -172,10 +172,19 @@ def _qualified_identity(numerical, admission, originals):
 
 def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, params,
              admission=None, owner_decision=None, owner_decision_bytes=None, source_freeze_at=None,
-             qualified_source_originals=None,derived_document_path=None,derived_document_sha256=None):
+             qualified_source_originals=None,derived_document_path=None,derived_document_sha256=None,
+             provider_reference=None):
     # A qualified prestart wrapper must recheck the real process clock at each
     # phase. A preliminary wrapper always retains its non-prestart class.
     approved = admission is not None
+    if provider_reference is not None:
+        if approved or derived_document_path is not None:
+            raise common.ResearchHold('PROVIDER_REFERENCE_CANNOT_GRANT_SOURCE_ADMISSION')
+        from runtime.local_fnb_rakuten_reference import materialize_reference
+        replay=materialize_reference(raw,capture=provider_reference['capture'],race=provider_reference['race'],
+            generated_at=provider_reference['generated_at'])
+        if any(replay[k] != v for k,v in (('numerical',numerical),('parsed',parsed),('request',request))):
+            raise common.ResearchHold('PROVIDER_REFERENCE_ORIGINAL_REPLAY_MISMATCH')
     derived = None
     if derived_document_path is not None or derived_document_sha256 is not None:
         if approved or derived_document_path is None or derived_document_sha256 is None:
@@ -188,7 +197,9 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
                 or derived['raw'] != raw or derived['request'] != request):
             raise common.ResearchHold('DERIVED_REFERENCE_REPLAY_INPUT_MISMATCH')
         source_freeze_at = derived['availability']['available_at']
-    classification = common.PRESTART_CLASSIFICATION if approved else DERIVED_REFERENCE if derived else PRELIMINARY
+    classification = (common.PRESTART_CLASSIFICATION if approved else
+        'PRIVATE_PROVIDER_REFERENCE_NOT_QUALIFIED_SOURCE_NOT_ACTIVE_NOT_OOS' if provider_reference else
+        DERIVED_REFERENCE if derived else PRELIMINARY)
     stamp = lambda: (common._prestart_clock(request,
         not_before=source_freeze_at or parsed['capture']['captured_at']) if approved else _clock())
     common._pinned(common.REPO/'runtime/local_fnb_context_static_candidate.py', common.MODEL_SHA)
@@ -214,6 +225,10 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         extra_paths = ('runtime/local_fnb_id_linked_race_reference.py','runtime/local_fnb_id_history_reference.py')
         code_paths += tuple(common.REPO/name for name in extra_paths)
         code_pins.update({name:common.digest((common.REPO/name).read_bytes()) for name in extra_paths})
+    if provider_reference:
+        extra_paths=('runtime/local_fnb_rakuten_reference.py','runtime/local_fnb_multisource.py')
+        code_paths+=tuple(common.REPO/name for name in extra_paths)
+        code_pins.update({name:common.digest((common.REPO/name).read_bytes()) for name in extra_paths})
     numerical_original_sha256 = common.digest(common.encoded(numerical))
     recipe = {'raw_sha256': common.digest(raw), 'parsed_sha256': sha(parsed),
         'numerical_sha256':numerical_original_sha256,
@@ -235,6 +250,10 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         recipe.update(derived_document_sha256=derived_document_sha256,
             derived_availability=deepcopy(derived['availability']),
             reference_owner_decision=deepcopy(derived['reference_owner_decision']))
+    if provider_reference:
+        recipe['provider_reference_input']={k:deepcopy(v) for k,v in provider_reference.items()
+            if k not in ('observation_packet','generated_at')}
+        recipe['provider_reference_input'].get('private_owner_decision',{}).pop('verified_at',None)
     folder = common._private_root(Path(private_root)/request['race_id']/sha(recipe))
     final = folder/'csv_research_execution_manifest.json'
     if final.exists():
@@ -262,8 +281,10 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     if claim.exists():
         raise common.ResearchHold('CSV_PARTIAL_EXECUTION_REQUIRES_READBACK_NOT_REDISPATCH')
     common._immutable(claim, common.encoded({'recipe': recipe, 'observed_at': observed.isoformat()}))
-    common._immutable(folder/'original.zip', raw)
-    common._immutable(folder/'parsed_csv.json', common.encoded(parsed))
+    common._immutable(folder/('original_provider_card.html' if provider_reference else 'original.zip'), raw)
+    common._immutable(folder/('parsed_provider_card.json' if provider_reference else 'parsed_csv.json'), common.encoded(parsed))
+    if provider_reference:
+        common._immutable(folder/'provider_reference_capture_and_scope.json',common.encoded(recipe['provider_reference_input']))
     if approved:
         _save_source_originals(folder,qualified_source_originals)
     if derived:
@@ -279,12 +300,14 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
     numeric_doc.setdefault('required_indices', numerical['candidate_full_numerical_summary']['required_indices'])
     for row in numeric_doc['runners']:
         row.setdefault('numerical_missing_components', row.get('candidate_missing_components', []))
-    document = render_full_numeric(numeric_doc, classification=classification, race_id=request['race_id'])
+    numeric_render_options={'source_description':'楽天競馬の掲載原文（正式SOURCE未入場）'} if provider_reference else {}
+    document = render_full_numeric(numeric_doc, classification=classification, race_id=request['race_id'],**numeric_render_options)
     common._immutable(folder/'numerical/all_horse_29_index_report.md', (document['body']+'\n').encode())
-    packet = deepcopy(derived['observation_packet']) if derived else observation_packet(parsed, raw=raw, generated_at=stamp().isoformat(),
+    packet = (deepcopy(provider_reference['observation_packet']) if provider_reference else
+        deepcopy(derived['observation_packet']) if derived else observation_packet(parsed, raw=raw, generated_at=stamp().isoformat(),
         source_snapshot_sha256=(numerical.get('candidate_current_state') or {})['source_snapshot_sha256'],
         source_receipt_sha256=(admission or {}).get('source_receipt_sha256'),
-        source_freeze_at=source_freeze_at)
+        source_freeze_at=source_freeze_at))
     packet['race_id'] = request['race_id']
     computational_ids = {str(row['runner_id']) for row in numerical['runners']}
     packet['runners'] = [row for row in packet['runners'] if row['runner_id'] in computational_ids]
@@ -317,14 +340,26 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         method_exports = {'status':'PRELIMINARY_NOT_ELIGIBLE_FOR_PRESTART_EXPORT','methods':{}}
     body = common._render_private_body(folder, prediction, krs, strict, None,
         private_owner_decision=owner_decision, request=request,
-        static_original_saved_at=prediction['freeze_at'])
+        static_original_saved_at=prediction['freeze_at'],
+        computational_field_label='掲載馬' if provider_reference else 'Active')
     if not approved:
-        prefix = ('# CSV掲載馬の予備研究・正式Active集合未検証\n\n'
-            '公式SOURCE入場・正式署名・発走前完全予測・本人Deliveryの成功件数は0です。'
-            'モデル内部のactive_runnersは計算に渡したCSV掲載馬であり、当日の確定出走集合ではありません。'
+        prefix = (('# 代替Provider掲載馬の私有研究・Active集合とSOURCE資格未検証\n\n' if provider_reference else
+            '# CSV掲載馬の予備研究・正式Active集合未検証\n\n')
+            +'公式SOURCE入場・正式署名・発走前完全予測・本人Deliveryの成功件数は0です。'
+            'モデル内部のactive_runnersは計算に渡した掲載馬であり、当日の確定出走集合ではありません。'
             +('個別過去走は派生文書内の実在原本とID接続を再解析して使用し、欠測部分はUNKNOWNを保持します。\n\n'
-              if derived else 'CSVにない個別過去走は作成せず、ContextはUNKNOWNを保持します。\n\n'))
+              if derived else 'Provider原文の同一馬行の個別過去走を再解析し、未観測のContextはUNKNOWNを保持します。\n\n'
+              if provider_reference else 'CSVにない個別過去走は作成せず、ContextはUNKNOWNを保持します。\n\n'))
         body = prefix.encode()+body
+        if provider_reference:
+            body+=('\n## 代替Provider原本・時刻・Revision\n\n```json\n'+common.encoded({
+                'classification':classification,'race_id':request['race_id'],
+                'scheduled_post_at':request['scheduled_post_at'],'prediction_cutoff':request['prediction_cutoff'],
+                'source_freeze_at':prediction['source_freeze_at'],'static_freeze_at':prediction['freeze_at'],
+                'provider_capture':provider_reference['capture'],
+                'private_owner_decision':provider_reference['private_owner_decision'],
+                'active_verified':False,'qualified_source':False,
+                'received_or_delivered_before_cutoff_proven':False}).decode()+'```\n').encode()
     elif method_exports['methods']:
         body += ('\n## 券種別の厳格MEC・Capital確定原本（独立代替案）\n\n'+
             '\n'.join('### '+method+'\n\n```json\n'+common.encoded(detail).decode().rstrip()+
@@ -452,6 +487,26 @@ def run_derived_document(path, pin, *, private_root,engine,params):
     return _execute(loaded['numerical'],loaded['parsed'],loaded['raw'],loaded['request'],
         private_root=private_root,engine=engine,params=params,
         derived_document_path=path,derived_document_sha256=pin)
+
+
+def run_provider_reference(raw, *, capture,race,private_root,engine,params,
+                           owner_decision_path,owner_decision_sha256):
+    """Execute an actual alternative card through the existing fixed pipeline.
+
+    No CSV wrapper, NAR data, alternate numerical rules, Active assertion or
+    Selection adoption is used. The existing private Owner decision is read.
+    """
+    from runtime.local_fnb_rakuten_reference import materialize_reference
+    loaded=materialize_reference(raw,capture=capture,race=race)
+    owner,owner_bytes=common.verify_private_owner_decision(owner_decision_path,owner_decision_sha256,
+        request=loaded['request'],source=loaded['source'],check_prestart=False)
+    reference={'provider':'RAKUTEN_KEIBA','capture':deepcopy(capture),'race':deepcopy(race),
+        'generated_at':loaded['generated_at'],'observation_packet':loaded['observation_packet'],
+        'private_owner_decision':owner,'qualified_source':False,'active_verified':False}
+    return _execute(loaded['numerical'],loaded['parsed'],raw,loaded['request'],
+        private_root=private_root,engine=engine,params=params,
+        owner_decision_bytes=owner_bytes,source_freeze_at=loaded['parsed']['captured_at'],
+        provider_reference=reference)
 
 
 def main(argv=None):

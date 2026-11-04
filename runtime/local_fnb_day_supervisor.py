@@ -464,7 +464,7 @@ def discover_available(binding, *, day, private_root, clock, failed_routes=None)
     routes = binding.get('discovery_routes')
     if not routes:
         return binding['discover_day'](day=day, venue_id='FNB', now=clock()), binding
-    from runtime.local_fnb_multisource import PROVIDERS
+    from runtime.local_fnb_multisource import PROVIDERS, RETIRED_EXECUTION_PROVIDERS
     if not isinstance(routes, (list, tuple)):
         raise ValueError('EXPLICIT_DISCOVERY_ROUTES_REQUIRED')
     failed = failed_routes if failed_routes is not None else set()
@@ -481,6 +481,10 @@ def discover_available(binding, *, day, private_root, clock, failed_routes=None)
         if isinstance(provider, str) and (provider in seen or provider in failed):
             continue
         if isinstance(provider, str): seen.add(provider)
+        if provider in RETIRED_EXECUTION_PROVIDERS:
+            attempts.append({'provider':provider,'status':'RETIRED_ARCHIVE_ONLY',
+                'code':'MULTISOURCE_NAR_CENTRAL_RETIRED_ARCHIVE_ONLY','retryable':False})
+            continue
         try:
             if (provider not in PROVIDERS or PROVIDERS[provider][1] != 'OFFICIAL'
                     or not callable(route.get('discover_day')) or not callable(route.get('verify_discovery'))):

@@ -10,7 +10,7 @@ from __future__ import annotations
 def _safe(value):
     return str(value).replace("\r"," ").replace("\n"," ").replace("|","／")
 
-def render_full_numeric(materialized, *, classification, race_id):
+def render_full_numeric(materialized, *, classification, race_id, source_description='既存公式SOURCE'):
     indices=materialized.get("required_indices")
     rows=materialized.get("runners")
     if not isinstance(indices,list) or len(indices)!=29 or len(set(indices))!=29:
@@ -25,7 +25,7 @@ def render_full_numeric(materialized, *, classification, race_id):
         "",
         "**分類**："+classification,
         "**対象Race**："+_safe(race_id),
-        "**注意**：以下は既存公式SOURCEから得た指数計算セルの原本であり、"
+        "**注意**：以下は"+source_description+"から得た指数計算セルの原本であり、"
         "正式な予測順位・KRS・券面・実購入・配送完了を示しません。",
         "UNKNOWNはWEAKではありません。規定中立は弱い馬という意味ではありません。",
         "",

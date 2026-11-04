@@ -56,6 +56,9 @@ def get_capture_binding():
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+    # Offline historical transport mechanics remain testable. This fixture
+    # uses only the mocked opener; the real default retirement is tested below.
+    monkeypatch.setattr(actor.multisource,'RETIRED_EXECUTION_PROVIDERS',frozenset())
     binding, pin = make_binding(tmp_path)
     root = tmp_path/'private'
     calls = []
@@ -80,6 +83,14 @@ def setup(tmp_path, monkeypatch):
         kw.update(changes)
         return actor.capture(**kw)
     return run, calls, root, raw, binding, pin, Response
+
+
+def test_default_retirement_stops_legacy_actor_before_any_get(setup,monkeypatch):
+    run,calls,*_=setup
+    monkeypatch.setattr(actor.multisource,'RETIRED_EXECUTION_PROVIDERS',frozenset(('NAR_OFFICIAL','NAR_OFFICIAL_CSV')))
+    with pytest.raises(ValueError,match='NAR_CENTRAL_RETIRED_ARCHIVE_ONLY'):
+        run()
+    assert calls==[]
 
 
 def test_qualified_single_get_uses_existing_parser_and_remains_reference(setup):
