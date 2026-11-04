@@ -55,9 +55,12 @@ def campaign_lock(root):
 
 
 def validate(manifest, *, binding, activations):
+    dates = manifest.get('race_dates')
     if (manifest.get('profile') != PROFILE or manifest.get('venue_id') != 'FNB'
             or manifest.get('classification') != day.CLASSIFICATION
-            or manifest.get('race_dates') != list(DATES)
+            or not isinstance(dates, list) or not dates
+            or any(value not in DATES for value in dates)
+            or dates != sorted(set(dates))
             or manifest.get('actor_code_sha256') != hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
             or not manifest.get('approval_ref')):
         raise ValueError('FINITE_ACTOR_EXACT_DATED_SCOPE_AND_CODE_REQUIRED')
@@ -66,12 +69,12 @@ def validate(manifest, *, binding, activations):
         raise ValueError('FINITE_ACTOR_APPROVED_LEASES_REQUIRED')
     previous_end = None
     days = set()
-    totals = {value:0 for value in DATES}
+    totals = {value:0 for value in dates}
     for row in leases:
         value = row.get('race_date')
         start, stop = day.stamp(row['start_at']), day.stamp(row['stop_at'])
         seconds = (stop - start).total_seconds()
-        if (value not in DATES or start.astimezone(day.JST).date().isoformat() != value
+        if (value not in dates or start.astimezone(day.JST).date().isoformat() != value
                 or stop.astimezone(day.JST).date().isoformat() != value
                 or not seconds.is_integer() or not 1 <= seconds <= 21000
                 or (previous_end is not None and start < previous_end)):
@@ -91,9 +94,9 @@ def validate(manifest, *, binding, activations):
         totals[value] += int(seconds)
         previous_end = stop
         days.add(value)
-    if days != set(DATES) or manifest.get('approved_day_worker_seconds') != totals:
+    if days != set(dates) or manifest.get('approved_day_worker_seconds') != totals:
         raise ValueError('FINITE_ACTOR_AGGREGATE_DURATION_NOT_PINNED')
-    if any(totals[value] > activations[value]['approved_worker_seconds'] for value in DATES):
+    if any(totals[value] > activations[value]['approved_worker_seconds'] for value in dates):
         raise ValueError('FINITE_ACTOR_AGGREGATE_EXCEEDS_DATED_ACTIVATION')
     return leases
 
@@ -242,7 +245,7 @@ def main(argv=None):
     manifest = pinned(args.manifest,args.manifest_sha256)
     binding = day.load_binding(manifest['binding']['path'],manifest['binding']['sha256'])
     activations = {value:pinned(manifest['activations'][value]['path'],
-                               manifest['activations'][value]['sha256']) for value in DATES}
+                               manifest['activations'][value]['sha256']) for value in manifest['race_dates']}
     previous = {}
     def stop(signum, frame):
         raise StopActor()

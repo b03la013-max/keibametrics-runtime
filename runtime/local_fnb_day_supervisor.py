@@ -240,6 +240,70 @@ def _resume_mutations(plan, race, binding, activation, cell, execute, clock):
         cell['activation_hold'] = safe_code(str(error)); return False
 
 
+def _reference_readback(binding, race, root, cell, now, *, discovery_verified):
+    """Read the existing independent REFERENCE without entering Formal gates.
+
+    The optional private callback only locates a saved publication. Its actual
+    frozen bytes are read by the existing REFERENCE reader. This is display
+    readiness, never a Formal completion, send, recipient ACK or Actor success.
+    """
+    cell.pop('reference', None)
+    if not binding or not callable(binding.get('inspect_reference')):
+        return
+    try:
+        if not discovery_verified:
+            raise ValueError('REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED')
+        result = binding['inspect_reference'](race=race, private_root=root, now=now)
+        if result.get('status') in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL'):
+            return
+        if result.get('status') != 'VERIFIED_REFERENCE_BODY_READY_TO_RENDER':
+            raise ValueError('REFERENCE_SAVED_BODY_NOT_READY')
+        from runtime.local_fnb_alternative_connection import race_intent
+        from runtime.local_fnb_rakuten_reference import read_saved_reference
+        actual = read_saved_reference(result['publication_folder'], race_intent(race), now=now)
+        manifest = actual['manifest']
+        if (stamp(manifest['scheduled_post_at']) != stamp(race['scheduled_post_at'])
+                or race.get('prediction_cutoff') is None
+                or stamp(manifest['prediction_cutoff']) != stamp(race['prediction_cutoff'])):
+            raise ValueError('REFERENCE_SAVED_DISCOVERY_POST_OR_CUTOFF_MISMATCH')
+        cell['reference'] = {k:actual[k] for k in ('status', 'classification', 'body', 'body_sha256',
+            'publication_folder', 'private_readback_verified', 'prestart_at_readback',
+            'source_age_seconds_at_readback', 'observation_age_seconds_at_readback',
+            'source_within_existing_600s', 'observation_within_existing_600s')}
+        cell['reference'].update(revision=manifest['revision'], manifest_sha256=manifest['sha256'],
+            body_original={'publication_folder':actual['publication_folder'],
+                'path':'answer.md', 'sha256':actual['body_sha256']},
+            source_sha256=manifest['source_sha256'], source_fetched_at=manifest['source_fetched_at'],
+            forecast_frozen_at=manifest['forecast_frozen_at'], prepared_at=manifest['prepared_at'],
+            observation_raw_sha256=manifest['observation_raw_sha256'],
+            readback_at=now.isoformat(), ready_to_render=True, displayed=False,
+            delivery_send_confirmed=False, recipient_delivery_confirmed=False,
+            recipient_ack='UNKNOWN', prestart_delivery_confirmed=False,
+            natural_delivery_verified=False, formal_final_proven=False,
+            new_prediction_executed=False, registered_oos_increment=0, actual_purchase=False)
+    except Exception as error:
+        cell['reference'] = {'status':'REFERENCE_READBACK_HOLD_NOT_NO_BET',
+            'code':safe_code(str(error)), 'readback_at':now.isoformat(),
+            'ready_to_render':False, 'formal_final_proven':False,
+            'recipient_ack':'UNKNOWN', 'natural_delivery_verified':False}
+
+
+def _pending_single_owner_claim(root, race):
+    """An older single-Race dispatch is not absence of an execution."""
+    from runtime.local_fnb_alternative_connection import race_intent
+    intent = race_intent(race)
+    prefix = f"KM-LOCAL-FNB-{intent['race_date'].replace('-', '')}-R{intent['race_no']:02d}"
+    base = root / 'single_owner_claims'
+    if base.is_symlink():
+        return True
+    for folder in base.glob(prefix + '*'):
+        if re.fullmatch(re.escape(prefix) + r'(?:-[A-Za-z0-9_]+)*', folder.name):
+            claim = folder / 'claim.json'
+            if folder.is_symlink() or claim.exists() or claim.is_symlink():
+                return True
+    return False
+
+
 def tick(plan, private_root, *, binding=None, activation=None, execute=False, clock=lambda:datetime.now(timezone.utc)):
     if execute and os.environ.get('GITHUB_ACTIONS') == 'true':
         raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
@@ -255,9 +319,30 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                      production_authority_granted=False, actual_purchase=False, forward_oos_increment=0)
         save = lambda: put(path, state)
         put(root / ('FNB_' + plan['race_date'] + '_LAST_DISCOVERY.json'), plan)
+        reference_discovery_verified = False
+        if binding and callable(binding.get('inspect_reference')):
+            try:
+                verifier = binding.get('verify_saved_discovery')
+                reference_plan = json.loads(encoded(plan))
+                before = sha(reference_plan)
+                reference_discovery_verified = (callable(verifier)
+                    and verifier(plan=reference_plan, now=clock()) is True)
+                if sha(reference_plan) != before:
+                    raise ValueError('REFERENCE_SAVED_DISCOVERY_MUTATED_BY_READER')
+                if not reference_discovery_verified:
+                    raise ValueError('REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED')
+                state['reference_discovery'] = {'status':'SAVED_RAW_IDENTITY_READBACK_VERIFIED',
+                    'plan_sha256':before, 'formal_qualification_granted':False}
+            except Exception as error:
+                reference_discovery_verified = False
+                state['reference_discovery'] = {'status':'REFERENCE_DISCOVERY_READBACK_HOLD',
+                    'code':safe_code(str(error)), 'formal_qualification_granted':False}
+        else:
+            state.pop('reference_discovery', None)
         observed_numbers = {str(r['race_no']) for r in rows}
         for key, prior in state['races'].items():
             prior['observed_in_latest_discovery'] = key in observed_numbers
+            prior.pop('reference', None)
             if key not in observed_numbers:
                 prior.pop('completion', None); prior.pop('delivery', None); prior.pop('result_learning', None)
                 prior['status'] = 'NOT_IN_CURRENT_DISCOVERY_RECONCILIATION_REQUIRED'
@@ -271,6 +356,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             cell['official_post_at'] = race['scheduled_post_at']
             cell['observed_in_latest_discovery'] = True
             cell['prediction_cutoff'] = race.get('prediction_cutoff')
+            _reference_readback(binding, race, root, cell, clock(),
+                                discovery_verified=reference_discovery_verified)
             if cell.get('claim'):
                 # Never resend an ambiguous dispatch, even after a process restart.
                 cell.pop('completion', None)
@@ -299,6 +386,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             if binding:
                 try:
                     existing = binding['inspect_race'](race=race, private_root=root, now=clock())
+                    if existing.get('status') == 'NO_FORMAL_ORIGINAL' and _pending_single_owner_claim(root, race):
+                        existing = {'status':'EXISTING_SINGLE_OWNER_CLAIM_REQUIRES_READBACK'}
                     if verify_prediction(root, race, existing, clock()):
                         cell['original_verified_this_tick'] = True
                         cell['claim'] = {'kind':'EXISTING_ORIGINAL_READBACK_NO_DISPATCH',
@@ -309,7 +398,7 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                         _deliver(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
                         _post_result(binding, activation, root, race, cell, clock, save, allow_mutation=permitted)
                         save(); continue
-                    if existing.get('status') not in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL'):
+                    if existing.get('status') not in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL', 'NO_FORMAL_ORIGINAL'):
                         cell['claim'] = {'kind':'EXISTING_EXECUTION_RECONCILIATION_NO_DISPATCH',
                             'race_sha256':sha(race),'observed_at':clock().isoformat(),
                             'delivery_target':delivery_target(activation)}
@@ -396,7 +485,13 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             'verified_prestart_originals':len(verified),
             'verified_prestart_recipient_deliveries':sum(c.get('status') == 'DELIVERED_PRESTART' for c in state['races'].values()),
             'no_bet_races':sum(c['completion'].get('computed_no_bet') is True for c in verified),
-            'verified_result_learning_races':sum(bool(c.get('result_learning')) for c in verified)}
+            'verified_result_learning_races':sum(bool(c.get('result_learning')) for c in verified),
+            'reference_saved_readbacks':sum(c.get('observed_in_latest_discovery') is True
+                and c.get('reference',{}).get('private_readback_verified') is True for c in state['races'].values()),
+            'reference_ready_to_render':sum(c.get('observed_in_latest_discovery') is True
+                and c.get('reference',{}).get('ready_to_render') is True for c in state['races'].values()),
+            'reference_displayed':0, 'reference_recipient_deliveries':0,
+            'reference_ack_verified':0, 'reference_autonomous_completed':0}
         save(); return state
 
 

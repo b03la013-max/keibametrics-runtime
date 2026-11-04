@@ -85,6 +85,17 @@ def test_unsigned_callback_200_is_not_source_admission_and_stops_owner(monkeypat
     executor.assert_not_called();assert list(tmp_path.glob('source_attempts/**/original_provider_card.html'))
 
 
+@pytest.mark.parametrize('revision',['LIVE-SYNTHETIC','OLDER-REVISION'])
+def test_partial_single_owner_claim_stops_direct_entry_before_source(tmp_path,revision):
+    intent={'venue_id':'FNB','race_date':'2026-11-06','race_no':1}
+    claim=tmp_path/'single_owner_claims'/('KM-LOCAL-FNB-20261106-R01-'+revision)/'claim.json'
+    claim.parent.mkdir(parents=True);claim.write_text('{"status":"AMBIGUOUS"}')
+    source=Mock(side_effect=AssertionError('partial execution must be reconciled before HTTP'))
+    with pytest.raises(m.ProducerHold,match='SINGLE_OWNER_CLAIM_EXISTS_READBACK_REQUIRED'):
+        m.run(intent,tmp_path,{'source':source},clock=lambda:NOW)
+    source.assert_not_called()
+
+
 @pytest.mark.parametrize('age,accepted',[(600,True),(601,False)])
 def test_new_signed_freeze_cannot_refresh_old_raw(monkeypatch,age,accepted):
     c,i,t,sign,o=fixture(monkeypatch);later=NOW+timedelta(seconds=age)

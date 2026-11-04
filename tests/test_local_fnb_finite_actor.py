@@ -135,6 +135,30 @@ def test_changed_scope_code_or_activation_rejected():
         with pytest.raises(ValueError):actor.validate(manifest,binding=binding,activations=activations)
 
 
+def test_only_remaining_approved_days_run_without_a_backdated_lease(tmp_path):
+    manifest,binding,activations=fixture()
+    remaining=list(actor.DATES[1:])
+    manifest['race_dates']=remaining
+    manifest['leases']=[r for r in manifest['leases'] if r['race_date'] in remaining]
+    manifest['approved_day_worker_seconds']={value:2 for value in remaining}
+    activations={value:activations[value] for value in remaining}
+    clock=Clock(manifest);calls=[]
+    def supervise(**kwargs):
+        calls.append(kwargs['day']);clock.current+=timedelta(seconds=kwargs['worker_seconds'])
+        return {'counts':{}}
+    result=actor.run(manifest,tmp_path,binding=binding,activations=activations,
+                     clock=clock,sleep=clock.sleep,supervise=supervise)
+    assert calls==remaining and result['status']=='FINITE_RUN_ENDED'
+
+
+@pytest.mark.parametrize('dates',[[],['2026-11-05','2026-11-05'],
+    ['2026-11-06','2026-11-05'],['2026-11-07']])
+def test_remaining_day_scope_cannot_duplicate_reorder_or_extend_dates(dates):
+    manifest,binding,activations=fixture();manifest['race_dates']=dates
+    with pytest.raises(ValueError,match='EXACT_DATED_SCOPE'):
+        actor.validate(manifest,binding=binding,activations=activations)
+
+
 def test_known_failed_provider_not_retried_on_next_lease(tmp_path):
     manifest,binding,activations=fixture();clock=Clock(manifest);calls=[]
     binding['discovery_routes']=[{'provider':'NANKAN_OFFICIAL'},{'provider':'FKEIBA_OFFICIAL'}]

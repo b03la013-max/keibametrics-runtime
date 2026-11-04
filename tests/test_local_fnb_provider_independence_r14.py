@@ -116,6 +116,26 @@ def test_normal_reference_readback_does_not_call_source_or_engine(tmp_path,monke
     assert not r['formal_final_proven'] and not r['recipient_delivery_ack']
 
 
+@pytest.mark.parametrize('emit_full_body',[False,True])
+def test_r20_cli_renders_verified_reference_and_succeeds(tmp_path,monkeypatch,capsys,emit_full_body):
+    from runtime import local_fnb_r20_chat_completion as r20
+    from runtime.local_fnb_rakuten_reference import read_saved_reference
+    folder,manifest,intent=reference_publication(tmp_path)
+    result=read_saved_reference(folder,intent,now=NOW+timedelta(seconds=3))
+    monkeypatch.setattr(r20,'complete',lambda *args,**kwargs:result)
+    args=['--query','2026-11-06 船橋1R','--private-root',str(tmp_path)]
+    if emit_full_body:
+        args.append('--emit-private-full-body')
+    assert r20.main(args)==0
+    output=capsys.readouterr().out
+    if emit_full_body:
+        assert output==(folder/'answer.md').read_text()
+    else:
+        rendered=json.loads(output)
+        assert rendered['status']=='VERIFIED_REFERENCE_BODY_READY_TO_RENDER'
+        assert 'body' not in rendered and not rendered['formal_final_proven']
+
+
 def test_explicit_formal_failure_still_returns_independent_reference(tmp_path,monkeypatch):
     from runtime import local_fnb_r20_chat_completion as r20
     folder,m,i=reference_publication(tmp_path);raw,capture,_=fixture_card()

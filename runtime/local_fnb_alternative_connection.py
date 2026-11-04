@@ -213,6 +213,13 @@ def run(intent,root,producers, *, clock):
     if previous:
         verified,request,adoption=previous
         return deliver_verified(verified,request=request,adoption=adoption,producers=producers,root=root,clock=clock)
+    # Reconcile a partial single-Race execution before another HTTP request,
+    # including when this entry is called without the day supervisor.
+    from runtime.local_fnb_day_supervisor import _pending_single_owner_claim
+    claim_race={**intent,'race_id':intent.get('race_id') or
+        f"KM-LOCAL-FNB-{intent['race_date'].replace('-', '')}-R{intent['race_no']:02d}"}
+    require(not _pending_single_owner_claim(Path(root),claim_race),
+        'EXECUTION','SINGLE_OWNER_CLAIM_EXISTS_READBACK_REQUIRED')
     require(callable(producers.get('source')),'SOURCE_PRODUCER','SOURCE_PRODUCER_NOT_CONNECTED')
     captured=producers['source'](intent=deepcopy(intent),private_root=root,now=observed)
     trust=producers.get('trust');assessment=source_assessment(captured,intent=intent,now=clock(),trust=trust)

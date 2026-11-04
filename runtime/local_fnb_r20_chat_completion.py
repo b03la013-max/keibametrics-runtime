@@ -590,7 +590,9 @@ def main(argv=None):
     result=complete(args.query,Path(args.private_root),
                     diagnostic_only=args.diagnostic_only,
                     emit_private_body=args.emit_private_full_body)
-    ready=result["status"] in ("VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER","VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER")
+    ready=result["status"] in ("VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER",
+                               "VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER",
+                               "VERIFIED_REFERENCE_BODY_READY_TO_RENDER")
     if args.emit_private_full_body and ready:
         print(result["body"],end="")
     else:

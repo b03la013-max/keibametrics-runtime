@@ -190,3 +190,136 @@ def test_future_day_observation_allowed_but_not_execution(tmp_path):
 def test_private_store_in_git_checkout_is_forbidden():
     with pytest.raises(ValueError,match='PRIVATE_SOURCE_IN_GIT_WORKTREE_FORBIDDEN'):
         s.tick(plan(),Path(s.__file__).parents[1]/'unsafe_private_store',execute=False,clock=lambda:NOW)
+
+
+def saved_reference_binding(root, monkeypatch):
+    """Adapter-only fixtures; existing reader owns frozen-body qualification."""
+    from runtime import local_fnb_rakuten_reference as reference
+    b = binding(root)
+    reads = []
+    def read(folder, intent, *, now):
+        reads.append((str(folder), intent, now))
+        race = next(r for r in plan()['races'] if r['race_no'] == intent['race_no'])
+        body = 'SYNTHETIC INDEPENDENT REFERENCE FULL BODY\n'
+        return {'status':'VERIFIED_REFERENCE_BODY_READY_TO_RENDER', 'classification':'REFERENCE',
+            'body':body, 'body_sha256':hashlib.sha256(body.encode()).hexdigest(),
+            'publication_folder':str(folder), 'private_readback_verified':True,
+            'prestart_at_readback':True, 'source_age_seconds_at_readback':900,
+            'observation_age_seconds_at_readback':900, 'source_within_existing_600s':False,
+            'observation_within_existing_600s':False,
+            'manifest':{'scheduled_post_at':race['scheduled_post_at'],
+                'prediction_cutoff':race['prediction_cutoff'], 'revision':'REFERENCE-SYNTHETIC',
+                'sha256':'a'*64, 'source_sha256':'b'*64,
+                'source_fetched_at':'2026-11-03T06:55:00Z',
+                'forecast_frozen_at':'2026-11-03T06:56:00Z',
+                'prepared_at':'2026-11-03T06:57:00Z', 'observation_raw_sha256':'c'*64}}
+    monkeypatch.setattr(reference, 'read_saved_reference', read)
+    b['inspect_reference'] = lambda **kw: {'status':'VERIFIED_REFERENCE_BODY_READY_TO_RENDER',
+        'publication_folder':str(root / ('reference_'+str(kw['race']['race_no']))),
+        'body':'CALLBACK BODY IS NOT THE INDEPENDENTLY READ ORIGINAL'}
+    b['verify_saved_discovery'] = lambda **kw: True
+    b['verify_discovery'] = lambda **kw: False
+    b['inspect_race'] = lambda **kw: {'status':'NO_FORMAL_ORIGINAL'}
+    return b, reads
+
+
+def test_independent_reference_readback_survives_formal_authority_hold(tmp_path, monkeypatch):
+    b, reads = saved_reference_binding(tmp_path, monkeypatch)
+    state = s.tick(plan(),tmp_path,binding=b,activation=None,execute=True,clock=lambda:NOW)
+    assert len(reads) == 2 and b['sent'] == []
+    assert state['counts']['reference_saved_readbacks'] == 2
+    assert state['counts']['reference_ready_to_render'] == 2
+    assert state['counts']['verified_prestart_originals'] == state['counts']['dispatched'] == 0
+    assert state['counts']['reference_ack_verified'] == state['counts']['reference_autonomous_completed'] == 0
+    assert state['reference_discovery']['formal_qualification_granted'] is False
+    for cell in state['races'].values():
+        ref = cell['reference']
+        assert ref['body'] == 'SYNTHETIC INDEPENDENT REFERENCE FULL BODY\n'
+        assert ref['body_original']['sha256'] == ref['body_sha256']
+        assert ref['recipient_ack'] == 'UNKNOWN' and ref['displayed'] is False
+        assert ref['formal_final_proven'] is False and ref['natural_delivery_verified'] is False
+        assert ref['source_within_existing_600s'] is False
+        assert 'completion' not in cell and 'claim' not in cell
+
+
+def test_saved_discovery_check_never_becomes_formal_qualification(tmp_path, monkeypatch):
+    b, reads = saved_reference_binding(tmp_path, monkeypatch)
+    state = tick(tmp_path,b=b)
+    assert len(reads) == 2 and b['sent'] == []
+    assert all(c['code']=='QUALIFIED_OFFICIAL_DISCOVERY_NOT_VERIFIED' for c in state['races'].values())
+    assert all('claim' not in c for c in state['races'].values())
+
+
+def test_reference_day_raw_failure_stops_only_reference_readback(tmp_path, monkeypatch):
+    b, reads = saved_reference_binding(tmp_path, monkeypatch)
+    b['verify_saved_discovery'] = lambda **kw: False
+    state = tick(tmp_path,b=b,execute=False)
+    assert reads == [] and state['counts']['reference_saved_readbacks'] == 0
+    assert all(c['reference']['code']=='REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED'
+               for c in state['races'].values())
+
+
+def test_current_reference_byte_loss_revokes_reference_count(tmp_path, monkeypatch):
+    from runtime import local_fnb_rakuten_reference as reference
+    b, _ = saved_reference_binding(tmp_path, monkeypatch)
+    assert tick(tmp_path,b=b,execute=False)['counts']['reference_saved_readbacks'] == 2
+    def corrupt(*args, **kwargs):
+        raise ValueError('REFERENCE_FROZEN_PUBLICATION_INTEGRITY_HOLD')
+    monkeypatch.setattr(reference, 'read_saved_reference', corrupt)
+    state = tick(tmp_path,b=b,execute=False)
+    assert state['counts']['reference_saved_readbacks'] == 0
+    assert all(c['reference']['code']=='REFERENCE_FROZEN_PUBLICATION_INTEGRITY_HOLD'
+               and 'body' not in c['reference'] for c in state['races'].values())
+
+
+def test_reference_cutoff_must_match_saved_day_identity(tmp_path, monkeypatch):
+    from runtime import local_fnb_rakuten_reference as reference
+    b, _ = saved_reference_binding(tmp_path, monkeypatch)
+    read = reference.read_saved_reference
+    def wrong(*args, **kwargs):
+        result = read(*args, **kwargs)
+        result['manifest']['prediction_cutoff'] = '2026-11-03T07:39:00Z'
+        return result
+    monkeypatch.setattr(reference, 'read_saved_reference', wrong)
+    state = tick(tmp_path,b=b,execute=False)
+    assert state['counts']['reference_saved_readbacks'] == 0
+    assert all(c['reference']['code']=='REFERENCE_SAVED_DISCOVERY_POST_OR_CUTOFF_MISMATCH'
+               for c in state['races'].values())
+
+
+@pytest.mark.parametrize('suffix',['','-OLDER_SOURCE_REVISION'])
+def test_no_formal_original_does_not_hide_an_ambiguous_single_race_claim(tmp_path, suffix):
+    b = binding(tmp_path)
+    b['inspect_race'] = lambda **kw: {'status':'NO_FORMAL_ORIGINAL'}
+    claim = tmp_path/'single_owner_claims'/(plan()['races'][0]['race_id']+suffix)/'claim.json'
+    claim.parent.mkdir(parents=True)
+    claim.write_bytes(b'{"status":"SYNTHETIC_PARTIAL_EXECUTION"}\n')
+    state = tick(tmp_path,b=b)
+    assert b['sent'] == [6]
+    assert state['races']['5']['code'] == 'EXISTING_EXECUTION_OR_PARTIAL_ORIGINAL_REQUIRES_READBACK'
+    assert state['races']['5']['dispatch_count'] == 0
+    assert state['counts']['dispatched'] == 1
+
+
+def test_changed_race_identity_cannot_retain_prior_reference_readback(tmp_path, monkeypatch):
+    b, _ = saved_reference_binding(tmp_path, monkeypatch)
+    assert tick(tmp_path,b=b,execute=False)['counts']['reference_saved_readbacks'] == 2
+    p = plan()
+    p['races'][0]['race_id'] += '-NEW_REVISION'
+    b['verify_saved_discovery'] = lambda **kw: False
+    state = tick(tmp_path,p,b,execute=False)
+    assert state['counts']['reference_saved_readbacks'] == 0
+    assert 'reference' not in state['races']['5']
+
+
+def test_saved_discovery_reader_cannot_mutate_formal_plan(tmp_path, monkeypatch):
+    b, reads = saved_reference_binding(tmp_path, monkeypatch)
+    p = plan(); original = deepcopy(p)
+    def mutate(**kw):
+        kw['plan']['races'][0]['prediction_cutoff'] = '2026-11-03T07:39:00Z'
+        return True
+    b['verify_saved_discovery'] = mutate
+    state = tick(tmp_path,p,b,execute=False)
+    assert p == original and reads == []
+    assert state['reference_discovery']['code'] == 'REFERENCE_SAVED_DISCOVERY_MUTATED_BY_READER'
+    assert state['counts']['reference_saved_readbacks'] == 0
