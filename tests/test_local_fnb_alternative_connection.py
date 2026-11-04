@@ -291,7 +291,7 @@ def test_same_single_owner_original_is_verified_by_existing_day_supervisor(monke
     from runtime import local_fnb_day_supervisor as day
     x,result,_=computed_fixture(monkeypatch,tmp_path);c,i,t,sign,o=x
     m.save_completion(tmp_path,i,c,result)
-    race={**c['request']};producers={'trust':t}
+    race={**c['request']};race.pop('race_date');producers={'trust':t}
     completion=m.supervisor_completion(tmp_path,race,producers,NOW)
     assert day.verify_prediction(tmp_path,race,completion,NOW)
     assert completion['owner_count']==1 and completion['horse_count']==2 and completion['index_cells']==58

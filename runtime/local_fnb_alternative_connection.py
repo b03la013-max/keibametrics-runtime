@@ -408,9 +408,20 @@ def verify_result(result, *, request,source,adoption,trust,root,now,captured):
 
 
 
+def race_intent(race):
+    # Existing discovery rows carry their dated identity in Race ID; a
+    # redundant race_date field is optional in the unchanged day contract.
+    match=re.fullmatch(r'KM-LOCAL-FNB-(\d{8})-R(\d{2})(?:-[A-Za-z0-9_]+)*',str(race.get('race_id')))
+    require(match is not None and int(match[2])==race.get('race_no'),
+        'REVISION','SINGLE_OWNER_DISCOVERY_RACE_IDENTITY_INVALID')
+    value=match[1];date=value[:4]+'-'+value[4:6]+'-'+value[6:]
+    require(not race.get('race_date') or race['race_date']==date,'REVISION','SINGLE_OWNER_DISCOVERY_DATE_CONFLICT')
+    return {'venue_id':'FNB','race_date':date,'race_no':race['race_no'],'race_id':race['race_id']}
+
+
 def supervisor_completion(root,race,producers,now):
     """Read the real signed single-Owner original for the existing Actor."""
-    intent={k:race[k] for k in ('race_date','race_no','race_id')};intent['venue_id']='FNB'
+    intent=race_intent(race)
     loaded=read_completion(root,intent,producers.get('trust'),now)
     if not loaded:return {'status':'NO_FORMAL_ORIGINAL'}
     verified,request,adoption=loaded
@@ -450,14 +461,14 @@ def day_callbacks(producers, *, discover_day,verify_discovery,authorize_race,clo
         'ACTOR','QUALIFIED_DAY_DISCOVERY_AND_AUTHORIZATION_NOT_CONNECTED')
     def inspect_race(*,race,private_root,now):return supervisor_completion(private_root,race,producers,now)
     def execute_race(*,race,private_root,now):
-        intent={k:race[k] for k in ('race_date','race_no','race_id')};intent['venue_id']='FNB'
+        intent=race_intent(race)
         try:
             result=run(intent,private_root,producers,clock=clock)
             return {'status':result['status'],'run_id':race['race_id']}
         except ProducerHold as error:
             return {'status':'EXECUTION_HOLD_NOT_NO_BET','first_failed_stage':error.stage,'reason':error.code}
     def inspect_delivery(*,race,completion,private_root,now):
-        intent={k:race[k] for k in ('race_date','race_no','race_id')};intent['venue_id']='FNB'
+        intent=race_intent(race)
         previous=read_completion(private_root,intent,producers.get('trust'),now)
         if not previous:return {}
         verified,request,adoption=previous
