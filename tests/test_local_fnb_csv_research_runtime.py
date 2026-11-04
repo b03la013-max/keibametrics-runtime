@@ -136,3 +136,51 @@ def test_mapping_only_input_is_serialized_without_claiming_original_transport_by
 def test_qualified_source_save_cannot_omit_verified_receipt_original(tmp_path):
     with pytest.raises(ValueError,match='ORIGINALS_REQUIRED_OR_CHANGED'):
         runtime._save_source_originals(tmp_path,{'csv_source_assessment.json':runtime._source_original({},None,'CSV')})
+
+
+def test_provider_reference_engine_pin_rejects_before_any_engine_call(tmp_path,monkeypatch):
+    """Synthetic reference wiring only; no real SOURCE, Owner or Engine run."""
+    from unittest.mock import Mock
+    from test_local_fnb_provider_independence_r14 import fixture_card
+    raw,capture,race=fixture_card()
+    monkeypatch.setattr(runtime.common,'verify_private_owner_decision',lambda *a,**k:(
+        {'classification':'SYNTHETIC_PRIVATE_REFERENCE_ONLY'},b'SYNTHETIC_OWNER_DECISION'))
+    # These test placeholders are not installed trust or Engine files. The
+    # real entry keeps the existing immutable Engine/map pin checks.
+    monkeypatch.setattr(runtime.common,'_pinned',lambda *a,**k:None)
+    engine=Mock(side_effect=AssertionError('MISMATCHED_PIN_MUST_STOP_BEFORE_ENGINE'))
+    monkeypatch.setattr(runtime.common,'execute_krs',engine)
+    with pytest.raises(ValueError,match='PINNED_ENGINE_INPUT_PROJECTION_MISMATCH_BEFORE_EXECUTION'):
+        runtime.run_provider_reference(raw,capture=capture,race=race,
+            private_root=tmp_path/'private',engine='SYNTHETIC_NOT_AN_ENGINE',params='SYNTHETIC_NOT_PARAMETERS',
+            owner_decision_path='SYNTHETIC_NOT_AN_APPROVAL',owner_decision_sha256='a'*64,
+            expected_engine_projection_sha256='0'*64)
+    engine.assert_not_called()
+
+
+@pytest.mark.parametrize('checks_before_expiry',[0,3])
+def test_reference_publication_cutoff_rejects_initial_or_pre_engine_expiry(tmp_path,monkeypatch,
+                                                                       checks_before_expiry):
+    """Synthetic clock boundary; no future execution or Active acceptance."""
+    from datetime import datetime,timedelta
+    from unittest.mock import Mock
+    from test_local_fnb_provider_independence_r14 import fixture_card
+    raw,capture,race=fixture_card()
+    cutoff=datetime.fromisoformat('2026-11-06T14:40:00+09:00')
+    calls=[]
+    def clock():
+        calls.append(True)
+        return cutoff-timedelta(seconds=1) if len(calls)<=checks_before_expiry else cutoff
+    monkeypatch.setattr(runtime.common,'_actual_clock',clock)
+    monkeypatch.setattr(runtime.common,'verify_private_owner_decision',lambda *a,**k:(
+        {'classification':'SYNTHETIC_PRIVATE_REFERENCE_ONLY'},b'SYNTHETIC_OWNER_DECISION'))
+    monkeypatch.setattr(runtime.common,'_pinned',lambda *a,**k:None)
+    engine=Mock(side_effect=AssertionError('EXPIRED_REFERENCE_MUST_NOT_CALL_ENGINE'))
+    monkeypatch.setattr(runtime.common,'execute_krs',engine)
+    with pytest.raises(ValueError,match='PRIVATE_PRESTART_CUTOFF_EXPIRED_NOT_NO_BET'):
+        runtime.run_provider_reference(raw,capture=capture,race=race,
+            private_root=tmp_path/'private',engine='SYNTHETIC_NOT_AN_ENGINE',params='SYNTHETIC_NOT_PARAMETERS',
+            owner_decision_path='SYNTHETIC_NOT_AN_APPROVAL',owner_decision_sha256='a'*64,
+            require_reference_publication_cutoff=True)
+    assert len(calls)==checks_before_expiry+1
+    engine.assert_not_called()

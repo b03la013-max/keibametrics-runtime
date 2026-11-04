@@ -152,7 +152,10 @@ def parse_card(raw, *, capture, race, now=None):
         sexage=re.fullmatch(r'([牡牝セ騸])(\d+)',compact(parts[0]))
         load=re.fullmatch(r'\d+(?:\.\d+)?',compact(parts[2]))
         if not sexage or not load: raise ValueError('RAKUTEN_SEX_AGE_LOAD_UNOBSERVED')
-        jockey=one(profile.find('a'),'JOCKEY').text()
+        jockey_anchor=one(profile.find('a'),'JOCKEY')
+        jockey=jockey_anchor.text()
+        jockey_url=jockey_anchor.attrs.get('href','')
+        jm=re.fullmatch(r'https://keiba\.rakuten\.co\.jp/jockey/detail/JOCKEYID/(\d+)',jockey_url)
         weight=compact(cell('weightDistance').text()); bw=re.fullmatch(r'(\d{3,4})(?:[(（]([+-]?\d+)[)）])?',weight)
         rate=compact(one(namecell.find(cls='rate'),'MARKET').text()); odds=re.match(r'(\d+(?:\.\d+)?)',rate)
         popularity=re.search(r'[(（](\d+)人気[)）]',rate)
@@ -161,6 +164,9 @@ def parse_card(raw, *, capture, race, now=None):
             'official_horse_id':None,'sire':direct[0],'dam':direct[1],'damsire':damsire[1],
             'date_of_birth':dob,'sex_age':parts[0],'age':int(sexage[2]),'current_load':float(load[0]),
             'current_jockey':jockey,'trainer':parts[-1],
+            'provider_jockey_id':jm[1] if jm else None,
+            'provider_jockey_id_namespace':PROVIDER if jm else None,
+            'provider_jockey_url':jockey_url if jm else None,
             'current_body_weight':int(bw[1]) if bw else None,
             'current_body_weight_change':int(bw[2]) if bw and bw[2] else None,
             'odds':float(odds[1]) if odds and float(odds[1])>0 else None,
@@ -182,8 +188,28 @@ def parse_card(raw, *, capture, race, now=None):
             evidence={'provider':PROVIDER,'source_url':url,'raw_sha256':digest,'captured_at':captured.isoformat(),
                 'runner_number':rid,'history_slot':slot,'provider_horse_id':hm[1],
                 'locator':f'tbody.raceCard/runner[{rid}]/history[{slot}]'}
+            # Preserve a native identity only when this same history cell
+            # actually prints the canonical Provider link. Names/dates alone
+            # do not create an ID, and a Provider ID is not an official ID.
+            history_name=one(c.find(cls='raceName'),'HISTORY_NAME')
+            native_links=[a.attrs.get('href','') for a in history_name.find('a')
+                if re.fullmatch(r'https://keiba\.rakuten\.co\.jp/race_performance/list/RACEID/\d{18}',a.attrs.get('href',''))]
+            if len(native_links)>1:
+                raise ValueError('RAKUTEN_HISTORY_NATIVE_RACE_LINK_AMBIGUOUS')
+            native_url=native_links[0] if native_links else None
+            native_id=native_url.rsplit('/',1)[-1] if native_url else None
+            if native_id and native_id[:8]!=event_day.strftime('%Y%m%d'):
+                raise ValueError('RAKUTEN_HISTORY_NATIVE_RACE_DATE_CONFLICT')
+            native_identity={'provider_race_id':native_id,
+                'provider_race_id_namespace':PROVIDER if native_id else None,
+                'provider_race_url':native_url}
+            if native_id:
+                evidence['native_race_identity']={**native_identity,
+                    'locator':f'tbody.raceCard/runner[{rid}]/history[{slot}]/.raceName/a@href',
+                    'raw_sha256':digest,'captured_at':captured.isoformat()}
             if not finish.isdigit():
-                current['non_completed_history'].append({'date':event_day.isoformat(),'printed_status':finish,'provenance':evidence})
+                current['non_completed_history'].append({'date':event_day.isoformat(),'printed_status':finish,
+                    **native_identity,'provenance':evidence})
                 continue
             field=one(info.find(cls='numberInfo'),'HISTORY_FIELD').text(); fs=re.fullmatch(r'(\d+)頭',compact(field))
             course=re.search(r'(?<!\d)(\d{3,4})([左右直]?)([ダ芝])',alltext)
@@ -197,12 +223,13 @@ def parse_card(raw, *, capture, race, now=None):
             time_margin=re.search(r'((?:\d+:)?\d{2,3}\.\d)\s+\((\d+(?:\.\d+)?)\)',alltext)
             body_weight=re.search(r'(?<!\d)(\d{3,4})k\s+\d+番',alltext)
             go=one(info.find(cls='stateInfo'),'HISTORY_GOING').text()
-            race_name=one(c.find(cls='raceName'),'HISTORY_NAME').text()
+            race_name=history_name.text()
             after_date=alltext.split(event[0],1)[-1]
             descriptor=after_date.split(course[0],1)[0].strip()
             ride=re.search(re.escape(course[0])+r'\s+(\d+|-)人\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(?:(?:\d+:)?\d{2,3}\.\d\s+\(|\d{3,4}k)',alltext)
             run={'date':event_day.strftime('%y.%m.%d'),'event_date':event_day.isoformat(),
                 'venue':event[1],'finish':f,'field_size':n,'distance':int(course[1]),
+                **native_identity,
                 'direction':{'左':'LEFT','右':'RIGHT','直':'STRAIGHT'}.get(course[2]),
                 'surface':{'ダ':'DIRT','芝':'TURF'}[course[3]],
                 'going':{'稍':'稍重','不':'不良'}.get(go,go),
@@ -222,6 +249,8 @@ def parse_card(raw, *, capture, race, now=None):
             'transform':'PRINTED_FACT_EXTRACTION_NOT_OFFICIAL_ID_PROMOTION',
             'status':'OBSERVED' if v is not None else 'UNKNOWN','conflict':'NOT_CROSS_SOURCE_RECONCILED'}
             for k,v in current.items() if k not in ('starts','non_completed_history','field_provenance')}
+        for key in ('provider_jockey_id','provider_jockey_id_namespace','provider_jockey_url'):
+            current['field_provenance'][key]['locator']=f'tbody.raceCard/runner[{rid}]/profile/a@href'
         runners.append(current)
     ids=[r['runner_id'] for r in runners]
     if len(ids)<2 or len(ids)!=len(set(ids)) or set(map(int,ids))!=set(range(1,len(ids)+1)):
@@ -241,12 +270,15 @@ def parse_card(raw, *, capture, race, now=None):
         'automated_use_licence_issued_here':False,'independent_upstream_sources_proven':False}
 
 
-def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=None):
+def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=None,
+                          active_runner_ids=None):
     """Connect observed facts to existing formulas and the fixed model format.
 
     This is the explicitly unqualified private reference route, not an alternate
     SOURCE admission. Unknown weather, going, Active status and ID mappings
     remain unknown. Only actually printed FNB histories feed the fixed context.
+    An admitted caller may provide its separately verified Active IDs before
+    field-relative arithmetic. This argument grants no Active qualification.
     """
     from runtime.local_nar_evidence_candidate import compile_parsed_candidate_evidence
     from runtime.local_fullnumerical_candidate import materialize_candidate
@@ -286,7 +318,17 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
             for key,field in (('track_condition','going'),('weather','weather'))},
         'active_runner_universe_verified':False,'formal_source_admitted':False,
         'production_numeric_consumers_authorized':False}
-    raw_field={r['runner_id']:deepcopy(r) for r in parsed['runners']}
+    numerical_runners=parsed['runners']
+    if active_runner_ids is not None:
+        listed={r['runner_id'] for r in parsed['runners']}
+        if (not isinstance(active_runner_ids,(list,tuple)) or len(active_runner_ids)<2
+                or any(type(rid) is not str or rid not in listed for rid in active_runner_ids)
+                or len(set(active_runner_ids))!=len(active_runner_ids)):
+            raise ValueError('RAKUTEN_EXPLICIT_ACTIVE_SUBSET_INVALID')
+        selected=set(active_runner_ids)
+        numerical_runners=[r for r in parsed['runners'] if r['runner_id'] in selected]
+        request['runners']=[r for r in request['runners'] if r['runner_id'] in selected]
+    raw_field={r['runner_id']:deepcopy(r) for r in numerical_runners}
     registry_path=root/'mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json'
     mapping_path=root/'mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json'
     compiled=compile_parsed_candidate_evidence(source,request,raw_field,registry_path)
@@ -306,7 +348,7 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
     if arithmetic['status']!='29_OF_29_RECORDED_FEATURE_ARITHMETIC_PASS':
         raise ValueError('RAKUTEN_EXISTING_29_ARITHMETIC_HOLD')
     observations=[]
-    for runner in parsed['runners']:
+    for runner in numerical_runners:
         starts=[x for x in runner['starts'] if compact(x['venue'])=='船橋' and x['content_positions']]
         observations.append({'runner_id':runner['runner_id'],'name':runner['name'],
             'historical_fnb_observations':[{'event_date':x['event_date'],'field_size':x['field_size'],

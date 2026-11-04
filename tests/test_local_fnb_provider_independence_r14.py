@@ -39,6 +39,63 @@ def test_original_namespaced_ids_cancelled_history_and_winner_difference():
     assert h['starts'][0]['margin']==0 and h['starts'][0]['printed_time_difference']==.5
     assert h['starts'][0]['content_positions']==[1,1,1]
 
+
+def linked_native_id_fixture():
+    raw,capture,race=fixture_card()
+    raw=raw.replace('<a>試験騎手</a>'.encode(),
+        '<a href="https://keiba.rakuten.co.jp/jockey/detail/JOCKEYID/31367">試験騎手</a>'.encode())
+    raw=raw.replace('<span class="raceName">２歳新馬</span>'.encode(),
+        '<span class="raceName"><a href="https://keiba.rakuten.co.jp/race_performance/list/RACEID/202610011900000001">２歳新馬</a></span>'.encode())
+    raw=raw.replace('<span class="raceName">２歳</span>'.encode(),
+        '<span class="raceName"><a href="https://keiba.rakuten.co.jp/race_performance/list/RACEID/202609011800000002">２歳</a></span>'.encode())
+    return raw,{**capture,'raw_sha256':hashlib.sha256(raw).hexdigest()},race
+
+
+def test_native_jockey_and_completed_or_cancelled_race_ids_keep_raw_lineage():
+    raw,capture,race=linked_native_id_fixture()
+    parsed=parse_card(raw,capture=capture,race=race,now=NOW)
+    runner=parsed['runners'][0]
+    assert runner['provider_jockey_id']=='31367'
+    assert runner['provider_jockey_id_namespace']=='RAKUTEN_KEIBA'
+    assert runner['provider_jockey_url'].endswith('/JOCKEYID/31367')
+    prov=runner['field_provenance']['provider_jockey_id']
+    assert prov['locator']=='tbody.raceCard/runner[1]/profile/a@href'
+    assert prov['raw_sha256']==capture['raw_sha256'] and prov['captured_at']==NOW.isoformat()
+    for key,native,slot in [('starts','202610011900000001',1),
+                             ('non_completed_history','202609011800000002',2)]:
+        history=runner[key][0]
+        assert history['provider_race_id']==native
+        assert history['provider_race_id_namespace']=='RAKUTEN_KEIBA'
+        assert history['provider_race_url'].endswith('/RACEID/'+native)
+        link=history['provenance']['native_race_identity']
+        assert link['provider_race_id']==native and link['raw_sha256']==capture['raw_sha256']
+        assert link['locator']==f'tbody.raceCard/runner[1]/history[{slot}]/.raceName/a@href'
+    assert runner['official_horse_id'] is None
+    assert not parsed['formal_source_admitted'] and not parsed['active_universe_verified']
+
+
+def test_unprinted_or_other_host_ids_are_not_created_from_names_or_dates():
+    raw,capture,race=fixture_card()
+    unlinked=parse_card(raw,capture=capture,race=race,now=NOW)['runners'][0]
+    assert unlinked['provider_jockey_id'] is None
+    assert unlinked['starts'][0]['provider_race_id'] is None
+    raw,capture,race=linked_native_id_fixture()
+    raw=raw.replace(b'https://keiba.rakuten.co.jp/jockey/',b'https://example.invalid/jockey/')
+    raw=raw.replace(b'https://keiba.rakuten.co.jp/race_performance/',b'https://example.invalid/race_performance/')
+    capture['raw_sha256']=hashlib.sha256(raw).hexdigest()
+    other=parse_card(raw,capture=capture,race=race,now=NOW)['runners'][0]
+    assert other['current_jockey']=='試験騎手' and other['provider_jockey_id'] is None
+    assert other['starts'][0]['provider_race_id'] is None
+    assert other['non_completed_history'][0]['provider_race_id'] is None
+
+
+def test_native_race_link_must_match_the_same_history_event_date():
+    raw,capture,race=linked_native_id_fixture()
+    raw=raw.replace(b'RACEID/202610011900000001',b'RACEID/202610021900000001')
+    capture['raw_sha256']=hashlib.sha256(raw).hexdigest()
+    with pytest.raises(ValueError,match='HISTORY_NATIVE_RACE_DATE_CONFLICT'):
+        parse_card(raw,capture=capture,race=race,now=NOW)
+
 @pytest.mark.parametrize('changed',[b'\n',b'<h1>wrong</h1>'])
 def test_modified_bytes_never_reuse_an_original_capture_hash(changed):
     raw,capture,race=fixture_card()

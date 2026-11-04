@@ -14,11 +14,12 @@ from runtime.local_fnb_alternative_connection import require,sha,encoded,stamp,c
 def materialize_inputs(captured,request,source, *, generated_at):
     """Reuse existing 29 formulas; retain their research provenance labels."""
     from runtime.local_fnb_rakuten_reference import materialize_reference
+    active_ids=source['artifact']['active_runner_ids']
     loaded=materialize_reference(captured['raw'],capture=captured['capture'],
-        race={k:request[k] for k in ('venue_id','race_date','race_no')},generated_at=generated_at)
+        race={k:request[k] for k in ('venue_id','race_date','race_no')},generated_at=generated_at,
+        active_runner_ids=active_ids)
     num=deepcopy(loaded['numerical']);num['race_id']=request['race_id']
-    active=set(source['artifact']['active_runner_ids'])
-    num['runners']=[r for r in num['runners'] if str(r['runner_id']) in active]
+    active=set(active_ids)
     num['required_indices']=num['candidate_full_numerical_summary']['required_indices']
     num['strict_full_numerical_ready']=all(len(r['canonical_components'])==29 and all(c['terminal_status'] in
         ('CALCULATED','RULED-NEUTRAL') for c in r['canonical_components'].values()) for r in num['runners'])

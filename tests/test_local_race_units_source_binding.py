@@ -128,10 +128,13 @@ def test_real_fnb_unresolved_age_class_stays_unknown_in_nci_and_witness():
     assert source==old_source and request==old_request
     assert witness["component_match_counts"]=={"MATCH":693}
     assert witness["index_match_counts"]=={"MATCH":99}
-    assert witness["missing_count"]==404
+    # Seven horses have only unresolved age-class histories: the four
+    # historical-class consumers now retain UNKNOWN instead of observed52.
+    assert witness["missing_count"]==404+7*4==432
     assert witness["independent_official_race_context"]["class_score_status"]=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
     for runner in numeric["runners"]:
-        for name in ("current_class","race_set_level","class_change_pressure","transfer_class"):
+        for name in ("current_class","race_set_level","class_change_pressure","transfer_class",
+                     "class_level","opponent_strength","previous_class","recent_opponent_class"):
             feature=runner["evidence_features"][name]
             assert feature["score"]==52 and feature["missing"] is True and feature["coverage"]==0
     assert witness["model_consumers_authorized"] is False
@@ -166,6 +169,50 @@ def test_unregistered_class_labels_do_not_become_observed_neutral_ordinals(label
     from runtime.local_base63_source_witness import grade
     assert _class_score(label)==(52.0,"CLASS_UNRESOLVED_CANONICAL_NEUTRAL")
     assert grade(label)==(52,"CLASS_UNRESOLVED_CANONICAL_NEUTRAL")
+
+
+def class_history_fixture(labels):
+    from runtime.local_nar_evidence_candidate import compile_parsed_candidate_evidence
+    source = {'source_snapshot_sha256':'SYNTHETIC_CLASS_HISTORY_ONLY',
+              'source_freeze_at':'2026-11-04T00:00:00+00:00','normalized_evidence':{}}
+    request = {'venue_id':'FNB','race_date':'2026-11-05','race_no':1,
+        'race':{'venue':'船橋','distance_m':1200,'direction':'LEFT','surface':'DIRT','class':'C1'},
+        'runners':[{'runner_id':'1','name':'SYNTHETIC_CLASS_HISTORY_ONLY'}]}
+    starts = [{'race_name':label,'date':f'26.10.{20-i:02d}','venue':'船橋','distance':1200,
+               'direction':'LEFT','surface':'DIRT','going':'良','finish':2,'field_size':10,
+               'content_positions':[2,2],'ride_jockey':'騎手A','content_time_text':'1:17.0'}
+              for i,label in enumerate(labels)]
+    raw = {'1':{'runner_id':'1','name':'SYNTHETIC_CLASS_HISTORY_ONLY','horse_no':1,
+                'current_jockey':'騎手A','current_load':54,'starts':starts}}
+    reg=ROOT/'mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json'
+    return compile_parsed_candidate_evidence(source,request,raw,reg)['runners'][0]['evidence_features']
+
+
+def test_unknown_history_class_never_becomes_measured_class_or_opponent_strength():
+    features = class_history_fixture(['3歳六','3歳七'])
+    for name in ('class_level','opponent_strength','previous_class','recent_opponent_class',
+                 'class_change_pressure','transfer_class'):
+        feature = features[name]
+        assert feature['missing'] is True and feature['score'] == 52 and feature['coverage'] == 0
+    assert features['current_class']['missing'] is False
+
+
+def test_known_c3_history_ordinal52_keeps_its_measured_semantics():
+    features = class_history_fixture(['C3','C3'])
+    for name in ('class_level','previous_class','recent_opponent_class'):
+        assert features[name]['missing'] is False and features[name]['score'] == 52
+    assert features['opponent_strength']['missing'] is False
+    assert features['opponent_strength']['score'] == 53.5
+
+
+def test_unknown_recent_class_cannot_replace_known_older_class_or_latest_identity():
+    features = class_history_fixture(['3歳六','C2'])
+    assert features['class_level']['score'] == features['recent_opponent_class']['score'] == 58
+    assert features['class_level']['coverage'] == features['opponent_strength']['coverage'] == .2
+    assert features['opponent_strength']['score'] == 58
+    assert features['class_level']['missing'] is False
+    for name in ('previous_class','class_change_pressure','transfer_class'):
+        assert features[name]['missing'] is True
 
 
 def classless_intent_archive():

@@ -19,6 +19,12 @@ on:
   pull_request:
     paths: ['runtime/**', 'tests/**', 'research/utility/**', '.github/workflows/local-runtime-correctness-regression.yml']
   workflow_dispatch:
+    inputs:
+      run_permitted_live_probes:
+        description: 'Run legacy live HTTP probes only with independently verified current source permission; this switch grants none'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -302,6 +308,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: FNB R10 single read-only GET canonical LOCAL Gateway health
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
         run: |
           python -m runtime.local_fnb_r10_gateway_readonly_health \
             --output fnb-r10-local-gateway-health.json
@@ -313,6 +320,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: FNB R10 actual trusted-Gateway GET R04 signed FINAL and numeric readback
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
         run: |
           python - <<'PY'
           import json, hashlib
@@ -479,6 +487,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: FNB R14 current Nov 2 1R primary NAR Raw inspection (ephemeral)
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
         run: |
           python -m runtime.local_fnb_r14_live_source_probe \
             --race-no 1 --output fnb-r14-live-r01-sanitized.json
@@ -490,6 +499,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: FNB R15 check NAR official mobile R02 without changing robot/ACL policy
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
         run: |
           python -m runtime.local_fnb_r15_mobile_official_readonly \
             --race-no 2 --output fnb-r15-mobile-official-r02-readonly.json

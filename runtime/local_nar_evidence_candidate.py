@@ -580,14 +580,17 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         f"last-corner normalized reach={last_corner_scores}", coverage=sum(x is not None for x in last_corner_scores) / 5,
         raw_metric=last_corner_scores)
 
-    class_vals = [r.get("class_score") for r in starts]
+    # The ordinal parser's neutral52 is UNKNOWN transport, not a measured C3
+    # ordinal. Reuse the existing missing-value arithmetic for history too.
+    class_vals = [None if r.get("class_parse_state") == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+                  else r.get("class_score") for r in starts]
     put("HPI-L", "class_level", _weighted(class_vals),
-        f"candidate class ordinals={class_vals}", coverage=len(class_vals) / 5, raw_metric=class_vals)
-    opponent = [_clamp(0.75 * float(r.get("class_score", NEUTRAL)) +
+        f"candidate class ordinals={class_vals}", coverage=sum(x is not None for x in class_vals) / 5, raw_metric=class_vals)
+    opponent = [None if grade is None else _clamp(0.75 * float(grade) +
                        0.25 * _clamp(50 + (float(r.get("field_size", field_size)) - 8) * 4))
-                for r in starts]
+                for r, grade in zip(starts, class_vals)]
     put("HPI-L", "opponent_strength", _weighted(opponent),
-        f"class+field candidate opponent scores={opponent}", coverage=len(opponent) / 5, raw_metric=opponent)
+        f"class+field candidate opponent scores={opponent}", coverage=sum(x is not None for x in opponent) / 5, raw_metric=opponent)
     st = _std([x for x in finish_vals if x is not None])
     repeatability = None if st is None else _clamp(100 - 1.6 * st)
     put("HPI-L", "repeatability", repeatability,
@@ -770,14 +773,14 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     # values into apparently observed FNB class/pressure/transfer features.
     # Preserve the registered missing rule and every scoring formula/weight.
     missing_current_class = cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
-    prev_class = starts[0].get("class_score") if starts else None
+    prev_class = class_vals[0] if class_vals else None
     put("NCI", "current_class", current_class, f"current race class={current_class_label}; state={cls_state}; basis={current_class_basis}",
         coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
         force_missing=missing_current_class)
     put("NCI", "previous_class", prev_class, f"latest race class ordinal={prev_class}",
         coverage=1 if prev_class is not None else 0, raw_metric=prev_class)
     put("NCI", "recent_opponent_class", _weighted(class_vals), f"recent class ordinals={class_vals}",
-        coverage=len(class_vals)/5, raw_metric=class_vals)
+        coverage=sum(x is not None for x in class_vals)/5, raw_metric=class_vals)
     put("NCI", "race_set_level", current_class,
         f"current race-set class ordinal={None if missing_current_class else current_class}",
         coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
@@ -788,8 +791,8 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
     is_jra_transfer = bool(starts and _norm(starts[0].get("venue","")).startswith("J"))
     transfer_class = None
-    if starts and not missing_current_class:
-        transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if is_jra_transfer else 0.8))
+    if prev_class is not None and not missing_current_class:
+        transfer_class = _clamp(50 + (prev_class-current_class) * (1.2 if is_jra_transfer else 0.8))
     put("NCI", "transfer_class", transfer_class,
         f"latest venue={starts[0].get('venue') if starts else None}; JRA transfer={is_jra_transfer}",
         coverage=1 if transfer_class is not None else 0, raw_metric=transfer_class)

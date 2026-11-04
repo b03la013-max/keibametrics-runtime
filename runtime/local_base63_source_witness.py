@@ -435,7 +435,8 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
                 "source_snapshot_sha256":source.get("source_snapshot_sha256"),"source_freeze_at":source.get("source_freeze_at"),
                 "qualification_issues":issues,"empirical_ability_measurement_proven":False}
             components[name]=rec;all_rows.append(rec)
-        finishes=[x["finish_score"] for x in starts];classes=[x["class_score"] for x in starts]
+        finishes=[x["finish_score"] for x in starts]
+        classes=[None if x.get("class_state")=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL" else x["class_score"] for x in starts]
         margins=[D(100)*(-x["margin"]/2).exp() if x["margin"] is not None else None for x in starts]
         early=[];late=[];progress=[]
         for run in starts:
@@ -445,9 +446,9 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
         put("HPI-L","recent_finish",decay_mean(finishes),coverage(len(starts),5),finishes,"NO_ELIGIBLE_RECENT_FINISH")
         put("HPI-L","finish_margin",decay_mean(margins),D(sum(x is not None for x in margins))/5,[x["margin"] for x in starts],"NO_NUMERIC_WINNER_MARGIN")
         put("HPI-L","passing_position_content",decay_mean(late),D(sum(x is not None for x in late))/5,late,"NO_ELIGIBLE_POINT_POSITION")
-        put("HPI-L","class_level",decay_mean(classes),D(len(classes))/5,classes,"NO_RECENT_CLASS")
-        opponent=[clip(D(".75")*x["class_score"]+D(".25")*clip(D(50)+(x["field_size"]-8)*4)) for x in starts]
-        put("HPI-L","opponent_strength",decay_mean(opponent),D(len(opponent))/5,opponent,"NO_RECENT_CLASS_OR_FIELD")
+        put("HPI-L","class_level",decay_mean(classes),D(sum(x is not None for x in classes))/5,classes,"NO_RESOLVED_RECENT_CLASS")
+        opponent=[None if cls is None else clip(D(".75")*cls+D(".25")*clip(D(50)+(x["field_size"]-8)*4)) for x,cls in zip(starts,classes)]
+        put("HPI-L","opponent_strength",decay_mean(opponent),D(sum(x is not None for x in opponent))/5,opponent,"NO_RESOLVED_RECENT_CLASS_OR_FIELD")
         sd=spread(finishes)
         put("HPI-L","repeatability",clip(100-D("1.6")*sd) if sd is not None else None,coverage(len(starts),3),finishes,"FEWER_THAN_TWO_FINISHES")
         def matched(index,name,predicate):
@@ -531,7 +532,7 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
         put("DCR","same_day_gci_coverage",100*coverage(management["prior_result_count"],max(1,request["race_no"]-1)),1,{"raw_verified_prior_races":management["prior_race_numbers"]})
         put("DCR","late_odds_changes_coverage",100 if management["odds_source_present"] else 0,1,{"raw_verified_odds_source_present":management["odds_source_present"]})
         class_label=str(race.get("class") or (context.get("race_titles") or [""])[0])
-        curclass,state=grade(class_label);prev=starts[0]["class_score"] if starts else None
+        curclass,state=grade(class_label);prev=classes[0] if classes else None
         unresolved_current_class=state=="CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
         current_value=None if unresolved_current_class else curclass
         current_reason="CURRENT_CLASS_UNRESOLVED_CANONICAL_NEUTRAL" if unresolved_current_class else None
@@ -540,8 +541,8 @@ def independently_score(raw_field,source,request,registry,*,context=None,managem
              ("recent_opponent_class",decay_mean(classes),classes,"NO_RECENT_CLASS"),
              ("race_set_level",current_value,{"class":class_label,"parse_state":state},current_reason),
              ("class_change_pressure",clip(50+(prev-curclass)*D("1.5")) if prev is not None and not unresolved_current_class else None,{"previous":prev,"current":curclass},current_reason or "NO_PREVIOUS_CLASS"),
-             ("transfer_class",clip(50+((prev or NEUTRAL)-curclass)*(D("1.2") if starts and compact(starts[0]["venue"]).startswith("J") else D(".8"))) if starts and not unresolved_current_class else None,{"previous":prev,"current":curclass},current_reason or "NO_PREVIOUS_CLASS")):
-            cov=D(len(classes))/5 if name=="recent_opponent_class" else int(value is not None)
+             ("transfer_class",clip(50+(prev-curclass)*(D("1.2") if starts and compact(starts[0]["venue"]).startswith("J") else D(".8"))) if prev is not None and not unresolved_current_class else None,{"previous":prev,"current":curclass},current_reason or "NO_PREVIOUS_CLASS")):
+            cov=D(sum(x is not None for x in classes))/5 if name=="recent_opponent_class" else int(value is not None)
             put("NCI",name,value,cov,obs,reason)
         observations[rid]={"horse":horse,"components":components,"current_distance":distance}
     best={rid:min(x["time_seconds"] for x in row["horse"]["history"] if x["distance"]==distance and x["time_seconds"] is not None)

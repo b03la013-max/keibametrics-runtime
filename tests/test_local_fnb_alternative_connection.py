@@ -67,6 +67,72 @@ def fixture(monkeypatch):
 def assess(x):return m.source_assessment(x[0],intent=x[1],now=NOW,trust=x[2])
 
 
+def counterfactual_three_runner_card():
+    """Synthetic cancelled-runner scenario; never current Active evidence."""
+    raw,capture,intent=fixture_card()
+    text=raw.decode();start=text.rfind('<tr>');end=text.index('</tr>',start)+5
+    third=(text[start:end].replace('<td class="number">2</td>','<td class="number">3</td>')
+        .replace('HORSEID/102','HORSEID/103').replace('機械試験馬2','機械試験馬3')
+        .replace('1:17.0','1:00.0').replace('1-1-1','8-8-8'))
+    raw=text.replace('</tbody>',third+'</tbody>').encode()
+    capture['raw_sha256']=m.sha(raw)
+    return raw,capture,intent
+
+
+def test_counterfactual_active_subset_precedes_field_relative_numerical_arithmetic(monkeypatch):
+    from runtime.local_fnb_rakuten_reference import materialize_reference
+    raw,capture,intent=counterfactual_three_runner_card()
+    full=materialize_reference(raw,capture=capture,race=intent,generated_at=NOW)
+    active=materialize_reference(raw,capture=capture,race=intent,generated_at=NOW,
+        active_runner_ids=['1','2'])
+    original_raw,original_capture,_=fixture_card()
+    two=materialize_reference(original_raw,capture=original_capture,race=intent,generated_at=NOW)
+    assert full['numerical']['candidate_environment']['field_size']==3
+    assert active['parsed']['listed_count']==3 and len(active['parsed']['runners'])==3
+    assert active['source']==full['source'] and active['raw']==full['raw']
+    assert not active['source']['active_runner_universe_verified']
+    assert set(active['raw_field'])=={'1','2'}
+    assert [r['runner_id'] for r in active['request']['runners']]==['1','2']
+    num=active['numerical'];summary=num['candidate_full_numerical_summary']
+    assert num['candidate_environment']['field_size']==2
+    assert summary['required_count']==summary['terminalized_count']==58
+    assert summary['calculated_count']+summary['ruled_neutral_count']==58
+    assert active['observation_packet']['counts']['active_runners']==2
+    assert active['observation_packet']['counts']['historical_fnb_starts']==2
+    for selected,expected in zip(num['runners'],two['numerical']['runners']):
+        assert {k:v['value'] for k,v in selected['canonical_components'].items()}=={
+            k:v['value'] for k,v in expected['canonical_components'].items()}
+    assert full['numerical']['runners'][0]['evidence_features']['class_relative_time']['score']==40
+    assert num['runners'][0]['evidence_features']['class_relative_time']['score']==70
+    # The admitted wrapper must pass its actual IDs into that same early gate.
+    # This isolates wiring; it does not validate or adopt this counterfactual.
+    c,_,_,_,_=fixture(monkeypatch);c.update(raw=raw,capture=capture)
+    loaded,adopted,packet=compute.materialize_inputs(c,c['request'],
+        {'artifact':{'active_runner_ids':['1','2'],'source_freeze_at':NOW.isoformat()}},
+        generated_at=NOW)
+    assert adopted['candidate_full_numerical_summary']['required_count']==58
+    assert adopted['candidate_environment']['field_size']==2
+    assert len(loaded['request']['runners'])==len(packet['runners'])==2
+
+
+def test_explicit_all_listed_active_ids_leave_existing_reference_values_unchanged():
+    from runtime.local_fnb_rakuten_reference import materialize_reference
+    raw,capture,intent=fixture_card()
+    original=materialize_reference(raw,capture=capture,race=intent,generated_at=NOW)
+    explicit=materialize_reference(raw,capture=capture,race=intent,generated_at=NOW,
+        active_runner_ids=['2','1'])
+    assert original==explicit
+
+
+@pytest.mark.parametrize('ids',[[],['1'],['1','1'],['1','3'],[1,2],'1,2'])
+def test_counterfactual_active_ids_must_be_unique_known_nonempty_universe(ids):
+    from runtime.local_fnb_rakuten_reference import materialize_reference
+    raw,capture,intent=fixture_card()
+    with pytest.raises(ValueError,match='EXPLICIT_ACTIVE_SUBSET_INVALID'):
+        materialize_reference(raw,capture=capture,race=intent,generated_at=NOW,
+            active_runner_ids=ids)
+
+
 def test_alternative_class_is_honest_and_one_owner_does_not_need_BC(monkeypatch,tmp_path):
     x=fixture(monkeypatch);captured,intent,trust,sign,owner=x
     source=assess(x);assert source['source_admitted'] and source['artifact']['official'] is False

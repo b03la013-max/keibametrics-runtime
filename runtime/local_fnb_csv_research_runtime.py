@@ -173,7 +173,8 @@ def _qualified_identity(numerical, admission, originals):
 def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, params,
              admission=None, owner_decision=None, owner_decision_bytes=None, source_freeze_at=None,
              qualified_source_originals=None,derived_document_path=None,derived_document_sha256=None,
-             provider_reference=None):
+             provider_reference=None, expected_engine_projection_sha256=None,
+             require_reference_publication_cutoff=False):
     # A qualified prestart wrapper must recheck the real process clock at each
     # phase. A preliminary wrapper always retains its non-prestart class.
     approved = admission is not None
@@ -201,7 +202,8 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         'PRIVATE_PROVIDER_REFERENCE_NOT_QUALIFIED_SOURCE_NOT_ACTIVE_NOT_OOS' if provider_reference else
         DERIVED_REFERENCE if derived else PRELIMINARY)
     stamp = lambda: (common._prestart_clock(request,
-        not_before=source_freeze_at or parsed['capture']['captured_at']) if approved else _clock())
+        not_before=source_freeze_at or parsed['capture']['captured_at'])
+        if approved or require_reference_publication_cutoff else _clock())
     common._pinned(common.REPO/'runtime/local_fnb_context_static_candidate.py', common.MODEL_SHA)
     common._pinned(common.REPO/'profiles/local_fnb_context_static_candidate_v0.1_20261103.json', common.MODEL_PROFILE_SHA)
     common._pinned(engine, common.ENGINE_SHA)
@@ -237,6 +239,10 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         'model_code_sha256': common.MODEL_SHA, 'engine_sha256': common.ENGINE_SHA,
         'parameter_map_sha256': common.MAP_SHA,
         'owner_decision_sha256': (owner_decision or {}).get('decision_sha256')}
+    if expected_engine_projection_sha256 is not None:
+        recipe['expected_engine_projection_sha256'] = expected_engine_projection_sha256
+    if require_reference_publication_cutoff:
+        recipe['require_reference_publication_cutoff'] = True
     if approved:
         if not isinstance(qualified_source_originals,dict):
             raise common.ResearchHold('CSV_QUALIFIED_SOURCE_ORIGINALS_REQUIRED_OR_CHANGED')
@@ -322,6 +328,10 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
                          ('research_prediction.json',prediction)):
         common._immutable(folder/name, common.encoded(value))
     stamp()
+    if (expected_engine_projection_sha256 is not None
+            and common.digest(common.encoded(common.engine_input_projection(prediction['PRE_KRS_input'])))
+                != expected_engine_projection_sha256):
+        raise common.ResearchHold('PINNED_ENGINE_INPUT_PROJECTION_MISMATCH_BEFORE_EXECUTION')
     krs = common.execute_krs(prediction['PRE_KRS_input'], engine=engine, params=params,
         destination=folder/'krs')
     common._immutable(folder/'krs/research_krs_receipt.json', common.encoded(krs))
@@ -490,7 +500,9 @@ def run_derived_document(path, pin, *, private_root,engine,params):
 
 
 def run_provider_reference(raw, *, capture,race,private_root,engine,params,
-                           owner_decision_path,owner_decision_sha256):
+                           owner_decision_path,owner_decision_sha256,
+                           expected_engine_projection_sha256=None,
+                           require_reference_publication_cutoff=False):
     """Execute an actual alternative card through the existing fixed pipeline.
 
     No CSV wrapper, NAR data, alternate numerical rules, Active assertion or
@@ -506,7 +518,8 @@ def run_provider_reference(raw, *, capture,race,private_root,engine,params,
     return _execute(loaded['numerical'],loaded['parsed'],raw,loaded['request'],
         private_root=private_root,engine=engine,params=params,
         owner_decision_bytes=owner_bytes,source_freeze_at=loaded['parsed']['captured_at'],
-        provider_reference=reference)
+        provider_reference=reference,expected_engine_projection_sha256=expected_engine_projection_sha256,
+        require_reference_publication_cutoff=require_reference_publication_cutoff)
 
 
 def main(argv=None):
