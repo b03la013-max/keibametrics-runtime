@@ -921,12 +921,14 @@ def _fnb_private_chat_route(args):
                     'first_failed_stage':'FNB_QUERY_OR_PRIVATE_EXECUTION',
                     'reason':str(exc).split(':')[0],
                     'recipient_delivery_ack':False,'registered_oos_increment':0}
-    if args.display and result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER':
+    ready=result.get('status') in ('VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER',
+                                  'VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER')
+    if args.display and ready:
         print(result['body'],end='')
     else:
         print(json.dumps({k:v for k,v in result.items() if k!='body'},
                          ensure_ascii=False,default=str))
-    return 0 if result.get('status')=='VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER' else 2
+    return 0 if ready else 2
 
 def main():
     args = _ENTRY_CLI_ARGS if _ENTRY_CLI_ARGS is not None else _parse_entry_arguments()

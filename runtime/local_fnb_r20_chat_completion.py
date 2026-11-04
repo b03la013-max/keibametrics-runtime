@@ -444,6 +444,10 @@ def _complete(query, private_root, *, now, diagnostic_only,emit_private_body,pro
             return _hold(intent,"WORK_ACTOR","PRIVATE_PRODUCER_EXECUTION_PUBLIC_CI_FORBIDDEN")
         try:
             connected=producers if producers is not None else _binding(root)
+            if isinstance(connected,dict) and connected.get('entry_mode')=='FNB_ALTERNATIVE_PROVIDER_SINGLE_OWNER_V1':
+                if diagnostic_only:raise ProducerHold('MODE','ALTERNATIVE_FORMAL_ROUTE_DIAGNOSTIC_EXECUTION_NOT_AUTHORIZED')
+                from runtime.local_fnb_alternative_connection import run as run_single
+                return run_single(intent,root,connected,clock=clock)
             _build_from_producers(intent,root,clock,diagnostic_only,connected)
         except ProducerHold:
             raise
@@ -552,12 +556,13 @@ def main(argv=None):
     result=complete(args.query,Path(args.private_root),
                     diagnostic_only=args.diagnostic_only,
                     emit_private_body=args.emit_private_full_body)
-    if args.emit_private_full_body and result["status"]=="VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER":
+    ready=result["status"] in ("VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER","VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER")
+    if args.emit_private_full_body and ready:
         print(result["body"],end="")
     else:
         print(json.dumps({k:v for k,v in result.items() if k!="body"},
                          ensure_ascii=False,sort_keys=True))
-    return 0 if result["status"]=="VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER" else 2
+    return 0 if ready else 2
 
 if __name__=="__main__":
     raise SystemExit(main())

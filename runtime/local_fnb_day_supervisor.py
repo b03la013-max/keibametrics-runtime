@@ -128,6 +128,9 @@ def original(root, descriptor):
 
 def verify_prediction(root, race, result, now):
     """Require a qualified reader's same-Race evidence and independently read its actual originals."""
+    if result.get('status')=='VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER':
+        from runtime.local_fnb_alternative_connection import verify_supervisor_result
+        return verify_supervisor_result(root,race,result,now)
     if result.get('status') != 'VERIFIED_COMPLETE_ORIGINAL':
         return False
     if (result.get('race_id') != race['race_id'] or result.get('classification') != CLASSIFICATION
