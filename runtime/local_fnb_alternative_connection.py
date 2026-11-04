@@ -76,6 +76,9 @@ def source_assessment(captured, *, intent,now,trust=None):
             'TIME','PRESTART_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
     require((post-cutoff).total_seconds()==300,'TIME','ADOPTED_300_SECOND_CUTOFF_REQUIRED')
     require(stamp(parsed['race_identity']['scheduled_post_at'])==post,'SOURCE','ALTERNATIVE_PROVIDER_POST_CONFLICT')
+    # A new signature/freeze cannot refresh an old HTTP observation.
+    require(0<=(observed-stamp(parsed['captured_at'])).total_seconds()<=600,
+            'SOURCE','ALTERNATIVE_PROVIDER_RAW_FRESHNESS_NOT_PROVEN')
     reasons=[]
     env=captured.get('source_envelope');artifact=None
     if not isinstance(env,dict):reasons.append('ALTERNATIVE_SOURCE_SIGNED_RECEIPT_MISSING')
@@ -286,6 +289,10 @@ def verify_result(result, *, request,source,adoption,trust,root,now,captured):
     """A callback return cannot assert Formal/Delivery without real originals."""
     from runtime.minimum_efficient_coverage import validate_mec_plan
     from runtime.jra_ticket_tree_renderer import render_ticket_tree
+    current_source=source_assessment(captured,intent={k:request[k] for k in ('venue_id','race_date','race_no')},
+        now=stamp(now),trust=trust)
+    require(current_source['source_admitted'] and current_source['artifact']==source['artifact'],
+        'SOURCE','SINGLE_OWNER_FINAL_SOURCE_RECHECK_FAILED')
     final=signed(result.get('final_envelope'),phase='FINAL',status='PASS',race_id=request['race_id'],trust=trust)
     require(final.get('race_id')==request['race_id'] and final.get('owner_count')==1
         and final.get('actual_purchase') is False and final.get('registered_OOS_increment')==0

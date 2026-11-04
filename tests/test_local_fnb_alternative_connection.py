@@ -1,6 +1,6 @@
 """Synthetic crypto/transport fixtures. Not real SOURCE or LIVE acceptance."""
 from copy import deepcopy
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from pathlib import Path
 import base64,json
 from unittest.mock import Mock
@@ -83,6 +83,28 @@ def test_unsigned_callback_200_is_not_source_admission_and_stops_owner(monkeypat
     assert result['first_failed_stage']=='SOURCE' and result['reason']=='ALTERNATIVE_SOURCE_SIGNED_RECEIPT_MISSING'
     assert result['status']=='EXECUTION_HOLD_NOT_NO_BET' and not result['recipient_delivery_ack']
     executor.assert_not_called();assert list(tmp_path.glob('source_attempts/**/original_provider_card.html'))
+
+
+@pytest.mark.parametrize('age,accepted',[(600,True),(601,False)])
+def test_new_signed_freeze_cannot_refresh_old_raw(monkeypatch,age,accepted):
+    c,i,t,sign,o=fixture(monkeypatch);later=NOW+timedelta(seconds=age)
+    artifact=deepcopy(c['source_envelope']['artifact'])
+    artifact['source_freeze_at']=later.isoformat()
+    artifact['current_state']['observed_at']=later.isoformat()
+    c['source_envelope']=sign(phase='SOURCE',race_id=c['request']['race_id'],status='SOURCE_FROZEN',artifact=artifact)
+    if accepted:
+        assert m.source_assessment(c,intent=i,now=later,trust=t)['source_admitted']
+    else:
+        with pytest.raises(m.ProducerHold,match='RAW_FRESHNESS_NOT_PROVEN'):
+            m.source_assessment(c,intent=i,now=later,trust=t)
+
+
+def test_source_expiring_during_computation_cannot_publish_final(monkeypatch,tmp_path):
+    x,result,engine=computed_fixture(monkeypatch,tmp_path);c,i,t,sign,o=x
+    with pytest.raises(m.ProducerHold,match='RAW_FRESHNESS_NOT_PROVEN'):
+        m.verify_result(result,request=c['request'],source=assess(x),adoption=o,trust=t,
+            root=tmp_path,now=NOW+timedelta(seconds=601),captured=c)
+    assert engine.call_count==1
 
 
 @pytest.mark.parametrize('case,code',[
