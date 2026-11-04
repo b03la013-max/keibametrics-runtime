@@ -42,8 +42,7 @@ def _minimal_work_cli(tmp_path, extra):
 ])
 def test_normal_fnb_cli_reaches_private_gate_without_formal_stack(tmp_path,query,reason):
     public=tmp_path/"unused-public-output"
-    result=_minimal_work_cli(tmp_path,["--query",query,"--private-root",str(tmp_path/"private"),
-        "--output",str(public),"--run-id","R21-PRIVATE-ACTOR-ACCEPTANCE"])
+    result=_minimal_work_cli(tmp_path,["--query",query,"--private-root",str(tmp_path/"private")])
     assert result.returncode==2,result.stderr
     body=json.loads(result.stdout)
     assert body["status"]=="EXECUTION_HOLD_NOT_NO_BET"

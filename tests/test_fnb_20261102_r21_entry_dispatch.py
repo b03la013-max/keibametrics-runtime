@@ -5,6 +5,7 @@ No source, owner or official prediction generated in tests.
 import json
 import sys
 from pathlib import Path
+import pytest
 
 from runtime import local_race_entry as entry
 from runtime import local_fnb_r20_chat_completion as private
@@ -69,6 +70,13 @@ def test_urw_chat_intent_remains_urw():
       now=datetime(2026,11,2,tzinfo=timezone.utc))
     assert intent["venue_id"]=="URW"
     assert intent["race_no"]==6
+
+def test_urw_entry_still_requires_formal_output_and_run_id(monkeypatch, capsys):
+    monkeypatch.setattr(sys,"argv",["local_race_entry","--query","浦和6R"])
+    with pytest.raises(SystemExit) as stopped:
+        entry._parse_entry_arguments()
+    assert stopped.value.code==2
+    assert "--output and --run-id are required" in capsys.readouterr().err
 
 
 def test_private_work_env_auto_connects_existing_store(monkeypatch,tmp_path,capsys):

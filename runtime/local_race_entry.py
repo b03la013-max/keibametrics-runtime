@@ -22,7 +22,10 @@ def _parse_entry_arguments():
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
     args = parser.parse_args()
-    if args.research_intent is None and (args.output is None or args.run_id is None):
+    # FNB dispatch returns its private frozen body directly; neither argument
+    # is used there. Keep the existing requirement for the Formal/URW route.
+    private_fnb_query = bool(args.query and re.search(r'(?:船橋|FNB)', args.query, re.I))
+    if args.research_intent is None and not private_fnb_query and (args.output is None or args.run_id is None):
         parser.error('--output and --run-id are required outside the explicit research route')
     return args
 
