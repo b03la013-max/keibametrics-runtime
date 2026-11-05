@@ -240,7 +240,7 @@ def _resume_mutations(plan, race, binding, activation, cell, execute, clock):
         cell['activation_hold'] = safe_code(str(error)); return False
 
 
-def _reference_readback(binding, race, root, cell, now, *, discovery_verified):
+def _reference_readback(binding, race, root, cell, now, *, discovery_verified, result=None):
     """Read the existing independent REFERENCE without entering Formal gates.
 
     The optional private callback only locates a saved publication. Its actual
@@ -253,7 +253,8 @@ def _reference_readback(binding, race, root, cell, now, *, discovery_verified):
     try:
         if not discovery_verified:
             raise ValueError('REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED')
-        result = binding['inspect_reference'](race=race, private_root=root, now=now)
+        if result is None:
+            result = binding['inspect_reference'](race=race, private_root=root, now=now)
         if result.get('status') in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL'):
             return
         if result.get('status') != 'VERIFIED_REFERENCE_BODY_READY_TO_RENDER':
@@ -286,6 +287,92 @@ def _reference_readback(binding, race, root, cell, now, *, discovery_verified):
             'code':safe_code(str(error)), 'readback_at':now.isoformat(),
             'ready_to_render':False, 'formal_final_proven':False,
             'recipient_ack':'UNKNOWN', 'natural_delivery_verified':False}
+
+
+def _execute_reference(plan, race, binding, activation, root, state, cell, clock, save,
+                       *, discovery_verified):
+    """Use the same dated Actor for an explicitly approved REFERENCE callback.
+
+    Qualification belongs to the pinned private Provider authorizer. Formal
+    Owner/Consumer/FINAL gates are not REFERENCE acquisition authority. A
+    durable attempt is never retried after an ambiguous callback or restart.
+    This path proves neither recipient delivery nor final Active by itself.
+    """
+    try:
+        activated(plan, race, binding, activation)
+        if not discovery_verified:
+            raise ValueError('REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED')
+        if clock().astimezone(JST).date().isoformat() != plan['race_date']:
+            raise ValueError('EXECUTION_REQUIRES_CURRENT_JST_DAY')
+        if cell.get('reference_claim'):
+            if cell['reference_claim']['race_sha256'] != sha(race):
+                raise ValueError('CLAIMED_REFERENCE_DISCOVERY_CHANGED_NO_REDISPATCH')
+            descriptor = cell.get('reference_execution_original')
+            if descriptor:
+                result = json.loads(original(root, descriptor))
+                _reference_readback(binding, race, root, cell, clock(),
+                    discovery_verified=discovery_verified, result=result)
+            return
+        if race.get('prediction_cutoff') is None or race.get('start_at') is None:
+            raise ValueError('REFERENCE_APPROVED_START_AND_CUTOFF_REQUIRED')
+        cutoff = stamp(race['prediction_cutoff'])
+        window = max(stamp(race['start_at']), stamp(race['scheduled_post_at']) - timedelta(seconds=600))
+        if clock() < window:
+            cell['reference_execution_status'] = 'WAIT_FINAL_SOURCE_WINDOW'
+            return
+        if clock() >= cutoff:
+            raise ValueError('NO_RETROACTIVE_PRESTART_EXECUTION')
+        authorize = binding.get('authorize_reference_race')
+        execute = binding.get('execute_reference_race')
+        if not callable(authorize) or not callable(execute):
+            raise ValueError('QUALIFIED_REFERENCE_EXECUTION_CALLBACKS_NOT_CONNECTED')
+        approved_plan = sha(plan)
+        if authorize(race=race, activation=activation, plan=plan, now=clock()) is not True:
+            raise ValueError('REFERENCE_PROVIDER_RETRIEVAL_NOT_AUTHORIZED')
+        if sha(plan) != approved_plan:
+            raise ValueError('REFERENCE_PLAN_MUTATED_DURING_AUTHORIZATION')
+        attempts = sum(c.get('dispatch_count', 0) + c.get('reference_dispatch_count', 0)
+                       for c in state['races'].values())
+        if attempts >= activation['max_dispatches']:
+            raise ValueError('APPROVED_DISPATCH_BUDGET_EXHAUSTED')
+        if clock() >= cutoff:
+            raise ValueError('CUTOFF_EXPIRED_DURING_PREFLIGHT')
+        cell['reference_claim'] = {'race_sha256':sha(race), 'claimed_at':clock().isoformat(),
+            'actor_id':activation['actor_id'], 'approval_ref':activation['approval_ref']}
+        cell['reference_dispatch_count'] = cell.get('reference_dispatch_count', 0) + 1
+        cell['reference_execution_status'] = 'REFERENCE_ATTEMPT_DURABLE_BEFORE_CALLBACK'
+        save()
+        if clock() >= cutoff:
+            raise ValueError('CUTOFF_EXPIRED_AFTER_DURABLE_ATTEMPT_RESERVATION')
+        result = execute(race=race, activation=activation, plan=plan, private_root=root, now=clock())
+        # Store only the reader descriptor, not arbitrary callback/body data.
+        descriptor = {'status':result['status'], 'publication_folder':result['publication_folder']}
+        relative = 'reference_executions/' + plan['race_date'] + '/R' + str(race['race_no']).zfill(2) + '.json'
+        from runtime.urw_nankan_reference_source import immutable
+        raw = encoded(descriptor)
+        _private_root((root / relative).parent)
+        immutable(root / relative, raw)
+        cell['reference_execution_original'] = {'path':relative, 'sha256':hashlib.sha256(raw).hexdigest()}
+        if result.get('callback_receipt_original'):
+            receipt = json.loads(original(root, result['callback_receipt_original']))
+            if type(receipt.get('new_KRS')) is not int or receipt['new_KRS'] not in (0, 1):
+                raise ValueError('REFERENCE_CALLBACK_KRS_RECEIPT_INVALID')
+            cell['reference_callback_receipt_original'] = result['callback_receipt_original']
+            cell['reference_callback_new_KRS'] = receipt['new_KRS']
+        _reference_readback(binding, race, root, cell, clock(),
+            discovery_verified=discovery_verified, result=descriptor)
+        reference = cell.get('reference', {})
+        if reference.get('private_readback_verified') is not True:
+            raise ValueError('REFERENCE_EXECUTION_BODY_READBACK_NOT_VERIFIED')
+        if clock() >= cutoff:
+            raise ValueError('REFERENCE_CALLBACK_COMPLETED_AFTER_CUTOFF')
+        if reference.get('observation_within_existing_600s') is not True:
+            raise ValueError('REFERENCE_CURRENT_OBSERVATION_OUTSIDE_600_SECONDS')
+        cell['reference_execution_status'] = 'REFERENCE_CALLBACK_AND_BODY_READBACK_VERIFIED'
+        cell.pop('reference_execution_hold', None)
+    except Exception as error:
+        cell['reference_execution_status'] = 'REFERENCE_EXECUTION_HOLD_NOT_NO_BET'
+        cell['reference_execution_hold'] = safe_code(str(error))
 
 
 def _pending_single_owner_claim(root, race):
@@ -356,8 +443,15 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             cell['official_post_at'] = race['scheduled_post_at']
             cell['observed_in_latest_discovery'] = True
             cell['prediction_cutoff'] = race.get('prediction_cutoff')
-            _reference_readback(binding, race, root, cell, clock(),
-                                discovery_verified=reference_discovery_verified)
+            try:
+                descriptor = cell.get('reference_execution_original')
+                current_reference = json.loads(original(root, descriptor)) if descriptor else None
+                _reference_readback(binding, race, root, cell, clock(),
+                    discovery_verified=reference_discovery_verified, result=current_reference)
+            except Exception as error:
+                cell['reference'] = {'status':'REFERENCE_READBACK_HOLD_NOT_NO_BET',
+                    'code':safe_code(str(error)), 'ready_to_render':False,
+                    'recipient_ack':'UNKNOWN', 'natural_delivery_verified':False}
             if cell.get('claim'):
                 # Never resend an ambiguous dispatch, even after a process restart.
                 cell.pop('completion', None)
@@ -423,6 +517,13 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 if race.get('prediction_cutoff') is None:
                     cell['unresolved'] = ['PREDICTION_CUTOFF_NOT_RESOLVED']
                 save(); continue
+            if cell.get('reference_claim') and not (activation and activation.get('reference_only') is True):
+                cell['status'] = 'EXISTING_REFERENCE_ATTEMPT_READBACK_ONLY_NO_REDISPATCH'
+                save(); continue
+            if activation and activation.get('reference_only') is True:
+                _execute_reference(plan, race, binding, activation, root, state, cell, clock, save,
+                    discovery_verified=reference_discovery_verified)
+                save(); continue
             try:
                 if os.environ.get('GITHUB_ACTIONS') == 'true':
                     raise ValueError('PRIVATE_DAY_EXECUTION_PUBLIC_CI_FORBIDDEN')
@@ -442,7 +543,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                     cell['status'] = 'WAIT_APPROVED_START_WINDOW'; save(); continue
                 if binding['authorize_race'](race=race, activation=activation, plan=plan, now=clock()) is not True:
                     raise ValueError('RACE_SOURCE_OWNER_CONSUMER_AUTHORITY_NOT_VERIFIED')
-                if sum(c['dispatch_count'] for c in state['races'].values()) >= activation['max_dispatches']:
+                if sum(c['dispatch_count'] + c.get('reference_dispatch_count', 0)
+                       for c in state['races'].values()) >= activation['max_dispatches']:
                     raise ValueError('APPROVED_DISPATCH_BUDGET_EXHAUSTED')
                 # No wall-clock supplied by a caller can replace a fresh clock after checks.
                 if clock() >= cutoff:
@@ -491,7 +593,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             'reference_ready_to_render':sum(c.get('observed_in_latest_discovery') is True
                 and c.get('reference',{}).get('ready_to_render') is True for c in state['races'].values()),
             'reference_displayed':0, 'reference_recipient_deliveries':0,
-            'reference_ack_verified':0, 'reference_autonomous_completed':0}
+            'reference_ack_verified':0, 'reference_autonomous_completed':0,
+            'reference_dispatched':sum(c.get('reference_dispatch_count', 0) for c in state['races'].values())}
         save(); return state
 
 

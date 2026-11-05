@@ -1,6 +1,7 @@
 """Synthetic correctness only. Fixture clocks/Cutoffs grant no LIVE authority."""
 from copy import deepcopy
 from datetime import datetime, timezone
+from datetime import timedelta
 import hashlib
 import json
 from pathlib import Path
@@ -323,3 +324,114 @@ def test_saved_discovery_reader_cannot_mutate_formal_plan(tmp_path, monkeypatch)
     assert p == original and reads == []
     assert state['reference_discovery']['code'] == 'REFERENCE_SAVED_DISCOVERY_MUTATED_BY_READER'
     assert state['counts']['reference_saved_readbacks'] == 0
+
+
+def reference_execution_setup(root, monkeypatch):
+    """Synthetic permissions/transports only; no real Actor or HTTP authority."""
+    from runtime import local_fnb_rakuten_reference as reference
+    b, _ = saved_reference_binding(root, monkeypatch)
+    p = plan()
+    for row in p['races']:
+        row['scheduled_post_at'] = (NOW + timedelta(minutes=10)).isoformat()
+        row['prediction_cutoff'] = (NOW + timedelta(minutes=5)).isoformat()
+    reader = reference.read_saved_reference
+    def read(folder, intent, *, now):
+        result = reader(folder, intent, now=now)
+        row = next(r for r in p['races'] if r['race_no'] == intent['race_no'])
+        result['manifest'].update(scheduled_post_at=row['scheduled_post_at'],
+                                  prediction_cutoff=row['prediction_cutoff'])
+        result['observation_within_existing_600s'] = True
+        return result
+    monkeypatch.setattr(reference, 'read_saved_reference', read)
+    calls = []
+    def execute(**kw):
+        n = kw['race']['race_no']
+        persisted = json.loads((root/'FNB_2026-11-03_DAY_CHECKPOINT.json').read_bytes())
+        assert persisted['races'][str(n)]['reference_claim']
+        assert persisted['races'][str(n)]['reference_dispatch_count'] == 1
+        calls.append(n)
+        return {'status':'VERIFIED_REFERENCE_BODY_READY_TO_RENDER',
+                'publication_folder':str(root / ('fresh_reference_' + str(n)))}
+    b.update(authorize_reference_race=lambda **kw:True, execute_reference_race=execute)
+    a = activation(); a['reference_only'] = True
+    return p, b, a, calls
+
+
+def test_explicit_reference_actor_is_independent_of_formal_owner_and_discovery(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    b['authorize_race'] = lambda **kw: (_ for _ in ()).throw(AssertionError('Formal authorizer called'))
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [5, 6] and b['sent'] == b['delivered'] == []
+    assert state['counts']['reference_dispatched'] == 2
+    assert state['counts']['dispatched'] == state['counts']['verified_prestart_originals'] == 0
+    assert state['counts']['reference_autonomous_completed'] == state['counts']['reference_ack_verified'] == 0
+    assert all(c['reference_execution_status']=='REFERENCE_CALLBACK_AND_BODY_READBACK_VERIFIED'
+               and 'fresh_reference_' in c['reference']['publication_folder'] for c in state['races'].values())
+
+
+def test_reference_claim_survives_ambiguity_and_mode_switch_without_retry(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    def ambiguous(**kw):
+        calls.append(kw['race']['race_no'])
+        raise TimeoutError('SYNTHETIC_AMBIGUOUS_SOURCE_ATTEMPT')
+    b['execute_reference_race'] = ambiguous
+    for active in (a, a, activation()):
+        state = s.tick(p, tmp_path, binding=b, activation=active, execute=True, clock=lambda:NOW)
+    assert calls == [5, 6] and b['sent'] == []
+    assert state['counts']['reference_dispatched'] == 2
+    assert state['counts']['no_bet_races'] == 0
+
+
+def test_reference_provider_denial_preserves_old_readback_and_does_not_claim(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    b['authorize_reference_race'] = lambda **kw:False
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [] and state['counts']['reference_ready_to_render'] == 2
+    assert state['counts']['reference_dispatched'] == 0
+    assert all(c['reference_execution_hold']=='REFERENCE_PROVIDER_RETRIEVAL_NOT_AUTHORIZED'
+               and 'reference_claim' not in c for c in state['races'].values())
+
+
+def test_reference_waits_for_final_window_and_requires_real_activation(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    early = NOW - timedelta(seconds=1)
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:early)
+    assert calls == []
+    assert all(c['reference_execution_status']=='WAIT_FINAL_SOURCE_WINDOW' for c in state['races'].values())
+    a['enabled'] = False
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [] and state['counts']['reference_dispatched'] == 0
+
+
+def test_completed_reference_remains_readable_without_current_activation(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    state = s.tick(p, tmp_path, binding=b, activation=None, execute=False, clock=lambda:NOW)
+    assert calls == [5, 6] and state['counts']['reference_ready_to_render'] == 2
+    assert all('fresh_reference_' in c['reference']['publication_folder'] for c in state['races'].values())
+    (tmp_path/'reference_executions/2026-11-03/R05.json').write_text('changed')
+    state = s.tick(p, tmp_path, binding=b, activation=None, execute=False, clock=lambda:NOW)
+    assert state['counts']['reference_ready_to_render'] == 1
+    assert state['races']['5']['reference']['code'] == 'PRIVATE_ORIGINAL_BYTES_CHANGED'
+
+
+def test_reference_expiry_during_permission_check_never_calls_source(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    late = [False]
+    def authorize(**kw):
+        late[0] = True
+        return True
+    b['authorize_reference_race'] = authorize
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True,
+                   clock=lambda:s.stamp(p['races'][0]['prediction_cutoff']) if late[0] else NOW)
+    assert calls == []
+    assert 'reference_claim' not in state['races']['5']
+    assert state['races']['5']['reference_execution_hold'] == 'CUTOFF_EXPIRED_DURING_PREFLIGHT'
+
+
+def test_reference_and_formal_share_the_same_approved_dispatch_budget(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    a['max_dispatches'] = 1
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [5] and state['counts']['reference_dispatched'] == 1
+    assert state['races']['6']['reference_execution_hold'] == 'APPROVED_DISPATCH_BUDGET_EXHAUSTED'
