@@ -403,6 +403,66 @@ def test_reference_waits_for_final_window_and_requires_real_activation(tmp_path,
     assert calls == [] and state['counts']['reference_dispatched'] == 0
 
 
+def test_reference_saved_plan_without_start_uses_final_window(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    del p['races'][0]['start_at']
+    p['races'][1]['start_at'] = (NOW + timedelta(seconds=30)).isoformat()
+    saved = deepcopy(p)
+    b['verify_saved_discovery'] = lambda **kw: kw['plan'] == saved
+    authorizations = []
+    def authorize(**kw):
+        authorizations.append(kw['race']['race_no'])
+        return True
+    b['authorize_reference_race'] = authorize
+    early = NOW - timedelta(seconds=1)
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:early)
+    assert calls == authorizations == []
+    assert all(c['reference_execution_status'] == 'WAIT_FINAL_SOURCE_WINDOW'
+               for c in state['races'].values())
+
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == authorizations == [5]
+    assert state['races']['5']['reference_execution_status'] == 'REFERENCE_CALLBACK_AND_BODY_READBACK_VERIFIED'
+    assert state['races']['6']['reference_execution_status'] == 'WAIT_FINAL_SOURCE_WINDOW'
+    later = NOW + timedelta(seconds=30)
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:later)
+    assert calls == authorizations == [5, 6]
+    assert state['races']['6']['reference_execution_status'] == 'REFERENCE_CALLBACK_AND_BODY_READBACK_VERIFIED'
+    assert p == saved
+
+
+def test_reference_window_rejects_explicit_null_and_other_saved_cutoff(tmp_path, monkeypatch):
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    p['races'][0]['start_at'] = None
+    del p['races'][1]['start_at']
+    p['races'][1]['prediction_cutoff'] = (NOW + timedelta(minutes=4)).isoformat()
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [] and state['counts']['reference_dispatched'] == 0
+    assert state['races']['5']['reference_execution_hold'] == 'REFERENCE_APPROVED_START_AND_CUTOFF_REQUIRED'
+    assert state['races']['6']['reference_execution_hold'] == 'REFERENCE_SAVED_DISCOVERY_300_SECOND_CUTOFF_REQUIRED'
+
+    p['races'][0]['start_at'] = p['races'][0]['prediction_cutoff']
+    with pytest.raises(ValueError, match='APPROVED_START_WINDOW_INVALID'):
+        s.validate_plan(p, NOW)
+
+
+def test_reference_saved_plan_stale_observation_cannot_complete(tmp_path, monkeypatch):
+    from runtime import local_fnb_rakuten_reference as reference
+    p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    del p['races'][0]['start_at']
+    a['race_numbers'] = [5]
+    reader = reference.read_saved_reference
+    def read(folder, intent, *, now):
+        result = reader(folder, intent, now=now)
+        result['observation_age_seconds_at_readback'] = 601
+        result['observation_within_existing_600s'] = False
+        return result
+    monkeypatch.setattr(reference, 'read_saved_reference', read)
+    state = s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
+    assert calls == [5] and state['races']['5']['reference']['private_readback_verified']
+    assert state['races']['5']['reference_execution_hold'] == 'REFERENCE_CURRENT_OBSERVATION_OUTSIDE_600_SECONDS'
+
+
 def test_completed_reference_remains_readable_without_current_activation(tmp_path, monkeypatch):
     p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
     s.tick(p, tmp_path, binding=b, activation=a, execute=True, clock=lambda:NOW)
@@ -417,6 +477,7 @@ def test_completed_reference_remains_readable_without_current_activation(tmp_pat
 
 def test_reference_expiry_during_permission_check_never_calls_source(tmp_path, monkeypatch):
     p, b, a, calls = reference_execution_setup(tmp_path, monkeypatch)
+    del p['races'][0]['start_at']
     late = [False]
     def authorize(**kw):
         late[0] = True

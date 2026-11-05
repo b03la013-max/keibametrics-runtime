@@ -313,10 +313,16 @@ def _execute_reference(plan, race, binding, activation, root, state, cell, clock
                 _reference_readback(binding, race, root, cell, clock(),
                     discovery_verified=discovery_verified, result=result)
             return
-        if race.get('prediction_cutoff') is None or race.get('start_at') is None:
+        if race.get('prediction_cutoff') is None or ('start_at' in race and race['start_at'] is None):
             raise ValueError('REFERENCE_APPROVED_START_AND_CUTOFF_REQUIRED')
         cutoff = stamp(race['prediction_cutoff'])
-        window = max(stamp(race['start_at']), stamp(race['scheduled_post_at']) - timedelta(seconds=600))
+        post = stamp(race['scheduled_post_at'])
+        window = post - timedelta(seconds=600)
+        # Saved discovery pins the post and Cutoff without an explicit start.
+        if 'start_at' in race:
+            window = max(stamp(race['start_at']), window)
+        elif post - cutoff != timedelta(seconds=300):
+            raise ValueError('REFERENCE_SAVED_DISCOVERY_300_SECOND_CUTOFF_REQUIRED')
         if clock() < window:
             cell['reference_execution_status'] = 'WAIT_FINAL_SOURCE_WINDOW'
             return
