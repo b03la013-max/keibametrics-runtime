@@ -146,6 +146,19 @@ def test_missing_true_role_is_first_failure_without_imputation():
     assert out["settlement"]["first_material_failure"]=="W_HEAD_ZERO"
     assert out["settlement"]["dominant_pfs_loss_owner"]=="NONE"
 
+
+def test_official_withdrawal_refunds_the_frozen_ticket_without_counting_a_hit():
+    pre, fin = frozen()
+    fin["mec"]["tickets"][0]["selection"] = [4, 5]
+    fin["sha256"] = canonical_sha({k:v for k,v in fin.items() if k != "sha256"})
+    outcome = official(); outcome["refund_runner_ids"] = [5]
+    settlement = settle_frozen_candidate(pre, fin, outcome,
+        source_sha256="a"*64, source_url="https://www.jra.go.jp/JRADB/accessS.html")["settlement"]
+    ticket = settlement["frozen_tickets"][0]
+    assert ticket["official_refund"] is True and ticket["recommended_return"] == 200
+    assert ticket["win"] is False
+    assert settlement["recommended_return_yen"] == 200 + 4850 + 720
+
 def test_real_repo_jra_official_payout_html_text_fixture():
     historical=ROOT/"runtime"/"diagnostics"/"jra_official_result_nav_probe.json"
     doc=json.loads(historical.read_text(encoding="utf-8"))

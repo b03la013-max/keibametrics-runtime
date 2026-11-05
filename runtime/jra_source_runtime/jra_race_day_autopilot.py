@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 # This file is also executed directly from runtime/jra_source_runtime in the
@@ -79,6 +80,17 @@ def due(post: _dt.datetime, now: _dt.datetime, window=DEFAULT_WINDOW) -> str:
 
 def plan_entries(plan: dict, race_date: str, *, meetings=resolve_meetings, resolve=resolve_day, days=None):
     days = {} if days is None else days
+    if 'dispatch_scope' in plan:
+        from jra_bvi_operational_day_plan import validate_plan
+        validate_plan(plan)
+        if plan['race_date']!=race_date:
+            raise ValueError('BVI_PRIORITY_DISPATCH_DATE_MISMATCH')
+        # all_races is the fixed ENV priority census, not obstacle dispatch
+        # permission. Only the independently bounded flat entries are routed.
+        for entry in plan['entries']:
+            for number in entry['races']:
+                yield entry['venue'],number,int(plan['run_count']),None
+        return
     if plan.get("all_races"):
         try:
             venues = meetings(race_date)
@@ -153,7 +165,7 @@ def _pending_work(root, race_date, now):
             if post.tzinfo is None:continue
             if now<post or not (state.get('_postresult_worker') or {}).get('requested_at'):return True
             continue  # The independent RESULT worker already owns the handoff.
-        if row.get('status') or not row.get('dispatch_window_close'):continue
+        if row.get('status') or row.get('scope_decision') or not row.get('dispatch_window_close'):continue
         if denied and row.get('routing_basis')!='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':continue
         cell=state.get(rid) or {}
         if (cell and cell.get('dispatch_state')!='CLAIM_PUBLISH_FAILED_NO_SEND') or list(
@@ -166,7 +178,7 @@ def _pending_work(root, race_date, now):
 
 def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
          meetings=resolve_meetings, dispatch=None, default_all=False, cache=None,
-         publish=None, resolver_runs=None, retry_resolver=None) -> list[dict]:
+         publish=None, resolver_runs=None, retry_resolver=None, flat_scope_only=False) -> list[dict]:
     tick_started = time.monotonic()
     plan_dir = root / "runtime" / "jra_race_day_plan"
     plan_path = plan_dir / f"{race_date}.json"
@@ -184,6 +196,15 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
     schedule_path = plan_dir / f"{race_date}.schedule.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     schedule = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else {}
+    if 'dispatch_scope' in plan:
+        from jra_bvi_operational_day_plan import validate_plan
+        validate_plan(plan)
+        if plan['race_date']!=race_date:
+            raise ValueError('BVI_PRIORITY_DISPATCH_DATE_MISMATCH')
+        for rid,facts in plan['official_schedule_facts'].items():
+            schedule.setdefault(rid,deepcopy(facts))
+        for held in plan['scope_exclusions']:
+            schedule[held['race_id']]['scope_decision']=deepcopy(held)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
     days: dict = cache.setdefault("days", {}) if cache is not None else {}
@@ -210,14 +231,39 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             if isinstance(_c, Exception):
                 raise _c
             return _c
+    census_fault=None
+    if 'dispatch_scope' in plan:
+        from jra_bvi_operational_day_plan import refresh_census_schedule
+        try:
+            if isinstance(cached,Exception):raise cached
+            if ({venue_code(v) for v in cached} !=
+                    {venue_code(v['venue']) for v in plan['official_discovery']['venues']}):
+                raise ValueError('BVI_PRIORITY_CURRENT_MEETING_UNIVERSE_CHANGED')
+            # Held rows remain facts; scope HOLD is not a fabricated status.
+            refresh_census_schedule(plan,schedule,days,resolve=resolve)
+            schedule.pop(f'{race_date}:BVI_PRIORITY_CENSUS',None)
+        except Exception as exc:
+            census_fault={'status':'RESEARCH_PRIORITY_CENSUS_UNVERIFIED',
+                'first_failed_operation':'OFFICIAL_PRIORITY_CENSUS_REFRESH',
+                'reason':type(exc).__name__+':'+str(exc),
+                'observed_at':now.isoformat(),'production_effect':'NONE',
+                'forward_oos_increment':0}
+            # An explicit non-race diagnostic makes the fixed ENV completeness
+            # check fail closed. Independently valid Production entries retain
+            # their own dispatch gates; research is not a new Production gate.
+            schedule[f'{race_date}:BVI_PRIORITY_CENSUS']=census_fault
     out = []
     resolver_runs = observed_resolver_runs(root) if resolver_runs is None else resolver_runs
     entries=plan_entries(plan,race_date,meetings=meetings,resolve=resolve,days=days)
     routing={}
     if plan.get('all_races') and isinstance(cached,Exception):
         routing=_independent_plan_routes(root,plan,race_date,schedule)
-        entries=itertools.chain(entries,((venue,r['race_no'],int(plan.get('run_count') or 5000),None)
-            for venue,rows in routing.items() for r in rows))
+        routes=((venue,r['race_no'],int(plan.get('run_count') or 5000),None)
+            for venue,rows in routing.items() for r in rows)
+        if 'dispatch_scope' in plan:
+            fault=(None,None,None,'OFFICIAL_CALENDAR_UNAVAILABLE:'+type(cached).__name__+':'+str(cached)[:160])
+            entries=itertools.chain([fault],routes)
+        else:entries=itertools.chain(entries,routes)
     for venue, race_no, run_count, err in entries:
         if err:
             key = f"{race_date}:{venue or 'ALL'}"
@@ -246,6 +292,22 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             out.append({"race_id": rid, "status": "NOT_ON_OFFICIAL_CARD"})
             schedule[rid] = {"status": "NOT_ON_OFFICIAL_CARD"}
             continue
+        if flat_scope_only or 'dispatch_scope' in plan:
+            from jra_bvi_operational_day_plan import row_hold
+            if venue in routing:
+                from jra_race_day_resolver import parse_day_rows
+                parsed=parse_day_rows([race.get('raw')])
+                if len(parsed)==1:race={**race,**{k:parsed[0][k] for k in ('surface','distance_m','field_size')}}
+            held=row_hold(race)
+            if held:
+                schedule.setdefault(rid,{})['scope_decision']={'race_id':rid,**held,
+                    'action':'EXCLUDE_FROM_FLAT_DISPATCH_ONLY'}
+                out.append({'race_id':rid,'status':held['status'],'reason':held['reason']})
+                continue  # A refreshed jump/unknown row never opens intake.
+            if schedule.get(rid,{}).get('scope_decision'):
+                out.append({'race_id':rid,'status':'SCOPE_HOLD',
+                    'reason':schedule[rid]['scope_decision']['reason']})
+                continue  # An original exclusion cannot be silently promoted.
         hh, mm = map(int, race["post_time"].split(":"))
         d = _dt.date.fromisoformat(race_date)
         post = _dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
@@ -497,6 +559,12 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
                        [p.stem for p in (root/'runtime/exact_gaps').glob(rid+'-LIVE-*.json')]))
     no_bet = [p for e in eids for p in glob.glob(str(root / "runtime" / "jra_no_bet_terminals" / (e + ".json")))]
     gaps = [p for e in eids for p in glob.glob(str(root / "runtime" / "exact_gaps" / (e + ".json")))]
+    if sched.get('scope_decision'):
+        row['scope_decision']=deepcopy(sched['scope_decision'])
+        row['dispatch_eligible']=False
+        if not (final_p.exists() or no_bet or intents or rid in state):
+            row['state']=sched['scope_decision']['status']
+            return row
     navigation_advisory=bool(sched.get('source_fault') and str(sched.get('status') or '').startswith(
         ('OFFICIAL_CALENDAR_UNAVAILABLE','OFFICIAL_CARD_UNAVAILABLE')))
     if sched.get('status') and (not navigation_advisory or (not final_p.exists() and not no_bet)):
@@ -1086,6 +1154,11 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
+    plan_path=root/f'runtime/jra_race_day_plan/{race_date}.json'
+    if plan_path.exists() and 'dispatch_scope' in json.loads(plan_path.read_text()):
+        from jra_bvi_operational_day_plan import validate_plan
+        validate_plan(json.loads(plan_path.read_text()))
+        paths.append(plan_path.relative_to(root).as_posix())
     run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
     if run('git','add',*paths).returncode!=0:
         raise RuntimeError('AUTOPILOT_STATE_GIT_ADD_FAILED_NO_SEND')
@@ -1184,8 +1257,20 @@ def main(argv=None):
         no_meetings=False
         calendar_denied=False
         try:
+            from jra_bvi_operational_day_plan import ensure_future_plan
+            ready=ensure_future_plan(root,a.date,default_all=a.all_races_default,cache=cache,
+                meetings=resolve_meetings,resolve=resolve_day,observed_clock=lambda:_dt.datetime.now(JST))
+            # Discovery/pull time belongs to the real dispatch clock.
+            now=_dt.datetime.now(JST)
+            # Research census failure never gates otherwise valid Production
+            # intake. The fallback requires each official row to be flat and
+            # creates no verified plan or fixed-D research eligibility.
             res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache,
-                       publish=lambda:_commit(root,a.date),meetings=resolve_meetings,resolve=resolve_day)
+                       publish=lambda:_commit(root,a.date),meetings=resolve_meetings,resolve=resolve_day,
+                       flat_scope_only=not ready)
+            if not ready:
+                res.append({'race_id':a.date,'status':'BLOCKED_OFFICIAL_PRIORITY_PLAN_BOOTSTRAP',
+                    'scope':'FIXED_D_RESEARCH_ONLY','forward_oos_increment':0})
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
             no_meetings=[r.get('status') for r in res]==['NO_OFFICIAL_MEETINGS']
             calendar_denied=any(r.get('race_id')==a.date+':ALL' and

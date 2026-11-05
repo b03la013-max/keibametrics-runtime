@@ -28,11 +28,15 @@ class ForwardTests(unittest.TestCase):
         self.assertFalse(pre['production_authority'])
         self.assertFalse(pre['signed_final_issued'])
         result=evaluate(pre,['1','2','3'],result_sha256='f'*64,observed_at='2026-10-10T12:30:00+09:00',git_commit_at='2026-10-10T12:11:00+09:00')
-        score=scorecard([result,result],policy_fingerprint=pre['policy_fingerprint'])
+        # The orchestrator supplies only independently verified frozen hashes;
+        # an in-file eligible flag or self hash alone cannot admit a record.
+        score=scorecard([result,result],policy_fingerprint=pre['policy_fingerprint'],
+                        independent_admissions={pre['sha256']})
         self.assertEqual(score['eligible_settled_races'],1)
         self.assertEqual(score['remaining_forward_races'],29)
         self.assertFalse(score['production_activation_authorized'])
         self.assertFalse(score['market_baseline_superiority_proven'])
+        self.assertEqual(scorecard([result],policy_fingerprint=pre['policy_fingerprint'])['eligible_settled_races'],0)
 
     def test_partial_candidate_unverified_late_and_replay_cannot_freeze(self):
         for case in ('late','partial','candidate','signature','replay','market','identity'):
