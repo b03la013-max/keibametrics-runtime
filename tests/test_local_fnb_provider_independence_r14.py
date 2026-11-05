@@ -269,16 +269,28 @@ def test_current_header_conditions_feed_existing_going_rules_without_historical_
     assert out['source']['formal_source_admitted'] is False
 
 
-@pytest.mark.parametrize('changed',['unchanged','weather','going','previously-unconsumed-going'])
+@pytest.mark.parametrize('changed',['unchanged','legacy-native-ids','native-identity-change',
+    'legacy-real-load-change','weather','going','previously-unconsumed-going'])
 def test_publication_compares_consumed_conditions_and_reuses_unchanged_krs(tmp_path,monkeypatch,changed):
     from runtime import local_fnb_saved_paper_tickets as saved
     from runtime import local_fnb_saved_exact_paper as exact_saved
     from runtime.local_fnb_rakuten_reference import publish_saved_reference
-    raw,capture,intent=fixture_card()
+    raw,capture,intent=linked_native_id_fixture()
     raw=raw.replace('発走時刻'.encode(),'天候： 曇 ダ： 稍重 発走時刻'.encode())
     capture['raw_sha256']=hashlib.sha256(raw).hexdigest()
     parsed=parse_card(raw,capture=capture,race=intent,now=NOW)
     parsed['capture']=capture
+    if changed in ('legacy-native-ids','legacy-real-load-change'):
+        def omit_native(value):
+            if isinstance(value,dict):
+                return {k:omit_native(v) for k,v in value.items() if not k.startswith(('provider_jockey_','provider_race_'))}
+            if isinstance(value,list):return [omit_native(v) for v in value]
+            return value
+        parsed=omit_native(parsed)
+    if changed=='native-identity-change':
+        parsed['runners'][0]['provider_jockey_id']='DIFFERENT_PINNED_ID'
+    if changed=='legacy-real-load-change':
+        parsed['runners'][0]['current_load']=999
     krs_raw=b'{}'
     rows=[{'runner_id':str(i),'rank':None} for i in (1,2)]
     pred={'race_id':'SYNTHETIC_ONLY','sha256':'synthetic-static',
@@ -315,7 +327,7 @@ def test_publication_compares_consumed_conditions_and_reuses_unchanged_krs(tmp_p
     args=dict(intent=intent,source_folder=tmp_path/'source',paper_folder=tmp_path/'paper',
         exact_folder=folder,destination=tmp_path/'publications',current_card_folder=current,
         now=NOW+timedelta(seconds=3))
-    if changed!='unchanged':
+    if changed not in ('unchanged','legacy-native-ids'):
         with pytest.raises(ValueError,match='MATERIAL_INPUT_CHANGE_NEW_CALCULATION_REVISION_REQUIRED'):
             publish_saved_reference(**args)
     else:

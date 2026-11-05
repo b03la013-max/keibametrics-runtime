@@ -435,11 +435,28 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
         if isinstance(value, list):
             return [facts(v) for v in value]
         return value
+    # Older saved parser versions omitted native IDs already present in their
+    # pinned Raw. Fill only those missing identity fields from that same Raw;
+    # preserve every previously parsed value and every calculation binding.
+    # This keeps real identity changes material without rerunning unchanged KRS
+    # merely because the current parser exposes more provenance.
+    old_card = parse_card(inputs['raw']['original_provider_card.html'],
+                          capture=original['capture'], race=intent, now=observed)
+    native_ids = {'provider_jockey_id','provider_jockey_id_namespace','provider_jockey_url',
+                  'provider_race_id','provider_race_id_namespace','provider_race_url'}
+    def complete_saved_identity(value, reparsed):
+        if isinstance(value, dict) and isinstance(reparsed, dict):
+            return {**{k:complete_saved_identity(v, reparsed.get(k)) for k,v in value.items()},
+                    **{k:v for k,v in reparsed.items() if k in native_ids and k not in value}}
+        if isinstance(value, list) and isinstance(reparsed, list) and len(value)==len(reparsed):
+            return [complete_saved_identity(v, r) for v,r in zip(value,reparsed)]
+        return value
+    original_runners = complete_saved_identity(original['runners'], old_card['runners'])
     consumed_state = inputs['numerical']['candidate_current_state']
     consumed_conditions = {'going':consumed_state.get('official_going') or None,
                            'weather':consumed_state.get('official_weather') or None}
     if (card['race_identity'] != original['race_identity']
-            or facts(card['runners']) != facts(original['runners'])
+            or facts(card['runners']) != facts(original_runners)
             or card['current_conditions'] != consumed_conditions):
         raise ValueError('REFERENCE_MATERIAL_INPUT_CHANGE_NEW_CALCULATION_REVISION_REQUIRED')
     note = one(Document(raw.decode('utf-8')).root.find(cls='raceNote'),'RACE_NOTE').text()
