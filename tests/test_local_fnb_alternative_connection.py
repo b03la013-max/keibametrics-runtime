@@ -124,6 +124,30 @@ def test_explicit_all_listed_active_ids_leave_existing_reference_values_unchange
     assert original==explicit
 
 
+def test_current_withdrawal_holds_before_unverified_numerics(monkeypatch):
+    from runtime import local_fnb_rakuten_reference as reference
+    from runtime import local_nar_evidence_candidate as evidence
+    raw, capture, intent = counterfactual_three_runner_card()
+    history_only = raw.replace('>取止<'.encode(), '>取消<'.encode(), 1)
+    assert reference.materialize_reference(history_only,
+        capture={**capture, 'raw_sha256': m.sha(history_only)}, race=intent,
+        generated_at=NOW)['numerical']['candidate_environment']['field_size'] == 3
+    before, marker, after = raw.rpartition(b'<td class="profile">')
+    assert marker
+    withdrawn = before + b'<td class="profile scratch">' + after
+    capture['raw_sha256'] = m.sha(withdrawn)
+    assert reference.parse_card(withdrawn, capture=capture, race=intent, now=NOW)['listed_count'] == 3
+    active = reference.materialize_reference(withdrawn, capture=capture, race=intent,
+        generated_at=NOW, active_runner_ids=['1', '2'])
+    assert active['numerical']['candidate_environment']['field_size'] == 2
+    assert not active['source']['active_runner_universe_verified']
+    compile_evidence = Mock(side_effect=AssertionError('numerics must stay untouched'))
+    monkeypatch.setattr(evidence, 'compile_parsed_candidate_evidence', compile_evidence)
+    with pytest.raises(ValueError, match='REFERENCE_CURRENT_WITHDRAWAL_NEW_REVISION_REQUIRED'):
+        reference.materialize_reference(withdrawn, capture=capture, race=intent, generated_at=NOW)
+    compile_evidence.assert_not_called()
+
+
 @pytest.mark.parametrize('ids',[[],['1'],['1','1'],['1','3'],[1,2],'1,2'])
 def test_counterfactual_active_ids_must_be_unique_known_nonempty_universe(ids):
     from runtime.local_fnb_rakuten_reference import materialize_reference

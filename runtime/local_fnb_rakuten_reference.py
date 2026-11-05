@@ -83,7 +83,17 @@ def _stamp(s):
     return t
 
 
-def parse_card(raw, *, capture, race, now=None):
+def _visible_current_withdrawal(tbody):
+    # Past-start withdrawals in history cells are not current changes.
+    return any(re.search(r'取消|除外', cell.text()) or
+               re.search(r'cancel|exclude|scratch', cell.attrs.get('class', ''), re.I)
+               for row in tbody.children if isinstance(row, Node) and row.tag == 'tr'
+               for cell in row.children if isinstance(cell, Node) and cell.tag in ('td', 'th')
+               and any(key in cell.attrs.get('class', '').split()
+                       for key in ('number', 'name', 'profile', 'weightDistance')))
+
+
+def parse_card(raw, *, capture, race, now=None, reject_current_withdrawal=False):
     """Reparse raw bytes, observed header and row-local history; no name joins."""
     if not isinstance(raw, bytes) or not 0 < len(raw) <= 4_000_000:
         raise ValueError('RAKUTEN_ORIGINAL_BYTE_LIMIT')
@@ -127,6 +137,8 @@ def parse_card(raw, *, capture, race, now=None):
     if race.get('scheduled_post_at') and _stamp(race['scheduled_post_at']) != post:
         raise ValueError('RAKUTEN_POST_INTENT_CONFLICT')
     body = one(root.find('tbody','raceCard'),'CARD_BODY')
+    if reject_current_withdrawal and _visible_current_withdrawal(body):
+        raise ValueError('REFERENCE_CURRENT_WITHDRAWAL_NEW_REVISION_REQUIRED')
     rows = [n for n in body.children if isinstance(n,Node) and n.tag=='tr'
             and any(c.attrs.get('class')=='number' for c in n.children if isinstance(c,Node))]
     runners=[]; prior_frame=None
@@ -289,7 +301,10 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
     root=Path(repo_root or Path(__file__).resolve().parents[1])
     generated=_stamp(generated_at or datetime.now(timezone.utc))
     if generated>datetime.now(timezone.utc): raise ValueError('RAKUTEN_REFERENCE_GENERATION_IN_FUTURE')
-    parsed=parse_card(raw,capture=capture,race=race,now=generated)
+    # Never compute from the whole Listed field once the card visibly disagrees.
+    # A separately admitted caller still supplies its verified Active subset.
+    parsed=parse_card(raw,capture=capture,race=race,now=generated,
+                      reject_current_withdrawal=active_runner_ids is None)
     identity=parsed['race_identity'];post=_stamp(identity['scheduled_post_at']);captured=_stamp(parsed['captured_at'])
     if generated<captured:raise ValueError('RAKUTEN_REFERENCE_BEFORE_CAPTURE')
     snapshot=sha(parsed)
@@ -463,14 +478,7 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
     # A visible row marker can prevent stale reuse. Absence is only an observed
     # page fact, never certification of the final Active set or changes feed.
     tbody = one(Document(raw.decode('utf-8')).root.find('tbody','raceCard'),'CARD_BODY')
-    # Current withdrawal status belongs to the current profile/number cells;
-    # past-start withdrawals elsewhere in a row must not exclude today's horse.
-    withdrawn = [r.text()[:150] for r in tbody.children if isinstance(r, Node) and r.tag == 'tr'
-                 and any(re.search(r'取消|除外', c.text()) or
-                         re.search(r'cancel|exclude|scratch', c.attrs.get('class',''), re.I)
-                         for c in r.children if isinstance(c, Node) and c.tag in ('td','th')
-                         and any(k in c.attrs.get('class','').split() for k in ('number','name','profile','weightDistance')))]
-    if withdrawn:
+    if _visible_current_withdrawal(tbody):
         raise ValueError('REFERENCE_CURRENT_WITHDRAWAL_NEW_REVISION_REQUIRED')
     ranks = {c:{r['runner_id']:r for r in pred['column_rankings'][c]['rows']} for c in ('W','P2','P3')}
     krs = {str(r['horse_no']):r for r in inputs['krs_output']['summary']}
