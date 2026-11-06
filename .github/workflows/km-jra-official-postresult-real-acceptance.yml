@@ -11,6 +11,7 @@ permissions:
   id-token: write
 jobs:
   actual-postresult:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

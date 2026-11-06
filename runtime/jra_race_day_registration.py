@@ -3,8 +3,10 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
+import unicodedata
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'runtime/jra_source_runtime'))
@@ -16,7 +18,22 @@ def sha(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def build_registrations(discovery, authority, *, observed_at, universe_snapshot=None):
+def automatic_row_hold(row):
+    """Strict current-row eligibility only for the new automatic Plan lane."""
+    if official_jump_race(row):
+        return 'JUMP','SCOPE_HOLD','DEDICATED_OWNER_MANIFEST_ENGINE_SCOPE_NOT_ESTABLISHED'
+    surface=re.sub(r'\s+','',unicodedata.normalize('NFKC',str(row.get('surface') or '')))
+    if surface not in {'芝','ダ','ダート'}:
+        return 'UNKNOWN','SCOPE_HOLD','OFFICIAL_RACE_TYPE_UNKNOWN'
+    if (type(row.get('field_size')) is not int or not 1<=row['field_size']<=18 or
+            not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',str(row.get('post_time') or '')) or
+            not isinstance(row.get('raw'),str) or not row['raw'].strip()):
+        return 'FLAT','SOURCE_HOLD','OFFICIAL_RACE_HEADER_INCOMPLETE'
+    return None
+
+
+def build_registrations(discovery, authority, *, observed_at, universe_snapshot=None,
+                        automatic_generation=None):
     if discovery.get('status') != 'DISCOVERED' or not discovery.get('venues'):
         raise ValueError('OFFICIAL_ALL_RACES_NOT_PROVEN')
     if datetime.fromisoformat(observed_at).tzinfo is None:
@@ -34,20 +51,28 @@ def build_registrations(discovery, authority, *, observed_at, universe_snapshot=
         if not rows or numbers!=list(range(1,len(rows)+1)):
             raise ValueError('OFFICIAL_RACE_SEQUENCE_NOT_PROVEN')
         vid=VENUES[venue_code(venue['venue'])][0]
+        if automatic_generation is not None and not re.fullmatch(
+                venue_code(venue['venue'])+day[:4]+r'\d{4}',str(venue.get('meeting_key') or '')):
+            raise ValueError('OFFICIAL_MEETING_IDENTITY_NOT_PROVEN')
         if vid in seen:raise ValueError('OFFICIAL_VENUE_DUPLICATED')
         seen.add(vid); eligible_numbers=[]
         for row in rows:
             rid=f"KM-JRA-{vid}-{day.replace('-','')}-R{row['race_no']:02d}"
             management.append(rid)
-            if official_jump_race(row):
-                held={'race_id':rid,'race_type':'JUMP','status':'HOLD',
+            hold=automatic_row_hold(row) if automatic_generation is not None else (
+                ('JUMP','SCOPE_HOLD','DEDICATED_OWNER_MANIFEST_ENGINE_SCOPE_NOT_ESTABLISHED')
+                if official_jump_race(row) else None)
+            if hold:
+                kind,status,reason=hold
+                held={'race_id':rid,'race_type':kind,
+                      'status':'SOURCE_HOLD' if status=='SOURCE_HOLD' else 'HOLD',
                       'action':'EXCLUDE_FROM_FLAT_DISPATCH_ONLY',
-                      'reason':'DEDICATED_OWNER_MANIFEST_ENGINE_SCOPE_NOT_ESTABLISHED',
+                      'reason':reason,
                       'source':'OFFICIAL_DAY_ROW_DISCIPLINE',
                       'historical_signed_artifacts_changed':False,
                       'venue':venue['venue'],'race_no':row['race_no'],
                       'title':row.get('title'),'official_day_row':row.get('raw')}
-                if row.get('post_time'):
+                if re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d',str(row.get('post_time') or '')):
                     held['post']=datetime.fromisoformat(day+'T'+row['post_time']+':00+09:00').isoformat()
                 scope_exclusions.append(held)
                 continue
@@ -82,9 +107,11 @@ def build_registrations(discovery, authority, *, observed_at, universe_snapshot=
           'cohort':{'source_discovery_sha256':sha(discovery),'registered_at':observed_at,
                     'race_ids':sorted(registrations),'race_count':len(registrations),
                     'current_authority_manifest':authority['manifest_id']}}
-    if scope_exclusions:
+    if scope_exclusions or automatic_generation is not None:
         plan['management_race_ids']=sorted(management)
         plan['scope_exclusions']=scope_exclusions
+    if automatic_generation is not None:
+        plan['automatic_generation']=deepcopy(automatic_generation)
     plan['cohort']['sha256']=sha(plan['cohort'])
     plan['plan_sha256']=sha(plan)
     for record in registrations.values():

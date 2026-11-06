@@ -2,6 +2,11 @@ name: JRA Candidate Isolation and OOS Acceptance
 permissions:
   contents: write
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/km-jra-candidate-isolation-oos-acceptance.yml"
+      - ".github/workflows/km-formal-result-runner.yml"
   push:
     branches: [main]
     paths:
@@ -41,7 +46,9 @@ jobs:
           assert 'mec_r4_shadow_pre_result.json' in forward
           assert 'mec_r4_shadow_result.json' in result
           assert 'pre_result.json' in result
-          assert "evaluate_source_candidate_result(candidate_pre" in result
+          assert "if os.path.exists(candidate_pre_path) and candidate_only:" in result
+          assert 'evaluate_official_candidate_result(candidate_pre,p["official_result"])' in result
+          assert "bind_source_candidate_result(candidate_pre,candidate_eval)" in result
           assert "source_candidate_oos_status.json" in result
           assert "build_source_objective_candidate" not in result
           print("CANDIDATE_ISOLATION_WORKFLOW_STRUCTURE_PASS")
@@ -67,6 +74,7 @@ jobs:
           print(json.dumps({"stored_records":len(records),"tracker":out},ensure_ascii=False))
           PY
       - name: Persist acceptance
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
         run: |
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
