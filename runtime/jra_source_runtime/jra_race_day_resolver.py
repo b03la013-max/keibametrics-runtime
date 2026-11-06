@@ -246,6 +246,8 @@ def resolve_day(race_date: str, venue: str, *, deadline_monotonic=None):
     toks = set(re.findall(r"pw01dde01" + key + r"(\d{2})" + d8, s2))
     if len(races) != len(toks):
         raise ValueError(f"JRA_RESOLVER_RACE_LIST_MISMATCH:{len(races)}!={len(toks)}")
+    if toks != {f'{i:02d}' for i in range(1,len(races)+1)}:
+        raise ValueError('JRA_RESOLVER_RACE_ORDINALS_UNRESOLVED')
     return key, races
 
 
