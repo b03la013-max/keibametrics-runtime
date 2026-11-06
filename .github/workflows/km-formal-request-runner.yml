@@ -1012,7 +1012,7 @@ jobs:
             python -m pip install --disable-pip-version-check -q cryptography==45.0.7
             readback=()
             if [ "$REUSED_PRODUCTION" = "true" ]; then readback=(--readback-only); fi
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+            PYTHONPATH=runtime python runtime/jra_delivery.py --compact-body --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" \
               --expected-race-id "$RID" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
@@ -1022,27 +1022,38 @@ jobs:
             if [ -f "runtime/jra_delivery/$RID/canonical_tree.txt" ]; then
               cp "runtime/jra_delivery/$RID/canonical_tree.txt" krs-artifacts/canonical_tree.txt
             fi
-            { echo '## Signed FINAL completed presentation'; echo '```'; cat krs-artifacts/completed_presentation.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            { echo '## Signed FINAL compact presentation'; echo '```'; cat krs-artifacts/completed_presentation.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Persist immutable FINAL or acceptance artifact
-        if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
+        if: steps.request.outputs.candidate_parallel != 'true'
+        env:
+          REUSED_PRODUCTION: ${{ steps.production_readback.outputs.reused }}
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "keibametrics-runtime"
           git config user.email "actions@users.noreply.github.com"
+          if [ "$REUSED_PRODUCTION" != "true" ]; then
           if [ -d runtime/final_artifacts ]; then git add runtime/final_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/acceptance_artifacts ]; then git add runtime/acceptance_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/mec_shadow_artifacts ]; then git add runtime/mec_shadow_artifacts/*.json 2>/dev/null || true; fi
           if [ -d runtime/role_rescue_shadow ]; then git add runtime/role_rescue_shadow/*.json 2>/dev/null || true; fi
-          if [ -d runtime/jra_delivery ]; then git add runtime/jra_delivery; fi
+          fi
+          # Stage only the established compact publication; full mail bodies stay private.
+          if [ -d runtime/jra_delivery ]; then
+            find runtime/jra_delivery -mindepth 2 -maxdepth 2 -type f \( \
+              -name presentation.json -o -name presentation_detail.json -o -name presentation.md -o \
+              -name canonical_tree.txt -o -name publication.json -o -name availability_receipt.json -o \
+              -name presentation_availability.json \) -print0 | xargs -0 -r git add --
+          fi
           if ! git diff --cached --quiet; then
             git commit -m "runtime: persist immutable FINAL/acceptance artifact [skip ci]"
             python tools/persist_local_checkpoints.py --branch main
           fi
 
       - name: Verify canonical FINAL availability after publication
+        id: jra_canonical_availability
         if: steps.request.outputs.candidate_parallel != 'true' && steps.production_readback.outputs.reused == 'false'
         env:
           REQUEST_PATH: ${{ steps.request.outputs.request }}
@@ -1053,17 +1064,37 @@ jobs:
             echo "JRA_CANONICAL_PUBLICATION_FAILED_SIGNED_FINAL_PRESERVED" >&2; exit 1
           fi
           if [ -f "runtime/jra_delivery/$RID/publication.json" ]; then
-            PYTHONPATH=runtime python runtime/jra_delivery.py --final "runtime/final_artifacts/$RID.json" \
+            PYTHONPATH=runtime python runtime/jra_delivery.py --compact-body --final "runtime/final_artifacts/$RID.json" \
               --output-dir "runtime/jra_delivery/$RID" --published-ref "$(git rev-parse HEAD)" \
               --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               > krs-artifacts/completed_presentation.txt
             cp "runtime/jra_delivery/$RID/availability_receipt.json" krs-artifacts/
             cp "runtime/jra_delivery/$RID/presentation_availability.json" krs-artifacts/
-            git add "runtime/jra_delivery/$RID"
+            git add "runtime/jra_delivery/$RID/availability_receipt.json" "runtime/jra_delivery/$RID/presentation_availability.json"
             if ! git diff --cached --quiet; then
               git commit -m "runtime: record canonical JRA FINAL availability [skip ci]"
               python tools/persist_local_checkpoints.py --branch main
             fi
+          fi
+
+      - name: Owner-authorized self delivery of the completed JRA FINAL
+        continue-on-error: true
+        if: steps.request.outputs.candidate_parallel != 'true' && vars.KM_JRA_SELF_DELIVERY_ENABLED == 'true' && (steps.jra_canonical_availability.outcome == 'success' || steps.production_readback.outputs.reused == 'true')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_PATH: ${{ steps.request.outputs.request }}
+          KM_JRA_SELF_DELIVERY_ENABLED: ${{ vars.KM_JRA_SELF_DELIVERY_ENABLED }}
+          KM_JRA_DELIVERY_CONFIG_PATH: ${{ vars.KM_JRA_DELIVERY_CONFIG_PATH }}
+        run: |
+          set -euo pipefail
+          RID="$(python -c 'import json,os;print(json.load(open(os.environ["REQUEST_PATH"]))["race_id"])')"
+          if [[ "$RID" == KM-JRA-* ]] && [ -f "runtime/final_artifacts/$RID.json" ]; then
+            PYTHONPATH=runtime python runtime/jra_delivery.py --send-event \
+              --final "runtime/final_artifacts/$RID.json" --output-dir "runtime/jra_delivery/$RID" \
+              --published-ref "$(git rev-parse HEAD)" \
+              --run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              > /dev/null \
+              || echo "::warning::JRA self delivery HOLD; details remain in the private Store"
           fi
 
       - name: Audit canonical JRA delivery evidence (read-only)
