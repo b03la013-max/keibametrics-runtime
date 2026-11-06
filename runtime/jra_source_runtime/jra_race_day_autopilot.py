@@ -683,7 +683,8 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
         'evidence_scope':'CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY',
         'signature_validation_performed':False,'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
     if signature_readback is not None:
-        evidence.update(signature_validation_performed=signature_readback['performed'],
+        evidence.update(signature_validation_performed=(signature_readback.get('verified') is True
+                                                       and signature_readback.get('status')=='VERIFIED'),
             signature_verification_receipt=signature_readback,
             signed_result_final_verified=signature_readback['verified'])
     return evidence
