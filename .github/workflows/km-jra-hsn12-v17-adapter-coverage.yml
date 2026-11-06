@@ -14,6 +14,7 @@ on:
       - "runtime/jra_source_to_evidence_features.py"
 jobs:
   diagnostic:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:

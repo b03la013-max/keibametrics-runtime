@@ -33,10 +33,11 @@ def test_official_36_intakes_do_not_trigger_source_or_claim_execution(tmp_path):
     assert {r['runner_universe_status'] for r in records.values()}=={'PENDING_OFFICIAL_PDF'}
     assert len(plan['cohort']['race_ids'])==36
     r=next(iter(records.values()))
-    verify_registration(r,plan,race_id=r['race_id'],official_post=datetime.fromisoformat(r['intake_intent']['scheduled_post_at']))
+    official_post=datetime.fromisoformat(r['intake_intent']['scheduled_post_at'])
+    verify_registration(r,plan,race_id=r['race_id'],official_post=official_post)
     r['executed_cells']=20
     with pytest.raises(ValueError,match='HASH_MISMATCH'):
-        verify_registration(r,plan,race_id=r['race_id'],official_post=datetime.now().astimezone())
+        verify_registration(r,plan,race_id=r['race_id'],official_post=official_post)
 
 
 def small_plan(root):
@@ -105,6 +106,25 @@ def test_failed_before_dispatch_never_retries_after_window(tmp_path):
              resolve=lambda *args:('meeting',[{'race_no':i,'post_time':'10:00'} for i in [1,2]]),
              publish=lambda:None,dispatch=lambda *args:pytest.fail('late dispatch'))
     assert all(x['status']=='MISSED_WINDOW' for x in out)
+
+@pytest.mark.parametrize('fetched_at, relation, errors', [
+    ('2026-10-18T00:54:59+00:00', 'PRE_CUTOFF', []),
+    ('2026-10-18T00:55:00+00:00', 'PRE_CUTOFF', []),
+    ('2026-10-18T00:55:00.000001+00:00', 'POST_CUTOFF',
+     ['SOURCE_STALE:JRA-CALENDAR', 'SOURCE_POST_CUTOFF:JRA-CALENDAR']),
+])
+def test_source_capture_cutoff_and_freshness_are_checked_against_explicit_clocks(fetched_at, relation, errors):
+    from source_acquisition import snapshot_from_bytes
+
+    url='https://www.jra.go.jp/keiba/calendar2026/2026/10/1018.html'
+    snapshot, actual=snapshot_from_bytes(
+        {'source_id':'JRA-CALENDAR','required':True,'max_age_seconds':60},
+        b'<html>test fixture</html>', final_url=url, status_code=200,
+        headers={'last-modified':'Sun, 18 Oct 2026 00:54:00 GMT'},
+        fetched_at=fetched_at, prediction_cutoff='2026-10-18T09:55:00+09:00',
+    )
+    assert snapshot['cutoff_relation']==relation
+    assert actual==errors
 
 
 def test_one_corrupt_final_cannot_block_independent_result_worker(tmp_path):
