@@ -91,6 +91,12 @@ def validate(manifest, *, binding, activations):
                 or type(activation.get('approved_worker_seconds')) is not int
                 or activation['approved_worker_seconds'] < seconds):
             raise ValueError('FINITE_ACTOR_EXISTING_DAY_ACTIVATION_MISMATCH')
+        if activation.get('reference_only') is True:
+            if not activation.get('effective_from') or not activation.get('effective_until'):
+                raise ValueError('FINITE_ACTOR_REFERENCE_ACTIVATION_PERIOD_REQUIRED')
+            if not (day.stamp(activation['effective_from']) <= start < stop
+                    <= day.stamp(activation['effective_until'])):
+                raise ValueError('FINITE_ACTOR_LEASE_OUTSIDE_REFERENCE_ACTIVATION_PERIOD')
         totals[value] += int(seconds)
         previous_end = stop
         days.add(value)

@@ -55,6 +55,20 @@ def canonical_trust(trust):
         'SOURCE','EXISTING_LOCAL_PUBLIC_TRUST_MISMATCH_NO_NEW_KEY_ALLOWED')
 
 
+def reconcile_active(parsed, state):
+    """Compare an already-qualified current-state universe with actual card rows."""
+    rows=state.get('runners') or [];by={str(r.get('horse_no')):r for r in rows}
+    card={r['runner_id']:r for r in parsed['runners']}
+    require(len(by)==len(rows) and set(by)==set(card),'SOURCE','ALTERNATIVE_PROVIDER_DECLARED_UNIVERSE_CONFLICT')
+    for rid,row in by.items():
+        require(row.get('name')==card[rid]['name'] and row.get('status') in ('ACTIVE','CANCELLED','EXCLUDED')
+            and row.get('current_jockey')==card[rid]['current_jockey']
+            and row.get('current_load')==card[rid]['current_load'],'SOURCE','ALTERNATIVE_PROVIDER_CURRENT_RUNNER_CONFLICT')
+    active=sorted((rid for rid in by if by[rid]['status']=='ACTIVE'),key=int)
+    require(len(active)>=2,'SOURCE','ALTERNATIVE_PROVIDER_ACTIVE_SET_SHA_MISMATCH')
+    return active,compact([by[rid] for rid in active])
+
+
 def source_assessment(captured, *, intent,now,trust=None):
     """Reparse real Rakuten bytes; qualifications are independently signed facts.
 
@@ -104,16 +118,9 @@ def source_assessment(captured, *, intent,now,trust=None):
                 and stamp(parsed['captured_at'])<=stamp(state['observed_at'])<=stamp(artifact['source_freeze_at'])<=observed):
             reasons.append('ALTERNATIVE_PROVIDER_CURRENT_CHANGES_AND_ACTIVE_UNVERIFIED')
         else:
-            rows=state.get('runners') or [];by={str(r.get('horse_no')):r for r in rows}
-            card={r['runner_id']:r for r in parsed['runners']}
-            require(len(by)==len(rows) and set(by)==set(card),'SOURCE','ALTERNATIVE_PROVIDER_DECLARED_UNIVERSE_CONFLICT')
-            for rid,row in by.items():
-                require(row.get('name')==card[rid]['name'] and row.get('status') in ('ACTIVE','CANCELLED','EXCLUDED')
-                    and row.get('current_jockey')==card[rid]['current_jockey']
-                    and row.get('current_load')==card[rid]['current_load'],'SOURCE','ALTERNATIVE_PROVIDER_CURRENT_RUNNER_CONFLICT')
-            active=sorted((r for r in by if by[r]['status']=='ACTIVE'),key=int)
-            require(len(active)>=2 and artifact.get('active_runner_ids')==active
-                and artifact.get('active_universe_sha256')==compact([by[r] for r in active]),
+            active,active_sha=reconcile_active(parsed,state)
+            require(artifact.get('active_runner_ids')==active
+                and artifact.get('active_universe_sha256')==active_sha,
                 'SOURCE','ALTERNATIVE_PROVIDER_ACTIVE_SET_SHA_MISMATCH')
         admission=artifact.get('field_admission') or {}
         expected=('identity','scheduled_post_at','runner_number_name','frame','jockey_load',

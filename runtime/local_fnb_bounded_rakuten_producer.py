@@ -26,13 +26,13 @@ class BoundedCardProducer:
             raise ProducerHold('SOURCE','PRIVATE_PROVIDER_ACQUISITION_PUBLIC_CI_FORBIDDEN')
         self.root=common._private_root(root);self.cards=observed_cards;self.actor_id=actor_id
         self.robots_path=Path(robots_path)
-    def __call__(self, *, intent,private_root,now):
-        from runtime.local_fnb_rakuten_reference import parse_card
+    def _capture(self, *, intent, now, expected_url=None):
         require=lambda ok,code:None if ok else (_ for _ in ()).throw(ProducerHold('SOURCE',code))
         require(intent.get('venue_id')=='FNB' and intent.get('race_date') in ('2026-11-04','2026-11-05','2026-11-06'),
             'BOUNDED_CARD_DATED_SCOPE_NOT_AUTHORIZED')
         key=intent['race_date']+'-R'+str(intent['race_no']).zfill(2);spec=self.cards.get(key) or {}
         url=spec.get('url','');p=urlsplit(url);m=re.fullmatch(r'/race_card/list/RACEID/(\d{18})',p.path)
+        require(expected_url is None or expected_url==url,'BOUNDED_EXACT_OBSERVED_CARD_URL_REQUIRED')
         require(p.scheme=='https' and p.netloc=='keiba.rakuten.co.jp' and not p.query and not p.fragment
             and m and m[1][:8]==intent['race_date'].replace('-','') and m[1][8:10]=='19'
             and int(m[1][-2:])==intent['race_no'],'BOUNDED_EXACT_OBSERVED_CARD_URL_REQUIRED')
@@ -67,20 +67,36 @@ class BoundedCardProducer:
             # debugging the same Raw requires an unnecessary second request.
             for name,data in [('original.html',raw),('capture.json',common.encoded(capture))]:
                 common._immutable(path/name,data)
-            parsed=parse_card(raw,capture=capture,race=intent,now=captured_at)
-            common._immutable(path/'parsed.json',common.encoded(parsed))
-            post=datetime.fromisoformat(parsed['race_identity']['scheduled_post_at'])
-            cutoff=post-timedelta(seconds=300)
-            require(captured_at<cutoff,'PRESTART_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
-            rid='KM-LOCAL-FNB-'+intent['race_date'].replace('-','')+'-R'+str(intent['race_no']).zfill(2)+'-ALT-R17-'+tag[:12]
-            if intent.get('race_id'):
-                require(re.fullmatch(re.escape(rid.split('-ALT-')[0])+r'(?:-[A-Za-z0-9_]+)*',intent['race_id']),
-                    'BOUNDED_DAY_DISCOVERY_REVISION_INVALID')
-                rid=intent['race_id']
-            race_request={**intent,'family_id':'LOCAL','race_id':rid,'scheduled_post_at':post.isoformat(),
-                'prediction_cutoff':cutoff.isoformat(),'race':{'venue':'船橋','distance_m':parsed['race_identity']['distance_m'],
-                    'surface':parsed['race_identity']['surface'],'direction':'LEFT','class':parsed['race_identity']['race_name']}}
-            return {'raw':raw,'capture':capture,'request':race_request,'actor_id':self.actor_id,
-                'source_envelope':None,'permission_original':None,'current_state_original':None,
-                'private_http_original':str(path/'original.html'),'formal_qualification_not_inferred':True}
+            return raw,capture,path,tag
         finally:os.close(fd)
+
+    def fetch(self, *, url, intent, now):
+        """The existing bounded origin transport for an admitted ProviderBinding."""
+        raw,capture,_,_=self._capture(intent=intent,now=now,expected_url=url)
+        return {'raw':raw,'http_status':capture['http_status'],'final_url':capture['final_url'],
+            'retrieval_method':'HTTPS_GET_ORIGINAL_RESPONSE','content_type':'text/html',
+            'captured_at':capture['completed_at'],'access_policy':{'decision':'ALLOW',
+                'robots_sha256':ROBOTS_SHA,'user_agent':UA,'rate_interval_seconds':61,
+                'no_retry':True,'qualified_SOURCE':False}}
+
+    def __call__(self, *, intent,private_root,now):
+        from runtime.local_fnb_rakuten_reference import parse_card
+        raw,capture,path,tag=self._capture(intent=intent,now=now)
+        captured_at=datetime.fromisoformat(capture['completed_at'])
+        parsed=parse_card(raw,capture=capture,race=intent,now=captured_at)
+        common._immutable(path/'parsed.json',common.encoded(parsed))
+        post=datetime.fromisoformat(parsed['race_identity']['scheduled_post_at'])
+        cutoff=post-timedelta(seconds=300)
+        if captured_at>=cutoff:
+            raise ProducerHold('SOURCE','PRESTART_CUTOFF_EXPIRED_DIAGNOSTIC_REQUIRED')
+        rid='KM-LOCAL-FNB-'+intent['race_date'].replace('-','')+'-R'+str(intent['race_no']).zfill(2)+'-ALT-R17-'+tag[:12]
+        if intent.get('race_id'):
+            if not re.fullmatch(re.escape(rid.split('-ALT-')[0])+r'(?:-[A-Za-z0-9_]+)*',intent['race_id']):
+                raise ProducerHold('SOURCE','BOUNDED_DAY_DISCOVERY_REVISION_INVALID')
+            rid=intent['race_id']
+        race_request={**intent,'family_id':'LOCAL','race_id':rid,'scheduled_post_at':post.isoformat(),
+            'prediction_cutoff':cutoff.isoformat(),'race':{'venue':'船橋','distance_m':parsed['race_identity']['distance_m'],
+                'surface':parsed['race_identity']['surface'],'direction':'LEFT','class':parsed['race_identity']['race_name']}}
+        return {'raw':raw,'capture':capture,'request':race_request,'actor_id':self.actor_id,
+            'source_envelope':None,'permission_original':None,'current_state_original':None,
+            'private_http_original':str(path/'original.html'),'formal_qualification_not_inferred':True}

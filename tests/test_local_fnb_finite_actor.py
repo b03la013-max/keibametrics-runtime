@@ -199,6 +199,22 @@ def test_multiple_leases_cannot_exceed_same_day_activation_total():
         actor.validate(manifest,binding=binding,activations=activations)
 
 
+def test_reference_lease_must_fit_approved_effective_period():
+    manifest, binding, activations = fixture()
+    first = manifest['leases'][0]
+    activation = activations[first['race_date']]
+    activation['reference_only'] = True
+    with pytest.raises(ValueError, match='REFERENCE_ACTIVATION_PERIOD_REQUIRED'):
+        actor.validate(manifest, binding=binding, activations=activations)
+
+    activation.update(effective_from=first['start_at'], effective_until=first['stop_at'])
+    assert actor.validate(manifest, binding=binding, activations=activations) == manifest['leases']
+
+    activation['effective_from'] = first['race_date'] + 'T14:00:01+09:00'
+    with pytest.raises(ValueError, match='LEASE_OUTSIDE_REFERENCE_ACTIVATION_PERIOD'):
+        actor.validate(manifest, binding=binding, activations=activations)
+
+
 def test_transient_failed_route_is_available_in_later_lease(tmp_path):
     (tmp_path/'FNB_2026-11-04_DISCOVERY_ROUTE_prior.json').write_text(json.dumps({
         'race_date':'2026-11-04','attempts':[{'provider':'FKEIBA_OFFICIAL',

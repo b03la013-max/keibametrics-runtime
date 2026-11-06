@@ -83,14 +83,29 @@ def _stamp(s):
     return t
 
 
-def _visible_current_withdrawal(tbody):
+def _row_withdrawal_marker(row):
     # Past-start withdrawals in history cells are not current changes.
     return any(re.search(r'取消|除外', cell.text()) or
                re.search(r'cancel|exclude|scratch', cell.attrs.get('class', ''), re.I)
-               for row in tbody.children if isinstance(row, Node) and row.tag == 'tr'
                for cell in row.children if isinstance(cell, Node) and cell.tag in ('td', 'th')
                and any(key in cell.attrs.get('class', '').split()
                        for key in ('number', 'name', 'profile', 'weightDistance')))
+
+
+def _visible_current_withdrawal(tbody):
+    return any(_row_withdrawal_marker(row) for row in tbody.children
+               if isinstance(row,Node) and row.tag=='tr')
+
+
+def _visible_withdrawn_ids(tbody):
+    numbers=[]
+    for row in tbody.children:
+        if isinstance(row,Node) and row.tag=='tr' and _row_withdrawal_marker(row):
+            number=one([cell for cell in row.children
+                if isinstance(cell,Node) and 'number' in cell.attrs.get('class','').split()],
+                'CURRENT_WITHDRAWAL_RUNNER_NUMBER')
+            numbers.append(str(int(compact(number.text()))))
+    return set(numbers)
 
 
 def parse_card(raw, *, capture, race, now=None, reject_current_withdrawal=False):
@@ -341,6 +356,9 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
                 or len(set(active_runner_ids))!=len(active_runner_ids)):
             raise ValueError('RAKUTEN_EXPLICIT_ACTIVE_SUBSET_INVALID')
         selected=set(active_runner_ids)
+        tbody=one(Document(raw.decode('utf-8')).root.find('tbody','raceCard'),'CARD_BODY')
+        if selected & _visible_withdrawn_ids(tbody):
+            raise ValueError('REFERENCE_CARD_WITHDRAWAL_CONFLICTS_WITH_ACTIVE_SUBSET')
         numerical_runners=[r for r in parsed['runners'] if r['runner_id'] in selected]
         request['runners']=[r for r in request['runners'] if r['runner_id'] in selected]
     raw_field={r['runner_id']:deepcopy(r) for r in numerical_runners}
@@ -394,8 +412,38 @@ def materialize_reference(raw, *, capture, race, generated_at=None, repo_root=No
         'provider_reference_only':True}
 
 
+def verify_reference_current_state(card, envelope, original, *, request, now):
+    """Verify the existing signed current-state witness without Formal admission."""
+    from runtime.local_fnb_alternative_connection import compact as evidence_sha
+    from runtime.local_fnb_alternative_connection import reconcile_active, signed
+    root=Path(__file__).resolve().parents[1]
+    trust=json.loads((root/'evidence/family_audit_20261016/runtime_health.json').read_bytes())
+    artifact=signed(envelope,phase='SOURCE',status='SOURCE_FROZEN',race_id=request.get('race_id'),trust=trust)
+    state=artifact.get('current_state')
+    observed=_stamp(now)
+    if (not isinstance(state,dict) or not isinstance(original,bytes) or not original
+            or state.get('original_sha256')!=hashlib.sha256(original).hexdigest()
+            or state.get('request_race_id')!=request.get('race_id')
+            or not request.get('race_id')
+            or state.get('card_raw_sha256')!=card['raw_sha256']
+            or state.get('latest_changes_verified') is not True
+            or state.get('complete_declared_universe') is not True
+            or artifact.get('provider')!=card['provider']
+            or artifact.get('source_url')!=card['source_url']
+            or artifact.get('raw_sha256')!=card['raw_sha256']
+            or artifact.get('parsed_card_sha256')!=evidence_sha(card)
+            or not _stamp(card['captured_at'])<=_stamp(state['observed_at'])<=_stamp(artifact['source_freeze_at'])<=observed
+                <_stamp(request['prediction_cutoff'])
+            or (observed-_stamp(card['captured_at'])).total_seconds()>600):
+        raise ValueError('REFERENCE_CURRENT_CHANGES_AND_ACTIVE_UNVERIFIED')
+    active,active_sha=reconcile_active(card,state)
+    if artifact.get('active_runner_ids')!=active or artifact.get('active_universe_sha256')!=active_sha:
+        raise ValueError('REFERENCE_CURRENT_CHANGES_AND_ACTIVE_UNVERIFIED')
+    return state,active,active_sha
+
+
 def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder,
-                            destination, current_card_folder=None, now=None):
+                            destination, current_card_folder=None, current_state_evidence=None, now=None):
     """Present existing real calculations independently of Formal admission.
 
     This small adapter reuses the saved-input verifier and immutable store.
@@ -439,6 +487,16 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
     capture = json.loads((card_folder/'capture.json').read_bytes()) if card_folder else original['capture']
     raw = (card_folder/'original.html').read_bytes() if card_folder else inputs['raw']['original_provider_card.html']
     card = parse_card(raw, capture=capture, race=intent, now=observed)
+    current_state = None
+    active_runners = card['runners']
+    if current_state_evidence is not None:
+        current_state_envelope,current_state_original=current_state_evidence
+        current_state,active_ids,active_sha=verify_reference_current_state(
+            card,current_state_envelope,current_state_original,request=request,now=observed)
+        active_runners=[row for row in card['runners'] if row['runner_id'] in active_ids]
+        if ([row['runner_id'] for row in request['runners']]!=active_ids
+                or pred['active_runners']!=active_ids):
+            raise ValueError('REFERENCE_QUALIFIED_ACTIVE_NEW_CALCULATION_REVISION_REQUIRED')
     # These are the actual facts consumed by the unchanged numerical/context
     # producers. Provenance timestamps and market observations are not facts
     # that can silently refresh a frozen model.
@@ -478,7 +536,8 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
     # A visible row marker can prevent stale reuse. Absence is only an observed
     # page fact, never certification of the final Active set or changes feed.
     tbody = one(Document(raw.decode('utf-8')).root.find('tbody','raceCard'),'CARD_BODY')
-    if _visible_current_withdrawal(tbody):
+    if ((current_state is None and _visible_current_withdrawal(tbody)) or
+            (current_state is not None and set(active_ids) & _visible_withdrawn_ids(tbody))):
         raise ValueError('REFERENCE_CURRENT_WITHDRAWAL_NEW_REVISION_REQUIRED')
     ranks = {c:{r['runner_id']:r for r in pred['column_rankings'][c]['rows']} for c in ('W','P2','P3')}
     krs = {str(r['horse_no']):r for r in inputs['krs_output']['summary']}
@@ -492,15 +551,19 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
         f"出走表の照合に用いた取得時刻 {jp(card['captured_at'])}／今回の本文保存 {jp(observed)}",
         ('今回取得した出走表と元計算の掲載馬・履歴・騎手・斤量・馬体重を照合し一致。'
          if fresh_observation else '保存済み出走表を再利用。当日変更の最新照合は未実施。'),
-        f"掲載{card['listed_count']}頭。現在欄に取消・除外表示を認めず。専用変更一覧と最終Activeは未認証。",
+        (f"掲載{card['listed_count']}頭。変更原本照合 {jp(current_state['observed_at'])}。"
+         f"REFERENCEのActive {len(active_runners)}頭（{','.join(active_ids)}）。"
+         f"取消・除外：{','.join(str(r['horse_no'])+' '+r['status'] for r in current_state['runners'] if r['status']!='ACTIVE') or '該当なし'}。"
+         if current_state is not None else
+         f"掲載{card['listed_count']}頭。現在欄に取消・除外表示を認めず。専用変更一覧と最終Activeは未認証。"),
         '観測したRaceヘッダー：'+note,
         '今回の出走表取得時刻で元の指数・KRSの時刻を更新していません。印字天候・馬場は元計算で消費した値と照合済みです。',
-        f"29指数×{card['listed_count']}頭={summary['required_count']}セル：算出{summary['calculated_count']}、規定中立{summary['ruled_neutral_count']}、未解決{summary['unresolved_count']}。",
+        f"29指数×{len(active_runners)}頭={summary['required_count']}セル：算出{summary['calculated_count']}、規定中立{summary['ruled_neutral_count']}、未解決{summary['unresolved_count']}。",
         f"欠測構成要素{summary['candidate_neutral_missing_component_count']}。正式Full29完了ではありません。", '',
         '|馬番|馬名|W参考順位|P2参考順位|P3参考順位|参考Role|SSR-W|SSR-P2|SSR-P3|',
         '|---:|---|---|---|---|---|---:|---:|---:|']
     required_parts=[]
-    for horse in card['runners']:
+    for horse in active_runners:
         rid=horse['runner_id']
         rank_values=[str(ranks[c][rid]['rank']) if ranks[c][rid]['rank'] is not None else 'UNKNOWN' for c in ('W','P2','P3')]
         row='|'+ '|'.join([rid,horse['name'],*rank_values,','.join(pred['roles'][rid]) or '既知・非Front',
@@ -535,8 +598,9 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
         'source_raw_sha256':hashlib.sha256(inputs['raw']['original_provider_card.html']).hexdigest(),
         'observation_capture':capture,'observation_raw_sha256':card['raw_sha256'],
         'current_observation_compared':fresh_observation,'input_facts_unchanged':True,
-        'active_verified':False,'current_changes_feed_verified':False,'runner_count':card['listed_count'],
-        'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in card['runners']],
+        'active_verified':current_state is not None,'current_changes_feed_verified':current_state is not None,
+        'runner_count':len(active_runners),
+        'runners':[{'runner_id':r['runner_id'],'name':r['name']} for r in active_runners],
         'model_sha256':pred['model_code_sha256'],'static_sha256':pred['sha256'],
         'KRS_output_sha256':exact['KRS_output_sha256'],'KRS_runs':5000,'KRS_seed':1,'new_KRS':0,
         'formal_final_proven':False,'signed_final_claim':False,'recipient_delivery_ack':False,
@@ -545,6 +609,11 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
         'selected_paper_tickets':{k:{'ticket_sha256':v['ticket_sha256'],'points':v['point_count'],
             'required_MEC':v['required_MEC'],'within_cap_amount':v['within_existing_cap_eligible_paper_amount']}
             for k,v in exact['portfolio']['methods'].items()}}
+    if current_state is not None:
+        manifest.update(reference_current_state_envelope=current_state_envelope,active_universe_sha256=active_sha)
+        # Same card and frozen calculations may acquire a separate qualified
+        # current-state original. Its evidence is a new publication only.
+        manifest['revision']+='-'+sha(current_state_envelope)[:16]
     manifest['sha256']=sha(manifest)
     folder=common._private_root(Path(destination)/'references'/request['race_date']/f"R{request['race_no']:02d}"/manifest['revision'])
     # Idempotent calls retain the original preparation time and frozen body.
@@ -565,6 +634,8 @@ def publish_saved_reference(*, intent, source_folder, paper_folder, exact_folder
                 raise ValueError('REFERENCE_PREDICTION_SELECTION_REVISION_MISMATCH')
             return previous_publication
     common._immutable(folder/'observation.html',raw)
+    if current_state is not None:
+        common._immutable(folder/'current_state.raw',current_state_original)
     common._immutable(folder/'answer.md',body.encode())
     common._immutable(folder/'manifest.json',common.encoded(manifest))
     return read_saved_reference(folder,intent,now=observed)
@@ -593,7 +664,20 @@ def read_saved_reference(folder, intent, *, now=None):
     capture=manifest['observation_capture']
     card=parse_card(raw,capture=capture,race=intent,
         now=_stamp(capture.get('completed_at') or capture.get('captured_at')))
-    if ([{'runner_id':r['runner_id'],'name':r['name']} for r in card['runners']]!=manifest['runners']
+    readback_runners=card['runners']
+    if manifest.get('reference_current_state_envelope') is not None:
+        state_file=folder/'current_state.raw'
+        if state_file.is_symlink():
+            raise ValueError('REFERENCE_CURRENT_STATE_ORIGINAL_PATH_INVALID')
+        _,active_ids,active_sha=verify_reference_current_state(card,manifest['reference_current_state_envelope'],
+            state_file.read_bytes(),request=manifest,now=manifest['prepared_at'])
+        if (manifest['active_universe_sha256']!=active_sha or manifest['active_verified'] is not True
+                or manifest['current_changes_feed_verified'] is not True):
+            raise ValueError('REFERENCE_CURRENT_STATE_READBACK_MISMATCH')
+        readback_runners=[r for r in readback_runners if r['runner_id'] in active_ids]
+    elif manifest.get('active_verified') or manifest.get('current_changes_feed_verified'):
+        raise ValueError('REFERENCE_CURRENT_STATE_ORIGINAL_MISSING')
+    if ([{'runner_id':r['runner_id'],'name':r['name']} for r in readback_runners]!=manifest['runners']
             or any(not part.startswith('|'+r['runner_id']+'|'+r['name']+'|')
                 for part,r in zip(manifest['required_parts'],manifest['runners']))
             or not _stamp(manifest['source_fetched_at'])<=_stamp(manifest['forecast_frozen_at'])

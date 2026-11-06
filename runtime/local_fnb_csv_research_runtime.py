@@ -183,7 +183,8 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
             raise common.ResearchHold('PROVIDER_REFERENCE_CANNOT_GRANT_SOURCE_ADMISSION')
         from runtime.local_fnb_rakuten_reference import materialize_reference
         replay=materialize_reference(raw,capture=provider_reference['capture'],race=provider_reference['race'],
-            generated_at=provider_reference['generated_at'])
+            generated_at=provider_reference['generated_at'],
+            active_runner_ids=provider_reference.get('active_runner_ids'))
         if any(replay[k] != v for k,v in (('numerical',numerical),('parsed',parsed),('request',request))):
             raise common.ResearchHold('PROVIDER_REFERENCE_ORIGINAL_REPLAY_MISMATCH')
     derived = None
@@ -348,15 +349,20 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
         common._immutable(folder/'strict_method_capital_exports.json',common.encoded(method_exports))
     else:
         method_exports = {'status':'PRELIMINARY_NOT_ELIGIBLE_FOR_PRESTART_EXPORT','methods':{}}
+    reference_active = provider_reference and provider_reference.get('active_runner_ids') is not None
     body = common._render_private_body(folder, prediction, krs, strict, None,
         private_owner_decision=owner_decision, request=request,
         static_original_saved_at=prediction['freeze_at'],
-        computational_field_label='掲載馬' if provider_reference else 'Active')
+        computational_field_label='照合済みREFERENCE Active' if reference_active else
+            '掲載馬' if provider_reference else 'Active')
     if not approved:
-        prefix = (('# 代替Provider掲載馬の私有研究・Active集合とSOURCE資格未検証\n\n' if provider_reference else
+        prefix = (('# 代替Providerの私有研究・REFERENCE Active照合済み\n\n' if reference_active else
+            '# 代替Provider掲載馬の私有研究・Active集合とSOURCE資格未検証\n\n' if provider_reference else
             '# CSV掲載馬の予備研究・正式Active集合未検証\n\n')
             +'公式SOURCE入場・正式署名・発走前完全予測・本人Deliveryの成功件数は0です。'
-            'モデル内部のactive_runnersは計算に渡した掲載馬であり、当日の確定出走集合ではありません。'
+            +('モデル内部のactive_runnersには当日変更原本で照合したREFERENCEの集合を使用しました。'
+              if reference_active else
+              'モデル内部のactive_runnersは計算に渡した掲載馬であり、当日の確定出走集合ではありません。')
             +('個別過去走は派生文書内の実在原本とID接続を再解析して使用し、欠測部分はUNKNOWNを保持します。\n\n'
               if derived else 'Provider原文の同一馬行の個別過去走を再解析し、未観測のContextはUNKNOWNを保持します。\n\n'
               if provider_reference else 'CSVにない個別過去走は作成せず、ContextはUNKNOWNを保持します。\n\n'))
@@ -368,7 +374,7 @@ def _execute_locked(numerical, parsed, raw, request, *, private_root, engine, pa
                 'source_freeze_at':prediction['source_freeze_at'],'static_freeze_at':prediction['freeze_at'],
                 'provider_capture':provider_reference['capture'],
                 'private_owner_decision':provider_reference['private_owner_decision'],
-                'active_verified':False,'qualified_source':False,
+                'active_verified':bool(reference_active),'qualified_source':False,
                 'received_or_delivered_before_cutoff_proven':False}).decode()+'```\n').encode()
     elif method_exports['methods']:
         body += ('\n## 券種別の厳格MEC・Capital確定原本（独立代替案）\n\n'+
@@ -502,19 +508,30 @@ def run_derived_document(path, pin, *, private_root,engine,params):
 def run_provider_reference(raw, *, capture,race,private_root,engine,params,
                            owner_decision_path,owner_decision_sha256,
                            expected_engine_projection_sha256=None,
-                           require_reference_publication_cutoff=False):
+                           require_reference_publication_cutoff=False,current_state_evidence=None):
     """Execute an actual alternative card through the existing fixed pipeline.
 
-    No CSV wrapper, NAR data, alternate numerical rules, Active assertion or
-    Selection adoption is used. The existing private Owner decision is read.
+    Only the existing numerical rules and private Owner decision are used.
+    Separately verified changes can constrain the REFERENCE Active set.
     """
-    from runtime.local_fnb_rakuten_reference import materialize_reference
-    loaded=materialize_reference(raw,capture=capture,race=race)
+    from runtime.local_fnb_rakuten_reference import (materialize_reference, parse_card,
+        verify_reference_current_state)
+    active_ids=None
+    observed=_clock()
+    if current_state_evidence is not None:
+        state_envelope,original=current_state_evidence
+        parsed=parse_card(raw,capture=capture,race=race,now=observed)
+        state,active_ids,active_sha=verify_reference_current_state(
+            parsed,state_envelope,original,request=race,now=observed)
+    loaded=materialize_reference(raw,capture=capture,race=race,generated_at=observed,active_runner_ids=active_ids)
     owner,owner_bytes=common.verify_private_owner_decision(owner_decision_path,owner_decision_sha256,
         request=loaded['request'],source=loaded['source'],check_prestart=False)
     reference={'provider':'RAKUTEN_KEIBA','capture':deepcopy(capture),'race':deepcopy(race),
         'generated_at':loaded['generated_at'],'observation_packet':loaded['observation_packet'],
-        'private_owner_decision':owner,'qualified_source':False,'active_verified':False}
+        'private_owner_decision':owner,'qualified_source':False,'active_verified':active_ids is not None}
+    if active_ids is not None:
+        reference.update(active_runner_ids=active_ids,active_universe_sha256=active_sha,
+                         current_state_original_sha256=state['original_sha256'])
     return _execute(loaded['numerical'],loaded['parsed'],raw,loaded['request'],
         private_root=private_root,engine=engine,params=params,
         owner_decision_bytes=owner_bytes,source_freeze_at=loaded['parsed']['captured_at'],

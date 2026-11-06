@@ -13,8 +13,6 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from runtime import formal_execution_orchestrator as o
-
 EID="LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC"
 RID="KM-LOCAL-FNB-20261002-R04-LIVE-R1"
 KEY_PATH="evidence/family_audit_20261016/runtime_health.json"
@@ -48,6 +46,7 @@ def verify_envelope(envelope, *, race_id, phase, status, public, cfg):
 
 
 def attest_archived_krs(root:Path|None=None):
+    from runtime import formal_execution_orchestrator as o
     root=Path(root) if root is not None else Path(__file__).resolve().parents[1]
     formal=o.resolve_phase(EID,"FORMAL")
     source=o.resolve_phase(EID,"SOURCE")
