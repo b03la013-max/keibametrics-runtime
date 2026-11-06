@@ -61,7 +61,7 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
     if not isinstance(results,list) or len(results)<3:
         raise JRANoBetLearningError("OFFICIAL_RESULT_UNIVERSE_INVALID")
     seen=set()
-    finish={}
+    finish_rows=[]
     for row in results:
         if not isinstance(row,dict):
             raise JRANoBetLearningError("OFFICIAL_RESULT_ROW_BAD")
@@ -69,12 +69,26 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
         pos=row.get("finish")
         if not rid or rid in seen or rid not in terminal["index_universe"]:
             raise JRANoBetLearningError("OFFICIAL_RESULT_RUNNER_MISMATCH")
-        if type(pos) is not int or pos<1 or pos in finish:
+        if type(pos) is not int or pos<1:
             raise JRANoBetLearningError("OFFICIAL_RESULT_FINISH_INVALID")
-        seen.add(rid); finish[pos]=rid
-    if any(pos not in finish for pos in (1,2,3)):
-        raise JRANoBetLearningError("OFFICIAL_TOP3_INCOMPLETE")
-    top3=[finish[pos] for pos in (1,2,3)]
+        # Older official result rows carry only the already universe-bound
+        # runner ID. Build a local view; the hash-checked source stays intact.
+        try:
+            horse_no=int(rid)
+        except ValueError as exc:
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_INVALID") from exc
+        if str(horse_no)!=rid or not 1<=horse_no<=18:
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_INVALID")
+        if "horse_no" in row and (type(row["horse_no"]) is not int or row["horse_no"]!=horse_no):
+            raise JRANoBetLearningError("OFFICIAL_RESULT_HORSE_NUMBER_MISMATCH")
+        finish_rows.append({**row,"horse_no":horse_no})
+        seen.add(rid)
+    from jra_source_runtime.jra_same_day_results import finish_groups_and_top3_orders
+    try:
+        grouped=finish_groups_and_top3_orders(finish_rows)
+    except ValueError as exc:
+        raise JRANoBetLearningError("OFFICIAL_TOP3_INCOMPLETE:"+str(exc)) from exc
+    top3=list(map(str,grouped["top3_orders"][0]))
     obj={
         "profile":PROFILE,
         "race_id":terminal["race_id"],
@@ -110,5 +124,9 @@ def build_no_bet_learning(terminal,official_result,*,race_no,acquired_at,
         "derived_held_count":decision["held_derived_count"],
         "production_effect":"NONE",
     }
+    if grouped["dead_heat"]:
+        obj.update(official_top3_orders=grouped["top3_orders"],
+                   official_finish_groups=grouped["finish_groups"],
+                   official_top3_is_legacy_representative=True)
     obj["sha256"]=_hash(obj)
     return obj

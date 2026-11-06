@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from source_acquisition import sha_obj
 
-PROFILE = "KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.0-20260924"
+PROFILE = "KM-LOCAL-POINT-IN-TIME-POPULATION-LEDGER-v1.1-20261025-MISSING-RESULT-ISOLATION"
 
 
 def _going_group(value: Any) -> str:
@@ -39,6 +39,7 @@ def build_population_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
         ped = seeds.get(str(runner_id)) or {}
         for h in horse.get("history") or []:
             finish = h.get("finish")
+            observed = type(finish) is int and finish > 0
             observations.append({
                 "runner_id": str(runner_id),
                 "horse_name": ped.get("horse_name"),
@@ -54,8 +55,9 @@ def build_population_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
                 "race_class": h.get("class"),
                 "popularity": h.get("popularity"),
                 "finish": finish,
-                "win": bool(finish == 1),
-                "top3": bool(isinstance(finish, int) and finish <= 3),
+                "finish_observed": observed,
+                "win": (finish == 1) if observed else None,
+                "top3": (finish <= 3) if observed else None,
                 "source_id": horse.get("source_id"),
                 "source_snapshot_sha256": horse.get("source_snapshot_sha256"),
             })
@@ -70,15 +72,17 @@ def build_population_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
             groups[k].append(o)
         rows: List[Dict[str, Any]] = []
         for (name, venue, distance_bucket, going_group), obs in groups.items():
-            n = len(obs)
-            wins = sum(1 for x in obs if x.get("win"))
-            top3 = sum(1 for x in obs if x.get("top3"))
+            known = [x for x in obs if x["finish_observed"]]
+            n = len(known)
+            wins = sum(1 for x in known if x["win"])
+            top3 = sum(1 for x in known if x["top3"])
             rows.append({
                 key_name: name,
                 "venue": venue,
                 "distance_bucket": distance_bucket,
                 "going_group": going_group,
                 "starts": n,
+                "unknown_finish_observations": len(obs)-n,
                 "wins": wins,
                 "top3": top3,
                 "win_rate": round(wins / n, 6) if n else None,
@@ -92,6 +96,8 @@ def build_population_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
         "production_authority": False,
         "status": "FIELD-CONDITIONED-SEED / POINT-IN-TIME / SELECTION-BIASED / SHADOW",
         "observation_count": len(observations),
+        "known_finish_observation_count": sum(x["finish_observed"] for x in observations),
+        "unknown_finish_observation_count": sum(not x["finish_observed"] for x in observations),
         "observations": observations,
         "sire_cohorts": aggregate("sire"),
         "damsire_cohorts": aggregate("damsire"),
@@ -99,6 +105,7 @@ def build_population_seed(artifact: Dict[str, Any]) -> Dict[str, Any]:
             "Current-field horse histories only; this is not yet an unbiased all-horse population.",
             "No cohort may become BVI Production authority from this seed alone.",
             "All history rows are inherited from pre-target-date NAR horse profiles.",
+            "Unresolved finish rows remain observations with null win/top3 and are excluded from rate denominators; no cancellation/DNF is inferred.",
         ],
     }
     out["sha256"] = sha_obj({k: v for k, v in out.items() if k != "sha256"})

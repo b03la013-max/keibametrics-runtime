@@ -29,7 +29,9 @@ jobs:
           suite=json.loads((P/"KM_LOCAL_SUITE_MANIFEST_20260924_R7.json").read_text())
           route=json.loads((P/"venue_chat_routes_20260924_R11.json").read_text())
           reg=json.loads((P/"local_information_source_registry_v1.9_20260924.json").read_text())
-          contract=frc.load_contracts()
+          # Preserve the archived R9 graph as a historical regression. The
+          # loader's default is today's gateway, not the archived contract.
+          contract=frc.load_contracts(P/"family_runtime_contracts_20260924_R9.json")
 
           RUNTIME="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.6-20260924-OFFICIAL-WEATHER-POPULATION-EVIDENCE"
           UNIVERSE="KM-LOCAL-NAR-RUNNER-UNIVERSE-v1.0-20260923"
@@ -93,6 +95,12 @@ jobs:
           # JRA/BAN remain isolated and unchanged in authority class.
           assert contract["families"]["JRA"]["external_endpoint"]=="https://quorumprobe-production.up.railway.app"
           assert contract["families"]["BAN"]["execution_status"]=="BLOCKED-PHYSICAL-RUNTIME-UNVERIFIED"
+
+          from execution_gateway import load_gateway, family_config
+          gateway=load_gateway()
+          current=frc.load_contracts()
+          assert current["profile_id"]==gateway["runtime_contract"]
+          assert frc.resolve_family_runtime({"family_id":"LOCAL"},current)["external_endpoint"]==family_config("LOCAL",gateway)["external_endpoint"]
 
           print("NAR_RUNNER_UNIVERSE_CURRENT_AUTHORITY_ACCEPTANCE_PASS")
           PY

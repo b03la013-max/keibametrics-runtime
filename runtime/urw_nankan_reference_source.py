@@ -177,6 +177,8 @@ class Client:
         self.opener=opener or urllib.request.build_opener(NoRedirect())
         self.clock=clock;self.sleep=sleep;self.now=now
 
+    validate_url = staticmethod(url_scope)
+
     def _wait(self,state):
         wait=max(0,state.get('next_at',0)-self.clock())
         if wait>30:raise NankanError('SOURCE_POLICY_RETRY_NOT_READY',retry_after_seconds=wait)
@@ -184,7 +186,7 @@ class Client:
         if self.clock()+.001<state.get('next_at',0):raise NankanError('SOURCE_POLICY_RETRY_NOT_READY')
 
     def get(self,url):
-        url_scope(url)
+        self.validate_url(url)
         self.cache.mkdir(parents=True,exist_ok=True,mode=0o700)
         with (self.cache/'lock').open('a') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX)

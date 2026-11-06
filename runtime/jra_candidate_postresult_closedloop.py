@@ -19,9 +19,9 @@ sys.path.insert(0, str(HERE / "jra_source_runtime"))
 
 from jra_source_candidate_oos import evaluate_result
 from jra_source_candidate_promotion_gate import bind_result
-from jra_same_day_results import _open_day, parse_result_detail
+from jra_same_day_results import _open_day, parse_result_detail, finish_groups_and_top3_orders
 from jra_race_card_detail import _date8, _post
-from source_acquisition import _decode, _html_text, utcnow
+from jra_source_runtime.source_acquisition import _decode, _html_text, utcnow
 
 PROFILE = "KM-JRA-CANDIDATE-AUTOMATIC-POSTRESULT-CLOSEDLOOP-20261010-R1"
 BET_KINDS = {"EXACTA": ("馬単", 2), "TRIO": ("3連複", 3), "TRIFECTA": ("3連単", 3)}
@@ -58,10 +58,11 @@ def _verified_pre_frozen(pre: dict, final: dict, race_id: str) -> None:
 
 
 def parse_official_payouts(text: str) -> dict:
-    """Extract only unambiguous JRA payouts per 100 yen after the LAST 払戻金.
+    """Extract each distinct official winning combination per 100 yen.
 
-    All three issued bet types must be present. Duplicate, ambiguous, or
-    malformed official payout entries fail closed, not silently marked zero.
+    One payout retains the historic dict shape; a dead heat may yield a list.
+    Repeating the same canonical combination is never an extra payout.
+    The result verifier separately reconciles the complete winning set.
     """
     if "払戻金" not in text:
         raise PendingOfficialResult("JRA_OFFICIAL_PAYOUT_SECTION_NOT_PUBLISHED")
@@ -73,16 +74,82 @@ def parse_official_payouts(text: str) -> dict:
     tail = "単勝 " + text[anchors[0].end():].split("勝馬の紹介",1)[0]
     out = {}
     for kind, (label, count) in BET_KINDS.items():
-        pattern = re.escape(label) + r"\s+((?:\d{1,2}\s*-\s*){" + str(count - 1) + r"}\d{1,2})\s+([\d,]+)\s*円"
-        matches = re.findall(pattern, tail)
-        if len(matches) != 1:
+        labels=list(re.finditer(r"(?<!\S)"+re.escape(label)+r"\s+",tail))
+        if len(labels)!=1:
             raise PendingOfficialResult("JRA_PAYOUT_MISSING_OR_AMBIGUOUS:" + kind)
-        selection, yen = matches[0]
-        nums = [int(x) for x in re.findall(r"\d+", selection)]
-        amount = int(yen.replace(",", ""))
-        if len(nums) != count or len(set(nums)) != count or amount <= 0:
-            raise PendingOfficialResult("JRA_PAYOUT_FORMAT_INVALID:" + kind)
-        out[kind] = {"selection": nums, "per_100_yen": amount}
+        block=tail[labels[0].end():]
+        stop=re.search(r"(?<!\S)(?:単勝|複勝|枠連|馬連|ワイド|馬単|3連複|3連単)\s+",block)
+        if stop:block=block[:stop.start()]
+        pattern = r"((?:\d{1,2}\s*-\s*){"+str(count-1)+r"}\d{1,2})\s+([\d,]+)\s*円"
+        matches=re.findall(pattern,block)
+        if not matches:
+            raise PendingOfficialResult("JRA_PAYOUT_MISSING_OR_AMBIGUOUS:"+kind)
+        entries=[];seen=set()
+        for selection,yen in matches:
+            nums=[int(x) for x in re.findall(r"\d+",selection)]
+            amount=int(yen.replace(",",""))
+            if len(nums)!=count or len(set(nums))!=count or any(not 1<=x<=18 for x in nums) or amount<=0:
+                raise PendingOfficialResult("JRA_PAYOUT_FORMAT_INVALID:"+kind)
+            key=tuple(sorted(nums)) if kind=="TRIO" else tuple(nums)
+            if key in seen:
+                raise PendingOfficialResult("JRA_PAYOUT_DUPLICATE_COMBINATION:"+kind)
+            seen.add(key);entries.append({"selection":nums,"per_100_yen":amount})
+        out[kind]=entries[0] if len(entries)==1 else entries
+    return out
+
+
+def official_top3_orders(official:dict)->list[list[int]]:
+    """Return every permissible order without silently truncating a dead heat."""
+    supplied=official.get("top3_orders")
+    if supplied is None and (official.get("dead_heat") is True or official.get("finish_groups") is not None):
+        raise ValueError("OFFICIAL_TOP3_ORDERS_REQUIRED")
+    orders=supplied if supplied is not None else [official.get("top3")]
+    if not isinstance(orders,list) or not orders:
+        raise ValueError("OFFICIAL_TOP3_ORDERS_REQUIRED")
+    seen=set();out=[]
+    for order in orders:
+        if (not isinstance(order,list) or len(order)!=3 or
+                any(type(x) is not int or not 1<=x<=18 for x in order) or len(set(order))!=3):
+            raise ValueError("OFFICIAL_TOP3_ORDER_INVALID")
+        key=tuple(order)
+        if key in seen:raise ValueError("OFFICIAL_TOP3_ORDER_DUPLICATE")
+        seen.add(key);out.append(order[:])
+    groups=official.get("finish_groups")
+    if supplied is not None:
+        if not isinstance(groups,list) or not groups:
+            raise ValueError("OFFICIAL_FINISH_GROUPS_REQUIRED")
+        if (any(not isinstance(g,dict) or type(g.get("finish")) is not int or g["finish"]<1
+                or not isinstance(g.get("horse_numbers"),list) or not g["horse_numbers"] for g in groups)
+                or len({g["finish"] for g in groups})!=len(groups)):
+            raise ValueError("OFFICIAL_FINISH_GROUPS_INVALID")
+        rows=[{"finish":g["finish"],"horse_no":n} for g in groups for n in g["horse_numbers"]]
+        expected=finish_groups_and_top3_orders(rows)["top3_orders"]
+        if sorted(out)!=expected:
+            raise ValueError("OFFICIAL_TOP3_GROUP_BINDING_MISMATCH")
+        if official.get("top3")!=expected[0]:
+            raise ValueError("OFFICIAL_LEGACY_TOP3_BINDING_MISMATCH")
+    return sorted(out)
+
+
+def official_payout_entries(official:dict,kind:str)->list[dict]:
+    """Validate all payable combinations, and each canonical ticket pays once."""
+    value=official.get("payouts",{}).get(kind)
+    entries=value if isinstance(value,list) else [value]
+    count=BET_KINDS[kind][1];seen=set();out=[]
+    for pay in entries:
+        if not isinstance(pay,dict):raise ValueError("OFFICIAL_PAYOUT_INVALID")
+        selection=pay.get("selection");price=pay.get("per_100_yen")
+        if (not isinstance(selection,list) or len(selection)!=count or
+                any(type(x) is not int or not 1<=x<=18 for x in selection) or
+                len(set(selection))!=count or type(price) is not int or price<0):
+            raise ValueError("OFFICIAL_PAYOUT_INVALID")
+        key=tuple(sorted(selection)) if kind=="TRIO" else tuple(selection)
+        if key in seen:raise ValueError("OFFICIAL_PAYOUT_DUPLICATE_COMBINATION")
+        seen.add(key);out.append(pay)
+    expected={tuple(sorted(o)) if kind=="TRIO" else tuple(o[:count])
+              for o in official_top3_orders(official)}
+    if seen!=expected:
+        raise ValueError("OFFICIAL_PAYOUT_TOP3_COMBINATIONS_MISMATCH:"+kind)
     return out
 
 
@@ -94,22 +161,18 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
     ids = [str(r.get("runner_id")) for r in rows+non_finishers]
     if len(set(ids)) != len(ids) or not set(ids).issubset(set(frozen_runner_ids)):
         raise ValueError("OFFICIAL_RESULT_RUNNER_UNIVERSE_MISMATCH")
-    top = {}
-    for r in rows:
-        rank = r.get("finish")
-        if rank in (1,2,3):
-            if rank in top:
-                raise PendingOfficialResult("JRA_DEAD_HEAT_MANUAL_ADJUDICATION_REQUIRED")
-            top[rank] = int(r["horse_no"])
-    if set(top) != {1,2,3}:
-        raise PendingOfficialResult("JRA_TOP3_NOT_CONFIRMED")
-    actual = [top[1], top[2], top[3]]
+    try:
+        grouped=finish_groups_and_top3_orders(rows)
+    except ValueError as exc:
+        raise PendingOfficialResult("JRA_TOP3_NOT_CONFIRMED:"+str(exc)) from exc
+    actual=grouped["top3_orders"][0]
     payouts = parse_official_payouts(payout_text)
-    for kind, spec in payouts.items():
-        expected = actual[:2] if kind == "EXACTA" else sorted(actual) if kind == "TRIO" else actual
-        found = sorted(spec["selection"]) if kind == "TRIO" else spec["selection"]
-        if found != expected:
-            raise PendingOfficialResult("OFFICIAL_PAYOUT_TOP3_MISMATCH:" + kind)
+    checked={"top3":actual,"payouts":payouts}
+    if grouped["dead_heat"]:checked.update(grouped)
+    for kind in BET_KINDS:
+        try:official_payout_entries(checked,kind)
+        except ValueError as exc:
+            raise PendingOfficialResult("OFFICIAL_PAYOUT_TOP3_MISMATCH:"+kind+":"+str(exc)) from exc
     # Only the explicit official refund horse-number declaration authorizes
     # refunds. A non-finish, fall or disqualification is not a cancellation.
     # Keep the returned numeric finishers compatible with same-day features.
@@ -123,9 +186,38 @@ def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: li
         raise PendingOfficialResult("OFFICIAL_REFUND_DECLARATION_REQUIRED")
     if not_refundable & set(refunded):
         raise ValueError("OFFICIAL_REFUND_NONCANCELLATION_STATUS")
-    return {"top3": actual, "payouts": payouts, "refund_runner_ids":refunded,
+    return {**checked, "refund_runner_ids":refunded,
             "non_finishers":non_finishers,
             "refund_declaration":match.group(0) if match else None}
+
+
+def evaluate_official_candidate_result(pre:dict,official:dict)->dict:
+    """Keep joint dead-heat outcomes; do not select the most flattering rank."""
+    orders=official_top3_orders(official)
+    measurements=[evaluate_result(pre,order) for order in orders]
+    if len(orders)==1:return measurements[0]
+    out=dict(measurements[0])
+    for key,value in out.items():
+        if type(value) is bool and key.endswith("capture"):
+            out[key]=any(row[key] for row in measurements)
+    for key in ("winner_static_rank","second_static_rank","third_static_rank","top3_mean_static_rank"):
+        if any(row.get(key)!=out.get(key) for row in measurements):out[key]=None
+    for key in ("winner_capture_efficiency","p2_capture_efficiency","p3_capture_efficiency"):
+        out[key]=max(row[key] for row in measurements)
+    for section in ("market_baseline","candidate_vs_market"):
+        out[section]=dict(out.get(section) or {})
+        for key,value in out[section].items():
+            if any((row.get(section) or {}).get(key)!=value for row in measurements):
+                out[section][key]=None
+    out.update(actual_top3_orders=orders,official_finish_groups=official["finish_groups"],
+               actual_top3_is_legacy_representative=True,
+               dead_heat_order_evaluations=measurements,
+               dead_heat_aggregation="ANY_VALID_ORDER_CAPTURE; VARYING_SCALAR_RANKS_ARE_NULL")
+    out["krs_incremental_utility"]={"classification":"DEAD_HEAT_MULTIPLE_VALID_ORDERS",
+        "by_valid_order":[{"top3":order,"evaluation":row.get("krs_incremental_utility")}
+                           for order,row in zip(orders,measurements)]}
+    out["sha256"]=canonical_sha({k:v for k,v in out.items() if k!="sha256"})
+    return out
 
 
 def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sha256: str, source_url: str) -> dict:
@@ -133,38 +225,25 @@ def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sh
     _verified_pre_frozen(pre, final, race_id)
     actual = [int(x) for x in official["top3"]]
     prices = official["payouts"]
+    orders=official_top3_orders(official)
     tickets = list(((final.get("mec") or {}).get("tickets") or []))
     if not tickets:
         raise ValueError("FROZEN_MEC_TICKETS_MISSING")
-    purchases = []
-    seen = set()
-    stake_total = 0
-    return_total = 0
-    for ticket in tickets:
-        kind = str(ticket.get("bet_type") or "")
-        if kind not in BET_KINDS:
-            raise ValueError("UNKNOWN_BET_TYPE:" + kind)
-        n = BET_KINDS[kind][1]
-        sel = [int(x) for x in ticket.get("selection") or []]
-        stake = ticket.get("stake")
-        if len(sel) != n or len(set(sel)) != n or not isinstance(stake,int) or isinstance(stake,bool) or stake <= 0 or stake % 100:
-            raise ValueError("FROZEN_TICKET_INVALID")
-        key = (kind, tuple(sorted(sel)) if kind == "TRIO" else tuple(sel))
-        if key in seen:
-            raise ValueError("DUPLICATE_FROZEN_TICKET")
-        seen.add(key)
-        pay = prices[kind]
-        winner = sorted(pay["selection"]) if kind == "TRIO" else pay["selection"]
-        observed = sorted(sel) if kind == "TRIO" else sel
-        amount = (stake // 100) * pay["per_100_yen"] if observed == winner else 0
-        purchases.append({"bet_type":kind,"selection":sel,"stake":stake,"recommended_return":amount,
-                          "win":amount>0})
-        stake_total += stake
-        return_total += amount
     required = int((final.get("capital") or {}).get("required_capital") or 0)
-    if required != stake_total or int((final.get("mec") or {}).get("ticket_count") or 0) != len(purchases):
+    # Reuse the Production arithmetic without asserting that this synthetic
+    # carrier is a signed FINAL or a purchased Production portfolio.
+    from jra_production_postresult import settle_final
+    settled=settle_final({"final_ticket":{"tickets":tickets,"total_investment":required}},official)
+    if int((final.get("mec") or {}).get("ticket_count") or 0)!=len(tickets):
         raise ValueError("FROZEN_CAPITAL_CANONICAL_MISMATCH")
-    evaluated = evaluate_result(pre, actual)
+    def key(ticket):
+        selection=ticket["selection"]
+        return ticket["bet_type"],tuple(sorted(selection) if ticket["bet_type"]=="TRIO" else selection)
+    paid={key(t):t["return"] for t in settled["winning_tickets"]}
+    purchases=[{"bet_type":t["bet_type"],"selection":t["selection"],"stake":t["stake"],
+                "recommended_return":paid.get(key(t),0),"win":paid.get(key(t),0)>0} for t in tickets]
+    stake_total=settled["total_investment"];return_total=settled["total_payout"]
+    evaluated = evaluate_official_candidate_result(pre,official)
     bound = bind_result(pre, evaluated)
     if not evaluated["winner_capture"]: first = "W_HEAD_ZERO"
     elif not evaluated["p2_capture"]: first = "P2_SECOND_ZERO"
@@ -187,14 +266,21 @@ def settle_frozen_candidate(pre: dict, final: dict, official: dict, *, source_sh
         "actual_top3": actual, "official_payouts": prices, "purchased_ticket_count":len(purchases),
         "frozen_tickets":purchases, "recommended_stake_yen":stake_total,
         "recommended_return_yen":return_total,
-        "recommended_profit_yen":return_total-stake_total,
-        "frozen_recommendation_pfs_percent":round(100*return_total/stake_total,2),
+        "recommended_profit_yen":settled["profit_loss"],
+        "frozen_recommendation_pfs_percent":round(settled["pfs"],2) if settled["pfs"] is not None else None,
         "actual_purchase_status":"UNVERIFIED","actual_pfs_status":"NOT_VERIFIED",
         "first_material_failure":first,"dominant_pfs_loss_owner":owner,
         "prediction_measurement":evaluated, "oos_eligible":pre["oos_eligible"],
         "result_receipt_status":"OFFICIAL_HTTP_SNAPSHOT_HASH_BOUND / SIGNED_RESULT_NOT_VERIFIED",
         "production_effect":"NONE","automatic_promotion":False,
     }
+    if len(orders)>1:
+        report.update(actual_top3_orders=orders,official_finish_groups=official["finish_groups"],
+                      actual_top3_is_legacy_representative=True)
+    if settled["refund"]:
+        report.update(recommended_refund_yen=settled["refund"],
+                      recommended_effective_stake_yen=settled["effective_investment"],
+                      refunded_tickets=settled["refunded_tickets"])
     report["sha256"] = canonical_sha(report)
     bound["settlement_sha256"] = report["sha256"]
     bound["official_result_source_sha256"] = source_sha256

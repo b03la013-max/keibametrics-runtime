@@ -7,9 +7,10 @@ from runtime import formal_execution_orchestrator as o
 
 
 def _result_settlement_from_existing_runner(payouts):
+    from runtime.local_result_settlement import settle_frozen_tickets,LocalSettlementError
     path = Path(o.__file__).with_name("local_result_from_signed_final.py")
-    code = path.read_text().split('tickets=((fin.get("artifact")', 1)[1]
-    code = 'tickets=((fin.get("artifact")' + code.split('\ndef post(', 1)[0]
+    code = path.read_text().split('top3=[int(x)', 1)[1]
+    code = 'top3=[int(x)' + code.split('\ndef post(', 1)[0]
     scope = {
         "fin": {"artifact": {"final_ticket": {"tickets": [
             {"bet_type": "EXACTA", "selection": [7, 5], "stake": 100},
@@ -18,6 +19,8 @@ def _result_settlement_from_existing_runner(payouts):
         "rid": "KAW-RESULT-REGRESSION",
         "req": {"finish_order": [7, 5, 6], "payouts": payouts,
                 "result_available_at": "2026-10-15T15:00:00+09:00"},
+        "settle_frozen_tickets":settle_frozen_tickets,
+        "LocalSettlementError":LocalSettlementError,
     }
     exec(compile(code, str(path), "exec"), scope)
     return scope["result_payload"]["settlement"]

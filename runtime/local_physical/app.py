@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, hashlib, json, os, pathlib, subprocess, tempfile, datetime
+import base64, hashlib, json, os, pathlib, subprocess, tempfile, datetime, threading, copy
 from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives import serialization
 from post_result_learning import build_post_result_review, build_learning_state
 from minimum_efficient_coverage import validate_mec_plan, MEC_PROFILE
 from capital_policy import PROFILE as CAPITAL_PROFILE
+from local_result_settlement import settle_frozen_tickets, LocalSettlementError
 
 APP_VERSION="KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.4-20260923-RUNTIME-SYNC-ACTIVE-UNIVERSE"
 RECEIPT_SCHEMA="KM-LOCAL-SIGNED-RECEIPT-v1"
@@ -68,6 +69,11 @@ def signed_receipt(phase:str,race_id:str,status:str,artifact:Dict[str,Any],error
 def verify_envelope(env):
     try:
         rec=env["receipt"]
+        if (rec.get("family") != FAMILY or rec.get("schema") != RECEIPT_SCHEMA
+                or env.get("signature_alg") != "Ed25519" or env.get("signer_key_id") != SIGNER
+                or not isinstance(env.get("artifact"),dict)
+                or rec.get("artifact_sha256") != sha_obj(env["artifact"])):
+            return False
         private_key().public_key().verify(base64.b64decode(env["signature"]),jdump(rec))
         return hashlib.sha256(jdump(rec)).hexdigest()==env.get("receipt_sha256")
     except Exception:
@@ -296,8 +302,7 @@ def _ticket_investment(final_ticket):
         return None
     return sum(_money_int(x.get("stake",0),"TICKET_STAKE") for x in ts if isinstance(x,dict))
 
-@app.post("/result")
-def result(p:Dict[str,Any]):
+def _build_result(p:Dict[str,Any]):
     validate_family(p)
     rid=str(p.get("race_id") or "")
     if not rid:
@@ -309,6 +314,8 @@ def result(p:Dict[str,Any]):
         errs.append("FINAL_RECEIPT_INVALID")
     elif (fin.get("receipt") or {}).get("status")!="PASS":
         errs.append("FINAL_RECEIPT_NOT_PASS")
+    elif (fin.get("receipt") or {}).get("phase")!="FINAL":
+        errs.append("FINAL_RECEIPT_PHASE_MISMATCH")
     elif str((fin.get("receipt") or {}).get("race_id") or "")!=rid:
         errs.append("FINAL_RECEIPT_RACE_ID_MISMATCH")
 
@@ -333,6 +340,13 @@ def result(p:Dict[str,Any]):
         errs.append("SETTLEMENT_STATUS_INVALID")
 
     final_ticket=((fin or {}).get("artifact") or {}).get("final_ticket")
+    # Do not trust caller-supplied return or FINAL's stated total. Reconcile
+    # each immutable ticket with the published flat LOCAL winning outcome.
+    accounting=None
+    try:
+        accounting=settle_frozen_tickets(final_ticket,official)
+    except LocalSettlementError as exc:
+        errs.append(str(exc))
     frozen_investment=_ticket_investment(final_ticket) if isinstance(final_ticket,dict) else None
     supplied_investment=settlement.get("investment")
     investment=None
@@ -362,7 +376,13 @@ def result(p:Dict[str,Any]):
         if ret is None: errs.append("RETURN_REQUIRED_FOR_COMPLETE_SETTLEMENT")
         if settled_investment is not None and investment is not None and settled_investment!=investment:
             errs.append("COMPLETE_SETTLEMENT_AMOUNT_MISMATCH")
+        if accounting is not None and (investment!=accounting["investment"] or ret!=accounting["return"]):
+            errs.append("SETTLEMENT_FINANCE_MISMATCH_OFFICIAL_FROZEN_TICKETS")
+        if accounting is not None and settlement.get("winning_tickets") is not None:
+            if settlement["winning_tickets"]!=accounting["winning_tickets"]:
+                errs.append("SETTLEMENT_WINNING_TICKETS_MISMATCH")
     elif settlement_status=="PARTIAL":
+        errs.append("LOCAL_PARTIAL_RESULT_NOT_SETTLED")
         if settled_investment is None or ret is None:
             errs.append("PARTIAL_SETTLEMENT_REQUIRES_SETTLED_INVESTMENT_AND_RETURN")
         elif investment is not None and settled_investment>investment:
@@ -371,6 +391,7 @@ def result(p:Dict[str,Any]):
         if ret==0:
             errs.append("PENDING_UNKNOWN_RETURN_ZERO_FORBIDDEN")
     elif settlement_status in {"VOID","REFUND"}:
+        errs.append("LOCAL_REFUND_RESULT_NOT_SETTLED")
         if ret is None:
             errs.append("VOID_REFUND_RETURN_REQUIRED")
 
@@ -394,7 +415,7 @@ def result(p:Dict[str,Any]):
     auto_learning=None
     try:
         finish_order=official.get("finish_order") or []
-        if len(finish_order)>=3 and isinstance(fin,dict):
+        if not errs and settlement_status=="COMPLETE" and len(finish_order)>=3 and isinstance(fin,dict):
             frozen_final_artifact=(fin.get("artifact") or {})
             frozen_fpp=(frozen_final_artifact.get("final_prediction_package") or {})
             final_artifact={
@@ -480,6 +501,10 @@ def result(p:Dict[str,Any]):
         "final_ticket_sha256":sha_obj(final_ticket or {}),
         "final_freeze_timestamp":((fin or {}).get("artifact") or {}).get("final_freeze_timestamp")
     }
+    if errs:
+        # A rejected or unsupported outcome is not a settled zero loss (or
+        # a caller-asserted profit). Keep performance fields unavailable.
+        pfs=profit_loss=settlement_completeness=None
     artifact={
         "official_result":official,
         "settlement":{
@@ -507,3 +532,30 @@ def result(p:Dict[str,Any]):
         "review_completed_at":utcnow()
     }
     return signed_receipt("RESULT",rid,"PASS" if not errs else "FAIL",artifact,errs)
+
+
+# Process-local idempotent receipt reuse; durable completion/recovery remains
+# the existing execution_store. Container replacement is NOT durable proof.
+# The caller must never automatically retry an ambiguous /result transport.
+_result_lock=threading.Lock()
+_result_receipts={}
+
+
+@app.post("/result")
+def result(p:Dict[str,Any]):
+    basis={"final_receipt_sha256":(p.get("final_receipt") or {}).get("receipt_sha256"),
+           "official_result":p.get("official_result"),
+           "result_available_at":p.get("result_available_at"),
+           "pfs_authority":p.get("pfs_authority")}
+    key=sha_obj(basis)
+    request_sha=sha_obj(p)
+    with _result_lock:
+        if key in _result_receipts:
+            prior_sha,prior=_result_receipts[key]
+            if request_sha!=prior_sha:
+                raise HTTPException(409,"RESULT_REUSE_REQUEST_MISMATCH")
+            return copy.deepcopy(prior)
+        envelope=_build_result(p)
+        if envelope["receipt"]["status"]=="PASS":
+            _result_receipts[key]=(request_sha,copy.deepcopy(envelope))
+        return envelope

@@ -2,7 +2,7 @@ import json,os,sys,urllib.request,urllib.error,urllib.parse,hashlib,datetime,cop
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0,"runtime")
-from family_runtime_contract import load_contracts, resolve_family_runtime
+from family_runtime_contract import load_contracts, resolve_family_runtime, require_receipt_binding
 from execution_gateway import (
     load_gateway, normalize_request, family_config, assess_runtime_health,
     artifact_name as gateway_artifact_name, derive_execution_id, request_json,
@@ -99,6 +99,11 @@ def get_json(path,timeout=60):
         attempts=4,
     )
 
+# A structurally complete request attestation is not approval of a physical
+# BAN runtime. Preserve schema-only resolution, reject actual unadmitted use.
+if fam=="BAN" and str(resolved["contract"].get("execution_status") or "").startswith("BLOCKED"):
+    fail_closed("BAN_PHYSICAL_RUNTIME_NOT_ADMITTED")
+
 # Current execution gateway is the single operational pointer.
 # Git commit equality is diagnostic only when the executable bundle
 # fingerprint and runtime profile are compatible.
@@ -129,10 +134,15 @@ def call(path,payload,timeout=600):
         method="POST",
         payload=payload,
         timeout=timeout,
-        attempts=4,
+        attempts=1 if path=="/result" else 4,
     )
 
 def verify_envelope(env,label):
+    expected_phase=("KRS_RUN" if label.startswith("CANDIDATE_KRS_") else
+                    "FORMAL" if label=="BAN_FORMAL" else label)
+    signer=(resolved.get("runtime_attestation") or {}).get("signed_receipt_authority") or resolved["contract"].get("signed_receipt_authority")
+    require_receipt_binding(env,family=fam,race_id=req.get("race_id"),
+                            phase=expected_phase,signer=signer)
     vc,v=call("/verify",env,60)
     assert vc<300 and v.get("valid") is True,(label,vc,v)
     receipt_verifications[label]=True

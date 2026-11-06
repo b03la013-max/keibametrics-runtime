@@ -1,9 +1,33 @@
 from __future__ import annotations
 import json
+import hashlib
 from pathlib import Path
 
 class FamilyRuntimeError(ValueError):
     pass
+
+
+def require_receipt_binding(envelope, *, family, race_id, phase, signer):
+    """Bind the externally verified signature to the expected actual bytes.
+
+    This supplements /verify; it never replaces cryptographic verification.
+    It grants no runtime, venue, Owner or SOURCE admission.
+    """
+    def sha(value):
+        return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,
+                                         separators=(",",":")).encode()).hexdigest()
+    receipt=envelope.get("receipt") or {}
+    if (receipt.get("family")!=family or receipt.get("race_id")!=race_id
+            or receipt.get("phase")!=phase):
+        raise FamilyRuntimeError("RECEIPT_FAMILY_RACE_PHASE_MISMATCH")
+    if (not signer or envelope.get("signer_key_id")!=signer
+            or envelope.get("signature_alg")!="Ed25519"
+            or receipt.get("schema")!=f"KM-{family}-SIGNED-RECEIPT-v1"):
+        raise FamilyRuntimeError("RECEIPT_SIGNER_OR_SCHEMA_MISMATCH")
+    if (not isinstance(envelope.get("artifact"),dict)
+            or receipt.get("artifact_sha256")!=sha(envelope["artifact"])
+            or envelope.get("receipt_sha256")!=sha(receipt)):
+        raise FamilyRuntimeError("RECEIPT_CONTENT_DIGEST_MISMATCH")
 
 def load_contracts(path=None):
     if path is None:

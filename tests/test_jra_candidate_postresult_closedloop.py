@@ -101,7 +101,8 @@ def test_dead_heat_is_not_silently_settled_as_one_order():
         {'runner_id':'4','horse_no':4,'finish':1},
         {'runner_id':'8','horse_no':8,'finish':2},
         {'runner_id':'3','horse_no':3,'finish':2}]}
-    with pytest.raises(PendingOfficialResult,match='DEAD_HEAT_MANUAL_ADJUDICATION'):
+    # The tied rank is valid, but a single payout omits the other winning pair.
+    with pytest.raises(PendingOfficialResult,match='OFFICIAL_PAYOUT_TOP3_MISMATCH'):
         verify_official_result(parsed,price_text(),['3','4','8'])
     with pytest.raises(ValueError,match="UNIVERSE"):
         verify_official_result(parsed,price_text(),["1","3","4"])

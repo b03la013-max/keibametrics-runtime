@@ -101,17 +101,18 @@ def test_durable_claim_precedes_dispatch_multiple_races_no_result_wait(tmp_path)
     send.assert_not_called()
 
 
-def test_urw_chat_dispatch_keeps_other_approved_races_untouched(tmp_path):
+@pytest.mark.parametrize('venue', ['URW', 'OHI'])
+def test_chat_dispatch_keeps_other_approved_races_untouched(tmp_path, venue):
     from runtime.family_authority_guard import resolve_current_authority
     p = plan()
-    p['venue_id'] = 'URW'
+    p['venue_id'] = venue
     for race in p['races']:
-        race['fields']['venue_id'] = 'URW'
-        race['execution_id'] = race['execution_id'].replace('-KAW-', '-URW-')
-        race['race_key'] = race['race_key'].replace('KAW-', 'URW-')
+        race['fields']['venue_id'] = venue
+        race['execution_id'] = race['execution_id'].replace('-KAW-', '-'+venue+'-')
+        race['race_key'] = race['race_key'].replace('KAW-', venue+'-')
     p['plan_sha256'] = d.sha({k:v for k,v in p.items() if k != 'plan_sha256'})
     a = approval(p)
-    a.update(venue_id='URW', preregister_authorized_races=True)
+    a.update(venue_id=venue, preregister_authorized_races=True)
     eid = p['races'][0]['execution_id']
     state, calls = {}, []
     current = resolve_current_authority(now=NOW)[1]['manifest_id']

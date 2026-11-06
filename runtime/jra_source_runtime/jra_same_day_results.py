@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import http.cookiejar
+import itertools
 import re
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
 
-from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
-from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+if __package__:
+    from .source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+    from .jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+else:
+    try:
+        from jra_source_runtime.source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+        from jra_source_runtime.jra_race_card_detail import _calendar_url, _fetch, _post, _date8
+    except ModuleNotFoundError as exc:
+        if exc.name != "jra_source_runtime":
+            raise
+        from source_acquisition import _decode, _html_tables, _html_text, sha_obj, snapshot_from_bytes, utcnow
+        from jra_race_card_detail import _calendar_url, _fetch, _post, _date8
 
 PROFILE="KM-JRA-OFFICIAL-SAME-DAY-RESULT-DETAIL-v1.0-20260926"
 BASE="https://www.jra.go.jp"
@@ -25,6 +36,38 @@ def _flt(v:Any):
 
 def _positions(v:Any)->List[int]:
     return [int(x) for x in re.findall(r"\d{1,2}",str(v or ""))]
+
+def finish_groups_and_top3_orders(runners:List[Dict[str,Any]])->Dict[str,Any]:
+    """Preserve official competition ranks, including a tie crossing third.
+
+    A third-place tie has ranks 1, 2, 3, 3, 5, not four distinct ranks.
+    Enumerating the permissible orders does not choose a preferred tied horse.
+    This helper deliberately does not change the historic parsed SOURCE body.
+    """
+    groups={};seen=set()
+    for row in runners:
+        rank=row.get("finish");number=row.get("horse_no")
+        if (type(rank) is not int or rank<1 or type(number) is not int
+                or not 1<=number<=18 or number in seen):
+            raise ValueError("JRA_OFFICIAL_FINISH_GROUP_INVALID")
+        if str(row.get("runner_id",number))!=str(number):
+            raise ValueError("JRA_OFFICIAL_FINISH_RUNNER_ID_MISMATCH")
+        seen.add(number);groups.setdefault(rank,[]).append(number)
+    orders=[[]];next_rank=1
+    for rank,numbers in sorted(groups.items()):
+        if len(orders[0])>=3:break
+        if rank!=next_rank:
+            raise ValueError("JRA_OFFICIAL_TOP3_RANK_GROUP_INCOMPLETE")
+        numbers=sorted(numbers)
+        take=min(len(numbers),3-len(orders[0]))
+        orders=[prefix+list(p) for prefix in orders
+                for p in itertools.permutations(numbers,take)]
+        next_rank+=len(numbers)
+    if not orders or len(orders[0])!=3:
+        raise ValueError("JRA_OFFICIAL_TOP3_RANK_GROUP_INCOMPLETE")
+    return {"finish_groups":[{"finish":rank,"horse_numbers":sorted(numbers)}
+                              for rank,numbers in sorted(groups.items())],
+            "top3_orders":sorted(orders),"dead_heat":len(orders)>1}
 
 def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     decoded=_decode(raw,content_type)
