@@ -17,8 +17,10 @@ from jra_production_no_bet_terminal import verify_no_bet_terminal
 from jra_production_blocker_classifier import classify_production_blockers, ROUTE_FAIL_CLOSED
 
 
-def inputs(single=False):
+def inputs(single=False, race_id=None):
     q, s, a = fixture()
+    if race_id is not None:
+        q['race_id'] = s['race_id'] = race_id
     if single:
         for r in q['runners'][1:]:
             r['canonical_components']['ZAI_WIN']['value'] = 0
@@ -147,19 +149,19 @@ def test_internal_handoff_failure_never_reports_formal_route():
 
 
 def test_aki_no_bet_closes_result_learning_without_pfs_credit():
-    intent, report = inputs()
+    intent, report = inputs(race_id='KM-JRA-TKY-20261011-R05')
     terminal = build(intent, report)
     from jra_no_bet_postresult_learning import build_no_bet_learning, _hash
     result = {'official': True, 'result_derived': True,
-              'runners': [{'runner_id': '2', 'finish': 1},
-                          {'runner_id': '3', 'finish': 2},
-                          {'runner_id': '1', 'finish': 3}]}
+              'runners': [{'runner_id': rid, 'finish': finish}
+                          for finish, rid in enumerate(['2', '3', '1', '4', '5', '6', '7', '8'], 1)]}
     result['sha256'] = _hash(result)
     result.update(race_no=5, source_snapshot_sha256='d'*64)
     learning = build_no_bet_learning(terminal, result, race_no=5,
         acquired_at='2026-10-11T10:15:00+09:00', result_source_snapshot_sha256='d'*64,
         official_capture_verified=True)
     assert learning['official_top3'] == ['2', '3', '1']
+    assert learning['official_finish_count'] == learning['official_runner_universe_count'] == 8
     assert learning['investment'] == learning['payout'] == 0 and learning['pfs'] is None
     assert learning['learning_class'] == 'AKI_POSITIVE_EVIDENCE_AND_OPPORTUNITY_COST_ONLY'
     assert not learning['eligible_for_production_prediction_kpi']

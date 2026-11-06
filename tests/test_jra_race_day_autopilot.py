@@ -44,7 +44,8 @@ assert 'jra_production_postresult' not in sys.modules
 import jra_race_day_autopilot as a
 schedule=json.loads((root/'runtime/jra_race_day_plan/2026-10-17.schedule.json').read_text())
 for rid in ['KM-JRA-TKY-20261017-R04','KM-JRA-NGT-20261017-R05','KM-JRA-KYO-20261017-R05']:
-    row=a.race_status(root,rid,schedule[rid],{},datetime.datetime.now(a.JST))
+    observed_at=datetime.datetime(2026,10,18,0,0,tzinfo=a.JST)
+    row=a.race_status(root,rid,schedule[rid],{},observed_at)
     # The same immutable FINAL may already have advanced through result/learning.
     assert row['state'] in {'FINAL','SETTLED','SETTLED_SIGNED_RESULT_LEARNED'}, row
     final=json.loads((root/'runtime/final_artifacts'/(rid+'.json')).read_text())
@@ -92,6 +93,21 @@ print('ACTUAL_DELIVERED_FINALS_STATUS_PASS')
         self.assertEqual(len(self.sent), 2)
         sched = json.loads((self.tmp / "runtime/jra_race_day_plan/2026-10-11.schedule.json").read_text())
         self.assertEqual(sched["KM-JRA-TKY-20261011-R11"]["post"], "2026-10-11T14:30:00+09:00")
+
+    def test_dispatch_window_endpoints_across_utc_date_boundary(self):
+        post = dt.datetime.fromisoformat("2026-11-07T09:45:00+09:00")
+        start = dt.datetime.fromisoformat("2026-11-06T23:50:00+00:00")
+        close = dt.datetime.fromisoformat("2026-11-07T00:15:00+00:00")
+        tick = dt.timedelta(microseconds=1)
+        for observed_at, expected in (
+            (start - tick, "WAIT"),
+            (start, "DISPATCH"),
+            (close - tick, "DISPATCH"),
+            (close, "DISPATCH"),
+            (close + tick, "MISSED_WINDOW"),
+        ):
+            with self.subTest(observed_at=observed_at):
+                self.assertEqual(due(post, observed_at), expected)
 
     def test_missed_window_never_dispatches_late(self):
         out = self.run_at(14, 40)

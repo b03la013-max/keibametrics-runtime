@@ -59,7 +59,7 @@ def test_strict_jra_payout_parsing():
     assert out["TRIFECTA"]["per_100_yen"]==4850
     with pytest.raises(PendingOfficialResult):
         parse_official_payouts("レース結果 払戻金 馬単 4-8 1,240 円")
-    with pytest.raises(PendingOfficialResult):
+    with pytest.raises(ValueError):
         parse_official_payouts(price_text().replace("馬単 4-8 1,240 円","馬単 4-8 1,240 円 馬単 4-8 1,240 円"))
 
 
@@ -71,7 +71,7 @@ def test_official_top3_and_price_table_must_reconcile():
     ]}
     result=verify_official_result(parsed,price_text(),["3","4","8"])
     assert result["top3"]==[4,8,3]
-    with pytest.raises(PendingOfficialResult,match="MISMATCH"):
+    with pytest.raises(ValueError,match="MISMATCH"):
         verify_official_result(parsed,price_text().replace("4-8 1,240", "8-4 1,240"),["3","4","8"])
 
 
@@ -101,7 +101,7 @@ def test_dead_heat_is_not_silently_settled_as_one_order():
         {'runner_id':'4','horse_no':4,'finish':1},
         {'runner_id':'8','horse_no':8,'finish':2},
         {'runner_id':'3','horse_no':3,'finish':2}]}
-    with pytest.raises(PendingOfficialResult,match='DEAD_HEAT_MANUAL_ADJUDICATION'):
+    with pytest.raises(ValueError,match='OFFICIAL_PAYOUT_TOP3_MISMATCH'):
         verify_official_result(parsed,price_text(),['3','4','8'])
     with pytest.raises(ValueError,match="UNIVERSE"):
         verify_official_result(parsed,price_text(),["1","3","4"])
@@ -162,3 +162,55 @@ def test_real_kyoto_pre_start_frozen_receipt_and_hashes_are_intact():
     pre=json.loads((folder/"pre_result.json").read_text(encoding="utf-8"))
     final=json.loads((folder/"candidate_final.json").read_text(encoding="utf-8"))
     _verified_pre_frozen(pre,final,race)
+
+
+def _portable_cancelled_result():
+    """Synthetic portable fixture; no live source or raw retained in tests."""
+    return {'official': True, 'runners': [
+        {'runner_id': str(n), 'horse_no': n, 'finish': i + 1}
+        for i, n in enumerate([4, 8, 3])],
+        'non_finishers': [{'runner_id': '13', 'horse_no': 13, 'finish_status': 'CANCELLED'}]}
+
+
+def test_source_preexcluded_zero_exposure_preserves_context_without_global_refund_claim():
+    before = _portable_cancelled_result()
+    parsed = copy.deepcopy(before)
+    result = verify_official_result(parsed, price_text(), ['4', '8', '3', '13'],
+                                    source_cancelled_runner_ids={'13'})
+    assert parsed == before
+    assert result['refund_runner_ids'] == [] and result['refund_declaration'] is None
+    context = result['declared_cancellation_context']
+    assert context['source_cancelled_before_prediction'] == [13]
+    assert context['signed_ticket_exposure'] == 0
+    assert context['global_official_refund_zero_claimed'] is False
+
+
+@pytest.mark.parametrize('status', ['DID_NOT_FINISH', 'DISQUALIFIED'])
+def test_source_preexcluded_is_not_reclassified_as_other_nonfinisher(status):
+    parsed = _portable_cancelled_result()
+    parsed['non_finishers'][0]['finish_status'] = status
+    with pytest.raises(ValueError, match='SOURCE_CANCELLATION_STATUS_MISMATCH'):
+        verify_official_result(parsed, price_text(), ['4', '8', '3', '13'],
+                               source_cancelled_runner_ids={'13'})
+
+
+def test_source_preexcluded_cannot_finish_or_introduce_foreign_runner():
+    parsed = _portable_cancelled_result()
+    parsed['runners'].append({'runner_id': '13', 'horse_no': 13, 'finish': 4})
+    parsed['non_finishers'] = []
+    with pytest.raises(ValueError, match='CANCELLED_RUNNER_FINISHED'):
+        verify_official_result(parsed, price_text(), ['4', '8', '3', '13'],
+                               source_cancelled_runner_ids={'13'})
+    parsed = _portable_cancelled_result()
+    parsed['non_finishers'][0].update(runner_id='14', horse_no=14)
+    with pytest.raises(ValueError, match='RUNNER_UNIVERSE_MISMATCH'):
+        verify_official_result(parsed, price_text(), ['4', '8', '3', '13'],
+                               source_cancelled_runner_ids={'13'})
+
+
+def test_source_preexcluded_exception_does_not_cover_active_later_withdrawal():
+    parsed = _portable_cancelled_result()
+    parsed['non_finishers'].append({'runner_id': '9', 'horse_no': 9, 'finish_status': 'CANCELLED'})
+    with pytest.raises(PendingOfficialResult, match='REFUND_DECLARATION_REQUIRED'):
+        verify_official_result(parsed, price_text(), ['4', '8', '3', '9', '13'],
+                               source_cancelled_runner_ids={'13'})

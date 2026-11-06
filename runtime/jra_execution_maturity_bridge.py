@@ -95,6 +95,11 @@ def _require_jra(intent: Dict[str,Any]) -> None:
     if missing:
         raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_REQUIRED_MISSING:"+",".join(missing))
 
+def _reject_explicit_jump_context(payload: Dict[str,Any]) -> None:
+    from jra_source_runtime.jra_race_day_resolver import explicit_current_jump_context, JUMP_SCOPE_REASON
+    if explicit_current_jump_context(payload):
+        raise JRAMaturityBridgeError(JUMP_SCOPE_REASON)
+
 def semantic_payload(req: Dict[str,Any]) -> Dict[str,Any]:
     return {
         k:copy.deepcopy(v) for k,v in req.items()
@@ -106,6 +111,7 @@ def semantic_sha256(req: Dict[str,Any]) -> str:
 
 def build_source_request(intent: Dict[str,Any]) -> Dict[str,Any]:
     _require_jra(intent)
+    _reject_explicit_jump_context(intent)
     cfg=intent.get("jra_source") if isinstance(intent.get("jra_source"),dict) else {}
     meeting_key=str(cfg.get("jra_meeting_key") or intent.get("jra_meeting_key") or "").strip()
     if not meeting_key:
@@ -380,7 +386,9 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
         from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
 
     _require_jra(intent)
+    _reject_explicit_jump_context(intent)
     source = source_env.get("artifact") or {}
+    _reject_explicit_jump_context(source)
     checkpoint = source_checkpoint_manifest(source_env, source_execution_id or _execution_id(intent))
     if source.get("race_id") != intent["race_id"] or source.get("prediction_cutoff") != intent["prediction_cutoff"]:
         raise JRAMaturityBridgeError("JRA_PRODUCTION_PREPARATION_SOURCE_IDENTITY_MISMATCH")
@@ -603,9 +611,11 @@ def build_formal_request(
     source_execution_id: str|None=None,
 ) -> Dict[str,Any]:
     _require_jra(intent)
+    _reject_explicit_jump_context(intent)
     source_execution_id=str(source_execution_id or _execution_id(intent)).strip()
     checkpoint=source_checkpoint_manifest(source_env,source_execution_id)
     artifact=source_env.get("artifact") or {}
+    _reject_explicit_jump_context(artifact)
     if str(artifact.get("race_id") or "")!=str(intent.get("race_id") or ""):
         raise JRAMaturityBridgeError("JRA_SINGLE_ENTRY_SOURCE_RACE_MISMATCH")
     if str(artifact.get("prediction_cutoff") or "")!=str(intent.get("prediction_cutoff") or ""):

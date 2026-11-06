@@ -24,19 +24,26 @@ def cohort():
     return build_registrations(discovery,authority,observed_at='2026-10-17T00:00:00+09:00')
 
 
-def test_official_36_intakes_do_not_trigger_source_or_claim_execution(tmp_path):
+def test_official_36_managed_races_register35_flat_without_source_or_claim(tmp_path):
     plan,records=cohort()
-    assert persist_registrations(tmp_path,plan,records)==36
-    assert sum(r['planned_required_cells'] for r in records.values())==9000
+    # The unchanged official fixture includes Tokyo9's9-runner jump race.
+    assert len(plan['management_race_ids'])==36
+    assert len(plan['scope_exclusions'])==1
+    assert plan['scope_exclusions'][0]['race_id']=='KM-JRA-TKY-20261018-R09'
+    assert plan['scope_exclusions'][0]['status']=='HOLD'
+    assert persist_registrations(tmp_path,plan,records)==35
+    assert sum(r['planned_required_cells'] for r in records.values())==8820
     assert sum(r['executed_cells'] for r in records.values())==0
     assert not (tmp_path/'runtime/jra_formal_intents').exists()
     assert {r['runner_universe_status'] for r in records.values()}=={'PENDING_OFFICIAL_PDF'}
-    assert len(plan['cohort']['race_ids'])==36
+    assert len(plan['cohort']['race_ids'])==35
+    assert 'KM-JRA-TKY-20261018-R09' not in records
     r=next(iter(records.values()))
-    verify_registration(r,plan,race_id=r['race_id'],official_post=datetime.fromisoformat(r['intake_intent']['scheduled_post_at']))
+    official_post=datetime.fromisoformat(r['intake_intent']['scheduled_post_at'])
+    verify_registration(r,plan,race_id=r['race_id'],official_post=official_post)
     r['executed_cells']=20
     with pytest.raises(ValueError,match='HASH_MISMATCH'):
-        verify_registration(r,plan,race_id=r['race_id'],official_post=datetime.now().astimezone())
+        verify_registration(r,plan,race_id=r['race_id'],official_post=official_post)
 
 
 def small_plan(root):
@@ -106,6 +113,25 @@ def test_failed_before_dispatch_never_retries_after_window(tmp_path):
              publish=lambda:None,dispatch=lambda *args:pytest.fail('late dispatch'))
     assert all(x['status']=='MISSED_WINDOW' for x in out)
 
+@pytest.mark.parametrize('fetched_at, relation, errors', [
+    ('2026-10-18T00:54:59+00:00', 'PRE_CUTOFF', []),
+    ('2026-10-18T00:55:00+00:00', 'PRE_CUTOFF', []),
+    ('2026-10-18T00:55:00.000001+00:00', 'POST_CUTOFF',
+     ['SOURCE_STALE:JRA-CALENDAR', 'SOURCE_POST_CUTOFF:JRA-CALENDAR']),
+])
+def test_source_capture_cutoff_and_freshness_are_checked_against_explicit_clocks(fetched_at, relation, errors):
+    from source_acquisition import snapshot_from_bytes
+
+    url='https://www.jra.go.jp/keiba/calendar2026/2026/10/1018.html'
+    snapshot, actual=snapshot_from_bytes(
+        {'source_id':'JRA-CALENDAR','required':True,'max_age_seconds':60},
+        b'<html>test fixture</html>', final_url=url, status_code=200,
+        headers={'last-modified':'Sun, 18 Oct 2026 00:54:00 GMT'},
+        fetched_at=fetched_at, prediction_cutoff='2026-10-18T09:55:00+09:00',
+    )
+    assert snapshot['cutoff_relation']==relation
+    assert actual==errors
+
 
 def test_one_corrupt_final_cannot_block_independent_result_worker(tmp_path):
     small_plan(tmp_path);p=tmp_path/'runtime/final_artifacts';p.mkdir(parents=True)
@@ -150,6 +176,7 @@ def signed_fixture():
     health={'status':'READY','engine':{'sha256':'engine'},'parameter_map':{'sha256':'jra-param'},
             'receipt_signer':{'ready':True,'key_id':'test','public_key_b64':b64encode(key.public_key().public_bytes(Encoding.Raw,PublicFormat.Raw)).decode()}}
     final={'family_id':'JRA','temporal_mode':'FORMAL-PRE-RACE','race_id':'KM-JRA-TKY-20261018-R01',
+           'prediction_cutoff':'2026-10-18T09:55:00+09:00',
            'scheduled_post_at':'2026-10-18T10:00:00+09:00','final_freeze_timestamp':'2026-10-18T09:50:00+09:00',
            'final_prediction_package':{'execution_stage_manifest':{'PRE_KRS':{'status':'PASS'}}},
            'final_ticket':{'no_bet':False,'tickets':[{'bet_type':'EXACTA','selection':[1,2],'stake':100}],
@@ -197,10 +224,15 @@ def test_real_cohort_36_races_isolated_dispatch_and_official_time_update(tmp_pat
     for minute in range(8*60,17*60,5):
         when=datetime.fromisoformat(f'2026-10-18T{minute//60:02}:{minute%60:02}:00+09:00')
         tick(tmp_path,'2026-10-18',when,resolve=lambda date,venue:official[venue],dispatch=send,publish=lambda:None)
-    assert len(attempts)==len(set(attempts))==36
+    assert len(plan['management_race_ids'])==36
+    assert len(attempts)==len(set(attempts))==35
+    assert ('東京',9) not in attempts
     index=json.loads((tmp_path/'runtime/jra_race_day_status/2026-10-18.json').read_text())
-    assert index['cohort_metrics']['denominator']==36
-    assert index['cohort_metrics']['dispatch_acknowledged']==35
+    assert len(index['races'])==36
+    assert index['cohort_metrics']['denominator']==35
+    assert index['cohort_metrics']['dispatch_acknowledged']==34
     assert index['cohort_metrics']['final_artifacts_present']==0
     schedule=json.loads((tmp_path/'runtime/jra_race_day_plan/2026-10-18.schedule.json').read_text())
+    assert schedule['KM-JRA-TKY-20261018-R09']['status']=='SCOPE_HOLD'
+    assert next(r for r in index['races'] if r['race_id']=='KM-JRA-TKY-20261018-R09')['state']=='SCOPE_HOLD'
     assert schedule['KM-JRA-TKY-20261018-R01']['registration_reconciliation']['post_changed']

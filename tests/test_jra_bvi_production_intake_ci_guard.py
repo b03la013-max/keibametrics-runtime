@@ -89,3 +89,58 @@ def test_automatic_ci_retains_offline_regressions_and_inventory_without_claiming
     assert any(s.get('name')=='Numerical lineage and temporal regression' for s in steps())
     assert any(s.get('run')=='python -m pytest -q tests/test_jra_bvi_env_acceptance.py' for s in steps())
 
+
+def test_existing_pedigree_live_smoke_is_manual_only_without_changing_schedule():
+    workflow=ROOT/'.github/workflows/km-jra-pedigree-live-smoke.yml'
+    doc=yaml.load(workflow.read_text(),Loader=yaml.BaseLoader)
+    assert 'workflow_dispatch' in doc['on']
+    assert 'schedule' not in doc['on']
+    job=doc['jobs']['official-read-only']
+    assert job['if']=="github.event_name == 'workflow_dispatch'"
+    assert any('--date 2026-10-04' in step.get('run','') for step in job['steps'])
+    assert any('--date 2022-01-05' in step.get('run','') for step in job['steps'])
+
+
+def test_existing_learning_binding_automatic_checks_stay_offline():
+    workflow=ROOT/'.github/workflows/km-jra-learning-binding-audit.yml'
+    doc=yaml.load(workflow.read_text(),Loader=yaml.BaseLoader)
+    assert {'pull_request','push','workflow_dispatch'}<=set(doc['on'])
+    expected={'Recover exact stored official locators and reverify existing OIDC intake',
+              'Read authenticated Workflow states after rate reset',
+              'Snapshot existing Owner scope approval through read-only provider API'}
+    selected=[]
+    for job in doc['jobs'].values():
+        assert not job.get('if')
+        for step in job['steps']:
+            if step.get('name') in expected:
+                assert step['if']=="github.event_name == 'workflow_dispatch'"
+                selected.append(step['name'])
+            elif 'python -m pytest' in step.get('run','') or 'python -m unittest' in step.get('run',''):
+                assert not step.get('if')
+    assert set(selected)==expected
+
+
+@pytest.mark.parametrize('event', ['pull_request', 'push', 'workflow_dispatch'])
+def test_existing_source_closure_oidc_recomputations_require_manual_event(event):
+    workflow=ROOT/'.github/workflows/km-jra-production-source-closure-real.yml'
+    doc=yaml.load(workflow.read_text(),Loader=yaml.BaseLoader)
+    assert {'pull_request','push','workflow_dispatch'}<=set(doc['on'])
+    job=doc['jobs']['source-closure']
+    assert not job.get('if')  # Normal offline regression stays automatic.
+    names={'Execute Production numerical preparation on immutable Tokyo R05 JRA SOURCE',
+           'Recompute source-verified real Kyoto R09 Production evidence after new evaluators'}
+    selected=[]
+    for step in job['steps']:
+        if step.get('name') in names:
+            condition=step['if']
+            assert condition=="github.event_name == 'workflow_dispatch'"
+            assert 'GH_TOKEN' in (step.get('env') or {})
+            enabled=eval(condition.replace('github.event_name',repr(event)),{'__builtins__':{}},{})
+            assert enabled is (event=='workflow_dispatch')
+            selected.append(step['name'])
+        elif 'python -m pytest' in step.get('run',''):
+            assert not step.get('if')
+        else:
+            assert not {'GH_TOKEN','GITHUB_TOKEN'} & set(step.get('env') or {})
+    assert set(selected)==names
+    assert any('python -m pytest' in step.get('run','') and not step.get('if') for step in job['steps'])

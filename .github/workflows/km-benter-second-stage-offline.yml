@@ -1,0 +1,52 @@
+name: Benter second-stage offline analysis regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'runtime/analysis/**'
+      - 'tests/analysis/**'
+      - '.github/workflows/km-benter-second-stage-offline.yml'
+  pull_request:
+    paths:
+      - 'runtime/analysis/benter_second_stage.py'
+      - 'runtime/analysis/_benter_second_stage_legacy.py'
+      - 'runtime/analysis/closing_odds_*.py'
+      - 'tests/analysis/test_closing_odds.py'
+      - 'tests/fixtures/analysis/**'
+      - 'docs/JRA_CLOSING_ODDS_RESEARCH.md'
+      - '.github/workflows/km-jra-closing-odds-manual.yml'
+      - 'runtime/analysis/benter_index_diagnostics.py'
+      - 'tests/analysis/test_benter_second_stage.py'
+      - 'tests/analysis/test_benter_index_diagnostics.py'
+      - 'docs/BENTER_INDEX_DIAGNOSTICS.md'
+      - '.github/workflows/km-benter-second-stage-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy==2.3.5 scipy==1.17.0 pytest==8.4.2
+      - run: python -m pytest -q tests/analysis/test_benter_second_stage.py tests/analysis/test_benter_index_diagnostics.py tests/analysis/test_closing_odds.py
+      - name: Verify calculator compatibility with networking disabled
+        run: |
+          python - <<'PYCODE'
+          import socket
+          import pytest
+          def forbidden(*args, **kwargs):
+              raise AssertionError("NO_NETWORK_DURING_COMPATIBILITY_TEST")
+          socket.socket.connect = forbidden
+          raise SystemExit(pytest.main([
+              "-q", "tests/analysis/test_closing_odds.py::test_legacy_bytes_and_default_and_closing_zero_are_identical"
+          ]))
+          PYCODE

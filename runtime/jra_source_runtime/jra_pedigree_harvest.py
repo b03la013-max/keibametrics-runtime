@@ -31,8 +31,16 @@ import urllib.error
 from typing import Any, Dict, List
 from bs4 import BeautifulSoup
 
-from source_acquisition import _decode
-from jra_horse_history import parse_horse_history
+if __package__:
+    from .source_acquisition import _decode
+else:
+    from source_acquisition import _decode
+
+def parse_horse_history(*args, **kwargs):
+    # RESULT navigation reuses this client without loading the unrelated
+    # standalone horse-history adapter. Its parser and call contract stay intact.
+    from jra_horse_history import parse_horse_history as parse
+    return parse(*args, **kwargs)
 
 PROFILE = "KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
 BASE = "https://www.jra.go.jp"
@@ -65,7 +73,8 @@ def retryable_official_error(exc):
 
 
 class _Client:
-    def __init__(self, delay: float = 1.0, *, deadline_monotonic=None, stop_on_access_denied=False):
+    def __init__(self, delay: float = 1.0, *, deadline_monotonic=None, stop_on_access_denied=False,
+                 referer_chain=False):
         if not 0.7 <= delay <= 15.0:
             raise ValueError("JRA_HARVEST_RATE_TOO_FAST_OR_INVALID")
         class _NoExternalRedirect(urllib.request.HTTPRedirectHandler):
@@ -81,12 +90,17 @@ class _Client:
         self.deadline_monotonic = deadline_monotonic
         self.stop_on_access_denied = stop_on_access_denied
         self.last_response = {}
+        self.referer_chain = referer_chain
+        self.last_raw = None
+        self.last_headers = {}
 
     def _open(self, url: str, data: bytes | None = None) -> str:
         if not url.startswith(BASE + "/"):
             raise ValueError("JRA_OFFICIAL_ONLY")
         req = urllib.request.Request(url, data=data, headers={
             "User-Agent": UA, "Accept": "text/html,*/*;q=0.1", "Accept-Language": "ja"})
+        if self.referer_chain and self.last_response.get('response_url'):
+            req.add_header('Referer', self.last_response['response_url'])
         # Three attempts retain the old bound. Reset/timeout/body-read failures
         # now share it with 429/5xx. Keep the same opener, cookies, URL and POST
         # token: navigation reads are safe to retry; no new source is invented.
@@ -126,6 +140,8 @@ class _Client:
                         if size > 6_000_000:
                             raise ValueError("JRA_HARVEST_PAGE_TOO_LARGE")
                     raw = b"".join(chunks)
+                    self.last_raw = raw
+                    self.last_headers = {str(k).lower():str(v) for k,v in r.headers.items()}
                     self.last_response = {'url':url, 'raw_sha256':_sha(raw),
                                           'fetched_at':_dt.datetime.now(_dt.timezone.utc).isoformat(),
                                           'http_status':getattr(r, 'status', None),
