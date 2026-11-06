@@ -8,7 +8,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'runtime/jra_source_runtime'))
-from jra_race_day_resolver import build_intent, venue_code, VENUES
+from jra_race_day_resolver import build_intent, venue_code, VENUES, official_jump_race
 from formal_request_validator import REQUIRED_INDEX_KEYS
 
 
@@ -26,6 +26,7 @@ def build_registrations(discovery, authority, *, observed_at, universe_snapshot=
     if owner.get('status') not in {'OWNER_AUTHORIZED_UNVALIDATED','PRODUCTION_AUTHORIZED'}:
         raise ValueError('JRA_STATIC_OWNER_NOT_AUTHORIZED')
     day=discovery['race_date']; registrations={}; entries=[]; seen=set()
+    management=[]; scope_exclusions=[]
     snapshots={v['venue_id']:v for v in (universe_snapshot or {}).get('venues',[])}
     for venue in discovery['venues']:
         rows=venue.get('races') or []
@@ -34,13 +35,28 @@ def build_registrations(discovery, authority, *, observed_at, universe_snapshot=
             raise ValueError('OFFICIAL_RACE_SEQUENCE_NOT_PROVEN')
         vid=VENUES[venue_code(venue['venue'])][0]
         if vid in seen:raise ValueError('OFFICIAL_VENUE_DUPLICATED')
-        seen.add(vid);entries.append({'venue':venue['venue'],'races':numbers})
+        seen.add(vid); eligible_numbers=[]
         for row in rows:
+            rid=f"KM-JRA-{vid}-{day.replace('-','')}-R{row['race_no']:02d}"
+            management.append(rid)
+            if official_jump_race(row):
+                held={'race_id':rid,'race_type':'JUMP','status':'HOLD',
+                      'action':'EXCLUDE_FROM_FLAT_DISPATCH_ONLY',
+                      'reason':'DEDICATED_OWNER_MANIFEST_ENGINE_SCOPE_NOT_ESTABLISHED',
+                      'source':'OFFICIAL_DAY_ROW_DISCIPLINE',
+                      'historical_signed_artifacts_changed':False,
+                      'venue':venue['venue'],'race_no':row['race_no'],
+                      'title':row.get('title'),'official_day_row':row.get('raw')}
+                if row.get('post_time'):
+                    held['post']=datetime.fromisoformat(day+'T'+row['post_time']+':00+09:00').isoformat()
+                scope_exclusions.append(held)
+                continue
             if type(row.get('field_size')) is not int or not 1<=row['field_size']<=18:
                 raise ValueError('OFFICIAL_FIELD_SIZE_NOT_PROVEN')
             intent=build_intent(race_date=day,venue=vid,race_no=row['race_no'],
                                 meeting_key=venue['meeting_key'],race=row)
             intent['current_authority_manifest']=authority['manifest_id']
+            eligible_numbers.append(row['race_no'])
             universe=next((r for r in snapshots.get(vid,{}).get('races',[])
                            if r['race_no']==row['race_no']),None)
             registrations[intent['race_id']]={
@@ -60,11 +76,15 @@ def build_registrations(discovery, authority, *, observed_at, universe_snapshot=
                 'formal_status':'REGISTERED_INTAKE_ONLY','source_executed':False,
                 'static_frozen':False,'dispatch_acknowledged':False,'user_delivery_verified':False,
             }
+        if eligible_numbers:entries.append({'venue':venue['venue'],'races':eligible_numbers})
     plan={'race_date':day,'family_id':'JRA','entries':entries,'run_count':5000,
           'dispatch_window_minutes_before_post':[55,30],
           'cohort':{'source_discovery_sha256':sha(discovery),'registered_at':observed_at,
                     'race_ids':sorted(registrations),'race_count':len(registrations),
                     'current_authority_manifest':authority['manifest_id']}}
+    if scope_exclusions:
+        plan['management_race_ids']=sorted(management)
+        plan['scope_exclusions']=scope_exclusions
     plan['cohort']['sha256']=sha(plan['cohort'])
     plan['plan_sha256']=sha(plan)
     for record in registrations.values():

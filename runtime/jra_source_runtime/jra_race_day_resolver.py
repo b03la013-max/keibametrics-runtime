@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 import time
+import unicodedata
 from typing import Any, Dict, List
 
 PROFILE = "KM-JRA-OFFICIAL-RACE-DAY-RESOLVER-v1.0-20261010"
@@ -22,6 +23,56 @@ VENUES = {  # official JRA course code -> (canonical venue_id, name)
 }
 NAME_TO_CODE = {name: code for code, (_, name) in VENUES.items()}
 ID_TO_CODE = {vid: code for code, (vid, _) in VENUES.items()}
+
+JUMP_SCOPE_REASON = "JRA_JUMP_DEDICATED_OWNER_UNCONFIRMED"
+
+
+class JRAScopeHold(ValueError):
+    """The regular JRA owner does not authorize the dedicated jump lane."""
+
+
+def official_jump_race(race: Dict[str, Any]) -> bool:
+    """Use explicit official race headers, never runner names or distance."""
+    surface = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(race.get("surface") or "")))
+    if surface.startswith("障") or surface in {"芝→ダート", "ダート→芝"}:
+        return True
+    for field in ("title", "race_name", "raw", "official_day_row", "raw_race_context"):
+        header = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(race.get(field) or "")))
+        if ("障害" in header or "ジャンプ" in header
+                or re.search(r"(?:^|\s)障[0-9]", header)
+                or re.search(r"(?<![A-Za-z0-9])J[・.]G(?:I{1,3}|[123])?(?![A-Za-z0-9])", header)):
+            return True
+    return False
+
+
+def explicit_current_jump_context(payload: Dict[str, Any]) -> bool:
+    """Inspect only explicit current race headers, never history or Raw bundles.
+
+    Missing headers remain unknown; this does not establish a flat Scope
+    witness or allow a dedicated jump owner through the regular JRA lane.
+    """
+    if not isinstance(payload, dict):
+        return False
+    def header(value):
+        return {key: value[key] for key in
+                ("surface", "title", "race_name", "raw_race_context", "official_day_row")
+                if isinstance(value.get(key), str)}
+    headers = [header(payload)]
+    if isinstance(payload.get("race"), dict):
+        headers.append(header(payload["race"]))
+    intent_resolver = payload.get("intent_resolver")
+    if isinstance(intent_resolver, dict) and isinstance(intent_resolver.get("official_day_row"), str):
+        headers.append({"official_day_row": intent_resolver["official_day_row"]})
+    for current in (payload, payload.get("source_snapshot")):
+        if not isinstance(current, dict):
+            continue
+        context = current.get("jra_race_context")
+        if isinstance(context, dict):
+            headers.append(header(context))
+        detail = current.get("jra_official_race_card_detail")
+        if isinstance(detail, dict) and isinstance(detail.get("race_context"), dict):
+            headers.append(header(detail["race_context"]))
+    return any(official_jump_race(header) for header in headers)
 
 
 def official_navigation_failure(exc, *, race_date=None, stage="OFFICIAL_CALENDAR"):
@@ -96,6 +147,8 @@ def build_intent(*, race_date: str, venue: str, race_no: int, meeting_key: str, 
         raise ValueError("JRA_MEETING_KEY_VENUE_MISMATCH")
     if int(race.get("race_no") or 0) != int(race_no):
         raise ValueError("JRA_RACE_NO_MISMATCH")
+    if official_jump_race(race):
+        raise JRAScopeHold(JUMP_SCOPE_REASON)
     hh, mm = map(int, str(race["post_time"]).split(":"))
     day = _dt.date.fromisoformat(race_date)
     post = _dt.datetime(day.year, day.month, day.day, hh, mm, tzinfo=JST)
@@ -294,20 +347,21 @@ if __name__ == "__main__":
         import traceback
         observed = _dt.datetime.now(JST)
         eligible = retry_deadline is not None and observed < retry_deadline
+        scope_hold = isinstance(exc, JRAScopeHold)
         failure = {
             "run_id": os.environ.get("GITHUB_RUN_ID", "0"),
             "workflow_run_id": os.environ.get("GITHUB_RUN_ID", "0"),
             "run_attempt": int(os.environ.get("GITHUB_RUN_ATTEMPT", "1")),
-            "first_failed_stage": "RESOLVE_OFFICIAL_RACE_AND_BUILD_INTENT",
-            "failure_owner": "JRA_OFFICIAL_RACE_RESOLVER",
+            "first_failed_stage": "JRA_PRODUCTION_SCOPE" if scope_hold else "RESOLVE_OFFICIAL_RACE_AND_BUILD_INTENT",
+            "failure_owner": "JRA_PRODUCTION_SCOPE" if scope_hold else "JRA_OFFICIAL_RACE_RESOLVER",
             "exception_class": type(exc).__name__, "error": str(exc)[:2000],
             "official_request": getattr(exc, "official_request", None),
             "traceback": traceback.format_exc()[-12000:],
-            "retryable": retryable_official_error(exc),
+            "retryable": False if scope_hold else retryable_official_error(exc),
             "retry_deadline": retry_deadline.isoformat() if retry_deadline else None,
             "temporal_eligibility": eligible,
             "last_attempt_at": observed.isoformat(), "status_updated_at": observed.isoformat(),
-            "terminal_state": ("RESOLVER_FAILED" if eligible or retry_deadline is None
+            "terminal_state": ("SCOPE_HOLD" if scope_hold else "RESOLVER_FAILED" if eligible or retry_deadline is None
                                else "RESOLVER_DEADLINE_EXCEEDED"),
             "conclusion": "failure", "exit_code": 1,
             "run_url": "https://github.com/" + os.environ.get("GITHUB_REPOSITORY", "b03la013-max/keibametrics-runtime") + "/actions/runs/" + os.environ.get("GITHUB_RUN_ID", "0"),

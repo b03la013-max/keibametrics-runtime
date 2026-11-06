@@ -214,3 +214,222 @@ def test_saved_oct24_36_races_preserve_finals_and_separate_storage_from_signatur
     assert sum(any(x.get('request_payload_bound') for x in p['stored_result_receipts']) for p in proof)==expected_receipts
     assert all(p['signature_validation_performed'] is False for p in proof)
     assert all(p.read_bytes()==body for p,body in finals.items())
+
+
+def _original_signature_reference(root, rid='KM-JRA-KYO-20261031-R01'):
+    """Copy existing archived originals; this helper never signs or calls a provider."""
+    import os, shutil, hashlib, pytest
+    from execution_store import resolve_phase
+    from jra_presentation import digest
+    source=Path(os.environ.get('KM_STATUS_VERIFICATION_DATA_ROOT') or Path(__file__).resolve().parents[1])
+    paths={kind:'runtime/'+folder+'/'+rid+suffix for kind,folder,suffix in (
+        ('final','final_artifacts','.json'),('result','results','.json'),
+        ('review','reviews_auto','-AUTO.json'),('learning','learning_states','.json'))}
+    if not all((source/p).is_file() for p in paths.values()):
+        pytest.skip('Existing Oct31 signed originals are not materialized; no Live credit')
+    for p in paths.values():
+        target=root/p;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/p,target)
+    eid=rid+'-LIVE-R1'
+    phase=resolve_phase(eid,'RESULT',root=source/'runtime/executions')
+    if not phase:pytest.skip('Existing original RESULT archive is not materialized')
+    shutil.copytree(source/'runtime/executions'/eid/'RESULT',root/'runtime/executions'/eid/'RESULT')
+    final=json.loads((root/paths['final']).read_text());result=json.loads((root/paths['result']).read_text())
+    authority=final['final_prediction_package']['execution_stage_manifest']['SIGNED_SOURCE_RECEIPT_VERIFIED']['current_authority_manifest']
+    profile='profiles/'+authority.replace('-','_')+'.json'
+    contract=json.loads((source/profile).read_text())['common_family_components']['family_runtime_contracts_profile']
+    for p in ('evidence/jra_bvi_phase3_20261017/runtime_health.json',profile,contract):
+        target=root/p;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source/p,target)
+    env=json.loads((phase['run_dir']/'result_receipt_envelope.json').read_text())
+    report={'profile':'UNSIGNED_REFERENCE_NOT_A_TRUST_ROOT','rows':[{
+        'race_id':rid,'result_request_sha256':digest(result),
+        'result_receipt_sha256':env['receipt_sha256'],
+        # These flags must have no effect on actual local cryptographic checks.
+        'result_signature_verified':False,'final_signature_verified':False}],
+        'input_manifest':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths.values()}}
+    report_path=root/'runtime/jra_race_day_status/2026-10-31.result-verification.json'
+    report_path.parent.mkdir(parents=True,exist_ok=True);report_path.write_text(json.dumps(report))
+    return rid,paths,report,report_path,final,result
+
+
+def _referenced_original_proof(root, case):
+    from jra_race_day_autopilot import _load_result_verification_report
+    rid,paths,report,path,final,result=case
+    return _post_result_evidence(root,rid,[rid+'-LIVE-R1'],final=final,result=result,
+        verification_report=_load_result_verification_report(root,'2026-10-31'))
+
+
+def test_referenced_original_receipts_verify_locally_without_trusting_audit_booleans(tmp_path):
+    case=_original_signature_reference(tmp_path)
+    proof=_referenced_original_proof(tmp_path,case)
+    receipt=proof['signature_verification_receipt']
+    assert proof['signature_validation_performed'] is True
+    assert proof['signed_result_final_verified'] is True
+    assert receipt['result_signature_verified'] and receipt['final_signature_verified']
+    assert receipt['settlement_old_fields_exact'] and receipt['review_exact_rebuild'] and receipt['learning_state_exact_rebuild']
+    assert receipt['source_report_is_trust_root'] is False
+    assert receipt['envelope_reference_byte_identity']=='UNKNOWN'
+    assert receipt['production_numeric_learning_consumption']=='NOT_ESTABLISHED'
+    assert proof['learning']['consumption']=='NOT_ESTABLISHED_BY_STORAGE'
+    assert proof['production_closed_loop_claim']=='NOT_ESTABLISHED_BY_STORAGE_AUDIT'
+
+
+def test_valid_originals_still_default_to_storage_only_without_opt_in_report(tmp_path):
+    case=_original_signature_reference(tmp_path)
+    rid,paths,report,path,final,result=case
+    path.unlink()
+    proof=_post_result_evidence(tmp_path,rid,[rid+'-LIVE-R1'],final=final,result=result)
+    assert proof['signature_validation_performed'] is False
+    assert 'signature_verification_receipt' not in proof
+
+
+def test_referenced_tampering_cannot_be_authorized_by_unsigned_report(tmp_path):
+    import base64,hashlib,pytest
+    from execution_store import persist_phase,resolve_phase
+    from post_result_learning import _sha
+    from jra_presentation import digest
+    for kind in ('signature','final','result','review','learning'):
+        root=tmp_path/kind;case=_original_signature_reference(root)
+        rid,paths,report,path,final,result=case
+        if kind=='signature':
+            phase=resolve_phase(rid+'-LIVE-R1','RESULT',root=root/'runtime/executions')
+            envelope=json.loads((phase['run_dir']/'result_receipt_envelope.json').read_text())
+            raw=bytearray(base64.b64decode(envelope['signature']));raw[0]^=1
+            envelope['signature']=base64.b64encode(raw).decode()
+            stage=root/'test-stage';stage.mkdir();(stage/'result_receipt_envelope.json').write_text(json.dumps(envelope))
+            persist_phase(rid+'-LIVE-R1','RESULT','tampered-test-only',stage,
+                root=root/'runtime/executions',github_sha='d'*40)
+        else:
+            value=json.loads((root/paths[kind]).read_text())
+            if kind=='final':value['sha256']='0'*64;final=value
+            elif kind=='result':value['settlement']['total_payout']+=100;result=value
+            elif kind=='review':value['capital']['investment']+=100
+            else:value['production_change_authorized']=True
+            if kind in ('review','learning'):value['sha256']=_sha({k:v for k,v in value.items() if k!='sha256'})
+            (root/paths[kind]).write_text(json.dumps(value))
+            # Even a newly rehashed unsigned report cannot authorize changed data.
+            report['input_manifest'][paths[kind]]=hashlib.sha256((root/paths[kind]).read_bytes()).hexdigest()
+            if kind=='result':report['rows'][0]['result_request_sha256']=digest(result)
+            case=(rid,paths,report,path,final,result)
+        report['rows'][0].update(result_signature_verified=True,final_signature_verified=True)
+        path.write_text(json.dumps(report))
+        proof=_referenced_original_proof(root,case)
+        verified=proof['signature_verification_receipt']
+        assert proof.get('signed_result_final_verified') is False,kind
+        assert verified['status']=='FAILED',(kind,verified)
+        assert verified['performed'] is True,kind
+        assert verified['first_blocker'],kind
+        assert proof['production_closed_loop_claim']=='NOT_ESTABLISHED_BY_STORAGE_AUDIT'
+
+
+def test_day_metrics_include_actual_verification_scope_and_keep_unexecuted_races(tmp_path):
+    rid,paths,report,path,final,result=_original_signature_reference(tmp_path)
+    other='KM-JRA-TKY-20261031-R06'
+    idx=write_status(tmp_path,'2026-10-31',dt.datetime(2026,11,1,9,tzinfo=JST),
+                     {rid:{},other:{}},{},formal_runs=[],resolver_runs=[],source_runs=[])
+    metrics=idx['post_result_metrics']
+    assert metrics['race_denominator']==2 and metrics['signed_result_final_verified']==1
+    assert metrics['signature_validation_performed'] is True
+    assert metrics['signature_verification_failed']==metrics['signature_verification_blocked']==0
+    assert metrics['verification_report']['path'].endswith('.result-verification.json')
+    assert metrics['production_closed_loop_claim']=='NOT_ESTABLISHED_BY_STORAGE_AUDIT'
+    assert next(r for r in idx['races'] if r['race_id']==other).get('post_result_evidence') is None
+
+
+def test_missing_archived_key_or_receipt_never_promotes_reference_only_flags(tmp_path):
+    case=_original_signature_reference(tmp_path)
+    (tmp_path/'evidence/jra_bvi_phase3_20261017/runtime_health.json').unlink()
+    proof=_referenced_original_proof(tmp_path,case)
+    assert proof['signature_validation_performed'] is False
+    assert proof['signature_verification_receipt']['status']=='BLOCKED'
+    assert proof['signed_result_final_verified'] is False
+
+
+def test_unreadable_optional_audit_does_not_interrupt_storage_status(tmp_path,monkeypatch):
+    rid,final,result,review,learning=_stored_result(tmp_path)
+    path=tmp_path/'runtime/jra_race_day_status/2026-10-24.result-verification.json'
+    path.parent.mkdir(parents=True,exist_ok=True);path.write_text('{}')
+    original=Path.read_bytes
+    def read(selected):
+        if selected==path:raise PermissionError('optional proof unavailable')
+        return original(selected)
+    monkeypatch.setattr(Path,'read_bytes',read)
+    idx=write_status(tmp_path,'2026-10-24',dt.datetime(2026,10,24,20,tzinfo=JST),
+                     {rid:{}},{},formal_runs=[],resolver_runs=[],source_runs=[])
+    assert idx['races'][0]['display_state']=='RESULT_REVIEW_LEARNING_STORED'
+    assert idx['post_result_metrics']['signature_validation_performed'] is False
+    assert idx['post_result_metrics']['signed_result_final_verified']==0
+    assert 'PermissionError' in idx['post_result_metrics']['verification_report']['error']
+
+
+def test_stale_parsed_bodies_and_receipt_cannot_bind_new_file_hashes(tmp_path):
+    import base64,hashlib
+    from execution_store import resolve_phase
+    from jra_race_day_autopilot import _load_result_verification_report,_result_signature_readback
+    for kind in ('final','result','review','learning','receipt'):
+        root=tmp_path/kind;case=_original_signature_reference(root)
+        rid,paths,report,path,final,result=case
+        review=json.loads((root/paths['review']).read_text());learning=json.loads((root/paths['learning']).read_text())
+        phase=resolve_phase(rid+'-LIVE-R1','RESULT',root=root/'runtime/executions')
+        envelope_path=phase['run_dir']/'result_receipt_envelope.json'
+        envelope=json.loads(envelope_path.read_text())
+        selected=envelope_path if kind=='receipt' else root/paths[kind]
+        value=json.loads(selected.read_text())
+        if kind=='receipt':value['signature']='changed-after-parse'
+        elif kind=='final':value['sha256']='0'*64
+        elif kind=='result':value['settlement']['total_payout']+=100
+        elif kind=='review':value['capital']['investment']+=100
+        else:value['production_change_authorized']=True
+        selected.write_text(json.dumps(value))
+        if kind!='receipt':report['input_manifest'][paths[kind]]=hashlib.sha256(selected.read_bytes()).hexdigest()
+        path.write_text(json.dumps(report))
+        proof=_result_signature_readback(root,rid,final,result,envelope,envelope_path,
+            review,learning,_load_result_verification_report(root,'2026-10-31'))
+        assert proof['verified'] is False and proof['performed'] is False,kind
+        assert proof['status']=='BLOCKED' and 'STALE_PARSED_BODY:'+kind in proof['first_blocker'],(kind,proof)
+
+
+def test_original_bytes_changed_during_signature_verification_are_rejected(tmp_path,monkeypatch):
+    import jra_delivery
+    from execution_store import resolve_phase
+    original_verify=jra_delivery.verify_signed_final
+    for kind in ('final','result','review','learning','receipt'):
+        root=tmp_path/kind;case=_original_signature_reference(root)
+        rid,paths,report,path,final,result=case
+        phase=resolve_phase(rid+'-LIVE-R1','RESULT',root=root/'runtime/executions')
+        selected=(phase['run_dir']/'result_receipt_envelope.json') if kind=='receipt' else root/paths[kind]
+        def verify_and_replace(*args,_selected=selected,**kwargs):
+            checked=original_verify(*args,**kwargs)
+            value=json.loads(_selected.read_text());value['changed_after_snapshot']=True
+            _selected.write_text(json.dumps(value))
+            return checked
+        monkeypatch.setattr(jra_delivery,'verify_signed_final',verify_and_replace)
+        proof=_referenced_original_proof(root,case)['signature_verification_receipt']
+        assert proof['verified'] is False and proof['performed'] is True,kind
+        assert proof['status']=='FAILED' and 'ORIGINAL_BYTES_CHANGED_DURING_VERIFICATION' in proof['first_blocker'],(kind,proof)
+
+
+def test_declared_outer_envelope_hash_is_bound_even_when_inner_signature_is_valid(tmp_path):
+    import hashlib
+    from execution_store import persist_phase,resolve_phase
+    from jra_presentation import archived_trust,_receipt
+    case=_original_signature_reference(tmp_path)
+    rid,paths,report,path,final,result=case
+    phase=resolve_phase(rid+'-LIVE-R1','RESULT',root=tmp_path/'runtime/executions')
+    original_path=phase['run_dir']/'result_receipt_envelope.json'
+    reference_path=original_path.relative_to(tmp_path).as_posix()
+    report['rows'][0]['result_receipt_path']=reference_path
+    report['input_manifest'][reference_path]=hashlib.sha256(original_path.read_bytes()).hexdigest()
+    path.write_text(json.dumps(report))
+    proof=_referenced_original_proof(tmp_path,case)['signature_verification_receipt']
+    assert proof['verified'] and proof['envelope_reference_byte_identity']=='MATCH'
+    envelope=json.loads(original_path.read_text());envelope['additional_outer_metadata']='not-in-original-audit'
+    # No new signature: the original inner receipt still verifies unchanged.
+    health,_=archived_trust(final,root=tmp_path)
+    assert _receipt(envelope,health['receipt_signer'],rid,'RESULT')['signature_verified'] is True
+    stage=tmp_path/'changed-outer-stage';stage.mkdir()
+    (stage/'result_receipt_envelope.json').write_text(json.dumps(envelope))
+    persist_phase(rid+'-LIVE-R1','RESULT','changed-outer-test-only',stage,
+        root=tmp_path/'runtime/executions',github_sha='d'*40)
+    proof=_referenced_original_proof(tmp_path,case)['signature_verification_receipt']
+    assert proof['verified'] is False and proof['performed'] is False
+    assert 'AUDIT_ORIGINAL_RECEIPT_FILE_MISMATCH' in proof['first_blocker']

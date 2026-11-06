@@ -126,6 +126,7 @@ jobs:
           from jra_aki_capital_preflight import verify_aki_ticket_binding
           from jra_aki_dispatch import apply_authorized_v21
           from jra_execution_maturity_bridge import verify_formal_request_binding
+          from jra_race_day_resolver import explicit_current_jump_context, JUMP_SCOPE_REASON
           from entry_transport_fallback import validate_fallback_request
 
           JRA_V02_SHA="8bdeec86ddd163dd7594819f531d732bde5939f9cc0f2f991f2d6eba5f8cdee5"
@@ -139,6 +140,9 @@ jobs:
 
           with open(os.environ["REQUEST_FILE"],encoding="utf-8") as f:
               req=json.load(f)
+          if str(req.get("family_id","JRA")).upper()=="JRA" and explicit_current_jump_context(req):
+              failure_checkpoint.mark("JRA_PRODUCTION_SCOPE")
+              raise ValueError(JUMP_SCOPE_REASON)
           # AKI v2.1 binds its Full20 dependency hash to the runners exactly as
           # handed off. Later runner annotations (source shadow observations,
           # rule-evaluator inputs) must not alter that recomputation input.
@@ -235,6 +239,9 @@ jobs:
               source_artifact=source_env.get("artifact") or {}
               assert source_artifact.get("family_id")=="JRA", "JRA_SOURCE_FAMILY_MISMATCH"
               assert source_artifact.get("race_id")==req.get("race_id"), "JRA_SOURCE_RACE_ID_MISMATCH"
+              if explicit_current_jump_context(source_artifact):
+                  failure_checkpoint.mark("JRA_PRODUCTION_SCOPE")
+                  raise ValueError(JUMP_SCOPE_REASON)
               assert source_artifact.get("formal_ready") is True, f"JRA_SOURCE_NOT_FORMAL_READY:{source_artifact.get('errors')}"
               if temporal_mode_early=="FORMAL-PRE-RACE":
                   signed_cutoff=str(source_artifact.get("prediction_cutoff") or "")
@@ -737,7 +744,7 @@ jobs:
           # and fail only this audit if an optional explanation cannot replay.
           from jra_role_exclusion_audit import build_role_exclusion_audit
           try:
-              final_package["role_exclusion_audit"]=build_role_exclusion_audit(req,resolved_authority_obj,'.')
+              final_package["role_exclusion_audit"]=build_role_exclusion_audit({**req,"runners":aki_signed_runners},resolved_authority_obj,'.')
           except (KeyError,ValueError,TypeError,OSError) as exc:
               final_package["role_exclusion_audit"]={"status":"HOLD","reason":str(exc)[:300],"production_effect":"NONE"}
           if mec is not None:
