@@ -34,6 +34,26 @@ def raw_detail(source):
     return raw,snap['content_type']
 
 
+def assert_native_numbers_and_current_roles(result,request):
+    # The saved historical horses keep their original empty Role metadata.
+    # A fresh build projects the already selected current canonical Roles;
+    # every other horse field and all Full20/Static inputs must stay exact.
+    horses=result['krs_input_data']['horses']
+    saved=request['krs_input_data']['horses']
+    universe=[str(r['runner_id']) for r in request['runners']]
+    assert [str(h['horse_no']) for h in horses]==universe
+    assert [h['horse_no'] for h in horses]==[h['horse_no'] for h in saved]
+    assert len(set(universe))==len(universe)
+    roles=request['static_prediction']['roles']
+    assert set(roles)==set(universe)
+    for actual,original in zip(horses,saved):
+        assert {k:v for k,v in actual.items() if k!='static_roles'}=={
+            k:v for k,v in original.items() if k!='static_roles'}
+        assert actual['static_roles']==roles[str(actual['horse_no'])]
+    assert result['runners']==request['runners']
+    assert result['static_prediction']==request['static_prediction']
+
+
 def test_grade_retention_is_opt_in_and_exact():
     markup='<table><tr><td>七夕賞<img alt="G&#8546;"></td><td>白富士S<img alt="リステッド"></td><td><img alt="勝馬GⅠ"></td></tr></table>'
     assert _html_tables(markup)==[[['七夕賞','白富士S','']]]
@@ -64,7 +84,7 @@ def test_actual_source_weather_going_and_class_reach_krs_without_hsv_changes():
     assert result['krs_input_data']['environment']['weather']=='雨'
     assert result['krs_input_data']['race']['going']=='稍重'
     assert result['krs_input_data']['race']['class']=='オープン'
-    assert result['krs_input_data']['horses']==request['krs_input_data']['horses']
+    assert_native_numbers_and_current_roles(result,request)
     assert result['krs_input_data']['simulation']==request['krs_input_data']['simulation']
     assert request==before
 
@@ -86,19 +106,25 @@ def test_unbound_or_post_cutoff_context_cannot_fill_krs():
         if kind=='timezone':source['source_freeze_at']='2026-10-24T14:00:00'
         if kind!='sha':
             request['source_snapshot_sha256']=sha_obj({k:v for k,v in source.items() if k!='source_snapshot_sha256'})
+        before=deepcopy(request)
         result=build_krs_input(request)
         assert result['krs_input_data']['environment']['weather']=='unknown'
         assert result['krs_input_data']['race']['going'] is None
-        assert result['krs_input_data']['horses']==request['krs_input_data']['horses']
+        assert_native_numbers_and_current_roles(result,request)
         expected={'sha':'NO_BOUND_SOURCE_CONTEXT','race':'NO_BOUND_SOURCE_CONTEXT',
                   'time':'SOURCE_CONTEXT_TIME_INELIGIBLE','timezone':'SOURCE_CONTEXT_TIME_INELIGIBLE'}[kind]
         assert result['explicit_engine_hsv_provenance']['source_context_status']==expected
+        assert request==before
 
 
 def test_absent_source_does_not_add_a_new_gate():
-    request=fixture_request();request.pop('source_snapshot')
+    request=fixture_request();request.pop('source_snapshot');before=deepcopy(request)
     result=build_krs_input(request)
-    assert result['krs_input_data']==request['krs_input_data']
+    assert_native_numbers_and_current_roles(result,request)
+    assert {k:v for k,v in result['krs_input_data'].items() if k!='horses'}=={
+        k:v for k,v in request['krs_input_data'].items() if k!='horses'}
+    assert result['explicit_engine_hsv_provenance']['source_context_status']=='NO_BOUND_SOURCE_CONTEXT'
+    assert request==before
 
 
 def test_retained_grade_reaches_existing_class_feature_without_new_rule():

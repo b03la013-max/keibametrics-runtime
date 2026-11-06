@@ -18,6 +18,7 @@ DCR_COMPONENT_MAX = {
 FORMULA_REGISTRY = "index_formula_registry JRA v1.0"
 BASE_MAPPING_VERSION = "JRA-v1.0-IPL-RULE-BASED"
 TRACE_SCHEMA = "KM-JRA-SOURCE-FEATURE-INDEX-STATIC-TRACE-v1.0-20260927"
+STATIC_ROLE_BINDING_VERSION = "JRA-CURRENT-STATIC-HORSE-ROLES-v1"
 
 
 class IndexLedgerError(ValueError):
@@ -120,6 +121,34 @@ def materialize_index_provenance(req: dict) -> dict:
     ranking = [str(x) for x in (sp.get("ranking") or [])]
     static_rank_by_id = {rid: pos + 1 for pos, rid in enumerate(ranking)}
     static_roles = sp.get("roles") or {}
+    # New builders explicitly mark this metadata representation. Unmarked
+    # historical requests must retain their exact old trace and PRE_KRS hash.
+    horse_roles = {}
+    current_jra_horse_roles = False
+    provenance = req.get("explicit_engine_hsv_provenance")
+    marked = isinstance(provenance, dict) and "static_role_binding_version" in provenance
+    if req.get("family_id") == "JRA" and marked:
+        if provenance["static_role_binding_version"] != STATIC_ROLE_BINDING_VERSION:
+            raise IndexLedgerError("JRA_STATIC_ROLE_BINDING_VERSION_UNSUPPORTED")
+        if sp.get("production_authority") is not True or "roles" not in sp:
+            raise IndexLedgerError("JRA_STATIC_ROLE_BINDING_AUTHORITY_MISSING")
+        declared_roles = sp["roles"]
+        if not isinstance(declared_roles, dict):
+            raise IndexLedgerError("JRA_STATIC_ROLE_MAP_INVALID")
+        if not declared_roles:
+            horse_roles = {h: [] for h in runner_by_id}
+            current_jra_horse_roles = True
+        else:
+            horse_roles = {str(h): cols for h, cols in declared_roles.items()}
+            if len(horse_roles) != len(declared_roles) or set(horse_roles) != set(runner_by_id):
+                raise IndexLedgerError("JRA_STATIC_ROLE_UNIVERSE_MISMATCH")
+            for h, cols in horse_roles.items():
+                if (not isinstance(cols, list) or any(c not in ("W", "P2", "P3") for c in cols)
+                        or len(cols) != len(set(cols))):
+                    raise IndexLedgerError("JRA_STATIC_ROLE_INVALID:" + h)
+            current_jra_horse_roles = True
+        if provenance.get("static_role_map_sha256") != _canonical_sha(horse_roles):
+            raise IndexLedgerError("JRA_STATIC_ROLE_BINDING_HASH_MISMATCH")
     replay = {
         "formula_registry": FORMULA_REGISTRY,
         "trace_schema": TRACE_SCHEMA,
@@ -226,7 +255,7 @@ def materialize_index_provenance(req: dict) -> dict:
             "F3S": copy.deepcopy(canonical["F3S"]),
             "T3I": copy.deepcopy(canonical["T3I"]),
         }
-        runner_roles = sorted(
+        runner_roles = sorted(horse_roles[rid]) if current_jra_horse_roles else sorted(
             str(role) for role, ids in static_roles.items()
             if isinstance(ids, list) and rid in {str(x) for x in ids}
         )
