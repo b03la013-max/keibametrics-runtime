@@ -259,5 +259,9 @@ def test_unsigned_outer_temporal_or_venue_mirror_cannot_override_signed_package(
     f, h, c = fixture()
     f[field] = value
     f['sha256'] = digest({k:v for k,v in f.items() if k != 'sha256'})
-    with pytest.raises(ValueError, match='FINAL_MIRROR_MISMATCH'):
+    # A forged outer cutoff after the original post is invalid even before
+    # the signed mirror comparison; both paths must reject that mutation.
+    reason=('FINAL_MIRROR_MISMATCH|FINAL_FORMAL_TEMPORAL_ORDER_INVALID'
+            if field=='prediction_cutoff' else 'FINAL_MIRROR_MISMATCH')
+    with pytest.raises(ValueError, match=reason):
         build_presentation(f, health=h, contract=c, generated_at='2026-10-17T04:40:00Z')

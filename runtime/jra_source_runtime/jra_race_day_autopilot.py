@@ -34,7 +34,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from jra_race_day_resolver import (JST, VENUES, resolve_day, resolve_meetings,
-                                   venue_code, official_navigation_failure)
+                                   venue_code, official_navigation_failure,
+                                   official_jump_race, JUMP_SCOPE_REASON)
 
 PROFILE = "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012"
 DEFAULT_WINDOW = (55, 30)
@@ -184,6 +185,31 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
     schedule_path = plan_dir / f"{race_date}.schedule.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     schedule = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else {}
+    # Existing approved Scope exclusions are management rows, never dispatch
+    # entries. Preserve them even when the registered cohort contains flat only.
+    for held in plan.get('scope_exclusions') or []:
+        rid=held.get('race_id') or ''
+        automatic=bool(plan.get('automatic_generation'))
+        if (held.get('race_type') not in ({'JUMP','UNKNOWN','FLAT'} if automatic else {'JUMP'})
+                or held.get('status') not in ({'HOLD','SCOPE_HOLD','SOURCE_HOLD'} if automatic else {'HOLD','SCOPE_HOLD'})
+                or held.get('action')!='EXCLUDE_FROM_FLAT_DISPATCH_ONLY'
+                or not rid.startswith('KM-JRA-') or race_date.replace('-','') not in rid):
+            continue
+        previous=schedule.get(rid) or {}
+        details={k:held[k] for k in ('post','title','venue','race_no','official_day_row') if k in held}
+        scope_status='SOURCE_HOLD' if held.get('status')=='SOURCE_HOLD' else 'SCOPE_HOLD'
+        temporal=previous.get('temporal_status')
+        if (previous.get('status')=='MISSED_WINDOW'
+                or (state.get(rid) or {}).get('dispatch_state')=='MISSED_WINDOW'):
+            temporal='MISSED_WINDOW'
+        schedule[rid]={**details,**previous,'status':scope_status,
+                       'scope_decision':{'race_type':held['race_type'],'status':scope_status,
+                                         'reason':held.get('reason') or JUMP_SCOPE_REASON},
+                       'temporal_status':temporal,
+                       'dispatch_eligibility':{'eligible':False,
+                           'blocking_stage':'SOURCE' if scope_status=='SOURCE_HOLD' else 'SCOPE',
+                           'reason':held.get('reason') or JUMP_SCOPE_REASON}}
+        schedule[rid].setdefault('scope_hold_reason',held.get('reason') or JUMP_SCOPE_REASON)
     # Official cards are cached across loop ticks (refreshed by the caller) so
     # the official site is not polled every tick.
     days: dict = cache.setdefault("days", {}) if cache is not None else {}
@@ -246,13 +272,45 @@ def tick(root: Path, race_date: str, now: _dt.datetime, *, resolve=resolve_day,
             out.append({"race_id": rid, "status": "NOT_ON_OFFICIAL_CARD"})
             schedule[rid] = {"status": "NOT_ON_OFFICIAL_CARD"}
             continue
+        if plan.get('automatic_generation'):
+            from jra_race_day_registration import automatic_row_hold
+            hold=automatic_row_hold(race)
+            if hold:
+                _,status,reason=hold
+                existing_pipeline=((root/'runtime/final_artifacts'/(rid+'.json')).exists() or
+                    bool(list((root/'runtime/jra_no_bet_terminals').glob(rid+'-LIVE-*.json'))) or
+                    bool(list((root/'runtime/jra_formal_intents').glob(rid+'-LIVE-*.json'))) or
+                    (rid in state and (state[rid] or {}).get('dispatch_state')!='CLAIM_PUBLISH_FAILED_NO_SEND'))
+                if existing_pipeline:
+                    previous=schedule.setdefault(rid,{})
+                    own_hold=previous.get('current_official_row_hold') or {}
+                    if (previous.get('status')==own_hold.get('status') and
+                            previous.get('scope_hold_reason')==own_hold.get('reason')):
+                        previous.pop('status',None);previous.pop('scope_hold_reason',None)
+                    previous['current_official_row_hold']={'status':status,'reason':reason}
+                    out.append({'race_id':rid,'status':'ALREADY_DISPATCHED','reason':reason})
+                else:
+                    schedule[rid]={**schedule.get(rid,{}),'venue':venue,'race_no':race_no,
+                        'title':race.get('title'),'official_day_row':race.get('raw'),
+                        'status':status,'scope_hold_reason':reason,
+                        'current_official_row_hold':{'status':status,'reason':reason}}
+                    out.append({'race_id':rid,'status':status,'reason':reason})
+                continue  # No claim/recovery/send; keep already-running actors and canonical artifacts.
         hh, mm = map(int, race["post_time"].split(":"))
         d = _dt.date.fromisoformat(race_date)
         post = _dt.datetime(d.year, d.month, d.day, hh, mm, tzinfo=JST)
+        previous_schedule = schedule.get(rid) or {}
         schedule[rid] = {"post": post.isoformat(), "title": race.get("title"), "venue": venue,
                          "race_no": race_no, "official_day_row": race.get("raw"),
                          "dispatch_window_open": (post - _dt.timedelta(minutes=window[0])).isoformat(),
                          "dispatch_window_close": (post - _dt.timedelta(minutes=window[1])).isoformat()}
+        if official_jump_race(race):
+            prior_hold = previous_schedule if previous_schedule.get("status") == "SCOPE_HOLD" else {}
+            schedule[rid] = {**prior_hold, **schedule[rid], "status": "SCOPE_HOLD"}
+            schedule[rid].setdefault("scope_hold_reason", JUMP_SCOPE_REASON)
+            out.append({"race_id": rid, "status": "SCOPE_HOLD",
+                        "reason": schedule[rid]["scope_hold_reason"]})
+            continue  # No registration/claim/recovery/dispatch for the jump lane.
         if venue in routing:
             schedule[rid].update(routing_basis='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED',
                                  source_accepted=False)
@@ -379,8 +437,136 @@ def _blocked_cells(gap: dict) -> list[str]:
     return [f"{rid}番:{'/'.join(v)}" for rid, v in sorted(per.items(), key=lambda z: int(z[0]) if z[0].isdigit() else 99)]
 
 
-def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=None):
-    """Describe canonical stored bodies, never admit them or verify signatures.
+
+def _result_signature_readback(root, rid, final, result, envelope, envelope_path,
+                               review, learning, verification_report):
+    """Bind an unsigned audit reference to originals, then run existing verifiers.
+
+    Audit PASS flags are never authority. The status contains a fresh local
+    verification receipt; SOURCE, prediction and signed originals stay untouched.
+    """
+    import hashlib
+    from jra_presentation import archived_trust, _receipt, digest
+    from jra_delivery import verify_signed_final
+    from jra_production_postresult import settle_final
+    from post_result_learning import build_post_result_review, build_learning_state
+    proof={'profile':'KM-JRA-RESULT-SIGNATURE-READBACK-v1','performed':False,
+        'verified':False,'status':'BLOCKED','source_report_is_trust_root':False,
+        'source_report_path':verification_report['path'],
+        'source_report_sha256':verification_report['sha256'],
+        'verifier':'EXISTING_ARCHIVED_KEY_PIN_AND_ED25519',
+        'verifier_code_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        'scope':'FINAL_RESULT_SIGNATURES_AND_DETERMINISTIC_REVIEW_STATE_REBUILD',
+        'observation_time_source':'PARENT_STATUS_GENERATED_AT',
+        'production_numeric_learning_consumption':'NOT_ESTABLISHED'}
+    try:
+        report=verification_report['body']
+        rows=[r for r in report['rows'] if r.get('race_id')==rid]
+        if len(rows)!=1:raise ValueError('AUDIT_RACE_REFERENCE_NOT_UNIQUE')
+        row=rows[0]
+        paths={'final':'runtime/final_artifacts/'+rid+'.json',
+               'result':'runtime/results/'+rid+'.json',
+               'review':'runtime/reviews_auto/'+rid+'-AUTO.json',
+               'learning':'runtime/learning_states/'+rid+'.json'}
+        hashes={}
+        parsed={}
+        snapshots={}
+        supplied={'final':final,'result':result,'review':review,'learning':learning}
+        for kind,relative in paths.items():
+            matching=[v for k,v in report['input_manifest'].items()
+                      if k==relative or k.endswith('/'+relative)]
+            path=root/relative
+            raw=path.read_bytes()
+            value=json.loads(raw)
+            if digest(value)!=digest(supplied[kind]):raise ValueError('STALE_PARSED_BODY:'+kind)
+            actual=hashlib.sha256(raw).hexdigest()
+            if len(matching)!=1 or matching[0]!=actual:
+                raise ValueError('AUDIT_ORIGINAL_FILE_MISMATCH:'+kind)
+            snapshots[path]=raw
+            parsed[kind]=value
+            hashes[kind+'_file_sha256']=actual
+        envelope_raw=envelope_path.read_bytes()
+        parsed_envelope=json.loads(envelope_raw)
+        if digest(parsed_envelope)!=digest(envelope):raise ValueError('STALE_PARSED_BODY:receipt')
+        snapshots[envelope_path]=envelope_raw
+        envelope_file_sha=hashlib.sha256(envelope_raw).hexdigest()
+        reference_path=row.get('result_receipt_path')
+        declared_envelope_sha=(report['input_manifest'].get(reference_path)
+                               if isinstance(reference_path,str) else None)
+        envelope_identity='UNKNOWN'
+        if declared_envelope_sha is not None:
+            if declared_envelope_sha!=envelope_file_sha:
+                raise ValueError('AUDIT_ORIGINAL_RECEIPT_FILE_MISMATCH')
+            envelope_identity='MATCH'
+        final,result,review,learning=(parsed[k] for k in ('final','result','review','learning'))
+        envelope=parsed_envelope
+        if (row.get('result_request_sha256')!=digest(result) or
+                row.get('result_receipt_sha256')!=envelope.get('receipt_sha256')):
+            raise ValueError('AUDIT_ORIGINAL_RESULT_REFERENCE_MISMATCH')
+        health,contract=archived_trust(final,root=root)
+        proof['performed']=True
+        verify_signed_final(final,health,contract)
+        receipt=_receipt(envelope,health['receipt_signer'],rid,'RESULT')
+        refs=result.get('frozen_prediction_ref') or {}
+        if (receipt['artifact_sha256']!=digest(result) or
+                refs.get('immutable_final_sha256')!=final['sha256'] or
+                refs.get('final_receipt_sha256')!=final['final_receipt_sha256']):
+            raise ValueError('SIGNED_RESULT_FINAL_REFERENCE_MISMATCH')
+        final_time=_dt.datetime.fromisoformat(final['final_receipt']['receipt']['timestamp'].replace('Z','+00:00'))
+        result_time=_dt.datetime.fromisoformat(receipt['timestamp'].replace('Z','+00:00'))
+        post=_dt.datetime.fromisoformat(final['scheduled_post_at'])
+        if not (final_time.tzinfo and result_time.tzinfo and post.tzinfo and final_time<post<=result_time):
+            raise ValueError('SIGNED_RESULT_FINAL_CLOCK_MISMATCH')
+        rebuilt=settle_final(final,result['official_result'])
+        original=result['settlement']
+        aliases={'actual_purchase','actual_purchase_pfs','capital_exposure_class','recommendation_pfs'}
+        if (set(original)-set(rebuilt) or set(rebuilt)-set(original)-aliases or
+                any(rebuilt.get(k)!=v for k,v in original.items())):
+            raise ValueError('FROZEN_SETTLEMENT_REBUILD_MISMATCH')
+        rebuilt_review=build_post_result_review(result,final,
+            review_semantics=review.get('review_semantics','LEGACY'))
+        if digest(rebuilt_review)!=digest(review):raise ValueError('RESULT_REVIEW_REBUILD_MISMATCH')
+        if digest(build_learning_state(rebuilt_review,effective_time=learning['effective_time']))!=digest(learning):
+            raise ValueError('RESULT_LEARNING_REBUILD_MISMATCH')
+        if any(path.read_bytes()!=raw for path,raw in snapshots.items()):
+            raise ValueError('ORIGINAL_BYTES_CHANGED_DURING_VERIFICATION')
+        proof.update(status='VERIFIED',verified=True,**hashes,
+            result_receipt_path=envelope_path.relative_to(root).as_posix(),
+            result_receipt_file_sha256=envelope_file_sha,
+            envelope_reference_byte_identity=envelope_identity,
+            result_receipt_sha256=envelope['receipt_sha256'],signer_key_id=envelope['signer_key_id'],
+            final_sha256=final['sha256'],
+            final_receipt_sha256=final['final_receipt_sha256'],
+            result_request_sha256=digest(result),final_signature_verified=True,
+            result_signature_verified=True,settlement_old_fields_exact=True,
+            review_exact_rebuild=True,learning_state_exact_rebuild=True)
+    except Exception as exc:
+        proof.update(status='FAILED' if proof['performed'] else 'BLOCKED',
+                     first_blocker=type(exc).__name__+':'+str(exc)[:180])
+    proof['sha256']=digest(proof)
+    return proof
+
+
+def _load_result_verification_report(root, race_date):
+    path=root/'runtime/jra_race_day_status'/(race_date+'.result-verification.json')
+    if not path.is_file():return None
+    import hashlib
+    raw=None
+    try:
+        raw=path.read_bytes()
+        body=json.loads(raw)
+        if (not isinstance(body,dict) or not isinstance(body.get('rows'),list) or
+                any(not isinstance(r,dict) for r in body['rows'])):
+            raise ValueError('RESULT_VERIFICATION_REPORT_ROWS_REQUIRED')
+        return {'path':path.relative_to(root).as_posix(),
+                'sha256':hashlib.sha256(raw).hexdigest(),'body':body}
+    except (OSError,ValueError,TypeError) as exc:
+        return {'path':path.relative_to(root).as_posix(),
+                'sha256':hashlib.sha256(raw).hexdigest() if raw is not None else None,
+                'error':type(exc).__name__+':'+str(exc)[:180]}
+
+def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=None, verification_report=None):
+    """Describe storage separately from an explicitly referenced signature readback.
 
     The legacy scheduler enum is retained separately. A file's presence must
     not become a claim of verified RESULT, actual Learning use or full closure.
@@ -431,6 +617,7 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
               sha256=learning.get('sha256'),effective_time=learning.get('effective_time'),
               consumption='NOT_ESTABLISHED_BY_STORAGE')
     receipts=[]
+    signature_readback=None
     for eid in eids or [rid+'-LIVE-R1']:
         try:
             phase=resolve_phase(eid,'RESULT',root=root/'runtime/executions')
@@ -449,9 +636,26 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
                 'receipt_sha256':envelope.get('receipt_sha256'),
                 'signature_present':bool(envelope.get('signature')),
                 'signature_validation':'NOT_PERFORMED_BY_STATUS_RENDERER'})
+            if (verification_report and not verification_report.get('error') and
+                    any(r.get('race_id')==rid and r.get('result_receipt_sha256')==envelope.get('receipt_sha256')
+                        for r in verification_report['body']['rows'])):
+                signature_readback=_result_signature_readback(root,rid,final,result,envelope,
+                    envelope_path,review,learning,verification_report)
+                receipts[-1]['signature_validation']=signature_readback['status']
         except (OSError,ValueError,KeyError,TypeError) as exc:
             receipts.append({'execution_id':eid,'storage_error':type(exc).__name__+':'+str(exc)[:120],
                              'request_payload_bound':False})
+    if (signature_readback is None and verification_report and
+            not verification_report.get('error') and
+            any(r.get('race_id')==rid for r in verification_report['body']['rows'])):
+        signature_readback={'profile':'KM-JRA-RESULT-SIGNATURE-READBACK-v1',
+            'performed':False,'verified':False,'status':'BLOCKED',
+            'source_report_path':verification_report['path'],
+            'source_report_sha256':verification_report['sha256'],
+            'source_report_is_trust_root':False,
+            'first_blocker':'AUDIT_RESULT_RECEIPT_MATCH_NOT_ESTABLISHED',
+            'production_numeric_learning_consumption':'NOT_ESTABLISHED'}
+        signature_readback['sha256']=_sha(signature_readback)
     zero_records=[]
     if terminal:
         for eid in eids:
@@ -472,18 +676,29 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
     storage=('ZERO_EXPOSURE_RESULT_LEARNING_STORED' if zero_bound else
              'RESULT_REVIEW_LEARNING_STORED' if learning_bound else
              'RESULT_REQUEST_STORED' if result is not None else 'POSTRESULT_NOT_RECORDED')
-    return {'storage_state':storage,'result_request_present':result is not None,
+    evidence={'storage_state':storage,'result_request_present':result is not None,
         'review':ri,'learning':li,'review_learning_bound':learning_bound,
         'stored_result_receipts':receipts,'zero_exposure_records':zero_records,
         'zero_exposure_result_learning_bound':zero_bound,
         'evidence_scope':'CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY',
         'signature_validation_performed':False,'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
+    if signature_readback is not None:
+        evidence.update(signature_validation_performed=signature_readback['performed'],
+            signature_verification_receipt=signature_readback,
+            signed_result_final_verified=signature_readback['verified'])
+    return evidence
 
 
-def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime) -> dict:
+def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime, *, verification_report=None) -> dict:
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
     row["registered_intake"]=sched.get("registered_intake",False)
+    if sched.get('scope_decision'):
+        row['scope_decision']=sched['scope_decision']
+        row['temporal_status']=sched.get('temporal_status')
+        row['dispatch_eligibility']=sched.get('dispatch_eligibility')
+    if sched.get('current_official_row_hold'):
+        row['current_official_row_hold']=sched['current_official_row_hold']
     if sched.get('routing_basis')=='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':
         row.update(routing_basis=sched['routing_basis'],fresh_source_accepted=False,
                    plan_registration_verified=row['registered_intake'],registered_intake=False)
@@ -553,7 +768,7 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
                 "actual_pfs_status",
             )}
         if res is not None:
-            row['post_result_evidence']=_post_result_evidence(root,rid,eids,final=final,result=res)
+            row['post_result_evidence']=_post_result_evidence(root,rid,eids,final=final,result=res,verification_report=verification_report)
             row['scheduler_state_scope']='LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF'
             row['display_state']=row['post_result_evidence']['storage_state']
     elif no_bet:
@@ -837,9 +1052,10 @@ def reconcile_source_run_status(root, row, runs, now):
 
 
 def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, state: dict, *, formal_runs=None, resolver_runs=None, source_runs=None) -> dict:
+    verification_report=_load_result_verification_report(root,race_date)
     rows=[]
     for rid,s in schedule.items():
-        try:rows.append(race_status(root,rid,s,state,now))
+        try:rows.append(race_status(root,rid,s,state,now,**({'verification_report':verification_report} if verification_report else {})))
         except (OSError,ValueError,KeyError,TypeError,ImportError) as exc:
             rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
                          'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
@@ -865,7 +1081,13 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
         'review_learning_bound':sum(p.get('review_learning_bound') is True for p in observed),
         'zero_exposure_result_learning_bound':sum(p.get('zero_exposure_result_learning_bound') is True for p in observed),
         'stored_result_receipts_payload_bound':sum(any(x.get('request_payload_bound') for x in p.get('stored_result_receipts',[])) for p in observed),
-        'signature_validation_performed':False,'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
+        'signature_validation_performed':any(p.get('signature_validation_performed') for p in observed),
+        'signed_result_final_verified':sum(p.get('signed_result_final_verified') is True for p in observed),
+        'signature_verification_failed':sum((p.get('signature_verification_receipt') or {}).get('status')=='FAILED' for p in observed),
+        'signature_verification_blocked':sum((p.get('signature_verification_receipt') or {}).get('status')=='BLOCKED' for p in observed),
+        'production_closed_loop_claim':'NOT_ESTABLISHED_BY_STORAGE_AUDIT'}
+    if verification_report:
+        idx['post_result_metrics']['verification_report']={k:v for k,v in verification_report.items() if k!='body'}
     plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
     plan=json.loads(plan_path.read_text()) if plan_path.exists() else {}
     cohort=(plan.get('cohort') or {})
@@ -895,6 +1117,10 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
             md.append(f"公式取得未成立: {fault.get('stage')} HTTP {fault.get('http_status')} / {fault.get('url')}。非開催の証明ではありません。")
         if r.get('post_result_evidence'):
             md.append('結果後の保存内容・SHA結合を表示。署名検証、Learning実消費、Production閉路完成は別証拠。')
+            signature=(r['post_result_evidence'].get('signature_verification_receipt') or {})
+            if signature:
+                md.append(f"RESULT/FINAL原本署名検収 {signature.get('status')} / 検収Receipt {signature.get('sha256')}。Review/Stateは再現照合、Learning数値実消費は未検証。")
+                if signature.get('first_blocker'):md.append('署名検収の停止理由: '+signature['first_blocker'])
         if r.get('formal_run_id'):
             md.append(f"Formal Run {r['formal_run_id']} / {r.get('formal_conclusion')} / "
                       f"最初の停止工程 {r.get('first_blocked_stage')} / {r.get('execution_error')}")
@@ -970,37 +1196,58 @@ def _post_result_closed_loop(root: Path, race_date: str) -> None:
 
 
 def request_postresult_worker(root, race_date, now, *, publish, send=None):
-    """Hand results to the existing independent workflow, never wait for RESULT."""
+    """Hand FINAL and zero-exposure decisions to their existing result workers."""
     path=root/'runtime/jra_race_day_plan'/f'{race_date}.state.json'
     state=json.loads(path.read_text()) if path.exists() else {}
-    previous=state.get('_postresult_worker') or {}
-    if previous.get('requested_at') and (now-_dt.datetime.fromisoformat(previous['requested_at'])).total_seconds()<1800:
-        return 'RECENT_RESULT_WORKER_REQUEST'
     d8=_dt.date.fromisoformat(race_date).strftime('%Y%m%d')
-    finals=list((root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'))
     due_final=False
-    for final_path in finals:
+    for final_path in (root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'):
         if (root/'runtime/learning_states'/final_path.name).exists():continue
         try:
             due_final |= _dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])<now
         except (OSError,ValueError,KeyError,TypeError):
             continue  # Status index owns this race's checkpoint integrity failure.
-    if not due_final:
-        return 'NO_DUE_FINAL'
-    state['_postresult_worker']={'requested_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
-    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
-    publish()
-    try:
-        if send is None:
-            subprocess.run(['gh','workflow','run','km-jra-production-postresult.yml','--ref','main'],
-                           check=True,cwd=root,capture_output=True,text=True,timeout=30)
-        else:send()
-        result='ACKNOWLEDGED'
-    except (subprocess.SubprocessError,OSError):
-        result='UNKNOWN_NO_IMMEDIATE_RETRY'
-    state=json.loads(path.read_text());state['_postresult_worker']['state']=result
-    path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
-    return result
+    due_no_bet=False
+    for terminal_path in (root/'runtime/jra_no_bet_terminals').glob(f'KM-JRA-*-{d8}-R*.json'):
+        if (root/'runtime/jra_no_bet_learning'/terminal_path.name).exists():continue
+        if not (root/'runtime/jra_formal_intents'/terminal_path.name).exists():continue
+        try:
+            terminal=json.loads(terminal_path.read_text())
+            intent=json.loads((root/'runtime/jra_formal_intents'/terminal_path.name).read_text())
+            if not isinstance(terminal,dict) or not isinstance(intent,dict):continue
+            post=_dt.datetime.fromisoformat(terminal.get('scheduled_post_at') or intent['scheduled_post_at'])
+            # The dedicated worker verifies terminal and official OIDC captures.
+            # Match its existing acquisition window; never make a result early.
+            due_no_bet |= (terminal.get('decision')=='NO_BET' and
+                           terminal.get('total_investment')==0 and
+                           post+_dt.timedelta(minutes=10)<=now<=post+_dt.timedelta(days=7))
+        except (OSError,ValueError,KeyError,TypeError):
+            continue
+    outcomes=[]
+    for key, eligible, workflow in (
+        ('_postresult_worker',due_final,'km-jra-production-postresult.yml'),
+        ('_no_bet_postresult_worker',due_no_bet,'km-jra-no-bet-postresult-learning.yml'),
+    ):
+        if not eligible:continue
+        previous=state.get(key) or {}
+        if previous.get('requested_at') and (now-_dt.datetime.fromisoformat(previous['requested_at'])).total_seconds()<1800:
+            outcomes.append('RECENT_RESULT_WORKER_REQUEST');continue
+        state[key]={'requested_at':now.isoformat(),'state':'CLAIMED_NOT_ACKNOWLEDGED'}
+        path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        publish()
+        try:
+            if send is None or key!='_postresult_worker':
+                subprocess.run(['gh','workflow','run',workflow,'--ref','main'],
+                               check=True,cwd=root,capture_output=True,text=True,timeout=30)
+            else:send()
+            result='ACKNOWLEDGED'
+        except (subprocess.SubprocessError,OSError):
+            result='UNKNOWN_NO_IMMEDIATE_RETRY'
+        state=json.loads(path.read_text());state[key]['state']=result
+        path.write_text(json.dumps(state,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        outcomes.append(result)
+    return next((x for x in outcomes if x!='RECENT_RESULT_WORKER_REQUEST'),
+                outcomes[0] if outcomes else 'NO_DUE_FINAL')
 
 
 def merge_dispatch_state(remote: dict, local: dict) -> dict:
@@ -1009,7 +1256,7 @@ def merge_dispatch_state(remote: dict, local: dict) -> dict:
     for key, value in local.items():
         if key == "_result_runner_dispatched":
             out[key] = sorted(set(remote.get(key) or []) | set(value or []))
-        elif key=='_postresult_worker' and key in out:
+        elif key in ('_postresult_worker','_no_bet_postresult_worker') and key in out:
             out[key]=max([out[key],value],key=lambda x:x.get('requested_at',''))
         elif key not in out:
             out[key] = value
@@ -1086,6 +1333,13 @@ def _rebase_generated(root: Path, race_date: str) -> bool:
 def _commit(root: Path, race_date: str) -> None:
     paths = [f"runtime/jra_race_day_plan/{race_date}.state.json", f"runtime/jra_race_day_plan/{race_date}.schedule.json",
              f"runtime/jra_race_day_status/{race_date}.json", f"runtime/jra_race_day_status/{race_date}.md"]
+    plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
+    if plan_path.exists():
+        plan=json.loads(plan_path.read_text())
+        if plan.get('automatic_generation'):
+            paths.append(plan_path.relative_to(root).as_posix())
+            paths.extend(f"runtime/jra_race_registrations/{race_date}/{rid}.json"
+                         for rid in plan['cohort']['race_ids'])
     run = lambda *a: subprocess.run(list(a), cwd=root, text=True, capture_output=True, timeout=30)
     if run('git','add',*paths).returncode!=0:
         raise RuntimeError('AUTOPILOT_STATE_GIT_ADD_FAILED_NO_SEND')
@@ -1142,6 +1396,83 @@ def _worker_output(continuation, reason):
         'reason':reason},ensure_ascii=False),flush=True)
 
 
+def ensure_day_plan(root, race_date, now, *, default_all, cache,
+                    meetings=resolve_meetings, resolve=resolve_day):
+    """Existing worker creates its missing dated Plan before new intake.
+
+    An existing Plan is never regenerated. Partial/failed official discovery
+    cannot authorize intake; existing SOURCE/Formal/RESULT workers are untouched.
+    Plan/registration files join the existing atomic Git claim publication.
+    """
+    plan_path=root/'runtime/jra_race_day_plan'/f'{race_date}.json'
+    if plan_path.exists() or not default_all:
+        return True
+    started=time.monotonic()
+    days=cache.setdefault('days',{})
+    try:
+        if 'meetings' not in cache:
+            try:cache['meetings']=meetings(race_date)
+            except Exception as exc:cache['meetings']=exc
+        venues=cache['meetings']
+        if isinstance(venues,Exception):raise venues
+        if not isinstance(venues,(list,tuple)) or len(set(venues))!=len(venues):
+            raise ValueError('JRA_OFFICIAL_CALENDAR_RESPONSE_INVALID')
+        if not venues:return True  # Existing no-meetings path remains unchanged.
+        discovery={'status':'DISCOVERED','race_date':race_date,'venues':[]}
+        for venue in venues:
+            if venue not in days:
+                try:days[venue]=resolve(race_date,venue)
+                except Exception as exc:days[venue]=exc
+            day=days[venue]
+            if isinstance(day,Exception):raise day
+            key,rows=day
+            if (not rows or len(rows)>12 or
+                    any(type(row.get('race_no')) is not int for row in rows) or
+                    [row.get('race_no') for row in rows]!=list(range(1,len(rows)+1))):
+                raise ValueError('OFFICIAL_RACE_SEQUENCE_NOT_PROVEN')
+            discovery['venues'].append({'venue':venue,'venue_id':VENUES[venue_code(venue)][0],
+                                        'meeting_key':key,'races':rows})
+        observed=now+_dt.timedelta(seconds=time.monotonic()-started)
+        from family_authority_guard import resolve_current_authority
+        from jra_race_day_registration import build_registrations,persist_registrations,sha
+        _,authority=resolve_current_authority(root=root,now=observed)
+        import os
+        provenance={'producer':'EXISTING_JRA_RACE_DAY_AUTOPILOT',
+            'observed_at':observed.isoformat(),'source_discovery_sha256':sha(discovery),
+            'source_discovery':discovery,
+            'authority_manifest':authority['manifest_id'],'authority_sha256':sha(authority),
+            'workflow_run_id':os.environ.get('GITHUB_RUN_ID'),
+            'workflow_ref':os.environ.get('GITHUB_WORKFLOW_REF'),
+            'event_name':os.environ.get('GITHUB_EVENT_NAME'),'actor':os.environ.get('GITHUB_ACTOR'),
+            'checkout_sha':os.environ.get('GITHUB_SHA'),
+            'day_level_unattended_acceptance':'NOT_ESTABLISHED_BY_PLAN_CREATION_ALONE'}
+        plan,records=build_registrations(discovery,authority,observed_at=observed.isoformat(),
+                                         automatic_generation=provenance)
+        persist_registrations(root,plan,records)
+        schedule_path=plan_path.with_name(f'{race_date}.schedule.json')
+        if schedule_path.exists():
+            schedule=json.loads(schedule_path.read_text())
+            key=race_date+':ALL'
+            if (schedule.get(key) or {}).get('status')=='OFFICIAL_DAY_PLAN_UNAVAILABLE':
+                schedule.pop(key)
+                schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        return True
+    except Exception as exc:
+        # Use the existing fault/status lifecycle; no fallback all-races intake.
+        directory=root/'runtime/jra_race_day_plan';directory.mkdir(parents=True,exist_ok=True)
+        schedule_path=directory/f'{race_date}.schedule.json';state_path=directory/f'{race_date}.state.json'
+        schedule=json.loads(schedule_path.read_text()) if schedule_path.exists() else {}
+        stage='OFFICIAL_CALENDAR' if isinstance(cache.get('meetings'),Exception) else 'OFFICIAL_DAY_PLAN'
+        fault=official_navigation_failure(exc,race_date=race_date,stage=stage)
+        key=race_date+':ALL'
+        schedule[key]=_failure_record(schedule.get(key) or {},'OFFICIAL_DAY_PLAN_UNAVAILABLE',fault,now)
+        schedule_path.write_text(json.dumps(schedule,ensure_ascii=False,sort_keys=True,indent=1)+'\n')
+        if not state_path.exists():state_path.write_text('{}\n')
+        state=json.loads(state_path.read_text())
+        write_status(root,race_date,now,schedule,state)
+        return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", default="../..")
@@ -1184,7 +1515,11 @@ def main(argv=None):
         no_meetings=False
         calendar_denied=False
         try:
-            res = tick(root, a.date, now, default_all=a.all_races_default, cache=cache,
+            now=_dt.datetime.now(JST)  # Rebase time precedes official discovery, not its observation.
+            ready=ensure_day_plan(root,a.date,now,default_all=a.all_races_default,cache=cache,
+                                  meetings=resolve_meetings,resolve=resolve_day)
+            now=_dt.datetime.now(JST)  # Bootstrap discovery can consume the remaining dispatch window.
+            res = tick(root, a.date, now, default_all=a.all_races_default and ready, cache=cache,
                        publish=lambda:_commit(root,a.date),meetings=resolve_meetings,resolve=resolve_day)
             print(json.dumps({"profile": PROFILE, "date": a.date, "at": now.isoformat(), "races": res}, ensure_ascii=False), flush=True)
             no_meetings=[r.get('status') for r in res]==['NO_OFFICIAL_MEETINGS']
