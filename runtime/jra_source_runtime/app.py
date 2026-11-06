@@ -20,6 +20,7 @@ from jra_race_card_detail import fetch_and_enrich_race_card_detail,fetch_race_ca
 from jra_market_observation import enrich_with_market_observation, attach_aki_external_observations
 from jra_registered_common import enrich_with_registered_common
 from jra_same_day_results import enrich_with_same_day_results
+from jra_race_day_resolver import explicit_current_jump_context, JUMP_SCOPE_REASON
 
 APP_VERSION="KM-JRA-SOURCE-RUNTIME-v1.7-20260926"
 RECEIPT_SCHEMA="KM-JRA-SOURCE-SIGNED-RECEIPT-v1"
@@ -87,6 +88,11 @@ def verify_envelope(env:Dict[str,Any])->bool:
 
 def _validate_family(p:Dict[str,Any]):
     if str(p.get("family_id") or "JRA").upper()!="JRA": raise HTTPException(422,"JRA_FAMILY_REQUIRED")
+    _reject_explicit_jump_context(p)
+
+def _reject_explicit_jump_context(p:Dict[str,Any]):
+    if explicit_current_jump_context(p):
+        raise HTTPException(422,JUMP_SCOPE_REASON)
 
 def _canonical_manifest_input(p:Dict[str,Any])->Dict[str,Any]:
     return {
@@ -156,6 +162,7 @@ def source_acquire(p:Dict[str,Any]):
         artifact=enrich_with_race_context(artifact)
     except Exception as e:
         artifact.setdefault("warnings",[]).append("JRA_RACE_CONTEXT_UNAVAILABLE:"+type(e).__name__+":"+str(e))
+    _reject_explicit_jump_context(artifact)
 
     # Official JRA PDF is the mandatory independent Runner Universe source.
     # JRADB HTML is retained only as auxiliary evidence because the public page
@@ -186,6 +193,7 @@ def source_acquire(p:Dict[str,Any]):
         artifact.setdefault("warnings",[]).append("JRA_RACE_CARD_DETAIL_UNAVAILABLE:"+type(e).__name__+":"+str(e))
         if q.get("require_jra_race_card_detail"):
             errors.append("JRA_RACE_CARD_DETAIL_REQUIRED_FAILED:"+type(e).__name__+":"+str(e))
+    _reject_explicit_jump_context(artifact)
 
     # Runner Universe policy: official PDF is preferred once published. Before the
     # PDF is available, the server-rendered official JRADB detailed card is a
@@ -343,6 +351,7 @@ def source_acquire(p:Dict[str,Any]):
             artifact=bind_latest_environment(artifact,cutoff)
         except (ValueError,KeyError,TypeError,OSError,EOFError) as exc:
             errors.append('JRA_CURRENT_ENVIRONMENT_BINDING_FAILED:'+str(exc))
+    _reject_explicit_jump_context(artifact)
     artifact["source_freeze_at"]=utcnow()
     if cutoff:
         try:

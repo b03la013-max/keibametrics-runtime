@@ -64,22 +64,51 @@ class NoBetWorkflowTests(unittest.TestCase):
  def test_unverified_or_invalid_one_does_not_block_verified_sibling(self):
   code=self.code('settle')
   import jra_no_bet_postresult_learning as module
+  from test_jra_no_bet_postresult_learning import build_input
+  from types import SimpleNamespace
+  original_builder=module.build_no_bet_learning
+  bad='KM-JRA-TKY-20261010-R05';good='KM-JRA-TKY-20261010-R06'
   for failure in ('attestation','builder'):
    with self.subTest(failure=failure),tempfile.TemporaryDirectory() as td:
     root=Path(td);old=os.getcwd();os.chdir(td)
     try:
-     for name in ('bad','good'):
-      for base in ('runtime_out/capture','runtime/jra_no_bet_terminals'):
-       p=root/base/(name+'.json');p.parent.mkdir(parents=True,exist_ok=True)
-       p.write_text(json.dumps({'name':name,'official_result_detail':{},'race_no':5,'result_capture_timestamp':'now','source_snapshot':{'snapshot_sha256':'a'*64}}))
+     # Complete synthetic, source-bound fixtures retain the actual worker's
+     # identity/hash/universe/time/zero-exposure checks; no Live credit.
+     for rid,rn in ((bad,5),(good,6)):
+      terminal,result=build_input();eid=rid+'-LIVE-R1'
+      terminal.update(race_id=rid,source_execution_id=eid)
+      terminal['sha256']=module._hash({k:v for k,v in terminal.items() if k!='sha256'})
+      result['race_no']=rn
+      capture={'race_id':rid,'execution_id':eid,'official_result_detail':result,'race_no':rn,
+        'original_prediction_cutoff':'2026-10-10T12:18:00+09:00',
+        'result_capture_timestamp':'2026-10-10T13:00:00+09:00','source_snapshot':{'snapshot_sha256':'a'*64}}
+      for base,value in (('runtime_out/capture',capture),('runtime/jra_no_bet_terminals',terminal)):
+       p=root/base/(eid+'.json');p.parent.mkdir(parents=True,exist_ok=True)
+       p.write_text(json.dumps(value))
      def attest(cmd,**kwargs):
-      if failure=='attestation' and 'bad.json' in cmd[3]:raise subprocess.CalledProcessError(1,cmd)
+      if failure=='attestation' and Path(cmd[3]).name==bad+'-LIVE-R1.json':raise subprocess.CalledProcessError(1,cmd)
+      workflow=cmd[cmd.index('--signer-workflow')+1]
+      capture=workflow.endswith('km-jra-no-bet-postresult-learning.yml')
+      self.assertIn('--deny-self-hosted-runners',cmd)
+      self.assertEqual(cmd[cmd.index('--source-ref')+1],'refs/heads/main')
+      certificate={'issuer':'https://token.actions.githubusercontent.com',
+        'subjectAlternativeName':'https://github.com/'+workflow+'@refs/heads/main',
+        'sourceRepositoryDigest':('1' if capture else '2')*40,
+        'sourceRepositoryRef':'refs/heads/main','runnerEnvironment':'github-hosted'}
+      verified={'verificationResult':{'signature':{'certificate':certificate},
+        'verifiedTimestamps':[{'timestamp':'2026-10-10T13:00:01+09:00' if capture else '2026-10-10T12:11:00+09:00'}],
+        'statement':{'subject':[{'digest':{'sha256':hashlib.sha256(Path(cmd[3]).read_bytes()).hexdigest()}}]}}}
+      return SimpleNamespace(stdout=json.dumps([verified]))
      def build(t,*args,**kwargs):
-      if failure=='builder' and t['name']=='bad':raise ValueError('REAL_BAD_INPUT')
-      return {'investment':0,'payout':0,'pfs':None}
-     with patch.dict(os.environ,{'GITHUB_OUTPUT':str(root/'output'),'GITHUB_REPOSITORY':'b03la013-max/keibametrics-runtime'}),patch('subprocess.run',side_effect=attest),patch.object(module,'build_no_bet_learning',side_effect=build):
+      if failure=='builder' and t['race_id']==bad:raise ValueError('REAL_BAD_INPUT')
+      return original_builder(t,*args,**kwargs)
+     with patch.dict(os.environ,{'GITHUB_OUTPUT':str(root/'output'),'GITHUB_REPOSITORY':'b03la013-max/keibametrics-runtime','GITHUB_SHA':'1'*40,'RACE_ID_FILTER':''}),patch('subprocess.run',side_effect=attest),patch.object(module,'build_no_bet_learning',side_effect=build):
       exec(compile(code,'no_bet_workflow','exec'),{})
-     self.assertTrue((root/'runtime_out/learning/good.json').exists());self.assertFalse((root/'runtime_out/learning/bad.json').exists())
+     self.assertTrue((root/f'runtime_out/learning/{good}-LIVE-R1.json').exists());self.assertFalse((root/f'runtime_out/learning/{bad}-LIVE-R1.json').exists())
+     review=json.loads((root/f'runtime/reviews_auto/{good}-AUTO.json').read_text())
+     state=json.loads((root/f'runtime/learning_states/{good}.json').read_text())
+     self.assertIsNone(review['capital']['pfs']);self.assertFalse(review['signed_final_verified'])
+     self.assertFalse(state['production_change_authorized']);self.assertFalse((root/'runtime/final_artifacts').exists())
      self.assertIn('learned=true',(root/'output').read_text())
     finally:os.chdir(old)
  def test_current_two_no_bet_terminals_are_in_bounded_capture_selection(self):

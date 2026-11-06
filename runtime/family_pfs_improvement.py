@@ -238,7 +238,23 @@ def build_pfs_improvement_assessment(
         routes.append("KEEP")
         keep.append("CURRENT_PRODUCTION_BEHAVIOR_FOR_THIS_RACE")
 
-    if first.startswith("PREDICTION_ROLE_"):
+    if review.get("review_semantics")=="DECISION_AWARE_V3" and race_id.startswith("KM-JRA-"):
+        role_tracks={"PREDICTION_ROLE_W":"WINNER_ROLE_MIGRATION",
+                     "PREDICTION_ROLE_P2":"HEAD_LOCAL_P2_REAUDIT",
+                     "PREDICTION_ROLE_P3":"PAIR_CONDITIONED_THIRD_REAUDIT"}
+        failures=(review.get("failure_localization") or {}).get("independent_role_failures") or []
+        for failure in failures:
+            if failure in role_tracks:
+                routes.append("TEST_NEXT")
+                test_tracks.append(role_tracks[failure])
+        conversions=(review.get("failure_localization") or {}).get("independent_conversion_failures") or []
+        if "ORDERED_PAIR_CONVERSION" in conversions:
+            routes.append("TEST_NEXT");test_tracks.append("PAIR_RESIDUAL")
+        if "THIRD_SET_COVERAGE" in conversions:
+            routes.append("TEST_NEXT");test_tracks.append("PAIR_THIRD_TAIL_COVERAGE")
+        if "EXACT_ORIENTATION" in conversions:
+            routes.append("TEST_NEXT");test_tracks.append("PAIR_LOCAL_SELECTIVE_EXACT")
+    elif first.startswith("PREDICTION_ROLE_"):
         routes.append("TEST_NEXT")
         test_tracks.append("WINNER_ROLE_MIGRATION")
     elif first == "ORDERED_PAIR_CONVERSION":
@@ -350,3 +366,4 @@ def apply_to_review(
         candidate_forward_evidence=candidate_forward_evidence,
     )
     return out
+
