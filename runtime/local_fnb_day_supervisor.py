@@ -255,7 +255,7 @@ def _reference_readback(binding, race, root, cell, now, *, discovery_verified, r
             raise ValueError('REFERENCE_SAVED_DISCOVERY_READBACK_NOT_VERIFIED')
         if result is None:
             result = binding['inspect_reference'](race=race, private_root=root, now=now)
-        if result.get('status') in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL'):
+        if result.get('status') in (None, 'NOT_OBSERVED', 'MISSING_ORIGINAL', 'MISSING_REFERENCE_ORIGINAL'):
             return
         if result.get('status') != 'VERIFIED_REFERENCE_BODY_READY_TO_RENDER':
             raise ValueError('REFERENCE_SAVED_BODY_NOT_READY')
@@ -277,6 +277,7 @@ def _reference_readback(binding, race, root, cell, now, *, discovery_verified, r
             source_sha256=manifest['source_sha256'], source_fetched_at=manifest['source_fetched_at'],
             forecast_frozen_at=manifest['forecast_frozen_at'], prepared_at=manifest['prepared_at'],
             observation_raw_sha256=manifest['observation_raw_sha256'],
+            active_universe_sha256=manifest.get('active_universe_sha256'),
             readback_at=now.isoformat(), ready_to_render=True, displayed=False,
             delivery_send_confirmed=False, recipient_delivery_confirmed=False,
             recipient_ack='UNKNOWN', prestart_delivery_confirmed=False,
@@ -344,7 +345,8 @@ def _execute_reference(plan, race, binding, activation, root, state, cell, clock
         if clock() >= cutoff:
             raise ValueError('CUTOFF_EXPIRED_DURING_PREFLIGHT')
         cell['reference_claim'] = {'race_sha256':sha(race), 'claimed_at':clock().isoformat(),
-            'actor_id':activation['actor_id'], 'approval_ref':activation['approval_ref']}
+            'actor_id':activation['actor_id'], 'approval_ref':activation['approval_ref'],
+            'delivery_target':delivery_target(activation)}
         cell['reference_dispatch_count'] = cell.get('reference_dispatch_count', 0) + 1
         cell['reference_execution_status'] = 'REFERENCE_ATTEMPT_DURABLE_BEFORE_CALLBACK'
         save()
@@ -438,6 +440,8 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             prior.pop('reference', None)
             if key not in observed_numbers:
                 prior.pop('completion', None); prior.pop('delivery', None); prior.pop('result_learning', None)
+                prior.pop('reference_result_learning', None)
+                prior.pop('reference_delivery', None)
                 prior['status'] = 'NOT_IN_CURRENT_DISCOVERY_RECONCILIATION_REQUIRED'
             prior['original_verified_this_tick'] = False
         for race in rows:
@@ -458,6 +462,31 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 cell['reference'] = {'status':'REFERENCE_READBACK_HOLD_NOT_NO_BET',
                     'code':safe_code(str(error)), 'ready_to_render':False,
                     'recipient_ack':'UNKNOWN', 'natural_delivery_verified':False}
+            cell.pop('reference_result_learning', None)
+            cell.pop('reference_delivery', None)
+            reference = cell.get('reference', {})
+            if reference.get('private_readback_verified') is True:
+                _reference_delivery(plan, race, binding, activation, root, cell, clock, save,
+                    execute=execute)
+            if (reference.get('private_readback_verified') is True
+                    and callable(binding.get('inspect_reference_result_learning'))
+                    and clock() >= stamp(race['scheduled_post_at'])):
+                try:
+                    # REFERENCE originals use the same durable settlement seam,
+                    # but never populate the Formal completion or its stages.
+                    cutoff = stamp(race['prediction_cutoff'])
+                    if not stamp(reference['forecast_frozen_at']) <= stamp(reference['prepared_at']) < cutoff:
+                        raise ValueError('REFERENCE_ORIGINAL_NOT_FROZEN_BEFORE_CUTOFF')
+                    permitted = False
+                    if execute and activation and activation.get('reference_only') is True:
+                        activated(plan, race, binding, activation)
+                        permitted = (stamp(activation['effective_from']) <= clock()
+                                     < stamp(activation['effective_until']))
+                    _post_result(binding, activation, root, race, cell, clock, save,
+                        allow_mutation=permitted, reference=reference)
+                    cell.pop('reference_result_hold', None)
+                except Exception as error:
+                    cell['reference_result_hold'] = safe_code(str(error))
             if cell.get('claim'):
                 # Never resend an ambiguous dispatch, even after a process restart.
                 cell.pop('completion', None)
@@ -529,6 +558,7 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
             if activation and activation.get('reference_only') is True:
                 _execute_reference(plan, race, binding, activation, root, state, cell, clock, save,
                     discovery_verified=reference_discovery_verified)
+                _reference_delivery(plan, race, binding, activation, root, cell, clock, save, execute=True)
                 save(); continue
             try:
                 if os.environ.get('GITHUB_ACTIONS') == 'true':
@@ -598,10 +628,80 @@ def tick(plan, private_root, *, binding=None, activation=None, execute=False, cl
                 and c.get('reference',{}).get('private_readback_verified') is True for c in state['races'].values()),
             'reference_ready_to_render':sum(c.get('observed_in_latest_discovery') is True
                 and c.get('reference',{}).get('ready_to_render') is True for c in state['races'].values()),
-            'reference_displayed':0, 'reference_recipient_deliveries':0,
-            'reference_ack_verified':0, 'reference_autonomous_completed':0,
+            'reference_displayed':0,
+            'reference_sender_accepted':sum(bool(c.get('reference_delivery')) for c in state['races'].values()),
+            'reference_recipient_deliveries':sum(c.get('reference_delivery', {}).get('prestart_arrival') is True
+                                               for c in state['races'].values()),
+            'reference_ack_verified':sum(c.get('reference_delivery', {}).get('recipient_ack_verified') is True
+                                         for c in state['races'].values()),
+            'reference_autonomous_completed':0,
+            'reference_verified_paper_settlement_races':sum(
+                bool(c.get('reference_result_learning')) for c in state['races'].values()
+                if c.get('observed_in_latest_discovery') is True),
             'reference_dispatched':sum(c.get('reference_dispatch_count', 0) for c in state['races'].values())}
         save(); return state
+
+
+def _reference_delivery(plan, race, binding, activation, root, cell, clock, save, *, execute):
+    """Send only the qualified, independently read original via the pinned Sender."""
+    reference = cell.get('reference', {})
+    claim = cell.get('reference_claim', {})
+    expected = claim.get('delivery_target')
+    inspect = binding.get('inspect_reference_delivery') if binding else None
+    if (cell.get('reference_execution_status') != 'REFERENCE_CALLBACK_AND_BODY_READBACK_VERIFIED'
+            or reference.get('private_readback_verified') is not True
+            or not DIGEST.fullmatch(str(reference.get('active_universe_sha256')))
+            or not expected or claim.get('race_sha256') != sha(race) or not callable(inspect)):
+        return
+    try:
+        args = {'race':race, 'completion':reference, 'private_root':root}
+        receipt = inspect(**args, now=clock())
+        cutoff = stamp(race['prediction_cutoff'])
+        delivery_claim = cell.get('reference_delivery_claim')
+        if receipt.get('sender_accepted_verified') is True:
+            data = json.loads(original(root, receipt['original']))
+            sent = stamp(data['sent_at'])
+            received = stamp(data['received_at']) if data.get('received_at') else None
+            if (not delivery_claim or data.get('idempotency_key') != delivery_claim['idempotency_key']
+                    or any(data.get(k) != v for k,v in expected.items())
+                    or data.get('race_id') != race['race_id'] or data.get('revision') != reference['revision']
+                    or data.get('body_sha256') != reference['body_sha256']
+                    or data.get('sender_accepted_verified') is not True
+                    or not isinstance(data.get('run_id'), str) or not data['run_id'].strip()
+                    or not isinstance(data.get('chat_ref'), str) or not data['chat_ref'].strip()
+                    or not stamp(reference['prepared_at']) <= stamp(delivery_claim['claimed_at']) <= sent < cutoff
+                    or sent > clock()
+                    or (received is not None and not sent <= received <= clock())
+                    or (data.get('recipient_ack_verified') is True and received is None)):
+                raise ValueError('REFERENCE_DELIVERY_RECEIPT_IDENTITY_OR_CLOCK_MISMATCH')
+            cell['reference_delivery'] = {'original':receipt['original'], 'sent_at':data['sent_at'],
+                'run_id':data['run_id'], 'chat_ref':data['chat_ref'],
+                'received_at':data.get('received_at'), 'prestart_arrival':received is not None and received < cutoff,
+                'recipient_ack_verified':data.get('recipient_ack_verified') is True}
+            cell.pop('reference_delivery_hold', None)
+            return
+        authorize = binding.get('authorize_reference_delivery')
+        send = binding.get('deliver_reference')
+        if (not execute or delivery_claim or not activation or activation.get('reference_only') is not True
+                or activation.get('approval_ref') != claim.get('approval_ref')
+                or activation.get('delivery_enabled') is not True or not activation.get('delivery_approval_ref')
+                or delivery_target(activation) != expected or not callable(authorize) or not callable(send)
+                or clock() >= cutoff or reference.get('observation_within_existing_600s') is not True):
+            return
+        activated(plan, race, binding, activation)
+        if authorize(race=race, completion=reference, activation=activation, now=clock()) is not True:
+            raise ValueError('REFERENCE_RECIPIENT_DELIVERY_NOT_AUTHORIZED')
+        key = race['race_id'] + ':' + reference['body_sha256']
+        end = min(cutoff, stamp(activation['effective_until']))
+        if not stamp(activation['effective_from']) <= clock() < end:
+            raise ValueError('REFERENCE_DELIVERY_OUTSIDE_APPROVED_WINDOW')
+        cell['reference_delivery_claim'] = {'idempotency_key':key,'claimed_at':clock().isoformat()}
+        save()
+        if clock() >= end:
+            raise ValueError('REFERENCE_DELIVERY_EXPIRED_AFTER_DURABLE_CLAIM')
+        send(**args, idempotency_key=key, now=clock())
+    except Exception as error:
+        cell['reference_delivery_hold'] = safe_code(str(error))
 
 
 def _deliver(binding, activation, root, race, cell, clock, save, *, allow_mutation=False):
@@ -633,31 +733,60 @@ def _deliver(binding, activation, root, race, cell, clock, save, *, allow_mutati
     binding['deliver'](race=race, completion=completion, idempotency_key=key, private_root=root, now=clock())
 
 
-def _post_result(binding, activation, root, race, cell, clock, save, *, allow_mutation=False):
+def _post_result(binding, activation, root, race, cell, clock, save, *, allow_mutation=False, reference=None):
     """Only a separately approved result Actor may continue a real frozen prediction."""
-    if not binding or clock() < stamp(race['scheduled_post_at']) or not callable(binding.get('inspect_result_learning')):
+    prefix = 'reference_' if reference is not None else ''
+    inspect = binding.get('inspect_' + prefix + 'result_learning') if binding else None
+    if not callable(inspect) or clock() < stamp(race['scheduled_post_at']):
         return
-    cell.pop('result_learning', None)
-    result = binding['inspect_result_learning'](race=race, completion=cell['completion'], private_root=root, now=clock())
-    if result.get('status') == 'VERIFIED_RESULT_SETTLEMENT_LEARNING':
+    output_key, claim_key = prefix + 'result_learning', prefix + 'post_result_claim'
+    cell.pop(output_key, None)
+    completion = reference if reference is not None else cell['completion']
+    source_sha = completion['source_sha256' if reference is not None else 'source_snapshot_sha256']
+    body_sha = completion['body_original']['sha256']
+    result = inspect(race=race, completion=completion, private_root=root, now=clock())
+    success = ('VERIFIED_REFERENCE_PAPER_SETTLEMENT_REFLECTION' if reference is not None
+               else 'VERIFIED_RESULT_SETTLEMENT_LEARNING')
+    if result.get('status') == success:
         if (result.get('race_id') != race['race_id']
-                or result.get('prediction_source_sha256') != cell['completion']['source_snapshot_sha256']
-                or result.get('prediction_body_sha256') != cell['completion']['body_original']['sha256']
+                or result.get('prediction_source_sha256') != source_sha
+                or result.get('prediction_body_sha256') != body_sha
                 or result.get('official_result_admission_verified') is not True):
             raise ValueError('RESULT_FROZEN_PREDICTION_JOIN_UNVERIFIED')
+        if reference is not None:
+            claim = cell.get(claim_key)
+            if (result.get('prediction_revision') != completion['revision']
+                    or (claim is not None and result.get('idempotency_key') != claim['idempotency_key'])
+                    or result.get('formal_PFS') is not None
+                    or result.get('actual_purchase') is not False
+                    or result.get('registered_OOS_increment') != 0
+                    or result.get('registered_Learning_increment') != 0):
+                raise ValueError('REFERENCE_RESULT_SCOPE_OR_REVISION_MISMATCH')
+            original(root, result['settlement_original'])
         original(root, result['result_original']); original(root, result['learning_original'])
-        cell['result_learning'] = result
-        cell['stages'].update(RESULT={'status':'VERIFIED'}, LEARNING={'status':'VERIFIED'})
+        cell[output_key] = result
+        if reference is None:
+            cell['stages'].update(RESULT={'status':'VERIFIED'}, LEARNING={'status':'VERIFIED'})
         return
-    if (not allow_mutation or cell.get('post_result_claim') or not activation or activation.get('result_learning_enabled') is not True
-            or not activation.get('post_result_approval_ref')
-            or not callable(binding.get('authorize_post_result')) or not callable(binding.get('execute_result_learning'))):
+    authorize = binding.get('authorize_' + prefix + 'post_result')
+    execute = binding.get('execute_' + prefix + 'result_learning')
+    if (not allow_mutation or cell.get(claim_key) or not activation
+            or activation.get('result_learning_enabled') is not True
+            or not activation.get('post_result_approval_ref') or not callable(authorize) or not callable(execute)):
         return
-    if binding['authorize_post_result'](race=race, activation=activation, completion=cell['completion'], now=clock()) is not True:
+    if reference is not None and result.get('status') != 'OFFICIAL_RESULT_READY_FOR_PAPER_SETTLEMENT':
+        return
+    if authorize(race=race, activation=activation, completion=completion, now=clock()) is not True:
         raise ValueError('POST_RESULT_ACTOR_NOT_AUTHORIZED')
-    key = race['race_id'] + ':' + cell['completion']['source_snapshot_sha256']
-    cell['post_result_claim'] = {'idempotency_key':key,'claimed_at':clock().isoformat()}; save()
-    binding['execute_result_learning'](race=race, completion=cell['completion'], idempotency_key=key, private_root=root, now=clock())
+    key = race['race_id'] + ':' + source_sha
+    if reference is not None:
+        key += ':' + body_sha
+        if not stamp(activation['effective_from']) <= clock() < stamp(activation['effective_until']):
+            raise ValueError('REFERENCE_RESULT_OUTSIDE_ACTIVATION_PERIOD')
+    cell[claim_key] = {'idempotency_key':key,'claimed_at':clock().isoformat()}; save()
+    if reference is not None and clock() >= stamp(activation['effective_until']):
+        raise ValueError('REFERENCE_RESULT_EXPIRED_AFTER_DURABLE_CLAIM')
+    execute(race=race, completion=completion, idempotency_key=key, private_root=root, now=clock())
 
 
 def discover_available(binding, *, day, private_root, clock, failed_routes=None):

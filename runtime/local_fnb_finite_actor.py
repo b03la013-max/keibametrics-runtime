@@ -1,4 +1,4 @@
-"""Finite private Nov4-6 FNB Actor, using the existing qualified day supervisor.
+"""Finite private FNB Actor, using the existing qualified day supervisor.
 
 This is an executable runner, not a Provider, licence, model, Delivery transport
 or deployment grant. Pinned private day activations and real day bindings remain
@@ -56,10 +56,17 @@ def campaign_lock(root):
 
 def validate(manifest, *, binding, activations):
     dates = manifest.get('race_dates')
+    # Historical campaigns keep their existing checkpoint. A new campaign
+    # is pinned to one explicitly approved day and cannot reuse that lease.
+    if not isinstance(dates, list) or not dates or any(type(value) is not str for value in dates):
+        raise ValueError('FINITE_ACTOR_EXACT_DATED_SCOPE_AND_CODE_REQUIRED')
+    historical = all(value in DATES for value in dates)
+    new_day = (len(dates) == 1 and dates[0] > DATES[-1]
+               and date.fromisoformat(dates[0]).isoformat() == dates[0]
+               and (activations.get(dates[0]) or {}).get('reference_only') is True)
     if (manifest.get('profile') != PROFILE or manifest.get('venue_id') != 'FNB'
             or manifest.get('classification') != day.CLASSIFICATION
-            or not isinstance(dates, list) or not dates
-            or any(value not in DATES for value in dates)
+            or not (historical or new_day)
             or dates != sorted(set(dates))
             or manifest.get('actor_code_sha256') != hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
             or not manifest.get('approval_ref')):
@@ -91,6 +98,10 @@ def validate(manifest, *, binding, activations):
                 or type(activation.get('approved_worker_seconds')) is not int
                 or activation['approved_worker_seconds'] < seconds):
             raise ValueError('FINITE_ACTOR_EXISTING_DAY_ACTIVATION_MISMATCH')
+        if new_day and (not manifest.get('actor_id')
+                        or manifest['actor_id'] != activation.get('actor_id')
+                        or manifest['approval_ref'] != activation.get('approval_ref')):
+            raise ValueError('FINITE_ACTOR_NEW_DAY_APPROVAL_OR_ACTOR_MISMATCH')
         if activation.get('reference_only') is True:
             if not activation.get('effective_from') or not activation.get('effective_until'):
                 raise ValueError('FINITE_ACTOR_REFERENCE_ACTIVATION_PERIOD_REQUIRED')
@@ -136,7 +147,8 @@ def run(manifest, private_root, *, binding, activations, clock=lambda:datetime.n
     root = day._private_root(private_root)
     leases = validate(manifest, binding=binding, activations=activations)
     digest = day.sha(manifest)
-    path = root / STATE_NAME
+    first_day = manifest['race_dates'][0]
+    path = root / (STATE_NAME if first_day in DATES else f'FNB_{first_day}_FINITE_ACTOR_CHECKPOINT.json')
     with campaign_lock(root):
         if path.is_symlink():
             raise ValueError('FINITE_ACTOR_CHECKPOINT_SYMLINK_FORBIDDEN')

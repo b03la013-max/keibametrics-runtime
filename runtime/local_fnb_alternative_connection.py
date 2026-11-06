@@ -500,5 +500,11 @@ def day_callbacks(producers, *, discover_day,verify_discovery,authorize_race,clo
         return json.loads(path.read_bytes())['delivery']
     # Delivery stays in run()/deliver_verified(), where the stronger new
     # Revision/Source/Ticket ACK checks reuse the existing supervisor primitive.
-    return {'discover_day':discover_day,'verify_discovery':verify_discovery,'authorize_race':authorize_race,
+    callbacks = {'discover_day':discover_day,'verify_discovery':verify_discovery,'authorize_race':authorize_race,
         'inspect_race':inspect_race,'execute_race':execute_race,'inspect_delivery':inspect_delivery}
+    for name in ('inspect_reference_result_learning', 'authorize_reference_post_result',
+                 'execute_reference_result_learning', 'inspect_reference_delivery',
+                 'authorize_reference_delivery', 'deliver_reference'):
+        if callable(producers.get(name)):
+            callbacks[name] = producers[name]
+    return callbacks

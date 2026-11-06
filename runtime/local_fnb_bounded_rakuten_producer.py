@@ -4,6 +4,7 @@ Exact observed card URLs only, >=61 seconds per origin, no redirect/denial
 retry, no app/prediction/detail or NAR fallback. Source credentials and signed
 qualification, when actually available, are separate pinned private originals.
 """
+from copy import deepcopy
 from pathlib import Path
 from datetime import datetime,timezone,timedelta
 import fcntl,json,os,re
@@ -21,15 +22,29 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class BoundedCardProducer:
-    def __init__(self, *, root,observed_cards,robots_path,actor_id):
+    def __init__(self, *, root,observed_cards,robots_path,actor_id,reference_scope=None):
         if any(os.environ.get(k,'').lower() not in ('','false','0') for k in ('CI','GITHUB_ACTIONS')):
             raise ProducerHold('SOURCE','PRIVATE_PROVIDER_ACQUISITION_PUBLIC_CI_FORBIDDEN')
         self.root=common._private_root(root);self.cards=observed_cards;self.actor_id=actor_id
         self.robots_path=Path(robots_path)
+        self.reference_scope=deepcopy(reference_scope)
     def _capture(self, *, intent, now, expected_url=None):
         require=lambda ok,code:None if ok else (_ for _ in ()).throw(ProducerHold('SOURCE',code))
-        require(intent.get('venue_id')=='FNB' and intent.get('race_date') in ('2026-11-04','2026-11-05','2026-11-06'),
-            'BOUNDED_CARD_DATED_SCOPE_NOT_AUTHORIZED')
+        day=intent.get('race_date')
+        require(intent.get('venue_id')=='FNB', 'BOUNDED_CARD_DATED_SCOPE_NOT_AUTHORIZED')
+        if day not in ('2026-11-04','2026-11-05','2026-11-06'):
+            # Only the qualified fetch entry can leave the old campaign.
+            # Preserve the same origin state and the legacy direct entry's scope.
+            scope=self.reference_scope or {}
+            require(expected_url is not None and day==scope.get('race_date')
+                and scope.get('actor_id')==self.actor_id
+                and now.astimezone(timezone(timedelta(hours=9))).date().isoformat()==day
+                and common._stamp(scope['effective_from'])<=common._stamp(now)
+                    <common._stamp(scope['effective_until']),
+                'BOUNDED_CARD_DATED_SCOPE_NOT_AUTHORIZED')
+            common._pinned(scope['permission_original_path'],scope['permission_sha256'])
+            require((self.root/'LAST_ATTEMPT.json').is_file(),
+                'REFERENCE_EXISTING_RAKUTEN_ORIGIN_STATE_REQUIRED')
         key=intent['race_date']+'-R'+str(intent['race_no']).zfill(2);spec=self.cards.get(key) or {}
         url=spec.get('url','');p=urlsplit(url);m=re.fullmatch(r'/race_card/list/RACEID/(\d{18})',p.path)
         require(expected_url is None or expected_url==url,'BOUNDED_EXACT_OBSERVED_CARD_URL_REQUIRED')
