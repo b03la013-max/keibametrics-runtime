@@ -148,7 +148,7 @@ jobs:
           print("JRA_REAL_KYO_R09_EVIDENCE_REPAIR="+json.dumps(result,ensure_ascii=False))
           PY
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         with:
           name: jra-tokyo-r05-real-source-production-closure
           path: |
