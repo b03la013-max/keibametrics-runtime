@@ -253,13 +253,13 @@ def _parse_recent(cell:str)->Dict[str,Any]|None:
     m=re.search(r"(\d+)\s*着",s); out["finish"]=int(m.group(1)) if m else None
     m=re.search(r"(\d+)\s*頭",s); out["field_size"]=int(m.group(1)) if m else None
     m=re.search(r"(\d+)\s*番人気",s); out["popularity_rank"]=int(m.group(1)) if m else None
-    m=re.search(r"(\d{2}(?:\.\d+)?)\s*kg\s+(\d{3,4})\s*(芝|ダ|障)",s)
+    m=re.search(r"(\d{2}(?:\.\d+)?)\s*kg\s+(\d{3,4})\s*(芝ダ|芝|ダ|障)",s)
     if m:
         out["assigned_weight"]=float(m.group(1)); out["distance_m"]=int(m.group(2)); out["surface"]=m.group(3)
-    mt=re.search(r"(?:芝|ダ|障)\s+(\d+:\d{2}\.\d|\d{2,3}\.\d)",s)
+    mt=re.search(r"(?:芝ダ|芝|ダ|障)\s+(\d+:\d{2}\.\d|\d{2,3}\.\d)",s)
     if mt: out["time"]=mt.group(1)
     # Open/handicap races print the official rating between going and weight.
-    mg=re.search(r"\s(良|稍重|重|不良)\s+(?:(\d{2,3})\s+)?(\d{3})\s*kg",s)
+    mg=re.search(r"\s((?:良|稍重|重|不良)(?:/(?:良|稍重|重|不良))?)\s+(?:(\d{2,3})\s+)?(\d{3})\s*kg",s)
     if mg:
         out["going"]=mg.group(1); out["body_weight"]=int(mg.group(3))
         if mg.group(2): out["rating"]=int(mg.group(2))

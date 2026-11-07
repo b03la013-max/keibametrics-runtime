@@ -7,6 +7,7 @@ unmatched identities are not treated as neutral observations.
 from __future__ import annotations
 
 from jra_source_runtime.jra_observed_context import resolve_observed_context
+from jra_source_runtime.jra_race_day_resolver import official_jump_history
 
 import json
 import math
@@ -164,8 +165,10 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
     # category. Each runner needs 2 earlier ratings and the active race needs
     # at least 4 independently rated runners; no cross-date leakage or
     # fallback zero ratings. Keep this normalizer under the registered v1 rule.
-    histories = {rid: _observed_runs(history.get(rid) or {}, detail.get(rid) or {}, race_day)
-                 for rid in official}
+    observed_histories = {rid: _observed_runs(history.get(rid) or {}, detail.get(rid) or {}, race_day)
+                          for rid in official}
+    histories = {rid: [row for row in rows if not official_jump_history(row)]
+                 for rid, rows in observed_histories.items()}
     speed_means = {}
     for rid, rows in histories.items():
         scores = []
@@ -262,8 +265,9 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
         # Consecutive-race timing is a directly observed pre-race fact.
         # Use the existing registered rotation rule and already existing
         # candidate timing bands; leave debutants and malformed dates missing.
-        if runs:
-            latest = _date(runs[0]["date"])
+        observed_runs = observed_histories[rid]
+        if observed_runs:
+            latest = _date(observed_runs[0]["date"])
             days = (race_day - latest).days if latest else None
             if days is not None and days > 0:
                 if 14 <= days <= 42:
@@ -295,7 +299,7 @@ def official_production_observations(source: dict, registry: dict) -> dict[str, 
         if type(current) is int and 300 <= current <= 700:
             historical = [
                 (int(x["body_weight"]), str(x["date"]))
-                for x in runs[:6] if type(x.get("body_weight")) is int
+                for x in observed_runs[:6] if type(x.get("body_weight")) is int
                 and 300 <= x["body_weight"] <= 700
             ]
             if len(historical) >= 2:

@@ -39,6 +39,7 @@ def fingerprint(root=ROOT):
            "runtime/jra_source_to_evidence_features.py","runtime/jra_source_runtime/jra_observed_context.py",
            "runtime/jra_source_runtime/jra_current_environment.py",
            "runtime/jra_source_runtime/jra_race_card_detail.py",
+           "runtime/jra_source_runtime/jra_race_day_resolver.py",
            "runtime/jra_evidence_to_base_production.py","runtime/jra_index_provenance_builder.py",
            "runtime/jra_evidence_feature_normalizer_production.py",
            "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json")

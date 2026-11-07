@@ -25,6 +25,7 @@ from statistics import mean, pstdev
 from typing import Any
 
 from jra_evidence_feature_normalizer_production import comment_band, percentile_band, rate_band
+from jra_source_runtime.jra_race_day_resolver import official_jump_history
 
 PROFILE = "KM-JRA-OWNER-AUTHORIZED-OBSERVED-FEATURE-RULES-v1.1-20261010"
 RULE_AUTHORITY = "OWNER-AUTHORIZED-NEW-RULE-20261010 / UNVALIDATED"
@@ -238,7 +239,8 @@ def _valid_run(x, day):
         return None
     if d is None or d >= day or field < 2 or not 1 <= fin <= field:
         return None
-    return {**x, "finish": fin, "field_size": field, "date": str(d), "surface": _surface(x.get("surface"))}
+    surface = "障" if official_jump_history(x) else _surface(x.get("surface"))
+    return {**x, "finish": fin, "field_size": field, "date": str(d), "surface": surface}
 
 
 # ------------------------------------------------------------ main entry
@@ -339,7 +341,8 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
     # ---- field-level form ranks for market mismatch
     def form_score(rid):
         runs = [z for z in (_valid_run(x, day) for x in ((history.get(rid) or {}).get("runs")
-                                                         or (detail.get(rid) or {}).get("recent_runs") or [])) if z]
+                                                         or (detail.get(rid) or {}).get("recent_runs") or []))
+                if z and z["surface"] != "障"]
         runs.sort(key=lambda r: r["date"], reverse=True)
         return mean(_nf(r) for r in runs[:4]) if runs else None
     form = {rid: form_score(rid) for rid in active}
@@ -386,9 +389,10 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                 z["jockey"] = m.group(1).strip() if m else None
             recent.append(z)
         recent.sort(key=lambda r: r["date"], reverse=True)
-        recent = recent[:4]
-        runs = hist_runs or list(recent)
-        runs.sort(key=lambda r: r["date"], reverse=True)
+        observed_runs = hist_runs or recent[:4]
+        observed_runs.sort(key=lambda r: r["date"], reverse=True)
+        recent = [r for r in recent[:4] if r["surface"] != "障"]
+        runs = [r for r in observed_runs if r["surface"] != "障"]
         # Race-card recent runs carry the official class text that the horse
         # history table omits for named races; bind it by run date.
         class_by_date = {r["date"]: r.get("race_class_text") for r in recent if r.get("race_class_text")}
@@ -398,10 +402,12 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         try:
             career = int(((d.get("career_record") or {}).get("starts")))
         except (TypeError, ValueError):
-            career = len(runs)
+            career = len(observed_runs)
         k = 1 if career <= 3 else 2
         rref = [f"JRA_OFFICIAL_RACE_CARD_RECENT:{rid}:{r['date']}" for r in recent]
         href = [f"JRA_OFFICIAL_HISTORY:{rid}:{r['date']}:{r['finish']}:{r['field_size']}" for r in runs[:8]]
+        observation_refs = [f"JRA_OFFICIAL_HISTORY:{rid}:{r['date']}:{r['finish']}:{r['field_size']}"
+                            for r in observed_runs[:8]]
 
         # -- margin / speed (race-card recent runs)
         behind = [0.0 if r["finish"] == 1 else max(0.0, float(r["margin"]))
@@ -488,24 +494,30 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                 f"normalized_finish_last{min(4, len(runs))}={q:.3f}", min(4, len(runs)))
 
         # -- rotation / layoff / continuity
-        if runs:
-            gap = (day - date.fromisoformat(runs[0]["date"])).days
+        if observed_runs:
+            # Actual starts and scale readings remain facts across disciplines.
+            # Compare performance only among the flat starts below.
+            gap = (day - date.fromisoformat(observed_runs[0]["date"])).days
             put("rotation_fit", "CAUTION" if gap < 7 else "NEUTRAL" if gap <= 13 else "POSITIVE" if gap <= 70
                 else "MIXED" if gap <= 120 else "CAUTION" if gap <= 240 else "WEAK",
-                href[:1], f"days_since_last_run={gap}", 1)
+                observation_refs[:1], f"days_since_last_run={gap}", 1)
             if gap <= 70:
-                put("layoff_readiness", "POSITIVE", href[:1], f"days_since_last_run={gap}; in_racing_rhythm", 1)
+                put("layoff_readiness", "POSITIVE", observation_refs[:1], f"days_since_last_run={gap}; in_racing_rhythm", 1)
             else:
-                returns = [runs[i] for i in range(len(runs) - 1)
-                           if (date.fromisoformat(runs[i]["date"]) - date.fromisoformat(runs[i + 1]["date"])).days > 70]
+                returns = [observed_runs[i] for i in range(len(observed_runs) - 1)
+                           if observed_runs[i]["surface"] != "障"
+                           and (date.fromisoformat(observed_runs[i]["date"])
+                                - date.fromisoformat(observed_runs[i + 1]["date"])).days > 70]
                 if returns:
                     put("layoff_readiness", percentile_band(mean(_nf(r) for r in returns)), href,
                         f"days_since_last_run={gap}; prior_layoff_return_normalized_finish={mean(_nf(r) for r in returns):.3f}", len(returns))
                 else:
-                    put("layoff_readiness", "CAUTION", href[:1], f"days_since_last_run={gap}; first_long_layoff_return_untested", 1)
-            n180 = sum(1 for r in runs if (day - date.fromisoformat(r["date"])).days <= 180)
+                    put("layoff_readiness", "CAUTION", observation_refs[:1],
+                        f"days_since_last_run={gap}; first_long_layoff_return_untested", 1)
+            n180 = sum(1 for r in observed_runs if (day - date.fromisoformat(r["date"])).days <= 180)
             put("preparation_continuity", {0: "CAUTION", 1: "MIXED", 2: "NEUTRAL", 3: "POSITIVE"}.get(n180, "STRONG"),
-                href, f"official_runs_in_180_days={n180}", n180)
+                observation_refs, f"official_runs_in_180_days={n180}", n180)
+        if runs:
             last = runs[0]
             same_cond = last.get("surface") == surface and distance is not None and last.get("distance_m") is not None \
                 and abs(int(last["distance_m"]) - int(distance)) <= 200
@@ -517,15 +529,15 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                 f"today_surface={surface} distance={distance}", 1)
 
         # -- bodyweight
-        bws = [(int(r["body_weight"]), r) for r in runs if isinstance(r.get("body_weight"), int)]
+        bws = [(int(r["body_weight"]), r) for r in observed_runs if isinstance(r.get("body_weight"), int)]
         cur_bw = d.get("current_body_weight")
         # Same low-career convention as k: 2 official weights suffice for <=3 starts.
         if len(bws) >= (2 if career <= 3 else 3):
             spread = max(b for b, _ in bws[:6]) - min(b for b, _ in bws[:6])
             put("bodyweight_history_quality", _thr(-spread, ((-10, "STRONG"), (-20, "POSITIVE"), (-30, "NEUTRAL")), "CAUTION"),
-                href, f"bodyweight_spread_last6={spread}kg", len(bws[:6]))
+                observation_refs, f"bodyweight_spread_last6={spread}kg", len(bws[:6]))
         if isinstance(cur_bw, int) and len(bws) >= 2:
-            good = [b for b, r in bws if _nf(r) >= 0.5]
+            good = [b for b, r in bws if r["surface"] != "障" and _nf(r) >= 0.5]
             if good:
                 lo, hi = min(good), max(good)
                 cat = "STRONG" if lo - 4 <= cur_bw <= hi + 4 else "NEUTRAL" if lo - 10 <= cur_bw <= hi + 10 else "CAUTION"
@@ -534,10 +546,10 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
                 med = sorted(b for b, _ in bws)[len(bws) // 2]
                 cat = "NEUTRAL" if abs(cur_bw - med) <= 6 else "MIXED"
                 fact = f"current={cur_bw}kg; median_past={med}kg; no_top_half_finish"
-            put("physical_readiness", cat, href, fact, len(bws))
+            put("physical_readiness", cat, observation_refs, fact, len(bws))
             lo, hi = min(b for b, _ in bws), max(b for b, _ in bws)
             put("bodyweight_range_fit", "POSITIVE" if lo <= cur_bw <= hi else "NEUTRAL" if lo - 6 <= cur_bw <= hi + 6 else "CAUTION",
-                href, f"current={cur_bw}kg; career_range={lo}-{hi}kg", len(bws))
+                observation_refs, f"current={cur_bw}kg; career_range={lo}-{hi}kg", len(bws))
         if weights and len(set(weights)) > 1:
             try:
                 dw = float(official[rid].get("assigned_weight")) - mean(weights)
