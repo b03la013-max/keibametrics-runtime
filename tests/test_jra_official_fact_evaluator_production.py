@@ -123,6 +123,20 @@ class TestOfficialProductionEvaluator(unittest.TestCase):
         src["source_freeze_at"] = "2026-10-10T12:35:00+09:00"
         self.assertEqual(official_production_observations(src, self.registry), {})
 
+    def test_jump_results_are_excluded_from_flat_form_but_preserve_scale_observations(self):
+        src = source()
+        runs = src["jra_official_horse_history"]["runners"]["1"]["runs"]
+        runs[0].update(race_name="東京ジャンプS J・GⅢ", surface="芝", body_weight=468)
+        runs[1].update(race_name="未勝利", body_weight=470)
+        src["jra_official_race_card_detail"]["runners"][0]["current_body_weight"] = 469
+        features = official_production_observations(src, self.registry)["1"]
+
+        self.assertNotIn("recent_performance", features)
+        self.assertNotIn("class_performance", features)
+        self.assertNotIn("same_course_fit", features)
+        self.assertEqual(features["bodyweight_range_fit"]["observation_count"], 2)
+        self.assertIn("days_to_target_race=30", features["rotation_fit"]["source_fact"])
+
     def test_real_jra_fractional_win_rate_is_not_percentage(self):
         src = source()
         stats = src["jra_official_person_stats"]["runners"]["1"]["jockey"]["current_year_flat"]

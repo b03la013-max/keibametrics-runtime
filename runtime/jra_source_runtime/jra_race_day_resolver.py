@@ -25,6 +25,10 @@ NAME_TO_CODE = {name: code for code, (_, name) in VENUES.items()}
 ID_TO_CODE = {vid: code for code, (vid, _) in VENUES.items()}
 
 JUMP_SCOPE_REASON = "JRA_JUMP_DEDICATED_OWNER_UNCONFIRMED"
+_JUMP_HISTORY_SHORT_TITLE = re.compile(
+    r"^(?:(?:中山G|東京ハイ|京都ハイ|阪神スプリ(?:ング)?|小倉サマー|三木ホース(?:ランド)?)J"
+    r"|(?:牛若丸|中山新春|ソレイユ|ペガサス|イルミネ)JS)(?:\s|$)"
+)
 
 
 class JRAScopeHold(ValueError):
@@ -43,6 +47,17 @@ def official_jump_race(race: Dict[str, Any]) -> bool:
                 or re.search(r"(?<![A-Za-z0-9])J[・.]G(?:I{1,3}|[123])?(?![A-Za-z0-9])", header)):
             return True
     return False
+
+
+def official_jump_history(run: Dict[str, Any]) -> bool:
+    """Classify official prior starts using their course and race labels."""
+    surface = unicodedata.normalize("NFKC", str(run.get("surface") or "")).strip()
+    if run.get("race_type") == "OBSTACLE" or surface == "芝ダ":
+        return True
+    names = [unicodedata.normalize("NFKC", str(run.get(k) or "")).strip()
+             for k in ("race_name", "race_class_text")]
+    return (official_jump_race({"surface": surface, "race_name": names[0], "title": names[1]})
+            or any(_JUMP_HISTORY_SHORT_TITLE.match(name) for name in names))
 
 
 def explicit_current_jump_context(payload: Dict[str, Any]) -> bool:

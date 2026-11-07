@@ -111,3 +111,23 @@ def test_candidate_result_winning_ticket_payout_can_settle_frozen_subset():
     assert s["status"]=="SETTLED"
     assert s["return"]==900
     assert s["pfs"]==900
+
+
+def test_tokyo_20261107_r05_shadow_uses_canonical_official_trio_payout():
+    import json
+    from pathlib import Path
+    from jra_candidate_postresult_closedloop import settle_mec_r4_shadow
+
+    race = "KM-JRA-TKY-20261107-R05"
+    root = Path(__file__).resolve().parents[1] / "runtime"
+    shadow = json.loads((root / "mec_shadow_artifacts" / f"{race}.json").read_text())
+    result = json.loads((root / "results" / f"{race}.json").read_text())
+    settled = settle_mec_r4_shadow(shadow, result)["arms"]["CPSS_ALL"]
+    assert (settled["status"], settled["ticket_count"], settled["investment"], settled["return"]) == (
+        "SETTLED", 22, 2200, 2080
+    )
+
+    result["official_result"]["payouts"]["TRIO"]["selection"] = [1, 8, 7]
+    unresolved = settle_mec_r4_shadow(shadow, result)["arms"]["CPSS_ALL"]
+    assert unresolved["status"] == "PARTIAL_PAYOUT_MISSING"
+    assert unresolved["return"] is None

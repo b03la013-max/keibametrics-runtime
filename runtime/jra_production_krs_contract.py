@@ -7,6 +7,8 @@ All KRS physics, parameter_map and existing signed /verify stay unchanged.
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from typing import Any, Mapping
 
 MODE_FOR_RUNS = {5000: "SIM-STD", 20000: "SIM-HIGH"}
@@ -14,6 +16,11 @@ MODE_FOR_RUNS = {5000: "SIM-STD", 20000: "SIM-HIGH"}
 
 class JRAProductionKRSContractError(ValueError):
     pass
+
+
+def _sha(obj: Any) -> str:
+    data = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
 
 def production_krs_payload(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -45,6 +52,11 @@ def production_krs_payload(request: Mapping[str, Any]) -> dict[str, Any]:
     kinput = deepcopy(original)
     kinput["simulation"]["run_count"] = count
     kinput["simulation"]["master_seed"] = seed
+    # Match Railway's Engine input normalization before hashing or dispatch.
+    race = kinput.setdefault("race", {})
+    if not isinstance(race, dict):
+        raise JRAProductionKRSContractError("FORMAL_KRS_RACE_CONTEXT_INVALID")
+    race.setdefault("prediction_id", race_id)
     return {
         "race_id": race_id,
         "input_data": kinput,
@@ -88,5 +100,10 @@ def assert_production_krs_receipt(
             raise JRAProductionKRSContractError(f"FORMAL_KRS_RECEIPT_{name.upper()}_INVALID")
     if not run.get("receipt_sha256"):
         raise JRAProductionKRSContractError("FORMAL_KRS_RECEIPT_HASH_MISSING")
+    if receipt["input_sha256"] != _sha(payload["input_data"]):
+        raise JRAProductionKRSContractError("FORMAL_KRS_RECEIPT_INPUT_SHA256_MISMATCH")
+    output = response.get("output")
+    if not isinstance(output, dict) or receipt["output_sha256"] != _sha(output):
+        raise JRAProductionKRSContractError("FORMAL_KRS_RECEIPT_OUTPUT_SHA256_MISMATCH")
     # The independent /verify call must still verify the signed envelope.
     return receipt

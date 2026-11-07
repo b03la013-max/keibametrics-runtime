@@ -42,3 +42,22 @@ def test_parser_preserves_withdrawal_and_nonfinish_without_fabricated_rank():
     assert [r['finish_status'] for r in out['non_finishers']]==[
         'CANCELLED','EXCLUDED','DID_NOT_FINISH','DISQUALIFIED']
     assert all('finish' not in r for r in out['non_finishers'])
+
+
+def test_turf_going_does_not_make_an_obstacle_result_a_flat_race():
+    html = """
+    <div class="race_header">
+      発走時刻： 14時01分 天候 晴 芝 良
+      <div class="type"><div class="cell category">障害3歳以上</div></div>
+      コース： 3,170 メートル （芝 内外）
+    </div>
+    <table>
+      <tr><th>着順</th><th>馬番</th><th>馬名</th><th>コーナー通過順位</th></tr>
+      <tr><td>1</td><td>1</td><td>試験馬</td><td>1 1 1 1</td></tr>
+    </table>
+    """.encode()
+    result = parse_result_detail(html, "text/html; charset=UTF-8")
+    assert result["race_environment"]["race_type"] == "OBSTACLE"
+    assert result["race_environment"]["surface"] == "芝"
+    assert result["race_environment"]["distance_m"] == 3170
+    assert result["runners"][0]["passing_positions"] == [1, 1, 1, 1]

@@ -313,7 +313,7 @@ def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_produc
              build_learning_state=lambda r,**kw:build_learning_state(r,effective_time=stamp),
              build_oos_measurement=measure,build_fast_reflection=build_fast_reflection)
     exec(_production_closed_loop_code(),env)
-    assert env['review']==build_post_result_review(result,final,review_semantics='DECISION_AWARE_V2')
+    assert env['review']==build_post_result_review(result,final,review_semantics='DECISION_AWARE_V3')
     assert env['learning']==build_learning_state(env['review'],effective_time=stamp)
     checkpoint=tmp_path/'runtime_out/result_checkpoint'
     assert json.loads((checkpoint/'post_result_review.json').read_text())==env['review']

@@ -541,6 +541,7 @@ def process(root: Path, race_id: str, *, now=None) -> str:
     if classification:
         return classification['status']
     stage="VERIFY_FROZEN_FINAL"
+    evidence = None
     try:
         verify_final(final)
         verify_archived_final_signature(final,root=root,race_id=race_id)
@@ -597,7 +598,56 @@ def process(root: Path, race_id: str, *, now=None) -> str:
         return "RESULT_REQUEST_WRITTEN"
     except Exception as exc:
         if not getattr(exc,"first_failed_stage",None):exc.first_failed_stage=stage
+        if evidence and evidence.get('raw_base64'):
+            exc.result_failure_capture = {'capture_stage': 'RESULT_DETAIL', **{
+                key: evidence.get(key)
+                for key in ('url', 'captured_at', 'content_type', 'sha256', 'raw_base64', 'identity')
+            }}
         raise
+
+
+def write_result_failure_capture(directory, race_id, exc):
+    """Keep original public response bytes only in the run's diagnostic artifact."""
+    import base64
+    from urllib.parse import urlsplit
+
+    capture = getattr(exc, 'result_failure_capture', None)
+    if not capture or not re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}', race_id):
+        return None
+    url = urlsplit(capture.get('url') or '')
+    if url.scheme != 'https' or url.hostname != 'www.jra.go.jp' or url.username or url.password:
+        return None
+    raw = base64.b64decode(capture['raw_base64'], validate=True)
+    if hashlib.sha256(raw).hexdigest() != capture.get('sha256'):
+        raise ValueError('RESULT_FAILURE_CAPTURE_SHA_MISMATCH')
+    record = {'scope': 'DIAGNOSTIC_ONLY_NOT_RESULT_ADMISSION', 'target_race_id': race_id,
+              'first_failed_stage': getattr(exc, 'first_failed_stage', None),
+              'error_code': str(exc).split(':', 1)[0], **capture}
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = race_id + '-' + _sha(record) + '.json'
+    (directory / filename).write_text(json.dumps(record, ensure_ascii=False, sort_keys=True),
+                                      encoding='utf-8')
+    return filename
+
+
+def pending_result_dispatches(root, rows):
+    """Use the saved requests as a retry source after a failed dispatch."""
+    paths = set()
+    for row in rows:
+        if row.get('status') not in {'ALREADY_RESULTED', 'RESULT_REQUEST_WRITTEN'}:
+            continue
+        race_id = row.get('race_id')
+        if not isinstance(race_id, str) or not re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}', race_id):
+            continue
+        request = Path('runtime/results') / (race_id + '.json')
+        if not (root / request).is_file():
+            continue
+        if ((root / 'runtime/reviews_auto' / (race_id + '-AUTO.json')).is_file()
+                and (root / 'runtime/learning_states' / (race_id + '.json')).is_file()):
+            continue
+        paths.add(request.as_posix())
+    return sorted(paths)
 
 
 def main(argv=None):
@@ -606,10 +656,17 @@ def main(argv=None):
     p.add_argument("--race-id")
     p.add_argument("--days", type=int, default=3)
     p.add_argument('--health-out')
+    p.add_argument('--failure-raw-dir')
+    p.add_argument('--dispatch-from-health')
     a = p.parse_args(argv)
     from jra_postresult_health import (build_execution_health,failure_row,
                                       write_execution_health,health_exit_code)
     root = Path(a.repo_root).resolve()
+    if a.dispatch_from_health:
+        report = json.loads(Path(a.dispatch_from_health).read_text(encoding='utf-8'))
+        for request in pending_result_dispatches(root, report['processed']):
+            print(request)
+        return 0
     from jra_candidate_postresult_closedloop import PendingOfficialResult
     paths = ([root / "runtime" / "final_artifacts" / (a.race_id + ".json")] if a.race_id
              else sorted((root / "runtime" / "final_artifacts").glob("KM-JRA-*.json")))
@@ -619,6 +676,7 @@ def main(argv=None):
         rid = f.stem
         row={'race_id':rid,'final_ref':f.relative_to(root).as_posix(),'persisted':False,
              'recommendation_pfs':None,'actual_purchase':'UNVERIFIED','actual_purchase_pfs':None}
+        failure = None
         try:
             if not f.exists():
                 results.append({**row,'status':'NO_PRODUCTION_FINAL'})
@@ -637,10 +695,20 @@ def main(argv=None):
             status = process(root, rid, now=now)
             row.update(status=status,persisted=status=='RESULT_REQUEST_WRITTEN')
         except PendingOfficialResult as e:
-            row.update(status='PENDING_OFFICIAL_RESULT',first_failed_stage='FETCH_OFFICIAL_RESULT',
+            failure = e
+            row.update(status='PENDING_OFFICIAL_RESULT',
+                       first_failed_stage=getattr(e, 'first_failed_stage', None) or 'FETCH_OFFICIAL_RESULT',
                        exception_class=type(e).__name__,error_code=str(e).split(':',1)[0],error=str(e))
         except Exception as e:  # report, never fabricate
+            failure = e
             row=failure_row(rid,e,'PRODUCTION_RESULT',**{k:v for k,v in row.items() if k!='race_id'})
+        if failure is not None and a.failure_raw_dir:
+            try:
+                capture = write_result_failure_capture(a.failure_raw_dir, rid, failure)
+                if capture:
+                    row['failure_raw_artifact'] = capture
+            except (OSError, ValueError) as capture_error:
+                row['failure_raw_artifact_error'] = type(capture_error).__name__
         results.append(row)
     report=build_execution_health('PRODUCTION',results)
     report['profile']=PROFILE

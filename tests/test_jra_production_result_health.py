@@ -102,6 +102,64 @@ def test_t8_unpublished_is_pending_and_not_a_verified_success(tmp_path,monkeypat
     assert not (tmp_path/'runtime/results').exists()
 
 
+def test_failure_retains_exact_raw_separately_from_health(tmp_path, monkeypatch):
+    import base64
+    import hashlib
+
+    rid = 'KM-JRA-TKY-20261028-R02'
+    save(tmp_path, rid, final())
+    response = b'<html>failed result observation</html>'
+    error = PendingOfficialResult('JRA_OFFICIAL_RESULT_RACE_NOT_PUBLISHED')
+    error.first_failed_stage = 'RESULT_RACE_SELECTION'
+    error.result_failure_capture = {
+        'capture_stage': 'RESULT_DAY',
+        'url': 'https://www.jra.go.jp/JRADB/accessS.html',
+        'captured_at': '2026-10-28T07:00:00Z',
+        'sha256': hashlib.sha256(response).hexdigest(),
+        'raw_base64': base64.b64encode(response).decode('ascii'),
+    }
+
+    def run(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(p, 'process', run)
+    health = tmp_path / 'health.json'
+    raw_dir = tmp_path / 'raw-failures'
+    assert p.main(['--repo-root', str(tmp_path), '--race-id', rid, '--health-out',
+                   str(health), '--failure-raw-dir', str(raw_dir)]) == 0
+    row = json.loads(health.read_text())['processed'][0]
+    assert row['first_failed_stage'] == 'RESULT_RACE_SELECTION'
+    assert row['status'] == 'PENDING_OFFICIAL_RESULT'
+    assert 'raw_base64' not in health.read_text()
+    capture = json.loads((raw_dir / row['failure_raw_artifact']).read_text())
+    assert capture['capture_stage'] == 'RESULT_DAY'
+    assert capture['target_race_id'] == rid
+    assert base64.b64decode(capture['raw_base64']) == response
+    assert capture['scope'] == 'DIAGNOSTIC_ONLY_NOT_RESULT_ADMISSION'
+    assert not (tmp_path / 'runtime/results').exists()
+
+
+def test_existing_incomplete_request_is_retried_without_rewriting_it(tmp_path):
+    requests = tmp_path / 'runtime/results'
+    reviews = tmp_path / 'runtime/reviews_auto'
+    learning = tmp_path / 'runtime/learning_states'
+    for folder in (requests, reviews, learning):
+        folder.mkdir(parents=True)
+    old = 'KM-JRA-TKY-20261107-R11'
+    last = 'KM-JRA-TKY-20261107-R12'
+    for race in (old, last):
+        (requests / (race + '.json')).write_bytes(b'{}\n')
+    (reviews / (old + '-AUTO.json')).touch()
+    (learning / (old + '.json')).touch()
+    rows = [{'race_id': race, 'status': 'ALREADY_RESULTED'} for race in (old, last)]
+    rows.append({'race_id': last, 'status': 'BLOCKED_OWNER_APPROVAL'})
+    assert p.pending_result_dispatches(tmp_path, rows) == ['runtime/results/' + last + '.json']
+    assert (requests / (last + '.json')).read_bytes() == b'{}\n'
+    (reviews / (last + '-AUTO.json')).touch()
+    (learning / (last + '.json')).touch()
+    assert p.pending_result_dispatches(tmp_path, rows) == []
+
+
 def test_production_missing_named_final_is_no_final_not_internal_success(tmp_path):
     out=tmp_path/'health.json'
     assert p.main(['--repo-root',str(tmp_path),'--race-id','KM-JRA-TKY-20261028-R01','--health-out',str(out)])==0

@@ -780,10 +780,12 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
                               prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
                               race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
                               required_sires=relevant_sires,
-                              required_damsires=relevant_damsires)
+                              required_damsires=relevant_damsires,
+                              exclude_obstacles=True)
         owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "snapshots", "horse_count", "run_count", "manifest_sha256",
                                                                         "identity_collision_count", "run_conflict_count",
                                                                         "rejected_untrusted_inputs", "source_signature_level")}
+        owner_corpus_manifest["population_scope"] = "JRA_FLAT_EXCLUDES_OFFICIAL_OBSTACLE_HISTORY"
         owner_observations = owner_authorized_observations(
             source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
     runners_out = {}

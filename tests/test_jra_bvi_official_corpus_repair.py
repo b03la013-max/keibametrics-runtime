@@ -46,6 +46,23 @@ class CorpusObservedBodyweightTests(unittest.TestCase):
                             run(when="2026-10-10")], date(2026, 10, 11))
         self.assertEqual([r["date"] for r in rows], ["2026-10-10"])
 
+    def test_flat_pedigree_excludes_official_obstacle_history_before_surface_normalization(self):
+        history = [
+            {**run(surface="芝ダ"), "race_name": "牛若丸JS", "distance_m": 3170},
+            {**run(surface="芝"), "race_name": "障害3歳上未勝利", "distance_m": 2890},
+            {**run(surface="芝"), "race_name": "京都ジャンプ", "distance_m": 3170},
+            {**run(surface="芝"), "race_name": "東京ハイＪ", "distance_m": 3110},
+            {**run(surface="芝"), "race_name": "阪神スプリJ", "distance_m": 3900},
+            {**run(surface="芝"), "race_name": "菊花賞 GⅠ", "distance_m": 3000},
+            run(surface="ダ"),
+        ]
+        day = date(2026, 10, 11)
+        flat = _clean_runs(history, day, exclude_obstacles=True)
+        self.assertEqual([row["race_name"] for row in flat], ["菊花賞 GⅠ", "2勝クラス"])
+        legacy = _clean_runs(history, day)
+        self.assertEqual(len(legacy), len(history))
+        self.assertEqual(legacy[0]["surface"], "芝")
+
 
 class SignedSourcePedigreeIdentityTests(unittest.TestCase):
     def artifact(self, card, pedigree=None, *, history_name=None):

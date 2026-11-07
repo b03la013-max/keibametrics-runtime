@@ -20,3 +20,19 @@ final_artifact={
 acc=build_oos_measurement(review,final_artifact,{"acceptance_only":True})
 assert acc["eligible"] is False
 assert acc["eligibility_reason"]=="ACCEPTANCE_ONLY_NOT_OOS"
+
+
+def test_jra_oos_and_review_report_distinct_frozen_p3_rank_metrics():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "runtime"
+    for race in ("KM-JRA-TKY-20261107-R01", "KM-JRA-TKY-20261107-R04"):
+        review = json.loads((root / "reviews_auto" / f"{race}-AUTO.json").read_text())
+        final = json.loads((root / "final_artifacts" / f"{race}.json").read_text())
+        measured = build_oos_measurement(review, final)["incremental_utility"]
+        registered = review["krs"]["post_result_evaluation"]
+        assert measured["role_rank_metrics"]["P3"] == "SSR-P3"
+        assert registered["role_rank_metrics"]["P3"] == "SSR-T3"
+        assert next(row for row in measured["rank_comparison"] if row["role"] == "P3")["krs_rank"] == 1
+        assert next(row for row in registered["rank_comparison"] if row["role"] == "P3")["krs_rank"] == 3

@@ -39,7 +39,7 @@ jobs:
       - name: Install official JRA HTTP/parser dependencies
         run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt pytest
       - name: Settlement regression
-        run: python -m pytest -q tests/test_jra_production_postresult.py
+        run: python -m pytest -q tests/test_jra_production_postresult.py tests/test_jra_production_result_health.py tests/test_jra_result_navigation_repair.py
       - name: Fetch official result and write RESULT request for each due FINAL
         id: execute
         env:
@@ -50,9 +50,9 @@ jobs:
           mkdir -p runtime_out/postresult
           status=0
           if [ -n "${RACE_ID:-}" ]; then
-            python runtime/jra_production_postresult.py --race-id "$RACE_ID" --health-out runtime_out/postresult/production.json || status=$?
+            python runtime/jra_production_postresult.py --race-id "$RACE_ID" --health-out runtime_out/postresult/production.json --failure-raw-dir runtime_out/postresult/raw-failures || status=$?
           else
-            python runtime/jra_production_postresult.py --days 3 --health-out runtime_out/postresult/production.json || status=$?
+            python runtime/jra_production_postresult.py --days 3 --health-out runtime_out/postresult/production.json --failure-raw-dir runtime_out/postresult/raw-failures || status=$?
           fi
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
       - name: Commit RESULT requests and dispatch the canonical Result Runner
@@ -63,22 +63,24 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t NEW < <(git ls-files --others --exclude-standard 'runtime/results/KM-JRA-*.json')
-          [ "${#NEW[@]}" -eq 0 ] && { echo "NO_NEW_PRODUCTION_RESULT"; exit 0; }
-          git config user.name "keibametrics-runtime"
-          git config user.email "actions@users.noreply.github.com"
-          git add "${NEW[@]}"
-          git commit -m "result: JRA Production official result request [skip ci]"
-          for i in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
-            git rebase --abort 2>/dev/null || true; sleep $((i*4))
-            [ "$i" -eq 3 ] && exit 1
-          done
-          for f in "${NEW[@]}"; do
+          if [ "${#NEW[@]}" -gt 0 ]; then
+            git config user.name "keibametrics-runtime"
+            git config user.email "actions@users.noreply.github.com"
+            git add "${NEW[@]}"
+            git commit -m "result: JRA Production official result request [skip ci]"
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true; sleep $((i*4))
+              [ "$i" -eq 3 ] && exit 1
+            done
+          fi
+          python runtime/jra_production_postresult.py --dispatch-from-health runtime_out/postresult/production.json > runtime_out/postresult/dispatch_paths.txt
+          while IFS= read -r f; do
             if ! gh workflow run km-formal-result-runner.yml --ref main -f request_path="$f"; then
               echo "$f" >> runtime_out/postresult/result_runner_dispatch_failures.txt
             fi
             sleep 5
-          done
+          done < runtime_out/postresult/dispatch_paths.txt
           test ! -s runtime_out/postresult/result_runner_dispatch_failures.txt
       - name: Aggregate execution health after preserving successful RESULT requests
         id: health
