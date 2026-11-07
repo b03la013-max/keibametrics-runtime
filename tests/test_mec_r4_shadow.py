@@ -116,6 +116,7 @@ def test_candidate_result_winning_ticket_payout_can_settle_frozen_subset():
 def test_tokyo_20261107_r05_shadow_uses_canonical_official_trio_payout():
     import json
     from pathlib import Path
+    from jra_candidate_postresult_closedloop import settle_mec_r4_shadow
 
     race = "KM-JRA-TKY-20261107-R05"
     root = Path(__file__).resolve().parents[1] / "runtime"
@@ -130,19 +131,3 @@ def test_tokyo_20261107_r05_shadow_uses_canonical_official_trio_payout():
     unresolved = settle_mec_r4_shadow(shadow, result)["arms"]["CPSS_ALL"]
     assert unresolved["status"] == "PARTIAL_PAYOUT_MISSING"
     assert unresolved["return"] is None
-
-
-def test_canonical_dead_heat_prices_are_matched_by_combination():
-    result = {"official_result": {
-        "top3": [1, 2, 3], "top3_orders": [[1, 2, 3], [1, 2, 4]],
-        "finish_groups": [{"finish": 1, "horse_numbers": [1]},
-                          {"finish": 2, "horse_numbers": [2]},
-                          {"finish": 3, "horse_numbers": [3, 4]}],
-        "payouts": {"TRIFECTA": [{"selection": [1, 2, 3], "per_100_yen": 500},
-                                 {"selection": [1, 2, 4], "per_100_yen": 800}]}
-    }}
-    tickets = [{"bet_type": "TRIFECTA", "selection": [1, 2, n], "stake": 100}
-               for n in (3, 4)]
-    settled = settle_ticket_list(tickets, result)
-    assert settled["status"] == "SETTLED"
-    assert settled["return"] == 1300

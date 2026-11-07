@@ -178,6 +178,40 @@ def official_payout_entries(official:dict,kind:str)->list[dict]:
     return out
 
 
+def settle_mec_r4_shadow(shadow, result):
+    """Adapt singleton JRA official prices at the MEC-R4 settlement boundary."""
+    from mec_r4_shadow import settle_mec_r4_shadow as settle
+
+    if not str(shadow.get("race_id") or "").startswith("KM-JRA-"):
+        return settle(shadow, result)
+    official = result.get("official_result") or {}
+    if official.get("dead_heat") is True or len(official.get("top3_orders") or []) > 1:
+        return settle(shadow, result)
+    payouts = dict(official.get("payouts") or {})
+    settlement = result.get("settlement") or {}
+    winning_tickets = settlement.get("winning_tickets") or []
+    for kind in BET_KINDS:
+        value = payouts.get(kind)
+        if not (isinstance(value, list) or isinstance(value, dict)
+                and {"selection", "per_100_yen"} & value.keys()):
+            continue
+        try:
+            price, = official_payout_entries(official, kind)
+        except ValueError:
+            # The present official entry is invalid. Leave the payout unknown
+            # instead of accepting an unrelated legacy receipt for this type.
+            payouts.pop(kind)
+            winning_tickets = [row for row in winning_tickets
+                               if str(row.get("bet_type") or "").upper() != kind]
+        else:
+            payouts[kind] = price["per_100_yen"]
+    return settle(shadow, {
+        **result,
+        "official_result": {**official, "payouts": payouts},
+        "settlement": {**settlement, "winning_tickets": winning_tickets},
+    })
+
+
 def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: list[str], *,
                            source_cancelled_runner_ids=None) -> dict:
     rows = list(parsed.get("runners") or [])

@@ -160,7 +160,8 @@ def test_optional_mec_failure_preserves_real_production_review_and_learning(tmp_
     from post_result_learning import build_post_result_review,build_learning_state
     from krs_oos_promotion_gate import build_oos_measurement
     from race_day_fast_reflection import build_fast_reflection
-    from mec_r4_shadow import build_mec_r4_shadow,settle_mec_r4_shadow
+    from mec_r4_shadow import build_mec_r4_shadow
+    from jra_candidate_postresult_closedloop import settle_mec_r4_shadow
     rid='KM-JRA-TKY-20261018-R11'
     final_raw=(root/'runtime/final_artifacts'/f'{rid}.json').read_bytes()
     result_raw=(root/'runtime/results'/f'{rid}.json').read_bytes()
