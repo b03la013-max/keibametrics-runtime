@@ -352,7 +352,8 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
     if not snap or not snap.get("raw_gzip_b64"):
         raise ValueError("JRA_OFFICIAL_PDF_RAW_SNAPSHOT_REQUIRED_FOR_RECONCILIATION")
     raw=gzip.decompress(base64.b64decode(str(snap["raw_gzip_b64"])))
-    if printed_table and hashlib.sha256(raw).hexdigest()!=snap.get('raw_sha256'):
+    raw_sha_matches=hashlib.sha256(raw).hexdigest()==snap.get('raw_sha256')
+    if printed_table and not raw_sha_matches:
         raise ValueError('JRA_OFFICIAL_PDF_RAW_HASH_MISMATCH')
     doc=fitz.open(stream=raw,filetype="pdf")
     target_text=None; page_no=None; clip_coords=None
@@ -406,11 +407,13 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
         hits=[ln for ln in lines if re.search(pat,ln)]
         if printed_table and len(hits)>1:
             missing.append({'horse_no':r.get('horse_no'),'name':name,'reason':'PDF_NAME_AMBIGUOUS'})
-        elif not hits:
+        elif printed_table or not hits:
+            # A recovered boundary must independently establish every
+            # printed horse number and name before matching to DETAIL.
             proof=_split_name_geometry_proof(target_blocks,r.get('horse_no'),name)
-            if (proof is None or not unique_names
-                    or hashlib.sha256(raw).hexdigest()!=snap.get('raw_sha256')):
-                missing.append({"horse_no":r.get("horse_no"),"name":name,"reason":"PDF_NAME_NOT_FOUND"})
+            if proof is None or not unique_names or not raw_sha_matches:
+                reason='PDF_NAME_NUMBER_NOT_BOUND' if printed_table else 'PDF_NAME_NOT_FOUND'
+                missing.append({'horse_no':r.get('horse_no'),'name':name,'reason':reason})
             else:
                 geometry_proofs.append(proof)
                 proofs.append({'horse_no':int(r['horse_no']),'name':name})

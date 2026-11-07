@@ -15,8 +15,12 @@ def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
                 page.insert_text((left+5,60),f'{no}R')
                 if not (missing_peer_rule and no==1):
                     page.draw_line((left,122),(left+251,122),width=.5)
-            page.insert_text((366,150),'ホクトウマ(JPN)',fontname='japan')
-            page.insert_text((366,184),'フランスウマ(FR)',fontname='japan')
+            page.insert_text((366,150),'ホクトウマ',fontname='japan')
+            page.insert_text((366,184),'フランスウマ',fontname='japan')
+            page.insert_text((367,161),'(JPN)')
+            page.insert_text((367,195),'(FR)')
+            page.insert_text((346,153),'1')
+            page.insert_text((346,187),'2')
             page.insert_text((86,150),'ベツレース(JPN)',fontname='japan')
             raw=doc.tobytes()
         return {'sources':[{'source_id':'JRA-OFFICIAL-RACE-PDF',
@@ -30,6 +34,11 @@ def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
     assert out['pdf_column_boundary_proof']=='ALIGNED_PRINTED_PEER_RUNNER_TABLES'
     assert diag['nationality_marker_count']==2
     assert diag['pdf_column_clip'][:3]==[310.5,0,562.5]
+    assert [proof['printed_number'] for proof in diag['pdf_split_name_geometry_proofs']]==['1','2']
+    swapped={'runners':[{'horse_no':2,'name':'ホクトウマ'},
+                        {'horse_no':1,'name':'フランスウマ'}]}
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(artifact(),2,swapped)
     with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
         reconcile_pdf_column_with_detail(artifact(missing_peer_rule=True),2,detail)
     changed=artifact()
