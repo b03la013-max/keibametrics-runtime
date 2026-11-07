@@ -89,6 +89,23 @@ class TestOwnerAuthorizedRules(unittest.TestCase):
                      "preparation_continuity", "same_day_track_fit", "market_mismatch"):
             self.assertIn(must, seen)
 
+    def test_flat_same_day_features_exclude_turf_obstacle_result(self):
+        source = real_artifact()
+        features = owner_authorized_observations(source, REGISTRY)
+        prior = source["jra_official_same_day_results"]["races"]
+        affected = next(row["same_day_track_fit"] for row in features.values()
+                        if "same_day_track_fit" in row)
+        ref = next(x for x in affected["evidence_refs"]
+                   if x.startswith("JRA_OFFICIAL_SAME_DAY:R"))
+        race_number = ref.rsplit("R", 1)[1]
+        prior[race_number]["race_environment"]["race_type"] = "OBSTACLE"
+        cleaned = owner_authorized_observations(source, REGISTRY)
+        self.assertTrue(any("same_day_track_fit" in row for row in cleaned.values()))
+        for row in cleaned.values():
+            for feature in ("same_day_track_fit", "track_bias_fit", "draw_course_fit"):
+                if feature in row:
+                    self.assertNotIn(ref, row[feature]["evidence_refs"])
+
     def test_newcomer_pedigree_rejects_oldest_known_non_debut_race(self):
         art = real_artifact()
         eligible = [(str(x.get("runner_id") or x.get("horse_no")),
