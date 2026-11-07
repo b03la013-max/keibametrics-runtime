@@ -3,6 +3,102 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]/"runtime"/"jra_source_runtime"
 sys.path.insert(0,str(ROOT))
 
+def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
+    import base64, gzip, hashlib
+    import fitz
+    from jra_official_pdf import reconcile_pdf_column_with_detail
+
+    def artifact(*,missing_peer_rule=False):
+        with fitz.open() as doc:
+            page=doc.new_page(width=900,height=500)
+            for no,left in enumerate((31,311,591),1):
+                page.insert_text((left+5,60),f'{no}R')
+                if not (missing_peer_rule and no==1):
+                    page.draw_line((left,122),(left+251,122),width=.5)
+            page.insert_text((366,150),'ホクトウマ',fontname='japan')
+            page.insert_text((366,184),'フランスウマ',fontname='japan')
+            page.insert_text((367,161),'(JPN)')
+            page.insert_text((367,195),'(FR)')
+            page.insert_text((346,153),'1')
+            page.insert_text((346,187),'2')
+            page.insert_text((86,150),'ベツレース(JPN)',fontname='japan')
+            raw=doc.tobytes()
+        return {'sources':[{'source_id':'JRA-OFFICIAL-RACE-PDF',
+                            'raw_gzip_b64':base64.b64encode(gzip.compress(raw)).decode(),
+                            'raw_sha256':hashlib.sha256(raw).hexdigest()}]}
+
+    import pytest
+    detail={'runners':[{'horse_no':1,'name':'ホクトウマ'},
+                       {'horse_no':2,'name':'フランスウマ'}]}
+    out,diag=reconcile_pdf_column_with_detail(artifact(),2,detail)
+    assert out['pdf_column_boundary_proof']=='ALIGNED_PRINTED_PEER_RUNNER_TABLES'
+    assert diag['nationality_marker_count']==2
+    assert diag['pdf_column_clip'][:3]==[310.5,0,562.5]
+    assert [proof['printed_number'] for proof in diag['pdf_split_name_geometry_proofs']]==['1','2']
+    swapped={'runners':[{'horse_no':2,'name':'ホクトウマ'},
+                        {'horse_no':1,'name':'フランスウマ'}]}
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(artifact(),2,swapped)
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(artifact(missing_peer_rule=True),2,detail)
+    changed=artifact()
+    changed['sources'][0]['raw_sha256']='0'*64
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(changed,2,detail)
+
+def _split_name_blocks(*,number='1',number_size=10,duplicate=False,split_baseline=False,name='カリメラ'):
+    spans=[{'text':ch,'bbox':[100+i*20,100+(10 if split_baseline and i==2 else 0),112+i*20,115+(10 if split_baseline and i==2 else 0)],'origin':[100+i*20,111+(10 if split_baseline and i==2 else 0)],'size':11} for i,ch in enumerate(name)]
+    blocks=[{'type':0,'lines':[{'spans':[s]} for s in spans]},
+            {'type':0,'lines':[{'spans':[{'text':number,'bbox':[80,105,90,120],'size':number_size}]}]},
+            {'type':0,'lines':[{'spans':[{'text':'ルメール','bbox':[115,100,150,115],'size':11}]}]}]
+    if duplicate:blocks.append(blocks[0])
+    return blocks
+
+def test_split_pdf_name_bound_to_exact_printed_number():
+    from jra_official_pdf import _split_name_geometry_proof
+    proof=_split_name_geometry_proof(_split_name_blocks(),1,'カリメラ')
+    assert proof['printed_number']=='1' and proof['name']=='カリメラ'
+    assert proof['name_bbox']==[100,100,172,115]
+
+def test_split_pdf_name_rejects_wrong_number_frame_duplicate_and_cross_row():
+    from jra_official_pdf import _split_name_geometry_proof
+    for kwargs in ({'number':'2'},{'number_size':17},{'duplicate':True},{'split_baseline':True}):
+        assert _split_name_geometry_proof(_split_name_blocks(**kwargs),1,'カリメラ') is None
+
+def test_split_pdf_name_is_unicode_equivalent_not_partial_or_fuzzy():
+    from jra_official_pdf import _split_name_geometry_proof
+    assert _split_name_geometry_proof(_split_name_blocks(),1,'ｶﾘﾒﾗ') is not None
+    for name in ('カリメ','カリメラー','カメリラ','カリメラA'):
+        assert _split_name_geometry_proof(_split_name_blocks(),1,name) is None
+
+def test_split_pdf_name_does_not_join_adjacent_blocks_or_two_numbers():
+    from jra_official_pdf import _split_name_geometry_proof
+    blocks=_split_name_blocks();lines=blocks[0]['lines']
+    blocks[0]['lines']=lines[:2];blocks.append({'type':0,'lines':lines[2:]})
+    assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+
+def test_split_pdf_name_rejects_far_fragments_and_intervening_nonkana():
+    from jra_official_pdf import _split_name_geometry_proof
+    blocks=_split_name_blocks()
+    for i,line in enumerate(blocks[0]['lines']):
+        line['spans'][0]['bbox'][0]+=i*80;line['spans'][0]['bbox'][2]+=i*80
+    assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+    for size in (11,5):
+        blocks=_split_name_blocks()
+        blocks[0]['lines'].append({'spans':[{'text':'A','bbox':[113,100,119,115],'origin':[113,111],'size':size}]})
+        assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+
+def test_split_pdf_name_uses_origin_baseline_and_one_fixed_font_size():
+    from jra_official_pdf import _split_name_geometry_proof
+    blocks=_split_name_blocks()
+    blocks[0]['lines'].append({'spans':[{'text':'A','bbox':[113,105,119,112],'origin':[113,111],'size':5}]})
+    assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+    blocks=_split_name_blocks()
+    for i,line in enumerate(blocks[0]['lines']):line['spans'][0]['size']=11+i*.5
+    assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+    blocks=_split_name_blocks();blocks[1]['lines'][0]['spans'].append({'text':'2','bbox':[81,105,91,120],'size':10})
+    assert _split_name_geometry_proof(blocks,1,'カリメラ') is None
+
 def test_jra_manifest_and_url():
     from jra_source_manifest import build_jra_manifest,race_card_url_from_meeting_key
     m=build_jra_manifest({"venue_id":"NKY","race_date":"2026-09-22","race_no":10,"jra_meeting_key":"0620260407"})
