@@ -42,6 +42,10 @@ def build_oos_measurement(review, final_artifact, result_request=None):
         pair_hit=third_hit=False
     from krs_prediction_utility import evaluate_against_result
     incremental=evaluate_against_result(ku,actual,static_ranking=(final_artifact.get("static_prediction") or {}).get("ranking")) if len(actual)==3 else None
+    if incremental is not None and str(review.get("race_id") or "").startswith("KM-JRA-"):
+        # Keep this occurrence-ranked series distinct from the Review's
+        # registered proposal basis (SSR-T3 for P3).
+        incremental["role_rank_metrics"]={"W":"SSR-W","P2":"SSR-P2","P3":"SSR-P3"}
     m={
       "profile":PROFILE,
       "race_id":review.get("race_id"),

@@ -301,7 +301,8 @@ def owner_authorized_observations(source: dict, registry: dict, *, corpus: dict 
         except (TypeError, ValueError):
             continue
         env = race.get("race_environment") or {}
-        if race_no is None or no >= race_no or _surface(env.get("surface")) != surface:
+        if (race_no is None or no >= race_no or env.get("race_type") == "OBSTACLE"
+                or _surface(env.get("surface")) != surface):
             continue
         same_day.append(race)
     same_day.sort(key=lambda r: int(r["race_no"]))

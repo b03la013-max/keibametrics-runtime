@@ -273,11 +273,13 @@ def settle_ticket_list(tickets,result):
     top3=_top3_ids(result)
     if len(top3)!=3:
         raise AssertionError("SHADOW_RESULT_TOP3_MISSING")
-    targets={
-        "EXACTA":top3[:2],
-        "TRIO":sorted(top3),
-        "TRIFECTA":top3,
-    }
+    official=result.get("official_result") or {}
+    has_finish_groups=any(official.get(key) is not None for key in ("top3_orders","finish_groups"))
+    if has_finish_groups or official.get("dead_heat") is True:
+        from jra_candidate_postresult_closedloop import official_top3_orders
+        orders=official_top3_orders(official)
+    else:
+        orders=[top3]
     by_type={}
     unresolved=[]
     total_inv=0
@@ -288,17 +290,33 @@ def settle_ticket_list(tickets,result):
         inv=sum(int(x.get("stake") or 0) for x in rows)
         ret=0.0
         hit=False
-        matching=[x for x in rows if _key(bt,x.get("selection") or [])==_key(bt,targets[bt])]
+        targets={_key(bt,order[:2] if bt=="EXACTA" else order) for order in orders}
+        matching=[x for x in rows if _key(bt,x.get("selection") or []) in targets]
         if matching:
-            pay=_payout(result,bt,top3)
-            if pay is None:
-                unresolved.append(bt)
+            official_price=(official.get("payouts") or {}).get(bt)
+            canonical_price=isinstance(official_price,list) or (
+                isinstance(official_price,dict) and
+                bool({"selection","per_100_yen"} & official_price.keys())
+            )
+            if canonical_price or len(orders)>1:
+                from jra_candidate_postresult_closedloop import official_payout_entries
+                try:
+                    prices={_key(bt,row["selection"]):row["per_100_yen"]
+                            for row in official_payout_entries(official,bt)}
+                except ValueError:
+                    unresolved.append(bt)
+                else:
+                    ret=sum(prices[_key(bt,x["selection"])]*(int(x.get("stake") or 0)/100.0)
+                            for x in matching)
             else:
-                for x in matching:
-                    ret += pay*(int(x.get("stake") or 0)/100.0)
-                hit=ret>0
-                if hit:
-                    hit_types.append(bt)
+                pay=_payout(result,bt,top3)
+                if pay is None:
+                    unresolved.append(bt)
+                else:
+                    ret=sum(pay*(int(x.get("stake") or 0)/100.0) for x in matching)
+            hit=ret>0
+            if hit:
+                hit_types.append(bt)
         total_inv += inv
         total_ret += ret
         by_type[bt]={

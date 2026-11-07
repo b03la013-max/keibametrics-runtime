@@ -21,7 +21,8 @@ sys.path.insert(0, str(HERE / "jra_source_runtime"))
 from jra_source_candidate_oos import evaluate_result
 from jra_source_candidate_promotion_gate import bind_result
 from jra_same_day_results import (_open_day, _result_post, parse_result_detail,
-    finish_groups_and_top3_orders, validate_result_identity, OfficialResultNavigationError)
+    finish_groups_and_top3_orders, validate_result_identity, OfficialResultNavigationError,
+    remember_result_failure_capture)
 from jra_race_card_detail import _date8
 from jra_source_runtime.source_acquisition import _decode, _html_text, utcnow
 
@@ -359,6 +360,7 @@ def fetch_jra_result(race_date: str, meeting_key: str, race_no: int, *, session=
         exc.official_navigation=list(getattr(client,'result_navigation',[]))
         exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                       for row in exc.official_navigation]}
+        remember_result_failure_capture(exc, client)
         raise exc
     if len(tokens)!=1:
         raise OfficialResultNavigationError('JRA_RESULT_RACE_TOKEN_NOT_UNIQUE','RESULT_RACE_SELECTION',client=client)
@@ -371,6 +373,7 @@ def fetch_jra_result(race_date: str, meeting_key: str, race_no: int, *, session=
         if not hasattr(exc,'first_failed_stage'):exc.first_failed_stage='RESULT_DETAIL_TABLE'
         exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                       for row in getattr(client,'result_navigation',[])]}
+        remember_result_failure_capture(exc, client)
         raise
     return {'parsed':parsed,'text':_html_text(_decode(raw,headers.get('content-type',''))),
             'sha256':hashlib.sha256(raw).hexdigest(),'captured_at':fetched,

@@ -120,6 +120,11 @@ def parse_result_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     scheduled_post=(f"{int(mt.group(1)):02d}:{int(mt.group(2)):02d}" if mt else None)
     mg=re.search(r"天候\s*([^\s]+)\s+(芝|ダート|ダ)\s*(良|稍重|重|不良)",text)
     env={"weather":mg.group(1),"surface":mg.group(2),"going":mg.group(3)} if mg else {}
+    if "障害" in text:
+        from bs4 import BeautifulSoup
+        category = BeautifulSoup(decoded, "html.parser").select_one(".race_header .type .category")
+        if category and category.get_text(strip=True).startswith("障害"):
+            env["race_type"] = "OBSTACLE"
     md=re.search(r"コース[:：]?\s*([\d,]+)\s*メートル\s*[（(]([^）)]+)",text)
     if md:
         env["distance_m"]=int(md.group(1).replace(",",""))
@@ -142,6 +147,28 @@ class OfficialResultNavigationError(ValueError):
         self.official_navigation = list(getattr(client, 'result_navigation', []))
         self.diagnostic = {'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                          for row in self.official_navigation]}
+        remember_result_failure_capture(self, client)
+
+
+def remember_result_failure_capture(exc, client):
+    """Attach only the last completed public response, outside health/log rows."""
+    import base64
+    import hashlib
+
+    raw = getattr(client, 'last_raw', None)
+    response = getattr(client, 'last_response', None) or {}
+    if not isinstance(raw, bytes) or hashlib.sha256(raw).hexdigest() != response.get('raw_sha256'):
+        return
+    navigation = getattr(client, 'result_navigation', None) or []
+    exc.result_failure_capture = {
+        'capture_stage': navigation[-1]['stage'] if navigation else None,
+        'url': response.get('response_url'),
+        'captured_at': response.get('fetched_at'),
+        'http_status': response.get('http_status'),
+        'content_type': (getattr(client, 'last_headers', None) or {}).get('content-type'),
+        'sha256': response['raw_sha256'],
+        'raw_base64': base64.b64encode(raw).decode('ascii'),
+    }
 
 
 def _navigation_observation(client, stage, *, token=None):
@@ -192,6 +219,7 @@ def _open_day(race_date:str,meeting_key:str):
         try: result = original_get(path)
         except Exception as exc:
             exc.first_failed_stage = 'RESULT_CALENDAR'
+            remember_result_failure_capture(exc, client)
             raise
         _navigation_observation(client, 'RESULT_CALENDAR')
         return result
@@ -204,6 +232,7 @@ def _open_day(race_date:str,meeting_key:str):
         try: result = original_post(path,token)
         except Exception as exc:
             exc.first_failed_stage = stage
+            remember_result_failure_capture(exc, client)
             raise
         _navigation_observation(client,stage,token=token)
         return result
@@ -220,6 +249,7 @@ def _open_day(race_date:str,meeting_key:str):
         exc.official_navigation=list(client.result_navigation)
         exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                       for row in client.result_navigation]}
+        remember_result_failure_capture(exc, client)
         raise
     expected = r'pw01srl\d{2}'+re.escape(key+d)+r'/[0-9A-Fa-f]{2}'
     target = [token for token in days if re.fullmatch(expected,token)]
