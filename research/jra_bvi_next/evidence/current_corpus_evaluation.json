@@ -1,0 +1,1808 @@
+{
+  "profile": "KM-JRA-BVI-HIERARCHICAL-RESIDUAL-v0.1-CANDIDATE-20261025",
+  "protocol": {
+    "profile": "KM-JRA-BVI-HIERARCHICAL-RESIDUAL-v0.1-CANDIDATE-20261025",
+    "classification": "POST_CAPTURE_RESEARCH / UNVALIDATED / NO_PRODUCTION_OR_PURCHASE_AUTHORITY",
+    "split": [
+      "2026-08-01",
+      "2026-09-01",
+      "2026-10-24"
+    ],
+    "label": "1-(finish-1)/(field_size-1)",
+    "identity": "NAME_SIRE_DAM_COMPOSITE; NOT_INDEPENDENT_OFFICIAL_ID",
+    "controls": "EXISTING_FIXED_CONTROL_RIDGE; CLASS/FIELD/STRICTLY_EARLIER_INDIVIDUAL_FORM/ENVIRONMENT",
+    "general_order": [
+      "sire",
+      "damsire",
+      "sire_damsire_pair"
+    ],
+    "environment_order": [
+      "sire_surface",
+      "damsire_surface",
+      "sire_venue",
+      "damsire_venue",
+      "sire_distance",
+      "damsire_distance",
+      "sire_going",
+      "damsire_going"
+    ],
+    "prior_effect": 0.0,
+    "prior_effective_horses": {
+      "GENERAL": 12.0,
+      "PAIR": 24.0,
+      "ENVIRONMENT": 24.0,
+      "SEASON": 24.0
+    },
+    "pooling": "NORMAL_NORMAL_RESIDUAL_MEANS_WITH_FIXED_ZERO_PARENT_RESIDUAL_PRIOR",
+    "weight": "1 / training_runs_per_exact_composite_horse",
+    "distance_bucket_metres": 400,
+    "uncertainty": "HORSE_CLUSTER_RESIDUAL_SANDWICH_PROXY; NOT_CALIBRATED_INTERVAL",
+    "weather": "EXCLUDED",
+    "meeting_progress": "MISSING_EXACT_MEETING_EVIDENCE; EXCLUDED",
+    "opponent_strength": "UNAVAILABLE_EXACT_RACE_BOUND_OPPONENT_LABELS; NOT_CONTROLLED",
+    "season": "CALENDAR_QUARTER_ABLATION_ONLY; NO_WEATHER_INFERENCE",
+    "negative_control": "TRAIN_HORSE_PARENT_PAIR_PERMUTATION_FIXED_SEED_20261025",
+    "hyperparameter_search": false,
+    "publication": "RESEARCH_ONLY_NOT_FORWARD_PREREGISTRATION",
+    "automatic_promotion": false
+  },
+  "protocol_sha256": "704baefc0508106ed5d7fdb45eaa312e2431da8b74513af214c22d1177e21382",
+  "classification": "POST_CAPTURE_CHRONOLOGICAL_DIAGNOSTIC; NOT_FORWARD_OOS",
+  "dataset_sha256": "49d4cd32a0b1e9a9bcb0a323aa49937b3d52f9b1d237826d19d6bc3c044fdcb4",
+  "corpus_manifest_sha256": "7669fa5b9689d53d37da1c864664892067217f86b284e1fcd17ae0d0e860ae1e",
+  "dataset_acquisition_cutoff": "2026-10-25T09:34:28.508658+00:00",
+  "reconstructed_input_rows": 38290,
+  "old_surface_only_eligible": 36082,
+  "explicit_jump_excluded": 489,
+  "jump_composite_horses": 126,
+  "research_flat_proxy_rows": 35593,
+  "domain_rule": "EXPLICIT_JUMP_TEXT_OR_MIXED_SURFACE_EXCLUDED; NO_PERMANENT_RACE_QUALIFICATION",
+  "training_rows": 31276,
+  "training_composite_horses": 2697,
+  "eligible_permanent_horse_ids": 0,
+  "independent_race_labels": 0,
+  "production_training_eligibility": false,
+  "partitions": {
+    "VALIDATION": {
+      "arms": {
+        "CONTROL_ONLY": {
+          "n": 1546,
+          "composite_horses": 1311,
+          "mse": 0.08560706106523626,
+          "mae": 0.24531344299703198
+        },
+        "GENERAL_ONLY": {
+          "n": 1546,
+          "composite_horses": 1311,
+          "mse": 0.08464387861407453,
+          "mae": 0.24304867394230978
+        },
+        "HIERARCHICAL_ENV": {
+          "n": 1546,
+          "composite_horses": 1311,
+          "mse": 0.08520059690347366,
+          "mae": 0.24248375317424506
+        },
+        "HIERARCHICAL_ENV_SEASON": {
+          "n": 1546,
+          "composite_horses": 1311,
+          "mse": 0.08495613941986582,
+          "mae": 0.24250678785849583
+        },
+        "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+          "n": 1546,
+          "composite_horses": 1311,
+          "mse": 0.08647371386141676,
+          "mae": 0.24535349362732736
+        }
+      },
+      "dependence": {
+        "horse_overlap_with_train": 1085,
+        "sire_overlap_with_train": 205,
+        "unseen_horse_rows": 254,
+        "unseen_sire_rows": 21
+      },
+      "sensitivity": {
+        "horse_id": {
+          "kind": "CLUSTER_BOOTSTRAP_SENSITIVITY_NOT_POPULATION_CI",
+          "cluster": "horse_id",
+          "n_clusters": 1311,
+          "resamples": 300,
+          "seed": 20261025,
+          "lower_2_5pct": -0.00015912473214528983,
+          "upper_97_5pct": 0.0013312690144910847,
+          "calibrated": false
+        },
+        "sire": {
+          "kind": "CLUSTER_BOOTSTRAP_SENSITIVITY_NOT_POPULATION_CI",
+          "cluster": "sire",
+          "n_clusters": 219,
+          "resamples": 300,
+          "seed": 20261025,
+          "lower_2_5pct": -0.0002676248458556639,
+          "upper_97_5pct": 0.0013656156118646418,
+          "calibrated": false
+        }
+      },
+      "groups": {
+        "venue": {
+          "新潟": {
+            "CONTROL_ONLY": {
+              "n": 636,
+              "composite_horses": 571,
+              "mse": 0.08433213123777741,
+              "mae": 0.2413986042038071
+            },
+            "GENERAL_ONLY": {
+              "n": 636,
+              "composite_horses": 571,
+              "mse": 0.08341552835999773,
+              "mae": 0.23964186250064404
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 636,
+              "composite_horses": 571,
+              "mse": 0.08383915453803997,
+              "mae": 0.23942666905607768
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 636,
+              "composite_horses": 571,
+              "mse": 0.08361131589947977,
+              "mae": 0.23955488986697113
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 636,
+              "composite_horses": 571,
+              "mse": 0.08480385942350684,
+              "mae": 0.24085661233270553
+            }
+          },
+          "札幌": {
+            "CONTROL_ONLY": {
+              "n": 380,
+              "composite_horses": 289,
+              "mse": 0.08682072078491378,
+              "mae": 0.24888049275606977
+            },
+            "GENERAL_ONLY": {
+              "n": 380,
+              "composite_horses": 289,
+              "mse": 0.0866238334495436,
+              "mae": 0.24661100325952573
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 380,
+              "composite_horses": 289,
+              "mse": 0.08682355002236856,
+              "mae": 0.24470799840385676
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 380,
+              "composite_horses": 289,
+              "mse": 0.08673463181122487,
+              "mae": 0.24459584041621
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 380,
+              "composite_horses": 289,
+              "mse": 0.0900845808582743,
+              "mae": 0.2534438984615392
+            }
+          },
+          "中京": {
+            "CONTROL_ONLY": {
+              "n": 530,
+              "composite_horses": 471,
+              "mse": 0.08626680573841808,
+              "mae": 0.2474537421744973
+            },
+            "GENERAL_ONLY": {
+              "n": 530,
+              "composite_horses": 471,
+              "mse": 0.08469830865957378,
+              "mae": 0.24458272476562548
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 530,
+              "composite_horses": 471,
+              "mse": 0.08567070097750341,
+              "mae": 0.2445575122533054
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 530,
+              "composite_horses": 471,
+              "mse": 0.08529478215618487,
+              "mae": 0.2445512541805304
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 530,
+              "composite_horses": 471,
+              "mse": 0.08588861567972779,
+              "mae": 0.24494908356389153
+            }
+          }
+        },
+        "surface": {
+          "芝": {
+            "CONTROL_ONLY": {
+              "n": 944,
+              "composite_horses": 807,
+              "mse": 0.08899632350751539,
+              "mae": 0.252501655965086
+            },
+            "GENERAL_ONLY": {
+              "n": 944,
+              "composite_horses": 807,
+              "mse": 0.08822149034789586,
+              "mae": 0.25005933514656337
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 944,
+              "composite_horses": 807,
+              "mse": 0.08884409692353366,
+              "mae": 0.24946128186120592
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 944,
+              "composite_horses": 807,
+              "mse": 0.08872938461772092,
+              "mae": 0.24940331789229214
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 944,
+              "composite_horses": 807,
+              "mse": 0.08999064707731184,
+              "mae": 0.25245134641815475
+            }
+          },
+          "ダ": {
+            "CONTROL_ONLY": {
+              "n": 602,
+              "composite_horses": 512,
+              "mse": 0.08029233723548294,
+              "mae": 0.2340415608677246
+            },
+            "GENERAL_ONLY": {
+              "n": 602,
+              "composite_horses": 512,
+              "mse": 0.07903380307133809,
+              "mae": 0.2320552118545766
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 602,
+              "composite_horses": 512,
+              "mse": 0.07948720152318026,
+              "mae": 0.23154224639602072
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 602,
+              "composite_horses": 512,
+              "mse": 0.07903928980728243,
+              "mae": 0.23169229557958598
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 602,
+              "composite_horses": 512,
+              "mse": 0.08095878868566102,
+              "mae": 0.23422330586230902
+            }
+          }
+        },
+        "going": {
+          "良": {
+            "CONTROL_ONLY": {
+              "n": 1298,
+              "composite_horses": 1169,
+              "mse": 0.08713438817325468,
+              "mae": 0.2478530312710816
+            },
+            "GENERAL_ONLY": {
+              "n": 1298,
+              "composite_horses": 1169,
+              "mse": 0.08574122503457055,
+              "mae": 0.24529791181832297
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1298,
+              "composite_horses": 1169,
+              "mse": 0.08631531291888253,
+              "mae": 0.24488366398672126
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1298,
+              "composite_horses": 1169,
+              "mse": 0.08598329469814517,
+              "mae": 0.24475750566414875
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1298,
+              "composite_horses": 1169,
+              "mse": 0.08762187770181361,
+              "mae": 0.24728556027507206
+            }
+          },
+          "稍重": {
+            "CONTROL_ONLY": {
+              "n": 248,
+              "composite_horses": 229,
+              "mse": 0.07761322805633343,
+              "mae": 0.23202156565946574
+            },
+            "GENERAL_ONLY": {
+              "n": 248,
+              "composite_horses": 229,
+              "mse": 0.07890050904228493,
+              "mae": 0.23127645312349873
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 248,
+              "composite_horses": 229,
+              "mse": 0.07936631711314825,
+              "mae": 0.2299229296476558
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 248,
+              "composite_horses": 229,
+              "mse": 0.07958014122951669,
+              "mae": 0.2307268212789092
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 248,
+              "composite_horses": 229,
+              "mse": 0.08046437247095263,
+              "mae": 0.23524130609195412
+            }
+          }
+        },
+        "distance": {
+          "1200": {
+            "CONTROL_ONLY": {
+              "n": 563,
+              "composite_horses": 493,
+              "mse": 0.08466008773960612,
+              "mae": 0.24293974231922008
+            },
+            "GENERAL_ONLY": {
+              "n": 563,
+              "composite_horses": 493,
+              "mse": 0.08311093121349222,
+              "mae": 0.23981830382858077
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 563,
+              "composite_horses": 493,
+              "mse": 0.08363309388337614,
+              "mae": 0.23824428059404723
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 563,
+              "composite_horses": 493,
+              "mse": 0.08324377213869207,
+              "mae": 0.23806369097891542
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 563,
+              "composite_horses": 493,
+              "mse": 0.08522951764895155,
+              "mae": 0.24257454079039154
+            }
+          },
+          "2000": {
+            "CONTROL_ONLY": {
+              "n": 212,
+              "composite_horses": 186,
+              "mse": 0.09089114371802806,
+              "mae": 0.2583756811296153
+            },
+            "GENERAL_ONLY": {
+              "n": 212,
+              "composite_horses": 186,
+              "mse": 0.09224041367134567,
+              "mae": 0.2589640724760439
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 212,
+              "composite_horses": 186,
+              "mse": 0.09221034443600296,
+              "mae": 0.25773061070135783
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 212,
+              "composite_horses": 186,
+              "mse": 0.09209836611413318,
+              "mae": 0.2576847645252173
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 212,
+              "composite_horses": 186,
+              "mse": 0.09144069865407473,
+              "mae": 0.25799397251517797
+            }
+          },
+          "1600": {
+            "CONTROL_ONLY": {
+              "n": 650,
+              "composite_horses": 574,
+              "mse": 0.08464331681919611,
+              "mae": 0.24319744495286658
+            },
+            "GENERAL_ONLY": {
+              "n": 650,
+              "composite_horses": 574,
+              "mse": 0.08348153232784847,
+              "mae": 0.2408169847563057
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 650,
+              "composite_horses": 574,
+              "mse": 0.08428657794327736,
+              "mae": 0.24092724649772174
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 650,
+              "composite_horses": 574,
+              "mse": 0.08406950430781122,
+              "mae": 0.24115878246263317
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 650,
+              "composite_horses": 574,
+              "mse": 0.08515092339127374,
+              "mae": 0.24237071972196864
+            }
+          },
+          "800": {
+            "CONTROL_ONLY": {
+              "n": 97,
+              "composite_horses": 70,
+              "mse": 0.08016632389697355,
+              "mae": 0.23469988595315994
+            },
+            "GENERAL_ONLY": {
+              "n": 97,
+              "composite_horses": 70,
+              "mse": 0.07911525322816691,
+              "mae": 0.23227375212166723
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 97,
+              "composite_horses": 70,
+              "mse": 0.08031589062575113,
+              "mae": 0.2352731969985551
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 97,
+              "composite_horses": 70,
+              "mse": 0.0804681693335415,
+              "mae": 0.23541156319465212
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 97,
+              "composite_horses": 70,
+              "mse": 0.08391834109365533,
+              "mae": 0.24041720958616494
+            }
+          },
+          "2400": {
+            "CONTROL_ONLY": {
+              "n": 24,
+              "composite_horses": 22,
+              "mse": 0.10923646628129835,
+              "mae": 0.28581814130801164
+            },
+            "GENERAL_ONLY": {
+              "n": 24,
+              "composite_horses": 22,
+              "mse": 0.1073266162335056,
+              "mae": 0.28223197695825863
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 24,
+              "composite_horses": 22,
+              "mse": 0.10454920342369789,
+              "mae": 0.2785521929944758
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 24,
+              "composite_horses": 22,
+              "mse": 0.10418766614174535,
+              "mae": 0.2778473207569278
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 24,
+              "composite_horses": 22,
+              "mse": 0.11793899117975977,
+              "mae": 0.29961980668759725
+            }
+          }
+        },
+        "career": {
+          "FIRST_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 226,
+              "composite_horses": 226,
+              "mse": 0.11369016397525644,
+              "mae": 0.2836672909416046
+            },
+            "GENERAL_ONLY": {
+              "n": 226,
+              "composite_horses": 226,
+              "mse": 0.11023736710480844,
+              "mae": 0.27815824369389996
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 226,
+              "composite_horses": 226,
+              "mse": 0.11110637965960683,
+              "mae": 0.27865262769238597
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 226,
+              "composite_horses": 226,
+              "mse": 0.11039564290996028,
+              "mae": 0.27817432885076043
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 226,
+              "composite_horses": 226,
+              "mse": 0.11635938798430921,
+              "mae": 0.28578452138306804
+            }
+          },
+          "ESTABLISHED_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 1088,
+              "composite_horses": 901,
+              "mse": 0.08069232974563871,
+              "mae": 0.23886907639556648
+            },
+            "GENERAL_ONLY": {
+              "n": 1088,
+              "composite_horses": 901,
+              "mse": 0.08082060329690158,
+              "mae": 0.23799452089277887
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1088,
+              "composite_horses": 901,
+              "mse": 0.08117809077540575,
+              "mae": 0.2370256375704401
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1088,
+              "composite_horses": 901,
+              "mse": 0.08101049125850643,
+              "mae": 0.23714485248615425
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1088,
+              "composite_horses": 901,
+              "mse": 0.08178875490148674,
+              "mae": 0.23927089126498674
+            }
+          },
+          "LOW_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 232,
+              "composite_horses": 220,
+              "mse": 0.08129864045341542,
+              "mae": 0.2381733620785882
+            },
+            "GENERAL_ONLY": {
+              "n": 232,
+              "composite_horses": 220,
+              "mse": 0.07764213355449825,
+              "mae": 0.23254934529588855
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 232,
+              "composite_horses": 220,
+              "mse": 0.07882895795714523,
+              "mae": 0.23284696065631372
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 232,
+              "composite_horses": 220,
+              "mse": 0.07867828343192482,
+              "mae": 0.23290731122425362
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 232,
+              "composite_horses": 220,
+              "mse": 0.07933178712275374,
+              "mae": 0.2344934035300396
+            }
+          }
+        },
+        "sire_support": {
+          "GE20": {
+            "CONTROL_ONLY": {
+              "n": 950,
+              "composite_horses": 803,
+              "mse": 0.0864167664774073,
+              "mae": 0.24882206875695329
+            },
+            "GENERAL_ONLY": {
+              "n": 950,
+              "composite_horses": 803,
+              "mse": 0.08535412200888542,
+              "mae": 0.2458077927310815
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 950,
+              "composite_horses": 803,
+              "mse": 0.08569317350087256,
+              "mae": 0.24461396144343825
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 950,
+              "composite_horses": 803,
+              "mse": 0.08558949109376779,
+              "mae": 0.24491180802103113
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 950,
+              "composite_horses": 803,
+              "mse": 0.08654137678237783,
+              "mae": 0.24768546430284308
+            }
+          },
+          "LT4": {
+            "CONTROL_ONLY": {
+              "n": 162,
+              "composite_horses": 134,
+              "mse": 0.07534594485985348,
+              "mae": 0.2245427114963084
+            },
+            "GENERAL_ONLY": {
+              "n": 162,
+              "composite_horses": 134,
+              "mse": 0.07489359575069333,
+              "mae": 0.22375318842126904
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 162,
+              "composite_horses": 134,
+              "mse": 0.0743045295028406,
+              "mae": 0.22154164204213475
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 162,
+              "composite_horses": 134,
+              "mse": 0.07386482747765019,
+              "mae": 0.22148337375415295
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 162,
+              "composite_horses": 134,
+              "mse": 0.07639950442593853,
+              "mae": 0.22632334256347494
+            }
+          },
+          "4_TO_19": {
+            "CONTROL_ONLY": {
+              "n": 434,
+              "composite_horses": 374,
+              "mse": 0.087664850659037,
+              "mae": 0.24538640159424846
+            },
+            "GENERAL_ONLY": {
+              "n": 434,
+              "composite_horses": 374,
+              "mse": 0.0867287048785847,
+              "mae": 0.24421159054386612
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 434,
+              "composite_horses": 374,
+              "mse": 0.08818957190663866,
+              "mae": 0.24563795627947158
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 434,
+              "composite_horses": 374,
+              "mse": 0.08770984551302727,
+              "mae": 0.24508979230664096
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 434,
+              "composite_horses": 374,
+              "mse": 0.09008602297117355,
+              "mae": 0.24735236996512505
+            }
+          }
+        },
+        "horse_seen": {
+          "False": {
+            "CONTROL_ONLY": {
+              "n": 254,
+              "composite_horses": 226,
+              "mse": 0.10866239254911306,
+              "mae": 0.2761338812297287
+            },
+            "GENERAL_ONLY": {
+              "n": 254,
+              "composite_horses": 226,
+              "mse": 0.10584489563509233,
+              "mae": 0.2717590927592271
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 254,
+              "composite_horses": 226,
+              "mse": 0.1063084345876008,
+              "mae": 0.2714437672007925
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 254,
+              "composite_horses": 226,
+              "mse": 0.10564967428307058,
+              "mae": 0.27099067128123794
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 254,
+              "composite_horses": 226,
+              "mse": 0.11088186420453672,
+              "mae": 0.2778209256816928
+            }
+          },
+          "True": {
+            "CONTROL_ONLY": {
+              "n": 1292,
+              "composite_horses": 1085,
+              "mse": 0.08107451137722953,
+              "mae": 0.23925431659524793
+            },
+            "GENERAL_ONLY": {
+              "n": 1292,
+              "composite_horses": 1085,
+              "mse": 0.08047587681582491,
+              "mae": 0.23740436559904585
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1292,
+              "composite_horses": 1085,
+              "mse": 0.08105091364359109,
+              "mae": 0.2367903758037009
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1292,
+              "composite_horses": 1085,
+              "mse": 0.0808879057857683,
+              "mae": 0.2369070151113004
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1292,
+              "composite_horses": 1085,
+              "mse": 0.08167520752461144,
+              "mae": 0.23897057741849703
+            }
+          }
+        },
+        "sire_seen": {
+          "True": {
+            "CONTROL_ONLY": {
+              "n": 1525,
+              "composite_horses": 1294,
+              "mse": 0.08511380095745709,
+              "mae": 0.24471816477957248
+            },
+            "GENERAL_ONLY": {
+              "n": 1525,
+              "composite_horses": 1294,
+              "mse": 0.08416309509822897,
+              "mae": 0.24243368106389332
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1525,
+              "composite_horses": 1294,
+              "mse": 0.08473175355678778,
+              "mae": 0.24188019695051768
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1525,
+              "composite_horses": 1294,
+              "mse": 0.08451467835080358,
+              "mae": 0.24195253469489836
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1525,
+              "composite_horses": 1294,
+              "mse": 0.08600857519518776,
+              "mae": 0.24484554952098914
+            }
+          },
+          "False": {
+            "CONTROL_ONLY": {
+              "n": 21,
+              "composite_horses": 17,
+              "mse": 0.12142714032062914,
+              "mae": 0.28854198021730565
+            },
+            "GENERAL_ONLY": {
+              "n": 21,
+              "composite_horses": 17,
+              "mse": 0.1195579196457168,
+              "mae": 0.287708871065409
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 21,
+              "composite_horses": 17,
+              "mse": 0.11924755422233048,
+              "mae": 0.286313431325876
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 21,
+              "composite_horses": 17,
+              "mse": 0.11701462181605315,
+              "mae": 0.2827561247387863
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 21,
+              "composite_horses": 17,
+              "mse": 0.12025164081376095,
+              "mae": 0.2822399108733209
+            }
+          }
+        }
+      }
+    },
+    "TEST": {
+      "arms": {
+        "CONTROL_ONLY": {
+          "n": 2771,
+          "composite_horses": 2252,
+          "mse": 0.09092431391257082,
+          "mae": 0.2539467128636051
+        },
+        "GENERAL_ONLY": {
+          "n": 2771,
+          "composite_horses": 2252,
+          "mse": 0.09021697820444897,
+          "mae": 0.2521439321386578
+        },
+        "HIERARCHICAL_ENV": {
+          "n": 2771,
+          "composite_horses": 2252,
+          "mse": 0.09045209994118548,
+          "mae": 0.25131132363591036
+        },
+        "HIERARCHICAL_ENV_SEASON": {
+          "n": 2771,
+          "composite_horses": 2252,
+          "mse": 0.09070328104742384,
+          "mae": 0.25174294589167573
+        },
+        "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+          "n": 2771,
+          "composite_horses": 2252,
+          "mse": 0.09142618270215343,
+          "mae": 0.2528473172776948
+        }
+      },
+      "dependence": {
+        "horse_overlap_with_train": 1590,
+        "sire_overlap_with_train": 228,
+        "unseen_horse_rows": 790,
+        "unseen_sire_rows": 49
+      },
+      "sensitivity": {
+        "horse_id": {
+          "kind": "CLUSTER_BOOTSTRAP_SENSITIVITY_NOT_POPULATION_CI",
+          "cluster": "horse_id",
+          "n_clusters": 2252,
+          "resamples": 300,
+          "seed": 20261025,
+          "lower_2_5pct": -0.0003349673595296912,
+          "upper_97_5pct": 0.0008811678725723051,
+          "calibrated": false
+        },
+        "sire": {
+          "kind": "CLUSTER_BOOTSTRAP_SENSITIVITY_NOT_POPULATION_CI",
+          "cluster": "sire",
+          "n_clusters": 254,
+          "resamples": 300,
+          "seed": 20261025,
+          "lower_2_5pct": -0.0005257416943524253,
+          "upper_97_5pct": 0.0008459312821392411,
+          "calibrated": false
+        }
+      },
+      "groups": {
+        "venue": {
+          "阪神": {
+            "CONTROL_ONLY": {
+              "n": 898,
+              "composite_horses": 794,
+              "mse": 0.08820658799788372,
+              "mae": 0.2503749841892302
+            },
+            "GENERAL_ONLY": {
+              "n": 898,
+              "composite_horses": 794,
+              "mse": 0.08738121736671461,
+              "mae": 0.24840204726450696
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 898,
+              "composite_horses": 794,
+              "mse": 0.08686446006323449,
+              "mae": 0.24628702422403617
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 898,
+              "composite_horses": 794,
+              "mse": 0.08616337857489595,
+              "mae": 0.24575921378255028
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 898,
+              "composite_horses": 794,
+              "mse": 0.08881830618816801,
+              "mae": 0.24893801517623276
+            }
+          },
+          "札幌": {
+            "CONTROL_ONLY": {
+              "n": 76,
+              "composite_horses": 73,
+              "mse": 0.06776092017853774,
+              "mae": 0.21724462625750726
+            },
+            "GENERAL_ONLY": {
+              "n": 76,
+              "composite_horses": 73,
+              "mse": 0.0663489478784832,
+              "mae": 0.2125790611431257
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 76,
+              "composite_horses": 73,
+              "mse": 0.06569896723204213,
+              "mae": 0.20889986914186762
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 76,
+              "composite_horses": 73,
+              "mse": 0.06613382052556227,
+              "mae": 0.20985509215365838
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 76,
+              "composite_horses": 73,
+              "mse": 0.06416415271301,
+              "mae": 0.20686121726540901
+            }
+          },
+          "中山": {
+            "CONTROL_ONLY": {
+              "n": 892,
+              "composite_horses": 782,
+              "mse": 0.0903728516507376,
+              "mae": 0.2525803251296048
+            },
+            "GENERAL_ONLY": {
+              "n": 892,
+              "composite_horses": 782,
+              "mse": 0.09027372711093756,
+              "mae": 0.2523416760990567
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 892,
+              "composite_horses": 782,
+              "mse": 0.09114651737343468,
+              "mae": 0.2527716984021673
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 892,
+              "composite_horses": 782,
+              "mse": 0.09066668342503112,
+              "mae": 0.25251836058204863
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 892,
+              "composite_horses": 782,
+              "mse": 0.09107738948913956,
+              "mae": 0.25145015232108786
+            }
+          },
+          "東京": {
+            "CONTROL_ONLY": {
+              "n": 427,
+              "composite_horses": 423,
+              "mse": 0.09897092272589633,
+              "mae": 0.26723009183422813
+            },
+            "GENERAL_ONLY": {
+              "n": 427,
+              "composite_horses": 423,
+              "mse": 0.09836729819397634,
+              "mae": 0.2658797125286214
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 427,
+              "composite_horses": 423,
+              "mse": 0.09909015510469962,
+              "mae": 0.26670177893074176
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 427,
+              "composite_horses": 423,
+              "mse": 0.10111164973768627,
+              "mae": 0.26874954830135456
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 427,
+              "composite_horses": 423,
+              "mse": 0.099901900767746,
+              "mae": 0.2691900546816845
+            }
+          },
+          "京都": {
+            "CONTROL_ONLY": {
+              "n": 452,
+              "composite_horses": 447,
+              "mse": 0.09422254444409313,
+              "mae": 0.25800874749481234
+            },
+            "GENERAL_ONLY": {
+              "n": 452,
+              "composite_horses": 447,
+              "mse": 0.09284336396629761,
+              "mae": 0.2538399459855866
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 452,
+              "composite_horses": 447,
+              "mse": 0.09298481799472016,
+              "mae": 0.2520396018184106
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 452,
+              "composite_horses": 447,
+              "mse": 0.09481558115471708,
+              "mae": 0.2540754098762591
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 452,
+              "composite_horses": 447,
+              "mse": 0.09430614874254956,
+              "mae": 0.2560626010911786
+            }
+          },
+          "新潟": {
+            "CONTROL_ONLY": {
+              "n": 26,
+              "composite_horses": 26,
+              "mse": 0.08192962041998145,
+              "mae": 0.2426984942720134
+            },
+            "GENERAL_ONLY": {
+              "n": 26,
+              "composite_horses": 26,
+              "mse": 0.07646892099626684,
+              "mae": 0.23518157500965103
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 26,
+              "composite_horses": 26,
+              "mse": 0.07700133962235464,
+              "mae": 0.23329328411767622
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 26,
+              "composite_horses": 26,
+              "mse": 0.07815033566000976,
+              "mae": 0.23440084836501107
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 26,
+              "composite_horses": 26,
+              "mse": 0.08388905464350396,
+              "mae": 0.2459285047446907
+            }
+          }
+        },
+        "surface": {
+          "ダ": {
+            "CONTROL_ONLY": {
+              "n": 1328,
+              "composite_horses": 1080,
+              "mse": 0.08948593374780155,
+              "mae": 0.2518683859734309
+            },
+            "GENERAL_ONLY": {
+              "n": 1328,
+              "composite_horses": 1080,
+              "mse": 0.08821357405031031,
+              "mae": 0.24908162471727316
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1328,
+              "composite_horses": 1080,
+              "mse": 0.08838812934341736,
+              "mae": 0.24753804341910507
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1328,
+              "composite_horses": 1080,
+              "mse": 0.08834412805609623,
+              "mae": 0.24787474898836948
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1328,
+              "composite_horses": 1080,
+              "mse": 0.09070490008181538,
+              "mae": 0.251948212091284
+            }
+          },
+          "芝": {
+            "CONTROL_ONLY": {
+              "n": 1443,
+              "composite_horses": 1212,
+              "mse": 0.09224806225547698,
+              "mae": 0.2558594073266344
+            },
+            "GENERAL_ONLY": {
+              "n": 1443,
+              "composite_horses": 1212,
+              "mse": 0.09206072090486209,
+              "mae": 0.25496218872604437
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1443,
+              "composite_horses": 1212,
+              "mse": 0.09235158223767619,
+              "mae": 0.2547838919851255
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1443,
+              "composite_horses": 1212,
+              "mse": 0.0928744211530947,
+              "mae": 0.2553028665344967
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1443,
+              "composite_horses": 1212,
+              "mse": 0.09208998264658097,
+              "mae": 0.25367476820462037
+            }
+          }
+        },
+        "going": {
+          "稍重": {
+            "CONTROL_ONLY": {
+              "n": 425,
+              "composite_horses": 401,
+              "mse": 0.0891351653278175,
+              "mae": 0.2526286286520115
+            },
+            "GENERAL_ONLY": {
+              "n": 425,
+              "composite_horses": 401,
+              "mse": 0.09006456958155216,
+              "mae": 0.25248340619522275
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 425,
+              "composite_horses": 401,
+              "mse": 0.09218957807773293,
+              "mae": 0.2549242202893395
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 425,
+              "composite_horses": 401,
+              "mse": 0.09237155285644348,
+              "mae": 0.25508126439407636
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 425,
+              "composite_horses": 401,
+              "mse": 0.09027787112287025,
+              "mae": 0.25215421088741863
+            }
+          },
+          "良": {
+            "CONTROL_ONLY": {
+              "n": 1793,
+              "composite_horses": 1567,
+              "mse": 0.0919589922164793,
+              "mae": 0.25523819091958727
+            },
+            "GENERAL_ONLY": {
+              "n": 1793,
+              "composite_horses": 1567,
+              "mse": 0.09052423094015741,
+              "mae": 0.2523520834009107
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1793,
+              "composite_horses": 1567,
+              "mse": 0.09013042822237721,
+              "mae": 0.25051055324685356
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1793,
+              "composite_horses": 1567,
+              "mse": 0.09064338473629376,
+              "mae": 0.2512538215340057
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1793,
+              "composite_horses": 1567,
+              "mse": 0.09242595637647248,
+              "mae": 0.2545893624362424
+            }
+          },
+          "重": {
+            "CONTROL_ONLY": {
+              "n": 422,
+              "composite_horses": 394,
+              "mse": 0.08954467502540356,
+              "mae": 0.2520273994308829
+            },
+            "GENERAL_ONLY": {
+              "n": 422,
+              "composite_horses": 394,
+              "mse": 0.09028952103724107,
+              "mae": 0.25308250623648765
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 422,
+              "composite_horses": 394,
+              "mse": 0.09111151569271268,
+              "mae": 0.25334691506992085
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 422,
+              "composite_horses": 394,
+              "mse": 0.0908976087799915,
+              "mae": 0.2532755662512265
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 422,
+              "composite_horses": 394,
+              "mse": 0.0890870862942598,
+              "mae": 0.2481247583233444
+            }
+          },
+          "不良": {
+            "CONTROL_ONLY": {
+              "n": 131,
+              "composite_horses": 128,
+              "mse": 0.08701147085911143,
+              "mae": 0.24672927701749825
+            },
+            "GENERAL_ONLY": {
+              "n": 131,
+              "composite_horses": 128,
+              "mse": 0.08627237083168289,
+              "mae": 0.245170115676492
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 131,
+              "composite_horses": 128,
+              "mse": 0.08709374678581226,
+              "mae": 0.2439928552749872
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 131,
+              "composite_horses": 128,
+              "mse": 0.08548474871062468,
+              "mae": 0.24267003610581042
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 131,
+              "composite_horses": 128,
+              "mse": 0.08900280031491983,
+              "mae": 0.24646566174584358
+            }
+          }
+        },
+        "distance": {
+          "1200": {
+            "CONTROL_ONLY": {
+              "n": 1121,
+              "composite_horses": 934,
+              "mse": 0.08951828840596822,
+              "mae": 0.25174432277710024
+            },
+            "GENERAL_ONLY": {
+              "n": 1121,
+              "composite_horses": 934,
+              "mse": 0.08843636735740762,
+              "mae": 0.2500910621668163
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1121,
+              "composite_horses": 934,
+              "mse": 0.08827237343736441,
+              "mae": 0.2480020541040855
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1121,
+              "composite_horses": 934,
+              "mse": 0.08860085260540901,
+              "mae": 0.24864817983022264
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1121,
+              "composite_horses": 934,
+              "mse": 0.09077335809065944,
+              "mae": 0.2516499209015392
+            }
+          },
+          "2000": {
+            "CONTROL_ONLY": {
+              "n": 419,
+              "composite_horses": 371,
+              "mse": 0.09210954392827855,
+              "mae": 0.25530481613641504
+            },
+            "GENERAL_ONLY": {
+              "n": 419,
+              "composite_horses": 371,
+              "mse": 0.09245768242146958,
+              "mae": 0.2541071178624338
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 419,
+              "composite_horses": 371,
+              "mse": 0.09382668047734367,
+              "mae": 0.2552064227826849
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 419,
+              "composite_horses": 371,
+              "mse": 0.09403256671301968,
+              "mae": 0.25543799507677667
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 419,
+              "composite_horses": 371,
+              "mse": 0.08977974368033936,
+              "mae": 0.24967804653790118
+            }
+          },
+          "1600": {
+            "CONTROL_ONLY": {
+              "n": 1131,
+              "composite_horses": 971,
+              "mse": 0.09226467349535278,
+              "mae": 0.25621424445690644
+            },
+            "GENERAL_ONLY": {
+              "n": 1131,
+              "composite_horses": 971,
+              "mse": 0.09093519093904101,
+              "mae": 0.25327739741879446
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1131,
+              "composite_horses": 971,
+              "mse": 0.09107174845948847,
+              "mae": 0.2527320976606093
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1131,
+              "composite_horses": 971,
+              "mse": 0.09121819432469318,
+              "mae": 0.2529992691564591
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1131,
+              "composite_horses": 971,
+              "mse": 0.09277653893111866,
+              "mae": 0.25560832876794143
+            }
+          },
+          "800": {
+            "CONTROL_ONLY": {
+              "n": 10,
+              "composite_horses": 8,
+              "mse": 0.0759205294833498,
+              "mae": 0.26320214510550943
+            },
+            "GENERAL_ONLY": {
+              "n": 10,
+              "composite_horses": 8,
+              "mse": 0.07588570186935703,
+              "mae": 0.2655570837781938
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 10,
+              "composite_horses": 8,
+              "mse": 0.07336707805699061,
+              "mae": 0.26148562806086717
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 10,
+              "composite_horses": 8,
+              "mse": 0.07265370265031415,
+              "mae": 0.2601098772304653
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 10,
+              "composite_horses": 8,
+              "mse": 0.07906404537680081,
+              "mae": 0.27109478180185576
+            }
+          },
+          "2400": {
+            "CONTROL_ONLY": {
+              "n": 90,
+              "composite_horses": 84,
+              "mse": 0.08774247360685729,
+              "mae": 0.24553228465495816
+            },
+            "GENERAL_ONLY": {
+              "n": 90,
+              "composite_horses": 84,
+              "mse": 0.09453057657254939,
+              "mae": 0.25283961738246147
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 90,
+              "composite_horses": 84,
+              "mse": 0.09600267672756793,
+              "mae": 0.255411391819167
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 90,
+              "composite_horses": 84,
+              "mse": 0.09692528612512864,
+              "mae": 0.2563700150080503
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 90,
+              "composite_horses": 84,
+              "mse": 0.09162665845680575,
+              "mae": 0.24579206324362193
+            }
+          }
+        },
+        "career": {
+          "LOW_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 582,
+              "composite_horses": 498,
+              "mse": 0.09162963393311242,
+              "mae": 0.25409173289998516
+            },
+            "GENERAL_ONLY": {
+              "n": 582,
+              "composite_horses": 498,
+              "mse": 0.08758994218323449,
+              "mae": 0.24770262866633813
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 582,
+              "composite_horses": 498,
+              "mse": 0.087243353835206,
+              "mae": 0.24597101581616557
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 582,
+              "composite_horses": 498,
+              "mse": 0.08723514598667055,
+              "mae": 0.24627868221117777
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 582,
+              "composite_horses": 498,
+              "mse": 0.09205519250137317,
+              "mae": 0.2536365623408083
+            }
+          },
+          "ESTABLISHED_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 1669,
+              "composite_horses": 1344,
+              "mse": 0.08240153344431825,
+              "mae": 0.24316156250823562
+            },
+            "GENERAL_ONLY": {
+              "n": 1669,
+              "composite_horses": 1344,
+              "mse": 0.08335173023557015,
+              "mae": 0.24304544028538314
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1669,
+              "composite_horses": 1344,
+              "mse": 0.08412888733734765,
+              "mae": 0.24262282633899102
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1669,
+              "composite_horses": 1344,
+              "mse": 0.08444771730486292,
+              "mae": 0.24319213494237224
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1669,
+              "composite_horses": 1344,
+              "mse": 0.08328036705768045,
+              "mae": 0.2420167396059395
+            }
+          },
+          "FIRST_OBSERVED_PROXY": {
+            "CONTROL_ONLY": {
+              "n": 520,
+              "composite_horses": 520,
+              "mse": 0.1174897453540291,
+              "mae": 0.2884005864827175
+            },
+            "GENERAL_ONLY": {
+              "n": 520,
+              "composite_horses": 520,
+              "mse": 0.11519204325138281,
+              "mae": 0.2863174350694375
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 520,
+              "composite_horses": 520,
+              "mse": 0.11433850776711899,
+              "mae": 0.2851750950583139
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 520,
+              "composite_horses": 520,
+              "mse": 0.11466287814683265,
+              "mae": 0.28530353230790134
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 520,
+              "composite_horses": 520,
+              "mse": 0.11686711079346018,
+              "mae": 0.28672595863813255
+            }
+          }
+        },
+        "sire_support": {
+          "4_TO_19": {
+            "CONTROL_ONLY": {
+              "n": 843,
+              "composite_horses": 666,
+              "mse": 0.09552004723628219,
+              "mae": 0.2600633515733803
+            },
+            "GENERAL_ONLY": {
+              "n": 843,
+              "composite_horses": 666,
+              "mse": 0.09255484983686331,
+              "mae": 0.2558885853622442
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 843,
+              "composite_horses": 666,
+              "mse": 0.09259522185503405,
+              "mae": 0.25448501611863467
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 843,
+              "composite_horses": 666,
+              "mse": 0.09271640581314926,
+              "mae": 0.25475757338694577
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 843,
+              "composite_horses": 666,
+              "mse": 0.09640814669591959,
+              "mae": 0.25978392723831983
+            }
+          },
+          "GE20": {
+            "CONTROL_ONLY": {
+              "n": 1656,
+              "composite_horses": 1365,
+              "mse": 0.08828582697563439,
+              "mae": 0.2503576618358452
+            },
+            "GENERAL_ONLY": {
+              "n": 1656,
+              "composite_horses": 1365,
+              "mse": 0.08881760733123995,
+              "mae": 0.249815653606458
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1656,
+              "composite_horses": 1365,
+              "mse": 0.08925887765877082,
+              "mae": 0.2493304116078692
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1656,
+              "composite_horses": 1365,
+              "mse": 0.08952897988506105,
+              "mae": 0.24978896393928507
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1656,
+              "composite_horses": 1365,
+              "mse": 0.08855370256487728,
+              "mae": 0.24847961232633267
+            }
+          },
+          "LT4": {
+            "CONTROL_ONLY": {
+              "n": 272,
+              "composite_horses": 221,
+              "mse": 0.09274464911726944,
+              "mae": 0.2568406175313623
+            },
+            "GENERAL_ONLY": {
+              "n": 272,
+              "composite_horses": 221,
+              "mse": 0.09149099430705518,
+              "mae": 0.25471336810130335
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 272,
+              "composite_horses": 221,
+              "mse": 0.09107461584671624,
+              "mae": 0.2535354690605412
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 272,
+              "composite_horses": 221,
+              "mse": 0.09161349629509384,
+              "mae": 0.2542961191808163
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 272,
+              "composite_horses": 221,
+              "mse": 0.09347409248371376,
+              "mae": 0.2579405422874332
+            }
+          }
+        },
+        "horse_seen": {
+          "False": {
+            "CONTROL_ONLY": {
+              "n": 790,
+              "composite_horses": 662,
+              "mse": 0.1087131392107036,
+              "mae": 0.27661515284876054
+            },
+            "GENERAL_ONLY": {
+              "n": 790,
+              "composite_horses": 662,
+              "mse": 0.10623839314354638,
+              "mae": 0.27334878886804365
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 790,
+              "composite_horses": 662,
+              "mse": 0.10587868063293603,
+              "mae": 0.2724463920128662
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 790,
+              "composite_horses": 662,
+              "mse": 0.10609290630013933,
+              "mae": 0.2727363103173791
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 790,
+              "composite_horses": 662,
+              "mse": 0.10894055567878687,
+              "mae": 0.2772498031903371
+            }
+          },
+          "True": {
+            "CONTROL_ONLY": {
+              "n": 1981,
+              "composite_horses": 1590,
+              "mse": 0.0838303351212912,
+              "mae": 0.24490679989627911
+            },
+            "GENERAL_ONLY": {
+              "n": 1981,
+              "composite_horses": 1590,
+              "mse": 0.0838278223226282,
+              "mae": 0.2436876793288573
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 1981,
+              "composite_horses": 1590,
+              "mse": 0.0843001571110578,
+              "mae": 0.24288290161784112
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 1981,
+              "composite_horses": 1590,
+              "mse": 0.08456607562105067,
+              "mae": 0.2433710337784472
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 1981,
+              "composite_horses": 1590,
+              "mse": 0.08444165233792303,
+              "mae": 0.24311588675220902
+            }
+          }
+        },
+        "sire_seen": {
+          "True": {
+            "CONTROL_ONLY": {
+              "n": 2722,
+              "composite_horses": 2213,
+              "mse": 0.09058756594349095,
+              "mae": 0.253454859426934
+            },
+            "GENERAL_ONLY": {
+              "n": 2722,
+              "composite_horses": 2213,
+              "mse": 0.08989108731694491,
+              "mae": 0.2516961234673274
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 2722,
+              "composite_horses": 2213,
+              "mse": 0.09016513608600857,
+              "mae": 0.2508994337199442
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 2722,
+              "composite_horses": 2213,
+              "mse": 0.09042716108030127,
+              "mae": 0.2513458516754596
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 2722,
+              "composite_horses": 2213,
+              "mse": 0.09104232143614052,
+              "mae": 0.2522441149615785
+            }
+          },
+          "False": {
+            "CONTROL_ONLY": {
+              "n": 49,
+              "composite_horses": 39,
+              "mse": 0.109631007215334,
+              "mae": 0.281269673161946
+            },
+            "GENERAL_ONLY": {
+              "n": 49,
+              "composite_horses": 39,
+              "mse": 0.10832054954702121,
+              "mae": 0.27702016077868497
+            },
+            "HIERARCHICAL_ENV": {
+              "n": 49,
+              "composite_horses": 39,
+              "mse": 0.10639323491652321,
+              "mae": 0.2741922287636615
+            },
+            "HIERARCHICAL_ENV_SEASON": {
+              "n": 49,
+              "composite_horses": 39,
+              "mse": 0.10604202697615131,
+              "mae": 0.27380193480066334
+            },
+            "PERMUTED_PEDIGREE_NEGATIVE_CONTROL": {
+              "n": 49,
+              "composite_horses": 39,
+              "mse": 0.11275006772434021,
+              "mae": 0.2863558214505222
+            }
+          }
+        }
+      }
+    }
+  },
+  "input_exclusions": {
+    "NON_JRA_CENTRAL_FLAT_CONTEXT": 2208
+  },
+  "flat_input_exclusions": {
+    "NON_JRA_CENTRAL_FLAT_CONTEXT": 1898
+  },
+  "opponent_strength_controlled": false,
+  "forward_oos_increment": 0,
+  "fixed_incumbent_modified": false,
+  "production_effect": "NONE",
+  "purchase_authority": false,
+  "decision": "REJECT_HISTORICAL_INCREMENT",
+  "predictive_improvement_demonstrated": false
+}
