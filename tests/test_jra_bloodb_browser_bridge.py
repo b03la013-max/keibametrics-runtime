@@ -2,6 +2,7 @@
 from copy import deepcopy
 from pathlib import Path
 import json
+import hashlib
 import tempfile
 from unittest.mock import patch
 import sys
@@ -9,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "runtime"))
-from jra_bloodb_browser_bridge import snapshot_rows, evaluate_snapshot, evaluate_race
+from jra_bloodb_browser_bridge import snapshot_rows, evaluate_snapshot, evaluate_race, snapshot_from_collection, evaluate_private_capture, VENUES
 from jra_bloodb_mac_collector import BloodBError, parse_rendered
 from jra_bloodb_mac_automation import discover_links, discover_race_url
 
@@ -62,6 +63,53 @@ def tearDownModule():
     __import__("os").environ.pop("KM_JRA_DCR_ART3_POLICY", None)
 
 class BridgeTests(unittest.TestCase):
+    def test_private_collector_hash_and_formula_connection(self):
+        race = fixture()
+        raw = ('<table>' + ''.join('<tr>'+''.join(
+            '<td>'+ (f'<a href="{row["links"][0]["url"]}">{cell}</a>' if i==1 else cell)+'</td>'
+            for i,cell in enumerate(row['cells']))+'</tr>' for row in race['rows'])+'</table>').encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder/'subscriber_page.html').write_bytes(raw)
+            (folder/'diagnostic.json').write_text(json.dumps({'origin_url':race['source'],
+                'captured_at':race['captured_at'],'raw_sha256':hashlib.sha256(raw).hexdigest()}))
+            source = folder/'signed.json'
+            with patch('jra_bloodb_browser_bridge.evaluate_race',return_value={}) as calculator:
+                evaluate_private_capture(folder,root=ROOT,source_path=source)
+                self.assertEqual(calculator.call_args.args[0],race)
+                self.assertEqual(calculator.call_args.kwargs['source_path'],source)
+            (folder/'subscriber_page.html').write_bytes(raw+b' altered')
+            with self.assertRaises(BloodBError):
+                evaluate_private_capture(folder,root=ROOT,source_path=source)
+
+    def test_collection_adapter_excludes_results_and_preserves_identity(self):
+        race = fixture()
+        record = {"kind": "main", "url": race["source"], "observed_at": race["captured_at"],
+                  "data": {"tables": [[[ {"text": value, "links": row["links"] if i == 1 else []}
+                                         for i, value in enumerate(row["cells"]) ]
+                                       for row in race["rows"]]]}}
+        snapshot = snapshot_from_collection([record, deepcopy(record), {"kind": "result"}])
+        self.assertEqual(snapshot, {"races": [race]})
+        altered = deepcopy(record)
+        altered["observed_at"] = "2026-10-10T14:01:00+00:00"
+        self.assertEqual(snapshot_from_collection([record, altered]), snapshot)
+        altered['data']['tables'][0][0][14]['text'] = '別の父'
+        with self.assertRaises(BloodBError): snapshot_from_collection([record, altered])
+        with self.assertRaises(BloodBError): snapshot_from_collection([{"kind":"result"}])
+
+    def test_all_ten_venues_select_their_source_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for code, (venue, _) in VENUES.items():
+                race = fixture()
+                race["source"] = f"https://www.blood-b.com/main.php?rcode=20261011{code}040401"
+                source = root / f"runtime/executions/KM-JRA-{venue}-20261011-R01-X/SOURCE/runs/x/source_receipt_envelope.json"
+                source.parent.mkdir(parents=True)
+                source.write_text('{}')
+                with patch('jra_bloodb_browser_bridge.evaluate_race',return_value={"bvi":{}}) as evaluator:
+                    evaluate_snapshot({"races":[race]},root=root)
+                    self.assertEqual(evaluator.call_args.kwargs['source_path'],source)
+
     def test_observed_td_two_tier_header(self):
         result = parse_rendered(html(), OFFICIAL)
         self.assertEqual(result["horse_count"], 2)
@@ -130,7 +178,7 @@ class BridgeTests(unittest.TestCase):
             path = Path(directory) / "source.json"
             path.write_text(json.dumps({"artifact": art}))
             with patch("jra_bloodb_browser_bridge._verified_source", return_value={"valid": True}), \
-                 patch("jra_bloodb_browser_bridge.load_official", return_value=(OFFICIAL, {})), \
+                 patch("jra_bloodb_browser_bridge.load_official", return_value=([{ "horse_no":r["horse_no"], "name":r["horse_name"] } for r in OFFICIAL], {})), \
                  patch("jra_bloodb_browser_bridge._attested", return_value=False), \
                  patch("jra_bloodb_browser_bridge.compile_source_to_features", return_value=compiled) as compiler:
                 result = evaluate_race(fixture(), root=ROOT, source_path=path)
