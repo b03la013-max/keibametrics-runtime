@@ -216,12 +216,12 @@ def test_saved_oct24_36_races_preserve_finals_and_separate_storage_from_signatur
     assert all(p.read_bytes()==body for p,body in finals.items())
 
 
-def _original_signature_reference(root, rid='KM-JRA-KYO-20261031-R01'):
+def _original_signature_reference(root, rid='KM-JRA-KYO-20261031-R01', *, archive_root=None):
     """Copy existing archived originals; this helper never signs or calls a provider."""
     import os, shutil, hashlib, pytest
     from execution_store import resolve_phase
     from jra_presentation import digest
-    source=Path(os.environ.get('KM_STATUS_VERIFICATION_DATA_ROOT') or Path(__file__).resolve().parents[1])
+    source=Path(archive_root or os.environ.get('KM_STATUS_VERIFICATION_DATA_ROOT') or Path(__file__).resolve().parents[1])
     paths={kind:'runtime/'+folder+'/'+rid+suffix for kind,folder,suffix in (
         ('final','final_artifacts','.json'),('result','results','.json'),
         ('review','reviews_auto','-AUTO.json'),('learning','learning_states','.json'))}
@@ -280,6 +280,44 @@ def test_valid_originals_still_default_to_storage_only_without_opt_in_report(tmp
     proof=_post_result_evidence(tmp_path,rid,[rid+'-LIVE-R1'],final=final,result=result)
     assert proof['signature_validation_performed'] is False
     assert 'signature_verification_receipt' not in proof
+
+
+def test_day_writer_verifies_complete_stored_checkpoint_without_report(tmp_path):
+    import base64
+    from execution_store import persist_phase, resolve_phase
+    archive_root=Path(__file__).resolve().parents[1]
+    rid,paths,report,report_path,final,result=_original_signature_reference(
+        tmp_path,'KM-JRA-FKS-20261107-R01',archive_root=archive_root)
+    report_path.unlink()
+    executions=tmp_path/'runtime/executions'
+    current=resolve_phase(rid+'-LIVE-R1','RESULT',root=executions)
+    inputs=[tmp_path/path for path in paths.values()]
+    originals={path:path.read_bytes() for path in inputs}
+
+    def render():
+        return write_status(tmp_path,'2026-11-07',dt.datetime(2026,11,7,11,tzinfo=JST),
+            {rid:{}},{},formal_runs=[],resolver_runs=[],source_runs=[])
+
+    verified=render()
+    assert verified['post_result_metrics']['signed_result_final_verified']==1
+    evidence=verified['races'][0]['post_result_evidence']
+    assert evidence['signature_verification_receipt']['source_report_path'].endswith('/manifest.json')
+    assert evidence['signature_verification_receipt']['envelope_reference_byte_identity']=='MATCH'
+    assert evidence['learning']['consumption']=='NOT_ESTABLISHED_BY_STORAGE'
+    assert all(path.read_bytes()==raw for path,raw in originals.items())
+
+    stage=tmp_path/'bad-signature'
+    stage.mkdir()
+    envelope=json.loads((current['run_dir']/'result_receipt_envelope.json').read_bytes())
+    signature=bytearray(base64.b64decode(envelope['signature']))
+    signature[0]^=1
+    envelope['signature']=base64.b64encode(signature).decode()
+    (stage/'result_receipt_envelope.json').write_text(json.dumps(envelope))
+    (stage/'result_request.json').write_bytes((current['run_dir']/'result_request.json').read_bytes())
+    persist_phase(rid+'-LIVE-R1','RESULT','tampered-test-only',stage,root=executions,github_sha='d'*40)
+    rejected=render()['post_result_metrics']
+    assert rejected['signature_verification_failed']==1 and rejected['signed_result_final_verified']==0
+    assert rejected['signature_validation_performed'] is False
 
 
 def test_referenced_tampering_cannot_be_authorized_by_unsigned_report(tmp_path):
