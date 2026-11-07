@@ -113,8 +113,11 @@ def build_candidate(final, *, budget_yen, include_krs_sets=False, preserve_base_
         elif kind == "TRIFECTA" and "EXACT_THIRD" in evidence_kinds:
             sets[tuple(sorted(sel))].add("FROZEN_EXACT_SET_PROJECTION")
     if include_krs_sets:
-        for sel in observations:
-            if set(sel) <= placed and set(sel).intersection(anchors):
+        hard_orders = {tuple(_runner(row[key]) for key in ("head", "second", "third"))
+                       for row in mec.get("hard_third_exclusions_retained", [])}
+        for sel, orders in observations.items():
+            if (set(sel) <= placed and set(sel).intersection(anchors)
+                    and orders.keys() - hard_orders):
                 sets[sel].add("KRS_JOINT_SET_PLACE_FRONTIER")
 
     def support(sel):

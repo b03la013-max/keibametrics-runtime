@@ -91,3 +91,34 @@ def test_ordered_exception_controls_keep_dedicated_pair_and_exact():
     assert {"bet_type": "EXACTA", "selection": [10, 2], "stake": 100} in pair_only["tickets"]
     assert not any(t["bet_type"] == "TRIFECTA" and t["selection"][:2] == [10, 2]
                    for t in pair_only["tickets"])
+
+def test_only_observed_orientation_excluded_does_not_support_trio():
+    final = _final("FKS", 1)
+    utility = final["krs_prediction_utility"]
+    utility["top_trifecta_occurrence"] = [
+        row for row in utility["top_trifecta_occurrence"] if
+        {row["W"], row["P2"], row["P3"]} == {3, 7, 8}
+    ]
+    _rebind(final)
+    initial = build_candidate(final, budget_yen=800, include_krs_sets=True)
+    assert any(x["set"] == [3, 7, 8] for x in initial["trio_candidates"])
+    final["minimum_efficient_coverage"]["hard_third_exclusions_retained"] = [
+        {"head": row["W"], "second": row["P2"], "third": row["P3"]}
+        for row in utility["top_trifecta_occurrence"]
+    ]
+    _rebind(final)
+    candidate = build_candidate(final, budget_yen=800, include_krs_sets=True)
+    assert all(x["set"] != [3, 7, 8] for x in candidate["trio_candidates"])
+
+
+def test_native_trio_keeps_explicit_already_combined_stake():
+    final = _final("TKY", 4)
+    ft = final["final_ticket"]
+    trio = next(t for t in ft["tickets"] if t["bet_type"] == "TRIO")
+    trio["stake"] += 100
+    ft["total_investment"] += 100
+    _rebind(final)
+    candidate = build_candidate(final, budget_yen=1400)
+    selected = [t for t in candidate["tickets"] if t["bet_type"] == "TRIO"
+                and sorted(t["selection"]) == sorted(trio["selection"])]
+    assert selected == [{"bet_type": "TRIO", "selection": sorted(trio["selection"]), "stake": 200}]
