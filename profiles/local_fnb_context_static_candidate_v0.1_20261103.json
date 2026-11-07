@@ -1,0 +1,99 @@
+{
+  "model_id": "KM-FNB-CONTEXT-PARETO-STATIC-RESEARCH-v0.1-20261103",
+  "model_version": "0.1",
+  "classification": "PRIVATE_RESEARCH_UNADOPTED_NOT_REGISTERED_OOS",
+  "canon": "KM-LOCAL-FNB-v2.1-20260928-R1",
+  "inherited_mechanisms": [
+    "FPR/FSD/LCC decomposition",
+    "range preservation",
+    "six separate stages",
+    "Head-local P2",
+    "Pair-conditioned Third",
+    "P2 review is not automatic promotion",
+    "UNKNOWN is not weak"
+  ],
+  "new_unadopted_hypotheses": [
+    "same-distance-if-present sample selection; other FNB distance fallback explicitly prior",
+    "historical normalized position envelope as a possible future-position prior, not measured current range",
+    "trajectory displacement as six separate cost proxies, not physiological measurement",
+    "historical acquisition-interval overlap as congestion proxy, never current FSD density or intention",
+    "Pareto layers over role-specific vectors; nondominated fronts are semantic proposals, not purchase instructions",
+    "head-specific overlap dimension for P2; head/second World-overlap dimension for Third"
+  ],
+  "raw_to_hypothesis_formulas": {
+    "position_share": "(printed_position-1)/(historical_field_size-1); no named corner relabelling",
+    "finish_share": "(historical_finish-1)/(historical_field_size-1); historical result strictly pre-Freeze",
+    "FPR_acquisition": "min/max/median first printed position shares; a prior hypothesis, not today's measured acceleration",
+    "FPR_maintenance": "median max(last_share-first_share,0)",
+    "LCC_acquisition_count": "count(first printed position ==1); denominator selected observed rows",
+    "LCC_maintenance_count": "count(first printed position == last printed position ==1); denominator selected observed rows",
+    "FSD_interval_relation": "two historical acquisition intervals overlap inclusively; unknown intention and current density remain NULL",
+    "Stage_Leader": "first printed position share",
+    "Stage_Pressing": "abs(last printed share-first printed share)",
+    "Stage_Tracking": "max(last printed share-first printed share,0)",
+    "Stage_Progression": "sum(max(previous_share-next_share,0)) over adjacent printed positions",
+    "Stage_Absorption": "sum(max(next_share-previous_share,0)); backward movement proxy, not causal contest resistance",
+    "Stage_Final_Conversion": "max(finish_share-last_printed_share,0)",
+    "Reachable_envelopes": "separate min/max/median over historical first, last, finish; hypotheses only; corner3/corner4=NULL",
+    "World": "first=last=1 -> LEAD_HOLD; else any forward movement -> PROGRESSION; else TRACK_OR_HOLD; no actual tactical-intention claim",
+    "Pareto": "a dominates b iff all role dimensions a<=b and at least one a<b; remove nondominated fronts iteratively",
+    "P2_head_collision": "append indicator(target interval overlaps head interval) to candidate P2 vector",
+    "Third_pair_world": "append indicator(target World set intersects head-or-second World set) to candidate P3 vector"
+  },
+  "role_vectors": {
+    "W": [
+      "median normalized historical finish (lower better)",
+      "FPR median position loss",
+      "Stage final loss",
+      "historical interval overlap count",
+      "negative observed lead-held fraction",
+      "Stage absorption displacement",
+      "hypothetical finish interval width"
+    ],
+    "P2": [
+      "median finish",
+      "Stage Tracking loss",
+      "Stage Pressing displacement",
+      "Stage Leader displacement",
+      "hypothetical last reported interval upper endpoint",
+      "negative observed lead-acquisition fraction"
+    ],
+    "P3": [
+      "median finish",
+      "LCC finish-conversion loss",
+      "Stage progression displacement",
+      "Stage absorption displacement",
+      "hypothetical finish interval width"
+    ]
+  },
+  "parameters": {
+    "weights": null,
+    "fixed_role_widths": null,
+    "fixed_probability_mapping": null,
+    "pareto_selection": "nondominated first front; all layers retained; ties and missing rank intervals retained"
+  },
+  "missing": "unknown metrics stay null and rank interval1..N; unresolved W/P2/P3 and Head/Pair/Third paths retained explicitly, no synthetic score or forced ticket",
+  "PRE_KRS": "existing HSV/static numeric arrays unchanged; candidate Role/Pair/Third/World draft bound by SHA; no claim of physical KRS context consumption",
+  "scope": "research only; no ADOPTED qualification, Production policy, source signature, OOS or ticket authority",
+  "empirical_validation": {
+    "actual_prior_positions_may_be_consumed": true,
+    "future_predictive_utility_validated": false
+  },
+  "required_before_adoption": [
+    "source access and admission",
+    "independent signature verification",
+    "permanent identity audit",
+    "fresh current context beyond historical proxies",
+    "exact model/consumer adoption before cutoff",
+    "frozen prospective role/pair/third evaluation",
+    "separate KRS physical mapping review if desired"
+  ],
+  "falsification": [
+    "increment disappears under context ablation on future held-out races",
+    "conditional Pair/Third fails incremental role/coverage control",
+    "proxy congestion has opposite out-of-day effect",
+    "wrong corner assumptions or distance fallback inflate measured coverage",
+    "unknown protection wrongly treated as weak"
+  ],
+  "rollback": "stop calling this isolated module; preserve originals; no change to current KAW Owner/Registry/Gateway/Signer"
+}

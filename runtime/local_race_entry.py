@@ -7,12 +7,44 @@ import os
 import re
 import json
 from pathlib import Path
-from runtime import formal_execution_orchestrator as o
-from runtime.local_fullnumerical_production import materialize_production
-from runtime.local_numerical_authority_gate import assess
-from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
-from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
-from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
+def _parse_entry_arguments():
+    parser = argparse.ArgumentParser(description=__doc__)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument('--request')
+    inputs.add_argument('--research-intent', help='Explicit isolated private FNB research descriptor; grants no Formal scope')
+    inputs.add_argument('--query', help='Explicit URW or FNB Race; FNB uses separately isolated private Work owner/source packets')
+    parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
+    parser.add_argument('--private-root', help='Explicit private Work directory for FNB, outside the public repository')
+    parser.add_argument('--diagnostic-only', action='store_true', help='No retroactive FNB prestart claim after cutoff')
+    parser.add_argument('--output')
+    parser.add_argument('--run-id')
+    parser.add_argument('--github-sha')
+    parser.add_argument('--persist-checkpoints', action='store_true',
+                        help='Use existing strict main-branch Git persistence before further stages')
+    args = parser.parse_args()
+    # FNB dispatch returns its private frozen body directly; neither argument
+    # is used there. Keep the existing requirement for the Formal/URW route.
+    private_fnb_query = bool(args.query and re.search(r'(?:船橋|FNB)', args.query, re.I))
+    if args.research_intent is None and not private_fnb_query and (args.output is None or args.run_id is None):
+        parser.error('--output and --run-id are required outside the explicit research route')
+    return args
+
+
+# A private FNB Work transport does not need the unrelated Formal/URW stack.
+# Parse the real CLI first so that missing Formal dependencies cannot prevent
+# the already isolated R20 route from executing. Imported/full-repository use
+# keeps the original dependencies and authority guards unchanged.
+_ENTRY_CLI_ARGS = _parse_entry_arguments() if __name__ == '__main__' else None
+_PRIVATE_FNB_CLI = bool(_ENTRY_CLI_ARGS is not None and
+                        (_ENTRY_CLI_ARGS.research_intent is not None or
+                         (_ENTRY_CLI_ARGS.query and re.search(r'(?:船橋|FNB)', _ENTRY_CLI_ARGS.query, re.I))))
+if not _PRIVATE_FNB_CLI:
+    from runtime import formal_execution_orchestrator as o
+    from runtime.local_fullnumerical_production import materialize_production
+    from runtime.local_numerical_authority_gate import assess
+    from runtime.local_static_input_resolver import resolve as resolve_static_input, input_packet
+    from runtime.local_race_key_shadow_owner import compile_shadow, compile_urw_candidate, ShadowOwnerError
+    from runtime.local_production_static_owner import build_formal_static, bind_urw_numerical_context, StaticOwnerError
 
 
 def resolve_chat_intent(query, *, now=None):
@@ -861,18 +893,70 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
     return report
 
 
+
+def _fnb_private_chat_route(args):
+    """FNB normal chat→existing private Work R20→R19, separate from URW Formal.
+
+    No public git checkpointer, new actor or model. Only the explicit private
+    Work directory can hold original NAR bytes and the two immutable B/C
+    owner source/model/KRS inputs. No required packets -> visible HOLD, never
+    a fabricated ticket or computed NO-BET.
+    """
+    from runtime.local_fnb_r20_chat_completion import complete
+    if args.persist_checkpoints:
+        raise ValueError('FNB_PRIVATE_RESEARCH_GIT_PERSISTENCE_FORBIDDEN')
+    # Private Work may bind its isolated durable store through an existing
+    # environment variable. This is not a Production authorization or a
+    # network/cloud-computer actor. No public fallback path is allowed.
+    private_root = args.private_root or os.environ.get('KM_FNB_PRIVATE_WORK_ROOT')
+    if not private_root:
+        result={'status':'EXECUTION_HOLD_NOT_NO_BET',
+                'first_failed_stage':'PRIVATE_WORK_ACTOR',
+                'reason':'FNB_PRIVATE_WORK_ROOT_NOT_CONNECTED',
+                'recipient_delivery_ack':False,'registered_oos_increment':0}
+    else:
+        try:
+            result=complete(args.query,Path(private_root),
+                            diagnostic_only=args.diagnostic_only,
+                            emit_private_body=args.display)
+        except (ValueError, OSError, KeyError, TypeError) as exc:
+            result={'status':'EXECUTION_HOLD_NOT_NO_BET',
+                    'first_failed_stage':'FNB_QUERY_OR_PRIVATE_EXECUTION',
+                    'reason':str(exc).split(':')[0],
+                    'recipient_delivery_ack':False,'registered_oos_increment':0}
+    ready=result.get('status') in ('VERIFIED_FROZEN_PRIVATE_BODY_READY_TO_RENDER',
+                                  'VERIFIED_FORMAL_SINGLE_OWNER_BODY_READY_TO_RENDER',
+                                  'VERIFIED_REFERENCE_BODY_READY_TO_RENDER')
+    if args.display and ready:
+        print(result['body'],end='')
+    else:
+        print(json.dumps({k:v for k,v in result.items() if k!='body'},
+                         ensure_ascii=False,default=str))
+    return 0 if ready else 2
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    inputs = parser.add_mutually_exclusive_group(required=True)
-    inputs.add_argument('--request')
-    inputs.add_argument('--query', help='Explicit URW race text: verified FINAL, authorized existing dispatch, or independent REFERENCE')
-    parser.add_argument('--display', action='store_true', help='Print the returned chat message instead of the JSON report')
-    parser.add_argument('--output', required=True)
-    parser.add_argument('--run-id', required=True)
-    parser.add_argument('--github-sha')
-    parser.add_argument('--persist-checkpoints', action='store_true',
-                        help='Use existing strict main-branch Git persistence before further stages')
-    args = parser.parse_args()
+    args = _ENTRY_CLI_ARGS if _ENTRY_CLI_ARGS is not None else _parse_entry_arguments()
+    if args.research_intent is not None:
+        if args.persist_checkpoints:
+            raise ValueError('FNB_PRIVATE_RESEARCH_GIT_PERSISTENCE_FORBIDDEN')
+        from runtime.local_fnb_research_runtime import run_intent, ResearchHold
+        try:
+            research = run_intent(args.research_intent)
+        except (ResearchHold, ValueError, OSError, KeyError, TypeError) as error:
+            print(json.dumps({'status': 'RESEARCH_EXECUTION_HOLD_NOT_NO_BET',
+                'exception_type': type(error).__name__,
+                'reason': str(error).partition(':')[0] if re.fullmatch('[A-Z][A-Z0-9_]{0,119}', str(error).partition(':')[0]) else 'RESEARCH_INPUT_OR_COMPONENT_UNVERIFIED',
+                'formal_final': False, 'registered_OOS_increment': 0, 'actual_purchase': False}))
+            return 2
+        print(json.dumps({key: research[key] for key in ('profile', 'race_id',
+            'index_cells', 'completion_reused', 'new_engine_executions_this_call',
+            'output_directory', 'formal_final', 'recipient_delivery_proven',
+            'registered_OOS_increment')}, ensure_ascii=False))
+        return 0
+    # FNB private research must not fall through to URW-only formal/reference
+    # routes, and no horse-level source or tickets may enter --output.
+    if args.query and re.search(r'(?:船橋|FNB)', args.query, re.I):
+        return _fnb_private_chat_route(args)
     output = Path(args.output).resolve()
     preserve_existing_reference = False
     try:
