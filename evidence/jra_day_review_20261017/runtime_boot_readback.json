@@ -1,0 +1,163 @@
+{
+  "observed_at": "2026-10-17T10:12:10.215Z",
+  "boot_logs": {
+    "scope": "deployment",
+    "deploymentId": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+    "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+    "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+    "status": "SUCCESS",
+    "deploy": [
+      {
+        "timestamp": "2026-10-14T06:16:01.461056249Z",
+        "severity": "info",
+        "message": "Starting Container",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"info\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:02.205620436Z",
+        "severity": "info",
+        "message": "KM_RUNTIME_BLOB_SHA 1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989 9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421 75cc9d0e8b15de0e95bbfd76d9ed4425fa6b9076d022d1a9c6b5bc812fa3dedc",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"info\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:12.104694136Z",
+        "severity": "error",
+        "message": "INFO:     Application startup complete.",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"error\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:12.104698376Z",
+        "severity": "error",
+        "message": "INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"error\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:12.104703776Z",
+        "severity": "error",
+        "message": "INFO:     Started server process [1]",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"error\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:12.104758455Z",
+        "severity": "error",
+        "message": "INFO:     Waiting for application startup.",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"error\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:12.104772855Z",
+        "severity": "error",
+        "message": "StreamableHTTP session manager started",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"error\""
+          }
+        ]
+      },
+      {
+        "timestamp": "2026-10-14T06:16:14.085634700Z",
+        "severity": "info",
+        "message": "INFO:     100.64.0.1:35889 - \"GET /health HTTP/1.1\" 200 OK",
+        "attributes": [
+          {
+            "key": "level",
+            "value": "\"info\""
+          }
+        ]
+      }
+    ]
+  },
+  "service_config": {
+    "service": {
+      "id": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+      "name": "quorumprobe"
+    },
+    "environment": {
+      "id": "8af4a037-975f-4c15-8005-7bcde494022b",
+      "name": "production"
+    },
+    "config": {
+      "source": {
+        "image": "python:3.13-slim"
+      },
+      "networking": {
+        "serviceDomains": {
+          "quorumprobe-production.up.railway.app": {}
+        }
+      },
+      "build": {
+        "builder": "RAILPACK",
+        "buildEnvironment": "V3"
+      },
+      "deploy": {
+        "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+        "preDeployCommand": [],
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30,
+        "restartPolicyType": "NEVER",
+        "useLegacyStacker": false,
+        "ipv6EgressEnabled": false,
+        "runtime": "V2",
+        "multiRegionConfig": {
+          "sfo": {
+            "numReplicas": 1
+          }
+        }
+      }
+    },
+    "staged": null,
+    "variable_names_count": 108
+  },
+  "variable_access": {
+    "valuesRedacted": true,
+    "code_available": false
+  },
+  "main_git_sha": "d7ae23a07f7e872957085ef2bf72cf794a0c316f",
+  "pr_code_head": "58ec50282964eb438f56315e8464dd24dae32764",
+  "scope": "READ_ONLY; no restart, redeploy, config, variables, signature or policy mutation",
+  "verification": {
+    "deployment_git_sha": "UNVERIFIED",
+    "boot_blob_sha256_observed": "1c453a5b0e8b5e4689b4a73d18128f54c7ed0e205db5b0c58b3dd229c264a989",
+    "boot_marker_hash_scope": "UNVERIFIED: logger implementation unavailable; do not treat as complete running-code fingerprint",
+    "engine_sha256": "MATCH existing signed runtime contract",
+    "parameter_map_sha256": "MATCH existing signed runtime contract",
+    "current_tracked_files_hashed": 14570,
+    "current_tracked_file_matches": 0,
+    "local_history_candidate_blobs_hashed": 16,
+    "local_history_candidate_matches": 0,
+    "history_scope": "Available local runtime app/server/bootstrap/krs Python history only; not exhaustive remote source history",
+    "config_drift": "Stored diagnostic startCommand ends SystemExit(9); active deployment boot starts uvicorn. Config-vs-deployment snapshot reconciliation unresolved. Previously observed in jra_p0_20261018/railway_readonly_snapshot.json; not newly introduced by this review.",
+    "next_deployment": "BLOCKED pending verified deployment source, exact start command and Owner activation approval",
+    "input_hash_resolution": "UNVERIFIED_LEGACY_HASH_SCOPE; no historical signature modified"
+  }
+}
