@@ -406,6 +406,31 @@ class TestOwnerRulesV11(unittest.TestCase):
         self.assertEqual(out2["pedigree_distance"]["rule_id"], RULES["pedigree_distance"])
         self.assertEqual(out2["physical_pedigree_fit"]["rule_id"], RULES["physical_pedigree_fit"])
 
+    def test_pedigree_class_admits_maiden_and_debut_samples_but_not_unknown(self):
+        from jra_owner_authorized_feature_rules import FALLBACK_RULES
+
+        context = self.art["jra_race_context"]
+        context["race_class"] = "2歳未勝利"
+        target = self.rows[0]
+        rid = str(target["runner_id"])
+        for parent, count, rule in (
+            ("sire", 3, RULES["pedigree_class"]),
+            ("damsire", 4, FALLBACK_RULES["pedigree_class"]),
+        ):
+            with self.subTest(parent=parent):
+                context["race_class"] = "2歳未勝利"
+                corpus = self.corpus(parent, target[parent], count, context["surface"])
+                for horse in corpus["horses"].values():
+                    for run, title in zip(horse["runs"].values(), ("2歳未勝利", "2歳新馬", "2歳未勝利", "格不明")):
+                        run["race_name"] = title
+                observed = owner_authorized_observations(self.art, REGISTRY, corpus=corpus)[rid]
+                self.assertEqual(observed["pedigree_class"]["rule_id"], rule)
+                self.assertEqual(observed["pedigree_class"]["observation_count"], 3 * count)
+
+                context["race_class"] = "1勝クラス"
+                observed = owner_authorized_observations(self.art, REGISTRY, corpus=corpus)[rid]
+                self.assertNotIn("pedigree_class", observed)
+
     def test_small_damsire_pool_is_not_filled(self):
         surface = self.art["jra_race_context"]["surface"]
         target = self.rows[0]

@@ -5,10 +5,12 @@ import hashlib
 import importlib.util
 import io
 import json
+import sys
 from pathlib import Path
 import zipfile
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("parallel_sidecar", ROOT / "scripts/jra_bvi_parallel_sidecar.py")
@@ -242,6 +244,55 @@ def test_genuine_parent_final_required_before_canonical_entry(tmp_path,monkeypat
         assert report['parent_final_verified']['external_krs_calls']==0
 
 
+REVIEWED_DELIVERY_PREFIX_SHA256='56e0fc7fad5deac4ea6dc58741dc1a2e7d769dccac9f97d5d8fdbc4da8d9269c'
+REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256='336f50e2f61c2c3cfafa66a204c3f533a58a5df06030309664ee4e98e4f52a38'
+
+
+def _assert_production_prefix_boundary(workflow,original):
+    """Only the reviewed Delivery delta may extend the original operational prefix.
+
+    Fixed D, all five numerical files, and b0a remain byte-pinned elsewhere in
+    this test. The new prefix is exact-byte sealed AND reverses to every old
+    production step/trigger/permission, so resealing a broader edit is unsafe.
+    """
+    marker='\n  pedigree-forward-shadow:'
+    assert workflow.count(marker)==1
+    prefix=workflow.split(marker)[0];baseline=original.split(marker)[0]
+    if prefix==baseline:return
+    assert hashlib.sha256(prefix.encode()).hexdigest()==REVIEWED_DELIVERY_PREFIX_SHA256
+    actual=yaml.load(prefix,Loader=yaml.BaseLoader)
+    expected=yaml.load(baseline,Loader=yaml.BaseLoader)
+    assert set(actual['jobs'])==set(expected['jobs'])
+    steps=actual['jobs']['orchestrate']['steps']
+    assert not any(step.get('name')=='Prepare canonical SOURCE and OIDC-bound JRA NO-BET presentation' for step in steps)
+    # Public read-back retains its original compact projection; only the two
+    # explicit display switches/header are reversed for the old prefix check.
+    readback=next(step for step in steps if step.get('id')=='final_readback')
+    assert readback['run'].count('--compact-body')==2
+    readback['run']=readback['run'].replace(' --compact-body','').replace(
+        'Existing Signed FINAL — compact presentation','Existing Signed FINAL — completed presentation')
+    # The existing upload must remain a separate original step, never shell text.
+    assert len([step for step in steps if step.get('name')==
+                'Upload signed-source JRA zero-investment terminal'
+                and step.get('uses')=='actions/upload-artifact@v4'])==1
+    candidates=[step for step in steps if step.get('id')=='candidate_parallel']
+    assert len(candidates)==1
+    candidate=candidates[0]
+    for key in ('KM_JRA_SELF_DELIVERY_ENABLED','KM_JRA_DELIVERY_CONFIG_PATH'):
+        assert candidate['env'].pop(key)=='${{ vars.'+key+' }}'
+    run=candidate['run']
+    start=run.index('# The existing Owner event verifies the public Terminal and generates\n')
+    end=run.index('# A Production evidence NO_BET remains a valid zero-exposure\n',start)
+    delivery=run[start:end]
+    assert hashlib.sha256(delivery.encode()).hexdigest()==REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256
+    assert 'if [ -n "$NO_BET_TARGET" ] && [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]; then' in delivery
+    assert '> /dev/null' in delivery and 'runtime_out/jra_no_bet_delivery_event.json' not in delivery
+    candidate['run']=run[:start]+run[end:]
+    # Exact original objects include all old source commands, numeric/KRS
+    # dispatch, upload, retry/temporal guards, schedule and job metadata.
+    assert actual==expected
+
+
 def test_fixed_model_five_code_files_and_production_prefix_are_unchanged():
     report={};s.verify_fixed_model(report)
     assert report['fixed_model_sha256']==s.MODEL_SHA
@@ -251,11 +302,36 @@ def test_fixed_model_five_code_files_and_production_prefix_are_unchanged():
     workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
     prefix=workflow.split('\n  pedigree-forward-shadow:')[0]
     original=s.subprocess.check_output(['git','show','b0a377ae06a2d3d15bc47863585e18388e4fea46:.github/workflows/km-jra-formal-single-entry.yml'],cwd=ROOT,text=True)
-    assert prefix==original.split('\n  pedigree-forward-shadow:')[0]
+    _assert_production_prefix_boundary(workflow,original)
     sidecar=workflow.split('\n  pedigree-forward-shadow:')[1]
     assert 'timeout-minutes: 30' in sidecar and 'needs: orchestrate' not in sidecar
     assert "steps.admission.outputs.admitted == 'true'" in sidecar
     assert 'BVI_ENV_PREDICTION_INDEPENDENT_TIMESTAMP_NOT_PRE_CUTOFF' in sidecar
+
+
+@pytest.mark.parametrize('mutation',['source_step','upload_step','private_delivery_guard','trigger'])
+def test_resealing_a_non_delivery_change_cannot_bypass_original_production_boundary(monkeypatch,mutation):
+    workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
+    original=s.subprocess.check_output(['git','show','b0a377ae06a2d3d15bc47863585e18388e4fea46:.github/workflows/km-jra-formal-single-entry.yml'],cwd=ROOT,text=True)
+    marker='\n  pedigree-forward-shadow:'
+    prefix,sidecar=workflow.split(marker)
+    value=yaml.load(prefix,Loader=yaml.BaseLoader)
+    steps=value['jobs']['orchestrate']['steps']
+    if mutation=='source_step':
+        first=next(step for step in steps if 'gh workflow run km-jra-source-first-runner.yml' in step.get('run',''))
+        first['run']=first['run'].replace('km-jra-source-first-runner.yml','UNAPPROVED-SOURCE.yml',1)
+    elif mutation=='upload_step':
+        steps[:]=[step for step in steps if step.get('name')!='Upload signed-source JRA zero-investment terminal']
+    elif mutation=='private_delivery_guard':
+        step=next(step for step in steps if step.get('id')=='candidate_parallel')
+        step['run']=step['run'].replace('&& [ "$KM_JRA_SELF_DELIVERY_ENABLED" = "true" ]','&& true',1)
+    else:value['on']['workflow_dispatch']['inputs']['intent_path']['required']='false'
+    altered=yaml.dump(value,sort_keys=False)+marker+sidecar
+    # Even an accidental new whole-prefix hash cannot authorize these changes:
+    # original objects and the exact private delivery block still bind.
+    monkeypatch.setattr(sys.modules[__name__],'REVIEWED_DELIVERY_PREFIX_SHA256',
+        hashlib.sha256(altered.split(marker)[0].encode()).hexdigest())
+    with pytest.raises(AssertionError):_assert_production_prefix_boundary(altered,original)
 
 
 def test_provider_timing_is_observational_and_never_admits_sample(monkeypatch):

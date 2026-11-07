@@ -10,8 +10,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
+import time as _clock
 
 from jra_static_owner_executable import compile_static_owner, PROFILE as OWNER_PROFILE
 
@@ -106,18 +108,22 @@ def freeze(intent, envelope, report, *, source_verified, created_at=None, root=R
     return result
 
 
-def evaluate(pre, top3, *, result_sha256, observed_at, git_commit_at):
+def _verify_frozen_before_result(pre, *, observed_at, git_commit_at):
     if pre.get("profile") != PROFILE or pre.get("owner_profile") != OWNER_PROFILE:
         raise ValueError("STATIC_OWNER_WRONG_POLICY_COHORT")
     if pre.get("sha256") != sha({k:v for k,v in pre.items() if k!="sha256"}):
         raise ValueError("STATIC_OWNER_FROZEN_HASH_INVALID")
     if not time(pre["frozen_at"]) <= time(git_commit_at) <= time(pre["prediction_cutoff"]) < time(pre["scheduled_post_at"]) < time(observed_at):
         raise ValueError("STATIC_OWNER_NOT_PROSPECTIVE")
+    if pre.get("production_authority") is not False or pre.get("candidate_only") is not True:
+        raise ValueError("STATIC_OWNER_AUTHORITY_LEAK")
+
+
+def evaluate(pre, top3, *, result_sha256, observed_at, git_commit_at):
+    _verify_frozen_before_result(pre, observed_at=observed_at, git_commit_at=git_commit_at)
     actual=[str(x) for x in top3]
     if len(actual)!=3 or len(set(actual))!=3 or not set(actual).issubset(pre["ranking"]):
         raise ValueError("STATIC_OWNER_RESULT_UNIVERSE_INVALID")
-    if pre.get("production_authority") is not False or pre.get("candidate_only") is not True:
-        raise ValueError("STATIC_OWNER_AUTHORITY_LEAK")
     if len(result_sha256)!=64: raise ValueError("STATIC_OWNER_RESULT_HASH_REQUIRED")
     static=[pre["ranking"].index(x)+1 for x in actual]
     market=[pre["market_ranking"].index(x)+1 for x in actual]
@@ -189,12 +195,125 @@ def save_immutable(path, obj):
         json.dump(obj,stream,ensure_ascii=False,sort_keys=True,indent=2)
 
 
-def main():
+def settle_pending(root=ROOT, *, now=None, fetch=None, budget_seconds=None, monotonic=None):
+    from jra_candidate_postresult_closedloop import (fetch_jra_result,verify_official_result,
+        PendingOfficialResult,validate_result_target)
+    from jra_postresult_health import build_execution_health,failure_row
+    root=Path(root);base=root/"runtime/jra_static_owner_forward_oos"
+    now=now or datetime.now(timezone.utc)
+    if budget_seconds is not None and budget_seconds<0:
+        raise ValueError('STATIC_OWNER_EXECUTION_BUDGET_INVALID')
+    clock=monotonic or _clock.monotonic
+    started=clock()
+    rows=[];records=[]
+    # Include orphan results in diagnostics, never silently qualify them.
+    def routing_priority(path):
+        # The canonical ID date orders existing work only. It never fills a
+        # missing post/cutoff or qualifies the underlying Frozen evidence.
+        match=re.fullmatch(r'KM-JRA-[A-Z]{3}-(\d{8})-R\d{2}',path.parent.name)
+        try:
+            day=datetime.strptime(match[1],'%Y%m%d') if match else None
+        except ValueError:
+            day=None
+        return (-int(day.strftime('%Y%m%d')) if day else 0,str(path))
+    paths=sorted(set(base.glob("*/pre_result.json")) |
+                 {p.with_name('pre_result.json') for p in base.glob('*/result_evaluation.json')},
+                 key=routing_priority)
+    for path in paths:
+        rid=path.parent.name;stage='READ_FROZEN_PRE_RESULT'
+        refs={'pre_result_ref':path.relative_to(root).as_posix(),
+              'frozen_pre_result_sha256':None,'source_ref':None,'final_ref':None}
+        try:
+            pre=json.loads(path.read_text())
+            refs.update(frozen_pre_result_sha256=pre.get('sha256'),
+                frozen_file_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                source_ref=pre.get('source_snapshot_sha256'),
+                final_ref=pre.get('final_receipt_sha256'))
+            stage='VERIFY_FROZEN_IDENTITY'
+            if pre.get('race_id')!=rid:raise ValueError('STATIC_OWNER_FROZEN_RACE_ID_MISMATCH')
+            if now<=time(pre['scheduled_post_at']):
+                rows.append(dict(refs,race_id=rid,status='RESULT_NOT_YET_DUE',persisted=False))
+                continue
+            stage='VERIFY_GIT_COMMIT_WITNESS'
+            witness=subprocess.check_output(['git','log','-1','--format=%cI','--',
+                str(path.relative_to(root))],cwd=root,text=True).strip()
+            if not witness:raise ValueError('STATIC_OWNER_COMMIT_WITNESS_REQUIRED')
+            stage='VERIFY_FROZEN_BEFORE_HTTP'
+            _verify_frozen_before_result(pre,observed_at=now.isoformat(),git_commit_at=witness)
+            stage='VERIFY_RESULT_TARGET'
+            validate_result_target(rid,pre['race_date'],pre['meeting_key'],pre['race_no'])
+            result_path=path.with_name('result_evaluation.json')
+            if result_path.exists():
+                stage='VERIFY_EXISTING_IMMUTABLE_RESULT'
+                record=json.loads(result_path.read_text())
+                if (record.get('race_id')!=rid or record.get('profile')!=PROFILE
+                        or record.get('policy_fingerprint')!=pre['policy_fingerprint']
+                        or record.get('oos_eligible') is not True
+                        or record.get('frozen_sha256')!=pre['sha256']
+                        or record.get('sha256')!=sha({k:v for k,v in record.items() if k!='sha256'})):
+                    raise ValueError('STATIC_OWNER_IMMUTABLE_RESULT_BINDING_INVALID')
+                records.append(record)
+                rows.append(dict(refs,race_id=rid,status='ALREADY_SETTLED',persisted=True,
+                    result_sha256=record['sha256']))
+                continue
+            stage='FETCH_OFFICIAL_RESULT'
+            if budget_seconds is not None and clock()-started>=budget_seconds:
+                rows.append(dict(refs,race_id=rid,status='NOT_RUN_BUDGET',persisted=False,
+                    first_not_executed_stage=stage,resume_condition='NEXT_EXISTING_SCHEDULE',
+                    recommendation_pfs=None))
+                continue
+            evidence=(fetch or fetch_jra_result)(pre['race_date'],pre['meeting_key'],pre['race_no'])
+            stage='VERIFY_OFFICIAL_RESULT'
+            actual=verify_official_result(evidence['parsed'],evidence['text'],pre['ranking'])
+            stage='EVALUATE_STATIC_OWNER_RESULT'
+            if actual.get('dead_heat') is True or len(actual.get('top3_orders') or [])>1:
+                # This existing metric contract accepts one ordered top3 only.
+                # Do not select an arbitrary tied order and issue OOS credit.
+                # Production's separate full-payout settlement remains usable.
+                rows.append(dict(refs,race_id=rid,status='NOT_ELIGIBLE',persisted=False,
+                    first_failed_stage=stage,error_code='STATIC_OWNER_DEAD_HEAT_METRICS_UNSUPPORTED',
+                    official_result_state='VERIFIED_DEAD_HEAT_METRICS_UNSUPPORTED',
+                    official_result_sha256=evidence['sha256'],oos_eligible=False,
+                    recommendation_pfs=None))
+                continue
+            record=evaluate(pre,actual['top3'],result_sha256=evidence['sha256'],
+                observed_at=evidence['captured_at'],git_commit_at=witness)
+            stage='SAVE_IMMUTABLE_RESULT'
+            save_immutable(result_path,record)
+            records.append(record)
+            rows.append(dict(refs,race_id=rid,status='SETTLED',persisted=True,
+                result_sha256=record['sha256'],official_result_state='VERIFIED'))
+        except PendingOfficialResult as exc:
+            rows.append(dict(refs,race_id=rid,status='PENDING_OFFICIAL_RESULT',persisted=False,
+                first_failed_stage=stage,exception_class=type(exc).__name__,error_code=str(exc),
+                recommendation_pfs=None))
+        except Exception as exc:
+            if str(exc) in ('STATIC_OWNER_WRONG_POLICY_COHORT','STATIC_OWNER_NOT_PROSPECTIVE'):
+                rows.append(dict(refs,race_id=rid,status='NOT_ELIGIBLE',persisted=False,
+                    first_failed_stage=stage,error_code=str(exc),exception_class=type(exc).__name__,
+                    recommendation_pfs=None))
+            else:
+                rows.append(failure_row(rid,exc,stage,**refs))
+    # Existing scorecard rules retain their policy/cohort and no-promotion gates.
+    card=scorecard(records,policy_fingerprint=fingerprint(root))
+    target=base/'current.json';target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_text(json.dumps(card,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+    health=build_execution_health('STATIC_OWNER',rows,observed_at=now.isoformat())
+    health['execution_budget_seconds']=budget_seconds
+    health['execution_budget_exhausted']=any(row['status']=='NOT_RUN_BUDGET' for row in rows)
+    health['scorecard']=card
+    return health
+
+
+def main(argv=None):
     parser=argparse.ArgumentParser();sub=parser.add_subparsers(dest="command",required=True)
     p=sub.add_parser("freeze")
     for name in ("intent","source-envelope","report","output"):p.add_argument("--"+name,required=True)
-    sub.add_parser("settle")
-    args=parser.parse_args()
+    settle_parser=sub.add_parser("settle")
+    settle_parser.add_argument('--repo-root',default=str(ROOT))
+    settle_parser.add_argument('--health-out')
+    settle_parser.add_argument('--budget-seconds',type=float,default=180)
+    args=parser.parse_args(argv)
     if args.command=="freeze":
         report=json.loads(Path(args.report).read_text())
         if report.get("source_only_full_numerical_ready") is not True:
@@ -207,27 +326,13 @@ def main():
                    report,source_verified=verified["valid"])
         save_immutable(args.output,out)
     else:
-        from jra_candidate_postresult_closedloop import fetch_jra_result,verify_official_result,PendingOfficialResult
-        base=ROOT/"runtime/jra_static_owner_forward_oos"
-        for path in sorted(base.glob("*/pre_result.json")):
-            result_path=path.with_name("result_evaluation.json")
-            if result_path.exists():continue
-            pre=json.loads(path.read_text())
-            if datetime.now(timezone.utc)<=time(pre["scheduled_post_at"]):continue
-            witness=subprocess.check_output(["git","log","-1","--format=%cI","--",str(path.relative_to(ROOT))],cwd=ROOT,text=True).strip()
-            if not witness:raise ValueError("STATIC_OWNER_COMMIT_WITNESS_REQUIRED")
-            try:
-                evidence=fetch_jra_result(pre["race_date"],pre["meeting_key"],pre["race_no"])
-                actual=verify_official_result(evidence["parsed"],evidence["text"],pre["ranking"])
-                record=evaluate(pre,actual["top3"],result_sha256=evidence["sha256"],observed_at=evidence["captured_at"],git_commit_at=witness)
-                save_immutable(result_path,record)
-            except PendingOfficialResult as exc:
-                print(pre["race_id"],str(exc))
-        records=[json.loads(p.read_text()) for p in base.glob("*/result_evaluation.json")]
-        out=scorecard(records,policy_fingerprint=fingerprint())
-        target=base/"current.json";target.parent.mkdir(parents=True,exist_ok=True)
-        target.write_text(json.dumps(out,ensure_ascii=False,sort_keys=True,indent=2)+"\n")
-        print(json.dumps(out))
+        from jra_postresult_health import write_execution_health,health_exit_code
+        root=Path(args.repo_root).resolve()
+        out=settle_pending(root,budget_seconds=args.budget_seconds)
+        target=args.health_out or root/'runtime/jra_static_owner_forward_oos/settlement_health.json'
+        out=write_execution_health(target,out)
+        print(json.dumps(out,ensure_ascii=False))
+        return health_exit_code(out)
 
 
-if __name__=="__main__":main()
+if __name__=="__main__":raise SystemExit(main())

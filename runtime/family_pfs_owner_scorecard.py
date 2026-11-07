@@ -72,6 +72,16 @@ def build_owner_scorecard(
     for raw in race_reviews:
         review = dict(raw)
         capital = review.get("capital") or {}
+        # JRA's verified NO_BET projection is decision/evidence context, not a
+        # capital-at-risk or prediction-accuracy sample. Keep other families
+        # and all existing financial/PAPER rows on their original path.
+        if (str(review.get("race_id") or "").startswith("KM-JRA-")
+                and review.get("decision") == "NO_BET"
+                and review.get("eligible_for_production_prediction_kpi") is False
+                and capital.get("pfs_status") == "NOT_APPLICABLE_ZERO_EXPOSURE"
+                and capital.get("investment") == 0 and capital.get("return") == 0
+                and capital.get("pfs") is None):
+            continue
         pfs_imp = review.get("pfs_improvement") or {}
         investment = _num(capital.get("investment"))
         ret = _num(capital.get("return"))

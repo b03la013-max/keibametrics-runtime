@@ -3,6 +3,40 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]/"runtime"/"jra_source_runtime"
 sys.path.insert(0,str(ROOT))
 
+def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
+    import base64, gzip, hashlib
+    import fitz
+    from jra_official_pdf import reconcile_pdf_column_with_detail
+
+    def artifact(*,missing_peer_rule=False):
+        with fitz.open() as doc:
+            page=doc.new_page(width=900,height=500)
+            for no,left in enumerate((31,311,591),1):
+                page.insert_text((left+5,60),f'{no}R')
+                if not (missing_peer_rule and no==1):
+                    page.draw_line((left,122),(left+251,122),width=.5)
+            page.insert_text((366,150),'ホクトウマ(JPN)',fontname='japan')
+            page.insert_text((366,184),'フランスウマ(FR)',fontname='japan')
+            page.insert_text((86,150),'ベツレース(JPN)',fontname='japan')
+            raw=doc.tobytes()
+        return {'sources':[{'source_id':'JRA-OFFICIAL-RACE-PDF',
+                            'raw_gzip_b64':base64.b64encode(gzip.compress(raw)).decode(),
+                            'raw_sha256':hashlib.sha256(raw).hexdigest()}]}
+
+    import pytest
+    detail={'runners':[{'horse_no':1,'name':'ホクトウマ'},
+                       {'horse_no':2,'name':'フランスウマ'}]}
+    out,diag=reconcile_pdf_column_with_detail(artifact(),2,detail)
+    assert out['pdf_column_boundary_proof']=='ALIGNED_PRINTED_PEER_RUNNER_TABLES'
+    assert diag['nationality_marker_count']==2
+    assert diag['pdf_column_clip'][:3]==[310.5,0,562.5]
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(artifact(missing_peer_rule=True),2,detail)
+    changed=artifact()
+    changed['sources'][0]['raw_sha256']='0'*64
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+        reconcile_pdf_column_with_detail(changed,2,detail)
+
 def _split_name_blocks(*,number='1',number_size=10,duplicate=False,split_baseline=False,name='カリメラ'):
     spans=[{'text':ch,'bbox':[100+i*20,100+(10 if split_baseline and i==2 else 0),112+i*20,115+(10 if split_baseline and i==2 else 0)],'origin':[100+i*20,111+(10 if split_baseline and i==2 else 0)],'size':11} for i,ch in enumerate(name)]
     blocks=[{'type':0,'lines':[{'spans':[s]} for s in spans]},

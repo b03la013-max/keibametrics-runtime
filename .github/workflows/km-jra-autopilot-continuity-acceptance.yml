@@ -3,16 +3,29 @@ on:
   push:
     branches: [main]
     paths:
+      - 'tests/test_jra_automatic_day_plan.py'
+      - 'tests/test_jra_jump_scope_guard.py'
       - 'runtime/jra_presentation.py'
       - 'runtime/jra_delivery.py'
       - 'tests/test_jra_presentation.py'
+      - 'tests/test_jra_self_delivery.py'
+      - 'tests/test_jra_no_bet_delivery.py'
+      - 'runtime/jra_no_bet_presentation.py'
       - 'tools/persist_local_checkpoints.py'
       - '.github/workflows/km-formal-result-runner.yml'
       - 'tests/test_jra_result_persistence.py'
+      - 'runtime/jra_source_runtime/jra_race_day_autopilot.py'
+      - 'tests/test_jra_day_status_settlement_pfs_delivery.py'
+      - '.github/workflows/km-jra-autopilot-continuity-acceptance.yml'
   pull_request:
     paths:
+      - 'tests/test_jra_automatic_day_plan.py'
+      - 'tests/test_jra_jump_scope_guard.py'
       - 'runtime/jra_presentation.py'
       - 'tests/test_jra_presentation.py'
+      - 'tests/test_jra_self_delivery.py'
+      - 'tests/test_jra_no_bet_delivery.py'
+      - 'runtime/jra_no_bet_presentation.py'
       - 'tools/persist_local_checkpoints.py'
       - '.github/workflows/km-formal-result-runner.yml'
       - 'tests/test_jra_result_persistence.py'
@@ -46,9 +59,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python -m pip install -q pytest beautifulsoup4 cryptography PyMuPDF numpy pyyaml
-      - run: python -m pytest -q tests/test_jra_race_day_autopilot.py tests/test_jra_calendar_autopilot_guard.py tests/test_jra_autopilot_continuity.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_real_race_failure_regressions.py tests/test_jra_day_status_settlement_pfs_delivery.py tests/test_jra_delivery_evidence_audit.py tests/test_jra_p0_20261018.py
+      - name: Read pinned archived receipt fixtures for signature projection regression
+        run: |
+          git fetch --no-tags --depth=1 origin 302304c1a82f87b5509236b3e499fb15e9d80c43
+          python - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          pin='302304c1a82f87b5509236b3e499fb15e9d80c43'
+          rid='KM-JRA-KYO-20261031-R01'
+          root=Path(os.environ['RUNNER_TEMP'])/'jra-signature-projection-originals'
+          def raw(p):return subprocess.check_output(['git','show',pin+':'+p])
+          paths=['runtime/'+d+'/'+rid+s for d,s in [('final_artifacts','.json'),('results','.json'),('reviews_auto','-AUTO.json'),('learning_states','.json')]]
+          final=json.loads(raw(paths[0]))
+          authority=final['final_prediction_package']['execution_stage_manifest']['SIGNED_SOURCE_RECEIPT_VERIFIED']['current_authority_manifest']
+          profile='profiles/'+authority.replace('-','_')+'.json'
+          contract=json.loads(raw(profile))['common_family_components']['family_runtime_contracts_profile']
+          paths+=['evidence/jra_bvi_phase3_20261017/runtime_health.json',profile,contract]
+          paths+=subprocess.check_output(['git','ls-tree','-r','--name-only',pin,'runtime/executions/'+rid+'-LIVE-R1/RESULT'],text=True).splitlines()
+          for p in paths:
+              target=root/p;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(raw(p))
+          with open(os.environ['GITHUB_ENV'],'a') as env:env.write('KM_STATUS_VERIFICATION_DATA_ROOT='+str(root)+'\n')
+          print('Pinned archived originals supplied:',len(paths))
+          PY
+      - run: python -m pytest -q tests/test_jra_jump_scope_guard.py tests/test_jra_race_day_autopilot.py tests/test_jra_calendar_autopilot_guard.py tests/test_jra_autopilot_continuity.py tests/test_jra_autopilot_failure_recovery.py tests/test_jra_real_race_failure_regressions.py tests/test_jra_day_status_settlement_pfs_delivery.py tests/test_jra_delivery_evidence_audit.py tests/test_jra_p0_20261018.py tests/test_jra_automatic_day_plan.py
       - run: python -m pytest -q tests/test_jra_result_persistence.py tests/test_persist_local_checkpoints_scratch.py
-      - run: python -m pytest -q tests/test_jra_presentation.py tests/test_jra_ticket_tree_renderer.py
+      - run: python -m pytest -q tests/test_jra_presentation.py tests/test_jra_ticket_tree_renderer.py tests/test_jra_self_delivery.py tests/test_jra_no_bet_delivery.py
 
       - name: Fetch exact pre-sidecar workflow baseline for immutable prefix comparison
         run: git fetch --no-tags --depth=1 origin b0a377ae06a2d3d15bc47863585e18388e4fea46
