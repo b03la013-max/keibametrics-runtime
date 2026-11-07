@@ -438,6 +438,13 @@ def _blocked_cells(gap: dict) -> list[str]:
 
 
 
+def _result_original_paths(rid):
+    return {'final':'runtime/final_artifacts/'+rid+'.json',
+            'result':'runtime/results/'+rid+'.json',
+            'review':'runtime/reviews_auto/'+rid+'-AUTO.json',
+            'learning':'runtime/learning_states/'+rid+'.json'}
+
+
 def _result_signature_readback(root, rid, final, result, envelope, envelope_path,
                                review, learning, verification_report):
     """Bind an unsigned audit reference to originals, then run existing verifiers.
@@ -464,10 +471,7 @@ def _result_signature_readback(root, rid, final, result, envelope, envelope_path
         rows=[r for r in report['rows'] if r.get('race_id')==rid]
         if len(rows)!=1:raise ValueError('AUDIT_RACE_REFERENCE_NOT_UNIQUE')
         row=rows[0]
-        paths={'final':'runtime/final_artifacts/'+rid+'.json',
-               'result':'runtime/results/'+rid+'.json',
-               'review':'runtime/reviews_auto/'+rid+'-AUTO.json',
-               'learning':'runtime/learning_states/'+rid+'.json'}
+        paths=_result_original_paths(rid)
         hashes={}
         parsed={}
         snapshots={}
@@ -565,7 +569,31 @@ def _load_result_verification_report(root, race_date):
                 'sha256':hashlib.sha256(raw).hexdigest() if raw is not None else None,
                 'error':type(exc).__name__+':'+str(exc)[:180]}
 
-def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=None, verification_report=None):
+
+def _stored_result_verification_reference(root, rid, phase, envelope_path, envelope, result):
+    """Use the validated execution-store checkpoint as an unsigned reference."""
+    import hashlib
+    from jra_presentation import digest
+
+    files=phase['manifest']['files']
+    if 'result_request.json' not in files:
+        return None
+    raw_request=(phase['run_dir']/'result_request.json').read_bytes()
+    result_digest=digest(result)
+    if (hashlib.sha256(raw_request).hexdigest()!=files['result_request.json']['sha256'] or
+            digest(json.loads(raw_request))!=result_digest):
+        return None
+    envelope_relative=envelope_path.relative_to(root).as_posix()
+    originals={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in _result_original_paths(rid).values()}
+    originals[envelope_relative]=files[envelope_path.name]['sha256']
+    return {'path':(phase['run_dir']/'manifest.json').relative_to(root).as_posix(),
+            'sha256':phase['latest']['manifest_sha256'],
+            'body':{'input_manifest':originals,'rows':[{'race_id':rid,'result_request_sha256':result_digest,
+                'result_receipt_sha256':envelope['receipt_sha256'],'result_receipt_path':envelope_relative}]}}
+
+
+def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=None, verification_report=None,
+                          verify_from_store=False):
     """Describe storage separately from an explicitly referenced signature readback.
 
     The legacy scheduler enum is retained separately. A file's presence must
@@ -636,12 +664,19 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
                 'receipt_sha256':envelope.get('receipt_sha256'),
                 'signature_present':bool(envelope.get('signature')),
                 'signature_validation':'NOT_PERFORMED_BY_STATUS_RENDERER'})
+            reference=None
             if (verification_report and not verification_report.get('error') and
                     any(r.get('race_id')==rid and r.get('result_receipt_sha256')==envelope.get('receipt_sha256')
                         for r in verification_report['body']['rows'])):
-                signature_readback=_result_signature_readback(root,rid,final,result,envelope,
-                    envelope_path,review,learning,verification_report)
-                receipts[-1]['signature_validation']=signature_readback['status']
+                reference=verification_report
+            elif verify_from_store and bound and learning_bound:
+                reference=_stored_result_verification_reference(root,rid,phase,envelope_path,envelope,result)
+            if reference:
+                checked=_result_signature_readback(root,rid,final,result,envelope,
+                    envelope_path,review,learning,reference)
+                if signature_readback is None or checked['verified']:
+                    signature_readback=checked
+                receipts[-1]['signature_validation']=checked['status']
         except (OSError,ValueError,KeyError,TypeError) as exc:
             receipts.append({'execution_id':eid,'storage_error':type(exc).__name__+':'+str(exc)[:120],
                              'request_payload_bound':False})
@@ -690,7 +725,8 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
     return evidence
 
 
-def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime, *, verification_report=None) -> dict:
+def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime, *, verification_report=None,
+                verify_from_store=False) -> dict:
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
     row["registered_intake"]=sched.get("registered_intake",False)
@@ -769,7 +805,8 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
                 "actual_pfs_status",
             )}
         if res is not None:
-            row['post_result_evidence']=_post_result_evidence(root,rid,eids,final=final,result=res,verification_report=verification_report)
+            row['post_result_evidence']=_post_result_evidence(root,rid,eids,final=final,result=res,
+                verification_report=verification_report,verify_from_store=verify_from_store)
             row['scheduler_state_scope']='LEGACY_COMPATIBILITY_ENUM; NOT_SIGNATURE_OR_CLOSED_LOOP_PROOF'
             row['display_state']=row['post_result_evidence']['storage_state']
     elif no_bet:
@@ -1056,7 +1093,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
     verification_report=_load_result_verification_report(root,race_date)
     rows=[]
     for rid,s in schedule.items():
-        try:rows.append(race_status(root,rid,s,state,now,**({'verification_report':verification_report} if verification_report else {})))
+        try:rows.append(race_status(root,rid,s,state,now,verification_report=verification_report,verify_from_store=True))
         except (OSError,ValueError,KeyError,TypeError,ImportError) as exc:
             rows.append({'race_id':rid,'post':s.get('post'),'state':'HOLD_CHECKPOINT_INTEGRITY',
                          'first_blocked_stage':'CHECKPOINT_READBACK','execution_error':str(exc)[:300]})
