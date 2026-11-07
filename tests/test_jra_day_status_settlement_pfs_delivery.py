@@ -216,12 +216,12 @@ def test_saved_oct24_36_races_preserve_finals_and_separate_storage_from_signatur
     assert all(p.read_bytes()==body for p,body in finals.items())
 
 
-def _original_signature_reference(root, rid='KM-JRA-KYO-20261031-R01'):
+def _original_signature_reference(root, rid='KM-JRA-KYO-20261031-R01', *, archive_root=None):
     """Copy existing archived originals; this helper never signs or calls a provider."""
     import os, shutil, hashlib, pytest
     from execution_store import resolve_phase
     from jra_presentation import digest
-    source=Path(os.environ.get('KM_STATUS_VERIFICATION_DATA_ROOT') or Path(__file__).resolve().parents[1])
+    source=Path(archive_root or os.environ.get('KM_STATUS_VERIFICATION_DATA_ROOT') or Path(__file__).resolve().parents[1])
     paths={kind:'runtime/'+folder+'/'+rid+suffix for kind,folder,suffix in (
         ('final','final_artifacts','.json'),('result','results','.json'),
         ('review','reviews_auto','-AUTO.json'),('learning','learning_states','.json'))}
@@ -285,7 +285,9 @@ def test_valid_originals_still_default_to_storage_only_without_opt_in_report(tmp
 def test_day_writer_verifies_complete_stored_checkpoint_without_report(tmp_path):
     import base64
     from execution_store import persist_phase, resolve_phase
-    rid,paths,report,report_path,final,result=_original_signature_reference(tmp_path,'KM-JRA-FKS-20261107-R01')
+    archive_root=Path(__file__).resolve().parents[1]
+    rid,paths,report,report_path,final,result=_original_signature_reference(
+        tmp_path,'KM-JRA-FKS-20261107-R01',archive_root=archive_root)
     report_path.unlink()
     executions=tmp_path/'runtime/executions'
     current=resolve_phase(rid+'-LIVE-R1','RESULT',root=executions)
