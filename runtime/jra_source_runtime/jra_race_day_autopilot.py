@@ -870,6 +870,14 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
         row["first_blocked_stage"] = stage
         row["full20"] = f"{gap.get('verified_full_index_count')}/{gap.get('required_index_count')}"
         row["unclosed_cells"] = _blocked_cells(gap)
+        if (error == 'AKI_SELECTED_HEAD_WITHOUT_MATERIAL_PAIR'
+                and gap.get('production_full_numerical_ready') is True):
+            from jra_practical_candidate_forecast import read_saved_forecast_reference
+
+            row['full20_diagnostic_path'] = Path(gaps[-1]).relative_to(root).as_posix()
+            reference = read_saved_forecast_reference(root, rid, sched.get('post'), gap, now)
+            if reference is not None:
+                row['paper_reference'] = reference
     elif eids or rid in state:
         row["state"] = "DISPATCHED_RUNNING"
         row["dispatched_at"] = (state.get(rid) or {}).get("dispatched_at")
@@ -1171,6 +1179,14 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
             md += ["```", r["aki_reference"]["tree"], "```"]
         if r.get("unclosed_cells"):
             md.append(f"Full20 {r.get('full20')} 未成立: " + "、".join(r["unclosed_cells"]))
+        if r.get('full20_diagnostic_path'):
+            path = Path(r['full20_diagnostic_path']).relative_to('runtime')
+            md.append(f"[全馬Full20 {r['full20']} 計算原本](../{path})。"
+                      f"停止工程 {r['first_blocked_stage']} / {r['execution_error']}。")
+        if r.get('paper_reference'):
+            ref = r['paper_reference']
+            path = Path(ref['path']).relative_to('runtime')
+            md.append(f"[PAPER参考](../{path})（{ref['temporal_class']}）。正式FINAL・本人到達の証拠なし。")
         if r.get("aki_selection_failure"):
             md.append(f"Full20 {r.get('full20')} 計算済み。AKI選定停止: {r.get('decision_reason')}。"
                       + "空列: " + "、".join(r["aki_selection_failure"].get("empty_columns") or [])
