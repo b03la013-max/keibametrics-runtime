@@ -1,0 +1,142 @@
+{
+  "status": "PREPARED_NOT_APPLIED_OWNER_APPROVAL_REQUIRED",
+  "source_deployment_id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+  "recovered_snapshot_start_command": "sh -c 'mkdir -p /opt/km && python -c \"import os,gzip,base64,pathlib,hashlib; dec=lambda s:gzip.decompress(base64.b64decode(s+\\\"=\\\"*((-len(s))%4))); ab=dec(\\\"\\\".join(os.environ[f\\\"KM_MCPFINE_{i}\\\"] for i in range(7))); eb=dec(\\\"\\\".join(os.environ[f\\\"KM_ENGINE_GZ_B64_{i}\\\"] for i in range(6))); pb=dec(os.environ[\\\"KM_PARAM_GZ_B64\\\"]); ash=hashlib.sha256(ab).hexdigest(); esh=hashlib.sha256(eb).hexdigest(); psh=hashlib.sha256(pb).hexdigest(); print(\\\"KM_RUNTIME_BLOB_SHA\\\",ash,esh,psh,flush=True); assert ash==os.environ[\\\"KM_MCPFINE_SHA256\\\"]; assert esh==os.environ[\\\"KM_ENGINE_SHA256\\\"]; assert psh==os.environ[\\\"KM_PARAM_SHA256\\\"]; pathlib.Path(\\\"/opt/km/app.py\\\").write_bytes(ab); pathlib.Path(\\\"/opt/km/KRS-Engine_v1.1.0_PORTABLE.py\\\").write_bytes(eb); pathlib.Path(\\\"/opt/km/parameter_map_v0.1-provisional.json\\\").write_bytes(pb)\" && python -m pip install --no-cache-dir mcp uvicorn cryptography >/tmp/km-pip.log 2>&1 && exec uvicorn app:app --app-dir /opt/km --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips=\"*\"'",
+  "recovered_snapshot_start_command_sha256": "4c89146f5ac67b2ac2f0fb3a03a934b4b6630919a74d23306f21c792fc800cf3",
+  "observed_python": "3.13.16",
+  "observed_packages": [
+    [
+      "PyJWT",
+      "2.15.1"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "anyio",
+      "4.15.1"
+    ],
+    [
+      "attrs",
+      "26.1.0"
+    ],
+    [
+      "cffi",
+      "2.1.1"
+    ],
+    [
+      "click",
+      "8.5.0"
+    ],
+    [
+      "cryptography",
+      "50.0.2"
+    ],
+    [
+      "h11",
+      "0.16.0"
+    ],
+    [
+      "httpcore2",
+      "2.13.1"
+    ],
+    [
+      "httpx2",
+      "2.13.1"
+    ],
+    [
+      "idna",
+      "3.20"
+    ],
+    [
+      "jsonschema",
+      "4.26.0"
+    ],
+    [
+      "jsonschema-specifications",
+      "2025.9.1"
+    ],
+    [
+      "mcp",
+      "2.3.0"
+    ],
+    [
+      "mcp-types",
+      "2.3.0"
+    ],
+    [
+      "opentelemetry-api",
+      "1.45.1"
+    ],
+    [
+      "pip",
+      "26.2.1"
+    ],
+    [
+      "pycparser",
+      "3.11"
+    ],
+    [
+      "pydantic",
+      "2.14.1"
+    ],
+    [
+      "pydantic_core",
+      "2.50.1"
+    ],
+    [
+      "python-multipart",
+      "0.0.32"
+    ],
+    [
+      "referencing",
+      "0.37.0"
+    ],
+    [
+      "rpds-py",
+      "2026.9.1"
+    ],
+    [
+      "sse-starlette",
+      "3.5.0"
+    ],
+    [
+      "starlette",
+      "1.8.0"
+    ],
+    [
+      "truststore",
+      "0.10.5"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.16.0"
+    ],
+    [
+      "uvicorn",
+      "0.54.0"
+    ]
+  ],
+  "candidate_start_command": "sh -c 'mkdir -p /opt/km && python -c \"import os,gzip,base64,pathlib,hashlib; dec=lambda s:gzip.decompress(base64.b64decode(s+\\\"=\\\"*((-len(s))%4))); ab=dec(\\\"\\\".join(os.environ[f\\\"KM_MCPFINE_{i}\\\"] for i in range(7))); eb=dec(\\\"\\\".join(os.environ[f\\\"KM_ENGINE_GZ_B64_{i}\\\"] for i in range(6))); pb=dec(os.environ[\\\"KM_PARAM_GZ_B64\\\"]); ash=hashlib.sha256(ab).hexdigest(); esh=hashlib.sha256(eb).hexdigest(); psh=hashlib.sha256(pb).hexdigest(); print(\\\"KM_RUNTIME_BLOB_SHA\\\",ash,esh,psh,flush=True); assert ash==os.environ[\\\"KM_MCPFINE_SHA256\\\"]; assert esh==os.environ[\\\"KM_ENGINE_SHA256\\\"]; assert psh==os.environ[\\\"KM_PARAM_SHA256\\\"]; pathlib.Path(\\\"/opt/km/app.py\\\").write_bytes(ab); pathlib.Path(\\\"/opt/km/KRS-Engine_v1.1.0_PORTABLE.py\\\").write_bytes(eb); pathlib.Path(\\\"/opt/km/parameter_map_v0.1-provisional.json\\\").write_bytes(pb)\" && python -m pip install --no-cache-dir --disable-pip-version-check --retries 2 --timeout 15 PyJWT==2.15.1 annotated-types==0.8.0 anyio==4.15.1 attrs==26.1.0 cffi==2.1.1 click==8.5.0 cryptography==50.0.2 h11==0.16.0 httpcore2==2.13.1 httpx2==2.13.1 idna==3.20 jsonschema==4.26.0 jsonschema-specifications==2025.9.1 mcp==2.3.0 mcp-types==2.3.0 opentelemetry-api==1.45.1 pycparser==3.11 pydantic==2.14.1 pydantic_core==2.50.1 python-multipart==0.0.32 referencing==0.37.0 rpds-py==2026.9.1 sse-starlette==3.5.0 starlette==1.8.0 truststore==0.10.5 typing-inspection==0.4.4 typing_extensions==4.16.0 uvicorn==0.54.0 >/tmp/km-pip.log 2>&1 && exec uvicorn app:app --app-dir /opt/km --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips=\"*\"'",
+  "candidate_start_command_sha256": "610839e28c178df8b0527d3a5850fe67b597f94bf5ef757823df9fb3ec326fec",
+  "candidate_diff": [
+    "Replace service diagnostic command with recovered artifact reconstruction/verification and uvicorn command",
+    "Pin all 28 observed application distributions; installed pip version recorded separately",
+    "Bound pip retries to 2 and connect/read timeout to 15 seconds; network/package availability remains required",
+    "Restore deployed snapshot healthcheckTimeout 300 instead of current service 30"
+  ],
+  "candidate_healthcheckTimeout": 300,
+  "unchanged": [
+    "Production app/Engine/parameter bytes",
+    "Signer/trust anchor/environment values",
+    "Numerical/Prediction Policy",
+    "No deployment or service mutation"
+  ],
+  "rollback_target": "Preserve active deployment 7c7eeb5e-3b5b-496a-b66f-82bd71897d53 and its original snapshot before any future owner-authorized deployment. Provider rollback not exercised. Never roll back to current diagnostic service command.",
+  "image_reference_limit": "Deployment UI exposes python:3.13-slim sha:70729 prefix only. Public current registry digest is reference, not full actual deployment digest proof. Do not replace actual image with inferred digest."
+}

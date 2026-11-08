@@ -1,0 +1,108 @@
+{
+  "observed_at": "2026-10-17T10:32:52.701Z",
+  "main_sha": "d7ae23a07f7e872957085ef2bf72cf794a0c316f",
+  "reviewed_pr_head": "7d3887df7f0a7133fa3d4c06fa5b22a15f27f44f",
+  "previous_code_head": "58ec50282964eb438f56315e8464dd24dae32764",
+  "github_submitted_reviews": [],
+  "reviewer_scope": "Assistant manual difference review independent of existing tests; not an independent-author external approval",
+  "railway_deployments": {
+    "deployments": [
+      {
+        "id": "7c7eeb5e-3b5b-496a-b66f-82bd71897d53",
+        "status": "SUCCESS",
+        "createdAt": "2026-10-14T06:12:52.934Z",
+        "updatedAt": "2026-10-14T06:16:16.627Z",
+        "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+        "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "url": null,
+        "snapshotId": "1db3ca05-b62e-4038-8106-80c3c561e761",
+        "creator": {
+          "id": "84ea6854-73ee-4a4c-b168-20a8e65b2982",
+          "name": null,
+          "email": "b03la013@gmail.com"
+        },
+        "canRollback": true,
+        "canRedeploy": true,
+        "regions": [
+          "sfo"
+        ],
+        "meta": {
+          "reason": "redeploy",
+          "image": "python:3.13-slim"
+        }
+      },
+      {
+        "id": "35de5393-7b71-4617-b4cc-6470cb70e748",
+        "status": "REMOVED",
+        "createdAt": "2026-09-22T14:51:01.935Z",
+        "updatedAt": "2026-10-13T18:05:30.964Z",
+        "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+        "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "url": null,
+        "snapshotId": "f556fd79-bcec-49da-bee0-06a5276e1ffe",
+        "creator": {
+          "id": "84ea6854-73ee-4a4c-b168-20a8e65b2982",
+          "name": null,
+          "email": "b03la013@gmail.com"
+        },
+        "canRollback": true,
+        "canRedeploy": true,
+        "regions": [
+          "sfo"
+        ],
+        "meta": {
+          "reason": "redeploy",
+          "image": "python:3.13-slim"
+        }
+      },
+      {
+        "id": "6c99ce4d-0cf3-45d9-9cc5-d9707f8e8327",
+        "status": "REMOVED",
+        "createdAt": "2026-09-22T14:47:10.583Z",
+        "updatedAt": "2026-09-22T14:51:18.190Z",
+        "serviceId": "3075b11b-a996-4d81-a76b-2df66f2561a0",
+        "environmentId": "8af4a037-975f-4c15-8005-7bcde494022b",
+        "url": null,
+        "snapshotId": "3a50535a-92e1-43cf-b7e8-4b1c8daf436b",
+        "creator": {
+          "id": "84ea6854-73ee-4a4c-b168-20a8e65b2982",
+          "name": null,
+          "email": "b03la013@gmail.com"
+        },
+        "canRollback": true,
+        "canRedeploy": true,
+        "regions": [
+          "sfo"
+        ],
+        "meta": {
+          "reason": "redeploy",
+          "image": "python:3.13-slim"
+        }
+      }
+    ]
+  },
+  "railway_config": {
+    "source": {
+      "image": "python:3.13-slim"
+    },
+    "deploy": {
+      "startCommand": "sh -c 'python -c \"import os,base64,hashlib; \nfor k in [\\\"KM_LOCAL_COMBINED_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64\\\",\\\"KM_LOCAL_BOOTSTRAP_B64_V4\\\"]:\n s=os.environ.get(k,\\\"\\\"); \n print(k,\\\"len=\\\",len(s)); \n if s:\n  b=base64.b64decode(s+\\\"=\\\"*((-len(s))%4)); \n  print(k,\\\"sha=\\\",hashlib.sha256(b).hexdigest(),\\\"decoded_len=\\\",len(b)); \n  print(k,\\\"head=\\\",repr(b[:500]))\nraise SystemExit(9)\"'",
+      "preDeployCommand": [],
+      "healthcheckPath": "/health",
+      "healthcheckTimeout": 30,
+      "restartPolicyType": "NEVER",
+      "useLegacyStacker": false,
+      "ipv6EgressEnabled": false,
+      "runtime": "V2",
+      "multiRegionConfig": {
+        "sfo": {
+          "numReplicas": 1
+        }
+      }
+    },
+    "staged": null
+  },
+  "runtime_mutations": 0,
+  "production_activation_performed": false,
+  "merge_performed": false
+}
