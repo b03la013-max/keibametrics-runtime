@@ -63,6 +63,8 @@ def _category(row):
                            row.get('first_failed_stage', 'PROCESS_RESULT'))['status']
     if status.startswith(('BLOCKED', 'FAILURE')):
         return status.split(':', 1)[0]
+    if status=='PENDING_RESULT_RUNNER':
+        return status
     if status.startswith('PENDING'):
         return 'PENDING_OFFICIAL_RESULT'
     if status=='NOT_RUN_BUDGET':
@@ -90,6 +92,8 @@ def build_execution_health(lane, rows, *, observed_at=None):
         health='NOT_RUN_BUDGET' if counts['NOT_RUN_BUDGET']==len(rows) else 'PARTIAL_BUDGET'
     elif counts.get('PENDING_OFFICIAL_RESULT'):
         health = 'PENDING_OFFICIAL_RESULT'
+    elif counts.get('PENDING_RESULT_RUNNER'):
+        health = 'PENDING_RESULT_RUNNER'
     elif counts.get('SETTLED'):
         health = 'SUCCESS_SETTLED'
     elif counts.get('RESULT_REQUEST_WRITTEN'):

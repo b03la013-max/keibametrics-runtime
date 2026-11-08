@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -91,6 +92,128 @@ def audit_learning_consumption(*, race_id, source_freeze, prediction_cutoff,
     return result
 
 
+def audit_official_observation_consumption(root, race_id, *, source_freeze, prediction_cutoff):
+    """Read the separate, authorized prior-race observation route from signed FINAL.
+
+    No Learning State is fed to scoring. The ablation operates only on the
+    existing Base13 mapping and reports no implied Static or ticket effect.
+    """
+    if __package__:
+        from .jra_production_postresult import verify_archived_final_signature
+    else:
+        from jra_production_postresult import verify_archived_final_signature
+
+    from execution_store import resolve_phase
+    from jra_evidence_to_base_production import _weighted_index, load_mapping
+    from jra_source_runtime.source_acquisition import verify_source_artifact
+    from jra_source_runtime.verify_source_envelope import verify
+
+    match = re.fullmatch(r"KM-JRA-([A-Z]{3})-([0-9]{8})-R([0-9]{2})", race_id)
+    if not match:
+        raise ValueError("JRA_OBSERVATION_TARGET_REQUIRED")
+    venue, day, target_number = match.groups()
+    target_day = datetime.strptime(day, "%Y%m%d").date().isoformat()
+    root = Path(root)
+    final = json.loads((root / "runtime/final_artifacts" / (race_id + ".json")).read_bytes())
+    verify_archived_final_signature(final, root=root, race_id=race_id)
+    package = final["final_prediction_package"]
+    binding = package["execution_stage_manifest"]["SIGNED_SOURCE_RECEIPT_VERIFIED"]
+    execution_id = binding.get("execution_id", "")
+    if not re.fullmatch(re.escape(race_id) + r"-LIVE-R[1-9][0-9]*", execution_id):
+        raise ValueError("JRA_OBSERVATION_SOURCE_EXECUTION_MISMATCH")
+    if _time(binding["source_freeze_at"]) != _time(source_freeze) or _time(final["prediction_cutoff"]) != _time(prediction_cutoff):
+        raise ValueError("JRA_OBSERVATION_CALLER_CLOCK_MISMATCH")
+    checkpoint = resolve_phase(execution_id, "SOURCE", root=root / "runtime/executions")
+    name = "source_receipt_envelope.json"
+    if checkpoint is None or name not in checkpoint["manifest"]["files"]:
+        raise ValueError("JRA_OBSERVATION_SOURCE_CHECKPOINT_MISSING")
+    envelope_path = checkpoint["run_dir"] / name
+    checked = verify(envelope_path)
+    envelope = json.loads(envelope_path.read_bytes())
+    source = envelope["artifact"]
+    verified, errors = verify_source_artifact(source)
+    if not verified:
+        raise ValueError("JRA_OBSERVATION_SOURCE_INVALID:" + "|".join(errors))
+    source_context = source["source_race_context"]
+    freeze, cutoff = _time(source_freeze), _time(prediction_cutoff)
+    if (
+        checked["race_id"] != race_id or checked["family"] != "JRA" or checked["status"] != "PASS"
+        or envelope["receipt"]["phase"] != "SOURCE" or checked["receipt_sha256"] != binding["receipt_sha256"]
+        or source["race_id"] != race_id or source_context["venue_id"] != venue
+        or source_context["race_date"] != target_day or source_context["race_no"] != int(target_number)
+        or _time(source["source_freeze_at"]) != freeze or _time(source["prediction_cutoff"]) != cutoff
+        or not freeze <= _time(envelope["receipt"]["timestamp"]) <= cutoff
+        or source["source_snapshot_sha256"] != binding["source_snapshot_sha256"]
+        or source["source_snapshot_sha256"] != final["source_snapshot_sha256"]
+    ):
+        raise ValueError("JRA_OBSERVATION_SOURCE_FINAL_BINDING_MISMATCH")
+
+    same_day = source["jra_official_same_day_results"]
+    result_sha = _sha(same_day)
+    if (result_sha != source["jra_official_same_day_results_sha256"]
+            or result_sha != binding["official_same_day_result_detail_sha256"]
+            or same_day.get("official") is not True or same_day.get("production_fact_authority") is not True):
+        raise ValueError("JRA_OBSERVATION_RESULT_BUNDLE_MISMATCH")
+    snapshots = {s.get("snapshot_sha256"): s for s in source["sources"]}
+    prior_results = {}
+    for number, row in same_day["races"].items():
+        if not 0 < int(number) < int(target_number) or row.get("race_no") != int(number):
+            raise ValueError("JRA_OBSERVATION_NON_PRIOR_RACE")
+        snapshot_sha = row["source_snapshot_sha256"]
+        snap = snapshots[snapshot_sha]
+        if (snap.get("source_id") != f"JRA-OFFICIAL-SAME-DAY-R{int(number):02d}-DETAIL"
+                or snap.get("official") is not True or snap.get("authority") != "JRA_OFFICIAL"
+                or snap.get("cutoff_relation") != "PRE_CUTOFF"
+                or row.get("official") is not True or row.get("production_fact_authority") is not True
+                or not _time(f'{target_day}T{row["scheduled_post_hhmm"]}:00+09:00') <= _time(snap["fetched_at"]) < freeze):
+            raise ValueError("JRA_OBSERVATION_PRIOR_RESULT_PROVENANCE_MISMATCH")
+        prior_results[number] = {
+            "race_id": f"KM-JRA-{venue}-{day}-R{int(number):02d}",
+            "fetched_at": snap["fetched_at"], "raw_sha256": snap["raw_sha256"],
+            "snapshot_sha256": snapshot_sha,
+        }
+
+    mapping_path = root / "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json"
+    mapping = load_mapping(mapping_path)
+    cells = []
+    for runner_id, runner in package["index_provenance_replay"]["runners"].items():
+        for index, trace in runner["base_index_trace"].items():
+            features, affected = {}, {}
+            for component in trace["components"]:
+                refs = component["evidence_refs"]
+                result_refs = [r.rsplit("R", 1)[1] for r in refs if r.startswith("JRA_OFFICIAL_SAME_DAY:R")]
+                name = component["feature"]
+                features[name] = {"category": component["category"], "evidence_refs": refs,
+                                  "source_fact": component["source_fact"], "rule_id": component["feature_rule_id"]}
+                if result_refs:
+                    affected[name] = [prior_results[str(int(n))]["race_id"] for n in result_refs]
+            if not affected:
+                continue
+            on = _weighted_index(index, trace["profile"], features, mapping)
+            if any(on.get(key) != trace.get(key) for key in (
+                "value", "rule_id", "mapping_version", "coverage_weight", "components", "information_status"
+            )) or on["value"] != runner["base_final_values"][index]:
+                raise ValueError("JRA_OBSERVATION_SIGNED_CELL_REBUILD_MISMATCH")
+            off = _weighted_index(index, trace["profile"], {k: v for k, v in features.items() if k not in affected}, mapping)
+            cells.append({"runner_id": runner_id, "index": index, "signed_value": on["value"],
+                          "same_day_component_ablation_value": off["value"],
+                          "delta": round(on["value"] - off["value"], 6),
+                          "same_day_features": affected})
+    out = {
+        "race_id": race_id, "final_sha256": final["sha256"], "final_signature_verified": True,
+        "source_receipt_sha256": checked["receipt_sha256"], "source_ed25519_verified": True,
+        "source_provenance": "BINDING_FROM_SIGNED_FINAL; INDEPENDENT_OIDC_NOT_REPERFORMED",
+        "source_freeze": source_freeze, "prediction_cutoff": prediction_cutoff,
+        "replay_mapping_file_sha256": hashlib.sha256(mapping_path.read_bytes()).hexdigest(),
+        "prior_official_result_snapshots": prior_results, "base_index_cells": cells,
+        "signed_consumed_cell_count": len(cells), "ablation_value_changed_count": sum(c["delta"] != 0 for c in cells),
+        "scope": "SIGNED_OFFICIAL_PRE_RACE_OBSERVATIONS_AND_BASE_INDEX_COMPONENT_ABLATION_ONLY",
+        "production_learning_state_use": "NOT_ESTABLISHED", "production_policy_changed": False,
+    }
+    out["sha256"] = _sha(out)
+    return out
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -100,6 +223,7 @@ def main():
     parser.add_argument("--cutoff", required=True)
     parser.add_argument("--states", required=True)
     parser.add_argument("--prediction-input")
+    parser.add_argument("--signed-official-observations-root")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     states = json.loads(Path(args.states).read_text(encoding="utf-8"))
@@ -110,6 +234,11 @@ def main():
         race_id=args.race_id, source_freeze=args.source_freeze,
         prediction_cutoff=args.cutoff, learning_states=states,
         prediction_input=frozen, family_id=args.family_id)
+    if args.signed_official_observations_root:
+        report["official_observation_consumption"] = audit_official_observation_consumption(
+            args.signed_official_observations_root, args.race_id,
+            source_freeze=args.source_freeze, prediction_cutoff=args.cutoff)
+        report["sha256"] = _sha({k: v for k, v in report.items() if k != "sha256"})
     Path(args.output).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

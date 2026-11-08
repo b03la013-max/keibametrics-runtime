@@ -427,13 +427,34 @@ def _intent_for(root: Path, race_id: str) -> dict:
     return hits[-1]
 
 
-def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,github_sha=None):
+def _result_execution_id(final, race_id):
+    execution_id = ((final.get('execution_stage_manifest') or {}).get('SIGNED_SOURCE_RECEIPT_VERIFIED') or {}).get('execution_id')
+    if not isinstance(execution_id,str) or not re.fullmatch(re.escape(race_id)+r'-LIVE-R[1-9]\d*',execution_id):
+        raise ProductionPostResultError('RESULT_REUSE_SOURCE_EXECUTION_IDENTITY_MISMATCH')
+    return execution_id
+
+
+def _bind_result_response(request,response,final):
+    receipt=response.get('receipt') or {}
+    if (receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS' or receipt.get('errors')
+            or receipt.get('race_id')!=request['race_id'] or receipt.get('artifact_sha256')!=_sha(request)
+            or response.get('receipt_sha256')!=_sha(receipt)
+            or response.get('signature_alg')!='Ed25519' or not response.get('signature')
+            or not response.get('signer_key_id')):
+        raise ProductionPostResultError('RESULT_REUSE_RECEIPT_BINDING_MISMATCH')
+    if _dt(receipt.get('timestamp'))<=_dt(final['scheduled_post_at']):
+        raise ProductionPostResultError('RESULT_REUSE_TEMPORAL_BEFORE_POST')
+
+
+def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,github_sha=None,publish=None):
     """Reuse verified JRA RESULT checkpoints before requesting another signature.
 
-    Uses the existing execution store. No exactly-once claim is made for a
-    crash after the remote signature but before any response bytes are saved.
+    The hosted publisher persists a claim before submission and a response
+    before external verification or downstream work. An unknown outcome
+    requires reconciliation and never opens another submission attempt.
     """
-    from execution_store import resolve_phase,persist_phase,phase_root
+    from execution_store import resolve_phase,persist_phase,phase_root,require_public_storage
+    from jra_result_submission import ResultSubmission
     root=Path(root);checkpoint=Path(checkpoint);race_id=request.get('race_id')
     if (not isinstance(race_id,str) or not re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}',race_id)
             or request.get('family_id','JRA')!='JRA'
@@ -447,9 +468,8 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
     if (refs.get('immutable_final_sha256')!=final.get('sha256') or
             refs.get('final_receipt_sha256')!=final.get('final_receipt_sha256')):
         raise ProductionPostResultError('RESULT_REUSE_FINAL_BINDING_MISMATCH')
-    execution_id=((final.get('execution_stage_manifest') or {}).get('SIGNED_SOURCE_RECEIPT_VERIFIED') or {}).get('execution_id')
-    if not isinstance(execution_id,str) or not re.fullmatch(re.escape(race_id)+r'-LIVE-R[1-9]\d*',execution_id):
-        raise ProductionPostResultError('RESULT_REUSE_SOURCE_EXECUTION_IDENTITY_MISMATCH')
+    require_public_storage(request)
+    execution_id=_result_execution_id(final,race_id)
     executions=root/'runtime/executions'
     phase=resolve_phase(execution_id,'RESULT',root=executions)
     saved_dir=phase['run_dir'] if phase else None
@@ -464,6 +484,7 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
             saved_dir=checkpoint
         elif any((phase_root(execution_id,'RESULT',executions)/'runs').glob('*')):
             raise ProductionPostResultError('RESULT_REUSE_PARTIAL_CHECKPOINT_UNRESOLVED')
+    submission=ResultSubmission(root,execution_id,request) if publish is not None else None
     if saved_dir is not None:
         saved_request=json.loads((saved_dir/'result_request.json').read_text())
         if saved_request!=request:
@@ -471,11 +492,23 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
         response=json.loads((saved_dir/'result_receipt_envelope.json').read_text())
         reused=True
     else:
-        code,response=call('/result',request)
-        if not 200<=code<300:raise ProductionPostResultError('RESULT_SUBMISSION_HTTP_FAILURE:'+str(code))
-        reused=False
+        status,response = submission.state() if submission is not None else ('READY',None)
+        reused=status=='RESPONSE_RECORDED'
+        if not reused:
+            if status!='READY':
+                raise ProductionPostResultError('RESULT_SUBMISSION_'+status)
+            if submission is not None:
+                submission.claim(str(run_id),publish)
+                path=root/'runtime/results'/(race_id+'.json')
+                current=json.loads(path.read_text(encoding='utf-8'))
+                current_final=json.loads((root/'runtime/final_artifacts'/(race_id+'.json')).read_text(encoding='utf-8'))
+                if current!=request or current_final!=final:
+                    raise ProductionPostResultError('RESULT_SUBMISSION_CANONICAL_INPUT_CHANGED')
+            code,response=call('/result',request)
+            if not 200<=code<300:raise ProductionPostResultError('RESULT_SUBMISSION_HTTP_FAILURE:'+str(code))
     # Keep the received original bytes locally even when verification is
     # refused or disconnected. These files are not verified phase admission.
+    require_public_storage(response)
     checkpoint.mkdir(parents=True,exist_ok=True)
     for name,value in (('result_request.json',request),('result_receipt_envelope.json',response)):
         target=checkpoint/name
@@ -487,15 +520,9 @@ def reuse_or_submit_production_result(root,request,*,call,checkpoint,run_id,gith
         else:
             with target.open('x',encoding='utf-8') as fh:
                 json.dump(value,fh,ensure_ascii=False,sort_keys=True,indent=2)
-    receipt=response.get('receipt') or {}
-    if (receipt.get('phase')!='RESULT' or receipt.get('status')!='PASS' or receipt.get('errors')
-            or receipt.get('race_id')!=race_id or receipt.get('artifact_sha256')!=_sha(request)
-            or response.get('receipt_sha256')!=_sha(receipt)
-            or response.get('signature_alg')!='Ed25519' or not response.get('signature')
-            or not response.get('signer_key_id')):
-        raise ProductionPostResultError('RESULT_REUSE_RECEIPT_BINDING_MISMATCH')
-    if _dt(receipt.get('timestamp'))<=_dt(final['scheduled_post_at']):
-        raise ProductionPostResultError('RESULT_REUSE_TEMPORAL_BEFORE_POST')
+    _bind_result_response(request,response,final)
+    if submission is not None and not reused:
+        submission.save_response(response,publish)
     code,verification=call('/verify',response)
     if not 200<=code<300 or verification.get('valid') is not True:
         raise ProductionPostResultError('RESULT_REUSE_SIGNATURE_NOT_VERIFIED')
@@ -576,11 +603,11 @@ def _source_bound_result_universe(root: Path, final: dict):
     return declared_ids, cancelled
 
 
-def process(root: Path, race_id: str, *, now=None) -> str:
+def process(root: Path, race_id: str, *, now=None, enroll_signer=False) -> str:
     require_owner_b_recovery(root,race_id,now=now,required_operation='FORMAL_RESULT_SETTLEMENT_REVIEW_STATE')
     out = root / "runtime" / "results" / (race_id + ".json")
     if out.exists():
-        return "ALREADY_RESULTED"
+        return _saved_request_status(root,race_id) if enroll_signer else "ALREADY_RESULTED"
     fpath = root / "runtime" / "final_artifacts" / (race_id + ".json")
     if not fpath.exists():
         return "NO_PRODUCTION_FINAL"
@@ -643,6 +670,9 @@ def process(root: Path, race_id: str, *, now=None) -> str:
             if saved!=req:
                 raise ProductionPostResultError('RESULT_REQUEST_IMMUTABILITY_CONFLICT') from exc
             return 'ALREADY_RESULTED'
+        if enroll_signer:
+            from jra_result_submission import ResultSubmission
+            ResultSubmission(root,_result_execution_id(final,race_id),req).enroll()
         return "RESULT_REQUEST_WRITTEN"
     except Exception as exc:
         if not getattr(exc,"first_failed_stage",None):exc.first_failed_stage=stage
@@ -679,23 +709,88 @@ def write_result_failure_capture(directory, race_id, exc):
     return filename
 
 
+def _saved_request(root, race_id):
+    from jra_result_submission import ResultSubmission
+    final=json.loads((root/'runtime/final_artifacts'/(race_id+'.json')).read_text(encoding='utf-8'))
+    path=root/'runtime/results'/(race_id+'.json')
+    request=json.loads(path.read_text(encoding='utf-8'))
+    refs=request.get('frozen_prediction_ref') or {}
+    if (final.get('race_id')!=race_id or request.get('race_id')!=race_id or request.get('result_lane')!='PRODUCTION'
+            or refs.get('immutable_final_sha256')!=final.get('sha256')
+            or refs.get('final_receipt_sha256')!=final.get('final_receipt_sha256')
+            or (request.get('official_result') or {}).get('status')!='OFFICIAL'
+            or (request.get('settlement') or {}).get('status')!='SETTLED'):
+        raise ProductionPostResultError('RESULT_SAVED_REQUEST_FINAL_BINDING_MISMATCH')
+    execution_id=_result_execution_id(final,race_id)
+    return path,request,final,execution_id,ResultSubmission(root,execution_id,request)
+
+
+def _saved_request_status(root,race_id):
+    from execution_store import resolve_phase
+    _,request,final,execution_id,submission=_saved_request(root,race_id)
+    phase=resolve_phase(execution_id,'RESULT',root=root/'runtime/executions')
+    if phase:
+        files=phase['manifest']['files']
+        if not {'result_request.json','result_receipt_envelope.json'}<=set(files):
+            raise ProductionPostResultError('RESULT_SAVED_PHASE_INCOMPLETE')
+        saved=json.loads((phase['run_dir']/'result_request.json').read_text(encoding='utf-8'))
+        if saved!=request:
+            raise ProductionPostResultError('RESULT_SAVED_PHASE_REQUEST_BINDING_MISMATCH')
+        response=json.loads((phase['run_dir']/'result_receipt_envelope.json').read_text(encoding='utf-8'))
+        _bind_result_response(request,response,final)
+        review_path=root/'runtime/reviews_auto'/(race_id+'-AUTO.json')
+        state_path=root/'runtime/learning_states'/(race_id+'.json')
+        if review_path.is_file() and state_path.is_file():
+            review=json.loads(review_path.read_text(encoding='utf-8'))
+            state=json.loads(state_path.read_text(encoding='utf-8'))
+            official=request['official_result']
+            refs=request['frozen_prediction_ref']
+            settlement=request['settlement']
+            capital=review.get('capital') or {}
+            review_sha=review.get('sha256')
+            if (review.get('race_id')!=race_id or state.get('race_id')!=race_id
+                    or review.get('immutable_final_artifact_sha256')!=refs['immutable_final_sha256']
+                    or review.get('final_receipt_sha256')!=refs['final_receipt_sha256']
+                    or review.get('official_top3')!=official['top3']
+                    or review.get('official_top3_orders')!=official.get('top3_orders')
+                    or review.get('official_finish_groups')!=official.get('finish_groups')
+                    or capital.get('investment')!=settlement['total_investment']
+                    or capital.get('settled_investment')!=settlement['effective_investment']
+                    or capital.get('return')!=settlement['total_payout']
+                    or review_sha!=_sha({k:v for k,v in review.items() if k!='sha256'})
+                    or state.get('sha256')!=_sha({k:v for k,v in state.items() if k!='sha256'})
+                    or state.get('source_review_sha256')!=review_sha):
+                raise ProductionPostResultError('RESULT_SAVED_LEARNING_BINDING_MISMATCH')
+            return 'ALREADY_RESULTED'
+        return 'PENDING_RESULT_RUNNER'
+    status,_=submission.state()
+    if status in {'READY','RESPONSE_RECORDED'}:
+        return 'PENDING_RESULT_RUNNER'
+    return 'BLOCKED_RESULT_'+status
+
+
 def pending_result_dispatches(root, rows):
-    """Use the saved requests as a retry source after a failed dispatch."""
+    """Retry only unclaimed enrolled requests or exact returned envelopes."""
     paths = set()
     for row in rows:
-        if row.get('status') not in {'ALREADY_RESULTED', 'RESULT_REQUEST_WRITTEN'}:
+        if row.get('status') not in {'PENDING_RESULT_RUNNER','RESULT_REQUEST_WRITTEN'}:
             continue
-        race_id = row.get('race_id')
-        if not isinstance(race_id, str) or not re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}', race_id):
-            continue
-        request = Path('runtime/results') / (race_id + '.json')
-        if not (root / request).is_file():
-            continue
-        if ((root / 'runtime/reviews_auto' / (race_id + '-AUTO.json')).is_file()
-                and (root / 'runtime/learning_states' / (race_id + '.json')).is_file()):
-            continue
-        paths.add(request.as_posix())
+        race_id=row['race_id']
+        if re.fullmatch(r'KM-JRA-[A-Z]{3}-\d{8}-R\d{2}',race_id) and _saved_request_status(root,race_id)=='PENDING_RESULT_RUNNER':
+            paths.add('runtime/results/'+race_id+'.json')
     return sorted(paths)
+
+
+def new_result_commit_paths(root, rows):
+    """Stage enrollment with each completed request in one existing Git commit."""
+    for row in rows:
+        if row.get('status')!='RESULT_REQUEST_WRITTEN':
+            continue
+        path,_,_,_,submission=_saved_request(root,row['race_id'])
+        if submission.state()[0]!='READY':
+            raise ProductionPostResultError('RESULT_NEW_REQUEST_NOT_ENROLLED')
+        yield path.relative_to(root).as_posix()
+        yield (submission.path/'ENROLLED.json').relative_to(root).as_posix()
 
 
 def main(argv=None):
@@ -706,14 +801,17 @@ def main(argv=None):
     p.add_argument('--health-out')
     p.add_argument('--failure-raw-dir')
     p.add_argument('--dispatch-from-health')
+    p.add_argument('--commit-from-health')
+    p.add_argument('--enroll-signer',action='store_true')
     a = p.parse_args(argv)
     from jra_postresult_health import (build_execution_health,failure_row,
                                       write_execution_health,health_exit_code)
     root = Path(a.repo_root).resolve()
-    if a.dispatch_from_health:
-        report = json.loads(Path(a.dispatch_from_health).read_text(encoding='utf-8'))
-        for request in pending_result_dispatches(root, report['processed']):
-            print(request)
+    if a.dispatch_from_health or a.commit_from_health:
+        report = json.loads(Path(a.dispatch_from_health or a.commit_from_health).read_text(encoding='utf-8'))
+        paths=pending_result_dispatches if a.dispatch_from_health else new_result_commit_paths
+        for path in paths(root, report['processed']):
+            print(path)
         return 0
     from jra_candidate_postresult_closedloop import PendingOfficialResult
     paths = ([root / "runtime" / "final_artifacts" / (a.race_id + ".json")] if a.race_id
@@ -738,9 +836,27 @@ def main(argv=None):
                 continue
             if not a.race_id:
                 age = (now - _dt(fin.get("scheduled_post_at"))).total_seconds()
-                if not 0 <= age <= a.days * 86400:
+                if age < 0:
                     continue
-            status = process(root, rid, now=now)
+                if age > a.days*86400:
+                    # The discovery window governs new fetches only. A known
+                    # enrolled request can finish after restart or day rollover.
+                    if not a.enroll_signer or not (root/'runtime/results'/(rid+'.json')).is_file():
+                        continue
+                    stage=((fin.get('execution_stage_manifest') or {}).get('SIGNED_SOURCE_RECEIPT_VERIFIED') or {})
+                    eid=stage.get('execution_id')
+                    if not isinstance(eid,str) or not re.fullmatch(re.escape(rid)+r'-LIVE-R[1-9]\d*',eid):
+                        continue
+                    execution=root/'runtime/executions'/eid
+                    enrolled=(execution/'RESULT_SUBMISSION'/'ENROLLED.json').is_file()
+                    prior_response=(execution/'RESULT'/'LATEST.json').is_file() and not (
+                        (root/'runtime/reviews_auto'/(rid+'-AUTO.json')).is_file()
+                        and (root/'runtime/learning_states'/(rid+'.json')).is_file())
+                    if not enrolled and not prior_response:
+                        continue
+                    if _saved_request_status(root,rid)=='ALREADY_RESULTED':
+                        continue
+            status = process(root,rid,now=now,**({'enroll_signer':True} if a.enroll_signer else {}))
             row.update(status=status,persisted=status=='RESULT_REQUEST_WRITTEN')
         except PendingOfficialResult as e:
             failure = e

@@ -106,11 +106,14 @@ jobs:
           result_receipt_reuse=None
           if (str(p.get("race_id") or "").startswith("KM-JRA-") and
                   str(p.get("result_lane") or "").upper()!="SOURCE_DERIVED_CANDIDATE"):
+              assert os.environ.get("GITHUB_REF")=="refs/heads/main", "JRA_PRODUCTION_RESULT_MAIN_REQUIRED"
               from jra_production_postresult import reuse_or_submit_production_result
+              from jra_result_submission import publish_to_main
               res,result_receipt_reuse=reuse_or_submit_production_result(
                   ".",p,call=call,checkpoint="runtime_out/result_checkpoint",
                   run_id=os.environ.get("GITHUB_RUN_ID","0")+"-"+os.environ.get("GITHUB_RUN_ATTEMPT","1"),
-                  github_sha=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip())
+                  github_sha=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+                  publish=lambda path:publish_to_main(".",path))
           else:
               # Preserve the non-JRA and separate Candidate signature contract.
               code,res=call("/result",p)

@@ -140,24 +140,73 @@ def test_failure_retains_exact_raw_separately_from_health(tmp_path, monkeypatch)
 
 
 def test_existing_incomplete_request_is_retried_without_rewriting_it(tmp_path):
+    from jra_result_submission import ResultSubmission
     requests = tmp_path / 'runtime/results'
-    reviews = tmp_path / 'runtime/reviews_auto'
-    learning = tmp_path / 'runtime/learning_states'
-    for folder in (requests, reviews, learning):
-        folder.mkdir(parents=True)
-    old = 'KM-JRA-TKY-20261107-R11'
-    last = 'KM-JRA-TKY-20261107-R12'
-    for race in (old, last):
-        (requests / (race + '.json')).write_bytes(b'{}\n')
-    (reviews / (old + '-AUTO.json')).touch()
-    (learning / (old + '.json')).touch()
-    rows = [{'race_id': race, 'status': 'ALREADY_RESULTED'} for race in (old, last)]
-    rows.append({'race_id': last, 'status': 'BLOCKED_OWNER_APPROVAL'})
-    assert p.pending_result_dispatches(tmp_path, rows) == ['runtime/results/' + last + '.json']
-    assert (requests / (last + '.json')).read_bytes() == b'{}\n'
-    (reviews / (last + '-AUTO.json')).touch()
-    (learning / (last + '.json')).touch()
+    requests.mkdir(parents=True)
+    frozen=final()
+    race=frozen['race_id']
+    execution_id=race+'-LIVE-R1'
+    frozen['execution_stage_manifest']={'SIGNED_SOURCE_RECEIPT_VERIFIED':{'execution_id':execution_id}}
+    frozen['sha256']=p._sha({k:v for k,v in frozen.items() if k!='sha256'})
+    save(tmp_path,race,frozen)
+    request=p.build_result_request(frozen,OFFICIAL,EVIDENCE)
+    path=requests/(race+'.json')
+    raw=json.dumps(request).encode()
+    path.write_bytes(raw)
+    rows=[{'race_id':race,'status':'PENDING_RESULT_RUNNER'}]
+    assert p.process(tmp_path,race,enroll_signer=True)=='BLOCKED_RESULT_LEGACY_UNRESOLVED'
+    assert p.pending_result_dispatches(tmp_path,rows)==[]
+    journal=ResultSubmission(tmp_path,execution_id,request)
+    journal.enroll()
+    assert p.pending_result_dispatches(tmp_path,rows)==[path.relative_to(tmp_path).as_posix()]
+    assert p.process(tmp_path,race,enroll_signer=True)=='PENDING_RESULT_RUNNER'
+    journal.claim('100-1',lambda path:None)
+    assert p.process(tmp_path,race,enroll_signer=True)=='BLOCKED_RESULT_SIGNER_OUTCOME_UNKNOWN'
     assert p.pending_result_dispatches(tmp_path, rows) == []
+    assert path.read_bytes()==raw
+
+
+def test_enrolled_request_is_scanned_after_discovery_window_without_refetch(tmp_path,monkeypatch):
+    from jra_result_submission import ResultSubmission
+    frozen=final()
+    race=frozen['race_id'];execution_id=race+'-LIVE-R1'
+    frozen['execution_stage_manifest']={'SIGNED_SOURCE_RECEIPT_VERIFIED':{'execution_id':execution_id}}
+    frozen['sha256']=p._sha({k:v for k,v in frozen.items() if k!='sha256'})
+    save(tmp_path,race,frozen)
+    request=p.build_result_request(frozen,OFFICIAL,EVIDENCE)
+    path=tmp_path/'runtime/results'/(race+'.json');path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(request))
+    journal=ResultSubmission(tmp_path,execution_id,request);journal.enroll()
+    monkeypatch.setattr('jra_candidate_postresult_closedloop.fetch_jra_result',lambda *a:pytest.fail('MUST_NOT_REFETCH'))
+    health=tmp_path/'health.json'
+    assert p.main(['--repo-root',str(tmp_path),'--days','0','--enroll-signer','--health-out',str(health)])==0
+    assert json.loads(health.read_text())['execution_health']=='PENDING_RESULT_RUNNER'
+    assert list(p.new_result_commit_paths(tmp_path,[{'race_id':race,'status':'RESULT_REQUEST_WRITTEN'}]))==[
+        path.relative_to(tmp_path).as_posix(),(journal.path/'ENROLLED.json').relative_to(tmp_path).as_posix()]
+
+
+def test_old_signed_phase_can_finish_review_without_new_signer_enrollment(tmp_path,monkeypatch):
+    from execution_store import persist_phase
+    frozen=final();race=frozen['race_id'];execution_id=race+'-LIVE-R1'
+    frozen['execution_stage_manifest']={'SIGNED_SOURCE_RECEIPT_VERIFIED':{'execution_id':execution_id}}
+    frozen['sha256']=p._sha({k:v for k,v in frozen.items() if k!='sha256'})
+    save(tmp_path,race,frozen)
+    request=p.build_result_request(frozen,OFFICIAL,EVIDENCE)
+    path=tmp_path/'runtime/results'/(race+'.json');path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(request))
+    receipt={'phase':'RESULT','status':'PASS','race_id':race,'artifact_sha256':p._sha(request),
+             'timestamp':'2026-10-11T07:30:00Z'}
+    envelope={'receipt':receipt,'receipt_sha256':p._sha(receipt),'signature':'offline-test',
+              'signer_key_id':'offline-test','signature_alg':'Ed25519'}
+    staging=tmp_path/'checkpoint';staging.mkdir()
+    (staging/'result_request.json').write_text(json.dumps(request))
+    (staging/'result_receipt_envelope.json').write_text(json.dumps(envelope))
+    persist_phase(execution_id,'RESULT','old-result',staging,root=tmp_path/'runtime/executions')
+    monkeypatch.setattr('jra_candidate_postresult_closedloop.fetch_jra_result',lambda *a:pytest.fail('MUST_NOT_REFETCH'))
+    health=tmp_path/'health.json'
+    assert p.main(['--repo-root',str(tmp_path),'--days','0','--enroll-signer','--health-out',str(health)])==0
+    rows=json.loads(health.read_text())['processed']
+    assert p.pending_result_dispatches(tmp_path,rows)==[path.relative_to(tmp_path).as_posix()]
 
 
 def test_production_missing_named_final_is_no_final_not_internal_success(tmp_path):

@@ -1,6 +1,10 @@
+import json
+from pathlib import Path
 import unittest
 
-from runtime.jra_next_race_learning_binding_audit import audit_learning_consumption
+from runtime.jra_next_race_learning_binding_audit import (
+    audit_learning_consumption, audit_official_observation_consumption,
+)
 
 
 class LearningBindingAuditTest(unittest.TestCase):
@@ -52,3 +56,23 @@ class LearningBindingAuditTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_existing_official_observations_are_proven_separately_from_learning_state():
+    import pytest
+
+    root = Path(__file__).resolve().parents[1]
+    for number, expected in ((1, (0, 0)), (6, (45, 44))):
+        race = f"KM-JRA-FKS-20261108-R{number:02d}"
+        final_path = root / "runtime/final_artifacts" / (race + ".json")
+        original = final_path.read_bytes()
+        final = json.loads(original)
+        stage = final["final_prediction_package"]["execution_stage_manifest"]["SIGNED_SOURCE_RECEIPT_VERIFIED"]
+        kwargs = {"source_freeze": stage["source_freeze_at"], "prediction_cutoff": final["prediction_cutoff"]}
+        result = audit_official_observation_consumption(root, race, **kwargs)
+        assert (result["signed_consumed_cell_count"], result["ablation_value_changed_count"]) == expected
+        assert result["production_learning_state_use"] == "NOT_ESTABLISHED"
+        assert not result["production_policy_changed"]
+        assert final_path.read_bytes() == original
+        with pytest.raises(ValueError, match="CALLER_CLOCK_MISMATCH"):
+            audit_official_observation_consumption(root, race, **dict(kwargs, source_freeze=final["prediction_cutoff"]))
