@@ -1,4 +1,5 @@
 import json,sys
+import pytest
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -68,6 +69,31 @@ def test_source_compiler_autofills_only_safe_production_fact_and_isolates_tsl():
     assert r["runners"]["1"]["shadow_observation_count"]==1
     assert r["formal_base_ready_after_merge"] is False
     assert "JRA_HORSE_HISTORY" in r["missing_source_families"]
+
+
+@pytest.mark.parametrize('source_freeze', ['2026-10-10T09:20:00+09:00', '2026-10-10T09:31:00+09:00'])
+def test_signed_source_time_bounds_pedigree_compilation(monkeypatch, source_freeze):
+    import jra_pedigree_corpus as pedigree
+
+    source = _artifact()
+    source.update(source_freeze_at=source_freeze, prediction_cutoff='2026-10-10T09:30:00+09:00')
+    runners = [{'runner_id': str(i), 'career_starts': 8} for i in (1, 2)]
+    observed_cutoffs = []
+
+    def record(*args, prediction_cutoff, **kwargs):
+        observed_cutoffs.append(prediction_cutoff)
+        return {'horses': {}, 'snapshots': []}
+
+    monkeypatch.setattr(pedigree, 'build_corpus', record)
+    if source_freeze.endswith('09:31:00+09:00'):
+        with pytest.raises(ValueError, match='BVI_SIGNED_SOURCE_CORPUS_CUTOFF_INVALID'):
+            compile_source_to_features(source, runners, _mapping())
+        assert observed_cutoffs == []
+    else:
+        manifest = compile_source_to_features(source, runners, _mapping())['pedigree_corpus_manifest']
+        assert observed_cutoffs == [manifest['availability_cutoff']] == ['2026-10-10T00:20:00+00:00']
+        assert manifest['availability_cutoff_basis'] == 'SOURCE_FREEZE_AT'
+        assert len(manifest['rule_registry_sha256']) == 64
 
 def test_source_compiler_never_silently_overwrites_existing_feature():
     runners=[

@@ -159,6 +159,7 @@ jobs:
             --plan runtime_out/pedigree_day_plan.json --index '${{ matrix.index }}' \
             --run-id '${{ github.run_id }}-${{ github.run_attempt }}'
       - name: Attest original producer bytes
+        id: batch_attestation
         if: steps.acquire.outputs.new == 'true'
         uses: actions/attest@v4
         with:
@@ -169,11 +170,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           FILE: ${{ steps.acquire.outputs.file }}
+          BUNDLE: ${{ steps.batch_attestation.outputs.bundle-path }}
           PYTHONPATH: runtime:runtime/jra_source_runtime
         run: |
           set -euo pipefail
+          test -s "$BUNDLE"
+          PROOF="${FILE%.json}.sigstore.jsonl"
+          cp -- "$BUNDLE" "$PROOF"
           gh attestation verify "$FILE" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml"
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-pedigree-corpus-harvest.yml" \
+            --bundle "$PROOF"
           python scripts/jra_weekend_bvi_intake.py admit --file "$FILE" \
             --receipt "runtime/pedigree_intake_receipts/$(basename "$FILE" .json)-admitted-${{ github.run_id }}.json"
       - name: Persist independently verified facts or isolated acquisition failure

@@ -1,4 +1,4 @@
-"""Overlap read-only cache warming with the existing Production wait.
+"""Verify a read-only SOURCE hint during the existing Production wait.
 
 The frozen five-file ENV implementation is called unchanged. Warming may read
 an immutable main request as a *hint*, but that hint can never authorize a
@@ -140,7 +140,7 @@ def profile_call(label, operation, report):
             "scope": "CUMULATIVE_TIMES_OVERLAP; NO_PER_ARM_STATIC_CLOCK; call_IS_KRS_AND_VERIFY_HTTP_COMBINED"}
 
 
-def prewarm(request_path, source_path, intent, eid, report, *, root=ROOT):
+def prewarm(request_path, source_path, intent, eid, report):
     request_raw = request_path.read_bytes(); source_raw = source_path.read_bytes()
     request = json.loads(request_raw); require_identity(request, intent, eid)
     checked = frozen._verified_source(source_path)
@@ -148,19 +148,16 @@ def prewarm(request_path, source_path, intent, eid, report, *, root=ROOT):
             or checked.get("race_id") != request["race_id"]
             or not frozen._attested(source_path, not_after=frozen.time(request["prediction_cutoff"]))):
         raise ValueError("BVI_SIDECAR_PREWARM_SOURCE_UNVERIFIED")
-    source = json.loads(source_raw)["artifact"]
+    source_env = json.loads(source_raw)
     from jra_execution_maturity_bridge import verify_formal_request_binding
-    if verify_formal_request_binding(request, json.loads(source_raw)).get("status") != "PASS":
+    if verify_formal_request_binding(request, source_env).get("status") != "PASS":
         raise ValueError("BVI_SIDECAR_PREWARM_FORMAL_SOURCE_UNBOUND")
-    card = source["jra_official_race_card_detail"]["runners"]
     now = frozen.require_open_window(request)
-    corpus = frozen.build_corpus(root, prediction_cutoff=now.isoformat(), race_date=request["race_date"],
-        exclude_race_id=request["race_id"], required_sires={r["sire"] for r in card if r.get("sire")},
-        required_damsires={r["damsire"] for r in card if r.get("damsire")})
-    # No features, Static, KRS, FINAL, model fit or prediction freeze is made.
+    # Canonical freeze verifies the full corpus after the parent is bound.
+    # Full corpus verification here blocks polling of the parent run.
     report["prewarm"] = {"request_file_sha256": digest(request_raw), "source_file_sha256": digest(source_raw),
-        "source_snapshot_sha256": source["source_snapshot_sha256"], "available_at": now.isoformat(),
-        "corpus_manifest_sha256": corpus["manifest_sha256"], "authority": "NON_AUTHORITATIVE_HINT_UNTIL_PARENT_ARTIFACT_MATCH",
+        "source_snapshot_sha256": source_env["artifact"]["source_snapshot_sha256"], "available_at": now.isoformat(),
+        "scope": "SIGNED_SOURCE_AND_REQUEST_BINDING_ONLY", "authority": "NON_AUTHORITATIVE_HINT_UNTIL_PARENT_ARTIFACT_MATCH",
         "predictions_created": 0, "external_krs_calls": 0}
     return report["prewarm"]
 
@@ -194,7 +191,7 @@ def warm_hint(intent, eid, report, *, root=ROOT):
     if len(candidates) != 1:
         report["prewarm_hint_status"] = "ABSENT_OR_AMBIGUOUS; NO_HINT_ACCEPTED"
         return None
-    return profile_call("read_only_prewarm", lambda: prewarm(request_path, candidates[0], intent, eid, report, root=root), report)
+    return profile_call("read_only_prewarm", lambda: prewarm(request_path, candidates[0], intent, eid, report), report)
 
 
 def download_parent_artifact(run_id, eid, cutoff, destination):
@@ -320,14 +317,15 @@ def run(run_id, intent_path, event_sha, report, *, root=ROOT):
         wait_deadline = actual_start + timedelta(minutes=15)
         report.update(github_job_started_at=own[0]["started_at"], job_deadline=job_deadline.isoformat(),
             wait_deadline=wait_deadline.isoformat())
-        if utcnow() >= wait_deadline:
+        hint_deadline = min(cutoff, wait_deadline)
+        if utcnow() >= hint_deadline:
             report["status"] = "PENDING; PARENT_WAIT_BUDGET_OR_CUTOFF_EXPIRED"
             return None
         producers = [j for j in jobs.get("jobs", []) if j.get("name") == "orchestrate"]
         if jobs.get("total_count", 0) > 100 or len(producers) > 1:
             raise ValueError("BVI_SIDECAR_UNIQUE_PARENT_JOB_REQUIRED")
         if not producers:
-            clock.sleep(min(60, max(0, (cutoff - utcnow()).total_seconds())))
+            clock.sleep(min(60, max(0, (hint_deadline - utcnow()).total_seconds())))
             continue
         producer = producers[0]
         if producer.get("status") == "completed":
@@ -337,11 +335,15 @@ def run(run_id, intent_path, event_sha, report, *, root=ROOT):
                 report["status"] = "PENDING; PRODUCTION_PARENT_NOT_SUCCESSFUL"
                 return None
             break
-        if clock.monotonic() - last_refresh >= 120:
+        # Optional hint only: reserve the Git refresh (90s), source OIDC (20s),
+        # and time to poll the original parent again before the existing limit.
+        if (hint is None and not report["final_present_at_launcher"]
+                and clock.monotonic() - last_refresh >= 120
+                and (hint_deadline - utcnow()).total_seconds() >= 120):
             refresh_main(root); last_refresh = clock.monotonic()
-            if hint is None and not report["final_present_at_launcher"]:
+            if (hint_deadline - utcnow()).total_seconds() >= 30:
                 hint = warm_hint(intent, eid, report, root=root)
-        clock.sleep(min(60, max(0, (cutoff - utcnow()).total_seconds())))
+        clock.sleep(min(60, max(0, (hint_deadline - utcnow()).total_seconds())))
     report["wait_finished_at"] = utcnow().isoformat()
     report["artifact"] = download_parent_artifact(run_id, eid, cutoff, root / "runtime_out/pedigree_forward_input")
     refresh_main(root)

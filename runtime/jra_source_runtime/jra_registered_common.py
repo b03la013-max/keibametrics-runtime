@@ -103,7 +103,7 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
     for h,rows in tables:
         def idx(part):
             return next((i for i,x in enumerate(h) if part in x),None)
-        ni,mi,ci,ti,gi,li,ei=[idx(x) for x in ["馬番","馬名","コース","調教タイム","脚色","評価","評価"]]
+        ni,mi,ci,ti,gi,ei=[idx(x) for x in ["馬番","馬名","コース","調教タイム","脚色","評価"]]
         out=[]
         for row in rows:
             if ni is None or ni>=len(row):continue
@@ -115,10 +115,16 @@ def parse_workout(raw:bytes,content_type:str="",official_universe:Dict[str,Any]|
             course=str(row[ci] if ci is not None and ci<len(row) else "").strip()
             t=str(row[ti] if ti is not None and ti<len(row) else "").strip()
             gait=str(row[gi] if gi is not None and gi<len(row) else "").strip()
-            comment=str(row[-2] if len(row)>=2 else "").strip()
-            rating=str(row[-1] if len(row)>=1 else "").strip().upper()
-            if rating not in {"A","B","C","D"}:
-                rating=""
+            # The provider publishes comment and rating under 評価, sometimes
+            # followed by 映像. Read the evaluation cells, not the row tail.
+            first_assessment=str(row[ei] if ei is not None and ei<len(row) else "").strip()
+            if first_assessment.upper() in {"A","B","C","D"}:
+                comment,rating="",first_assessment.upper()
+            else:
+                comment=first_assessment
+                rating=str(row[ei+1] if ei is not None and ei+1<len(row) else "").strip().upper()
+                if rating not in {"A","B","C","D"}:
+                    rating=""
             out.append({"runner_id":str(no),"horse_no":no,"horse_name":name,"course":course,
                         "workout_time_raw":t,"final1f":_last_lap(t),"gait":gait,
                         "assessment":comment,"rating":rating})

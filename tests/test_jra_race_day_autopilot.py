@@ -247,3 +247,54 @@ def test_completed_canonical_formal_failure_is_visible_even_without_any_artifact
     newer={**run,'databaseId':38990090544,'status':'in_progress','conclusion':None}
     row=write_status(tmp_path,'2026-10-17',dt.datetime(2026,10,17,11,4,tzinfo=JST),schedule,{},formal_runs=[run,newer])['races'][0]
     assert row['state']=='DISPATCHED_RUNNING'
+
+
+def test_expired_source_to_formal_handoff_is_a_technical_failure(tmp_path):
+    from base64 import b64encode
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from execution_store import persist_phase
+    from jra_race_day_autopilot import write_status
+    from verify_source_envelope import _jdump, sha_obj
+
+    rid='KM-JRA-FKS-20261108-R08'
+    eid=rid+'-LIVE-R1'
+    runtime=tmp_path/'runtime'
+    request={'family_id':'JRA','race_id':rid,'execution_id':eid,
+             'prediction_cutoff':'2026-11-08T13:35:00+09:00',
+             'external_dispatch_deadline_at':'2026-11-08T13:38:00+09:00'}
+    for subdir in ('jra_formal_intents','jra_source_requests'):
+        (runtime/subdir).mkdir(parents=True)
+        (runtime/subdir/(eid+'.json')).write_text(json.dumps(request))
+    artifact=tmp_path/'source'
+    artifact.mkdir()
+    source={'race_id':rid}
+    receipt={'race_id':rid,'family':'JRA','status':'PASS','artifact_sha256':sha_obj(source)}
+    key=Ed25519PrivateKey.generate()
+    envelope={'receipt':receipt,'receipt_sha256':sha_obj(receipt),'artifact':source,
+              'receipt_public_key_b64':b64encode(key.public_key().public_bytes_raw()).decode(),
+              'signature':b64encode(key.sign(_jdump(receipt))).decode(),'github_run_id':'42444437712',
+              'signer_trust_class':'GITHUB_ACTIONS_EPHEMERAL_ED25519_PLUS_GITHUB_OIDC_ATTESTATION'}
+    (artifact/'source_receipt_envelope.json').write_text(json.dumps(envelope))
+    persisted=persist_phase(eid,'SOURCE','42444437712',artifact,root=runtime/'executions')
+    run={'databaseId':42444437711,'displayTitle':'JRA SOURCE runtime/jra_source_requests/'+eid+'.json',
+         'status':'completed','conclusion':'failure'}
+    schedule={rid:{'post':'2026-11-08T13:40:00+09:00'}}
+
+    def status(minute):
+        return write_status(tmp_path,'2026-11-08',dt.datetime(2026,11,8,13,minute,tzinfo=JST),
+                            schedule,{},formal_runs=[],resolver_runs=[],source_runs=[run])['races'][0]
+
+    assert status(37)['state']=='DISPATCHED_RUNNING'
+    row=status(38)
+    assert row['state']=='FORMAL_FAILED'
+    assert row['first_blocked_stage']=='SINGLE_ENTRY_SOURCE_TO_FORMAL_HANDOFF'
+    assert row['source_run_id']=='42444437712'
+    assert row['source_manifest_sha256']==persisted['latest']['manifest_sha256']
+    assert row['source_checkpoint_envelope_signature_verified'] is True
+    assert row['detailed_failure_stage_verified'] is False
+    assert row['temporal_eligibility'] is False
+    assert row['recommendation_pfs'] is None
+
+    (runtime/'requests').mkdir()
+    (runtime/'requests'/(eid+'-FORMAL.json')).write_text(json.dumps(request))
+    assert status(41)['state']=='DISPATCHED_RUNNING'

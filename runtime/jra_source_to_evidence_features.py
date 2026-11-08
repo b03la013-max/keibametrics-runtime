@@ -768,7 +768,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     owner_corpus_manifest = None
     if owner_registry_path.exists():
         from jra_owner_authorized_feature_rules import owner_authorized_observations
-        from jra_pedigree_corpus import build_corpus
+        from jra_pedigree_corpus import _dt, build_corpus
         race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
                         or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
         target_rows = (source_artifact.get("jra_official_race_card_detail") or {}).get("runners") or []
@@ -776,8 +776,17 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             str(x.get("runner_id") or x.get("horse_no")), {}).get("pedigree") or {} for x in target_rows]
         relevant_sires = {str(x.get("sire") or "").strip() for x in list(target_rows) + hist_ped if x.get("sire")}
         relevant_damsires = {str(x.get("damsire") or "").strip() for x in list(target_rows) + hist_ped if x.get("damsire")}
+        prediction_cutoff = str(source_artifact.get("prediction_cutoff") or "")
+        source_freeze = source_artifact.get("source_freeze_at")
+        corpus_cutoff = prediction_cutoff
+        if source_freeze is not None:
+            frozen_at, cutoff_at = _dt(source_freeze), _dt(prediction_cutoff)
+            if frozen_at is None or cutoff_at is None or frozen_at > cutoff_at:
+                raise SourceToFeatureError("BVI_SIGNED_SOURCE_CORPUS_CUTOFF_INVALID")
+            corpus_cutoff = frozen_at.isoformat()
+        owner_registry = json.loads(owner_registry_path.read_text(encoding="utf-8"))
         corpus = build_corpus(Path(__file__).resolve().parents[1],
-                              prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
+                              prediction_cutoff=corpus_cutoff,
                               race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
                               required_sires=relevant_sires,
                               required_damsires=relevant_damsires)
@@ -785,7 +794,11 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
                                                                         "identity_collision_count", "run_conflict_count",
                                                                         "rejected_untrusted_inputs", "source_signature_level")}
         owner_observations = owner_authorized_observations(
-            source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
+            source_artifact, owner_registry, corpus=corpus)
+        if source_freeze is not None:
+            owner_corpus_manifest.update(availability_cutoff=corpus_cutoff,
+                                         availability_cutoff_basis="SOURCE_FREEZE_AT",
+                                         rule_registry_sha256=_sha(owner_registry))
     runners_out = {}
     all_missing_sources = set()
     # Empty runner universes must fail closed. A vacuous all([])==True is not
@@ -883,33 +896,22 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     out["sha256"] = _sha(out)
     return out
 
-def attach_source_features_to_request(request: Dict[str, Any], source_artifact: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
-    req = copy.deepcopy(request)
-    report = compile_source_to_features(source_artifact, req.get("runners") or [], mapping)
+def capture_source_objective_shadow(source_artifact, runners, mapping):
     try:
         from jra_source_objective_evaluator import build_source_objective_candidate
-        objective_candidate = build_source_objective_candidate(source_artifact, req.get("runners") or [], mapping)
+        return build_source_objective_candidate(source_artifact, runners, mapping)
     except Exception as exc:
-        objective_candidate = {
+        return {
             "profile":"KM-JRA-SOURCE-OBJECTIVE-EVALUATOR-v0.1-20260926",
             "status":"SHADOW / NON-PRODUCTION / CAPTURE-ERROR",
             "available":False,
             "error":type(exc).__name__+":"+str(exc),
             "production_effect":"NONE",
         }
-    by_id = {str(r.get("runner_id") or r.get("horse_no") or ""):r for r in req.get("runners") or []}
-    for rid,rr in report["runners"].items():
-        if by_id[rid].get("career_starts") is None and rr["factual_runner_updates"].get("career_starts") is not None:
-            by_id[rid]["career_starts"] = int(rr["factual_runner_updates"]["career_starts"])
-            by_id[rid]["newcomer"] = bool(rr["factual_runner_updates"].get("newcomer"))
-        by_id[rid]["bvi_acquisition_failure"] = rr.get("bvi_acquisition_failure")
-        by_id[rid]["evidence_features"] = copy.deepcopy(rr["merged_evidence_features"])
-        by_id[rid]["source_shadow_observations"] = copy.deepcopy(rr["shadow_observations"])
-        by_id[rid]["source_rule_evaluator_inputs"] = copy.deepcopy(rr["rule_evaluator_inputs"])
-    req["source_to_evidence_feature_compiler"] = {
-        k:v for k,v in report.items() if k != "runners"
-    }
-    req["source_to_evidence_feature_runner_coverage"] = {
+
+
+def source_feature_runner_coverage(report):
+    return {
         rid:{
             "factual_runner_updates":rr["factual_runner_updates"],
             "rule_evaluator_inputs_sha256":rr["rule_evaluator_inputs"].get("sha256"),
@@ -925,6 +927,25 @@ def attach_source_features_to_request(request: Dict[str, Any], source_artifact: 
             "source_feature_trace_summary":copy.deepcopy(rr["source_feature_trace_summary"]),
         } for rid,rr in report["runners"].items()
     }
+
+
+def attach_source_features_to_request(request: Dict[str, Any], source_artifact: Dict[str, Any], mapping: Dict[str, Any]) -> Dict[str, Any]:
+    req = copy.deepcopy(request)
+    report = compile_source_to_features(source_artifact, req.get("runners") or [], mapping)
+    objective_candidate = capture_source_objective_shadow(source_artifact, req.get("runners") or [], mapping)
+    by_id = {str(r.get("runner_id") or r.get("horse_no") or ""):r for r in req.get("runners") or []}
+    for rid,rr in report["runners"].items():
+        if by_id[rid].get("career_starts") is None and rr["factual_runner_updates"].get("career_starts") is not None:
+            by_id[rid]["career_starts"] = int(rr["factual_runner_updates"]["career_starts"])
+            by_id[rid]["newcomer"] = bool(rr["factual_runner_updates"].get("newcomer"))
+        by_id[rid]["bvi_acquisition_failure"] = rr.get("bvi_acquisition_failure")
+        by_id[rid]["evidence_features"] = copy.deepcopy(rr["merged_evidence_features"])
+        by_id[rid]["source_shadow_observations"] = copy.deepcopy(rr["shadow_observations"])
+        by_id[rid]["source_rule_evaluator_inputs"] = copy.deepcopy(rr["rule_evaluator_inputs"])
+    req["source_to_evidence_feature_compiler"] = {
+        k:v for k,v in report.items() if k != "runners"
+    }
+    req["source_to_evidence_feature_runner_coverage"] = source_feature_runner_coverage(report)
     req["source_to_evidence_feature_sha256"] = report["sha256"]
     req["source_objective_candidate_shadow"] = objective_candidate
     return req

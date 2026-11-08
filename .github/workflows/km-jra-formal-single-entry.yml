@@ -192,48 +192,60 @@ jobs:
 
       - name: Wait for canonical Signed SOURCE
         if: (steps.source_reuse.outputs.reused != 'true') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
+        timeout-minutes: 15
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ steps.submit_source.outputs.source_sha }}
           SOURCE_REQUEST_PATH: ${{ steps.submit_source.outputs.request_path }}
           SOURCE_REDISPATCH: ${{ steps.submit_source.outputs.redispatch }}
           EXECUTION_ID: ${{ steps.meta.outputs.execution_id }}
         run: |
           set -euo pipefail
-          RUN_ID=""
-          if [ "$SOURCE_REDISPATCH" = "true" ]; then
-            gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"
-            RUN_TITLE="JRA SOURCE $SOURCE_REQUEST_PATH"
-            for attempt in $(seq 1 80); do
-              echo "Waiting for redispatched SOURCE run (attempt $attempt)" >/dev/null
-              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle | jq -r --arg title "$RUN_TITLE" '[.[] | select(.displayTitle==$title)][0].databaseId // empty')"
-              [ -n "$RUN_ID" ] && break
-              sleep 3
-            done
-          else
-            for attempt in $(seq 1 80); do
-              echo "Waiting for SOURCE run (attempt $attempt)" >/dev/null
-              RUN_ID="$(gh run list --workflow km-jra-source-first-runner.yml --commit "$SOURCE_SHA" --json databaseId,status,conclusion --limit 1 --jq '.[0].databaseId // empty')"
-              [ -n "$RUN_ID" ] && break
-              sleep 3
-            done
-          fi
-          test -n "$RUN_ID"
-          gh run watch "$RUN_ID" --exit-status
-          echo "$RUN_ID" > runtime_out/jra_single_entry_source_run_id.txt
-          git pull --rebase origin main
-          rm -rf runtime_out/jra_single_entry_source_checkpoint
-          EXECUTION_ID="$EXECUTION_ID" python - <<'PY'
-          import os,sys
+          read -r POINTER CUTOFF DEADLINE < <(python - <<'PY'
+          import json,os,sys,time
+          from datetime import datetime
+          from pathlib import Path
           sys.path.insert(0,"runtime")
-          from execution_store import materialize_phase
-          x=materialize_phase(
-              os.environ["EXECUTION_ID"],"SOURCE",
-              "runtime_out/jra_single_entry_source_checkpoint"
-          )
-          assert x is not None,"JRA_SINGLE_ENTRY_SOURCE_CHECKPOINT_NOT_PERSISTED"
+          from execution_store import phase_root
+          with open(os.environ['SOURCE_REQUEST_PATH'],encoding='utf-8') as fh:
+              request=json.load(fh)
+          execution_id=os.environ['EXECUTION_ID']
+          assert request['execution_id']==execution_id, 'SOURCE_REQUEST_EXECUTION_ID_MISMATCH'
+          deadline=int(time.time())+13*60
+          cutoff=deadline
+          if request['temporal_mode']=='FORMAL-PRE-RACE':
+              cut, dispatch, post=(datetime.fromisoformat(request[key].replace('Z','+00:00')) for key in
+                  ('prediction_cutoff','external_dispatch_deadline_at','scheduled_post_at'))
+              assert all(x.tzinfo is not None for x in (cut,dispatch,post)), 'SOURCE_DEADLINE_TIMEZONE_REQUIRED'
+              assert cut <= dispatch < post, 'SOURCE_DEADLINE_TEMPORAL_ORDER_INVALID'
+              cutoff=int(cut.timestamp())
+              deadline=min(deadline,int(dispatch.timestamp()))
+          print(phase_root(execution_id,'SOURCE').relative_to(Path.cwd())/'LATEST.json',cutoff,deadline)
           PY
+          )
+          # The verified, durable checkpoint is the handoff. Actions job-list
+          # availability is independent of whether the SOURCE producer committed it.
+          DISPATCH_PENDING="$SOURCE_REDISPATCH"
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if timeout 20 git fetch -q origin main; then
+              if git cat-file -e "FETCH_HEAD:$POINTER" 2>/dev/null; then
+                git merge --ff-only FETCH_HEAD
+                test "$(date +%s)" -lt "$DEADLINE"
+                python runtime/execution_store.py resolve --execution-id "$EXECUTION_ID" --phase SOURCE \
+                  --destination runtime_out/jra_single_entry_source_checkpoint
+                exit 0
+              fi
+              if [ "$DISPATCH_PENDING" = "true" ] && [ "$(date +%s)" -lt "$CUTOFF" ]; then
+                DISPATCH_PENDING=false
+                if ! timeout 20 gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"; then
+                  echo 'SOURCE dispatch acknowledgement unavailable; waiting for canonical checkpoint' >&2
+                fi
+              fi
+            fi
+            sleep 15
+          done
+          echo 'JRA_SINGLE_ENTRY_SOURCE_CHECKPOINT_DEADLINE_EXCEEDED' >&2
+          exit 1
 
 
       - name: Verify and bind Static to durable Signed SOURCE
@@ -269,7 +281,7 @@ jobs:
           test -f "$REPORT" || exit 0
           READY="$(python -c 'import json; print(str(json.load(open("runtime_out/jra_single_entry_exact_gap.json")).get("source_only_full_numerical_ready") is True).lower())')"
           [ "$READY" = "true" ] || exit 0
-          gh attestation verify runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --repo "${{ github.repository }}"
+          python runtime/jra_source_runtime/verify_source_attestation.py runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --request "$INTENT_FILE"
           PYTHONPATH=runtime python runtime/jra_static_owner_forward_oos.py freeze --intent "$INTENT_FILE" --source-envelope runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --report "$REPORT" --output runtime_out/static_owner_forward_pre_result.json
           echo "created=true" >> "$GITHUB_OUTPUT"
 
@@ -338,7 +350,7 @@ jobs:
           set -euo pipefail
           test -f runtime_out/jra_single_entry_exact_gap.json
           test -f runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json
-          gh attestation verify runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --repo "${{ github.repository }}"
+          python runtime/jra_source_runtime/verify_source_attestation.py runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --request "$INTENT_FILE"
           PYTHONPATH=runtime:runtime/jra_source_runtime python - <<'PY'
           import json, os
           from pathlib import Path
@@ -760,7 +772,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -q cryptography beautifulsoup4
-      - name: Warm verified caches during Production wait then freeze the original Run artifact
+      - name: Verify a signed SOURCE hint while waiting for the original Run artifact
         id: freeze
         continue-on-error: true
         env:
@@ -769,12 +781,13 @@ jobs:
           set -euo pipefail
           # Existing job/runner count is unchanged: at most fifteen minutes of
           # Production wait plus the original fifteen-minute active budget.
-          # Only CPU/IO signature caches warm while orchestrate runs; the launcher
+          # Only the target SOURCE signature is warmed while orchestrate runs; the launcher
           # cannot start canonical prediction/KRS until that ORIGINAL Run has
           # succeeded and its exact SOURCE/Request/FINAL bindings are verified.
           python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
             --intent-path "${{ inputs.intent_path }}" --event-sha "${{ github.sha }}"
       - name: Attest exact research prediction before cutoff
+        id: research_attestation
         if: steps.freeze.outputs.output != ''
         uses: actions/attest@v4
         with:
@@ -785,10 +798,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUTPUT: ${{ steps.freeze.outputs.output }}
+          BUNDLE: ${{ steps.research_attestation.outputs.bundle-path }}
         run: |
           set -euo pipefail
+          test -s "$BUNDLE"
+          cp -- "$BUNDLE" runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
           gh attestation verify "$OUTPUT" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml" \
+            --bundle runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl \
             --format json > runtime_out/pedigree_env_prediction_verification.json
           python - <<'PY'
           import json,os
@@ -814,6 +831,7 @@ jobs:
           path: |
             ${{ steps.freeze.outputs.output }}
             runtime_out/pedigree_env_prediction_verification.json
+            runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
           if-no-files-found: error
           retention-days: 90
       - name: Commit immutable comparison before cutoff without delaying Production
@@ -852,6 +870,7 @@ jobs:
           path: |
             runtime/jra_static_owner_forward_oos/**/pedigree_env_pre_result.json
             runtime_out/pedigree_env_prediction_verification.json
+            runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
             runtime_out/jra_bvi_forward_freeze_failure.json
             runtime_out/jra_bvi_forward_timing.json
             runtime_out/jra_bvi_forward_delivery_timing.json

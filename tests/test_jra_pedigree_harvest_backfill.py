@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import json
+import hashlib
 import os
 import tempfile
 import sys
@@ -98,6 +99,42 @@ class TestBackfillCursor(unittest.TestCase):
         self.assertEqual(first["completed_batch_count"],12)
 
 class TestSignedAttestationCache(unittest.TestCase):
+    def test_future_harvest_never_spends_attestation_lookup(self):
+        from jra_pedigree_corpus import HARVEST_PROFILE, _verified_harvest
+
+        with tempfile.TemporaryDirectory() as temp:
+            p = Path(temp)/'future.json'
+            payload = {'profile':HARVEST_PROFILE,'source':'www.jra.go.jp','official':True,
+                       'harvested_at':'2026-10-10T09:45:00+00:00'}
+            payload['sha256'] = hashlib.sha256(json.dumps(payload,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+            p.write_text(json.dumps(payload))
+            with patch('jra_pedigree_corpus._attested', side_effect=AssertionError('late harvest must not verify')):
+                self.assertIsNone(_verified_harvest(p,not_after=datetime.fromisoformat('2026-10-10T09:44:00+00:00')))
+
+    def test_bundle_cache_keeps_exact_signer_cutoff_and_bundle_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p = Path(temp) / 'proof-bound.json'
+            p.write_text('candidate subject')
+            bundle = p.with_suffix('.sigstore.jsonl')
+            bundle.write_text('first proof')
+            original = SimpleNamespace(returncode=0, stdout=json.dumps([
+                {'verificationResult': {'verifiedTimestamps': [{'timestamp': '2026-10-10T09:45:00Z'}]}}]))
+            rejected = SimpleNamespace(returncode=1, stdout='')
+            before = datetime.fromisoformat('2026-10-10T09:44:00+00:00')
+            after = datetime.fromisoformat('2026-10-10T09:46:00+00:00')
+            signer = 'km-jra-pedigree-corpus-harvest.yml'
+            with patch.dict(os.environ, {'GH_TOKEN':'TEST'}):
+                with patch('jra_pedigree_corpus.subprocess.run', side_effect=[original, rejected]) as run:
+                    self.assertFalse(_attested(p, signer=signer, not_after=before))
+                    self.assertTrue(_attested(p, signer=signer, not_after=after))
+                    self.assertIn('--bundle', run.call_args.args[0])
+                    self.assertIn(str(bundle), run.call_args.args[0])
+                    self.assertIn('--signer-workflow', run.call_args.args[0])
+                    self.assertEqual(run.call_count, 1)
+                    bundle.write_text('other proof')
+                    self.assertFalse(_attested(p, signer=signer, not_after=after))
+                    self.assertEqual(run.call_count, 2)
+
     def test_same_size_same_mtime_tamper_cannot_reuse_attestation(self):
         with tempfile.TemporaryDirectory() as temp:
             p=Path(temp)/"signed.json"

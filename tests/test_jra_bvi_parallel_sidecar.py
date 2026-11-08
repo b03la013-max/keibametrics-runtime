@@ -46,7 +46,7 @@ def artifact_metadata(eid, raw, **patch):
     return {"total_count":1,"artifacts":[row]}
 
 
-def test_prewarm_verifies_real_gate_interfaces_but_never_predicts_or_calls_krs(tmp_path, monkeypatch):
+def test_prewarm_verifies_source_without_blocking_parent_poll_on_corpus(tmp_path, monkeypatch):
     intent, request, eid=fixture(tmp_path)
     q=tmp_path/'q.json';q.write_text(json.dumps(request))
     src=tmp_path/'s.json';source={"race_id":request['race_id'],"source_snapshot_sha256":"a"*64,
@@ -58,18 +58,13 @@ def test_prewarm_verifies_real_gate_interfaces_but_never_predicts_or_calls_krs(t
     monkeypatch.setattr(s.frozen,'_attested',attest)
     import jra_execution_maturity_bridge
     monkeypatch.setattr(jra_execution_maturity_bridge,'verify_formal_request_binding',lambda *a:{"status":"PASS"})
-    def corpus(root, **kw):
-        assert kw['exclude_race_id']==request['race_id']
-        assert kw['required_sires']=={'S'} and kw['required_damsires']=={'DS'}
-        assert s.frozen.time(kw['prediction_cutoff'])<=s.frozen.time(request['prediction_cutoff'])
-        seen.append(('corpus',root,kw));return {'manifest_sha256':'c'*64}
-    monkeypatch.setattr(s.frozen,'build_corpus',corpus)
-    for name in ('freeze','compare','call','execute_diagnostic_downstream'):
-        monkeypatch.setattr(s.frozen,name,lambda *a,**k:pytest.fail('prewarm cannot predict/KRS'))
-    report={};hint=s.prewarm(q,src,intent,eid,report,root=tmp_path)
-    assert [x[0] for x in seen]==['attest','corpus']
+    for name in ('build_corpus','freeze','compare','call','execute_diagnostic_downstream'):
+        monkeypatch.setattr(s.frozen,name,lambda *a,**k:pytest.fail('prewarm may only verify SOURCE'))
+    report={};hint=s.prewarm(q,src,intent,eid,report)
+    assert [x[0] for x in seen]==['attest']
     assert seen[0][2]['not_after']==s.frozen.time(request['prediction_cutoff'])
     assert hint['predictions_created']==hint['external_krs_calls']==0
+    assert hint['scope']=='SIGNED_SOURCE_AND_REQUEST_BINDING_ONLY'
     assert hint['authority'].startswith('NON_AUTHORITATIVE_HINT')
 
 
@@ -80,7 +75,7 @@ def test_unverified_prewarm_never_warms_corpus(tmp_path,monkeypatch,patch):
     monkeypatch.setattr(s.frozen,'_attested',lambda *a,**k:False)
     monkeypatch.setattr(s.frozen,'build_corpus',lambda *a,**k:pytest.fail('Unverified input'))
     with pytest.raises((ValueError,KeyError),match='PREWARM_SOURCE_UNVERIFIED|race_id'):
-        s.prewarm(q,p,intent,eid,{},root=tmp_path)
+        s.prewarm(q,p,intent,eid,{})
 
 
 def completed_artifact(tmp_path):
@@ -161,8 +156,10 @@ def test_parent_failure_or_wait_limit_cannot_trigger_prediction(tmp_path,monkeyp
     assert report['status']=='PENDING; PARENT_WAIT_BUDGET_OR_CUTOFF_EXPIRED'
 
 
-def test_warm_then_parent_complete_then_original_freeze_without_clock_override(tmp_path,monkeypatch):
+@pytest.mark.parametrize('seconds_remaining',[900,100])
+def test_parent_poll_preserves_original_freeze_with_or_without_hint(tmp_path,monkeypatch,seconds_remaining):
     intent,request,eid=fixture(tmp_path);events=[];jobs=iter(['in_progress','completed']);own=own_job()
+    own['started_at']=(s.utcnow()-s.timedelta(seconds=900-seconds_remaining)).isoformat()
     def api(path):
         if path.endswith('/123'):return parent()
         status=next(jobs);return {'jobs':[own,{'name':'orchestrate','status':status,'conclusion':'success' if status=='completed' else None}]}
@@ -179,7 +176,12 @@ def test_warm_then_parent_complete_then_original_freeze_without_clock_override(t
         events.append('canonical_freeze');return {'sha256':'c'*64}
     monkeypatch.setattr(s.frozen,'freeze',freeze)
     report={};s.run(123,'runtime/jra_formal_intents/one.json','b'*40,report,root=tmp_path)
-    assert events.index('signature_caches_only')<events.index('wait')<events.index('original_run_artifact')<events.index('canonical_freeze')
+    if seconds_remaining==900:
+        assert events.index('signature_caches_only')<events.index('wait')
+    else:
+        assert 'signature_caches_only' not in events
+        assert events.count('read_main')==1  # Only the required post-parent refresh.
+    assert events.index('wait')<events.index('original_run_artifact')<events.index('canonical_freeze')
     assert events.index('bind_all_original_bytes')<events.index('verify_actual_final_signature')<events.index('canonical_freeze')
     assert report['status'].endswith('INDEPENDENT_WITNESS_STILL_REQUIRED')
     assert 'canonical_freeze_started_at' in report
@@ -246,19 +248,35 @@ def test_genuine_parent_final_required_before_canonical_entry(tmp_path,monkeypat
 
 REVIEWED_DELIVERY_PREFIX_SHA256='56e0fc7fad5deac4ea6dc58741dc1a2e7d769dccac9f97d5d8fdbc4da8d9269c'
 REVIEWED_PRIVATE_DELIVERY_BLOCK_SHA256='336f50e2f61c2c3cfafa66a204c3f533a58a5df06030309664ee4e98e4f52a38'
+REVIEWED_SOURCE_WAIT_SHA256='4802433593b0a3d1181b5d4ac37d4b008a6d60b25f18b0fa4eb04db771755b18'
 
 
 def _assert_production_prefix_boundary(workflow,original):
-    """Only the reviewed Delivery delta may extend the original operational prefix.
+    """Only reviewed SOURCE and Delivery steps may extend the original prefix.
 
     Fixed D, all five numerical files, and b0a remain byte-pinned elsewhere in
-    this test. The new prefix is exact-byte sealed AND reverses to every old
-    production step/trigger/permission, so resealing a broader edit is unsafe.
+    this test. The exact SOURCE delta reverses to the sealed Delivery prefix,
+    which then reverses to the original production steps/triggers/permissions.
     """
     marker='\n  pedigree-forward-shadow:'
     assert workflow.count(marker)==1
     prefix=workflow.split(marker)[0];baseline=original.split(marker)[0]
     if prefix==baseline:return
+    wait_marker='      - name: Wait for canonical Signed SOURCE\n'
+    bind_marker='      - name: Verify and bind Static to durable Signed SOURCE\n'
+    if wait_marker in prefix and bind_marker in prefix:
+        start=prefix.index(wait_marker)
+        end=prefix.index(bind_marker,start)
+        if hashlib.sha256(prefix[start:end].encode()).hexdigest()==REVIEWED_SOURCE_WAIT_SHA256:
+            original_start=baseline.index(wait_marker)
+            original_end=baseline.index(bind_marker,original_start)
+            prefix=prefix[:start]+baseline[original_start:original_end]+prefix[end:]
+            bundle_verify=('python runtime/jra_source_runtime/verify_source_attestation.py '
+                           'runtime_out/jra_single_entry_source_checkpoint/source_receipt_envelope.json --request "$INTENT_FILE"')
+            old_verify=('gh attestation verify runtime_out/jra_single_entry_source_checkpoint/'
+                        'source_receipt_envelope.json --repo "${{ github.repository }}"')
+            assert prefix.count(bundle_verify)==2
+            prefix=prefix.replace(bundle_verify,old_verify)
     assert hashlib.sha256(prefix.encode()).hexdigest()==REVIEWED_DELIVERY_PREFIX_SHA256
     actual=yaml.load(prefix,Loader=yaml.BaseLoader)
     expected=yaml.load(baseline,Loader=yaml.BaseLoader)
@@ -332,6 +350,19 @@ def test_resealing_a_non_delivery_change_cannot_bypass_original_production_bound
     monkeypatch.setattr(sys.modules[__name__],'REVIEWED_DELIVERY_PREFIX_SHA256',
         hashlib.sha256(altered.split(marker)[0].encode()).hexdigest())
     with pytest.raises(AssertionError):_assert_production_prefix_boundary(altered,original)
+
+
+@pytest.mark.parametrize('mutation',[
+    ('git merge --ff-only FETCH_HEAD','git merge FETCH_HEAD'),
+    (' --request "$INTENT_FILE"',''),
+])
+def test_reviewed_source_changes_cannot_be_resealed_after_mutation(mutation):
+    workflow=(ROOT/'.github/workflows/km-jra-formal-single-entry.yml').read_text()
+    original=s.subprocess.check_output(['git','show','b0a377ae06a2d3d15bc47863585e18388e4fea46:.github/workflows/km-jra-formal-single-entry.yml'],cwd=ROOT,text=True)
+    old,new=mutation
+    assert old in workflow
+    with pytest.raises(AssertionError):
+        _assert_production_prefix_boundary(workflow.replace(old,new,1),original)
 
 
 def test_provider_timing_is_observational_and_never_admits_sample(monkeypatch):
