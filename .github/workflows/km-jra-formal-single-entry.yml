@@ -772,7 +772,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install -q cryptography beautifulsoup4
-      - name: Warm verified caches during Production wait then freeze the original Run artifact
+      - name: Verify a signed SOURCE hint while waiting for the original Run artifact
         id: freeze
         continue-on-error: true
         env:
@@ -781,7 +781,7 @@ jobs:
           set -euo pipefail
           # Existing job/runner count is unchanged: at most fifteen minutes of
           # Production wait plus the original fifteen-minute active budget.
-          # Only CPU/IO signature caches warm while orchestrate runs; the launcher
+          # Only the target SOURCE signature is warmed while orchestrate runs; the launcher
           # cannot start canonical prediction/KRS until that ORIGINAL Run has
           # succeeded and its exact SOURCE/Request/FINAL bindings are verified.
           python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
