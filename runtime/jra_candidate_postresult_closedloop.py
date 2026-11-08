@@ -21,7 +21,8 @@ sys.path.insert(0, str(HERE / "jra_source_runtime"))
 from jra_source_candidate_oos import evaluate_result
 from jra_source_candidate_promotion_gate import bind_result
 from jra_same_day_results import (_open_day, _result_post, parse_result_detail,
-    finish_groups_and_top3_orders, validate_result_identity, OfficialResultNavigationError)
+    finish_groups_and_top3_orders, validate_result_identity, OfficialResultNavigationError,
+    remember_result_failure_capture)
 from jra_race_card_detail import _date8
 from jra_source_runtime.source_acquisition import _decode, _html_text, utcnow
 
@@ -175,6 +176,40 @@ def official_payout_entries(official:dict,kind:str)->list[dict]:
     if seen!=expected:
         raise ValueError("OFFICIAL_PAYOUT_TOP3_COMBINATIONS_MISMATCH:"+kind)
     return out
+
+
+def settle_mec_r4_shadow(shadow, result):
+    """Adapt singleton JRA official prices at the MEC-R4 settlement boundary."""
+    from mec_r4_shadow import settle_mec_r4_shadow as settle
+
+    if not str(shadow.get("race_id") or "").startswith("KM-JRA-"):
+        return settle(shadow, result)
+    official = result.get("official_result") or {}
+    if official.get("dead_heat") is True or len(official.get("top3_orders") or []) > 1:
+        return settle(shadow, result)
+    payouts = dict(official.get("payouts") or {})
+    settlement = result.get("settlement") or {}
+    winning_tickets = settlement.get("winning_tickets") or []
+    for kind in BET_KINDS:
+        value = payouts.get(kind)
+        if not (isinstance(value, list) or isinstance(value, dict)
+                and {"selection", "per_100_yen"} & value.keys()):
+            continue
+        try:
+            price, = official_payout_entries(official, kind)
+        except ValueError:
+            # The present official entry is invalid. Leave the payout unknown
+            # instead of accepting an unrelated legacy receipt for this type.
+            payouts.pop(kind)
+            winning_tickets = [row for row in winning_tickets
+                               if str(row.get("bet_type") or "").upper() != kind]
+        else:
+            payouts[kind] = price["per_100_yen"]
+    return settle(shadow, {
+        **result,
+        "official_result": {**official, "payouts": payouts},
+        "settlement": {**settlement, "winning_tickets": winning_tickets},
+    })
 
 
 def verify_official_result(parsed: dict, payout_text: str, frozen_runner_ids: list[str], *,
@@ -359,6 +394,7 @@ def fetch_jra_result(race_date: str, meeting_key: str, race_no: int, *, session=
         exc.official_navigation=list(getattr(client,'result_navigation',[]))
         exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                       for row in exc.official_navigation]}
+        remember_result_failure_capture(exc, client)
         raise exc
     if len(tokens)!=1:
         raise OfficialResultNavigationError('JRA_RESULT_RACE_TOKEN_NOT_UNIQUE','RESULT_RACE_SELECTION',client=client)
@@ -371,6 +407,7 @@ def fetch_jra_result(race_date: str, meeting_key: str, race_no: int, *, session=
         if not hasattr(exc,'first_failed_stage'):exc.first_failed_stage='RESULT_DETAIL_TABLE'
         exc.diagnostic={'navigation':[{k:v for k,v in row.items() if k!='fetched_at'}
                                       for row in getattr(client,'result_navigation',[])]}
+        remember_result_failure_capture(exc, client)
         raise
     return {'parsed':parsed,'text':_html_text(_decode(raw,headers.get('content-type',''))),
             'sha256':hashlib.sha256(raw).hexdigest(),'captured_at':fetched,

@@ -3,6 +3,7 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import textwrap
 
@@ -12,6 +13,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'runtime'),str(ROOT/'tests')]
 import jra_production_postresult as production
 from execution_store import persist_phase,resolve_phase
+from jra_result_submission import ResultSubmission, ResultSubmissionError, publish_to_main
 
 RID='KM-JRA-KYO-20261025-R07'
 
@@ -48,6 +50,128 @@ def stored(root,request,envelope,eid):
 def execute(root,request,call,attempt='second-run'):
     return production.reuse_or_submit_production_result(root,request,call=call,
         checkpoint=root/'runtime_out/result_checkpoint',run_id=attempt,github_sha='b'*40)
+
+
+def hosted_execute(root,request,call,attempt,publish):
+    path=root/'runtime/results'/(request['race_id']+'.json')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    if not path.exists():path.write_text(json.dumps(request))
+    return production.reuse_or_submit_production_result(root,request,call=call,
+        checkpoint=root/'runtime_out/result_checkpoint',run_id=attempt,github_sha='b'*40,publish=publish)
+
+
+@pytest.mark.parametrize('crash_point',['claim_publish','signer_accepted','response_publish','verify','review'])
+def test_hosted_restart_uses_only_durable_evidence(tmp_path,crash_point):
+    root=tmp_path/'runner';fresh=tmp_path/'fresh'
+    request,envelope,eid=fixture(root);fixture(fresh)
+    journal=ResultSubmission(root,eid,request);enrollment=journal.enroll()
+    def copy_durably(path):
+        target=fresh/path.relative_to(root)
+        target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(path,target)
+    copy_durably(enrollment)
+    calls=[]
+    def publish(path):
+        if ((path.name=='CLAIM.json' and crash_point=='claim_publish') or
+            (path.name=='RESPONSE.json' and crash_point=='response_publish')):
+            raise ConnectionError('injected before durable publication')
+        copy_durably(path)
+    def call(route,payload):
+        if route=='/result':
+            assert ResultSubmission(fresh,eid,request).state()[0]=='SIGNER_OUTCOME_UNKNOWN'
+            calls.append(route)
+            if crash_point=='signer_accepted':raise ConnectionError('injected after remote acceptance')
+            return 200,envelope
+        assert ResultSubmission(fresh,eid,request).state()[0]=='RESPONSE_RECORDED'
+        calls.append(route)
+        if crash_point=='verify':raise ConnectionError('injected after durable response')
+        return 200,{'valid':True}
+    if crash_point=='review':
+        hosted_execute(root,request,call,'200-1',publish)
+        assert resolve_phase(eid,'RESULT',root=root/'runtime/executions') is not None
+    else:
+        with pytest.raises(ConnectionError):hosted_execute(root,request,call,'200-1',publish)
+    assert resolve_phase(eid,'RESULT',root=fresh/'runtime/executions') is None
+    previous=list(calls)
+    def recover(route,payload):
+        assert route=='/verify' and payload==envelope
+        calls.append(route)
+        return 200,{'valid':True}
+    if crash_point=='claim_publish':
+        assert previous==[]
+        assert ResultSubmission(fresh,eid,request).state()[0]=='READY'
+    elif crash_point in {'signer_accepted','response_publish'}:
+        assert previous==['/result']
+        with pytest.raises(production.ProductionPostResultError,match='SIGNER_OUTCOME_UNKNOWN'):
+            hosted_execute(fresh,request,recover,'201-1',lambda path:pytest.fail('MUST_NOT_WRITE'))
+        assert calls==previous
+    else:
+        assert previous==['/result','/verify']
+        original=(ResultSubmission(fresh,eid,request).path/'RESPONSE.json').read_bytes()
+        recovered,trace=hosted_execute(fresh,request,recover,'201-1',lambda path:pytest.fail('MUST_NOT_WRITE'))
+        assert recovered==envelope and trace['status']=='VERIFIED_REUSE' and calls==[*previous,'/verify']
+        assert (ResultSubmission(fresh,eid,request).path/'RESPONSE.json').read_bytes()==original
+
+
+def test_unenrolled_legacy_requires_reconciliation_before_post(tmp_path):
+    request,_,_=fixture(tmp_path)
+    with pytest.raises(production.ProductionPostResultError,match='LEGACY_UNRESOLVED'):
+        hosted_execute(tmp_path,request,lambda *args:pytest.fail('MUST_NOT_CALL'),'200-1',
+                       lambda path:pytest.fail('MUST_NOT_WRITE'))
+
+
+def test_stale_runner_rechecks_request_after_publishing_claim(tmp_path):
+    request,_,eid=fixture(tmp_path)
+    ResultSubmission(tmp_path,eid,request).enroll()
+    def publish(path):
+        target=tmp_path/'runtime/results'/(request['race_id']+'.json')
+        target.write_text(json.dumps({**request,'settlement':{'status':'SETTLED','total_payout':100}}))
+    with pytest.raises(production.ProductionPostResultError,match='CANONICAL_INPUT_CHANGED'):
+        hosted_execute(tmp_path,request,lambda *args:pytest.fail('MUST_NOT_CALL'),'200-1',publish)
+
+
+def test_private_response_never_reaches_uploadable_checkpoint(tmp_path):
+    from execution_store import ExecutionStoreError
+    request,envelope,eid=fixture(tmp_path)
+    journal=ResultSubmission(tmp_path,eid,request);journal.enroll()
+    def call(route,payload):
+        assert route=='/result'
+        return 200,{**envelope,'private_only':True}
+    with pytest.raises(ExecutionStoreError,match='PRIVATE_SOURCE_PUBLIC_STORAGE_FORBIDDEN'):
+        hosted_execute(tmp_path,request,call,'200-1',lambda path:None)
+    assert journal.state()[0]=='SIGNER_OUTCOME_UNKNOWN'
+    assert not (tmp_path/'runtime_out/result_checkpoint').exists()
+
+
+@pytest.mark.parametrize('same_race',[True,False])
+def test_two_stale_checkouts_are_serialized_per_request(tmp_path,same_race):
+    initial=tmp_path/'initial';initial.mkdir()
+    remote=tmp_path/'origin.git'
+    first=tmp_path/'first';second=tmp_path/'second'
+    def git(cwd,*args):
+        return subprocess.run(['git',*args],cwd=cwd,check=True,capture_output=True,text=True).stdout
+    git(tmp_path,'init','--bare','--initial-branch=main',str(remote))
+    git(initial,'init','--initial-branch=main')
+    git(initial,'config','user.email','tests@example.org');git(initial,'config','user.name','Test')
+    request,_,eid=fixture(initial)
+    enrollment=ResultSubmission(initial,eid,request).enroll()
+    other={**request,'race_id':'KM-JRA-KYO-20261025-R08'}
+    other_id=other['race_id']+'-LIVE-R1'
+    enrolled=[str(enrollment)]
+    if not same_race:
+        enrolled.append(str(ResultSubmission(initial,other_id,other).enroll()))
+    git(initial,'add',*enrolled);git(initial,'commit','-m','enroll')
+    git(initial,'push',str(remote),'main')
+    for checkout in (first,second):git(tmp_path,'clone',str(remote),str(checkout))
+    ResultSubmission(first,eid,request).claim('200-1',lambda path:publish_to_main(first,path))
+    if same_race:
+        with pytest.raises(ResultSubmissionError,match='PUBLICATION_UNCONFIRMED'):
+            ResultSubmission(second,eid,request).claim('200-1',lambda path:publish_to_main(second,path))
+    else:
+        ResultSubmission(second,other_id,other).claim('201-1',lambda path:publish_to_main(second,path))
+        other_claim=ResultSubmission(second,other_id,other).path/'CLAIM.json'
+        assert json.loads(git(remote,'show','main:'+str(other_claim.relative_to(second))))==json.loads(other_claim.read_text())
+    remote_claim=git(remote,'show','main:'+str((enrollment.parent/'CLAIM.json').relative_to(initial)))
+    assert json.loads(remote_claim)==json.loads((first/enrollment.parent.relative_to(initial)/'CLAIM.json').read_text())
 
 
 def test_existing_verified_checkpoint_reuse_makes_zero_signing_calls_and_preserves_bytes(tmp_path):

@@ -22,7 +22,7 @@ from jra_owner_authorized_feature_rules import (
 )
 from jra_pedigree_corpus import build_corpus
 from jra_race_card_detail import _parse_recent, decode_passing_positions as parser_decode
-from jra_race_day_resolver import parse_day_rows, build_intent, venue_code
+from jra_race_day_resolver import parse_day_rows, build_intent, venue_code, official_jump_history
 from jra_pedigree_harvest import parse_horse_pedigree
 from jra_production_auto_handoff import (
     JRAProductionAutoHandoffError, require_independent_owner_activation,
@@ -62,6 +62,23 @@ class TestPassingDecoder(unittest.TestCase):
                             "1:24.0 良 516kg 1515 3F 36.4 パンサーズ(0.4)")
         self.assertEqual(old["passing_positions"], [15, 15])
 
+    def test_mixed_obstacle_surface_is_preserved(self):
+        row = _parse_recent(
+            "2026年5月31日 京都 障害オープン 4着 9頭9番4番人気 ▲水沼 元輝 "
+            "57.0kg 3170芝ダ 3:34.8 良/良 468kg 2 2 2 3 1F 13.6 コンテナワールド(1.1)"
+        )
+        self.assertEqual((row["surface"], row["going"], row["body_weight"]), ("芝ダ", "良/良", 468))
+
+    def test_jump_history_labels_are_official_and_source_local(self):
+        short_names = ("阪神スプリJ", "京都ハイJ", "東京ハイJ", "中山GJ", "三木ホースJ",
+                       "小倉サマーJ", "牛若丸JS", "中山新春JS", "ソレイユJS", "ペガサスJS", "イルミネJS")
+        for name in short_names:
+            with self.subTest(name=name):
+                self.assertTrue(official_jump_history({"surface": "芝", "race_name": name}))
+        self.assertFalse(official_jump_history({"surface": "芝", "race_name": "京都大賞典 GⅡ",
+                                               "raw": "障害 jump terms from another field"}))
+        self.assertTrue(official_jump_history({"surface": "芝", "race_class_text": "東京ジャンプS J・GⅢ"}))
+
     def test_class_rank(self):
         self.assertEqual(class_rank("3歳上1勝クラス"), 1)
         self.assertEqual(class_rank("米子城S OP"), 4)
@@ -70,6 +87,24 @@ class TestPassingDecoder(unittest.TestCase):
 
 
 class TestOwnerAuthorizedRules(unittest.TestCase):
+    def test_legacy_jump_margin_cannot_enter_flat_performance(self):
+        from test_jra_official_fact_evaluator_production import source
+
+        art = source()
+        runs = art["jra_official_horse_history"]["runners"]["1"]["runs"]
+        runs[0].update(race_name="障害オープン", surface="芝", body_weight=468, margin=0.0)
+        runs[1].update(race_name="未勝利", body_weight=470, margin=0.8)
+        card = art["jra_official_race_card_detail"]["runners"][0]
+        card["recent_runs"] = runs[:2]
+        art["jra_race_context"].update(race_class="未勝利", race_no=5)
+
+        features = owner_authorized_observations(art, REGISTRY)["1"]
+        self.assertIn("best_seconds_behind_winner=0.800; runs=1", features["finish_margin"]["source_fact"])
+        self.assertEqual(features["opponent_strength"]["category"], "NEUTRAL")
+        self.assertNotIn("2026-09-10", str(features["opponent_strength"]["evidence_refs"]))
+        self.assertIn("days_since_last_run=30", features["rotation_fit"]["source_fact"])
+        self.assertIn("bodyweight_spread_last6=2kg", features["bodyweight_history_quality"]["source_fact"])
+
     def test_real_source_features_are_labelled_registered_and_pre_race(self):
         art = real_artifact()
         out = owner_authorized_observations(art, REGISTRY, corpus=None)
@@ -88,6 +123,23 @@ class TestOwnerAuthorizedRules(unittest.TestCase):
         for must in ("recent_speed", "closing_quality", "position_quality", "rotation_fit",
                      "preparation_continuity", "same_day_track_fit", "market_mismatch"):
             self.assertIn(must, seen)
+
+    def test_flat_same_day_features_exclude_turf_obstacle_result(self):
+        source = real_artifact()
+        features = owner_authorized_observations(source, REGISTRY)
+        prior = source["jra_official_same_day_results"]["races"]
+        affected = next(row["same_day_track_fit"] for row in features.values()
+                        if "same_day_track_fit" in row)
+        ref = next(x for x in affected["evidence_refs"]
+                   if x.startswith("JRA_OFFICIAL_SAME_DAY:R"))
+        race_number = ref.rsplit("R", 1)[1]
+        prior[race_number]["race_environment"]["race_type"] = "OBSTACLE"
+        cleaned = owner_authorized_observations(source, REGISTRY)
+        self.assertTrue(any("same_day_track_fit" in row for row in cleaned.values()))
+        for row in cleaned.values():
+            for feature in ("same_day_track_fit", "track_bias_fit", "draw_course_fit"):
+                if feature in row:
+                    self.assertNotIn(ref, row[feature]["evidence_refs"])
 
     def test_newcomer_pedigree_rejects_oldest_known_non_debut_race(self):
         art = real_artifact()

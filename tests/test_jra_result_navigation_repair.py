@@ -121,9 +121,13 @@ def test_t3_archive_uses_only_observed_form_checksum_and_same_session(monkeypatc
 ])
 def test_t4_t6_unrelated_or_other_result_body_never_accepted(monkeypatch,body):
     calls,_=install(monkeypatch,[CALENDAR,DAY,DAY_HTML,body])
-    with pytest.raises(result.OfficialResultNavigationError,match='PRINTED_IDENTITY'):
+    with pytest.raises(result.OfficialResultNavigationError,match='PRINTED_IDENTITY') as failure:
         candidate.fetch_jra_result(DATE,KEY,11)
     assert len(calls)==4
+    capture=failure.value.result_failure_capture
+    assert capture['capture_stage']=='RESULT_DETAIL'
+    assert base64.b64decode(capture['raw_base64'])==body.encode()
+    assert capture['sha256']==hashlib.sha256(body.encode()).hexdigest()
 
 
 def test_t5_403_stops_without_retries_or_archive_bypass(monkeypatch):

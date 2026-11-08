@@ -137,6 +137,24 @@ def _independent_plan_routes(root, plan, race_date, schedule):
     return routes
 
 
+def _result_eligible_after(final_path):
+    try:
+        post=_dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])
+    except (OSError,ValueError,KeyError,TypeError):
+        return None
+    if post.tzinfo is not None:
+        # Match the result worker's official publication polling boundary.
+        return post+_dt.timedelta(minutes=1)
+    return None
+
+
+def _has_result_worker_outputs(root, rid):
+    return all((root/'runtime'/directory/name).is_file() for directory,name in (
+        ('results',rid+'.json'), ('reviews_auto',rid+'-AUTO.json'),
+        ('learning_states',rid+'.json'),
+    ))
+
+
 def _pending_work(root, race_date, now):
     schedule_path=root/'runtime/jra_race_day_plan'/f'{race_date}.schedule.json'
     if not schedule_path.exists():return False
@@ -148,12 +166,11 @@ def _pending_work(root, race_date, now):
         if not rid.startswith('KM-JRA-'):continue
         final_path=root/'runtime/final_artifacts'/(rid+'.json')
         if final_path.exists():
-            if (root/'runtime/results'/(rid+'.json')).exists():continue
-            try:post=_dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])
-            except (OSError,ValueError,KeyError,TypeError):continue
-            if post.tzinfo is None:continue
-            if now<post or not (state.get('_postresult_worker') or {}).get('requested_at'):return True
-            continue  # The independent RESULT worker already owns the handoff.
+            # A request or ACK may predate the last race or publication of its
+            # official result. Keep the bounded loop available for a later poll.
+            if not _has_result_worker_outputs(root,rid) and _result_eligible_after(final_path) is not None:
+                return True
+            continue
         if row.get('status') or not row.get('dispatch_window_close'):continue
         if denied and row.get('routing_basis')!='EXISTING_APPROVED_PLAN_FRESH_RESOLVER_REQUIRED':continue
         cell=state.get(rid) or {}
@@ -1243,11 +1260,11 @@ def request_postresult_worker(root, race_date, now, *, publish, send=None):
     d8=_dt.date.fromisoformat(race_date).strftime('%Y%m%d')
     due_final=False
     for final_path in (root/'runtime/final_artifacts').glob(f'KM-JRA-*-{d8}-R*.json'):
-        if (root/'runtime/learning_states'/final_path.name).exists():continue
-        try:
-            due_final |= _dt.datetime.fromisoformat(json.loads(final_path.read_text())['scheduled_post_at'])<now
-        except (OSError,ValueError,KeyError,TypeError):
-            continue  # Status index owns this race's checkpoint integrity failure.
+        if _has_result_worker_outputs(root,final_path.stem):continue
+        eligible_after=_result_eligible_after(final_path)
+        if eligible_after is not None and eligible_after<now:
+            due_final=True
+            break
     due_no_bet=False
     for terminal_path in (root/'runtime/jra_no_bet_terminals').glob(f'KM-JRA-*-{d8}-R*.json'):
         if (root/'runtime/jra_no_bet_learning'/terminal_path.name).exists():continue

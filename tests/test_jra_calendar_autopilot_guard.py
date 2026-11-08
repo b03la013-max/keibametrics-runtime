@@ -246,11 +246,76 @@ def test_t8_t14_existing_final_readback_and_result_handoff_survive_calendar_deni
     def result_worker(root,date,now,*,publish):
         return original(root,date,now,publish=publish,send=lambda:sends.append(date))
     monkeypatch.setattr(a,'request_postresult_worker',result_worker)
-    result,output=worker_main(tmp_path,monkeypatch,fail(denied()))
-    assert result==0 and sends==[DATE] and 'continue_worker=false' in output
+    result,output=worker_main(tmp_path,monkeypatch,fail(denied()),budget=0)
+    assert result==0 and sends==[DATE] and 'continue_worker=true' in output
     row=next(r for r in json.loads((tmp_path/f'runtime/jra_race_day_status/{DATE}.json').read_text())['races'] if r['race_id']==RID)
     assert row['state']=='FINAL' and row['immutable_final_sha256']=='a'*64
     assert row['ticket_count']==1 and final.read_bytes()==raw
+
+
+def test_final_races_remain_pending_across_early_ack_late_result_and_review(tmp_path):
+    # 11/8 observed timings. All dispatch and official access are replaced locally.
+    date='2026-11-08'
+    tky='KM-JRA-TKY-20261108-R12'
+    kyo='KM-JRA-KYO-20261108-R12'
+    plan=tmp_path/'runtime/jra_race_day_plan'
+    plan.mkdir(parents=True)
+    state=plan/f'{date}.state.json'
+    state.write_text(json.dumps({'_postresult_worker':{
+        'requested_at':date+'T16:02:05.813795+09:00','state':'ACKNOWLEDGED'}}))
+    posts={tky:date+'T16:10:00+09:00',kyo:date+'T16:25:00+09:00'}
+    (plan/f'{date}.schedule.json').write_text(json.dumps({rid:{'post':post} for rid,post in posts.items()}))
+
+    def put(directory, name, obj=None):
+        path=tmp_path/'runtime'/directory/(name+'.json')
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(obj or {}))
+
+    for rid,post in posts.items():
+        put('final_artifacts',rid,{'scheduled_post_at':post})
+
+    times=[]
+    def handoff(clock):
+        now=dt.datetime.fromisoformat(date+'T'+clock+'+09:00')
+        return now,a.request_postresult_worker(tmp_path,date,now,publish=lambda:None,
+            send=lambda:times.append(clock))
+
+    now,out=handoff('16:25:01')
+    assert out=='RECENT_RESULT_WORKER_REQUEST' and not times
+    assert a._pending_work(tmp_path,date,now)
+    now,out=handoff('16:32:06')
+    assert out=='ACKNOWLEDGED' and times==['16:32:06']
+    put('results',tky)
+    put('reviews_auto',tky+'-AUTO')
+    put('learning_states',tky)
+    assert a._pending_work(tmp_path,date,now)
+
+    # An acknowledged job can finish before the official result is published.
+    # The same existing cadence gets another chance with no immediate retry.
+    _,out=handoff('17:00:00')
+    assert out=='RECENT_RESULT_WORKER_REQUEST' and times==['16:32:06']
+    now,out=handoff('17:02:07')
+    assert out=='ACKNOWLEDGED' and times==['16:32:06','17:02:07']
+    put('results',kyo)
+    assert a._pending_work(tmp_path,date,now)
+    put('reviews_auto',kyo+'-AUTO')
+    put('learning_states',kyo)
+    assert not a._pending_work(tmp_path,date,now)
+    _,out=handoff('17:32:08')
+    assert out=='NO_DUE_FINAL' and times==['16:32:06','17:02:07']
+
+
+def test_result_worker_waits_for_same_boundary_as_official_ingest(tmp_path):
+    (tmp_path/'runtime/jra_race_day_plan').mkdir(parents=True)
+    p=tmp_path/'runtime/final_artifacts'/f'{RID}.json'
+    p.parent.mkdir()
+    p.write_text(json.dumps({'scheduled_post_at':NOW.isoformat()}))
+    sent=[]
+    run=lambda when:a.request_postresult_worker(tmp_path,DATE,when,publish=lambda:None,
+        send=lambda:sent.append(when))
+    boundary=NOW+dt.timedelta(minutes=1)
+    assert run(boundary)=='NO_DUE_FINAL' and not sent
+    assert run(boundary+dt.timedelta(seconds=1))=='ACKNOWLEDGED' and len(sent)==1
 
 
 def test_t6_all_calendar_denied_keeps_only_approved_independent_routing(tmp_path,monkeypatch):

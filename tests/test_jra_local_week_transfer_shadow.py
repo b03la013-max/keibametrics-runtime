@@ -254,9 +254,10 @@ def test_result_fails_closed_on_tampered_sha_semantic_and_oos():
 
 def test_result_runner_wires_frozen_transfer_before_candidate_result_binding():
     workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/km-formal-result-runner.yml").read_text()
-    assert "evaluate_jra_week_transfer_shadow_result" in workflow
-    assert workflow.index("transfer_eval=evaluate_jra_week_transfer_shadow_result(") < workflow.index(
-        "source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)")
+    evaluate = workflow.index("transfer_evaluations=[evaluate_jra_week_transfer_shadow_result(")
+    attach = workflow.index('candidate_eval["jra_local_week_transfer_shadow_result"]=transfer_eval')
+    bind = workflow.index("source_candidate_result=bind_source_candidate_result(candidate_pre,candidate_eval)")
+    assert evaluate < attach < bind
     assert "JRA_TRANSFER_FROZEN_PRE_RESULT_SHADOW_MISSING" in workflow
     assert "jra_local_week_transfer_result_sha256" in workflow
 

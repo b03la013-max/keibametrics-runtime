@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -24,15 +26,21 @@ def request(count=20000):
         "jra_adapter_mode":"EXPLICIT_ENGINE_HSV",
         "base_index_mapping_authority":{"production_authority":True},
         "krs_input_data":{
+            "race":{"class":"1勝クラス"},
             "simulation":{"run_count":5000,"master_seed":1},
             "horses":[{"horse_no":1},{"horse_no":2}]
         }
     }
 
 
+def digest(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def executed(payload):
     sim=payload["input_data"]["simulation"]
-    return {"run_receipt":{
+    output={"summary":[{"horse_no":1,"name":"テスト馬"}]}
+    return {"output":output,"run_receipt":{
         "receipt_sha256":"c"*64,
         "receipt":{
             "status":"EXECUTED",
@@ -43,8 +51,8 @@ def executed(payload):
             "actual_run_count":sim["run_count"],
             "engine_sha256":ENGINE,
             "input_class":payload["input_class"],
-            "input_sha256":"a"*64,
-            "output_sha256":"b"*64,
+            "input_sha256":digest(payload["input_data"]),
+            "output_sha256":digest(output),
         }
     }}
 
@@ -59,6 +67,7 @@ class TestJRAProductionKRSContract(unittest.TestCase):
         self.assertEqual(k["input_data"]["simulation"],{
             "run_count":20000,"master_seed":2026101005
         })
+        self.assertEqual(k["input_data"]["race"]["prediction_id"],r["race_id"])
         x=assert_production_krs_receipt(k,executed(k),expected_engine_sha256=ENGINE)
         self.assertEqual(x["actual_run_count"],20000)
 
@@ -116,6 +125,17 @@ class TestJRAProductionKRSContract(unittest.TestCase):
         unsigned["run_receipt"]["receipt_sha256"]=""
         with self.assertRaisesRegex(JRAProductionKRSContractError,"HASH_MISSING"):
             assert_production_krs_receipt(p,unsigned,expected_engine_sha256=ENGINE)
+
+    def test_reject_other_inputs_or_outputs_even_when_receipt_hashes_are_well_formed(self):
+        p=production_krs_payload(request(5000))
+        r=executed(p)
+        p["input_data"]["horses"][0]["hsv"]={"surface_fit":72}
+        with self.assertRaisesRegex(JRAProductionKRSContractError,"INPUT_SHA256_MISMATCH"):
+            assert_production_krs_receipt(p,r,expected_engine_sha256=ENGINE)
+        r=executed(p)
+        r["output"]["summary"][0]["horse_no"]=2
+        with self.assertRaisesRegex(JRAProductionKRSContractError,"OUTPUT_SHA256_MISMATCH"):
+            assert_production_krs_receipt(p,r,expected_engine_sha256=ENGINE)
 
 
 if __name__=="__main__":

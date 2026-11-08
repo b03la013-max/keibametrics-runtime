@@ -21,6 +21,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from jra_source_runtime.jra_race_day_resolver import official_jump_history
+
 PROFILE = "KM-JRA-POINT-IN-TIME-PEDIGREE-CORPUS-v1.1-20261010-TRUSTED-IDENTITY"
 HARVEST_PROFILE = "KM-JRA-OFFICIAL-PEDIGREE-HARVEST-v1.0-20261010"
 REPO = "b03la013-max/keibametrics-runtime"
@@ -112,7 +114,8 @@ def _attested(path: Path, *, signer: str | None = None,
         return False
 
 
-def _clean_runs(runs: list[dict], race_day: date, *, include_environment: bool = False) -> list[dict]:
+def _clean_runs(runs: list[dict], race_day: date, *, include_environment: bool = False,
+                exclude_obstacles: bool = False) -> list[dict]:
     """Clean observed runs; extra environment fields are research opt-in only.
 
     The default shape is deliberately unchanged: signed historical Production
@@ -123,6 +126,10 @@ def _clean_runs(runs: list[dict], race_day: date, *, include_environment: bool =
     out = []
     for r in runs:
         if not isinstance(r, dict):
+            continue
+        # Official histories use both 芝ダ and 芝 for obstacle races.
+        # Check the race kind before collapsing the raw surface.
+        if exclude_obstacles and official_jump_history(r):
             continue
         try:
             d = date.fromisoformat(str(r["date"]))
@@ -378,7 +385,8 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
                  attestation_verifier=None,
                  source_attestation_verifier=None,
                  required_sires: set[str] | None = None,
-                 required_damsires: set[str] | None = None) -> dict:
+                 required_damsires: set[str] | None = None,
+                 exclude_obstacles: bool = False) -> dict:
     cutoff = _dt(prediction_cutoff)
     try:
         day = date.fromisoformat(str(race_date))
@@ -421,7 +429,7 @@ def build_corpus(root: str | Path, *, prediction_cutoff: str, race_date: str,
             elif incoming:
                 row["damsire"] = incoming
                 row["maternal_identity_status"] = "OBSERVED"
-        for run in _clean_runs(h.get("runs") or [], day):
+        for run in _clean_runs(h.get("runs") or [], day, exclude_obstacles=exclude_obstacles):
             # A date + course alone is not a unique race identity. Do not
             # silently overwrite contradictory same-key historical results.
             key = (run["date"], run["venue"], run["surface"],

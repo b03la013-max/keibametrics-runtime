@@ -105,6 +105,7 @@ class ObservedFactRetention(unittest.TestCase):
         paths=sorted((ROOT/'runtime/requests').glob('KM-JRA-*-20261018-*-FORMAL.json'))
         if not paths:self.skipTest('stored official cards missing')
         runners=0;rider_recoveries=0
+        mixed_surface_recoveries=0
         for path in paths:
             request=json.loads(path.read_text())
             source=request['source_snapshot']; old=source['jra_official_race_card_detail']
@@ -131,6 +132,12 @@ class ObservedFactRetention(unittest.TestCase):
                     self.assertEqual(len(before['recent_runs']),len(after['recent_runs']))
                     for old_run,new_run in zip(before['recent_runs'],after['recent_runs']):
                         keys=(set(old_run)|set(new_run))-{'raw','race_class_text'}
+                        if old_run.get('surface') == '芝' and new_run.get('surface') == '芝ダ':
+                            self.assertRegex(new_run['raw'],r'\d{3,4}芝ダ\s')
+                            self.assertRegex(new_run['going'],r'^(良|稍重|重|不良)/(良|稍重|重|不良)$')
+                            self.assertIn(f"{new_run['going']} {new_run['body_weight']}kg",new_run['raw'])
+                            keys-={'surface','going','body_weight'}
+                            mixed_surface_recoveries+=1
                         self.assertEqual({k:old_run.get(k) for k in keys},
                                          {k:new_run.get(k) for k in keys})
                         if old_run.get('race_class_text')!=new_run.get('race_class_text'):
@@ -138,6 +145,7 @@ class ObservedFactRetention(unittest.TestCase):
                             self.assertRegex(new_run['race_class_text'][len(old_run['race_class_text']):],r'^ (?:G[ⅠⅡⅢ123]|Jpn[ⅠⅡⅢ123]|リステッド)$')
                     runners+=1
         self.assertEqual((len(paths),runners),(34,437))
+        self.assertEqual(mixed_surface_recoveries,5)
         self.assertEqual(rider_recoveries,10)
 
     def test_saved_tokyo11_omitted_weights_reach_existing_feature_rule(self):
