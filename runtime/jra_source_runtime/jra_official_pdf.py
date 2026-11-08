@@ -71,7 +71,7 @@ def _race_label_number(v:Any)->int|None:
     return None
 
 def _printed_runner_table_bounds(page, peers, position):
-    """Find the aligned top rules of the printed peer runner tables."""
+    """Find the printed peer table boundaries, including staggered race headings."""
     if len(peers) < 2 or not hasattr(page, 'get_drawings'):
         return None
     spacing = min(right['x0']-left['x0'] for left,right in zip(peers,peers[1:]))
@@ -87,13 +87,21 @@ def _printed_runner_table_bounds(page, peers, position):
             if abs(a.y-b.y) > .5 or not .7*spacing <= x1-x0 < spacing:
                 continue
             for index, label in enumerate(peers):
-                if (0 <= label['x0']-x0 <= 18 and 10 <= a.y-label['yc'] <= 100
+                if (0 <= label['x0']-x0 <= 18 and 10 <= a.y-label['yc'] <= max(100,.5*spacing)
                         and (index+1 == len(peers) or x1 < peers[index+1]['x0'])):
                     rules[index].append((a.y,x0,x1))
     for y,left,right in sorted(rules[position]):
         if all(any(abs(y-rule_y) <= 1 for rule_y,_,_ in group) for group in rules):
             # Include glyphs touching the outline. The peer check establishes
             # the adjacent columns independently of the target's DETAIL names.
+            return left-.5,right+.5
+    if all(rules):
+        # WIN5 and similar headings move their own table down. The anchored,
+        # equal-width top rules of every peer still prove the columns.
+        tops = [min(group) for group in rules]
+        widths = [right-left for _,left,right in tops]
+        if max(widths)-min(widths) <= 1:
+            _,left,right = tops[position]
             return left-.5,right+.5
     return None
 
@@ -352,8 +360,7 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
     if not snap or not snap.get("raw_gzip_b64"):
         raise ValueError("JRA_OFFICIAL_PDF_RAW_SNAPSHOT_REQUIRED_FOR_RECONCILIATION")
     raw=gzip.decompress(base64.b64decode(str(snap["raw_gzip_b64"])))
-    raw_sha_matches=hashlib.sha256(raw).hexdigest()==snap.get('raw_sha256')
-    if printed_table and not raw_sha_matches:
+    if hashlib.sha256(raw).hexdigest()!=snap.get('raw_sha256'):
         raise ValueError('JRA_OFFICIAL_PDF_RAW_HASH_MISMATCH')
     doc=fitz.open(stream=raw,filetype="pdf")
     target_text=None; page_no=None; clip_coords=None
@@ -377,9 +384,9 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
     detail_runners=list(detail_active.get("runners") or [])
     if not detail_runners:
         raise ValueError("JRA_DETAIL_ACTIVE_RUNNERS_REQUIRED_FOR_PDF_RECONCILIATION")
-    # FR is the two-letter nationality printed on the official card, not
+    # FR and GB are two-letter nationalities printed on the official card, not
     # the adjacent English race metadata. Keep the legacy proof unchanged.
-    country=r'(?:[A-Z]{3}|FR)' if printed_table else r'[A-Z]{3}'
+    country=r'(?:[A-Z]{3}|FR|GB)' if printed_table else r'[A-Z]{3}'
     marker_count=len(re.findall(r'[（(]'+country+r'[）)]',target_text))
     if marker_count!=len(detail_runners):
         raise ValueError(
@@ -411,7 +418,7 @@ def _reconcile_pdf_column(artifact, race_no, detail_active, *, printed_table):
             # A recovered boundary must independently establish every
             # printed horse number and name before matching to DETAIL.
             proof=_split_name_geometry_proof(target_blocks,r.get('horse_no'),name)
-            if proof is None or not unique_names or not raw_sha_matches:
+            if proof is None or not unique_names:
                 reason='PDF_NAME_NUMBER_NOT_BOUND' if printed_table else 'PDF_NAME_NOT_FOUND'
                 missing.append({'horse_no':r.get('horse_no'),'name':name,'reason':reason})
             else:
@@ -581,19 +588,29 @@ def fetch_and_enrich_official_pdf(
     # Preserve the actually fetched official Raw even if both legacy parsers
     # fail. Keeping evidence does not admit a runner universe or a SOURCE PASS.
     artifact["sources"]=list(artifact.get("sources") or [])+[snapshot]
-    doc=fitz.open(stream=raw,filetype="pdf")
-    try:
-        universe=parse_runner_universe_from_doc(doc,int(race_no))
-    except Exception:
-        # Compatibility fallback for historical single-column fixtures/PDFs.
-        pages=[p.get_text("text") for p in doc]
-        universe=parse_runner_universe_from_pages(pages,int(race_no))
+    page_fallback_requires_detail=False
+    with fitz.open(stream=raw,filetype="pdf") as doc:
+        try:
+            universe=parse_runner_universe_from_doc(doc,int(race_no))
+        except Exception:
+            pages=[p.get_text("text") for p in doc]
+            universe=parse_runner_universe_from_pages(pages,int(race_no))
+            page=doc[universe["pdf_page_number"]-1]
+            page_fallback_requires_detail=any(
+                _race_label_number(word[4]) not in (None,int(race_no))
+                for word in page.get_text("words")
+            )
     universe["source_snapshot_sha256"]=snapshot["snapshot_sha256"]
     universe["raw_sha256"]=snapshot["raw_sha256"]
     universe["official_pdf_url"]=final_url
+    if page_fallback_requires_detail:
+        universe["pdf_multi_race_page_fallback"]=True
     universe["runner_universe_sha256"]=sha_obj({k:v for k,v in universe.items() if k!="runner_universe_sha256"})
     artifact["jra_official_pdf_runner_universe"]=universe
     artifact["jra_official_pdf_runner_universe_sha256"]=sha_obj(universe)
+    if page_fallback_requires_detail:
+        artifact.setdefault("warnings",[]).append("JRA_OFFICIAL_PDF_MULTI_RACE_PAGE_FALLBACK_REQUIRES_DETAIL")
+        return artifact
     artifact["jra_declared_runner_universe"]={**universe,"universe_type":"DECLARED"}
     artifact["jra_official_runner_universe"]=universe
     artifact["jra_official_runner_universe_sha256"]=sha_obj(universe)

@@ -8,20 +8,29 @@ def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
     import fitz
     from jra_official_pdf import reconcile_pdf_column_with_detail
 
-    def artifact(*,missing_peer_rule=False):
+    def artifact(*,missing_peer_rule=False,staggered=False):
         with fitz.open() as doc:
             page=doc.new_page(width=900,height=500)
             for no,left in enumerate((31,311,591),1):
                 page.insert_text((left+5,60),f'{no}R')
                 if not (missing_peer_rule and no==1):
-                    page.draw_line((left,122),(left+251,122),width=.5)
-            page.insert_text((366,150),'ホクトウマ',fontname='japan')
-            page.insert_text((366,184),'フランスウマ',fontname='japan')
-            page.insert_text((367,161),'(JPN)')
-            page.insert_text((367,195),'(FR)')
-            page.insert_text((346,153),'1')
-            page.insert_text((346,187),'2')
+                    top=(122,169,130)[no-1] if staggered else 122
+                    page.draw_line((left,top),(left+251,top),width=.5)
+            first=196 if staggered else 150
+            page.insert_text((366,first),'ホクトウマ',fontname='japan')
+            page.insert_text((366,first+34),'フランスウマ',fontname='japan')
+            page.insert_text((367,first+11),'(JPN)')
+            page.insert_text((367,first+45),'(GB)' if staggered else '(FR)')
+            page.insert_text((346,first+3),'1')
+            page.insert_text((346,first+37),'2')
             page.insert_text((86,150),'ベツレース(JPN)',fontname='japan')
+            if staggered:
+                page.insert_text((646,150),'ミギノウマ',fontname='japan')
+                page.insert_text((646,184),'ミギノニトウメ',fontname='japan')
+                page.insert_text((626,153),'1')
+                page.insert_text((626,187),'2')
+                page.insert_text((647,161),'(JPN)')
+                page.insert_text((647,195),'(JPN)')
             raw=doc.tobytes()
         return {'sources':[{'source_id':'JRA-OFFICIAL-RACE-PDF',
                             'raw_gzip_b64':base64.b64encode(gzip.compress(raw)).decode(),
@@ -43,8 +52,65 @@ def test_pdf_reconciliation_uses_aligned_printed_runner_tables():
         reconcile_pdf_column_with_detail(artifact(missing_peer_rule=True),2,detail)
     changed=artifact()
     changed['sources'][0]['raw_sha256']='0'*64
-    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+    with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_RAW_HASH_MISMATCH'):
         reconcile_pdf_column_with_detail(changed,2,detail)
+    _,diag=reconcile_pdf_column_with_detail(artifact(staggered=True),2,detail)
+    assert diag['nationality_marker_count']==2
+    assert diag['pdf_column_clip'][:3]==[310.5,0,562.5]
+    assert [(p['printed_number'],p['name']) for p in diag['pdf_split_name_geometry_proofs']]==[
+        ('1','ホクトウマ'),('2','フランスウマ')]
+    adjacent={'runners':[{'horse_no':1,'name':'ミギノウマ'},
+                          {'horse_no':2,'name':'ミギノニトウメ'}]}
+    for wrong_detail in (adjacent,swapped):
+        with pytest.raises(ValueError,match='JRA_OFFICIAL_PDF_TARGET_COLUMN_RUNNER_COUNT_PROOF_FAIL'):
+            reconcile_pdf_column_with_detail(artifact(staggered=True),2,wrong_detail)
+
+def test_whole_page_pdf_candidate_with_peer_race_requires_detail(monkeypatch):
+    from unittest.mock import MagicMock
+    import fitz
+    import jra_official_pdf as pdf
+
+    response=MagicMock(status=200,headers={'content-type':'application/pdf'})
+    response.__enter__.return_value=response
+    response.geturl.return_value=pdf.official_pdf_url('2026-11-08','FKS','0320260302')
+    monkeypatch.setattr(pdf.urllib.request,'build_opener',lambda *args: MagicMock(open=lambda *args,**kwargs: response))
+    monkeypatch.setattr(pdf,'validate_public_url',lambda url: None)
+    monkeypatch.setattr(pdf,'utcnow',lambda: '2026-11-08T05:00:00+00:00')
+
+    def no_column(*args):
+        raise ValueError('JRA_OFFICIAL_PDF_COLUMN_PARSE_FAILED')
+
+    monkeypatch.setattr(pdf,'parse_runner_universe_from_doc',no_column)
+    monkeypatch.setattr(pdf,'parse_runner_universe_from_pages',lambda *args: {'pdf_page_number':1,'runners':[]})
+    for peer_race in (False,True):
+        with fitz.open() as doc:
+            page=doc.new_page()
+            page.insert_text((20,40),'11R')
+            if peer_race:
+                page.insert_text((320,40),'12R')
+            response.read.return_value=doc.tobytes()
+        out=pdf.fetch_and_enrich_official_pdf({},'2026-11-08T15:15:00+09:00',
+            race_date='2026-11-08',venue_id='FKS',race_no=11,meeting_key='0320260302')
+        assert out['jra_official_pdf_runner_universe'].get('pdf_multi_race_page_fallback',False)==peer_race
+        assert ('jra_official_runner_universe' in out) != peer_race
+
+def test_detail_identity_failure_does_not_leak_candidate(monkeypatch):
+    import pytest
+    import jra_race_card_detail as detail
+
+    headers={'content-type':'text/html;charset=utf-8'}
+    raw=('<h1>2026年11月8日（日曜）3回福島2日 12レース</h1>'
+         '<p>発走時刻：16時00分 天候 晴 芝 良 3歳以上 1勝クラス '
+         'コース：1,200メートル（芝・右）</p>').encode()
+    monkeypatch.setattr(detail,'_discover_and_fetch',lambda *args: (raw,headers,'https://www.jra.go.jp/JRADB/accessD.html',{}))
+    monkeypatch.setattr(detail,'utcnow',lambda: '2026-11-08T05:00:00+00:00')
+    monkeypatch.setattr(detail,'parse_race_card_detail',lambda raw,content_type: {
+        'race_context':detail.parse_detail_race_context(raw,content_type),'runners':[]})
+    artifact={'source_race_context':{'race_date':'2026-11-08','venue_id':'FKS','race_no':11}}
+    with pytest.raises(ValueError,match='JRA_DETAIL_CONTEXT_IDENTITY_MISMATCH:race_no'):
+        detail.fetch_and_enrich_race_card_detail(artifact,'2026-11-08T15:15:00+09:00',
+            race_date='2026-11-08',meeting_key='0320260302',race_no=11)
+    assert set(artifact)=={'source_race_context'}
 
 def _split_name_blocks(*,number='1',number_size=10,duplicate=False,split_baseline=False,name='カリメラ'):
     spans=[{'text':ch,'bbox':[100+i*20,100+(10 if split_baseline and i==2 else 0),112+i*20,115+(10 if split_baseline and i==2 else 0)],'origin':[100+i*20,111+(10 if split_baseline and i==2 else 0)],'size':11} for i,ch in enumerate(name)]
@@ -403,3 +469,31 @@ def test_registered_common_workout_selects_official_universe_matching_table():
     ]}
     x=parse_workout(raw,"text/html; charset=utf-8",official)
     assert [r["horse_name"] for r in x["runners"]]==["リゼスカーレット","アイファーティアラ"]
+
+
+def test_registered_workout_keeps_comments_and_ratings_with_video_column():
+    from jra_registered_common import parse_workout
+
+    raw = """<table>
+      <tr><th>馬番</th><th>馬名</th><th colspan="2">評価</th><th>映像</th></tr>
+      <tr><td>1</td><td>トリポリタニア 前走</td><td>仕上上々</td><td>B</td><td>再生</td></tr>
+      <tr><td>3</td><td>パシアンジャン 前走</td><td>伸び一息</td><td>C</td><td></td></tr>
+    </table>""".encode("utf-8")
+    universe = {"runners": [
+        {"horse_no": 1, "name": "トリポリタニア"},
+        {"horse_no": 3, "name": "パシアンジャン"},
+    ]}
+    rows = parse_workout(raw, "text/html; charset=utf-8", universe)["runners"]
+    assert [(row["assessment"], row["rating"]) for row in rows] == [("仕上上々", "B"), ("伸び一息", "C")]
+    assert all(row["final1f"] is None for row in rows)
+
+
+def test_official_detail_keeps_unlinked_non_jra_trainer_identity():
+    from jra_race_card_detail import _parse_identity
+
+    cell = ("ムーンリットデイズ 126.8 (9番人気) (1.0.0.0) 400万円 474kg(-6) "
+            "仲谷 光一 中川牧場 山崎 裕也(本会外) 父：ニューイヤーズデイ "
+            "母：キーウエスト(母の父：ネオユニヴァース)")
+    row = _parse_identity(cell)
+    assert (row["trainer"], row["trainer_base"]) == ("山崎 裕也", "本会外")
+    assert row["horse_name"] == "ムーンリットデイズ"

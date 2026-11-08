@@ -1002,8 +1002,7 @@ def reconcile_source_run_status(root, row, runs, now):
     rid=row['race_id']
     # A materialized Formal request or numerical handoff is stronger than an
     # older SOURCE failure. FINAL/NO_BET were already protected by the state guard.
-    if row.get('awaiting_stage')=='EXTERNAL_FORMAL_FINAL' or any(
-            (root/'runtime/requests').glob(rid+'-LIVE-*-FORMAL.json')):
+    if row.get('awaiting_stage')=='EXTERNAL_FORMAL_FINAL':
         return
     intents=list((root/'runtime/jra_formal_intents').glob(rid+'-LIVE-*.json'))
     if not intents:
@@ -1013,27 +1012,68 @@ def reconcile_source_run_status(root, row, runs, now):
         match=re.fullmatch(re.escape(rid)+r'-LIVE-R(\d+)',path.stem)
         return int(match.group(1)) if match else -1
     execution=max(intents,key=revision).stem
+    if (root/'runtime/requests'/f'{execution}-FORMAL.json').is_file():
+        return
+    expected='runtime/jra_source_requests/'+execution+'.json'
+    target=(root/expected).resolve()
+    if not target.is_relative_to((root/'runtime/jra_source_requests').resolve()):
+        return
+    try:
+        request=json.loads(target.read_text())
+    except (OSError,ValueError):
+        return
+    if not isinstance(request,dict) or (request.get('family_id'),request.get('race_id'),
+                                        request.get('execution_id'))!=('JRA',rid,execution):
+        return
+    from execution_store import ExecutionStoreError, resolve_phase
+    try:
+        source=resolve_phase(execution,'SOURCE',root=root/'runtime/executions')
+        if source is not None:
+            from cryptography.exceptions import InvalidSignature
+            from verify_source_envelope import verify
+            name='source_receipt_envelope.json'
+            if name not in source['manifest']['files']:
+                raise ExecutionStoreError('SOURCE_CHECKPOINT_SIGNED_ENVELOPE_MISSING')
+            try:
+                verified=verify(source['run_dir']/name)
+            except (InvalidSignature,ValueError) as exc:
+                raise ExecutionStoreError('SOURCE_CHECKPOINT_RECEIPT_INVALID') from exc
+            if (verified['valid'],verified['status'],verified['family'],verified['race_id'],
+                    str(verified['github_run_id']))!=(True,'PASS','JRA',rid,source['latest']['run_id']):
+                raise ExecutionStoreError('SOURCE_CHECKPOINT_RECEIPT_CONTEXT_MISMATCH')
+    except (OSError,ExecutionStoreError) as exc:
+        row.update(state='HOLD_CHECKPOINT_INTEGRITY',first_blocked_stage='SOURCE_CHECKPOINT_READBACK',
+                   execution_id=execution,execution_error=str(exc),recommendation_pfs=None)
+        return
+    if source is not None:
+        # Durable SOURCE supersedes a failed/stale child run. The elapsed
+        # dispatch deadline proves the handoff is unclosed, not why it stopped.
+        try:
+            deadline=_dt.datetime.fromisoformat(request['external_dispatch_deadline_at'])
+            cutoff=_dt.datetime.fromisoformat(request['prediction_cutoff'])
+            post=_dt.datetime.fromisoformat(row['post'])
+            expired=cutoff <= deadline < post and now >= deadline
+        except (KeyError,TypeError,ValueError):
+            expired=False
+        if expired:
+            row.update(state='FORMAL_FAILED',first_blocked_stage='SINGLE_ENTRY_SOURCE_TO_FORMAL_HANDOFF',
+                execution_id=execution,execution_error='FORMAL_DISPATCH_DEADLINE_EXCEEDED_WITH_SOURCE_CHECKPOINT',
+                source_run_id=source['latest']['run_id'],source_manifest_sha256=source['latest']['manifest_sha256'],
+                source_receipt_sha256=verified['receipt_sha256'],source_checkpoint_envelope_signature_verified=True,
+                prediction_cutoff=request['prediction_cutoff'],external_dispatch_deadline_at=deadline.isoformat(),
+                detailed_failure_stage_verified=False,temporal_eligibility=False,
+                recovery_status='CUTOFF_EXCEEDED_NO_LATE_FINAL',recommendation_pfs=None)
+        return
     matches=[]
     for run in runs:
         if run.get('headBranch','main')!='main':
             continue
         path=str(run.get('displayTitle') or '').removeprefix('JRA SOURCE ')
-        expected='runtime/jra_source_requests/'+execution+'.json'
-        if path!=expected:
-            continue
-        target=(root/path).resolve()
-        if not target.is_relative_to((root/'runtime/jra_source_requests').resolve()):
-            continue
-        try:
-            request=json.loads(target.read_text())
-        except (OSError,ValueError):
-            continue
-        if (request.get('family_id')=='JRA' and request.get('race_id')==rid
-                and request.get('execution_id')==execution):
-            matches.append((run,request))
+        if path==expected:
+            matches.append(run)
     if not matches:
         return
-    latest,request=max(matches,key=lambda item:(int(item[0]['databaseId']),int(item[0].get('attempt') or 1)))
+    latest=max(matches,key=lambda run:(int(run['databaseId']),int(run.get('attempt') or 1)))
     if latest.get('status')!='completed' or latest.get('conclusion') not in {'failure','cancelled','timed_out'}:
         return
     cutoff=request.get('prediction_cutoff')

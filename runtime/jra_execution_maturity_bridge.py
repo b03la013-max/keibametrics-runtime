@@ -374,13 +374,13 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     """
     try:
         from .jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
-        from .jra_source_to_evidence_features import compile_source_to_features
+        from .jra_source_to_evidence_features import compile_source_to_features, source_feature_runner_coverage
         from .jra_evidence_to_base_production import load_mapping, build_production_ledger, evaluate_partial_production_base_indices
         from .jra_index_provenance_builder import materialize_index_provenance
         from .jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
     except ImportError:
         from jra_zero_touch_source_index_orchestrator import build_source_runner_stubs
-        from jra_source_to_evidence_features import compile_source_to_features
+        from jra_source_to_evidence_features import compile_source_to_features, source_feature_runner_coverage
         from jra_evidence_to_base_production import load_mapping, build_production_ledger, evaluate_partial_production_base_indices
         from jra_index_provenance_builder import materialize_index_provenance
         from jra_supplemental_evidence_pack import apply_supplemental_evidence_pack
@@ -412,6 +412,7 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
         k: copy.deepcopy(v) for k, v in features.items() if k != "runners"
     }
     req["source_to_evidence_feature_sha256"] = features["sha256"]
+    req["source_to_evidence_feature_runner_coverage"] = source_feature_runner_coverage(features)
     gaps = []
     for runner in req["runners"]:
         rid = runner["runner_id"]

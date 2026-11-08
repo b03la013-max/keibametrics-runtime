@@ -199,7 +199,8 @@ def source_acquire(p:Dict[str,Any]):
     # PDF is available, the server-rendered official JRADB detailed card is a
     # same-authority JRA fallback. When both exist, their runner ID/name sets must agree.
     detail_u=artifact.get("jra_official_race_card_detail")
-    if not artifact.get("jra_official_runner_universe") and detail_u:
+    pdf_u=artifact.get("jra_official_runner_universe") or artifact.get("jra_official_pdf_runner_universe")
+    if not pdf_u and detail_u:
         try:
             declared_u,active_u=runner_universes_from_detail(detail_u)
             artifact["jra_declared_runner_universe"]=declared_u
@@ -210,10 +211,10 @@ def source_acquire(p:Dict[str,Any]):
             artifact["official_runner_source"]="JRA_OFFICIAL_JRADB_DETAIL_FALLBACK"
         except Exception as e:
             errors.append("JRA_DETAIL_RUNNER_UNIVERSE_FAILED:"+type(e).__name__+":"+str(e))
-    elif artifact.get("jra_official_runner_universe") and detail_u:
+    elif pdf_u and detail_u:
         try:
             detail_declared,detail_active=runner_universes_from_detail(detail_u)
-            p={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (artifact["jra_official_runner_universe"].get("runners") or [])}
+            p={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (pdf_u.get("runners") or [])}
             h={int(x["horse_no"]):re.sub(r"\s+","",str(x.get("name") or "")) for x in (detail_declared.get("runners") or [])}
             mismatch=(p!=h)
             diffs=[{"horse_no":no,"pdf_name":p.get(no),"detail_name":h.get(no)}
@@ -249,6 +250,7 @@ def source_acquire(p:Dict[str,Any]):
                         type(recon_exc).__name__+":"+str(recon_exc)
                     )
             else:
+                artifact["jra_official_runner_universe"]=pdf_u
                 artifact["official_runner_source"]="JRA_OFFICIAL_PDF_RECONCILED_WITH_JRADB_DETAIL"
             if not mismatch or "strict_reconciliation" in artifact.get("official_runner_universe_reconciliation",{}):
                 from jra_official_pdf import apply_official_detail_status

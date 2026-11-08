@@ -10,7 +10,9 @@ def sha_obj(x):
 
 def verify(path):
     p=pathlib.Path(path)
-    env=json.loads(p.read_text(encoding="utf-8"))
+    return verify_payload(json.loads(p.read_text(encoding="utf-8")))
+
+def verify_payload(env):
     rec=env.get("receipt") or {}
     art=env.get("artifact") or {}
     pub_b64=str(env.get("receipt_public_key_b64") or "")

@@ -5,9 +5,9 @@ import math
 import re
 from collections import Counter
 try:
-    from .jra_evidence_to_base_production import _weighted_index, _profile_for_runner
+    from .jra_evidence_to_base_production import _weighted_index, _profile_for_runner, build_production_ledger
 except ImportError:
-    from jra_evidence_to_base_production import _weighted_index, _profile_for_runner
+    from jra_evidence_to_base_production import _weighted_index, _profile_for_runner, build_production_ledger
 
 
 def sha(value):
@@ -59,6 +59,27 @@ def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_repo
                     or sha(refs) != manifest.get('manifest_sha256')):
                 raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
     return manifest
+
+
+def materialize_frozen_production_evidence(request, mapping, *, source_snapshot_sha256):
+    """Replay the frozen numerical evidence without reading the current corpus."""
+    from jra_bvi_static_proof import verify_static_proof
+    from jra_index_provenance_builder import materialize_index_provenance
+
+    verify_compiler_lineage(request, source_snapshot_sha256=source_snapshot_sha256)
+    if request.get('require_zero_touch_source_indices'):
+        compiler = request.get('source_to_evidence_feature_compiler') or {}
+        if compiler.get('source_only_formal_base_ready') is not True:
+            raise ValueError('ZERO_TOUCH_FROZEN_PRODUCTION_INDEX_NOT_READY')
+    verify_static_proof(request['bvi_static_consumption_proof'], request)
+    ledger = build_production_ledger(request['race_id'], request['runners'], mapping)
+    if ledger != request.get('index_provenance_ledger'):
+        raise ValueError('JRA_FROZEN_PRODUCTION_EVIDENCE_MISMATCH')
+    replay = materialize_index_provenance(request)
+    if any(frozen['canonical_components'] != rebuilt['canonical_components']
+           for frozen, rebuilt in zip(request['runners'], replay['runners'], strict=True)):
+        raise ValueError('JRA_FROZEN_CANONICAL_COMPONENTS_MISMATCH')
+    return replay
 
 
 def build_bvi_consumption(request, mapping, source_artifact=None):

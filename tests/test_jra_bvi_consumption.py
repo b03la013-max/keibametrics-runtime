@@ -5,7 +5,7 @@ import pytest
 import sys
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"runtime"))
-from jra_bvi_consumption import build_bvi_consumption
+from jra_bvi_consumption import build_bvi_consumption, materialize_frozen_production_evidence
 from jra_evidence_to_base_production import attach_production_ledger_to_request
 from jra_index_provenance_builder import materialize_index_provenance
 ROOT=Path(__file__).resolve().parents[1]
@@ -86,6 +86,43 @@ def test_actual_compiler_report_manifest_binds_original_components_without_rewri
     assert out['corpus_component_bindings']['MATCHED_DECLARED_MANIFEST']>0
     assert req['runners']==original
     assert [r['bvi_value'] for r in out['runners']]==[r['canonical_components']['BVI']['value'] for r in original]
+
+
+def test_kyoto_nine_replays_frozen_corpus_when_a_later_feature_would_change_bvi():
+    path=ROOT/'runtime/requests/KM-JRA-KYO-20261108-R09-LIVE-R1-FORMAL.json'
+    req=json.loads(path.read_text()); before=deepcopy(req)
+    mapping=json.loads((ROOT/'mapping/jra_base_index_evidence_mapping_v1.0_20260921.json').read_text())
+    source={**req['source_snapshot'], 'source_snapshot_sha256':req['source_snapshot_sha256']}
+    frozen=materialize_frozen_production_evidence(req,mapping,source_snapshot_sha256=source['source_snapshot_sha256'])
+    replay=build_bvi_consumption(frozen,mapping,source_artifact=source)
+    runner=next(row for row in replay['runners'] if row['runner_id']=='6')
+    assert runner['bvi_value']==68.311111
+    assert replay['counts']=={'MEASURED':14,'DCR_ONLY':1}
+    assert replay['static_execution_proof_status']=='BOUND_ACTUAL_EXECUTION'
+    assert replay['corpus_artifact_lineage_status']=='FROZEN_SNAPSHOT_LIST_BOUND'
+    assert req==before
+
+    # Use another runner's component to simulate a post-freeze enrichment.
+    changed=deepcopy(req)
+    features=next(row['evidence_features'] for row in changed['runners'] if str(row['runner_id'])=='6')
+    features['maternal_class_signal']=next(row['evidence_features']['maternal_class_signal'] for row in req['runners']
+                                          if 'maternal_class_signal' in row['evidence_features'])
+    with pytest.raises(ValueError,match='BVI_CONSUMPTION_NUMERICAL_MISMATCH:6'):
+        build_bvi_consumption(materialize_index_provenance(changed),mapping,source_artifact=source)
+    with pytest.raises(ValueError,match='JRA_FROZEN_PRODUCTION_EVIDENCE_MISMATCH'):
+        materialize_frozen_production_evidence(changed,mapping,source_snapshot_sha256=source['source_snapshot_sha256'])
+
+    changed=deepcopy(req)
+    changed['runners'][0]['canonical_components']['BVI']['value']=0
+    with pytest.raises(ValueError,match='BVI_STATIC_PROOF_BINDING_INVALID'):
+        materialize_frozen_production_evidence(changed,mapping,source_snapshot_sha256=source['source_snapshot_sha256'])
+
+    changed=deepcopy(req)
+    changed['require_zero_touch_source_indices']=True
+    materialize_frozen_production_evidence(changed,mapping,source_snapshot_sha256=source['source_snapshot_sha256'])
+    changed['source_to_evidence_feature_compiler']['source_only_formal_base_ready']=False
+    with pytest.raises(ValueError,match='ZERO_TOUCH_FROZEN_PRODUCTION_INDEX_NOT_READY'):
+        materialize_frozen_production_evidence(changed,mapping,source_snapshot_sha256=source['source_snapshot_sha256'])
 
 
 def test_mixed_supplemental_corpus_is_isolated_not_claimed_wholly_new():

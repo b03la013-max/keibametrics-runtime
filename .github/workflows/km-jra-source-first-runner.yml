@@ -182,10 +182,13 @@ jobs:
       - name: Verify GitHub attestation before persistence
         if: steps.acquire.outcome == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          REQUEST_FILE: ${{ steps.req.outputs.request }}
         run: |
           set -euo pipefail
-          gh attestation verify runtime_out/source_receipt_envelope.json --repo "${{ github.repository }}"
+          test -s "$ATTESTATION_BUNDLE"
+          cp -- "$ATTESTATION_BUNDLE" runtime_out/source_attestation_bundle.json
+          python runtime/jra_source_runtime/verify_source_attestation.py runtime_out/source_receipt_envelope.json --request "$REQUEST_FILE"
           python - <<'PY'
           import json,os,pathlib
           p=pathlib.Path("runtime_out/source_attestation.json")

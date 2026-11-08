@@ -182,7 +182,7 @@ def _parse_identity(cell:str)->Dict[str,Any]:
     if m4: sire,dam,damsire=[x.strip() for x in m4.groups()]
     trainer=None; trainer_base=None
     before=s.split("父：",1)[0]
-    ms=list(re.finditer(r"([一-龯々ぁ-んァ-ヶー・A-Za-z.]+(?:\s+[一-龯々ぁ-んァ-ヶー・A-Za-z.]+)?)\((美浦|栗東)\)",before))
+    ms=list(re.finditer(r"([一-龯々ぁ-んァ-ヶー・A-Za-z.]+(?:\s+[一-龯々ぁ-んァ-ヶー・A-Za-z.]+)?)\((美浦|栗東|本会外)\)",before))
     if ms:
         trainer=ms[-1].group(1).strip(); trainer_base=ms[-1].group(2)
     bw=bwd=None
@@ -561,7 +561,7 @@ def resolve_cancelled_runner_numbers(artifact:Dict[str,Any],*,meeting_key:str)->
     recovery_proofs={};recovery_diag=None
     pdf_names={re.sub(r'\s+','',str(r.get('name') or '')) for r in pdf.get('runners') or []}
     detail_names={re.sub(r'\s+','',str(r.get('horse_name') or '')) for r in rows}
-    if pdf_names!=detail_names:
+    if pdf_names!=detail_names or pdf.get('pdf_multi_race_page_fallback'):
         pdf,recovery_proofs,recovery_diag=_cancelled_numbers_from_target_pdf(artifact,detail,snap,context['race_no'])
     names={};numbers=set()
     for row in pdf.get('runners') or []:
@@ -630,6 +630,8 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     detail=parse_race_card_detail(raw,headers.get("content-type",""))
     detail["navigation_tokens_sha256"]=hashlib.sha256(str(tokens).encode()).hexdigest()
     detail["source_snapshot_sha256"]=snap["snapshot_sha256"]
+    # Keep a rejected DETAIL candidate out of the caller's reconciliation.
+    artifact=dict(artifact)
     artifact["sources"]=list(artifact.get("sources") or [])+[snap]
     artifact["jra_official_race_card_detail"]=detail
     artifact["jra_official_race_card_detail_sha256"]=sha_obj(detail)

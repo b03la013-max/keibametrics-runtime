@@ -206,7 +206,8 @@ def compile_production_auto_handoff(intent, source_env, report, *, current_autho
     # The intent is not the compiler output. Keep the original admitted corpus
     # binding across this boundary without filling legacy requests from today's
     # corpus or allowing an intent-supplied trace to replace the prepared one.
-    for name in ("source_to_evidence_feature_compiler", "source_to_evidence_feature_sha256"):
+    for name in ("source_to_evidence_feature_compiler", "source_to_evidence_feature_sha256",
+                 "source_to_evidence_feature_runner_coverage"):
         req.pop(name, None)
         if name in prepared:
             req[name] = deepcopy(prepared[name])
