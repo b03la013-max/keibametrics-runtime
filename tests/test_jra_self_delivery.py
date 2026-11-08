@@ -212,6 +212,97 @@ def test_d6_duplicate_provider_ids_cannot_mark_complete(prepared):
     assert record['NOTIFICATION_SENT'] is False and len(transport.sent)==2
 
 
+def test_d6_restarted_worker_resolves_exact_inbox_without_resend(prepared):
+    final,args,sender,at,bundle=prepared
+    args['part_bytes']=1024*1024
+    sender.fail_send=True
+    with pytest.raises(ValueError,match='SEND_OUTCOME_UNKNOWN_NO_RETRY'):
+        send(prepared)
+    # A process exit may prevent the handler writing the failure class.
+    rewrite_receipt(args,lambda r:r.pop('failure_class'))
+    original=json.loads(receipt_path(args).read_text())
+    message_id=original['parts'][0]['rfc822_message_id']
+    reader=FakeGmail(at)
+    reader.sent=sender.sent.copy()
+    lookups=[]
+    def lookup(identifier):
+        lookups.append(identifier)
+        return 'offline-1'
+    reader.find_inbox_message=lookup
+    plan=delivery._complete_delivery_plan(final,args['presentation_dir'],ROOT,args['part_bytes'])
+    verify={k:v for k,v in args.items() if k!='presentation_dir'}
+    checked=delivery._verify_delivery_plan_arrival(plan,**{**verify,'transport':reader},
+        now=lambda:at,reconcile=True)
+    assert lookups==[message_id] and reader.read_calls==['offline-1']
+    assert len(sender.sent)==len(reader.sent)==1
+    assert checked['DESTINATION_ARRIVAL_CONFIRMED'] is True
+    assert checked['USER_ACKNOWLEDGED'] is None
+    assert checked['send_observed_before_cutoff'] is None
+    assert checked['parts'][0]['acceptance_evidence']=='INBOX_RECONCILIATION'
+    assert checked['verified_body_sha256']==plan['body_sha256']
+    assert delivery.send_complete_self_mail(final,**args,now=lambda:at)==checked
+    assert len(sender.sent)==1
+    assert delivery._verify_delivery_plan_arrival(plan,**{**verify,'transport':reader},
+        now=lambda:at+timedelta(days=1),reconcile=True)==checked
+    assert reader.read_calls==['offline-1']
+
+
+def test_d6_private_write_cannot_push_send_past_cutoff(prepared,monkeypatch):
+    final,args,transport,at,bundle=prepared
+    moment=at
+    write=delivery._write_private_delivery
+    def delayed_write(path,record):
+        nonlocal moment
+        write(path,record)
+        if record['parts']:
+            moment=delivery._delivery_time(record['prediction_cutoff'])
+    monkeypatch.setattr(delivery,'_write_private_delivery',delayed_write)
+    with pytest.raises(ValueError,match='JRA_DELIVERY_CUTOFF_EXPIRED'):
+        delivery.send_complete_self_mail(final,**args,now=lambda:moment)
+    assert not transport.sent
+    record=json.loads(receipt_path(args).read_text())
+    assert record['failure_class']=='CUTOFF_EXPIRED' and record['parts']==[]
+
+
+def test_d6_reconciliation_rejects_wrong_message_id_without_writing(prepared):
+    final,args,transport,at,bundle=prepared
+    args['part_bytes']=1024*1024
+    transport.fail_send=True
+    with pytest.raises(ValueError,match='SEND_OUTCOME_UNKNOWN_NO_RETRY'):
+        send(prepared)
+    path=receipt_path(args)
+    original=path.read_bytes()
+    def change(raw):
+        message=BytesParser(policy=policy.default).parsebytes(raw)
+        message.replace_header('Message-ID','<other@keibametrics.invalid>')
+        return message.as_bytes()
+    transport.change=change
+    transport.find_inbox_message=lambda _: 'offline-1'
+    plan=delivery._complete_delivery_plan(final,args['presentation_dir'],ROOT,args['part_bytes'])
+    verify={k:v for k,v in args.items() if k!='presentation_dir'}
+    with pytest.raises(ValueError,match='RECEIVED_MESSAGE_ID_INVALID'):
+        delivery._verify_delivery_plan_arrival(plan,**verify,now=lambda:at,reconcile=True)
+    assert path.read_bytes()==original and len(transport.sent)==1
+
+
+def test_d6_gmail_lookup_queries_exact_message_id_with_inbox_filter(monkeypatch):
+    from urllib.parse import urlsplit, parse_qs
+    transport=delivery.GmailSelfTransport(client_id='offline',client_secret='offline',refresh_token='offline')
+    monkeypatch.setattr(transport,'_headers',lambda:{})
+    rfc822_id='<'+'a'*64+'@keibametrics.invalid>'
+    result={'messages':[{'id':'offline-1'}]}
+    def request(url, *, headers):
+        parts=urlsplit(url)
+        assert parts.hostname=='gmail.googleapis.com'
+        assert parse_qs(parts.query)=={'q':['rfc822msgid:'+rfc822_id],'labelIds':['INBOX'],'maxResults':['2']}
+        return result, None
+    monkeypatch.setattr(transport,'_request',request)
+    assert transport.find_inbox_message(rfc822_id)=='offline-1'
+    result['nextPageToken']='unseen-page'
+    with pytest.raises(ValueError,match='RECONCILIATION_MATCH_NOT_UNIQUE'):
+        transport.find_inbox_message(rfc822_id)
+
+
 def test_d7_all_utf8_parts_reassemble_and_inbox_readback_never_claims_ack(prepared):
     final,args,transport,at,bundle=prepared
     args['part_bytes']=10000
@@ -319,21 +410,25 @@ def test_d8_concurrent_same_race_has_one_atomic_send_claim(prepared):
     from concurrent.futures import ThreadPoolExecutor
     import threading
     final,args,transport,at,bundle=prepared
-    barrier=threading.Barrier(2)
+    entered=threading.Event()
+    release=threading.Event()
     def identity():
         transport.identity_calls+=1
-        barrier.wait(timeout=10)
+        entered.set()
+        assert release.wait(timeout=10)
         return transport.identity_value
     transport.identity=identity
     with ThreadPoolExecutor(max_workers=2) as pool:
-        futures=[pool.submit(send,prepared) for _ in range(2)]
-        accepted=[];rejected=[]
-        for future in futures:
-            try: accepted.append(future.result())
-            except ValueError as exc: rejected.append(str(exc))
-    assert len(accepted)==len(rejected)==1
-    assert rejected==['JRA_DELIVERY_PRIOR_ATTEMPT_REVIEW_REQUIRED']
-    assert len(transport.sent)==accepted[0]['part_count']
+        winner=pool.submit(send,prepared)
+        try:
+            assert entered.wait(timeout=10)
+            with pytest.raises(ValueError,match='PRIOR_ATTEMPT_REVIEW_REQUIRED'):
+                pool.submit(send,prepared).result(timeout=10)
+        finally:
+            release.set()
+        accepted=winner.result(timeout=10)
+    assert transport.identity_calls==1
+    assert len(transport.sent)==accepted['part_count']
 
 
 def test_d9_candidate_never_claims_unattended_live_acceptance(prepared):

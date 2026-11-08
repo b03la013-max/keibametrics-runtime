@@ -381,6 +381,38 @@ def test_unknown_event_send_retains_private_attempt_and_no_false_provider_accept
     assert len(case['transport'].sent)==sent
 
 
+def test_completion_event_resumes_multipart_readback_after_last_send_timeout(prepared_signed,tmp_path,monkeypatch):
+    final,args,sender,at,bundle=prepared_signed
+    artifact=tmp_path/'final.json';artifact.write_text(json.dumps(final))
+    mock_canonical_api(monkeypatch,artifact,args['presentation_dir'])
+    cfg=config_file(tmp_path,args['authorization'],args['private_store'])
+    monkeypatch.setenv('KM_JRA_SELF_DELIVERY_ENABLED','true')
+    monkeypatch.setenv('KM_JRA_DELIVERY_CONFIG_PATH',str(cfg))
+    plan=delivery._complete_delivery_plan(final,args['presentation_dir'],ROOT,250000)
+    assert len(plan['chunks'])>1
+    send=sender.send
+    def timeout_on_last(raw):
+        sender.fail_send=len(sender.sent)==len(plan['chunks'])-1
+        return send(raw)
+    sender.send=timeout_on_last
+    monkeypatch.setattr(delivery,'GmailSelfTransport',lambda **kwargs:sender)
+    def run():
+        return delivery.dispatch_owner_delivery_event(artifact,presentation_dir=args['presentation_dir'],
+            root=ROOT,canonical_ref='3'*40,now=lambda:at)
+    with pytest.raises(delivery.DeliveryEventError,match='SEND_OUTCOME_UNKNOWN_NO_RETRY'):
+        run()
+    reader=FakeGmail(at)
+    reader.sent=sender.sent.copy()
+    reader.send=lambda raw:pytest.fail('unexpected second send')
+    reader.find_inbox_message=lambda value:f'offline-{len(plan["chunks"])}'
+    monkeypatch.setattr(delivery,'GmailSelfTransport',lambda **kwargs:reader)
+    result=run()
+    assert result['DESTINATION_ARRIVAL_CONFIRMED'] is True
+    assert result['provider_accepted_parts_recorded']==len(plan['chunks'])
+    assert len(reader.read_calls)==len(plan['chunks'])
+    assert result['USER_ACKNOWLEDGED'] is None
+
+
 def test_claim_without_receipt_never_becomes_send_attempt_or_provider_evidence(case,tmp_path,monkeypatch):
     compose(case);mock_canonical_api(monkeypatch,case['paths']['terminal'],case['directory'],kind='NO_BET')
     cfg=config_file(tmp_path,case['auth'],case['private_store'],kind='NO_BET')
