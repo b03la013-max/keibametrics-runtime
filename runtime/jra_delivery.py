@@ -1,6 +1,7 @@
 """Publish an exact canonical JRA tree with signed payload binding and honest delivery state."""
 import argparse
 import base64
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
@@ -135,6 +136,22 @@ class GmailSelfTransport:
         value, when = self._request('https://gmail.googleapis.com/gmail/v1/users/me/messages/'
             + quote(message_id, safe='') + '?format=raw', headers=self._headers())
         return {**value,'_provider_readback_date':when}
+
+    def find_inbox_message(self, rfc822_id):
+        import re
+        from urllib.parse import urlencode
+        if not re.fullmatch(r'<[0-9a-f]{64}@keibametrics\.invalid>', rfc822_id):
+            raise ValueError('JRA_DELIVERY_RECONCILIATION_MESSAGE_ID_INVALID')
+        query = urlencode({'q':'rfc822msgid:'+rfc822_id, 'labelIds':'INBOX', 'maxResults':2})
+        value, _ = self._request('https://gmail.googleapis.com/gmail/v1/users/me/messages?'+query,
+                                 headers=self._headers())
+        rows = value.get('messages') or []
+        if value.get('nextPageToken') or len(rows) != 1:
+            raise ValueError('JRA_DELIVERY_RECONCILIATION_MATCH_NOT_UNIQUE')
+        identifier = rows[0].get('id')
+        if not isinstance(identifier, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', identifier):
+            raise ValueError('JRA_DELIVERY_RECONCILIATION_PROVIDER_ID_INVALID')
+        return identifier
 
 
 def _self_delivery_authorization(authorization, *, required_scope="JRA_SIGNED_FINAL_COMPLETE_BODY"):
@@ -356,8 +373,36 @@ def _write_private_delivery(path, value):
             json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
             stream.flush(); os.fsync(stream.fileno())
         os.replace(name, path)
+        _sync_delivery_directory(path.parent)
     finally:
         if os.path.exists(name): os.unlink(name)
+
+def _sync_delivery_directory(directory):
+    import os
+    fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+@contextmanager
+def _lock_delivery_receipt(store, key):
+    import fcntl
+    import os
+    import stat
+    lock_path=store/(key+'.lock')
+    fd=os.open(lock_path,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
+    try:
+        mode=os.fstat(fd).st_mode
+        if not stat.S_ISREG(mode) or mode&0o077:
+            raise ValueError('JRA_DELIVERY_PRIVATE_LOCK_INVALID')
+        try:
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('JRA_DELIVERY_PRIOR_ATTEMPT_REVIEW_REQUIRED') from None
+        yield
+    finally:
+        os.close(fd)
 
 
 def _delivery_basis(plan):
@@ -368,6 +413,10 @@ def _delivery_basis(plan):
 
 def _delivery_binding(plan):
     return {key:plan[key] for key in ('race_id',_delivery_basis(plan)[0],'source_sha256','body_sha256')}
+
+def _delivery_message_id(plan, claim_key, number):
+    token = _sha([_delivery_binding(plan), claim_key, number, len(plan['chunks'])])
+    return f'<{token}@keibametrics.invalid>'
 
 
 def send_complete_self_mail(final, *, presentation_dir, root, private_store,
@@ -382,23 +431,37 @@ def _send_verified_delivery_plan(plan, *, root, private_store, authorization=Non
                                   transport=None, now=None, part_bytes=250000):
     """Shared existing transport and Race/account claim; artifact kinds never split it."""
     import hashlib
-    import re
-    from email.message import EmailMessage
-    from email.policy import SMTP
-    from email.utils import format_datetime
     a = _self_delivery_authorization(authorization,required_scope=plan['delivery_scope'])
     if transport is None: raise ValueError('JRA_DELIVERY_PRIVATE_TRANSPORT_REQUIRED')
-    root, store = Path(root).resolve(), Path(private_store).resolve()
-    if store == root or root in store.parents:
-        raise ValueError('JRA_DELIVERY_PRIVATE_STORE_OUTSIDE_REPOSITORY_REQUIRED')
     if a.get('authority') != plan['authority']:
         raise ValueError('JRA_DELIVERY_OWNER_AUTHORITY_MISMATCH')
     clock = now or (lambda: datetime.now(timezone.utc))
     cutoff = _delivery_time(plan['prediction_cutoff'])
     key = hashlib.sha256((plan['race_id']+'\0'+a['account_sub']).encode()).hexdigest()
-    store.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if store.stat().st_mode & 0o077:
-        raise ValueError('JRA_DELIVERY_PRIVATE_STORE_PERMISSIONS_REQUIRED')
+    store = _delivery_store(private_store, root, create=True)
+    with _lock_delivery_receipt(store,key):
+        return _send_delivery_parts(plan,a,transport,store,key,clock,cutoff,part_bytes)
+
+
+def _delivery_store(path, root, *, create=False):
+    root, resolved = Path(root).resolve(), Path(path).resolve()
+    if resolved == root or root in resolved.parents:
+        raise ValueError('JRA_DELIVERY_PRIVATE_STORE_OUTSIDE_REPOSITORY_REQUIRED')
+    try:
+        return _private_delivery_directory(path,root=root,create=create)
+    except ValueError as exc:
+        if str(exc)=='JRA_DELIVERY_PRIVATE_BODY_DIRECTORY_0700_REQUIRED':
+            raise ValueError('JRA_DELIVERY_PRIVATE_STORE_PERMISSIONS_REQUIRED') from None
+        raise
+
+
+def _send_delivery_parts(plan, a, transport, store, key, clock, cutoff, part_bytes):
+    import hashlib
+    import os
+    import re
+    from email.message import EmailMessage
+    from email.policy import SMTP
+    from email.utils import format_datetime
     claim, receipt_path = store/(key+'.claim.json'), store/(key+'.receipt.json')
     if claim.is_symlink() or receipt_path.is_symlink():
         raise ValueError('JRA_DELIVERY_PRIVATE_RECEIPT_SYMLINK')
@@ -420,11 +483,11 @@ def _send_verified_delivery_plan(plan, *, root, private_store, authorization=Non
     _self_delivery_identity(transport, a)
     if _delivery_time(clock()) >= cutoff: raise ValueError('JRA_DELIVERY_CUTOFF_EXPIRED')
     try:
-        import os
         fd=os.open(claim,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         with os.fdopen(fd,'w',encoding='utf-8') as stream:
             json.dump(_delivery_binding(plan), stream)
-            stream.flush(); __import__('os').fsync(stream.fileno())
+            stream.flush(); os.fsync(stream.fileno())
+        _sync_delivery_directory(store)
     except FileExistsError:
         raise ValueError('JRA_DELIVERY_PRIOR_ATTEMPT_REVIEW_REQUIRED') from None
     record = {**_delivery_binding(plan),'prediction_cutoff':plan['prediction_cutoff']}
@@ -448,6 +511,8 @@ def _send_verified_delivery_plan(plan, *, root, private_store, authorization=Non
         message['To']=message['From']=a['account_email']
         message['Subject']=f"KeibaMetrics {plan['race_id']} [{number}/{len(plan['chunks'])}]"
         message['Date']=format_datetime(_delivery_time(clock()))
+        message_id=_delivery_message_id(plan,key,number)
+        message['Message-ID']=message_id
         for field,value in ((_delivery_basis(plan)[1],plan[_delivery_basis(plan)[0]]),('Source',plan['source_sha256']),
                             ('Body',plan['body_sha256'])):
             message['X-KeibaMetrics-'+field+'-SHA256']=value
@@ -458,8 +523,13 @@ def _send_verified_delivery_plan(plan, *, root, private_store, authorization=Non
         raw=message.as_bytes()
         part={'number':number,'sha256':hashlib.sha256(chunk.encode()).hexdigest(),
               'mime_sha256':hashlib.sha256(raw).hexdigest(),'attempted_at':_delivery_time(clock()).isoformat(),
-              'provider_message_id':None, 'accepted':False}
+              'rfc822_message_id':message_id,'provider_message_id':None, 'accepted':False}
         record['parts'].append(part);_write_private_delivery(receipt_path,record)
+        if _delivery_time(clock()) >= cutoff:
+            record['parts'].pop()
+            record['failure_class']='CUTOFF_EXPIRED'
+            _write_private_delivery(receipt_path,record)
+            raise ValueError('JRA_DELIVERY_CUTOFF_EXPIRED')
         try:
             response=transport.send(raw)
             identifier=response.get('id')
@@ -488,40 +558,65 @@ def verify_self_mail_arrival(final, *, presentation_dir, root, private_store,
 
 
 def _verify_delivery_plan_arrival(plan, *, root, private_store, authorization=None,
-                                  transport=None, part_bytes=250000, now=None):
+                                  transport=None, part_bytes=250000, now=None, reconcile=False):
     """Shared Inbox/MIME verifier; never sends or invents a human ACK."""
+    import hashlib
+    a=_self_delivery_authorization(authorization,required_scope=plan['delivery_scope'])
+    if a.get('readback_authorized') is not True or transport is None:
+        raise ValueError('JRA_DELIVERY_OWNER_INBOX_READBACK_REQUIRED')
+    if a.get('authority')!=plan['authority']:
+        raise ValueError('JRA_DELIVERY_OWNER_AUTHORITY_MISMATCH')
+    key=hashlib.sha256((plan['race_id']+'\0'+a['account_sub']).encode()).hexdigest()
+    store=_delivery_store(private_store,root)
+    with _lock_delivery_receipt(store,key):
+        return _verify_inbox_parts(plan,a,transport,store,key,part_bytes,now,reconcile)
+
+
+def _verify_inbox_parts(plan,a,transport,store,key,part_bytes,now,reconcile):
     import hashlib
     import re
     from email import policy
     from email.parser import BytesParser
     from email.utils import parsedate_to_datetime
-    a=_self_delivery_authorization(authorization,required_scope=plan['delivery_scope'])
-    if a.get('readback_authorized') is not True or transport is None:
-        raise ValueError('JRA_DELIVERY_OWNER_INBOX_READBACK_REQUIRED')
-    root,store=Path(root).resolve(),Path(private_store).resolve()
-    if store == root or root in store.parents:
-        raise ValueError('JRA_DELIVERY_PRIVATE_STORE_OUTSIDE_REPOSITORY_REQUIRED')
-    if a.get('authority')!=plan['authority']:
-        raise ValueError('JRA_DELIVERY_OWNER_AUTHORITY_MISMATCH')
-    key=hashlib.sha256((plan['race_id']+'\0'+a['account_sub']).encode()).hexdigest()
     path=store/(key+'.receipt.json')
-    if path.is_symlink(): raise ValueError('JRA_DELIVERY_PRIVATE_RECEIPT_SYMLINK')
+    claim=store/(key+'.claim.json')
+    if path.is_symlink() or claim.is_symlink(): raise ValueError('JRA_DELIVERY_PRIVATE_RECEIPT_SYMLINK')
+    if not claim.is_file() or json.loads(claim.read_text())!=_delivery_binding(plan):
+        raise ValueError('JRA_DELIVERY_IMMUTABLE_CLAIM_CONFLICT')
     record=json.loads(path.read_text())
     if (record.get('sha256')!=_sha({k:v for k,v in record.items() if k!='sha256'})
             or any(record.get(k)!=v for k,v in _delivery_binding(plan).items())
-            or record.get('NOTIFICATION_SENT') is not True
             or record.get('account_sub_sha256')!=hashlib.sha256(a['account_sub'].encode()).hexdigest()
             or record.get('destination_sha256')!=hashlib.sha256(a['account_email'].casefold().encode()).hexdigest()
             or record.get('part_bytes')!=part_bytes
             or record.get('part_count')!=len(plan['chunks'])
             or len(record.get('parts') or [])!=len(plan['chunks'])):
         raise ValueError('JRA_DELIVERY_RECEIPT_OR_PART_SET_INVALID')
+    unresolved = record.get('NOTIFICATION_SENT') is not True
+    failure = record.get('failure_class')
+    if unresolved and (not reconcile or (failure is not None and not str(failure).startswith('UNKNOWN_SEND_OUTCOME:'))
+            or any(not p.get('attempted_at') for p in record['parts'])):
+        raise ValueError('JRA_DELIVERY_RECEIPT_OR_PART_SET_INVALID')
+    if (not unresolved and record.get('DESTINATION_ARRIVAL_CONFIRMED') is True
+            and record.get('verified_body_sha256')==plan['body_sha256']):
+        return record
     _self_delivery_identity(transport,a)
     clock=now or (lambda:datetime.now(timezone.utc))
     received=[];observations=[];provider_observations=[];identifiers=set()
     for number,(part,chunk) in enumerate(zip(record['parts'],plan['chunks']),1):
         identifier=part.get('provider_message_id')
-        if not identifier or identifier in identifiers or part.get('number')!=number or part.get('accepted') is not True:
+        if part.get('number') != number:
+            raise ValueError('JRA_DELIVERY_RECEIPT_OR_PART_SET_INVALID')
+        expected_message_id=part.get('rfc822_message_id')
+        if expected_message_id is not None and expected_message_id != _delivery_message_id(plan,key,number):
+            raise ValueError('JRA_DELIVERY_RECONCILIATION_MESSAGE_ID_INVALID')
+        recovered = not identifier and unresolved and part.get('accepted') is False
+        if recovered:
+            if (not expected_message_id or number!=len(plan['chunks'])
+                    or not callable(getattr(transport,'find_inbox_message',None))):
+                raise ValueError('JRA_DELIVERY_RECONCILIATION_ORIGINAL_ATTEMPT_REQUIRED')
+            identifier=transport.find_inbox_message(expected_message_id)
+        if not identifier or identifier in identifiers or (not recovered and part.get('accepted') is not True):
             raise ValueError('JRA_DELIVERY_RECEIPT_OR_PART_SET_INVALID')
         identifiers.add(identifier);data=transport.received(identifier)
         observations.append(_delivery_time(clock()))
@@ -539,6 +634,8 @@ def _verify_delivery_plan_arrival(plan, *, root, private_store, authorization=No
                 or message.get_all('Cc') or message.get_all('Bcc')
                 or message.get_all('X-KeibaMetrics-Part')!=[f"{number}/{len(plan['chunks'])}"]):
             raise ValueError('JRA_DELIVERY_RECEIVED_DESTINATION_OR_PART_INVALID')
+        if expected_message_id and message.get_all('Message-ID') != [expected_message_id]:
+            raise ValueError('JRA_DELIVERY_RECEIVED_MESSAGE_ID_INVALID')
         for field,value in ((_delivery_basis(plan)[1],plan[_delivery_basis(plan)[0]]),('Source',plan['source_sha256']),('Body',plan['body_sha256'])):
             headers=message.get_all('X-KeibaMetrics-'+field+'-SHA256',[])
             actual=str(headers[0]).strip() if len(headers)==1 else ''
@@ -553,6 +650,13 @@ def _verify_delivery_plan_arrival(plan, *, root, private_store, authorization=No
         observed=datetime.fromtimestamp(int(stamp)/1000,timezone.utc)
         if observed<_delivery_time(plan['basis_created_at']):
             raise ValueError('JRA_DELIVERY_RECEIVED_TIMESTAMP_INVALID')
+        if recovered:
+            attempted_at=_delivery_time(part['attempted_at'])
+            attempted_ms=attempted_at.replace(microsecond=attempted_at.microsecond//1000*1000)
+            if observed < attempted_ms:
+                raise ValueError('JRA_DELIVERY_RECEIVED_TIMESTAMP_INVALID')
+            part.update(provider_message_id=identifier, accepted=True,
+                        acceptance_evidence='INBOX_RECONCILIATION')
         received.append(observed)
     cutoff=_delivery_time(plan['prediction_cutoff'])
     timing_proven=(all(t is not None for t in provider_observations)
@@ -565,6 +669,9 @@ def _verify_delivery_plan_arrival(plan, *, root, private_store, authorization=No
                   delivery_deadline_evidence_complete=all(t is not None for t in provider_observations),
                   delivered_before_cutoff=timing_proven,
                   verified_body_sha256=plan['body_sha256'])
+    if unresolved:
+        record.update(NOTIFICATION_SENT=True, send_observed_before_cutoff=None,
+                      reconciliation='ALL_ATTEMPTED_PARTS_VERIFIED_INBOX')
     _write_private_delivery(path,record)
     return record
 
@@ -701,8 +808,18 @@ def dispatch_owner_delivery_event(artifact_path,*,presentation_dir,root,kind='SI
     transport=GmailSelfTransport(client_id=oauth.get('client_id'),client_secret=oauth.get('client_secret'),
                                  refresh_token=oauth.get('refresh_token'))
     try:
-        receipt=_send_verified_delivery_plan(plan,root=root,private_store=private_store,authorization=authorization,
-                      transport=transport,now=now,part_bytes=config.get('part_bytes',250000))
+        try:
+            receipt=_send_verified_delivery_plan(plan,root=root,private_store=private_store,authorization=authorization,
+                          transport=transport,now=now,part_bytes=config.get('part_bytes',250000))
+        except ValueError as exc:
+            if (str(exc) not in {'JRA_DELIVERY_PRIOR_ATTEMPT_REVIEW_REQUIRED','JRA_DELIVERY_SEND_OUTCOME_UNKNOWN_NO_RETRY'}
+                    or authorization.get('readback_authorized') is not True):
+                raise
+            try:
+                receipt=_verify_delivery_plan_arrival(plan,root=root,private_store=private_store,authorization=authorization,
+                          transport=transport,now=now,part_bytes=config.get('part_bytes',250000),reconcile=True)
+            except (OSError,ValueError,TypeError,KeyError):
+                raise exc from None
         if (authorization.get('readback_authorized') is True
                 and not (receipt.get('DESTINATION_ARRIVAL_CONFIRMED') is True
                          and receipt.get('verified_body_sha256')==plan['body_sha256'])):
