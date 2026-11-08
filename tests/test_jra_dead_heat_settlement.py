@@ -272,14 +272,43 @@ def test_actual_rendered_payout_dom_matches_every_distinct_supported_payout(fixt
         assert wides==[((6,7),7860),((2,6),3680),((6,10),1530),((2,7),2350),((7,10),1110)]
     assert path.read_bytes()==raw
 
+def test_role_rescue_persists_one_record_for_both_official_orders(tmp_path):
+    from jra_production_postresult import persist_dead_heat_role_rescue_result
+
+    fixture=FACTS['records'][0]
+    rid=fixture['race_id']
+    pre=ROOT/'runtime/role_rescue_shadow'/f'{rid}.json'
+    final=json.loads((ROOT/'runtime/final_artifacts'/f'{rid}.json').read_text())
+    # The fixture contains independently extracted official facts. Its replay
+    # clock is for the offline test, not an assertion about the HTTP receipt.
+    request=build_result_request(final,official(fixture),{
+        'parsed':fixture['parsed'],'captured_at':'2026-10-25T07:00:00+00:00'})
+    frozen=tmp_path/pre.relative_to(ROOT)
+    frozen.parent.mkdir(parents=True)
+    shutil.copyfile(pre,frozen)
+
+    record=persist_dead_heat_role_rescue_result(tmp_path,request)
+    assert persist_dead_heat_role_rescue_result(tmp_path,request)==record
+    assert frozen.read_bytes()==pre.read_bytes()
+    assert record['official_top3_orders']==fixture['expected_top3_orders']
+    evaluations=record['conditional_rank_evaluation']['by_valid_order']
+    assert [row['top3'] for row in evaluations]==record['official_top3_orders']
+    assert [row['evaluation']['actual_role_ranks']['P3'] for row in evaluations]==[8,1]
+    for arm in record['arms'].values():
+        assert arm['official_winning_combinations']==fixture['expected_payout_entries']
+    status=json.loads((tmp_path/'runtime/role_rescue_shadow_status.json').read_text())
+    assert status['distinct_races']==1 and status['forward_oos_verified_races']==0
+
+
 @pytest.mark.parametrize('case',['dead_heat','normal','shadow_error'])
-def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_production(tmp_path,monkeypatch,case):
+def test_workflow_routes_dead_heat_role_research_without_blocking_production(tmp_path,monkeypatch,case):
     """Run the actual post-signature workflow block; never call the Runtime."""
     import os
     from test_jra_result_persistence import _production_closed_loop_code
     from post_result_learning import build_post_result_review,build_learning_state
     from krs_oos_promotion_gate import build_oos_measurement,evaluate_r30
     from race_day_fast_reflection import build_fast_reflection
+    import jra_production_postresult
     import jra_role_learning_shadow
     if case=='dead_heat':
         fixture=FACTS['records'][0];rid=fixture['race_id']
@@ -300,6 +329,11 @@ def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_produc
         if case=='shadow_error':raise ValueError('offline injected research error')
         return {'status':'SETTLED','test_only':True}
     monkeypatch.setattr(jra_role_learning_shadow,'persist_shadow_result',persist)
+    dead_heat_calls=[]
+    def persist_dead_heat(root, request):
+        dead_heat_calls.append(request)
+        return {'status':'DEAD_HEAT_RESEARCH_DIAGNOSTIC_ONLY','production_effect':'NONE'}
+    monkeypatch.setattr(jra_production_postresult,'persist_dead_heat_role_rescue_result',persist_dead_heat)
     monkeypatch.chdir(tmp_path)
     stamp=datetime.now(timezone.utc).isoformat()
     krs_calls=[]
@@ -323,15 +357,16 @@ def test_workflow_skips_unsupported_dead_heat_shadow_kpi_without_blocking_produc
         assert calls==krs_calls==[] and env['oos'] is None
         assert env['oos_diagnostic']=={'status':'NOT_SETTLED',
             'reason':'UNKNOWN_DEAD_HEAT_RANK_EVALUATION','production_effect':'NONE'}
-        assert env['role_shadow_result']=={'status':'NOT_SETTLED',
-            'reason':'UNKNOWN_DEAD_HEAT_RANK_EVALUATION','production_effect':'NONE'}
+        assert dead_heat_calls==[result]
+        assert env['role_shadow_result']=={'status':'DEAD_HEAT_RESEARCH_DIAGNOSTIC_ONLY',
+            'production_effect':'NONE'}
     elif case=='normal':
         assert len(calls)==1 and env['role_shadow_result']['status']=='SETTLED'
     else:
         assert len(calls)==1 and env['role_shadow_result']['status']=='NOT_SETTLED'
         assert 'offline injected research error' in env['role_shadow_result']['reason']
     if case!='dead_heat':
-        assert len(krs_calls)==1 and env['oos_diagnostic'] is None
+        assert len(krs_calls)==1 and env['oos_diagnostic'] is None and dead_heat_calls==[]
         assert env['oos']==build_oos_measurement(env['review'],final,result)
     # Run the actual persistence/aggregation block too. Even if a historic
     # representative-only measurement exists, preserve it without counting it

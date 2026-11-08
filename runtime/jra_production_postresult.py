@@ -261,6 +261,54 @@ def settle_final(final: dict, official: dict) -> dict:
     return settled
 
 
+def persist_dead_heat_role_rescue_result(root: Path, result: dict):
+    """Settle once per race and keep rank diagnostics for every valid order."""
+    import os
+    from tempfile import TemporaryDirectory
+    from jra_candidate_postresult_closedloop import official_top3_orders
+    from jra_conditional_rank_shadow import evaluate_comparison
+    from jra_role_learning_shadow import digest, persist_shadow_result, settle_shadow, write_status
+
+    official = result['official_result']
+    orders = official_top3_orders(official)
+    if len(orders) < 2:
+        raise ProductionPostResultError('ROLE_RESCUE_DEAD_HEAT_ORDERS_REQUIRED')
+    root = Path(root)
+    rid = result['race_id']
+    pre = root / 'runtime/role_rescue_shadow' / f'{rid}.json'
+    if not pre.is_file():
+        return None
+    path = root / 'runtime/role_rescue_shadow_results' / f'{rid}.json'
+    if path.is_file():
+        return persist_shadow_result(root, result)
+
+    shadow = json.loads(pre.read_text(encoding='utf-8'))
+    out = settle_shadow(shadow, result)
+    rank = shadow.get('conditional_rank_comparison') or {}
+    if rank.get('role_rankings') and rank.get('model_policy_sha256'):
+        out['conditional_rank_evaluation'] = {
+            'status': 'DEAD_HEAT_MULTIPLE_VALID_ORDERS', 'oos_eligible': False,
+            'by_valid_order': [{'top3': order, 'evaluation': evaluate_comparison(rank, order)}
+                               for order in orders],
+        }
+    # Settlement is a post-result diagnostic. Tie rankings have no registered
+    # cohort aggregation rule, so they cannot be counted as forward OOS credit.
+    out.update(official_top3_orders=orders, result_request_sha256=digest(result),
+               eligibility_status='DEAD_HEAT_RESEARCH_DIAGNOSTIC_ONLY',
+               oos_candidate_id=shadow.get('oos_candidate_id'), preregistration_verified=False)
+    out['sha256'] = digest({k: v for k, v in out.items() if k != 'sha256'})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=path.parent) as directory:
+        staged = Path(directory) / path.name
+        staged.write_text(json.dumps(out, ensure_ascii=False, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+        try:
+            os.link(staged, path)
+        except FileExistsError:
+            return persist_shadow_result(root, result)
+    write_status(root / 'runtime/role_rescue_shadow_status.json', records_dir=path.parent)
+    return out
+
+
 def build_result_request(final: dict, official: dict, evidence: dict) -> dict:
     verify_final(final)
     settlement = settle_final(final, official)

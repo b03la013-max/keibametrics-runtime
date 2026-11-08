@@ -234,11 +234,9 @@ jobs:
                   oos=build_oos_measurement(review,final_artifact,p)
               # Role/learning research settlement cannot block Production RESULT.
               try:
-                  # The frozen sidecar's rank evaluator accepts one order only.
-                  # Do not silently turn a dead heat into representative-only
-                  # research KPIs or alter its preregistered code / model pins.
                   if len((p.get("official_result") or {}).get("top3_orders") or [])>1:
-                      role_shadow_result={"status":"NOT_SETTLED","reason":"UNKNOWN_DEAD_HEAT_RANK_EVALUATION","production_effect":"NONE"}
+                      from jra_production_postresult import persist_dead_heat_role_rescue_result
+                      role_shadow_result=persist_dead_heat_role_rescue_result(".",p)
                   else:
                       from jra_role_learning_shadow import persist_shadow_result
                       role_shadow_result=persist_shadow_result(".",p)
