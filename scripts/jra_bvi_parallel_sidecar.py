@@ -317,14 +317,15 @@ def run(run_id, intent_path, event_sha, report, *, root=ROOT):
         wait_deadline = actual_start + timedelta(minutes=15)
         report.update(github_job_started_at=own[0]["started_at"], job_deadline=job_deadline.isoformat(),
             wait_deadline=wait_deadline.isoformat())
-        if utcnow() >= wait_deadline:
+        hint_deadline = min(cutoff, wait_deadline)
+        if utcnow() >= hint_deadline:
             report["status"] = "PENDING; PARENT_WAIT_BUDGET_OR_CUTOFF_EXPIRED"
             return None
         producers = [j for j in jobs.get("jobs", []) if j.get("name") == "orchestrate"]
         if jobs.get("total_count", 0) > 100 or len(producers) > 1:
             raise ValueError("BVI_SIDECAR_UNIQUE_PARENT_JOB_REQUIRED")
         if not producers:
-            clock.sleep(min(60, max(0, (cutoff - utcnow()).total_seconds())))
+            clock.sleep(min(60, max(0, (hint_deadline - utcnow()).total_seconds())))
             continue
         producer = producers[0]
         if producer.get("status") == "completed":
@@ -336,14 +337,13 @@ def run(run_id, intent_path, event_sha, report, *, root=ROOT):
             break
         # Optional hint only: reserve the Git refresh (90s), source OIDC (20s),
         # and time to poll the original parent again before the existing limit.
-        hint_deadline = min(cutoff, wait_deadline)
         if (hint is None and not report["final_present_at_launcher"]
                 and clock.monotonic() - last_refresh >= 120
                 and (hint_deadline - utcnow()).total_seconds() >= 120):
             refresh_main(root); last_refresh = clock.monotonic()
             if (hint_deadline - utcnow()).total_seconds() >= 30:
                 hint = warm_hint(intent, eid, report, root=root)
-        clock.sleep(min(60, max(0, (cutoff - utcnow()).total_seconds())))
+        clock.sleep(min(60, max(0, (hint_deadline - utcnow()).total_seconds())))
     report["wait_finished_at"] = utcnow().isoformat()
     report["artifact"] = download_parent_artifact(run_id, eid, cutoff, root / "runtime_out/pedigree_forward_input")
     refresh_main(root)

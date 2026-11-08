@@ -787,6 +787,7 @@ jobs:
           python scripts/jra_bvi_parallel_sidecar.py --run-id "${{ github.run_id }}" \
             --intent-path "${{ inputs.intent_path }}" --event-sha "${{ github.sha }}"
       - name: Attest exact research prediction before cutoff
+        id: research_attestation
         if: steps.freeze.outputs.output != ''
         uses: actions/attest@v4
         with:
@@ -797,10 +798,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUTPUT: ${{ steps.freeze.outputs.output }}
+          BUNDLE: ${{ steps.research_attestation.outputs.bundle-path }}
         run: |
           set -euo pipefail
+          test -s "$BUNDLE"
+          cp -- "$BUNDLE" runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
           gh attestation verify "$OUTPUT" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/km-jra-formal-single-entry.yml" \
+            --bundle runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl \
             --format json > runtime_out/pedigree_env_prediction_verification.json
           python - <<'PY'
           import json,os
@@ -826,6 +831,7 @@ jobs:
           path: |
             ${{ steps.freeze.outputs.output }}
             runtime_out/pedigree_env_prediction_verification.json
+            runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
           if-no-files-found: error
           retention-days: 90
       - name: Commit immutable comparison before cutoff without delaying Production
@@ -864,6 +870,7 @@ jobs:
           path: |
             runtime/jra_static_owner_forward_oos/**/pedigree_env_pre_result.json
             runtime_out/pedigree_env_prediction_verification.json
+            runtime_out/pedigree_env_prediction_bundle.sigstore.jsonl
             runtime_out/jra_bvi_forward_freeze_failure.json
             runtime_out/jra_bvi_forward_timing.json
             runtime_out/jra_bvi_forward_delivery_timing.json

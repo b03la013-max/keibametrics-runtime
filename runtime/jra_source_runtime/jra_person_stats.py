@@ -122,6 +122,7 @@ def parse_person_profile(raw:bytes,content_type:str,kind:str,token:str)->Dict[st
     # Parsing the flattened page text therefore captured the whole navigation bar
     # as a "name". Resolve the canonical identity from short heading elements first.
     name=""
+    weekly_jockey_identity=""
     for raw_h in re.findall(r"<h[1-4][^>]*>(.*?)</h[1-4]>",decoded,re.I|re.S):
         h=re.sub(r"<[^>]+>","",raw_h)
         h=re.sub(r"\s+"," ",h).strip()
@@ -129,6 +130,10 @@ def parse_person_profile(raw:bytes,content_type:str,kind:str,token:str)->Dict[st
         if m:
             name=m.group(1).strip()
             break
+        if kind=="jockey":
+            week=re.fullmatch(r"今週の騎乗馬一覧\s*([ぁ-ゖァ-ヺ一-龯々\s]{1,32})",h)
+            if week:
+                weekly_jockey_identity=week.group(1).strip()
     if not name:
         # Fallback for simplified/unit fixtures and future markup changes:
         # accept only short name-like captures, never navigation-sized text.
@@ -150,6 +155,10 @@ def parse_person_profile(raw:bytes,content_type:str,kind:str,token:str)->Dict[st
       "career_flat":rows[1] if len(rows)>1 else None,
       "stat_table_count":len(rows),
     }
+    # The current card may lead to a named weekly schedule for a guest jockey.
+    # Preserve that identity separately from the annual Flat stats profile.
+    if weekly_jockey_identity and not name and not rows:
+        out["weekly_jockey_identity"]=weekly_jockey_identity
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
@@ -183,7 +192,7 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
         for kind in ("jockey","trainer"):
             for tok in ((hh.get("person_profile_tokens") or {}).get(kind) or []):
                 unique.setdefault((kind,str(tok)),ht)
-    profiles={};snaps=[];errors=[]
+    profiles={};weekly_jockeys={};snaps=[];errors=[]
     def job(kind,tok,ht):
         op,ref=_fetch_horse_session(ht)
         return _post_profile(op,kind,tok,ref,prediction_cutoff)
@@ -193,6 +202,12 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
             k,t=fut[f]
             try:
                 snap,p=f.result();snaps.append(snap);profiles[(k,t)]=p
+                if p.get("weekly_jockey_identity"):
+                    weekly_jockeys[t]={
+                        "name":p["weekly_jockey_identity"],
+                        "status":"EXACT_IDENTITY_WITHOUT_CURRENT_YEAR_FLAT_STATS",
+                        "source_snapshot_sha256":snap["snapshot_sha256"],
+                    }
             except Exception as exc:
                 errors.append(f"JRA_PERSON_STATS_PROFILE_FAILED:{k}:{type(exc).__name__}:{exc}")
     by_runner={}
@@ -206,7 +221,8 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
         for kind in ("jockey","trainer"):
             tok=(direct_tokens.get(rid) or {}).get(kind)
             prof=profiles.get((kind,str(tok))) if tok else None
-            if prof and (not current[kind] or _norm(prof.get("name"))==current[kind]):
+            if (prof and not prof.get("weekly_jockey_identity")
+                    and (not current[kind] or _norm(prof.get("name"))==current[kind])):
                 matched[kind]=prof
         # Fallback to historical links, but require exact current-name identity
         # unless there is only one candidate and no current name was parsed.
@@ -216,7 +232,7 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
             candidates=[]
             for tok in p.get(kind) or []:
                 prof=profiles.get((kind,str(tok)))
-                if not prof:continue
+                if not prof or prof.get("weekly_jockey_identity"):continue
                 candidates.append(prof)
                 if current[kind] and _norm(prof.get("name"))==current[kind]:
                     matched[kind]=prof;break
@@ -229,6 +245,9 @@ def enrich_with_person_stats(artifact:Dict[str,Any],prediction_cutoff:str,*,requ
           "jockey":matched.get("jockey"),"trainer":matched.get("trainer"),
           "jockey_matched":bool(matched.get("jockey")),"trainer_matched":bool(matched.get("trainer"))
         }
+        weekly=weekly_jockeys.get((direct_tokens.get(rid) or {}).get("jockey"))
+        if weekly and _norm(weekly["name"])==current["jockey"] and "jockey" not in matched:
+            by_runner[rid]["weekly_jockey_identity"]=weekly
     artifact["sources"]=list(artifact.get("sources") or [])+snaps
     payload={
       "profile":PROFILE,"status":"PASS" if by_runner else "UNAVAILABLE","official":True,"production_fact_authority":True,

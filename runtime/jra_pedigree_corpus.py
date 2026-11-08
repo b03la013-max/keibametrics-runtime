@@ -63,12 +63,26 @@ def _horse_identity(h: dict) -> str | None:
 def _attested(path: Path, *, signer: str | None = None,
               not_after: datetime | None = None) -> bool:
     """Verify artifact bytes against GitHub OIDC / Sigstore, not an in-file flag."""
-    if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")):
+    bundle = path.with_suffix('.sigstore.jsonl') if signer else None
+    if signer is None and path.name == 'source_receipt_envelope.json':
+        source_bundle = path.with_name('source_attestation_bundle.json')
+        if source_bundle.exists() or source_bundle.is_symlink():
+            signer = 'km-jra-source-first-runner.yml'
+            bundle = source_bundle
+    bundle_digest = None
+    if bundle is not None and (bundle.exists() or bundle.is_symlink()):
+        try:
+            if bundle.is_symlink() or not bundle.is_file() or not 0 < bundle.stat().st_size <= 1024 * 1024:
+                return False
+            bundle_digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+        except OSError:
+            return False
+    if not (bundle_digest or os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')):
         return False
     # Always key attestation cache by the actual artifact bytes. A same-size
     # modification that restores mtime must never reuse signed provenance.
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    cache_key = (digest, signer)
+    cache_key = (digest, signer, bundle_digest)
     if cache_key in _ATTEST_CACHE:
         verified, witnessed = _ATTEST_CACHE[cache_key]
         return bool(verified and (not_after is None or any(t <= not_after for t in witnessed)))
@@ -76,6 +90,8 @@ def _attested(path: Path, *, signer: str | None = None,
            "--format", "json"]
     if signer:
         cmd += ["--signer-workflow", REPO + "/.github/workflows/" + signer]
+    if bundle_digest:
+        cmd += ["--bundle", str(bundle)]
     try:
         r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                            text=True, timeout=20, check=False)
@@ -254,6 +270,11 @@ def _verified_harvest(path: Path, *, not_after: datetime,
         # Preserve the v1 producer canonical hash serialization exactly.
         actual = hashlib.sha256(json.dumps(unsigned, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         if digest != actual:
+            return None
+        # This negative-only filter cannot admit any record. The attested
+        # timestamp below remains mandatory for all potentially eligible rows.
+        captured = _dt(obj.get('harvested_at'))
+        if captured is None or captured > not_after:
             return None
         trusted = (attestation_verifier or
                    (lambda p: (

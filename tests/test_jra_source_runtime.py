@@ -379,6 +379,34 @@ def test_person_profile_parser_current_year_stats():
     assert r["current_year_flat"]["top3_rate"]==0.160
 
 
+def test_jra_weekly_jockey_card_binds_identity_without_authorizing_statistics(monkeypatch):
+    import jra_person_stats
+
+    raw = ("<h1><span class=\"opt\">今週の騎乗馬一覧</span>野畑 凌</h1>"
+           "<table><tr><td>平地</td><td>東京7R</td></tr></table>").encode()
+    profile = jra_person_stats.parse_person_profile(raw, "text/html; charset=utf-8", "jockey", "WK")
+    assert profile["weekly_jockey_identity"] == "野畑 凌"
+    assert profile["current_year_flat"] is None and profile["career_flat"] is None
+    monkeypatch.setattr(jra_person_stats, "_fetch_horse_session", lambda token: (None, token))
+    monkeypatch.setattr(jra_person_stats, "_post_profile", lambda *args: ({"snapshot_sha256": "S"}, profile))
+    source = {"jra_official_race_card_detail": {"runners": [
+        {"runner_id": "1", "horse_profile_token": "H1", "jockey_profile_token": "WK", "jockey": "野畑凌"},
+        {"runner_id": "2", "horse_profile_token": "H2", "jockey_profile_token": "WK", "jockey": "別人"},
+        {"runner_id": "3", "horse_profile_token": "H3", "jockey_profile_token": "WK"},
+    ]}}
+    result, errors = jra_person_stats.enrich_with_person_stats(
+        source, "2026-11-08T14:00:00+09:00", require_person_stats=True)
+    stats = result["jra_official_person_stats"]
+    assert stats["runners"]["1"]["weekly_jockey_identity"] == {
+        "name": "野畑 凌", "status": "EXACT_IDENTITY_WITHOUT_CURRENT_YEAR_FLAT_STATS",
+        "source_snapshot_sha256": "S",
+    }
+    assert all(row["jockey"] is None and not row["jockey_matched"] for row in stats["runners"].values())
+    assert "weekly_jockey_identity" not in stats["runners"]["2"]
+    assert "weekly_jockey_identity" not in stats["runners"]["3"]
+    assert errors == ["JRA_PERSON_STATS_INCOMPLETE:0/3:0/3"]
+
+
 def test_registered_common_race_id_derives_from_jra_meeting_key():
     import sys
     from pathlib import Path

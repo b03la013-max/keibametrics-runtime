@@ -768,7 +768,7 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
     owner_corpus_manifest = None
     if owner_registry_path.exists():
         from jra_owner_authorized_feature_rules import owner_authorized_observations
-        from jra_pedigree_corpus import build_corpus
+        from jra_pedigree_corpus import _dt, build_corpus
         race_date = str((source_artifact.get("source_race_context") or {}).get("race_date")
                         or (source_artifact.get("jra_race_context") or {}).get("race_date") or "")
         target_rows = (source_artifact.get("jra_official_race_card_detail") or {}).get("runners") or []
@@ -776,16 +776,28 @@ def compile_source_to_features(source_artifact: Dict[str, Any], request_runners:
             str(x.get("runner_id") or x.get("horse_no")), {}).get("pedigree") or {} for x in target_rows]
         relevant_sires = {str(x.get("sire") or "").strip() for x in list(target_rows) + hist_ped if x.get("sire")}
         relevant_damsires = {str(x.get("damsire") or "").strip() for x in list(target_rows) + hist_ped if x.get("damsire")}
+        prediction_cutoff = str(source_artifact.get("prediction_cutoff") or "")
+        source_freeze = source_artifact.get("source_freeze_at")
+        corpus_cutoff = prediction_cutoff
+        if source_freeze is not None:
+            frozen_at, cutoff_at = _dt(source_freeze), _dt(prediction_cutoff)
+            if frozen_at is None or cutoff_at is None or frozen_at > cutoff_at:
+                raise SourceToFeatureError("BVI_SIGNED_SOURCE_CORPUS_CUTOFF_INVALID")
+            corpus_cutoff = frozen_at.isoformat()
         corpus = build_corpus(Path(__file__).resolve().parents[1],
-                              prediction_cutoff=str(source_artifact.get("prediction_cutoff") or ""),
+                              prediction_cutoff=corpus_cutoff,
                               race_date=race_date, exclude_race_id=source_artifact.get("race_id"),
                               required_sires=relevant_sires,
                               required_damsires=relevant_damsires)
         owner_corpus_manifest = {k: corpus.get(k) for k in ("profile", "snapshot_count", "snapshots", "horse_count", "run_count", "manifest_sha256",
                                                                         "identity_collision_count", "run_conflict_count",
                                                                         "rejected_untrusted_inputs", "source_signature_level")}
-        owner_observations = owner_authorized_observations(
-            source_artifact, json.loads(owner_registry_path.read_text(encoding="utf-8")), corpus=corpus)
+        owner_registry = json.loads(owner_registry_path.read_text(encoding="utf-8"))
+        if source_freeze is not None:
+            owner_corpus_manifest.update(availability_cutoff=corpus_cutoff,
+                                         availability_cutoff_basis="SOURCE_FREEZE_AT",
+                                         rule_registry_sha256=_sha(owner_registry))
+        owner_observations = owner_authorized_observations(source_artifact, owner_registry, corpus=corpus)
     runners_out = {}
     all_missing_sources = set()
     # Empty runner universes must fail closed. A vacuous all([])==True is not

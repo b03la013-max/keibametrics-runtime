@@ -4,6 +4,7 @@ import json
 import math
 import re
 from collections import Counter
+from datetime import datetime
 try:
     from .jra_evidence_to_base_production import _weighted_index, _profile_for_runner, build_production_ledger
 except ImportError:
@@ -14,7 +15,8 @@ def sha(value):
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
-def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_report=None):
+def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_report=None,
+                            source_freeze_at=None):
     """Bind a new compact trace to its actual Compiler output, without rereading.
 
     A legacy request with neither field is left legacy. The full report is
@@ -52,6 +54,20 @@ def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_repo
     if manifest is not None:
         if not isinstance(manifest, dict):
             raise ValueError('BVI_CONSUMPTION_CORPUS_MANIFEST_BINDING_INVALID')
+        temporal_fields = {'availability_cutoff', 'availability_cutoff_basis', 'rule_registry_sha256'}
+        if temporal_fields.intersection(manifest):
+            try:
+                cutoff = datetime.fromisoformat(manifest['availability_cutoff'])
+                prediction = datetime.fromisoformat(request['prediction_cutoff'])
+                source_freeze = (datetime.fromisoformat(source_freeze_at)
+                                 if source_freeze_at is not None else cutoff)
+                if (manifest['availability_cutoff_basis'] != 'SOURCE_FREEZE_AT'
+                        or cutoff.tzinfo is None or source_freeze.tzinfo is None
+                        or not cutoff == source_freeze <= prediction
+                        or not re.fullmatch(r'[0-9a-f]{64}', manifest['rule_registry_sha256'])):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError('BVI_CONSUMPTION_CORPUS_CUTOFF_BINDING_INVALID') from exc
         if manifest.get('snapshots') is not None:
             refs = manifest['snapshots']
             if (not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs)
@@ -61,12 +77,14 @@ def verify_compiler_lineage(request, *, source_snapshot_sha256=None, source_repo
     return manifest
 
 
-def materialize_frozen_production_evidence(request, mapping, *, source_snapshot_sha256):
+def materialize_frozen_production_evidence(request, mapping, *, source_snapshot_sha256,
+                                           source_freeze_at=None):
     """Replay the frozen numerical evidence without reading the current corpus."""
     from jra_bvi_static_proof import verify_static_proof
     from jra_index_provenance_builder import materialize_index_provenance
 
-    verify_compiler_lineage(request, source_snapshot_sha256=source_snapshot_sha256)
+    verify_compiler_lineage(request, source_snapshot_sha256=source_snapshot_sha256,
+                            source_freeze_at=source_freeze_at)
     if request.get('require_zero_touch_source_indices'):
         compiler = request.get('source_to_evidence_feature_compiler') or {}
         if compiler.get('source_only_formal_base_ready') is not True:
@@ -89,7 +107,8 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             (request.get('source_snapshot_sha256') and request['source_snapshot_sha256']!=source_artifact.get('source_snapshot_sha256'))):
         raise ValueError('BVI_CONSUMPTION_SOURCE_BINDING_MISMATCH')
     corpus_manifest = verify_compiler_lineage(request,
-        source_snapshot_sha256=source_artifact.get('source_snapshot_sha256'))
+        source_snapshot_sha256=source_artifact.get('source_snapshot_sha256'),
+        source_freeze_at=source_artifact.get('source_freeze_at'))
     cards={str(r.get('runner_id') or r.get('horse_no')):r for r in (source_artifact.get('jra_official_race_card_detail') or {}).get('runners',[])}
     histories=(source_artifact.get('jra_official_horse_history') or {}).get('runners') or {}
     rows=[]

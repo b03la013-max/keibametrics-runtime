@@ -88,6 +88,23 @@ def test_actual_compiler_report_manifest_binds_original_components_without_rewri
     assert [r['bvi_value'] for r in out['runners']]==[r['canonical_components']['BVI']['value'] for r in original]
 
 
+def test_frozen_corpus_clock_is_checked_against_actual_source_clock():
+    from jra_bvi_consumption import sha, verify_compiler_lineage
+
+    request = {'race_id':'R', 'source_snapshot_sha256':'a'*64,
+               'source_to_evidence_feature_sha256':'b'*64,
+               'prediction_cutoff':'2026-11-08T09:35:00+09:00'}
+    manifest = {'snapshots': [], 'snapshot_count': 0, 'manifest_sha256': sha([]),
+                'availability_cutoff':'2026-11-08T00:25:00+00:00',
+                'availability_cutoff_basis':'SOURCE_FREEZE_AT', 'rule_registry_sha256':'c'*64}
+    request['source_to_evidence_feature_compiler'] = {
+        'race_id':'R', 'source_snapshot_sha256':'a'*64, 'sha256':'b'*64,
+        'pedigree_corpus_manifest':manifest}
+    assert verify_compiler_lineage(request, source_freeze_at='2026-11-08T09:25:00+09:00') == manifest
+    with pytest.raises(ValueError, match='BVI_CONSUMPTION_CORPUS_CUTOFF_BINDING_INVALID'):
+        verify_compiler_lineage(request, source_freeze_at='2026-11-08T09:26:00+09:00')
+
+
 def test_kyoto_nine_replays_frozen_corpus_when_a_later_feature_would_change_bvi():
     path=ROOT/'runtime/requests/KM-JRA-KYO-20261108-R09-LIVE-R1-FORMAL.json'
     req=json.loads(path.read_text()); before=deepcopy(req)

@@ -318,7 +318,8 @@ jobs:
           )
           req["evidence_feature_compiler_attestation"]=evidence_compiler
           if frozen_production_evidence:
-              req=materialize_frozen_production_evidence(req,prod_map,source_snapshot_sha256=source_sha)
+              req=materialize_frozen_production_evidence(req,prod_map,source_snapshot_sha256=source_sha,
+                  source_freeze_at=source_artifact["source_freeze_at"])
           else:
               if not isinstance(req.get("index_provenance_ledger"),dict) or not req.get("index_provenance_ledger"):
                   req=attach_production_ledger_to_request(req,prod_map)
