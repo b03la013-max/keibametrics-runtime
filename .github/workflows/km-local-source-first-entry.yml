@@ -65,6 +65,9 @@ jobs:
           request = json.loads(raw)
           if request.get('family_id') != 'LOCAL' or request.get('execution_phase') != 'SOURCE':
               raise SystemExit('SOURCE_INTENT_FAMILY_OR_PHASE_MISMATCH')
+          # local_race_entry routes AUTO/REFERENCE before analysis_only is examined.
+          if request.get('prediction_mode', 'FORMAL-PRODUCTION') != 'FORMAL-PRODUCTION':
+              raise SystemExit('SOURCE_INTENT_PREDICTION_MODE_MISMATCH')
           eid = str(request.get('execution_id') or request.get('race_id') or '')
           if not re.fullmatch(r'KM-LOCAL-[A-Z0-9-]+', eid):
               raise SystemExit('SOURCE_EXECUTION_ID_INVALID')
