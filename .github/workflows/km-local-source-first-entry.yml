@@ -92,9 +92,11 @@ jobs:
           if not p.is_file():
               raise SystemExit('SOURCE_ENTRY_REPORT_MISSING')
           r = json.loads(p.read_text())
-          phases = r.get('source', {}).get('phases', [])
-          verified = r.get('source', {}).get('status') == 'SOURCE_PASS' and any(
-              p.get('phase') == 'SOURCE' and p.get('status') == 'PASS' for p in phases)
+          # A newly acquired SOURCE has phases; a verified cached SOURCE has none.
+          # The existing orchestrator verifies the signed checkpoint in both paths.
+          source = r.get('source', {})
+          verified = (source.get('status') == 'SOURCE_PASS'
+                      and source.get('signed_source_verified') is True)
           if not verified:
               raise SystemExit('SIGNED_SOURCE_STAGE_NOT_VERIFIED')
           if r.get('formal_final_proven') is True:
