@@ -210,3 +210,48 @@ def test_source_first_rejects_mismatched_race_execution_ids(tmp_path, monkeypatc
         exec(_source_python(), {})
     assert not output.exists()
     assert not (tmp_path / "race-request.json").exists()
+
+
+def test_source_push_rejects_filename_identity_mismatch(tmp_path, monkeypatch):
+    """The immutable intent path and payload must refer to the same race."""
+    import subprocess
+    import pytest
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    for key, value in (("user.email", "test@example.invalid"),
+                       ("user.name", "LOCAL Test")):
+        subprocess.run(["git", "config", key, value], cwd=tmp_path, check=True)
+    (tmp_path / "README.md").write_text("base\n")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "base"], cwd=tmp_path,
+                   check=True, capture_output=True)
+    before = _git(tmp_path, "rev-parse", "HEAD")
+
+    path = tmp_path / "runtime/source_intents/KM-LOCAL-KAW-20261110-R01.json"
+    path.parent.mkdir(parents=True)
+    # Committed bytes are authentic, and race_id matches execution_id, but
+    # the *committed filename* names a different race.
+    request = {"family_id": "LOCAL", "execution_phase": "SOURCE",
+               "execution_id": "KM-LOCAL-KAW-20261110-R02",
+               "race_id": "KM-LOCAL-KAW-20261110-R02"}
+    path.write_text(json.dumps(request))
+    subprocess.run(["git", "add", str(path.relative_to(tmp_path))],
+                   cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "SOURCE intent"], cwd=tmp_path,
+                   check=True, capture_output=True)
+    after = _git(tmp_path, "rev-parse", "HEAD")
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"before": before, "after": after,
+                                 "deleted": False}))
+    output = tmp_path / "github_output"
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_SHA", after)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    with pytest.raises(SystemExit, match="SOURCE_INTENT_FILENAME_EXECUTION_ID_MISMATCH"):
+        exec(_source_python(), {})
+    assert not output.exists()
+    assert not (tmp_path / "race-request.json").exists()
