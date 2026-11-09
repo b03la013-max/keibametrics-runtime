@@ -255,3 +255,25 @@ def test_source_push_rejects_filename_identity_mismatch(tmp_path, monkeypatch):
         exec(_source_python(), {})
     assert not output.exists()
     assert not (tmp_path / "race-request.json").exists()
+
+def test_source_first_with_static_cannot_enter_formal_prediction(tmp_path, monkeypatch):
+    """SOURCE-only ingress must never pass a FORMAL-capable request to Runtime."""
+    request = {
+        "family_id": "LOCAL",
+        "execution_phase": "SOURCE",
+        "execution_id": "KM-LOCAL-KAW-20261110-R04",
+        "static_prediction": {"provenance": "synthetic-approved-frozen"},
+    }
+    output = tmp_path / "github_output"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("RACE_REQUEST_JSON", json.dumps(request))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    exec(_source_python(), {})
+    forwarded = json.loads((tmp_path / "race-request.json").read_text())
+    assert forwarded["execution_id"] == request["execution_id"]
+    assert forwarded["static_prediction"] == request["static_prediction"]
+    # The downstream local_race_entry.run() only stays at SOURCE + numerical
+    # when analysis_only is explicitly True; otherwise it can enter FORMAL.
+    assert forwarded["analysis_only"] is True
