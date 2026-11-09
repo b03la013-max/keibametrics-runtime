@@ -188,3 +188,25 @@ def test_source_push_fetches_only_missing_before_tree_from_shallow_checkout(tmp_
     assert json.loads((checkout / "race-request.json").read_text()) == req
     assert subprocess.run(["git", "cat-file", "-e", before + "^{tree}"],
                           cwd=checkout, capture_output=True).returncode == 0
+
+
+def test_source_first_rejects_mismatched_race_execution_ids(tmp_path, monkeypatch):
+    """Do not materialize a SOURCE request with contradictory race identities."""
+    import pytest
+
+    request = {
+        "family_id": "LOCAL",
+        "execution_phase": "SOURCE",
+        "execution_id": "KM-LOCAL-KAW-20261110-R01",
+        "race_id": "KM-LOCAL-KAW-20261110-R02",
+    }
+    output = tmp_path / "github_output"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("RACE_REQUEST_JSON", json.dumps(request))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    with pytest.raises(SystemExit, match="SOURCE_INTENT_RACE_EXECUTION_ID_MISMATCH"):
+        exec(_source_python(), {})
+    assert not output.exists()
+    assert not (tmp_path / "race-request.json").exists()
