@@ -38,7 +38,7 @@ def test_source_first_entry_emits_parseable_execution_id(tmp_path, monkeypatch):
 
     exec(compile(match.group(1), "<actual-source-first-workflow>", "exec"), {})
     assert output.read_text(encoding="utf-8") == f"execution_id={execution_id}\n"
-    assert json.loads((tmp_path / "race-request.json").read_text()) == request
+    assert json.loads((tmp_path / "race-request.json").read_text()) == {**request, "analysis_only": True}
 
 
 def _git(root, *args):
@@ -97,7 +97,7 @@ def test_source_push_uses_complete_range_not_only_tip_commit(tmp_path, monkeypat
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     exec(_source_python(), {})
     assert output.read_text() == f"execution_id={execution_id}\n"
-    assert json.loads((tmp_path / "race-request.json").read_text()) == request
+    assert json.loads((tmp_path / "race-request.json").read_text()) == {**request, "analysis_only": True}
 
 
 def test_source_push_rejects_changed_checkout_bytes(tmp_path, monkeypatch):
@@ -185,7 +185,7 @@ def test_source_push_fetches_only_missing_before_tree_from_shallow_checkout(tmp_
 
     exec(_source_python(), {})
     assert output.read_text() == f"execution_id={execution_id}\n"
-    assert json.loads((checkout / "race-request.json").read_text()) == req
+    assert json.loads((checkout / "race-request.json").read_text()) == {**req, "analysis_only": True}
     assert subprocess.run(["git", "cat-file", "-e", before + "^{tree}"],
                           cwd=checkout, capture_output=True).returncode == 0
 
