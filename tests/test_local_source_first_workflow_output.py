@@ -277,3 +277,28 @@ def test_source_first_with_static_cannot_enter_formal_prediction(tmp_path, monke
     # The downstream local_race_entry.run() only stays at SOURCE + numerical
     # when analysis_only is explicitly True; otherwise it can enter FORMAL.
     assert forwarded["analysis_only"] is True
+
+
+def test_source_first_rejects_non_source_prediction_modes_before_runtime(tmp_path, monkeypatch):
+    """SOURCE-only workflow must not dispatch to AUTO or REFERENCE Runtime paths."""
+    import pytest
+
+    for mode in ("REFERENCE", "AUTO"):
+        execution_id = "KM-LOCAL-KAW-20261110-R06"
+        request = {
+            "family_id": "LOCAL",
+            "execution_phase": "SOURCE",
+            "execution_id": execution_id,
+            "prediction_mode": mode,
+        }
+        out = tmp_path / "github_output"
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+        monkeypatch.setenv("RACE_REQUEST_JSON", json.dumps(request))
+        monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+        # Actual runtime.local_race_entry.run() dispatches on prediction_mode
+        # before consulting analysis_only. Prevent those routes at ingress.
+        with pytest.raises(SystemExit, match="SOURCE_INTENT_PREDICTION_MODE_MISMATCH"):
+            exec(_source_python(), {})
+        assert not out.exists()
+        assert not (tmp_path / "race-request.json").exists()
