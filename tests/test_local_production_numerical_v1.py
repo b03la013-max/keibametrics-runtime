@@ -138,3 +138,35 @@ def test_r44_declares_numerical_ready_without_prediction_or_krs_promotion():
     assert d["krs_input_policy_change"] is False
     assert d["mec_r3_change"] is False
     assert d["capital_policy_change"] is False
+
+
+def test_kaw_class_evidence_distinguishes_unresolved_history_from_observed_c3():
+    from local_nar_evidence_candidate import compile_parsed_candidate_evidence
+    from local_fullnumerical_production import PRODUCTION_EVIDENCE_REGISTRY
+
+    execution = "KM-LOCAL-KAW-20261016-R01-LIVE-R1"
+    request = load(f"runtime/formal_intents/{execution}.json")
+    source = load(
+        f"runtime/executions/{execution}/FORMAL/runs/race-key-38855562125-formal/"
+        "source_receipt_envelope.json"
+    )["artifact"]
+    result = materialize_production(source, request, request["required_indices"])
+    runners = {str(runner["runner_id"]): runner for runner in result["runners"]}
+    for runner_id, coverage in (("7", 0.4), ("8", 0.8)):
+        features = runners[runner_id]["evidence_features"]
+        for name in ("class_level", "opponent_strength", "recent_opponent_class"):
+            assert features[name]["coverage"] == coverage
+            assert features[name]["missing"] is False
+    observed = runners["1"]["evidence_features"]["current_class"]
+    assert observed["score"] == 52.0 and observed["missing"] is False
+
+    # Exercise the actual 11/09 R1 class label in isolation without changing
+    # or re-signing any historical SOURCE.
+    raw = {key: runner["raw_candidate_evidence"] for key, runner in runners.items()}
+    request["race"]["class"] = "３歳３"
+    evidence = compile_parsed_candidate_evidence(source, request, raw, PRODUCTION_EVIDENCE_REGISTRY)
+    for runner in evidence["runners"]:
+        features = runner["evidence_features"]
+        for name in ("current_class", "race_set_level", "class_change_pressure", "transfer_class"):
+            assert features[name]["missing"] is True
+            assert features[name]["coverage"] == 0
