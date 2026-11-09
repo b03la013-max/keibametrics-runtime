@@ -28,6 +28,16 @@ HTML_OFFICIAL = (HTML.replace("テストホース一号", "血統テスト一号
 
 
 class LocalAcceptanceTests(unittest.TestCase):
+    def test_signed_queue_connects_bvi_and_retains_capture_when_bvi_blocked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, spec, dest = self.populate(Path(directory))
+            self.assertTrue(spec['calculate_bvi_diagnostic'])
+            report = json.loads((dest / spec['race_id'] / 'bvi_diagnostic.json').read_text())
+            self.assertEqual(report['status'], 'BLOCKED')
+            self.assertTrue(all(row['value'] is None for row in report['bvi'].values()))
+            self.assertEqual(verify_capture(spec, private_root=dest)['status'],
+                             'LOCAL_CAPTURE_ARTIFACT_INTEGRITY_VERIFIED')
+
     def populate(self, root: Path):
         fixture(root)
         q = root / "private" / "bloodb_queue.json"
