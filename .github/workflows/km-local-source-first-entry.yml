@@ -22,8 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # A multi-commit push may introduce the intent before the tip commit.
-          fetch-depth: 0
+          fetch-depth: 2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -46,6 +45,12 @@ jobs:
                       not all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in (before, after)) or
                       after != os.environ['GITHUB_SHA']):
                   raise SystemExit('SOURCE_INTENT_PUSH_EVENT_RANGE_INVALID')
+              # Fetch only the missing before snapshot, not the entire repo history.
+              if before != '0' * 40 and subprocess.run(
+                      ['git', 'cat-file', '-e', before + '^{tree}'],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                  subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', before],
+                                 check=True)
               diff = (['git', 'ls-tree', '-r', '--name-only', after]
                       if before == '0' * 40 else
                       ['git', 'diff', '--name-only', '--diff-filter=AMR', before, after])
