@@ -70,6 +70,8 @@ jobs:
               raise SystemExit('SOURCE_EXECUTION_ID_INVALID')
           if request.get('race_id') is not None and str(request['race_id']) != eid:
               raise SystemExit('SOURCE_INTENT_RACE_EXECUTION_ID_MISMATCH')
+          if os.environ.get('GITHUB_EVENT_NAME') == 'push' and Path(matches[0]).stem != eid:
+              raise SystemExit('SOURCE_INTENT_FILENAME_EXECUTION_ID_MISMATCH')
           Path('race-request.json').write_text(json.dumps(request))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write('execution_id=' + eid + '\n')
