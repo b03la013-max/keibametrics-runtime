@@ -302,3 +302,44 @@ def test_source_first_rejects_non_source_prediction_modes_before_runtime(tmp_pat
             exec(_source_python(), {})
         assert not out.exists()
         assert not (tmp_path / "race-request.json").exists()
+
+
+def test_source_first_post_run_accepts_verified_reused_checkpoint(tmp_path, monkeypatch):
+    """A verified SOURCE checkpoint readback has no newly executed phases."""
+    import pytest
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/km-local-source-first-entry.yml").read_text(encoding="utf-8")
+    )
+    step = next(s for s in workflow["jobs"]["entry"]["steps"]
+                if s.get("name") == "Execute SOURCE-first entry with explicit hold reporting")
+    blocks = re.findall(r"python - <<'PY'\n(.*?)\nPY", step["run"], re.S)
+    assert len(blocks) == 2
+    verify = compile(blocks[1], "<source-first-actual-postrun-verifier>", "exec")
+
+    reports = tmp_path / "entry-out"
+    reports.mkdir()
+    report_file = reports / "entry_report.json"
+    cached = {
+        "status": "HOLD",
+        "code": "STATIC_PREDICTION_FREEZE_REQUIRED",
+        "formal_final_proven": False,
+        "source": {
+            "status": "SOURCE_PASS",
+            "phase": "SOURCE",
+            "execution_class": "SOURCE_ONLY",
+            "signed_source_verified": True,
+            "completion": False,
+            # Existing verified SOURCE reuse does not run a new phase.
+        },
+    }
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOURCE_ENTRY_RC", "1")
+    report_file.write_text(json.dumps(cached))
+    exec(verify, {})  # Signed SOURCE cache is a valid SOURCE-only outcome.
+
+    # A fabricated SOURCE_PASS label without verified signature must still fail.
+    cached["source"]["signed_source_verified"] = False
+    report_file.write_text(json.dumps(cached))
+    with pytest.raises(SystemExit, match="SIGNED_SOURCE_STAGE_NOT_VERIFIED"):
+        exec(verify, {})
