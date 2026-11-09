@@ -135,3 +135,56 @@ def test_source_push_rejects_changed_checkout_bytes(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="REFERENCE_PUSH_REQUEST_CHANGED_AFTER_EVENT"):
         exec(_source_python(), {})
     assert not (tmp_path / "race-request.json").exists()
+
+
+def test_source_push_fetches_only_missing_before_tree_from_shallow_checkout(tmp_path, monkeypatch):
+    """Deep push ranges work with bounded checkout history, even in large repos."""
+    import subprocess
+
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=origin, check=True, capture_output=True)
+    for key, value in (("user.email", "test@example.invalid"), ("user.name", "LOCAL Test")):
+        subprocess.run(["git", "config", key, value], cwd=origin, check=True)
+
+    (origin / "README.md").write_text("first\n")
+    subprocess.run(["git", "add", "."], cwd=origin, check=True)
+    subprocess.run(["git", "commit", "-m", "base"], cwd=origin, check=True, capture_output=True)
+    before = _git(origin, "rev-parse", "HEAD")
+
+    execution_id = "KM-LOCAL-KAW-20261110-R05"
+    req = {"family_id": "LOCAL", "execution_phase": "SOURCE", "execution_id": execution_id}
+    intent = origin / "runtime/source_intents" / (execution_id + ".json")
+    intent.parent.mkdir(parents=True)
+    intent.write_text(json.dumps(req))
+    subprocess.run(["git", "add", "."], cwd=origin, check=True)
+    subprocess.run(["git", "commit", "-m", "SOURCE intent"], cwd=origin,
+                   check=True, capture_output=True)
+    for number in (1, 2):
+        (origin / "README.md").write_text("first\n" + "x\n" * number)
+        subprocess.run(["git", "add", "."], cwd=origin, check=True)
+        subprocess.run(["git", "commit", "-m", f"metadata {number}"], cwd=origin,
+                       check=True, capture_output=True)
+    after = _git(origin, "rev-parse", "HEAD")
+
+    checkout = tmp_path / "checkout"
+    subprocess.run(["git", "clone", "--depth=2", "--branch", "main", origin.as_uri(),
+                    str(checkout)], check=True, capture_output=True)
+    missing = subprocess.run(["git", "cat-file", "-e", before + "^{tree}"],
+                             cwd=checkout, capture_output=True)
+    assert missing.returncode != 0, "Test must exercise the missing-before fetch"
+
+    event = checkout / "event.json"
+    event.write_text(json.dumps({"before": before, "after": after, "deleted": False}))
+    output = checkout / "github_output"
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_SHA", after)
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    exec(_source_python(), {})
+    assert output.read_text() == f"execution_id={execution_id}\n"
+    assert json.loads((checkout / "race-request.json").read_text()) == req
+    assert subprocess.run(["git", "cat-file", "-e", before + "^{tree}"],
+                          cwd=checkout, capture_output=True).returncode == 0
