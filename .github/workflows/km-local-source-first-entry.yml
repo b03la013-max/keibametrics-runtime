@@ -22,7 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # A multi-commit push may introduce the intent before the tip commit.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -38,12 +39,21 @@ jobs:
           import json, os, re, subprocess
           from pathlib import Path
           if os.environ.get('GITHUB_EVENT_NAME') == 'push':
-              changed = subprocess.check_output(
-                  ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', os.environ['GITHUB_SHA']],
-                  text=True).splitlines()
+              from tools.persist_local_checkpoints import verify_event_files
+              event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+              before, after = event.get('before', ''), event.get('after', '')
+              if (event.get('deleted') or
+                      not all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in (before, after)) or
+                      after != os.environ['GITHUB_SHA']):
+                  raise SystemExit('SOURCE_INTENT_PUSH_EVENT_RANGE_INVALID')
+              diff = (['git', 'ls-tree', '-r', '--name-only', after]
+                      if before == '0' * 40 else
+                      ['git', 'diff', '--name-only', '--diff-filter=AMR', before, after])
+              changed = subprocess.check_output(diff, text=True).splitlines()
               matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\.json', p)]
               if len(matches) != 1:
                   raise SystemExit('SOURCE_INTENT_PUSH_REQUIRES_EXACTLY_ONE_FILE')
+              verify_event_files(cwd=Path.cwd(), event_sha=after, paths=matches)
               raw = Path(matches[0]).read_text(encoding='utf-8')
           else:
               raw = os.environ['RACE_REQUEST_JSON']
