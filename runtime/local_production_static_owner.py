@@ -286,7 +286,13 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         raise StaticOwnerError("NUMERICAL_CLOSURE_ONLY_NOT_PREDICTIVE")
     pool = (source.get("active_runner_universe") or source.get("official_runner_universe") or {}).get("runners") or []
     ids = [str(r.get("runner_id")) for r in pool]
-    if len(pool) < 2 or len(ids) != len(set(ids)) or set(ids) != {str(r.get("runner_id")) for r in numerical.get("runners") or []}:
+    # Set equality alone hides duplicate full29 records for the same Active
+    # runner. Require exactly one numerical row per signed Active identity
+    # before freezing Production Static/KRS inputs.
+    numeric_ids = [str(r.get("runner_id")) for r in numerical.get("runners") or []]
+    if (len(pool) < 2 or len(ids) != len(set(ids))
+            or len(numeric_ids) != len(ids) or len(numeric_ids) != len(set(numeric_ids))
+            or set(ids) != set(numeric_ids)):
         raise StaticOwnerError("FULL_RUNNER_UNIVERSE_MISMATCH")
     parsed = parse_race_card(source)
     declared = (source.get("declared_runner_universe") or {}).get("runners") or []
