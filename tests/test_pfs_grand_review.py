@@ -145,124 +145,128 @@ def test_source_candidate_oos_pfs_is_separate_and_tier_measured(tmp_path, monkey
     assert c["production_effect"]=="NONE"
 
 
-def test_formal_single_win_place_report_uses_only_declared_frozen_stakes():
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    formal={"race_id":"KM-LOCAL-KAW-20261016-R01-LIVE-R1","date":"20261016",
-            "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-            "investment":200,"return":0,"bet_types":{
-                "WIN":{"investment":100,"return":0},
-                "PLACE":{"investment":100,"return":0}}}
-    hypothetical_reference={**formal,"race_id":"KM-LOCAL-KAW-20261016-R02-LIVE-R1",
-                            "formal_class":"OTHER",
-                            "investment":200,"return":2000}
-    measured=p._single_axis([formal,hypothetical_reference])
-    assert measured["actual_purchase_inferred"] is False
-    for bt in ("WIN","PLACE"):
-        arm=measured["types"][bt]
-        assert arm["settled_bet_races"]==1
-        assert arm["aggregate"]["investment"]==100
-        assert arm["aggregate"]["return"]==0
-        assert arm["aggregate"]["investment_weighted_pfs"]==0.0
-        assert arm["excluding_top_bottom_1pct"]["status"]=="INSUFFICIENT_SAMPLE"
+# Single WIN/PLACE observations are explicitly non-Production and must not
+# modify the preregistered hash-frozen PFS runtime above.
+def _formal_single(race="KM-LOCAL-KAW-20261016-R01-LIVE-R1", investment=200, payout=0):
+    return {"race_id": race, "formal_class": "FORMAL_PRE_RACE",
+            "pfs_authority": "FROZEN-RECOMMENDATION-PFS",
+            "investment": investment, "return": payout}
 
 
-def test_single_type_missing_is_unknown_not_zero_pfs():
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    formal={"race_id":"KM-LOCAL-KAW-20261016-R03-LIVE-R1",
-            "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-            "investment":300,"return":150,"bet_types":{}}
-    single=p._single_axis([formal])
-    assert single["types"]["WIN"]["aggregate"]["investment_weighted_pfs"] is None
-    assert single["types"]["PLACE"]["aggregate"]["investment_weighted_pfs"] is None
-    assert single["types"]["WIN"]["status"]=="NO_VERIFIED_SINGLE_TYPE_OBSERVATIONS"
+def _settled_single(tmp_path, race, breakdown, *, grade="FORMAL-PRE-RACE", suffix="one"):
+    folder = tmp_path / "runtime/results"
+    folder.mkdir(parents=True, exist_ok=True)
+    record = {"race_id": race, "formal_grade": grade,
+              "settlement": {"status": "SETTLED",
+                             "pfs_authority": "FROZEN-RECOMMENDATION-PFS",
+                             "bet_type_summary": breakdown}}
+    (folder / (suffix + ".json")).write_text(json.dumps(record), encoding="utf-8")
+    return folder
 
 
-def test_formal_win_place_tail_exclusion_is_symmetric_not_optimal_selection():
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    rows=[]
-    for i in range(100):
-        ret=0 if i==0 else (10000 if i==99 else 100)
-        rows.append({"race_id":f"KM-LOCAL-KAW-20261016-R{i+1:03d}",
-                     "date":"20261016","formal_class":"FORMAL_PRE_RACE",
-                     "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-                     "investment":100,"return":ret,
-                     "bet_types":{"PLACE":{"investment":100,"return":ret}}})
-    arm=p._single_axis(rows)["types"]["PLACE"]
-    assert arm["aggregate"]["investment_weighted_pfs"]==198.0
-    assert arm["excluding_top_bottom_1pct"]["excluded_each_tail"]==1
-    assert arm["excluding_top_bottom_1pct"]["aggregate"]["investment_weighted_pfs"]==100.0
-    assert arm["excluding_top_bottom_3pct"]["excluded_each_tail"]==3
-    assert arm["excluding_top_bottom_3pct"]["aggregate"]["investment_weighted_pfs"]==100.0
+def test_local_single_zero_is_settled_loss_not_missing_or_actual_purchase(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single()
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": 0},
+        {"bet_type": "PLACE", "investment": 100, "payout": 0}])
+    result = review.build_report([row], result_dir=root)
+    assert result["purchase_inferred"] is False
+    assert result["official_prestart_receipts_independently_verified"] is False
+    assert result["qualifying_frozen_formal_races"] == 1
+    assert result["races_with_single_type_records"] == 1
+    for bt in ("WIN", "PLACE"):
+        arm = result["bet_types"][bt]
+        assert arm["aggregate"]["settled_race_count"] == 1
+        assert arm["aggregate"]["investment"] == 100
+        assert arm["aggregate"]["return"] == 0
+        assert arm["aggregate"]["pfs_pct"] == 0.0
+        assert arm["upper_and_lower_1pct_removed"]["status"] == "INSUFFICIENT_SAMPLE"
 
 
-def test_single_type_inconsistent_with_canonical_total_is_held():
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    row={"race_id":"KM-LOCAL-KAW-20261016-R02-LIVE-R1",
-         "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-         "investment":100,"return":100,
-         "bet_types":{"WIN":{"investment":100,"return":200}}}
-    arm=p._single_axis([row])["types"]["WIN"]
-    assert arm["settled_bet_races"]==0
-    assert arm["held"][0]["reason"]=="SINGLE_TYPE_SETTLEMENT_CONTRADICTS_CANONICAL_TOTAL"
-    assert arm["aggregate"]["investment_weighted_pfs"] is None
+def test_local_single_unknown_type_is_not_zero_pfs(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single()
+    root = _settled_single(tmp_path, row["race_id"], [])
+    result = review.build_report([row], result_dir=root)
+    assert result["races_with_single_type_records"] == 0
+    assert result["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
+    assert result["bet_types"]["PLACE"]["aggregate"]["pfs_pct"] is None
 
 
-def test_zero_payout_record_preserved_in_full_report(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results"]:
-        Path(d).mkdir(parents=True,exist_ok=True)
-    race_id="KM-LOCAL-KAW-20261016-R03-LIVE-R1"
-    result={"race_id":race_id,"formal_grade":"FORMAL-PRE-RACE",
-            "settlement":{"status":"SETTLED",
-                          "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-                          "total_investment":200,"total_payout":0,"pfs":0,
-                          "bet_type_summary":[
-                              {"bet_type":"WIN","investment":100,"payout":0},
-                              {"bet_type":"PLACE","investment":100,"payout":0}]}}
-    Path("runtime/results/result.json").write_text(json.dumps(result),encoding="utf-8")
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    report=p.build_report()
-    assert len(report["records"])==1
-    assert report["records"][0]["bet_types"]["WIN"]["return"]==0
-    assert report["records"][0]["bet_types"]["PLACE"]["return"]==0
-    singles=report["formal_pre_race_single_win_place"]["types"]
-    assert singles["WIN"]["aggregate"]["investment_weighted_pfs"]==0.0
-    assert singles["PLACE"]["aggregate"]["investment_weighted_pfs"]==0.0
-    assert report["model_comparison_eligible_single_win_place"]["types"]["WIN"]["status"]=="NO_VERIFIED_SINGLE_TYPE_OBSERVATIONS"
+def test_local_single_reference_results_never_infer_frozen_ticket(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single()
+    row["formal_class"] = "OTHER"
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": 1300}])
+    result = review.build_report([row], result_dir=root)
+    assert result["qualifying_frozen_formal_races"] == 0
+    assert result["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
 
 
-def test_result_dict_bet_type_breakdown_keeps_explicit_zero(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results"]:
-        Path(d).mkdir(parents=True,exist_ok=True)
-    item={"race_id":"KM-LOCAL-KAW-20261016-R04-LIVE-R1","formal_grade":"FORMAL-PRE-RACE",
-          "settlement":{"status":"SETTLED","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
-                        "total_investment":100,"total_payout":0,
-                        "by_bet_type":{"WIN":{"investment":100,"return":0}}}}
-    Path("runtime/results/result.json").write_text(json.dumps(item),encoding="utf-8")
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    records=p.canonical_records()
-    assert records[0]["bet_types"]["WIN"]=={"investment":100.0,"return":0.0}
-    assert p._single_axis(records)["types"]["WIN"]["aggregate"]["investment_weighted_pfs"]==0.0
+def test_local_single_symmetric_tail_trim_no_cherry_picking():
+    from research import local_single_win_place_review as review
+    rows = [{"race_id": f"R{i:03d}", "investment": 100,
+             "return": (0 if i == 0 else 10000 if i == 99 else 100)}
+            for i in range(100)]
+    assert review._aggregate(rows)["pfs_pct"] == 198.0
+    one = review._tail_check(rows, 1)
+    three = review._tail_check(rows, 3)
+    assert one["removed_each_side"] == 1 and one["aggregate"]["pfs_pct"] == 100.0
+    assert three["removed_each_side"] == 3 and three["aggregate"]["pfs_pct"] == 100.0
+    assert review._tail_check(rows[:10], 1)["status"] == "INSUFFICIENT_SAMPLE"
 
 
-def test_bool_and_nan_are_never_settled_financial_evidence():
-    import sys
-    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
-    import pfs_grand_review as p
-    assert p._num(True) is None
-    assert p._num(False) is None
-    assert p._num(float("nan")) is None
-    assert p._num(float("inf")) is None
+def test_local_single_duplicate_result_source_is_quarantined(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single()
+    root = _settled_single(tmp_path, row["race_id"], [{"bet_type": "WIN", "investment": 100, "payout": 0}])
+    _settled_single(tmp_path, row["race_id"], [{"bet_type": "WIN", "investment": 100, "payout": 0}], suffix="two")
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "DUPLICATE_RESULT_SOURCE"
+    assert report["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
+
+
+def test_local_single_requires_formal_frozen_settlement_source(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single()
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": 0}], grade="POST-START-REPLAY")
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "FROZEN_PRESTART_TYPE_SOURCE_UNPROVEN"
+    assert report["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
+
+
+def test_local_single_type_exceeding_frozen_total_is_quarantined(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single(investment=100, payout=100)
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": 200}])
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "TYPE_BREAKDOWN_CONTRADICTS_FROZEN_TOTAL"
+    assert report["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
+
+
+def test_local_single_dict_type_breakdown_preserves_zero(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single(investment=100)
+    root = tmp_path / "runtime/results"
+    root.mkdir(parents=True)
+    source = {"race_id": row["race_id"], "formal_grade": "FORMAL-PRE-RACE",
+              "settlement": {"status": "SETTLED", "pfs_authority": "FROZEN-RECOMMENDATION-PFS",
+                             "by_bet_type": {"WIN": {"investment": 100, "return": 0}}}}
+    (root / "one.json").write_text(json.dumps(source))
+    assert review.build_report([row], result_dir=root)["bet_types"]["WIN"]["aggregate"]["pfs_pct"] == 0.0
+
+
+def test_local_single_invalid_money_never_enters_roi(tmp_path):
+    from research import local_single_win_place_review as review
+    assert review._number(True) is None
+    assert review._number(float("nan")) is None
+    assert review._number(float("inf")) is None
+    row = _formal_single(investment=100)
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": float("nan")}])
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "TYPE_BREAKDOWN_CONTRADICTS_FROZEN_TOTAL"
