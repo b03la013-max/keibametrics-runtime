@@ -68,3 +68,34 @@ def test_synthetic_partial_bound_registry_cannot_claim_full_ready(tmp_path):
     out=assess(ep,mp)
     assert out["status"]=="NOT_READY"
     assert out["full_numerical_authority"] is False
+
+
+def test_partial_component_registry_cannot_claim_full_63_rule_authority(tmp_path):
+    """A 1/63 bound registry must never be certified as full Production numeric READY."""
+    evidence = {
+        "registry_id": "TEST-PARTIAL",
+        "status": "ACTIVE / PRODUCTION-NUMERICAL-AUTHORITY",
+        "common_component_sets": {
+            "HPI-L": {"recent_finish": 100}
+        },
+        "component_score_rules": {
+            "HPI-L": {
+                "recent_finish": {"rule_id": "TEST-R1", "transform": "x"}
+            }
+        },
+    }
+    mapping = {
+        "mapping_id": "TEST-MAPPING",
+        "status": "ACTIVE / PRODUCTION-NUMERICAL-AUTHORITY",
+        "required_indices": [f"I{i:02d}" for i in range(29)],
+        "strict_numerical_terminal_policy": "CALCULATED_OR_RULED_NEUTRAL",
+    }
+    ep = tmp_path / "partial_e.json"
+    mp = tmp_path / "partial_m.json"
+    ep.write_text(json.dumps(evidence), encoding="utf-8")
+    mp.write_text(json.dumps(mapping), encoding="utf-8")
+    out = assess(ep, mp)
+    assert out["required_component_rule_count"] == 1
+    assert out["status"] == "NOT_READY"
+    assert out["full_numerical_authority"] is False
+    assert "FULL_63_COMPONENT_SET_INVALID" in out["reasons"]
