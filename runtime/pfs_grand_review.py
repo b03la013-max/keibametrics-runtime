@@ -17,9 +17,21 @@ def _sha(x):
 
 def _num(v):
     try:
-        return float(v)
-    except Exception:
+        value=float(v)
+    except (TypeError, ValueError, OverflowError):
         return None
+    # A bool, NaN or infinity is not a settled financial observation.
+    return value if not isinstance(v,bool) and __import__("math").isfinite(value) else None
+
+
+def _first_present(record,*keys):
+    """Retain a declared zero payout; absence must not become a 0-yen loss."""
+    if not isinstance(record,dict):
+        return None
+    for key in keys:
+        if key in record and record[key] is not None:
+            return record[key]
+    return None
 
 def _venue(race_id):
     u=str(race_id).upper()
@@ -76,11 +88,11 @@ def _extract(path,obj):
             return None
         capital=obj.get("capital") or obj.get("settlement") or {}
         inv=_num(measurement.get("investment"))
-        if inv is None: inv=_num(capital.get("total_investment") or capital.get("investment"))
+        if inv is None: inv=_num(_first_present(capital,"total_investment","investment"))
         ret=_num(measurement.get("return"))
-        if ret is None: ret=_num(capital.get("return") or capital.get("provisional_return"))
+        if ret is None: ret=_num(_first_present(capital,"return","provisional_return"))
         pfs=_num(measurement.get("pfs"))
-        if pfs is None: pfs=_num(capital.get("pfs") or capital.get("provisional_pfs"))
+        if pfs is None: pfs=_num(_first_present(capital,"pfs","provisional_pfs"))
         authority=measurement.get("pfs_authority") or capital.get("pfs_authority") or capital.get("authority")
         grade=grade or (obj.get("formal_eligibility") or {}).get("formal_grade") or (obj.get("frozen_artifact") or {}).get("formal_grade")
         model_elig=model_elig or (obj.get("formal_eligibility") or {}).get("model_comparison_eligibility")
@@ -88,7 +100,7 @@ def _extract(path,obj):
         if isinstance(bt,dict):
             for k,v in bt.items():
                 if isinstance(v,dict):
-                    bi=_num(v.get("investment")); br=_num(v.get("return") or v.get("payout"))
+                    bi=_num(v.get("investment")); br=_num(_first_present(v,"return","payout"))
                     if bi is not None and br is not None: bet_types[str(k).upper()]={"investment":bi,"return":br}
     elif path.startswith("runtime/results/"):
         s=obj.get("settlement") or {}
@@ -103,10 +115,13 @@ def _extract(path,obj):
         grade=grade or fr.get("final_status") or fr.get("formal_grade") or fr.get("temporal_formality")
         le=obj.get("learning_event") or {}
         model_elig=model_elig or le.get("model_comparison_eligibility")
-        for row in s.get("bet_type_summary") or s.get("by_bet_type") or []:
+        typed=_first_present(s,"bet_type_summary","by_bet_type") or []
+        if isinstance(typed,dict):
+            typed=[dict(v,bet_type=k) for k,v in typed.items() if isinstance(v,dict)]
+        for row in typed:
             if isinstance(row,dict):
                 k=str(row.get("bet_type") or "").upper()
-                bi=_num(row.get("investment")); br=_num(row.get("payout") or row.get("return"))
+                bi=_num(row.get("investment")); br=_num(_first_present(row,"payout","return"))
                 if k and bi is not None and br is not None: bet_types[k]={"investment":bi,"return":br}
         note=str(s.get("note") or "").upper()
         actual="UNVERIFIED" if "ACTUAL" in note and ("UNVERIFIED" in note or "NOT VERIFIED" in note) else "UNKNOWN"
@@ -246,6 +261,77 @@ def _bet_type(rows):
             "pfs":round(ret/inv*100.0,9) if inv else None,
         }
     return out
+
+def _roi_tail_check(rows, percent):
+    """Symmetric exclusion by per-race ROI, not cherry-picked return alone.
+
+    Research audit only. Samples too small to remove at least one at each end
+    are NOT a zero-percent result and are never called robust.
+    """
+    bet=[r for r in rows if r["investment"]>0]
+    excluded=int(len(bet)*percent/100)
+    if excluded<1 or 2*excluded>=len(bet):
+        return {"status":"INSUFFICIENT_SAMPLE","race_count":len(bet),
+                "excluded_each_tail":0,"aggregate":None}
+    ranked=sorted(bet,key=lambda r:(r["return"]/r["investment"],
+                                    r.get("date") or "",r["race_id"]))
+    trimmed=ranked[excluded:len(ranked)-excluded]
+    return {"status":"MEASURED_FROZEN_RECOMMENDATION_ONLY",
+            "race_count":len(bet),"excluded_each_tail":excluded,
+            "aggregate":_aggregate(trimmed)}
+
+
+def _single_axis(formal_rows):
+    """Only explicit, settled WIN/PLACE type summaries. Never infer bets.
+
+    The same race may appear in a WIN and a PLACE cohort; do not add cohorts.
+    No result-derived candidate tickets or retrospective best-odds purchases.
+    """
+    result={}
+    for bet_type in ("WIN","PLACE"):
+        rows=[];held=[]
+        observed=0
+        for source in formal_rows:
+            if source.get("formal_class")!="FORMAL_PRE_RACE":
+                continue
+            if not str(source.get("pfs_authority") or "").upper().startswith("FROZEN"):
+                continue
+            bet_types=source.get("bet_types") or {}
+            if not isinstance(bet_types,dict) or bet_type not in bet_types:
+                continue
+            observed += 1
+            data=bet_types[bet_type]
+            inv=_num(data.get("investment")) if isinstance(data,dict) else None
+            ret=_num(data.get("return")) if isinstance(data,dict) else None
+            # Reject contradictory type detail; the per-race total cannot be
+            # less than this type's stake or payout (small float tolerance).
+            if (inv is None or ret is None or inv<0 or ret<0
+                    or inv>source["investment"]+0.01
+                    or ret>source["return"]+0.01):
+                held.append({"race_id":source["race_id"],
+                             "reason":"SINGLE_TYPE_SETTLEMENT_CONTRADICTS_CANONICAL_TOTAL"})
+                continue
+            if inv==0:
+                if ret:
+                    held.append({"race_id":source["race_id"],"reason":"NONZERO_RETURN_WITH_ZERO_STAKE"})
+                continue
+            rows.append({"race_id":source["race_id"],"date":source.get("date"),
+                         "investment":inv,"return":ret,"profit_loss":ret-inv,
+                         "hit_but_loss":0<ret<inv})
+        result[bet_type]={
+            "status":"MEASURED_FROZEN_RECOMMENDATION_ONLY" if rows else "NO_VERIFIED_SINGLE_TYPE_OBSERVATIONS",
+            "type_summary_observed_races":observed,
+            "settled_bet_races":len(rows),"held":held,
+            "aggregate":_aggregate(rows),
+            "excluding_top_bottom_1pct":_roi_tail_check(rows,1),
+            "excluding_top_bottom_3pct":_roi_tail_check(rows,3),
+        }
+    return {"status":"MEASUREMENT_ONLY / NO_PRODUCTION_OR_PURCHASE_AUTHORITY",
+            "source":"FROZEN_FORMAL_PRE_RACE_SETTLED_TYPE_BREAKDOWN",
+            "actual_purchase_inferred":False,
+            "note":"WIN/PLACE PFS is computed only from explicit frozen settlement detail. No ticket, probability, or purchase is reconstructed.",
+            "types":result}
+
 
 def _tier_pfs():
     """Prospective/structured MEC tier economics where immutable FINAL has tier metadata.
@@ -533,6 +619,8 @@ def build_report():
         "formal_pre_race_by_venue":_by(formal,"venue"),
         "all_by_formal_class":_by(rows,"formal_class"),
         "formal_pre_race_bet_type":_bet_type(formal),
+        "formal_pre_race_single_win_place":_single_axis(formal),
+        "model_comparison_eligible_single_win_place":_single_axis(eligible),
         "frozen_by_family":{f:{"aggregate":_aggregate([r for r in all_frozen if r["family_id"]==f]),"robustness":_robustness([r for r in all_frozen if r["family_id"]==f]),"by_venue":_by([r for r in all_frozen if r["family_id"]==f],"venue"),"by_formal_class":_by([r for r in all_frozen if r["family_id"]==f],"formal_class"),"by_bet_type":_bet_type([r for r in all_frozen if r["family_id"]==f])} for f in ["JRA","LOCAL","BAN","UNKNOWN"]},
         "actual_pfs":{
             "status":"MEASURED" if actual_rows else "NO_VERIFIED_SETTLED_PURCHASES",
