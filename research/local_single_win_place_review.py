@@ -129,13 +129,16 @@ def build_report(canonical_rows, *, result_dir="runtime/results"):
             held.append({"race_id": rid, "reason": "CANONICAL_MONEY_INVALID"})
             continue
         seen = set()
+        accepted = []
+        invalid = False
         for entry in _type_details(s):
             typ = str(entry.get("bet_type") or "").upper()
             if typ not in SINGLE_TYPES:
                 continue
             if typ in seen:
                 held.append({"race_id": rid, "bet_type": typ, "reason": "DUPLICATE_TYPE_BREAKDOWN"})
-                continue
+                invalid = True
+                break
             seen.add(typ)
             inv = _number(entry.get("investment"))
             ret = _number(_first_present(entry, "payout", "return"))
@@ -143,12 +146,22 @@ def build_report(canonical_rows, *, result_dir="runtime/results"):
                     or inv > gross + 0.01 or ret > gross_return + 0.01):
                 held.append({"race_id": rid, "bet_type": typ,
                              "reason": "TYPE_BREAKDOWN_CONTRADICTS_FROZEN_TOTAL"})
-                continue
-            if inv == 0:
-                if ret:
-                    held.append({"race_id": rid, "bet_type": typ,
-                                 "reason": "NONZERO_RETURN_WITH_ZERO_STAKE"})
-                continue
+                invalid = True
+                break
+            if inv == 0 and ret:
+                held.append({"race_id": rid, "bet_type": typ,
+                             "reason": "NONZERO_RETURN_WITH_ZERO_STAKE"})
+                invalid = True
+                break
+            if inv > 0:
+                accepted.append((typ, inv, ret))
+        if invalid:
+            continue  # Do not partially count a broken single-race breakdown.
+        if (sum(inv for _, inv, _ in accepted) > gross + 0.01
+                or sum(ret for _, _, ret in accepted) > gross_return + 0.01):
+            held.append({"race_id": rid, "reason": "COMBINED_SINGLE_TYPES_EXCEED_CANONICAL_TOTAL"})
+            continue
+        for typ, inv, ret in accepted:
             arms[typ].append({"race_id": rid, "investment": inv, "return": ret,
                               "source_file": filename})
             selected.append(rid)
