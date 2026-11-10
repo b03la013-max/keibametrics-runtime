@@ -779,9 +779,10 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
         report.update(first_failed_phase='NUMERICAL', code='FULL_NUMERICAL_CLOSURE_REQUIRED')
         o._write(output/'entry_report.json', report)
         return report
-    if intent.get('analysis_only') is True:
-        # SOURCE-only has finished its numerical diagnostics. Static owner
-        # discovery and FORMAL prestart checks are unrelated dependencies.
+    if (intent.get('analysis_only') is True and not
+            (o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json").is_file()):
+        # No canonical frozen Static exists: SOURCE-only numerics must not
+        # require Static discovery, yet existing frozen readback is preserved.
         report.update(first_failed_phase=None, code='ANALYSIS_ONLY_SOURCE_COMPLETE')
         o._write(output/'entry_report.json', report)
         return report
@@ -852,6 +853,8 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
                 'formal_final_proven': False,
                 'production_prediction_changed': False,
             }
+    if formal is not None and intent.get('analysis_only') is True:
+        report.update(code='ANALYSIS_ONLY_SOURCE_COMPLETE', first_failed_phase=None)
     if formal is not None and generation_allowed and intent.get('analysis_only') is not True:
         canonical = o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json"
         if checkpoint_publisher is not None and canonical.is_file():
