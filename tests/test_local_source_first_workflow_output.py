@@ -383,3 +383,61 @@ def test_source_only_does_not_lose_signed_checkpoint_on_numerical_hold(tmp_path,
     (reports / "entry_report.json").write_text(json.dumps(report))
     with pytest.raises(SystemExit, match="UNEXPECTED_SOURCE_FIRST_FAILURE"):
         exec(verify, {})
+
+
+def test_source_first_analysis_only_ready_finishes_without_static_owner(tmp_path, monkeypatch):
+    """A verified SOURCE+Full29 diagnostic must not require a frozen Static owner.
+
+    Synthetic SOURCE only: no provider requests, public Raw, signing or purchase.
+    """
+    from runtime import local_race_entry as entry
+
+    execution_id = "KM-LOCAL-KAW-20261110-R01"
+    request = {
+        "family_id": "LOCAL", "venue_id": "KAW", "race_date": "2026-11-10",
+        "race_no": 1, "execution_id": execution_id, "race_id": execution_id,
+        "execution_phase": "SOURCE", "analysis_only": True,
+    }
+    signed = {"run_dir": tmp_path / "synthetic-signed-source"}
+    envelope = {
+        "receipt_sha256": "synthetic-receipt",
+        "artifact": {"official_runner_universe": {"runners": [{"runner_id": "1"}]}},
+    }
+
+    monkeypatch.setattr(entry.o, "derive_execution_id", lambda _: execution_id)
+    monkeypatch.setattr(entry.o, "validate_request_context", lambda _: {
+        "current_authority_manifest": "KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+    })
+    monkeypatch.setattr(
+        entry.o, "resolve_phase",
+        lambda _eid, phase: signed if phase == "SOURCE" else None,
+    )
+    monkeypatch.setattr(entry.o, "orchestrate", lambda *args, **kwargs: {
+        "status": "SOURCE_PASS", "phase": "SOURCE",
+        "execution_class": "SOURCE_ONLY", "signed_source_verified": True,
+        "completion": False,
+    })
+    monkeypatch.setattr(entry.o, "validate_source_checkpoint", lambda *args: None)
+    monkeypatch.setattr(entry.o, "_load_checkpoint_json", lambda *args: envelope)
+    monkeypatch.setattr(entry, "bind_urw_numerical_context", lambda req, src: req)
+    monkeypatch.setattr(entry, "assess", lambda: {
+        "status": "READY", "required_indices": ["HPI-L"],
+    })
+    monkeypatch.setattr(entry, "materialize_production", lambda *args: {
+        "strict_full_numerical_ready": True, "synthetic_numerical": True,
+    })
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("SOURCE_ONLY_MUST_NOT_RESOLVE_STATIC_OR_FORMAL")
+
+    monkeypatch.setattr(entry, "resolve_static_input", forbidden)
+    monkeypatch.setattr(entry.o, "check_deadline", forbidden)
+    output = tmp_path / "output"
+    report = entry.run(request, output=output, run_id="synthetic-source-only")
+    assert report["code"] == "ANALYSIS_ONLY_SOURCE_COMPLETE"
+    assert report["first_failed_phase"] is None
+    assert report["numerical_diagnostic_only"] is True
+    assert report["formal_final_proven"] is False
+    assert report["source"]["signed_source_verified"] is True
+    assert (output / "numerical_materialization.json").is_file()
+    assert json.loads((output / "entry_report.json").read_text()) == report
