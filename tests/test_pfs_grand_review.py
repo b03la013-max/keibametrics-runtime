@@ -143,3 +143,126 @@ def test_source_candidate_oos_pfs_is_separate_and_tier_measured(tmp_path, monkey
     assert c["tier_pfs"]["tiers"]["PROTECTION"]["pfs"]==900.0
     assert c["tier_pfs"]["tiers"]["TAIL"]["pfs"]==0.0
     assert c["production_effect"]=="NONE"
+
+
+def test_formal_single_win_place_report_uses_only_declared_frozen_stakes():
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    formal={"race_id":"KM-LOCAL-KAW-20261016-R01-LIVE-R1","date":"20261016",
+            "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+            "investment":200,"return":0,"bet_types":{
+                "WIN":{"investment":100,"return":0},
+                "PLACE":{"investment":100,"return":0}}}
+    hypothetical_reference={**formal,"race_id":"KM-LOCAL-KAW-20261016-R02-LIVE-R1",
+                            "formal_class":"OTHER",
+                            "investment":200,"return":2000}
+    measured=p._single_axis([formal,hypothetical_reference])
+    assert measured["actual_purchase_inferred"] is False
+    for bt in ("WIN","PLACE"):
+        arm=measured["types"][bt]
+        assert arm["settled_bet_races"]==1
+        assert arm["aggregate"]["investment"]==100
+        assert arm["aggregate"]["return"]==0
+        assert arm["aggregate"]["investment_weighted_pfs"]==0.0
+        assert arm["excluding_top_bottom_1pct"]["status"]=="INSUFFICIENT_SAMPLE"
+
+
+def test_single_type_missing_is_unknown_not_zero_pfs():
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    formal={"race_id":"KM-LOCAL-KAW-20261016-R03-LIVE-R1",
+            "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+            "investment":300,"return":150,"bet_types":{}}
+    single=p._single_axis([formal])
+    assert single["types"]["WIN"]["aggregate"]["investment_weighted_pfs"] is None
+    assert single["types"]["PLACE"]["aggregate"]["investment_weighted_pfs"] is None
+    assert single["types"]["WIN"]["status"]=="NO_VERIFIED_SINGLE_TYPE_OBSERVATIONS"
+
+
+def test_formal_win_place_tail_exclusion_is_symmetric_not_optimal_selection():
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    rows=[]
+    for i in range(100):
+        ret=0 if i==0 else (10000 if i==99 else 100)
+        rows.append({"race_id":f"KM-LOCAL-KAW-20261016-R{i+1:03d}",
+                     "date":"20261016","formal_class":"FORMAL_PRE_RACE",
+                     "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+                     "investment":100,"return":ret,
+                     "bet_types":{"PLACE":{"investment":100,"return":ret}}})
+    arm=p._single_axis(rows)["types"]["PLACE"]
+    assert arm["aggregate"]["investment_weighted_pfs"]==198.0
+    assert arm["excluding_top_bottom_1pct"]["excluded_each_tail"]==1
+    assert arm["excluding_top_bottom_1pct"]["aggregate"]["investment_weighted_pfs"]==100.0
+    assert arm["excluding_top_bottom_3pct"]["excluded_each_tail"]==3
+    assert arm["excluding_top_bottom_3pct"]["aggregate"]["investment_weighted_pfs"]==100.0
+
+
+def test_single_type_inconsistent_with_canonical_total_is_held():
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    row={"race_id":"KM-LOCAL-KAW-20261016-R02-LIVE-R1",
+         "formal_class":"FORMAL_PRE_RACE","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+         "investment":100,"return":100,
+         "bet_types":{"WIN":{"investment":100,"return":200}}}
+    arm=p._single_axis([row])["types"]["WIN"]
+    assert arm["settled_bet_races"]==0
+    assert arm["held"][0]["reason"]=="SINGLE_TYPE_SETTLEMENT_CONTRADICTS_CANONICAL_TOTAL"
+    assert arm["aggregate"]["investment_weighted_pfs"] is None
+
+
+def test_zero_payout_record_preserved_in_full_report(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results"]:
+        Path(d).mkdir(parents=True,exist_ok=True)
+    race_id="KM-LOCAL-KAW-20261016-R03-LIVE-R1"
+    result={"race_id":race_id,"formal_grade":"FORMAL-PRE-RACE",
+            "settlement":{"status":"SETTLED",
+                          "pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+                          "total_investment":200,"total_payout":0,"pfs":0,
+                          "bet_type_summary":[
+                              {"bet_type":"WIN","investment":100,"payout":0},
+                              {"bet_type":"PLACE","investment":100,"payout":0}]}}
+    Path("runtime/results/result.json").write_text(json.dumps(result),encoding="utf-8")
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    report=p.build_report()
+    assert len(report["records"])==1
+    assert report["records"][0]["bet_types"]["WIN"]["return"]==0
+    assert report["records"][0]["bet_types"]["PLACE"]["return"]==0
+    singles=report["formal_pre_race_single_win_place"]["types"]
+    assert singles["WIN"]["aggregate"]["investment_weighted_pfs"]==0.0
+    assert singles["PLACE"]["aggregate"]["investment_weighted_pfs"]==0.0
+    assert report["model_comparison_eligible_single_win_place"]["types"]["WIN"]["status"]=="NO_VERIFIED_SINGLE_TYPE_OBSERVATIONS"
+
+
+def test_result_dict_bet_type_breakdown_keeps_explicit_zero(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for d in ["runtime/performance_ledger","runtime/reviews","runtime/reviews_auto","runtime/results"]:
+        Path(d).mkdir(parents=True,exist_ok=True)
+    item={"race_id":"KM-LOCAL-KAW-20261016-R04-LIVE-R1","formal_grade":"FORMAL-PRE-RACE",
+          "settlement":{"status":"SETTLED","pfs_authority":"FROZEN-RECOMMENDATION-PFS",
+                        "total_investment":100,"total_payout":0,
+                        "by_bet_type":{"WIN":{"investment":100,"return":0}}}}
+    Path("runtime/results/result.json").write_text(json.dumps(item),encoding="utf-8")
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    records=p.canonical_records()
+    assert records[0]["bet_types"]["WIN"]=={"investment":100.0,"return":0.0}
+    assert p._single_axis(records)["types"]["WIN"]["aggregate"]["investment_weighted_pfs"]==0.0
+
+
+def test_bool_and_nan_are_never_settled_financial_evidence():
+    import sys
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"runtime"))
+    import pfs_grand_review as p
+    assert p._num(True) is None
+    assert p._num(False) is None
+    assert p._num(float("nan")) is None
+    assert p._num(float("inf")) is None
