@@ -63,6 +63,9 @@ jobs:
             tests/test_family_pfs_improvement.py \
             tests/test_ohi_20261008_result_reflection_regression.py \
             tests/test_nar_auxiliary_evidence.py
+      - name: Audit checked-in frozen WIN/PLACE observations (read-only, non-Production)
+        run: |
+          python research/local_single_win_place_review.py --out "${RUNNER_TEMP}/local-single-win-place-review.json"
       - name: Compile LOCAL runtime modules
         run: |
           python -m py_compile             runtime/local_physical/app.py             runtime/local_physical/app_v15.py             runtime/local_physical/source_acquisition.py             runtime/local_physical/nar_source_manifest.py             runtime/local_physical/nar_runner_universe.py \
