@@ -270,3 +270,26 @@ def test_local_single_invalid_money_never_enters_roi(tmp_path):
         {"bet_type": "WIN", "investment": 100, "payout": float("nan")}])
     report = review.build_report([row], result_dir=root)
     assert report["held"][0]["reason"] == "TYPE_BREAKDOWN_CONTRADICTS_FROZEN_TOTAL"
+
+
+def test_local_single_combined_win_place_exceeds_canonical_stake_is_held(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single(investment=100, payout=0)
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "WIN", "investment": 100, "payout": 0},
+        {"bet_type": "PLACE", "investment": 100, "payout": 0}])
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "COMBINED_SINGLE_TYPES_EXCEED_CANONICAL_TOTAL"
+    assert report["bet_types"]["WIN"]["aggregate"]["pfs_pct"] is None
+    assert report["bet_types"]["PLACE"]["aggregate"]["pfs_pct"] is None
+
+
+def test_local_single_duplicate_type_prevents_partial_race_counting(tmp_path):
+    from research import local_single_win_place_review as review
+    row = _formal_single(investment=200, payout=0)
+    root = _settled_single(tmp_path, row["race_id"], [
+        {"bet_type": "PLACE", "investment": 100, "payout": 0},
+        {"bet_type": "PLACE", "investment": 100, "payout": 0}])
+    report = review.build_report([row], result_dir=root)
+    assert report["held"][0]["reason"] == "DUPLICATE_TYPE_BREAKDOWN"
+    assert report["bet_types"]["PLACE"]["aggregate"]["pfs_pct"] is None
