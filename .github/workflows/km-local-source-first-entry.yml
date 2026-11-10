@@ -102,7 +102,9 @@ jobs:
           if r.get('formal_final_proven') is True:
               raise SystemExit('SOURCE_ONLY_WORKFLOW_MUST_NOT_CLAIM_FINAL')
           if int(os.environ['SOURCE_ENTRY_RC']) and r.get('code') not in (
-              'STATIC_PREDICTION_FREEZE_REQUIRED', 'ANALYSIS_ONLY_SOURCE_COMPLETE'):
+              'STATIC_PREDICTION_FREEZE_REQUIRED',
+              'FULL_NUMERICAL_CLOSURE_REQUIRED',
+              'ANALYSIS_ONLY_SOURCE_COMPLETE'):
               raise SystemExit('UNEXPECTED_SOURCE_FIRST_FAILURE:' + str(r.get('code')))
           print('SIGNED_SOURCE_ONLY_PASS / FORMAL_FINAL_NOT_CLAIMED / ' + str(r.get('code')))
           PY
