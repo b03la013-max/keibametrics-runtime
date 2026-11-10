@@ -343,3 +343,43 @@ def test_source_first_post_run_accepts_verified_reused_checkpoint(tmp_path, monk
     report_file.write_text(json.dumps(cached))
     with pytest.raises(SystemExit, match="SIGNED_SOURCE_STAGE_NOT_VERIFIED"):
         exec(verify, {})
+
+
+def test_source_only_does_not_lose_signed_checkpoint_on_numerical_hold(tmp_path, monkeypatch):
+    """SOURCE is verified independently of unfinished Full29 numerical coverage."""
+    import pytest
+
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/km-local-source-first-entry.yml").read_text(encoding="utf-8")
+    )
+    step = next(s for s in workflow["jobs"]["entry"]["steps"]
+                if s.get("name") == "Execute SOURCE-first entry with explicit hold reporting")
+    blocks = re.findall(r"python - <<'PY'\n(.*?)\nPY", step["run"], re.S)
+    assert len(blocks) == 2
+    verify = compile(blocks[1], "<source-first-actual-postrun-verifier>", "exec")
+
+    reports = tmp_path / "entry-out"
+    reports.mkdir()
+    report = {
+        "status": "HOLD",
+        "first_failed_phase": "NUMERICAL",
+        "code": "FULL_NUMERICAL_CLOSURE_REQUIRED",
+        "formal_final_proven": False,
+        "source": {
+            "status": "SOURCE_PASS",
+            "signed_source_verified": True,
+            "execution_class": "SOURCE_ONLY",
+        },
+    }
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SOURCE_ENTRY_RC", "1")
+    (reports / "entry_report.json").write_text(json.dumps(report))
+    # It must be possible to retain a valid SOURCE-only diagnostic even if
+    # actual numerical coverage is incomplete. No FORMAL success is inferred.
+    exec(verify, {})
+
+    # A valid SOURCE label cannot launder an unrelated execution failure.
+    report["code"] = "UNEXPECTED_RUNTIME_FAILURE"
+    (reports / "entry_report.json").write_text(json.dumps(report))
+    with pytest.raises(SystemExit, match="UNEXPECTED_SOURCE_FIRST_FAILURE"):
+        exec(verify, {})
