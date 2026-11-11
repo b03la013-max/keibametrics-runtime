@@ -142,7 +142,9 @@ def compile_shadow(
             thirds.append(rid)
         if len(thirds) >= widths[2]:
             break
-    p3_unknown = [rid for rid in ids if "T3I-L" in neutrals[rid]]
+    pairs = [(h, p) for h in heads for p in seconds if h != p]
+    p3_unknown = [rid for rid in ranked["T3I-L"]
+                  if "T3I-L" in neutrals[rid] and any(rid not in pair for pair in pairs)]
     # One unknown third is protected in this paper baseline rather than being
     # silently equated to a low score. Never promote to Production.
     protected_unknown = None
@@ -152,7 +154,6 @@ def compile_shadow(
     roles = {rid: [col for col, pool in
                    (("W", heads), ("P2", seconds), ("P3", thirds))
                    if rid in pool] for rid in ids}
-    pairs = [(h, p) for h in heads for p in seconds if h != p]
     # Order-exact paper candidates are not actual bets or Producer SIGNED FINAL.
     exacta = [{"bet_type": "EXACTA", "selection": [h, p], "stake": 100}
               for h, p in pairs]
