@@ -947,10 +947,12 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
     ids = {f'{prefix}{number:02d}-LIVE-R1' for number in range(1, 13)}
     approved = private.binding.get('formal_execution_ids')
     approved = {eid for eid in approved if isinstance(eid, str)} if isinstance(approved, list) else set()
+    source_only = private.binding.get('source_only_execution_ids')
+    source_only = {eid for eid in source_only if isinstance(eid, str)} if isinstance(source_only, list) else set()
     sources, errors, program, races = {}, {}, None, []
-    for eid in sorted(ids & approved):
+    for eid in sorted(ids & (approved | source_only)):
         try:
-            private.require_nankan_source_approval(eid)
+            private.require_nankan_source_approval(eid, source_only=True)
             saved = private.resolve(eid, 'SOURCE')
             if saved is None:
                 continue
@@ -986,13 +988,20 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
     result.update(status='PRIVATE_NANKAN_DAY_PLAN_READY', first_stop_stage=None,
                   plan_sha256=plan['plan_sha256'], source_read_failures=errors)
     approval_path = root / 'profiles' / 'local_autonomous_approvals' / f'{day}-KAW.json'
+
+    def read_day_approval():
+        try:
+            return approval_path.read_bytes()
+        except FileNotFoundError:
+            return private.runtime_approval_bytes()
+
     approval = None
     current = None
     if execute:
         try:
-            # The dated day-plan approval authorizes scheduling. The Binding's
-            # separate hash-pinned approval authorizes each private execution.
-            approval_bytes = approval_path.read_bytes()
+            # Scheduling still needs a complete dated plan approval. The
+            # same pinned private document can also authorize the execution.
+            approval_bytes = read_day_approval()
             approval = json.loads(approval_bytes)
             if approval.get('cost_control_ref') != private.binding.get('cost_control_ref'):
                 raise ValueError('PRIVATE_DAY_COST_CONTROL_MISMATCH')
@@ -1060,7 +1069,7 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
                         continue
                     if clock() >= deadline:
                         raise ValueError('DEADLINE_EXPIRED_BEFORE_DURABLE_CLAIM')
-                    if approval_path.read_bytes() != approval_bytes:
+                    if read_day_approval() != approval_bytes:
                         raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
                     private.write(claim, {'execution_id': eid, 'plan_sha256': plan['plan_sha256'],
                                           'source_receipt_sha256': envelope['receipt_sha256'],

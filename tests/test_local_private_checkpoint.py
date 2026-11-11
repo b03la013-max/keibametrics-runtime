@@ -227,6 +227,7 @@ def test_private_checkpoint_separates_public_and_recovers_exact_bytes(signed_cas
     ("scope", "ENDPOINT_OUTSIDE_PERMISSION"),
     ("authority", "CONSUMER_NOT_AUTHORIZED"),
     ("active", "ACTIVE_UNIVERSE_INVALID"),
+    ("race", "RACE_CONTEXT_MISMATCH"),
 ])
 def test_signed_private_input_fails_closed(signed_case, defect, reason):
     root, binding, pin, intent, basis, signed, path, envelope, calls = signed_case
@@ -248,6 +249,8 @@ def test_signed_private_input_fails_closed(signed_case, defect, reason):
         artifact["source_manifest_profile"] = "UNAPPROVED_NANKAN"
     if defect == "active":
         artifact["runner_status_registry"][0]["status"] = "ACTIVE_DECLARED"
+    if defect == "race":
+        basis = {**basis, "race_no": 2}
     changed = signed(artifact)
     if defect == "signature":
         changed["signature"] = base64.b64encode(b"x" * 64).decode()
@@ -292,7 +295,7 @@ def test_kaw_live_source_never_falls_back_to_nar(signed_case, monkeypatch):
     with pytest.raises(store.ExecutionStoreError, match="PRIVATE_SOURCE_NANKAN_EXCLUSIVE_PERMISSION_REQUIRED"):
         private.produce_nankan_source(basis, no_network, github_sha="FIXTURE")
     private.binding["formal_execution_ids"] = []
-    with pytest.raises(store.ExecutionStoreError, match="PRIVATE_FORMAL_EXECUTION_APPROVAL_REQUIRED"):
+    with pytest.raises(store.ExecutionStoreError, match="PRIVATE_SOURCE_EXECUTION_APPROVAL_REQUIRED"):
         private.acquire_source(basis, github_sha="FIXTURE")
     assert calls == []
 
@@ -307,6 +310,7 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     _, binding_path, _, intent, _, sign, _, _, calls = signed_case
     binding = json.loads(binding_path.read_bytes())
     binding["source_url_prefixes"] = {"NANKAN_OFFICIAL": [nankan.ORIGIN + "/"]}
+    binding["source_only_execution_ids"] = binding.pop("formal_execution_ids")
     binding_bytes = transport._json(binding)
     write(binding_path, binding_bytes)
     monkeypatch.setenv(transport.BINDING_ENV, str(binding_path))
@@ -341,6 +345,17 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
         assert phase == "SOURCE" and race_id == basis["race_id"] and not errors
         return sign(artifact, phase=phase, status=status, timestamp=datetime.now(timezone.utc).isoformat())
 
+    with pytest.raises(store.ExecutionStoreError, match="NANKAN_LIVE_ACQUISITION_PERMISSION_REQUIRED"):
+        checkpoint.produce_nankan_source(basis, sign_fixture, github_sha="FIXTURE")
+    assert requested == calls == []
+    binding["nankan_live_acquisition_authorized"] = True
+    write(binding_path, transport._json(binding))
+    monkeypatch.setenv(transport.BINDING_SHA_ENV, transport._sha(binding_path.read_bytes()))
+    checkpoint = transport.PrivateCheckpoint.from_env()
+    expired_basis = {**basis, "prediction_cutoff": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()}
+    with pytest.raises(store.ExecutionStoreError, match="NANKAN_CUTOFF_PASSED"):
+        checkpoint.produce_nankan_source(expired_basis, sign_fixture, github_sha="FIXTURE")
+    assert requested == calls == []
     result = checkpoint.produce_nankan_source(basis, sign_fixture, github_sha="FIXTURE")
     assert result["status"] == "PASS" and requested == list(raw_by_url)
     resolved = transport.PrivateCheckpoint.from_env().resolve(basis["race_id"], "SOURCE")
@@ -353,9 +368,53 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     assert requested == list(raw_by_url)
     assert set(calls) == {"GET"}
 
+    # The approved signer can hand the original bytes to a separate private
+    # Runner whose SOURCE permission does not authorize fetching or prediction.
+    day, eid = intent['race_date'], intent['execution_id']
+    consumer_root = checkpoint.root / "consumer"
+    consumer_root.mkdir(mode=0o700)
+    for field in ("permission_file", "formal_runtime_approval_file"):
+        name = binding[field]
+        write(consumer_root / name, (checkpoint.root / name).read_bytes())
+    consumer_pin = {**binding, "nankan_live_acquisition_authorized": False}
+    consumer_binding = write(consumer_root / "binding.json", transport._json(consumer_pin))
+    consumer = transport.PrivateCheckpoint(consumer_binding, transport._sha(consumer_binding.read_bytes()))
+    transferred = write(consumer_root / "signed-source.json", envelope_path.read_bytes())
+    output = consumer.work_root / eid / "source-intake"
+    with pytest.raises(store.ExecutionStoreError, match="SOURCE_EXECUTION_APPROVAL_REQUIRED"):
+        consumer.import_source(transferred, {**basis, "race_id": eid.replace("-R01-", "-R02-")},
+                               github_sha="FIXTURE")
+    token = orchestrator.PRIVATE_CHECKPOINT.set(consumer)
+    try:
+        accepted = local_race_entry.run(intent, output=output, run_id="fixture", github_sha="FIXTURE",
+                                        private_source=transferred, source_only=True)
+        assert accepted["status"] == "SOURCE_PASS"
+        with pytest.raises(store.ExecutionStoreError, match="FORMAL_EXECUTION_APPROVAL_REQUIRED"):
+            local_race_entry.run(intent, output=output, run_id="fixture")
+    finally:
+        orchestrator.PRIVATE_CHECKPOINT.reset(token)
+    assert not (output / "numerical_materialization.json").exists()
+    imported = consumer.resolve(eid, "SOURCE")
+    imported_path = imported["run_dir"] / "source_receipt_envelope.json"
+    assert imported_path.read_bytes() == transferred.read_bytes()
+    report = dispatcher.private_kaw_day(tmp_path, day, 120, now=datetime.now(JST), private=consumer)
+    assert report["races"][eid]["status"] == "SIGNED_NANKAN_SOURCE_VERIFIED"
+    assert report["dispatch_count"] == 0
+
+    # A newly approved formal scope can read back the same immutable SOURCE.
+    # No provider refetch or change of the original storage manifest is needed.
+    binding["formal_execution_ids"] = [eid]
+    binding["nankan_live_acquisition_authorized"] = False
+    write(binding_path, transport._json(binding))
+    monkeypatch.setenv(transport.BINDING_SHA_ENV, transport._sha(binding_path.read_bytes()))
+    checkpoint = transport.PrivateCheckpoint.from_env()
+    assert checkpoint.resolve(eid, "SOURCE")["latest"] == resolved["latest"]
+    assert checkpoint.import_source(envelope_path, basis, github_sha="NEW_FIXTURE")["latest"] == resolved["latest"]
+    assert checkpoint.produce_nankan_source(basis, sign_fixture, github_sha="FIXTURE")["status"] == "REUSED"
+    assert requested == list(raw_by_url)
+
     # The actual verifier and private store supply the program, including R2.
     # Only R1 has signed runners and Binding scope.
-    day, eid = intent['race_date'], intent['execution_id']
     now = datetime.now(JST)
     day_report = dispatcher.private_kaw_day(tmp_path, day, 120, now=now, private=checkpoint)
     race2 = eid.replace('-R01-', '-R02-')
@@ -386,6 +445,18 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
         'race_numbers': [1], 'activation_phase': 'B', 'max_dispatches': 1, 'cost_control_ref': 'FIXTURE_ONLY',
         'start_lead_seconds': 1800, 'minimum_remaining_seconds': 300,
     }))
+    scoped = dispatcher.private_kaw_day(tmp_path, day, 120, **{**options, 'private': consumer})
+    assert scoped['dispatch_count'] == 0 and not scoped['races'][eid]['execution_approved']
+    assert not (consumer.work_root / 'day-dispatch' / day / f'{eid}.json').exists()
+
+    day_approval = approval.read_bytes()
+    write(checkpoint.root / binding['formal_runtime_approval_file'], day_approval)
+    binding['formal_runtime_approval_sha256'] = transport._sha(day_approval)
+    write(binding_path, transport._json(binding))
+    monkeypatch.setenv(transport.BINDING_SHA_ENV, transport._sha(binding_path.read_bytes()))
+    checkpoint = transport.PrivateCheckpoint.from_env()
+    approval.unlink()
+    assert checkpoint.resolve(eid, "SOURCE")["latest"] == resolved["latest"]
     sent = []
 
     def held(request, **kwargs):
@@ -424,10 +495,35 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     assert requested == list(raw_by_url)
 
 
+def test_startup_health_does_not_load_formal_binding(signed_case, monkeypatch, capsys):
+    from runtime import kaw_research_startup as startup
+
+    root, binding, _, *_ = signed_case
+    monkeypatch.setattr(startup, "MOUNT_ROOT", root)
+    write(root / "bootstrap_probe.json", transport._json({
+        "nonce": "fixture", "sha256": transport._sha(b"fixture"),
+    }))
+    monkeypatch.delenv(transport.BINDING_ENV, raising=False)
+    monkeypatch.delenv(transport.BINDING_SHA_ENV, raising=False)
+    assert startup.main([]) == 0
+    assert "KAW_RUNNER_WAITING_FOR_BINDING" in capsys.readouterr().out
+    assert startup.main(["--check-binding"]) == 2
+    monkeypatch.setenv(transport.BINDING_ENV, str(binding))
+    monkeypatch.setenv(transport.BINDING_SHA_ENV, "0" * 64)
+    assert startup.main([]) == 0
+    assert "KAW_RUNNER_BINDING_NOT_CHECKED" in capsys.readouterr().out
+    with pytest.raises(store.ExecutionStoreError, match="BINDING_SHA_MISMATCH"):
+        startup.main(["--check-binding"])
+
+
 def test_private_binding_and_publication_boundaries(signed_case, monkeypatch):
     root, binding, pin, intent, basis, signed, path, envelope, calls = signed_case
     with pytest.raises(store.ExecutionStoreError, match="BINDING_SHA_MISMATCH"):
         transport.PrivateCheckpoint(binding, "0" * 64)
+    wrong_code = {**json.loads(binding.read_bytes()), "code_sha256": "0" * 64}
+    wrong_binding = write(root / "wrong-code.json", transport._json(wrong_code))
+    with pytest.raises(store.ExecutionStoreError, match="BINDING_SCOPE_OR_CODE_INVALID"):
+        transport.PrivateCheckpoint(wrong_binding, transport._sha(wrong_binding.read_bytes()))
     private = transport.PrivateCheckpoint(binding, pin)
     link = root / "link"
     link.symlink_to(transport.ROOT, target_is_directory=True)
@@ -439,6 +535,27 @@ def test_private_binding_and_publication_boundaries(signed_case, monkeypatch):
     with pytest.raises(store.ExecutionStoreError, match="CI_FORBIDDEN"):
         transport.PrivateCheckpoint(binding, pin)
     assert calls == []
+
+
+@pytest.mark.parametrize("defect, code", [
+    ("expired", "SOURCE_PROCESSING_PERMISSION_EXPIRED"),
+    ("approval", "SOURCE_EXECUTION_APPROVAL_REQUIRED"),
+    ("cost", "SOURCE_EXECUTION_APPROVAL_REQUIRED"),
+])
+def test_source_only_proof_fails_before_acquisition(signed_case, defect, code):
+    root, binding_path, _, intent, *_ = signed_case
+    binding = json.loads(binding_path.read_bytes())
+    binding["source_only_execution_ids"] = binding.pop("formal_execution_ids")
+    if defect == "expired":
+        binding["valid_until"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    elif defect == "approval":
+        write(root / binding["formal_runtime_approval_file"], b"CHANGED TEST PROOF")
+    else:
+        binding["cost_control_ref"] = ""
+    write(binding_path, transport._json(binding))
+    private = transport.PrivateCheckpoint(binding_path, transport._sha(binding_path.read_bytes()))
+    with pytest.raises(store.ExecutionStoreError, match=code):
+        private.acquire_source(orchestrator.source_checkpoint_basis(intent), github_sha="FIXTURE")
 
 
 def test_new_process_reuses_checkpoint_via_normal_cli(signed_case):

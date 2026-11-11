@@ -26,8 +26,11 @@ MOUNT_ROOT = Path("/data/km-local-kaw")
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dispatch-once", action="store_true",
-                        help="Run one approved KAW race-day tick on this private service")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--dispatch-once", action="store_true",
+                      help="Run one approved KAW race-day tick on this private service")
+    mode.add_argument("--check-binding", action="store_true",
+                      help="Validate the configured Binding without dispatching")
     args = parser.parse_args(argv)
     subprocess.run(
         [sys.executable, "-m", "runtime.local_race_entry", "--help"],
@@ -55,12 +58,17 @@ def main(argv=None):
     if args.dispatch_once and os.environ.get("KM_LOCAL_AUTONOMOUS_ENABLED") != "true":
         print("KAW_RUNNER_DISPATCH_NOT_ACTIVATED")
         return 2
-    if not (os.environ.get(BINDING_ENV) and os.environ.get(BINDING_SHA_ENV)):
+    configured = bool(os.environ.get(BINDING_ENV) and os.environ.get(BINDING_SHA_ENV))
+    if not (args.dispatch_once or args.check_binding):
+        print("KAW_RUNNER_BINDING_NOT_CHECKED" if configured else "KAW_RUNNER_WAITING_FOR_BINDING")
+        return 0
+    if not configured:
         print("KAW_RUNNER_WAITING_FOR_BINDING")
-        return 2 if args.dispatch_once else 0
+        return 2
     private = PrivateCheckpoint.from_env()
-    if args.dispatch_once and not private.root.is_relative_to(root):
-        print("KAW_RUNNER_DISPATCH_BINDING_OUTSIDE_MOUNT")
+    if not private.root.is_relative_to(root):
+        print("KAW_RUNNER_DISPATCH_BINDING_OUTSIDE_MOUNT" if args.dispatch_once
+              else "KAW_RUNNER_CHECK_BINDING_OUTSIDE_MOUNT")
         return 2
     print("KAW_RUNNER_BINDING_VALIDATED")
     if args.dispatch_once:

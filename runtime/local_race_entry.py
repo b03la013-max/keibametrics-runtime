@@ -738,6 +738,8 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None,
         return report
     if private is not None and (private_source is not None or source_only):
         if private_source is not None:
+            if not source_only:
+                private.require_formal_execution(request['execution_id'])
             o.check_deadline(request, phase="SOURCE")
             private.import_source(private_source, o.source_checkpoint_basis(request), github_sha=github_sha)
         if source_only:
@@ -766,6 +768,8 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None,
         report['delivery']=readback_final(request['execution_id'],'readback')
         o._write(output/'entry_report.json', report)
         return report
+    if private is not None and private_source is None:
+        private.require_formal_execution(request['execution_id'])
     # Existing verified pre-cutoff SOURCE remains usable; reacquisition after
     # cutoff is forbidden. A late entry never creates a historical prediction.
     saved = o.resolve_phase(request['execution_id'], 'SOURCE')
@@ -910,14 +914,18 @@ def main():
     parser.add_argument('--persist-checkpoints', action='store_true',
                         help='Use existing strict main-branch Git persistence before further stages')
     args = parser.parse_args()
+    private_options = args.private_source is not None or args.private_source_only
     private_requested = bool(os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING")
-                             or os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256")
-                             or args.private_source is not None or args.private_source_only)
+                             or os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256") or private_options)
     output = Path(args.output) if private_requested else Path(args.output).resolve()
     preserve_existing_reference = False
     private = None
     private_context = None
     try:
+        intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
+        if not private_options and intent.get('prediction_mode') == 'REFERENCE':
+            private_requested = False
+            output = output.resolve()
         if private_requested:
             if args.persist_checkpoints or args.query or args.display:
                 raise ValueError('PRIVATE_CHECKPOINT_PUBLIC_ENTRY_FORBIDDEN')
@@ -932,7 +940,6 @@ def main():
                 raise ValueError('CHECKPOINT_PUBLISH_REQUIRES_EXISTING_MAIN_ACTIONS_ENTRY')
             from runtime.local_race_day_dispatcher import publish_state
             publisher = lambda paths: publish_state(o.ROOT, paths)
-        intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
         if private is not None:
             with private.race_lock(o.derive_execution_id(intent)):
                 report = run(intent, output=output, run_id=args.run_id, github_sha=args.github_sha,

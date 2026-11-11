@@ -354,20 +354,29 @@ class PrivateCheckpoint:
         _require(result is not None and result["run_dir"] == candidate,
                  "PRIVATE_CHECKPOINT_POINTER_CHANGED")
         path = self.directory(result["run_dir"])
+        binding_record = json.loads(private_file(path / "private_checkpoint_binding.json").read_bytes())
+        # SOURCE keeps its original admission record. A current Binding may
+        # reuse it only after verifying the whole envelope under its own scope.
+        stored_pin = binding_record.get("binding_sha256") if isinstance(binding_record, dict) else None
         _require(result["manifest"].get("storage_scope") == "PRIVATE" and
-                 json.loads(private_file(path / "private_checkpoint_binding.json").read_bytes()) ==
-                 {"binding_sha256": self.binding_sha}, "PRIVATE_CHECKPOINT_STORED_BINDING_MISMATCH")
-        self._verify_phase(path, phase, execution_id)
+                 "private_checkpoint_binding.json" in result["manifest"]["files"] and
+                 isinstance(stored_pin, str) and re.fullmatch(r"[0-9a-f]{64}", stored_pin) and
+                 binding_record == {"binding_sha256": stored_pin} and
+                 (phase == "SOURCE" or stored_pin == self.binding_sha),
+                 "PRIVATE_CHECKPOINT_STORED_BINDING_MISMATCH")
+        self._verify_phase(path, phase, execution_id, run_id)
         return result
 
-    def _verify_phase(self, path, phase, execution_id):
+    def _verify_phase(self, path, phase, execution_id, run_id):
         def read(name):
             return json.loads(private_file(path / name).read_bytes())
 
         if phase == "SOURCE":
             basis = read("source_checkpoint_basis.json")
             _require(basis["race_id"] == execution_id, "PRIVATE_SOURCE_EXECUTION_ID_MISMATCH")
-            self._verify_source(read("source_receipt_envelope.json"), basis)
+            envelope = read("source_receipt_envelope.json")
+            _require(envelope.get("receipt_sha256") == run_id, "PRIVATE_SOURCE_RECEIPT_RUN_ID_MISMATCH")
+            self._verify_source(envelope, basis)
         elif phase == "FORMAL":
             self._verify_final(read("final_receipt_envelope.json"), execution_id)
         elif phase == "OFFICIAL_RESULT":
@@ -512,19 +521,29 @@ class PrivateCheckpoint:
                  "PRIVATE_SOURCE_PROCESSING_PERMISSION_EXPIRED")
 
     def require_formal_execution(self, execution_id):
+        self._require_execution_approval(execution_id)
+
+    def _require_execution_approval(self, execution_id, *, source_only=False):
         self.require_current_processing()
-        approved = self.binding.get("formal_execution_ids")
-        proof = self.binding.get("formal_runtime_approval_file") or ""
-        _require(isinstance(approved, list) and execution_id in approved and
-                 proof not in {"", ".", "..", self.binding_path.name, store.PRIVATE_MARKER} and
-                 Path(proof).name == proof and
-                 _sha(private_file(self.root / proof).read_bytes()) ==
-                 self.binding.get("formal_runtime_approval_sha256") and self.binding.get("cost_control_ref"),
+        scopes = ("formal_execution_ids", "source_only_execution_ids") if source_only else ("formal_execution_ids",)
+        error = ("PRIVATE_SOURCE_EXECUTION_APPROVAL_REQUIRED" if source_only else
                  "PRIVATE_FORMAL_EXECUTION_APPROVAL_REQUIRED")
+        _require(any(isinstance(self.binding.get(scope), list) and execution_id in self.binding[scope]
+                     for scope in scopes), error)
+        self.runtime_approval_bytes(error=error)
+
+    def runtime_approval_bytes(self, *, error="PRIVATE_FORMAL_EXECUTION_APPROVAL_REQUIRED"):
+        proof = self.binding.get("formal_runtime_approval_file") or ""
+        cost = self.binding.get("cost_control_ref")
+        _require(isinstance(proof, str) and proof not in {"", ".", "..", self.binding_path.name, store.PRIVATE_MARKER}
+                 and Path(proof).name == proof and isinstance(cost, str) and bool(cost.strip()), error)
+        data = private_file(self.root / proof).read_bytes()
+        _require(_sha(data) == self.binding.get("formal_runtime_approval_sha256"), error)
+        return data
 
     def import_source(self, path, basis, *, github_sha):
         if basis.get("source_manifest_profile") == nankan_kaw_source.PROFILE:
-            self.require_nankan_source_approval(basis["race_id"])
+            self.require_nankan_source_approval(basis["race_id"], source_only=True)
         else:
             self.require_current_processing()
         if path.parent == self.root:
@@ -534,16 +553,16 @@ class PrivateCheckpoint:
         payload = private_file(path).read_bytes()
         return self._persist_source_bytes(payload, basis, github_sha=github_sha)
 
-    def require_nankan_source_approval(self, execution_id):
+    def require_nankan_source_approval(self, execution_id, *, source_only=False):
         self._identity(execution_id)
-        self.require_formal_execution(execution_id)
+        self._require_execution_approval(execution_id, source_only=source_only)
         _require(set(self.binding["source_url_prefixes"]) == {nankan_kaw_source.PROVIDER},
                  "PRIVATE_SOURCE_NANKAN_EXCLUSIVE_PERMISSION_REQUIRED")
 
     def produce_nankan_source(self, basis, sign, *, github_sha):
         """Operator entry on the authorized signer host, with no public signing route."""
         execution_id = basis["race_id"]
-        self.require_nankan_source_approval(execution_id)
+        self.require_nankan_source_approval(execution_id, source_only=True)
         _require(basis.get("source_manifest_profile") == nankan_kaw_source.PROFILE
                  and basis.get("explicit_source_manifest_sha256") is None,
                  "PRIVATE_SOURCE_NANKAN_AUTODISCOVERY_BASIS_REQUIRED")
@@ -556,6 +575,10 @@ class PrivateCheckpoint:
                                                 "source_checkpoint_basis.json").read_bytes()) == basis,
                          "PRIVATE_SOURCE_ACQUISITION_BASIS_INVALID")
                 return {"status": "REUSED", "receipt_sha256": prior["manifest"]["run_id"]}
+            _require(self.binding.get("nankan_live_acquisition_authorized") is True,
+                     "PRIVATE_SOURCE_NANKAN_LIVE_ACQUISITION_PERMISSION_REQUIRED")
+            _require(datetime.now(timezone.utc) < _time(basis["prediction_cutoff"]),
+                     "PRIVATE_SOURCE_NANKAN_CUTOFF_PASSED")
             client = Client(cache=self.directory(self.work_root / "nankan-source-policy", create=True))
 
             def get(url):
@@ -583,7 +606,7 @@ class PrivateCheckpoint:
     def acquire_source(self, basis, *, github_sha):
         execution_id = basis["race_id"]
         self._identity(execution_id)
-        self.require_formal_execution(execution_id)
+        self._require_execution_approval(execution_id, source_only=True)
         _require(basis.get("family_id") == "LOCAL" and basis.get("venue_id") == "KAW" and
                  execution_id.split("-")[3:5] ==
                  [basis["race_date"].replace("-", ""), f'R{basis["race_no"]:02d}'] and
@@ -595,15 +618,17 @@ class PrivateCheckpoint:
         raise store.ExecutionStoreError("PRIVATE_NANKAN_SIGNED_SOURCE_IMPORT_REQUIRED")
 
     def _persist_source_bytes(self, payload, basis, *, github_sha):
+        prior = self.resolve(basis["race_id"], "SOURCE")
+        if prior is not None:
+            directory = prior["run_dir"]
+            _require(private_file(directory / "source_receipt_envelope.json").read_bytes() == payload and
+                     json.loads(private_file(directory / "source_checkpoint_basis.json").read_bytes()) == basis,
+                     "PRIVATE_CHECKPOINT_IMMUTABLE_REVISION_CONFLICT")
+            return {"path": str(directory), "manifest": prior["manifest"], "latest": prior["latest"]}
         envelope = json.loads(payload)
-        self._verify_source(envelope, basis)
         with tempfile.TemporaryDirectory(dir=self.work_root) as staging:
             staging = Path(staging)
             self.write(staging / "source_checkpoint_basis.json", basis)
-            self.write(staging / "source_verification.json", {
-                "valid": True, "verified": True, "signature_valid": True, "artifact_valid": True,
-                "method": "CANONICAL_GATEWAY_HEALTH_ED25519",
-            })
             envelope_path = staging / "source_receipt_envelope.json"
             envelope_path.write_bytes(payload)
             envelope_path.chmod(0o600)
@@ -615,7 +640,12 @@ class PrivateCheckpoint:
         _require(re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9_.-]{0,179}", run_id),
                  "PRIVATE_CHECKPOINT_RUN_ID_INVALID")
         self.output_directory(directory)
-        self._verify_phase(directory, phase, execution_id)
+        self._verify_phase(directory, phase, execution_id, run_id)
+        if phase == "SOURCE":
+            self.write(directory / "source_verification.json", {
+                "valid": True, "verified": True, "signature_valid": True, "artifact_valid": True,
+                "method": "CANONICAL_GATEWAY_HEALTH_ED25519",
+            })
         self.write(directory / "private_checkpoint_binding.json", {"binding_sha256": self.binding_sha})
         files = sorted(private_file(p) for p in directory.glob("*.json") if p.name != "manifest.json")
         phase_path = self.directory(self.store_root / execution_id / phase, create=True)
