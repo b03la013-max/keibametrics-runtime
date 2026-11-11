@@ -81,7 +81,8 @@ def private_file(path):
 def code_sha256():
     files = ("execution_gateway.py", "execution_store.py", "family_authority_guard.py",
              "formal_execution_orchestrator.py", "local_prestart_gate.py", "local_private_checkpoint.py",
-             "local_race_entry.py", "local_race_day_dispatcher.py", "local_race_key_gate.py", "local_static_input_resolver.py",
+             "local_race_entry.py", "local_race_day_dispatcher.py", "kaw_research_startup.py",
+             "local_race_key_gate.py", "local_static_input_resolver.py",
              "non_jra_formal_runner.py", "local_physical/nankan_kaw_source.py",
              "local_physical/source_acquisition.py", "urw_nankan_reference_source.py",
              "urw_reference_source_policy.py", "local_nar_evidence_candidate.py",

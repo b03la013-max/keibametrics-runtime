@@ -297,11 +297,12 @@ def test_kaw_live_source_never_falls_back_to_nar(signed_case, monkeypatch):
     assert calls == []
 
 
-def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path):
+def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path, capsys):
     from test_nankan_kaw_source import KAW_DAY_ID, fixture_access_policy, pages
     from runtime import urw_nankan_reference_source as nankan
     from runtime import local_race_day_dispatcher as dispatcher
     from runtime import family_authority_guard
+    from runtime import kaw_research_startup as startup
 
     _, binding_path, _, intent, _, sign, _, _, calls = signed_case
     binding = json.loads(binding_path.read_bytes())
@@ -388,7 +389,7 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path)
     sent = []
 
     def held(request, **kwargs):
-        assert orchestrator.PRIVATE_CHECKPOINT.get() is checkpoint
+        assert orchestrator.PRIVATE_CHECKPOINT.get().binding_sha == checkpoint.binding_sha
         claim = checkpoint.work_root / 'day-dispatch' / day / f'{eid}.json'
         assert json.loads(claim.read_bytes())['source_receipt_sha256'] == envelope['receipt_sha256']
         assert claim.stat().st_mode & 0o777 == 0o600
@@ -396,10 +397,28 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path)
         return {'status': 'HOLD', 'first_failed_phase': 'STATIC_FREEZE'}
 
     monkeypatch.setattr(local_race_entry, 'run', held)
-    launched = dispatcher.private_kaw_day(tmp_path, day, 120, **options)
+    monkeypatch.setattr(startup, 'ROOT', tmp_path)
+    monkeypatch.setattr(startup, 'MOUNT_ROOT', checkpoint.root)
+    write(checkpoint.root / 'bootstrap_probe.json', transport._json({
+        'nonce': 'fixture', 'sha256': transport._sha(b'fixture'),
+    }))
+    monkeypatch.delenv('KM_LOCAL_AUTONOMOUS_ENABLED')
+    assert startup.main(['--dispatch-once']) == 2
+    assert 'KAW_RUNNER_DISPATCH_NOT_ACTIVATED' in capsys.readouterr().out
+    monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED', 'true')
+    assert startup.main([]) == 0 and not sent
+    capsys.readouterr()
+    assert startup.main(['--dispatch-once']) == 0
+    log = capsys.readouterr().out.splitlines()
+    assert 'KAW_RUNNER_BINDING_VALIDATED' in log
+    assert json.loads(log[-1])['dispatch_count'] == 1
+    assert envelope['receipt_sha256'] not in '\n'.join(log)
+    status_path = checkpoint.work_root / 'day-dispatch' / day / 'day-status.json'
+    launched = json.loads(status_path.read_bytes())
     assert launched['dispatch_count'] == 1 and launched['races'][eid]['first_failed_phase'] == 'STATIC_FREEZE'
     assert launched['races'][race2]['execution_approved'] is False
-    repeated = dispatcher.private_kaw_day(tmp_path, day, 120, **options)
+    assert startup.main(['--dispatch-once']) == 0
+    repeated = json.loads(status_path.read_bytes())
     assert repeated['races'][eid]['status'] == 'HOLD_PRIOR_CLAIM_NO_AUTOMATIC_RETRY'
     assert repeated['dispatch_count'] == 0 and sent == [eid]
     assert requested == list(raw_by_url)
