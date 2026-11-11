@@ -138,3 +138,36 @@ def test_unknown_p3_is_protected_without_treating_neutral_as_weak():
     assert "P3" in shadow["role_columns"]["6"]
     assert shadow["neutral_index_registry"]["6"] == ["T3I-L"]
     assert shadow["prediction_consumption_authorized"] is False
+
+
+def test_unknown_winner_cell_does_not_change_observed_gap_or_paper_paths():
+    req, source, numeric, now = fixture()
+    for row, value in zip(numeric["runners"], [62, 46, 45, 44, 43, 42]):
+        row["canonical_components"]["ZAI-WIN"]["value"] = value
+    control = compile_shadow(req, source, numeric, now=now)
+    assert control["shadow_width"]["winner_spread"] == 16
+    assert control["winner_head_local_pairs"] == [
+        {"head": "1", "second": "2"}, {"head": "1", "second": "3"},
+    ]
+
+    numeric["runners"][-1]["canonical_components"]["ZAI-WIN"] = {
+        "value": 52, "terminal_status": "RULED-NEUTRAL",
+    }
+    shadow = compile_shadow(req, source, numeric, now=now)
+    assert shadow["shadow_width"] == control["shadow_width"]
+    assert shadow["paper_tickets"] == control["paper_tickets"]
+    assert shadow["paper_capital_yen"] == control["paper_capital_yen"]
+    assert shadow["ranking"][-1] == "6"
+    assert shadow["p3_unknown_protection"] == "6"
+    assert shadow["neutral_index_registry"]["6"] == ["ZAI-WIN", "T3I-L"]
+
+
+@pytest.mark.parametrize("observed_count", [0, 1])
+def test_unknown_winner_gap_uses_existing_wide_band_without_inventing_a_spread(observed_count):
+    req, source, numeric, now = fixture()
+    for row in numeric["runners"][observed_count:]:
+        row["canonical_components"]["ZAI-WIN"] = {"value": 52, "terminal_status": "RULED-NEUTRAL"}
+    shadow = compile_shadow(req, source, numeric, now=now)
+    assert shadow["shadow_width"]["winner_spread"] is None
+    assert shadow["shadow_width"]["band"] == "SHADOW_WIDE"
+    assert shadow["production_authority"] is False
