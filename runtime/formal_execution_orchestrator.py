@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextvars import ContextVar
 import datetime as dt
 import hashlib
 import json
@@ -22,7 +23,8 @@ sys.path.insert(0, "runtime")
 
 from execution_gateway import derive_execution_id, load_gateway, result_route, ExecutionGatewayError
 from local_prestart_gate import validate_window, PrestartError
-from execution_store import (ExecutionStoreError, materialize_phase, persist_phase, resolve_phase,
+from runtime.execution_store import (ExecutionStoreError, materialize_phase as _public_materialize_phase,
+                             persist_phase as _public_persist_phase, resolve_phase as _public_resolve_phase,
                              require_public_storage, require_public_json_files)
 from formal_import_closure import FormalImportClosureError, build_closure
 from family_authority_guard import load_authority, validate_request_context, verify_execution_completion
@@ -31,6 +33,49 @@ from entry_transport_fallback import build_legacy_formal_request, validate_fallb
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_RUNTIME_OUT = ROOT / "runtime_out"
 DEFAULT_TMP_ROOT = ROOT / "runtime" / "orchestrator_tmp"
+
+
+# Set only by the local, operator-bound KAW entry. Public/Actions callers
+# continue to use the original checkpoint APIs and never fall back to private.
+PRIVATE_CHECKPOINT = ContextVar("local_private_checkpoint", default=None)
+
+
+def resolve_phase(execution_id, phase, *, root=None):
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        if root is not None:
+            raise ExecutionStoreError("PRIVATE_CHECKPOINT_PUBLIC_ROOT_CONFLICT")
+        return private.resolve(execution_id, phase)
+    return _public_resolve_phase(execution_id, phase, root=root)
+
+
+def persist_phase(execution_id, phase, run_id, directory, *, root=None, github_sha=None):
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        if root is not None:
+            raise ExecutionStoreError("PRIVATE_CHECKPOINT_PUBLIC_ROOT_CONFLICT")
+        return private.persist(execution_id, phase, run_id, directory, github_sha=github_sha)
+    return _public_persist_phase(execution_id, phase, run_id, directory, root=root, github_sha=github_sha)
+
+
+def materialize_phase(execution_id, phase, destination, *, root=None):
+    private = PRIVATE_CHECKPOINT.get()
+    if private is None:
+        return _public_materialize_phase(execution_id, phase, destination, root=root)
+    resolved = resolve_phase(execution_id, phase, root=root)
+    if resolved is not None:
+        dest = pathlib.Path(destination)
+        _reset_runtime_out(dest)
+        for name in resolved["manifest"]["files"]:
+            shutil.copy2(resolved["run_dir"] / name, dest / name)
+    return resolved
+
+def formal_intent_path(execution_id, *, repo_root=None):
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        return private.root / "intents" / f"{execution_id}.json"
+    return (repo_root or ROOT) / "runtime" / "formal_intents" / f"{execution_id}.json"
+
 
 SUPPORTED_FAMILIES = {"LOCAL"}
 
@@ -553,6 +598,10 @@ def _load(path: str | pathlib.Path) -> Dict[str, Any]:
 
 
 def _write(path: pathlib.Path, value: Any) -> None:
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        private.write(path, value)
+        return
     require_public_storage(value)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2), encoding="utf-8")
@@ -560,20 +609,32 @@ def _write(path: pathlib.Path, value: Any) -> None:
 
 def _copy_json_dir(src: pathlib.Path, dst: pathlib.Path) -> None:
     files = sorted(p for p in src.iterdir() if p.is_file() and p.suffix == ".json") if src.exists() else []
-    require_public_json_files(files)
-    if dst.exists():
-        shutil.rmtree(dst)
-    dst.mkdir(parents=True, exist_ok=True)
-    if not src.exists():
-        return
+    private = PRIVATE_CHECKPOINT.get()
+    if private is None:
+        require_public_json_files(files)
+        if dst.exists():
+            shutil.rmtree(dst)
+        dst.mkdir(parents=True, exist_ok=True)
+    else:
+        from runtime.local_private_checkpoint import private_file
+        private.directory(src)
+        for p in files:
+            private_file(p)
+        _reset_runtime_out(dst)
     for p in files:
         shutil.copy2(p, dst / p.name)
 
 
 def _reset_runtime_out(runtime_out: pathlib.Path) -> None:
-    if runtime_out.exists():
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        private.output_directory(runtime_out, create=True)
         shutil.rmtree(runtime_out)
-    runtime_out.mkdir(parents=True, exist_ok=True)
+        private.output_directory(runtime_out, create=True)
+    else:
+        if runtime_out.exists():
+            shutil.rmtree(runtime_out)
+        runtime_out.mkdir(parents=True, exist_ok=True)
 
 
 def build_phase_request(intent: Dict[str, Any], phase: str) -> Dict[str, Any]:
@@ -766,12 +827,48 @@ def run_phase(
     resume_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     execution_id = str(request["execution_id"])
+    private = PRIVATE_CHECKPOINT.get()
+    if private is not None:
+        if phase == "SOURCE" and resume_result is None:
+            check_deadline(request, phase="SOURCE")
+            acquired = private.acquire_source(source_checkpoint_basis(request), github_sha=github_sha)
+            validate_source_checkpoint(pathlib.Path(acquired["path"]), request)
+            return {"phase": "SOURCE", "status": "PASS",
+                    "manifest_sha256": acquired["latest"]["manifest_sha256"],
+                    "run_id": acquired["manifest"]["run_id"], "stdout_tail": None}
+        if phase == "RESULT" and resume_result is None:
+            _reset_runtime_out(runtime_out)
+            try:
+                saved = private.settle_result(request, runtime_out, github_sha=github_sha)
+            except ExecutionStoreError as exc:
+                raise FormalOrchestrationError(str(exc)) from None
+            return {"phase": "RESULT", "status": "PASS",
+                    "manifest_sha256": saved["latest"]["manifest_sha256"],
+                    "run_id": saved["manifest"]["run_id"], "stdout_tail": None}
+        if phase != "FORMAL" or resume_result is not None:
+            raise FormalOrchestrationError("PRIVATE_CHECKPOINT_EXTERNAL_PHASE_UNSUPPORTED")
+        private.require_formal_execution(execution_id)
+        private.output_directory(runtime_out, create=True)
+        private.output_directory(tmp_root, create=True)
+        if runtime_out == tmp_root or runtime_out in tmp_root.parents or tmp_root in runtime_out.parents:
+            raise FormalOrchestrationError("PRIVATE_CHECKPOINT_WORK_DIRECTORIES_OVERLAP")
+        saved = private.resolve(execution_id, "SOURCE")
+        if saved is None:
+            raise FormalOrchestrationError("PRIVATE_CHECKPOINT_SIGNED_SOURCE_REQUIRED")
+        request = copy.deepcopy(request)
+        request["source_receipt"] = _load_checkpoint_json(saved, "source_receipt_envelope.json")
+        request.pop("source_receipt_artifact_id", None)
     request_path = tmp_root / execution_id / f"{phase.lower()}_request.json"
     _write(request_path, request)
     _reset_runtime_out(runtime_out)
 
     env = os.environ.copy()
     env.pop("KM_RESULT_REUSE_PATH", None)
+    env.pop("KM_LOCAL_PRIVATE_CHECKPOINT_RUNNER", None)
+    if private is not None:
+        env["KM_LOCAL_PRIVATE_CHECKPOINT_RUNNER"] = "1"
+        env["KM_LOCAL_PRIVATE_CHECKPOINT_BINDING"] = str(private.binding_path)
+        env["KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256"] = private.binding_sha
     store_run_id = f"{run_id}-{phase.lower()}"
     if resume_result is not None:
         if str(phase).upper() != "RESULT":
@@ -800,6 +897,8 @@ def run_phase(
         text=True,
     )
     if proc.returncode != 0:
+        if private is not None:
+            raise FormalOrchestrationError("PRIVATE_FORMAL_RUNNER_FAILED")
         failure = _phase_failure(runtime_out, phase, proc.returncode, proc.stdout, proc.stderr)
         if resume_result is not None:
             # The earlier immutable receipt survives even when fresh /verify
@@ -854,7 +953,7 @@ def run_phase(
         "status": "PASS",
         "manifest_sha256": (persisted.get("latest") or {}).get("manifest_sha256"),
         "run_id": (persisted.get("manifest") or {}).get("run_id"),
-        "stdout_tail": proc.stdout[-4000:],
+        "stdout_tail": proc.stdout[-4000:] if private is None else None,
     }
 
 
@@ -874,6 +973,7 @@ def orchestrate(
     # RESULT is a later invocation of the same entry, never an attempt to
     # reacquire SOURCE or recompute a historical prediction.
     phase = str(intent.get("execution_phase") or intent.get("phase") or "").upper()
+    private = PRIVATE_CHECKPOINT.get()
     # An explicitly requested SOURCE phase must never silently become FORMAL.
     # Its signed receipt is reusable, but it is NOT a full lifecycle FINAL.
     if phase in {"SOURCE", "SOURCE_ONLY", "SOURCE_ACQUIRE", "SOURCE-FREEZE", "SOURCE_FREEZE"}:
@@ -901,6 +1001,8 @@ def orchestrate(
         request = copy.deepcopy(intent)
         request["execution_id"] = execution_id
         route = result_route(request)
+        if private is not None and route != "CANONICAL":
+            raise FormalOrchestrationError("PRIVATE_RESULT_REQUIRES_CANONICAL_ROUTE")
         formal = resolve_phase(execution_id, "FORMAL")
         if route == "CANONICAL" and formal is None:
             raise FormalOrchestrationError("RESULT_REQUIRES_EXISTING_FORMAL_CHECKPOINT")
@@ -909,13 +1011,15 @@ def orchestrate(
         if previous is not None:
             basis = _load_checkpoint_json(previous, "result_checkpoint_basis.json")
             if basis != {"request_sha256": _sha_obj(request)}:
+                if private is not None:
+                    raise FormalOrchestrationError("PRIVATE_RESULT_REQUEST_CHANGED")
                 _validate_explicit_result_revision(request, previous, formal)
             else:
                 _reset_runtime_out(runtime_out)
                 materialize_phase(execution_id, "RESULT", runtime_out)
                 completion = verify_execution_completion(runtime_out, request, phase="RESULT")
                 flags = _load_checkpoint_json(previous, "receipt_verifications.json") or {}
-                if (completion["complete"] or plan_only or "RESULT" not in flags
+                if (completion["complete"] or private is not None or plan_only or "RESULT" not in flags
                         or flags.get("RESULT") not in (True, False)
                         or not _load_checkpoint_json(previous, "result_receipt_envelope.json")):
                     return {"status": "ALREADY_COMPLETE" if completion["complete"] else "FORMAL_INCOMPLETE",
@@ -929,7 +1033,7 @@ def orchestrate(
         completion = verify_execution_completion(runtime_out, request, phase="RESULT")
         _write(runtime_out / "lifecycle_completion.json", completion)
         return {"status": "FULL_LIFECYCLE_EXECUTION_PASS" if completion["complete"] else "FORMAL_INCOMPLETE",
-                "execution_id": execution_id, "completion": completion,
+                "execution_id": execution_id, "phase": "RESULT", "completion": completion,
                 "execution_class": completion["execution_class"],
                 "phases": [result], "prediction_reexecution": False}
 
@@ -1186,6 +1290,8 @@ def run_formal_with_fallback(request, phase, **kwargs):
         check_deadline(request)
         return run_phase(request, phase, **kwargs)
     except FormalOrchestrationError as exc:
+        if PRIVATE_CHECKPOINT.get() is not None:
+            raise
         try:
             failure = json.loads(str(exc))
         except ValueError:
@@ -1314,6 +1420,7 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
     from local_physical.source_acquisition import fetch_source
     from local_physical.nar_source_manifest import _result_source, LOCAL_BABA_CODES
     execution_id = derive_execution_id(intent)
+    private = PRIVATE_CHECKPOINT.get()
     formal = resolve_phase(execution_id, "FORMAL")
     source = resolve_phase(execution_id, "SOURCE")
     if not formal or not source:
@@ -1345,13 +1452,23 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
     for key, value in context_keys.items():
         if str(value).replace("/", "-") != str(identity[key]).replace("/", "-"):
             raise FormalOrchestrationError("OFFICIAL_RESULT_SOURCE_IDENTITY_MISMATCH")
-    if dt.datetime.now(dt.timezone.utc) < _parse_iso(intent["scheduled_post_at"]):
+    scheduled_post = _parse_iso(intent["scheduled_post_at"])
+    if private is not None:
+        observed_post = _official_post_from_source(intent, source)
+        if observed_post is None:
+            raise FormalOrchestrationError("PRIVATE_RESULT_OFFICIAL_POST_REQUIRED")
+        scheduled_post = max(scheduled_post, observed_post)
+    if dt.datetime.now(dt.timezone.utc) < scheduled_post:
         raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_DUE")
     tickets = ((final.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
     if any(str(t.get("bet_type", "")).upper() not in {"EXACTA", "TRIO", "TRIFECTA"} for t in tickets):
         raise FormalOrchestrationError("OFFICIAL_RESULT_UNSUPPORTED_SETTLEMENT_TICKET_HOLD")
     spec = _result_source(identity["venue_id"], LOCAL_BABA_CODES[identity["venue_id"]],
                           str(identity["race_date"]).replace("-", "/"), int(identity["race_no"]))
+    if private is not None:
+        private.require_formal_execution(execution_id)
+        if not private.allows_source_endpoint(spec["authority"], spec["url"]):
+            raise FormalOrchestrationError("PRIVATE_RESULT_ENDPOINT_OUTSIDE_PERMISSION")
     # RESULT collection has its own time axis; never reuse prediction cutoff.
     try:
         snapshot, errors = (fetch or fetch_source)(spec, "")
@@ -1363,6 +1480,8 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
         raise
     if errors or snapshot.get("final_url") != spec["url"]:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FETCH_OR_REDIRECT_HOLD")
+    if private is not None and _parse_iso(snapshot["fetched_at"]) < scheduled_post:
+        raise FormalOrchestrationError("PRIVATE_RESULT_OBSERVED_BEFORE_OFFICIAL_POST")
     runners = artifact["active_runner_universe"]["runners"]
     order, payouts = parse_official_result_snapshot(snapshot, identity, [r["runner_id"] for r in runners])
     request = {"family_id": "LOCAL", "execution_id": execution_id, "race_id": intent["race_id"],
@@ -1377,7 +1496,8 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
     dest = tmp_root / execution_id / "official_result_out"
     _write(dest / "official_result_snapshot.json", snapshot)
     _write(dest / "official_result_request.json", request)
-    persist_phase(execution_id, "OFFICIAL_RESULT", f"{run_id}-official-result", dest, github_sha=github_sha)
+    store_run_id = snapshot["snapshot_sha256"] if private is not None else f"{run_id}-official-result"
+    persist_phase(execution_id, "OFFICIAL_RESULT", store_run_id, dest, github_sha=github_sha)
     return request
 
 
