@@ -31,6 +31,7 @@ from sbo_public_shadow_evidence import (
 
 APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL"
 SOURCE_REQUIRED = True
+NANKAN_KAW_MANIFEST_PROFILE = "KM-LOCAL-NANKAN-KAW-SOURCE-MANIFEST-v1"
 legacy.APP_VERSION = APP_VERSION
 
 app = FastAPI(title="KeibaMetrics LOCAL Physical Runtime", version=APP_VERSION)
@@ -49,15 +50,27 @@ def _require_source_receipt(payload: Dict[str, Any], race_id: str) -> Dict[str, 
         raise HTTPException(422, "SOURCE_RECEIPT_NOT_FROZEN")
     if str(rec.get("race_id") or "") != str(race_id):
         raise HTTPException(422, "SOURCE_RECEIPT_RACE_ID_MISMATCH")
-    valid, errors = verify_source_artifact(env.get("artifact") or {})
-    if not valid:
-        raise HTTPException(422, "SOURCE_ARTIFACT_INVALID:" + ",".join(errors))
-    # Current LOCAL registry/runtime owns the NAR runner consumer only.
-    # A generic SOURCE signature proves bytes, not authority for a new provider
-    # to skip the PRE_KRS/FINAL runner checks. SOURCE-only verification stays
-    # independent; a different consumer needs its own approved implementation.
-    if (env.get("artifact") or {}).get("source_manifest_profile") != NAR_MANIFEST_PROFILE:
-        raise HTTPException(422, "SOURCE_CONSUMER_NOT_AUTHORIZED")
+    artifact = env.get("artifact") or {}
+    profile = artifact.get("source_manifest_profile")
+    if profile == NANKAN_KAW_MANIFEST_PROFILE:
+        if rec.get("artifact_sha256") != sha_obj(artifact):
+            raise HTTPException(422, "SOURCE_ARTIFACT_RECEIPT_MISMATCH")
+        try:
+            from runtime.local_physical import nankan_kaw_source
+            from runtime.local_private_checkpoint import PrivateCheckpoint
+            private = PrivateCheckpoint.from_env()
+            if private is None:
+                raise ValueError("PRIVATE_CHECKPOINT_BINDING_REQUIRED")
+            private.require_nankan_source_approval(race_id)
+            nankan_kaw_source.verify(artifact)
+        except (ImportError, KeyError, ValueError, TypeError, OSError):
+            raise HTTPException(422, "SOURCE_CONSUMER_NANKAN_KAW_NOT_ADMITTED") from None
+    else:
+        valid, errors = verify_source_artifact(artifact)
+        if not valid:
+            raise HTTPException(422, "SOURCE_ARTIFACT_INVALID:" + ",".join(errors))
+        if profile != NAR_MANIFEST_PROFILE:
+            raise HTTPException(422, "SOURCE_CONSUMER_NOT_AUTHORIZED")
     return env
 
 
@@ -102,6 +115,9 @@ def verify(payload: Dict[str, Any]):
 @app.post("/source/manifest/local")
 def source_manifest_local(payload: Dict[str, Any]):
     legacy.validate_family(payload)
+    race = payload.get("race") if isinstance(payload.get("race"), dict) else {}
+    if str(payload.get("venue_id") or race.get("venue_id") or "").upper() == "KAW" or "-KAW-" in str(payload.get("race_id") or ""):
+        raise HTTPException(422, "PRIVATE_NANKAN_SIGNED_SOURCE_IMPORT_REQUIRED")
     try:
         return build_local_nar_manifest(payload)
     except ValueError as e:
@@ -114,6 +130,9 @@ def source_acquire(payload: Dict[str, Any]):
     race_id = str(payload.get("race_id") or "")
     if not race_id:
         raise HTTPException(422, "RACE_ID_REQUIRED")
+    if (str(payload.get("venue_id") or "").upper() == "KAW" or "-KAW-" in race_id
+            or payload.get("manifest_profile") == NANKAN_KAW_MANIFEST_PROFILE):
+        raise HTTPException(422, "PRIVATE_NANKAN_SIGNED_SOURCE_IMPORT_REQUIRED")
     artifact, errors = acquire_sources(payload)
     artifact["source_manifest_profile"] = payload.get("manifest_profile")
     artifact["source_race_context"] = {
@@ -182,11 +201,37 @@ def source_acquire(payload: Dict[str, Any]):
     return legacy.signed_receipt("SOURCE", race_id, status, artifact, artifact["errors"])
 
 
+def produce_private_nankan_source(request):
+    """Run on the authorized signer host with a private, dated Binding."""
+    import base64
+    import hashlib
+    from runtime.formal_execution_orchestrator import source_checkpoint_basis
+    from runtime.local_private_checkpoint import PrivateCheckpoint
+
+    private = PrivateCheckpoint.from_env()
+    if private is None:
+        raise ValueError("PRIVATE_CHECKPOINT_BINDING_REQUIRED")
+    key_sha = hashlib.sha256(base64.b64decode(legacy.public_b64(), validate=True)).hexdigest()
+    if (private.binding.get("signer_public_key_sha256") != key_sha
+            or private.binding.get("signer_runtime_revision") != legacy.GIT_REV):
+        raise ValueError("PRIVATE_NANKAN_SIGNER_SCOPE_MISMATCH")
+    return private.produce_nankan_source(source_checkpoint_basis(request), legacy.signed_receipt,
+                                         github_sha=legacy.GIT_REV)
+
+
 @app.post("/source/verify")
 def source_verify(payload: Dict[str, Any]):
     sig = legacy.verify_envelope(payload)
     rec = payload.get("receipt") or {}
-    valid_artifact, errors = verify_source_artifact(payload.get("artifact") or {})
+    artifact = payload.get("artifact") or {}
+    if artifact.get("source_manifest_profile") == NANKAN_KAW_MANIFEST_PROFILE:
+        try:
+            _require_source_receipt({"source_receipt": payload}, str(rec.get("race_id") or ""))
+            valid_artifact, errors = True, []
+        except HTTPException as exc:
+            valid_artifact, errors = False, [str(exc.detail)]
+    else:
+        valid_artifact, errors = verify_source_artifact(artifact)
     valid = (
         sig
         and rec.get("phase") == "SOURCE"
@@ -211,7 +256,7 @@ def pre_krs(payload: Dict[str, Any]):
     race_id = str(payload.get("race_id") or "")
     source = _require_source_receipt(payload, race_id)
     source_artifact = source.get("artifact") or {}
-    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+    if source_artifact.get("source_manifest_profile") in {NAR_MANIFEST_PROFILE, NANKAN_KAW_MANIFEST_PROFILE}:
         valid_universe, universe_errors = validate_krs_horses(
             source_artifact, payload.get("krs_input_data")
         )
@@ -240,7 +285,7 @@ def final(payload: Dict[str, Any]):
     race_id = str(payload.get("race_id") or "")
     source = _require_source_receipt(payload, race_id)
     source_artifact = source.get("artifact") or {}
-    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+    if source_artifact.get("source_manifest_profile") in {NAR_MANIFEST_PROFILE, NANKAN_KAW_MANIFEST_PROFILE}:
         allowed = {str(r.get("runner_id") or r.get("horse_no")) for r in
                    (source_artifact.get("official_runner_universe") or {}).get("runners") or []}
         fpp = payload.get("final_prediction_package") or {}
