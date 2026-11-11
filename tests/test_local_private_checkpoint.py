@@ -297,9 +297,11 @@ def test_kaw_live_source_never_falls_back_to_nar(signed_case, monkeypatch):
     assert calls == []
 
 
-def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch):
+def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path):
     from test_nankan_kaw_source import KAW_DAY_ID, fixture_access_policy, pages
     from runtime import urw_nankan_reference_source as nankan
+    from runtime import local_race_day_dispatcher as dispatcher
+    from runtime import family_authority_guard
 
     _, binding_path, _, intent, _, sign, _, _, calls = signed_case
     binding = json.loads(binding_path.read_bytes())
@@ -349,6 +351,58 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch):
     assert checkpoint.produce_nankan_source(basis, sign_fixture, github_sha="FIXTURE")["status"] == "REUSED"
     assert requested == list(raw_by_url)
     assert set(calls) == {"GET"}
+
+    # The actual verifier and private store supply the program, including R2.
+    # Only R1 has signed runners and Binding scope.
+    day, eid = intent['race_date'], intent['execution_id']
+    now = datetime.now(JST)
+    day_report = dispatcher.private_kaw_day(tmp_path, day, 120, now=now, private=checkpoint)
+    race2 = eid.replace('-R01-', '-R02-')
+    assert day_report['races'][eid]['active_runner_count'] == 2
+    assert day_report['races'][race2]['status'] == 'HOLD_SIGNED_NANKAN_SOURCE_REQUIRED'
+
+    monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED', 'true')
+    options = dict(now=now, execute=True, private=checkpoint, clock=lambda: now)
+    missing = dispatcher.private_kaw_day(tmp_path, day, 120, **options)
+    assert missing['status'] == 'HOLD_PRIVATE_NANKAN_DAY_APPROVAL' and missing['dispatch_count'] == 0
+
+    profiles = tmp_path / 'profiles'
+    approvals = profiles / 'local_autonomous_approvals'
+    approvals.mkdir(parents=True)
+    owner = profiles / 'local_production_static_owner_20261014_v1.json'
+    owner.write_bytes((transport.ROOT / 'profiles' / owner.name).read_bytes())
+    original_resolver = family_authority_guard.resolve_current_authority
+    monkeypatch.setattr(family_authority_guard, 'resolve_current_authority',
+                        lambda *, root=None, now=None: original_resolver(now=now))
+    approval = approvals / f'{day}-KAW.json'
+    approval.write_text(json.dumps({
+        'family_id': 'LOCAL', 'venue_id': 'KAW', 'race_date': day,
+        'current_authority_manifest': intent['current_authority_manifest'],
+        'destination': checkpoint.config['external_endpoint'].rstrip('/'),
+        'plan_sha256': day_report['plan_sha256'], 'enabled': True, 'owner_approval_ref': 'FIXTURE_ONLY',
+        'scheduled_execution_authorized': True, 'existing_runtime_usage_cost_authorized': True,
+        'data_scope': 'INTENT_SOURCE_STATIC_PRE_KRS_KRS_FINAL_RESULT_SETTLEMENT',
+        'race_numbers': [1], 'activation_phase': 'B', 'max_dispatches': 1, 'cost_control_ref': 'FIXTURE_ONLY',
+        'start_lead_seconds': 1800, 'minimum_remaining_seconds': 300,
+    }))
+    sent = []
+
+    def held(request, **kwargs):
+        assert orchestrator.PRIVATE_CHECKPOINT.get() is checkpoint
+        claim = checkpoint.work_root / 'day-dispatch' / day / f'{eid}.json'
+        assert json.loads(claim.read_bytes())['source_receipt_sha256'] == envelope['receipt_sha256']
+        assert claim.stat().st_mode & 0o777 == 0o600
+        sent.append(request['execution_id'])
+        return {'status': 'HOLD', 'first_failed_phase': 'STATIC_FREEZE'}
+
+    monkeypatch.setattr(local_race_entry, 'run', held)
+    launched = dispatcher.private_kaw_day(tmp_path, day, 120, **options)
+    assert launched['dispatch_count'] == 1 and launched['races'][eid]['first_failed_phase'] == 'STATIC_FREEZE'
+    assert launched['races'][race2]['execution_approved'] is False
+    repeated = dispatcher.private_kaw_day(tmp_path, day, 120, **options)
+    assert repeated['races'][eid]['status'] == 'HOLD_PRIOR_CLAIM_NO_AUTOMATIC_RETRY'
+    assert repeated['dispatch_count'] == 0 and sent == [eid]
+    assert requested == list(raw_by_url)
 
 
 def test_private_binding_and_publication_boundaries(signed_case, monkeypatch):

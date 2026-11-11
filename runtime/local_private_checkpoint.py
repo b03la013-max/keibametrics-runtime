@@ -81,7 +81,7 @@ def private_file(path):
 def code_sha256():
     files = ("execution_gateway.py", "execution_store.py", "family_authority_guard.py",
              "formal_execution_orchestrator.py", "local_prestart_gate.py", "local_private_checkpoint.py",
-             "local_race_entry.py", "local_race_key_gate.py", "local_static_input_resolver.py",
+             "local_race_entry.py", "local_race_day_dispatcher.py", "local_race_key_gate.py", "local_static_input_resolver.py",
              "non_jra_formal_runner.py", "local_physical/nankan_kaw_source.py",
              "local_physical/source_acquisition.py", "urw_nankan_reference_source.py",
              "urw_reference_source_policy.py", "local_nar_evidence_candidate.py",
@@ -178,14 +178,21 @@ class PrivateCheckpoint:
                  "PRIVATE_CHECKPOINT_EXECUTION_ID_INVALID")
 
     @contextmanager
-    def race_lock(self, execution_id):
-        self._identity(execution_id)
-        directory = self.directory(self.store_root / execution_id, create=True)
-        fd = os.open(directory / ".race.lock", os.O_CREAT | os.O_NOFOLLOW | os.O_RDWR, 0o600)
+    def _lock(self, directory, name):
+        path = self.directory(directory, create=True) / name
+        fd = os.open(path, os.O_CREAT | os.O_NOFOLLOW | os.O_RDWR, 0o600)
         with os.fdopen(fd, "rb") as lock:
-            private_file(directory / ".race.lock")
+            private_file(path)
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
+
+    def race_lock(self, execution_id):
+        self._identity(execution_id)
+        return self._lock(self.store_root / execution_id, ".race.lock")
+
+    def day_dispatch_lock(self, day):
+        _require(re.fullmatch(r"\d{4}-\d{2}-\d{2}", day), "PRIVATE_DAY_DISPATCH_DATE_INVALID")
+        return self._lock(self.work_root / "day-dispatch" / day, ".dispatch.lock")
 
     def _signer(self):
         if self._key is None:
