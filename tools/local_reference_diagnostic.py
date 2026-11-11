@@ -2,10 +2,21 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
 import re
+
+
+def _timestamp(value: str) -> datetime:
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError) as exc:
+        raise ValueError("RESULT_TIMESTAMP_INVALID") from exc
+    if stamp.utcoffset() is None:
+        raise ValueError("RESULT_TIMESTAMP_INVALID")
+    return stamp
 
 
 def evaluate(reference: Path | None, cohort: dict) -> dict:
@@ -15,9 +26,15 @@ def evaluate(reference: Path | None, cohort: dict) -> dict:
     races = cohort["races"]
     if not races:
         raise ValueError("RESULT_COHORT_EMPTY")
+    if any(type(race["race_no"]) is not int or race["race_no"] < 1 for race in races):
+        raise ValueError("RESULT_RACE_ID_INVALID")
     if len({race["race_no"] for race in races}) != len(races):
         raise ValueError("RESULT_RACE_DUPLICATE")
     ranks = {race["race_no"]: race["predicted_order"] for race in races}
+    for race in races:
+        for order in (race["predicted_order"], race["actual_order"]):
+            if not isinstance(order, list) or any(type(horse) is not int or horse < 1 for horse in order):
+                raise ValueError("RESULT_RUNNER_ID_INVALID")
     if reference is not None:
         raw = reference.read_bytes()
         if hashlib.sha256(raw).hexdigest() != cohort["reference_sha256"]:
@@ -33,7 +50,17 @@ def evaluate(reference: Path | None, cohort: dict) -> dict:
         if parsed != ranks:
             raise ValueError("REFERENCE_RANKS_MISMATCH")
     output = []
+    observed = _timestamp(cohort["result_observed_at"]) if cohort.get("result_observed_at") is not None else None
     for race in races:
+        if any(race.get(field) for field in ("cancelled", "excluded", "did_not_finish", "dead_heat", "race_abandoned")):
+            raise ValueError("RESULT_NOT_STRICT_ORDINAL")
+        # Check supplied clocks. A missing publication time remains unknown.
+        frozen = _timestamp(race["effective_freeze"]) if race.get("effective_freeze") is not None else None
+        published = _timestamp(race["result_publication_time"]) if race.get("result_publication_time") is not None else None
+        if ((frozen is not None and observed is not None and frozen >= observed)
+                or (frozen is not None and published is not None and frozen >= published)
+                or (published is not None and observed is not None and published > observed)):
+            raise ValueError("RESULT_TIME_ORDER_INVALID")
         predicted = ranks[race["race_no"]]
         actual = race["actual_order"]
         if (len(predicted) != len(set(predicted)) or len(actual) != len(set(actual)) or len(actual) < 3

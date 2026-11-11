@@ -63,3 +63,45 @@ def test_original_bytes_and_rank_binding(tmp_path):
     cohort["races"][0]["predicted_order"] = [2, 1, 3]
     with pytest.raises(ValueError, match="REFERENCE_RANKS_MISMATCH"):
         evaluate(path, cohort)
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("race_no", True), ("race_no", 1.0),
+    ("predicted_order", [1.0, 2, 3, 4]), ("actual_order", [True, 2, 3, 4]),
+])
+def test_noninteger_id_cannot_alias_an_official_race_or_runner(field, value):
+    cohort = copy.deepcopy(COHORT)
+    cohort["races"][0][field] = value
+    with pytest.raises(ValueError, match="RESULT_.*_ID_INVALID"):
+        evaluate(None, cohort)
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("cancelled", [4]), ("excluded", [4]), ("did_not_finish", [4]),
+    ("dead_heat", True), ("race_abandoned", True),
+])
+def test_nonordinal_result_is_not_scored_even_with_a_complete_order(field, value):
+    cohort = copy.deepcopy(COHORT)
+    cohort["races"][0][field] = value
+    with pytest.raises(ValueError, match="RESULT_NOT_STRICT_ORDINAL"):
+        evaluate(None, cohort)
+
+
+def test_result_observation_and_publication_follow_effective_freeze():
+    cohort = copy.deepcopy(COHORT)
+    cohort["result_observed_at"] = "2026-11-10T09:00:00Z"
+    race = cohort["races"][0]
+    race["effective_freeze"] = "2026-11-10T16:45:00+09:00"
+    race["result_publication_time"] = "2026-11-10T17:50:00+09:00"
+    assert evaluate(None, cohort)["exact_order_matches"] == 1
+
+    race["result_publication_time"] = "2026-11-10T16:40:00+09:00"
+    with pytest.raises(ValueError, match="RESULT_TIME_ORDER_INVALID"):
+        evaluate(None, cohort)
+    race["result_publication_time"] = None
+    race["effective_freeze"] = "2026-11-10T18:00:00+09:00"
+    with pytest.raises(ValueError, match="RESULT_TIME_ORDER_INVALID"):
+        evaluate(None, cohort)
+    race["effective_freeze"] = "2026-11-10T16:45:00"
+    with pytest.raises(ValueError, match="RESULT_TIMESTAMP_INVALID"):
+        evaluate(None, cohort)
