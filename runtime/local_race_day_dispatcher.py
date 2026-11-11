@@ -969,7 +969,7 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
                 program = observed
             sources[eid] = (saved, envelope)
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            errors[eid] = type(exc).__name__
+            errors[eid] = {'type': type(exc).__name__, 'reason': str(exc)}
     if program is None:
         result['source_read_failures'] = errors
         return result
@@ -1001,7 +1001,8 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             approval = None
             result.update(status='HOLD_PRIVATE_NANKAN_DAY_APPROVAL',
-                          first_stop_stage='DATED_OWNER_AUTHORIZATION', approval_error=type(exc).__name__)
+                          first_stop_stage='DATED_OWNER_AUTHORIZATION',
+                          approval_error={'type': type(exc).__name__, 'reason': str(exc)})
 
     claims = private.output_directory(private.work_root / 'day-dispatch' / day, create=True)
     for item in plan['races']:
@@ -1076,7 +1077,8 @@ def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=No
                     orchestrator.PRIVATE_CHECKPOINT.reset(context)
                 cell.update(status=report['status'], first_failed_phase=report.get('first_failed_phase'))
         except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
-            cell.update(status='HOLD_PRIVATE_NANKAN_HANDOFF', error=type(exc).__name__)
+            cell.update(status='HOLD_PRIVATE_NANKAN_HANDOFF',
+                        error={'type': type(exc).__name__, 'reason': str(exc)})
     private.write(claims / 'day-plan.json', plan)
     private.write(claims / ('day-status.json' if execute else 'day-inspection.json'), result)
     return result
