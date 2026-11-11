@@ -208,9 +208,18 @@ def test_signature_failure_remains_first_source_failure():
 
 @pytest.mark.parametrize("endpoint", ["pre_krs", "final"])
 def test_kaw_nankan_receipt_still_requires_the_private_producer_binding(endpoint, monkeypatch):
-    from runtime.local_private_checkpoint import BINDING_ENV, BINDING_SHA_ENV
-    monkeypatch.delenv(BINDING_ENV, raising=False)
-    monkeypatch.delenv(BINDING_SHA_ENV, raising=False)
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    checkpoint = ModuleType("runtime.local_private_checkpoint")
+    binding_reads = []
+
+    def read_missing_binding():
+        binding_reads.append(True)
+        return None
+
+    checkpoint.PrivateCheckpoint = SimpleNamespace(from_env=read_missing_binding)
+    monkeypatch.setitem(sys.modules, checkpoint.__name__, checkpoint)
     scope, calls, hold = _source_consumer_endpoints()
     payload = _source_consumer_payload(scope["NANKAN_KAW_MANIFEST_PROFILE"])
     envelope = payload["source_receipt"]
@@ -218,3 +227,4 @@ def test_kaw_nankan_receipt_still_requires_the_private_producer_binding(endpoint
     with pytest.raises(hold, match="SOURCE_CONSUMER_NANKAN_KAW_NOT_ADMITTED"):
         scope[endpoint](payload)
     assert not calls
+    assert binding_reads == [True]
