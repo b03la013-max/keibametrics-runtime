@@ -840,7 +840,7 @@ def acquire_sources(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]
     return artifact, artifact["errors"]
 
 
-def verify_source_artifact(artifact: Dict[str, Any]) -> Tuple[bool, List[str]]:
+def verify_source_artifact(artifact: Dict[str, Any], *, require_formal_ready: bool = True) -> Tuple[bool, List[str]]:
     errors: List[str] = []
     if not isinstance(artifact, dict):
         return False, ["SOURCE_ARTIFACT_INVALID"]
@@ -881,6 +881,6 @@ def verify_source_artifact(artifact: Dict[str, Any]) -> Tuple[bool, List[str]]:
     expected_artifact = sha_obj({k: v for k, v in artifact.items() if k != "source_snapshot_sha256"})
     if expected_artifact != artifact.get("source_snapshot_sha256"):
         errors.append("SOURCE_ARTIFACT_HASH_MISMATCH")
-    if artifact.get("formal_ready") is not True:
+    if require_formal_ready and artifact.get("formal_ready") is not True:
         errors.append("SOURCE_NOT_FORMAL_READY")
     return not errors, errors

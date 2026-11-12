@@ -581,7 +581,7 @@ def _reference_availability_report(intent, *, output, run_id, prediction, eid):
         authority['error'] = str(exc)
     try:
         policy = json.loads((o.ROOT/'profiles/local_production_static_owner_20261014_v1.json').read_text())
-        formal_stop = ('VENUE_OWNER_NOT_AUTHORIZED' if policy.get('enabled') is not True or 'URW' not in policy.get('venues', [])
+        formal_stop = ('VENUE_OWNER_NOT_AUTHORIZED' if policy.get('enabled') is not True or intent['venue_id'] not in policy.get('venues', [])
                        else 'FORMAL_REQUIRES_SEPARATE_AUTHORIZED_SINGLE_ENTRY')
     except (ValueError, OSError, TypeError, AttributeError):
         formal_stop = 'FORMAL_OWNER_POLICY_UNRESOLVED'
@@ -606,13 +606,21 @@ def run_reference(intent, *, output, run_id):
     from runtime.local_physical.nar_runner_universe import enrich_source_artifact
     from runtime.local_physical.source_acquisition import sha_obj
     from runtime.local_race_key_shadow_owner import compile_reference_prediction, render_reference_prediction
-    if (intent.get('family_id', 'LOCAL') != 'LOCAL' or intent.get('venue_id') != 'URW'
+    venue = intent.get('venue_id')
+    if (intent.get('family_id', 'LOCAL') != 'LOCAL' or venue not in ('URW', 'KAW')
             or type(intent.get('race_no')) is not int or not 1 <= intent['race_no'] <= 12):
-        raise ValueError('REFERENCE_URW_IDENTITY_REQUIRED')
+        raise ValueError('REFERENCE_LOCAL_RACE_IDENTITY_REQUIRED')
     if any(key in intent for key in ('static_prediction', 'signature', 'source_receipt_envelope', 'final_prediction_package')):
         raise ValueError('REFERENCE_FORMAL_INPUT_MIXING_FORBIDDEN')
     day = date.fromisoformat(intent['race_date'])
-    eid = f"KM-LOCAL-URW-{day:%Y%m%d}-R{intent['race_no']:02d}-REFERENCE-R1"
+    eid = f"KM-LOCAL-{venue}-{day:%Y%m%d}-R{intent['race_no']:02d}-REFERENCE-R1"
+    kaw = venue == 'KAW'
+    if kaw:
+        from runtime.local_private_checkpoint import private_directory, private_file
+        from runtime.urw_nankan_reference_source import immutable, save_json
+        if os.environ.get('CI') or os.environ.get('GITHUB_ACTIONS'):
+            raise ValueError('REFERENCE_KAW_PRIVATE_WORK_ONLY')
+        private_directory(output, create=True)
     if any(intent.get(k) not in (None, eid) for k in ('execution_id', 'race_id')):
         raise ValueError('REFERENCE_EXECUTION_ID_MISMATCH')
     if (output/'entry_report.json').exists() or (output/'reference_prediction.json').exists():
@@ -622,10 +630,25 @@ def run_reference(intent, *, output, run_id):
         from runtime.local_physical.source_acquisition import verify_source_artifact
         try:
             prior_path = output/'entry_report.json'
+            prediction_path = output/'reference_prediction.json'
+            source_path = output/'reference_source.json'
+            intent_path = output/'reference_intent.json'
+            if kaw:
+                import hashlib
+                for path in (prediction_path, source_path, intent_path):
+                    private_file(path)
+                for path in (prior_path, output/'reference_prediction.md'):
+                    if path.exists() or path.is_symlink():
+                        private_file(path)
             prior = json.loads(prior_path.read_text()) if prior_path.exists() else None
-            prediction = json.loads((output/'reference_prediction.json').read_text())
-            source = json.loads((output/'reference_source.json').read_text())
-            original = json.loads((output/'reference_intent.json').read_text())
+            prediction = json.loads(prediction_path.read_text())
+            raw = source_path.read_bytes()
+            source = json.loads(raw)
+            original = json.loads(intent_path.read_text())
+            if kaw and (hashlib.sha256(raw).hexdigest() != original.get('reference_source_sha256')
+                    or intent.get('reference_source_sha256', original['reference_source_sha256'])
+                        != original['reference_source_sha256']):
+                raise ValueError('REFERENCE_KAW_OFFICIAL_INPUT_SHA_MISMATCH')
             rendered = render_reference_prediction(prediction)
             message_path = output/'reference_prediction.md'
             if ((prior is not None and (prior.get('status') != 'REFERENCE_AVAILABLE' or prior.get('execution_id') != eid))
@@ -638,7 +661,7 @@ def run_reference(intent, *, output, run_id):
                     or prediction.get('prediction_cutoff') != source.get('prediction_cutoff')
                     or prediction.get('scheduled_post_at') != source.get('scheduled_post_at')
                     or any(prediction.get(k) is not False for k in ('production_authority','formal_handoff_allowed','signed_final_claim'))
-                    or not verify_source_artifact(source)[0]
+                    or not verify_source_artifact(source, require_formal_ready=not kaw)[0]
                     or not (datetime.fromisoformat(source['source_freeze_at'])
                             <= datetime.fromisoformat(prediction['frozen_at']) <= datetime.now(timezone.utc))
                     or datetime.fromisoformat(prediction['frozen_at']) >= datetime.fromisoformat(prediction['prediction_cutoff'])
@@ -649,20 +672,47 @@ def run_reference(intent, *, output, run_id):
             # receipt is recoverable from those exact bytes, even after cutoff.
             # Existing conflicting prose or receipts remain a hard HOLD.
             if prior is None:
-                reference_answer(prediction, source)
+                if not kaw:
+                    reference_answer(prediction, source)
                 if not message_path.exists():
-                    with message_path.open('x', encoding='utf-8') as message:
-                        message.write(rendered)
+                    if kaw:
+                        immutable(message_path, rendered.encode())
+                    else:
+                        with message_path.open('x', encoding='utf-8') as message:
+                            message.write(rendered)
                 prior = _reference_availability_report(intent, output=output, run_id=run_id,
                     prediction=prediction, eid=eid)
-                with prior_path.open('x', encoding='utf-8') as receipt:
-                    json.dump(prior, receipt, ensure_ascii=False, sort_keys=True, indent=2)
+                if kaw:
+                    save_json(prior_path, prior)
+                else:
+                    with prior_path.open('x', encoding='utf-8') as receipt:
+                        json.dump(prior, receipt, ensure_ascii=False, sort_keys=True, indent=2)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise ValueError('REFERENCE_OUTPUT_ALREADY_EXISTS_NO_REEXECUTION') from exc
         return {**prior, 'reference_message_path': str(output/'reference_prediction.md'),
                 'reference_readback_only': True, 'prediction_reexecution': False,
                 'source_freshness_claim': False, 'readback_at': datetime.now(timezone.utc).isoformat()}
     request = {**intent, 'family_id': 'LOCAL', 'race_id': eid, 'execution_id': eid}
+    if kaw:
+        import hashlib
+        source_path = Path(request.pop('reference_source_path', ''))
+        private_directory(source_path.parent)
+        raw = private_file(source_path).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != request.get('reference_source_sha256'):
+            raise ValueError('REFERENCE_KAW_OFFICIAL_INPUT_SHA_MISMATCH')
+        source = json.loads(raw)
+        if (source.get('signed_source_claim') is not False
+                or source.get('production_authority') is not False):
+            raise ValueError('REFERENCE_KAW_UNSIGNED_INPUT_REQUIRED')
+        prediction = compile_reference_prediction(request, source)
+        report = _reference_availability_report(intent, output=output, run_id=run_id,
+            prediction=prediction, eid=eid)
+        save_json(output/'reference_intent.json', request)
+        immutable(output/'reference_source.json', raw)
+        save_json(output/'reference_prediction.json', prediction)
+        immutable(output/'reference_prediction.md', render_reference_prediction(prediction).encode())
+        save_json(output/'entry_report.json', report)
+        return report
     output.mkdir(parents=True, exist_ok=True)
     o._write(output/'reference_intent.json', request)
     source, errors = capture_public_urw_sources(request, output=output/'public_capture', reference_only=True)
@@ -917,15 +967,18 @@ def main():
     private_options = args.private_source is not None or args.private_source_only
     private_requested = bool(os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING")
                              or os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_BINDING_SHA256") or private_options)
-    output = Path(args.output) if private_requested else Path(args.output).resolve()
+    requested_output = Path(args.output)
+    output = requested_output if private_requested else requested_output.resolve()
     preserve_existing_reference = False
+    kaw_reference_requested = False
     private = None
     private_context = None
     try:
         intent = resolve_chat_intent(args.query) if args.query is not None else json.loads(Path(args.request).read_text())
         if not private_options and intent.get('prediction_mode') == 'REFERENCE':
             private_requested = False
-            output = output.resolve()
+            kaw_reference_requested = intent.get('venue_id') == 'KAW'
+            output = requested_output.absolute() if kaw_reference_requested else output.resolve()
         if private_requested:
             if args.persist_checkpoints or args.query or args.display:
                 raise ValueError('PRIVATE_CHECKPOINT_PUBLIC_ENTRY_FORBIDDEN')
@@ -955,6 +1008,11 @@ def main():
             print(json.dumps({'status': 'HOLD', 'code': code}))
             if private_context is not None:
                 o.PRIVATE_CHECKPOINT.reset(private_context)
+            return 2
+        if kaw_reference_requested:
+            print(json.dumps({'status': 'HOLD', 'code': 'KAW_REFERENCE_FAILED',
+                              'reason': str(exc).split(':', 1)[0] if isinstance(exc, ValueError)
+                                        else type(exc).__name__}))
             return 2
         from runtime.formal_failure_diagnostics import failure_stage_for, resume_hint_for
         preserve_existing_reference = str(exc) == 'REFERENCE_OUTPUT_ALREADY_EXISTS_NO_REEXECUTION'
