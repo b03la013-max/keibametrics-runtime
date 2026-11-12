@@ -133,6 +133,8 @@ def require_public_artifact_paths(paths, *, json_only=False) -> int:
 def build_local_result_payload(req, fin):
     """Build the canonical settlement from the frozen LOCAL ticket list."""
     tickets = ((fin.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
+    if req.get("official_outcome") is not None:
+        return _build_nankan_result_payload(req, fin, tickets)
     finish_order = [int(number) for number in req["finish_order"]]
     top3 = finish_order[:3]
     payouts = {str(kind).upper(): int(value) for kind, value in (req.get("payouts") or {}).items()}
@@ -184,6 +186,55 @@ def build_local_result_payload(req, fin):
     return result_payload, by_type
 
 
+def _build_nankan_result_payload(req, final, tickets):
+    outcome = req["official_outcome"]
+    if outcome.get("provider") != "NANKAN_OFFICIAL":
+        raise ExecutionStoreError("RESULT_PROVIDER_OUTCOME_INVALID")
+    payouts = {(row["bet_type"], tuple(row["selection"])): row["payout_per_100"]
+               for row in outcome["payout_rows"]}
+    refunded = set(outcome["refunded_runners"])
+    by_type, wins = {}, []
+    for ticket in tickets:
+        kind = str(ticket["bet_type"]).upper()
+        selection = list(map(int, ticket["selection"]))
+        stake = int(ticket["stake"])
+        if kind not in {"EXACTA", "TRIO", "TRIFECTA"} or stake <= 0 or stake % 100:
+            raise ExecutionStoreError("RESULT_UNSUPPORTED_FROZEN_TICKET")
+        summary = by_type.setdefault(kind, {"investment": 0, "return": 0, "refund": 0, "wins": []})
+        summary["investment"] += stake
+        if refunded.intersection(selection):
+            summary["refund"] += stake
+            summary["return"] += stake
+            continue
+        key = tuple(sorted(selection) if kind == "TRIO" else selection)
+        amount = payouts.get((kind, key))
+        if amount is not None:
+            ticket_return = stake * amount // 100
+            win = {"bet_type": kind, "selection": selection, "stake": stake,
+                   "payout_per_100": amount, "return": ticket_return}
+            wins.append(win)
+            summary["wins"].append(win)
+            summary["return"] += ticket_return
+    investment = sum(s["investment"] for s in by_type.values())
+    total_return = sum(s["return"] for s in by_type.values())
+    refund = sum(s["refund"] for s in by_type.values())
+    for summary in by_type.values():
+        summary["effective_investment"] = summary["investment"] - summary["refund"]
+        summary["payout"] = summary["return"] - summary["refund"]
+    return {
+        "family_id": "LOCAL", "race_id": req["race_id"], "final_receipt": final,
+        "official_result": {"finish_order": req["finish_order"], "result_available_at": req["result_available_at"],
+                            "source": req["source"], "outcome": outcome,
+                            "source_snapshot_sha256": req["official_snapshot_sha256"],
+                            "source_verification_ref": req["official_result_verification_ref"]},
+        "result_available_at": req["result_available_at"],
+        "settlement": {"status": "COMPLETE", "investment": investment, "settled_investment": investment,
+                       "return": total_return, "refund": refund, "effective_investment": investment - refund,
+                       "payout": total_return - refund, "winning_tickets": wins},
+        "pfs_authority": req.get("pfs_authority") or "FROZEN-RECOMMENDATION",
+    }, by_type
+
+
 def verify_result_reuse(envelope, final, expected_payload, verification):
     """Reuse a signed RESULT only after fresh external signature verification.
 
@@ -205,7 +256,12 @@ def verify_result_reuse(envelope, final, expected_payload, verification):
         raise ExecutionStoreError("RESULT_RECOVERY_OFFICIAL_OUTCOME_MISMATCH")
     settlement = artifact.get("settlement") or {}
     expected = expected_payload.get("settlement") or {}
-    for key in ("status", "investment", "settled_investment", "return"):
+    settlement_keys = ("status", "investment", "settled_investment", "return")
+    if "refund" in expected:
+        settlement_keys += ("refund", "effective_investment", "payout", "pfs", "winning_tickets")
+        effective = expected["effective_investment"]
+        expected = {**expected, "pfs": round(expected["payout"] / effective * 100, 6) if effective else None}
+    for key in settlement_keys:
         if key not in expected or settlement.get(key) != expected[key]:
             raise ExecutionStoreError("RESULT_RECOVERY_SETTLEMENT_MISMATCH")
     if settlement.get("pfs_authority") != expected_payload.get("pfs_authority"):

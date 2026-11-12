@@ -18,7 +18,7 @@ from runtime import formal_execution_orchestrator as orchestrator
 from runtime import local_private_checkpoint as transport
 from runtime import local_race_entry
 from runtime.local_race_key_intake import JST, build
-from runtime.local_physical.nar_source_manifest import PROFILE as NAR_PROFILE, build_local_nar_manifest
+from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES, PROFILE as NAR_PROFILE, _result_source, build_local_nar_manifest
 from runtime.local_physical.source_acquisition import SOURCE_PROFILE
 
 MARK = b"PRIVATE_SIGNED_FIXTURE_NEVER_PUBLISH"
@@ -696,7 +696,7 @@ def test_private_result_reads_frozen_final_and_submits_at_most_once(signed_case,
         # Seed an already persisted legacy result fixture. Settlement and
         # idempotent recovery still work without a new NAR request.
         ctx = source["artifact"]["source_race_context"]
-        spec = transport._result_source("KAW", transport.LOCAL_BABA_CODES["KAW"],
+        spec = _result_source("KAW", LOCAL_BABA_CODES["KAW"],
                                         ctx["race_date"].replace("-", "/"), ctx["race_no"])
         snapshot, errors = result_page(spec, None)
         assert not errors

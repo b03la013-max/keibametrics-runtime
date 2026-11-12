@@ -297,7 +297,11 @@ def _ticket_investment(final_ticket):
     return sum(_money_int(x.get("stake",0),"TICKET_STAKE") for x in ts if isinstance(x,dict))
 
 @app.post("/result")
-def result(p:Dict[str,Any]):
+def result(p: Dict[str, Any]):
+    return _result(p)
+
+
+def _result(p: Dict[str, Any], *, nankan_authorized=False):
     validate_family(p)
     rid=str(p.get("race_id") or "")
     if not rid:
@@ -390,11 +394,45 @@ def result(p:Dict[str,Any]):
         profit_loss=ret-investment
         settlement_completeness=100.0
 
+    nankan_outcome = official.get("outcome")
+    nankan_amounts = {}
+    ambiguous_top3 = False
+    if nankan_outcome is not None:
+        if not nankan_authorized:
+            raise HTTPException(422, "PRIVATE_NANKAN_RESULT_REQUIRED")
+        if (not isinstance(nankan_outcome, dict) or nankan_outcome.get("provider") != "NANKAN_OFFICIAL"
+                or settlement_status != "COMPLETE"):
+            errs.append("RESULT_PROVIDER_OUTCOME_INVALID")
+        else:
+            try:
+                groups = nankan_outcome["finish_groups"]
+                if [runner for group in groups for runner in group] != official.get("finish_order"):
+                    raise ValueError("finish group mismatch")
+                start = 0
+                for group in groups:
+                    if start < 3 and len(group) > 1:
+                        ambiguous_top3 = True
+                    start += len(group)
+                refund_ids = set(nankan_outcome["refunded_runners"])
+                refund = sum(_money_int(t["stake"], "TICKET_STAKE")
+                             for t in (final_ticket or {}).get("tickets", [])
+                             if refund_ids.intersection(map(int, t["selection"])))
+                nankan_amounts = {"refund": refund, "effective_investment": investment - refund,
+                                  "payout": ret - refund}
+                if (min(nankan_amounts.values()) < 0
+                        or any(settlement.get(k) != v for k, v in nankan_amounts.items())):
+                    raise ValueError("refund amount mismatch")
+                nankan_amounts["winning_tickets"] = settlement.get("winning_tickets") or []
+                effective = nankan_amounts["effective_investment"]
+                pfs = round(nankan_amounts["payout"] / effective * 100, 6) if effective else None
+            except (KeyError, TypeError, ValueError, HTTPException):
+                errs.append("NANKAN_RESULT_SETTLEMENT_INVALID")
+
     auto_review=None
     auto_learning=None
     try:
         finish_order=official.get("finish_order") or []
-        if len(finish_order)>=3 and isinstance(fin,dict):
+        if len(finish_order)>=3 and isinstance(fin,dict) and not ambiguous_top3:
             frozen_final_artifact=(fin.get("artifact") or {})
             frozen_fpp=(frozen_final_artifact.get("final_prediction_package") or {})
             final_artifact={
@@ -428,10 +466,11 @@ def result(p:Dict[str,Any]):
                     "investment":investment,
                     "total_investment":investment,
                     "settled_investment":settled_investment,
-                    "return":ret,
-                    "total_payout":ret,
+                    "return":nankan_amounts.get("payout", ret),
+                    "total_payout":nankan_amounts.get("payout", ret),
                     "pfs_authority":p.get("pfs_authority"),
-                    "winning_tickets":settlement.get("winning_tickets") or []
+                    "winning_tickets":settlement.get("winning_tickets") or [],
+                    **nankan_amounts,
                 }
             }
             auto_review=build_post_result_review(learning_result,final_artifact)
@@ -450,6 +489,8 @@ def result(p:Dict[str,Any]):
             "automatic":True,
             "review_sha256":auto_review.get("sha256")
         }
+    elif ambiguous_top3:
+        failure={"primary_failure": "UNKNOWN", "reason": "OFFICIAL_TOP3_DEAD_HEAT"}
     elif caller_failure is not None:
         failure=caller_failure
     else:
@@ -469,6 +510,9 @@ def result(p:Dict[str,Any]):
             "forbidden":auto_learning.get("forbidden"),
             "production_change_authorized":auto_learning.get("production_change_authorized")
         }
+    elif ambiguous_top3:
+        learning={"status": "HOLD", "reason": "OFFICIAL_TOP3_DEAD_HEAT",
+                  "production_change_authorized": False}
     elif caller_learning is not None:
         learning=caller_learning
     else:
@@ -494,7 +538,8 @@ def result(p:Dict[str,Any]):
             "profit_loss":profit_loss,
             "pfs":pfs,
             "pfs_authority":p.get("pfs_authority"),
-            "settlement_completeness_pct":settlement_completeness
+            "settlement_completeness_pct":settlement_completeness,
+            **nankan_amounts,
         },
         "failure_localization":failure,
         "learning_event":learning,

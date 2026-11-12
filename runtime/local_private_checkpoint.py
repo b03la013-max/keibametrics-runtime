@@ -20,9 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from runtime import execution_gateway as gateway
 from runtime import execution_store as store
 from runtime.family_authority_guard import resolve_current_authority
-from runtime.local_physical.nar_source_manifest import (
-    LOCAL_BABA_CODES, PROFILE as NAR_PROFILE, _result_source,
-)
+from runtime.local_physical.nar_source_manifest import PROFILE as NAR_PROFILE
 from runtime.local_physical import nankan_kaw_source
 from runtime.local_physical.source_acquisition import verify_source_artifact
 
@@ -83,7 +81,7 @@ def code_sha256():
              "formal_execution_orchestrator.py", "local_prestart_gate.py", "local_private_checkpoint.py",
              "local_race_entry.py", "local_race_day_dispatcher.py", "kaw_research_startup.py",
              "local_race_key_gate.py", "local_static_input_resolver.py",
-             "non_jra_formal_runner.py", "local_physical/nankan_kaw_source.py",
+             "non_jra_formal_runner.py", "local_physical/nankan_kaw_source.py", "local_physical/nankan_kaw_result.py",
              "local_physical/source_acquisition.py", "urw_nankan_reference_source.py",
              "urw_reference_source_policy.py", "local_nar_evidence_candidate.py",
              "local_production_static_owner.py")
@@ -317,7 +315,7 @@ class PrivateCheckpoint:
             _require(self.allows_source_endpoint(source.get("authority"), source[label]),
                      "PRIVATE_SOURCE_ENDPOINT_OUTSIDE_PERMISSION")
 
-    def allows_source_endpoint(self, authority, address):
+    def allows_source_endpoint(self, authority, address, *, required_prefix=None):
         prefixes = self.binding["source_url_prefixes"].get(authority)
         if not isinstance(prefixes, list) or not prefixes:
             return False
@@ -327,7 +325,8 @@ class PrivateCheckpoint:
                 and not url.path.endswith(("/..", "/."))
                 and any(url.netloc == p.netloc and url.path.startswith(p.path)
                         for p in map(urlsplit, prefixes) if p.scheme == "https" and p.path.endswith("/")
-                        and not p.query and not p.fragment))
+                        and not p.query and not p.fragment
+                        and (required_prefix is None or p.path.startswith(required_prefix))))
 
     def resolve(self, execution_id, phase):
         self._identity(execution_id)
@@ -405,7 +404,7 @@ class PrivateCheckpoint:
 
     def _verify_official_result(self, request, snapshot, execution_id):
         from runtime.formal_execution_orchestrator import (
-            _official_post_from_source, _source_binding_from_resolved, parse_official_result_snapshot,
+            _official_post_from_source, _source_binding_from_resolved, official_result_spec, official_result_fields,
         )
 
         source = self.resolve(execution_id, "SOURCE")
@@ -414,11 +413,14 @@ class PrivateCheckpoint:
         source_artifact = json.loads(private_file(source["run_dir"] /
                                                   "source_receipt_envelope.json").read_bytes())["artifact"]
         final_envelope = json.loads(private_file(final["run_dir"] / "final_receipt_envelope.json").read_bytes())
-        context = source_artifact["source_race_context"]
         source_basis = _source_binding_from_resolved(source)
         post = _official_post_from_source({}, source)
-        spec = _result_source("KAW", LOCAL_BABA_CODES["KAW"], context["race_date"].replace("-", "/"),
-                              context["race_no"])
+        spec = official_result_spec(source_artifact, private=True, historical=True)
+        if spec["authority"] == nankan_kaw_source.PROVIDER:
+            _require(self.allows_source_endpoint(spec["authority"], spec["url"], required_prefix="/result/"),
+                     "PRIVATE_RESULT_ENDPOINT_OUTSIDE_PERMISSION")
+            _require(request.get("official_result_verification_ref") ==
+                     spec["url"] + "#sha256=" + snapshot["raw_sha256"], "PRIVATE_RESULT_RAW_BINDING_INVALID")
         observed = _time(snapshot["fetched_at"])
         self._check_snapshot_scope(snapshot, _time(self.binding["valid_from"]), datetime.now(timezone.utc))
         _require(request.get("race_id") == request.get("execution_id") == execution_id and
@@ -433,10 +435,9 @@ class PrivateCheckpoint:
                  request.get("official_snapshot_sha256") == snapshot.get("snapshot_sha256") ==
                  _sha(_json({k: v for k, v in snapshot.items() if k != "snapshot_sha256"})),
                  "PRIVATE_RESULT_OFFICIAL_SNAPSHOT_BINDING_INVALID")
-        active = [r["runner_id"] for r in source_artifact["active_runner_universe"]["runners"]]
-        order, payouts = parse_official_result_snapshot(snapshot, context, active)
-        _require(request.get("finish_order") == order and request.get("payouts") == payouts,
-                 "PRIVATE_RESULT_OFFICIAL_OUTCOME_CHANGED")
+        fields = official_result_fields(snapshot, source_artifact, spec)
+        _require({key: request[key] for key in ("finish_order", "payouts", "official_outcome") if key in request}
+                 == fields, "PRIVATE_RESULT_OFFICIAL_OUTCOME_CHANGED")
 
     def _result_inputs(self, execution_id):
         official = self.resolve(execution_id, "OFFICIAL_RESULT")
@@ -498,7 +499,9 @@ class PrivateCheckpoint:
         self.write(directory / "result_summary.json", {
             **identity, "verified": True, "result_receipt": envelope["receipt_sha256"],
             "investment": investment, "return": total_return, "profit_loss": total_return - investment,
-            "pfs": None if investment == 0 else round(total_return / investment * 100, 6),
+            "pfs": settlement["pfs"] if "refund" in settlement else
+                   (None if investment == 0 else round(total_return / investment * 100, 6)),
+            **{k: settlement[k] for k in ("refund", "effective_investment", "payout") if k in settlement},
             "pfs_authority": payload["pfs_authority"], "by_type": by_type,
             "winning_tickets": payload["settlement"]["winning_tickets"],
         })

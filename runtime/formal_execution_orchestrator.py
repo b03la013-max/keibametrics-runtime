@@ -1367,7 +1367,8 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     if any(marker in page_text for marker in (
             "審議中", "審議しています", "成績未確定", "着順未確定", "払戻未確定", "結果未確定")):
         raise FormalOrchestrationError("OFFICIAL_RESULT_NOT_FINAL")
-    if any(marker in page_text for marker in ("競走取り止め", "競走取止", "競走中止", "開催中止")):
+    if any(marker in page_text for marker in (
+            "競走取り止め", "競走取止", "競走は中止", "競走を中止", "開催中止")):
         # Cancellations require the existing authorized refund path; the flat
         # payout representation used here cannot safely settle them.
         raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
@@ -1380,6 +1381,8 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     # Use the result table's explicit status, not incidental page text. A horse
     # already excluded from the frozen active universe cannot create exposure.
     frozen_runners = set(map(str, runner_ids))
+    stopped_runners = set()
+    individual_stop_labels = 0
     for table in tables:
         if not table or not {"着順", "馬番", "馬名"}.issubset(set(table[0])):
             continue
@@ -1388,20 +1391,32 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
             if len(row) <= status_index:
                 continue
             status = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[status_index]))
-            if status not in {"取消", "除外", "出走取消", "競走除外"}:
+            if status not in {"取消", "除外", "出走取消", "競走除外", "中止", "競走中止"}:
                 continue
             horse = (re.sub(r"\s+", "", unicodedata.normalize("NFKC", row[horse_index]))
                      if len(row) > horse_index else "")
+            if status in {"中止", "競走中止"}:
+                if horse not in frozen_runners or horse in stopped_runners:
+                    raise FormalOrchestrationError("OFFICIAL_RESULT_DNF_UNIVERSE_HOLD")
+                stopped_runners.add(horse)
+                individual_stop_labels += status == "競走中止"
+                continue
             if not re.fullmatch(r"[1-9]\d*", horse) or horse in frozen_runners:
                 raise FormalOrchestrationError("OFFICIAL_RESULT_REFUND_REQUIRED")
+    # An unaccounted label is a possible cancellation notice outside the result rows.
+    if page_text.count("競走中止") != individual_stop_labels:
+        raise FormalOrchestrationError("OFFICIAL_RESULT_CANCELLATION_HOLD")
     finish_tables = [rows for table in tables if (rows := _result_rows_from_table(table))]
     if len(finish_tables) != 1:
         raise FormalOrchestrationError("OFFICIAL_RESULT_FINISH_TABLE_HOLD")
     rows = sorted(finish_tables[0], key=lambda row: row["finish"])
     positions = [row["finish"] for row in rows]
     order = [row["horse_no"] for row in rows]
+    ranked_runners = set(map(str, order))
+    if stopped_runners and (stopped_runners & ranked_runners or stopped_runners | ranked_runners != frozen_runners):
+        raise FormalOrchestrationError("OFFICIAL_RESULT_DNF_UNIVERSE_HOLD")
     if (len(rows) < 3 or positions != list(range(1, len(rows) + 1))
-            or len(set(order)) != len(order) or not set(map(str, order)).issubset(set(map(str, runner_ids)))):
+            or len(set(order)) != len(order) or not ranked_runners.issubset(frozen_runners)):
         raise FormalOrchestrationError("OFFICIAL_RESULT_DEAD_HEAT_OR_UNIVERSE_HOLD")
     # Validate published winning selection as well as amount. Flat per-bet-type
     # payouts cannot represent dead heats, refunds or multiple winning sets.
@@ -1427,10 +1442,41 @@ def parse_official_result_snapshot(snapshot, race_context, runner_ids):
     return order, payouts
 
 
+def official_result_spec(artifact, *, private, historical=False):
+    from runtime.local_physical import nankan_kaw_result, nankan_kaw_source
+    from runtime.local_physical.nar_source_manifest import _result_source, LOCAL_BABA_CODES, PROFILE
+
+    identity = artifact["source_race_context"]
+    venue = identity["venue_id"]
+    profile = artifact.get("source_manifest_profile")
+    if profile == nankan_kaw_source.PROFILE:
+        if not private:
+            raise FormalOrchestrationError("PRIVATE_NANKAN_OFFICIAL_RESULT_REQUIRED")
+        return nankan_kaw_result.spec_from_source(artifact)
+    if venue == "KAW" and not (private and historical and profile == PROFILE):
+        raise FormalOrchestrationError("PRIVATE_NANKAN_OFFICIAL_RESULT_ADAPTER_REQUIRED")
+    return _result_source(venue, LOCAL_BABA_CODES[venue],
+                          str(identity["race_date"]).replace("-", "/"), int(identity["race_no"]))
+
+
+def official_result_fields(snapshot, artifact, spec):
+    from runtime.local_physical import nankan_kaw_result
+
+    if spec["authority"] == nankan_kaw_result.PROVIDER:
+        outcome = nankan_kaw_result.parse(snapshot, artifact)
+        return {"finish_order": [runner for group in outcome["finish_groups"] for runner in group],
+                "official_outcome": outcome}
+    runners = artifact["active_runner_universe"]["runners"]
+    order, payouts = parse_official_result_snapshot(
+        snapshot, artifact["source_race_context"], [r["runner_id"] for r in runners])
+    return {"finish_order": order, "payouts": payouts}
+
+
 def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fetch=None):
     """Acquire one immutable official RESULT checkpoint from frozen SOURCE identity."""
     from local_physical.source_acquisition import fetch_source
-    from local_physical.nar_source_manifest import _result_source, LOCAL_BABA_CODES
+    from runtime.local_physical import nankan_kaw_result
+    from runtime.urw_nankan_reference_source import Client, NankanError
     execution_id = derive_execution_id(intent)
     private = PRIVATE_CHECKPOINT.get()
     formal = resolve_phase(execution_id, "FORMAL")
@@ -1475,17 +1521,25 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
     tickets = ((final.get("artifact") or {}).get("final_ticket") or {}).get("tickets") or []
     if any(str(t.get("bet_type", "")).upper() not in {"EXACTA", "TRIO", "TRIFECTA"} for t in tickets):
         raise FormalOrchestrationError("OFFICIAL_RESULT_UNSUPPORTED_SETTLEMENT_TICKET_HOLD")
-    if identity["venue_id"] == "KAW":
-        raise FormalOrchestrationError("PRIVATE_NANKAN_OFFICIAL_RESULT_ADAPTER_REQUIRED")
-    spec = _result_source(identity["venue_id"], LOCAL_BABA_CODES[identity["venue_id"]],
-                          str(identity["race_date"]).replace("-", "/"), int(identity["race_no"]))
+    spec = official_result_spec(artifact, private=private is not None)
     if private is not None:
         private.require_formal_execution(execution_id)
-        if not private.allows_source_endpoint(spec["authority"], spec["url"]):
+        result_prefix = "/result/" if spec["authority"] == nankan_kaw_result.PROVIDER else None
+        if not private.allows_source_endpoint(spec["authority"], spec["url"], required_prefix=result_prefix):
             raise FormalOrchestrationError("PRIVATE_RESULT_ENDPOINT_OUTSIDE_PERMISSION")
     # RESULT collection has its own time axis; never reuse prediction cutoff.
     try:
-        snapshot, errors = (fetch or fetch_source)(spec, "")
+        if spec["authority"] == nankan_kaw_result.PROVIDER and fetch is None:
+            cache = private.directory(private.work_root / "nankan-source-policy", create=True)
+            snapshot, errors = nankan_kaw_result.capture(spec, Client(cache=cache).get)
+        else:
+            snapshot, errors = (fetch or fetch_source)(spec, "")
+    except NankanError as exc:
+        raise FormalOrchestrationError(str(exc)) from exc
+    except urllib.error.HTTPError as exc:
+        if spec["authority"] == nankan_kaw_result.PROVIDER:
+            raise FormalOrchestrationError(f"NANKAN_RESULT_HTTP_{exc.code}") from exc
+        raise
     except ValueError as exc:
         # DNS validation is part of the existing Source safety boundary. Retry
         # resolution failures without bypassing it or retaining raw diagnostics.
@@ -1496,11 +1550,16 @@ def acquire_official_result_request(intent, *, run_id, github_sha, tmp_root, fet
         raise FormalOrchestrationError("OFFICIAL_RESULT_FETCH_OR_REDIRECT_HOLD")
     if private is not None and _parse_iso(snapshot["fetched_at"]) < scheduled_post:
         raise FormalOrchestrationError("PRIVATE_RESULT_OBSERVED_BEFORE_OFFICIAL_POST")
-    runners = artifact["active_runner_universe"]["runners"]
-    order, payouts = parse_official_result_snapshot(snapshot, identity, [r["runner_id"] for r in runners])
+    try:
+        result_fields = official_result_fields(snapshot, artifact, spec)
+    except (NankanError, OSError, ValueError) as exc:
+        if spec["authority"] != nankan_kaw_result.PROVIDER:
+            raise
+        raise FormalOrchestrationError(str(exc) if isinstance(exc, NankanError)
+                                       else "NANKAN_RESULT_SNAPSHOT_INVALID") from exc
     request = {"family_id": "LOCAL", "execution_id": execution_id, "race_id": intent["race_id"],
                "phase": "RESULT", "execution_phase": "RESULT", "temporal_mode": "RESULT",
-               "finish_order": order, "payouts": payouts, "result_available_at": snapshot["fetched_at"],
+               **result_fields, "result_available_at": snapshot["fetched_at"],
                "result_timestamp_authority": "OBSERVED_AT_OFFICIAL_RETRIEVAL_PUBLICATION_TIME_UNKNOWN",
                "source": spec["url"], "official_result_verified": True,
                "official_result_verification_ref": spec["url"] + "#sha256=" + snapshot["raw_sha256"],
