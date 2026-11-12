@@ -1139,21 +1139,24 @@ def compile_public_venue_candidate(request, source, numerical, *, historical_rep
 
 
 def compile_reference_prediction(request, source, *, now=None):
-    """Unsigned URW record-based reference; no numerical/Owner/FINAL gate.
+    """Unsigned LOCAL record-based reference; no numerical/Owner/FINAL gate.
 
     Reuse the existing card parser and observed-record comparator, without
     invoking a Production Owner or borrowing its scope. This is an unvalidated
     ordinal reference, not a newly fitted model or independent W/P2/P3 result.
     """
     from runtime.local_nar_evidence_candidate import parse_race_card
-    from runtime.local_production_static_owner import _card_heading, _runner_facts
+    from runtime.local_production_static_owner import _card_heading, _runner_facts, _start_date
     from runtime.local_physical.source_acquisition import verify_source_artifact
     from runtime.local_race_key_intake import JST
     import copy
     injected_clock = now is not None
     now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None or request.get('family_id') != 'LOCAL' or request.get('venue_id') != 'URW':
-        raise ShadowOwnerError('REFERENCE_URW_LOCAL_ONLY')
+    from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES, VENUE_NAMES
+    venue = request.get('venue_id')
+    if now.tzinfo is None or request.get('family_id') != 'LOCAL' or venue not in ('URW', 'KAW'):
+        raise ShadowOwnerError('REFERENCE_LOCAL_VENUE_REQUIRED')
+    venue_name = VENUE_NAMES[venue]
     context = source.get('source_race_context') or {}
     if any(str(context.get(k)) != str(request.get(k)) for k in ('venue_id', 'race_date', 'race_no')):
         raise ShadowOwnerError('REFERENCE_SOURCE_IDENTITY_MISMATCH')
@@ -1164,7 +1167,7 @@ def compile_reference_prediction(request, source, *, now=None):
     post = _aware(source['scheduled_post_at'], 'REFERENCE_POST')
     if not frozen <= now < cutoff < post or now.astimezone(JST).date().isoformat() > request['race_date']:
         raise ShadowOwnerError('REFERENCE_PRESTART_WINDOW_EXPIRED')
-    valid, errors = verify_source_artifact(source)
+    valid, errors = verify_source_artifact(source, require_formal_ready=venue == 'URW')
     if not valid:
         raise ShadowOwnerError('REFERENCE_RAW_SOURCE_INTEGRITY:' + ','.join(errors))
     from urllib.parse import urlparse, parse_qs
@@ -1177,14 +1180,52 @@ def compile_reference_prediction(request, source, *, now=None):
     url = urlparse(cards[0]['final_url']); query = parse_qs(url.query)
     if (url.scheme != 'https' or url.hostname != 'www.keiba.go.jp'
             or url.path != '/KeibaWeb/TodayRaceInfo/DebaTable'
-            or query.get('k_babaCode') != ['18'] or query.get('k_raceNo') != [str(request['race_no'])]
+            or query.get('k_babaCode') != [LOCAL_BABA_CODES[venue]] or query.get('k_raceNo') != [str(request['race_no'])]
             or query.get('k_raceDate') != [request['race_date'].replace('-', '/')]):
         raise ShadowOwnerError('REFERENCE_OFFICIAL_CARD_IDENTITY')
     from runtime.local_physical.source_acquisition import _html_text
     heading = re.sub(r'\s+', '', _html_text(raw_html(cards[0]))).split('競走馬')[0]
     y, m, d = map(int, request['race_date'].split('-'))
-    if not re.search(rf'{y}年{m}月{d}日.*?浦和第{request["race_no"]}競走', heading):
+    if not re.search(rf'{y}年{m}月{d}日.*?{venue_name}第{request["race_no"]}競走', heading):
         raise ShadowOwnerError('REFERENCE_OFFICIAL_CARD_BODY_IDENTITY')
+    if venue == 'KAW':
+        from runtime.local_physical.nar_runner_universe import enrich_source_artifact
+        from runtime.local_physical.nar_source_manifest import _race_card_source, _odds_source
+        from runtime.local_physical.source_acquisition import _extract, _merge_evidence
+
+        day = request['race_date'].replace('-', '/')
+        specs = {_spec['source_id']: _spec for _spec in (
+            _race_card_source(venue, LOCAL_BABA_CODES[venue], day, request['race_no']),
+            _odds_source(venue, LOCAL_BABA_CODES[venue], day, request['race_no']))}
+        seen = set()
+        for snapshot in source['sources']:
+            source_id = snapshot.get('source_id')
+            spec = specs.get(source_id)
+            observed_url = urlparse(snapshot.get('final_url', ''))
+            expected_url = urlparse(spec['url']) if spec else None
+            if (spec is None or source_id in seen or snapshot.get('official') is not True
+                    or snapshot.get('authority') != spec['authority']
+                    or snapshot.get('authority_priority') != spec['priority']
+                    or snapshot.get('source_class') != spec['source_class']
+                    or (observed_url.scheme, observed_url.netloc, observed_url.path,
+                        parse_qs(observed_url.query), observed_url.fragment) !=
+                       (expected_url.scheme, expected_url.netloc, expected_url.path,
+                        parse_qs(expected_url.query), '')
+                    or snapshot.get('http_status') != 200
+                    or snapshot.get('cutoff_relation') != 'PRE_CUTOFF'
+                    or _aware(snapshot['fetched_at'], 'REFERENCE_FETCHED_AT') > frozen):
+                raise ShadowOwnerError('REFERENCE_KAW_PRESTART_EVIDENCE_SCOPE')
+            raw = gzip.decompress(base64.b64decode(snapshot['raw_gzip_b64']))
+            evidence, errors = _extract(raw, snapshot['content_type'], spec['extract'])
+            if errors or evidence != snapshot.get('extracted_evidence'):
+                raise ShadowOwnerError('REFERENCE_KAW_RAW_EVIDENCE_MISMATCH')
+            seen.add(source_id)
+        normalized, _, errors = _merge_evidence(source['sources'])
+        if errors or normalized != source['normalized_evidence']:
+            raise ShadowOwnerError('REFERENCE_KAW_NORMALIZED_EVIDENCE_MISMATCH')
+        rebuilt = enrich_source_artifact({'normalized_evidence': normalized})
+        if any(source.get(key) != rebuilt[key] for key in ('runner_status_registry', 'declared_runner_universe')):
+            raise ShadowOwnerError('REFERENCE_KAW_DECLARED_UNIVERSE_MISMATCH')
     parsed = parse_race_card(source)
     declared = (source.get('declared_runner_universe') or {}).get('runners') or []
     if not parsed or len(declared) != len(parsed) or {str(x['runner_id']) for x in declared} != set(parsed):
@@ -1203,7 +1244,7 @@ def compile_reference_prediction(request, source, *, now=None):
     if start.get('authority') != 'NAR_OFFICIAL' or start.get('value') != post.astimezone(JST).strftime('%H:%M'):
         raise ShadowOwnerError('REFERENCE_OFFICIAL_POST_MISMATCH')
     day = post.astimezone(JST).replace(hour=0, minute=0, second=0, microsecond=0)
-    facts = {rid: _runner_facts(parsed[rid], venue_name='浦和', distance=header['distance'], race_day=day) for rid in ids}
+    facts = {rid: _runner_facts(parsed[rid], venue_name=venue_name, distance=header['distance'], race_day=day) for rid in ids}
     # Same transparent observed-record ordering as the existing evidence-only
     # baseline. Missing exact-course history stays UNKNOWN, not a weak score.
     def key(rid):
@@ -1225,15 +1266,25 @@ def compile_reference_prediction(request, source, *, now=None):
         f = facts[rid]; card = parsed[rid]
         observations = []
         for s in card.get('starts') or []:
+            if venue == 'KAW':
+                start_day = _start_date(s.get('date'))
+                if start_day is None or start_day.date() > frozen.astimezone(JST).date():
+                    raise ShadowOwnerError('REFERENCE_KAW_HISTORY_AFTER_OBSERVATION')
             observations.append({'date': s.get('date'), 'venue': s.get('venue'), 'distance': s.get('distance'),
                 'finish': s.get('finish'), 'field_size': s.get('field_size'), 'positions': s.get('content_positions') or [],
                 'surface': s.get('surface'), 'going': s.get('going'), 'class_tokens': _urw_class_tokens(s.get('race_name')),
-                'matched_urw_distance': str(s.get('venue', '')).replace('ナ', '') == '浦和' and s.get('distance') == header['distance'],
+                ('matched_urw_distance' if venue == 'URW' else 'matched_venue_distance'):
+                    str(s.get('venue', '')).replace('ナ', '') == venue_name and s.get('distance') == header['distance'],
                 'raw_reference': s.get('raw')})
         rows.append({'runner_id': rid, 'name': card['name'], 'reference_rank': comparable_ranks.get(rid),
             'ability_status': 'OBSERVED_RECORD_REFERENCE_UNVALIDATED' if rid in comparable_ranks else 'UNKNOWN_CONDITION_TRANSFER_NOT_WEAK',
             'facts': f, 'past_starts': observations,
-            'current_conditions': _urw_current_condition_translation(card, observations, header),
+            'current_conditions': (_urw_current_condition_translation(card, observations, header)
+                if venue == 'URW' else {'current_distance_m': header['distance'],
+                    'current_body_weight': card.get('current_body_weight'),
+                    'current_body_weight_change': card.get('current_body_weight_change'),
+                    'current_assigned_load': card.get('current_load'),
+                    'role_adjustments_applied': False}),
             'jockey': card.get('current_jockey'), 'trainer': card.get('trainer'),
             'pedigree': {k: card.get(k) for k in ('sire', 'dam', 'damsire')},
             'current_bias': 'UNKNOWN', 'bloodline_effect': 'UNKNOWN', 'jockey_trainer_effect': 'UNKNOWN',
@@ -1243,7 +1294,7 @@ def compile_reference_prediction(request, source, *, now=None):
     if completed >= cutoff:
         raise ShadowOwnerError('REFERENCE_COMPLETED_AFTER_CUTOFF')
     out = {'status': 'NON-PRODUCTION / NON-FORMAL / REFERENCE ONLY', 'race_id': request['race_id'],
-        'venue_id': 'URW', 'race_date': request['race_date'], 'race_no': request['race_no'],
+        'venue_id': venue, 'race_date': request['race_date'], 'race_no': request['race_no'],
         'scheduled_post_at': source['scheduled_post_at'], 'prediction_cutoff': source['prediction_cutoff'],
         'frozen_at': completed.isoformat(), 'source_freeze_at': source['source_freeze_at'],
         'temporal_class': ('INJECTED_CLOCK_CONTRACT_TEST' if injected_clock else
@@ -1272,14 +1323,16 @@ def compile_reference_prediction(request, source, *, now=None):
 
 def render_reference_prediction(prediction):
     """Human-readable evidence and uncertainty; never a Canonical FINAL."""
-    lines = [prediction['status'], '', f"浦和{prediction['race_no']}R　{prediction['race_date']}　発走 {prediction['scheduled_post_at']}",
+    from runtime.local_physical.nar_source_manifest import VENUE_NAMES
+    venue_name = VENUE_NAMES[prediction['venue_id']]
+    lines = [prediction['status'], '', f"{venue_name}{prediction['race_no']}R　{prediction['race_date']}　発走 {prediction['scheduled_post_at']}",
         f"観測 {prediction['source_freeze_at']}／参考予想凍結 {prediction['frozen_at']}", '',
         '過去実績による暫定比較です。同場同距離実績の優先には未検証の偏りがあり、転入・条件変更馬の能力優劣は確定できません。', '',
         '| 参考順位 | 馬番・馬名 | 確認できた根拠 | 不確実性 |', '|---:|---|---|---|']
     for row in prediction['runners']:
         f = row['facts']; runs = row['past_starts']
         recent = runs[0] if runs else None
-        evidence = f"浦和同距離 {f['exact_races']}戦／勝利{f['exact_wins']}／3着内{f['exact_podiums']}"
+        evidence = f"{venue_name}同距離 {f['exact_races']}戦／勝利{f['exact_wins']}／3着内{f['exact_podiums']}"
         if recent:
             evidence += f"。直近 {recent['date']} {recent['venue']} {recent['distance']}m {recent['finish']}着、通過{recent['positions']}"
         unknown = '同条件実績UNKNOWN。' if f['unknown_exact_course'] else ''

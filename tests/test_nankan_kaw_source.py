@@ -124,3 +124,82 @@ def test_expired_kaw_intent_cannot_fetch_a_provider():
     with pytest.raises(NankanError, match="NANKAN_KAW_CUTOFF_PASSED"):
         source.acquire(REQUEST, lambda url: pytest.fail(url),
                        now=lambda: datetime.fromisoformat(REQUEST["prediction_cutoff"]))
+
+
+@pytest.mark.parametrize(
+    ("labels", "refund", "expected_refund", "expected_trifecta"),
+    [
+        (["1", "2", "3", "4", "4", "競走中止"], "", [], 1),
+        (["1", "2", "3", "3", "競走除外", "競走中止"], "返還馬番：5番", [5], 2),
+    ],
+)
+def test_confirmed_result_and_settlement(labels, refund, expected_refund, expected_trifecta):
+    from runtime.local_physical import nankan_kaw_result as result
+    from runtime.urw_nankan_reference_source import url_scope
+
+    artifact = acquire()
+    runners = [{"horse_no": h, "runner_id": str(h), "name": f"Fixture-{h}"} for h in range(1, 7)]
+    for field in ("declared_runner_universe", "active_runner_universe"):
+        artifact[field]["runners"] = runners
+    spec = result.spec_from_source(artifact)
+    assert url_scope(spec["url"]).path == f"/result/{KAW_DAY_ID}01.do"
+    with pytest.raises(NankanError, match="NANKAN_URL_SCOPE_HOLD"):
+        url_scope(spec["url"].replace(KAW_DAY_ID, DAY_ID))
+    rows = "".join(f"<tr><td>{label}</td><td>{h}</td><td>Fixture-{h}</td></tr>"
+                   for h, label in enumerate(labels, 1))
+    second_win = ("<tr><td>1-2-4</td><td>1,400</td><td>3</td>"
+                  "<td>1-2-4</td><td>2,500</td><td>3</td></tr>") if expected_trifecta == 2 else ""
+    html = (f"<p>1R 2026年10月22日 第7回 川崎競馬 第4日</p>"
+            f"<table><tr><th>着</th><th>馬番</th><th>馬名</th></tr>{rows}</table>"
+            "<table><tr><th colspan='3'>馬単</th></tr><tr><th>組番</th><th>金額</th><th>人気</th></tr>"
+            "<tr><td>1-2</td><td>540</td><td>2</td></tr></table>"
+            "<table><tr><th colspan='3'>三連複</th><th colspan='3'>三連単</th></tr>"
+            "<tr><th>組番</th><th>金額</th><th>人気</th><th>組番</th><th>金額</th><th>人気</th></tr>"
+            "<tr><td>1-2-3</td><td>1,000</td><td>1</td><td>1-2-3</td><td>2,000</td><td>2</td></tr>"
+            f"{second_win}</table><p>{refund}</p>")
+
+    def snapshot(body):
+        raw = body.encode()
+        observed = DAY + "T12:26:00+09:00"
+        data, errors = result.capture(spec, lambda url: ({
+            "url": url, "http_status": 200, "provider": result.PROVIDER, "fetched_at": observed,
+            "raw_sha256": hashlib.sha256(raw).hexdigest(), "source_policy": fixture_access_policy(observed),
+        }, raw))
+        assert errors == []
+        return data
+
+    data = snapshot(html)
+    parsed = result.parse(data, artifact)
+    assert parsed["refunded_runners"] == expected_refund
+    assert parsed["nonfinishers"] == [6]
+    assert sum(row["bet_type"] == "TRIFECTA" for row in parsed["payout_rows"]) == expected_trifecta
+    with pytest.raises(NankanError, match="NANKAN_RESULT_PAGE_RACE_IDENTITY"):
+        result.parse(snapshot(html.replace("第4日", "第5日")), artifact)
+    with pytest.raises(NankanError, match="NANKAN_RESULT_PAYOUT_SELECTIONS"):
+        result.parse(snapshot(html.replace("<td>1-2</td>", "<td>2-1</td>")), artifact)
+    with pytest.raises(NankanError, match="NANKAN_RESULT_SNAPSHOT_IDENTITY"):
+        result.parse({**data, "authority": "NAR_OFFICIAL"}, artifact)
+    if expected_refund:
+        with pytest.raises(NankanError, match="NANKAN_RESULT_REFUND_NOT_CONFIRMED"):
+            result.parse(snapshot(html.replace(refund, "")), artifact)
+
+    final = {"receipt": {"race_id": REQUEST["race_id"]}, "receipt_sha256": "fixture-final",
+             "artifact": {"final_ticket": {"tickets": [
+                 {"bet_type": "EXACTA", "selection": [1, 2], "stake": 100},
+                 {"bet_type": "TRIO", "selection": [3, 1, 2], "stake": 200},
+                 {"bet_type": "TRIFECTA", "selection": [1, 2, 4], "stake": 100},
+                 {"bet_type": "TRIFECTA", "selection": [1, 2, 5], "stake": 100},
+             ]}}}
+    req = {"race_id": REQUEST["race_id"], "official_outcome": parsed, "source": spec["url"],
+           "result_available_at": data["fetched_at"],
+           "official_snapshot_sha256": data["snapshot_sha256"],
+           "official_result_verification_ref": spec["url"] + "#sha256=" + data["raw_sha256"],
+           "finish_order": [runner for group in parsed["finish_groups"] for runner in group]}
+    payload, by_type = execution_store.build_local_result_payload(req, final)
+    amounts = payload["settlement"]
+    assert (amounts["investment"], amounts["refund"], amounts["effective_investment"], amounts["payout"]) == (
+        (500, 100, 400, 5040) if expected_refund else (500, 0, 500, 2540))
+    assert by_type["TRIO"]["return"] == 2000
+    if expected_refund:
+        assert by_type["TRIFECTA"]["refund"] == 100
+        assert by_type["TRIFECTA"]["payout"] == 2500

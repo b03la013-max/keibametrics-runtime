@@ -18,7 +18,7 @@ from runtime import formal_execution_orchestrator as orchestrator
 from runtime import local_private_checkpoint as transport
 from runtime import local_race_entry
 from runtime.local_race_key_intake import JST, build
-from runtime.local_physical.nar_source_manifest import PROFILE as NAR_PROFILE, build_local_nar_manifest
+from runtime.local_physical.nar_source_manifest import LOCAL_BABA_CODES, PROFILE as NAR_PROFILE, _result_source, build_local_nar_manifest
 from runtime.local_physical.source_acquisition import SOURCE_PROFILE
 
 MARK = b"PRIVATE_SIGNED_FIXTURE_NEVER_PUBLISH"
@@ -300,14 +300,29 @@ def test_kaw_live_source_never_falls_back_to_nar(signed_case, monkeypatch):
     assert calls == []
 
 
-def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path, capsys):
+def test_kaw_nankan_signed_private_roundtrip(request, monkeypatch, tmp_path, capsys):
     from test_nankan_kaw_source import KAW_DAY_ID, fixture_access_policy, pages
     from runtime import urw_nankan_reference_source as nankan
     from runtime import local_race_day_dispatcher as dispatcher
     from runtime import family_authority_guard
     from runtime import kaw_research_startup as startup
+    from runtime.local_physical import nankan_kaw_source
+    from runtime.local_production_static_owner import bind_official_numerical_context, build_formal_static
 
-    _, binding_path, _, intent, _, sign, _, _, calls = signed_case
+    # This scenario assumes that capture and post time fall on the same JST day.
+    observed_at = datetime(2026, 10, 22, 12, 5, tzinfo=JST)
+
+    class RoundtripClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return observed_at.astimezone(tz) if tz else observed_at.replace(tzinfo=None)
+
+    prestart_gate = sys.modules[orchestrator.validate_window.__module__]
+    for module in (sys.modules[__name__], prestart_gate, transport, local_race_entry,
+                   nankan_kaw_source, dispatcher, startup):
+        monkeypatch.setattr(module, "datetime", RoundtripClock)
+
+    _, binding_path, _, intent, _, sign, _, _, calls = request.getfixturevalue("signed_case")
     binding = json.loads(binding_path.read_bytes())
     binding["source_url_prefixes"] = {"NANKAN_OFFICIAL": [nankan.ORIGIN + "/"]}
     binding["source_only_execution_ids"] = binding.pop("formal_execution_ids")
@@ -397,6 +412,14 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     imported = consumer.resolve(eid, "SOURCE")
     imported_path = imported["run_dir"] / "source_receipt_envelope.json"
     assert imported_path.read_bytes() == transferred.read_bytes()
+    artifact = envelope["artifact"]
+    numeric_request = bind_official_numerical_context(
+        {**intent, "runners": artifact["official_runner_universe"]["runners"]}, artifact)
+    numerical = local_race_entry.materialize_production(
+        artifact, numeric_request, local_race_entry.assess()["required_indices"])
+    owner_policy = json.loads((transport.ROOT / "profiles/local_production_static_owner_20261014_v1.json").read_bytes())
+    formal_intent, _ = build_formal_static(intent, envelope, numerical, policy=owner_policy, now=observed_at)
+    assert formal_intent["source_policy"] == "CURRENT_LOCAL_OFFICIAL_NANKAN"
     report = dispatcher.private_kaw_day(tmp_path, day, 120, now=datetime.now(JST), private=consumer)
     assert report["races"][eid]["status"] == "SIGNED_NANKAN_SOURCE_VERIFIED"
     assert report["dispatch_count"] == 0
@@ -479,9 +502,11 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     monkeypatch.setenv('KM_LOCAL_AUTONOMOUS_ENABLED', 'true')
     assert startup.main([]) == 0 and not sent
     capsys.readouterr()
+    assert startup.main(['--check-binding']) == 0 and not sent
+    assert 'KAW_RUNNER_BINDING_VALIDATED' in capsys.readouterr().out
     assert startup.main(['--dispatch-once']) == 0
     log = capsys.readouterr().out.splitlines()
-    assert 'KAW_RUNNER_BINDING_VALIDATED' in log
+    assert 'KAW_RUNNER_PRIVATE_ROOT_READY' in log
     assert json.loads(log[-1])['dispatch_count'] == 1
     assert envelope['receipt_sha256'] not in '\n'.join(log)
     status_path = checkpoint.work_root / 'day-dispatch' / day / 'day-status.json'
@@ -696,7 +721,7 @@ def test_private_result_reads_frozen_final_and_submits_at_most_once(signed_case,
         # Seed an already persisted legacy result fixture. Settlement and
         # idempotent recovery still work without a new NAR request.
         ctx = source["artifact"]["source_race_context"]
-        spec = transport._result_source("KAW", transport.LOCAL_BABA_CODES["KAW"],
+        spec = _result_source("KAW", LOCAL_BABA_CODES["KAW"],
                                         ctx["race_date"].replace("-", "/"), ctx["race_no"])
         snapshot, errors = result_page(spec, None)
         assert not errors
@@ -738,3 +763,82 @@ def test_private_result_reads_frozen_final_and_submits_at_most_once(signed_case,
     assert calls.count("OFFICIAL") == calls.count("RESULT") == 1
     assert store.resolve_phase(eid, "OFFICIAL_RESULT") is None and store.resolve_phase(eid, "RESULT") is None
     assert (private.resolve(eid, "RESULT") is None) == interrupted
+
+    # A renewed current approval can re-verify already persisted bytes.
+    phases = ("SOURCE", "FORMAL", "OFFICIAL_RESULT") + (() if interrupted else ("RESULT",))
+    originals = {phase: private.resolve(eid, phase) for phase in phases}
+    replacement = json.loads(binding.read_bytes())
+    replacement["cost_control_ref"] = "RENEWED_FIXTURE_ONLY"
+    renewed = write(binding.parent / "renewed-binding.json", transport._json(replacement))
+    replacement_pin = transport._sha(renewed.read_bytes())
+    next_runtime = transport.PrivateCheckpoint(renewed, replacement_pin)
+    for phase, original in originals.items():
+        assert next_runtime.resolve(eid, phase) == original
+        assert json.loads((original["run_dir"] / "private_checkpoint_binding.json").read_bytes()) == {
+            "binding_sha256": pin}
+    next_runtime.binding["source_only_execution_ids"] = next_runtime.binding.pop("formal_execution_ids")
+    assert next_runtime.resolve(eid, "SOURCE") == originals["SOURCE"]
+    with pytest.raises(store.ExecutionStoreError, match="FORMAL_EXECUTION_APPROVAL_REQUIRED"):
+        next_runtime.resolve(eid, "FORMAL")
+    assert calls.count("OFFICIAL") == calls.count("RESULT") == 1
+
+
+def test_private_evidence_reuses_existing_nested_paths(signed_case):
+    root, binding_path, _, intent, *_ = signed_case
+    binding = json.loads(binding_path.read_bytes())
+    records = root / "existing" / "evidence"
+    (root / "existing").mkdir(mode=0o700)
+    records.mkdir(mode=0o700)
+    for field in ("permission_file", "formal_runtime_approval_file"):
+        old = root / binding[field]
+        moved = records / old.name
+        old.rename(moved)
+        binding[field] = str(moved.relative_to(root))
+
+    def checkpoint():
+        data = transport._json(binding)
+        write(binding_path, data)
+        return transport.PrivateCheckpoint(binding_path, transport._sha(data))
+
+    private = checkpoint()
+    private.require_formal_execution(intent["execution_id"])
+    approval_path = root / binding["formal_runtime_approval_file"]
+    write(approval_path, b"CHANGED")
+    with pytest.raises(store.ExecutionStoreError, match="FORMAL_EXECUTION_APPROVAL_REQUIRED"):
+        private.require_formal_execution(intent["execution_id"])
+    binding["permission_file"] = "../outside-proof.txt"
+    with pytest.raises(store.ExecutionStoreError, match="PROVIDER_RIGHTS_REQUIRED"):
+        checkpoint()
+
+
+def test_private_result_known_signer_refusal_is_retryable_but_timeout_is_not(signed_case, monkeypatch):
+    _, binding, pin, intent, *_ = signed_case
+    private = transport.PrivateCheckpoint(binding, pin)
+    eid = intent["execution_id"]
+    request = {"execution_id": eid, "race_id": eid,
+               "official_outcome": {"provider": "NANKAN_OFFICIAL", "payout_rows": [], "refunded_runners": []},
+               "result_available_at": datetime.now(timezone.utc).isoformat(), "source": "FIXTURE",
+               "official_snapshot_sha256": "f" * 64, "official_result_verification_ref": "FIXTURE",
+               "finish_order": [1, 2, 3]}
+    final = {"artifact": {"final_ticket": {"tickets": []}}}
+    monkeypatch.setattr(private, "_result_inputs", lambda _: (request, final))
+    out = private.work_root / eid / "result"
+    claim = private.work_root / eid / "result_exchange" / "request.sha256"
+    calls = []
+
+    def responder(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return 422, {"detail": "NANKAN_KAW_RESULT_SIGNING_NOT_ADMITTED"}
+        raise TimeoutError("fixture transport timeout")
+
+    monkeypatch.setattr(transport.gateway, "request_json", responder)
+    with pytest.raises(store.ExecutionStoreError, match="SIGNER_REJECTED_BEFORE_SIGNING"):
+        private.settle_result(request, out, github_sha="FIXTURE")
+    assert not claim.exists()
+    with pytest.raises(TimeoutError):
+        private.settle_result(request, out, github_sha="FIXTURE")
+    assert claim.is_file()
+    with pytest.raises(store.ExecutionStoreError, match="SUBMISSION_OUTCOME_UNCONFIRMED"):
+        private.settle_result(request, out, github_sha="FIXTURE")
+    assert len(calls) == 2

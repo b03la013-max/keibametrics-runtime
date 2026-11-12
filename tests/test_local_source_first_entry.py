@@ -449,3 +449,73 @@ def test_source_publish_conflict_stops_before_prediction(monkeypatch,tmp_path):
     def conflict(paths):raise RuntimeError('PERSIST_IMMUTABLE_OR_UNKNOWN_CONFLICT')
     with pytest.raises(RuntimeError,match='PERSIST_IMMUTABLE'):
         e.run({'execution_id':'race','race_id':'race'},output=tmp_path/'out',run_id='test',checkpoint_publisher=conflict)
+
+
+def test_kaw_nar_reference_uses_pinned_private_card_without_formal(monkeypatch, tmp_path):
+    from datetime import datetime
+    from hashlib import sha256
+
+    from runtime import local_race_entry as entry, local_race_key_shadow_owner as owner
+    from runtime.local_physical.nar_runner_universe import enrich_source_artifact
+    from runtime.local_physical.nar_source_manifest import _race_card_source
+    from runtime.local_physical.source_acquisition import (
+        _merge_evidence, sha_obj, snapshot_from_bytes, verify_source_artifact,
+    )
+    from urw_reference_fixture_support import module as fixture
+
+    monkeypatch.delenv('CI', raising=False)
+    monkeypatch.delenv('GITHUB_ACTIONS', raising=False)
+    case = json.loads((Path(fixture.__file__).parent/'factual_cells.json').read_text())['cases']['2026-10-19/R05']
+    day, no = case['race_date'], case['race_no']
+    race_id = f"KM-LOCAL-KAW-{day.replace('-', '')}-R{no:02d}-REFERENCE-R1"
+    intent = {'family_id': 'LOCAL', 'venue_id': 'KAW', 'race_date': day, 'race_no': no,
+              'prediction_mode': 'REFERENCE'}
+    source = fixture.synthetic_source(case, race_id)
+    spec = _race_card_source('KAW', '21', day.replace('-', '/'), no)
+    raw = fixture.minimal_html(case).decode().replace('日 浦和 第', '日 川崎 第', 1).encode()
+    snapshot, errors = snapshot_from_bytes(spec, raw, final_url=spec['url'], status_code=200,
+        headers={'content-type': 'text/html; charset=UTF-8'}, fetched_at=case['source_fetch_at'],
+        prediction_cutoff=case['prediction_cutoff'])
+    assert not errors
+    evidence, conflicts, errors = _merge_evidence([snapshot])
+    assert not errors
+    source.update(sources=[snapshot], normalized_evidence=evidence, normalized_evidence_sha256=sha_obj(evidence),
+                  conflicts=conflicts, source_race_context={'venue_id': 'KAW', 'race_date': day, 'race_no': no},
+                  formal_ready=False)
+    source = enrich_source_artifact(source)
+    source['source_snapshot_sha256'] = sha_obj({k: v for k, v in source.items() if k != 'source_snapshot_sha256'})
+    assert verify_source_artifact(source) == (False, ['SOURCE_NOT_FORMAL_READY'])
+
+    inbox = tmp_path/'inbox'
+    inbox.mkdir(mode=0o700)
+    artifact_path = inbox/'evidence.json'
+    raw_artifact = json.dumps(source, ensure_ascii=False).encode()
+    artifact_path.write_bytes(raw_artifact)
+    artifact_path.chmod(0o600)
+    intent.update(reference_source_path=str(artifact_path),
+                  reference_source_sha256=sha256(raw_artifact).hexdigest())
+    compiler = owner.compile_reference_prediction
+    now = datetime.fromisoformat(case['forecast_freeze_at'])
+    monkeypatch.setattr(owner, 'compile_reference_prediction', lambda request, evidence:
+                        compiler(request, evidence, now=now))
+    monkeypatch.setattr(o, 'validate_request_context', lambda *a: pytest.fail('formal validation was called'))
+    output = tmp_path/'work'
+    with pytest.raises(ValueError, match='OFFICIAL_INPUT_SHA_MISMATCH'):
+        entry.run({**intent, 'reference_source_sha256': '0'*64}, output=output, run_id='bad-pin')
+    assert not (output/'entry_report.json').exists()
+    report = entry.run(intent, output=output, run_id='kaw-reference')
+    prediction = json.loads((output/'reference_prediction.json').read_text())
+    assert report['formal_final_proven'] is False
+    assert report['runtime_post_count'] == report['signed_source_count'] == 0
+    assert prediction['venue_id'] == 'KAW' and len(prediction['runners']) >= 2
+    assert prediction['production_authority'] is prediction['formal_handoff_allowed'] is False
+    assert prediction['canonical_tickets'] is prediction['stakes'] is None
+    assert '川崎5R' in (output/'reference_prediction.md').read_text()
+    assert (output/'reference_source.json').read_bytes() == raw_artifact
+
+    artifact_path.unlink()
+    monkeypatch.setattr(owner, 'compile_reference_prediction', lambda *a: pytest.fail('frozen forecast recalculated'))
+    assert entry.run(intent, output=output, run_id='kaw-readback')['reference_readback_only']
+    (output/'reference_source.json').write_bytes(raw_artifact+b'\n')
+    with pytest.raises(ValueError, match='NO_REEXECUTION'):
+        entry.run(intent, output=output, run_id='kaw-tamper')

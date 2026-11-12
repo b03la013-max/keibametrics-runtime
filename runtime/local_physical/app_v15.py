@@ -418,4 +418,22 @@ def formal(payload: Dict[str, Any]):
 
 @app.post("/result")
 def result(payload: Dict[str, Any]):
+    official = payload.get("official_result")
+    if isinstance(official, dict) and official.get("outcome") is not None:
+        try:
+            from runtime.execution_store import build_local_result_payload
+            from runtime.local_private_checkpoint import PrivateCheckpoint
+
+            private = PrivateCheckpoint.from_env()
+            if private is None:
+                raise ValueError("PRIVATE_CHECKPOINT_BINDING_REQUIRED")
+            race_id = payload["race_id"]
+            private.require_nankan_source_approval(race_id)
+            request, final = private._result_inputs(race_id)
+            expected, _ = build_local_result_payload(request, final)
+            if payload != expected:
+                raise ValueError("PRIVATE_NANKAN_RESULT_PAYLOAD_CHANGED")
+        except (ImportError, KeyError, ValueError, TypeError, OSError, RuntimeError):
+            raise HTTPException(422, "NANKAN_KAW_RESULT_SIGNING_NOT_ADMITTED") from None
+        return legacy._result(payload, nankan_authorized=True)
     return legacy.result(payload)
