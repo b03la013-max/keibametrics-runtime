@@ -1,4 +1,4 @@
-"""Owner-requested LOCAL automatic Production Static: signed NAR evidence only.
+"""Owner-requested LOCAL automatic Production Static using signed official evidence.
 
 No 29-index numeric values, AKI Shadow ranks, betting odds or results enter
 this owner. The transparent ordinal racing heuristic is unvalidated; its
@@ -446,7 +446,8 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
         "require_full_numerical_authority": True,
         "production_numerical_claim": True,
         "degraded_execution": False,
-        "source_policy": "CURRENT_LOCAL_OFFICIAL_NAR",
+        "source_policy": ("CURRENT_LOCAL_OFFICIAL_NANKAN" if source_authority == nankan_kaw_source.PROVIDER
+                          else "CURRENT_LOCAL_OFFICIAL_NAR"),
     })
     ledger = {"profile": PROFILE, "status": "OWNER_AUTHORIZED_UNVALIDATED_PRESTART_STATIC",
               "execution_id": request["execution_id"], "frozen_at": now.isoformat(),

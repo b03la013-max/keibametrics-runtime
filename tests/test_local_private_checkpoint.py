@@ -300,14 +300,29 @@ def test_kaw_live_source_never_falls_back_to_nar(signed_case, monkeypatch):
     assert calls == []
 
 
-def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path, capsys):
+def test_kaw_nankan_signed_private_roundtrip(request, monkeypatch, tmp_path, capsys):
     from test_nankan_kaw_source import KAW_DAY_ID, fixture_access_policy, pages
     from runtime import urw_nankan_reference_source as nankan
     from runtime import local_race_day_dispatcher as dispatcher
     from runtime import family_authority_guard
     from runtime import kaw_research_startup as startup
+    from runtime.local_physical import nankan_kaw_source
+    from runtime.local_production_static_owner import bind_official_numerical_context, build_formal_static
 
-    _, binding_path, _, intent, _, sign, _, _, calls = signed_case
+    # This scenario assumes that capture and post time fall on the same JST day.
+    observed_at = datetime(2026, 10, 22, 12, 5, tzinfo=JST)
+
+    class RoundtripClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return observed_at.astimezone(tz) if tz else observed_at.replace(tzinfo=None)
+
+    prestart_gate = sys.modules[orchestrator.validate_window.__module__]
+    for module in (sys.modules[__name__], prestart_gate, transport, local_race_entry,
+                   nankan_kaw_source, dispatcher, startup):
+        monkeypatch.setattr(module, "datetime", RoundtripClock)
+
+    _, binding_path, _, intent, _, sign, _, _, calls = request.getfixturevalue("signed_case")
     binding = json.loads(binding_path.read_bytes())
     binding["source_url_prefixes"] = {"NANKAN_OFFICIAL": [nankan.ORIGIN + "/"]}
     binding["source_only_execution_ids"] = binding.pop("formal_execution_ids")
@@ -397,6 +412,14 @@ def test_kaw_nankan_signed_private_roundtrip(signed_case, monkeypatch, tmp_path,
     imported = consumer.resolve(eid, "SOURCE")
     imported_path = imported["run_dir"] / "source_receipt_envelope.json"
     assert imported_path.read_bytes() == transferred.read_bytes()
+    artifact = envelope["artifact"]
+    numeric_request = bind_official_numerical_context(
+        {**intent, "runners": artifact["official_runner_universe"]["runners"]}, artifact)
+    numerical = local_race_entry.materialize_production(
+        artifact, numeric_request, local_race_entry.assess()["required_indices"])
+    owner_policy = json.loads((transport.ROOT / "profiles/local_production_static_owner_20261014_v1.json").read_bytes())
+    formal_intent, _ = build_formal_static(intent, envelope, numerical, policy=owner_policy, now=observed_at)
+    assert formal_intent["source_policy"] == "CURRENT_LOCAL_OFFICIAL_NANKAN"
     report = dispatcher.private_kaw_day(tmp_path, day, 120, now=datetime.now(JST), private=consumer)
     assert report["races"][eid]["status"] == "SIGNED_NANKAN_SOURCE_VERIFIED"
     assert report["dispatch_count"] == 0
