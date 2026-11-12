@@ -70,8 +70,11 @@ def main(argv=None):
         print("KAW_RUNNER_DISPATCH_BINDING_OUTSIDE_MOUNT" if args.dispatch_once
               else "KAW_RUNNER_CHECK_BINDING_OUTSIDE_MOUNT")
         return 2
-    print("KAW_RUNNER_BINDING_VALIDATED")
+    if args.check_binding:
+        private.check_nankan_source_binding()
+        print("KAW_RUNNER_BINDING_VALIDATED")
     if args.dispatch_once:
+        print("KAW_RUNNER_PRIVATE_ROOT_READY")
         from runtime.local_race_day_dispatcher import private_kaw_day
 
         now = datetime.now(JST)

@@ -116,12 +116,10 @@ class PrivateCheckpoint:
         _require(_time(b.get("valid_from")) <= datetime.now(timezone.utc) < _time(b.get("retain_until")) and
                  _time(b.get("valid_from")) < _time(b.get("valid_until")) <= _time(b.get("retain_until")),
                  "PRIVATE_CHECKPOINT_BINDING_OUTSIDE_RETENTION")
-        proof = str(b.get("permission_file") or "")
-        _require(proof not in {"", ".", "..", path.name, store.PRIVATE_MARKER} and Path(proof).name == proof and
-                 _sha(private_file(self.root / proof).read_bytes()) == b.get("permission_sha256") and
-                 b.get("private_storage_and_authorized_runtime_processing") is True and
-                 isinstance(b.get("source_url_prefixes"), dict) and bool(b["source_url_prefixes"]),
-                 "PRIVATE_CHECKPOINT_PROVIDER_RIGHTS_REQUIRED")
+        rights_error = "PRIVATE_CHECKPOINT_PROVIDER_RIGHTS_REQUIRED"
+        _require(b.get("private_storage_and_authorized_runtime_processing") is True and
+                 isinstance(b.get("source_url_prefixes"), dict) and bool(b["source_url_prefixes"]), rights_error)
+        self._proof_bytes("permission", rights_error)
         self.store_root = private_directory(self.root / "checkpoints", create=True)
         self.work_root = private_directory(self.root / "work", create=True)
         self._key = None
@@ -151,6 +149,23 @@ class PrivateCheckpoint:
             if parent != self.root and parent.is_relative_to(self.root):
                 private_directory(parent, create=create)
         return private_directory(path, create=create)
+
+    def _proof_bytes(self, field, error):
+        reference = self.binding.get(f"{field}_file")
+        _require(isinstance(reference, str) and bool(reference.strip()), error)
+        relative = Path(reference)
+        _require(not relative.is_absolute() and ".." not in relative.parts and
+                 relative.name not in {"", ".", store.PRIVATE_MARKER}, error)
+        path = self.root / relative
+        _require(path != self.binding_path, error)
+        try:
+            if path.parent != self.root:
+                self.directory(path.parent)
+            data = private_file(path).read_bytes()
+        except OSError:
+            raise store.ExecutionStoreError(error) from None
+        _require(_sha(data) == self.binding.get(f"{field}_sha256"), error)
+        return data
 
     def output_directory(self, path, *, create=False):
         path = Path(path)
@@ -354,15 +369,16 @@ class PrivateCheckpoint:
                  "PRIVATE_CHECKPOINT_POINTER_CHANGED")
         path = self.directory(result["run_dir"])
         binding_record = json.loads(private_file(path / "private_checkpoint_binding.json").read_bytes())
-        # SOURCE keeps its original admission record. A current Binding may
-        # reuse it only after verifying the whole envelope under its own scope.
+        # Preserve the admission record. A renewed Binding must still authorize
+        # the race for downstream readback and re-verify its immutable evidence.
         stored_pin = binding_record.get("binding_sha256") if isinstance(binding_record, dict) else None
         _require(result["manifest"].get("storage_scope") == "PRIVATE" and
                  "private_checkpoint_binding.json" in result["manifest"]["files"] and
                  isinstance(stored_pin, str) and re.fullmatch(r"[0-9a-f]{64}", stored_pin) and
-                 binding_record == {"binding_sha256": stored_pin} and
-                 (phase == "SOURCE" or stored_pin == self.binding_sha),
+                 binding_record == {"binding_sha256": stored_pin},
                  "PRIVATE_CHECKPOINT_STORED_BINDING_MISMATCH")
+        if phase != "SOURCE" and stored_pin != self.binding_sha:
+            self.require_formal_execution(execution_id)
         self._verify_phase(path, phase, execution_id, run_id)
         return result
 
@@ -484,6 +500,13 @@ class PrivateCheckpoint:
             endpoint = self.config["external_endpoint"].rstrip("/")
             http, envelope = gateway.request_json(endpoint + "/result", method="POST", payload=payload,
                                                   timeout=180, attempts=1)
+            if (official.get("official_outcome") is not None and http == 422
+                    and envelope == {"detail": "NANKAN_KAW_RESULT_SIGNING_NOT_ADMITTED"}):
+                # This response is emitted before signing. An unknown outcome
+                # must still keep the exclusive claim and require reconciliation.
+                claim.unlink()
+                store._sync_directory(exchange)
+                raise store.ExecutionStoreError("PRIVATE_NANKAN_RESULT_SIGNER_REJECTED_BEFORE_SIGNING")
             _require(http < 300, "PRIVATE_RESULT_SUBMISSION_OUTCOME_UNCONFIRMED")
             self.write(saved, envelope)
         self._verify_result(envelope, final, payload)
@@ -536,13 +559,31 @@ class PrivateCheckpoint:
         self.runtime_approval_bytes(error=error)
 
     def runtime_approval_bytes(self, *, error="PRIVATE_FORMAL_EXECUTION_APPROVAL_REQUIRED"):
-        proof = self.binding.get("formal_runtime_approval_file") or ""
         cost = self.binding.get("cost_control_ref")
-        _require(isinstance(proof, str) and proof not in {"", ".", "..", self.binding_path.name, store.PRIVATE_MARKER}
-                 and Path(proof).name == proof and isinstance(cost, str) and bool(cost.strip()), error)
-        data = private_file(self.root / proof).read_bytes()
-        _require(_sha(data) == self.binding.get("formal_runtime_approval_sha256"), error)
-        return data
+        _require(isinstance(cost, str) and bool(cost.strip()), error)
+        return self._proof_bytes("formal_runtime_approval", error)
+
+    def check_nankan_source_binding(self):
+        error = "PRIVATE_SOURCE_EXECUTION_APPROVAL_REQUIRED"
+        self.require_current_processing()
+        _require(set(self.binding["source_url_prefixes"]) == {nankan_kaw_source.PROVIDER},
+                 "PRIVATE_SOURCE_NANKAN_EXCLUSIVE_PERMISSION_REQUIRED")
+        prefixes = self.binding["source_url_prefixes"][nankan_kaw_source.PROVIDER]
+        _require(isinstance(prefixes, list) and bool(prefixes)
+                 and all(isinstance(prefix, str) for prefix in prefixes)
+                 and all(self.allows_source_endpoint(nankan_kaw_source.PROVIDER, url)
+                         for url in (nankan_kaw_source.nankan.CALENDAR, nankan_kaw_source.CHANGES)),
+                 "PRIVATE_SOURCE_ENDPOINT_OUTSIDE_PERMISSION")
+        ids = []
+        for field in ("source_only_execution_ids", "formal_execution_ids"):
+            scoped = self.binding.get(field, [])
+            _require(isinstance(scoped, list) and all(isinstance(eid, str) for eid in scoped), error)
+            ids.extend(scoped)
+        _require(bool(ids), error)
+        for eid in ids:
+            self._identity(eid)
+        self.runtime_approval_bytes(error=error)
+        self._signer()
 
     def import_source(self, path, basis, *, github_sha):
         if basis.get("source_manifest_profile") == nankan_kaw_source.PROFILE:
