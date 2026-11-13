@@ -1,0 +1,26 @@
+name: LOCAL probe 2
+permissions:
+  contents: write
+on:
+  push:
+    branches: [claude/local-probe-2]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          UA="KeibaMetrics-LOCAL-PrivateResearch/1.0 (+https://github.com/b03la013-max/keibametrics-runtime)"
+          mkdir -p o
+          get() { sleep 62; curl -sS -m 25 -A "$UA" -o "o/$1" -w "$1 %{http_code} %{size_download}\n" "https://keiba.rakuten.co.jp$2" >> o/index.txt; }
+          get term.html /guide/term
+          get r4.html /race_card/list/RACEID/202611132135090504
+          get r2.html /race_card/list/RACEID/202611132135090502
+          get res7.html /race_performance/list/RACEID/202611132135090507
+          tar czf o.tgz o; openssl rand -out k.bin 32
+          openssl enc -aes-256-cbc -pbkdf2 -in o.tgz -out p/o.enc -pass file:k.bin
+          openssl pkeyutl -encrypt -pubin -inkey p/pub.pem -in k.bin -out p/k.enc
+          cp o/index.txt p/index.txt
+          git config user.name x; git config user.email x@users.noreply.github.com
+          git add p && git commit -qm "probe out [skip ci]" && git push -q origin HEAD:claude/local-probe-2
