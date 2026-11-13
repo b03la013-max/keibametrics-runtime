@@ -1,0 +1,73 @@
+name: KeibaMetrics LOCAL Race-Day Autopilot
+run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || github.event.schedule || 'push' }}
+
+# NAR (all local venues except ばんえい) race-day autopilot, the LOCAL counterpart
+# of km-jra-race-day-autopilot.yml. Each tick reads the public Rakuten keiba
+# race cards (robots.txt respected, Crawl-Delay 60 s persisted across runs), runs the
+# KeibaMetrics LOCAL v4.3 chain (runtime/local_autopilot) and commits
+# runtime/local_autopilot/output/<date>/{README.md, <VENUE>_<RR>.md/json}.
+#   朝版  = every race, as soon as the day's program is published
+#   直前版 = re-read card + odds 45..3 min before each post (body weight/odds)
+# PAPER only: no purchase, no external notification, no Formal/Production claim.
+permissions:
+  contents: write
+
+on:
+  schedule:
+    # Every 10 min 09:00-21:50 JST (day + night meetings).
+    - cron: "*/10 0-12 * * *"
+  workflow_dispatch:
+    inputs:
+      race_date:
+        description: "YYYY-MM-DD (empty = today JST)"
+        required: false
+        type: string
+      mode:
+        description: "tick (one pass) or loop (repeat until 21:30 JST)"
+        required: false
+        default: tick
+        type: choice
+        options: [tick, loop]
+
+concurrency:
+  group: km-local-race-day-autopilot-v2-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/local_autopilot/
+      - name: Run autopilot
+        env:
+          RACE_DATE: ${{ inputs.race_date }}
+          MODE: ${{ inputs.mode || 'tick' }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -uo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          publish() {
+            git add runtime/local_autopilot/output || true
+            if ! git diff --cached --quiet; then
+              git commit -q -m "LOCAL autopilot $D $(TZ=Asia/Tokyo date +%H:%M) [skip ci]"
+              for i in 1 2 3; do
+                git pull -q --rebase origin "$BRANCH" && git push -q origin "HEAD:$BRANCH" && break
+                sleep 5
+              done
+            fi
+          }
+          while :; do
+            python -m runtime.local_autopilot.run --date "$D" --budget 420 || echo "tick exit $?"
+            publish
+            [ "$MODE" = "loop" ] || break
+            [ "$(TZ=Asia/Tokyo date +%H%M)" -lt 2130 ] || break
+            sleep 20
+          done
