@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 import datetime as dt
+import base64
+import gzip
 import hashlib
+import io
 import json
 import math
 import re
 import statistics
 import unicodedata
 from pathlib import Path
+from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, List, Tuple
 
 PROFILE = "KM-LOCAL-NAR-EVIDENCE-CANDIDATE-v0.1-20260923"
 DEFAULT_REGISTRY = "mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json"
 RECENCY = [0.30, 0.25, 0.20, 0.15, 0.10]
 NEUTRAL = 52.0
+VENUE_NAMES = {"URW": "浦和", "FNB": "船橋", "OHI": "大井", "KAW": "川崎",
+               "MOR": "盛岡", "MIZ": "水沢", "KSM": "笠松", "NGY": "名古屋",
+               "SON": "園田", "HIM": "姫路", "KCH": "高知", "SAG": "佐賀",
+               "MON": "門別", "KNZ": "金沢"}
 
 
 class LocalCandidateEvidenceError(ValueError):
@@ -40,9 +49,134 @@ def _jockey_name(s: Any) -> str:
     return t.replace("☆", "").replace("▲", "").replace("△", "").strip()
 
 
+def resolve_race_units(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Read the existing LOCAL intent schema without changing scoring rules.
+
+    Formal intents use distance_m and may label race.venue in Japanese. Both
+    scoring passes must consume those same units. Conflicting explicit fields
+    are a HOLD; never replace them with distance=0 or an inferred direction.
+    This resolves schema fields only. Official Raw/intent physical-context
+    agreement remains a separate SOURCE gate (also checked by the witness).
+    """
+    race = request.get("race") or {}
+    reverse = {v: k for k, v in VENUE_NAMES.items()}
+    supplied = [v for v in (request.get("venue_id"), race.get("venue_id"), race.get("venue"))
+                if v not in (None, "")]
+    ids = [reverse.get(_norm(v), _norm(v).upper()) for v in supplied]
+    if any(v not in VENUE_NAMES for v in ids):
+        raise LocalCandidateEvidenceError("LOCAL_RACE_VENUE_ID_UNRESOLVED")
+    known = {v for v in ids if v in VENUE_NAMES}
+    if len(known) > 1:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_VENUE_FIELDS_CONFLICT")
+    venue = next(iter(known)) if known else (ids[0] if ids else "")
+    distances = []
+    for key in ("distance_m", "distance"):
+        value = race.get(key)
+        if value in (None, ""):
+            continue
+        if isinstance(value, bool) or not re.fullmatch(r"\d+", str(value)):
+            raise LocalCandidateEvidenceError("LOCAL_RACE_DISTANCE_UNIT_INVALID")
+        distances.append(int(value))
+    if len(set(distances)) > 1:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_DISTANCE_FIELDS_CONFLICT")
+    direction = str(race.get("direction") or "").upper()
+    if direction and direction not in {"LEFT", "RIGHT"}:
+        raise LocalCandidateEvidenceError("LOCAL_RACE_DIRECTION_INVALID")
+    if not direction:
+        # Preserve the existing known-venue fallback for legacy intent inputs.
+        direction = "LEFT" if venue in {"URW", "FNB", "KAW", "MOR"} else "RIGHT"
+    return {"venue_id": venue, "venue_name": VENUE_NAMES.get(venue, venue),
+            "distance_m": distances[0] if distances else 0, "direction": direction}
+
+
 def _load(path: str | Path) -> Dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def _current_class_label(request: Dict[str, Any], source: Dict[str, Any]) -> Tuple[str, str]:
+    """Resolve a missing FNB class label from its actual frozen official card.
+
+    This supplies the existing ordinal parser with an observed header, never
+    a new class score. Explicit request labels are retained, including UNKNOWN.
+    No other venue or external acquisition method is introduced here.
+    """
+    label = str((request.get("race") or {}).get("class") or "")
+    if label or request.get("venue_id") != "FNB":
+        return label, "EXPLICIT_REQUEST_CLASS_OR_UNOBSERVED"
+    cards = [s for s in source.get("sources", []) if s.get("official") is True
+             and s.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"]
+    if not cards:
+        return "", "OFFICIAL_CURRENT_CLASS_NOT_OBSERVED"
+    if len(cards) != 1:
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_OFFICIAL_CARD_AMBIGUOUS")
+    card = cards[0]
+    if not card.get("raw_gzip_b64"):
+        return "", "OFFICIAL_CURRENT_CLASS_RAW_NOT_AVAILABLE"
+    if (card.get("authority") != "NAR_OFFICIAL" or card.get("http_status") != 200
+            or _sha({k:v for k,v in card.items() if k != "snapshot_sha256"}) != card.get("snapshot_sha256")):
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_OFFICIAL_CARD_UNVERIFIED")
+    for url_key in ("requested_url","final_url"):
+        url = urlparse(card.get(url_key) or "")
+        query = parse_qs(url.query)
+        if ((url.scheme,url.netloc,url.path) != ("https","www.keiba.go.jp","/KeibaWeb/TodayRaceInfo/DebaTable")
+                or query.get("k_babaCode") != ["19"]
+                or query.get("k_raceDate") != [str(request.get("race_date","")).replace("-","/")]
+                or query.get("k_raceNo") != [str(request.get("race_no"))]):
+            raise LocalCandidateEvidenceError("CURRENT_CLASS_OFFICIAL_CARD_IDENTITY_CONFLICT")
+    stamp = dt.datetime.fromisoformat(card["fetched_at"].replace("Z","+00:00"))
+    freeze = dt.datetime.fromisoformat(source["source_freeze_at"].replace("Z","+00:00"))
+    cutoff = dt.datetime.fromisoformat(request["prediction_cutoff"].replace("Z","+00:00"))
+    source_cutoff = dt.datetime.fromisoformat(source["prediction_cutoff"].replace("Z","+00:00"))
+    if (any(t.tzinfo is None for t in (stamp,freeze,cutoff,source_cutoff))
+            or source_cutoff != cutoff or freeze >= cutoff or stamp >= cutoff
+            or card.get("cutoff_relation") not in (None,"PRE_CUTOFF")):
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_ORIGINAL_CUTOFF_INELIGIBLE")
+    if stamp > freeze:
+        return "", "OFFICIAL_CURRENT_CLASS_NOT_IN_ORIGINAL_FREEZE"
+    limit = 4*1024*1024
+    if len(card["raw_gzip_b64"]) > limit*2:
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_RAW_BYTE_LIMIT")
+    compressed = base64.b64decode(card["raw_gzip_b64"],validate=True)
+    with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+        raw = stream.read(limit+1)
+    if len(raw)>limit or hashlib.sha256(raw).hexdigest()!=card.get("raw_sha256"):
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_RAW_HASH_OR_BYTE_LIMIT")
+
+    class Header(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.sections=[]; self.heading=None; self.titles=[]; self.race_headers=[]
+        def handle_starttag(self,tag,attrs):
+            if tag=="section":self.sections.append("raceTitle" in (dict(attrs).get("class") or "").split())
+            if tag in {"h3","h4"}:self.heading=[tag,[],any(self.sections)]
+        def handle_data(self,data):
+            if self.heading is not None:self.heading[1].append(data)
+        def handle_endtag(self,tag):
+            if self.heading is not None and self.heading[0]==tag:
+                text="".join(self.heading[1])
+                if tag=="h4":self.race_headers.append(_norm(text))
+                elif self.heading[2]:self.titles.append(text.strip())
+                self.heading=None
+            if tag=="section" and self.sections:self.sections.pop()
+    parser = Header()
+    try: text=raw.decode("utf-8")
+    except UnicodeDecodeError: text=raw.decode("cp932")
+    parser.feed(text)
+    day=dt.date.fromisoformat(request["race_date"].replace("/","-"))
+    expected=rf"{day.year}年{day.month}月{day.day}日.*?船橋第{int(request['race_no'])}競走(\d{{1,2}}):(\d{{2}})発走"
+    headers=[re.search(expected,h) for h in parser.race_headers]
+    headers=[h for h in headers if h]
+    if len(parser.titles)!=1 or len(headers)!=1:
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_OFFICIAL_HEADER_AMBIGUOUS")
+    post=dt.datetime.combine(day,dt.time(int(headers[0][1]),int(headers[0][2])),tzinfo=dt.timezone(dt.timedelta(hours=9)))
+    if cutoff >= post:
+        raise LocalCandidateEvidenceError("CURRENT_CLASS_CUTOFF_NOT_BEFORE_OFFICIAL_POST")
+    if request.get("scheduled_post_at"):
+        declared_post=dt.datetime.fromisoformat(request["scheduled_post_at"].replace("Z","+00:00"))
+        if declared_post.tzinfo is None or declared_post != post:
+            raise LocalCandidateEvidenceError("CURRENT_CLASS_OFFICIAL_POST_CONFLICT")
+    return parser.titles[0], "HASH_VERIFIED_FROZEN_OFFICIAL_FNB_RACE_TITLE"
 
 
 def _parse_date(s: str) -> dt.date | None:
@@ -68,6 +202,13 @@ def _time_seconds(s: str) -> float | None:
 def _class_score(text: str) -> Tuple[float, str]:
     """Transparent ordinal only. Candidate / uncalibrated, never a probability."""
     t = _norm(text).upper()
+    # Explicit class codes outside the existing table have no ordinal. Do not
+    # let the composite fallback label an unregistered A9/C4 (or mixed class)
+    # as an observed neutral52 class; no new ordinal is introduced here.
+    class_codes = re.findall(r"[ABC]\d+", t)
+    known_codes = {"A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"}
+    if any(code not in known_codes for code in class_codes):
+        return NEUTRAL, "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
     table = [
         # Roman grades are whole tokens: GI must not consume GII/GIII,
         # and a trailing I in an unrelated word is not a grade witness.
@@ -380,15 +521,12 @@ def _same_venue_name(historical: str, current: str) -> bool:
 def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dict[str, Any],
                        reg: Dict[str, Any], field_size: int) -> Dict[str, Any]:
     race = request.get("race") or {}
-    venue = str(race.get("venue") or race.get("venue_id") or request.get("venue_id") or "")
-    venue_name = {"URW": "浦和", "FNB": "船橋", "OHI": "大井", "KAW": "川崎",
-                  "MOR": "盛岡", "MIZ": "水沢", "KSM": "笠松", "NGY": "名古屋",
-                  "SON": "園田", "HIM": "姫路", "KCH": "高知", "SAG": "佐賀",
-                  "MON": "門別", "KNZ": "金沢"}.get(venue.upper(), venue)
-    distance = int(race.get("distance") or 0)
+    units = resolve_race_units(request)
+    venue, venue_name = units["venue_id"], units["venue_name"]
+    distance = units["distance_m"]
     going = str(((source.get("normalized_evidence") or {}).get("track_condition") or {}).get("value")
                 or race.get("going") or "")
-    direction = "LEFT" if venue.upper() in {"URW", "FNB", "KAW", "MOR"} else "RIGHT"
+    direction = units["direction"]
     surface = str(race.get("surface") or "dirt").upper()
     race_date_s = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
     try:
@@ -442,14 +580,17 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         f"last-corner normalized reach={last_corner_scores}", coverage=sum(x is not None for x in last_corner_scores) / 5,
         raw_metric=last_corner_scores)
 
-    class_vals = [r.get("class_score") for r in starts]
+    # The ordinal parser's neutral52 is UNKNOWN transport, not a measured C3
+    # ordinal. Reuse the existing missing-value arithmetic for history too.
+    class_vals = [None if r.get("class_parse_state") == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+                  else r.get("class_score") for r in starts]
     put("HPI-L", "class_level", _weighted(class_vals),
-        f"candidate class ordinals={class_vals}", coverage=len(class_vals) / 5, raw_metric=class_vals)
-    opponent = [_clamp(0.75 * float(r.get("class_score", NEUTRAL)) +
+        f"candidate class ordinals={class_vals}", coverage=sum(x is not None for x in class_vals) / 5, raw_metric=class_vals)
+    opponent = [None if grade is None else _clamp(0.75 * float(grade) +
                        0.25 * _clamp(50 + (float(r.get("field_size", field_size)) - 8) * 4))
-                for r in starts]
+                for r, grade in zip(starts, class_vals)]
     put("HPI-L", "opponent_strength", _weighted(opponent),
-        f"class+field candidate opponent scores={opponent}", coverage=len(opponent) / 5, raw_metric=opponent)
+        f"class+field candidate opponent scores={opponent}", coverage=sum(x is not None for x in opponent) / 5, raw_metric=opponent)
     st = _std([x for x in finish_vals if x is not None])
     repeatability = None if st is None else _clamp(100 - 1.6 * st)
     put("HPI-L", "repeatability", repeatability,
@@ -609,38 +750,49 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
     put("DCR", "bodyweight_range_coverage", 100*bw_cov,
         f"bodyweight observations={int(current_bw is not None)+len(historical_bw)}/6", coverage=1, raw_metric=bw_cov)
     prev_result_keys = [k for k in (source.get("normalized_evidence") or {}) if re.fullmatch(r"same_day_r\d+_result_tables", k)]
+    normalized = source.get("normalized_evidence") or {}
+    prior_result_refs = [value for key in prev_result_keys
+                         for value in (normalized[key].get("source_id"),
+                                       normalized[key].get("snapshot_sha256")) if value]
     race_no = int(request.get("race_no") or race.get("race_no") or 1)
     same_day_cov = min(1.0, len(prev_result_keys)/max(1,race_no-1))
     put("DCR", "same_day_gci_coverage", 100*same_day_cov,
-        f"same-day prior official result sources={len(prev_result_keys)}/{max(0,race_no-1)}", coverage=1, raw_metric=same_day_cov)
+        f"same-day prior official result sources={len(prev_result_keys)}/{max(0,race_no-1)}", coverage=1, raw_metric=same_day_cov,
+        extra_refs=prior_result_refs)
     odds_present = isinstance((source.get("normalized_evidence") or {}).get("odds_tables"), dict)
+    odds_evidence = normalized.get("odds_tables") if odds_present else {}
+    odds_refs = [odds_evidence[key] for key in ("source_id", "snapshot_sha256") if odds_evidence.get(key)]
     put("DCR", "late_odds_changes_coverage", 100.0 if odds_present else 0.0,
-        f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present)
+        f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present,
+        extra_refs=odds_refs)
 
-    current_class, cls_state = _class_score(str(race.get("class") or ""))
-    # URW's missing header class is UNKNOWN, not an observed C3/52 ordinal.
+    current_class_label, current_class_basis = _current_class_label(request, source)
+    current_class, cls_state = _class_score(current_class_label)
+    # An unresolved class is UNKNOWN in every LOCAL venue, not an observed
+    # C3/52 ordinal. The former URW-only condition leaked neutral transport
+    # values into apparently observed FNB class/pressure/transfer features.
     # Preserve the registered missing rule and every scoring formula/weight.
-    missing_urw_class = venue.upper() == "URW" and cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
-    prev_class = starts[0].get("class_score") if starts else None
-    put("NCI", "current_class", current_class, f"current race class={race.get('class')}; state={cls_state}",
-        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
-        force_missing=missing_urw_class)
+    missing_current_class = cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+    prev_class = class_vals[0] if class_vals else None
+    put("NCI", "current_class", current_class, f"current race class={current_class_label}; state={cls_state}; basis={current_class_basis}",
+        coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
+        force_missing=missing_current_class)
     put("NCI", "previous_class", prev_class, f"latest race class ordinal={prev_class}",
         coverage=1 if prev_class is not None else 0, raw_metric=prev_class)
     put("NCI", "recent_opponent_class", _weighted(class_vals), f"recent class ordinals={class_vals}",
-        coverage=len(class_vals)/5, raw_metric=class_vals)
+        coverage=sum(x is not None for x in class_vals)/5, raw_metric=class_vals)
     put("NCI", "race_set_level", current_class,
-        f"current race-set class ordinal={None if missing_urw_class else current_class}",
-        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
-        force_missing=missing_urw_class)
-    pressure = None if prev_class is None or missing_urw_class else _clamp(50 + (prev_class-current_class)*1.5)
+        f"current race-set class ordinal={None if missing_current_class else current_class}",
+        coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
+        force_missing=missing_current_class)
+    pressure = None if prev_class is None or missing_current_class else _clamp(50 + (prev_class-current_class)*1.5)
     put("NCI", "class_change_pressure", pressure,
-        f"previous-current class delta={None if prev_class is None or missing_urw_class else prev_class-current_class}",
+        f"previous-current class delta={None if prev_class is None or missing_current_class else prev_class-current_class}",
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
     is_jra_transfer = bool(starts and _norm(starts[0].get("venue","")).startswith("J"))
     transfer_class = None
-    if starts and not missing_urw_class:
-        transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if is_jra_transfer else 0.8))
+    if prev_class is not None and not missing_current_class:
+        transfer_class = _clamp(50 + (prev_class-current_class) * (1.2 if is_jra_transfer else 0.8))
     put("NCI", "transfer_class", transfer_class,
         f"latest venue={starts[0].get('venue') if starts else None}; JRA transfer={is_jra_transfer}",
         coverage=1 if transfer_class is not None else 0, raw_metric=transfer_class)
@@ -676,7 +828,8 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
     reg = _load(registry_path)
     raw_field = json.loads(json.dumps(raw_field, ensure_ascii=False))
     race = request.get("race") or {}
-    venue = str(race.get("venue_id") or race.get("venue") or request.get("venue_id") or "").upper()
+    units = resolve_race_units(request)
+    venue = units["venue_id"]
     if venue in {"URW", "浦和"}:
         race_day_text = str(race.get("race_date") or race.get("date") or request.get("race_date") or "")
         try:
@@ -760,7 +913,7 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
 
     # Cross-runner comparable-time percentile for NCI.class_relative_time.
     race = request.get("race") or {}
-    current_distance = int(race.get("distance") or 0)
+    current_distance = units["distance_m"]
     best_times: Dict[str, float] = {}
     for c in compiled:
         times = []
@@ -824,6 +977,7 @@ def compile_parsed_candidate_evidence(source_artifact: Dict[str, Any], request: 
         "official_runner_universe_sha256": source_artifact.get("official_runner_universe_sha256"),
         "runner_count": len(compiled),
         "result_derived_features": 0,
+        "resolved_race_units": units,
     }
     request["candidate_evidence_compiler"]["sha256"] = _sha(request["candidate_evidence_compiler"])
     return request

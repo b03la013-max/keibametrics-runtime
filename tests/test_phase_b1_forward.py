@@ -8,6 +8,26 @@ import local_candidate_postresult as f
 from krs_prediction_utility import build_krs_prediction_utility
 from pfs_grand_review import actual_purchase_records
 
+pytestmark = pytest.mark.usefixtures('isolated_forward_definition')
+
+@pytest.fixture
+def isolated_forward_definition(tmp_path, monkeypatch):
+    """Exercise mechanics without adopting changed code into the real window."""
+    repository_path = ROOT/'research/utility/forward_protocol.json'
+    repository_raw = repository_path.read_bytes()
+    repository_reader = f._forward_protocol
+    protocol = repository_reader()
+    protocol['version'] = 'MECHANICAL-TEST-ONLY-'+protocol['version']
+    protocol['definition_sha256'] = f._definition_hashes()
+    path = tmp_path/'mechanical_forward_protocol.json'
+    path.write_text(json.dumps(protocol))
+    # Preserve the real definition hashing and rejection gate. Only this
+    # explicitly isolated fixture's protocol reader changes, never the registry.
+    monkeypatch.setattr(f, '_forward_protocol', lambda: json.loads(path.read_text()))
+    yield {'path':path, 'repository_raw':repository_raw,
+           'repository_reader':repository_reader}
+    assert repository_path.read_bytes() == repository_raw
+
 def inputs(family='LOCAL',race='FNB-20261002-R01'):
     req={'family_id':family,'race_id':race,'execution_id':race+'-EXEC','temporal_mode':'FORMAL-PRE-RACE','scheduled_post_at':'2026-10-02T02:00:00+00:00','runners':[{'runner_id':str(i),'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'static_prediction':{'ranking':['1','2','3','4']}}
     utility={'summary':[{'horse_no':i,'ranks':{'SSR-W':i,'SSR-P2':i,'SSR-P3':i},'static_roles':['W','P2','P3']} for i in [1,2,3,4]],'snapshot':{'role_zones':{'W':1,'P2':2,'P3':3}}}
@@ -38,16 +58,31 @@ def test_forward_binding_and_late_rejected():
     with pytest.raises(ValueError,match='NOT_PRE_RESULT'):f.build_forward_capture(req,fin,u,generated_at=req['scheduled_post_at'],candidate={})
     with pytest.raises(ValueError,match='CANDIDATE_SOURCE'):f.build_forward_capture(req,fin,u,generated_at='2026-10-02T01:00:00+00:00',candidate={'race_source_snapshot_sha256':'wrong'})
 
-def test_capture_immutable_and_fresh_process(tmp_path):
+def test_capture_immutable_and_fresh_process(tmp_path, isolated_forward_definition):
     req,fin,pre=capture();root=str(tmp_path/'ledger');f.persist_forward_capture(pre,root)
     result_art,rreq=result(req);settled=settle(pre,fin,result_art,rreq)
     assert settled['status']=='SETTLED' and not settled['eligible'] and not settled['krs_eligible']
     f.persist_forward_settlement(pre,settled,root)
-    subprocess.run([sys.executable,'-c',f"import sys;sys.path.insert(0,{str(ROOT/'runtime')!r});from local_candidate_postresult import forward_status; assert forward_status({root!r})['families']['LOCAL']['captured_races']==1"],cwd=ROOT,check=True)
+    protocol_path = str(isolated_forward_definition['path'])
+    subprocess.run([sys.executable,'-c',f"import json,sys;from pathlib import Path;sys.path.insert(0,{str(ROOT/'runtime')!r});import local_candidate_postresult as f;f._forward_protocol=lambda:json.loads(Path({protocol_path!r}).read_text()); assert f.forward_status({root!r})['families']['LOCAL']['captured_races']==1"],cwd=ROOT,check=True)
     _,_,second=capture(race='FNB-20261002-R02');f.persist_forward_capture(second,root)
     assert f.forward_status(root)['families']['LOCAL']['captured_races']==2
     changed=copy.deepcopy(pre);changed['generated_at']='2026-10-02T01:01:00+00:00';changed['sha256']=f._sha({k:v for k,v in changed.items() if k!='sha256'})
     with pytest.raises(ValueError,match='NO_REGENERATION'):f.persist_forward_capture(changed,root)
+
+def test_definition_mismatch_still_rejected(isolated_forward_definition, monkeypatch):
+    protocol = f._forward_protocol()
+    key = protocol['definition_files'][0]
+    protocol['definition_sha256'][key] = '0'*64
+    monkeypatch.setattr(f, '_forward_protocol', lambda: copy.deepcopy(protocol))
+    req, fin, utility = inputs()
+    with pytest.raises(ValueError, match='DEFINITION_NOT_PREREGISTERED'):
+        f.build_forward_capture(req, fin, utility,
+            generated_at='2026-10-02T01:00:00+00:00',
+            candidate={'race_source_snapshot_sha256':'source-test'},
+            classification='MECHANICAL_ACCEPTANCE')
+    assert isolated_forward_definition['repository_reader']() == json.loads(
+        isolated_forward_definition['repository_raw'])
 
 def test_missing_payout_holds_only_shadow(tmp_path):
     req,fin,pre=capture();before=copy.deepcopy(fin);art,rreq=result(req,False)

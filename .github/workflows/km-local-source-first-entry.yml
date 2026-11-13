@@ -55,7 +55,7 @@ jobs:
           if not re.fullmatch(r'KM-LOCAL-[A-Z0-9-]+', eid):
               raise SystemExit('SOURCE_EXECUTION_ID_INVALID')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('execution_id=' + eid + '\\n')
+              f.write('execution_id=' + eid + '\n')
           PY
           set +e
           python -m runtime.local_race_entry --request race-request.json --output entry-out --run-id "source-first-${{ github.run_id }}" --github-sha "${{ github.sha }}"

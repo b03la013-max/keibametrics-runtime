@@ -19,6 +19,12 @@ on:
   pull_request:
     paths: ['runtime/**', 'tests/**', 'research/utility/**', '.github/workflows/local-runtime-correctness-regression.yml']
   workflow_dispatch:
+    inputs:
+      run_permitted_live_probes:
+        description: 'Run legacy live HTTP probes only with independently verified current source permission; this switch grants none'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -61,10 +67,512 @@ jobs:
             tests/test_common_exact_continuity_shadow.py \
             tests/test_family_pfs_improvement.py \
             tests/test_ohi_20261008_result_reflection_regression.py \
+            tests/test_fnb_20261102_numeric_proof_grade.py \
+            tests/test_fnb_20261102_r6_acceptance.py \
+            tests/test_fnb_20261102_r7_plan_provenance.py \
+            tests/test_fnb_20261102_r7_arithmetic_witness.py \
+            tests/test_fnb_20261102_r7_ticket_disposition.py \
+            tests/test_fnb_20261102_r8_semantics.py \
+            tests/test_fnb_20261102_r8_arithmetic.py \
+            tests/test_fnb_20261102_r8_delivery.py \
+            tests/test_fnb_20261102_r8_missingness.py \
+            tests/test_fnb_20261102_r8_official_changes.py \
+            tests/test_fnb_20261102_r9_delivery.py \
+            tests/test_fnb_20261102_r9_evidence_63.py \
+            tests/test_fnb_20261102_r9_numeric_disposition.py \
+            tests/test_fnb_20261102_r9_60r_observation.py \
+            tests/test_fnb_20261102_r9_history_asof.py \
+            tests/test_fnb_20261102_r10_historical_closedloop.py \
+            tests/test_fnb_20261102_r10_gateway_readonly_health.py \
+            tests/test_fnb_20261102_r10_signed_identity.py \
+            tests/test_fnb_20261102_r11_prestart_emergency.py \
+            tests/test_fnb_20261102_r11_venue_temporal.py \
+            tests/test_fnb_20261102_r12_official_change_scope.py \
+            tests/test_fnb_20261102_r12_historical_krs_witness.py \
+            tests/test_fnb_20261102_r12_hpi_source_arithmetic.py \
+            tests/test_fnb_20261102_r13_rider_lineage.py \
+            tests/test_fnb_20261102_r13_private_numeric.py \
+            tests/test_fnb_20261102_r14_live_source_probe.py \
+            tests/test_fnb_20261102_r15_mobile_official_readonly.py \
+            tests/test_fnb_20261102_r16_private_browser_capture.py \
+            tests/test_fnb_20261102_r17_method_constructor.py \
+            tests/test_fnb_20261102_r18_full_private_delivery.py \
+            tests/test_fnb_20261102_r19_chat_readback.py \
+            tests/test_fnb_20261102_r20_chat_completion.py \
+            tests/test_fnb_20261102_r21_entry_dispatch.py \
+            tests/test_local_base63_source_witness.py \
+            tests/test_local_race_units_source_binding.py \
+            tests/test_local_autonomous_followthrough.py \
+            tests/test_local_dispatcher_current_readback.py \
+            tests/test_local_defined_raw_formulas.py \
+            tests/test_local_fnb_owner_input_integrity.py \
+            tests/test_local_base15_research_candidates.py \
+            tests/test_local_fnb_venue_context_binding.py \
+            tests/test_local_fnb_observation_context.py \
+            tests/test_local_nar_csv_reference.py \
+            tests/test_local_nar_csv_download.py \
+            tests/test_local_fnb_csv_preliminary_numeric.py \
+            tests/test_local_fnb_csv_composite_history.py \
+            tests/test_local_fnb_csv_composite_numeric.py \
+            tests/test_local_fnb_csv_research_runtime.py \
+            tests/test_local_fnb_finite_actor.py \
+            tests/test_local_fnb_multisource.py \
+            tests/test_local_fnb_provider_independence_r14.py \
+            tests/test_local_historical_population_observations.py \
+            tests/test_local_fnb_context_static_candidate.py \
+            tests/test_fnb_research_runtime.py \
+            tests/test_local_fnb_semantic_closure.py \
+            tests/test_local_fnb_saved_paper_tickets.py \
+            tests/test_local_fnb_exact_orientation_research.py \
+            tests/test_local_fnb_alternative_connection.py \
+            tests/test_local_fnb_csv_source_admission.py \
+            tests/test_local_historical_identity_observations.py \
+            tests/test_local_fnb_csv_capture_actor.py \
+            tests/test_local_fnb_base63_readiness_census.py \
+            tests/test_local_fnb_csv_current_universe.py \
+            tests/test_local_fnb_csv_postresult.py \
+            tests/test_local_fnb_csv_frozen_export.py \
+            tests/test_local_fnb_csv_input_identity.py \
+            tests/test_local_fnb_csv_market_transport.py \
+            tests/test_local_fnb_derived_runtime_transport.py \
+            tests/test_local_fnb_id_linked_race_reference.py \
+            tests/test_local_fnb_id_history_reference.py \
+            tests/test_local_fnb_csv_signed_capture.py \
+            tests/test_local_fnb_mec_failure_localization.py \
+            tests/test_local_fnb_selection_study.py \
+            tests/test_mec_pair_local_third_transport.py \
+            tests/test_source_acquisition_offered_csv.py \
+            tests/test_source_acquisition_offered_csv_zip.py \
+            tests/test_fnb_20261102_r14_private_dual_krs.py \
+            tests/test_fnb_20261102_r14_private_work_entry.py \
             tests/test_nar_auxiliary_evidence.py
       - name: Compile LOCAL runtime modules
         run: |
           python -m py_compile             runtime/local_physical/app.py             runtime/local_physical/app_v15.py             runtime/local_physical/source_acquisition.py             runtime/local_physical/nar_source_manifest.py             runtime/local_physical/nar_runner_universe.py \
             runtime/local_numerical_authority_gate.py \
+            runtime/local_race_key_gate.py \
+            runtime/local_fnb_r6_readonly_acceptance.py \
+            runtime/local_fnb_r6_numeric_readback.py \
+            runtime/local_fnb_r7_plan_provenance.py \
+            runtime/local_fnb_r7_arithmetic_witness.py \
+            runtime/local_fnb_r7_ticket_disposition.py \
+            runtime/local_fnb_r8_card_raw_check.py \
+            runtime/local_fnb_r8_odds_raw_check.py \
+            runtime/local_fnb_r8_single_race_semantics.py \
+            runtime/local_fnb_r8_day_semantics.py \
+            runtime/local_fnb_r8_arithmetic_first.py \
+            runtime/local_fnb_r8_arithmetic_roles.py \
+            runtime/local_fnb_r8_arithmetic_29.py \
+            runtime/local_fnb_r8_delivery_completeness.py \
+            runtime/local_fnb_r8_missingness_census.py \
+            runtime/local_fnb_r9_method_audit.py \
+            runtime/local_fnb_r9_evidence_63.py \
+            runtime/local_fnb_r9_numeric_disposition.py \
+            runtime/local_fnb_r9_60r_observation.py \
+            runtime/local_fnb_r9_history_asof.py \
+            runtime/local_fnb_r10_historical_closedloop.py \
+            runtime/local_fnb_r10_gateway_readonly_health.py \
+            runtime/local_fnb_r10_signed_race_identity.py \
+            runtime/local_fnb_r11_prestart_emergency.py \
+            runtime/local_fnb_r11_venue_temporal.py \
+            runtime/local_fnb_r12_official_change_scope.py \
+            runtime/local_fnb_r12_historical_krs_witness.py \
+            runtime/local_fnb_r12_hpi_source_arithmetic.py \
+            runtime/local_fnb_r13_rider_lineage.py \
+            runtime/local_fnb_r13_private_source_admission.py \
+            runtime/local_fnb_r13_private_single_numeric.py \
+            runtime/local_fnb_r13_private_numeric_document.py \
+            runtime/local_fnb_r14_live_source_probe.py \
+            runtime/local_fnb_r15_mobile_official_readonly.py \
+            runtime/local_fnb_r16_private_browser_capture.py \
+            runtime/local_fnb_r17_method_constructor.py \
+            runtime/local_fnb_r18_full_private_delivery.py \
+            runtime/local_fnb_r14_private_dual_krs.py \
+            runtime/local_fnb_r14_private_work_entry.py \
+            runtime/local_fullnumerical_production.py \
             runtime/local_evidence_to_base_production.py
+
+      - name: Compile isolated research and FNB context transport
+        run: python -m py_compile runtime/local_base15_research_candidates.py runtime/local_fnb_venue_context_binding.py runtime/local_fnb_observation_context.py runtime/local_race_day_dispatcher.py runtime/local_nar_csv_reference.py runtime/local_fnb_multisource.py runtime/local_historical_population_observations.py runtime/local_fnb_context_static_candidate.py runtime/local_fnb_research_runtime.py runtime/local_fnb_semantic_closure.py runtime/local_fnb_csv_source_admission.py runtime/local_historical_identity_observations.py runtime/local_fnb_csv_capture_actor.py
+      - name: FNB R9 historical signed-store numerical and feature receipts
+        run: |
+          python - <<'PY'
+          import sys, json, hashlib
+          from pathlib import Path
+          sys.path.insert(0, str(Path('runtime').resolve()))
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_numeric_cell_integrity import attest_cell_grid
+          from runtime.local_fnb_r7_arithmetic_witness import verify_arithmetic
+          from local_fullnumerical_production import materialize_production
+          eid = 'LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase = o.resolve_phase(eid, 'SOURCE')
+          assert phase is not None
+          env = o._load_checkpoint_json(phase, 'source_receipt_envelope.json')
+          assert env['receipt']['status'] == 'SOURCE_FROZEN'
+          intent = json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          mat = materialize_production(env['artifact'], intent, intent['required_indices'])
+          assert mat['fnb_historical_asof_preflight']['status'] == 'PRE_RACE_DATED_HISTORY_CHECKED'
+          reg = json.loads(Path('mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json').read_text())
+          mapping = json.loads(Path('mapping/local_full_numerical_mapping_v1.0_production_20261008.json').read_text())
+          arithmetic = verify_arithmetic(mat, reg, mapping)
+          from runtime.local_fnb_r8_arithmetic_29 import verify_29
+          arithmetic29 = verify_29(mat, reg, mapping)
+          from runtime.local_fnb_r8_missingness_census import census
+          missingness = census(mat)
+          from runtime.local_fnb_r9_evidence_63 import audit_63
+          evidence63 = audit_63(mat, reg, intent, env['artifact'])
+          assert evidence63['status'] == 'ALL_63_COMPONENT_RECORDS_LINEAGE_VERIFIED', evidence63['issues']
+          assert missingness['ruled_neutral']==36 and missingness['calculated']==312
+          assert arithmetic29['status'] == '29_OF_29_RECORDED_FEATURE_ARITHMETIC_PASS', arithmetic29['issues']
+          cells = attest_cell_grid(mat, expected_indices=intent['required_indices'],
+                   expected_runner_ids=[r['runner_id'] for r in intent['runners']])
+          assert arithmetic['status'] == '12_OF_29_INDEPENDENT_ARITHMETIC_VERIFIED', arithmetic['issues']
+          assert cells['status'] == 'CELL_GRID_CONSISTENT', cells['issues']
+          assert mat['numeric_coverage']['required_count'] == 348
+          authority = mat['production_numerical_authority']
+          keys = ['prediction_consumption_authorized','krs_consumption_authorized',
+                  'ticket_consumption_authorized','capital_consumption_authorized']
+          assert all(authority[k] is False for k in keys)
+          payload = {'classification':'RETROSPECTIVE_FNB_20261002_R04_NOT_20261102_LIVE_NOT_OOS',
+              'execution_id':eid,'signed_source_status':'HISTORICAL_STORE_STATUS_NOT_FRESH_SIGNATURE_VERIFY',
+              'numeric_counts':{k:v for k,v in mat['numeric_coverage'].items() if k!='unresolved'},
+              'numeric_grid':cells,'independent_12_index_arithmetic':arithmetic, 'independent_29_index_arithmetic':arithmetic29, 'missingness_census':missingness, 'feature_63_record_lineage':evidence63, 'fnb_historical_asof_preflight':mat['fnb_historical_asof_preflight'],
+              'consumer_permissions':{k:authority[k] for k in keys},
+              'new_runtime_posts':0,'new_signed_final':False,'personal_delivery_ack':False}
+          payload['receipt_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
+              ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r9-historical-numerical-receipt.json').write_text(
+              json.dumps(payload,sort_keys=True,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps({'source_race':eid,'required':348,
+              'calculated':mat['numeric_coverage']['calculated_count'],
+              'independent_arithmetic_cells':arithmetic['checked_cells'],
+              'receipt_sha256':payload['receipt_sha256']},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r9-historical-numerical-${{ github.run_id }}
+          path: fnb-r9-historical-numerical-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R9 day 1 official-raw bound dated read-only acceptance
+        run: |
+          python -m runtime.local_fnb_r6_readonly_acceptance \
+            --root . --date 2026-11-02 --output fnb-r9-readonly-acceptance.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r9-readonly-${{ github.run_id }}
+          path: fnb-r9-readonly-acceptance.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R9 read-only five-day 60R repository receipt matrix
+        run: |
+          python -m runtime.local_fnb_r9_60r_observation \
+            --root . --start-date 2026-11-02 --output fnb-r9-60r-matrix.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r9-60r-${{ github.run_id }}
+          path: fnb-r9-60r-matrix.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 independently verified historical Signed RESULT settlement
+        run: |
+          python - <<'PY'
+          from runtime.local_fnb_r10_historical_closedloop import inspect_historical
+          import hashlib,json
+          from pathlib import Path
+          audit=inspect_historical()
+          assert audit['status']=='RETROSPECTIVE_R06_CRYPTO_AND_FROZEN_SETTLEMENT_VERIFIED'
+          assert audit['all_three_stored_ed25519_signatures_verified_with_archived_key'] is True
+          assert audit['ticket_audit']['total_stake']==5900
+          assert audit['ticket_audit']['total_payout']==9320
+          receipt={'schema':'KM-FNB-R10-HISTORICAL-SIGNED-SETTLEMENT-RECEIPT-v1',
+                   'classification':'RETROSPECTIVE_NOT_REGISTERED_OOS_NOT_NEW_LIVE',
+                   'audit':audit}
+          receipt['sha256']=hashlib.sha256(json.dumps(receipt,sort_keys=True,
+              ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r10-historical-settlement.json').write_text(
+             json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'status':audit['status'],
+             'recommendation_pfs_percent':audit['settled_pfs_percent'],
+             'signatures_verified_with_archived_public_key':3,
+             'actual_purchase_verified':False,'new_11_02_prediction':False}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-historical-settlement-${{ github.run_id }}
+          path: fnb-r10-historical-settlement.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 single read-only GET canonical LOCAL Gateway health
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
+        run: |
+          python -m runtime.local_fnb_r10_gateway_readonly_health \
+            --output fnb-r10-local-gateway-health.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-local-gateway-health-${{ github.run_id }}
+          path: fnb-r10-local-gateway-health.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R10 actual trusted-Gateway GET R04 signed FINAL and numeric readback
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          from runtime.local_race_key_gate import readback_final
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          result=readback_final(eid,'historical-r10',repo_root=Path.cwd(),allow_network=True)
+          report={'scope':'HISTORICAL_FNB_20261002_R04_READBACK_NOT_20261102_LIVE',
+              'status':result.get('status'), 'signed_final_pass':result.get('signed_final_pass'),
+              'prestart_final_pass':result.get('prestart_final_pass'),
+              'numeric_evidence_quality':result.get('numeric_evidence_quality'),
+              'numeric_checkpoint_consistency':result.get('numeric_checkpoint_consistency'),
+              'delivery_document_audit':result.get('delivery_document_audit'),
+              'presentation_sha256':result.get('presentation_sha256'),
+              'canonical_tree_sha256':result.get('tree_sha256'),
+              'verification_scope':result.get('verification_scope'),
+              'fresh_signature_verification':result.get('fresh_signature_verification'),
+              'readback_reason':result.get('reason'),
+              'receipt_not_an_ack':result.get('user_received_at') is None,
+              'new_signed_source_or_final_generated':False,
+              'registered_forward_oos_increment':0}
+          report['sha256']=hashlib.sha256(json.dumps(report,sort_keys=True,ensure_ascii=False,
+                      separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r10-historical-signed-final-readback.json').write_text(
+              json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'status':report['status'],
+              'numeric_quality':(report.get('numeric_evidence_quality') or {}).get('status'),
+              'verified_before_cutoff':report['prestart_final_pass']},ensure_ascii=False))
+          assert report['signed_final_pass'] is True, result.get('reason')
+          assert report['prestart_final_pass'] is True
+          assert report['numeric_evidence_quality']['calculated_count']==0
+          assert report['numeric_evidence_quality']['ruled_hold_count']==348
+          assert result.get('prestart_delivery_pass') is False
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r10-historical-final-readback-${{ github.run_id }}
+          path: |
+            fnb-r10-historical-signed-final-readback.json
+            runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_tree.txt
+            runtime/execution_reports/LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC/delivery/canonical_presentation.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R11 actual November 2 prestart window and 12R readiness (read-only)
+        run: |
+          python -m runtime.local_fnb_r11_prestart_emergency \
+            --root . --output fnb-r11-20261102-prestart-readiness.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r11-prestart-${{ github.run_id }}
+          path: fnb-r11-20261102-prestart-readiness.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R12 real archived evidence independent HPI6 and signed KRS chain
+        run: |
+          python - <<'PY'
+          import sys,json,hashlib
+          from pathlib import Path
+          sys.path.insert(0,str(Path('runtime').resolve()))
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r12_historical_krs_witness import attest_archived_krs
+          from runtime.local_fnb_r12_hpi_source_arithmetic import verify_hpi_six
+          from local_fullnumerical_production import materialize_production
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase=o.resolve_phase(eid,'SOURCE')
+          src=o._load_checkpoint_json(phase,'source_receipt_envelope.json')['artifact']
+          intent=json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          mat=materialize_production(src,intent,intent['required_indices'])
+          arithmetic=verify_hpi_six(mat)
+          krs=attest_archived_krs()
+          assert arithmetic['status']=='HPI_SIX_PARSED_START_ARITHMETIC_VERIFIED',arithmetic['errors']
+          assert arithmetic['checked_cells']==72
+          assert krs['status']=='ARCHIVED_FNB_R04_KRS_SIGNED_LINEAGE_VERIFIED'
+          assert krs['actual_run_count']==5000
+          assert krs['seed_is_one'] is False
+          payload={'classification':'RETROSPECTIVE_NOT_20261102_LIVE_NOT_REGISTERED_OOS',
+                   'real_hpi_six_arithmetic':arithmetic,
+                   'signed_krs_chain':krs,
+                   'numerical_consumer_authority_granted':False,
+                   'new_signed_final':False,'new_live_delivery_ack':False}
+          payload['sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,
+               ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+          Path('fnb-r12-hpi-krs-receipt.json').write_text(
+              json.dumps(payload,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+          print(json.dumps({'hpi_arithmetic_cells':arithmetic['checked_cells'],
+                           'krs_signed_phases':len(krs['signed_phase_envelopes_verified']),
+                           'historical_sim_count':krs['actual_run_count']},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r12-hpi-krs-${{ github.run_id }}
+          path: fnb-r12-hpi-krs-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R13 real archived private 29index all-horse frozen document and readback
+        run: |
+          python - <<'PY'
+          import hashlib,json,tempfile
+          from datetime import datetime,timezone
+          from pathlib import Path
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r13_private_single_numeric import execute
+          from runtime.local_fnb_r12_historical_krs_witness import attest_archived_krs
+          eid='LOCAL-KM-LOCAL-FNB-20261002-R04-LIVE-R1-EXEC'
+          phase=o.resolve_phase(eid,'SOURCE')
+          art=o._load_checkpoint_json(phase,'source_receipt_envelope.json')['artifact']
+          intent=json.loads(Path('runtime/formal_intents/KM-LOCAL-FNB-20261002-R04-LIVE-R1.json').read_text())
+          assert attest_archived_krs()['signed_phase_envelopes_verified']==[
+              'SOURCE','PRE_KRS','KRS_RUN','FINAL']
+          with tempfile.TemporaryDirectory(prefix='fnb-private-no-public-') as temp:
+              grade=execute(source_artifact=art,request=intent,private_root=Path(temp),
+                            repo_root=Path.cwd(),
+                            now=datetime.now(timezone.utc),diagnostic_only=True)
+              private=Path(grade['private_root'])
+              full=(private/'numerical_materialization.json').read_bytes()
+              readable=(private/'all_horse_29_index_report.md').read_bytes()
+              saved=(private/'private_numerical_receipt.json').read_bytes()
+              assert grade['29_index_cells']==348
+              assert grade['calculated']==312 and grade['neutral']==36
+              # Current replay restores 62 archived inputs; Before retains 274.
+              assert grade['unknown_components']==212
+              assert grade['private_materialization_sha256']==hashlib.sha256(full).hexdigest()
+              assert grade['private_readable_document_sha256']==hashlib.sha256(readable).hexdigest()
+              assert grade['private_receipt_sha256']==hashlib.sha256(saved).hexdigest()
+              assert grade['full_private_readback_verified'] is True
+              assert grade['signed_final_or_delivery_claim'] is False
+              # NEVER upload full indexed horses or official private SOURCE from
+              # this public GitHub repo Actions; only aggregate SHA witness.
+              receipt={'schema':'KM-FNB-R13-PRIVATE-NUMERIC-EXECUTION-RECEIPT-v1',
+                  'classification':'20261002_HISTORIC_DIAGNOSTIC_NOT_20261102_LIVE',
+                  'runner_count':grade['runner_count'],
+                  'required_29_cells':grade['29_index_cells'],
+                  'calculated_cells':grade['calculated'],
+                  'ruled_neutral_cells':grade['neutral'],
+                  'missing_feature_components':grade['unknown_components'],
+                  'all_horse_numeric_sha256':grade['private_materialization_sha256'],
+                  'all_horse_document_sha256':grade['private_readable_document_sha256'],
+                  'private_receipt_sha256':grade['private_receipt_sha256'],
+                  'three_private_files_readback_verified':True,
+                  'full_private_content_published_to_public_github':False,
+                  'source_privacy':'PRIVATE_NONCOMMERCIAL_RESEARCH_ONLY',
+                  'formal_consumer_scope_authorized':False,
+                  'new_daily_signed_final':False,
+                  'no_bet_calculated':False,
+                  'current_krs_5000x2_seed1':False,
+                  'recipient_delivery_ack':False,
+                  'forward_oos_increment':0}
+              receipt['sha256']=hashlib.sha256(json.dumps(receipt,
+                  sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+              Path('fnb-r13-private-numeric-safe-receipt.json').write_text(
+                  json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+              print(json.dumps({'status':'R13_PRIVATE_RESEARCH_NUMERICAL_PASS',
+                 'runners':receipt['runner_count'],'cells':receipt['required_29_cells'],
+                 'private_bytes_verified':True,'registered_oos':False},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r13-private-numeric-sanitized-${{ github.run_id }}
+          path: fnb-r13-private-numeric-safe-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: FNB R14 current Nov 2 1R primary NAR Raw inspection (ephemeral)
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
+        run: |
+          python -m runtime.local_fnb_r14_live_source_probe \
+            --race-no 1 --output fnb-r14-live-r01-sanitized.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r14-live-r01-sanitized-${{ github.run_id }}
+          path: fnb-r14-live-r01-sanitized.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: FNB R15 check NAR official mobile R02 without changing robot/ACL policy
+        if: github.event_name == 'workflow_dispatch' && inputs.run_permitted_live_probes == true
+        run: |
+          python -m runtime.local_fnb_r15_mobile_official_readonly \
+            --race-no 2 --output fnb-r15-mobile-official-r02-readonly.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r15-official-mobile-r02-${{ github.run_id }}
+          path: fnb-r15-mobile-official-r02-readonly.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: FNB R16 archived actual browser bytes + all29 private execution receipt
+        run: |
+          python - <<'PY'
+          import base64,gzip,json,hashlib,tempfile
+          from pathlib import Path
+          from datetime import datetime,timezone
+          from runtime import formal_execution_orchestrator as o
+          from runtime.local_fnb_r16_private_browser_capture import ingest
+          from runtime.local_fnb_r14_private_work_entry import run
+          race='KM-LOCAL-FNB-20261002-R04-LIVE-R1'
+          saved=o.resolve_phase('LOCAL-'+race+'-EXEC','SOURCE')
+          source=o._load_checkpoint_json(saved,'source_receipt_envelope.json')['artifact']
+          cards=[c for c in source['sources'] if c.get('source_class')==
+                 'OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT']
+          assert len(cards)==1
+          card=cards[0]
+          request=json.loads(Path('runtime/formal_intents/'+race+'.json').read_text())
+          with tempfile.TemporaryDirectory(prefix='fnb-r16-private-') as tmp:
+              html=Path(tmp)/'nar_actual_original.html'
+              html.write_bytes(gzip.decompress(base64.b64decode(card['raw_gzip_b64'])))
+              private=Path(tmp)/'private_store'
+              imported=ingest(html_path=html,request=request,
+                  observed_url=card['requested_url'],
+                  capture_time=source['source_freeze_at'],
+                  private_output=private,public_repo=Path.cwd(),
+                  now=datetime.now(timezone.utc),diagnostic_only=True)
+              assert imported['status']=='FNB_BROWSER_SOURCE_IMPORTED_TO_PRIVATE_RESEARCH_UNSIGNED'
+              art=json.loads((private/race/'unsigned_official_card_artifact.json').read_text())
+              diagnostic=run(source=art,request=request,root=private,
+                  public_repo=Path.cwd(),now=datetime.now(timezone.utc),
+                  diagnostic_only=True)
+              assert diagnostic['numeric_cells']==348
+              assert diagnostic['private_checkpoint_readback_verified'] is True
+              assert diagnostic['krs_two_owners_done'] is False
+              receipt={'schema':'KM-FNB-R16-REAL-ARCHIVED-BROWSER-SOURCE-TO-NUMERIC-v1',
+                       'classification':'20261002_HISTORICAL_DIAGNOSTIC_NOT_20261102_LIVE',
+                       'raw_sha256':imported['raw_sha256'],
+                       'imported_source_sha256':imported['source_artifact_sha256'],
+                       'official_stored_source_signed_by_this_import':False,
+                       'declared_runner_count':imported['declared_runner_count'],
+                       'full_29_numeric_cell_count':diagnostic['numeric_cells'],
+                       'full_private_three_stage_readback':True,
+                       'new_live_source_signed':False,
+                       'new_20261102_prediction':False,
+                       'fixed_two_owner_krs_5000_seed1':False,
+                       'six_ticket_methods_computed':False,
+                       'recipient_delivery_ack':False,
+                       'registered_oos_increment':0,
+                       'public_raw_or_horse_data_exported':False}
+              receipt['sha256']=hashlib.sha256(json.dumps(receipt,
+                  sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+              Path('fnb-r16-browser-private-sanitized.json').write_text(
+                  json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n')
+              print(json.dumps({'status':'HISTORICAL_R16_REAL_BROWSER_SOURCE_NUMERIC_PASS',
+                   'runners':receipt['declared_runner_count'],
+                   'cells':receipt['full_29_numeric_cell_count'],
+                   'public_raw_exported':False},ensure_ascii=False))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnb-r16-browser-private-sanitized-${{ github.run_id }}
+          path: fnb-r16-browser-private-sanitized.json
+          if-no-files-found: warn
+          retention-days: 30
 
