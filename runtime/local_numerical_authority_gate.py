@@ -46,6 +46,15 @@ def assess(
     explicitly_non_numerical = "NON-NUMERICAL" in evidence_status.upper()
     required_indices = list(mapping.get("required_indices") or [])
     full_29_index_manifest = len(required_indices) == 29 and len(set(required_indices)) == 29
+    # The established Production contract binds exactly 9 base index groups
+    # and 63 component rules. "All declared rules bound" is insufficient if
+    # the declaration silently omits base indices or individual components.
+    component_rule_count = sum(len(x) for x in component_sets.values() if isinstance(x, dict))
+    full_63_component_manifest = (
+        len(component_sets) == 9
+        and component_rule_count == 63
+        and set(component_sets).issubset(set(required_indices))
+    )
     production_registry = "PRODUCTION-NUMERICAL-AUTHORITY" in evidence_status.upper()
     production_mapping = "PRODUCTION-NUMERICAL-AUTHORITY" in mapping_status.upper()
     strict_terminal_policy = str(mapping.get("strict_numerical_terminal_policy") or "")
@@ -56,6 +65,7 @@ def assess(
         and not invalid_rules
         and bool(component_sets)
         and full_29_index_manifest
+        and full_63_component_manifest
         and production_registry
         and production_mapping
         and strict_terminal_policy == "CALCULATED_OR_RULED_NEUTRAL"
@@ -70,6 +80,8 @@ def assess(
         reasons.append("COMPONENT_SCORE_RULES_INVALID")
     if not full_29_index_manifest:
         reasons.append("FULL_29_INDEX_MANIFEST_INVALID")
+    if not full_63_component_manifest:
+        reasons.append("FULL_63_COMPONENT_SET_INVALID")
     if not production_registry:
         reasons.append("EVIDENCE_REGISTRY_NOT_PRODUCTION_NUMERICAL_AUTHORITY")
     if not production_mapping:
@@ -94,7 +106,7 @@ def assess(
         "ticket_consumption_authorized": False,
         "capital_consumption_authorized": False,
         "calibration_status": str(mapping.get("calibration_status") or "UNCALIBRATED_RULE_BASED_PRODUCTION_NUMERICAL"),
-        "required_component_rule_count": sum(len(x) for x in component_sets.values() if isinstance(x, dict)),
+        "required_component_rule_count": component_rule_count,
         "bound_component_rule_count": (
             sum(
                 1
