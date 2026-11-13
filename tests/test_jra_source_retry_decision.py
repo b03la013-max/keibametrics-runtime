@@ -19,8 +19,12 @@ def test_single_completed_failure_retries():
     assert d.decide([run(10)], PATH) == "RETRY"
 
 
-def test_newest_failure_after_older_failure_retries_caller_bounds_budget():
-    assert d.decide([run(10), run(12, conclusion="timed_out")], PATH) == "RETRY"
+def test_retry_budget_is_durable_across_workers_and_restarts():
+    # A second visible run means the single retry was already dispatched by
+    # some worker; a restarted or parallel waiter must never send a third.
+    assert d.decide([run(10), run(12, conclusion="timed_out")], PATH) == "WAIT"
+    assert d.decide([run(10), run(12)], PATH) == "WAIT"
+    assert d.decide([run(10, conclusion="timed_out")], PATH) == "RETRY"
 
 
 def test_no_observed_run_waits():
