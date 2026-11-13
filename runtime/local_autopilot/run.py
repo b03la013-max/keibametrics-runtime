@@ -50,6 +50,8 @@ FINAL_WINDOW_MIN = 45
 CUTOFF_MIN = 3          # Rakuten closes voting 2 min before post; we freeze 3 min before
 MAX_ATTEMPTS = 3
 RESULT_DELAY_MIN = 20
+CODE_VERSION = hashlib.sha256(b''.join(
+    (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py'))).hexdigest()[:12]
 LOG = []
 
 
@@ -492,7 +494,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     jobs.append((3, mins, key, 'RESULT'))
                 continue
             if r['status'] == 'PREDICTION_FAILURE' and r['attempts'] >= MAX_ATTEMPTS:
-                continue
+                if r.get('failed_code') == CODE_VERSION:
+                    continue
+                r['attempts'] = 0  # code changed since the failure: retry automatically
+                log('RETRY_AFTER_CODE_CHANGE', key, r.get('last_error'))
             if mins <= FINAL_WINDOW_MIN and '直前版' not in have:
                 jobs.append((1, mins, key, '直前版'))
             elif not have:
@@ -537,6 +542,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 break
             except Exception as exc:
                 r['attempts'] += 1
+                r['failed_code'] = CODE_VERSION
                 r['status'] = 'PREDICTION_FAILURE' if edition != 'RESULT' else r['status']
                 r['last_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
                 dump(out / f'{key}.error.json', {'race': key, 'edition': edition, 'error': r['last_error'],

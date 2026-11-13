@@ -63,10 +63,11 @@ def norm(text):
 
 def class_level(text):
     t = norm(text)
-    m = re.search(r'([ABC])\s*([123])', t)
+    m = re.search(r'([ABC])\s*-?\s*([1-9])', t)
     if not m:
         return None
-    level = CLASS_LEVEL[m[1] + m[2]]
+    # Venue class ladders differ (高知 A3, C4 ...): table first, ordered fallback.
+    level = CLASS_LEVEL.get(m[1] + m[2], {'A': 8, 'B': 6, 'C': 3}[m[1]] - 0.8 * (int(m[2]) - 1))
     g = re.search(r'[\(（]([一二三四五六七八九十])[\)）]', t)
     return level - 0.08 * ((KANJI[g[1]] - 1) if g else 0)
 
