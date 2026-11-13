@@ -64,7 +64,7 @@ def url_scope(url):
     p=urlsplit(url)
     if (p.scheme!='https' or p.netloc!='www.nankankeiba.com' or p.query or p.fragment
             or not re.fullmatch(r'/(?:calendar/\d{6}|program/\d{14}|(?:syousai|uma_shosai)/\d{16}'
-                r'|odds/\d{8}18\d{4}(?:0[1-9]|1[0-2])01|henko_info/00000000000000)\.do|/robots\.txt',p.path)):
+                r'|odds/\d{8}(?:18|19|20|21)\d{4}(?:0[1-9]|1[0-2])01|henko_info/00000000000000)\.do|/robots\.txt',p.path)):
         raise NankanError('NANKAN_URL_SCOPE_HOLD')
     return p
 
