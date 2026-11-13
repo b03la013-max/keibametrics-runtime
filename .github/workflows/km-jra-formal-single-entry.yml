@@ -226,6 +226,13 @@ jobs:
           # The verified, durable checkpoint is the handoff. Actions job-list
           # availability is independent of whether the SOURCE producer committed it.
           DISPATCH_PENDING="$SOURCE_REDISPATCH"
+          # One bounded SOURCE retry: only after every observed SOURCE run for this
+          # exact request has concluded unsuccessfully, no checkpoint exists, and at
+          # least SOURCE_RETRY_MIN_SECONDS remain before the dispatch deadline.
+          # The retry reuses the identical request file; it never extends a deadline.
+          SOURCE_RETRY_MIN_SECONDS=300
+          SOURCE_RETRY_USED=false
+          SOURCE_RETRY_NEXT_CHECK=$(( $(date +%s) + 60 ))
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
             if timeout 20 git fetch -q origin main; then
               if git cat-file -e "FETCH_HEAD:$POINTER" 2>/dev/null; then
@@ -239,6 +246,22 @@ jobs:
                 DISPATCH_PENDING=false
                 if ! timeout 20 gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"; then
                   echo 'SOURCE dispatch acknowledgement unavailable; waiting for canonical checkpoint' >&2
+                fi
+              fi
+              NOW_S=$(date +%s)
+              if [ "$SOURCE_RETRY_USED" = "false" ] && [ "$NOW_S" -ge "$SOURCE_RETRY_NEXT_CHECK" ] \
+                 && [ $(( DEADLINE - NOW_S )) -ge "$SOURCE_RETRY_MIN_SECONDS" ] && [ "$NOW_S" -lt "$CUTOFF" ]; then
+                SOURCE_RETRY_NEXT_CHECK=$(( NOW_S + 60 ))
+                RUNS_JSON="$(timeout 20 gh run list --workflow km-jra-source-first-runner.yml --limit 50 \
+                  --json databaseId,displayTitle,status,conclusion 2>/dev/null || true)"
+                DECISION="$(RUNS_JSON="$RUNS_JSON" python runtime/jra_source_runtime/jra_source_retry_decision.py \
+                  --request-path "$SOURCE_REQUEST_PATH" 2>/dev/null || echo WAIT)"
+                if [ "$DECISION" = "RETRY" ]; then
+                  SOURCE_RETRY_USED=true
+                  echo "JRA_SOURCE_BOUNDED_RETRY_DISPATCHED remaining=$(( DEADLINE - NOW_S ))s" >&2
+                  if ! timeout 20 gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"; then
+                    echo 'SOURCE retry acknowledgement unavailable; waiting for canonical checkpoint' >&2
+                  fi
                 fi
               fi
             fi
