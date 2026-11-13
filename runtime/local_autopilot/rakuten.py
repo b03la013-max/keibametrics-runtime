@@ -51,6 +51,52 @@ def lines(fragment):
     return [nfkc(x) for x in unescape(raw).split('\x00') if nfkc(x)]
 
 
+def robots_policy(text, ua):
+    """RFC 9309: groups naming our product token apply; otherwise every '*'
+    group (Rakuten splits '*' into two groups, which are merged)."""
+    groups, cur, in_rules = [], None, False
+    for raw in text.splitlines():
+        line = raw.split('#', 1)[0].strip()
+        if ':' not in line:
+            continue
+        k, v = [x.strip() for x in line.split(':', 1)]
+        k = k.lower()
+        if k == 'user-agent':
+            if cur is None or in_rules:
+                cur = {'agents': [], 'rules': [], 'delay': 0.0}
+                groups.append(cur)
+                in_rules = False
+            cur['agents'].append(v.lower())
+        elif cur is not None and k in ('allow', 'disallow', 'crawl-delay'):
+            in_rules = True
+            if k == 'crawl-delay':
+                try:
+                    cur['delay'] = max(cur['delay'], float(v))
+                except ValueError:
+                    pass
+            elif v:
+                cur['rules'].append((k == 'allow', v))
+    token = ua.split('/')[0].lower()
+    mine = [g for g in groups if any(a != '*' and a in token for a in g['agents'])]
+    chosen = mine or [g for g in groups if '*' in g['agents']]
+    return {'rules': [r for g in chosen for r in g['rules']],
+            'crawl_delay': max([g['delay'] for g in chosen] + [0.0]),
+            'groups': 'product' if mine else 'star'}
+
+
+def robots_allows(policy, path):
+    best = None
+    for allow, pat in policy['rules']:
+        anchored = pat.endswith('$')
+        body = pat[:-1] if anchored else pat
+        rx = '^' + re.escape(body).replace(r'\*', '.*') + ('$' if anchored else '')
+        if re.match(rx, path):
+            key = (len(body.replace('*', '')), allow)  # longest wins; Allow wins ties
+            if best is None or key > best:
+                best = key
+    return True if best is None else best[1]
+
+
 class Client:
     def __init__(self, state_path):
         self.state_path = Path(state_path)
@@ -59,14 +105,20 @@ class Client:
         except (OSError, ValueError):
             self.state = {}
         self.requests = 0
+        self.wait_seconds = 0.0
+        self.delay = DELAY
 
     def _save(self):
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(self.state, ensure_ascii=False, indent=1) + '\n')
 
     def _raw(self, url):
-        wait = self.state.get('last_request_epoch', 0) + DELAY - time.time()
+        hold = self.state.get('hold_until_epoch', 0)
+        if hold > time.time():
+            raise SourceStop(f'SOURCE_HOLD_UNTIL:{hold:.0f}')
+        wait = self.state.get('last_request_epoch', 0) + self.delay - time.time()
         if wait > 0:
+            self.wait_seconds += wait
             time.sleep(wait)
         req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept': 'text/html,text/plain'})
         self.state['last_request_epoch'] = time.time()
@@ -76,6 +128,8 @@ class Client:
                 body = r.read(3_000_000)
                 status = r.status
         except urllib.error.HTTPError as e:
+            if e.code in (403, 429, 503):  # access refused / throttled: back off 30 min, no retry
+                self.state['hold_until_epoch'] = time.time() + 1800
             self._save()
             raise SourceStop(f'HTTP_{e.code}:{url}') from e
         except OSError as e:
@@ -86,24 +140,19 @@ class Client:
             raise SourceStop(f'HTTP_{status}:{url}')
         return body.decode('utf-8', errors='replace')
 
-    def _allowed(self, path):
+    def _robots(self):
         rb = self.state.get('robots')
         if not rb or time.time() - rb.get('at', 0) > 6 * 3600:
             txt = self._raw(ORIGIN + '/robots.txt')
             rb = {'at': time.time(), 'text': txt}
             self.state['robots'] = rb
             self._save()
-        disallow, agent_all = [], False
-        for line in rb['text'].splitlines():
-            line = line.split('#', 1)[0].strip()
-            if ':' not in line:
-                continue
-            k, v = [x.strip() for x in line.split(':', 1)]
-            if k.lower() == 'user-agent':
-                agent_all = v == '*'
-            elif k.lower() == 'disallow' and agent_all and v:
-                disallow.append(v)
-        return not any(path.startswith(d) for d in disallow)
+        return robots_policy(rb['text'], UA)
+
+    def _allowed(self, path):
+        policy = self._robots()
+        self.delay = max(DELAY, policy['crawl_delay'] + 1)
+        return robots_allows(policy, path)
 
     def get(self, path):
         if not self._allowed(path.split('?')[0]):
@@ -188,8 +237,9 @@ def parse_start(td):
         if m and out['ride_jockey'] is None and out['distance']:
             out['ride_jockey'] = m[1]
             continue
-        m = re.search(r'(\d+:)?\d{2}\.\d\s*\((-?\d+\.\d)\)', ln)
+        m = re.search(r'((?:\d+:)?\d{2}\.\d)\s*\((-?\d+\.\d)\)', ln)
         if m:
+            out['content_time_text'] = m[1]
             out['margin'] = 0.0 if out['finish'] == 1 else abs(float(m[2]))
             continue
         m = re.search(r'(\d{2}\.\d)\s+(\d{3})k', ln)
@@ -206,9 +256,10 @@ def parse_start(td):
 def parse_card(card_html):
     i = card_html.find('<tbody class="raceCard">')
     body = card_html[i:card_html.find('</tbody>', i)]
-    blocks = re.split(r'<tr class="box\d+"', body)[1:]
+    blocks = re.split(r'<tr class="box\d+(?=[ "])', body)[1:]
     runners, excluded = [], []
     frame = None
+    last_no = 0
     for blk in blocks:
         tds = re.findall(r'<t[dh][^>]*class="([^"]*)"[^>]*>(.*?)</t[dh]>', blk, re.S)
         cell = {}
@@ -218,6 +269,7 @@ def parse_card(card_html):
                 starts.append(inner)
             else:
                 cell.setdefault(cls.split()[0], inner)
+        row_class = blk[:blk.find('>')]
         number = text(cell.get('number'))
         name_html = cell.get('name', '')
         nm = re.search(r'<span class="mainHorse">.*?>([^<]+)</a>', name_html, re.S)
@@ -240,10 +292,12 @@ def parse_card(card_html):
         wd = lines(cell.get('weightDistance'))
         cur_bw = _int(wd[0]) if wd and re.fullmatch(r'\d{3}', wd[0]) else None
         chg = _int(wd[1]) if len(wd) > 1 and re.fullmatch(r'[+-]?\d+|±0', wd[1].replace('±0', '0')) else None
-        status_txt = number + ' ' + rt + ' ' + text(blk[:400])
-        cancelled = (not number.isdigit()) or any(k in rt for k in ('取消', '除外', '中止'))
+        cancelled = ('cancel' in row_class or not number.isdigit()
+                     or any(k in number + rt for k in ('取消', '除外', '中止')))
+        horse_no = int(number) if number.isdigit() else (last_no + 1)  # 取消 rows hide the number
+        last_no = horse_no
         frame = _int(text(cell.get('position'))) or frame
-        row = {'horse_no': int(number) if number.isdigit() else None, 'frame_no': frame,
+        row = {'horse_no': horse_no, 'frame_no': frame, 'scratch_marker': number if cancelled else None,
                'name': name, 'sire': sire, 'damsire': damsire[1] if damsire else None,
                'win_odds': float(win[1]) if win and not cancelled and '.' in win[1] else None,
                'popularity': int(pop[1]) if pop else None,
@@ -267,3 +321,6 @@ class Reader:
 
     def card_page(self, rid):
         return self.client.get('/race_card/list/RACEID/' + rid)
+
+    def result_page(self, rid):
+        return self.client.get('/race_performance/list/RACEID/' + rid)

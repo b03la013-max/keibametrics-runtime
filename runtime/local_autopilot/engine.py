@@ -269,7 +269,8 @@ def predict(race, runners, odds, today):
         x['p_model'] = a
         x['p_market'] = m / tot if (m and tot) else None
         x['p_win'] = 0.5 * a + 0.5 * x['p_market'] if x['p_market'] else a
-    order = sorted(rows, key=lambda x: -x['F3S'])
+    # ties (e.g. all-newcomer fields where every index is UNKNOWN) break on the market
+    order = sorted(rows, key=lambda x: (-round(x['F3S'], 1), x['win'] or 999.0))
     marks = ['◎', '○', '▲', '△', '△']
     for x in rows:
         x['mark'] = ''

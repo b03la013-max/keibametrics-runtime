@@ -1,21 +1,26 @@
 name: KeibaMetrics LOCAL Race-Day Autopilot
-run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || github.event.schedule || 'push' }}
+run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || 'loop' }}
 
 # NAR (all local venues except ばんえい) race-day autopilot, the LOCAL counterpart
-# of km-jra-race-day-autopilot.yml. Each tick reads the public Rakuten keiba
-# race cards (robots.txt respected, Crawl-Delay 60 s persisted across runs), runs the
-# KeibaMetrics LOCAL v4.3 chain (runtime/local_autopilot) and commits
-# runtime/local_autopilot/output/<date>/{README.md, <VENUE>_<RR>.md/json}.
-#   朝版  = every race, as soon as the day's program is published
-#   直前版 = re-read card + odds 45..3 min before each post (body weight/odds)
-# PAPER only: no purchase, no external notification, no Formal/Production claim.
+# of km-jra-race-day-autopilot.yml (PAPER research implementation, not Formal).
+#  * Source: public Rakuten keiba race cards / results. robots.txt (RFC 9309)
+#    checked; >=61 s between requests, persisted across runs; 403/429 -> 30 min
+#    hold, never retried in a loop. Raw pages are never committed.
+#  * Code runs from main; OUTPUT is committed to the separate branch
+#    `local-autopilot-data` (main stays free of generated commits). A commit is
+#    made only when a prediction/state/result actually changed.
+#  * One long-lived worker per day (07:07-23:30 JST). It hands off to a fresh
+#    run before the 6 h hosted-job limit; scheduled runs are restarts only.
+# PAPER only: no purchase, no external notification, no Formal/Production
+# claim; formal Owner/consumers/Runner/Signer/Private Store are not touched.
 permissions:
   contents: write
+  actions: write
 
 on:
   schedule:
-    # Every 10 min 09:00-21:50 JST (day + night meetings).
-    - cron: "*/10 0-12 * * *"
+    # 07:07-21:57 JST restarts (22-23 UTC previous day, 00-12 UTC).
+    - cron: "7,27,47 22,23,0-12 * * *"
   workflow_dispatch:
     inputs:
       race_date:
@@ -23,51 +28,75 @@ on:
         required: false
         type: string
       mode:
-        description: "tick (one pass) or loop (repeat until 21:30 JST)"
+        description: "loop (worker until done/23:30 JST) or tick (one pass)"
         required: false
-        default: tick
+        default: loop
         type: choice
-        options: [tick, loop]
+        options: [loop, tick]
 
 concurrency:
-  group: km-local-race-day-autopilot-v2-${{ github.ref_name }}
+  group: km-local-race-day-autopilot
   cancel-in-progress: false
 
 jobs:
   autopilot:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
           sparse-checkout-cone-mode: false
           sparse-checkout: |
-            /runtime/local_autopilot/
-      - name: Run autopilot
+            /runtime/local_autopilot/*.py
+            /runtime/local_nar_evidence_candidate.py
+            /runtime/local_fullnumerical_candidate.py
+            /runtime/local_fullnumerical_production.py
+            /runtime/local_bvi_bloodline_research.py
+            /runtime/local_krs_bridge_candidate.py
+            /mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json
+            /mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json
+            /mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json
+            /mapping/local_full_numerical_mapping_v1.0_production_20261008.json
+      - uses: actions/checkout@v4
+        with:
+          ref: local-autopilot-data
+          path: data
+          fetch-depth: 5
+      - name: Run autopilot worker
         env:
+          GH_TOKEN: ${{ github.token }}
           RACE_DATE: ${{ inputs.race_date }}
-          MODE: ${{ inputs.mode || 'tick' }}
-          BRANCH: ${{ github.ref_name }}
+          MODE: ${{ inputs.mode || 'loop' }}
         run: |
           set -uo pipefail
-          git config user.name "keibametrics-runtime"
-          git config user.email "actions@users.noreply.github.com"
-          D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
+          export KM_LOCAL_AUTOPILOT_OUT="$GITHUB_WORKSPACE/data/output"
+          git -C data config user.name "keibametrics-runtime"
+          git -C data config user.email "actions@users.noreply.github.com"
+          START=$(date +%s)
           publish() {
-            git add runtime/local_autopilot/output || true
-            if ! git diff --cached --quiet; then
-              git commit -q -m "LOCAL autopilot $D $(TZ=Asia/Tokyo date +%H:%M) [skip ci]"
+            git -C data add -A output
+            if ! git -C data diff --cached --quiet; then
+              git -C data commit -q -m "LOCAL autopilot $(TZ=Asia/Tokyo date '+%F %H:%M')"
               for i in 1 2 3; do
-                git pull -q --rebase origin "$BRANCH" && git push -q origin "HEAD:$BRANCH" && break
+                git -C data pull -q --rebase origin local-autopilot-data && git -C data push -q origin HEAD:local-autopilot-data && return 0
                 sleep 5
               done
+              echo "PUSH_FAILED"
             fi
           }
           while :; do
+            D="${RACE_DATE:-$(TZ=Asia/Tokyo date +%F)}"
             python -m runtime.local_autopilot.run --date "$D" --budget 420 || echo "tick exit $?"
             publish
             [ "$MODE" = "loop" ] || break
-            [ "$(TZ=Asia/Tokyo date +%H%M)" -lt 2130 ] || break
-            sleep 20
+            HM=$(TZ=Asia/Tokyo date +%H%M)
+            if python -m runtime.local_autopilot.run --date "$D" --pending; then PENDING=1; else PENDING=0; fi
+            [ "$HM" -lt 2330 ] || break
+            if [ "$PENDING" = 0 ] && [ "$HM" -ge 2100 ]; then echo "DAY_DONE"; break; fi
+            if [ $(( $(date +%s) - START )) -gt 19500 ]; then
+              gh workflow run km-local-race-day-autopilot.yml --ref main -f mode=loop -f race_date="$D" && echo "HANDOFF"
+              break
+            fi
+            if [ "$PENDING" = 1 ]; then sleep 15; else sleep 120; fi
           done
