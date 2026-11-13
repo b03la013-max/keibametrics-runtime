@@ -167,7 +167,7 @@ def _tick(day, now, budget_seconds, only, reader):
         log('PLAN_HOLD', type(exc).__name__, getattr(exc, 'receipt', exc), traceback.format_exc()[-800:])
         return 2
     if not plan['venues']:
-        log('NO_SOUTH_KANTO_MEETING', day)
+        log('NO_LOCAL_MEETING', day)
         return 0
     jobs = []
     for venue, races in plan['venues'].items():
