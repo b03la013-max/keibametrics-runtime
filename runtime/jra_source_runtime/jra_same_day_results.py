@@ -304,11 +304,20 @@ def validate_result_identity(raw, content_type, key, day, race_no):
 
 
 def _fetch_race(opener,referer:str,day_html:str,key:str,d:str,race_no:int,prediction_cutoff:str):
-    prefix="pw01sde01"+key+f"{int(race_no):02d}"+d
-    m=re.search(r"("+re.escape(prefix)+r"/[0-9A-Fa-f]{2})",day_html)
-    if not m:
+    # Same-day result lists print pw01sde01...; the archive (past week) pages
+    # print pw01sde10... for the same race. The same-day code keeps priority
+    # (unchanged behaviour); the archive code is used only when no same-day
+    # token exists, and each code must resolve to exactly one token.
+    found=[]
+    for code in ("01","10"):
+        found=sorted(set(re.findall(r"(pw01sde"+code+re.escape(key+f"{int(race_no):02d}"+d)
+                                     +r"/[0-9A-Fa-f]{2})",day_html)))
+        if found:break
+    if not found:
         raise ValueError(f"JRA_RESULT_RACE_TOKEN_NOT_FOUND:{race_no}")
-    final,raw,headers=_result_post(opener,m.group(1),referer)
+    if len(found)!=1:
+        raise ValueError(f"JRA_RESULT_RACE_TOKEN_AMBIGUOUS:{race_no}")
+    final,raw,headers=_result_post(opener,found[0],referer)
     fetched=opener.last_response.get("fetched_at") or utcnow()
     validate_result_identity(raw,headers.get("content-type",""),key,d,race_no)
     spec={
