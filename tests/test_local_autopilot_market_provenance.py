@@ -61,7 +61,7 @@ def _push_fixture(tmp_path, monkeypatch, at, blob='{"frozen":true}'):
     out = tmp_path
     rev = out / 'rev'
     rev.mkdir()
-    (rev / 'SAG_01.r1.json').write_text('{"frozen":true}\\n')
+    (rev / 'SAG_01.r1.json').write_text('{"frozen":true}\n')
     commit_line = 'a' * 40 + ' 2026-11-14T14:00:00+09:00'
 
     def fake_git(_out, *args):
