@@ -1,0 +1,47 @@
+name: KeibaMetrics JRA night-before SOURCE dry run (diagnostic)
+run-name: JRA SOURCE preflight dry run ${{ github.ref_name }}
+
+# Diagnostic only: runs the existing SOURCE acquisition for tomorrow's official
+# flat cards with an ephemeral key. No Production signature, no execution-store
+# write, no commit, no dispatch, no delivery. Read-only repository permission.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ['preflight/jra-source-dryrun-*']
+    paths: ['runtime/jra_preflight_requests/*.json']
+
+concurrency:
+  group: km-jra-preflight-source-dryrun
+  cancel-in-progress: false
+
+jobs:
+  dryrun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        venue: ['東京', '京都', '福島']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - run: python -m pip install --disable-pip-version-check -q -r runtime/jra_source_runtime/requirements.txt
+      - name: Dry-run SOURCE for every flat race of one venue
+        env:
+          VENUE: ${{ matrix.venue }}
+        run: |
+          set -euo pipefail
+          D="$(python -c 'import json,glob;print(json.load(open(sorted(glob.glob("runtime/jra_preflight_requests/*.json"))[-1]))["race_date"])')"
+          mkdir -p preflight_out
+          cd runtime/jra_source_runtime
+          python jra_preflight_source_dryrun.py --date "$D" --venue "$VENUE" --output "../../preflight_out/preflight.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jra-preflight-${{ strategy.job-index }}
+          path: preflight_out/
+          retention-days: 7
