@@ -35,7 +35,7 @@ jobs:
           VENUE: ${{ matrix.venue }}
         run: |
           set -euo pipefail
-          D="$(python -c 'import json,glob;print(json.load(open(sorted(glob.glob("runtime/jra_preflight_requests/*.json"))[-1]))["race_date"])')"
+          D="$(python -c 'import json,glob;print(json.load(open(sorted(glob.glob("runtime/jra_preflight_requests/2026-11-14*.json"))[0]))["race_date"])')"
           mkdir -p preflight_out
           cd runtime/jra_source_runtime
           python jra_preflight_source_dryrun.py --date "$D" --venue "$VENUE" --output "../../preflight_out/preflight.json"
