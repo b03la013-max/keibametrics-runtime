@@ -514,13 +514,14 @@ def snapshot_from_bytes(
     headers: Dict[str, str] | None = None,
     fetched_at: str | None = None,
     prediction_cutoff: str | None = None,
+    gzip_mtime: int | None = None,
 ) -> Tuple[Dict[str, Any], List[str]]:
     headers = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
     fetched_at = fetched_at or utcnow()
     content_type = headers.get("content-type", "")
     evidence, extraction_errors = _extract(raw, content_type, spec.get("extract") or [])
     raw_sha = hashlib.sha256(raw).hexdigest()
-    packed = gzip.compress(raw, compresslevel=9)
+    packed = gzip.compress(raw, compresslevel=9, mtime=gzip_mtime)
     now_dt = _parse_dt(fetched_at) or datetime.datetime.now(datetime.timezone.utc)
     cutoff_dt = _parse_dt(prediction_cutoff)
     relation = "UNKNOWN"
