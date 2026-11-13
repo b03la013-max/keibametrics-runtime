@@ -161,12 +161,20 @@ def build_candidate_krs(request: Dict[str,Any]) -> Dict[str,Any]:
     runners=q.get("runners") or []
     bridge_runners={}
     horses=[]
+    seen_horse_numbers=set()
     for r in runners:
         rid=str(r.get("runner_id"))
+        try:
+            horse_no=int(rid)
+        except ValueError as exc:
+            raise LocalCandidateBridgeError("CANDIDATE_KRS_RUNNER_ID_INVALID:" + rid) from exc
+        if horse_no in seen_horse_numbers:
+            raise LocalCandidateBridgeError(f"CANDIDATE_KRS_RUNNER_ID_DUPLICATE:{horse_no}")
+        seen_horse_numbers.add(horse_no)
         b=build_runner_bridge(r)
         bridge_runners[rid]=b
         horses.append({
-          "horse_no":int(rid),"name":str(r.get("name") or ""),
+          "horse_no":horse_no,"name":str(r.get("name") or ""),
           "hsv":copy.deepcopy(b["hsv"]),"static":copy.deepcopy(b["static"]),
           "static_roles":copy.deepcopy(r.get("candidate_static_roles") or []),
           "uncertainty_scale":b["uncertainty_scale"],
