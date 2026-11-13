@@ -74,6 +74,7 @@ def plan_for(reader, day, out):
     if path.exists():
         return json.loads(path.read_text())
     links = reader.meetings(day)
+    log('CALENDAR_LINKS', links)
     plan = {'race_date': day, 'created_at': datetime.now(JST).isoformat(), 'venues': {}}
     for code, url in sorted(links.items()):
         races = reader.program(url, day)
@@ -123,9 +124,32 @@ def index(out, plan):
     (out / 'README.md').write_text('\n'.join(L) + '\n')
 
 
+LOG = []
+
+
+def log(*parts):
+    line = datetime.now(JST).strftime('%H:%M:%S ') + ' '.join(str(p) for p in parts)
+    print(line, flush=True)
+    LOG.append(line)
+
+
+def flush_log(out):
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / 'autopilot_log.txt').open('a') as fh:
+        fh.write('\n'.join(LOG) + '\n')
+    LOG.clear()
+
+
 def tick(day=None, now=None, budget_seconds=480, only=None, reader=None):
     now = now or datetime.now(JST)
     day = day or now.date().isoformat()
+    try:
+        return _tick(day, now, budget_seconds, only, reader)
+    finally:
+        flush_log(ROOT / day)
+
+
+def _tick(day, now, budget_seconds, only, reader):
     today = date.fromisoformat(day)
     out = ROOT / day
     reader = reader or Reader()
@@ -133,10 +157,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None):
     try:
         plan = plan_for(reader, day, out)
     except Exception as exc:
-        print('PLAN_HOLD', type(exc).__name__, getattr(exc, 'receipt', exc))
+        log('PLAN_HOLD', type(exc).__name__, getattr(exc, 'receipt', exc), traceback.format_exc()[-800:])
         return 2
     if not plan['venues']:
-        print('NO_SOUTH_KANTO_MEETING', day)
+        log('NO_SOUTH_KANTO_MEETING', day)
         return 0
     jobs = []
     for venue, races in plan['venues'].items():
@@ -155,10 +179,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None):
             elif have is None:
                 jobs.append((100 + mins, r, '朝版', stem))
     jobs.sort(key=lambda j: j[0])
+    log('TICK', day, 'venues', list(plan['venues']), 'jobs', len(jobs))
     done = 0
     for _, r, edition, stem in jobs:
         if time.monotonic() - started > budget_seconds:
-            print('BUDGET_STOP remaining', len(jobs) - done)
+            log('BUDGET_STOP remaining', len(jobs) - done)
             break
         try:
             md, data = predict_race(reader, r, today, edition)
@@ -167,12 +192,12 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None):
             err = stem.with_suffix('.error.json')
             if err.exists():
                 err.unlink()
-            print('OK', r['venue_id'], r['race_no'], edition)
+            log('OK', r['venue_id'], r['race_no'], edition)
         except Exception as exc:
             dump(stem.with_suffix('.error.json'), {'race': r, 'error': type(exc).__name__,
                  'receipt': getattr(exc, 'receipt', str(exc)), 'at': datetime.now(JST).isoformat(),
                  'trace': traceback.format_exc()[-1500:]})
-            print('HOLD', r['venue_id'], r['race_no'], type(exc).__name__, getattr(exc, 'receipt', exc))
+            log('HOLD', r['venue_id'], r['race_no'], type(exc).__name__, getattr(exc, 'receipt', exc))
         done += 1
     index(out, plan)
     return 0
