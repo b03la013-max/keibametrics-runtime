@@ -1,7 +1,8 @@
-name: KeibaMetrics LOCAL source robots probe
-# One-shot: fetch robots.txt (and nothing else) of candidate public sources
-# from a GitHub-hosted runner with an honest UA, to see which ones permit
-# automated reads of race cards from cloud workers.
+name: KeibaMetrics LOCAL source page probe
+# One-shot developer probe for the Rakuten keiba card format. Robots.txt
+# permits these paths (Crawl-Delay 60 is honoured). Pages are encrypted to the
+# developer's public key before being committed, so no readable third-party
+# content is published in this public repository.
 permissions:
   contents: write
 on:
@@ -11,7 +12,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,13 +20,26 @@ jobs:
           sparse-checkout: |
             /runtime/local_autopilot/
       - run: |
-          UA="KeibaMetrics-URW-PublicResearch/1.0 (+https://github.com/b03la013-max/keibametrics-runtime)"
-          OUT=runtime/local_autopilot/output/robots_probe.txt
-          : > "$OUT"
-          for host in www.nankankeiba.com keiba.rakuten.co.jp www.oddspark.com nar.netkeiba.com www.keiba.go.jp www.spat4.jp; do
-            code=$(curl -sS -m 15 -A "$UA" -o body.txt -w "%{http_code} %{content_type}" "https://$host/robots.txt" || echo "ERR")
-            { echo "=== $host  $code"; head -c 3000 body.txt | sed 's/^/  /'; echo; } >> "$OUT"
-            sleep 3
-          done
+          set -u
+          UA="KeibaMetrics-LOCAL-PrivateResearch/1.0 (+https://github.com/b03la013-max/keibametrics-runtime)"
+          mkdir -p p
+          get() { curl -sS -m 20 -A "$UA" -o "p/$1" -w "$1 %{http_code} %{content_type} %{url_effective}\n" "$2" >> p/index.txt; }
+          get top.html "https://keiba.rakuten.co.jp/"
+          L=$(grep -oE 'race_card/list/RACEID/[0-9]{18}' p/top.html | sort -u | head -40 | tr '\n' ' ')
+          echo "LINKS $L" >> p/index.txt
+          R=$(grep -oE 'race_card/list/RACEID/2026111321[0-9]{8}' p/top.html | sort -u | tail -1)
+          [ -n "$R" ] || R=$(grep -oE 'race_card/list/RACEID/[0-9]{18}' p/top.html | sort -u | tail -1)
+          echo "PICK $R" >> p/index.txt
+          if [ -n "$R" ]; then
+            sleep 61; get card.html "https://keiba.rakuten.co.jp/$R"
+            ID=${R##*/}
+            sleep 61; get odds.html "https://keiba.rakuten.co.jp/odds/tanfuku/RACEID/$ID"
+          fi
+          tar czf p.tgz p
+          openssl rand -out k.bin 32
+          openssl enc -aes-256-cbc -pbkdf2 -in p.tgz -out runtime/local_autopilot/probe.enc -pass file:k.bin
+          openssl pkeyutl -encrypt -pubin -inkey runtime/local_autopilot/probe_pub.pem -in k.bin -out runtime/local_autopilot/probe.key.enc
+          cp p/index.txt runtime/local_autopilot/probe_index.txt
           git config user.name "keibametrics-runtime"; git config user.email "actions@users.noreply.github.com"
-          git add "$OUT" && git commit -qm "robots probe [skip ci]" && git pull -q --rebase origin claude/local-autopilot-20261113 && git push -q origin HEAD:claude/local-autopilot-20261113
+          git add runtime/local_autopilot/probe.enc runtime/local_autopilot/probe.key.enc runtime/local_autopilot/probe_index.txt
+          git commit -qm "page probe [skip ci]" && git pull -q --rebase origin claude/local-autopilot-20261113 && git push -q origin HEAD:claude/local-autopilot-20261113
