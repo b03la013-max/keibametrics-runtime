@@ -390,8 +390,8 @@ def trio(cols, cap, must=()):
                     seen.add(k)
                     out.append(tuple(sorted(k)))
     must = [tuple(sorted(m)) for m in must if len(set(m)) == 3]
-    keep = [m for m in must if m not in out] + out
-    return keep[:cap]
+    keep = list(dict.fromkeys(must + out))  # required lines first, never truncated away
+    return keep[:max(cap, len(must))]
 
 
 def build_tickets(rows, order, ana, quad, form, total, asi, w, p, rsi, promote):
