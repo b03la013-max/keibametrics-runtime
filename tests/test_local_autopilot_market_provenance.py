@@ -52,3 +52,58 @@ def test_render_never_claims_odds_acquired_when_all_missing():
     known = run.render(race, res, '朝版', '2026-11-13T21:28:00+09:00')
     assert '| 確認済騎手 |' in known
     assert '騎手情報未取得' not in known
+
+
+# Git commit timestamps cannot prove when the pushed file was read back.
+# The conservative readback time must control the pre-start status.
+def _push_fixture(tmp_path, monkeypatch, at, blob='{"frozen":true}'):
+    from datetime import datetime
+    out = tmp_path
+    rev = out / 'rev'
+    rev.mkdir()
+    (rev / 'SAG_01.r1.json').write_text('{"frozen":true}\\n')
+    commit_line = 'a' * 40 + ' 2026-11-14T14:00:00+09:00'
+
+    def fake_git(_out, *args):
+        if args[0] == 'log':
+            return commit_line
+        if args[0] == 'show':
+            return blob
+        raise AssertionError(args)
+
+    monkeypatch.setattr(run, '_git', fake_git)
+    monkeypatch.setattr(run, 'now_jst', lambda: datetime.fromisoformat(at))
+    edition = {'rev': 'SAG_01.r1', 'delivery': {'COMMITTED': None, 'PUSH_VERIFIED': None}}
+    race = {'post_current': '2026-11-14T15:20:00+09:00',
+            'status': 'PREDICTION_COMPLETE', 'editions': [edition]}
+    queue = {'race_date': '2026-11-14', 'races': {'SAG_01': race}}
+    return queue, race, edition
+
+
+def test_push_verification_not_backdated_after_cutoff(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(
+        tmp_path, monkeypatch, '2026-11-14T15:18:00+09:00')
+    assert run.mark_delivery(q, tmp_path)
+    assert edition['delivery']['COMMITTED'] == '2026-11-14T14:00:00+09:00'
+    assert edition['delivery']['PUSH_VERIFIED'] == '2026-11-14T15:18:00+09:00'
+    assert edition['delivery']['LINK_AVAILABLE'].endswith('rev/SAG_01.r1.json')
+    assert race['status'] == 'PREDICTION_COMPLETE'
+    assert 'push_verified_at' not in race
+
+
+def test_push_verification_before_cutoff_is_eligible(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(
+        tmp_path, monkeypatch, '2026-11-14T15:16:00+09:00')
+    assert run.mark_delivery(q, tmp_path)
+    assert race['status'] == 'PRESTART_PUSH_VERIFIED'
+    assert race['push_verified_at'] == edition['delivery']['PUSH_VERIFIED']
+    assert race['push_verified_at'] == '2026-11-14T15:16:00+09:00'
+
+
+def test_remote_blob_mismatch_does_not_certify_delivery(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(
+        tmp_path, monkeypatch, '2026-11-14T15:16:00+09:00',
+        blob='{"tampered":true}')
+    assert run.mark_delivery(q, tmp_path)
+    assert edition['delivery']['PUSH_VERIFIED'] is None
+    assert race['status'] == 'PREDICTION_COMPLETE'
