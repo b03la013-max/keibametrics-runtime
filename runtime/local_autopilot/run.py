@@ -117,7 +117,7 @@ def index(out, plan):
                 pr = d['prediction']
                 top = pr['ranking'][0]
                 L.append(f"| [{r['race_no']}R]({venue}_{r['race_no']:02d}.md) | {r['scheduled_post_at'][11:16]} | "
-                         f"{r['race_name']} | {d['edition']} | ◎{top['no']} {top['name']} | {pr['quad']} | "
+                         f"{d['race'].get('race_name') or r['race_name']} | {d['edition']} | ◎{top['no']} {top['name']} | {pr['quad']} | "
                          f"{pr['aki']['total']}/{pr['aki']['form']} | "
                          + '<br>'.join(f"{t['k']} {t['b']}" for t in pr['tickets'][:2]) + ' |')
             else:
