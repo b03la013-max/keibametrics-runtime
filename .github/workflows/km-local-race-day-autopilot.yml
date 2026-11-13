@@ -9,10 +9,11 @@ run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || 
 #  * Code runs from main; OUTPUT is committed to the separate branch
 #    `local-autopilot-data` (main stays free of generated commits). A commit is
 #    made only when a prediction/state/result actually changed.
-#  * After the day is done (>=21:00, nothing pending) the same worker pre-builds
-#    tomorrow's 朝版 until 23:30; the morning run re-checks venues once.
-#  * One long-lived worker per day (07:07-23:30 JST). It hands off to a fresh
-#    run before the 6 h hosted-job limit; scheduled runs are restarts only.
+#  * Continuous self-chaining worker (hands off before the 6 h job limit), so
+#    it does not depend on GitHub cron (which did not fire for this workflow on
+#    13 Nov). It only contacts the provider when work is due: today's editions
+#    and results, tomorrow's 朝版 pre-build from 21:00, venue re-check from 06:00.
+#    Scheduled runs below are restarts only (queued behind a live worker).
 # PAPER only: no purchase, no external notification, no Formal/Production
 # claim; formal Owner/consumers/Runner/Signer/Private Store are not touched.
 permissions:
@@ -95,25 +96,20 @@ jobs:
             [ "$MODE" = "loop" ] || break
             HM=$(TZ=Asia/Tokyo date +%H%M)
             if python -m runtime.local_autopilot.run --date "$D" --pending; then PENDING=1; else PENDING=0; fi
-            [ "$HM" -lt 2330 ] || break
-            if [ "$PENDING" = 0 ] && [ "$HM" -ge 2100 ]; then
-              echo "DAY_DONE"
-              # Pre-build tomorrow's 朝版 tonight (cards are published the day
-              # before), so the morning run only has 直前版 and new venues left.
+            if [ "$PENDING" = 0 ] && [ "$HM" -ge 2100 ] && [ -z "$RACE_DATE" ]; then
+              # Pre-build tomorrow's 朝版 tonight (cards are published the day before).
               T=$(TZ=Asia/Tokyo date -d tomorrow +%F)
-              while [ "$(TZ=Asia/Tokyo date +%H%M)" -lt 2330 ] && python -m runtime.local_autopilot.run --date "$T" --pending; do
+              if python -m runtime.local_autopilot.run --date "$T" --pending; then
                 python -m runtime.local_autopilot.run --date "$T" --budget 420 || echo "prebuild exit $?"
                 publish
-                if [ $(( $(date +%s) - START )) -gt 19500 ]; then
-                  gh workflow run km-local-race-day-autopilot.yml --ref main -f mode=loop && echo "HANDOFF"
-                  break
-                fi
-              done
-              echo "PREBUILD_DONE $T"
-              break
+                PENDING=1
+              fi
             fi
+            # Self-chaining worker: GitHub cron for this workflow has not been
+            # firing (0 scheduled runs on 13 Nov), so continuity must not
+            # depend on it. Hand off to a fresh run before the 6 h job limit.
             if [ $(( $(date +%s) - START )) -gt 19500 ]; then
-              gh workflow run km-local-race-day-autopilot.yml --ref main -f mode=loop -f race_date="$D" && echo "HANDOFF"
+              gh workflow run km-local-race-day-autopilot.yml --ref main -f mode=loop && echo "HANDOFF"
               break
             fi
             if [ "$PENDING" = 1 ]; then sleep 15; else sleep 120; fi

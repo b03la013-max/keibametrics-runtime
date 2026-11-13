@@ -1,7 +1,10 @@
 """FULL29 SHADOW: feed the Rakuten-parsed card into the EXISTING formal LOCAL
 29-index arithmetic, unchanged, and build (not run) the KRS input.
 
-Classification: FULL29_SHADOW_PAPER / provider=RAKUTEN_PUBLIC_CARD.
+Classification: FULL29_SHADOW_CANDIDATE_ARITHMETIC / provider=RAKUTEN_PUBLIC_CARD.
+  * Arithmetic = materialize_candidate(); the production consumer
+    (materialize_production) is NOT executed. Its per-cell gates are
+    re-applied and reported as production_gates for comparison only.
   * Formal SOURCE is NOT established (no official signed SOURCE receipt).
   * Uses the Production evidence registry ids and the regression-tested
     implementation mapping exactly as local_fullnumerical_production does,
@@ -65,6 +68,14 @@ def run(race, runners, html_text, fetched_at):
     attach_research(comp, src)
     out = materialize_candidate(comp, REPO / prod.IMPLEMENTATION_EVIDENCE_REGISTRY, REPO / prod.IMPLEMENTATION_MAPPING)
     counts = {'CALCULATED': 0, 'RULED-NEUTRAL': 0, 'RULED-HOLD': 0, 'NOT-APPLICABLE': 0, 'UNRESOLVED': 0}
+    # Same per-cell gates materialize_production() applies before it rebinds to
+    # Production authority (registry equivalence + finite value + provenance).
+    try:
+        prod._assert_registry_equivalence()
+        equivalence = 'PASS'
+    except Exception as exc:
+        equivalence = f'FAIL:{type(exc).__name__}:{str(exc)[:120]}'
+    prod_gate = {'pass': 0, 'PROVENANCE_INCOMPLETE': 0, 'FINITE_VALUE_REQUIRED': 0, 'TERMINAL_MISSING': 0, 'STATUS_INVALID': 0}
     neutral_by_index = {}
     table = []
     for ru in out['runners']:
@@ -74,6 +85,16 @@ def run(race, runners, html_text, fetched_at):
             spec = cc.get(idx)
             st = (spec or {}).get('terminal_status', 'UNRESOLVED')
             counts[st if st in counts else 'UNRESOLVED'] += 1
+            if not isinstance(spec, dict):
+                prod_gate['TERMINAL_MISSING'] += 1
+            elif str(st).upper() not in ('CALCULATED', 'RULED-NEUTRAL', 'RULED-HOLD', 'NOT-APPLICABLE'):
+                prod_gate['STATUS_INVALID'] += 1
+            elif str(st).upper() in ('CALCULATED', 'RULED-NEUTRAL') and not prod._finite_numeric(spec.get('value')):
+                prod_gate['FINITE_VALUE_REQUIRED'] += 1
+            elif not spec.get('rule_id') or not spec.get('evidence_refs') or not spec.get('source_fact'):
+                prod_gate['PROVENANCE_INCOMPLETE'] += 1
+            else:
+                prod_gate['pass'] += 1
             if st != 'CALCULATED':
                 neutral_by_index[idx] = neutral_by_index.get(idx, 0) + 1
             vals[idx] = None if not spec or spec.get('value') is None else round(float(spec['value']), 2)
@@ -85,7 +106,9 @@ def run(race, runners, html_text, fetched_at):
     except Exception as exc:  # readiness evidence only
         krs_error = f'{type(exc).__name__}:{str(exc)[:160]}'
     order = sorted(table, key=lambda x: -(x['indices'].get('F3S-L') or 0))
-    return {'classification': 'FULL29_SHADOW_PAPER', 'provider': 'RAKUTEN_PUBLIC_CARD',
+    return {'classification': 'FULL29_SHADOW_CANDIDATE_ARITHMETIC', 'provider': 'RAKUTEN_PUBLIC_CARD',
+            'implementation': 'local_fullnumerical_candidate.materialize_candidate (NOT the production consumer)',
+            'production_gates': {'registry_equivalence': equivalence, 'cells': prod_gate},
             'formal_source_established': False, 'production_numerical_authority': False,
             'prediction_consumption_authorized': False, 'krs_consumption_authorized': False,
             'ticket_consumption_authorized': False, 'capital_consumption_authorized': False,

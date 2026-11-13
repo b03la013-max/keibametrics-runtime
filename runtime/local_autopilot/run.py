@@ -3,7 +3,10 @@
 One `tick` = one pass over the day's race QUEUE (every discovered race is kept
 with an explicit state until the day is closed):
 
-  DISCOVERED -> SOURCE_READY -> PREDICTION_COMPLETE -> PRESTART_DELIVERED
+  DISCOVERED -> SOURCE_READY -> PREDICTION_COMPLETE -> PRESTART_PUSH_VERIFIED
+  (delivery ladder per revision: GENERATED/FROZEN -> COMMITTED -> PUSH_VERIFIED ->
+   LINK_AVAILABLE; USER_DELIVERY_SENT / USER_REACHED / USER_ACK_VERIFIED are
+   NOT_CONNECTED: a GitHub push is not proof that the user received it)
   side states: SOURCE_HOLD (access refused/held), PREDICTION_FAILURE (retried
   up to 3x), MISSED_DEADLINE (no edition before cutoff), POSTRESULT_DIAGNOSTIC
   (official result read, PAPER settlement done).
@@ -25,6 +28,8 @@ PAPER only: no purchase, no external notification, no Formal claim.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import subprocess
 import json
 import os
 import sys
@@ -221,14 +226,39 @@ def predict(reader, r, today, edition, out, cards):
     slim['ranking'] = [{k: x[k] for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
                                          'T3I', 'F3S', 'OPI', 'p_win', 'role')} for x in res['order']]
     saved_at = now_jst().isoformat()
+    src_sha = hashlib.sha256(html.encode()).hexdigest()
+    ticket_sha = hashlib.sha256(json.dumps(slim['tickets'], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    rev_n = len(r['editions']) + 1
+    rev_dir = out / 'rev'
+    rev_dir.mkdir(parents=True, exist_ok=True)
+    while (rev_dir / f"{stem.name}.r{rev_n}.json").exists():  # never overwrite a frozen revision
+        rev_n += 1
+    rev_id = f"{stem.name}.r{rev_n}"
+    prev_rev = r['editions'][-1].get('rev') if r['editions'] else None
+    frozen = {'race_id': r['rid'], 'race_key': stem.name, 'revision_id': rev_id, 'previous_revision': prev_rev,
+              'edition': edition, 'revision_reason': revision, 'source_fetched_at': fetched,
+              'source_snapshot_sha256': src_sha, 'frozen_at': saved_at, 'saved_at': saved_at,
+              'cutoff': cutoff(r).isoformat(), 'post_time': r['post_current'],
+              'runners': [{'no': x['horse_no'], 'name': x['name']} for x in runners],
+              'scratched': race['scratched'], 'roles': {'W': res['order'][0]['no'],
+                                                         'P2': res['order'][1]['no'] if len(res['order']) > 1 else None,
+                                                         'P3': res['order'][2]['no'] if len(res['order']) > 2 else None},
+              'ticket_sha256': ticket_sha, 'prediction': slim, 'paper': True, 'calibrated': False}
+    (rev_dir / f"{rev_id}.json").write_text(json.dumps(frozen, ensure_ascii=False, indent=1, default=str) + '\n')
+    (rev_dir / f"{rev_id}.md").write_text(md)
     stem.with_suffix('.md').write_text(md)
     dump(stem.with_suffix('.json'), {'race': {k: race[k] for k in ('venue_id', 'venue_name', 'race_no', 'rid', 'race_date',
                                                                   'post_current', 'distance', 'race_name', 'going', 'surface')},
                                      'edition': edition, 'card_fetched_at': fetched, 'saved_at': saved_at,
+                                     'revision_id': rev_id, 'source_snapshot_sha256': src_sha, 'ticket_sha256': ticket_sha,
                                      'revision': revision, 'scratched': race['scratched'], 'newcomers': race['newcomers'],
                                      'active_runners': len(runners), 'prediction': slim, 'paper': True, 'calibrated': False})
-    r['status'] = 'PRESTART_DELIVERED' if r.get('delivered_at') else 'PREDICTION_COMPLETE'
-    r['editions'].append({'edition': edition, 'source_fetched_at': fetched, 'saved_at': saved_at, 'revision': revision,
+    r['status'] = 'PREDICTION_COMPLETE'
+    r['editions'].append({'edition': edition, 'rev': rev_id, 'source_sha256': src_sha, 'ticket_sha256': ticket_sha,
+                          'source_fetched_at': fetched, 'saved_at': saved_at, 'frozen_at': saved_at, 'revision': revision,
+                          'delivery': {'GENERATED': saved_at, 'FROZEN': saved_at, 'COMMITTED': None, 'PUSH_VERIFIED': None,
+                                       'LINK_AVAILABLE': None, 'USER_DELIVERY_SENT': 'NOT_CONNECTED',
+                                       'USER_REACHED': 'NOT_CONNECTED', 'USER_ACK_VERIFIED': 'NOT_CONNECTED'},
                           'before_cutoff': datetime.fromisoformat(saved_at) < cutoff(r),
                           'top': res['order'][0]['no'], 'quad': res['quad'], 'aki_form': res['aki']['form']})
     r['active_runners'] = len(runners)
@@ -237,25 +267,68 @@ def predict(reader, r, today, edition, out, cards):
     return {'fetch_s': round(t1 - t0, 2), 'compute_s': round(t2 - t1, 2), 'shadow_s': round(t3 - t2, 2)}
 
 
+DATA_REMOTE = 'origin/local-autopilot-data'
+REPO_URL = 'https://github.com/b03la013-max/keibametrics-runtime/blob/local-autopilot-data/output/'
+
+
+def _git(out, *args):
+    try:
+        return subprocess.run(['git', '-C', str(out), *args], capture_output=True, text=True, timeout=20).stdout.strip()
+    except Exception:
+        return ''
+
+
 def mark_delivery(q, out):
-    """PRESTART_DELIVERED = latest pre-cutoff edition is in a pushed commit.
-    Commit time comes from git (the workflow pushes right after each tick)."""
-    import subprocess
+    """Per revision: COMMITTED (local commit containing the frozen file) and
+    PUSH_VERIFIED (that commit is on the remote-tracking data branch, whose
+    blob bytes equal the frozen file). Pre-cutoff status needs PUSH_VERIFIED
+    before cutoff. User delivery/ACK is NOT_CONNECTED and never inferred."""
     changed = False
     for key, r in q['races'].items():
-        if r['status'] != 'PREDICTION_COMPLETE' or r.get('delivered_at'):
-            continue
-        path = out / f'{key}.json'
-        try:
-            ts = subprocess.run(['git', '-C', str(out), 'log', '-1', '--format=%cI', '--', path.name],
-                                capture_output=True, text=True, timeout=20).stdout.strip()
-        except Exception:
-            ts = ''
-        if ts and r['editions'] and r['editions'][-1]['before_cutoff'] and datetime.fromisoformat(ts) < cutoff(r):
-            r['status'] = 'PRESTART_DELIVERED'
-            r['delivered_at'] = ts
+        if r['status'] == 'PRESTART_DELIVERED':  # legacy label (13 Nov): local commit time only
+            r['status'] = 'PRESTART_COMMITTED_LEGACY'
+            changed = True
+        for e in r['editions']:
+            d = e.get('delivery')
+            if not d or d.get('PUSH_VERIFIED'):
+                continue
+            rel = f"{q['race_date']}/rev/{e['rev']}.json"
+            path = out / 'rev' / f"{e['rev']}.json"
+            if not d.get('COMMITTED'):
+                line = _git(out, 'log', '-1', '--format=%H %cI', '--', str(path))
+                if line:
+                    d['COMMITTED'] = line.split()[1]
+                    d['commit_sha'] = line.split()[0]
+                    changed = True
+            if d.get('COMMITTED'):
+                line = _git(out, 'log', '-1', '--format=%H %cI', DATA_REMOTE, '--', str(path))
+                if line and path.exists():
+                    blob = _git(out, 'show', f"{DATA_REMOTE}:output/{rel}")
+                    if blob and blob.strip() == path.read_text().strip():
+                        d['PUSH_VERIFIED'] = line.split()[1]
+                        d['remote_commit_sha'] = line.split()[0]
+                        d['LINK_AVAILABLE'] = REPO_URL + rel
+                        changed = True
+        pre = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED')
+               and datetime.fromisoformat(e['delivery']['PUSH_VERIFIED']) < cutoff(r)]
+        if pre and r['status'] in ('PREDICTION_COMPLETE', 'SOURCE_READY'):
+            r['status'] = 'PRESTART_PUSH_VERIFIED'
+            r['push_verified_at'] = pre[-1]['delivery']['PUSH_VERIFIED']
             changed = True
     return changed
+
+
+def frozen_prediction(r, out, key):
+    """The last revision frozen before cutoff (immutable rev file), else the
+    legacy latest file if it was saved before cutoff (13 Nov races)."""
+    pre = [e for e in r['editions'] if datetime.fromisoformat(e.get('frozen_at') or e['saved_at']) < cutoff(r)]
+    for e in reversed(pre):
+        if e.get('rev') and (out / 'rev' / f"{e['rev']}.json").exists():
+            return out / 'rev' / f"{e['rev']}.json"
+    pj = out / f'{key}.json'
+    if pre and pj.exists() and datetime.fromisoformat(json.loads(pj.read_text())['saved_at']) < cutoff(r):
+        return pj
+    return None
 
 
 def report(q, out):
@@ -266,7 +339,8 @@ def report(q, out):
                or any(e['before_cutoff'] for e in r['editions'])]
     missed = [r for r in races.values() if r['status'] == 'MISSED_DEADLINE']
     fails = [r for r in races.values() if r['status'] in ('PREDICTION_FAILURE', 'SOURCE_HOLD')]
-    delivered = [r for r in races.values() if r.get('delivered_at')]
+    delivered = [r for r in races.values() if r.get('push_verified_at')]
+    legacy = [r for r in races.values() if r['status'] == 'PRESTART_COMMITTED_LEGACY']
     first_fail = next((f"{k} {r['last_error']}" for k, r in sorted(races.items(), key=lambda kv: kv[1]['post_current'])
                        if r.get('last_error')), 'なし')
     t = q['timings']
@@ -279,7 +353,8 @@ def report(q, out):
          f"| 開催場Discovery | {len(q['venues'])}場（{'・'.join(v['name'] for v in q['venues'].values())}） |",
          f"| Race Discovery | {n}R |",
          f"| 発走前予測完成 | {pct(pre)} |",
-         f"| 発走前GitHub保存（Delivery） | {pct(delivered)} |",
+         f"| 発走前GitHub push検証（実バイト照合） | {pct(delivered)}{f'（旧判定・push未検証 {len(legacy)}R）' if legacy else ''} |",
+         "| 本人Delivery／到達／ACK | 未接続（GitHub保存は本人受領の証拠ではない） |",
          f"| 朝版または発走前版あり | {pct(morning)} |",
          f"| 未作成（MISSED_DEADLINE） | {len(missed)}R |",
          f"| 失敗・保留 | {len(fails)}R |", f"| 最初の失敗 | {first_fail} |",
@@ -303,6 +378,28 @@ def report(q, out):
                 n_ = len(common)
                 d2 = sum((pr.index(h) - sh.index(h)) ** 2 for h in common)
                 rho_sum += 1 - 6 * d2 / (n_ * (n_ * n_ - 1))
+    sh_n = sh_err = runners = cells = 0
+    tc_sum = {}
+    gate_sum = {}
+    for key in races:
+        sj = out / f'{key}.shadow29.json'
+        if sj.exists():
+            d = json.loads(sj.read_text())
+            sh_n += 1
+            runners += d.get('runner_count', 0)
+            cells += d.get('cells', 0)
+            for k, v in d.get('terminal_counts', {}).items():
+                tc_sum[k] = tc_sum.get(k, 0) + v
+            for k, v in (d.get('production_gates') or {}).get('cells', {}).items():
+                gate_sum[k] = gate_sum.get(k, 0) + v
+    predicted = sum(1 for r in races.values() if r['editions'])
+    if predicted:
+        L += ['## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）', '',
+              f"予想{predicted}Rのうち実行{sh_n}R／{runners}頭×29＝{cells}セル（期待値 {runners * 29}）："
+              + '・'.join(f"{k} {v}" for k, v in tc_sum.items())
+              + (f"。正式経路と同じセル検査：通過 {gate_sum.get('pass', 0)}／"
+                 + '・'.join(f"{k} {v}" for k, v in gate_sum.items() if k != 'pass' and v) if gate_sum else '')
+              + '。KRS実試行 0（外部Engine未呼出）。', '']
     if cmp_n:
         L += ['## PAPERエンジン vs 公式29指数シャドー（同一出馬表）', '',
               f"比較{cmp_n}R：◎一致 {agree}/{cmp_n}・順位相関（Spearman平均）{rho_sum / cmp_n:.2f}。"
@@ -310,11 +407,18 @@ def report(q, out):
     res_rows = [r for r in races.values() if r.get('settlement')]
     if res_rows:
         inv = sum(r['settlement']['invest'] for r in res_rows)
+        ref = sum(r['settlement'].get('refund', 0) for r in res_rows)
+        eff = inv - ref
         pay = sum(r['settlement']['payout'] for r in res_rows)
-        L += ['## 結果照合（PAPER・1点100円）', '',
-              f"対象{len(res_rows)}R：◎1着 {sum(r['settlement']['win_hit'] for r in res_rows)}／◎3着内 {sum(r['settlement']['top_in3'] for r in res_rows)}"
+        pend = sum(1 for r in races.values() if r['editions'] and not r.get('settlement'))
+        last = max((r['settlement'].get('settled_at') or '' for r in res_rows), default='')
+        L += ['## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）', '',
+              f"精算{len(res_rows)}R（未精算 {pend}R・最終精算 {last[11:16] or '–'}）："
+              f"◎1着 {sum(r['settlement']['win_hit'] for r in res_rows)}／◎3着内 {sum(r['settlement']['top_in3'] for r in res_rows)}"
               f"／Top3捕捉 {sum(r['settlement']['top3_capture'] for r in res_rows)}/{3 * len(res_rows)}"
-              f"／投資 {inv:,}円・払戻 {pay:,}円・PFS {100 * pay / inv:.1f}%" if inv else '投資0（PFS NULL）', '']
+              f"／Ordered Pair {sum(r['settlement']['ordered_pair'] for r in res_rows)}／完全順序 {sum(r['settlement']['exact_triple'] for r in res_rows)}", '',
+              (f"投資 {inv:,}円・返還 {ref:,}円・有効投資 {eff:,}円・払戻 {pay:,}円・損益 {pay - eff:+,}円・PFS {100 * pay / eff:.1f}%"
+               if eff else '有効投資0（PFS NULL）'), '']
     for vid, v in q['venues'].items():
         L += [f"## {v['name']}", '',
               '| R | 発走（変更） | 状態 | 版 | 取得 | 保存 | 本命 | 買い目 | 結果 |', '|---|---|---|---|---|---|---|---|---|']
@@ -354,13 +458,16 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
     metrics = {'tick_at': now.isoformat(), 'requests_before': getattr(getattr(reader, 'client', None), 'requests', 0)}
     cards = {}
     q = load_queue(out)
+    if q and any(r.get('settlement') and 'effective_invest' not in r['settlement'] for r in q['races'].values()):
+        resettle(day)  # one-time offline re-settlement of legacy (pre-revision) settlements
+        q = load_queue(out)
     changed = False
     try:
         if q is None:
             q = discover(reader, day, out, cards)
             q['timings']['first_tick_at'] = now.isoformat()
             changed = True
-        elif day == now.date().isoformat() and not q['discovered_at'].startswith(day) \
+        elif day == now.date().isoformat() and now.hour >= 6 and not q['discovered_at'].startswith(day) \
                 and not q['timings'].get('rediscovered_at'):
             changed |= rediscover(reader, day, q, cards)
         if not q['races']:
@@ -401,12 +508,19 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
             try:
                 if edition == 'RESULT':
                     r['result_attempts'] = r.get('result_attempts', 0) + 1
+                    fp = frozen_prediction(r, out, key)
+                    if fp is None:
+                        r['result_attempts'] = MAX_ATTEMPTS
+                        r['last_error'] = 'NO_PRECUTOFF_FROZEN_PREDICTION'
+                        changed = True
+                        continue
                     html = reader.result_page(r['rid'])
-                    st = settle.settle(html, out / f'{key}.json')
+                    st = settle.settle(html, fp, now_jst().isoformat())
                     if st:
                         dump(out / f'{key}.result.json', st)
-                        r['settlement'] = {k: st[k] for k in ('order', 'invest', 'payout', 'win_hit', 'top_in3',
-                                                              'top3_capture', 'ordered_pair', 'exact_triple')}
+                        r['settlement'] = {k: st.get(k) for k in ('order', 'invest', 'refund', 'effective_invest', 'payout',
+                                                                  'win_hit', 'top_in3', 'top3_capture', 'ordered_pair',
+                                                                  'exact_triple', 'settled_at', 'revision', 'ticket_sha256')}
                         r['status'] = 'POSTRESULT_DIAGNOSTIC'
                         log('RESULT', key, st['order'][:3], st['payout'])
                     changed = True
@@ -474,13 +588,50 @@ def pending_soon(day=None, minutes=12):
     return False
 
 
+def resettle(day):
+    """Recompute settlements from stored official order/payouts (no network)
+    against the frozen pre-cutoff prediction. Writes <key>.result.json and keeps
+    the previous one as <key>.result.prev.json (never silently overwritten)."""
+    out = ROOT / day
+    q = load_queue(out)
+    n = 0
+    for key, r in q['races'].items():
+        rp = out / f'{key}.result.json'
+        fp = frozen_prediction(r, out, key)
+        if not rp.exists() or fp is None:
+            continue
+        old = json.loads(rp.read_text())
+        res = {'order': old['order'], 'non_starters': old.get('non_starters', []),
+               'did_not_finish': old.get('did_not_finish', []),
+               'payouts': {k: {(tuple(sorted(int(x) for x in c.split('-'))) if k in settle.UNORDERED
+                               else tuple(int(x) for x in c.split('-'))): v for c, v in d.items()}
+                           for k, d in old['payouts'].items()}}
+        st = settle.settle_parsed(res, json.loads(fp.read_text()), str(fp.relative_to(ROOT)), now_jst().isoformat())
+        st['resettled_from'] = old.get('settled_at') or 'initial'
+        if not (out / f'{key}.result.prev.json').exists():
+            (out / f'{key}.result.prev.json').write_text(rp.read_text())
+        dump(rp, st)
+        r['settlement'] = {k: st.get(k) for k in ('order', 'invest', 'refund', 'effective_invest', 'payout', 'win_hit',
+                                                  'top_in3', 'top3_capture', 'ordered_pair', 'exact_triple',
+                                                  'settled_at', 'revision', 'ticket_sha256')}
+        n += 1
+    dump(out / 'queue.json', q)
+    report(q, out)
+    log('RESETTLE', day, n)
+    print('RESETTLE', day, n)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--date')
     ap.add_argument('--races', help='comma-separated race numbers to restrict')
     ap.add_argument('--budget', type=int, default=480)
     ap.add_argument('--pending', action='store_true', help='exit 0 if work is due within 12 min, else 1')
+    ap.add_argument('--resettle', action='store_true', help='recompute settlements offline from stored results')
     a = ap.parse_args()
+    if a.resettle:
+        sys.exit(resettle(a.date))
     if a.pending:
         sys.exit(0 if pending_soon(a.date) else 1)
     only = {int(x) for x in a.races.split(',')} if a.races else None

@@ -5,7 +5,11 @@ official finishing order and the official payouts, and settles the FROZEN
 latest pre-cutoff paper tickets at a fixed 100 yen per combination.
   * Never edits the frozen prediction; writes a separate .result.json.
   * PFS = 100 * payout / investment; investment 0 -> PFS None (not 0%).
-  * 返還 (scratched horse in a ticket) is refunded at face value.
+  * Settles only the revision frozen before cutoff (passed in by the caller).
+  * 返還: a combination containing a horse that did not start (取消/除外 on the
+    result page) is refunded and removed from the effective investment.
+    競走中止 horses started: no refund. Refunds are never counted as payout.
+  * Dead heats: every published winning combination is honoured.
 This is a PAPER diagnostic: no purchase, no capital decision.
 """
 from __future__ import annotations
@@ -59,11 +63,19 @@ def parse_result(html):
     i = html.find('<tbody class="record">')
     body = html[i:html.find('</tbody>', i)] if i >= 0 else ''
     order = []
+    non_starters, did_not_finish = [], []
     for row in re.split(r'<tr class="box', body)[1:]:
-        pos = re.search(r'<td class="order">\s*(\d{1,2})\s*</td>', row)
+        pos = re.search(r'<td class="order">(.*?)</td>', row, re.S)
         num = re.search(r'<td class="number">\s*(\d{1,2})\s*</td>', row)
-        if pos and num:
-            order.append((int(pos[1]), int(num[1])))
+        if not (pos and num):
+            continue
+        ptxt = text(pos[1])
+        if re.fullmatch(r'\d{1,2}', ptxt):
+            order.append((int(ptxt), int(num[1])))
+        elif any(k in ptxt for k in ('取消', '除外')):
+            non_starters.append(int(num[1]))
+        elif ptxt:
+            did_not_finish.append(int(num[1]))
     order = [h for _, h in sorted(order)]
     j = html.find('summary="払戻金"')
     seg = html[j:html.find('</table>', j)] if j >= 0 else ''
@@ -80,38 +92,61 @@ def parse_result(html):
             pays.setdefault(kind, {})[tuple(sorted(t)) if kind in UNORDERED else t] = y
     if len(order) < 3 or not pays:
         return None
-    return {'order': order, 'payouts': pays}
+    return {'order': order, 'payouts': pays, 'non_starters': non_starters, 'did_not_finish': did_not_finish}
 
 
-def settle(html, prediction_path):
+def settle(html, prediction_path, settled_at=None):
     res = parse_result(html)
     if res is None:
         return None
-    pred = json.loads(Path(prediction_path).read_text())
+    return settle_parsed(res, json.loads(Path(prediction_path).read_text()), str(prediction_path), settled_at)
+
+
+def settle_parsed(res, pred, prediction_ref, settled_at=None):
     p = pred['prediction']
     order = res['order']
     top3 = set(order[:3])
     rank = [x['no'] for x in p['ranking']]
+    gone = set(res.get('non_starters') or [])
+    inferred = []
+    frozen_runners = {x['no'] for x in pred.get('runners') or []}
+    if frozen_runners and len(order) >= 0.6 * len(frozen_runners):  # in the frozen field but on no result row -> did not start
+        inferred = sorted(frozen_runners - set(order) - set(res.get('did_not_finish') or []) - gone)
+        gone |= set(inferred)
     tickets = []
-    invest = payout = 0
+    gross = refund = payout = 0
     for t in p['tickets']:
         kind = KIND.get(t['k'])
         combos = [tuple(sorted(c)) if kind in UNORDERED else c for c in expand(t)]
         table = res['payouts'].get(kind, {})
-        hits = [c for c in combos if c in table]
+        if not table and combos:
+            status = 'NOT_SOLD_OR_NOT_PUBLISHED'
+        else:
+            status = 'SETTLED'
+        refunded = [c for c in combos if gone & set(c)]
+        live = [c for c in combos if c not in refunded]
+        hits = [c for c in live if c in table]
         inv = UNIT * len(combos)
+        ref = UNIT * len(refunded)
         pay = sum(table[c] * UNIT // 100 for c in hits)
-        invest += inv
+        gross += inv
+        refund += ref
         payout += pay
-        tickets.append({'k': t['k'], 'b': t['b'], 'combinations': len(combos), 'hits': [list(c) for c in hits],
-                        'invest': inv, 'payout': pay})
+        tickets.append({'k': t['k'], 'b': t['b'], 'combinations': len(combos), 'refunded': [list(c) for c in refunded],
+                        'hits': [list(c) for c in hits], 'invest': inv, 'refund': ref, 'effective_invest': inv - ref,
+                        'payout': pay, 'status': status})
+    effective = gross - refund
     return {'classification': 'PAPER_SETTLEMENT_FIXED_100_YEN', 'edition': pred['edition'],
-            'prediction_saved_at': pred.get('saved_at'), 'order': order,
+            'prediction_ref': prediction_ref, 'revision': pred.get('revision_id'),
+            'ticket_sha256': pred.get('ticket_sha256'), 'prediction_saved_at': pred.get('saved_at'),
+            'settled_at': settled_at, 'order': order,
+            'non_starters': sorted(gone), 'non_starters_inferred': inferred, 'did_not_finish': res.get('did_not_finish', []),
             'payouts': {k: {'-'.join(map(str, c)): v for c, v in d.items()} for k, d in res['payouts'].items()},
             'winner_hit': rank[0] == order[0], 'win_hit': int(rank[0] == order[0]),
             'top_in3': int(rank[0] in top3), 'top3_capture': len(top3 & set(rank[:3])),
-            'top5_capture': len(top3 & set(rank[:5])),
+            'top4_capture': len(top3 & set(rank[:4])), 'top5_capture': len(top3 & set(rank[:5])),
+            'top6_capture': len(top3 & set(rank[:6])),
             'ordered_pair': int(rank[:2] == order[:2]), 'exact_triple': int(rank[:3] == order[:3]),
             'p2_hit': int(len(rank) > 1 and rank[1] == order[1]), 'p3_hit': int(len(rank) > 2 and rank[2] == order[2]),
-            'tickets': tickets, 'invest': invest, 'payout': payout,
-            'pfs': round(100 * payout / invest, 1) if invest else None}
+            'tickets': tickets, 'invest': gross, 'refund': refund, 'effective_invest': effective, 'payout': payout,
+            'pfs': round(100 * payout / effective, 1) if effective else None}
