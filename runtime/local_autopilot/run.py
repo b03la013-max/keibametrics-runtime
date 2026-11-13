@@ -142,6 +142,30 @@ def discover(reader, day, out, cards):
     return q
 
 
+def rediscover(reader, day, q, cards):
+    """Race day, queue pre-built on an earlier day: add venues listed since."""
+    q['timings']['rediscovered_at'] = now_jst().isoformat()
+    known = {v['code'] for v in q['venues'].values()}
+    added = []
+    for code, prefix in sorted(reader.meetings(day).items()):
+        if code in known:
+            continue
+        vid, vname = rk.VENUES[code]
+        rid1 = prefix + '01'
+        html = reader.card_page(rid1)
+        cards[rid1] = (html, now_jst().isoformat())
+        menu = rk.parse_menu(html, prefix)
+        q['venues'][vid] = {'name': vname, 'code': code, 'races': len(menu)}
+        for n, rid, hhmm in menu:
+            post = f'{day}T{hhmm.zfill(5)}:00+09:00'
+            q['races'][f'{vid}_{n:02d}'] = {'venue_id': vid, 'venue_name': vname, 'race_no': n, 'rid': rid,
+                'race_date': day, 'post_initial': post, 'post_current': post, 'post_changes': [],
+                'status': 'DISCOVERED', 'editions': [], 'attempts': 0, 'last_error': None}
+        added.append(vid)
+    log('REDISCOVER', day, 'added', added)
+    return True
+
+
 def cutoff(r):
     return datetime.fromisoformat(r['post_current']) - timedelta(minutes=CUTOFF_MIN)
 
@@ -336,6 +360,9 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
             q = discover(reader, day, out, cards)
             q['timings']['first_tick_at'] = now.isoformat()
             changed = True
+        elif day == now.date().isoformat() and not q['discovered_at'].startswith(day) \
+                and not q['timings'].get('rediscovered_at'):
+            changed |= rediscover(reader, day, q, cards)
         if not q['races']:
             log('NO_LOCAL_MEETING', day)
             dump(out / 'queue.json', q)
