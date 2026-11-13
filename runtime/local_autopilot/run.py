@@ -79,10 +79,22 @@ def f0(x):
 
 
 # --------------------------------------------------------------------- render
+# Report probability input provenance; do not alter the uncalibrated PAPER model.
+def probability_source_note(rows):
+    available = sum(row.get('p_market') is not None for row in rows)
+    count = len(rows)
+    if not available:
+        return 'p勝はF3S softmaxのみ（単勝オッズ由来市場確率なし・実勝率ではない）'
+    if available == count:
+        return 'p勝はF3S softmaxと単勝オッズ由来市場確率の50:50合成（未較正・実勝率ではない）'
+    return (f'p勝は市場確率あり{available}/{count}頭のみ50:50合成、他はF3S softmaxのみ'
+            '（部分オッズ時の全頭確率合計は100%未保証・実勝率ではない）')
+
+
 def render(race, res, edition, src_at, shadow=None, revision=None):
     a = res['aki']
     L = [f"## {race['venue_name']}{race['race_no']}R {race['post_current'][11:16]}発走　{race.get('race_name', '')}",
-         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表・オッズ取得 {src_at[11:16]}）"
+         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表取得 {src_at[11:16]}／単勝オッズ {sum(x.get('win') is not None for x in res['rows'])}/{len(res['rows'])}頭）"
          + (f"　改訂理由：{revision}" if revision else ''),
          '', f"- 展開：{res['pace']}", f"- レース型（§30）：**{res['race_type']}**"]
     if race.get('scratched'):
@@ -117,7 +129,7 @@ def render(race, res, edition, src_at, shadow=None, revision=None):
     elif shadow:
         L += ['', f"公式29指数シャドー：実行不可（{shadow['error']}）"]
     notes = sorted({f for x in res['rows'] for f in x['flags'] if 'NEUTRAL' in f})
-    L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎コメント）は"
+    L += ['', f"<sub>未較正ペーパー。{probability_source_note(res['rows'])}。CCI（厩舎コメント）は"
               f"未取得のため中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
     return '\n'.join(L)
 
