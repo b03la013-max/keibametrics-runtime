@@ -101,10 +101,14 @@ def render(race, res, edition, src_at, shadow=None, revision=None):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
+    missing_jockey = [x for x in res['order'] if not str(x.get('jockey') or '').strip()]
+    if missing_jockey:
+        names = '、'.join(f"{x['no']}番{x['name']}" for x in missing_jockey)
+        L.append(f"- 騎手情報未取得：{names}（UNKNOWN／未補完。役割・券面は暫定、発走前の変更照合が必要）")
     L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | p勝(暫定) | 役割 |',
           '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
-        L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or ''} | "
+        L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or 'UNKNOWN（未取得）'} | "
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
                  f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
