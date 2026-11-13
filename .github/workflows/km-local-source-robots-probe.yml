@@ -1,0 +1,31 @@
+name: KeibaMetrics LOCAL source robots probe
+# One-shot: fetch robots.txt (and nothing else) of candidate public sources
+# from a GitHub-hosted runner with an honest UA, to see which ones permit
+# automated reads of race cards from cloud workers.
+permissions:
+  contents: write
+on:
+  push:
+    branches: [claude/local-autopilot-20261113]
+    paths: ['runtime/local_autopilot/probe']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/local_autopilot/
+      - run: |
+          UA="KeibaMetrics-URW-PublicResearch/1.0 (+https://github.com/b03la013-max/keibametrics-runtime)"
+          OUT=runtime/local_autopilot/output/robots_probe.txt
+          : > "$OUT"
+          for host in www.nankankeiba.com keiba.rakuten.co.jp www.oddspark.com nar.netkeiba.com www.keiba.go.jp www.spat4.jp; do
+            code=$(curl -sS -m 15 -A "$UA" -o body.txt -w "%{http_code} %{content_type}" "https://$host/robots.txt" || echo "ERR")
+            { echo "=== $host  $code"; head -c 3000 body.txt | sed 's/^/  /'; echo; } >> "$OUT"
+            sleep 3
+          done
+          git config user.name "keibametrics-runtime"; git config user.email "actions@users.noreply.github.com"
+          git add "$OUT" && git commit -qm "robots probe [skip ci]" && git pull -q --rebase origin claude/local-autopilot-20261113 && git push -q origin HEAD:claude/local-autopilot-20261113
