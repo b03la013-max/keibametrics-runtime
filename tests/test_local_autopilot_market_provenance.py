@@ -107,3 +107,46 @@ def test_remote_blob_mismatch_does_not_certify_delivery(tmp_path, monkeypatch):
     assert run.mark_delivery(q, tmp_path)
     assert edition['delivery']['PUSH_VERIFIED'] is None
     assert race['status'] == 'PREDICTION_COMPLETE'
+
+
+def _legacy_push_claim(queue, race, edition):
+    """Existing 14 Nov saved queues used commit time as push-verification time."""
+    old = '2026-11-14T14:00:00+09:00'
+    edition['delivery']['COMMITTED'] = old
+    edition['delivery']['PUSH_VERIFIED'] = old
+    race['status'] = 'PRESTART_PUSH_VERIFIED'
+    race['push_verified_at'] = old
+
+
+def test_legacy_push_timestamp_needs_new_observation_after_cutoff(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(tmp_path, monkeypatch, '2026-11-14T15:18:00+09:00')
+    _legacy_push_claim(q, race, edition)
+    assert run.mark_delivery(q, tmp_path)
+    d = edition['delivery']
+    assert d['PUSH_VERIFIED_LEGACY_COMMIT_CLOCK'] == '2026-11-14T14:00:00+09:00'
+    assert d['PUSH_VERIFIED'] == '2026-11-14T15:18:00+09:00'
+    assert d['PUSH_VERIFIED_TIME_BASIS'] == 'READBACK_OBSERVED_AT'
+    assert race['status'] == 'PREDICTION_COMPLETE'
+    assert 'push_verified_at' not in race
+    # Once a correctly timed remote readback exists, don't keep overwriting it.
+    assert not run.mark_delivery(q, tmp_path)
+
+
+def test_legacy_push_claim_recertifies_at_actual_precutoff_observation(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(tmp_path, monkeypatch, '2026-11-14T15:16:00+09:00')
+    _legacy_push_claim(q, race, edition)
+    assert run.mark_delivery(q, tmp_path)
+    assert race['status'] == 'PRESTART_PUSH_VERIFIED'
+    assert race['push_verified_at'] == '2026-11-14T15:16:00+09:00'
+    assert edition['delivery']['PUSH_VERIFIED_LEGACY_COMMIT_CLOCK'] != race['push_verified_at']
+
+
+def test_legacy_push_claim_with_blob_mismatch_is_quarantined(tmp_path, monkeypatch):
+    q, race, edition = _push_fixture(tmp_path, monkeypatch, '2026-11-14T15:16:00+09:00',
+                                     blob='{"tampered":true}')
+    _legacy_push_claim(q, race, edition)
+    assert run.mark_delivery(q, tmp_path)
+    assert edition['delivery']['PUSH_VERIFIED_LEGACY_COMMIT_CLOCK']
+    assert edition['delivery'].get('PUSH_VERIFIED') is None
+    assert race['status'] == 'PREDICTION_COMPLETE'
+    assert 'push_verified_at' not in race
