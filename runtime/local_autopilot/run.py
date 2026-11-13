@@ -308,7 +308,15 @@ def mark_delivery(q, out):
             changed = True
         for e in r['editions']:
             d = e.get('delivery')
-            if not d or d.get('PUSH_VERIFIED'):
+            if not d:
+                continue
+            # Old PAPER records stamped PUSH_VERIFIED with the commit clock,
+            # not the time of remote blob readback. Preserve that historical
+            # timestamp as unverified evidence; recheck the blob at a real clock.
+            if d.get('PUSH_VERIFIED') and d.get('PUSH_VERIFIED_TIME_BASIS') != 'READBACK_OBSERVED_AT':
+                d['PUSH_VERIFIED_LEGACY_COMMIT_CLOCK'] = d.pop('PUSH_VERIFIED')
+                changed = True
+            if d.get('PUSH_VERIFIED'):
                 continue
             rel = f"{q['race_date']}/rev/{e['rev']}.json"
             path = out / 'rev' / f"{e['rev']}.json"
@@ -327,14 +335,25 @@ def mark_delivery(q, out):
                         # observed. Backdating with %cI can falsely certify a
                         # post-cutoff push as pre-start. Use the readback clock.
                         d['PUSH_VERIFIED'] = now_jst().isoformat()
+                        d['PUSH_VERIFIED_TIME_BASIS'] = 'READBACK_OBSERVED_AT'
                         d['remote_commit_sha'] = line.split()[0]
                         d['LINK_AVAILABLE'] = REPO_URL + rel
                         changed = True
-        pre = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED')
+        pre = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED_TIME_BASIS') == 'READBACK_OBSERVED_AT'
+               and e['delivery'].get('PUSH_VERIFIED')
                and datetime.fromisoformat(e['delivery']['PUSH_VERIFIED']) < cutoff(r)]
-        if pre and r['status'] in ('PREDICTION_COMPLETE', 'SOURCE_READY'):
-            r['status'] = 'PRESTART_PUSH_VERIFIED'
-            r['push_verified_at'] = pre[-1]['delivery']['PUSH_VERIFIED']
+        if pre and r['status'] in ('PREDICTION_COMPLETE', 'SOURCE_READY', 'PRESTART_PUSH_VERIFIED'):
+            observed = pre[-1]['delivery']['PUSH_VERIFIED']
+            if r['status'] != 'PRESTART_PUSH_VERIFIED' or r.get('push_verified_at') != observed:
+                r['status'] = 'PRESTART_PUSH_VERIFIED'
+                r['push_verified_at'] = observed
+                changed = True
+        elif not pre and (r['status'] == 'PRESTART_PUSH_VERIFIED' or 'push_verified_at' in r):
+            # Never leave a stale pre-start summary certified by the legacy
+            # commit clock when observation was late or the blob mismatched.
+            if r['status'] == 'PRESTART_PUSH_VERIFIED':
+                r['status'] = 'PREDICTION_COMPLETE'
+            r.pop('push_verified_at', None)
             changed = True
     return changed
 
