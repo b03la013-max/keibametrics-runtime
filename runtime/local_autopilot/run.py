@@ -323,7 +323,10 @@ def mark_delivery(q, out):
                 if line and path.exists():
                     blob = _git(out, 'show', f"{DATA_REMOTE}:output/{rel}")
                     if blob and blob.strip() == path.read_text().strip():
-                        d['PUSH_VERIFIED'] = line.split()[1]
+                        # The Git commit's %cI is NOT the time the remote push was
+                        # observed. Backdating with %cI can falsely certify a
+                        # post-cutoff push as pre-start. Use the readback clock.
+                        d['PUSH_VERIFIED'] = now_jst().isoformat()
                         d['remote_commit_sha'] = line.split()[0]
                         d['LINK_AVAILABLE'] = REPO_URL + rel
                         changed = True
