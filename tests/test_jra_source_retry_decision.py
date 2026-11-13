@@ -68,3 +68,67 @@ def test_workflow_retry_is_single_bounded_and_deadline_guarded():
     assert '$(( DEADLINE - NOW_S )) -ge "$SOURCE_RETRY_MIN_SECONDS"' in step
     assert '"$NOW_S" -lt "$CUTOFF"' in step
     assert 'jra_source_retry_decision.py' in step and '|| echo WAIT' in step
+
+
+def _repo(tmp_path):
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(remote), str(seed)], check=True)
+    (seed / "README").write_text("x\n")
+    subprocess.run(["git", "-C", str(seed), "add", "README"], check=True)
+    subprocess.run(["git", "-C", str(seed), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init"], check=True)
+    subprocess.run(["git", "-C", str(seed), "push", "-q", "origin", "HEAD:main"], check=True)
+    clones = []
+    for name in ("w1", "w2"):
+        c = tmp_path / name
+        subprocess.run(["git", "clone", "-q", str(remote), str(c)], check=True)
+        clones.append(c)
+    return remote, clones
+
+
+def test_claim_is_create_if_absent_across_workers(tmp_path):
+    remote, (w1, w2) = _repo(tmp_path)
+    head_before = subprocess.run(["git", "-C", str(w1), "rev-parse", "HEAD"], capture_output=True, text=True).stdout
+    assert d.claim_retry("KM-JRA-FKS-20261114-R11-LIVE-R1", PATH, "111", cwd=w1) == "CLAIMED"
+    # Second worker (stale clone, restarted job, or parallel waiter) cannot claim again.
+    assert d.claim_retry("KM-JRA-FKS-20261114-R11-LIVE-R1", PATH, "222", cwd=w2) == "LOST"
+    assert d.claim_retry("KM-JRA-FKS-20261114-R11-LIVE-R1", PATH, "111", cwd=w1) == "LOST"
+    # Caller working tree and HEAD untouched; claim is on the remote branch.
+    assert subprocess.run(["git", "-C", str(w1), "rev-parse", "HEAD"], capture_output=True, text=True).stdout == head_before
+    shown = subprocess.run(["git", "--git-dir", str(remote), "show",
+                            "main:runtime/jra_source_retry_claims/KM-JRA-FKS-20261114-R11-LIVE-R1.json"],
+                           capture_output=True, text=True, check=True).stdout
+    assert json.loads(shown)["claimed_by_run_id"] == "111"
+    # A different race keeps its own budget.
+    assert d.claim_retry("KM-JRA-KYO-20261114-R01-LIVE-R1", PATH, "222", cwd=w2) == "CLAIMED"
+
+
+def test_concurrent_claims_have_exactly_one_winner(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    remote, clones = _repo(tmp_path)
+    extra = []
+    for i in range(4):
+        c = tmp_path / f"p{i}"
+        subprocess.run(["git", "clone", "-q", str(remote), str(c)], check=True)
+        extra.append(c)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda c: d.claim_retry("KM-JRA-TKY-20261114-R05-LIVE-R1", PATH, str(c), cwd=c),
+                                clones + extra))
+    assert results.count("CLAIMED") == 1 and results.count("LOST") == 5
+
+
+def test_claim_fails_closed_without_remote(tmp_path):
+    assert d.claim_retry("KM-JRA-X-LIVE-R1", PATH, "1", cwd=tmp_path) == "LOST"
+    assert d.claim_retry("", PATH, "1", cwd=tmp_path) == "LOST"
+
+
+def test_workflow_dispatches_retry_only_after_claim():
+    wf = (ROOT / ".github/workflows/km-jra-formal-single-entry.yml").read_text()
+    start = wf.index("      - name: Wait for canonical Signed SOURCE\n")
+    step = wf[start:wf.index("      - name: Verify and bind Static to durable Signed SOURCE\n", start)]
+    claim = step.index("--claim-execution-id")
+    sends = [i for i in range(len(step)) if step.startswith("gh workflow run km-jra-source-first-runner.yml", i)]
+    assert len(sends) == 2  # original redispatch + claimed retry
+    assert sends[1] > claim and 'if [ "$CLAIM" = "CLAIMED" ]' in step[claim:sends[1]]
+    assert "|| echo LOST" in step

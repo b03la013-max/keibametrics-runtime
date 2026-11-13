@@ -258,9 +258,18 @@ jobs:
                   --request-path "$SOURCE_REQUEST_PATH" 2>/dev/null || echo WAIT)"
                 if [ "$DECISION" = "RETRY" ]; then
                   SOURCE_RETRY_USED=true
-                  echo "JRA_SOURCE_BOUNDED_RETRY_DISPATCHED remaining=$(( DEADLINE - NOW_S ))s" >&2
-                  if ! timeout 20 gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"; then
-                    echo 'SOURCE retry acknowledgement unavailable; waiting for canonical checkpoint' >&2
+                  # Durable create-if-absent claim on main before any send: only the
+                  # worker whose claim commit fast-forwards main may dispatch.
+                  CLAIM="$(timeout 60 python runtime/jra_source_runtime/jra_source_retry_decision.py \
+                    --request-path "$SOURCE_REQUEST_PATH" --claim-execution-id "$EXECUTION_ID" \
+                    --worker-run-id "$GITHUB_RUN_ID" 2>/dev/null || echo LOST)"
+                  if [ "$CLAIM" = "CLAIMED" ]; then
+                    echo "JRA_SOURCE_BOUNDED_RETRY_DISPATCHED remaining=$(( DEADLINE - NOW_S ))s" >&2
+                    if ! timeout 20 gh workflow run km-jra-source-first-runner.yml --ref main -f request_path="$SOURCE_REQUEST_PATH"; then
+                      echo 'SOURCE retry acknowledgement unavailable; waiting for canonical checkpoint' >&2
+                    fi
+                  else
+                    echo "JRA_SOURCE_BOUNDED_RETRY_CLAIM_LOST_NO_SEND" >&2
                   fi
                 fi
               fi
