@@ -21,13 +21,16 @@ NEUTRAL = 52.0
 
 # §3.5 / §23-§26 jockey notes (surname prefixes). Higher = stronger at venue.
 JOCKEYS = {
-    'ALL': {'笹川': 70, '矢野': 70, '御神本': 68, '本田正': 66, '町田': 66, '野畑': 66, '和田譲': 62,
-            '吉原': 68, '山崎誠': 64, '森泰': 68, '本橋': 62, '張田': 60, '西啓': 62, '今野': 60,
-            '岡部': 60, '藤本現': 58, '山口達': 58, '佐藤友': 60, '石川倭': 58, '桑村': 58},
-    'KAW': {'町田': 70, '山崎誠': 68, '野畑': 70, '山林堂': 60},
-    'OHI': {'矢野': 72, '笹川': 72, '御神本': 70},
-    'FNB': {'本橋': 66, '山口達': 62},
-    'URW': {'笹川': 72, '本橋': 66},
+    'ALL': {'笹川': 70, '矢野貴': 70, '御神': 68, '本田正': 66, '町田直': 66, '野畑': 66, '和田譲': 62,
+            '吉原寛': 68, '山崎誠': 64, '森泰': 68, '本橋孝': 62, '張田': 60, '西啓': 62, '今野': 60,
+            '岡部誠': 62, '藤本現': 58, '山口達': 58, '石川倭': 58, '吉村智': 72, '下原理': 72, '田中学': 70,
+            '赤岡': 72, '宮川実': 72, '永森': 66, '多田羅': 64, '関本淳': 62, '岩本怜': 62, '高橋悠': 64,
+            '山本聡': 66, '山本政': 64, '高松亮': 62, '村上忍': 62, '岡村卓': 60, '井上瑛': 60,
+            '鮫島克': 66, '飛田愛': 60, '丸野勝': 64, '岡部誠': 64, '加藤聡': 62, '渡邊竜': 60},
+    'KAW': {'町田直': 70, '山崎誠': 68, '野畑': 70, '山林': 60},
+    'OHI': {'矢野貴': 72, '笹川': 72, '御神': 70},
+    'FNB': {'本橋孝': 66, '山口達': 62},
+    'URW': {'笹川': 72, '本橋孝': 66},
 }
 TRAINERS = {
     'URW': {'小久保': 72, '國保': 66, '平山': 64, '繁田': 64, '小澤': 60, '宇野木': 60},
@@ -44,7 +47,8 @@ SIRES = {
     'FNB': {'ホッコータルマエ', 'パイロ', 'ヘニーヒューズ', 'キングカメハメハ', 'ルーラーシップ'},
 }
 # EVI weight on early position vs late speed, by venue (§23-§26).
-FRONT_WEIGHT = {'URW': 0.85, 'KAW': 0.75, 'FNB': 0.55, 'OHI': 0.55}
+FRONT_WEIGHT = {'URW': 0.85, 'KAW': 0.75, 'FNB': 0.55, 'OHI': 0.55, 'KOC': 0.85, 'SON': 0.8, 'HMJ': 0.75,
+                'NGY': 0.8, 'KSM': 0.8, 'KNZ': 0.75, 'SAG': 0.8, 'MOR': 0.6, 'MIZ': 0.75, 'MON': 0.65}
 CLASS_LEVEL = {'A1': 8, 'A2': 7, 'B1': 6, 'B2': 5, 'B3': 4, 'C1': 3, 'C2': 2, 'C3': 1}
 KANJI = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
 
@@ -131,8 +135,10 @@ def base_indices(r, race, today):
     if same:
         cfi += 10 * (statistics.mean(same) - 0.5)
     frame = r.get('frame_no')
-    if frame and venue in ('URW', 'KAW'):
+    if frame and venue in ('URW', 'KAW', 'SON', 'KSM', 'NGY'):
         cfi += {1: 4, 2: 4, 3: 3, 4: 1, 7: -2, 8: -3}.get(frame, 0)
+    if frame and venue == 'KOC':  # §29 deep inner sand: outside frames favoured
+        cfi += {1: -4, 2: 1, 3: 2, 7: 2, 8: 4}.get(frame, 0)
     if dist and venue == 'URW' and dist in (1500, 1600) and frame and frame >= 7:
         cfi -= 4
     # --- RFIg-L: repeatability of early position + finish stability ------
@@ -177,7 +183,13 @@ def base_indices(r, race, today):
     bwi = NEUTRAL
     bw = r.get('current_body_weight')
     good = [s['ride_body_weight'] for s in starts if s.get('ride_body_weight') and (rel_finish(s) or 0) >= 0.6]
-    if bw and good:
+    rng = r.get('good_bw_range')
+    if bw and rng:  # 連対時馬体重レンジ (§34)
+        gap = max(0, rng[0] - bw, bw - rng[1])
+        bwi = 72 - 2.2 * max(0, gap - 4)
+        if gap >= 12:
+            flags.append(f'BWI:連対時体重レンジ{rng[0]}-{rng[1]}から{gap}kg外')
+    elif bw and good:
         gap = abs(bw - statistics.median(good))
         bwi = 70 - 2.2 * max(0, gap - 4)
     elif bw:

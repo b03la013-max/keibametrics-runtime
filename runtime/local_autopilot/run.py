@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from runtime.local_autopilot import engine
-from runtime.local_autopilot.source import Reader
+from runtime.local_autopilot import rakuten as rk
 
 JST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parent / 'output'
@@ -65,7 +65,7 @@ def render(race, res, edition, odds_at):
         L.append(f"| {t['k']} | {t['b']} | {t['pt']} | {t['st']} | {t.get('note', '')} |")
     notes = sorted({f for x in res['rows'] for f in x['flags'] if 'NEUTRAL' in f})
     L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成。CCI（厩舎コメント）は"
-              f"未取得のため中立52。{' '.join(notes)}</sub>", '']
+              f"未取得のため中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
     return '\n'.join(L)
 
 
@@ -73,36 +73,40 @@ def plan_for(reader, day, out):
     path = out / 'plan.json'
     if path.exists():
         return json.loads(path.read_text())
-    links = reader.meetings(day)
-    log('CALENDAR_LINKS', links)
-    plan = {'race_date': day, 'created_at': datetime.now(JST).isoformat(), 'venues': {}}
-    for code, url in sorted(links.items()):
-        races = reader.program(url, day)
-        plan['venues'][races[0]['venue_id']] = races
+    venues = reader.meetings(day)
+    log('MEETINGS', venues)
+    plan = {'race_date': day, 'created_at': datetime.now(JST).isoformat(), 'venues': {}, 'source': 'keiba.rakuten.co.jp'}
+    for code, prefix in sorted(venues.items()):
+        vid, vname = rk.VENUES[code]
+        html = reader.card_page(prefix + '01')
+        menu = rk.parse_menu(html, prefix)
+        plan['venues'][vid] = [{'venue_id': vid, 'venue_name': vname, 'venue_code': code, 'race_no': n,
+                                'rid': rid, 'race_date': day, 'race_name': '',
+                                'scheduled_post_at': f'{day}T{hhmm.zfill(5)}:00+09:00'} for n, rid, hhmm in menu]
     dump(path, plan)
     return plan
 
 
 def predict_race(reader, race, today, edition):
-    card = reader.card(race)
-    try:
-        od = reader.odds(race)
-    except Exception as exc:  # odds page may not exist early morning
-        od = {'fetched_at': None, 'odds': {}, 'error': type(exc).__name__}
-    res = engine.predict(race, card['runners'], od['odds'], today)
-    odds_at = od['fetched_at'][11:16] + '時点' if od.get('fetched_at') and od['odds'] else None
-    md = render(race, res, edition, odds_at)
+    html = reader.card_page(race['rid'])
+    fetched = datetime.now(JST).isoformat()
+    head = rk.parse_header(html)
+    runners, excluded = rk.parse_card(html)
+    race = dict(race, distance=head['distance'], race_name=head['race_name'], class_text=head['race_name'],
+                surface=head['surface'], going=head['going'])
+    odds = {r['horse_no']: {'win': r['win_odds'], 'place_low': None, 'cancelled': False} for r in runners}
+    res = engine.predict(race, runners, odds, today)
+    md = render(race, res, edition, fetched[11:16] + '時点' if any(r['win_odds'] for r in runners) else None)
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
     slim['ranking'] = [{k: x[k] for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
                                          'T3I', 'F3S', 'OPI', 'p_win', 'role')} for x in res['order']]
-    return md, {'race': race, 'edition': edition, 'card_fetched_at': card['fetched_at'],
-                'odds_fetched_at': od.get('fetched_at'), 'scratched': [e.get('name') for e in card['excluded']],
-                'prediction': slim, 'paper': True, 'calibrated': False}
+    return md, {'race': race, 'edition': edition, 'card_fetched_at': fetched, 'going': head['going'],
+                'scratched': [e.get('name') for e in excluded], 'prediction': slim, 'paper': True, 'calibrated': False}
 
 
 def index(out, plan):
     L = [f"# ケイバメトリクス地方版 オートパイロット {plan['race_date']}", '',
-         '南関東公式（nankankeiba.com）の公開出馬表・オッズから v4.3 を自動計算。未較正ペーパー（購入なし）。', '']
+         '楽天競馬の公開出馬表（robots.txt許可範囲・60秒間隔）から v4.3 を自動計算。未較正ペーパー（購入なし）。', '']
     for venue, races in plan['venues'].items():
         L += [f"## {races[0]['venue_name']}", '', '| R | 発走 | レース | 版 | 本命 | 象限 | AKI | 買い目 |',
               '|---|---|---|---|---|---|---|---|']
@@ -152,10 +156,13 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None):
 def _tick(day, now, budget_seconds, only, reader):
     today = date.fromisoformat(day)
     out = ROOT / day
-    reader = reader or Reader()
+    reader = reader or rk.Reader(ROOT / 'source_state.json')
     started = time.monotonic()
     try:
         plan = plan_for(reader, day, out)
+    except rk.SourceStop as exc:
+        log('SOURCE_STOP', exc)
+        return 3
     except Exception as exc:
         log('PLAN_HOLD', type(exc).__name__, getattr(exc, 'receipt', exc), traceback.format_exc()[-800:])
         return 2
@@ -193,6 +200,9 @@ def _tick(day, now, budget_seconds, only, reader):
             if err.exists():
                 err.unlink()
             log('OK', r['venue_id'], r['race_no'], edition)
+        except rk.SourceStop as exc:
+            log('SOURCE_STOP', exc)
+            break
         except Exception as exc:
             dump(stem.with_suffix('.error.json'), {'race': r, 'error': type(exc).__name__,
                  'receipt': getattr(exc, 'receipt', str(exc)), 'at': datetime.now(JST).isoformat(),

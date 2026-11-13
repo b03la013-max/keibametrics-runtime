@@ -1,9 +1,9 @@
 name: KeibaMetrics LOCAL Race-Day Autopilot
 run-name: LOCAL autopilot ${{ inputs.race_date || 'today' }} ${{ inputs.mode || github.event.schedule || 'push' }}
 
-# South-Kanto (浦和・船橋・大井・川崎) race-day autopilot, the LOCAL counterpart
-# of km-jra-race-day-autopilot.yml. Each tick reads the official NANKAN public
-# calendar/card/odds (robots.txt respected, >=10 s between requests), runs the
+# NAR (all local venues except ばんえい) race-day autopilot, the LOCAL counterpart
+# of km-jra-race-day-autopilot.yml. Each tick reads the public Rakuten keiba
+# race cards (robots.txt respected, Crawl-Delay 60 s persisted across runs), runs the
 # KeibaMetrics LOCAL v4.3 chain (runtime/local_autopilot) and commits
 # runtime/local_autopilot/output/<date>/{README.md, <VENUE>_<RR>.md/json}.
 #   朝版  = every race, as soon as the day's program is published
@@ -14,8 +14,8 @@ permissions:
 
 on:
   schedule:
-    # Every 10 min 10:00-21:50 JST (South-Kanto day + night meetings).
-    - cron: "*/10 1-12 * * *"
+    # Every 10 min 09:00-21:50 JST (day + night meetings).
+    - cron: "*/10 0-12 * * *"
   push:
     branches: [claude/local-autopilot-20261113]
     paths: ['runtime/local_autopilot/start']
@@ -26,7 +26,7 @@ on:
         required: false
         type: string
       mode:
-        description: "tick (one pass) or loop (repeat every 5 min until 21:30 JST)"
+        description: "tick (one pass) or loop (repeat until 21:30 JST)"
         required: false
         default: tick
         type: choice
@@ -47,8 +47,6 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /runtime/local_autopilot/
-            /runtime/urw_nankan_reference_source.py
-            /runtime/urw_reference_source_policy.py
       - name: Run autopilot
         env:
           RACE_DATE: ${{ inputs.race_date }}
@@ -74,5 +72,5 @@ jobs:
             publish
             [ "$MODE" = "loop" ] || break
             [ "$(TZ=Asia/Tokyo date +%H%M)" -lt 2130 ] || break
-            sleep 240
+            sleep 20
           done
