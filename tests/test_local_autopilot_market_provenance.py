@@ -45,3 +45,10 @@ def test_render_never_claims_odds_acquired_when_all_missing():
     assert 'softmaxのみ' in text
     assert '50:50合成' not in text
     assert '100%' in text  # display stays unchanged, only provenance is repaired
+    assert '| UNKNOWN（未取得） |' in text
+    assert '騎手情報未取得：1番test horse' in text
+    assert '役割・券面は暫定' in text
+    r['jockey'] = '確認済騎手'
+    known = run.render(race, res, '朝版', '2026-11-13T21:28:00+09:00')
+    assert '| 確認済騎手 |' in known
+    assert '騎手情報未取得' not in known
