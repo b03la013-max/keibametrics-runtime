@@ -42,6 +42,13 @@ jobs:
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/local_autopilot/
+            /runtime/urw_nankan_reference_source.py
+            /runtime/urw_reference_source_policy.py
       - name: Run autopilot
         env:
           RACE_DATE: ${{ inputs.race_date }}
