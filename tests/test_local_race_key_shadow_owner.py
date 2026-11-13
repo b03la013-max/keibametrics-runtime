@@ -138,3 +138,113 @@ def test_unknown_p3_is_protected_without_treating_neutral_as_weak():
     assert "P3" in shadow["role_columns"]["6"]
     assert shadow["neutral_index_registry"]["6"] == ["T3I-L"]
     assert shadow["prediction_consumption_authorized"] is False
+
+
+def test_unknown_winner_cell_does_not_change_observed_gap_or_paper_paths():
+    req, source, numeric, now = fixture()
+    for row, value in zip(numeric["runners"], [62, 46, 45, 44, 43, 42]):
+        row["canonical_components"]["ZAI-WIN"]["value"] = value
+    control = compile_shadow(req, source, numeric, now=now)
+    assert control["shadow_width"]["winner_spread"] == 16
+    assert control["winner_head_local_pairs"] == [
+        {"head": "1", "second": "2"}, {"head": "1", "second": "3"},
+    ]
+
+    numeric["runners"][-1]["canonical_components"]["ZAI-WIN"] = {
+        "value": 52, "terminal_status": "RULED-NEUTRAL",
+    }
+    shadow = compile_shadow(req, source, numeric, now=now)
+    assert shadow["shadow_width"] == control["shadow_width"]
+    assert shadow["paper_tickets"] == control["paper_tickets"]
+    assert shadow["paper_capital_yen"] == control["paper_capital_yen"]
+    assert shadow["ranking"][-1] == "6"
+    assert shadow["p3_unknown_protection"] == "6"
+    assert shadow["neutral_index_registry"]["6"] == ["ZAI-WIN", "T3I-L"]
+
+
+@pytest.mark.parametrize("observed_count", [0, 1])
+def test_unknown_winner_gap_uses_existing_wide_band_without_inventing_a_spread(observed_count):
+    req, source, numeric, now = fixture()
+    for row in numeric["runners"][observed_count:]:
+        row["canonical_components"]["ZAI-WIN"] = {"value": 52, "terminal_status": "RULED-NEUTRAL"}
+    shadow = compile_shadow(req, source, numeric, now=now)
+    assert shadow["shadow_width"]["winner_spread"] is None
+    assert shadow["shadow_width"]["band"] == "SHADOW_WIDE"
+    assert shadow["production_authority"] is False
+
+
+def test_calculated_tie_has_zero_gap_and_keeps_wide_band():
+    req, source, numeric, now = fixture()
+    numeric["runners"][1]["canonical_components"]["ZAI-WIN"]["value"] = 82
+    out = compile_shadow(req, source, numeric, now=now)
+    assert out["ranking"][:2] == ["1", "2"]
+    assert out["shadow_width"]["winner_spread"] == 0
+    assert out["shadow_width"]["band"] == "SHADOW_WIDE"
+
+
+@pytest.mark.parametrize("all_neutral", [False, True])
+def test_neutral_payload_values_do_not_change_paper_selection(all_neutral):
+    req, source, numeric, now = fixture()
+    relevant = ("ZAI-WIN", "ZAI-PLACE", "T3I-L")
+    rows = numeric["runners"] if all_neutral else numeric["runners"][-2:]
+    for row in rows:
+        for index in relevant:
+            row["canonical_components"][index] = {"value": 52, "terminal_status": "RULED-NEUTRAL"}
+    baseline = compile_shadow(req, source, numeric, now=now)
+    for position, row in enumerate(rows):
+        for index in relevant:
+            row["canonical_components"][index]["value"] = 0 if position % 2 else 100
+    assert compile_shadow(req, source, numeric, now=now) == baseline
+
+
+def test_third_protection_and_tickets_are_independent_of_runner_order():
+    req, source, numeric, now = fixture()
+    numeric["runners"][0]["canonical_components"]["ZAI-WIN"]["value"] = 96
+    numeric["runners"][0]["canonical_components"]["T3I-L"].update(
+        terminal_status="RULED-NEUTRAL", value=52,
+    )
+    runners = numeric["runners"]
+    runners.append({
+        "runner_id": "7", "canonical_components": {
+            index: {"value": 55, "terminal_status": "CALCULATED"} for index in INDEXES
+        },
+    })
+    official = source["artifact"]["official_runner_universe"]["runners"]
+    official.append({"runner_id": "7"})
+
+    expected = compile_shadow(req, source, numeric, now=now)
+    assert expected["p3_unknown_protection"] == "6"
+    assert expected["winner_head_local_pairs"] == [
+        {"head": "1", "second": "2"}, {"head": "1", "second": "3"},
+    ]
+    assert expected["paper_ticket_count"] == 10
+    assert {tuple(row["selection"]) for row in expected["paper_tickets"]
+            if row["bet_type"] == "TRIFECTA" and row["selection"][-1] == "6"} == {
+        ("1", "2", "6"), ("1", "3", "6"),
+    }
+    runners.reverse()
+    official.reverse()
+    assert compile_shadow(req, source, numeric, now=now) == expected
+
+
+def test_official_withdrawal_requires_new_numerical_universe():
+    req, source, numeric, now = fixture()
+    official = source["artifact"]["official_runner_universe"]["runners"]
+    official.pop(0)
+    with pytest.raises(ShadowOwnerError, match="FULL_RUNNER_UNIVERSE_MISMATCH"):
+        compile_shadow(req, source, numeric, now=now)
+
+    numeric["runners"].pop(0)
+    out = compile_shadow(req, source, numeric, now=now)
+    assert "1" not in out["role_columns"]
+    assert all("1" not in row["selection"] for row in out["paper_tickets"])
+    assert out["paper_capital_yen"] == 100 * out["paper_ticket_count"]
+
+
+def test_ruled_hold_is_not_neutral():
+    req, source, numeric, now = fixture()
+    numeric["runners"][-1]["canonical_components"]["ZAI-WIN"] = {
+        "value": None, "terminal_status": "RULED-HOLD",
+    }
+    with pytest.raises(ShadowOwnerError, match="INDEX_NOT_TERMINAL:6:ZAI-WIN"):
+        compile_shadow(req, source, numeric, now=now)
