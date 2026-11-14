@@ -4,11 +4,11 @@
   "canonical_available_before_post": 11,
   "cohort_sha256": "3cef08fcf3f062b351dc5f66a3c7d3c9f672c6e3ca3d357123f1372854fe50d4",
   "denominator": 35,
-  "dispatch_acknowledged": 15,
+  "dispatch_acknowledged": 16,
   "external_krs_recorded": 11,
   "final_artifacts_present": 11,
   "full20_calculated_cells": 3120,
-  "learning_records_present": 8,
+  "learning_records_present": 9,
   "prediction_quality": "FORWARD_OOS_PENDING",
   "registered_intakes": 35,
   "user_delivery_verified": 0
@@ -25,7 +25,7 @@
   "signature_verification_failed": 0,
   "signed_result_final_verified": 0,
   "stored_result_receipts_payload_bound": 7,
-  "zero_exposure_result_learning_bound": 1
+  "zero_exposure_result_learning_bound": 2
  },
  "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012",
  "race_date": "2026-11-14",
@@ -2819,7 +2819,7 @@
     }
    },
    "decision_reason": "AKI_SINGLE_HEAD_FORBIDDEN",
-   "display_state": "AKI_NO_BET",
+   "display_state": "AKI_NO_BET / ZERO_EXPOSURE_RESULT_RECORDED",
    "first_blocked_stage": "PRODUCTION_AKI_COLUMN_SELECTION",
    "full20": "280/280",
    "no_bet_terminal": "runtime/jra_no_bet_terminals/KM-JRA-KYO-20261114-R03-LIVE-R1.json",
@@ -2828,30 +2828,47 @@
     "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
     "learning": {
      "consumption": "NOT_ESTABLISHED_BY_STORAGE",
-     "effective_time": null,
+     "effective_time": "2026-11-14T02:35:27.128401+00:00",
      "path": "runtime/learning_states/KM-JRA-KYO-20261114-R03.json",
-     "present": false,
-     "race_bound": false,
+     "present": true,
+     "race_bound": true,
      "review_bound": false,
-     "self_hash_valid": false,
-     "sha256": null,
-     "state_id": null
+     "self_hash_valid": true,
+     "sha256": "bde598ddd7454abc7b6ba6d1476a09d2b6c06dfaeef274d13e24c3bb9e16596f",
+     "state_id": "KM-JRA-KYO-20261114-R03-LEARNING-NEXT"
     },
     "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
     "result_request_present": false,
     "review": {
      "path": "runtime/reviews_auto/KM-JRA-KYO-20261114-R03-AUTO.json",
-     "present": false,
-     "race_bound": false,
+     "present": true,
+     "race_bound": true,
      "result_and_final_bound": false,
-     "self_hash_valid": false
+     "self_hash_valid": true
     },
     "review_learning_bound": false,
     "signature_validation_performed": false,
-    "storage_state": "POSTRESULT_NOT_RECORDED",
+    "storage_state": "ZERO_EXPOSURE_RESULT_LEARNING_STORED",
     "stored_result_receipts": [],
-    "zero_exposure_records": [],
-    "zero_exposure_result_learning_bound": false
+    "zero_exposure_records": [
+     {
+      "decision_bound": true,
+      "official_result_acquired_at": "2026-11-14T02:34:58.292880+00:00",
+      "official_top3": [
+       "12",
+       "14",
+       "2"
+      ],
+      "path": "runtime/jra_no_bet_learning/KM-JRA-KYO-20261114-R03-LIVE-R1.json",
+      "pfs": null,
+      "present": true,
+      "race_bound": true,
+      "self_hash_valid": true,
+      "signature_or_oidc_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "status": "ZERO_EXPOSURE_RESULT_RECORDED"
+     }
+    ],
+    "zero_exposure_result_learning_bound": true
    },
    "race_id": "KM-JRA-KYO-20261114-R03",
    "race_no": 3,
@@ -4259,15 +4276,17 @@
    "venue": "京都"
   },
   {
-   "dispatched_at": null,
-   "first_failure": null,
+   "dispatched_at": "2026-11-14T11:35:31.504468+09:00",
    "post": "2026-11-14T12:30:00+09:00",
    "race_id": "KM-JRA-FKS-20261114-R06",
    "race_no": 6,
    "registered_intake": true,
-   "state": "CLAIMED_NOT_ACKNOWLEDGED",
+   "state": "DISPATCHED_RUNNING",
+   "status_updated_at": "2026-11-14T11:35:31.504468+09:00",
+   "terminal_state": null,
    "title": "3歳以上1勝クラス（混合）［指定］",
-   "venue": "福島"
+   "venue": "福島",
+   "workflow_run_id": "43547182915"
   },
   {
    "dispatch_window_open": "2026-11-14T11:45:00+09:00",
