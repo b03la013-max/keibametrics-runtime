@@ -34,6 +34,13 @@ class PendingOfficialResult(ValueError):
     pass
 
 
+
+# Canonical venue ids written by the race-day resolver (jra_race_day_resolver.VENUES),
+# plus the legacy spellings that older intents used. FKS/SPP/HKD/CHK/KKR were missing,
+# which blocked every Fukushima candidate result (INTENT_RACE_OR_VENUE_MISMATCH).
+JRA_INTENT_VENUE_IDS = frozenset({"SPP","HKD","FKS","NGT","TKY","NKY","CHK","KYO","HSN","KKR",
+                                  "CKY","FKU","KOK","SAP","HAK"})
+
 def canonical_sha(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -504,7 +511,7 @@ def process(root:Path, race_id:str)->str:
     intent_path=root/"runtime"/"jra_formal_intents"/(race_id+"-LIVE-R1.json")
     if not intent_path.exists(): return "JRA_FORMAL_INTENT_MISSING"
     intent=json.loads(intent_path.read_text(encoding="utf-8"))
-    if intent.get("race_id")!=race_id or intent.get("venue_id") not in {"KYO","TKY","NKY","HSN","CKY","NGT","FKU","KOK","SAP","HAK"}:
+    if intent.get("race_id")!=race_id or intent.get("venue_id") not in JRA_INTENT_VENUE_IDS:
         raise ValueError("INTENT_RACE_OR_VENUE_MISMATCH")
     meeting_key=(intent.get("jra_source") or {}).get("jra_meeting_key")
     validate_result_target(race_id,intent["race_date"],meeting_key,intent["race_no"])
