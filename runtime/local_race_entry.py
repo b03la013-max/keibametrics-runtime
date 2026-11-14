@@ -779,6 +779,13 @@ def run(intent, *, output, run_id, github_sha=None, checkpoint_publisher=None):
         report.update(first_failed_phase='NUMERICAL', code='FULL_NUMERICAL_CLOSURE_REQUIRED')
         o._write(output/'entry_report.json', report)
         return report
+    if (intent.get('analysis_only') is True and not
+            (o.ROOT/'runtime/formal_intents'/f"{request['execution_id']}.json").is_file()):
+        # No canonical frozen Static exists: SOURCE-only numerics must not
+        # require Static discovery, yet existing frozen readback is preserved.
+        report.update(first_failed_phase=None, code='ANALYSIS_ONLY_SOURCE_COMPLETE')
+        o._write(output/'entry_report.json', report)
+        return report
     # Look up the exact canonical race ourselves; C2 is not a prerequisite
     # for the existing chat-owned frozen-input path.
     discovery_request = copy.deepcopy(request)

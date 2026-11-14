@@ -38,24 +38,48 @@ jobs:
           import json, os, re, subprocess
           from pathlib import Path
           if os.environ.get('GITHUB_EVENT_NAME') == 'push':
-              changed = subprocess.check_output(
-                  ['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', os.environ['GITHUB_SHA']],
-                  text=True).splitlines()
+              from tools.persist_local_checkpoints import verify_event_files
+              event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+              before, after = event.get('before', ''), event.get('after', '')
+              if (event.get('deleted') or
+                      not all(re.fullmatch(r'[0-9a-f]{40}', sha) for sha in (before, after)) or
+                      after != os.environ['GITHUB_SHA']):
+                  raise SystemExit('SOURCE_INTENT_PUSH_EVENT_RANGE_INVALID')
+              # Fetch only the missing before snapshot, not the entire repo history.
+              if before != '0' * 40 and subprocess.run(
+                      ['git', 'cat-file', '-e', before + '^{tree}'],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                  subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', before],
+                                 check=True)
+              diff = (['git', 'ls-tree', '-r', '--name-only', after]
+                      if before == '0' * 40 else
+                      ['git', 'diff', '--name-only', '--diff-filter=AMR', before, after])
+              changed = subprocess.check_output(diff, text=True).splitlines()
               matches = [p for p in changed if re.fullmatch(r'runtime/source_intents/[A-Za-z0-9_-]+\.json', p)]
               if len(matches) != 1:
                   raise SystemExit('SOURCE_INTENT_PUSH_REQUIRES_EXACTLY_ONE_FILE')
+              verify_event_files(cwd=Path.cwd(), event_sha=after, paths=matches)
               raw = Path(matches[0]).read_text(encoding='utf-8')
           else:
               raw = os.environ['RACE_REQUEST_JSON']
           request = json.loads(raw)
           if request.get('family_id') != 'LOCAL' or request.get('execution_phase') != 'SOURCE':
               raise SystemExit('SOURCE_INTENT_FAMILY_OR_PHASE_MISMATCH')
-          Path('race-request.json').write_text(json.dumps(request))
+          # local_race_entry routes AUTO/REFERENCE before analysis_only is examined.
+          if request.get('prediction_mode', 'FORMAL-PRODUCTION') != 'FORMAL-PRODUCTION':
+              raise SystemExit('SOURCE_INTENT_PREDICTION_MODE_MISMATCH')
           eid = str(request.get('execution_id') or request.get('race_id') or '')
           if not re.fullmatch(r'KM-LOCAL-[A-Z0-9-]+', eid):
               raise SystemExit('SOURCE_EXECUTION_ID_INVALID')
+          if request.get('race_id') is not None and str(request['race_id']) != eid:
+              raise SystemExit('SOURCE_INTENT_RACE_EXECUTION_ID_MISMATCH')
+          if os.environ.get('GITHUB_EVENT_NAME') == 'push' and Path(matches[0]).stem != eid:
+              raise SystemExit('SOURCE_INTENT_FILENAME_EXECUTION_ID_MISMATCH')
+          # SOURCE-first must not enter Static/FORMAL even if a frozen Static is supplied.
+          request['analysis_only'] = True
+          Path('race-request.json').write_text(json.dumps(request))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('execution_id=' + eid + '\\n')
+              f.write('execution_id=' + eid + '\n')
           PY
           set +e
           python -m runtime.local_race_entry --request race-request.json --output entry-out --run-id "source-first-${{ github.run_id }}" --github-sha "${{ github.sha }}"
@@ -68,15 +92,19 @@ jobs:
           if not p.is_file():
               raise SystemExit('SOURCE_ENTRY_REPORT_MISSING')
           r = json.loads(p.read_text())
-          phases = r.get('source', {}).get('phases', [])
-          verified = r.get('source', {}).get('status') == 'SOURCE_PASS' and any(
-              p.get('phase') == 'SOURCE' and p.get('status') == 'PASS' for p in phases)
+          # A newly acquired SOURCE has phases; a verified cached SOURCE has none.
+          # The existing orchestrator verifies the signed checkpoint in both paths.
+          source = r.get('source', {})
+          verified = (source.get('status') == 'SOURCE_PASS'
+                      and source.get('signed_source_verified') is True)
           if not verified:
               raise SystemExit('SIGNED_SOURCE_STAGE_NOT_VERIFIED')
           if r.get('formal_final_proven') is True:
               raise SystemExit('SOURCE_ONLY_WORKFLOW_MUST_NOT_CLAIM_FINAL')
           if int(os.environ['SOURCE_ENTRY_RC']) and r.get('code') not in (
-              'STATIC_PREDICTION_FREEZE_REQUIRED', 'ANALYSIS_ONLY_SOURCE_COMPLETE'):
+              'STATIC_PREDICTION_FREEZE_REQUIRED',
+              'FULL_NUMERICAL_CLOSURE_REQUIRED',
+              'ANALYSIS_ONLY_SOURCE_COMPLETE'):
               raise SystemExit('UNEXPECTED_SOURCE_FIRST_FAILURE:' + str(r.get('code')))
           print('SIGNED_SOURCE_ONLY_PASS / FORMAL_FINAL_NOT_CLAIMED / ' + str(r.get('code')))
           PY
