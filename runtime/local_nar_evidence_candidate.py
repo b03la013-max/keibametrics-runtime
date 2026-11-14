@@ -442,14 +442,23 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         f"last-corner normalized reach={last_corner_scores}", coverage=sum(x is not None for x in last_corner_scores) / 5,
         raw_metric=last_corner_scores)
 
-    class_vals = [r.get("class_score") for r in starts]
+    is_kaw = venue.upper() in {"KAW", "川崎"}
+    class_vals = [
+        None if is_kaw and r.get("class_parse_state") == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+        else r.get("class_score")
+        for r in starts
+    ]
+    class_coverage = sum(value is not None for value in class_vals) / 5 if is_kaw else len(class_vals) / 5
     put("HPI-L", "class_level", _weighted(class_vals),
-        f"candidate class ordinals={class_vals}", coverage=len(class_vals) / 5, raw_metric=class_vals)
-    opponent = [_clamp(0.75 * float(r.get("class_score", NEUTRAL)) +
-                       0.25 * _clamp(50 + (float(r.get("field_size", field_size)) - 8) * 4))
-                for r in starts]
+        f"candidate class ordinals={class_vals}", coverage=class_coverage, raw_metric=class_vals)
+    opponent = [
+        None if is_kaw and ordinal is None
+        else _clamp(0.75 * float(r.get("class_score", NEUTRAL)) +
+                    0.25 * _clamp(50 + (float(r.get("field_size", field_size)) - 8) * 4))
+        for r, ordinal in zip(starts, class_vals)
+    ]
     put("HPI-L", "opponent_strength", _weighted(opponent),
-        f"class+field candidate opponent scores={opponent}", coverage=len(opponent) / 5, raw_metric=opponent)
+        f"class+field candidate opponent scores={opponent}", coverage=class_coverage if is_kaw else len(opponent) / 5, raw_metric=opponent)
     st = _std([x for x in finish_vals if x is not None])
     repeatability = None if st is None else _clamp(100 - 1.6 * st)
     put("HPI-L", "repeatability", repeatability,
@@ -618,28 +627,27 @@ def _build_preliminary(raw: Dict[str, Any], request: Dict[str, Any], source: Dic
         f"official odds source present={odds_present}", coverage=1, raw_metric=odds_present)
 
     current_class, cls_state = _class_score(str(race.get("class") or ""))
-    # URW's missing header class is UNKNOWN, not an observed C3/52 ordinal.
-    # Preserve the registered missing rule and every scoring formula/weight.
-    missing_urw_class = venue.upper() == "URW" and cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
-    prev_class = starts[0].get("class_score") if starts else None
+    # An unresolved class is missing evidence; a recognized C3 ordinal may also equal 52.
+    missing_current_class = (is_kaw or venue.upper() == "URW") and cls_state == "CLASS_UNRESOLVED_CANONICAL_NEUTRAL"
+    prev_class = class_vals[0] if class_vals else None
     put("NCI", "current_class", current_class, f"current race class={race.get('class')}; state={cls_state}",
-        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
-        force_missing=missing_urw_class)
+        coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
+        force_missing=missing_current_class)
     put("NCI", "previous_class", prev_class, f"latest race class ordinal={prev_class}",
         coverage=1 if prev_class is not None else 0, raw_metric=prev_class)
     put("NCI", "recent_opponent_class", _weighted(class_vals), f"recent class ordinals={class_vals}",
-        coverage=len(class_vals)/5, raw_metric=class_vals)
+        coverage=class_coverage, raw_metric=class_vals)
     put("NCI", "race_set_level", current_class,
-        f"current race-set class ordinal={None if missing_urw_class else current_class}",
-        coverage=0 if missing_urw_class else 1, raw_metric=None if missing_urw_class else current_class,
-        force_missing=missing_urw_class)
-    pressure = None if prev_class is None or missing_urw_class else _clamp(50 + (prev_class-current_class)*1.5)
+        f"current race-set class ordinal={None if missing_current_class else current_class}",
+        coverage=0 if missing_current_class else 1, raw_metric=None if missing_current_class else current_class,
+        force_missing=missing_current_class)
+    pressure = None if prev_class is None or missing_current_class else _clamp(50 + (prev_class-current_class)*1.5)
     put("NCI", "class_change_pressure", pressure,
-        f"previous-current class delta={None if prev_class is None or missing_urw_class else prev_class-current_class}",
+        f"previous-current class delta={None if prev_class is None or missing_current_class else prev_class-current_class}",
         coverage=1 if pressure is not None else 0, raw_metric=pressure)
     is_jra_transfer = bool(starts and _norm(starts[0].get("venue","")).startswith("J"))
     transfer_class = None
-    if starts and not missing_urw_class:
+    if starts and not missing_current_class and (not is_kaw or prev_class is not None):
         transfer_class = _clamp(50 + ((prev_class or NEUTRAL)-current_class) * (1.2 if is_jra_transfer else 0.8))
     put("NCI", "transfer_class", transfer_class,
         f"latest venue={starts[0].get('venue') if starts else None}; JRA transfer={is_jra_transfer}",
