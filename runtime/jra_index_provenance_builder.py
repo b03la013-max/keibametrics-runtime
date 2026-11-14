@@ -24,6 +24,47 @@ class IndexLedgerError(ValueError):
     pass
 
 
+# Owner decision 2026-11-14 15:16 JST (上濵さん): pedigree first (BLOOD BIAS),
+# odds-theory index one tier lower. v1.1 = v1.0 x 0.80 + BVI .15 + VMI .05,
+# effective for races on/after 2026-11-15; earlier FINALs replay with v1.0.
+ZAI_V11_EFFECTIVE_DATE = "20261115"
+ZAI_WIN_WEIGHTS = {
+    "v1.0": {"HPI": .20, "SSI": .17, "CFI": .10, "RFI": .08, "JTI": .05, "CSI": .05,
+             "TRI": .05, "BWI": .05, "GCI": .08, "PRI": .12, "KGI": .05},
+}
+ZAI_PLACE_WEIGHTS = {
+    "v1.0": {"HPI": .16, "SSI": .14, "CFI": .10, "RFI": .14, "JTI": .05, "CSI": .06,
+             "TRI": .05, "BWI": .08, "GCI": .08, "PRI": .08, "KGI": .06},
+}
+for _table in (ZAI_WIN_WEIGHTS, ZAI_PLACE_WEIGHTS):
+    _table["v1.1"] = {k: round(w * 0.80, 6) for k, w in _table["v1.0"].items()}
+    _table["v1.1"].update({"BVI": 0.15, "VMI": 0.05})
+
+
+def zai_formula_version(race_id) -> str:
+    import re as _re
+    m = _re.search(r"-(\d{8})-R\d{2}", str(race_id or ""))
+    return "v1.1" if m and m.group(1) >= ZAI_V11_EFFECTIVE_DATE else "v1.0"
+
+
+def _weighted_left_sum(vals, weights):
+    # Plain left-to-right float addition, bit-identical to the original v1.0
+    # expression (built-in sum() uses compensated summation on Python >= 3.12).
+    total = None
+    for k, w in weights.items():
+        term = vals[k] * w
+        total = term if total is None else total + term
+    return total
+
+
+def zai_win_value(vals, version="v1.0"):
+    return _weighted_left_sum(vals, ZAI_WIN_WEIGHTS[version])
+
+
+def zai_place_value(vals, version="v1.0"):
+    return _weighted_left_sum(vals, ZAI_PLACE_WEIGHTS[version])
+
+
 def _score(x, label, lo=0.0, hi=100.0):
     if not isinstance(x, (int, float)) or not isfinite(float(x)) or not (lo <= float(x) <= hi):
         raise IndexLedgerError(f"{label}_OUT_OF_RANGE:{x}")
@@ -166,16 +207,9 @@ def materialize_index_provenance(req: dict) -> dict:
         )
         tpi_weak = tpi_base - weak
         tpi = 50.0 + (tpi_weak - 50.0) * dcr_factor
-        zai_win = (
-            vals["HPI"]*.20 + vals["SSI"]*.17 + vals["CFI"]*.10 + vals["RFI"]*.08 +
-            vals["JTI"]*.05 + vals["CSI"]*.05 + vals["TRI"]*.05 + vals["BWI"]*.05 +
-            vals["GCI"]*.08 + vals["PRI"]*.12 + vals["KGI"]*.05
-        )
-        zai_place = (
-            vals["HPI"]*.16 + vals["SSI"]*.14 + vals["CFI"]*.10 + vals["RFI"]*.14 +
-            vals["JTI"]*.05 + vals["CSI"]*.06 + vals["TRI"]*.05 + vals["BWI"]*.08 +
-            vals["GCI"]*.08 + vals["PRI"]*.08 + vals["KGI"]*.06
-        )
+        zai_version = zai_formula_version(req.get("race_id"))
+        zai_win = zai_win_value(vals, zai_version)
+        zai_place = zai_place_value(vals, zai_version)
         sri = zai_place*.45 + tpi*.25 + vals["RFI"]*.10 + vals["PRI"]*.08 + vals["KGI"]*.07 + vals["BWI"]*.05
 
         scenario = spec.get("scenario_fit")
@@ -190,8 +224,11 @@ def materialize_index_provenance(req: dict) -> dict:
 
         formula_refs = sorted(set(all_refs))
         canonical["TPI"] = _derived(tpi, "JRA-TPI-FINAL-v1.0", formula_refs, f"TPI replay; weak={weak:.6f}; dcr_factor={dcr_factor:.6f}")
-        canonical["ZAI_WIN"] = _derived(zai_win, "JRA-ZAI-WIN-v1.0", formula_refs, "ZAI-WIN fixed formula replay")
-        canonical["ZAI_PLACE"] = _derived(zai_place, "JRA-ZAI-PLACE-v1.0", formula_refs, "ZAI-PLACE fixed formula replay")
+        suffix = "" if zai_version == "v1.0" else f" ({zai_version}: Owner 2026-11-14 BVI .15 VMI .05)"
+        canonical["ZAI_WIN"] = _derived(zai_win, f"JRA-ZAI-WIN-{zai_version}", formula_refs,
+                                        "ZAI-WIN fixed formula replay" + suffix)
+        canonical["ZAI_PLACE"] = _derived(zai_place, f"JRA-ZAI-PLACE-{zai_version}", formula_refs,
+                                          "ZAI-PLACE fixed formula replay" + suffix)
         canonical["SRI"] = _derived(sri, "JRA-SRI-v1.0", formula_refs, "SRI fixed formula replay")
         canonical["F3S"] = _derived(f3s, "JRA-F3S-v1.0", sorted(set(formula_refs + [str(x) for x in scenario_refs])), "F3S fixed formula replay")
         canonical["T3I"] = _derived(t3i, "JRA-T3I-v1.0", formula_refs, "T3I fixed formula replay")

@@ -276,6 +276,32 @@ def resolve_and_build(race_date: str, venue: str, race_no: int, **kw) -> Dict[st
     return build_intent(race_date=race_date, venue=venue, race_no=race_no, meeting_key=key, race=race, **kw)
 
 
+SUPPLEMENTAL_PACK_DIR = "runtime/jra_supplemental_packs"
+
+
+def attach_supplemental_pack(intent: Dict[str, Any], root) -> Dict[str, Any]:
+    """Owner-captured pre-race pack (BLOOD BIAS / TSL bands), if one was frozen.
+
+    Only identity is checked here; every content guard stays in
+    apply_supplemental_evidence_pack. No pack -> the intent is unchanged.
+    """
+    import json
+    from pathlib import Path
+    p = Path(root) / SUPPLEMENTAL_PACK_DIR / f"{intent['race_id']}.json"
+    if not p.exists():
+        return intent
+    try:
+        pack = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError:
+        intent["supplemental_evidence_pack_skipped"] = "PACK_JSON_INVALID"
+        return intent
+    if pack.get("race_id") != intent["race_id"]:
+        intent["supplemental_evidence_pack_skipped"] = "PACK_RACE_ID_MISMATCH"
+        return intent
+    intent["supplemental_evidence_pack"] = pack
+    return intent
+
+
 def execute(a, deadline_monotonic):
     import json
     from pathlib import Path
@@ -301,6 +327,7 @@ def execute(a, deadline_monotonic):
     from family_authority_guard import resolve_current_authority
     _, _current = resolve_current_authority(root=_root, now=_dt.datetime.now(_dt.timezone.utc))
     intent["current_authority_manifest"] = _current["manifest_id"]
+    attach_supplemental_pack(intent, _root)
     p = Path(a.out_dir) / (intent["execution_id"] + ".json")
     if p.exists():
         raise SystemExit("INTENT_ALREADY_EXISTS:" + str(p))

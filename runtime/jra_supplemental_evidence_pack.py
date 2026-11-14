@@ -109,8 +109,15 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
     features_by=pack.get("runner_features")
     if not isinstance(features_by,dict):
         raise SupplementalEvidenceError("SUPPLEMENTAL_RUNNER_FEATURES_MISSING")
+    dropped_runners=[]
     if not set(features_by).issubset(set(runner_by)):
-        raise SupplementalEvidenceError("SUPPLEMENTAL_RUNNER_UNIVERSE_MISMATCH")
+        # An Owner capture taken before a scratch may name a runner that the
+        # signed official universe no longer holds. Such rows are excluded
+        # (never added as runners); every remaining row keeps all guards.
+        if pack.get("owner_decision") != "OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY":
+            raise SupplementalEvidenceError("SUPPLEMENTAL_RUNNER_UNIVERSE_MISMATCH")
+        dropped_runners=sorted(set(features_by)-set(runner_by), key=lambda x:(len(x),x))
+        features_by={k:v for k,v in features_by.items() if k in runner_by}
 
     registry=_load_registry()
     feature_rules=registry["feature_rules"]
@@ -184,6 +191,8 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
       "new_weight_created":False,
       "result_derived":False
     }
+    if dropped_runners:
+        attestation["dropped_runners_not_in_official_universe"]=dropped_runners
     attestation["sha256"]=_sha(attestation)
     req["supplemental_evidence_pack_attestation"]=attestation
     return req,attestation
