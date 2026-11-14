@@ -79,20 +79,36 @@ def f0(x):
 
 
 # --------------------------------------------------------------------- render
+# Report probability input provenance; do not alter the uncalibrated PAPER model.
+def probability_source_note(rows):
+    available = sum(row.get('p_market') is not None for row in rows)
+    count = len(rows)
+    if not available:
+        return 'p勝はF3S softmaxのみ（単勝オッズ由来市場確率なし・実勝率ではない）'
+    if available == count:
+        return 'p勝はF3S softmaxと単勝オッズ由来市場確率の50:50合成（未較正・実勝率ではない）'
+    return (f'p勝は市場確率あり{available}/{count}頭のみ50:50合成、他はF3S softmaxのみ'
+            '（部分オッズ時の全頭確率合計は100%未保証・実勝率ではない）')
+
+
 def render(race, res, edition, src_at, shadow=None, revision=None):
     a = res['aki']
     L = [f"## {race['venue_name']}{race['race_no']}R {race['post_current'][11:16]}発走　{race.get('race_name', '')}",
-         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表・オッズ取得 {src_at[11:16]}）"
+         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表取得 {src_at[11:16]}／単勝オッズ {sum(x.get('win') is not None for x in res['rows'])}/{len(res['rows'])}頭）"
          + (f"　改訂理由：{revision}" if revision else ''),
          '', f"- 展開：{res['pace']}", f"- レース型（§30）：**{res['race_type']}**"]
     if race.get('scratched'):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
+    missing_jockey = [x for x in res['order'] if not str(x.get('jockey') or '').strip()]
+    if missing_jockey:
+        names = '、'.join(f"{x['no']}番{x['name']}" for x in missing_jockey)
+        L.append(f"- 騎手情報未取得：{names}（UNKNOWN／未補完。役割・券面は暫定、発走前の変更照合が必要）")
     L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | p勝(暫定) | 役割 |',
           '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
-        L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or ''} | "
+        L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or 'UNKNOWN（未取得）'} | "
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
                  f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
@@ -117,7 +133,7 @@ def render(race, res, edition, src_at, shadow=None, revision=None):
     elif shadow:
         L += ['', f"公式29指数シャドー：実行不可（{shadow['error']}）"]
     notes = sorted({f for x in res['rows'] for f in x['flags'] if 'NEUTRAL' in f})
-    L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎コメント）は"
+    L += ['', f"<sub>未較正ペーパー。{probability_source_note(res['rows'])}。CCI（厩舎コメント）は"
               f"未取得のため中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
     return '\n'.join(L)
 
@@ -292,7 +308,15 @@ def mark_delivery(q, out):
             changed = True
         for e in r['editions']:
             d = e.get('delivery')
-            if not d or d.get('PUSH_VERIFIED'):
+            if not d:
+                continue
+            # Old PAPER records stamped PUSH_VERIFIED with the commit clock,
+            # not the time of remote blob readback. Preserve that historical
+            # timestamp as unverified evidence; recheck the blob at a real clock.
+            if d.get('PUSH_VERIFIED') and d.get('PUSH_VERIFIED_TIME_BASIS') != 'READBACK_OBSERVED_AT':
+                d['PUSH_VERIFIED_LEGACY_COMMIT_CLOCK'] = d.pop('PUSH_VERIFIED')
+                changed = True
+            if d.get('PUSH_VERIFIED'):
                 continue
             rel = f"{q['race_date']}/rev/{e['rev']}.json"
             path = out / 'rev' / f"{e['rev']}.json"
@@ -307,15 +331,29 @@ def mark_delivery(q, out):
                 if line and path.exists():
                     blob = _git(out, 'show', f"{DATA_REMOTE}:output/{rel}")
                     if blob and blob.strip() == path.read_text().strip():
-                        d['PUSH_VERIFIED'] = line.split()[1]
+                        # The Git commit's %cI is NOT the time the remote push was
+                        # observed. Backdating with %cI can falsely certify a
+                        # post-cutoff push as pre-start. Use the readback clock.
+                        d['PUSH_VERIFIED'] = now_jst().isoformat()
+                        d['PUSH_VERIFIED_TIME_BASIS'] = 'READBACK_OBSERVED_AT'
                         d['remote_commit_sha'] = line.split()[0]
                         d['LINK_AVAILABLE'] = REPO_URL + rel
                         changed = True
-        pre = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED')
+        pre = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED_TIME_BASIS') == 'READBACK_OBSERVED_AT'
+               and e['delivery'].get('PUSH_VERIFIED')
                and datetime.fromisoformat(e['delivery']['PUSH_VERIFIED']) < cutoff(r)]
-        if pre and r['status'] in ('PREDICTION_COMPLETE', 'SOURCE_READY'):
-            r['status'] = 'PRESTART_PUSH_VERIFIED'
-            r['push_verified_at'] = pre[-1]['delivery']['PUSH_VERIFIED']
+        if pre and r['status'] in ('PREDICTION_COMPLETE', 'SOURCE_READY', 'PRESTART_PUSH_VERIFIED'):
+            observed = pre[-1]['delivery']['PUSH_VERIFIED']
+            if r['status'] != 'PRESTART_PUSH_VERIFIED' or r.get('push_verified_at') != observed:
+                r['status'] = 'PRESTART_PUSH_VERIFIED'
+                r['push_verified_at'] = observed
+                changed = True
+        elif not pre and (r['status'] == 'PRESTART_PUSH_VERIFIED' or 'push_verified_at' in r):
+            # Never leave a stale pre-start summary certified by the legacy
+            # commit clock when observation was late or the blob mismatched.
+            if r['status'] == 'PRESTART_PUSH_VERIFIED':
+                r['status'] = 'PREDICTION_COMPLETE'
+            r.pop('push_verified_at', None)
             changed = True
     return changed
 
