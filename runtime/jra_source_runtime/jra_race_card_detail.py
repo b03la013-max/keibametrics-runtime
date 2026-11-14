@@ -426,6 +426,48 @@ def parse_race_card_detail(raw:bytes,content_type:str="")->Dict[str,Any]:
     out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
     return out
 
+EQUIPMENT_PROFILE="KM-JRA-OFFICIAL-EQUIPMENT-DECLARATION-v1.0-20261114"
+
+
+def parse_equipment_declarations(raw:bytes,content_type:str="",*,active_numbers=None)->Dict[str,Any]:
+    """Official blinker declarations printed on the JRA detailed race card.
+
+    Fact extraction only: ``blinker_declared`` says the official card shows the
+    ``horse_icon blinker`` mark in that runner's 馬番 cell.  It is not an effect
+    score.  Absence means "not declared on this official card" only when every
+    expected horse number cell was found; otherwise the runner stays UNKNOWN.
+    Other gear (cheek pieces, hoods...) is not printed and is never inferred.
+    """
+    decoded=_decode(raw,content_type)
+    cells=re.findall(r'<td class="num">\s*(\d{1,2})(.*?)</td>',decoded,re.S)
+    seen={}
+    for number,rest in cells:
+        no=int(number)
+        if not 1<=no<=18:continue
+        mark=bool(re.search(r'class="horse_icon blinker"',rest))
+        if no in seen and seen[no]!=mark:
+            raise ValueError("JRA_EQUIPMENT_DECLARATION_CONFLICT:"+str(no))
+        seen[no]=mark
+    expected=set(int(x) for x in active_numbers) if active_numbers is not None else set(seen)
+    complete=bool(expected) and expected<=set(seen)
+    runners={}
+    for no in sorted(expected):
+        if no in seen and seen[no]:
+            state="DECLARED"
+        elif no in seen and complete:
+            state="NOT_DECLARED_ON_OFFICIAL_CARD"
+        else:
+            state="UNKNOWN"
+        runners[str(no)]={"horse_no":no,"blinker_declared":True if state=="DECLARED" else (False if state.startswith("NOT_") else None),
+                          "state":state}
+    out={"profile":EQUIPMENT_PROFILE,"official":True,"production_fact_authority":True,
+         "fact_only":True,"effect_score_authority":False,"complete":complete,
+         "declared_count":sum(1 for r in runners.values() if r["state"]=="DECLARED"),
+         "runners":runners}
+    out["sha256"]=sha_obj({k:v for k,v in out.items() if k!="sha256"})
+    return out
+
+
 def _cancelled_numbers_from_target_pdf(artifact,detail,snap,race_no):
     """Recover printed scratch numbers when legacy PDF parsing selected a peer race.
 
@@ -635,6 +677,14 @@ def fetch_and_enrich_race_card_detail(artifact:Dict[str,Any],prediction_cutoff:s
     artifact["sources"]=list(artifact.get("sources") or [])+[snap]
     artifact["jra_official_race_card_detail"]=detail
     artifact["jra_official_race_card_detail_sha256"]=sha_obj(detail)
+    try:
+        equipment=parse_equipment_declarations(raw,headers.get("content-type",""),
+            active_numbers=[r["horse_no"] for r in detail["runners"] if r.get("horse_no") is not None])
+        equipment["source_snapshot_sha256"]=snap["snapshot_sha256"]
+        artifact["jra_official_equipment_declarations"]=equipment
+        artifact["jra_official_equipment_declarations_sha256"]=sha_obj(equipment)
+    except ValueError as exc:
+        artifact.setdefault("warnings",[]).append("JRA_EQUIPMENT_DECLARATIONS_UNAVAILABLE:"+str(exc)[:200])
     try:
         from .jra_observed_context import bind_observed_context
     except ImportError:
