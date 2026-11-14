@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -150,6 +151,46 @@ class TestResolverClientRate(unittest.TestCase):
 
 
 class TestAllRacesAndStatus(unittest.TestCase):
+    def test_actual_aki_stops_surface_full20_and_bound_nonformal_reference(self):
+        from jra_race_day_autopilot import race_status, write_status
+
+        root = Path(__file__).resolve().parents[1]
+        observed = dt.datetime(2026, 11, 8, 2, 10, tzinfo=JST)
+        for rid, post, cell_count in (
+            ('KM-JRA-KYO-20261107-R01', '2026-11-07T10:05:00+09:00', 180),
+            ('KM-JRA-TKY-20261107-R07', '2026-11-07T13:15:00+09:00', 360),
+        ):
+            with self.subTest(race_id=rid), tempfile.TemporaryDirectory() as directory:
+                tmp = Path(directory)
+                schedule = {'post': post}
+                gap = Path('runtime/exact_gaps') / (rid + '-LIVE-R1.json')
+                target = Path('runtime/source_candidate_oos') / rid
+                reference = target / 'candidate_forecast_brief.json'
+                (tmp / gap.parent).mkdir(parents=True)
+                shutil.copyfile(root / gap, tmp / gap)
+                shutil.copytree(root / target, tmp / target)
+                brief = json.loads((tmp / reference).read_text())
+                preview_at = dt.datetime.fromisoformat(brief['display_time'])
+                live = race_status(tmp, rid, schedule, {}, preview_at)
+                self.assertEqual(live['paper_reference']['temporal_class'], 'PRE_START_PREVIEW')
+                early = race_status(tmp, rid, schedule, {}, preview_at - dt.timedelta(microseconds=1))
+                self.assertNotIn('paper_reference', early)
+                result = write_status(tmp, '2026-11-07', observed, {rid: schedule}, {},
+                                      formal_runs=[], resolver_runs=[], source_runs=[])
+                row = result['races'][0]
+                self.assertEqual(row['state'], 'PRODUCTION_BLOCKED')
+                self.assertEqual(row['execution_error'], 'AKI_SELECTED_HEAD_WITHOUT_MATERIAL_PAIR')
+                self.assertEqual(row['full20'], f'{cell_count}/{cell_count}')
+                self.assertEqual(row['paper_reference']['temporal_class'], 'HISTORICAL_REPRINT_ONLY')
+                self.assertIs(row['paper_reference']['user_delivery_verified'], False)
+                self.assertNotIn('ticket_count', row)
+                self.assertIn(f'(../source_candidate_oos/{rid}/candidate_forecast_brief.json)',
+                              (tmp / 'runtime/jra_race_day_status/2026-11-07.md').read_text())
+                gap_body = json.loads((tmp / gap).read_text())
+                gap_body['prepared_numerical_request']['runners'].pop()
+                (tmp / gap).write_text(json.dumps(gap_body))
+                self.assertNotIn('paper_reference', race_status(tmp, rid, schedule, {}, observed))
+
     def test_all_races_plan_and_status_index(self):
         tmp = Path(tempfile.mkdtemp())
         (tmp / "runtime/jra_formal_intents").mkdir(parents=True)
