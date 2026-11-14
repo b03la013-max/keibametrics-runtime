@@ -232,6 +232,12 @@ def _record_after_label(row: List[str], label: str) -> Dict[str, int] | None:
 
 
 def parse_race_card(source_artifact: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    from runtime.local_physical import nankan_kaw_source
+    if source_artifact.get("source_manifest_profile") == nankan_kaw_source.PROFILE:
+        try:
+            return nankan_kaw_source.verify(source_artifact)
+        except (KeyError, TypeError, ValueError, OSError) as exc:
+            raise LocalCandidateEvidenceError("NANKAN_KAW_SOURCE_INVALID") from exc
     ev = source_artifact.get("normalized_evidence") or {}
     rc = ev.get("race_card_tables") or {}
     tables = rc.get("value") if isinstance(rc, dict) else None

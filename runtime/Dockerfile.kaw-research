@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+RUN python -m pip install --no-cache-dir \
+    cryptography==50.0.0 cffi==2.1.1 pycparser==3.0
+
+COPY runtime/*.py runtime/*.json runtime/
+COPY runtime/local_physical/ runtime/local_physical/
+COPY governance/ governance/
+COPY mapping/ mapping/
+COPY profiles/ profiles/
+COPY research/local_bvi/ research/local_bvi/
+
+CMD ["python", "-m", "runtime.kaw_research_startup"]

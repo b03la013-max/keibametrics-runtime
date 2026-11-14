@@ -3,29 +3,28 @@ from pathlib import Path
 
 import pytest
 
+from runtime import execution_store
 from runtime import formal_execution_orchestrator as o
 
 
 def _result_settlement_from_existing_runner(payouts):
-    path = Path(o.__file__).with_name("local_result_from_signed_final.py")
-    code = path.read_text().split('tickets=((fin.get("artifact")', 1)[1]
-    code = 'tickets=((fin.get("artifact")' + code.split('\ndef post(', 1)[0]
-    scope = {
-        "fin": {"artifact": {"final_ticket": {"tickets": [
-            {"bet_type": "EXACTA", "selection": [7, 5], "stake": 100},
-            {"bet_type": "TRIO", "selection": [1, 2, 3], "stake": 100},
-        ]}}},
-        "rid": "KAW-RESULT-REGRESSION",
-        "req": {"finish_order": [7, 5, 6], "payouts": payouts,
-                "result_available_at": "2026-10-15T15:00:00+09:00"},
+    final = {"artifact": {"final_ticket": {"tickets": [
+        {"bet_type": "EXACTA", "selection": [7, 5], "stake": 100},
+        {"bet_type": "TRIO", "selection": [1, 2, 3], "stake": 100},
+    ]}}}
+    request = {
+        "race_id": "KAW-RESULT-REGRESSION",
+        "finish_order": [7, 5, 6],
+        "payouts": payouts,
+        "result_available_at": "2026-10-15T15:00:00+09:00",
     }
-    exec(compile(code, str(path), "exec"), scope)
-    return scope["result_payload"]["settlement"]
+    payload, _ = execution_store.build_local_result_payload(request, final)
+    return payload["settlement"]
 
 
 @pytest.mark.parametrize("payouts", [{}, {"TRIO": 500}, {"EXACTA": 0}])
 def test_winning_payout_unknown_stops_before_complete_result(payouts):
-    with pytest.raises(SystemExit, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
+    with pytest.raises(execution_store.ExecutionStoreError, match="RESULT_WINNING_PAYOUT_NOT_READY:EXACTA"):
         _result_settlement_from_existing_runner(payouts)
 
 

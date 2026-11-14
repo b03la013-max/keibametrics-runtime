@@ -305,6 +305,7 @@ def request_json(
     headers: Dict[str, str] | None = None,
     timeout: int = 60,
     attempts: int = 4,
+    retry_rate_limit: bool = True,
 ) -> Tuple[int, Dict[str, Any]]:
     """Bounded retry transport for operational control-plane calls.
 
@@ -331,7 +332,8 @@ def request_json(
                 parsed = json.loads(raw) if raw else {}
             except Exception:
                 parsed = {"raw": raw}
-            if exc.code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
+            if (exc.code not in RETRYABLE_HTTP_STATUS or attempt >= attempts
+                    or (exc.code == 429 and not retry_rate_limit)):
                 return exc.code, parsed
             last_error = exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:

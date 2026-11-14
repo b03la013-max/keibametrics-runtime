@@ -65,8 +65,26 @@ resolved=resolve_family_runtime(req,load_contracts())
 assert resolved["executable"] is True
 endpoint=resolved["external_endpoint"]
 
+private_checkpoint = None
+if os.environ.get("KM_LOCAL_PRIVATE_CHECKPOINT_RUNNER") == "1":
+    from runtime.local_private_checkpoint import PrivateCheckpoint
+    private_checkpoint = PrivateCheckpoint.from_env()
+    if (private_checkpoint is None or fam != "LOCAL" or phase != "FORMAL"
+            or req.get("venue_id") != "KAW" or not isinstance(req.get("source_receipt"), dict)
+            or req.get("source_receipt_artifact_id")):
+        raise ValueError("PRIVATE_FORMAL_SIGNED_SOURCE_REQUIRED")
+    private_checkpoint.require_formal_execution(execution_id)
+    private_checkpoint.output_directory(pathlib.Path(RUNTIME_OUT))
+    saved = private_checkpoint.resolve(execution_id, "SOURCE")
+    if (saved is None or req["source_receipt"] !=
+            json.loads((saved["run_dir"] / "source_receipt_envelope.json").read_bytes())):
+        raise ValueError("PRIVATE_FORMAL_SOURCE_HANDOFF_MISMATCH")
+
 os.makedirs(RUNTIME_OUT,exist_ok=True)
 def persist(name,obj):
+    if private_checkpoint is not None:
+        private_checkpoint.write(pathlib.Path(RUNTIME_OUT) / name, obj)
+        return
     from execution_store import require_public_storage
     require_public_storage(obj)
     with open(os.path.join(RUNTIME_OUT,name),"w",encoding="utf-8") as wf:
@@ -141,6 +159,8 @@ def verify_envelope(env,label):
 
 def acquire_verified_source(req, rid):
     race_meta=req.get("race") if isinstance(req.get("race"),dict) else {}
+    if str(req.get("venue_id") or race_meta.get("venue_id") or "").upper() == "KAW" or "-KAW-" in rid:
+        fail_closed("PRIVATE_NANKAN_SIGNED_SOURCE_IMPORT_REQUIRED")
     source_req=req.get("source_acquisition_request")
     if not isinstance(source_req,dict) and isinstance(req.get("required_source_manifest"),list):
         source_req={
@@ -683,7 +703,11 @@ ids=[str(x.get("runner_id")) for x in runners]
 assert len(ids)==len(set(ids)),"RUNNER_UNIVERSE_DUPLICATE_ID"
 
 official_universe=source_artifact.get("official_runner_universe")
-if source_artifact.get("source_manifest_profile")=="KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923":
+from runtime.local_physical.nankan_kaw_source import PROFILE as NANKAN_KAW_PROFILE
+if source_artifact.get("source_manifest_profile") in {
+        "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923", NANKAN_KAW_PROFILE}:
+    if source_artifact.get("source_manifest_profile") == NANKAN_KAW_PROFILE and private_checkpoint is None:
+        fail_closed("PRIVATE_NANKAN_SIGNED_SOURCE_IMPORT_REQUIRED")
     assert isinstance(official_universe,dict),"OFFICIAL_RUNNER_UNIVERSE_REQUIRED"
     off_rows=official_universe.get("runners")
     assert isinstance(off_rows,list) and off_rows,"OFFICIAL_RUNNER_UNIVERSE_EMPTY"
@@ -1627,6 +1651,9 @@ candidate_krs_summary=None
 candidate_krs_v02_summary=None
 candidate_krs_v03_summary=None
 def run_candidate_krs_arm(label,q,legacy=False):
+    if private_checkpoint is not None:
+        return {"status":"SKIPPED_PRIVATE_FORMAL_ONLY","label":label,
+                "production_authority":False,"oos_temporal_eligible":False}
     if q is None:
         return {"status":"NOT_AVAILABLE","label":label,"production_authority":False,"oos_temporal_eligible":False}
     try:

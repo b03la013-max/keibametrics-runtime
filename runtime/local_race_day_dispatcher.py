@@ -835,6 +835,13 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
         return report
     contexts = []
     for venue in meeting['venues']:
+        if venue == 'KAW':
+            report['venues'][venue] = {
+                'status': 'HOLD_PRIVATE_NANKAN_DISCOVERY_REQUIRED',
+                'first_stop_stage': 'OFFICIAL_RACE_DISCOVERY',
+                'formal_registration_proven': False,
+            }
+            continue
         name = day+'-'+venue
         plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')
         approval_path = root/'profiles/local_autonomous_approvals'/(name+'.json')
@@ -913,6 +920,179 @@ def readback_health(root, plan):
     return None
 
 
+def private_kaw_day(root, day, cutoff_seconds, *, now, execute=False, private=None,
+                    clock=lambda: datetime.now(timezone.utc)):
+    """Plan from the signed private SOURCE and hand off on that same host."""
+    from runtime import formal_execution_orchestrator as orchestrator, local_race_entry
+    from runtime import urw_nankan_reference_source as nankan
+    from runtime.local_physical.nankan_kaw_source import PROFILE, PROVIDER
+    from runtime.local_private_checkpoint import PrivateCheckpoint, private_file
+
+    if date.fromisoformat(day).isoformat() != day or now.tzinfo is None:
+        raise ValueError('LOCAL_DAY_IDENTITY_INVALID')
+    if type(cutoff_seconds) is not int or not 120 <= cutoff_seconds <= 3600:
+        raise ValueError('EXPLICIT_CUTOFF_SECONDS_REQUIRED')
+    if execute and (now.astimezone(JST).date().isoformat() != day
+                    or os.environ.get('KM_LOCAL_AUTONOMOUS_ENABLED') != 'true'):
+        raise ValueError('OWNER_ACTIVATION_AND_DATED_APPROVAL_REQUIRED')
+    private = private if private is not None else PrivateCheckpoint.from_env()
+    result = {'status': 'HOLD_PRIVATE_NANKAN_DISCOVERY_REQUIRED',
+              'first_stop_stage': 'OFFICIAL_RACE_DISCOVERY', 'race_date': day,
+              'dispatch_count': 0, 'races': {}}
+    if private is None:
+        result.update(first_stop_stage='PRIVATE_BINDING', code='PRIVATE_CHECKPOINT_BINDING_REQUIRED')
+        return result
+
+    prefix = f"KM-LOCAL-KAW-{day.replace('-', '')}-R"
+    ids = {f'{prefix}{number:02d}-LIVE-R1' for number in range(1, 13)}
+    approved = private.binding.get('formal_execution_ids')
+    approved = {eid for eid in approved if isinstance(eid, str)} if isinstance(approved, list) else set()
+    source_only = private.binding.get('source_only_execution_ids')
+    source_only = {eid for eid in source_only if isinstance(eid, str)} if isinstance(source_only, list) else set()
+    sources, errors, program, races = {}, {}, None, []
+    for eid in sorted(ids & (approved | source_only)):
+        try:
+            private.require_nankan_source_approval(eid, source_only=True)
+            saved = private.resolve(eid, 'SOURCE')
+            if saved is None:
+                continue
+            path = saved['run_dir'] / 'source_receipt_envelope.json'
+            envelope = json.loads(private_file(path).read_bytes())
+            artifact = envelope['artifact']
+            if (artifact.get('provider'), artifact.get('source_manifest_profile')) != (PROVIDER, PROFILE):
+                raise ValueError('PRIVATE_NANKAN_SIGNED_SOURCE_REQUIRED')
+            snapshot = artifact['sources'][1]  # Verified calendar/program order in the SOURCE contract.
+            observed = datetime.fromisoformat(snapshot['fetched_at'])
+            if observed > now:
+                raise ValueError('PRIVATE_NANKAN_PROGRAM_FROM_FUTURE')
+            if program is None or observed > program:
+                raw = gzip.decompress(base64.b64decode(snapshot['raw_gzip_b64'], validate=True))
+                races = nankan.parse_program(raw, snapshot['final_url'], day, venue_id='KAW')
+                program = observed
+            sources[eid] = (saved, envelope)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors[eid] = {'type': type(exc).__name__, 'reason': str(exc)}
+    if program is None:
+        result['source_read_failures'] = errors
+        return result
+
+    plan = {'family_id': 'LOCAL', 'venue_id': 'KAW', 'race_date': day,
+            'provider': PROVIDER, 'races': []}
+    for race in races:
+        post = datetime.fromisoformat(race['scheduled_post_at'])
+        fields = {k: race[k] for k in FIELDS if k != 'prediction_cutoff'}
+        fields['prediction_cutoff'] = (post - timedelta(seconds=cutoff_seconds)).isoformat()
+        eid = f"{prefix}{race['race_no']:02d}-LIVE-R1"
+        plan['races'].append({'fields': fields, 'execution_id': eid, 'provider_race_id': race['provider_race_id']})
+    plan['plan_sha256'] = sha(plan)
+    result.update(status='PRIVATE_NANKAN_DAY_PLAN_READY', first_stop_stage=None,
+                  plan_sha256=plan['plan_sha256'], source_read_failures=errors)
+    approval_path = root / 'profiles' / 'local_autonomous_approvals' / f'{day}-KAW.json'
+
+    def read_day_approval():
+        try:
+            return approval_path.read_bytes()
+        except FileNotFoundError:
+            return private.runtime_approval_bytes()
+
+    approval = None
+    current = None
+    if execute:
+        try:
+            # Scheduling still needs a complete dated plan approval. The
+            # same pinned private document can also authorize the execution.
+            approval_bytes = read_day_approval()
+            approval = json.loads(approval_bytes)
+            if approval.get('cost_control_ref') != private.binding.get('cost_control_ref'):
+                raise ValueError('PRIVATE_DAY_COST_CONTROL_MISMATCH')
+            current = authorization(approval, plan, root, now)
+            result['status'] = 'PRIVATE_NANKAN_DAY_DISPATCH_OBSERVED'
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            approval = None
+            result.update(status='HOLD_PRIVATE_NANKAN_DAY_APPROVAL',
+                          first_stop_stage='DATED_OWNER_AUTHORIZATION',
+                          approval_error={'type': type(exc).__name__, 'reason': str(exc)})
+
+    claims = private.output_directory(private.work_root / 'day-dispatch' / day, create=True)
+    for item in plan['races']:
+        eid, fields = item['execution_id'], item['fields']
+        cell = result['races'][eid] = {**fields, 'delivery_deadline': fields['prediction_cutoff'],
+                                      'execution_approved': (approval is not None and eid in approved
+                                                             and fields['race_no'] in approval['race_numbers']),
+                                      'status': 'HOLD_SIGNED_NANKAN_SOURCE_REQUIRED'}
+        if eid not in sources:
+            continue
+        saved, envelope = sources[eid]
+        artifact = envelope['artifact']
+        if any(datetime.fromisoformat(artifact[k]) != datetime.fromisoformat(fields[k])
+               for k in ('scheduled_post_at', 'prediction_cutoff')):
+            cell['status'] = 'HOLD_SIGNED_NANKAN_SCHEDULE_MISMATCH'
+            continue
+        cell.update(status='SIGNED_NANKAN_SOURCE_VERIFIED', source_receipt_sha256=envelope['receipt_sha256'],
+                    active_runner_count=artifact['official_runner_universe']['runner_count'],
+                    cancelled_runner_ids=[row['runner_id'] for row in artifact['runner_status_registry']
+                                          if row['status'] == 'CANCELLED'])
+        if not cell['execution_approved']:
+            continue
+        try:
+            with private.race_lock(eid):
+                if private.resolve(eid, 'FORMAL') is not None:
+                    cell['status'] = 'EXISTING_SIGNED_FINAL_NO_REDISPATCH'
+                    continue
+                claim = claims / f'{eid}.json'
+                if claim.exists() or claim.is_symlink():
+                    cell['status'] = 'HOLD_PRIOR_CLAIM_NO_AUTOMATIC_RETRY'
+                    continue
+                post, cutoff = (datetime.fromisoformat(fields[k]) for k in ('scheduled_post_at', 'prediction_cutoff'))
+                dispatch_at = clock()
+                if dispatch_at < post - timedelta(seconds=approval['start_lead_seconds']):
+                    cell['status'] = 'WAIT_DISPATCH_WINDOW'
+                    continue
+                deadline = cutoff - timedelta(seconds=approval['minimum_remaining_seconds'])
+                if dispatch_at >= deadline:
+                    cell['status'] = 'DEADLINE_HOLD_NO_RETROACTIVE_START'
+                    continue
+                private.require_nankan_source_approval(eid)
+                request = build(fields, now=dispatch_at)
+                request['source_policy'] = 'CURRENT_LOCAL_OFFICIAL_NANKAN'
+                verified = private.resolve(eid, 'SOURCE')
+                if (request['execution_id'] != eid or request['current_authority_manifest'] != current
+                        or verified is None or verified['run_dir'] != saved['run_dir']
+                        or json.loads(private_file(saved['run_dir'] / 'source_checkpoint_basis.json').read_bytes())
+                        != orchestrator.source_checkpoint_basis(request)):
+                    raise ValueError('PRIVATE_NANKAN_DAY_SOURCE_CHANGED')
+                with private.day_dispatch_lock(day):
+                    claimed = sum((claims / f'{item}.json').exists() or (claims / f'{item}.json').is_symlink()
+                                  for item in ids)
+                    if claimed >= approval['max_dispatches']:
+                        cell['status'] = 'HOLD_DISPATCH_BUDGET_EXHAUSTED'
+                        continue
+                    if clock() >= deadline:
+                        raise ValueError('DEADLINE_EXPIRED_BEFORE_DURABLE_CLAIM')
+                    if read_day_approval() != approval_bytes:
+                        raise ValueError('OWNER_APPROVAL_CHANGED_DURING_WORKER')
+                    private.write(claim, {'execution_id': eid, 'plan_sha256': plan['plan_sha256'],
+                                          'source_receipt_sha256': envelope['receipt_sha256'],
+                                          'claimed_at': dispatch_at.isoformat()})
+                if clock() >= deadline:
+                    raise ValueError('DEADLINE_EXPIRED_DURING_DURABLE_CLAIM')
+                context = orchestrator.PRIVATE_CHECKPOINT.set(private)
+                try:
+                    result['dispatch_count'] += 1
+                    report = local_race_entry.run(request, output=private.work_root / eid / 'day-dispatch',
+                                                  run_id=f'{eid}-day-dispatch',
+                                                  github_sha=os.environ.get('RAILWAY_GIT_COMMIT_SHA'))
+                finally:
+                    orchestrator.PRIVATE_CHECKPOINT.reset(context)
+                cell.update(status=report['status'], first_failed_phase=report.get('first_failed_phase'))
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            cell.update(status='HOLD_PRIVATE_NANKAN_HANDOFF',
+                        error={'type': type(exc).__name__, 'reason': str(exc)})
+    private.write(claims / 'day-plan.json', plan)
+    private.write(claims / ('day-status.json' if execute else 'day-inspection.json'), result)
+    return result
+
+
 def prepare_worker(root, plan, plan_path, state_path, approval_path, *, only_execution_id=None):
     approval = json.loads(approval_path.read_text())
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
@@ -961,6 +1141,13 @@ def main():
         # HOLD must nevertheless alert the caller after preserving its evidence.
         return int(not report['target_races_complete'] or any(
             v.get('status','').startswith('HOLD') for v in report['venues'].values()))
+    if args.venue == 'KAW':
+        if args.execute and root != ROOT:
+            raise ValueError('PRIVATE_NANKAN_DAY_REQUIRES_RUNTIME_REPOSITORY')
+        report = private_kaw_day(root, args.date, args.cutoff_seconds, now=now, execute=args.execute)
+        print(json.dumps({k: report[k] for k in ('status', 'first_stop_stage', 'code', 'dispatch_count', 'plan_sha256')
+                          if k in report}))
+        return 2 if report['status'].startswith('HOLD') else 0
     name = args.date+'-'+args.venue
     folder = root/'runtime/local_race_day_plan'
     plan_path, state_path = folder/(name+'.json'), folder/(name+'.state.json')

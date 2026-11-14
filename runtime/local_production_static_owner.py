@@ -71,6 +71,13 @@ class _VisibleText(HTMLParser):
 
 def _card_heading(source_artifact: dict, *, expected_race: dict | None = None) -> dict:
     sources = source_artifact.get("sources") or []
+    from runtime.local_physical import nankan_kaw_source
+    if source_artifact.get("source_manifest_profile") == nankan_kaw_source.PROFILE:
+        try:
+            nankan_kaw_source.verify(source_artifact)
+        except (KeyError, TypeError, ValueError, OSError) as exc:
+            raise StaticOwnerError("NANKAN_KAW_SOURCE_INVALID") from exc
+        return source_artifact["race_heading"]
     main = next((x for x in sources if x.get("source_class") == "OFFICIAL_RACE_CARD_CURRENT_STATE_BODY_WEIGHT"
                  and x.get("official") is True and x.get("cutoff_relation") == "PRE_CUTOFF"), None)
     if not main or not main.get("raw_gzip_b64"):
@@ -129,7 +136,7 @@ def _start_date(raw: str) -> datetime | None:
         return None
 
 
-def bind_urw_numerical_context(request: dict, source: dict) -> dict:
+def bind_official_numerical_context(request: dict, source: dict) -> dict:
     """Bind the existing URW materializer to the verified card, not distance 0.
 
     SOURCE signature/Authority verification belongs to the existing caller.
@@ -137,7 +144,10 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
     Frozen numerical artifacts are never passed through this function on readback.
     """
     out = copy.deepcopy(request)
-    if request.get("venue_id") != "URW":
+    from runtime.local_physical import nankan_kaw_source
+    nankan = source.get("source_manifest_profile") == nankan_kaw_source.PROFILE
+    venue = request.get("venue_id")
+    if venue != "URW" and not (venue == "KAW" and nankan):
         return out
     from runtime.local_physical.source_acquisition import verify_source_artifact
     valid, errors = verify_source_artifact(source)
@@ -150,7 +160,7 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
                 for k in ("venue_id", "race_date", "race_no")))):
         raise StaticOwnerError("URW_NUMERICAL_SOURCE_RACE_MISMATCH")
     header = _card_heading(source, expected_race=request)
-    observed = {"venue_id": "URW", "race_date": request["race_date"],
+    observed = {"venue_id": venue, "race_date": request["race_date"],
                 "race_no": request["race_no"], "distance": header["distance"],
                 "surface": header["surface"], "class": header["class"]}
     race = out.get("race") or {}
@@ -159,7 +169,7 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
     for key, value in observed.items():
         if key in race and race[key] not in (None, "", "UNKNOWN", value):
             raise StaticOwnerError("URW_NUMERICAL_RACE_CONTEXT_CONFLICT:" + key)
-    if race.get("venue") not in (None, "", "URW", "浦和"):
+    if race.get("venue") not in (None, "", venue, VENUE_NAMES[venue]):
         raise StaticOwnerError("URW_NUMERICAL_RACE_CONTEXT_CONFLICT:venue")
     out["race"] = {**race, **observed}
     card = next(s for s in source["sources"]
@@ -168,7 +178,7 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
     from urllib.parse import urlsplit, parse_qs
     url = urlsplit(card["final_url"])
     query = parse_qs(url.query)
-    if (url.scheme != "https" or url.hostname != "www.keiba.go.jp"
+    if not nankan and (url.scheme != "https" or url.hostname != "www.keiba.go.jp"
             or url.path != "/KeibaWeb/TodayRaceInfo/DebaTable"
             or any(query.get(k) != [v] for k, v in {
                 "k_babaCode": "18", "k_raceDate": request["race_date"].replace("-", "/"),
@@ -183,6 +193,9 @@ def bind_urw_numerical_context(request: dict, source: dict) -> dict:
         "signature_verification": "EXISTING_SOURCE_CALLER_REQUIRED_NOT_GRANTED_HERE",
     }
     return out
+
+
+bind_urw_numerical_context = bind_official_numerical_context
 
 
 def _runner_facts(row: dict, *, venue_name: str, distance: int, race_day: datetime) -> dict:
@@ -276,7 +289,11 @@ def build_formal_static(request: dict, envelope: dict, numerical: dict, *,
             or int(official.get("race_no") or 0) != int(request.get("race_no") or 0)):
         raise StaticOwnerError("OFFICIAL_SOURCE_IDENTITY_MISMATCH")
     official_post = (source.get("normalized_evidence") or {}).get("start_time") or {}
-    if (official_post.get("authority") != "NAR_OFFICIAL"
+    from runtime.local_physical import nankan_kaw_source
+    source_authority = (nankan_kaw_source.PROVIDER
+                        if venue == "KAW" and source.get("source_manifest_profile") == nankan_kaw_source.PROFILE
+                        else "NAR_OFFICIAL")
+    if (official_post.get("authority") != source_authority
             or official_post.get("cutoff_relation") != "PRE_CUTOFF"
             or official_post.get("value") != _dt(request.get("scheduled_post_at")).astimezone(JST).strftime("%H:%M")):
         raise StaticOwnerError("OFFICIAL_SOURCE_POST_MISMATCH")
