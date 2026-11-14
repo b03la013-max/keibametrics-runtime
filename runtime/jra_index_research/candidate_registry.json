@@ -1,0 +1,165 @@
+{
+ "profile": "KM-JRA-INDEX-RESEARCH-v1-REGISTRY",
+ "candidates": [
+  {
+   "hypothesis": "BWI has the weakest standalone winner discrimination in training (winner_pct 0.469); removing it from ZAI-WIN reduces noise",
+   "change": {
+    "type": "ABLATE",
+    "removed": "BWI"
+   },
+   "weights": {
+    "HPI": 0.166667,
+    "SSI": 0.141667,
+    "CFI": 0.083333,
+    "RFI": 0.066667,
+    "JTI": 0.041667,
+    "CSI": 0.041667,
+    "TRI": 0.041667,
+    "GCI": 0.066667,
+    "PRI": 0.1,
+    "KGI": 0.041667,
+    "BVI": 0.15625,
+    "VMI": 0.052083
+   },
+   "parent_formula": "JRA-ZAI-WIN-v1.1",
+   "parent_formula_sha256": "245a29adc2dd87984130bfd9f5a2d90be412cec5113dbc6607fbaf3137c7b88c",
+   "train_window": [
+    "20261012",
+    "20261114"
+   ],
+   "train_races": 207,
+   "expected_effect": "lower paired top3_mean_rank vs Champion",
+   "rejection": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+   "pre_registered": {
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better; 95% bootstrap CI upper bound < 0",
+    "secondary": [
+     "winner_pct (0=top, 0.5=random)",
+     "winner_in_top3",
+     "top3_in_top5",
+     "ordered_pair_top2",
+     "exact_triple_top3"
+    ],
+    "promotion_eligible": "forward OOS >= 100 eligible races AND primary CI upper < 0 AND winner_in_top3 not worse by more than 2 points AND no condition (surface) with >= 30 races worse by > 0.3 rank",
+    "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+    "pfs": "Challengers have no frozen tickets; counterfactual PFS is NOT computed (Production PFS only)"
+   },
+   "candidate_id": "CAND-ZAIW-0bc062d66d",
+   "status": "SHADOW",
+   "registered_at": "2026-11-14T16:26:58.667905+00:00",
+   "forward_from_race_date": "20261115"
+  },
+  {
+   "hypothesis": "re-weight ZAI-WIN toward indices with stronger standalone discrimination, shrunk 50% toward the Champion to limit overfitting",
+   "change": {
+    "type": "DISCRIMINATION_REWEIGHT",
+    "shrink": 0.5
+   },
+   "weights": {
+    "BVI": 0.087204,
+    "BWI": 0.028229,
+    "CFI": 0.081296,
+    "CSI": 0.061508,
+    "GCI": 0.061401,
+    "HPI": 0.132764,
+    "JTI": 0.07461,
+    "KGI": 0.06969,
+    "PRI": 0.081462,
+    "RFI": 0.051185,
+    "SSI": 0.118178,
+    "TRI": 0.052803,
+    "VMI": 0.099672
+   },
+   "parent_formula": "JRA-ZAI-WIN-v1.1",
+   "parent_formula_sha256": "245a29adc2dd87984130bfd9f5a2d90be412cec5113dbc6607fbaf3137c7b88c",
+   "train_window": [
+    "20261012",
+    "20261114"
+   ],
+   "train_races": 207,
+   "expected_effect": "lower paired top3_mean_rank vs Champion",
+   "rejection": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+   "pre_registered": {
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better; 95% bootstrap CI upper bound < 0",
+    "secondary": [
+     "winner_pct (0=top, 0.5=random)",
+     "winner_in_top3",
+     "top3_in_top5",
+     "ordered_pair_top2",
+     "exact_triple_top3"
+    ],
+    "promotion_eligible": "forward OOS >= 100 eligible races AND primary CI upper < 0 AND winner_in_top3 not worse by more than 2 points AND no condition (surface) with >= 30 races worse by > 0.3 rank",
+    "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+    "pfs": "Challengers have no frozen tickets; counterfactual PFS is NOT computed (Production PFS only)"
+   },
+   "candidate_id": "CAND-ZAIW-833492fdec",
+   "status": "SHADOW",
+   "registered_at": "2026-11-14T16:26:58.667964+00:00",
+   "forward_from_race_date": "20261115"
+  },
+  {
+   "hypothesis": "turf and dirt reward different abilities; surface-specific discrimination re-weighting (50% shrink) improves ranking",
+   "change": {
+    "type": "SURFACE_SPLIT_REWEIGHT",
+    "shrink": 0.5
+   },
+   "weights_by_surface": {
+    "芝": {
+     "BVI": 0.084091,
+     "BWI": 0.030537,
+     "CFI": 0.076397,
+     "CSI": 0.059339,
+     "GCI": 0.065588,
+     "HPI": 0.134197,
+     "JTI": 0.077244,
+     "KGI": 0.068955,
+     "PRI": 0.081458,
+     "RFI": 0.049629,
+     "SSI": 0.120818,
+     "TRI": 0.053804,
+     "VMI": 0.097943
+    },
+    "ダ": {
+     "BVI": 0.090928,
+     "BWI": 0.025468,
+     "CFI": 0.087157,
+     "CSI": 0.064105,
+     "GCI": 0.056392,
+     "HPI": 0.131048,
+     "JTI": 0.071457,
+     "KGI": 0.070569,
+     "PRI": 0.081466,
+     "RFI": 0.053046,
+     "SSI": 0.115018,
+     "TRI": 0.051606,
+     "VMI": 0.10174
+    }
+   },
+   "parent_formula": "JRA-ZAI-WIN-v1.1",
+   "parent_formula_sha256": "245a29adc2dd87984130bfd9f5a2d90be412cec5113dbc6607fbaf3137c7b88c",
+   "train_window": [
+    "20261012",
+    "20261114"
+   ],
+   "train_races": 207,
+   "expected_effect": "lower paired top3_mean_rank vs Champion",
+   "rejection": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+   "pre_registered": {
+    "primary": "paired top3_mean_rank (Challenger - Champion), lower is better; 95% bootstrap CI upper bound < 0",
+    "secondary": [
+     "winner_pct (0=top, 0.5=random)",
+     "winner_in_top3",
+     "top3_in_top5",
+     "ordered_pair_top2",
+     "exact_triple_top3"
+    ],
+    "promotion_eligible": "forward OOS >= 100 eligible races AND primary CI upper < 0 AND winner_in_top3 not worse by more than 2 points AND no condition (surface) with >= 30 races worse by > 0.3 rank",
+    "degradation": "forward OOS >= 30 races with primary CI lower > 0 -> REJECTED",
+    "pfs": "Challengers have no frozen tickets; counterfactual PFS is NOT computed (Production PFS only)"
+   },
+   "candidate_id": "CAND-ZAIW-c6f0732ede",
+   "status": "SHADOW",
+   "registered_at": "2026-11-14T16:26:58.667977+00:00",
+   "forward_from_race_date": "20261115"
+  }
+ ]
+}

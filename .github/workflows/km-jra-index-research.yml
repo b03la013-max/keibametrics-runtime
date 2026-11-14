@@ -1,0 +1,72 @@
+name: JRA 20-Index Reflection Research
+run-name: JRA 20-index reflection / Challenger research
+
+# Research only. Reads signed FINALs, official top3 and settlements; writes only
+# runtime/jra_index_research. Never touches the Production prediction path.
+permissions:
+  contents: write
+
+on:
+  workflow_run:
+    # New official results land here (Static Owner cohort result_evaluation.json).
+    workflows: ["JRA Candidate Automatic Official Postresult Closed Loop"]
+    types: [completed]
+  schedule:
+    # Sat/Sun 09:10-17:40 JST: freeze Challenger Shadows for newly signed FINALs.
+    - cron: "10,40 0-8 * * 0,6"
+    # Weekly walk-forward: Monday 03:20 JST.
+    - cron: "20 18 * * 0"
+  workflow_dispatch:
+    inputs:
+      weekly:
+        description: "Recompute walk-forward"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: jra-index-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Tests
+        run: |
+          python -m pip install --disable-pip-version-check -q pytest
+          python -m pytest -q tests/test_jra_index_research.py tests/test_jra_zai_version_forward_oos.py
+      - name: Reflect, analyse, freeze Shadow, evaluate forward OOS
+        env:
+          WEEKLY: ${{ github.event.schedule == '20 18 * * 0' || inputs.weekly == true }}
+        run: |
+          set -euo pipefail
+          D=$(TZ=Asia/Tokyo date +%F)
+          args="--date $D"
+          if [ "$WEEKLY" = "true" ]; then args="$args --weekly"; fi
+          python runtime/analysis/jra_index_research.py $args
+          python runtime/analysis/jra_zai_version_forward_oos.py freeze --date "$D"
+          python runtime/analysis/jra_zai_version_forward_oos.py evaluate
+          python runtime/analysis/jra_zai_version_forward_oos.py summary | tee runtime_zai_oos_summary.json
+          mkdir -p runtime/jra_zai_forward_oos && cp runtime_zai_oos_summary.json runtime/jra_zai_forward_oos/summary.json
+      - name: Persist research artefacts only
+        run: |
+          set -euo pipefail
+          git config user.name "keibametrics-runtime"
+          git config user.email "actions@users.noreply.github.com"
+          git add runtime/jra_index_research runtime/jra_zai_forward_oos
+          if git diff --cached --quiet; then echo "NO_RESEARCH_CHANGE"; exit 0; fi
+          git commit -m "research: JRA 20-index reflection / Challenger Shadow / ZAI OOS [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
