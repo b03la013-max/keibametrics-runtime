@@ -206,6 +206,50 @@ def materialize_production(
         and numeric_value_count == required_count
     )
 
+    # Operational outcome: distinguish numerical terminalization from evidence
+    # availability. A nonmissing feature/coverage=1 can still be a *proxy*;
+    # neither is proof of directly measured official data or of prediction use.
+    component_sets = _load(PRODUCTION_EVIDENCE_REGISTRY)["common_component_sets"]
+    components_expected = len(out["runners"]) * equivalence["component_rule_count"]
+    components_accounted = 0
+    components_missing = 0
+    components_partial = 0
+    components_full_coverage = 0
+    for runner in out["runners"]:
+        canonical = runner.get("canonical_components") or {}
+        for base_index, expected_names in component_sets.items():
+            index_spec = canonical.get(base_index) or {}
+            ledger = {
+                c.get("component"): c for c in (index_spec.get("components") or [])
+                if isinstance(c, dict) and isinstance(c.get("component"), str)
+            }
+            for name in expected_names:
+                detail = ledger.get(name)
+                if detail is None:
+                    continue
+                components_accounted += 1
+                if detail.get("missing") is True:
+                    components_missing += 1
+                elif isinstance(detail.get("coverage"), (int, float)) and not isinstance(detail.get("coverage"), bool):
+                    coverage = float(detail["coverage"])
+                    if 0.0 <= coverage < 1.0:
+                        components_partial += 1
+                    elif coverage >= 1.0:
+                        components_full_coverage += 1
+    out["base9_component_evidence_audit"] = {
+        "expected_component_cells": components_expected,
+        "accounted_component_cells": components_accounted,
+        "unaccounted_component_cells": components_expected - components_accounted,
+        "explicit_missing_component_cells": components_missing,
+        "nonmissing_component_cells": components_accounted - components_missing,
+        "partial_coverage_nonmissing_cells": components_partial,
+        "full_coverage_nonmissing_cells": components_full_coverage,
+        "direct_measured_component_cells": None,
+        "proxy_component_cells": None,
+        "direct_vs_proxy_verified": False,
+        "scope": "NUMERICAL_EVIDENCE_AVAILABILITY_ONLY_NOT_CONSUMER_USE",
+    }
+
     out["required_indices"] = required
     out["numeric_coverage"] = {
         "required_count": required_count,
