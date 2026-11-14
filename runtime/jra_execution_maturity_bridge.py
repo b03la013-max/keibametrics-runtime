@@ -402,8 +402,21 @@ def prepare_production_numerical(intent: Dict[str,Any], source_env: Dict[str,Any
     req = {"family_id":"JRA", "race_id":intent["race_id"],
            "prediction_cutoff":intent["prediction_cutoff"],
            "acceptance_only":bool(intent.get("acceptance_only")), "runners":runners}
+    pack_failure = None
     if intent.get("supplemental_evidence_pack") is not None:
-        req, _ = apply_supplemental_evidence_pack(req, intent["supplemental_evidence_pack"], mapping)
+        pack = intent["supplemental_evidence_pack"]
+        if isinstance(pack, dict) and pack.get("owner_decision") == "OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY":
+            # Owner-captured external pack: a rejected pack leaves the race on
+            # official evidence only (recorded), never without a prediction.
+            try:
+                req, _ = apply_supplemental_evidence_pack(req, pack, mapping)
+            except ValueError as exc:
+                pack_failure = {"status": "SUPPLEMENTAL_PACK_REJECTED_OFFICIAL_ONLY",
+                                "reason": str(exc)[:300], "pack_sha256": pack.get("pack_sha256")}
+        else:
+            req, _ = apply_supplemental_evidence_pack(req, pack, mapping)
+    if pack_failure:
+        req["supplemental_evidence_pack_failure"] = pack_failure
     features = compile_source_to_features(source, req["runners"], mapping)
     # Preserve the exact compiler-time corpus, including its admitted snapshot
     # list. Reconstructing a manifest later cannot prove which inflow supplied

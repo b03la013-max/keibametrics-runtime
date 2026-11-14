@@ -53,11 +53,13 @@
     ],
     "expert_support": [
       "JRA-EXPERT-SUPPORT-CATEGORY-v1",
-      "KM-JRA-EXPERT-SUPPORT-v1"
+      "KM-JRA-EXPERT-SUPPORT-v1",
+      "KM-JRA-BLOODB-PEDIGREE-EVALUATION-MARK-v1"
     ],
     "external_index_support": [
       "JRA-EXTERNAL-INDEX-SUPPORT-CATEGORY-v1",
-      "KM-JRA-EXTERNAL-INDEX-SUPPORT-v1"
+      "KM-JRA-EXTERNAL-INDEX-SUPPORT-v1",
+      "KM-JRA-TSL-MARK-BAND-v1"
     ],
     "finish_margin": [
       "KM-JRA-FINISH-MARGIN-v1"
@@ -122,12 +124,14 @@
       "KM-JRA-PACE-RESILIENCE-v1"
     ],
     "pedigree_class": [
-      "KM-JRA-PEDIGREE-CLASS-v1"
+      "KM-JRA-PEDIGREE-CLASS-v1",
+      "KM-JRA-BLOODB-SIRE-GENERATION-RANK-BAND-v1"
     ],
     "pedigree_distance": [
       "HSN-BVI-T2200-PEDIGREE-DISTANCE-v1.2",
       "HSN-BVI-T2400-PEDIGREE-DISTANCE-v1.2",
-      "KM-JRA-PEDIGREE-DISTANCE-v1"
+      "KM-JRA-PEDIGREE-DISTANCE-v1",
+      "KM-JRA-BLOODB-SIRE-DISTANCE-TYPE-RANK-BAND-v1"
     ],
     "pedigree_surface": [
       "HSN-BVI-T2200-PEDIGREE-SURFACE-v1.2",
@@ -201,7 +205,8 @@
       "KM-JRA-SIRE-NEWCOMER-SIGNAL-v1"
     ],
     "sire_track_signal": [
-      "KM-JRA-SIRE-TRACK-SIGNAL-v1"
+      "KM-JRA-SIRE-TRACK-SIGNAL-v1",
+      "KM-JRA-BLOODB-SIRE-COURSE-RANK-BAND-v1"
     ],
     "speed_reliability": [
       "KM-JRA-SPEED-RELIABILITY-v1"
@@ -283,5 +288,27 @@
     "numeric_effect": "NONE",
     "prediction_policy_effect": "NONE",
     "repair_scope": "Register every Production Mapping feature and enforce mapping-registry closure before race compilation."
-  }
+  },
+  "owner_amendments": [
+    {
+      "id": "OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY",
+      "decided_at": "2026-11-14T15:16:00+09:00",
+      "decided_by": "Owner (上濵さん)",
+      "rules": {
+        "sire_track_signal": "KM-JRA-BLOODB-SIRE-COURSE-RANK-BAND-v1",
+        "pedigree_class": "KM-JRA-BLOODB-SIRE-GENERATION-RANK-BAND-v1",
+        "pedigree_distance": "KM-JRA-BLOODB-SIRE-DISTANCE-TYPE-RANK-BAND-v1",
+        "expert_support": "KM-JRA-BLOODB-PEDIGREE-EVALUATION-MARK-v1",
+        "external_index_support": "KM-JRA-TSL-MARK-BAND-v1"
+      },
+      "bands": {
+        "rank (CR/GR/血統タイプ, 1=best)": "1-3 EXCEPTIONAL, 4-10 VERY_STRONG, 11-20 STRONG, 21-35 POSITIVE, 36-55 NEUTRAL, 56-75 MIXED, 76+ CAUTION, blank=no observation",
+        "BLOOD BIAS 血統評価": "血 VERY_STRONG, 注 STRONG, blank=no observation",
+        "TSL 印": "◎ VERY_STRONG, ○ STRONG, ▲/☆ POSITIVE, △ NEUTRAL, × MIXED, 無印 CAUTION"
+      },
+      "distance_type": "芝 <=1400 p / <=1800 s / else t; ダ <=1300 p / <=1700 s / else t (BLOOD BIAS help2)",
+      "zai_formula": "JRA-ZAI-v1.1 = v1.0 x 0.80 + BVI 0.15 + VMI 0.05 (races on/after 2026-11-15)",
+      "storage": "raw captures in private keibametrics-evidence-private; public packs carry band + digest only"
+    }
+  ]
 }
