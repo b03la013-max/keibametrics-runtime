@@ -73,10 +73,20 @@ jobs:
           expected_local_parent=auth["manifest_id"]
           # R51 changes only JRA NEWCOMER PAPER execution. LOCAL pointers
           # retain R50, with exact scoped/common equality checked here.
-          if auth["manifest_id"]=="KM-FAMILY-CURRENT-AUTHORITY-20261012-R51":
+          # R52 changes only JRA (ZAI v1.1 / BLOOD BIAS-TSL bands) and inherits R51.
+          if auth["manifest_id"] in ("KM-FAMILY-CURRENT-AUTHORITY-20261012-R51",
+                                     "KM-FAMILY-CURRENT-AUTHORITY-20261115-R52"):
+              if auth["manifest_id"].endswith("-R52"):
+                  r51=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261012_R51.json")
+                  assert auth["predecessor"]==r51["manifest_id"]
+                  assert auth["family_scoped_authority"]["LOCAL"]==r51["family_scoped_authority"]["LOCAL"]
+                  assert cc==r51["common_family_components"]
+                  auth_chain=r51
+              else:
+                  auth_chain=auth
               parent=j("profiles/KM_FAMILY_CURRENT_AUTHORITY_20261011_R50.json")
-              assert auth["predecessor"]==parent["manifest_id"]
-              assert auth["family_scoped_authority"]["LOCAL"]==parent["family_scoped_authority"]["LOCAL"]
+              assert auth_chain["predecessor"]==parent["manifest_id"]
+              assert auth_chain["family_scoped_authority"]["LOCAL"]==parent["family_scoped_authority"]["LOCAL"]
               assert cc==parent["common_family_components"]
               expected_local_parent=parent["manifest_id"]
           expected_local_route=route["profile_id"]
