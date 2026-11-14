@@ -203,11 +203,14 @@ def test_saved_oct24_36_races_preserve_finals_and_separate_storage_from_signatur
     schedule=json.loads((root/'runtime/jra_race_day_plan/2026-10-24.schedule.json').read_text())
     finals={p:p.read_bytes() for p in (root/'runtime/final_artifacts').glob('*20261024*.json')}
     rows=[race_status(root,rid,s,{},dt.datetime(2026,10,24,20,tzinfo=JST)) for rid,s in schedule.items()]
-    expected_learning=int(os.environ.get('KM_STATUS_EXPECTED_LEARNING','32'))
+    # KYO-20261024-R07 learning was stored later by the automatic post-result run
+    # (commit 9ccdc9590, 2026-11-08), so the saved data now holds 33 learned races.
+    expected_learning=int(os.environ.get('KM_STATUS_EXPECTED_LEARNING','33'))
     expected_receipts=int(os.environ.get('KM_STATUS_EXPECTED_RECEIPTS','33'))
     assert len(rows)==36 and len(finals)==33
-    assert Counter(r['state'] for r in rows)=={
-        'SETTLED_SIGNED_RESULT_LEARNED':expected_learning,'SETTLED':33-expected_learning,'AKI_NO_BET':3}
+    expected_states={'SETTLED_SIGNED_RESULT_LEARNED':expected_learning,
+                     'SETTLED':33-expected_learning,'AKI_NO_BET':3}
+    assert Counter(r['state'] for r in rows)=={k:v for k,v in expected_states.items() if v}
     proof=[r['post_result_evidence'] for r in rows]
     assert sum(p['review_learning_bound'] for p in proof)==expected_learning
     assert sum(p['zero_exposure_result_learning_bound'] for p in proof)==3
