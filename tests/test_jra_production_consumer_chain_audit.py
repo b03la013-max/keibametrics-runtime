@@ -64,3 +64,21 @@ def test_final_after_post_fails(tmp_path):
     def m(d):
         d["final_freeze_timestamp"] = d["scheduled_post_at"]
     assert not _audit(tmp_path, m)["checks"]["C6_final_prestart"]
+
+
+def test_audit_uses_registered_zai_version_by_race_date():
+    v = {k: 50.0 + i for i, k in enumerate(a.BASE13)}
+    assert a.zai_win(v, "KM-JRA-TKY-20261114-R11") == a.zai_win(v)  # v1.0
+    v11 = a.zai_win(v, "KM-JRA-TKY-20261115-R11")
+    expect = sum(v[k] * w for k, w in {"HPI": .16, "SSI": .136, "CFI": .08, "RFI": .064, "JTI": .04,
+                                        "CSI": .04, "TRI": .04, "BWI": .04, "GCI": .064, "PRI": .096,
+                                        "KGI": .04, "BVI": .15, "VMI": .05}.items())
+    assert abs(v11 - expect) < 1e-9
+
+
+def test_v10_final_relabelled_as_v11_date_fails_arithmetic(tmp_path):
+    def m(d):
+        d["race_id"] = d["race_id"].replace("20261108", "20261115")
+    r = _audit(tmp_path, m)
+    assert r["zai_formula_version"] == "v1.1"
+    assert not r["checks"]["C3_full20_arithmetic"]

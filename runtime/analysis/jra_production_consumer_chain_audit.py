@@ -43,14 +43,19 @@ def _t(s):
     return dt.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
 
 
-def zai_win(v):
-    return (v["HPI"]*.20 + v["SSI"]*.17 + v["CFI"]*.10 + v["RFI"]*.08 + v["JTI"]*.05 + v["CSI"]*.05
-            + v["TRI"]*.05 + v["BWI"]*.05 + v["GCI"]*.08 + v["PRI"]*.12 + v["KGI"]*.05)
+import sys as _sys
+_sys.path.insert(0, str(ROOT / "runtime"))
+from jra_index_provenance_builder import (zai_formula_version, zai_place_value,  # noqa: E402
+                                          zai_win_value)
 
 
-def zai_place(v):
-    return (v["HPI"]*.16 + v["SSI"]*.14 + v["CFI"]*.10 + v["RFI"]*.14 + v["JTI"]*.05 + v["CSI"]*.06
-            + v["TRI"]*.05 + v["BWI"]*.08 + v["GCI"]*.08 + v["PRI"]*.08 + v["KGI"]*.06)
+def zai_win(v, race_id=None):
+    """Registered ZAI-WIN for the race date (v1.0 before 2026-11-15, v1.1 after)."""
+    return zai_win_value(v, zai_formula_version(race_id))
+
+
+def zai_place(v, race_id=None):
+    return zai_place_value(v, zai_formula_version(race_id))
 
 
 def tpi_base(v):
@@ -120,12 +125,13 @@ def audit_final(path, root, mapping):
             else:
                 bad += 1
         try:
-            if abs(zai_win(v) - r["zai_win"]) > TOL or abs(zai_place(v) - r["zai_place"]) > TOL \
+            if abs(zai_win(v, rid) - r["zai_win"]) > TOL or abs(zai_place(v, rid) - r["zai_place"]) > TOL \
                     or abs(tpi_base(v) - r["tpi_base"]) > TOL:
                 arith = False
         except (KeyError, TypeError):
             arith = False
     c["C3_full20_arithmetic"] = bad == 0 and arith
+    out["zai_formula_version"] = zai_formula_version(rid)
     out["full20_cells"] = cells
     out["full20_required"] = 20 * len(runners)
 
