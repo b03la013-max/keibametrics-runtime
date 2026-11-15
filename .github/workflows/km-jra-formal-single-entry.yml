@@ -2,6 +2,7 @@ name: KeibaMetrics JRA Formal Single Entry
 
 permissions:
   contents: write
+  issues: write
   actions: write
   id-token: write
   attestations: write
@@ -450,6 +451,21 @@ jobs:
           PY
 
 
+      - name: Deliver NO-BET to the Owner before post (issue comment notification)
+        if: steps.blocked_terminal.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INTENT_FILE: ${{ steps.meta.outputs.intent_file }}
+        run: |
+          set -euo pipefail
+          RACE_ID="$(jq -r .race_id "$INTENT_FILE")"
+          POST_AT="$(jq -r .scheduled_post_at "$INTENT_FILE")"
+          REASON="$(jq -r '.first_actual_blocked_stage // .terminal_route // "NO-BET"' runtime_out/jra_production_blocker_classification.json 2>/dev/null || echo NO-BET)"
+          python runtime/jra_owner_issue_delivery.py --race-id "$RACE_ID" --post-at "$POST_AT" \
+            --no-bet-reason "$REASON" --receipt runtime_out/jra_owner_issue_delivery.json
+
       - name: Independently attest JRA NO_BET terminal with GitHub OIDC
         if: (steps.blocked_terminal.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
         uses: actions/attest-build-provenance@v2
@@ -703,6 +719,20 @@ jobs:
           PYTHONPATH=runtime python runtime/jra_ticket_tree_renderer.py runtime_out/jra_immutable_final.json \
             > runtime_out/jra_ticket_tree.txt
           { echo "## ${RACE_ID} 買い目"; echo '```'; cat runtime_out/jra_ticket_tree.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deliver FINAL to the Owner before post (issue comment notification)
+        if: (steps.formal_run.outcome == 'success') && steps.final_readback.outcome == 'success' && steps.final_readback.outputs.reused != 'true'
+        # Owner approved 2026-11-15 19:50; never posts at/after post time; never blocks Production.
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RACE_ID="$(jq -r .race_id runtime_out/jra_single_entry_formal_request.json)"
+          POST_AT="$(jq -r .scheduled_post_at runtime_out/jra_immutable_final.json)"
+          python runtime/jra_owner_issue_delivery.py --race-id "$RACE_ID" --post-at "$POST_AT" \
+            --tree runtime_out/jra_ticket_tree.txt --receipt runtime_out/jra_owner_issue_delivery.json
 
 
       - name: Persist single-entry execution report
