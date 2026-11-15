@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import subprocess
 import json
 import os
@@ -78,6 +79,27 @@ def f0(x):
     return '–' if x is None else f'{x:.0f}'
 
 
+def paper_identifiability(race, res):
+    """Presentation-only uncertainty for all-newcomer PAPER; no numeric/ticket policy change."""
+    rows = res.get('rows') or []
+    order = res.get('order') or []
+    if not rows or race.get('newcomers') != len(rows) or len(order) != len(rows):
+        return 'NOT_ALL_NEWCOMERS'
+    pairs = [(x.get('F3S'), x.get('p_win')) for x in order]
+    numeric = all(
+        isinstance(a, (int, float)) and not isinstance(a, bool)
+        and isinstance(b, (int, float)) and not isinstance(b, bool)
+        and math.isfinite(a) and math.isfinite(b)
+        for a, b in pairs
+    )
+    if numeric and (max(a for a, _ in pairs) - min(a for a, _ in pairs) <= 1e-9
+                    and max(b for _, b in pairs) - min(b for _, b in pairs) <= 1e-9):
+        return 'ALL_NEWCOMER_TIE'
+    return 'ALL_NEWCOMER_LOW_EVIDENCE'
+
+
+
+
 # --------------------------------------------------------------------- render
 def render(race, res, edition, src_at, shadow=None, revision=None):
     a = res['aki']
@@ -89,6 +111,11 @@ def render(race, res, edition, src_at, shadow=None, revision=None):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
+    identifiability = paper_identifiability(race, res)
+    if identifiability == 'ALL_NEWCOMER_TIE':
+        L.append('- **PAPER判定留保／NO-BET推奨**：全頭が未出走でF3Sと暫定勝率も全頭同値。表示の印・W/P2/P3は識別できない同点順位の暫定表示であり、参考券面は資金判断に使用しない（券面・計算・Freezeは変更しない）。')
+    elif identifiability == 'ALL_NEWCOMER_LOW_EVIDENCE':
+        L.append('- **PAPER低識別力**：全頭が未出走で、過去走による能力比較は成立しない。暫定順位・券面を実証的な優劣と解釈しない（数値Policyと券面は変更しない）。')
     L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | p勝(暫定) | 役割 |',
           '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
