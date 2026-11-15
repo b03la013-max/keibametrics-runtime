@@ -68,6 +68,27 @@ def summarize(root):
             'milestones': {k: n >= k for k in (30, 100, 500)}, 'days': days}
 
 
+def observation(root):
+    """Per venue: share of runners whose official-29 cell was CALCULATED (not
+    rule-neutral) for each index, from the shadow files (candidate arithmetic)."""
+    out = {}
+    for day in sorted(p for p in Path(root).iterdir() if p.is_dir() and p.name[:2] == '20'):
+        for f in day.glob('*.shadow29.json'):
+            try:
+                s = json.loads(f.read_text())
+            except ValueError:
+                continue
+            if s.get('error') or not s.get('runner_count'):
+                continue
+            v = out.setdefault(f.name[:3], {'runners': 0, 'neutral': Counter()})
+            v['runners'] += s['runner_count']
+            v['neutral'].update(s.get('non_calculated_by_index') or {})
+    idx = sorted({k for v in out.values() for k in v['neutral']})
+    return {venue: {'runners': v['runners'],
+                    'observed_rate': {k: round(1 - v['neutral'].get(k, 0) / v['runners'], 3) for k in idx}}
+            for venue, v in sorted(out.items())}, idx
+
+
 def write(root):
     s = summarize(root)
     (Path(root) / 'forward_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
@@ -80,5 +101,12 @@ def write(root):
     for k, d in s['days'].items():
         L.append(f"| {k} | {d['races']} | {d['prestart']} | {d['settled']} | {d['eff']:,} | {d['pay']:,} | "
                  f"{round(100 * d['pay'] / d['eff'], 1) if d['eff'] else '–'}% |")
+    obs, idx = observation(root)
+    s['observation'] = obs
+    (Path(root) / 'forward_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
+    L += ['', '## 全29指数の観測率（場別・CALCULATEDの比率。それ以外は全頭が規則中立）', '',
+          '| 場 | 頭数 | ' + ' | '.join(idx) + ' |', '|---|---|' + '---|' * len(idx)]
+    for v, o in obs.items():
+        L.append(f"| {v} | {o['runners']} | " + ' | '.join(f"{o['observed_rate'][k]:.0%}" for k in idx) + ' |')
     (Path(root) / 'forward_summary.md').write_text('\n'.join(L) + '\n')
     return s
