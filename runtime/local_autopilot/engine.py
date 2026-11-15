@@ -18,6 +18,7 @@ import unicodedata
 from datetime import date
 
 NEUTRAL = 52.0
+VMI_WEIGHT = 0.10  # external auxiliary (SBO) share of F3S-L; fixed prior, Owner-approved adoption
 
 # §3.5 / §23-§26 jockey notes (surname prefixes). Higher = stronger at venue.
 JOCKEYS = {
@@ -219,7 +220,7 @@ def softmax(xs, tau):
     return [v / s for v in e]
 
 
-def predict(race, runners, odds, today):
+def predict(race, runners, odds, today, ext=None):
     active = [r for r in runners if r.get('status') != 'CANCELLED'
               and not (odds.get(r['horse_no'], {}).get('cancelled'))]
     rows = []
@@ -262,6 +263,14 @@ def predict(race, runners, odds, today):
         x['T3I'] = clamp(t3)
         x['F3S'] = clamp(0.25 * x['SRI'] + 0.20 * x['TPIF'] + 0.18 * x['EVI'] + 0.14 * x['RFI'] + 0.12 * x['CFI']
                          + 0.06 * x['NCI'] + 0.05 * x['T3I'])
+    # VMI-L: external auxiliary indicator (水分ボンバー, Owner-approved 2026-11-15), one step
+    # lower than the model: fixed prior weight VMI_WEIGHT, unknown horse = 52, never fitted.
+    vm = (ext or {}).get('vmi') or {}
+    for x in rows:
+        x['VMI'] = vm.get(x['no'])
+    if any(x['VMI'] is not None for x in rows):
+        for x in rows:
+            x['F3S'] = clamp((1 - VMI_WEIGHT) * x['F3S'] + VMI_WEIGHT * (x['VMI'] if x['VMI'] is not None else NEUTRAL))
     # probabilities (uncalibrated)
     pm = softmax([x['F3S'] for x in rows], 4.5)
     imp = [1 / x['win'] if x['win'] else None for x in rows]

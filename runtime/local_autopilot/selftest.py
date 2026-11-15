@@ -2,7 +2,8 @@
 
 python -m runtime.local_autopilot.selftest
 """
-from runtime.local_autopilot import settle
+from runtime.local_autopilot import settle, sbo, engine
+from datetime import date
 
 
 def pred(tickets, ranking=(1, 2, 3, 4, 5)):
@@ -41,7 +42,29 @@ def check():
     pr = pred([{'k': 'ワイド', 'b': '1-2 / 1-6'}]); pr['runners'] = [{'no': n} for n in (1, 2, 3, 6)]
     st = settle.settle_parsed(res, pr, 'p')
     assert st['non_starters_inferred'] == [6] and st['refund'] == 100 and st['payout'] == 300, st
-    print('SELFTEST_OK 6/6')
+    # 7) SBO table parsing (synthetic page with the same structure) + VMI-L
+    html = ('<table id="table"><tr><th>馬</th></tr>'
+            '<tr><td rowspan="2">1</td><td rowspan="2">A</td><td>t</td><td>52.0</td><td>j</td><td><br /></td>'
+            '<td class="center">88(5)</td><td>87(5)</td><td class="bgred">89(5)</td><td rowspan="2">88</td></tr>'
+            '<tr><td>81-98</td><td>81-98</td><td>74-101</td></tr>'
+            '<tr><td rowspan="2">2</td><td rowspan="2">B</td><td>t</td><td>54.0</td><td>j</td><td><br /></td>'
+            '<td>*(0)</td><td>*(0)</td><td>*(0)</td><td>*</td></tr><tr><td></td><td></td><td></td></tr>'
+            '<tr><td rowspan="2">3</td><td rowspan="2">C</td><td>t</td><td>54.0</td><td>j</td><td><br /></td>'
+            '<td>80(3)</td><td>80(3)</td><td>80(3)</td><td>80</td></tr></table>')
+    t = sbo.parse_table(html)
+    assert t[1]['avg'] == 88 and t[2]['avg'] is None and t[3]['n'] == 3, t
+    v = sbo.vmi(t, [1, 2, 3])
+    assert v[2] is None and v[1] == 60.0 and v[3] == 44.0, v
+    # 8) VMI blend changes F3S by the fixed prior weight only, unknown horse -> neutral 52
+    runners = [{'horse_no': n, 'name': f'H{n}', 'frame_no': n, 'starts': [], 'current_jockey': 'x', 'trainer': 'y'}
+               for n in (1, 2, 3)]
+    race = {'venue_id': 'OHI', 'venue_name': '大井', 'distance': 1200, 'race_name': 'C3', 'class_text': ''}
+    odds = {n: {'win': w} for n, w in ((1, 2.0), (2, 4.0), (3, 8.0))}
+    a = {x['no']: x['F3S'] for x in engine.predict(race, runners, odds, date(2026, 11, 16))['rows']}
+    b = {x['no']: x['F3S'] for x in engine.predict(race, runners, odds, date(2026, 11, 16), {'vmi': v})['rows']}
+    w = engine.VMI_WEIGHT
+    assert abs(b[1] - ((1 - w) * a[1] + w * 60)) < 1e-9 and abs(b[2] - ((1 - w) * a[2] + w * 52)) < 1e-9, (a, b)
+    print('SELFTEST_OK 8/8')
 
 
 if __name__ == '__main__':

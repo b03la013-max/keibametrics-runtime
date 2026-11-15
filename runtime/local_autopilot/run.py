@@ -23,7 +23,9 @@ Outputs (KM_LOCAL_AUTOPILOT_OUT, default runtime/local_autopilot/output):
   <date>/<VENUE>_<RR>.shadow29.json  official 29-index arithmetic (shadow)
   <date>/<VENUE>_<RR>.result.json    official result + PAPER settlement
   <date>/metrics.jsonl, autopilot_log.txt
-PAPER only: no purchase, no external notification, no Formal claim.
+PAPER only: no purchase, no Formal claim. The only outbound message is the
+Owner-approved pre-start comment on issue #424 (deliver()); 水分ボンバー VMI-L
+is an external auxiliary at a fixed prior weight (engine.VMI_WEIGHT).
 """
 from __future__ import annotations
 
@@ -40,6 +42,7 @@ from pathlib import Path
 
 from runtime.local_autopilot import engine
 from runtime.local_autopilot import rakuten as rk
+from runtime.local_autopilot import sbo
 from runtime.local_autopilot import settle
 
 JST = timezone(timedelta(hours=9))
@@ -51,7 +54,7 @@ CUTOFF_MIN = 3          # Rakuten closes voting 2 min before post; we freeze 3 m
 MAX_ATTEMPTS = 3
 RESULT_DELAY_MIN = 20
 CODE_VERSION = hashlib.sha256(b''.join(
-    (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py'))).hexdigest()[:12]
+    (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py', 'sbo.py'))).hexdigest()[:12]
 LOG = []
 
 
@@ -79,22 +82,26 @@ def f0(x):
 
 
 # --------------------------------------------------------------------- render
-def render(race, res, edition, src_at, shadow=None, revision=None):
+def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None):
     a = res['aki']
     L = [f"## {race['venue_name']}{race['race_no']}R {race['post_current'][11:16]}発走　{race.get('race_name', '')}",
          f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表・オッズ取得 {src_at[11:16]}）"
          + (f"　改訂理由：{revision}" if revision else ''),
          '', f"- 展開：{res['pace']}", f"- レース型（§30）：**{res['race_type']}**"]
+    if sbo_meta:
+        L.append(f"- 外部補助指標VMI-L（水分ボンバー・F3Sへ{engine.VMI_WEIGHT:.0%}）：" + (
+            f"使用 {sbo_meta['coverage']}/{sbo_meta['active']}頭（取得 {sbo_meta['fetched_at'][11:16]}）" if sbo_meta['status'] == 'USED'
+            else f"未使用（{sbo_meta['status']}）→ F3Sは従来式"))
     if race.get('scratched'):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
-    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | p勝(暫定) | 役割 |',
-          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | p勝(暫定) | 役割 |',
+          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
         L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or ''} | "
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
-                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | "
+                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
     ev = '–' if res['tan_ev'] is None else f"{res['tan_ev']:+.2f}"
     L += ['', '**本命判定エンジン（§12）**', '',
@@ -177,6 +184,33 @@ def cutoff(r):
     return datetime.fromisoformat(r['post_current']) - timedelta(minutes=CUTOFF_MIN)
 
 
+_SBO = []
+
+
+def sbo_aux(r, runners):
+    """水分ボンバー VMI-L for this race, only from a snapshot fetched before cutoff."""
+    try:
+        if not _SBO:
+            _SBO.append(sbo.Client(ROOT / 'sbo_state.json'))
+        snap = sbo.snapshot(_SBO[0], r['race_date'], r['venue_id'], r['race_no'])
+        at = now_jst().isoformat()
+        active = [x['horse_no'] for x in runners if x.get('status') != 'CANCELLED']
+        meta = {'status': snap['status'], 'fetched_at': at, 'sha256': snap.get('sha256'), 'active': len(active),
+                'coverage': 0, 'weight': engine.VMI_WEIGHT}
+        if snap['status'] != 'OK':
+            return None, meta
+        if datetime.fromisoformat(at) >= cutoff(r):
+            meta['status'] = 'FETCHED_AFTER_CUTOFF'
+            return None, meta
+        v = sbo.vmi(snap['table'], active)
+        meta['coverage'] = sum(1 for x in v.values() if x is not None)
+        meta['status'] = 'USED' if meta['coverage'] else 'NO_INDEX'
+        return ({'vmi': v} if meta['coverage'] else None), meta
+    except Exception as exc:  # external auxiliary must never block the prediction
+        return None, {'status': 'UNAVAILABLE', 'error': f'{type(exc).__name__}:{str(exc)[:120]}',
+                      'fetched_at': now_jst().isoformat(), 'sha256': None, 'coverage': 0, 'active': len(runners)}
+
+
 def predict(reader, r, today, edition, out, cards):
     t0 = time.monotonic()
     if r['rid'] in cards:
@@ -203,7 +237,8 @@ def predict(reader, r, today, edition, out, cards):
                 scratched=[e['name'] for e in excluded],
                 newcomers=sum(1 for x in runners if not x['starts']))
     odds = {x['horse_no']: {'win': x['win_odds'], 'place_low': None, 'cancelled': False} for x in runners}
-    res = engine.predict(race, runners, odds, today)
+    ext, sbo_meta = sbo_aux(r, runners)
+    res = engine.predict(race, runners, odds, today, ext)
     t2 = time.monotonic()
     stem = out / f"{r['venue_id']}_{r['race_no']:02d}"
     # P0-6 revision reason
@@ -223,10 +258,11 @@ def predict(reader, r, today, edition, out, cards):
     except Exception as exc:
         shadow = {'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
     t3 = time.monotonic()
-    md = render(race, res, edition, fetched, shadow, revision)
+    md = render(race, res, edition, fetched, shadow, revision, sbo_meta)
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
-    slim['ranking'] = [{k: x[k] for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
-                                         'T3I', 'F3S', 'OPI', 'p_win', 'role')} for x in res['order']]
+    slim['ranking'] = [{k: x.get(k) for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
+                                             'T3I', 'F3S', 'OPI', 'VMI', 'p_win', 'role')} for x in res['order']]
+    slim['sbo'] = sbo_meta
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
     ticket_sha = hashlib.sha256(json.dumps(slim['tickets'], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
@@ -262,7 +298,8 @@ def predict(reader, r, today, edition, out, cards):
                                        'LINK_AVAILABLE': None, 'USER_DELIVERY_SENT': 'NOT_CONNECTED',
                                        'USER_REACHED': 'NOT_CONNECTED', 'USER_ACK_VERIFIED': 'NOT_CONNECTED'},
                           'before_cutoff': datetime.fromisoformat(saved_at) < cutoff(r),
-                          'top': res['order'][0]['no'], 'quad': res['quad'], 'aki_form': res['aki']['form']})
+                          'top': res['order'][0]['no'], 'quad': res['quad'], 'aki_form': res['aki']['form'],
+                          'sbo': {k: sbo_meta.get(k) for k in ('status', 'fetched_at', 'sha256', 'coverage', 'active')}})
     r['active_runners'] = len(runners)
     r['scratched'] = race['scratched']
     r['last_error'] = None
@@ -317,6 +354,75 @@ def mark_delivery(q, out):
             r['status'] = 'PRESTART_PUSH_VERIFIED'
             r['push_verified_at'] = pre[-1]['delivery']['PUSH_VERIFIED']
             changed = True
+    return changed
+
+
+DELIVERY_REPO = 'b03la013-max/keibametrics-runtime'
+DELIVERY_FALLBACK_MIN = 10   # no 直前版 by post-10 min -> deliver the latest pre-cutoff edition
+
+
+def _gh(method, path, body=None):
+    import urllib.request
+    token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    req = urllib.request.Request('https://api.github.com' + path, method=method,
+                                 data=None if body is None else json.dumps(body).encode(),
+                                 headers={'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json',
+                                          'Content-Type': 'application/json', 'User-Agent': 'km-local-autopilot'})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.loads(resp.read().decode())
+
+
+def delivery_body(q, r, e, out):
+    md = (out / 'rev' / f"{e['rev']}.md").read_text()
+    fr = json.loads((out / 'rev' / f"{e['rev']}.json").read_text())
+    rk_ = fr['prediction']['ranking']
+    marks = ' '.join(f"{x['mark']}{x['no']}" for x in rk_ if x.get('mark'))
+    tree = [f"W {fr['roles']['W']}", f"└ P2 {fr['roles']['P2']}", f"   └ P3 {fr['roles']['P3']}"]
+    head = (f"### 【地方版PAPER】{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
+            f"（予測締切 {cutoff(r).strftime('%H:%M')}）— {e['edition']} `{e['rev']}`\n\n"
+            f"**印** {marks}\n\n```\n" + '\n'.join(tree) + "\n```\n")
+    foot = (f"\n---\n<sub>Claude v4.3 PAPER（研究実装・毎レース購入方針の推薦試算）。正式Signed FINALではありません。"
+            f"実購入なし。凍結 {e['frozen_at'][11:19]}／券面SHA `{e['ticket_sha256'][:12]}`／SOURCE SHA `{e['source_sha256'][:12]}`"
+            f"／原本 {e['delivery'].get('LINK_AVAILABLE') or ''}</sub>")
+    return head + '\n' + md + foot
+
+
+def deliver(q, out, now):
+    """Pre-start Owner delivery: one comment per race on the LOCAL delivery issue
+    (Owner decision 2026-11-15), posted only before cutoff and only for a
+    revision whose push was verified. Sent + read-back are recorded; whether the
+    Owner actually saw it is not observable here (USER_REACHED UNVERIFIABLE)."""
+    issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+    if not issue or not (os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')):
+        return False
+    changed = False
+    for key, r in q['races'].items():
+        if r.get('delivered_rev') or now >= cutoff(r) or r.get('delivery_attempts', 0) >= MAX_ATTEMPTS:
+            continue
+        pv = [e for e in r['editions'] if e.get('delivery', {}).get('PUSH_VERIFIED')]
+        if not pv:
+            continue
+        e = pv[-1]
+        mins = (datetime.fromisoformat(r['post_current']) - now).total_seconds() / 60
+        if e['edition'] != '直前版' and mins > DELIVERY_FALLBACK_MIN:
+            continue
+        d = e['delivery']
+        r['delivery_attempts'] = r.get('delivery_attempts', 0) + 1
+        try:
+            body = delivery_body(q, r, e, out)
+            c = _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': body})
+            back = _gh('GET', f"/repos/{DELIVERY_REPO}/issues/comments/{c['id']}")
+            sha = hashlib.sha256(body.encode()).hexdigest()
+            d.update({'USER_DELIVERY_SENT': c['created_at'], 'delivery_comment_url': c['html_url'],
+                      'delivery_body_sha256': sha,
+                      'DELIVERY_READBACK_VERIFIED': hashlib.sha256((back.get('body') or '').encode()).hexdigest() == sha,
+                      'USER_REACHED': 'UNVERIFIABLE_GITHUB_NOTIFICATION', 'USER_ACK_VERIFIED': 'NOT_REQUIRED'})
+            r['delivered_rev'] = e['rev']
+            log('DELIVERED', key, e['rev'], c['html_url'])
+        except Exception as exc:
+            d['delivery_error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
+            log('DELIVERY_FAIL', key, d['delivery_error'])
+        changed = True
     return changed
 
 
@@ -477,6 +583,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
             dump(out / 'queue.json', q)
             return 0
         changed |= mark_delivery(q, out)
+        changed |= deliver(q, out, now)
         jobs = []
         for key, r in q['races'].items():
             if only and r['race_no'] not in only:
