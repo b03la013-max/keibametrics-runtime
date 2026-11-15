@@ -178,6 +178,10 @@ def classify_production_blockers(report: dict, *, owner_status: dict,
             "stage": STAGE_OWNER_EXEC,
             "code": "JRA_STATIC_OWNER_EXECUTION_NOT_AVAILABLE",
             "error": report.get("static_owner_executable_error"),
+            # Display-only cause; the code above is kept for artifact/replay compatibility.
+            "cause": ("STATIC_FREEZE_AFTER_PREDICTION_CUTOFF"
+                      if "STATIC_FREEZE_AFTER_PREDICTION_CUTOFF" in str(report.get("static_owner_executable_error") or "")
+                      else "STATIC_OWNER_EXECUTION_NOT_AVAILABLE"),
         })
     handoff_error = str(report.get("auto_handoff_error") or "")
     if handoff_error.startswith("AKI_"):

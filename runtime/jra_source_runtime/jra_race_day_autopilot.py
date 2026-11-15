@@ -707,6 +707,40 @@ def _post_result_evidence(root, rid, eids, *, final=None, result=None, terminal=
     return evidence
 
 
+
+def _count_verified_final_signatures(root: Path, race_ids) -> int:
+    """Independent FINAL signature check with the existing verifier (read-only)."""
+    try:
+        from jra_production_postresult import verify_archived_final_signature
+    except ImportError:
+        try:
+            from runtime.jra_production_postresult import verify_archived_final_signature
+        except ImportError:
+            return 0
+    n = 0
+    for rid in race_ids:
+        p = root / 'runtime/final_artifacts' / f'{rid}.json'
+        if not p.exists():
+            continue
+        try:
+            verify_archived_final_signature(json.loads(p.read_text()), root=root, race_id=rid)
+            n += 1
+        except Exception:
+            pass
+    return n
+
+
+def _count_shadow_learning_consumers(root: Path, race_ids) -> int:
+    n = 0
+    for rid in race_ids:
+        p = root / 'runtime/role_rescue_shadow' / f'{rid}.json'
+        try:
+            if p.exists() and (json.loads(p.read_text()).get('learning_intake') or {}).get('accepted'):
+                n += 1
+        except Exception:
+            pass
+    return n
+
 def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetime, *, verification_report=None) -> dict:
     row = {"race_id": rid, "post": sched.get("post"), "title": sched.get("title"),
            "venue": sched.get("venue"), "race_no": sched.get("race_no")}
@@ -848,6 +882,10 @@ def race_status(root: Path, rid: str, sched: dict, state: dict, now: _dt.datetim
             row["state"]="DISPATCHED_RUNNING"
             row["awaiting_stage"]="EXTERNAL_FORMAL_FINAL"
         row["first_blocked_stage"] = stage
+        if "STATIC_FREEZE_AFTER_PREDICTION_CUTOFF" in str(gap.get("static_owner_executable_error") or ""):
+            # Display-only: the stored gap/blocker artifacts are not rewritten.
+            row["blocked_cause"] = "STATIC_FREEZE_AFTER_PREDICTION_CUTOFF"
+            row["blocked_cause_ja"] = "締切超過（Static確定が予測締切後になるため停止。Static Ownerの欠陥ではない）"
         row["full20"] = f"{gap.get('verified_full_index_count')}/{gap.get('required_index_count')}"
         row["unclosed_cells"] = _blocked_cells(gap)
     elif eids or rid in state:
@@ -1162,6 +1200,11 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
             'full20_calculated_cells':sum((r.get('actual_numerical_calculation') or {}).get('calculated_count',0) for r in cohort_rows),
             'external_krs_recorded':sum((r.get('krs_actual_run_count') or 0)>=5000 for r in cohort_rows),
             'learning_records_present':sum((root/'runtime/learning_states'/(rid+'.json')).exists() for rid in cohort['race_ids']),
+            'final_signature_verified':_count_verified_final_signatures(root,cohort['race_ids']),
+            'learning_shadow_consumed':_count_shadow_learning_consumers(root,cohort['race_ids']),
+            'learning_production_consumed':0,
+            'learning_production_note':'Learning is consumed by the role-rescue Shadow only; Production use needs Owner approval and forward OOS.',
+            'user_ack':'ACK_UNVERIFIED',
             'actual_purchase_status':'UNVERIFIED','prediction_quality':'FORWARD_OOS_PENDING'}
     d = root / "runtime" / "jra_race_day_status"
     d.mkdir(parents=True, exist_ok=True)
@@ -1181,7 +1224,7 @@ def write_status(root: Path, race_date: str, now: _dt.datetime, schedule: dict, 
                 if signature.get('first_blocker'):md.append('署名検収の停止理由: '+signature['first_blocker'])
         if r.get('formal_run_id'):
             md.append(f"Formal Run {r['formal_run_id']} / {r.get('formal_conclusion')} / "
-                      f"最初の停止工程 {r.get('first_blocked_stage')} / {r.get('execution_error')}")
+                      f"最初の停止工程 {r.get('first_blocked_stage')} / {r.get('blocked_cause_ja') or r.get('execution_error')}")
         if r.get('source_run_id'):
             md.append(f"SOURCE Run {r['source_run_id']} / {r.get('source_conclusion')} / "
                       f"{r.get('recovery_status')}。正式予測未成立・推薦PFS算定対象外。")
