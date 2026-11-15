@@ -9,7 +9,8 @@
 window.__kmLocalBands = async function (date8, opts) {
   opts = opts || {};
   const gap = opts.gapMs || 2500;                       // polite spacing between page loads
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // hidden panes throttle timers heavily: gap 0 = paced by the network round-trip only
+  const sleep = ms => ms > 0 ? new Promise(r => setTimeout(r, ms)) : Promise.resolve();
   const L = ["VERY_STRONG", "STRONG", "NEUTRAL", "CAUTION"];
   const shift = (b, d) => L[Math.max(0, Math.min(3, L.indexOf(b) - d))];
   const band = t => { t = String(t || "");
