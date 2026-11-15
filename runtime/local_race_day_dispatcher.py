@@ -254,6 +254,20 @@ def discover(venue, day, cutoff_seconds, *, now, fetch=fetch_source, authority_r
 
 def authorization(approval, plan, root, now):
     """Approval is an owner-maintained repository record, not inferred from a race request."""
+    # R7 FNB-specific guard: a self-hashed day plan is not official evidence.
+    # This executes on the EXISTING dated dispatcher before it can authorize
+    # a GitHub Actions handoff. It neither activates FNB nor grants any scope.
+    if plan.get('venue_id') == 'FNB':
+        from runtime.local_fnb_r7_plan_provenance import verify_fnb_plan
+        verified = verify_fnb_plan(plan, plan.get('race_date'))
+        if not verified['raw_integrity_verified']:
+            raise ValueError('FNB_DAY_PLAN_OFFICIAL_RAW_INTEGRITY_REQUIRED:'
+                             + ','.join(verified['issues'][:5]))
+        from runtime.local_fnb_r8_day_semantics import audit_day
+        semantics = audit_day(plan, plan['race_date'])
+        if semantics['status'] != 'FNB_DAY_SEMANTICS_CONSISTENT':
+            raise ValueError('FNB_DAY_SEMANTIC_RAW_REPLAY_REQUIRED:'
+                             + ','.join(semantics['issues'][:5]))
     from runtime.family_authority_guard import resolve_current_authority
     from runtime.execution_gateway import family_config
     _, current = resolve_current_authority(root=root, now=now)
@@ -659,6 +673,11 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
         if only_execution_id is not None and eid != only_execution_id:
             continue
         cell = state['races'].setdefault(eid, {})
+        # A previous tick's successful derivative does not verify the current
+        # checkpoint. Clear it before reading LATEST so a missing/replaced or
+        # unreadable FINAL cannot retire the worker on a stale success flag.
+        cell.pop('final_readback', None)
+        cell.pop('monitor_error', None)
         try:
             cell.update(checkpoint_status(root, eid))
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -683,8 +702,10 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
                     if cell['stages']['FINAL']['status']=='NOT_OBSERVED' and now >= cutoff-timedelta(seconds=approval['minimum_remaining_seconds']):
                         cell['deadline_alert']='FINAL_NOT_OBSERVED_DEADLINE_APPROACHING_OR_EXPIRED'
                     if cell['stages']['FINAL']['status']!='NOT_OBSERVED':
-                        from runtime.local_race_key_gate import terminal_state
-                        cell['final_readback']=terminal_state(eid, (cell.get('actions_run') or {}).get('status','unknown'))
+                        from runtime.local_race_key_gate import readback_final
+                        cell['final_readback']=readback_final(
+                            eid, (cell.get('actions_run') or {}).get('status','unknown'),
+                            repo_root=root)
                 except Exception as exc:
                     cell['monitor_error']=str(exc)
             if cell['stages']['FINAL']['status']=='NOT_OBSERVED' and now >= cutoff:
@@ -707,8 +728,8 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
             cell['status'] = 'EXISTING_RACE_READ_BACK_OR_APPROVED_CHECKPOINT_RESUME_ONLY'
             if execute and cell['stages']['FINAL']['status']!='NOT_OBSERVED':
                 try:
-                    from runtime.local_race_key_gate import terminal_state
-                    cell['final_readback']=terminal_state(eid,'existing')
+                    from runtime.local_race_key_gate import readback_final
+                    cell['final_readback']=readback_final(eid,'existing',repo_root=root)
                 except Exception as exc:
                     cell['monitor_error']=str(exc)
             continue
@@ -782,8 +803,32 @@ def tick(root, plan, approval, state, *, now, execute=False, authorize=authoriza
     return state
 
 
+def worker_pending_races(state):
+    """Keep an already claimed race under observation without redispatching it.
+
+    A workflow acknowledgement is not a verified FINAL. In particular the
+    phase-B single-race worker must not retire just because no unclaimed race
+    remains. The caller still enforces the existing approved worker lease;
+    RESULT waiting and recipient acknowledgement are separate contracts.
+    """
+    pending = []
+    for cell in state.get('races', {}).values():
+        if (cell.get('status') in {'WAIT_DISPATCH_WINDOW', 'HOLD_PRE_DISPATCH'}
+                and not cell.get('manual_recovery_required') and not cell.get('claimed_at')):
+            pending.append(cell)
+        elif (cell.get('claimed_at') and cell.get('status') in {
+                'DISPATCH_ACKNOWLEDGED_MONITOR_CHECKPOINTS',
+                'HOLD_AMBIGUOUS_DISPATCH_NO_AUTOMATIC_RETRY'}):
+            final = cell.get('final_readback') or {}
+            if not (final.get('signed_final_pass') is True
+                    and final.get('prestart_final_pass') is True
+                    and final.get('render_available') is True):
+                pending.append(cell)
+    return pending
+
+
 def run_worker(approval, step, *, clock=lambda:datetime.now(timezone.utc), sleep=time.sleep):
-    """One existing dispatcher, bounded lease; no RESULT waits or self dispatch."""
+    """One existing dispatcher, bounded lease; monitor claims, never self dispatch."""
     seconds = approval.get('worker_seconds', 0)
     if (type(seconds) is not int or not 0 <= seconds <= 21000
             or seconds and not approval.get('worker_duration_approval_ref')):
@@ -791,9 +836,7 @@ def run_worker(approval, step, *, clock=lambda:datetime.now(timezone.utc), sleep
     end = clock() + timedelta(seconds=seconds)
     while True:
         state = step()
-        pending = [c for c in state.get('races',{}).values()
-                   if c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
-                   and not c.get('manual_recovery_required') and not c.get('claimed_at')]
+        pending = worker_pending_races(state)
         remaining = (end-clock()).total_seconds()
         if not pending or remaining <= 0:
             return state
@@ -890,9 +933,7 @@ def south_kanto_day(root, day, cutoff_seconds, *, now, execute=False, fetch=fetc
                 report['venues'][venue]['worker_state'] = state
                 # Each venue retains its OWN reviewed duration and race budget.
                 if (time.monotonic()-started < approval.get('worker_seconds', 0)
-                        and any(c.get('status') in {'WAIT_DISPATCH_WINDOW','HOLD_PRE_DISPATCH'}
-                            and not c.get('manual_recovery_required') and not c.get('claimed_at')
-                            for c in state.get('races',{}).values())):
+                        and worker_pending_races(state)):
                     pending.append((venue, approval, step, started))
             except Exception as exc:
                 report['venues'][venue].update(status='HOLD_WORKER', original_error=f'{type(exc).__name__}:{exc}')

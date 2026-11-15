@@ -18,6 +18,110 @@ class RaceKeyGateError(ValueError):
     pass
 
 
+
+def attest_numeric_quality(entry_report: dict) -> dict:
+    """Report numeric evidence separately from SOURCE/FINAL lifecycle receipts.
+
+    Historical FNB FULL-LIFECYCLE-DEGRADED records can have zero calculated
+    indices and every required cell RULED-HOLD.  Their signatures and
+    lifecycle events must remain readable, but must never be described as
+    complete numerical calculations. This metadata-only audit changes no
+    Owner, numeric mapping, role, ticket, KRS or signature authority.
+    """
+    completion = entry_report.get("completion")
+    coverage = completion.get("numeric_coverage") if isinstance(completion, dict) else None
+    if not isinstance(coverage, dict):
+        return {"status": "NUMERICAL_COUNTS_NOT_REPORTED",
+                "all_cells_calculated": False,
+                "reported_numeric_value_closure": False,
+                "independent_evidence_verification": "NOT_PERFORMED"}
+    keys = ("required_count", "calculated_count", "ruled_neutral_count",
+            "ruled_hold_count", "not_applicable_count", "unresolved_count")
+    values = {}
+    for key in keys:
+        raw = coverage.get(key, 0 if key not in {"required_count", "calculated_count"} else None)
+        if type(raw) is not int or raw < 0:
+            return {"status": "NUMERICAL_COUNTS_INVALID",
+                    "all_cells_calculated": False,
+                    "reported_numeric_value_closure": False,
+                    "independent_evidence_verification": "NOT_PERFORMED"}
+        values[key] = raw
+    required = values["required_count"]
+    calculated = values["calculated_count"]
+    neutral = values["ruled_neutral_count"]
+    hold = values["ruled_hold_count"]
+    na = values["not_applicable_count"]
+    unresolved = values["unresolved_count"]
+    if required <= 0 or calculated + neutral + hold + na + unresolved != required:
+        status = "NUMERICAL_COUNTS_INVALID"
+    elif hold or unresolved:
+        status = "NUMERICAL_HELD_OR_UNRESOLVED"
+    elif na:
+        status = "NUMERICAL_NOT_APPLICABLE_PRESENT"
+    elif calculated == 0:
+        status = "NUMERICAL_RULED_NEUTRAL_ONLY"
+    elif neutral:
+        status = "NUMERICAL_CALCULATED_WITH_RULED_NEUTRAL"
+    else:
+        status = "NUMERICAL_ALL_CALCULATED_REPORTED"
+    valid = status not in {"NUMERICAL_COUNTS_INVALID", "NUMERICAL_HELD_OR_UNRESOLVED",
+                            "NUMERICAL_NOT_APPLICABLE_PRESENT"}
+    return {**values, "status": status,
+            "all_cells_calculated": status == "NUMERICAL_ALL_CALCULATED_REPORTED",
+            "reported_numeric_value_closure": valid,
+            "independent_evidence_verification": "NOT_PERFORMED"}
+
+
+
+def attest_frozen_numeric_counts(entry_report: dict, materialized: dict | None,
+                                 mandatory: dict | None) -> dict:
+    """Cross-check REPORT counts against separately persisted FORMAL artifacts.
+
+    The FORMAL checkpoint reader validates its existing manifest hashes.
+    Matching counts are consistency evidence only: not fresh official SOURCE,
+    independent index evaluation, signer verification, or Delivery success.
+    Missing historical files remain UNKNOWN; this never changes a policy gate.
+    """
+    reported = attest_numeric_quality(entry_report)
+    keys = ("required_count", "calculated_count", "ruled_neutral_count",
+            "ruled_hold_count", "not_applicable_count", "unresolved_count")
+    if reported["status"] in {"NUMERICAL_COUNTS_NOT_REPORTED",
+                              "NUMERICAL_COUNTS_INVALID"}:
+        return {"status": "NUMERICAL_REPORT_COUNTS_UNVERIFIED",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    if not isinstance(materialized, dict) or not isinstance(mandatory, dict):
+        return {"status": "NUMERICAL_FROZEN_CHECKPOINT_UNAVAILABLE",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    a, b = materialized.get("numeric_coverage"), mandatory.get("numeric_coverage")
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return {"status": "NUMERICAL_FROZEN_COVERAGE_UNAVAILABLE",
+                "consistency_verified": False,
+                "independent_index_evaluation": "NOT_PERFORMED"}
+    def take(obj):
+        values = {}
+        for key in keys:
+            val = obj.get(key, 0 if key not in {"required_count", "calculated_count"} else None)
+            if type(val) is not int or val < 0:
+                return None
+            values[key] = val
+        return values
+    expected = {key: reported[key] for key in keys}
+    mat, stage = take(a), take(b)
+    valid = mat is not None and stage is not None and expected == mat == stage
+    if valid:
+        valid = (mat["required_count"] > 0
+                 and sum(mat[k] for k in keys if k != "required_count")
+                 == mat["required_count"])
+    return {"status": ("NUMERICAL_FROZEN_COUNTS_CONSISTENT" if valid
+                       else "NUMERICAL_FROZEN_COUNTS_MISMATCH"),
+            "consistency_verified": bool(valid),
+            "independent_index_evaluation": "NOT_PERFORMED",
+            "qualifier": "EXISTING_FORMAL_MANIFEST_READBACK_NOT_FRESH_SIGNATURE",
+            "numeric_quality_status": reported["status"]}
+
+
 def readback_final(execution_id, job_status='readback', *, repo_root=None,
                    allow_network=True, _verified_final_response=None):
     """Recover canonical LOCAL content; never generate or POST a prediction.
@@ -53,6 +157,9 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             raise RaceKeyGateError('READBACK_SIGNED_SOURCE_MISSING')
         final = o._load_checkpoint_json(formal,'final_receipt_envelope.json') or {}
         signed_source = o._load_checkpoint_json(source,'source_receipt_envelope.json') or {}
+        from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+        signed_race_id = local_receipt_race_id(
+            execution_id, signed_source.get('artifact') or {})
         flags = o._load_checkpoint_json(formal,'receipt_verifications.json') or {}
         temporal = o._load_checkpoint_json(formal,'final_before_post_verification.json') or {}
         if any(flags.get(p) is not True for p in ('SOURCE','PRE_KRS','KRS_RUN','FINAL')):
@@ -72,7 +179,7 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
             receipt,artifact=envelope.get('receipt') or {},envelope.get('artifact') or {}
             if (receipt.get('family')!='LOCAL' or receipt.get('phase')!=phase
                     or receipt.get('status')!=status or receipt.get('errors')
-                    or receipt.get('race_id')!=execution_id or artifact.get('race_id',execution_id)!=execution_id
+                    or receipt.get('race_id')!=signed_race_id or artifact.get('race_id',signed_race_id)!=signed_race_id
                     or envelope.get('signature_alg')!='Ed25519'
                     or envelope.get('signer_key_id')!=cfg['receipt_signer_key_id']
                     or receipt.get('engine_sha256')!=cfg['engine_sha256']
@@ -83,7 +190,7 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
         artifact=final['artifact']; receipt=final['receipt']; src=signed_source['artifact']
         if (artifact.get('source_receipt_sha256')!=signed_source['receipt_sha256']
                 or artifact.get('source_snapshot_sha256')!=src.get('source_snapshot_sha256')
-                or temporal.get('execution_id')!=execution_id or temporal.get('race_id')!=execution_id
+                or temporal.get('execution_id')!=execution_id or temporal.get('race_id')!=signed_race_id
                 or temporal.get('final_receipt_sha256')!=final['receipt_sha256']
                 or temporal.get('verified') is not True):
             raise RaceKeyGateError('READBACK_SOURCE_OR_TEMPORAL_LINEAGE_MISMATCH')
@@ -188,7 +295,18 @@ def readback_final(execution_id, job_status='readback', *, repo_root=None,
                 temp.write(tree_bytes);tree_temp=Path(temp.name)
             try:os.replace(tree_temp,tree_path)
             finally:tree_temp.unlink(missing_ok=True)
-        return {**report,**payload,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
+        from runtime.local_fnb_r6_numeric_readback import frozen_numeric_readback
+        numeric_grade = frozen_numeric_readback(execution_id, formal, root)
+        from runtime.local_fnb_r7_ticket_disposition import attest_ticket_decision
+        ticket_disposition = attest_ticket_decision(artifact, final_verified=True)
+        from runtime.local_fnb_r8_delivery_completeness import audit_venue_presentation
+        official_universe = src.get('official_runner_universe') or {}
+        expected_ids = [str(r.get('runner_id')) for r in official_universe.get('runners', [])
+                        if isinstance(r, dict) and r.get('runner_id') is not None]
+        official_venue = (src.get('source_race_context') or {}).get('venue_id')
+        delivery_document_audit = audit_venue_presentation(
+            artifact, expected_ids, official_venue)
+        return {**report,**payload,**numeric_grade,'ticket_disposition':ticket_disposition,'delivery_document_audit':delivery_document_audit,'status':'SIGNED_FINAL_RENDER_AVAILABLE_DELIVERY_UNPROVEN',
             'signed_final_pass':True,'prestart_final_pass':True,'render_available':True,
             'readback_only':True,'readback_time':now.isoformat(),
             'render_generated_at':saved['created_at'],'presentation_sha256':saved['sha256'],
@@ -223,6 +341,8 @@ def certify(request: dict, entry_report: dict) -> dict:
     # the manual five-field trigger was supplied incorrectly. Never turn such
     # a SOURCE into a formal pre-race basis.
     artifact = signed_source.get("artifact") or {}
+    from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+    signed_race_id = local_receipt_race_id(eid, artifact)
     official = artifact.get("source_race_context") or {}
     official_day = str(official.get("race_date") or "").replace("/", "-")
     if (official.get("venue_id") != request.get("venue_id")
@@ -253,6 +373,7 @@ def certify(request: dict, entry_report: dict) -> dict:
         "prestart_delivery_pass": False,
         "service_completion": False,
         "user_received_at": None,
+        "numeric_evidence_quality": attest_numeric_quality(entry_report),
     }
     if status == "HOLD":
         code = str(entry_report.get("code") or "")
@@ -281,8 +402,25 @@ def certify(request: dict, entry_report: dict) -> dict:
             or temporal.get("verified") is not True or final.get("receipt_sha256") is None
             or (final.get("receipt") or {}).get("status") != "PASS"):
         raise RaceKeyGateError("SIGNED_FINAL_VERIFICATION_REQUIRED")
-    if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != eid:
+    if str(temporal.get("execution_id")) != eid or str(temporal.get("race_id")) != signed_race_id:
         raise RaceKeyGateError("FINAL_TEMPORAL_RACE_MISMATCH")
+    # Checkpoint fixtures and older executions may omit either numerical
+    # artifact. The existing manifest is the authority for file existence;
+    # missing evidence is UNKNOWN, never fabricated as matching counts.
+    frozen_files = (formal.get("manifest") or {}).get("files") or {}
+    report["numeric_checkpoint_consistency"] = attest_frozen_numeric_counts(
+        entry_report,
+        o._load_checkpoint_json(formal, "numerical_materialization_summary.json")
+        if "numerical_materialization_summary.json" in frozen_files else None,
+        o._load_checkpoint_json(formal, "mandatory_stage_manifest.json")
+        if "mandatory_stage_manifest.json" in frozen_files else None)
+    if request.get("venue_id")=="FNB":
+        from runtime.local_fnb_r9_numeric_disposition import classify
+        report["fnb_numerical_disposition"]=classify(
+            report["numeric_evidence_quality"],report["numeric_checkpoint_consistency"])
+        # Historic signatures record lifecycle only. This metadata cannot
+        # substitute for dual-owner signed prediction or recipient ACK.
+        report["fnb_complete_prediction_delivery_proven"]=False
     return {**report, "status": "FULL_LIFECYCLE_EXECUTION_PASS",
             "formal_final_proven": True, "completion": True,
             "final_receipt_sha256": final["receipt_sha256"]}
@@ -302,6 +440,11 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
         return {**report,'status':'TERMINAL_ERROR' if job_status=='failure' else 'NO_SIGNED_FINAL',
                 'reason':'SIGNED_FINAL_CHECKPOINT_MISSING'}
     final=o._load_checkpoint_json(phase,'final_receipt_envelope.json') or {}
+    from runtime.local_fnb_r10_signed_race_identity import local_receipt_race_id
+    try:
+        expected_signed_race_id = local_receipt_race_id(execution_id)
+    except ValueError as exc:
+        return {**report, 'status': 'HOLD', 'reason': str(exc)}
     flags=o._load_checkpoint_json(phase,'receipt_verifications.json') or {}
     temporal=o._load_checkpoint_json(phase,'final_before_post_verification.json') or {}
     if final.get('receipt',{}).get('status')!='PASS' or flags.get('FINAL') is not True:
@@ -313,7 +456,7 @@ def terminal_state(execution_id: str, job_status: str) -> dict:
     http, verification = request_json(endpoint+'/verify', method='POST', payload=final,
                                       timeout=20, attempts=1)
     if (http >= 300 or verification.get('valid') is not True
-            or final.get('receipt', {}).get('race_id') != execution_id):
+            or final.get('receipt', {}).get('race_id') != expected_signed_race_id):
         return {**report, 'status': 'HOLD', 'reason': 'FINAL_FRESH_SIGNATURE_OR_IDENTITY_REQUIRED'}
     return readback_final(execution_id,job_status,allow_network=False,
                           _verified_final_response=verification)
@@ -353,6 +496,29 @@ def main() -> int:
                         and result.get('render_available') is True
                         and isinstance(result.get('canonical_tree'), str))
             content = f"### {args.execution_id}\n\nStatus: {result['status']}\n\n"
+            # Surface frozen numerical degradation alongside the verified
+            # ticket tree without modifying that canonical signed payload.
+            grade = result.get("numeric_evidence_quality") or {}
+            check = result.get("numeric_checkpoint_consistency") or {}
+            content += (
+                f"Numeric grade: {grade.get('status', 'NOT_REPORTED')}; "
+                f"CALCULATED={grade.get('calculated_count', 'UNKNOWN')}/"
+                f"{grade.get('required_count', 'UNKNOWN')}; "
+                f"RULED-HOLD={grade.get('ruled_hold_count', 'UNKNOWN')}; "
+                f"frozen-ledger={check.get('status', 'NOT_VERIFIED')}\n\n"
+                "Independent arithmetic: NOT_PERFORMED; recipient delivery: UNPROVEN\n\n"
+            )
+            decision = result.get("ticket_disposition") or {}
+            content += (
+                f"Ticket disposition: {decision.get('status', 'NOT_VERIFIED')}; "
+                f"recommendation stake={decision.get('recommendation_investment', 'UNKNOWN')}; "
+                "PFS=NULL until independent settlement; actual purchase UNKNOWN\\n\\n"
+            )
+            document = result.get('delivery_document_audit') or {}
+            content += (
+                f"Document completeness: {document.get('status', 'NOT_VERIFIED')}; "
+                f"missing={document.get('missing', ['NO_DOCUMENT_AUDIT'])}\\n\\n"
+            )
             if included:
                 content += (f"FINAL receipt: {result['final_receipt_sha256']}\n\n"
                             f"FINAL artifact: {result.get('original_final_artifact_sha256')}\n\n"

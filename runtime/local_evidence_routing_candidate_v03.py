@@ -15,6 +15,8 @@ from local_nar_evidence_candidate import (
     _clamp,
     _going_group,
     _norm,
+    VENUE_NAMES,
+    resolve_race_units,
 )
 
 PROFILE = "KM-LOCAL-NUMERICAL-EVIDENCE-ROUTING-v0.3-CANDIDATE-20260925"
@@ -78,9 +80,15 @@ def _recency_weighted(xs: List[float | None], *, max_items: int = 8) -> float | 
 
 
 def _venue_eq(a: Any, b: Any) -> bool:
-    aa = _norm(a).replace("ナ", "")
-    bb = _norm(b).replace("ナ", "")
-    return bool(aa and bb and (aa == bb or aa in bb or bb in aa))
+    aa = _norm(a).removesuffix("ナ")
+    bb = _norm(b).removesuffix("ナ")
+    aa = VENUE_NAMES.get(aa.upper(), aa)
+    bb = VENUE_NAMES.get(bb.upper(), bb)
+    # Unknown labels such as 船橋_typo or 浦和以外 are not the canonical
+    # venue. Code/name normalization must never turn substring overlap into
+    # a qualified same-venue population.
+    known = set(VENUE_NAMES.values())
+    return aa in known and bb in known and aa == bb
 
 
 def _history_perf(rows: List[Dict[str, Any]], pred) -> Tuple[float | None, float, int]:
@@ -287,8 +295,11 @@ def compile_candidate_evidence_v03(
     horses, riders, trainers, entities, same_day = _profile_maps(source_artifact)
     ledger = source_artifact.get("point_in_time_population_ledger") or {}
     race = request.get("race") or {}
-    venue = str(race.get("venue") or race.get("venue_id") or request.get("venue_id") or "")
-    distance = int(race.get("distance") or 0)
+    # The base compiler and these existing overrides must consume identical
+    # canonical units; distance_m is the normal Intent field, not a new model.
+    units = resolve_race_units(request)
+    venue = units["venue_name"]
+    distance = units["distance_m"]
     going = str(
         ((source_artifact.get("normalized_evidence") or {}).get("track_condition") or {}).get("value")
         or race.get("going") or ""
@@ -485,6 +496,7 @@ def compile_candidate_evidence_v03(
         "jma_weather_evidence_sha256": jma_sha,
         "sbo_public_shadow_evidence_sha256": sbo_sha,
         "runner_count": len(out.get("runners") or []),
+        "resolved_race_units": units,
         "result_derived_features": 0,
         "design_freeze_date": DESIGN_FREEZE_DATE,
         "missing_policy": "OBSERVED_ONLY_RENORMALIZE",

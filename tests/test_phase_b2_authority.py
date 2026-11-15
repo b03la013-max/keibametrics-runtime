@@ -1,7 +1,9 @@
 """Mechanical tests never increment repository forward cohorts."""
 import copy
 import pytest
-from test_phase_b1_forward import capture,result,signed_result,settle,f
+from test_phase_b1_forward import capture,result,signed_result,settle,f,isolated_forward_definition
+
+pytestmark = pytest.mark.usefixtures('isolated_forward_definition')
 
 @pytest.mark.parametrize('defect',['flag','reference','execution','receipt','digest','signature','outcome','final_binding'])
 def test_result_authority_holds_research_not_production(defect):

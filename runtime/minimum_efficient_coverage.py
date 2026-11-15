@@ -213,14 +213,16 @@ def _semantic_pairs(req):
 def _semantic_third_universe(req, roles, pair_keys):
     """Build the pre-compression third universe.
 
-    Global active P3 is semantic evidence. Pair-local PURCHASE/PROTECT decides
-    exact/protection strength, but a soft EXCLUDE (for example LOWER_*_MATERIALITY)
-    cannot erase the global P3 semantic state before capital optimization.
-    Such cases become TAIL set-protection. Only hard structural exclusions may
-    remove them before MEC.
+    Global active P3 is a floor. An already material Pair-local Third remains
+    in that Pair's universe even when it has no global P3 Role (R2 sections1/4/6).
+    This consumes the supplied PURCHASE/PROTECT decision; it does not grant one
+    to UNKNOWN, SEMANTIC_ONLY or an unadopted research proposal. A soft EXCLUDE
+    cannot erase the global floor; only hard structural exclusions may do so.
     """
     by_key={}
-    for x in req.get("third_dispositions") or []:
+    original_rows,_,_=_dedupe_dispositions(
+        req.get("third_dispositions") or [],("head","second","third"),"THIRD_DISPOSITION")
+    for x in original_rows:
         key=(_s(x.get("head")),_s(x.get("second")),_s(x.get("third")))
         by_key[key]=copy.deepcopy(x)
 
@@ -230,7 +232,11 @@ def _semantic_third_universe(req, roles, pair_keys):
     hard_exclusions=[]
     synthesized=[]
     for h,s in sorted(pair_keys):
-        for t in sorted(active_p3,key=lambda z:int(z) if z.isdigit() else z):
+        # Scope the union to this exact ordered Pair. Never alter role_registry
+        # or leak a local Third into another Pair's global P3 tail floor.
+        local_material={t for (head,second,t),x in by_key.items()
+            if (head,second)==(h,s) and str(x.get("status") or "") in {"PURCHASE","PROTECT"}}
+        for t in sorted(active_p3|local_material,key=lambda z:int(z) if z.isdigit() else z):
             if t in {h,s}:
                 continue
             key=(h,s,t)
@@ -319,10 +325,11 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
         detail={h:str(budget_head_reasons.get(h) or budget_head_reasons.get(int(h)) if h.isdigit() else budget_head_reasons.get(h) or "") for h in uncovered_heads}
         raise MECError("ACTIVE_W_WITHOUT_MATERIAL_PAIR_CLOSURE:"+json.dumps(detail,ensure_ascii=False,sort_keys=True))
 
-    # Pre-compression third universe: every globally active P3 must survive
-    # under every material ordered pair unless a hard structural exclusion exists.
+    # Preserve the global P3 floor and each Pair's already material local Third.
     third_rows,soft_third_overrides,hard_third_exclusions,synthesized_tail_thirds = _semantic_third_universe(req,roles,pair_keys)
-    orphan_thirds=[]
+    orphan_thirds=[copy.deepcopy(x) for x in req.get("third_dispositions") or []
+        if str(x.get("status") or "") in {"PURCHASE","PROTECT"}
+        and (_s(x.get("head")),_s(x.get("second"))) not in pair_keys]
 
     coverage={}
     candidates=[]
@@ -500,6 +507,17 @@ def build_mec_plan(req:dict,krs_utility:dict|None=None,strict_head_closure:bool=
       "budget_rule":"IF_MINIMUM_REQUIRED_CAPITAL_IS_NOT_MARKET_COMPATIBLE_USE_LIMITED_PAPER_OR_NO_BET; DO_NOT_DELETE_MATERIAL_STRUCTURE_FOR_BUDGET",
       "production_effect":"TICKET_CAPITAL_EXECUTION_ONLY; PREDICTION_NUMERICS_UNCHANGED",
     }
+    local_only=[copy.deepcopy(x) for x in third_rows
+        if "P3" not in roles.get(_s(x.get("third")),set())
+        and x.get("semantic_source")=="PAIR_LOCAL"]
+    if local_only:
+        report["pair_local_third_transport"]={
+            "profile":"KM-COMMON-MATERIAL-PAIR-LOCAL-THIRD-CONSUMER-REPAIR-v1",
+            "consumed_original_material_thirds":local_only,
+            "global_static_roles_changed":False,
+            "material_selection_inferred":False,
+            "pair_scope_preserved":True,
+        }
     raw=json.dumps(report,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode()
     report["sha256"]=hashlib.sha256(raw).hexdigest()
     return report

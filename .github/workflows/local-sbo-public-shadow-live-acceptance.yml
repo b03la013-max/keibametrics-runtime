@@ -24,6 +24,7 @@ jobs:
           python -m pip install -q pytest
           python -m pytest -q tests/test_sbo_public_shadow_evidence.py
       - name: Verify live public SBO page extraction and storage boundary
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python - <<'PY'
           import json,sys

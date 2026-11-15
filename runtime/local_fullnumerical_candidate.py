@@ -330,6 +330,16 @@ def materialize_candidate(request: Dict[str, Any],
             market_missing=0.0
             market_fact=f"candidate ability rank={ar}/{n}; official market rank={mr}/{n}"
         odds_ref=[(r.get("raw_candidate_evidence") or {}).get("race_card_source_id")]
+        # CSV transport can carry the actually printed rank from a separately
+        # captured odds table. Keep that original in the cell's lineage; this
+        # changes neither the ordinal value nor either market formula.
+        market_provenance = ((r.get("raw_candidate_evidence") or {}).get("market_provenance") or {}).get("popularity") or {}
+        if mr is not None and market_provenance.get("state") == "OBSERVED_PRINTED_PRESTART":
+            market_raw = market_provenance.get("zip_raw_sha256")
+            if market_raw:
+                odds_ref.append(market_raw)
+                if market_provenance.get("table") == "odds":
+                    odds_ref.append("NAR-CSV-ODDS-"+market_raw)
         cc["PRI"]=_index(mapping_id,"PRI",pri,odds_ref,market_fact,
                          rule_id="LOCAL-NUM-CAND-v0.1-PRI-RANK-ALIGNMENT",missing_fraction=market_missing)
         cc["OPI-V"]=_index(mapping_id,"OPI-V",opi,odds_ref,market_fact,
