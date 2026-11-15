@@ -69,7 +69,12 @@ def check():
                                                      {'kb': {1: {'cci': 'VERY_STRONG', 'tri': 'CAUTION'}}})['rows']}
     k = engine.KB_WEIGHT
     assert abs(c[1] - (a[1] + k * 14 - k * 7)) < 1e-9 and c[2] == a[2], (a, c)
-    print('SELFTEST_OK 9/9')
+    # 10) TM consensus / RT-CPU / pace: F3S shifts by fixed priors; 逃げ raises EVI toward 82
+    e = {x['no']: x for x in engine.predict(race, runners, odds, date(2026, 11, 16),
+                                              {'kb': {2: {'tm': 60.0, 'rt': 56.0, 'cpu': 60.0, 'pace': '逃げ'}}})['rows']}
+    base2 = {x['no']: x for x in engine.predict(race, runners, odds, date(2026, 11, 16))['rows']}[2]
+    assert e[2]['PACE'] == '逃げ' and e[2]['EVI'] > base2['EVI'] and e[2]['KBA'] == 58.0, e[2]
+    print('SELFTEST_OK 10/10')
 
 
 if __name__ == '__main__':

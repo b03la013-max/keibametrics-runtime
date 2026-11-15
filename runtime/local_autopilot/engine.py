@@ -22,6 +22,11 @@ VMI_WEIGHT = 0.30  # SBO speed-index share of F3S-L (Owner 2026-11-15 21:19: spe
 # 競馬ブック bands (Owner 2026-11-15 21:19: auto-acquire, connect): CCI = 厩舎の話, TRI = 調教.
 BAND_SCORE = {'VERY_STRONG': 66.0, 'STRONG': 59.0, 'NEUTRAL': 52.0, 'CAUTION': 45.0}
 KB_WEIGHT = 0.15   # F3S-L += KB_WEIGHT x (CCI-52) + KB_WEIGHT x (TRI-52); fixed prior, not fitted
+# Owner 2026-11-15 21:53: reflect every collected Keibabook item in its matching index.
+TM_WEIGHT = 0.15   # トラックマン印の合議 (in-race deviation idx): F3S-L += TM_WEIGHT x (TMI-52)
+KBA_WEIGHT = 0.15  # 能力表 RT/CPU (mean of in-race deviation idx): F3S-L += KBA_WEIGHT x (KBA-52)
+PACE_TARGET = {'逃げ': 82.0, '好位': 66.0, '中位': 52.0, '後方': 38.0}
+PACE_SHARE = 0.30  # 展開予想 -> EVI = 0.7 EVI + 0.3 target (before SRI/T3I/F3S)
 
 # §3.5 / §23-§26 jockey notes (surname prefixes). Higher = stronger at venue.
 JOCKEYS = {
@@ -242,6 +247,14 @@ def predict(race, runners, odds, today, ext=None):
     n = len(rows)
     if n == 0:
         raise ValueError('NO_ACTIVE_RUNNERS')
+    kb = (ext or {}).get('kb') or {}
+    for x in rows:  # 競馬ブック展開予想 feeds EVI (early-position expectation) before everything downstream
+        pace = (kb.get(x['no']) or {}).get('pace')
+        x['PACE'] = pace
+        if pace in PACE_TARGET:
+            x['EVI'] = clamp((1 - PACE_SHARE) * x['EVI'] + PACE_SHARE * PACE_TARGET[pace])
+            if pace == '逃げ':
+                x['early'] = min(x['early'], 0.1) if x['early'] is not None else 0.1
     # pace: leaders (early <= 0.15 or recent leads)
     leaders = [x for x in rows if (x['early'] is not None and x['early'] <= 0.15) or x['leads'] >= 2]
     for x in rows:
@@ -274,13 +287,17 @@ def predict(race, runners, odds, today, ext=None):
     if any(x['VMI'] is not None for x in rows):
         for x in rows:
             x['F3S'] = clamp((1 - VMI_WEIGHT) * x['F3S'] + VMI_WEIGHT * (x['VMI'] if x['VMI'] is not None else NEUTRAL))
-    kb = (ext or {}).get('kb') or {}
     for x in rows:
         b = kb.get(x['no']) or {}
         x['CCI'] = BAND_SCORE.get(b.get('cci'), NEUTRAL)
         x['TRI'] = BAND_SCORE.get(b.get('tri'), NEUTRAL)
+        x['TMI'] = b.get('tm')
+        ab = [v for v in (b.get('rt'), b.get('cpu')) if v is not None]
+        x['KBA'] = sum(ab) / len(ab) if ab else None
         if b:
-            x['F3S'] = clamp(x['F3S'] + KB_WEIGHT * (x['CCI'] - NEUTRAL) + KB_WEIGHT * (x['TRI'] - NEUTRAL))
+            x['F3S'] = clamp(x['F3S'] + KB_WEIGHT * (x['CCI'] - NEUTRAL) + KB_WEIGHT * (x['TRI'] - NEUTRAL)
+                             + TM_WEIGHT * ((x['TMI'] if x['TMI'] is not None else NEUTRAL) - NEUTRAL)
+                             + KBA_WEIGHT * ((x['KBA'] if x['KBA'] is not None else NEUTRAL) - NEUTRAL))
     # probabilities (uncalibrated)
     pm = softmax([x['F3S'] for x in rows], 4.5)
     imp = [1 / x['win'] if x['win'] else None for x in rows]

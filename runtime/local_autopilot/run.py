@@ -93,19 +93,21 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
             f"使用 {sbo_meta['coverage']}/{sbo_meta['active']}頭（取得 {sbo_meta['fetched_at'][11:16]}）" if sbo_meta['status'] == 'USED'
             else f"未使用（{sbo_meta['status']}）→ F3Sは従来式"))
         kbm = sbo_meta.get('keibabook') or {}
-        L.append(f"- 競馬ブック帯域（CCI厩舎の話・TRI調教、各{engine.KB_WEIGHT}×偏差）：" + (
-            f"使用 {kbm['coverage']}頭（取得 {str(kbm['captured_at'])[11:16]}UTC）" if kbm.get('status') == 'USED'
-            else f"未使用（{kbm.get('status')}）"))
+        sg = kbm.get('signals') or {}
+        L.append(f"- 競馬ブック（厩舎の話CCI・調教TRI・TM印TMI・RT/CPU→KBA 各{engine.KB_WEIGHT}×偏差、展開予想→EVI {engine.PACE_SHARE:.0%}）：" + (
+            f"使用 {kbm['coverage']}頭［CCI {sg.get('cci', 0)}／TRI {sg.get('tri', 0)}／印 {sg.get('tm', 0)}／展開 {sg.get('pace', 0)}"
+            f"／RT・CPU {max(sg.get('rt', 0), sg.get('cpu', 0))}］（取得 {str(kbm['captured_at'])[11:16]}UTC）"
+            if kbm.get('status') == 'USED' else f"未使用（{kbm.get('status')}）"))
     if race.get('scratched'):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
-    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | CCI | TRI | p勝(暫定) | 役割 |',
-          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | CCI | TRI | 印 | 展開 | p勝(暫定) | 役割 |',
+          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
         L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or ''} | "
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
-                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | {f0(x.get('CCI'))} | {f0(x.get('TRI'))} | "
+                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | {f0(x.get('CCI'))} | {f0(x.get('TRI'))} | {f0(x.get('TMI'))} | {x.get('PACE') or ''} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
     ev = '–' if res['tan_ev'] is None else f"{res['tan_ev']:+.2f}"
     L += ['', '**本命判定エンジン（§12）**', '',
@@ -231,8 +233,11 @@ def keibabook_aux(out, r):
     if cap >= cutoff(r):
         meta['status'] = 'CAPTURED_AFTER_CUTOFF'
         return None, meta
-    kb = {int(k): v for k, v in race['horses'].items()}
-    meta.update(status='USED', coverage=len(kb))
+    kb = {int(k): v for k, v in race['horses'].items() if v}
+    if not kb:
+        return None, meta
+    meta.update(status='USED', coverage=len(kb),
+                signals={k: sum(1 for v in kb.values() if k in v) for k in ('cci', 'tri', 'tm', 'pace', 'rt', 'cpu')})
     return kb, meta
 
 
@@ -290,7 +295,8 @@ def predict(reader, r, today, edition, out, cards):
     md = render(race, res, edition, fetched, shadow, revision, sbo_meta)
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
     slim['ranking'] = [{k: x.get(k) for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
-                                             'T3I', 'F3S', 'OPI', 'VMI', 'CCI', 'TRI', 'p_win', 'role')} for x in res['order']]
+                                             'T3I', 'F3S', 'OPI', 'VMI', 'CCI', 'TRI', 'TMI', 'KBA', 'PACE',
+                                             'p_win', 'role')} for x in res['order']]
     slim['sbo'] = sbo_meta
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
