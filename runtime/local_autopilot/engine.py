@@ -219,6 +219,26 @@ def softmax(xs, tau):
     return [v / s for v in e]
 
 
+def assign_win_probabilities(rows):
+    """PAPER-only: partial market odds must not inflate the race probability mass.
+
+    Market information is used for the 50:50 blend only when a positive,
+    finite win price is available for every active runner. Otherwise all
+    runners use the model softmax (not a partial-market/model mixture).
+    The caller must supply at least one active runner.
+    """
+    pm = softmax([x['F3S'] for x in rows], 4.5)
+    imp = [1.0 / x['win'] if x.get('win') is not None
+           and math.isfinite(x['win']) and x['win'] > 0 else None for x in rows]
+    complete = all(v is not None for v in imp)
+    total = sum(v for v in imp if v is not None)
+    for x, a, m in zip(rows, pm, imp):
+        x['p_model'] = a
+        x['p_market'] = m / total if complete else None
+        x['p_win'] = 0.5 * a + 0.5 * x['p_market'] if complete else a
+    return complete
+
+
 def predict(race, runners, odds, today):
     active = [r for r in runners if r.get('status') != 'CANCELLED'
               and not (odds.get(r['horse_no'], {}).get('cancelled'))]
@@ -262,14 +282,8 @@ def predict(race, runners, odds, today):
         x['T3I'] = clamp(t3)
         x['F3S'] = clamp(0.25 * x['SRI'] + 0.20 * x['TPIF'] + 0.18 * x['EVI'] + 0.14 * x['RFI'] + 0.12 * x['CFI']
                          + 0.06 * x['NCI'] + 0.05 * x['T3I'])
-    # probabilities (uncalibrated)
-    pm = softmax([x['F3S'] for x in rows], 4.5)
-    imp = [1 / x['win'] if x['win'] else None for x in rows]
-    tot = sum(v for v in imp if v)
-    for x, a, m in zip(rows, pm, imp):
-        x['p_model'] = a
-        x['p_market'] = m / tot if (m and tot) else None
-        x['p_win'] = 0.5 * a + 0.5 * x['p_market'] if x['p_market'] else a
+    # probabilities (uncalibrated); incomplete odds do not form a market distribution
+    assign_win_probabilities(rows)
     # ties (e.g. all-newcomer fields where every index is UNKNOWN) break on the market
     order = sorted(rows, key=lambda x: (-round(x['F3S'], 1), x['win'] or 999.0))
     marks = ['◎', '○', '▲', '△', '△']
