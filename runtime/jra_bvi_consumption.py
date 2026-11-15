@@ -100,6 +100,39 @@ def materialize_frozen_production_evidence(request, mapping, *, source_snapshot_
     return replay
 
 
+# Wording repair takes effect for races after the 2026-11-15 card, so FINALs
+# already frozen on 11/15 (old wording, v1.1 numerics) stay byte-reproducible.
+BVI_PROPAGATION_TEXT_EFFECTIVE_DATE = "20261116"
+
+
+def _bvi_propagation(race_id):
+    """Describe BVI propagation from the ZAI formula actually used for this race.
+
+    v1.0 races keep the original wording byte-for-byte (frozen artifacts and
+    their hashes are unchanged); v1.1 (ZAI_V11_EFFECTIVE_DATE onward) carries a
+    direct registered BVI term in ZAI_WIN/ZAI_PLACE.
+    """
+    try:
+        from .jra_index_provenance_builder import zai_formula_version, ZAI_WIN_WEIGHTS, ZAI_PLACE_WEIGHTS
+    except ImportError:
+        from jra_index_provenance_builder import zai_formula_version, ZAI_WIN_WEIGHTS, ZAI_PLACE_WEIGHTS
+    version = zai_formula_version(race_id)
+    import re as _re
+    m = _re.search(r"-(\d{8})-R\d{2}", str(race_id or ""))
+    if not m or m.group(1) < BVI_PROPAGATION_TEXT_EFFECTIVE_DATE:
+        version = 'v1.0'  # artifacts frozen before this repair keep their original wording
+    win = ZAI_WIN_WEIGHTS[version].get('BVI')
+    place = ZAI_PLACE_WEIGHTS[version].get('BVI')
+    if not win and not place:
+        return {'direct_derived':['TPI'],'indirect_derived':['SRI','F3S','T3I'],
+            'no_direct_bvi_term':['ZAI_WIN','ZAI_PLACE'],
+            'static_winner_ranking':'ZAI_WIN; BVI-only change does not directly change W ranking'}
+    return {'direct_derived':['TPI','ZAI_WIN','ZAI_PLACE'],'indirect_derived':['SRI','F3S','T3I'],
+        'no_direct_bvi_term':[],'zai_formula_version':version,
+        'zai_bvi_weight':{'ZAI_WIN':win,'ZAI_PLACE':place},
+        'static_winner_ranking':'ZAI_WIN; BVI carries a direct registered weight, so a BVI-only change can directly change W ranking'}
+
+
 def build_bvi_consumption(request, mapping, source_artifact=None):
     pedigree_features={feature for indices in mapping['index_profiles'].values() for feature in indices['BVI']}
     source_artifact=source_artifact or {}
@@ -198,9 +231,7 @@ def build_bvi_consumption(request, mapping, source_artifact=None):
             for index,weights in indices.items() if index!='BVI' and set(weights)&pedigree_features}
             for profile,indices in mapping['index_profiles'].items()},
         'shared_feature_effect_is_not_bvi_scalar_propagation':True,
-        'propagation':{'direct_derived':['TPI'],'indirect_derived':['SRI','F3S','T3I'],
-            'no_direct_bvi_term':['ZAI_WIN','ZAI_PLACE'],
-            'static_winner_ranking':'ZAI_WIN; BVI-only change does not directly change W ranking'},
+        'propagation':_bvi_propagation(request['race_id']),
         'prediction_improvement_demonstrated':False,'capital_improvement_demonstrated':False}
     if corpus_manifest and corpus_manifest.get('snapshots') is not None:
         result['corpus_component_bindings'] = dict(component_bindings)
