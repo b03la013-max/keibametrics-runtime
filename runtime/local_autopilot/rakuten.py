@@ -264,7 +264,7 @@ def parse_jockey_changes(card_html):
     prefix = card_html.split('<tbody class="raceCard">', 1)[0]
     notices = {}
     for match in re.finditer(
-        r'(?<!\\d)(\\d{1,2})番\\s*騎手変更\\s*([^\\s→]+)\\s*→\\s*([^\\s→]+)',
+        r'(?<!\d)(\d{1,2})番\s*騎手変更\s*([^\s→]+)\s*→\s*([^\s→]+)',
         text(prefix),
     ):
         horse_no = int(match.group(1))
