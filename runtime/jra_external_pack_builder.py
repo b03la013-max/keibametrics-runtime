@@ -9,6 +9,13 @@ Owner decision 2026-11-14 15:16 JST (上濵さん, Owner):
     carries only the registered band category, the private capture digest and
     the horse number/name already public on the official card.
 
+Owner decision 2026-11-15 19:50 JST (上濵さん, Owner): Keibabook (s.keibabook.co.jp,
+Owner's member session) workout and stable-comment bands are adopted for
+Production through the same private-pack route. They fill existing features with
+already registered rule IDs (workout_capability / workout_speed /
+stable_comment_state); no index weight or formula changes. Raw workout rows and
+trainer comments stay private; the public pack carries only the band.
+
 The pack is the existing KM-JRA-SUPPLEMENTAL-EVIDENCE-PACK-v1.0 contract, so
 apply_supplemental_evidence_pack keeps every existing guard (cutoff, registry,
 universe, conflict, result-derived).
@@ -34,6 +41,16 @@ RULES = {
     "expert_support": "KM-JRA-BLOODB-PEDIGREE-EVALUATION-MARK-v1",
     "external_index_support": "KM-JRA-TSL-MARK-BAND-v1",
 }
+# Keibabook book_race_id: YYYY KK VV DD RR (KK = meeting, VV = Keibabook venue code)
+VENUE_BY_KEIBABOOK = {"00": "KYO", "01": "HSN", "02": "CKY", "03": "KKR", "04": "TKY",
+                      "05": "NKY", "06": "FKS", "07": "NGT", "08": "SPP", "09": "HKD"}
+KEIBABOOK_RULES = {
+    "workout_capability": "JRA-WORKOUT-CAPABILITY-COMMENT-v1",
+    "workout_speed": "JRA-WORKOUT-FINAL1F-BAND-v1",
+    "stable_comment_state": "KM-JRA-STABLE-COMMENT-STATE-v1",
+}
+KEIBABOOK_BAND = {"X": "EXCEPTIONAL", "V": "VERY_STRONG", "S": "STRONG", "P": "POSITIVE",
+                  "N": "NEUTRAL", "C": "CAUTION"}
 TSL_MARK = {"◎": "VERY_STRONG", "○": "STRONG", "▲": "POSITIVE", "☆": "POSITIVE",
             "△": "NEUTRAL", "×": "MIXED"}
 BLOODB_EVAL = {"血": "VERY_STRONG", "注": "STRONG"}
@@ -133,6 +150,38 @@ def tsl_features(race: dict, src_id: str):
     return out
 
 
+def keibabook_races(bands: dict):
+    """bands_shadow compact: {date, captured_at, res:{venue:[[book_race_id, "no+wcap+wspd+stab,..."]]}}."""
+    date8 = bands["date"].replace("-", "")
+    for venue, rows in (bands.get("res") or {}).items():
+        for book_id, cells in rows:
+            if not re.fullmatch(r"\d{12}", book_id) or book_id[6:8] != venue:
+                raise ValueError("KEIBABOOK_RACE_ID_INVALID:" + book_id)
+            rid = f"KM-JRA-{VENUE_BY_KEIBABOOK[venue]}-{date8}-R{int(book_id[-2:]):02d}"
+            horses = []
+            for cell in [c for c in cells.split(",") if c]:
+                m = re.fullmatch(r"(\d{1,2})([XVSPNC-])([XVSPNC-])([XVSPNC-])", cell)
+                if not m:
+                    raise ValueError("KEIBABOOK_CELL_INVALID:" + book_id + ":" + cell)
+                horses.append({"no": int(m.group(1)), "wcap": m.group(2), "wspd": m.group(3), "stab": m.group(4)})
+            yield rid, book_id, horses
+
+
+def keibabook_features(horses, src_id: str):
+    out = {}
+    for h in horses:
+        no = str(h["no"])
+        f = {}
+        for key, feat, label in (("wcap", "workout_capability", "調教評価"), ("wspd", "workout_speed", "調教終い1F"),
+                                 ("stab", "stable_comment_state", "厩舎コメント")):
+            band = KEIBABOOK_BAND.get(h[key])
+            if band:
+                f[feat] = _feature(band, KEIBABOOK_RULES[feat], src_id, f"競馬ブック{label} band={band} ({no}番)")
+        if f:
+            out[no] = f
+    return out
+
+
 def bloodb_from_compact(compact: dict) -> dict:
     """Browser compact: [rcode, course, "no:CR:GR:W:P:S:T:eval,..."]."""
     races = []
@@ -148,7 +197,7 @@ def bloodb_from_compact(compact: dict) -> dict:
     return {"captured_at": compact["captured_at"], "races": races}
 
 
-def build_packs(bloodb: dict | None, tsl: dict | None, *, ingested_at: str):
+def build_packs(bloodb: dict | None, tsl: dict | None, *, ingested_at: str, keibabook: dict | None = None):
     """Return {race_id: pack}. Raw bodies never enter a pack, only digests."""
     by_race: dict[str, dict] = {}
     srcs: dict[str, dict] = {}
@@ -184,6 +233,18 @@ def build_packs(bloodb: dict | None, tsl: dict | None, *, ingested_at: str):
                 "private_store": "keibametrics-evidence-private"}
             for no, f in tsl_features(race, sid).items():
                 by_race.setdefault(rid, {}).setdefault(no, {}).update(f)
+    if keibabook:
+        for rid, book_id, horses in keibabook_races(keibabook):
+            sid = "KEIBABOOK-" + book_id
+            srcs.setdefault(rid, {})[sid] = {
+                "source_id": sid, "authority": "USER_PROVIDED_PRE_RACE",
+                "source_class": "OWNER_SUBSCRIPTION_BROWSER_CAPTURE",
+                "origin": "https://s.keibabook.co.jp/cyuou/cyokyo/0/" + book_id,
+                "content_sha256": sha(horses), "available_at": keibabook["captured_at"],
+                "ingested_at": ingested_at, "result_derived": False, "production_use": "ALLOWED",
+                "private_store": "keibametrics-evidence-private"}
+            for no, f in keibabook_features(horses, sid).items():
+                by_race.setdefault(rid, {}).setdefault(no, {}).update(f)
     packs = {}
     for rid, feats in by_race.items():
         captured = max(s["available_at"] for s in srcs[rid].values())
@@ -191,6 +252,8 @@ def build_packs(bloodb: dict | None, tsl: dict | None, *, ingested_at: str):
                 "sources": sorted(srcs[rid].values(), key=lambda s: s["source_id"]),
                 "runner_features": {k: feats[k] for k in sorted(feats, key=int)},
                 "owner_decision": "OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY"}
+        if any(k.startswith("KEIBABOOK-") for k in srcs[rid]):
+            pack["owner_decision_keibabook"] = "OWNER-2026-11-15-KEIBABOOK-WORKOUT-STABLE-PRODUCTION"
         pack["pack_sha256"] = sha(pack)
         packs[rid] = pack
     return packs
@@ -200,6 +263,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--bloodb")
     ap.add_argument("--tsl")
+    ap.add_argument("--keibabook", help="bands_shadow.json compact (workout / stable-comment bands)")
     ap.add_argument("--out-dir", default="runtime/jra_supplemental_packs")
     a = ap.parse_args(argv)
     load = lambda p: json.loads(Path(p).read_text(encoding="utf-8")) if p else None
@@ -207,7 +271,7 @@ def main(argv=None):
     bb = load(a.bloodb)
     if bb and bb.get("races") and isinstance(bb["races"][0], list):
         bb = bloodb_from_compact(bb)
-    packs = build_packs(bb, load(a.tsl), ingested_at=now)
+    packs = build_packs(bb, load(a.tsl), ingested_at=now, keibabook=load(a.keibabook))
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for rid, pack in packs.items():
