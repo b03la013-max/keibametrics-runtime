@@ -46,3 +46,29 @@ def test_pack_applies_through_supplemental_guard(monkeypatch):
     out, att = apply_supplemental_evidence_pack(req, pack, mapping)
     feats = {r["runner_id"]: r["evidence_features"] for r in out["runners"]}
     assert feats["4"]["workout_speed"]["rule_id"] == "JRA-WORKOUT-FINAL1F-BAND-v1"
+
+
+def test_owner_pack_keeps_official_precedence(monkeypatch):
+    monkeypatch.chdir(ROOT)
+    pack = build_packs(None, None, ingested_at="2026-11-14T22:40:00Z", keibabook=BANDS)["KM-JRA-TKY-20261115-R11"]
+    official = {"category": "NEUTRAL", "rule_id": "JRA-WORKOUT-CAPABILITY-COMMENT-v1", "evidence_refs": ["OFFICIAL:1"],
+                "source_fact": "official workout assessment", "result_derived": False}
+    req = {"race_id": "KM-JRA-TKY-20261115-R11", "prediction_cutoff": "2026-11-15T14:25:00+09:00",
+           "runners": [{"runner_id": "1", "evidence_features": {"workout_capability": dict(official)}},
+                       {"runner_id": "4", "evidence_features": {}}, {"runner_id": "9", "evidence_features": {}}]}
+    mapping = json.loads((ROOT / "mapping/jra_base_index_evidence_mapping_v1.0_20260921.json").read_text())
+    out, att = apply_supplemental_evidence_pack(req, pack, mapping)
+    f1 = out["runners"][0]["evidence_features"]
+    assert f1["workout_capability"] == official                # official kept, not merged
+    assert f1["workout_speed"]["category"] == "VERY_STRONG"    # gap filled
+    assert att["official_precedence_skipped"] == ["1:workout_capability"]
+
+
+def test_u13_newcomer_signal_registered_and_emitted():
+    from jra_external_pack_builder import bloodb_from_compact
+    bb = bloodb_from_compact({"captured_at": "2026-11-20T21:00:00Z",
+                              "races": [["2026112105050405", "芝1600", "3:4:21::31:29:36:注"]]})
+    f = build_packs(bb, None, ingested_at="2026-11-20T21:10:00Z")["KM-JRA-TKY-20261121-R05"]["runner_features"]["3"]
+    assert f["sire_newcomer_signal"]["category"] == f["sire_track_signal"]["category"] == "VERY_STRONG"  # CR 4
+    reg = _load_rule_registry()
+    assert f["sire_newcomer_signal"]["rule_id"] in reg["feature_rules"]["sire_newcomer_signal"]

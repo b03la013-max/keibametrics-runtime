@@ -122,6 +122,10 @@ def bloodb_features(race: dict, src_id: str):
         if b:
             f["sire_track_signal"] = _feature(b, RULES["sire_track_signal"], src_id,
                                               f"BLOOD BIAS CR(コース別サイアーランキング) band={b} ({no}番)")
+            # U13 (Owner 2026-11-15): the same CR band fills sire_newcomer_signal where the
+            # official card has none (NEWCOMER BVI weight 0.10 unchanged).
+            f["sire_newcomer_signal"] = _feature(b, RULES["sire_track_signal"], src_id,
+                                                 f"BLOOD BIAS CR(コース別サイアーランキング) newcomer band={b} ({no}番)")
         b = rank_band(h.get("GR"))
         if b:
             f["pedigree_class"] = _feature(b, RULES["pedigree_class"], src_id,

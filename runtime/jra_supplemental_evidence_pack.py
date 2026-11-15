@@ -125,6 +125,8 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
     cats=set((mapping.get("category_scale") or {}).keys())
     feature_count=0
     refs_used=set()
+    owner_pack = pack.get("owner_decision") == "OWNER-2026-11-14-BLOODB-PRIMARY-TSL-SECONDARY"
+    official_precedence=[]
 
     for rid,feats in features_by.items():
         if not isinstance(feats,dict):
@@ -169,6 +171,11 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
             }
             old=dst.get(name)
             if old is not None and old != normalized:
+                if owner_pack and not old.get("supplemental_pack_sha256"):
+                    # Owner packs only fill gaps: an official observation keeps precedence and
+                    # the supplemental value for that single feature is skipped (never merged).
+                    official_precedence.append(f"{rid}:{name}")
+                    continue
                 raise SupplementalEvidenceError(f"SUPPLEMENTAL_FEATURE_CONFLICT:{rid}:{name}")
             dst[name]=normalized
             feature_count+=1
@@ -193,6 +200,8 @@ def apply_supplemental_evidence_pack(request: Dict[str,Any], pack: Dict[str,Any]
     }
     if dropped_runners:
         attestation["dropped_runners_not_in_official_universe"]=dropped_runners
+    if official_precedence:
+        attestation["official_precedence_skipped"]=sorted(official_precedence)
     attestation["sha256"]=_sha(attestation)
     req["supplemental_evidence_pack_attestation"]=attestation
     return req,attestation
