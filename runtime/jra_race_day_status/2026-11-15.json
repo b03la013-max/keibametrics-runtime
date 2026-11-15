@@ -8,23 +8,23 @@
   "external_krs_recorded": 15,
   "final_artifacts_present": 15,
   "full20_calculated_cells": 4320,
-  "learning_records_present": 8,
+  "learning_records_present": 10,
   "prediction_quality": "FORWARD_OOS_PENDING",
   "registered_intakes": 34,
   "user_delivery_verified": 0
  },
- "generated_at": "2026-11-15T12:57:11.651700+09:00",
+ "generated_at": "2026-11-15T12:59:31.438126+09:00",
  "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; MISSED_WINDOW = never predicted (no late or backdated FINAL). state retains scheduler compatibility; display_state and post_result_evidence separate stored bodies/bindings from signature verification and full closure.",
  "post_result_metrics": {
   "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
   "race_denominator": 36,
   "result_requests_present": 11,
-  "review_learning_bound": 8,
+  "review_learning_bound": 10,
   "signature_validation_performed": false,
   "signature_verification_blocked": 0,
   "signature_verification_failed": 0,
   "signed_result_final_verified": 0,
-  "stored_result_receipts_payload_bound": 8,
+  "stored_result_receipts_payload_bound": 10,
   "zero_exposure_result_learning_bound": 0
  },
  "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012",
@@ -808,7 +808,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261115-R05/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
-   "display_state": "RESULT_REQUEST_STORED",
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "d205ea26e50d3c23557c7603d9366f45e796ab1309587e50d878b0834ff70ee3",
    "immutable_final_sha256": "130a731d8fa2da3b14b65d6df575edbda471060bfeb70743d2815262727a9b27",
    "krs_actual_run_count": 5000,
@@ -822,28 +822,37 @@
     "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
     "learning": {
      "consumption": "NOT_ESTABLISHED_BY_STORAGE",
-     "effective_time": null,
+     "effective_time": "2026-11-15T03:56:53.930270+00:00",
      "path": "runtime/learning_states/KM-JRA-KYO-20261115-R05.json",
-     "present": false,
-     "race_bound": false,
-     "review_bound": false,
-     "self_hash_valid": false,
-     "sha256": null,
-     "state_id": null
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "10d303cc0b2f969a9ac056977497d1287f71129e7d98eae0c247d093675fd525",
+     "state_id": "KM-JRA-KYO-20261115-R05-LEARNING-NEXT"
     },
     "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
     "result_request_present": true,
     "review": {
      "path": "runtime/reviews_auto/KM-JRA-KYO-20261115-R05-AUTO.json",
-     "present": false,
-     "race_bound": false,
-     "result_and_final_bound": false,
-     "self_hash_valid": false
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
     },
-    "review_learning_bound": false,
+    "review_learning_bound": true,
     "signature_validation_performed": false,
-    "storage_state": "RESULT_REQUEST_STORED",
-    "stored_result_receipts": [],
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-KYO-20261115-R05-LIVE-R1/RESULT/runs/43674447582-1/result_receipt_envelope.json",
+      "receipt_sha256": "989d6ccf676122691bf09c7d0d976565895f9890c57ba0609abcc8464919c310",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
     "zero_exposure_records": [],
     "zero_exposure_result_learning_bound": false
    },
@@ -861,7 +870,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 0,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 30.000／W-AKI 60.000\nP2-AKI 40.000／P3-AKI 20.000\nASI 15.000／軸飛びリスク 85.000／RSI 0.000\n外部変動 0.000／堅決着補正 0.000\n└─ 見送り\n購入判定\n└─ 見送り\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "メイクデビュー京都 2歳新馬（混合）［指定］",
@@ -880,7 +889,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-FKS-20261115-R06/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
-   "display_state": "RESULT_REQUEST_STORED",
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "e70dadc14b0094b2ccb9221a04f33503a76137fa68b897d58a1bd14316ae3f59",
    "immutable_final_sha256": "870b85474939ba699aae79c096a909663698fd618daf2027616237448950ac24",
    "krs_actual_run_count": 5000,
@@ -894,28 +903,37 @@
     "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
     "learning": {
      "consumption": "NOT_ESTABLISHED_BY_STORAGE",
-     "effective_time": null,
+     "effective_time": "2026-11-15T03:57:01.848032+00:00",
      "path": "runtime/learning_states/KM-JRA-FKS-20261115-R06.json",
-     "present": false,
-     "race_bound": false,
-     "review_bound": false,
-     "self_hash_valid": false,
-     "sha256": null,
-     "state_id": null
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "a5b51058de25ff6464cd3b8552770448114d625791414931f97bb5a5915635b1",
+     "state_id": "KM-JRA-FKS-20261115-R06-LEARNING-NEXT"
     },
     "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
     "result_request_present": true,
     "review": {
      "path": "runtime/reviews_auto/KM-JRA-FKS-20261115-R06-AUTO.json",
-     "present": false,
-     "race_bound": false,
-     "result_and_final_bound": false,
-     "self_hash_valid": false
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
     },
-    "review_learning_bound": false,
+    "review_learning_bound": true,
     "signature_validation_performed": false,
-    "storage_state": "RESULT_REQUEST_STORED",
-    "stored_result_receipts": [],
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-FKS-20261115-R06-LIVE-R1/RESULT/runs/43674440445-1/result_receipt_envelope.json",
+      "receipt_sha256": "ec40383520cc3ed8a3e0224d3532829c91e763a85857a89b84cf1745ea462c27",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
     "zero_exposure_records": [],
     "zero_exposure_result_learning_bound": false
    },
@@ -933,7 +951,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 0,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 26.500／W-AKI 45.000\nP2-AKI 20.000／P3-AKI 20.000\nASI 27.500／軸飛びリスク 72.500／RSI 25.000\n外部変動 0.000／堅決着補正 0.000\n└─ 見送り\n購入判定\n└─ 見送り\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "メイクデビュー福島 2歳新馬（混合）［指定］",
@@ -2289,11 +2307,8 @@
    "race_no": 8,
    "registered_intake": true,
    "state": "DISPATCHED_RUNNING",
-   "status_updated_at": "2026-11-15T12:57:11.651700+09:00",
-   "terminal_state": null,
    "title": "3歳以上2勝クラス（混合）［指定］",
-   "venue": "京都",
-   "workflow_run_id": "43674588376"
+   "venue": "京都"
   },
   {
    "dispatch_window_open": "2026-11-15T13:05:00+09:00",
