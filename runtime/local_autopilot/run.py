@@ -281,7 +281,8 @@ def predict(reader, r, today, edition, out, cards):
               'scratched': race['scratched'], 'roles': {'W': res['order'][0]['no'],
                                                          'P2': res['order'][1]['no'] if len(res['order']) > 1 else None,
                                                          'P3': res['order'][2]['no'] if len(res['order']) > 2 else None},
-              'ticket_sha256': ticket_sha, 'prediction': slim, 'paper': True, 'calibrated': False}
+              'ticket_sha256': ticket_sha, 'prediction': slim, 'paper': True, 'calibrated': False,
+              'code_version': CODE_VERSION, 'engine': 'Claude v4.3 PAPER', 'purchase_policy': 'EVERY_RACE'}
     (rev_dir / f"{rev_id}.json").write_text(json.dumps(frozen, ensure_ascii=False, indent=1, default=str) + '\n')
     (rev_dir / f"{rev_id}.md").write_text(md)
     stem.with_suffix('.md').write_text(md)
@@ -632,7 +633,8 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                         dump(out / f'{key}.result.json', st)
                         r['settlement'] = {k: st.get(k) for k in ('order', 'invest', 'refund', 'effective_invest', 'payout',
                                                                   'win_hit', 'top_in3', 'top3_capture', 'ordered_pair',
-                                                                  'exact_triple', 'settled_at', 'revision', 'ticket_sha256')}
+                                                                  'exact_triple', 'settled_at', 'revision', 'ticket_sha256',
+                                                                  'diagnosis')}
                         r['status'] = 'POSTRESULT_DIAGNOSTIC'
                         log('RESULT', key, st['order'][:3], st['payout'])
                     changed = True
@@ -675,6 +677,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
         if changed and q is not None:
             dump(out / 'queue.json', q)
             report(q, out)
+            try:
+                from runtime.local_autopilot import forward
+                forward.write(ROOT)
+            except Exception as exc:
+                log('FORWARD_SUMMARY_FAIL', type(exc).__name__, str(exc)[:120])
             metrics['elapsed_s'] = round(time.monotonic() - started, 1)
             with (out / 'metrics.jsonl').open('a') as fh:
                 fh.write(json.dumps(metrics, ensure_ascii=False) + '\n')

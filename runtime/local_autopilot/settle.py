@@ -149,4 +149,28 @@ def settle_parsed(res, pred, prediction_ref, settled_at=None):
             'ordered_pair': int(rank[:2] == order[:2]), 'exact_triple': int(rank[:3] == order[:3]),
             'p2_hit': int(len(rank) > 1 and rank[1] == order[1]), 'p3_hit': int(len(rank) > 2 and rank[2] == order[2]),
             'tickets': tickets, 'invest': gross, 'refund': refund, 'effective_invest': effective, 'payout': payout,
-            'pfs': round(100 * payout / effective, 1) if effective else None}
+            'pfs': round(100 * payout / effective, 1) if effective else None,
+            'diagnosis': diagnose(rank, order, pay_hit=payout > 0)}
+
+
+def _pos(rank, no):
+    return rank.index(no) + 1 if no in rank else None
+
+
+def diagnose(rank, order, pay_hit=False):
+    """First-failure classification (P1 Winner Discovery / W width / P2 / Third /
+    ticket), measured on the frozen ranking only. Order: discovery -> role ->
+    pair -> third -> ticket."""
+    w, s2, s3 = (order + [None, None, None])[:3]
+    wr, r2, r3 = _pos(rank, w), _pos(rank, s2), _pos(rank, s3)
+    if wr is None or wr > 6:
+        first = 'WINNER_NOT_DISCOVERED'
+    elif wr > 1:
+        first = 'W_WIDTH_OR_ROLE' if wr <= 3 else 'WINNER_DISCOVERED_LOW'
+    elif r2 is None or r2 > 4:
+        first = 'P2_MISS'
+    elif r3 is None or r3 > 6:
+        first = 'THIRD_MISS'
+    else:
+        first = 'TICKET_OR_CAPITAL' if not pay_hit else 'NONE'
+    return {'winner_rank': wr, 'second_rank': r2, 'third_rank': r3, 'first_failure': first}
