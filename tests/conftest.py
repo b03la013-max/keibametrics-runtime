@@ -14,7 +14,12 @@ import sys
 import pytest
 
 _SHADOWED = ("source_acquisition", "jma_weather_evidence", "app")
-_BASE_PATH = list(sys.path)
+from pathlib import Path as _P
+_ROOT = _P(__file__).resolve().parents[1]
+# Shared roots most JRA tests (and their subprocesses) expect; LOCAL tests put
+# runtime/local_physical in front of these themselves.
+_BASE_PATH = [str(_ROOT / "runtime"), str(_ROOT / "runtime" / "jra_source_runtime"),
+              str(_ROOT / "tests")] + [p for p in sys.path]
 _STATE = {}
 
 
