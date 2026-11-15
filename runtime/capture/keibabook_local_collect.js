@@ -56,7 +56,7 @@ window.__kmLocalCollect = async function (date8, opts) {
       if (pages[name]) continue;
       await sleep(gap);
       const p = await get(href);
-      if (p.status !== 200 || /表示できません|存在しません/.test(p.doc.title + (p.doc.body.innerText || "").slice(0, 3000))) {
+      if (p.status !== 200 || /表示できません|存在しません/.test(p.doc.title + (p.doc.body.innerText || p.doc.body.textContent || ""))) {
         pages[name] = { status: p.status, unavailable: true }; continue; }
       pages[name] = { url: p.url, ...extract(p.doc) };
     }
