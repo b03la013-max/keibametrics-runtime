@@ -88,9 +88,15 @@ def _metrics(order, top3):
 def evaluate_one(race_dir: Path, root: Path) -> dict | None:
     pre = json.loads((race_dir / "pre_result.json").read_text())
     ev = root / "runtime/jra_static_owner_forward_oos" / pre["race_id"] / "result_evaluation.json"
-    if not ev.exists():
-        return None
-    off = json.loads(ev.read_text())
+    if ev.exists():
+        off = json.loads(ev.read_text())
+    else:  # fall back to the official RESULT capture (jra.go.jp) when the static-owner evaluation is absent
+        res = root / "runtime/results" / f"{pre['race_id']}.json"
+        if not res.exists():
+            return None
+        o = json.loads(res.read_text())["official_result"]
+        off = {"top3": o["finish_order"][:3], "observed_at": o.get("captured_at"),
+               "official_result_sha256": o.get("raw_sha256")}
     top3 = [str(x) for x in off["top3"]]
     observed = off.get("observed_at")
     body = {"profile": PROFILE, "race_id": pre["race_id"], "pre_result_sha256": pre["sha256"],
