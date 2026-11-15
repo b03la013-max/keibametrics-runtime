@@ -6,7 +6,7 @@ the archived trusted public key and compares the saved display with that FINAL.
 No live Health request, prediction calculation or new signature is involved.
 """
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -387,7 +387,7 @@ def complete_body(bundle, final):
     return '\n'.join(lines) + '\n'
 
 
-if __name__ == '__main__':
+def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description='Read saved presentation; no execution or notification.')
     parser.add_argument('--directory', required=True)
@@ -395,16 +395,25 @@ if __name__ == '__main__':
     parser.add_argument('--expected-final-sha256', required=True)
     parser.add_argument('--final', required=True)
     parser.add_argument('--expected-authority')
+    parser.add_argument('--before-post', action='store_true',
+                        help='Print only while the verified FINAL is still before scheduled post.')
     display = parser.add_mutually_exclusive_group()
     display.add_argument('--complete-body', dest='complete_body', action='store_true',
                         help='Expand verified saved Full20, roles, tickets and evidence (default); preserve originals.')
     display.add_argument('--compact-body', dest='complete_body', action='store_false',
                         help='Return the original compact saved text unchanged.')
     parser.set_defaults(complete_body=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     final = json.loads(Path(args.final).read_text())
     bundle = read_presentation(args.directory, final=final,
                             expected_race_id=args.expected_race_id,
                             expected_final_sha256=args.expected_final_sha256,
                             expected_authority=args.expected_authority)
-    print(complete_body(bundle, final) if args.complete_body else bundle['text'], end='')
+    body = complete_body(bundle, final) if args.complete_body else bundle['text']
+    if args.before_post and datetime.now(timezone.utc) >= datetime.fromisoformat(final['scheduled_post_at']):
+        parser.exit(2, 'JRA_PRESENTATION_POST_TIME_PASSED\n')
+    print(body, end='')
+
+
+if __name__ == '__main__':
+    main()

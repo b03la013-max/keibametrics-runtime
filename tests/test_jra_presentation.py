@@ -48,6 +48,41 @@ def test_complete_body_cli_rejects_forged_saved_values_before_output(tmp_path, m
     assert capsys.readouterr().out == ''
 
 
+@pytest.mark.parametrize('seconds_before_post, live_only, emits', [(1, True, True), (0, True, False),
+                                                                (-1, True, False), (-1, False, True)])
+def test_saved_presentation_cli_respects_prestart_mode(tmp_path, monkeypatch, capsys,
+                                                      seconds_before_post, live_only, emits):
+    from datetime import datetime, timedelta
+    import jra_presentation
+
+    final, _, _ = fixture()
+    saved = save_presentation(tmp_path, build())
+    final_path = tmp_path / 'final.json'
+    final_path.write_text(json.dumps(final))
+    post = datetime.fromisoformat(final['scheduled_post_at'])
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz):
+            return (post - timedelta(seconds=seconds_before_post)).astimezone(tz)
+
+    monkeypatch.setattr(jra_presentation, 'datetime', Clock)
+    args = ['--compact-body', '--directory', str(tmp_path), '--expected-race-id', final['race_id'],
+            '--expected-final-sha256', final['sha256'], '--final', str(final_path)]
+    if live_only:
+        args.append('--before-post')
+    if emits:
+        jra_presentation.main(args)
+        assert capsys.readouterr().out == saved['text']
+    else:
+        with pytest.raises(SystemExit) as exc:
+            jra_presentation.main(args)
+        assert exc.value.code == 2
+        output = capsys.readouterr()
+        assert output.out == ''
+        assert output.err == 'JRA_PRESENTATION_POST_TIME_PASSED\n'
+
+
 def test_complete_body_paper_never_promotes_mec_reference():
     from jra_presentation import complete_body
     _, h, c = fixture()
