@@ -18,7 +18,10 @@ import unicodedata
 from datetime import date
 
 NEUTRAL = 52.0
-VMI_WEIGHT = 0.10  # external auxiliary (SBO) share of F3S-L; fixed prior, Owner-approved adoption
+VMI_WEIGHT = 0.30  # SBO speed-index share of F3S-L (Owner 2026-11-15 21:19: speed index suits NAR, raise it)
+# 競馬ブック bands (Owner 2026-11-15 21:19: auto-acquire, connect): CCI = 厩舎の話, TRI = 調教.
+BAND_SCORE = {'VERY_STRONG': 66.0, 'STRONG': 59.0, 'NEUTRAL': 52.0, 'CAUTION': 45.0}
+KB_WEIGHT = 0.15   # F3S-L += KB_WEIGHT x (CCI-52) + KB_WEIGHT x (TRI-52); fixed prior, not fitted
 
 # §3.5 / §23-§26 jockey notes (surname prefixes). Higher = stronger at venue.
 JOCKEYS = {
@@ -271,6 +274,13 @@ def predict(race, runners, odds, today, ext=None):
     if any(x['VMI'] is not None for x in rows):
         for x in rows:
             x['F3S'] = clamp((1 - VMI_WEIGHT) * x['F3S'] + VMI_WEIGHT * (x['VMI'] if x['VMI'] is not None else NEUTRAL))
+    kb = (ext or {}).get('kb') or {}
+    for x in rows:
+        b = kb.get(x['no']) or {}
+        x['CCI'] = BAND_SCORE.get(b.get('cci'), NEUTRAL)
+        x['TRI'] = BAND_SCORE.get(b.get('tri'), NEUTRAL)
+        if b:
+            x['F3S'] = clamp(x['F3S'] + KB_WEIGHT * (x['CCI'] - NEUTRAL) + KB_WEIGHT * (x['TRI'] - NEUTRAL))
     # probabilities (uncalibrated)
     pm = softmax([x['F3S'] for x in rows], 4.5)
     imp = [1 / x['win'] if x['win'] else None for x in rows]

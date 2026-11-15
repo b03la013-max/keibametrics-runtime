@@ -64,7 +64,12 @@ def check():
     b = {x['no']: x['F3S'] for x in engine.predict(race, runners, odds, date(2026, 11, 16), {'vmi': v})['rows']}
     w = engine.VMI_WEIGHT
     assert abs(b[1] - ((1 - w) * a[1] + w * 60)) < 1e-9 and abs(b[2] - ((1 - w) * a[2] + w * 52)) < 1e-9, (a, b)
-    print('SELFTEST_OK 8/8')
+    # 9) 競馬ブック bands: VERY_STRONG CCI + CAUTION TRI shift F3S by KB_WEIGHT x deviation
+    c = {x['no']: x['F3S'] for x in engine.predict(race, runners, odds, date(2026, 11, 16),
+                                                     {'kb': {1: {'cci': 'VERY_STRONG', 'tri': 'CAUTION'}}})['rows']}
+    k = engine.KB_WEIGHT
+    assert abs(c[1] - (a[1] + k * 14 - k * 7)) < 1e-9 and c[2] == a[2], (a, c)
+    print('SELFTEST_OK 9/9')
 
 
 if __name__ == '__main__':

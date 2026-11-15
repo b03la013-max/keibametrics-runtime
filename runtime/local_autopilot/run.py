@@ -92,16 +92,20 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
         L.append(f"- 外部補助指標VMI-L（水分ボンバー・F3Sへ{engine.VMI_WEIGHT:.0%}）：" + (
             f"使用 {sbo_meta['coverage']}/{sbo_meta['active']}頭（取得 {sbo_meta['fetched_at'][11:16]}）" if sbo_meta['status'] == 'USED'
             else f"未使用（{sbo_meta['status']}）→ F3Sは従来式"))
+        kbm = sbo_meta.get('keibabook') or {}
+        L.append(f"- 競馬ブック帯域（CCI厩舎の話・TRI調教、各{engine.KB_WEIGHT}×偏差）：" + (
+            f"使用 {kbm['coverage']}頭（取得 {str(kbm['captured_at'])[11:16]}UTC）" if kbm.get('status') == 'USED'
+            else f"未使用（{kbm.get('status')}）"))
     if race.get('scratched'):
         L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
-    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | p勝(暫定) | 役割 |',
-          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
+    L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | CCI | TRI | p勝(暫定) | 役割 |',
+          '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
     for x in res['order']:
         L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {x['jockey'] or ''} | "
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
-                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | "
+                 f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | {f0(x.get('CCI'))} | {f0(x.get('TRI'))} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
     ev = '–' if res['tan_ev'] is None else f"{res['tan_ev']:+.2f}"
     L += ['', '**本命判定エンジン（§12）**', '',
@@ -124,8 +128,8 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
     elif shadow:
         L += ['', f"公式29指数シャドー：実行不可（{shadow['error']}）"]
     notes = sorted({f for x in res['rows'] for f in x['flags'] if 'NEUTRAL' in f})
-    L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎コメント）は"
-              f"未取得のため中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
+    L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎の話）・TRI（調教）は"
+              f"競馬ブック帯域が無い馬・場では中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
     return '\n'.join(L)
 
 
@@ -211,6 +215,27 @@ def sbo_aux(r, runners):
                       'fetched_at': now_jst().isoformat(), 'sha256': None, 'coverage': 0, 'active': len(runners)}
 
 
+def keibabook_aux(out, r):
+    """競馬ブック bands captured in the Owner's session (external/keibabook_bands.json,
+    bands only). Used only when captured before this race's cutoff."""
+    p = out / 'external' / 'keibabook_bands.json'
+    if not p.exists():
+        return None, {'status': 'NOT_CAPTURED'}
+    raw = p.read_bytes()
+    doc = json.loads(raw)
+    meta = {'status': 'NOT_PROVIDED', 'captured_at': doc.get('captured_at'), 'sha256': hashlib.sha256(raw).hexdigest()}
+    race = next((x for x in doc.get('races', []) if x.get('venue') == r['venue_name'] and x.get('race_no') == r['race_no']), None)
+    if race is None:
+        return None, meta
+    cap = datetime.fromisoformat(doc['captured_at'].replace('Z', '+00:00'))
+    if cap >= cutoff(r):
+        meta['status'] = 'CAPTURED_AFTER_CUTOFF'
+        return None, meta
+    kb = {int(k): v for k, v in race['horses'].items()}
+    meta.update(status='USED', coverage=len(kb))
+    return kb, meta
+
+
 def predict(reader, r, today, edition, out, cards):
     t0 = time.monotonic()
     if r['rid'] in cards:
@@ -238,6 +263,10 @@ def predict(reader, r, today, edition, out, cards):
                 newcomers=sum(1 for x in runners if not x['starts']))
     odds = {x['horse_no']: {'win': x['win_odds'], 'place_low': None, 'cancelled': False} for x in runners}
     ext, sbo_meta = sbo_aux(r, runners)
+    kb, kb_meta = keibabook_aux(out, r)
+    if kb:
+        ext = dict(ext or {}, kb=kb)
+    sbo_meta['keibabook'] = kb_meta
     res = engine.predict(race, runners, odds, today, ext)
     t2 = time.monotonic()
     stem = out / f"{r['venue_id']}_{r['race_no']:02d}"
@@ -261,7 +290,7 @@ def predict(reader, r, today, edition, out, cards):
     md = render(race, res, edition, fetched, shadow, revision, sbo_meta)
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
     slim['ranking'] = [{k: x.get(k) for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
-                                             'T3I', 'F3S', 'OPI', 'VMI', 'p_win', 'role')} for x in res['order']]
+                                             'T3I', 'F3S', 'OPI', 'VMI', 'CCI', 'TRI', 'p_win', 'role')} for x in res['order']]
     slim['sbo'] = sbo_meta
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
@@ -300,7 +329,8 @@ def predict(reader, r, today, edition, out, cards):
                                        'USER_REACHED': 'NOT_CONNECTED', 'USER_ACK_VERIFIED': 'NOT_CONNECTED'},
                           'before_cutoff': datetime.fromisoformat(saved_at) < cutoff(r),
                           'top': res['order'][0]['no'], 'quad': res['quad'], 'aki_form': res['aki']['form'],
-                          'sbo': {k: sbo_meta.get(k) for k in ('status', 'fetched_at', 'sha256', 'coverage', 'active')}})
+                          'sbo': {k: sbo_meta.get(k) for k in ('status', 'fetched_at', 'sha256', 'coverage', 'active')},
+                          'keibabook': kb_meta})
     r['active_runners'] = len(runners)
     r['scratched'] = race['scratched']
     r['last_error'] = None
