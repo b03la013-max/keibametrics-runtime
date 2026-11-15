@@ -8,23 +8,23 @@
   "external_krs_recorded": 23,
   "final_artifacts_present": 23,
   "full20_calculated_cells": 6200,
-  "learning_records_present": 17,
+  "learning_records_present": 19,
   "prediction_quality": "FORWARD_OOS_PENDING",
   "registered_intakes": 34,
   "user_delivery_verified": 0
  },
- "generated_at": "2026-11-15T14:31:08.062663+09:00",
+ "generated_at": "2026-11-15T14:33:26.276411+09:00",
  "how_to_read": "Each race is run automatically 55-30 min before its official post. FINAL = signed pre-race Production FINAL with the 買い目 tree; EVIDENCE_NO_BET = verified zero-exposure terminal because some runner x index cells could not be closed from official evidence; AKI_NO_BET = actual Full20 closed, registered AKI positive-evidence selection cannot close; MISSED_WINDOW = never predicted (no late or backdated FINAL). state retains scheduler compatibility; display_state and post_result_evidence separate stored bodies/bindings from signature verification and full closure.",
  "post_result_metrics": {
   "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
   "race_denominator": 36,
   "result_requests_present": 19,
-  "review_learning_bound": 16,
+  "review_learning_bound": 18,
   "signature_validation_performed": false,
   "signature_verification_blocked": 0,
   "signature_verification_failed": 0,
   "signed_result_final_verified": 0,
-  "stored_result_receipts_payload_bound": 16,
+  "stored_result_receipts_payload_bound": 18,
   "zero_exposure_result_learning_bound": 1
  },
  "profile": "KM-JRA-RACE-DAY-AUTOPILOT-v1.3-20261012",
@@ -2627,7 +2627,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-KYO-20261115-R08/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
-   "display_state": "RESULT_REQUEST_STORED",
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "c447366fb7c6913aba542a622522044fe6b2ec4e231d5b84694f610c4a95be56",
    "immutable_final_sha256": "4bc45b850371709c0db11bf605fb3f624d71387fc29c8550387b9d8846fc870a",
    "krs_actual_run_count": 5000,
@@ -2641,28 +2641,37 @@
     "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
     "learning": {
      "consumption": "NOT_ESTABLISHED_BY_STORAGE",
-     "effective_time": null,
+     "effective_time": "2026-11-15T05:32:05.817781+00:00",
      "path": "runtime/learning_states/KM-JRA-KYO-20261115-R08.json",
-     "present": false,
-     "race_bound": false,
-     "review_bound": false,
-     "self_hash_valid": false,
-     "sha256": null,
-     "state_id": null
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "02972ec9e485a48c4489835c624fa931a0da258f0d5b0a4f0bb9ebeb6b47326e",
+     "state_id": "KM-JRA-KYO-20261115-R08-LEARNING-NEXT"
     },
     "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
     "result_request_present": true,
     "review": {
      "path": "runtime/reviews_auto/KM-JRA-KYO-20261115-R08-AUTO.json",
-     "present": false,
-     "race_bound": false,
-     "result_and_final_bound": false,
-     "self_hash_valid": false
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
     },
-    "review_learning_bound": false,
+    "review_learning_bound": true,
     "signature_validation_performed": false,
-    "storage_state": "RESULT_REQUEST_STORED",
-    "stored_result_receipts": [],
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-KYO-20261115-R08-LIVE-R1/RESULT/runs/43681295039-1/result_receipt_envelope.json",
+      "receipt_sha256": "21c8bb01e98de1f008d33252ad64f025bd0acc75162d2c2a781fcc5722c85e77",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
     "zero_exposure_records": [],
     "zero_exposure_result_learning_bound": false
    },
@@ -2680,7 +2689,7 @@
     "total_payout": 0,
     "winning_tickets": []
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 7,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 18.000／W-AKI 10.000\nP2-AKI 15.000／P3-AKI 35.000\nASI 77.500／軸飛びリスク 22.500／RSI 25.000\n外部変動 0.000／堅決着補正 0.000\n馬単（本線）\n1着\n└─ 1\n2着\n├─ 3\n├─ 5\n└─ 9\n三連単（本線）\n1着\n└─ 1\n2着\n├─ 3\n├─ 5\n└─ 9\n3着\n├─ 3\n└─ 5\n点数\n├─ 馬単　3点\n├─ 三連単　4点\n└─ 合計　7点\n1点当たり\n└─ 100円\n投資額\n└─ 700円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "3歳以上2勝クラス（混合）［指定］",
@@ -2771,7 +2780,7 @@
    },
    "availability_receipt": "runtime/jra_delivery/KM-JRA-TKY-20261115-R09/availability_receipt.json",
    "canonical_availability_verified_before_post": true,
-   "display_state": "RESULT_REQUEST_STORED",
+   "display_state": "RESULT_REVIEW_LEARNING_STORED",
    "final_receipt_sha256": "0165d64f6f846e32be9e7dd429c8bd6b09ce781d5fb0c81af71c9f520f5cb87c",
    "immutable_final_sha256": "a0c5483dc86809069e5fc471ca42dc54328a64e3b351f8c786964412b4f5de23",
    "krs_actual_run_count": 5000,
@@ -2785,28 +2794,37 @@
     "evidence_scope": "CANONICAL_STORAGE_SELF_HASH_AND_BINDING_ONLY",
     "learning": {
      "consumption": "NOT_ESTABLISHED_BY_STORAGE",
-     "effective_time": null,
+     "effective_time": "2026-11-15T05:31:43.332754+00:00",
      "path": "runtime/learning_states/KM-JRA-TKY-20261115-R09.json",
-     "present": false,
-     "race_bound": false,
-     "review_bound": false,
-     "self_hash_valid": false,
-     "sha256": null,
-     "state_id": null
+     "present": true,
+     "race_bound": true,
+     "review_bound": true,
+     "self_hash_valid": true,
+     "sha256": "469604662cbb4cf3bcb9e80efe9c63f8b44c3d228cd1464fe42643f0d219c447",
+     "state_id": "KM-JRA-TKY-20261115-R09-LEARNING-NEXT"
     },
     "production_closed_loop_claim": "NOT_ESTABLISHED_BY_STORAGE_AUDIT",
     "result_request_present": true,
     "review": {
      "path": "runtime/reviews_auto/KM-JRA-TKY-20261115-R09-AUTO.json",
-     "present": false,
-     "race_bound": false,
-     "result_and_final_bound": false,
-     "self_hash_valid": false
+     "present": true,
+     "race_bound": true,
+     "result_and_final_bound": true,
+     "self_hash_valid": true
     },
-    "review_learning_bound": false,
+    "review_learning_bound": true,
     "signature_validation_performed": false,
-    "storage_state": "RESULT_REQUEST_STORED",
-    "stored_result_receipts": [],
+    "storage_state": "RESULT_REVIEW_LEARNING_STORED",
+    "stored_result_receipts": [
+     {
+      "path": "runtime/executions/KM-JRA-TKY-20261115-R09-LIVE-R1/RESULT/runs/43681301950-1/result_receipt_envelope.json",
+      "receipt_sha256": "8049271605af6d8ce3c2b785de73be930197ffaa81d13f02749a0fbc1e48528c",
+      "request_payload_bound": true,
+      "signature_present": true,
+      "signature_validation": "NOT_PERFORMED_BY_STATUS_RENDERER",
+      "stored_manifest_verified": true
+     }
+    ],
     "zero_exposure_records": [],
     "zero_exposure_result_learning_bound": false
    },
@@ -2846,7 +2864,7 @@
      }
     ]
    },
-   "state": "SETTLED",
+   "state": "SETTLED_SIGNED_RESULT_LEARNED",
    "ticket_count": 72,
    "ticket_tree": "買い目\n荒れ構造（AKI-JRA v2.1）\n総合 54.000／W-AKI 70.000\nP2-AKI 70.000／P3-AKI 55.000\nASI 30.000／軸飛びリスク 70.000／RSI 40.000\n外部変動 0.000／堅決着補正 0.000\n馬単（頭入替）\n1着\n├─ 14\n├─ 8\n├─ 1\n└─ 6\n2着\n├─ 14\n├─ 8\n├─ 1\n├─ 6\n└─ 4\n三連複（本線）\n1列目\n└─ 14\n2列目\n└─ 8\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 8\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 8\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 8\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 1\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 1\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 1\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 1\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 6\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 6\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 6\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 4\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 14\n2列目\n└─ 4\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 1\n3列目\n└─ 6\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 1\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 1\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 1\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 6\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 6\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 6\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 4\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 8\n2列目\n└─ 4\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 6\n3列目\n└─ 4\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 6\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 6\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 4\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 1\n2列目\n└─ 4\n3列目\n└─ 5\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 4\n3列目\n└─ 9\n三連複（押さえ）\n1列目\n└─ 6\n2列目\n└─ 4\n3列目\n└─ 5\n三連単（頭入替）\n1着\n├─ 14\n├─ 8\n└─ 1\n2着\n├─ 14\n├─ 8\n├─ 1\n└─ 6\n3着\n├─ 14\n├─ 8\n├─ 1\n├─ 6\n└─ 4\n点数\n├─ 馬単　16点\n├─ 三連複　29点\n├─ 三連単　27点\n└─ 合計　72点\n1点当たり\n└─ 100円\n投資額\n└─ 7,200円\n購入判定\n└─ 推奨（実購入未確認）\n確率状態\n└─ 未較正\nEV\n└─ 算出不可\n検証状態\n└─ 未検証（オーナー承認・前向きOOS 0件）",
    "title": "銀嶺ステークス 3歳以上3勝クラス（混合）［指定］",
