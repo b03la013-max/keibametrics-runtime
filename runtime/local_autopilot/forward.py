@@ -89,6 +89,65 @@ def observation(root):
             for venue, v in sorted(out.items())}, idx
 
 
+def formal_oos(root):
+    """Formal Production ledger (unknown-future, pre-start Signed FINAL only).
+
+    Two measurements per settled formal race:
+      * formal: the Signed FINAL (Static Owner roles + MEC tickets) settlement and
+        whether the Runtime-signed RESULT receipt was verified;
+      * numerical_shadow: the Production Full29 materialization (not consumed, R52)
+        ranked by F3S-L, scored against the official order -- the OOS evidence the
+        R52 boundary requires before any numerical->prediction/KRS/ticket/capital
+        consumption promotion (which additionally needs human Owner review)."""
+    rows = []
+    for day, key, r in _races(root):
+        f = r.get('formal') or {}
+        if f.get('status') != 'SIGNED_FINAL':
+            continue
+        row = {'day': day.name, 'race': key, 'final_receipt': f.get('final_receipt_sha256', '')[:16],
+               'settled': False}
+        fs, st = r.get('formal_settlement') or {}, r.get('settlement') or {}
+        if fs and st.get('order'):
+            order = st['order']
+            row.update(settled=True, eff=fs.get('effective_invest'), pay=fs.get('payout'),
+                       result_receipt_verified=bool(fs.get('result_receipt_verified')),
+                       first_material_failure=fs.get('first_material_failure'))
+            try:
+                sm = json.loads((day / 'formal' / f'{key}.summary.json').read_text())
+                rank = [int(x) for x in sm.get('ranking') or []]
+                row['formal_win'] = int(bool(rank) and rank[0] == order[0])
+                row['formal_top3_capture'] = len(set(rank[:3]) & set(order[:3]))
+            except (OSError, ValueError):
+                pass
+            try:
+                fz = json.loads((day / 'formal' / f'{key}.full29.json').read_text())
+                n29 = [x['no'] for x in sorted(fz['runners'], key=lambda x: -(x['indices'].get('F3S-L') or 0))]
+                row['num_win'] = int(bool(n29) and n29[0] == order[0])
+                row['num_top3_capture'] = len(set(n29[:3]) & set(order[:3]))
+                row['full29_classification'] = fz.get('classification')
+            except (OSError, ValueError, KeyError):
+                pass
+        rows.append(row)
+    done = [x for x in rows if x['settled']]
+    eff = sum(x.get('eff') or 0 for x in done)
+    pay = sum(x.get('pay') or 0 for x in done)
+    prod = [x for x in done if x.get('full29_classification') == 'FULL29_PRODUCTION_NUMERICAL_MATERIALIZATION']
+    return {'classification': 'LOCAL_FORMAL_PRODUCTION_FORWARD_OOS (Signed FINAL, recommendation only, no purchase)',
+            'signed_final_races': len(rows), 'settled_races': len(done),
+            'result_receipt_verified': sum(1 for x in done if x.get('result_receipt_verified')),
+            'effective_invest': eff, 'payout': pay, 'pfs': round(100 * pay / eff, 1) if eff else None,
+            'formal_win_hits': sum(x.get('formal_win', 0) for x in done),
+            'numerical_shadow': {'races': len(prod), 'win_hits': sum(x.get('num_win', 0) for x in prod),
+                                 'top3_capture_sum': sum(x.get('num_top3_capture', 0) for x in prod),
+                                 'formal_top3_capture_sum': sum(x.get('formal_top3_capture', 0) for x in prod)},
+            'consumption_promotion_gate': {
+                'rule': 'R52: numerical consumption requires separate genuine unknown-future OOS + human (Owner) review',
+                'min_settled_production_numerical_races': 100,
+                'threshold_basis': 'PROPOSED (較正・検証運用条項 第12条: 100件以上・目的事象20件以上・訓練/検証分離); Owner decides',
+                'evidence_ready': len(prod) >= 100, 'owner_review': 'NOT_PERFORMED', 'authorized': False},
+            'races': rows}
+
+
 def write(root):
     s = summarize(root)
     (Path(root) / 'forward_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
@@ -108,5 +167,18 @@ def write(root):
           '| 場 | 頭数 | ' + ' | '.join(idx) + ' |', '|---|---|' + '---|' * len(idx)]
     for v, o in obs.items():
         L.append(f"| {v} | {o['runners']} | " + ' | '.join(f"{o['observed_rate'][k]:.0%}" for k in idx) + ' |')
+    fo = formal_oos(root)
+    s['formal'] = fo
+    (Path(root) / 'forward_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
+    ns, g = fo['numerical_shadow'], fo['consumption_promotion_gate']
+    L += ['', '## 正式Production（署名FINAL・未知未来・推薦試算・実購入なし）', '',
+          f"- 署名FINAL {fo['signed_final_races']}R／精算 {fo['settled_races']}R／署名RESULT検証 {fo['result_receipt_verified']}R",
+          f"- 実効投資 {fo['effective_invest']:,}円／払戻 {fo['payout']:,}円／PFS {fo['pfs']}%／正式◎1着 {fo['formal_win_hits']}",
+          f"- 正式29指数（Production計算器・未消費）のF3S-L順：{ns['races']}R中 1着的中 {ns['win_hits']}／上位3頭の3着内捕捉 {ns['top3_capture_sum']}（正式Static {ns['formal_top3_capture_sum']}）",
+          f"- 数値Consumer昇格ゲート：精算 {ns['races']}/{g['min_settled_production_numerical_races']}R・Ownerレビュー {g['owner_review']}・承認 {g['authorized']}",
+          '', '| 日付 | Race | FINAL | 精算 | 投資 | 払戻 | RESULT署名 | 第一失敗 |', '|---|---|---|---|---|---|---|---|']
+    for x in fo['races']:
+        L.append(f"| {x['day']} | {x['race']} | `{x['final_receipt']}` | {'済' if x['settled'] else '待'} | "
+                 f"{x.get('eff', '–')} | {x.get('pay', '–')} | {x.get('result_receipt_verified', '–')} | {x.get('first_material_failure', '–')} |")
     (Path(root) / 'forward_summary.md').write_text('\n'.join(L) + '\n')
     return s
