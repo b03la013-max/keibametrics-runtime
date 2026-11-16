@@ -221,6 +221,9 @@ def sbo_aux(r, runners):
                       'fetched_at': now_jst().isoformat(), 'sha256': None, 'coverage': 0, 'active': len(runners)}
 
 
+ENGINE_KB_KEYS = {'cci', 'tri', 'tm', 'pace', 'rt', 'cpu'}
+
+
 def keibabook_aux(out, r):
     """競馬ブック bands captured in the Owner's session (external/keibabook_bands.json,
     bands only). Used only when captured before this race's cutoff."""
@@ -237,7 +240,9 @@ def keibabook_aux(out, r):
     if cap >= cutoff(r):
         meta['status'] = 'CAPTURED_AFTER_CUTOFF'
         return None, meta
-    kb = {int(k): v for k, v in race['horses'].items() if v}
+    full = {int(k): v for k, v in race['horses'].items() if v}
+    meta['evidence_only'] = full   # incl. style / course_first labels: danger-fav evidence, never the engine
+    kb = {k: v for k, v in full.items() if set(v) & ENGINE_KB_KEYS}
     if not kb:
         return None, meta
     meta.update(status='USED', coverage=len(kb),
@@ -275,6 +280,7 @@ def predict(reader, r, today, edition, out, cards):
     kb, kb_meta = keibabook_aux(out, r)
     if kb:
         ext = dict(ext or {}, kb=kb)
+    kb_evidence = kb_meta.pop('evidence_only', None)
     sbo_meta['keibabook'] = kb_meta
     res = engine.predict(race, runners, odds, today, ext)
     t2 = time.monotonic()
@@ -305,6 +311,12 @@ def predict(reader, r, today, edition, out, cards):
                                              # evidence only (shadow measurement: body weight / market); not consumed
                                              'frame', 'bw', 'bw_change', 'place_low', 'BWI')} for x in res['order']]
     slim['sbo'] = sbo_meta
+    try:  # evidence only (危険な1番人気 + 前走内容); never consumed by ranking / tickets / KRS / capital
+        from runtime.local_autopilot import danger_fav
+        slim['danger_fav'] = danger_fav.flags(race, runners, kb_evidence)
+        slim['prior_runs'] = {str(x['horse_no']): danger_fav.prior_record(x) for x in runners}
+    except Exception as exc:
+        slim['danger_fav'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
     ticket_sha = hashlib.sha256(json.dumps(slim['tickets'], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
@@ -937,6 +949,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     o = smz.measure(ROOT)
                     (ROOT / 'shadow_measure.json').write_text(json.dumps(o, ensure_ascii=False, indent=1) + '\n')
                     (ROOT / 'shadow_measure.md').write_text(smz.md(o))
+                    smz.write_daily(ROOT, out.name)   # per-day: allocation / NO-BET / ◎ vs 1番人気 / 危険な1番人気
                 except Exception as exc:
                     log('SHADOW_MEASURE_FAIL', type(exc).__name__, str(exc)[:120])
             try:

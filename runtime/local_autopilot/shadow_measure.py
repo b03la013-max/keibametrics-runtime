@@ -39,6 +39,10 @@ def strategies(rank, fav):
     if fav is not None:
         s['WIN_1番人気'] = [('WIN', [fav])]
         s['PLACE_1番人気'] = [('PLACE', [fav])]
+        o = [x for x in t if x != fav]   # PAPER order without the favorite: same partners, favorite as axis
+        s['WIDE_1番人気-PAPER上位2'] = [('WIDE', [fav, x]) for x in o[:2]]
+        s['QUINELLA_1番人気-PAPER上位3'] = [('QUINELLA', [fav, x]) for x in o[:3]]
+        s['TRIO_1番人気軸_PAPER上位4流し'] = [('TRIO', [fav, a, b]) for a, b in combinations(o[:4], 2)]
     return s
 
 
@@ -94,8 +98,30 @@ def band(o):
     return '<2.0' if o < 2 else '2.0-4.9' if o < 5 else '5.0-9.9' if o < 10 else '10.0+'
 
 
-def measure(root):
-    rows = load(root)
+def _role(res, no):
+    """(won, top3, win payout, place payout) of one horse, 100-yen units."""
+    if no is None:
+        return None
+    pay = res['payouts']
+    return (no == res['order'][0], no in res['order'][:3],
+            (pay.get('WIN') or {}).get(str(no)) or 0, (pay.get('PLACE') or {}).get(str(no)) or 0)
+
+
+def _rolesum(xs):
+    xs = [x for x in xs if x]
+    if not xs:
+        return None
+    n = len(xs)
+    return {'races': n, 'win_rate': round(100 * sum(x[0] for x in xs) / n, 1),
+            'top3_rate': round(100 * sum(x[1] for x in xs) / n, 1),
+            'win_pfs': round(sum(x[2] for x in xs) / n, 1), 'place_pfs': round(sum(x[3] for x in xs) / n, 1),
+            'win_pfs_95ci': boot_ci([(100, x[2]) for x in xs]), 'place_pfs_95ci': boot_ci([(100, x[3]) for x in xs])}
+
+
+def measure(root, days=None):
+    rows = [x for x in load(root) if days is None or x['day'] in days]
+    hv = defaultdict(lambda: defaultdict(list))      # group -> role -> [(won, top3, win pay, place pay)]
+    dz = defaultdict(lambda: defaultdict(list))      # danger-fav: group -> role -> [...]
     strat = defaultdict(list)
     hits = defaultdict(int)
     bands = defaultdict(lambda: defaultdict(list))
@@ -135,6 +161,20 @@ def measure(root):
             market['diverge_fav_won'] += w == fav
             market['diverge_honmei_won'] += w == rank[0]
             market['diverge_fav_out_of_top3'] += fav not in res['order'][:3]
+        fo = odds.get(fav)
+        for g in ('ALL', 'venue:' + x['key'].split('_')[0], 'fav_odds:' + band(fo), 'day:' + x['day'],
+                  'honmei_is_fav' if rank[0] == fav else 'honmei_not_fav'):
+            hv[g]['◎'].append(_role(res, rank[0]))
+            hv[g]['1番人気'].append(_role(res, fav))
+            if rank[0] != fav:
+                hv[g]['◎≠人気時の◎'].append(_role(res, rank[0]))
+        dfv = pred.get('danger_fav') or {}
+        if dfv.get('status') == 'OK' and dfv.get('favorite_no') == fav:
+            groups = ['rank:' + dfv['danger_rank']] + [f"{k}={v}" for k, v in sorted(dfv['flags'].items()) if v is not None]
+            for g in groups:
+                dz[g]['1番人気'].append(_role(res, fav))
+                dz[g]['2番人気'].append(_role(res, dfv.get('second_no')))
+                dz[g]['◎'].append(_role(res, rank[0]))
         for r in ranking:
             if r.get('bw_change') is not None:
                 bw['winner' if r['no'] == w else 'others'].append(abs(r['bw_change']))
@@ -159,6 +199,9 @@ def measure(root):
            'market': {**dict(market),
                       'fav_win_rate': round(100 * market['fav_won'] / market['races'], 1) if market['races'] else None,
                       'honmei_win_rate': round(100 * market['honmei_won'] / market['races'], 1) if market['races'] else None},
+           'honmei_vs_favorite': {g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(hv.items())},
+           'danger_favorite': ({g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(dz.items())}
+                               or 'NOT_PERSISTED_BEFORE_2026-11-17'),
            'body_weight': {k: {'n': len(v), 'mean_abs_change_kg': round(sum(v) / len(v), 2) if v else None}
                            for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17'}
     return out
@@ -183,8 +226,39 @@ def md(o):
           f"- 1番人気の勝率 {m.get('fav_win_rate')}%／◎の勝率 {m.get('honmei_win_rate')}%／◎=1番人気 {m.get('honmei_is_fav')}R",
           f"- ◎≠1番人気 {m.get('diverge')}R：1番人気が勝利 {m.get('diverge_fav_won')}R、◎が勝利 {m.get('diverge_honmei_won')}R、"
           f"1番人気が3着外 {m.get('diverge_fav_out_of_top3')}R",
-          '', f"## 馬体重：{o['body_weight']}", '']
+          '', '## ◎ vs 1番人気（勝率・3着内率・単勝/複勝回収率）', '',
+          '| 区分 | 対象 | Race | 勝率 | 3着内率 | 単勝回収 | 単勝95%CI | 複勝回収 |', '|---|---|---|---|---|---|---|---|']
+    for g, d in o['honmei_vs_favorite'].items():
+        if g.startswith('day:') and len(o['days']) > 1:
+            continue
+        for role, v in d.items():
+            if v:
+                L.append(f"| {g} | {role} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | "
+                         f"{v['win_pfs_95ci']} | {v['place_pfs']}% |")
+    L += ['', '## 危険な1番人気（フラグ別の1番人気・2番人気・◎の成績）', '']
+    if isinstance(o['danger_favorite'], dict):
+        L += ['| 条件 | 対象 | Race | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|---|']
+        for g, d in o['danger_favorite'].items():
+            for role, v in d.items():
+                if v:
+                    L.append(f"| {g} | {role} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
+    else:
+        L.append(f"- {o['danger_favorite']}")
+    L += ['', f"## 馬体重：{o['body_weight']}", '']
     return '\n'.join(L)
+
+
+def write_daily(root, day):
+    """Per-day shadow file next to the daily review (allocation / NO-BET / ◎ vs 1番人気 / 危険な1番人気)."""
+    root = Path(root)
+    o = measure(root, days={day})
+    if not o['races']:
+        return None
+    d = root / day / 'review'
+    d.mkdir(parents=True, exist_ok=True)
+    (d / 'shadow_daily.json').write_text(json.dumps(o, ensure_ascii=False, indent=1) + '\n')
+    (d / 'shadow_daily.md').write_text(md(o).replace('# 地方版 影計測', '# 地方版 日次影計測', 1))
+    return o
 
 
 if __name__ == '__main__':
