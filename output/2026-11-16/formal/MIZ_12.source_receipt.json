@@ -1,0 +1,101 @@
+{
+ "receipt": {
+  "schema": "KM-LOCAL-SIGNED-RECEIPT-v1",
+  "runtime_revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL",
+  "family": "LOCAL",
+  "phase": "SOURCE",
+  "race_id": "KM-LOCAL-MIZ-20261116-R12-RKT",
+  "status": "FAIL",
+  "errors": [
+   "REQUIRED_SOURCE_FETCH_FAILED:RAKUTEN_RACE_CARD:SOURCE_HOST_NOT_ALLOWED:keiba.rakuten.co.jp",
+   "MISSING_REQUIRED_SOURCES:RAKUTEN_RACE_CARD"
+  ],
+  "artifact_sha256": "f37280af2a1f507022c06ae812ddf7d6a6fb5e5a9f0e43e95a4cc8fe7ea3e3a2",
+  "timestamp": "2026-11-16T08:34:48.274684+00:00",
+  "engine_version": "1.1.0",
+  "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+  "parameter_map_version": "0.1-provisional",
+  "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+  "calibration_status": "PROVISIONAL_UNCALIBRATED",
+  "github_revision": "b26e49c356749f5ada6d065ab0b615c3675648ab",
+  "runtime_hashes": {
+   "legacy_runtime_app_sha256": "7ca4ea99cf82943ad6255fdc9d7d5d24f1c5f54b5dd9767a22d860dd6f0d2e40",
+   "runtime_wrapper_sha256": "2d4f32ef2ad8d17ac9b0ab8b11581bb5791f96615cc4bb579ae673bc45daa6f1",
+   "source_acquisition_sha256": "ef05cf8bfad137b04b2c21e9dede20b9a5502e60cb9abd2cc13e68c0c33b90a9",
+   "nar_source_manifest_sha256": "35cec3b9a7bb313ef1d90a7e7f4f4d1d08ae2f329e05cc563575d82e4c0732cc",
+   "nar_runner_universe_sha256": "d2ab387d6ce20bff26b86e3be341fda0777b984a1ff664dc688ee0fde523b7cb",
+   "nar_auxiliary_evidence_sha256": "470e5f1c6a0fcb35363cfe59632b2c00f5d8537d9000e496b399a85c4d61223c",
+   "jma_weather_evidence_sha256": "ddf600b9ff25745777865d0eb98c67aefdf4476a64b4b0604b1605e0cef614e1",
+   "point_in_time_population_sha256": "346e3c3289e20aa69fecb587bd9705297ff408becd4390bacee356dff216d850",
+   "sbo_public_shadow_evidence_sha256": "998cec5d9b426efaa1a6d8411b2125fd797e39f66ee5bf5dfb46fd8d15148c53"
+  }
+ },
+ "receipt_sha256": "92d1713e3af4c108c291733054281245d939be0f03ca7e346dd4ded91d0f6d85",
+ "signature": "SxiUfJFHsJFQvxIyH/S1piOWwOcSQ+ogFcOw3h2NBcAMP4U4nxS7OhZuoMkNqW7uApgqq7e4aijjlvwbnCMbCw==",
+ "signer_key_id": "KM-LOCAL-RUNTIME-ED25519-20260922",
+ "signature_alg": "Ed25519",
+ "artifact": {
+  "schema": "KM-SOURCE-SNAPSHOT-v1",
+  "profile": "KM-FAMILY-EXTERNAL-SOURCE-ACQUISITION-20260923-R1",
+  "race_id": "KM-LOCAL-MIZ-20261116-R12-RKT",
+  "prediction_cutoff": "2026-11-16T18:07:00+09:00",
+  "source_freeze_at": "2026-11-16T08:34:48.274046+00:00",
+  "source_fetch_execution": {
+   "mode": "SERIAL",
+   "worker_limit": 6,
+   "workers_used": 1,
+   "source_count": 1,
+   "manifest_order_restored_before_merge": true,
+   "prediction_authority": false
+  },
+  "required_source_manifest": [
+   {
+    "source_id": "RAKUTEN_RACE_CARD",
+    "url": "https://keiba.rakuten.co.jp/race_card/list/RACEID/202611161106070212",
+    "source_class": "RAKUTEN_RACE_CARD_CURRENT_STATE",
+    "authority": "RAKUTEN_KEIBA_PUBLIC_CARD",
+    "priority": 90,
+    "official": false,
+    "required": true,
+    "extract": []
+   }
+  ],
+  "required_source_manifest_sha256": "523860f46532bb384761d072fefaeabb4823466c516660c8c6a4b86225291f2b",
+  "sources": [
+   {
+    "schema": "KM-SOURCE-SNAPSHOT-v1",
+    "source_id": "RAKUTEN_RACE_CARD",
+    "source_class": "RAKUTEN_RACE_CARD_CURRENT_STATE",
+    "authority": "RAKUTEN_KEIBA_PUBLIC_CARD",
+    "official": false,
+    "required": true,
+    "requested_url": "https://keiba.rakuten.co.jp/race_card/list/RACEID/202611161106070212",
+    "status": "FETCH_FAILED",
+    "error": "SOURCE_HOST_NOT_ALLOWED:keiba.rakuten.co.jp",
+    "fetched_at": "2026-11-16T08:34:48.274006+00:00"
+   }
+  ],
+  "raw_source_bundle_sha256": "7cd0df985855577e3da23775dc9b95af9850f448504b28a68d0dd4b7d3ab57b7",
+  "normalized_evidence": {},
+  "normalized_evidence_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "conflicts": [],
+  "missing_required_sources": [
+   "RAKUTEN_RACE_CARD"
+  ],
+  "stale_sources": [],
+  "post_cutoff_sources": [],
+  "formal_ready": false,
+  "errors": [
+   "REQUIRED_SOURCE_FETCH_FAILED:RAKUTEN_RACE_CARD:SOURCE_HOST_NOT_ALLOWED:keiba.rakuten.co.jp",
+   "MISSING_REQUIRED_SOURCES:RAKUTEN_RACE_CARD"
+  ],
+  "source_snapshot_sha256": "04b15b22d44c675dace7deb792823b1b219200e7f01f89ac5d56710ec2d9b544",
+  "source_manifest_profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+  "source_race_context": {
+   "venue_id": "MIZ",
+   "race_date": "2026-11-16",
+   "race_no": 12,
+   "rakuten_race_id": "202611161106070212"
+  }
+ }
+}
