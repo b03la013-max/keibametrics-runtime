@@ -574,9 +574,14 @@ def deliver_formal(r, key, sm, now):
     try:
         c = _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': body})
         back = _gh('GET', f"/repos/{DELIVERY_REPO}/issues/comments/{c['id']}")
+        ok = (back.get('body') or '') == body
         r['formal']['delivery'] = {'USER_DELIVERY_SENT': c['created_at'], 'url': c['html_url'],
-                                   'READBACK_VERIFIED': (back.get('body') or '') == body,
-                                   'USER_REACHED': 'UNVERIFIABLE_GITHUB_NOTIFICATION'}
+                                   'DELIVERY_READBACK_VERIFIED': ok,
+                                   'READBACK_VERIFIED': ok,   # legacy key kept
+                                   'delivery_body_sha256': hashlib.sha256(body.encode()).hexdigest(),
+                                   'USER_REACHED': 'UNVERIFIED (GitHub notification arrival/viewing not observable; '
+                                                   'set only on the Owner\'s explicit 受信確認 for this race)',
+                                   'USER_ACK_VERIFIED': False}
         log('FORMAL_DELIVERED', key, c['html_url'])
     except Exception as exc:
         log('FORMAL_DELIVERY_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')

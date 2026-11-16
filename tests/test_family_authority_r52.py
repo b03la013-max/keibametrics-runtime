@@ -19,7 +19,8 @@ def test_r52_not_active_before_effective_time_so_race_day_keeps_r51():
 
 
 def test_r52_resolves_after_effective_time():
-    _, a = g.resolve_current_authority(ROOT, now=datetime(2026, 11, 17, tzinfo=timezone.utc))
+    # R53 (LOCAL Owner amendment 2026-11-16) supersedes R52 one second after R52 takes effect.
+    _, a = g.resolve_current_authority(ROOT, now=datetime(2026, 11, 16, 15, 0, 0, tzinfo=timezone.utc))
     assert a["manifest_id"] == "KM-FAMILY-CURRENT-AUTHORITY-20261115-R52"
     assert a["predecessor"] == R51["manifest_id"]
 

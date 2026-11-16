@@ -6,7 +6,8 @@ Owner instructions 2026-11-16 (16:26 楽天競馬をソースに / 16:32 地方�
   SOURCE (Runtime fetch + freeze + sign, Rakuten profile, signature verified here)
   -> Full29 (production registry on the signed card bytes; numeric consumers stay false)
   -> Static (Owner policy v1.1: ordinal past-start heuristic, no 29-index numbers / odds)
-  -> PRE_KRS (SOURCE-derived technical-proxy KRS input; R52 boundary unchanged)
+  -> PRE_KRS (KRS input mode from the authority resolved per race: R53 LOCAL consumption
+     authorised -> FORMAL_NUMERICAL from the Production Full29; otherwise technical proxy)
   -> KRS (5,000 runs) -> Role/Pair/Third closure -> MEC -> Capital (RECOMMENDATION_ONLY)
   -> Signed FINAL (Runtime), signature verified here.
 
@@ -71,6 +72,45 @@ def runtime_v16_ready():
     except Exception:
         _V16['ready'] = False
     return _V16['ready']
+
+
+def resolve_authority(now):
+    """Current family authority at this instant (canonical resolver) and the LOCAL consumption flags."""
+    from family_authority_guard import resolve_current_authority
+    path, a = resolve_current_authority(REPO, now=now)
+    b = ((a.get('family_scoped_authority') or {}).get('LOCAL') or {}).get('numerical_consumption_boundary') or {}
+    return {'manifest_id': a.get('manifest_id'), 'path': str(path.relative_to(REPO)),
+            'file_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'effective_at': a.get('effective_at'),
+            'resolved_at': now.isoformat(),
+            'consumption': {k: b.get(k) is True for k in ('prediction_authority', 'krs_input_authority',
+                                                          'ticket_authority', 'capital_authority')}}
+
+
+def prior_learning_states(out_dir, race_id, source_freeze):
+    """Verified LOCAL RESULT learning states available strictly before this race's SOURCE freeze."""
+    states = []
+    if out_dir is None:
+        return states
+    for f in sorted(Path(out_dir).parent.glob('*/formal/*.result_receipt.json')):
+        try:
+            rec = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        art = rec.get('artifact') or {}
+        st = art.get('automatic_next_race_learning_state')
+        if (rec.get('receipt') or {}).get('status') != 'PASS' or not isinstance(st, dict) or st.get('race_id') == race_id:
+            continue
+        states.append(dict(st, effective_time=art.get('review_completed_at'),
+                           result_receipt_sha256=rec.get('receipt_sha256')))
+    eligible = []
+    for st in states:
+        try:
+            t = datetime.fromisoformat(str(st['effective_time']).replace('Z', '+00:00'))
+        except (KeyError, ValueError):
+            continue
+        if t < source_freeze:
+            eligible.append(st)
+    return eligible
 
 
 def _endpoint():
@@ -211,6 +251,9 @@ def run_formal(r, out_dir, deadline):
         if _now() >= deadline:
             raise FormalStop(stage, 'PRESTART_DEADLINE_PASSED')
     try:
+        authority = resolve_authority(_now())
+        summary['authority'] = authority
+        numeric_krs = authority['consumption']['krs_input_authority']
         base = _endpoint()
         hc, health = _call(base, '/health', None, 30)
         if hc >= 300 or health.get('status') != 'READY':
@@ -272,16 +315,22 @@ def run_formal(r, out_dir, deadline):
         kin = copy.deepcopy(krs_input)
         for h in kin['horses']:
             h['static_roles'] = roles.get(str(h['horse_no']), [])
-        kin.setdefault('keibametrics_input_authority', {}).update({
-            'input_mode': 'TECHNICAL_PROXY_DIAGNOSTIC', 'full_numerical_calculation': False, 'full_terminalization': True,
-            'proxy_reason': 'R52 LOCAL numerical KRS-input consumer false; SOURCE-derived technical proxy on the signed card'})
+        if numeric_krs:
+            kin.setdefault('keibametrics_input_authority', {}).update({
+                'input_mode': 'FORMAL_NUMERICAL', 'full_numerical_calculation': True, 'full_terminalization': True,
+                'proxy_reason': None, 'bridge_id': 'local_krs_bridge_candidate/PRODUCTION_FULL29',
+                'authority_manifest': authority['manifest_id']})
+        else:
+            kin.setdefault('keibametrics_input_authority', {}).update({
+                'input_mode': 'TECHNICAL_PROXY_DIAGNOSTIC', 'full_numerical_calculation': False, 'full_terminalization': True,
+                'proxy_reason': f"{authority['manifest_id']}: LOCAL numerical KRS-input consumer false; SOURCE-derived technical proxy"})
         kin.setdefault('race', {})['race_id'] = race['formal_race_id']
         kin.setdefault('simulation', {}).update({'run_count': 5000, 'master_seed': req['seed']})
         guard('PRE_KRS')
         pc, pre = _call(base, '/pre-krs', {'family_id': 'LOCAL', 'race_id': race['formal_race_id'], 'source_receipt': src,
                                           'krs_input_data': kin, 'full_terminalization': True,
-                                          'full_numerical_calculation': False,
-                                          'krs_input_mode': 'TECHNICAL_PROXY_DIAGNOSTIC',
+                                          'full_numerical_calculation': bool(numeric_krs),
+                                          'krs_input_mode': kin['keibametrics_input_authority']['input_mode'],
                                           'static_prediction_frozen': True}, 120)
         arts['pre_krs_receipt'] = pre
         if pc >= 300 or (pre.get('receipt') or {}).get('status') != 'PASS' or not _verify_sig(pre, pub):
@@ -295,10 +344,19 @@ def run_formal(r, out_dir, deadline):
             raise FormalStop('KRS', f"HTTP_{kc}:{(run.get('receipt') or {}).get('errors') or run.get('detail')}")
         ka = run['artifact']
         mark('KRS', actual_run_count=ka['actual_run_count'], input_sha256=ka['input_sha256'], output_sha256=ka['output_sha256'])
-        mark('KRS_UTILITY', status='NOT_CONSUMED (uncalibrated; R52)', production_effect='NONE')
+        from krs_prediction_utility import build_krs_prediction_utility
+        try:
+            utility = build_krs_prediction_utility(req, {'status': 'EXECUTED', 'output': copy.deepcopy(ka.get('raw_output') or {})})
+        except Exception as exc:
+            utility = None
+            arts['krs_utility_error'] = {'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
+        if utility is not None:
+            arts['krs_prediction_utility'] = utility
+        mark('KRS_UTILITY', utility_class=(utility or {}).get('utility_class'), utility_sha256=(utility or {}).get('sha256'),
+             production_effect='MEC_SHADOW_ONLY (existing MEC R3 keeps KRS proposals non-capitalised; no new selection policy)')
         guard('MEC')
         req, closure = canonicalize_role_pair_third_closure(req)
-        mec = build_mec_plan(req, None, strict_head_closure=True, min_stake=100)
+        mec = build_mec_plan(req, utility, strict_head_closure=True, min_stake=100)
         chk = validate_mec_plan(mec)
         if chk.get('mec_verified') is not True or mec.get('profile') != MEC_PROFILE:
             raise FormalStop('MEC', 'MEC_VERIFY_FAILED')
@@ -312,10 +370,38 @@ def run_formal(r, out_dir, deadline):
         guard('FINAL_TICKET_FREEZE')
         freeze = _now().isoformat()
         mark('FINAL_TICKET_FREEZE', ticket_count=len(tickets), total_investment=total)
+        freeze_at = datetime.fromisoformat(stages['SOURCE_FREEZE'])
+        states = prior_learning_states(out_dir, race['formal_race_id'], freeze_at)
+        bindings, enforced = [], []
+        for st in states:
+            for item in st.get('immediate_correctness') or []:
+                if item == 'MEC_PRECOMPRESSION_SEMANTIC_UNIVERSE_REQUIRED':
+                    if mec.get('precompression_semantic_universe') is not True:
+                        raise FormalStop('MEC', 'LEARNING_IMMEDIATE_CORRECTNESS_FAILED:' + item)
+                    enforced.append({'state_id': st['state_id'], 'item': item, 'status': 'SATISFIED'})
+                else:
+                    raise FormalStop('MEC', 'LEARNING_IMMEDIATE_CORRECTNESS_UNKNOWN:' + item)
+            bindings.append({'state_id': st['state_id'], 'state_sha256': st['sha256'],
+                             'result_receipt_sha256': st.get('result_receipt_sha256'),
+                             'effective_time': st['effective_time'],
+                             'immediate_correctness': st.get('immediate_correctness') or [],
+                             'shadow_candidates': st.get('shadow_candidates') or [],
+                             'use': 'IMMEDIATE_CORRECTNESS_ENFORCED + SHADOW_RECORDED (production_change_authorized=false)'})
         fpp = {'ranking': req['static_prediction']['ranking'], 'roles': roles, 'marks': req['static_prediction']['marks'],
                'source_snapshot_sha256': art['source_snapshot_sha256'], 'static_ledger_sha256': ledger['sha256'],
-               'local_krs_input_sha256': _sha(kin), 'minimum_efficient_coverage': mec,
-               'krs_prediction_utility_shadow': None, 'owner_policy': policy['profile']}
+               'local_krs_input_sha256': _sha(kin), 'krs_input_mode': kin['keibametrics_input_authority']['input_mode'],
+               'minimum_efficient_coverage': mec,
+               'krs_prediction_utility_shadow': utility, 'owner_policy': policy['profile'],
+               'current_authority': {k: authority[k] for k in ('manifest_id', 'file_sha256', 'resolved_at')},
+               'learning_state_bindings': bindings, 'learning_immediate_correctness': enforced}
+        try:
+            from jra_next_race_learning_binding_audit import audit_learning_consumption
+            arts['learning_binding_audit'] = audit_learning_consumption(
+                race_id=race['formal_race_id'], source_freeze=stages['SOURCE_FREEZE'], prediction_cutoff=deadline.isoformat(),
+                learning_states=states, prediction_input=fpp, family_id='LOCAL')
+        except Exception as exc:
+            arts['learning_binding_audit'] = {'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
+        mark('LEARNING_BINDING', eligible_states=len(states), bound=len(bindings), enforced=len(enforced))
         trace = {'fpp_sha256': _sha(fpp), 'mec_sha256': mec['sha256'], 'candidate_count': mec.get('candidate_count', len(tickets)),
                  'selected_count': len(tickets), 'capital_decision_sha256': capital['sha256'],
                  'role_pair_third_closure_sha256': closure.get('sha256')}
@@ -330,12 +416,16 @@ def run_formal(r, out_dir, deadline):
         if fc >= 300 or (fin.get('receipt') or {}).get('status') != 'PASS' or not _verify_sig(fin, pub):
             raise FormalStop('FINAL', f"HTTP_{fc}:{(fin.get('receipt') or {}).get('errors') or fin.get('detail')}")
         vfc, vf = _call(base, '/verify', fin, 60)
+        full_numeric_pre = (pre.get('artifact') or {}).get('full_numerical_calculation') is True
         summary.update(status='SIGNED_FINAL', final_receipt_sha256=fin['receipt_sha256'],
+                       formal_status='FULL_FORMAL_E2E_PASS' if full_numeric_pre else 'FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS',
                        final_verified_remote=vfc < 300 and vf.get('valid') is True, final_verified_local=True,
                        ticket_count=len(tickets), total_investment=total, no_bet=no_bet,
                        ranking=fpp['ranking'], marks=fpp['marks'],
                        roles={k: v for k, v in roles.items()}, krs_actual_run_count=ka['actual_run_count'],
-                       before_cutoff=_now() < deadline, tickets=tickets)
+                       before_cutoff=_now() < deadline, tickets=tickets,
+                       krs_input_mode=kin['keibametrics_input_authority']['input_mode'],
+                       learning_state_bindings=[b['state_id'] for b in bindings])
         stages['SIGNED_FINAL'] = _now().isoformat()
     except FormalStop as e:
         summary.update(status='HOLD', first_failed_stage=e.stage, error=str(e.detail)[:400])
