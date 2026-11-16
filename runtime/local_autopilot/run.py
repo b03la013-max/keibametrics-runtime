@@ -724,6 +724,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
     out.mkdir(parents=True, exist_ok=True)
     reader = reader or rk.Reader(ROOT / 'source_state.json')
     started = time.monotonic()
+    reviewed = False
     metrics = {'tick_at': now.isoformat(), 'requests_before': getattr(getattr(reader, 'client', None), 'requests', 0)}
     cards = {}
     q = load_queue(out)
@@ -760,7 +761,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 if results and r['editions'] and not r.get('settlement') and mins <= -RESULT_DELAY_MIN \
                         and r.get('result_attempts', 0) < MAX_ATTEMPTS:
                     jobs.append((3, mins, key, 'RESULT'))
-                elif results and r.get('settlement') and (r.get('formal') or {}).get('status') == 'SIGNED_FINAL' \
+                if r.get('settlement') and r.get('review_attempts', 0) < 2 and (
+                        not r.get('review') or (r['review'].get('formal') is False
+                                                and (r.get('formal_settlement') or {}).get('result_receipt_verified'))):
+                    jobs.append((5, mins, key, 'REVIEW'))   # post-RESULT, lowest priority, local only
+                if results and r.get('settlement') and (r.get('formal') or {}).get('status') == 'SIGNED_FINAL' \
                         and not (r.get('formal_settlement') or {}).get('result_receipt_verified') \
                         and r.get('formal_result_attempts', 0) < 3:
                     jobs.append((3, mins, key, 'FORMAL_RESULT'))
@@ -826,6 +831,19 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     log('KRS', key, rev, sm['http_status'], sm.get('actual_run_count'), list(sm['stages'])[-1], sm['elapsed_s'])
                     changed = True
                     continue
+                if edition == 'REVIEW':
+                    from runtime.local_autopilot import review as rv
+                    r['review_attempts'] = r.get('review_attempts', 0) + 1
+                    b = rv.write_race(out, key, r)
+                    if b is not None:
+                        r['review'] = {'sha256': b['sha256'], 'formal': b['formal_recommendation'] is not None,
+                                       'first_material_failure': b['first_material_failure'],
+                                       'proposals': [x['id'] for x in b['proposals']], 'reviewed_at': now_jst().isoformat()}
+                        r['review_attempts'] = 0
+                        reviewed = True
+                        log('REVIEW', key, b['first_material_failure'], len(b['proposals']), b['sha256'][:12])
+                    changed = True
+                    continue
                 if edition == 'FORMAL_RESULT':
                     settle_formal(r, key, out, reader.result_page(r['rid']))
                     changed = True
@@ -862,7 +880,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 changed = True
                 break
             except Exception as exc:
-                if edition in ('KRS', 'FORMAL', 'FORMAL_RESULT'):  # research KRS / formal never affect the PAPER prediction state
+                if edition in ('KRS', 'FORMAL', 'FORMAL_RESULT', 'REVIEW'):  # research KRS / formal never affect the PAPER prediction state
                     log('KRS_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
                     changed = True
                     continue
@@ -893,6 +911,13 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
         if changed and q is not None:
             dump(out / 'queue.json', q)
             report(q, out)
+            if reviewed:
+                try:
+                    from runtime.local_autopilot import review as rv
+                    rv.write_daily(out, q)
+                    rv.write_periods(ROOT)
+                except Exception as exc:
+                    log('REVIEW_SUMMARY_FAIL', type(exc).__name__, str(exc)[:120])
             try:
                 from runtime.local_autopilot import forward
                 forward.write(ROOT)
