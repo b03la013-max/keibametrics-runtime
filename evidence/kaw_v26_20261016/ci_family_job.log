@@ -1,0 +1,450 @@
+2026-10-16T13:20:45.6445613Z Current runner version: '2.337.0'
+2026-10-16T13:20:45.6481758Z ##[group]Runner Image Provisioner
+2026-10-16T13:20:45.6482984Z Hosted Compute Agent
+2026-10-16T13:20:45.6484084Z Version: 20261012.601
+2026-10-16T13:20:45.6485240Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+2026-10-16T13:20:45.6486405Z Build Date: 2026-10-12T17:48:21Z
+2026-10-16T13:20:45.6487706Z Worker ID: {126e0a51-f9f8-4db8-b149-5df8e42bf4e3}
+2026-10-16T13:20:45.6488903Z Region: eastus2
+2026-10-16T13:20:45.6489819Z Cloud: Azure
+2026-10-16T13:20:45.6491044Z ##[endgroup]
+2026-10-16T13:20:45.6493201Z ##[group]Operating System
+2026-10-16T13:20:45.6494359Z Ubuntu
+2026-10-16T13:20:45.6495221Z 24.04.5
+2026-10-16T13:20:45.6496143Z LTS
+2026-10-16T13:20:45.6496973Z ##[endgroup]
+2026-10-16T13:20:45.6497889Z ##[group]Runner Image
+2026-10-16T13:20:45.6499063Z Image: ubuntu-24.04
+2026-10-16T13:20:45.6500279Z Version: 20261012.334.1
+2026-10-16T13:20:45.6502616Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-16T13:20:45.6505411Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+2026-10-16T13:20:45.6507193Z ##[endgroup]
+2026-10-16T13:20:45.6509138Z ##[group]GITHUB_TOKEN Permissions
+2026-10-16T13:20:45.6512083Z Contents: read
+2026-10-16T13:20:45.6513040Z Metadata: read
+2026-10-16T13:20:45.6514043Z ##[endgroup]
+2026-10-16T13:20:45.6517217Z Secret source: Actions
+2026-10-16T13:20:45.6518777Z Cache mode: write
+2026-10-16T13:20:45.6519911Z Prepare workflow directory
+2026-10-16T13:20:45.6998809Z Prepare all required actions
+2026-10-16T13:20:45.7071721Z Getting action download info
+2026-10-16T13:20:45.9675830Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-10-16T13:20:46.0691086Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-10-16T13:20:46.1589609Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-10-16T13:20:46.3776064Z Complete job name: acceptance
+2026-10-16T13:20:46.4595164Z ##[group]Run actions/checkout@v4
+2026-10-16T13:20:46.4596035Z with:
+2026-10-16T13:20:46.4596532Z   repository: b03la013-max/keibametrics-runtime
+2026-10-16T13:20:46.4600660Z   token: ***
+2026-10-16T13:20:46.4601099Z   ssh-strict: true
+2026-10-16T13:20:46.4601528Z   ssh-user: git
+2026-10-16T13:20:46.4601964Z   persist-credentials: true
+2026-10-16T13:20:46.4602442Z   clean: true
+2026-10-16T13:20:46.4602891Z   sparse-checkout-cone-mode: true
+2026-10-16T13:20:46.4603415Z   fetch-depth: 1
+2026-10-16T13:20:46.4603838Z   fetch-tags: false
+2026-10-16T13:20:46.4604267Z   show-progress: true
+2026-10-16T13:20:46.4604710Z   lfs: false
+2026-10-16T13:20:46.4605115Z   submodules: false
+2026-10-16T13:20:46.4605564Z   set-safe-directory: true
+2026-10-16T13:20:46.4606065Z   allow-unsafe-pr-checkout: false
+2026-10-16T13:20:46.4606834Z ##[endgroup]
+2026-10-16T13:20:46.5614019Z Syncing repository: b03la013-max/keibametrics-runtime
+2026-10-16T13:20:46.5616191Z ##[group]Getting Git version info
+2026-10-16T13:20:46.5617175Z Working directory is '/home/runner/work/keibametrics-runtime/keibametrics-runtime'
+2026-10-16T13:20:46.5618598Z [command]/usr/bin/git version
+2026-10-16T13:20:46.5745105Z git version 2.55.0
+2026-10-16T13:20:46.5769411Z ##[endgroup]
+2026-10-16T13:20:46.5795052Z Temporarily overriding HOME='/home/runner/work/_temp/e3029a31-0920-4d26-bcff-8fb388132ad2' before making global git config changes
+2026-10-16T13:20:46.5797445Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-16T13:20:46.5801584Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T13:20:46.5865230Z Deleting the contents of '/home/runner/work/keibametrics-runtime/keibametrics-runtime'
+2026-10-16T13:20:46.5872064Z ##[group]Initializing the repository
+2026-10-16T13:20:46.5876272Z [command]/usr/bin/git init /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T13:20:46.6013455Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-16T13:20:46.6017878Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-16T13:20:46.6019501Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-16T13:20:46.6020734Z hint: call:
+2026-10-16T13:20:46.6021319Z hint:
+2026-10-16T13:20:46.6021875Z hint: 	git config --global init.defaultBranch <name>
+2026-10-16T13:20:46.6022537Z hint:
+2026-10-16T13:20:46.6023139Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-16T13:20:46.6024067Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-16T13:20:46.6024813Z hint:
+2026-10-16T13:20:46.6025228Z hint: 	git branch -m <name>
+2026-10-16T13:20:46.6025709Z hint:
+2026-10-16T13:20:46.6026344Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-16T13:20:46.6027494Z Initialized empty Git repository in /home/runner/work/keibametrics-runtime/keibametrics-runtime/.git/
+2026-10-16T13:20:46.6043998Z [command]/usr/bin/git remote add origin https://github.com/b03la013-max/keibametrics-runtime
+2026-10-16T13:20:46.6102270Z ##[endgroup]
+2026-10-16T13:20:46.6103865Z ##[group]Disabling automatic garbage collection
+2026-10-16T13:20:46.6106371Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-16T13:20:46.6152994Z ##[endgroup]
+2026-10-16T13:20:46.6154743Z ##[group]Setting up auth
+2026-10-16T13:20:46.6156549Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-16T13:20:46.6205895Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-16T13:20:46.6732573Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-16T13:20:46.6774526Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-16T13:20:46.7039626Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-16T13:20:46.7081733Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-16T13:20:46.7330336Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-16T13:20:46.7390728Z ##[endgroup]
+2026-10-16T13:20:46.7391667Z ##[group]Fetching the repository
+2026-10-16T13:20:46.7401387Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ecbfa50dce50cc13b75eb3e62b5d9c73d3a99884:refs/remotes/pull/285/merge
+2026-10-16T13:21:04.1585011Z From https://github.com/b03la013-max/keibametrics-runtime
+2026-10-16T13:21:04.1586302Z  * [new ref]         ecbfa50dce50cc13b75eb3e62b5d9c73d3a99884 -> pull/285/merge
+2026-10-16T13:21:04.1590191Z ##[endgroup]
+2026-10-16T13:21:04.1591129Z ##[group]Determining the checkout info
+2026-10-16T13:21:04.1593439Z ##[endgroup]
+2026-10-16T13:21:04.1601061Z [command]/usr/bin/git sparse-checkout disable
+2026-10-16T13:21:04.1660729Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-16T13:21:04.1695346Z ##[group]Checking out the ref
+2026-10-16T13:21:04.1699135Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/285/merge
+2026-10-16T13:21:05.2258530Z Updating files:  11% (1570/13333)
+2026-10-16T13:21:05.3752367Z Updating files:  12% (1600/13333)
+2026-10-16T13:21:05.5679675Z Updating files:  13% (1734/13333)
+2026-10-16T13:21:05.7198189Z Updating files:  14% (1867/13333)
+2026-10-16T13:21:05.8662331Z Updating files:  15% (2000/13333)
+2026-10-16T13:21:05.9610321Z Updating files:  16% (2134/13333)
+2026-10-16T13:21:06.0514214Z Updating files:  17% (2267/13333)
+2026-10-16T13:21:06.1364494Z Updating files:  18% (2400/13333)
+2026-10-16T13:21:06.1941060Z Updating files:  19% (2534/13333)
+2026-10-16T13:21:06.2764708Z Updating files:  19% (2558/13333)
+2026-10-16T13:21:06.3649251Z Updating files:  20% (2667/13333)
+2026-10-16T13:21:06.4511325Z Updating files:  21% (2800/13333)
+2026-10-16T13:21:06.5299546Z Updating files:  22% (2934/13333)
+2026-10-16T13:21:06.5635900Z Updating files:  23% (3067/13333)
+2026-10-16T13:21:06.6440492Z Updating files:  24% (3200/13333)
+2026-10-16T13:21:06.6739221Z Updating files:  25% (3334/13333)
+2026-10-16T13:21:06.7041970Z Updating files:  26% (3467/13333)
+2026-10-16T13:21:06.7577402Z Updating files:  27% (3600/13333)
+2026-10-16T13:21:06.8105763Z Updating files:  28% (3734/13333)
+2026-10-16T13:21:06.8397322Z Updating files:  29% (3867/13333)
+2026-10-16T13:21:06.8651498Z Updating files:  30% (4000/13333)
+2026-10-16T13:21:06.9163611Z Updating files:  31% (4134/13333)
+2026-10-16T13:21:06.9575497Z Updating files:  32% (4267/13333)
+2026-10-16T13:21:06.9871241Z Updating files:  33% (4400/13333)
+2026-10-16T13:21:07.0251743Z Updating files:  34% (4534/13333)
+2026-10-16T13:21:07.0455715Z Updating files:  35% (4667/13333)
+2026-10-16T13:21:07.0669174Z Updating files:  36% (4800/13333)
+2026-10-16T13:21:07.0866071Z Updating files:  37% (4934/13333)
+2026-10-16T13:21:07.1101517Z Updating files:  38% (5067/13333)
+2026-10-16T13:21:07.1804093Z Updating files:  39% (5200/13333)
+2026-10-16T13:21:07.1867136Z Updating files:  40% (5334/13333)
+2026-10-16T13:21:07.2588264Z Updating files:  40% (5364/13333)
+2026-10-16T13:21:07.3434268Z Updating files:  41% (5467/13333)
+2026-10-16T13:21:07.4213824Z Updating files:  42% (5600/13333)
+2026-10-16T13:21:07.5490857Z Updating files:  43% (5734/13333)
+2026-10-16T13:21:07.6338387Z Updating files:  44% (5867/13333)
+2026-10-16T13:21:07.7158241Z Updating files:  45% (6000/13333)
+2026-10-16T13:21:07.7929916Z Updating files:  46% (6134/13333)
+2026-10-16T13:21:07.9136475Z Updating files:  47% (6267/13333)
+2026-10-16T13:21:07.9977108Z Updating files:  48% (6400/13333)
+2026-10-16T13:21:08.0767007Z Updating files:  49% (6534/13333)
+2026-10-16T13:21:08.1592300Z Updating files:  50% (6667/13333)
+2026-10-16T13:21:08.1899475Z Updating files:  51% (6800/13333)
+2026-10-16T13:21:08.2896841Z Updating files:  51% (6812/13333)
+2026-10-16T13:21:08.3786328Z Updating files:  52% (6934/13333)
+2026-10-16T13:21:08.4642938Z Updating files:  53% (7067/13333)
+2026-10-16T13:21:08.5487263Z Updating files:  54% (7200/13333)
+2026-10-16T13:21:08.6761429Z Updating files:  55% (7334/13333)
+2026-10-16T13:21:08.7650544Z Updating files:  56% (7467/13333)
+2026-10-16T13:21:08.8658446Z Updating files:  57% (7600/13333)
+2026-10-16T13:21:08.9555329Z Updating files:  58% (7734/13333)
+2026-10-16T13:21:09.1007394Z Updating files:  59% (7867/13333)
+2026-10-16T13:21:09.1869227Z Updating files:  60% (8000/13333)
+2026-10-16T13:21:09.2765330Z Updating files:  61% (8134/13333)
+2026-10-16T13:21:09.3615176Z Updating files:  62% (8267/13333)
+2026-10-16T13:21:09.4427236Z Updating files:  63% (8400/13333)
+2026-10-16T13:21:09.5238786Z Updating files:  64% (8534/13333)
+2026-10-16T13:21:09.6483248Z Updating files:  65% (8667/13333)
+2026-10-16T13:21:09.7289813Z Updating files:  66% (8800/13333)
+2026-10-16T13:21:09.8101316Z Updating files:  67% (8934/13333)
+2026-10-16T13:21:09.8832022Z Updating files:  68% (9067/13333)
+2026-10-16T13:21:09.9126658Z Updating files:  69% (9200/13333)
+2026-10-16T13:21:09.9432170Z Updating files:  70% (9334/13333)
+2026-10-16T13:21:09.9597201Z Updating files:  71% (9467/13333)
+2026-10-16T13:21:09.9849782Z Updating files:  72% (9600/13333)
+2026-10-16T13:21:10.0088986Z Updating files:  73% (9734/13333)
+2026-10-16T13:21:10.0304016Z Updating files:  74% (9867/13333)
+2026-10-16T13:21:10.0503472Z Updating files:  75% (10000/13333)
+2026-10-16T13:21:10.0715166Z Updating files:  76% (10134/13333)
+2026-10-16T13:21:10.0811084Z Updating files:  77% (10267/13333)
+2026-10-16T13:21:10.0989178Z Updating files:  78% (10400/13333)
+2026-10-16T13:21:10.1253060Z Updating files:  79% (10534/13333)
+2026-10-16T13:21:10.1423169Z Updating files:  80% (10667/13333)
+2026-10-16T13:21:10.1664099Z Updating files:  81% (10800/13333)
+2026-10-16T13:21:10.1814349Z Updating files:  82% (10934/13333)
+2026-10-16T13:21:10.1858739Z Updating files:  83% (11067/13333)
+2026-10-16T13:21:10.2151235Z Updating files:  83% (11128/13333)
+2026-10-16T13:21:10.6140293Z Updating files:  84% (11200/13333)
+2026-10-16T13:21:10.6216367Z Updating files:  85% (11334/13333)
+2026-10-16T13:21:10.6730457Z Updating files:  86% (11467/13333)
+2026-10-16T13:21:10.6784208Z Updating files:  87% (11600/13333)
+2026-10-16T13:21:10.8337798Z Updating files:  88% (11734/13333)
+2026-10-16T13:21:10.9518474Z Updating files:  89% (11867/13333)
+2026-10-16T13:21:11.0022300Z Updating files:  90% (12000/13333)
+2026-10-16T13:21:11.0662809Z Updating files:  91% (12134/13333)
+2026-10-16T13:21:11.1917285Z Updating files:  92% (12267/13333)
+2026-10-16T13:21:11.2528725Z Updating files:  92% (12347/13333)
+2026-10-16T13:21:11.2952972Z Updating files:  93% (12400/13333)
+2026-10-16T13:21:11.3489147Z Updating files:  94% (12534/13333)
+2026-10-16T13:21:11.6474201Z Updating files:  95% (12667/13333)
+2026-10-16T13:21:11.7334042Z Updating files:  96% (12800/13333)
+2026-10-16T13:21:11.8078599Z Updating files:  97% (12934/13333)
+2026-10-16T13:21:11.8243667Z Updating files:  98% (13067/13333)
+2026-10-16T13:21:11.8322615Z Updating files:  99% (13200/13333)
+2026-10-16T13:21:11.8323309Z Updating files: 100% (13333/13333)
+2026-10-16T13:21:11.8323919Z Updating files: 100% (13333/13333), done.
+2026-10-16T13:21:11.8995421Z Note: switching to 'refs/remotes/pull/285/merge'.
+2026-10-16T13:21:11.8996255Z 
+2026-10-16T13:21:11.8997113Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-16T13:21:11.9001038Z changes and commit them, and you can discard any commits you make in this
+2026-10-16T13:21:11.9002351Z state without impacting any branches by switching back to a branch.
+2026-10-16T13:21:11.9003111Z 
+2026-10-16T13:21:11.9003604Z If you want to create a new branch to retain commits you create, you may
+2026-10-16T13:21:11.9004900Z do so (now or later) by using -c with the switch command. Example:
+2026-10-16T13:21:11.9005371Z 
+2026-10-16T13:21:11.9005555Z   git switch -c <new-branch-name>
+2026-10-16T13:21:11.9005853Z 
+2026-10-16T13:21:11.9006024Z Or undo this operation with:
+2026-10-16T13:21:11.9006296Z 
+2026-10-16T13:21:11.9006448Z   git switch -
+2026-10-16T13:21:11.9006650Z 
+2026-10-16T13:21:11.9007023Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-16T13:21:11.9007574Z 
+2026-10-16T13:21:11.9008189Z HEAD is now at ecbfa50 Merge 96296652d19eda59f65bcd6a45c85c845853d4da into 7997b4b860f76e4719a9d5bd65aa442f3bdf9afc
+2026-10-16T13:21:11.9088121Z ##[endgroup]
+2026-10-16T13:21:11.9136640Z [command]/usr/bin/git log -1 --format=%H
+2026-10-16T13:21:11.9164603Z ecbfa50dce50cc13b75eb3e62b5d9c73d3a99884
+2026-10-16T13:21:12.0472994Z ##[group]Run actions/setup-python@v5
+2026-10-16T13:21:12.0473316Z with:
+2026-10-16T13:21:12.0473544Z   python-version: 3.13
+2026-10-16T13:21:12.0473823Z   check-latest: false
+2026-10-16T13:21:12.0476338Z   token: ***
+2026-10-16T13:21:12.0476573Z   update-environment: true
+2026-10-16T13:21:12.0476835Z   allow-prereleases: false
+2026-10-16T13:21:12.0477088Z   freethreaded: false
+2026-10-16T13:21:12.0477315Z ##[endgroup]
+2026-10-16T13:21:12.1863393Z ##[group]Installed versions
+2026-10-16T13:21:12.2988703Z (node:2323) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T13:21:12.2990245Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T13:21:12.2990999Z Successfully set up CPython (3.13.16)
+2026-10-16T13:21:12.2991935Z ##[endgroup]
+2026-10-16T13:21:12.3414920Z ##[group]Run python -m pip install pytest cryptography PyMuPDF fastapi httpx pyyaml
+2026-10-16T13:21:12.3415754Z [36;1mpython -m pip install pytest cryptography PyMuPDF fastapi httpx pyyaml[0m
+2026-10-16T13:21:12.6065126Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:12.6065700Z env:
+2026-10-16T13:21:12.6066008Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:12.6066481Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:12.6066947Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:12.6067347Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:12.6067748Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:12.6068141Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:12.6068475Z ##[endgroup]
+2026-10-16T13:21:15.1166170Z Collecting pytest
+2026-10-16T13:21:15.1772534Z   Downloading pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+2026-10-16T13:21:15.3896727Z Collecting cryptography
+2026-10-16T13:21:15.3971971Z   Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)
+2026-10-16T13:21:15.5433350Z Collecting PyMuPDF
+2026-10-16T13:21:15.5507037Z   Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl.metadata (26 kB)
+2026-10-16T13:21:15.6080179Z Collecting fastapi
+2026-10-16T13:21:15.6152400Z   Downloading fastapi-0.143.2-py3-none-any.whl.metadata (26 kB)
+2026-10-16T13:21:15.6432369Z Collecting httpx
+2026-10-16T13:21:15.6505928Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-10-16T13:21:15.6899674Z Collecting pyyaml
+2026-10-16T13:21:15.6981506Z   Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+2026-10-16T13:21:15.7128135Z Collecting iniconfig>=1.0.1 (from pytest)
+2026-10-16T13:21:15.7205453Z   Downloading iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-10-16T13:21:15.7379579Z Collecting packaging>=22 (from pytest)
+2026-10-16T13:21:15.7459478Z   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+2026-10-16T13:21:15.7614501Z Collecting pluggy<2,>=1.5 (from pytest)
+2026-10-16T13:21:15.7869100Z   Downloading pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-10-16T13:21:15.8094062Z Collecting pygments>=2.7.2 (from pytest)
+2026-10-16T13:21:15.8171340Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-10-16T13:21:15.9264767Z Collecting cffi>=2.0.0 (from cryptography)
+2026-10-16T13:21:15.9343891Z   Downloading cffi-2.1.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+2026-10-16T13:21:15.9619853Z Collecting starlette>=0.46.0 (from fastapi)
+2026-10-16T13:21:15.9694777Z   Downloading starlette-1.8.0-py3-none-any.whl.metadata (6.6 kB)
+2026-10-16T13:21:16.0762766Z Collecting pydantic>=2.9.0 (from fastapi)
+2026-10-16T13:21:16.0840001Z   Downloading pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+2026-10-16T13:21:16.1169653Z Collecting typing-extensions>=4.8.0 (from fastapi)
+2026-10-16T13:21:16.1243459Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-10-16T13:21:16.1401956Z Collecting typing-inspection>=0.4.2 (from fastapi)
+2026-10-16T13:21:16.1499821Z   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+2026-10-16T13:21:16.1634202Z Collecting annotated-doc>=0.0.2 (from fastapi)
+2026-10-16T13:21:16.1704759Z   Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+2026-10-16T13:21:16.1918827Z Collecting opentelemetry-api>=1.44.0 (from fastapi)
+2026-10-16T13:21:16.1998044Z   Downloading opentelemetry_api-1.45.1-py3-none-any.whl.metadata (1.4 kB)
+2026-10-16T13:21:16.2214100Z Collecting anyio (from httpx)
+2026-10-16T13:21:16.2287670Z   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+2026-10-16T13:21:16.2507465Z Collecting certifi (from httpx)
+2026-10-16T13:21:16.2587264Z   Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+2026-10-16T13:21:16.2765550Z Collecting httpcore==1.* (from httpx)
+2026-10-16T13:21:16.2839568Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-10-16T13:21:16.3045932Z Collecting idna (from httpx)
+2026-10-16T13:21:16.3119524Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-10-16T13:21:16.3266734Z Collecting h11>=0.16 (from httpcore==1.*->httpx)
+2026-10-16T13:21:16.3489594Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-10-16T13:21:16.3646816Z Collecting pycparser (from cffi>=2.0.0->cryptography)
+2026-10-16T13:21:16.3729655Z   Downloading pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)
+2026-10-16T13:21:16.3896768Z Collecting annotated-types>=0.6.0 (from pydantic>=2.9.0->fastapi)
+2026-10-16T13:21:16.3967477Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-10-16T13:21:17.0904690Z Collecting pydantic-core==2.50.1 (from pydantic>=2.9.0->fastapi)
+2026-10-16T13:21:17.0980280Z   Downloading pydantic_core-2.50.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+2026-10-16T13:21:17.1167460Z Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+2026-10-16T13:21:17.1377326Z Downloading pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-10-16T13:21:17.1467949Z Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)
+2026-10-16T13:21:17.1903749Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 126.2 MB/s  0:00:00
+2026-10-16T13:21:17.1979185Z Downloading pymupdf-1.28.2-cp310-abi3-manylinux_2_28_x86_64.whl (25.8 MB)
+2026-10-16T13:21:17.2722299Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.8/25.8 MB 356.3 MB/s  0:00:00
+2026-10-16T13:21:17.2798377Z Downloading fastapi-0.143.2-py3-none-any.whl (144 kB)
+2026-10-16T13:21:17.2895584Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-10-16T13:21:17.2986256Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-10-16T13:21:17.3080525Z Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (801 kB)
+2026-10-16T13:21:17.3132488Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 801.6/801.6 kB 175.6 MB/s  0:00:00
+2026-10-16T13:21:17.3201046Z Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+2026-10-16T13:21:17.3293548Z Downloading cffi-2.1.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+2026-10-16T13:21:17.3385201Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-10-16T13:21:17.3476738Z Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-10-16T13:21:17.3565970Z Downloading opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+2026-10-16T13:21:17.3656519Z Downloading packaging-26.3-py3-none-any.whl (129 kB)
+2026-10-16T13:21:17.3782172Z Downloading pydantic-2.14.1-py3-none-any.whl (488 kB)
+2026-10-16T13:21:17.3882747Z Downloading pydantic_core-2.50.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.2 MB)
+2026-10-16T13:21:17.3967438Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 300.0 MB/s  0:00:00
+2026-10-16T13:21:17.4038250Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-10-16T13:21:17.4128429Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-10-16T13:21:17.4210738Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 192.9 MB/s  0:00:00
+2026-10-16T13:21:17.4285392Z Downloading starlette-1.8.0-py3-none-any.whl (79 kB)
+2026-10-16T13:21:17.4375631Z Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+2026-10-16T13:21:17.4475476Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-10-16T13:21:17.4614351Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-10-16T13:21:17.4703292Z Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+2026-10-16T13:21:17.4790779Z Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+2026-10-16T13:21:17.4896846Z Downloading pycparser-3.11-py3-none-any.whl (51 kB)
+2026-10-16T13:21:17.7829367Z Installing collected packages: typing-extensions, pyyaml, PyMuPDF, pygments, pycparser, pluggy, packaging, iniconfig, idna, h11, certifi, annotated-types, annotated-doc, typing-inspection, pytest, pydantic-core, opentelemetry-api, httpcore, cffi, anyio, starlette, pydantic, httpx, cryptography, fastapi
+2026-10-16T13:21:21.1613268Z 
+2026-10-16T13:21:21.1645475Z Successfully installed PyMuPDF-1.28.2 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 certifi-2026.7.22 cffi-2.1.1 cryptography-50.0.2 fastapi-0.143.2 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 iniconfig-2.3.1 opentelemetry-api-1.45.1 packaging-26.3 pluggy-1.7.0 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pygments-2.21.0 pytest-9.1.1 pyyaml-6.0.3 starlette-1.8.0 typing-extensions-4.16.0 typing-inspection-0.4.4
+2026-10-16T13:21:21.2934614Z ##[group]Run python -m pytest -q tests/test_family_pfs_improvement.py tests/test_family_owner_utility_r43.py tests/test_family_pfs_governance_runtime.py tests/test_family_pfs_regression_readout.py tests/test_family_authority_guard.py tests/test_race_day_fast_path.py
+2026-10-16T13:21:21.2936542Z [36;1mpython -m pytest -q tests/test_family_pfs_improvement.py tests/test_family_owner_utility_r43.py tests/test_family_pfs_governance_runtime.py tests/test_family_pfs_regression_readout.py tests/test_family_authority_guard.py tests/test_race_day_fast_path.py[0m
+2026-10-16T13:21:21.3004359Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:21.3004630Z env:
+2026-10-16T13:21:21.3004908Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:21.3005399Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:21.3005842Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:21.3006274Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:21.3006672Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:21.3007074Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:21.3007403Z ##[endgroup]
+2026-10-16T13:21:23.1598097Z .......................................                                  [100%]
+2026-10-16T13:21:23.1598710Z 39 passed in 0.69s
+2026-10-16T13:21:23.1960702Z ##[group]Run python -m py_compile runtime/family_pfs_improvement.py runtime/family_pfs_promotion_gate.py runtime/family_pfs_owner_scorecard.py runtime/family_pfs_regression_readout.py runtime/post_result_learning.py runtime/race_day_fast_reflection.py
+2026-10-16T13:21:23.1962584Z [36;1mpython -m py_compile runtime/family_pfs_improvement.py runtime/family_pfs_promotion_gate.py runtime/family_pfs_owner_scorecard.py runtime/family_pfs_regression_readout.py runtime/post_result_learning.py runtime/race_day_fast_reflection.py[0m
+2026-10-16T13:21:23.2029004Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:23.2029283Z env:
+2026-10-16T13:21:23.2029584Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2030315Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:23.2030806Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2031230Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2031697Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2032117Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:23.2032470Z ##[endgroup]
+2026-10-16T13:21:23.2652153Z ##[group]Run python -m pytest -q tests/test_kaw_v26_integrated.py tests/test_family_conversion_diagnostics.py tests/test_capital_policy.py tests/test_krs_prediction_utility.py
+2026-10-16T13:21:23.2653462Z [36;1mpython -m pytest -q tests/test_kaw_v26_integrated.py tests/test_family_conversion_diagnostics.py tests/test_capital_policy.py tests/test_krs_prediction_utility.py[0m
+2026-10-16T13:21:23.2717539Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:23.2717803Z env:
+2026-10-16T13:21:23.2718080Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2718529Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:23.2718966Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2719357Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2719754Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:23.2720460Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:23.2720809Z ##[endgroup]
+2026-10-16T13:21:27.2305748Z ...................                                                      [100%]
+2026-10-16T13:21:27.2306699Z 19 passed in 3.71s
+2026-10-16T13:21:27.2665202Z ##[group]Run python tools/kaw_v25_day_regression.py --out evidence/kaw_v26_20261016/ci_regression.json
+2026-10-16T13:21:27.2665989Z [36;1mpython tools/kaw_v25_day_regression.py --out evidence/kaw_v26_20261016/ci_regression.json[0m
+2026-10-16T13:21:27.2728645Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:27.2728915Z env:
+2026-10-16T13:21:27.2729201Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:27.2729695Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:27.2730416Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:27.2730844Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:27.2731284Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:27.2731724Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:27.2732088Z ##[endgroup]
+2026-10-16T13:21:30.5473832Z {"canonical_formal_completed": 5, "fixed_four": {"races": 4, "investment": 58800, "return": 15030.0, "profit_loss": -43770.0, "pfs_pct": 25.56122448979592, "max_drawdown": 43770.0, "total_loss_count": 3, "no_bet_count": 0}, "signed_five": {"races": 5, "investment": 66300, "return": 50640.0, "profit_loss": -15660.0, "pfs_pct": 76.38009049773756, "max_drawdown": 43200.0, "total_loss_count": 3, "no_bet_count": 0}, "aggregates": {"PRODUCTION": {"races": 5, "investment": 66300, "return": 50640.0, "profit_loss": -15660.0, "pfs_pct": 76.38009049773756, "max_drawdown": 43200.0, "total_loss_count": 3, "no_bet_count": 0}, "STATIC_PLUS_KRS_DIAGNOSTIC": {"races": 5, "investment": 66300, "return": 50640.0, "profit_loss": -15660.0, "pfs_pct": 76.38009049773756, "max_drawdown": 43200.0, "total_loss_count": 3, "no_bet_count": 0}, "ORIGINAL_AKI": {"races": 5, "investment": 6900, "return": 8690.0, "profit_loss": 1790.0, "pfs_pct": 125.94202898550724, "max_drawdown": 3900.0, "total_loss_count": 3, "no_bet_count": 0}, "PR262_REFERENCE": {"races": 5, "investment": 7700, "return": 12430.0, "profit_loss": 4730.0, "pfs_pct": 161.42857142857144, "max_drawdown": 1320.0, "total_loss_count": 1, "no_bet_count": 1}, "PR265_R1_REJECTED": {"races": 5, "investment": 4000, "return": 15030.0, "profit_loss": 11030.0, "pfs_pct": 375.75, "max_drawdown": 2200.0, "total_loss_count": 3, "no_bet_count": 1}, "PR265_R2_REJECTED": {"races": 5, "investment": 5900, "return": 15030.0, "profit_loss": 9130.0, "pfs_pct": 254.74576271186442, "max_drawdown": 4100.0, "total_loss_count": 3, "no_bet_count": 1}, "OWNER_DIVERSITY_R3": {"races": 5, "investment": 130200, "return": 15030.0, "profit_loss": -115170.0, "pfs_pct": 11.543778801843319, "max_drawdown": 115170.0, "total_loss_count": 3, "no_bet_count": 1}, "OWNER_DIVERSITY_KRS_R3": {"races": 5, "investment": 109500, "return": 18720.0, "profit_loss": -90780.0, "pfs_pct": 17.095890410958905, "max_drawdown": 90780.0, "total_loss_count": 2, "no_bet_count": 1}, "FINITE_CAPITAL_10000": {"races": 5, "investment": 0, "return": 0.0, "profit_loss": 0.0, "pfs_pct": null, "max_drawdown": 0, "total_loss_count": 0, "no_bet_count": 5}}}
+2026-10-16T13:21:30.5744985Z ##[group]Run python tools/kaw_v25_official_acquire.py --date 2026-10-16 --out evidence/kaw_v26_20261016/official_readonly
+2026-10-16T13:21:30.5745872Z [36;1mpython tools/kaw_v25_official_acquire.py --date 2026-10-16 --out evidence/kaw_v26_20261016/official_readonly[0m
+2026-10-16T13:21:30.5808900Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:30.5809197Z env:
+2026-10-16T13:21:30.5809512Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:30.5810308Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:30.5810839Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:30.5811296Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:30.5811758Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:30.5812225Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:30.5812803Z ##[endgroup]
+2026-10-16T13:21:33.7063478Z [{"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 1}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=1", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [8, 5, 6, 3, 7, 9, 11, 4, 12, 10, 1, 2], "payouts": {"EXACTA": 1110, "TRIO": 3280, "TRIFECTA": 13920}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=1"}, "observed_at": "2026-10-16T13:21:31.767693+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 2}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=2", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [2, 1, 6, 5, 3, 4], "payouts": {"EXACTA": 7580, "TRIO": 4070, "TRIFECTA": 28030}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=2"}, "observed_at": "2026-10-16T13:21:31.751509+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 3}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=3", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [3, 6, 4, 1, 7, 5], "payouts": {"EXACTA": 1420, "TRIO": 850, "TRIFECTA": 4430}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=3"}, "observed_at": "2026-10-16T13:21:31.745203+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 4}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=4", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [3, 4, 2, 6, 1, 5], "payouts": {"EXACTA": 920, "TRIO": 1740, "TRIFECTA": 6280}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=4"}, "observed_at": "2026-10-16T13:21:32.168466+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 5}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=5", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [9, 4, 8, 2, 12, 6, 1, 5, 3, 7, 14, 13, 11, 10], "payouts": {"EXACTA": 2980, "TRIO": 2600, "TRIFECTA": 15570}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=5"}, "observed_at": "2026-10-16T13:21:32.413268+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 6}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=6", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [12, 1, 11, 6, 3, 5, 8, 10, 9, 2, 4, 7], "payouts": {"EXACTA": 680, "TRIO": 1120, "TRIFECTA": 3010}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=6"}, "observed_at": "2026-10-16T13:21:32.735106+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 7}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=7", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [8, 1, 10, 9, 5, 4, 7, 6, 3, 2], "payouts": {"EXACTA": 7660, "TRIO": 7860, "TRIFECTA": 40930}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=7"}, "observed_at": "2026-10-16T13:21:32.606242+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 8}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=8", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [7, 3, 5, 8, 10, 1, 2, 9, 6, 4], "payouts": {"EXACTA": 1080, "TRIO": 7320, "TRIFECTA": 19930}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=8"}, "observed_at": "2026-10-16T13:21:32.771587+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 9}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=9", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [5, 7, 6, 10, 3, 1, 4, 9, 2, 8], "payouts": {"EXACTA": 10720, "TRIO": 7360, "TRIFECTA": 47330}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=9"}, "observed_at": "2026-10-16T13:21:33.038199+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 10}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=10", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [5, 4, 8, 12, 9, 10, 3, 6, 7, 1, 2, 11], "payouts": {"EXACTA": 12540, "TRIO": 15920, "TRIFECTA": 98770}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=10"}, "observed_at": "2026-10-16T13:21:33.222897+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 11}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=11", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [8, 11, 1, 2, 5, 4, 10, 9, 6, 3, 7], "payouts": {"EXACTA": 900, "TRIO": 1240, "TRIFECTA": 3590}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=11"}, "observed_at": "2026-10-16T13:21:33.189744+00:00"}, {"context": {"venue_id": "KAW", "race_date": "2026-10-16", "race_no": 12}, "mode": "POST_RESULT_READ_ONLY", "new_signatures": 0, "url": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=12", "acquisition_errors": [], "status": "VERIFIED", "official_result": {"finish_order": [10, 5, 8, 4, 2, 6, 1, 3, 9, 7, 11], "payouts": {"EXACTA": 8430, "TRIO": 9310, "TRIFECTA": 55710}, "source": "https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RaceMarkTable?k_babaCode=21&k_raceDate=2026%2F10%2F16&k_raceNo=12"}, "observed_at": "2026-10-16T13:21:33.701581+00:00"}]
+2026-10-16T13:21:33.7395996Z ##[group]Run actions/upload-artifact@v4
+2026-10-16T13:21:33.7396357Z with:
+2026-10-16T13:21:33.7396587Z   name: kaw-v26-integrated-audit
+2026-10-16T13:21:33.7396867Z   path: evidence/kaw_v26_20261016/
+2026-10-16T13:21:33.7397139Z   if-no-files-found: warn
+2026-10-16T13:21:33.7397395Z   compression-level: 6
+2026-10-16T13:21:33.7397625Z   overwrite: false
+2026-10-16T13:21:33.7397860Z   include-hidden-files: false
+2026-10-16T13:21:33.7398106Z env:
+2026-10-16T13:21:33.7398371Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:33.7398825Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:33.7399268Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:33.7399847Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:33.7400576Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:33.7401037Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:33.7401383Z ##[endgroup]
+2026-10-16T13:21:33.9097820Z (node:2401) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T13:21:33.9098751Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T13:21:33.9219778Z With the provided path, there will be 17 files uploaded
+2026-10-16T13:21:33.9221600Z Artifact name is valid!
+2026-10-16T13:21:33.9222021Z Root directory input is valid!
+2026-10-16T13:21:34.1642175Z Beginning upload of artifact content to blob storage
+2026-10-16T13:21:34.2585712Z (node:2401) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-10-16T13:21:34.3334540Z Uploaded bytes 408752
+2026-10-16T13:21:34.3538895Z Finished uploading artifact content to blob storage!
+2026-10-16T13:21:34.3540419Z SHA256 digest of uploaded artifact zip is 31c398eec7465cfc0fefd066b17e92ccfecadd62db1aabe5bf41a902cd44a899
+2026-10-16T13:21:34.3541859Z Finalizing artifact upload
+2026-10-16T13:21:34.7289419Z Artifact kaw-v26-integrated-audit.zip successfully finalized. Artifact ID 12048901063
+2026-10-16T13:21:34.7291043Z Artifact kaw-v26-integrated-audit has been successfully uploaded! Final size is 408752 bytes. Artifact ID is 12048901063
+2026-10-16T13:21:34.7297183Z Artifact download URL: https://github.com/b03la013-max/keibametrics-runtime/actions/runs/38907123563/artifacts/12048901063
+2026-10-16T13:21:34.7433797Z ##[group]Run python runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json
+2026-10-16T13:21:34.7434779Z [36;1mpython runtime/family_authority_guard.py --selftest --authority-path profiles/KM_FAMILY_CURRENT_AUTHORITY_20261007_R43.json[0m
+2026-10-16T13:21:34.7497651Z shell: /usr/bin/bash -e {0}
+2026-10-16T13:21:34.7497915Z env:
+2026-10-16T13:21:34.7498198Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:34.7498681Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+2026-10-16T13:21:34.7499146Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:34.7499561Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:34.7500258Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+2026-10-16T13:21:34.7500714Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+2026-10-16T13:21:34.7501063Z ##[endgroup]
+2026-10-16T13:21:34.8110965Z {"authority": "KM-FAMILY-CURRENT-AUTHORITY-20261007-R43", "ban": "EXPECTED_BLOCKED", "jra": "PASS", "local": "PASS", "negative_cross_family": "PASS", "negative_scope_override": "PASS", "status": "PASS"}
+2026-10-16T13:21:34.8333737Z Post job cleanup.
+2026-10-16T13:21:34.9697628Z (node:2415) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-16T13:21:34.9698629Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-16T13:21:34.9908463Z Post job cleanup.
+2026-10-16T13:21:35.0896175Z [command]/usr/bin/git version
+2026-10-16T13:21:35.0945240Z git version 2.55.0
+2026-10-16T13:21:35.0991992Z Temporarily overriding HOME='/home/runner/work/_temp/f046ae3f-2f94-42f6-8f58-e573a3843888' before making global git config changes
+2026-10-16T13:21:35.0993457Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-16T13:21:35.0999216Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keibametrics-runtime/keibametrics-runtime
+2026-10-16T13:21:35.1046349Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-16T13:21:35.1090813Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-16T13:21:35.1376433Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-16T13:21:35.1411928Z http.https://github.com/.extraheader
+2026-10-16T13:21:35.1424416Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-16T13:21:35.1464996Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-16T13:21:35.1756715Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-16T13:21:35.1811510Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-16T13:21:35.2247821Z Cleaning up orphan processes
+2026-10-16T13:21:35.2542346Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+

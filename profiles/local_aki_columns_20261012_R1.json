@@ -1,0 +1,89 @@
+{
+  "profile": "KM-LOCAL-AKI-COLUMNS-PAPER-20261012-R1",
+  "family": "LOCAL",
+  "status": "OWNER_REQUESTED_IMPLEMENTATION / PAPER_RESEARCH / UNVALIDATED",
+  "purchase_authority": false,
+  "production_authority": false,
+  "automatic_promotion": false,
+  "numerical_mapping": "mapping/local_full_numerical_mapping_v1.0_production_20261008.json",
+  "role_indices": {
+    "W": "ZAI-WIN",
+    "P2": "ZAI-PLACE",
+    "P3": "T3I-L"
+  },
+  "role_axes": {
+    "W": "W-AKI",
+    "P2": "P2-AKI",
+    "P3": "P3-AKI"
+  },
+  "axes": [
+    "W-AKI",
+    "P2-AKI",
+    "P3-AKI",
+    "ASI",
+    "RSI"
+  ],
+  "single_axis_min_asi": 50,
+  "single_axis_source": "LOCAL v4.12 Rev.3 article 39: ASI 49 or less forbids single axis",
+  "support_groups": {
+    "PERFORMANCE": [
+      "recent_finish",
+      "class_level",
+      "opponent_strength"
+    ],
+    "CONDITION_FIT": [
+      "same_distance",
+      "same_venue",
+      "going_fit"
+    ],
+    "POSITION": [
+      "position_acquisition",
+      "position_maintenance",
+      "third_corner_progression"
+    ]
+  },
+  "minimum_support_groups": 2,
+  "head_features": [
+    "position_acquisition",
+    "leadership_stalk_acceptance"
+  ],
+  "pair_features": [
+    "position_maintenance",
+    "position_acquisition"
+  ],
+  "third_features": [
+    "third_corner_progression",
+    "position_maintenance"
+  ],
+  "selection_formula": "main=observed eligible role-score maxima; additional if leader-score <= score_span * max(column_AKI, axis risk for W or RSI for P2/P3)/100; risk is max not sum",
+  "missing_policy": "No neutral observation is eligibility support. Information uncertainty reported separately; no fabricated axis or role floor. PAPER regardless of compatible capital.",
+  "pair_policy": "Distinct head and second; observed head position and observed second acquisition/maintenance; PROTECT model relation only. No exact order purchase confidence claimed.",
+  "third_policy": "Distinct triple; observed third progression/maintenance is pair-context PROTECT. R3 global P3 tail continuity remains.",
+  "capital_policy": "Run existing R3 and capital after immutable selection. No role pruning, cap or budget input. PAPER/NO_BET only.",
+  "venue_policy": "All LOCAL flat venues share implementation. No numeric venue coefficients invented. Current venue rules remain upstream evidence/compiler and R3 closure; per-venue empirical validation pending. BAN rejected.",
+  "external_change": {
+    "status": "NOT_NUMERICALLY_DEFINED_IN_CURRENT_29_INDEX_REGISTRY",
+    "action": "record source revisions; source/universe change invalidates selection, recompute; never infer unchanged from missing"
+  },
+  "firm_finish_correction": {
+    "status": "NO_REGISTERED_NUMERIC_CORRECTION",
+    "action": "not subtracted; missing != zero proven correction"
+  },
+  "validation": {
+    "replay_oos_count": 0,
+    "future_plan": "Freeze code/policy/input hashes before post; collect all consecutive eligible LOCAL races and holds; 30 eligible races is review trigger only, not automatic promotion. Stratify venue/field/class/distance/going; chronological design/evaluation separation; same-source frozen production comparator; no payoff tuning.",
+    "metrics": [
+      "winner/p2/p3/order capture",
+      "ticket reachability",
+      "ticket count/investment",
+      "hit-with-loss",
+      "equal-budget/count linear normalization explicitly not reselection",
+      "remove-largest-win sensitivity",
+      "loss streak/drawdown",
+      "PAPER/NO_BET information missing"
+    ],
+    "probability_calibration": "NONE; scores and AKI are not probabilities or EV"
+  },
+  "structural_anchor_rule": "If W has exactly one supported head, exclude it from P2/P3 anchor pools; if P2 also has exactly one supported second, exclude it from P3 anchor pool. Choose maxima only from remaining eligible observations; no fixed rank floor."
+}
+
