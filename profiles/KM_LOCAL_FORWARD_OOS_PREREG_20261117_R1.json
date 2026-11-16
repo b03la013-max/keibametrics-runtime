@@ -1,0 +1,61 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261117-R1",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-17T02:30:00+09:00",
+ "freeze_rule": "Only races whose official post time is on or after first_eligible_post count. Everything before (11/13-16, 116 PAPER races / 5 formal races) is research replay used to form the hypotheses, never OOS.",
+ "first_eligible_post": "2026-11-17T11:35:00+09:00",
+ "learning_races": "2026-11-13..2026-11-16 PAPER 116R, formal 5R (output/shadow_measure.md, review/formal_eval.md)",
+ "production_change": "NONE. Candidates are evaluated in shadow only; promotion needs a separate explicit Owner approval after the promotion criteria hold.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {
+   "id": "C1-FAV-AXIS-TRIO",
+   "hypothesis": "3連複 1番人気軸 × PAPER上位4頭流し (6点) beats the PAPER Champion tickets on PFS with less stake.",
+   "change": "ticket allocation only (formula, no reselection)",
+   "scope": "all LOCAL PAPER races with a settled result",
+   "champion": "PAPER_実買い目 (frozen 直前版 tickets)",
+   "population": "same races, same frozen revision, same payouts",
+   "primary_metric": "PFS difference (candidate - champion)",
+   "secondary_metrics": ["hit rate", "invest", "max single-race loss", "share of payout from the top 1 race"],
+   "reject_if": "at 100R the 95% bootstrap CI of the PFS difference is entirely below 0, or candidate PFS < 80%",
+   "promote_if": "at 100R the 95% CI of the PFS difference is above 0 and the top-1 race supplies < 40% of candidate payout; re-confirm at 300R"
+  },
+  {
+   "id": "C2-DANGER-FAV-RANK-A",
+   "hypothesis": "1番人気 with 危険度ランクA (Drive 地方競馬版・危険な1番人気 第9章) wins at least 10 points less often than 1番人気 with rank NONE.",
+   "change": "evidence only (prediction.danger_fav); no ranking change",
+   "scope": "races with prediction.danger_fav status OK",
+   "champion": "1番人気 with danger_rank NONE",
+   "population": "same days, rank A vs rank NONE favorites",
+   "primary_metric": "favorite win-rate difference (NONE - A)",
+   "secondary_metrics": ["favorite top-3 rate", "favorite WIN/PLACE PFS", "2番人気 WIN PFS when the favorite is rank A"],
+   "reject_if": "at 100R the difference is <= 0",
+   "promote_if": "at 100R the difference >= 10 points with >= 30 rank-A races; then propose to the Owner as a W-role caution input"
+  },
+  {
+   "id": "C3-FAV-AS-W-WHEN-DIVERGED",
+   "hypothesis": "When ◎ != 1番人気, the 1番人気 wins more often than ◎ (win rate difference >= 15 points).",
+   "change": "evidence only",
+   "scope": "PAPER races where ◎ != 1番人気",
+   "champion": "◎ (PAPER W)",
+   "population": "same races",
+   "primary_metric": "win-rate difference (1番人気 - ◎)",
+   "secondary_metrics": ["top-3 rate", "WIN/PLACE PFS of each"],
+   "reject_if": "at 100R the difference is <= 0",
+   "promote_if": "at 100R the difference >= 15 points and WIN PFS of 1番人気 >= ◎; then propose to the Owner a review of the PAPER W selection"
+  },
+  {
+   "id": "C4-LOCAL-CAP-60",
+   "hypothesis": "The R54 60-point cap (already adopted) does not lower PFS versus the full signed MEC set.",
+   "change": "none (measures the adopted cap); adoption is not proof of advantage",
+   "scope": "formal races with LIVE_R54 cap evaluation",
+   "champion": "full Signed FINAL MEC R3 set (settled by the Runtime signed RESULT)",
+   "population": "same races",
+   "primary_metric": "PFS capped - PFS full",
+   "secondary_metrics": ["invest saved", "races with lost hits", "loss avoided"],
+   "reject_if": "at 100R the capped PFS is lower by more than 10 points (report to the Owner; no automatic change)",
+   "promote_if": "not applicable (already Production); report the measured effect"
+  }
+ ]
+}

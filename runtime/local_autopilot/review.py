@@ -428,6 +428,44 @@ def _aggregate(reviews):
             'improvement_priority': ranked, 'adoption_rule': ADOPTION}
 
 
+def _audit(day_dir, q):
+    """日次自律監査 6項目 (Delivery / 計算完走 / 精度 / PFS / Learning / 障害・改善), from existing artifacts."""
+    from runtime.local_autopilot import delivery_ledger
+    led = delivery_ledger.build(q, day_dir)['summary']
+    races = q['races'].values()
+    formal = [r['formal'] for r in races if r.get('formal')]
+    full29 = len(list((day_dir / 'formal').glob('*.full29.json'))) if (day_dir / 'formal').exists() else 0
+    fset = [r['formal_settlement'] for r in races if (r.get('formal_settlement') or {}).get('result_receipt_verified')]
+    bind = []
+    for p in sorted((day_dir / 'formal').glob('*.summary.json')) if (day_dir / 'formal').exists() else []:
+        try:
+            bind.append(len(json.loads(p.read_text()).get('learning_state_bindings') or []))
+        except ValueError:
+            pass
+    fo = Path(day_dir).parent / 'forward_oos_local.json'
+    oos = json.loads(fo.read_text())['candidates'] if fo.exists() else None
+    return {
+        '1_delivery': {'races_managed': led['races_managed'], 'formal_eligible_attempted': led['formal']['attempted'],
+                       'paper_prestart_submitted': led['paper']['submitted_prestart'],
+                       'formal_prestart_submitted': led['formal']['submitted_prestart'],
+                       'user_reached_owner_confirmed': led['paper']['user_reached_owner_confirmed']
+                       + led['formal']['user_reached_owner_confirmed']},
+        '2_computation': {'full29': full29, 'signed_final': sum(1 for f in formal if f.get('status') == 'SIGNED_FINAL'),
+                          'krs_5000': sum(1 for f in formal if f.get('krs_actual_run_count') == 5000),
+                          'no_bet': sum(1 for f in formal if f.get('no_bet')),
+                          'hold': dict(Counter(f.get('first_failed_stage') or 'UNKNOWN' for f in formal
+                                               if f.get('status') != 'SIGNED_FINAL'))},
+        '3_accuracy': 'see accuracy',
+        '4_pfs': {'paper_pfs': None, 'formal_pfs': None, 'actual_purchase': 'NONE (実購入なし)'},
+        '5_learning': {'result_receipts_verified': len(fset),
+                       'learning_states_saved': sum(1 for x in fset if x.get('learning_state_id')),
+                       'formal_races_binding_prior_states': sum(1 for b in bind if b),
+                       'production_change_authorized': False},
+        '6_failures': {'first_stops': led['first_stops'], 'formal_stops': led.get('formal_stops'),
+                       'oos_progress': {k: v.get('stage') for k, v in (oos or {}).items()}},
+    }
+
+
 def write_daily(day_dir, q):
     day_dir = Path(day_dir)
     reviews = [json.loads(p.read_text()) for p in sorted((day_dir / 'review').glob('*.review.json'))] \
@@ -437,6 +475,10 @@ def write_daily(day_dir, q):
     terminal = all(r.get('settlement') or r.get('status') in ('MISSED_DEADLINE', 'SOURCE_HOLD', 'PREDICTION_FAILURE')
                    for r in q['races'].values())
     s = {'profile': PROFILE + '-DAILY', 'race_date': day_dir.name, 'complete_day': terminal, **_aggregate(reviews)}
+    try:
+        s['daily_audit'] = _audit(day_dir, q)
+    except Exception as exc:  # the audit never blocks the review summary
+        s['daily_audit'] = {'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     s['sha256'] = _sha(s)
     (day_dir / 'review' / 'daily_summary.json').write_text(json.dumps(s, ensure_ascii=False, indent=1) + '\n')
     (day_dir / 'review' / 'daily_summary.md').write_text(_summary_md(f"{day_dir.name} 日次総括" + ('' if terminal else '（途中）'), s))
@@ -449,6 +491,18 @@ def _summary_md(title, s):
          f"- 第一失敗：{s['all_local']['first_failure']}", '', '| 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |', '|---|---|---|---|---|']
     for k, v in s['by_venue'].items():
         L.append(f"| {k} | {v['races']} | {v['paper_pfs']} | {v['formal_pfs']} | {v['first_failure']} |")
+    au = s.get('daily_audit') or {}
+    if au and 'error' not in au:
+        d1, d2, d5, d6 = au['1_delivery'], au['2_computation'], au['5_learning'], au['6_failures']
+        L += ['', '## 日次自律監査', '',
+              f"1. 配送：管理 {d1['races_managed']}R／PAPER発走前送信 {d1['paper_prestart_submitted']}／正式試行 "
+              f"{d1['formal_eligible_attempted']}・発走前送信 {d1['formal_prestart_submitted']}／本人確認 {d1['user_reached_owner_confirmed']}",
+              f"2. 計算完走：Full29 {d2['full29']}／Signed FINAL {d2['signed_final']}／KRS5000 {d2['krs_5000']}／NO-BET {d2['no_bet']}"
+              f"／HOLD {d2['hold'] or 'なし'}",
+              '3. 精度：下表', f"4. PFS：PAPER {s['all_local']['paper_pfs']}%／正式推薦 {s['all_local']['formal_pfs']}%／実購入なし",
+              f"5. Learning：RESULT署名検証 {d5['result_receipts_verified']}／学習状態保存 {d5['learning_states_saved']}"
+              f"／前Raceの学習状態を結合した正式Race {d5['formal_races_binding_prior_states']}（Production変更なし）",
+              f"6. 障害・改善：停止 {d6['first_stops'] or 'なし'}／正式停止 {d6['formal_stops'] or 'なし'}／OOS進捗 {d6['oos_progress']}"]
     acc = s.get('accuracy') or {}
     L += ['', '## 精度（回収とは別に測定）', '',
           '| 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |',

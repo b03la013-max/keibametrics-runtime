@@ -937,6 +937,11 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
         if changed and q is not None:
             dump(out / 'queue.json', q)
             report(q, out)
+            try:  # per-race delivery ledger (10 separated states, pre-start test, first stop); derived only
+                from runtime.local_autopilot import delivery_ledger
+                delivery_ledger.write(q, out, now_jst(), CUTOFF_MIN, MAX_ATTEMPTS)
+            except Exception as exc:
+                log('DELIVERY_LEDGER_FAIL', type(exc).__name__, str(exc)[:120])
             if reviewed:
                 try:
                     from runtime.local_autopilot import review as rv
@@ -950,6 +955,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     (ROOT / 'shadow_measure.json').write_text(json.dumps(o, ensure_ascii=False, indent=1) + '\n')
                     (ROOT / 'shadow_measure.md').write_text(smz.md(o))
                     smz.write_daily(ROOT, out.name)   # per-day: allocation / NO-BET / ◎ vs 1番人気 / 危険な1番人気
+                    from runtime.local_autopilot import formal_eval
+                    formal_eval.write_daily(out)          # per-day: KRS improved/worsened, 60-point cap effect
+                    from runtime.local_autopilot import forward_oos
+                    forward_oos.write(ROOT)               # pre-registered candidates, post-freeze races only
                 except Exception as exc:
                     log('SHADOW_MEASURE_FAIL', type(exc).__name__, str(exc)[:120])
             try:
