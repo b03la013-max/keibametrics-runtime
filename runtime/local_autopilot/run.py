@@ -53,6 +53,7 @@ FINAL_WINDOW_MIN = 45
 CUTOFF_MIN = 3          # Rakuten closes voting 2 min before post; we freeze 3 min before
 MAX_ATTEMPTS = 3
 RESULT_DELAY_MIN = 20
+RESEARCH_KRS = os.environ.get('KM_LOCAL_RESEARCH_KRS', '1') == '1'  # non-production research KRS (5,000 / seed 1)
 CODE_VERSION = hashlib.sha256(b''.join(
     (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py', 'sbo.py'))).hexdigest()[:12]
 LOG = []
@@ -288,9 +289,10 @@ def predict(reader, r, today, edition, out, cards):
             revision = '直前の馬体重・オッズ・騎手を反映して再予測'
     try:
         shadow = __import__('runtime.local_autopilot.shadow29', fromlist=['run']).run(race, runners, html, fetched)
+        krs_input = shadow.pop('_krs_input', None)
         dump(stem.with_name(stem.name + '.shadow29.json'), shadow)
     except Exception as exc:
-        shadow = {'error': f'{type(exc).__name__}:{str(exc)[:200]}'}
+        shadow, krs_input = {'error': f'{type(exc).__name__}:{str(exc)[:200]}'}, None
     t3 = time.monotonic()
     md = render(race, res, edition, fetched, shadow, revision, sbo_meta)
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
@@ -320,6 +322,9 @@ def predict(reader, r, today, edition, out, cards):
               'code_version': CODE_VERSION, 'engine': 'Claude v4.3 PAPER', 'purchase_policy': 'EVERY_RACE'}
     (rev_dir / f"{rev_id}.json").write_text(json.dumps(frozen, ensure_ascii=False, indent=1, default=str) + '\n')
     (rev_dir / f"{rev_id}.md").write_text(md)
+    if krs_input is not None:  # research-KRS input frozen with the revision (run later by the KRS job)
+        (out / 'krs').mkdir(exist_ok=True)
+        (out / 'krs' / f'{rev_id}.input.json').write_text(json.dumps(krs_input, ensure_ascii=False, sort_keys=True))
     stem.with_suffix('.md').write_text(md)
     dump(stem.with_suffix('.json'), {'race': {k: race[k] for k in ('venue_id', 'venue_name', 'race_no', 'rid', 'race_date',
                                                                   'post_current', 'distance', 'race_name', 'going', 'surface')},
@@ -646,6 +651,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 jobs.append((1, mins, key, '直前版'))
             elif not have:
                 jobs.append((2, mins, key, '朝版'))
+            elif have[-1] == '直前版' and RESEARCH_KRS and not (r.get('research_krs') or {}).get(r['editions'][-1]['rev']) \
+                    and r.get('krs_attempts', 0) < MAX_ATTEMPTS \
+                    and (out / 'krs' / f"{r['editions'][-1]['rev']}.input.json").exists():
+                jobs.append((4, mins, key, 'KRS'))
         jobs.sort()
         if jobs:
             log('TICK', day, 'jobs', len(jobs), [f'{k}:{e}' for _, _, k, e in jobs[:6]])
@@ -655,6 +664,22 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 break
             r = q['races'][key]
             try:
+                if edition == 'KRS':
+                    rev = r['editions'][-1]['rev']
+                    r['krs_attempts'] = r.get('krs_attempts', 0) + 1
+                    inp = json.loads((out / 'krs' / f'{rev}.input.json').read_text())
+                    sm, env = __import__('runtime.local_autopilot.shadow29', fromlist=['research_krs']).research_krs(
+                        inp, f"LOCAL-{r['race_date']}-{key}-{rev.split('.')[-1]}-RESEARCH")
+                    sm['revision'] = rev
+                    sm['ran_before_post'] = now_jst() < datetime.fromisoformat(r['post_current'])
+                    dump(out / 'krs' / f'{rev}.receipt.json', {'summary': sm, 'envelope': env})
+                    if 'RECEIPT_VERIFIED' in sm['stages'] or sm['http_status'] >= 400:
+                        r.setdefault('research_krs', {})[rev] = {k: sm.get(k) for k in (
+                            'actual_run_count', 'input_sha256', 'output_sha256', 'receipt_sha256', 'elapsed_s',
+                            'http_status', 'ran_before_post')} | {'stages': list(sm['stages'])}
+                    log('KRS', key, rev, sm['http_status'], sm.get('actual_run_count'), list(sm['stages'])[-1], sm['elapsed_s'])
+                    changed = True
+                    continue
                 if edition == 'RESULT':
                     r['result_attempts'] = r.get('result_attempts', 0) + 1
                     fp = frozen_prediction(r, out, key)
@@ -686,6 +711,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 changed = True
                 break
             except Exception as exc:
+                if edition == 'KRS':  # research KRS never affects the race's prediction state
+                    log('KRS_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
+                    changed = True
+                    continue
                 r['attempts'] += 1
                 r['failed_code'] = CODE_VERSION
                 r['status'] = 'PREDICTION_FAILURE' if edition != 'RESULT' else r['status']

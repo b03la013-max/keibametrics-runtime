@@ -99,10 +99,11 @@ def run(race, runners, html_text, fetched_at):
                 neutral_by_index[idx] = neutral_by_index.get(idx, 0) + 1
             vals[idx] = None if not spec or spec.get('value') is None else round(float(spec['value']), 2)
         table.append({'no': int(ru['runner_id']), 'name': ru.get('name'), 'indices': vals})
-    krs_input_sha, krs_error = None, None
+    krs_input_sha, krs_error, krs_input = None, None, None
     try:
         krs = build_candidate_krs(out)
         krs_input_sha = krs['candidate_krs_input_sha256']
+        krs_input = krs['candidate_krs_input_data']
     except Exception as exc:  # readiness evidence only
         krs_error = f'{type(exc).__name__}:{str(exc)[:160]}'
     order = sorted(table, key=lambda x: -(x['indices'].get('F3S-L') or 0))
@@ -119,4 +120,74 @@ def run(race, runners, html_text, fetched_at):
             'non_calculated_by_index': neutral_by_index,
             'f3s_order': [x['no'] for x in order], 'runners': table,
             'krs': {'engine': 'EXTERNAL_v1.1.0_NOT_CALLED', 'trials': 0, 'run_count_planned': 5000, 'seed': 1,
-                    'input_built': krs_input_sha is not None, 'input_sha256': krs_input_sha, 'error': krs_error}}
+                    'input_built': krs_input_sha is not None, 'input_sha256': krs_input_sha, 'error': krs_error},
+            '_krs_input': krs_input}
+
+
+def resolve_endpoint():
+    """LOCAL external KRS Engine endpoint + engine/parameter_map SHA from the canonical contract."""
+    from family_runtime_contract import load_contracts, resolve_family_runtime
+    r = resolve_family_runtime({'family_id': 'LOCAL'}, load_contracts())
+    c = r['contract']
+    return r['external_endpoint'], {k: c.get(k) for k in ('engine_sha256', 'parameter_map_sha256', 'runtime',
+                                                          'signed_receipt_authority')}
+
+
+def research_krs(krs_input, race_id, run_count=5000, seed=1, timeout=300):
+    """NON-PRODUCTION research KRS: real external Engine run on the SOURCE-derived
+    (Rakuten public card) candidate input. Returns (stages, envelope). Never a formal KRS."""
+    import copy
+    import json
+    import time
+    import urllib.error
+    import urllib.request
+    from datetime import datetime, timezone
+    now = lambda: datetime.now(timezone.utc).isoformat()
+    stages = {'REQUESTED': now()}
+    endpoint, contract = resolve_endpoint()
+
+    def call(path, payload, t):
+        body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode()
+        rq = urllib.request.Request(endpoint + path, data=body, headers={'content-type': 'application/json'}, method='POST')
+        try:
+            with urllib.request.urlopen(rq, timeout=t) as x:
+                raw = x.read().decode()
+                return x.status, (json.loads(raw) if raw else {})
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode(errors='replace')
+            try:
+                return e.code, json.loads(raw)
+            except ValueError:
+                return e.code, {'raw': raw[:500]}
+
+    inp = copy.deepcopy(krs_input)
+    inp.setdefault('race', {})['race_id'] = race_id
+    inp.setdefault('simulation', {})['run_count'] = run_count
+    inp['simulation']['master_seed'] = seed
+    stages['ATTEMPTED'] = now()
+    t0 = time.monotonic()
+    code, res = call('/krs/execute', {'family_id': 'LOCAL', 'race_id': race_id, 'krs_input_data': inp,
+                                      'run_count': run_count, 'seed': seed}, timeout)
+    art = res.get('artifact') or {}
+    summary = {'classification': 'LOCAL_RESEARCH_KRS_NON_PRODUCTION (SOURCE=RAKUTEN_PUBLIC_CARD, unsigned)',
+               'endpoint': endpoint, 'contract': contract, 'race_id': race_id, 'run_count_requested': run_count,
+               'seed': seed, 'http_status': code, 'elapsed_s': round(time.monotonic() - t0, 1),
+               'receipt_status': (res.get('receipt') or {}).get('status'),
+               'actual_run_count': art.get('actual_run_count'), 'input_sha256': art.get('input_sha256'),
+               'output_sha256': art.get('output_sha256'), 'receipt_sha256': res.get('receipt_sha256'),
+               'engine_sha256_reported': art.get('engine_sha256') or (res.get('receipt') or {}).get('engine_sha256'),
+               'calibrated': False}
+    if code < 300 and summary['receipt_status'] == 'EXECUTED':
+        stages['COMPLETED'] = now()
+        if summary['output_sha256']:
+            stages['OUTPUT_CAPTURED'] = now()
+        if summary['receipt_sha256']:
+            stages['RECEIPT_ISSUED'] = now()
+            vc, v = call('/verify', res, 60)
+            summary['verify'] = {'http_status': vc, 'valid': v.get('valid')}
+            if vc < 300 and v.get('valid') is True:
+                stages['RECEIPT_VERIFIED'] = now()
+    else:
+        summary['error'] = str(res)[:300]
+    summary['stages'] = stages
+    return summary, res
