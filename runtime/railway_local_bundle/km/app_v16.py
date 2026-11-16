@@ -25,7 +25,7 @@ import source_acquisition as _sa
 from source_acquisition import acquire_sources, sha_obj, verify_source_artifact
 import rakuten
 
-APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.6-REV.1-20261116-RAKUTEN-SOURCE"
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.6-REV.2-20261116-RAKUTEN-SOURCE"
 RAKUTEN_PROFILE = "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116"
 APPROVED_PROFILES = {NAR_MANIFEST_PROFILE, RAKUTEN_PROFILE}
 RAKUTEN_BABA = {"MOR": "10", "MIZ": "11", "URW": "18", "FNB": "19", "OHI": "20", "KAW": "21",
@@ -76,6 +76,9 @@ def _rfc9309_robots_policy(text: str, robots_url: str) -> Dict[str, Any]:
 _sa._literal_robots_policy = _rfc9309_robots_policy
 # Honour a published Crawl-delay (Rakuten: 60 s) instead of refusing after 30 s; NAR (10 s) unaffected.
 _sa._POLICY_MAX_WAIT = 75.0
+# The Owner-approved Rakuten formal SOURCE host (exact host only, no wildcard).
+if "keiba.rakuten.co.jp" not in _sa.DEFAULT_ALLOWED_HOSTS:
+    _sa.DEFAULT_ALLOWED_HOSTS.append("keiba.rakuten.co.jp")
 
 
 def _drop_routes(*paths):
