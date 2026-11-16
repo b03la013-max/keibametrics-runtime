@@ -89,6 +89,23 @@ def observation(root):
             for venue, v in sorted(out.items())}, idx
 
 
+def _owner_gate():
+    """Owner decision on LOCAL numerical consumption, read from the family authority files."""
+    repo = Path(__file__).resolve().parents[2] / 'profiles'
+    best = None
+    for p in sorted(repo.glob('KM_FAMILY_CURRENT_AUTHORITY_*.json')):
+        try:
+            d = json.loads(p.read_text())
+        except ValueError:
+            continue
+        b = ((d.get('family_scoped_authority') or {}).get('LOCAL') or {}).get('numerical_consumption_boundary') or {}
+        if b.get('krs_input_authority') is True:
+            best = (d.get('manifest_id'), d.get('effective_at'))
+    if best:
+        return {'owner_review': 'OWNER_APPROVED (2026-11-16)', 'authorized': True, 'authority': best[0], 'effective_at': best[1]}
+    return {'owner_review': 'NOT_PERFORMED', 'authorized': False}
+
+
 def formal_oos(root):
     """Formal Production ledger (unknown-future, pre-start Signed FINAL only).
 
@@ -144,7 +161,7 @@ def formal_oos(root):
                 'rule': 'R52: numerical consumption requires separate genuine unknown-future OOS + human (Owner) review',
                 'min_settled_production_numerical_races': 100,
                 'threshold_basis': 'PROPOSED (較正・検証運用条項 第12条: 100件以上・目的事象20件以上・訓練/検証分離); Owner decides',
-                'evidence_ready': len(prod) >= 100, 'owner_review': 'NOT_PERFORMED', 'authorized': False},
+                'evidence_ready': len(prod) >= 100, **_owner_gate()},
             'races': rows}
 
 
