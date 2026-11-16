@@ -1,0 +1,24 @@
+# 地方版 2026-11-16 日次総括（途中）（自動・推薦試算・実購入なし）
+
+- 反省済みRace 35／PAPER PFS 141.6%／正式推薦 PFS 39.5%
+- 第一失敗：{'NONE': 6, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1}
+
+| 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
+|---|---|---|---|---|
+| KNZ | 12 | 115.6 | 16.2 | {'NONE': 3, 'WINNER_DISCOVERED_LOW': 2, 'THIRD_MISS': 1, 'P2_MISS': 2, 'WINNER_NOT_DISCOVERED': 1, 'W_WIDTH_OR_ROLE': 2, 'CAPITAL_EFFICIENCY': 1} |
+| MIZ | 12 | 71.0 | None | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1} |
+| OHI | 11 | 245.6 | 41.9 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 2, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 1} |
+
+## 改善優先順位（P0→P1→P2、件数・影響額順）
+
+| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |
+|---|---|---|---|---|
+| P0:KRS_UTILITY_NOT_AVAILABLE | P0 | 4 | 35,780 | RECURRING |
+| P0:FORMAL_HOLD:SOURCE_FREEZE | P0 | 4 | 3,000 | RECURRING |
+| P1:ROLE_W_MISS | P1 | 18 | 26,500 | RECURRING |
+| P1:ROLE_P2_MISS | P1 | 10 | 18,660 | RECURRING |
+| P1:HIT_BUT_LOSS | P1 | 7 | 19,670 | RECURRING |
+| P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 35 | 50,270 | RECURRING |
+
+<sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
