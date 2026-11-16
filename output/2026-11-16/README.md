@@ -17,15 +17,15 @@
 | 最初の失敗 | なし |
 | 初回起動 / Plan完成 / 初予想 / 全Race初版完成 | 21:06:16 / 21:09:19 / 21:09:31 / 21:44:55 |
 | 最早発走 | 11:45 |
-| Provider要求 | 102回・待機3336秒 |
+| Provider要求 | 103回・待機3336秒 |
 
 ## 公式29指数シャドー（候補算術 materialize_candidate・正式Consumerではない）
 
-予想36Rのうち実行36R／378頭×29＝10962セル（期待値 10962）：CALCULATED 9311・RULED-NEUTRAL 1651・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10962／。KRS実試行 0（外部Engine未呼出）。
+予想36Rのうち実行36R／378頭×29＝10962セル（期待値 10962）：CALCULATED 9321・RULED-NEUTRAL 1641・RULED-HOLD 0・NOT-APPLICABLE 0・UNRESOLVED 0。正式経路と同じセル検査：通過 10962／。KRS実試行 0（外部Engine未呼出）。
 
 ## PAPERエンジン vs 公式29指数シャドー（同一出馬表）
 
-比較36R：◎一致 15/36・順位相関（Spearman平均）0.61。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
+比較36R：◎一致 14/36・順位相関（Spearman平均）0.61。シャドーは消費権限なし（Prediction/KRS/Ticket/Capital=false）。
 
 ## 結果照合（PAPER・1点100円・発走前に凍結した最終Revisionのみ）
 
@@ -82,5 +82,5 @@
 | [9R](KNZ_09.md) | 16:55 | POSTRESULT_DIAGNOSTIC | 直前版 | 16:10 | 16:10 | ◎3 ウレシイゴサン | ワイド 3-1 / 3-8<br>三連複 1-3-6 / 1-3-4 / 1-3-9 / 1-3-10 / 1-3-8 | 10-6-3 払戻0円 |
 | [10R](KNZ_10.md) | 17:30 | POSTRESULT_DIAGNOSTIC | 直前版 | 16:45 | 16:45 | ◎6 ハジメテノチュウ | ワイド 6-2 / 6-4<br>三連複 1-2-8 / 1-2-6 / 2-6-8 / 2-6-9 / 2-3-6 / 2-6-7 / 2-4-6 | 2-8-1 払戻1,650円 |
 | [11R](KNZ_11.md) | 18:05 | PRESTART_PUSH_VERIFIED | 直前版 | 17:20 | 17:20 | ◎11 ロット | 単勝 11<br>馬単 11→3,7 |  |
-| [12R](KNZ_12.md) | 18:45 | PRESTART_PUSH_VERIFIED | 朝版 | 21:40 | 21:40 | ◎2 シンリミテス | ワイド 2-3<br>三連複 1-2-3 / 2-3-4 / 2-3-5 / 1-2-4 / 1-2-5 |  |
+| [12R](KNZ_12.md) | 18:45 | PREDICTION_COMPLETE | 直前版 | 18:00 | 18:00 | ◎3 ルージュミラージュ | ワイド 3-2<br>三連複 1-2-3 / 2-3-5 / 2-3-4 / 1-3-5 / 1-3-4 |  |
 
