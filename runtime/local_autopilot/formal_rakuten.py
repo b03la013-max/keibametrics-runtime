@@ -166,7 +166,7 @@ def build_static(race, source_env, rows, numerical, policy, now):
                  'race_date': race['race_date'], 'race_no': race['race_no'], 'surface': 'dirt',
                  'distance': head['distance'], 'class': race.get('class_text') or 'UNKNOWN'},
         'runners': runners, 'required_indices': numerical['required_indices'], 'run_count': 5000,
-        'seed': int(race['race_date'].replace('-', '') + str(race['race_no']).zfill(2)),
+        'seed': 1,   # 実行契約: KRS 5,000回・固定seed 1（研究KRSと同一）
         'static_prediction_frozen': True,
         'static_prediction': {
             'status': 'FROZEN / OWNER-AUTHORIZED / RULE-BASED-UNVALIDATED / RESULT-BLIND',
