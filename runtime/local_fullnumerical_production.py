@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-from local_nar_evidence_candidate import compile_candidate_evidence
+from local_nar_evidence_candidate import compile_candidate_evidence, compile_parsed_candidate_evidence
 from local_fullnumerical_candidate import materialize_candidate, REQUIRED
 from local_bvi_bloodline_research import attach_research
 
@@ -130,7 +130,11 @@ def materialize_production(
     source_artifact: Dict[str, Any],
     request: Dict[str, Any],
     required_indices: Iterable[str],
+    raw_field: Dict[str, Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
+    """raw_field (optional): provider-parsed runner facts for a SOURCE that the
+    caller has already verified (e.g. the Runtime-signed Rakuten race card).
+    When omitted the formal NAR parser is used exactly as before."""
     equivalence = _assert_registry_equivalence()
     required = [str(x) for x in required_indices]
     if len(required) != 29 or set(required) != set(REQUIRED):
@@ -139,11 +143,19 @@ def materialize_production(
         )
 
     # Compile source-derived evidence using the Production rule IDs.
-    compiled = compile_candidate_evidence(
-        source_artifact,
-        copy.deepcopy(request),
-        PRODUCTION_EVIDENCE_REGISTRY,
-    )
+    if raw_field is None:
+        compiled = compile_candidate_evidence(
+            source_artifact,
+            copy.deepcopy(request),
+            PRODUCTION_EVIDENCE_REGISTRY,
+        )
+    else:
+        compiled = compile_parsed_candidate_evidence(
+            source_artifact,
+            copy.deepcopy(request),
+            raw_field,
+            PRODUCTION_EVIDENCE_REGISTRY,
+        )
     attach_research(compiled, source_artifact)
 
     # Reuse the already regression-tested deterministic arithmetic engine. Its

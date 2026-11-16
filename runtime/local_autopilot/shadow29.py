@@ -191,3 +191,60 @@ def research_krs(krs_input, race_id, run_count=5000, seed=1, timeout=300):
         summary['error'] = str(res)[:300]
     summary['stages'] = stages
     return summary, res
+
+
+def run_production(race, runners, html_text, fetched_at):
+    """FORMAL Full29: the Production numerical consumer
+    local_fullnumerical_production.materialize_production() on the
+    Runtime-signed Rakuten card (provider-parsed facts, same Production
+    registries and closure gate). Consumption flags stay exactly as the
+    Production module sets them (prediction/KRS/ticket/capital = False, R52).
+    The KRS input is still the SOURCE-derived technical proxy built from the
+    same compiled evidence (KRS-input consumption is not authorised)."""
+    import os
+    import local_fullnumerical_production as prod
+    from local_nar_evidence_candidate import compile_parsed_candidate_evidence
+    from local_fullnumerical_candidate import materialize_candidate, REQUIRED
+    from local_bvi_bloodline_research import attach_research
+    from local_krs_bridge_candidate import build_candidate_krs
+
+    html_sha = hashlib.sha256(html_text.encode()).hexdigest()
+    src, req, raw = build(race, runners, html_sha, fetched_at)
+    cwd = os.getcwd()
+    os.chdir(REPO)   # Production module resolves its registries relative to the repo root
+    try:
+        prod_out = prod.materialize_production(src, req, REQUIRED, raw_field=raw)   # raises on closure failure
+        comp = compile_parsed_candidate_evidence(src, req, raw, REPO / prod.PRODUCTION_EVIDENCE_REGISTRY)
+        attach_research(comp, src)
+        cand = materialize_candidate(comp, REPO / prod.IMPLEMENTATION_EVIDENCE_REGISTRY, REPO / prod.IMPLEMENTATION_MAPPING)
+        krs = build_candidate_krs(cand)
+    finally:
+        os.chdir(cwd)
+    cov = prod_out['numeric_coverage']
+    # identical arithmetic check: Production values == implementation values cell by cell
+    pv = {(str(r['runner_id']), i): (r.get('canonical_components') or {}).get(i, {}).get('value')
+          for r in prod_out['runners'] for i in REQUIRED}
+    cv = {(str(r['runner_id']), i): (r.get('canonical_components') or {}).get(i, {}).get('value')
+          for r in cand['runners'] for i in REQUIRED}
+    table = [{'no': int(r['runner_id']), 'name': r.get('name'),
+              'indices': {i: (None if (r.get('canonical_components') or {}).get(i, {}).get('value') is None
+                              else round(float(r['canonical_components'][i]['value']), 2)) for i in REQUIRED}}
+             for r in prod_out['runners']]
+    return {'classification': 'FULL29_PRODUCTION_NUMERICAL_MATERIALIZATION', 'provider': 'RAKUTEN_PUBLIC_CARD',
+            'implementation': 'local_fullnumerical_production.materialize_production (Production consumer)',
+            'materializer_profile': prod.PROFILE,
+            'production_numerical_authority': prod_out['production_numerical_authority'],
+            'production_numerical_summary': prod_out['production_numerical_summary'],
+            'numeric_coverage': {k: v for k, v in cov.items() if k != 'unresolved'},
+            'full_terminalization': prod_out['full_terminalization'],
+            'full_numerical_closure': prod_out['full_numerical_closure'],
+            'strict_full_numerical_ready': prod_out['strict_full_numerical_ready'],
+            'index_terminalization_hash': prod_out['index_terminalization_hash'],
+            'index_provenance_hash': prod_out['index_provenance_hash'],
+            'implementation_value_equivalence': 'PASS' if pv == cv else 'MISMATCH',
+            'evidence_registry_id': prod.PROD_REGISTRY_ID, 'mapping_id': prod.PROD_MAPPING_ID,
+            'source_snapshot_sha256': html_sha, 'source_fetched_at': fetched_at,
+            'required_indices': list(REQUIRED), 'runner_count': len(table),
+            'cells': len(table) * len(REQUIRED), 'runners': table,
+            'krs': {'input_mode': 'TECHNICAL_PROXY_DIAGNOSTIC', 'input_sha256': krs['candidate_krs_input_sha256']},
+            '_krs_input': krs['candidate_krs_input_data']}

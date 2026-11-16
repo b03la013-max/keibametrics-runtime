@@ -242,21 +242,28 @@ def run_formal(r, out_dir, deadline):
              universe_sha256=art['official_runner_universe_sha256'])
         guard('NUMERICAL_MATERIALIZATION')
         head = art['rakuten_card_header']
-        sh = shadow29.run({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
-                           'race_date': r['race_date'], 'distance': head.get('distance'), 'surface': head.get('surface'),
-                           'going': head.get('going'), 'race_name': head.get('race_name'), 'post_current': r['post_current'],
-                           'rid': r['rid']}, active, html, snap['fetched_at'])
+        try:
+            sh = shadow29.run_production({'venue_id': r['venue_id'], 'venue_name': r['venue_name'], 'race_no': r['race_no'],
+                                          'race_date': r['race_date'], 'distance': head.get('distance'),
+                                          'surface': head.get('surface'), 'going': head.get('going'),
+                                          'race_name': head.get('race_name'), 'post_current': r['post_current'],
+                                          'rid': r['rid']}, active, html, snap['fetched_at'])
+        except Exception as exc:
+            raise FormalStop('NUMERICAL_MATERIALIZATION', f'PRODUCTION_MATERIALIZER:{type(exc).__name__}:{str(exc)[:200]}')
         krs_input = sh.pop('_krs_input', None)
         arts['full29'] = sh
-        tc = sh.get('terminal_counts') or {}
-        full_term = (sh.get('production_gates') or {}).get('registry_equivalence') == 'PASS' and not tc.get('UNRESOLVED')
-        numerical = {'required_indices': sh.get('required_indices') or [], 'strict_full_numerical_ready': full_term,
-                     'production_numerical_authority': {'prediction_consumption_authorized': False}}
-        if len(numerical['required_indices']) != 29 or not full_term or krs_input is None:
-            raise FormalStop('NUMERICAL_MATERIALIZATION', f"FULL29_NOT_TERMINAL:{tc}:{(sh.get('krs') or {}).get('error')}")
-        mark('NUMERICAL_MATERIALIZATION', cells=sh.get('cells'), terminal_counts=tc)
-        mark('INDEX_PROVENANCE', registry_equivalence=sh['production_gates']['registry_equivalence'],
-             cell_gate_pass=sh['production_gates']['cells'].get('pass'))
+        cov = sh['numeric_coverage']
+        numerical = {'required_indices': sh['required_indices'], 'strict_full_numerical_ready': sh['strict_full_numerical_ready'],
+                     'production_numerical_authority': sh['production_numerical_authority']}
+        if (len(numerical['required_indices']) != 29 or not sh['full_numerical_closure'] or krs_input is None
+                or sh['implementation_value_equivalence'] != 'PASS'):
+            raise FormalStop('NUMERICAL_MATERIALIZATION', f"FULL29_NOT_CLOSED:{cov}:{sh['implementation_value_equivalence']}")
+        mark('NUMERICAL_MATERIALIZATION', materializer=sh['materializer_profile'], cells=sh['cells'],
+             calculated=cov['calculated_count'], ruled_neutral=cov['ruled_neutral_count'],
+             full_numerical_closure=True, terminalization_hash=sh['index_terminalization_hash'])
+        mark('INDEX_PROVENANCE', provenance_hash=sh['index_provenance_hash'],
+             evidence_registry=sh['evidence_registry_id'], mapping=sh['mapping_id'],
+             implementation_value_equivalence=sh['implementation_value_equivalence'])
         guard('STATIC_FREEZE')
         req, ledger = build_static(race, src, active, numerical, policy, _now())
         arts['static_ledger'] = ledger
