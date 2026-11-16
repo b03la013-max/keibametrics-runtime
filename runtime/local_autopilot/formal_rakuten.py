@@ -64,7 +64,10 @@ def runtime_v16_ready():
     _V16['checked'] = time.monotonic()
     try:
         c, h = _call(_endpoint(), '/health16', None, 20)
-        _V16['ready'] = c < 300 and RAKUTEN_PROFILE in (h.get('approved_source_profiles') or [])
+        # REV.1 is known to reject the Rakuten host (SOURCE_HOST_NOT_ALLOWED); do not
+        # spend formal attempts on it.
+        _V16['ready'] = (c < 300 and RAKUTEN_PROFILE in (h.get('approved_source_profiles') or [])
+                         and 'v1.6-REV.1-' not in str(h.get('runtime_revision') or ''))
     except Exception:
         _V16['ready'] = False
     return _V16['ready']
