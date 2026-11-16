@@ -54,6 +54,22 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+_V16 = {'checked': 0.0, 'ready': False}
+
+
+def runtime_v16_ready():
+    """True once the Runtime serves /health16 with the Rakuten profile (probed <= every 5 min)."""
+    if time.monotonic() - _V16['checked'] < 300:
+        return _V16['ready']
+    _V16['checked'] = time.monotonic()
+    try:
+        c, h = _call(_endpoint(), '/health16', None, 20)
+        _V16['ready'] = c < 300 and RAKUTEN_PROFILE in (h.get('approved_source_profiles') or [])
+    except Exception:
+        _V16['ready'] = False
+    return _V16['ready']
+
+
 def _endpoint():
     from runtime.local_autopilot.shadow29 import resolve_endpoint
     return resolve_endpoint()[0]

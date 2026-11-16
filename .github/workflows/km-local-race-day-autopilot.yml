@@ -61,6 +61,12 @@ jobs:
             /runtime/local_bvi_bloodline_research.py
             /runtime/local_krs_bridge_candidate.py
             /runtime/family_runtime_contract.py
+            /runtime/local_production_static_owner.py
+            /runtime/local_physical/nar_source_manifest.py
+            /runtime/minimum_efficient_coverage.py
+            /runtime/capital_policy.py
+            /profiles/family_user_capital_default_20261003_R1.json
+            /profiles/local_production_static_owner_20261116_v1_1.json
             /runtime/execution_gateway.py
             /profiles/current_execution_gateway.json
             /profiles/family_runtime_contracts_*.json
@@ -82,6 +88,7 @@ jobs:
           MODE: ${{ inputs.mode || 'loop' }}
         run: |
           set -uo pipefail
+          python -m pip install -q cryptography || echo "cryptography install failed (formal signature checks will HOLD)"
           export KM_LOCAL_AUTOPILOT_OUT="$GITHUB_WORKSPACE/data/output"
           git -C data config user.name "keibametrics-runtime"
           git -C data config user.email "actions@users.noreply.github.com"

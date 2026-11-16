@@ -54,6 +54,9 @@ CUTOFF_MIN = 3          # Rakuten closes voting 2 min before post; we freeze 3 m
 MAX_ATTEMPTS = 3
 RESULT_DELAY_MIN = 20
 RESEARCH_KRS = os.environ.get('KM_LOCAL_RESEARCH_KRS', '1') == '1'  # non-production research KRS (5,000 / seed 1)
+# Formal Production on the Runtime-signed Rakuten card (Owner instructions 2026-11-16).
+FORMAL = os.environ.get('KM_LOCAL_FORMAL', '1') == '1'
+FORMAL_MIN_LEAD_MIN = 4   # SOURCE waits out Rakuten's 60 s Crawl-delay; never start closer to cutoff
 CODE_VERSION = hashlib.sha256(b''.join(
     (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py', 'sbo.py'))).hexdigest()[:12]
 LOG = []
@@ -468,6 +471,76 @@ def deliver(q, out, now):
     return changed
 
 
+FORMAL_KIND = {'WIN': '単勝', 'PLACE': '複勝', 'WIDE': 'ワイド', 'QUINELLA': '馬連', 'EXACTA': '馬単',
+               'TRIO': '三連複', 'TRIFECTA': '三連単'}
+
+
+def formal_tickets_kb(tickets):
+    """MEC tickets -> settle k/b lines (100-yen units; a 200-yen stake is two lines)."""
+    out = []
+    for t in tickets:
+        k = FORMAL_KIND.get(str(t.get('bet_type')))
+        sel = [str(x) for x in t.get('selection') or []]
+        if not k or not sel:
+            continue
+        b = '→'.join(sel) if k in ('馬単', '三連単') else '-'.join(sel)
+        out += [{'k': k, 'b': b}] * max(1, int(t.get('stake') or 100) // 100)
+    return out
+
+
+def settle_formal(r, key, out, html):
+    f = r.get('formal') or {}
+    if f.get('status') != 'SIGNED_FINAL' or r.get('formal_settlement'):
+        return
+    try:
+        sm = json.loads((out / 'formal' / f'{key}.summary.json').read_text())
+        fp = {'edition': 'FORMAL_SIGNED_FINAL', 'revision_id': 'FORMAL:' + f['final_receipt_sha256'][:16],
+              'ticket_sha256': f['final_receipt_sha256'], 'saved_at': (sm.get('stages') or {}).get('SIGNED_FINAL'),
+              'runners': [{'no': int(x)} for x in sm.get('ranking') or []],
+              'prediction': {'ranking': [{'no': int(x)} for x in sm.get('ranking') or []],
+                             'tickets': formal_tickets_kb(sm.get('tickets') or [])}}
+        st = settle.settle(html, fp, now_jst().isoformat())
+        if st:
+            st['classification'] = 'FORMAL_RECOMMENDATION_SETTLEMENT (no real purchase)'
+            dump(out / 'formal' / f'{key}.result.json', st)
+            r['formal_settlement'] = {k: st.get(k) for k in ('invest', 'refund', 'effective_invest', 'payout', 'pfs',
+                                                              'win_hit', 'diagnosis')}
+            log('FORMAL_RESULT', key, st['invest'], st['payout'])
+    except Exception as exc:
+        log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')
+
+
+def deliver_formal(r, key, sm, now):
+    issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+    if not issue or now >= cutoff(r):
+        return
+    lines = [f"### 【地方版 正式 Signed FINAL】{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
+             f"（予測締切 {cutoff(r).strftime('%H:%M')}）", '',
+             '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
+             '**役割** ' + ' / '.join(f"{c}: " + ','.join(x for x in sm['ranking'] if c in sm['roles'][x])
+                                      for c in ('W', 'P2')),
+             f"**買い目（MEC・推薦試算、実購入なし）** {sm['ticket_count']}点 {sm['total_investment']:,}円", '']
+    by = {}
+    for t in sm.get('tickets') or []:
+        by.setdefault(t.get('bet_type'), []).append('-'.join(map(str, t.get('selection') or [])) + (
+            f"({t.get('stake')}円)" if int(t.get('stake') or 100) != 100 else ''))
+    for k, v in by.items():
+        lines.append(f"- {FORMAL_KIND.get(k, k)}：" + ' '.join(v[:60]) + (' …' if len(v) > 60 else ''))
+    lines += ['', f"<sub>SOURCE=Runtime署名の楽天出馬表／KRS {sm['krs_actual_run_count']}回（未較正・技術Proxy）／"
+                  f"Static Owner v1.1（未検証の順序規則）／FINAL Receipt `{sm['final_receipt_sha256'][:16]}`"
+                  f"（署名検証 local={sm['final_verified_local']} remote={sm['final_verified_remote']}）</sub>"]
+    body = '\n'.join(lines)
+    try:
+        c = _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': body})
+        back = _gh('GET', f"/repos/{DELIVERY_REPO}/issues/comments/{c['id']}")
+        r['formal']['delivery'] = {'USER_DELIVERY_SENT': c['created_at'], 'url': c['html_url'],
+                                   'READBACK_VERIFIED': (back.get('body') or '') == body,
+                                   'USER_REACHED': 'UNVERIFIABLE_GITHUB_NOTIFICATION'}
+        log('FORMAL_DELIVERED', key, c['html_url'])
+    except Exception as exc:
+        log('FORMAL_DELIVERY_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')
+
+
 def frozen_prediction(r, out, key):
     """The last revision frozen before cutoff (immutable rev file), else the
     legacy latest file if it was saved before cutoff (13 Nov races)."""
@@ -651,6 +724,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 jobs.append((1, mins, key, '直前版'))
             elif not have:
                 jobs.append((2, mins, key, '朝版'))
+            elif have[-1] == '直前版' and FORMAL and not r.get('formal') and r.get('formal_attempts', 0) < 2 \
+                    and r.get('rid') and mins > CUTOFF_MIN + FORMAL_MIN_LEAD_MIN \
+                    and __import__('runtime.local_autopilot.formal_rakuten', fromlist=['x']).runtime_v16_ready():
+                jobs.append((1.5, mins, key, 'FORMAL'))
             elif have[-1] == '直前版' and RESEARCH_KRS and not (r.get('research_krs') or {}).get(r['editions'][-1]['rev']) \
                     and r.get('krs_attempts', 0) < MAX_ATTEMPTS \
                     and (out / 'krs' / f"{r['editions'][-1]['rev']}.input.json").exists():
@@ -664,6 +741,25 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 break
             r = q['races'][key]
             try:
+                if edition == 'FORMAL':
+                    r['formal_attempts'] = r.get('formal_attempts', 0) + 1
+                    from runtime.local_autopilot import formal_rakuten
+                    sm, arts = formal_rakuten.run_formal(r, out, cutoff(r))
+                    (out / 'formal').mkdir(exist_ok=True)
+                    for name, obj in arts.items():
+                        dump(out / 'formal' / f'{key}.{name}.json', obj)
+                    dump(out / 'formal' / f'{key}.summary.json', sm)
+                    if sm['status'] == 'SIGNED_FINAL' or r['formal_attempts'] >= 2:
+                        r['formal'] = {k: sm.get(k) for k in ('status', 'first_failed_stage', 'error', 'race_id',
+                                                               'final_receipt_sha256', 'final_verified_remote',
+                                                               'final_verified_local', 'ticket_count', 'total_investment',
+                                                               'no_bet', 'krs_actual_run_count', 'before_cutoff',
+                                                               'elapsed_s')} | {'stages': list(sm.get('stages') or {})}
+                    log('FORMAL', key, sm['status'], sm.get('first_failed_stage'), sm.get('error', '')[:120], sm['elapsed_s'])
+                    if sm['status'] == 'SIGNED_FINAL':
+                        deliver_formal(r, key, sm, now_jst())
+                    changed = True
+                    continue
                 if edition == 'KRS':
                     rev = r['editions'][-1]['rev']
                     r['krs_attempts'] = r.get('krs_attempts', 0) + 1
@@ -698,6 +794,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                                                                   'diagnosis')}
                         r['status'] = 'POSTRESULT_DIAGNOSTIC'
                         log('RESULT', key, st['order'][:3], st['payout'])
+                        settle_formal(r, key, out, html)
                     changed = True
                 else:
                     timing = predict(reader, r, date.fromisoformat(day), edition, out, cards)
@@ -711,7 +808,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 changed = True
                 break
             except Exception as exc:
-                if edition == 'KRS':  # research KRS never affects the race's prediction state
+                if edition in ('KRS', 'FORMAL'):  # research KRS / formal never affect the PAPER prediction state
                     log('KRS_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
                     changed = True
                     continue
