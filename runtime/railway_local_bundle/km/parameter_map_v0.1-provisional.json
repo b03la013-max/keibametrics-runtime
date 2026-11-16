@@ -1,0 +1,29 @@
+{
+  "parameter_map_version": "0.1-provisional",
+  "status": "PROVISIONAL_UNCALIBRATED",
+  "score_noise": {"gate_sd": 8.0, "acquisition_sd": 6.0, "maintenance_sd": 5.0, "progression_sd": 6.0, "final_sd": 5.0},
+  "common_shock_sd": {"pace": 8.0, "track_speed": 5.0, "inside_bias": 7.0, "outside_bias": 7.0, "congestion": 8.0},
+  "strategy_adjustment": {
+    "aggressive": {"intent": 10.0, "position_cost": 7.0, "progression": 2.0},
+    "standard": {"intent": 0.0, "position_cost": 0.0, "progression": 0.0},
+    "conservative": {"intent": -9.0, "position_cost": -3.0, "progression": 5.0}
+  },
+  "stage_weights": {
+    "gate": {"gate_reliability": 0.7, "initial_acceleration": 0.3},
+    "acquisition": {"gate": 0.24, "initial_acceleration": 0.24, "position_intent": 0.18, "inside_cut_ability": 0.08, "outside_press_ability": 0.08, "stalk_acceptance": 0.08, "crowd_tolerance": 0.1},
+    "leader": {"acquisition": 0.52, "leader_need": 0.25, "initial_acceleration": 0.15, "outside_press_ability": 0.08},
+    "maintenance": {"early_position_hold": 0.28, "midrace_hold": 0.25, "sustained_speed": 0.17, "pressure_tolerance": 0.15, "front_friction_tolerance": 0.15},
+    "progression": {"progression_ceiling": 0.28, "progression_timing": 0.14, "corner_acceleration": 0.22, "traffic_escape": 0.16, "long_move_tolerance": 0.2},
+    "final_ability": {"base_competitive_ability": 0.38, "class_strength": 0.14, "condition_fit": 0.15, "distance_fit": 0.13, "surface_fit": 0.1, "sustained_speed": 0.1},
+    "state_resilience": {"training_state": 0.27, "bodyweight_state": 0.23, "comment_state": 0.12, "data_confidence": 0.18, "final_reserve": 0.2}
+  },
+  "cost_coefficients": {"position_cost_scale": 0.22, "friction_cost_scale": 0.26, "pace_cost_scale": 0.22, "path_cost_scale": 0.18, "progression_cost_scale": 0.2},
+  "pace": {"base": 50.0, "front_candidate_add": 2.2, "leader_need_add": 1.6, "competition_add": 7.0, "scenario_low_shift": -12.0, "scenario_high_shift": 14.0},
+  "path": {"inside_gate_fraction": 0.33, "outside_gate_fraction": 0.33, "inside_bias_effect": 5.0, "outside_bias_effect": 5.0, "congestion_effect": 6.0},
+  "position": {"front_band_fraction": 0.34, "mid_band_fraction": 0.67, "rank_momentum": 3.0, "leader_bonus": 3.5},
+  "ers": {"initial_base": 62.0, "reserve_weight": 0.25, "state_weight": 0.15, "min": 5.0, "max": 100.0},
+  "uncertainty": {"low_dcr_mix_to_neutral": 0.35, "high_dcr_mix_to_neutral": 0.05, "neutral": 50.0},
+  "audit": {"sim_xdi_rank_gap": 2, "top_role_rank": 3, "robust_a_scenario_share": 0.8, "robust_b_scenario_share": 0.6, "robust_c_scenario_share": 0.35},
+  "convergence": {"batch_size": 1000, "max_ssr_change_pp": 2.0, "top_rank_stability_count": 2},
+  "display": {"percent_decimals": 1, "top_combinations": 20}
+}

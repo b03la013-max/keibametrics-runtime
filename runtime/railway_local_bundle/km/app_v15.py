@@ -1,0 +1,376 @@
+from __future__ import annotations
+
+from typing import Any, Dict
+
+import app as legacy
+from fastapi import FastAPI, HTTPException
+
+from source_acquisition import SOURCE_PROFILE, acquire_sources, verify_source_artifact, sha_obj
+from nar_source_manifest import PROFILE as NAR_MANIFEST_PROFILE, build_local_nar_manifest
+from nar_runner_universe import (
+    PROFILE as NAR_RUNNER_UNIVERSE_PROFILE,
+    enrich_source_artifact,
+    validate_krs_horses,
+)
+from nar_auxiliary_evidence import (
+    PROFILE as NAR_AUXILIARY_EVIDENCE_PROFILE,
+    enrich_with_auxiliary_evidence,
+)
+from jma_weather_evidence import (
+    PROFILE as JMA_WEATHER_EVIDENCE_PROFILE,
+    build_jma_weather_evidence,
+)
+from local_population_ledger import (
+    PROFILE as LOCAL_POPULATION_LEDGER_PROFILE,
+    enrich_with_population_seed,
+)
+from sbo_public_shadow_evidence import (
+    PROFILE as SBO_PUBLIC_SHADOW_PROFILE,
+    build_sbo_shadow_evidence,
+)
+
+APP_VERSION = "KM-LOCAL-PHYSICAL-RUNTIME-v1.5-REV.8-20260928-RACE-DAY-SOURCE-PARALLEL"
+SOURCE_REQUIRED = True
+legacy.APP_VERSION = APP_VERSION
+
+app = FastAPI(title="KeibaMetrics LOCAL Physical Runtime", version=APP_VERSION)
+
+
+def _require_source_receipt(payload: Dict[str, Any], race_id: str) -> Dict[str, Any]:
+    env = payload.get("source_receipt")
+    if not isinstance(env, dict):
+        raise HTTPException(422, "SOURCE_RECEIPT_REQUIRED")
+    if not legacy.verify_envelope(env):
+        raise HTTPException(422, "SOURCE_RECEIPT_SIGNATURE_INVALID")
+    rec = env.get("receipt") or {}
+    if rec.get("phase") != "SOURCE":
+        raise HTTPException(422, "SOURCE_RECEIPT_PHASE_INVALID")
+    if rec.get("status") != "SOURCE_FROZEN":
+        raise HTTPException(422, "SOURCE_RECEIPT_NOT_FROZEN")
+    if str(rec.get("race_id") or "") != str(race_id):
+        raise HTTPException(422, "SOURCE_RECEIPT_RACE_ID_MISMATCH")
+    valid, errors = verify_source_artifact(env.get("artifact") or {})
+    if not valid:
+        raise HTTPException(422, "SOURCE_ARTIFACT_INVALID:" + ",".join(errors))
+    # Current LOCAL registry/runtime owns the NAR runner consumer only.
+    # A generic SOURCE signature proves bytes, not authority for a new provider
+    # to skip the PRE_KRS/FINAL runner checks. SOURCE-only verification stays
+    # independent; a different consumer needs its own approved implementation.
+    if (env.get("artifact") or {}).get("source_manifest_profile") != NAR_MANIFEST_PROFILE:
+        raise HTTPException(422, "SOURCE_CONSUMER_NOT_AUTHORIZED")
+    return env
+
+
+@app.get("/health")
+def health():
+    h = dict(legacy.health())
+    h["runtime_revision"] = APP_VERSION
+    h["runtime_app_sha256"] = legacy.sha_file(__file__)
+    h["legacy_runtime_app_sha256"] = legacy.sha_file("/opt/km/app.py")
+    h["source_acquisition_profile"] = SOURCE_PROFILE
+    h["source_acquisition_required"] = SOURCE_REQUIRED
+    caps = list(h.get("capabilities") or [])
+    for c in ("SOURCE_ACQUIRE", "SOURCE_VERIFY", "SOURCE_FREEZE"):
+        if c not in caps:
+            caps.insert(0, c)
+    h["capabilities"] = caps
+    h["source_acquisition_sha256"] = legacy.sha_file("/opt/km/source_acquisition.py")
+    h["nar_source_manifest_profile"] = NAR_MANIFEST_PROFILE
+    h["nar_source_manifest_sha256"] = legacy.sha_file("/opt/km/nar_source_manifest.py")
+    h["nar_runner_universe_profile"] = NAR_RUNNER_UNIVERSE_PROFILE
+    h["nar_runner_universe_sha256"] = legacy.sha_file("/opt/km/nar_runner_universe.py")
+    h["nar_auxiliary_evidence_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
+    h["nar_auxiliary_evidence_sha256"] = legacy.sha_file("/opt/km/nar_auxiliary_evidence.py")
+    h["jma_weather_evidence_profile"] = JMA_WEATHER_EVIDENCE_PROFILE
+    h["jma_weather_evidence_sha256"] = legacy.sha_file("/opt/km/jma_weather_evidence.py")
+    h["point_in_time_population_profile"] = LOCAL_POPULATION_LEDGER_PROFILE
+    h["point_in_time_population_sha256"] = legacy.sha_file("/opt/km/local_population_ledger.py")
+    h["sbo_public_shadow_profile"] = SBO_PUBLIC_SHADOW_PROFILE
+    h["sbo_public_shadow_sha256"] = legacy.sha_file("/opt/km/sbo_public_shadow_evidence.py")
+    for c in ("SOURCE_SBO_PUBLIC_SHADOW", "SOURCE_JMA_WEATHER", "SOURCE_POINT_IN_TIME_POPULATION_SEED", "SOURCE_NAR_ENTITY_PROFILES", "SOURCE_SAME_DAY_POSITION_BIAS", "SOURCE_RUNNER_UNIVERSE", "SOURCE_MANIFEST_LOCAL_NAR"):
+        if c not in caps:
+            caps.insert(0, c)
+    h["capabilities"] = caps
+    return h
+
+
+@app.post("/verify")
+def verify(payload: Dict[str, Any]):
+    return legacy.verify(payload)
+
+
+@app.post("/source/manifest/local")
+def source_manifest_local(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    try:
+        return build_local_nar_manifest(payload)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.post("/source/acquire")
+def source_acquire(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    race_id = str(payload.get("race_id") or "")
+    if not race_id:
+        raise HTTPException(422, "RACE_ID_REQUIRED")
+    artifact, errors = acquire_sources(payload)
+    artifact["source_manifest_profile"] = payload.get("manifest_profile")
+    artifact["source_race_context"] = {
+        "venue_id": payload.get("venue_id"),
+        "race_date": payload.get("race_date"),
+        "race_no": payload.get("race_no"),
+    }
+    if payload.get("manifest_profile") == NAR_MANIFEST_PROFILE:
+        try:
+            artifact = enrich_source_artifact(artifact)
+        except Exception as e:
+            errors = list(errors) + ["OFFICIAL_RUNNER_UNIVERSE_EXTRACTION_FAILED:" + str(e)]
+            artifact["formal_ready"] = False
+        if bool(payload.get("include_auxiliary_evidence", True)) and artifact.get("official_runner_universe"):
+            try:
+                artifact, auxiliary_errors = enrich_with_auxiliary_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_profiles=bool(payload.get("require_auxiliary_profiles", False)),
+                )
+                errors = list(errors) + list(auxiliary_errors)
+            except Exception as e:
+                artifact["auxiliary_evidence_error"] = str(e)
+                artifact["auxiliary_source_profile"] = NAR_AUXILIARY_EVIDENCE_PROFILE
+                if bool(payload.get("require_auxiliary_profiles", False)):
+                    errors = list(errors) + ["AUXILIARY_EVIDENCE_REQUIRED_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
+        if bool(payload.get("include_population_seed", True)) and artifact.get("auxiliary_evidence"):
+            try:
+                artifact = enrich_with_population_seed(artifact)
+            except Exception as e:
+                artifact["point_in_time_population_error"] = str(e)
+        if bool(payload.get("include_jma_weather", True)):
+            try:
+                artifact, jma_errors = build_jma_weather_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_weather=bool(payload.get("require_jma_weather", False)),
+                )
+                errors = list(errors) + list(jma_errors)
+            except Exception as e:
+                artifact["jma_weather_error"] = str(e)
+                artifact["jma_weather_profile"] = JMA_WEATHER_EVIDENCE_PROFILE
+                if bool(payload.get("require_jma_weather", False)):
+                    errors = list(errors) + ["JMA_REQUIRED_WEATHER_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
+        if bool(payload.get("include_sbo_shadow", True)):
+            try:
+                artifact, sbo_errors = build_sbo_shadow_evidence(
+                    artifact,
+                    str(payload.get("prediction_cutoff") or ""),
+                    require_sbo=bool(payload.get("require_sbo_shadow", False)),
+                )
+                errors = list(errors) + list(sbo_errors)
+            except Exception as e:
+                artifact["sbo_public_shadow_error"] = str(e)
+                artifact["sbo_public_shadow_profile"] = SBO_PUBLIC_SHADOW_PROFILE
+                if bool(payload.get("require_sbo_shadow", False)):
+                    errors = list(errors) + ["SBO_PUBLIC_SHADOW_REQUIRED_FAILED:" + str(e)]
+                    artifact["formal_ready"] = False
+    artifact["errors"] = list(dict.fromkeys(errors))
+    artifact["source_snapshot_sha256"] = sha_obj(
+        {k: v for k, v in artifact.items() if k != "source_snapshot_sha256"}
+    )
+    status = "SOURCE_FROZEN" if not artifact["errors"] and artifact.get("formal_ready") is True else "FAIL"
+    return legacy.signed_receipt("SOURCE", race_id, status, artifact, artifact["errors"])
+
+
+@app.post("/source/verify")
+def source_verify(payload: Dict[str, Any]):
+    sig = legacy.verify_envelope(payload)
+    rec = payload.get("receipt") or {}
+    valid_artifact, errors = verify_source_artifact(payload.get("artifact") or {})
+    valid = (
+        sig
+        and rec.get("phase") == "SOURCE"
+        and rec.get("status") == "SOURCE_FROZEN"
+        and valid_artifact
+    )
+    return {
+        "valid": bool(valid),
+        "verified": bool(valid),
+        "signature_valid": bool(sig),
+        "artifact_valid": bool(valid_artifact),
+        "errors": errors,
+        "signer_key_id": legacy.SIGNER,
+        "family": legacy.FAMILY,
+        "source_profile": SOURCE_PROFILE,
+    }
+
+
+@app.post("/pre-krs")
+def pre_krs(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    race_id = str(payload.get("race_id") or "")
+    source = _require_source_receipt(payload, race_id)
+    source_artifact = source.get("artifact") or {}
+    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+        valid_universe, universe_errors = validate_krs_horses(
+            source_artifact, payload.get("krs_input_data")
+        )
+        if not valid_universe:
+            raise HTTPException(
+                422,
+                "SOURCE_RUNNER_UNIVERSE_MISMATCH:" + ",".join(universe_errors),
+            )
+    out = legacy.pre_krs(payload)
+    if (out.get("receipt") or {}).get("status") == "PASS":
+        art = dict(out.get("artifact") or {})
+        art["source_receipt_sha256"] = source.get("receipt_sha256")
+        art["source_snapshot_sha256"] = (source.get("artifact") or {}).get("source_snapshot_sha256")
+        out = legacy.signed_receipt("PRE_KRS", race_id, "PASS", art, [])
+    return out
+
+
+@app.post("/krs/execute")
+def krs_execute(payload: Dict[str, Any]):
+    return legacy.krs_execute(payload)
+
+
+@app.post("/final")
+def final(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    race_id = str(payload.get("race_id") or "")
+    source = _require_source_receipt(payload, race_id)
+    source_artifact = source.get("artifact") or {}
+    if source_artifact.get("source_manifest_profile") == NAR_MANIFEST_PROFILE:
+        allowed = {str(r.get("runner_id") or r.get("horse_no")) for r in
+                   (source_artifact.get("official_runner_universe") or {}).get("runners") or []}
+        fpp = payload.get("final_prediction_package") or {}
+        if (not isinstance(fpp, dict) or not isinstance(fpp.get("ranking") or [], list)
+                or not isinstance(fpp.get("roles") or {}, dict)):
+            raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+        references = set(map(str, fpp.get("ranking") or [])) | set(map(str, fpp.get("roles") or {}))
+        for part in (payload.get("final_ticket") or {}, payload.get("minimum_efficient_coverage") or {},
+                     fpp.get("minimum_efficient_coverage") or {}):
+            if not isinstance(part, dict):
+                raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+            tickets = part.get("tickets") or []
+            if not isinstance(tickets, list):
+                raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+            for ticket in tickets:
+                if not isinstance(ticket, dict) or not isinstance(ticket.get("selection"), list):
+                    raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+                references.update(map(str, ticket["selection"]))
+        if not allowed or references - allowed:
+            raise HTTPException(422, "SOURCE_FINAL_RUNNER_UNIVERSE_MISMATCH")
+    out = legacy.final(payload)
+    if (out.get("receipt") or {}).get("status") == "PASS":
+        art = dict(out.get("artifact") or {})
+        art["source_receipt_sha256"] = source.get("receipt_sha256")
+        art["source_snapshot_sha256"] = (source.get("artifact") or {}).get("source_snapshot_sha256")
+        out = legacy.signed_receipt("FINAL", race_id, "PASS", art, [])
+    return out
+
+
+@app.post("/formal")
+def formal(payload: Dict[str, Any]):
+    legacy.validate_family(payload)
+    race_id = str(payload.get("race_id") or "")
+    if not race_id:
+        raise HTTPException(422, "RACE_ID_REQUIRED")
+
+    work = dict(payload)
+    source = work.get("source_receipt")
+    if not isinstance(source, dict) and isinstance(work.get("source_acquisition_request"), dict):
+        req = dict(work["source_acquisition_request"])
+        req["family_id"] = legacy.FAMILY
+        req["race_id"] = race_id
+        source = source_acquire(req)
+        work["source_receipt"] = source
+
+    try:
+        source = _require_source_receipt(work, race_id)
+    except HTTPException as e:
+        return legacy.signed_receipt(
+            "FORMAL",
+            race_id,
+            "FAIL",
+            {"source_receipt": source},
+            [str(e.detail)],
+        )
+
+    pre = pre_krs(work)
+    if (pre.get("receipt") or {}).get("status") != "PASS":
+        return legacy.signed_receipt(
+            "FORMAL",
+            race_id,
+            "FAIL",
+            {"source_receipt": source, "pre_krs_receipt": pre},
+            ["PRE_KRS_FAIL"],
+        )
+
+    run = legacy.krs_execute(
+        {
+            "family_id": legacy.FAMILY,
+            "race_id": race_id,
+            "krs_input_data": work.get("krs_input_data"),
+            "run_count": work.get("run_count", 5000),
+            "seed": work.get("seed", 1),
+        }
+    )
+    if (run.get("receipt") or {}).get("status") != "EXECUTED":
+        return legacy.signed_receipt(
+            "FORMAL",
+            race_id,
+            "FAIL",
+            {"source_receipt": source, "pre_krs_receipt": pre, "krs_run_receipt": run},
+            ["KRS_FAIL"],
+        )
+
+    fin_payload = {
+        "family_id": legacy.FAMILY,
+        "race_id": race_id,
+        "source_receipt": source,
+        "krs_run_receipt": run,
+        "final_prediction_package": work.get("final_prediction_package"),
+        "final_ticket": work.get("final_ticket"),
+        "minimum_efficient_coverage": work.get("minimum_efficient_coverage"),
+        "capital_policy_decision": work.get("capital_policy_decision"),
+        "ticket_transport_trace": work.get("ticket_transport_trace"),
+        "execution_stage_manifest": work.get("execution_stage_manifest"),
+        "final_freeze_timestamp": work.get("final_freeze_timestamp"),
+    }
+    fin = final(fin_payload)
+    if (fin.get("receipt") or {}).get("status") != "PASS":
+        return legacy.signed_receipt(
+            "FORMAL",
+            race_id,
+            "FAIL",
+            {
+                "source_receipt": source,
+                "pre_krs_receipt": pre,
+                "krs_run_receipt": run,
+                "final_receipt": fin,
+            },
+            ["FINAL_FAIL"],
+        )
+
+    artifact = {
+        "source_receipt": source,
+        "pre_krs_receipt": pre,
+        "krs_run_receipt": run,
+        "final_receipt": fin,
+        "source_receipt_sha256": source.get("receipt_sha256"),
+        "source_snapshot_sha256": (source.get("artifact") or {}).get("source_snapshot_sha256"),
+        "requested_run_count": run["artifact"]["requested_run_count"],
+        "actual_run_count": run["artifact"]["actual_run_count"],
+        "input_sha256": run["artifact"]["input_sha256"],
+        "output_sha256": run["artifact"]["output_sha256"],
+        "final_ticket_sha256": fin["artifact"]["ticket_sha256"],
+    }
+    full_numeric=bool((pre.get("artifact") or {}).get("full_numerical_calculation"))
+    status="FULL_FORMAL_E2E_PASS" if full_numeric else "FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS"
+    return legacy.signed_receipt("FORMAL", race_id, status, artifact, [])
+
+
+@app.post("/result")
+def result(payload: Dict[str, Any]):
+    return legacy.result(payload)
