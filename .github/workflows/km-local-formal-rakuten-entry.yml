@@ -1,0 +1,68 @@
+name: KeibaMetrics LOCAL Formal (Rakuten signed SOURCE) entry
+run-name: LOCAL formal ${{ inputs.race_date }} ${{ inputs.race_key }}
+
+# One-race formal Production entry on the Runtime-signed Rakuten race card
+# (Owner instructions 2026-11-16). The continuous LOCAL autopilot worker calls the
+# same runtime/local_autopilot/formal_rakuten.py; this entry exists for acceptance and
+# manual recovery. No purchase; outputs go to local-autopilot-data output/<date>/formal/.
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      race_date: {description: "YYYY-MM-DD", required: true, type: string}
+      race_key: {description: "queue key, e.g. OHI_12", required: true, type: string}
+
+concurrency:
+  group: km-local-formal-${{ inputs.race_date }}-${{ inputs.race_key }}
+  cancel-in-progress: false
+
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /runtime/local_autopilot/*.py
+            /runtime/local_nar_evidence_candidate.py
+            /runtime/local_fullnumerical_candidate.py
+            /runtime/local_fullnumerical_production.py
+            /runtime/local_bvi_bloodline_research.py
+            /runtime/local_krs_bridge_candidate.py
+            /runtime/local_production_static_owner.py
+            /runtime/local_physical/nar_source_manifest.py
+            /runtime/minimum_efficient_coverage.py
+            /runtime/capital_policy.py
+            /runtime/family_runtime_contract.py
+            /runtime/execution_gateway.py
+            /profiles/current_execution_gateway.json
+            /profiles/family_runtime_contracts_*.json
+            /profiles/family_user_capital_default_20261003_R1.json
+            /profiles/local_production_static_owner_20261116_v1_1.json
+            /mapping/local_evidence_feature_rule_registry_v0.1_candidate_20260923.json
+            /mapping/local_evidence_feature_rule_registry_v1.1_production_numerical_20261008.json
+            /mapping/local_full_numerical_mapping_v0.1_candidate_20260923.json
+            /mapping/local_full_numerical_mapping_v1.0_production_20261008.json
+            /research/local_bvi/
+      - uses: actions/checkout@v4
+        with:
+          ref: local-autopilot-data
+          path: data
+          fetch-depth: 5
+      - name: Formal run
+        env:
+          KM_LOCAL_AUTOPILOT_OUT: ${{ github.workspace }}/data/output
+        run: |
+          set -uo pipefail
+          python -m pip install -q cryptography
+          python -m runtime.local_autopilot.formal_rakuten --date "${{ inputs.race_date }}" --key "${{ inputs.race_key }}" | tee formal.log
+          git -C data config user.name "keibametrics-runtime"
+          git -C data config user.email "actions@users.noreply.github.com"
+          git -C data add output/${{ inputs.race_date }}/formal
+          git -C data commit -q -m "LOCAL formal ${{ inputs.race_date }} ${{ inputs.race_key }}" || exit 0
+          for i in 1 2 3; do git -C data pull -q --rebase origin local-autopilot-data && git -C data push -q origin HEAD:local-autopilot-data && break; sleep 5; done
