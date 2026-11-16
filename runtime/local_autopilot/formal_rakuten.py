@@ -86,8 +86,9 @@ def resolve_authority(now):
                                                           'ticket_authority', 'capital_authority')}}
 
 
-def prior_learning_states(out_dir, race_id, source_freeze):
-    """Verified LOCAL RESULT learning states available strictly before this race's SOURCE freeze."""
+def prior_learning_states(out_dir, race_id, source_freeze, pub=None):
+    """Verified LOCAL RESULT learning states available strictly before this race's SOURCE freeze.
+    With `pub`, the RESULT receipt's Ed25519 signature must verify (unsigned/forged states are ignored)."""
     states = []
     if out_dir is None:
         return states
@@ -100,6 +101,12 @@ def prior_learning_states(out_dir, race_id, source_freeze):
         st = art.get('automatic_next_race_learning_state')
         if (rec.get('receipt') or {}).get('status') != 'PASS' or not isinstance(st, dict) or st.get('race_id') == race_id:
             continue
+        if pub is not None:
+            try:
+                if not _verify_sig(rec, pub):
+                    continue
+            except Exception:
+                continue
         states.append(dict(st, effective_time=art.get('review_completed_at'),
                            result_receipt_sha256=rec.get('receipt_sha256')))
     eligible = []
@@ -371,7 +378,7 @@ def run_formal(r, out_dir, deadline):
         freeze = _now().isoformat()
         mark('FINAL_TICKET_FREEZE', ticket_count=len(tickets), total_investment=total)
         freeze_at = datetime.fromisoformat(stages['SOURCE_FREEZE'])
-        states = prior_learning_states(out_dir, race['formal_race_id'], freeze_at)
+        states = prior_learning_states(out_dir, race['formal_race_id'], freeze_at, pub)
         bindings, enforced = [], []
         for st in states:
             for item in st.get('immediate_correctness') or []:
