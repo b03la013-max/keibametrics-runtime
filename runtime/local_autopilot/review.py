@@ -191,7 +191,12 @@ def build(day_dir, key, r):
         formal['refs'] = {'final_receipt_sha256': sm.get('final_receipt_sha256'),
                           'result_receipt_sha256': rr.get('receipt_sha256'),
                           'result_receipt_verified': (r.get('formal_settlement') or {}).get('result_receipt_verified'),
-                          'krs_input_mode': sm.get('krs_input_mode'), 'authority': (sm.get('authority') or {}).get('manifest_id')}
+                          'krs_input_mode': sm.get('krs_input_mode'), 'authority': (sm.get('authority') or {}).get('manifest_id'),
+                          'prediction_consumer': sm.get('prediction_consumer'),
+                          'local_ticket_cap_sha256': sm.get('local_ticket_cap_sha256'),
+                          'signed_final_ticket_count': sm.get('signed_final_ticket_count'),
+                          'signed_final_total_investment': sm.get('signed_final_total_investment'),
+                          'signed_final_settlement': fr.get('signed_final_settlement')}
         formal['first_material_failure'] = ((auto or {}).get('failure_localization') or {}).get('first_material_failure')
     full29 = _load(day_dir / 'formal' / f'{key}.full29.json') if sm else None
     idx_ev = _index_evidence(full29, order)

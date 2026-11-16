@@ -515,11 +515,21 @@ def settle_formal(r, key, out, html):
         frozen_total = int(sm.get('total_investment') or 0)
         if st['invest'] != frozen_total:
             raise ValueError(f"SETTLEMENT_INVEST_{st['invest']}_NE_FROZEN_{frozen_total}")
-        status = 'COMPLETE' if not st['refund'] else 'PARTIAL'
-        settlement = {'status': status, 'investment': frozen_total, 'return': int(st['payout']),
-                      'winning_tickets': [h for t in st.get('tickets') or [] for h in t.get('hits') or []]}
+        # The Runtime RESULT settles the Runtime-signed FINAL ticket set. With the R54 LOCAL ticket cap the
+        # recommendation (st) is the capped subset; the signed full set is settled separately for /result.
+        sf = st
+        if sm.get('signed_final_tickets') is not None:
+            fp_full = dict(fp, prediction=dict(fp['prediction'], tickets=formal_tickets_kb(sm['signed_final_tickets'])))
+            sf = settle.settle_parsed(res, fp_full, f'formal/{key}.summary.json#signed_final', now_jst().isoformat())
+            if sf['invest'] != int(sm.get('signed_final_total_investment') or 0):
+                raise ValueError(f"SIGNED_SETTLEMENT_INVEST_{sf['invest']}_NE_FROZEN_{sm.get('signed_final_total_investment')}")
+            st['signed_final_settlement'] = {k: sf.get(k) for k in ('invest', 'refund', 'effective_invest', 'payout', 'pfs')}
+            st['local_ticket_cap_sha256'] = sm.get('local_ticket_cap_sha256')
+        status = 'COMPLETE' if not sf['refund'] else 'PARTIAL'
+        settlement = {'status': status, 'investment': int(sf['invest']), 'return': int(sf['payout']),
+                      'winning_tickets': [h for t in sf.get('tickets') or [] for h in t.get('hits') or []]}
         if status == 'PARTIAL':
-            settlement['settled_investment'] = int(st['effective_invest'])
+            settlement['settled_investment'] = int(sf['effective_invest'])
         from runtime.local_autopilot import formal_rakuten as fr
         base = fr._endpoint()
         hc, health = fr._call(base, '/health', None, 30)
@@ -538,7 +548,7 @@ def settle_formal(r, key, out, html):
         dump(fdir / f'{key}.result_receipt.json', rec)
         art = (rec.get('artifact') or {}) if isinstance(rec, dict) else {}
         r['formal_settlement'] = {k: st.get(k) for k in ('invest', 'refund', 'effective_invest', 'payout', 'pfs',
-                                                          'win_hit', 'diagnosis')}
+                                                          'win_hit', 'diagnosis', 'signed_final_settlement')}
         r['formal_settlement'].update(
             result_receipt_sha256=st['result_receipt_sha256'], result_receipt_verified=st['result_receipt_verified'],
             runtime_pfs=(art.get('settlement') or {}).get('pfs'),
@@ -560,7 +570,9 @@ def deliver_formal(r, key, sm, now):
              '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
              '**役割** ' + ' / '.join(f"{c}: " + ','.join(x for x in sm['ranking'] if c in sm['roles'][x])
                                       for c in ('W', 'P2')),
-             f"**買い目（MEC・推薦試算、実購入なし）** {sm['ticket_count']}点 {sm['total_investment']:,}円", '']
+             f"**買い目（MEC・推薦試算、実購入なし）** {sm['ticket_count']}点 {sm['total_investment']:,}円"
+             + (f"（地方版上限{sm['ticket_count']}点適用／署名FINALのMEC全体 {sm['signed_final_ticket_count']}点 "
+                f"{sm['signed_final_total_investment']:,}円）" if sm.get('local_ticket_cap_sha256') else ''), '']
     by = {}
     for t in sm.get('tickets') or []:
         by.setdefault(t.get('bet_type'), []).append('-'.join(map(str, t.get('selection') or [])) + (

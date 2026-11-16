@@ -13,7 +13,7 @@ R53 = json.loads((ROOT / "profiles/KM_FAMILY_CURRENT_AUTHORITY_20261116_R53.json
 
 
 def test_r53_resolves_from_2026_11_17_jst():
-    _, a = g.resolve_current_authority(ROOT, now=datetime(2026, 11, 17, tzinfo=timezone.utc))
+    _, a = g.resolve_current_authority(ROOT, now=datetime(2026, 11, 16, 15, 0, 1, 500000, tzinfo=timezone.utc))  # R54 supersedes 1 s later
     assert a["manifest_id"] == R53["manifest_id"]
     assert a["predecessor"] == R52["manifest_id"]
 

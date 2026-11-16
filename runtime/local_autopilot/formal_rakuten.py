@@ -78,12 +78,47 @@ def resolve_authority(now):
     """Current family authority at this instant (canonical resolver) and the LOCAL consumption flags."""
     from family_authority_guard import resolve_current_authority
     path, a = resolve_current_authority(REPO, now=now)
-    b = ((a.get('family_scoped_authority') or {}).get('LOCAL') or {}).get('numerical_consumption_boundary') or {}
+    L = (a.get('family_scoped_authority') or {}).get('LOCAL') or {}
+    b = L.get('numerical_consumption_boundary') or {}
     return {'manifest_id': a.get('manifest_id'), 'path': str(path.relative_to(REPO)),
             'file_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'effective_at': a.get('effective_at'),
             'resolved_at': now.isoformat(),
             'consumption': {k: b.get(k) is True for k in ('prediction_authority', 'krs_input_authority',
-                                                          'ticket_authority', 'capital_authority')}}
+                                                          'ticket_authority', 'capital_authority')},
+            'numerical_prediction_consumer': _active(L.get('numerical_prediction_consumer')),
+            'local_ticket_cap': _active(L.get('local_ticket_cap'))}
+
+
+def _active(x):
+    return x if isinstance(x, dict) and x.get('status') == 'ACTIVE' else None
+
+
+def numerical_ranking(full29):
+    """R54 numerical prediction consumer: existing candidate arithmetic
+    (local_krs_bridge_candidate.build_candidate_prediction) on the Production Full29 values."""
+    from local_krs_bridge_candidate import build_candidate_prediction
+    req = {'runners': [{'runner_id': str(x['no']), 'name': x.get('name'),
+                        'canonical_components': {i: {'value': v} for i, v in x['indices'].items()}}
+                       for x in full29['runners']]}
+    cp = build_candidate_prediction(req)['candidate_static_prediction']
+    return cp['ranking'], {k: cp[k] for k in ('profile', 'ranking', 'runner_scores')}
+
+
+def cap_tickets(tickets, ranking, cap):
+    """R54 LOCAL ticket cap: keep <= cap tickets of the MEC set by tier, numerical rank sum, MEC order."""
+    tier = {'CORE': 0, 'PROTECTION': 1, 'TAIL': 2}
+    pos = {str(h): i for i, h in enumerate(ranking)}
+    order = sorted(range(len(tickets)), key=lambda i: (tier.get(str(tickets[i].get('mec_tier')), 3),
+                                                        sum(pos.get(str(x), 99) for x in tickets[i]['selection']), i))
+    keep = sorted(order[:cap])
+    kept = [copy.deepcopy(tickets[i]) for i in keep]
+    dropped = [tickets[i] for i in order[cap:]]
+    rec = {'max_tickets': cap, 'mec_ticket_count': len(tickets), 'kept_count': len(kept),
+           'kept_investment': sum(int(t.get('stake') or 100) for t in kept),
+           'dropped_count': len(dropped), 'dropped_coverage_ids': sorted({c for t in dropped for c in t.get('coverage_ids') or []}),
+           'tickets': kept}
+    rec['sha256'] = _sha(rec)
+    return rec
 
 
 def prior_learning_states(out_dir, race_id, source_freeze, pub=None):
@@ -150,7 +185,7 @@ def _verify_sig(env, public_b64):
 
 
 # ---------------------------------------------------------------- Static Owner v1.1
-def build_static(race, source_env, rows, numerical, policy, now):
+def build_static(race, source_env, rows, numerical, policy, now, ranked_override=None, consumer=None):
     """Port of local_production_static_owner.build_formal_static (same ordinal rule set)
     onto the Runtime-signed Rakuten card. No 29-index numbers, odds or results."""
     from runtime.local_production_static_owner import _runner_facts
@@ -179,11 +214,17 @@ def build_static(race, source_env, rows, numerical, policy, now):
         vals = (f['exact_wins'], f['exact_podiums'], f['exact_best_finish_share'], f['venue_best_finish_share'],
                 f['recent_dirt_finish_share'], f['dirt_best_finish_share'])
         return tuple(-float(v) if v is not None else 0 for v in vals) + (int(rid),)
-    ranked = sorted(ids, key=rank_key)
+    static_ranked = sorted(ids, key=rank_key)
+    if ranked_override is not None:
+        if sorted(ranked_override) != sorted(ids):
+            raise FormalStop('STATIC_FREEZE', 'NUMERICAL_RANKING_UNIVERSE_MISMATCH')
+        ranked = list(ranked_override)
+    else:
+        ranked = static_ranked
     n = len(ranked)
     heads, seconds, thirds = ranked[:min(n, 3)], ranked[:min(n, 6)], ranked[:min(n, 9)]
     unknown = [rid for rid in ranked if facts[rid]['unknown_exact_course']]
-    if unknown and not any(x in thirds for x in unknown) and n > len(thirds):
+    if ranked_override is None and unknown and not any(x in thirds for x in unknown) and n > len(thirds):
         thirds = thirds[:-1] + [unknown[0]]
     roles = {rid: [c for c, pool in (('W', heads), ('P2', seconds)) if rid in pool] + ['P3'] for rid in ranked}
     role_registry = [{'runner_id': rid, 'column': c, 'status': 'CORE' if rid in heads else 'PROTECTED'}
@@ -216,7 +257,8 @@ def build_static(race, source_env, rows, numerical, policy, now):
         'seed': 1,   # 実行契約: KRS 5,000回・固定seed 1（研究KRSと同一）
         'static_prediction_frozen': True,
         'static_prediction': {
-            'status': 'FROZEN / OWNER-AUTHORIZED / RULE-BASED-UNVALIDATED / RESULT-BLIND',
+            'status': ('FROZEN / OWNER-AUTHORIZED R54 NUMERICAL CONSUMER (candidate ranking, Static widths 3/6/9) / RESULT-BLIND'
+                       if ranked_override is not None else 'FROZEN / OWNER-AUTHORIZED / RULE-BASED-UNVALIDATED / RESULT-BLIND'),
             'ranking': ranked, 'marks': marks, 'roles': roles,
             'uncertainty': {rid: ('EXACT_COURSE_UNKNOWN / PROTECTED_NOT_WEAK' if facts[rid]['unknown_exact_course']
                                   else 'EXACT_COURSE_OBSERVED') for rid in ranked},
@@ -231,7 +273,9 @@ def build_static(race, source_env, rows, numerical, policy, now):
     ledger = {'profile': policy['profile'], 'status': 'OWNER_AUTHORIZED_UNVALIDATED_PRESTART_STATIC',
               'frozen_at': now.isoformat(), 'source_receipt_sha256': source_env['receipt_sha256'],
               'full_universe': ranked, 'observed_facts': facts, 'uncalibrated': True,
-              'numerical_prediction_consumption': False, 'odds_consumed': False, 'result_consumed': False}
+              'numerical_prediction_consumption': ranked_override is not None, 'odds_consumed': False, 'result_consumed': False,
+              'static_owner_v1_1_shadow_ranking': static_ranked,
+              'numerical_prediction_consumer': (consumer or {}).get('profile') if ranked_override is not None else None}
     ledger['sha256'] = _sha(ledger)
     return req, ledger
 
@@ -315,7 +359,11 @@ def run_formal(r, out_dir, deadline):
              evidence_registry=sh['evidence_registry_id'], mapping=sh['mapping_id'],
              implementation_value_equivalence=sh['implementation_value_equivalence'])
         guard('STATIC_FREEZE')
-        req, ledger = build_static(race, src, active, numerical, policy, _now())
+        consumer = authority.get('numerical_prediction_consumer')
+        num_rank, num_pred = (numerical_ranking(sh) if consumer else (None, None))
+        if num_pred:
+            arts['numerical_prediction'] = num_pred
+        req, ledger = build_static(race, src, active, numerical, policy, _now(), ranked_override=num_rank, consumer=consumer)
         arts['static_ledger'] = ledger
         mark('STATIC_FREEZE', ledger_sha256=ledger['sha256'], ranking=req['static_prediction']['ranking'])
         roles = req['static_prediction']['roles']
@@ -394,7 +442,14 @@ def run_formal(r, out_dir, deadline):
                              'immediate_correctness': st.get('immediate_correctness') or [],
                              'shadow_candidates': st.get('shadow_candidates') or [],
                              'use': 'IMMEDIATE_CORRECTNESS_ENFORCED + SHADOW_RECORDED (production_change_authorized=false)'})
+        cap_cfg = authority.get('local_ticket_cap')
+        capped = cap_tickets(tickets, req['static_prediction']['ranking'], int(cap_cfg['max_tickets'])) \
+            if cap_cfg and not no_bet else None
+        if capped:
+            mark('LOCAL_TICKET_CAP', max_tickets=capped['max_tickets'], mec_ticket_count=capped['mec_ticket_count'],
+                 kept=capped['kept_count'], kept_investment=capped['kept_investment'], sha256=capped['sha256'])
         fpp = {'ranking': req['static_prediction']['ranking'], 'roles': roles, 'marks': req['static_prediction']['marks'],
+               'local_ticket_cap': capped, 'prediction_consumer': (consumer or {}).get('profile'),
                'source_snapshot_sha256': art['source_snapshot_sha256'], 'static_ledger_sha256': ledger['sha256'],
                'local_krs_input_sha256': _sha(kin), 'krs_input_mode': kin['keibametrics_input_authority']['input_mode'],
                'minimum_efficient_coverage': mec,
@@ -427,10 +482,14 @@ def run_formal(r, out_dir, deadline):
         summary.update(status='SIGNED_FINAL', final_receipt_sha256=fin['receipt_sha256'],
                        formal_status='FULL_FORMAL_E2E_PASS' if full_numeric_pre else 'FORMAL_E2E_TERMINALIZED_PROXY_KRS_PASS',
                        final_verified_remote=vfc < 300 and vf.get('valid') is True, final_verified_local=True,
-                       ticket_count=len(tickets), total_investment=total, no_bet=no_bet,
+                       ticket_count=len(capped['tickets']) if capped else len(tickets),
+                       total_investment=capped['kept_investment'] if capped else total, no_bet=no_bet,
+                       signed_final_ticket_count=len(tickets), signed_final_total_investment=total,
+                       signed_final_tickets=tickets, local_ticket_cap_sha256=(capped or {}).get('sha256'),
+                       prediction_consumer=(consumer or {}).get('profile'),
                        ranking=fpp['ranking'], marks=fpp['marks'],
                        roles={k: v for k, v in roles.items()}, krs_actual_run_count=ka['actual_run_count'],
-                       before_cutoff=_now() < deadline, tickets=tickets,
+                       before_cutoff=_now() < deadline, tickets=capped['tickets'] if capped else tickets,
                        krs_input_mode=kin['keibametrics_input_authority']['input_mode'],
                        learning_state_bindings=[b['state_id'] for b in bindings])
         stages['SIGNED_FINAL'] = _now().isoformat()
