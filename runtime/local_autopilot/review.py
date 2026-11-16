@@ -364,6 +364,32 @@ def _impact(b):
     return -pl if isinstance(pl, (int, float)) and pl < 0 else 0
 
 
+ACC_KEYS = ('winner_pre_rank_1', 'winner_in_top3', 'winner_in_W', 'second_in_P2', 'third_in_P3',
+            'winner_is_ticket_head', 'trio_set_covered')
+
+
+def _accuracy(reviews):
+    """Accuracy measured separately from PFS (vision: 精度・回収・規格を別々に測る). Rates in %, per track,
+    overall and per venue. Evidence only: never consumed by ranking, tickets or capital."""
+    def one(bs, track):
+        ev = [(b.get(track) or {}).get('evaluation') for b in bs]
+        ev = [e for e in ev if e]
+        if not ev:
+            return None
+        flag = {'winner_pre_rank_1': lambda e: e.get('winner_pre_rank') == 1,
+                'winner_in_top3': lambda e: isinstance(e.get('winner_pre_rank'), int) and e['winner_pre_rank'] <= 3}
+        out = {'races': len(ev)}
+        for k in ACC_KEYS:
+            f = flag.get(k, lambda e, k=k: e.get(k) is True)
+            out[k] = round(100 * sum(1 for e in ev if f(e)) / len(ev), 1)
+        out['mean_top3_capture'] = round(sum(e.get('top3_capture') or 0 for e in ev) / len(ev), 2)
+        return out
+    venues = sorted({b['venue'] for b in reviews})
+    return {track: {'all': one(reviews, track),
+                    'by_venue': {v: one([b for b in reviews if b['venue'] == v], track) for v in venues}}
+            for track in ('paper', 'formal_recommendation')}
+
+
 def _aggregate(reviews):
     by_venue = defaultdict(lambda: {'races': 0, 'paper_eff': 0, 'paper_pay': 0, 'formal_eff': 0, 'formal_pay': 0,
                                     'first_failure': Counter()})
@@ -395,7 +421,7 @@ def _aggregate(reviews):
                      for k, a in props.items()),
                     key=lambda x: (tier_rank.get(x['tier'], 9), -x['count'], -x['impact_yen']))
     tot = lambda f: sum(v[f] for v in venues.values())
-    return {'races': len(reviews), 'by_venue': venues,
+    return {'races': len(reviews), 'by_venue': venues, 'accuracy': _accuracy(reviews),
             'all_local': {'paper_pfs': round(100 * tot('paper_payout') / tot('paper_effective_invest'), 1) if tot('paper_effective_invest') else None,
                           'formal_pfs': round(100 * tot('formal_payout') / tot('formal_effective_invest'), 1) if tot('formal_effective_invest') else None,
                           'first_failure': dict(sum((Counter(v['first_failure']) for v in venues.values()), Counter()))},
@@ -423,6 +449,14 @@ def _summary_md(title, s):
          f"- 第一失敗：{s['all_local']['first_failure']}", '', '| 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |', '|---|---|---|---|---|']
     for k, v in s['by_venue'].items():
         L.append(f"| {k} | {v['races']} | {v['paper_pfs']} | {v['formal_pfs']} | {v['first_failure']} |")
+    acc = s.get('accuracy') or {}
+    L += ['', '## 精度（回収とは別に測定）', '',
+          '| 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |',
+          '|---|---|---|---|---|---|---|---|---|---|']
+    for track, label in (('paper', 'PAPER'), ('formal_recommendation', '正式推薦')):
+        a = (acc.get(track) or {}).get('all')
+        if a:
+            L.append(f"| {label} | {a['races']} | " + ' | '.join(f"{a[k]}%" for k in ACC_KEYS) + f" | {a['mean_top3_capture']} |")
     L += ['', '## 改善優先順位（P0→P1→P2、件数・影響額順）', '', '| ID | 区分 | 件数 | 影響額(円) | 証拠の強さ |', '|---|---|---|---|---|']
     for p in s['improvement_priority'][:20]:
         L.append(f"| {p['id']} | {p['tier']} | {p['count']} | {p['impact_yen']:,} | {p['evidence_strength']} |")

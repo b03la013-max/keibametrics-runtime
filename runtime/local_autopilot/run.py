@@ -301,7 +301,9 @@ def predict(reader, r, today, edition, out, cards):
     slim = {k: v for k, v in res.items() if k not in ('rows', 'order', 'ana')}
     slim['ranking'] = [{k: x.get(k) for k in ('mark', 'no', 'name', 'jockey', 'win', 'TPIF', 'SRI', 'EVI', 'NCI',
                                              'T3I', 'F3S', 'OPI', 'VMI', 'CCI', 'TRI', 'TMI', 'KBA', 'PACE',
-                                             'p_win', 'role')} for x in res['order']]
+                                             'p_win', 'role',
+                                             # evidence only (shadow measurement: body weight / market); not consumed
+                                             'frame', 'bw', 'bw_change', 'place_low', 'BWI')} for x in res['order']]
     slim['sbo'] = sbo_meta
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
@@ -930,6 +932,13 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     rv.write_periods(ROOT)
                 except Exception as exc:
                     log('REVIEW_SUMMARY_FAIL', type(exc).__name__, str(exc)[:120])
+                try:  # evidence-only shadow measurement (allocation / payout band / NO-BET flags / market / body weight)
+                    from runtime.local_autopilot import shadow_measure as smz
+                    o = smz.measure(ROOT)
+                    (ROOT / 'shadow_measure.json').write_text(json.dumps(o, ensure_ascii=False, indent=1) + '\n')
+                    (ROOT / 'shadow_measure.md').write_text(smz.md(o))
+                except Exception as exc:
+                    log('SHADOW_MEASURE_FAIL', type(exc).__name__, str(exc)[:120])
             try:
                 from runtime.local_autopilot import forward
                 forward.write(ROOT)
