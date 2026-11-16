@@ -489,25 +489,66 @@ def formal_tickets_kb(tickets):
 
 
 def settle_formal(r, key, out, html):
+    """Formal RESULT closed loop: settle the frozen Signed-FINAL tickets against the
+    official result (recommendation only, no purchase), then submit the official
+    result + settlement to the Runtime /result, which re-verifies the FINAL receipt,
+    runs the automatic post-result review / next-race learning state and signs a
+    RESULT receipt. The receipt signature is verified here before it is recorded."""
     f = r.get('formal') or {}
-    if f.get('status') != 'SIGNED_FINAL' or r.get('formal_settlement'):
+    if f.get('status') != 'SIGNED_FINAL' or (r.get('formal_settlement') or {}).get('result_receipt_verified'):
         return
+    r['formal_result_attempts'] = r.get('formal_result_attempts', 0) + 1
     try:
-        sm = json.loads((out / 'formal' / f'{key}.summary.json').read_text())
+        fdir = out / 'formal'
+        sm = json.loads((fdir / f'{key}.summary.json').read_text())
+        fin = json.loads((fdir / f'{key}.final_receipt.json').read_text())
         fp = {'edition': 'FORMAL_SIGNED_FINAL', 'revision_id': 'FORMAL:' + f['final_receipt_sha256'][:16],
               'ticket_sha256': f['final_receipt_sha256'], 'saved_at': (sm.get('stages') or {}).get('SIGNED_FINAL'),
               'runners': [{'no': int(x)} for x in sm.get('ranking') or []],
               'prediction': {'ranking': [{'no': int(x)} for x in sm.get('ranking') or []],
                              'tickets': formal_tickets_kb(sm.get('tickets') or [])}}
-        st = settle.settle(html, fp, now_jst().isoformat())
-        if st:
-            st['classification'] = 'FORMAL_RECOMMENDATION_SETTLEMENT (no real purchase)'
-            dump(out / 'formal' / f'{key}.result.json', st)
-            r['formal_settlement'] = {k: st.get(k) for k in ('invest', 'refund', 'effective_invest', 'payout', 'pfs',
-                                                              'win_hit', 'diagnosis')}
-            log('FORMAL_RESULT', key, st['invest'], st['payout'])
+        res = settle.parse_result(html)
+        if res is None:
+            return
+        st = settle.settle_parsed(res, fp, f'formal/{key}.summary.json', now_jst().isoformat())
+        st['classification'] = 'FORMAL_RECOMMENDATION_SETTLEMENT (no real purchase)'
+        frozen_total = int(sm.get('total_investment') or 0)
+        if st['invest'] != frozen_total:
+            raise ValueError(f"SETTLEMENT_INVEST_{st['invest']}_NE_FROZEN_{frozen_total}")
+        status = 'COMPLETE' if not st['refund'] else 'PARTIAL'
+        settlement = {'status': status, 'investment': frozen_total, 'return': int(st['payout']),
+                      'winning_tickets': [h for t in st.get('tickets') or [] for h in t.get('hits') or []]}
+        if status == 'PARTIAL':
+            settlement['settled_investment'] = int(st['effective_invest'])
+        from runtime.local_autopilot import formal_rakuten as fr
+        base = fr._endpoint()
+        hc, health = fr._call(base, '/health', None, 30)
+        rc, rec = fr._call(base, '/result', {
+            'family_id': 'LOCAL', 'race_id': sm['race_id'], 'final_receipt': fin,
+            'official_result': {'finish_order': [int(x) for x in res['order']],
+                                'non_starters': sorted(res.get('non_starters') or []),
+                                'source': 'RAKUTEN_RACE_RESULT', 'result_available_at': now_jst().isoformat()},
+            'settlement': settlement, 'pfs_authority': 'FORMAL_RECOMMENDATION_ONLY_NO_PURCHASE'}, 120)
+        verified = (rc < 300 and isinstance(rec, dict) and (rec.get('receipt') or {}).get('status') == 'PASS'
+                    and fr._verify_sig(rec, health['receipt_public_key_b64']))
+        st['result_receipt_sha256'] = rec.get('receipt_sha256') if isinstance(rec, dict) else None
+        st['result_receipt_verified'] = bool(verified)
+        st['result_receipt_errors'] = (rec.get('receipt') or {}).get('errors') if isinstance(rec, dict) else str(rec)[:200]
+        dump(fdir / f'{key}.result.json', st)
+        dump(fdir / f'{key}.result_receipt.json', rec)
+        art = (rec.get('artifact') or {}) if isinstance(rec, dict) else {}
+        r['formal_settlement'] = {k: st.get(k) for k in ('invest', 'refund', 'effective_invest', 'payout', 'pfs',
+                                                          'win_hit', 'diagnosis')}
+        r['formal_settlement'].update(
+            result_receipt_sha256=st['result_receipt_sha256'], result_receipt_verified=st['result_receipt_verified'],
+            runtime_pfs=(art.get('settlement') or {}).get('pfs'),
+            first_material_failure=(art.get('failure_localization') or {}).get('primary_failure'),
+            learning_state_id=(art.get('learning_event') or {}).get('state_id'),
+            learning_production_change_authorized=(art.get('learning_event') or {}).get('production_change_authorized'))
+        log('FORMAL_RESULT', key, st['invest'], st['payout'], 'RESULT_RECEIPT_VERIFIED' if verified else
+            f"RESULT_RECEIPT_NOT_VERIFIED:{rc}:{st['result_receipt_errors']}")
     except Exception as exc:
-        log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')
+        log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
 
 
 def deliver_formal(r, key, sm, now):
@@ -714,6 +755,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 if results and r['editions'] and not r.get('settlement') and mins <= -RESULT_DELAY_MIN \
                         and r.get('result_attempts', 0) < MAX_ATTEMPTS:
                     jobs.append((3, mins, key, 'RESULT'))
+                elif results and r.get('settlement') and (r.get('formal') or {}).get('status') == 'SIGNED_FINAL' \
+                        and not (r.get('formal_settlement') or {}).get('result_receipt_verified') \
+                        and r.get('formal_result_attempts', 0) < 3:
+                    jobs.append((3, mins, key, 'FORMAL_RESULT'))
                 continue
             if r['status'] == 'PREDICTION_FAILURE' and r['attempts'] >= MAX_ATTEMPTS:
                 if r.get('failed_code') == CODE_VERSION:
@@ -776,6 +821,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     log('KRS', key, rev, sm['http_status'], sm.get('actual_run_count'), list(sm['stages'])[-1], sm['elapsed_s'])
                     changed = True
                     continue
+                if edition == 'FORMAL_RESULT':
+                    settle_formal(r, key, out, reader.result_page(r['rid']))
+                    changed = True
+                    continue
                 if edition == 'RESULT':
                     r['result_attempts'] = r.get('result_attempts', 0) + 1
                     fp = frozen_prediction(r, out, key)
@@ -808,7 +857,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                 changed = True
                 break
             except Exception as exc:
-                if edition in ('KRS', 'FORMAL'):  # research KRS / formal never affect the PAPER prediction state
+                if edition in ('KRS', 'FORMAL', 'FORMAL_RESULT'):  # research KRS / formal never affect the PAPER prediction state
                     log('KRS_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
                     changed = True
                     continue
