@@ -1,0 +1,61 @@
+{
+ "manifest_id": "KM-LOCAL-FORMAL-RAKUTEN-SOURCE-AMENDMENT-20261116-R1",
+ "status": "OWNER-INSTRUCTED / ACTIVE-ON-RUNTIME-v1.6 / FIRST-LIVE-ACCEPTANCE-PENDING",
+ "amends": "KM-FAMILY-CURRENT-AUTHORITY-20261115-R52 (LOCAL family scope only)",
+ "owner_instructions": [
+  "2026-11-16 16:26 JST 楽天競馬をソースにしてください",
+  "2026-11-16 16:32 JST 正式Static Ownerの対象：地方平地14場すべて（ばんえい除外）",
+  "2026-11-16 16:32 JST RailwayのRuntime変更とDeployを承認（権限ファイルのRev.更新を含む）",
+  "2026-11-16 17:19 JST まだできていないことを完成させなさい"
+ ],
+ "formal_source": {
+  "profile": "KM-LOCAL-RAKUTEN-SOURCE-MANIFEST-v1.0-20261116",
+  "provider": "楽天競馬 public race card (keiba.rakuten.co.jp/race_card/list/RACEID/<18 digits>)",
+  "acquired_and_signed_by": "LOCAL Runtime (witnessstrictimage) app_v16 — runtime-side fetch, robots.txt + Crawl-delay honoured",
+  "reason": "keiba.go.jp robots.txt disallows /KeibaWeb/TodayRaceInfo/ for crawlers; Owner instructed Rakuten",
+  "nar_profile_kept": "KM-LOCAL-NAR-SOURCE-MANIFEST-v1.0-20260923 (unchanged; blocked by robots)"
+ },
+ "runtime": {
+  "revision": "KM-LOCAL-PHYSICAL-RUNTIME-v1.6-REV.1-20261116-RAKUTEN-SOURCE",
+  "bundle": "runtime/railway_local_bundle (repo build pinned to commit efbdcaf6)",
+  "app_v16_sha256": "74b7e0964168e24a4515353d2150ac99cefa0be8a78afa48743a77c4469776d9",
+  "rakuten_parser_sha256": "8e17c4f090279141c6317f3e65affcdb0d258a89ac45a23857fde089263cd4a8",
+  "pinned_v15_bundle_unchanged": true,
+  "health_fields_unchanged": true,
+  "engine_sha256": "9929df994aa7964173edef9af7e9a705628ce377babf22df3af4e280fc275421",
+  "parameter_map_sha256": "d8c027ee5bcc8fd3d2c248e8059b341776be38910e833d7589f09ab817c161f5",
+  "receipt_signer": "KM-LOCAL-RUNTIME-ED25519-20260922"
+ },
+ "static_owner": {
+  "profile": "KM-LOCAL-PRODUCTION-STATIC-EVIDENCE-OWNER-v1.1-20261116",
+  "file": "profiles/local_production_static_owner_20261116_v1_1.json",
+  "file_sha256": "256e599af824bb939382cc234031cbefe5a1c062bad037696352ff1fe7a4517b",
+  "venues": [
+   "MON",
+   "MOR",
+   "MIZ",
+   "URW",
+   "FNB",
+   "OHI",
+   "KAW",
+   "KNZ",
+   "KSM",
+   "NGY",
+   "SON",
+   "HIM",
+   "KCH",
+   "SAG"
+  ],
+  "rule_set": "identical ordinal past-start heuristic to v1.0 (UNVALIDATED); no 29-index numbers, odds or results"
+ },
+ "formal_runner": {
+  "module": "runtime/local_autopilot/formal_rakuten.py",
+  "sha256": "a2dcb5fca9cdb1bbc25d23d24036d844535e0154e96d190ff1f8083a888187e4",
+  "invoked_by": "km-local-race-day-autopilot (after each 直前版) and km-local-formal-rakuten-entry (one race)"
+ },
+ "numerical_consumption_boundary": "UNCHANGED (R52): prediction / KRS-input / ticket / capital numerical consumers false; KRS input = SOURCE-derived TECHNICAL_PROXY_DIAGNOSTIC",
+ "capital": "RECOMMENDATION_ONLY; no real purchase",
+ "ban_family": "EXCLUDED / independent HOLD",
+ "rollback": "Railway: redeploy commit 4a2af618 (app_v15 start); set KM_LOCAL_FORMAL=0 in the autopilot workflow; this amendment then reads INACTIVE",
+ "sha256": "266a72beb542df2380934a8696beebb734e09d397ad95f7fb6ca91e28f354e39"
+}
