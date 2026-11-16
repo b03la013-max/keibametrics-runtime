@@ -29,7 +29,7 @@
 - 署名FINAL 5R／精算 5R／署名RESULT検証 5R
 - 実効投資 69,600円／払戻 26,000円／PFS 37.4%／正式◎1着 2
 - 正式29指数（Production計算器・未消費）のF3S-L順：3R中 1着的中 0／上位3頭の3着内捕捉 5（正式Static 4）
-- 数値Consumer昇格ゲート：精算 3/100R・Ownerレビュー NOT_PERFORMED・承認 False
+- 数値Consumer昇格ゲート：精算 3/100R・Ownerレビュー OWNER_APPROVED (2026-11-16)・承認 True
 
 | 日付 | Race | FINAL | 精算 | 投資 | 払戻 | RESULT署名 | 第一失敗 |
 |---|---|---|---|---|---|---|---|
