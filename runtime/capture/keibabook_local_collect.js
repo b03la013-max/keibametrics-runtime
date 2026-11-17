@@ -8,7 +8,8 @@
 // after the race; venues where Keibabook does not offer a page simply have no link).
 // Per page it keeps the data tables as rows of cell text (site chrome removed) or, for
 // table-less pages, the content text. Output is downloaded as a gzip JSON file
-// (km_local_kb_<date8>_<HHMM>.json.gz) into the Owner's Downloads folder; it is for the
+// (km_local_kb_<date8>_<HHMM>.json.gz) into the Owner's Downloads folder, or with {keep:true} kept in
+// the page for Claude to read back without any download; it is for the
 // PRIVATE evidence repository only. The public repository receives bands only
 // (window.__kmLocalBands in keibabook_local_bands.js computes them from the same pages).
 window.__kmLocalCollect = async function (date8, opts) {
@@ -71,7 +72,14 @@ window.__kmLocalCollect = async function (date8, opts) {
   const gz = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"))).blob();
   const hhmm = new Date().toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }).replace(":", "");
   const name = `km_local_kb_${date8}_${hhmm}.json.gz`;
-  if (opts.download !== false) {
+  // keep: no download button at all — Claude reads the gzip back in base64 chunks from the page
+  // (window.__kmLocalLast) and stores it in the private repo (Owner request 2026-11-17 22:21).
+  if (opts.keep) {
+    const buf = new Uint8Array(await gz.arrayBuffer());
+    let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    window.__kmLocalLast = { file: name, sha256: sha, b64: btoa(bin) };
+  }
+  if (opts.download !== false && !opts.keep) {
     const a = document.createElement("a"); a.href = URL.createObjectURL(gz); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
   }
