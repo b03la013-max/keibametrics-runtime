@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-17（21:17時点）
+# 地方版 配送台帳 2026-11-17（21:18時点）
 
 - 管理Race 36／発走済み 36
 - PAPER：凍結 36・Push検証 36・送信 36（発走前 36）・読み戻し一致 36・本人確認 0
@@ -45,6 +45,6 @@
 | OHI_09 | 18:55 | POSTRESULT_DIAGNOSTIC | 18:12 | ○ | SIGNED_FINAL | 18:13 | ○ |  |
 | OHI_10 | 19:30 | POSTRESULT_DIAGNOSTIC | 18:47 | ○ | SIGNED_FINAL | 18:48 | ○ |  |
 | OHI_11 | 20:10 | PRESTART_PUSH_VERIFIED | 19:27 | ○ | SIGNED_FINAL | 19:28 | ○ |  |
-| OHI_12 | 20:50 | PRESTART_PUSH_VERIFIED | 20:07 | ○ | SIGNED_FINAL | 20:08 | ○ |  |
+| OHI_12 | 20:50 | POSTRESULT_DIAGNOSTIC | 20:07 | ○ | SIGNED_FINAL | 20:08 | ○ |  |
 
 <sub>USER_REACHED counts only the Owner's own confirmation; GitHub post/read-back is not proof of reading.</sub>
