@@ -1,7 +1,7 @@
-# 地方版 配送台帳 2026-11-18（21:16時点）
+# 地方版 配送台帳 2026-11-18（21:25時点）
 
 - 管理Race 36／発走済み 0
-- PAPER：凍結 13・Push検証 5・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
+- PAPER：凍結 20・Push検証 13・送信 0（発走前 0）・読み戻し一致 0・本人確認 0
 - 正式：試行 0・Signed FINAL 0（NO-BET 0）・発走前送信 0・読み戻し一致 0・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
@@ -13,17 +13,17 @@
 | KSM_01 | 10:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_02 | 10:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KSM_03 | 11:25 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| KSM_04 | 11:55 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_05 | 12:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_06 | 13:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_07 | 13:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| KSM_08 | 14:00 | DISCOVERED |  | … | - | - | - |  |
-| KSM_09 | 14:35 | DISCOVERED |  | … | - | - | - |  |
+| KSM_04 | 11:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_05 | 12:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_06 | 13:00 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_07 | 13:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| KSM_08 | 14:00 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| KSM_09 | 14:35 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | KSM_10 | 15:10 | DISCOVERED |  | … | - | - | - |  |
 | KSM_11 | 15:45 | DISCOVERED |  | … | - | - | - |  |
 | KSM_12 | 16:15 | DISCOVERED |  | … | - | - | - |  |
-| OHI_01 | 14:30 | DISCOVERED |  | … | - | - | - |  |
-| OHI_02 | 15:02 | DISCOVERED |  | … | - | - | - |  |
+| OHI_01 | 14:30 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| OHI_02 | 15:02 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | OHI_03 | 15:35 | DISCOVERED |  | … | - | - | - |  |
 | OHI_04 | 16:07 | DISCOVERED |  | … | - | - | - |  |
 | OHI_05 | 16:40 | DISCOVERED |  | … | - | - | - |  |
@@ -36,13 +36,13 @@
 | OHI_12 | 20:50 | DISCOVERED |  | … | - | - | - |  |
 | SON_01 | 10:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | SON_02 | 11:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
-| SON_03 | 11:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_04 | 12:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_05 | 12:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_06 | 13:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
-| SON_07 | 13:40 | DISCOVERED |  | … | - | - | - |  |
-| SON_08 | 14:10 | DISCOVERED |  | … | - | - | - |  |
-| SON_09 | 14:45 | DISCOVERED |  | … | - | - | - |  |
+| SON_03 | 11:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_04 | 12:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_05 | 12:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_06 | 13:10 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
+| SON_07 | 13:40 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_08 | 14:10 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| SON_09 | 14:45 | PREDICTION_COMPLETE |  | … | - | - | - |  |
 | SON_10 | 15:20 | DISCOVERED |  | … | - | - | - |  |
 | SON_11 | 15:55 | DISCOVERED |  | … | - | - | - |  |
 | SON_12 | 16:30 | DISCOVERED |  | … | - | - | - |  |
