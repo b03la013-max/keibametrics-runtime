@@ -1,4 +1,4 @@
-# 地方版 配送台帳 2026-11-17（15:02時点）
+# 地方版 配送台帳 2026-11-17（15:05時点）
 
 - 管理Race 36／発走済み 10
 - PAPER：凍結 36・Push検証 36・送信 14（発走前 14）・読み戻し一致 14・本人確認 0
@@ -11,7 +11,7 @@
 | Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |
 |---|---|---|---|---|---|---|---|---|
 | KNZ_01 | 14:10 | POSTRESULT_DIAGNOSTIC | 13:27 | ○ | SIGNED_FINAL | 13:28 | ○ |  |
-| KNZ_02 | 14:45 | PRESTART_PUSH_VERIFIED | 14:02 | ○ | SIGNED_FINAL | 14:03 | ○ |  |
+| KNZ_02 | 14:45 | POSTRESULT_DIAGNOSTIC | 14:02 | ○ | SIGNED_FINAL | 14:03 | ○ |  |
 | KNZ_03 | 15:20 | PRESTART_PUSH_VERIFIED | 14:37 | ○ | SIGNED_FINAL | 14:38 | ○ |  |
 | KNZ_04 | 15:55 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | KNZ_05 | 16:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
