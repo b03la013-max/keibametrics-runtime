@@ -11,6 +11,7 @@ parameter or feeds back into ranking, tickets, KRS or capital. It answers:
 Usage: python -m runtime.local_autopilot.shadow_measure <output_root> [<out_stem>]
 """
 import json
+import math
 import random
 import sys
 from collections import defaultdict
@@ -118,6 +119,71 @@ def _rolesum(xs):
             'win_pfs_95ci': boot_ci([(100, x[2]) for x in xs]), 'place_pfs_95ci': boot_ci([(100, x[3]) for x in xs])}
 
 
+GAP = 2.0        # 馬券購入法: adjacent popularity odds ratio >= 2.0 is an オッズの断層
+
+
+def odds_gap(odds):
+    """First 断層 among the top-6 favourites: k = number of horses above the gap (None = no gap)."""
+    o = sorted(odds.values())[:6]
+    for k in range(1, len(o)):
+        if o[k] / o[k - 1] >= GAP:
+            return k, round(o[1] / o[0], 2) if len(o) > 1 else None
+    return None, round(o[1] / o[0], 2) if len(o) > 1 else None
+
+
+def _probs(rank_rows, ns):
+    """(market q, model p) normalised over starters with both values."""
+    rows = [r for r in rank_rows if r['no'] not in ns and r.get('win') and r.get('p_win')]
+    if len(rows) < 3:
+        return None
+    iq = {r['no']: 1 / r['win'] for r in rows}
+    ip = {r['no']: max(float(r['p_win']), 1e-4) for r in rows}
+    return ({k: v / sum(iq.values()) for k, v in iq.items()}, {k: v / sum(ip.values()) for k, v in ip.items()})
+
+
+def _combine(q, p, a, b):
+    z = {k: math.exp(b * math.log(q[k]) + a * math.log(p[k])) for k in q}
+    t = sum(z.values())
+    return {k: v / t for k, v in z.items()}
+
+
+def _harville_ll(pr, order, lam2, lam3):
+    """log-likelihood of the observed 2nd/3rd under discounted Harville (prob ∝ pr^λ among the rest)."""
+    ll = 0.0
+    for pos, lam in ((1, lam2), (2, lam3)):
+        if len(order) <= pos or order[pos] not in pr:
+            return None
+        rest = {k: pr[k] ** lam for k in pr if k not in order[:pos]}
+        ll += math.log(rest[order[pos]] / sum(rest.values()))
+    return ll
+
+
+def benter(rows_q):
+    """Benter information test: does the PAPER model add to the market? Leave-one-day-out fit of
+    log P = a*log p_model + b*log q_market (grid), scored by winner log-loss on the held-out day."""
+    grid = [(a / 10, b / 10) for a in range(0, 16) for b in range(0, 16) if a or b]
+    ll = lambda rows, a, b: -sum(math.log(_combine(q, p, a, b)[w]) for q, p, w, _ in rows) / len(rows)
+    days = sorted({d for *_, d in rows_q})
+    held, fits = [], {}
+    for d in days:
+        train = [x for x in rows_q if x[3] != d]
+        test = [x for x in rows_q if x[3] == d]
+        if len(train) < 20:
+            continue
+        a, b = min(grid, key=lambda g: ll(train, *g))
+        fits[d] = [a, b]
+        held += [(x, a, b) for x in test]
+    n = len(held)
+    if not n:
+        return {'status': 'INSUFFICIENT', 'races': len(rows_q)}
+    m = lambda f: round(-sum(math.log(f(x, a, b)) for x, a, b in held) / n, 4)
+    return {'races': n, 'days': days, 'fits_by_heldout_day': fits,
+            'logloss_market': m(lambda x, a, b: x[0][x[2]]), 'logloss_model': m(lambda x, a, b: x[1][x[2]]),
+            'logloss_combined_oos': m(lambda x, a, b: _combine(x[0], x[1], a, b)[x[2]]),
+            'reading': 'combined < market means the model carries information the odds do not (Benter); '
+                       'no EV/Kelly use until calibration is approved'}
+
+
 def measure(root, days=None):
     rows = [x for x in load(root) if days is None or x['day'] in days]
     hv = defaultdict(lambda: defaultdict(list))      # group -> role -> [(won, top3, win pay, place pay)]
@@ -128,6 +194,9 @@ def measure(root, days=None):
     flags = defaultdict(lambda: defaultdict(list))
     market = defaultdict(int)
     bw = defaultdict(list)
+    kg = defaultdict(list)          # 亀谷 sire rules: group -> [role]
+    gp = defaultdict(lambda: defaultdict(list))   # odds 断層: group -> role -> [...]
+    bq, hv_ll = [], defaultdict(float)
     for x in rows:
         res, pred = x['res'], x['pred']
         ranking = pred.get('ranking') or []
@@ -175,6 +244,31 @@ def measure(root, days=None):
                 dz[g]['1番人気'].append(_role(res, fav))
                 dz[g]['2番人気'].append(_role(res, dfv.get('second_no')))
                 dz[g]['◎'].append(_role(res, rank[0]))
+        for no, ev in ((pred.get('kametani') or {}).get('by_horse') or {}).items():
+            if int(no) in ns:
+                continue
+            g = 'buy_match' if ev['buy_match'] and not ev['caution_match'] else 'caution_match' if ev['caution_match'] and not ev['buy_match'] \
+                else 'both' if ev['buy_match'] else 'covered_no_match'
+            kg[g].append(_role(res, int(no)))
+            if ev['buy_match'] and int(no) not in rank[:3]:
+                kg['buy_match_outside_paper_top3'].append(_role(res, int(no)))
+        if odds:
+            k, r12 = odds_gap(odds)
+            pops = sorted(odds, key=odds.get)
+            for g in ('gap_after:' + str(k), 'gap12>=2.5' if r12 and r12 >= 2.5 else 'gap12<2.5'):
+                gp[g]['1番人気'].append(_role(res, fav))
+                gp[g]['2番人気'].append(_role(res, pops[1] if len(pops) > 1 else None))
+                gp[g]['◎'].append(_role(res, rank[0]))
+                gp[g]['_winner_within_gap'].append((k is not None and w in pops[:k], False, 0, 0))
+        pq = _probs(ranking, ns)
+        if pq and w in pq[0]:
+            bq.append((pq[0], pq[1], w, x['day']))
+            for lab, l2, l3 in (('harville', 1.0, 1.0), ('benter_0.81_0.65', 0.81, 0.65)):
+                for src, pr in (('market', pq[0]), ('model', pq[1])):
+                    v = _harville_ll(pr, [int(o) for o in res['order']], l2, l3)
+                    if v is not None:
+                        hv_ll[f'{src}:{lab}'] += v
+                        hv_ll[f'{src}:{lab}:n'] += 1
         for r in ranking:
             if r.get('bw_change') is not None:
                 bw['winner' if r['no'] == w else 'others'].append(abs(r['bw_change']))
@@ -203,7 +297,13 @@ def measure(root, days=None):
            'danger_favorite': ({g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(dz.items())}
                                or 'NOT_PERSISTED_BEFORE_2026-11-17'),
            'body_weight': {k: {'n': len(v), 'mean_abs_change_kg': round(sum(v) / len(v), 2) if v else None}
-                           for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17'}
+                           for k, v in bw.items()} or 'NOT_PERSISTED_BEFORE_2026-11-17',
+           'kametani_sire_rules': {g: _rolesum(v) for g, v in sorted(kg.items())} or 'NOT_PERSISTED_BEFORE_2026-11-18',
+           'odds_gap': {g: {role: _rolesum(v) for role, v in d.items()} for g, d in sorted(gp.items())},
+           'benter_information_test': benter(bq),
+           'place_order_model': {k.rsplit(':', 1)[0] if k.endswith(':n') else k:
+                                 (round(-hv_ll[k] / hv_ll[k + ':n'], 4) if not k.endswith(':n') and hv_ll.get(k + ':n') else None)
+                                 for k in hv_ll if not k.endswith(':n')}}
     return out
 
 
@@ -244,7 +344,26 @@ def md(o):
                     L.append(f"| {g} | {role} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
     else:
         L.append(f"- {o['danger_favorite']}")
-    L += ['', f"## 馬体重：{o['body_weight']}", '']
+    L += ['', f"## 馬体重：{o['body_weight']}", '', '## 亀谷血統辞典 種牡馬ルール該当（著者主張・NAR未検証）', '']
+    if isinstance(o.get('kametani_sire_rules'), dict):
+        L += ['| 区分 | 頭数 | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|']
+        for g, v in o['kametani_sire_rules'].items():
+            if v:
+                L.append(f"| {g} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
+    else:
+        L.append(f"- {o.get('kametani_sire_rules')}")
+    L += ['', '## オッズの断層（隣接人気の単勝オッズ比 ≥ 2.0）', '',
+          '| 区分 | 対象 | Race | 勝率 | 3着内率 | 単勝回収 | 複勝回収 |', '|---|---|---|---|---|---|---|']
+    for g, d in (o.get('odds_gap') or {}).items():
+        for role, v in d.items():
+            if v and role != '_winner_within_gap':
+                L.append(f"| {g} | {role} | {v['races']} | {v['win_rate']}% | {v['top3_rate']}% | {v['win_pfs']}% | {v['place_pfs']}% |")
+            elif v:
+                L.append(f"| {g} | 勝ち馬が断層より上 | {v['races']} | {v['win_rate']}% | | | |")
+    b = o.get('benter_information_test') or {}
+    L += ['', '## Benter情報量テスト（日単位の交差検証、勝ち馬の対数損失・小さいほど良い）', '',
+          f"- 市場のみ {b.get('logloss_market')}／モデルのみ {b.get('logloss_model')}／結合（検証日外で推定）{b.get('logloss_combined_oos')}"
+          f"（{b.get('races', 0)}R）", f"- 2・3着の確率モデル（対数損失）：{o.get('place_order_model')}", '']
     return '\n'.join(L)
 
 

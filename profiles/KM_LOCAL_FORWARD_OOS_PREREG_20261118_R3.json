@@ -1,0 +1,19 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R3",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-18T01:00:44+09:00 (before the first 11/18 post, 10:25)",
+ "first_eligible_post": "2026-11-18T00:00:00+09:00",
+ "extends": "R1 (C1-C4) and R2 (C5-C6), unchanged",
+ "sources": ["Drive: 馬券購入法 (オッズの断層 / 券種別控除率)", "Drive: ビル・ベンター研究 (model+market combination, Harville discount)", "Drive: 亀谷敬正の競馬血統辞典 同名馬統合版 (research/kametani/sire_rules.json sha256 ce869790851b37a3…)"],
+ "learning_races": "2026-11-13..17 PAPER 152R (shadow_measure) - in-sample, used only to set the frozen values below",
+ "frozen_values": {"benter_weights_model_a": 0.4, "benter_weights_market_b": 0.8, "gap_ratio": 2.0, "gap12_threshold": 2.5, "harville_discount": [0.81, 0.65]},
+ "production_change": "NONE. No ranking, ticket, KRS, MEC, cap, capital or Owner change. Kelly/EV stay disabled until calibration is approved.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {"id": "C7-KAMETANI-BUY-MATCH", "hypothesis": "Runners whose sire has a 亀谷 buy condition fully matched (and no caution matched) have a higher top-3 rate and place PFS than covered runners with no match.", "unit": "runner", "control": "covered_no_match runners in the same races", "primary_metric": "top-3 rate difference, place PFS", "reject_if": "at 100 matched runners the top-3 rate is not higher than control", "promote_if": "never automatic; at 300 runners report to the Owner as a candidate evidence feature"},
+  {"id": "C8-ODDS-GAP-FAVORITE", "hypothesis": "When the 2nd-favourite odds / favourite odds >= 2.5 the favourite wins at least 15 points more often than when < 2.5 (in-sample 68.5% vs 36.7%).", "unit": "race", "primary_metric": "favourite win-rate difference", "reject_if": "at 100 races the difference is < 15 points or its 95% CI includes 0", "promote_if": "report to the Owner as a candidate NO-BET / axis rule"},
+  {"id": "C9-BENTER-COMBINATION", "hypothesis": "With frozen weights a=0.4 (model) b=0.8 (market), the combined winner probability has lower log-loss than the market alone (in-sample LODO 1.6065 vs 1.6111).", "unit": "race", "primary_metric": "winner log-loss: combined vs market vs model", "reject_if": "at 100 races combined >= market", "promote_if": "only a calibration-candidate report; formal EV/Kelly stay forbidden without a separate Owner approval"},
+  {"id": "C10-HARVILLE-DISCOUNT", "hypothesis": "Benter's discounted Harville (0.81 / 0.65) gives lower log-loss for the observed 2nd and 3rd than plain Harville, for the model probabilities.", "unit": "race", "primary_metric": "2nd/3rd log-loss", "reject_if": "at 100 races discounted >= plain", "promote_if": "report to the Owner as a candidate for P2/P3 ordering research"}
+ ]
+}

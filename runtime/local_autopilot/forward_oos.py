@@ -122,8 +122,61 @@ def evaluate(root, prereg_path=PREREG):
             'pfs_rev2': pf([(x['rev2']['invest'], x['rev2']['payout']) for x in revs]),
             'winner_rank_better': sum(1 for x in revs if (x['winner_rank_rev2'] or 99) < (x['winner_rank_rev1'] or 99)),
             'winner_rank_worse': sum(1 for x in revs if (x['winner_rank_rev2'] or 99) > (x['winner_rank_rev1'] or 99))}
+    pre3 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261118_R3.json')
+    if pre3.exists():
+        out['candidates'].update(evaluate_r3(root, json.loads(pre3.read_text())))
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
+
+
+def evaluate_r3(root, p3):
+    import math
+    start = datetime.fromisoformat(p3['first_eligible_post'])
+    fv = p3['frozen_values']
+    kb_buy, kb_ctl, g_hi, g_lo, ll = [], [], [], [], {'market': [], 'model': [], 'combined': []}
+    hv = {'plain': [], 'discount': []}
+    for x in sm.load(root):
+        if (_post(root, x['day'], x['key']) or start.replace(year=1900)) < start:
+            continue
+        res, pred = x['res'], x['pred']
+        ns = set(res.get('non_starters') or []) | set(res.get('non_starters_inferred') or [])
+        ranking = pred.get('ranking') or []
+        for no, ev in ((pred.get('kametani') or {}).get('by_horse') or {}).items():
+            if int(no) in ns:
+                continue
+            if ev['buy_match'] and not ev['caution_match']:
+                kb_buy.append(sm._role(res, int(no)))
+            elif not ev['buy_match'] and not ev['caution_match']:
+                kb_ctl.append(sm._role(res, int(no)))
+        odds = {r['no']: r.get('win') for r in ranking if r['no'] not in ns and r.get('win')}
+        if len(odds) >= 2:
+            o = sorted(odds.values())
+            fav = min(odds, key=odds.get)
+            (g_hi if o[1] / o[0] >= fv['gap12_threshold'] else g_lo).append(sm._role(res, fav))
+        pq = sm._probs(ranking, ns)
+        w = int(res['order'][0])
+        if pq and w in pq[0]:
+            c = sm._combine(pq[0], pq[1], fv['benter_weights_model_a'], fv['benter_weights_market_b'])
+            for k, pr in (('market', pq[0]), ('model', pq[1]), ('combined', c)):
+                ll[k].append(-math.log(pr[w]))
+            order = [int(v) for v in res['order']]
+            a = sm._harville_ll(pq[1], order, 1.0, 1.0)
+            b = sm._harville_ll(pq[1], order, *fv['harville_discount'])
+            if a is not None and b is not None:
+                hv['plain'].append(-a)
+                hv['discount'].append(-b)
+    avg = lambda v: round(sum(v) / len(v), 4) if v else None
+    b, c = sm._rolesum(kb_buy), sm._rolesum(kb_ctl)
+    hi, lo = sm._rolesum(g_hi), sm._rolesum(g_lo)
+    return {
+        'C7-KAMETANI-BUY-MATCH': {'buy_match': b, 'control': c, 'stage': _stage(len([v for v in kb_buy if v]), p3['stages']),
+                                  'top3_diff': round(b['top3_rate'] - c['top3_rate'], 1) if b and c else None},
+        'C8-ODDS-GAP-FAVORITE': {'gap12_hi': hi, 'gap12_lo': lo, 'stage': _stage(len([v for v in g_hi + g_lo if v]), p3['stages']),
+                                 'fav_win_diff': round(hi['win_rate'] - lo['win_rate'], 1) if hi and lo else None},
+        'C9-BENTER-COMBINATION': {'races': len(ll['market']), 'stage': _stage(len(ll['market']), p3['stages']),
+                                  **{f'logloss_{k}': avg(v) for k, v in ll.items()}},
+        'C10-HARVILLE-DISCOUNT': {'races': len(hv['plain']), 'stage': _stage(len(hv['plain']), p3['stages']),
+                                  'logloss_plain': avg(hv['plain']), 'logloss_discount': avg(hv['discount'])}}
 
 
 def md(o):
@@ -143,7 +196,19 @@ def md(o):
         *([f"- C6 10分前改訂：{c['C6-CHECK10-REVISION']['stage']}／Rev1 {c['C6-CHECK10-REVISION']['pfs_rev1']}% 対 Rev2 "
            f"{c['C6-CHECK10-REVISION']['pfs_rev2']}%／1着順位 改善{c['C6-CHECK10-REVISION']['winner_rank_better']}・悪化"
            f"{c['C6-CHECK10-REVISION']['winner_rank_worse']}"] if 'C6-CHECK10-REVISION' in c else []),
+        *(_md_r3(c) if 'C7-KAMETANI-BUY-MATCH' in c else []),
         '', f"<sub>{o['production_change']}</sub>", ''])
+
+
+def _md_r3(c):
+    g = lambda d, k: (d or {}).get(k)
+    c7, c8, c9, c10 = (c[k] for k in ('C7-KAMETANI-BUY-MATCH', 'C8-ODDS-GAP-FAVORITE', 'C9-BENTER-COMBINATION', 'C10-HARVILLE-DISCOUNT'))
+    return [f"- C7 亀谷 買い条件該当：{c7['stage']}／3着内率 該当 {g(c7['buy_match'], 'top3_rate')}%（{g(c7['buy_match'], 'races')}頭）"
+            f" 対 非該当 {g(c7['control'], 'top3_rate')}%／複勝回収 {g(c7['buy_match'], 'place_pfs')}%",
+            f"- C8 オッズ断層（2番人気/1番人気 ≥ 2.5）：{c8['stage']}／1番人気勝率 断層あり {g(c8['gap12_hi'], 'win_rate')}%"
+            f" 対 なし {g(c8['gap12_lo'], 'win_rate')}%",
+            f"- C9 Benter結合：{c9['stage']}／勝ち馬対数損失 市場 {c9['logloss_market']}・モデル {c9['logloss_model']}・結合 {c9['logloss_combined']}",
+            f"- C10 Harville割引：{c10['stage']}／2・3着対数損失 通常 {c10['logloss_plain']} 対 割引 {c10['logloss_discount']}"]
 
 
 def write(root):

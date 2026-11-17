@@ -319,6 +319,11 @@ def predict(reader, r, today, edition, out, cards):
         slim['prior_runs'] = {str(x['horse_no']): danger_fav.prior_record(x) for x in runners}
     except Exception as exc:
         slim['danger_fav'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    try:  # 亀谷 sire-rule matches (author claims, unvalidated on NAR): evidence only, no numeric consumer
+        from runtime.local_autopilot import bloodline_kametani
+        slim['kametani'] = bloodline_kametani.race_evidence(race, runners)
+    except Exception as exc:
+        slim['kametani'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     if edition == '直前版':   # current-state evidence at the T-45 edition (evidence only, no numeric consumer)
         try:
             from runtime.local_autopilot import weather, day_trend
