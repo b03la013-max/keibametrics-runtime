@@ -53,6 +53,7 @@ FINAL_WINDOW_MIN = 45
 CUTOFF_MIN = 3          # Rakuten closes voting 2 min before post; we freeze 3 min before
 MAX_ATTEMPTS = 3
 RESULT_DELAY_MIN = 20
+RESULT_MAX_ATTEMPTS = 8          # official results can lag; retries back off 15, 30, 45 ... min (11/17 OHI_11)
 RESEARCH_KRS = os.environ.get('KM_LOCAL_RESEARCH_KRS', '1') == '1'  # non-production research KRS (5,000 / seed 1)
 # Formal Production on the Runtime-signed Rakuten card (Owner instructions 2026-11-16).
 FORMAL = os.environ.get('KM_LOCAL_FORMAL', '1') == '1'
@@ -785,7 +786,8 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     log('MISSED_DEADLINE', key)
                     changed = True
                 if results and r['editions'] and not r.get('settlement') and mins <= -RESULT_DELAY_MIN \
-                        and r.get('result_attempts', 0) < MAX_ATTEMPTS:
+                        and r.get('result_attempts', 0) < RESULT_MAX_ATTEMPTS \
+                        and now_jst().isoformat() >= (r.get('result_next_at') or ''):
                     jobs.append((3, mins, key, 'RESULT'))
                 if r.get('settlement') and r.get('review_attempts', 0) < 2 and (
                         not r.get('review') or (r['review'].get('formal') is False
@@ -893,6 +895,9 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                         r['status'] = 'POSTRESULT_DIAGNOSTIC'
                         log('RESULT', key, st['order'][:3], st['payout'])
                         settle_formal(r, key, out, html)
+                    else:
+                        r['result_next_at'] = (now_jst() + timedelta(minutes=15 * r['result_attempts'])).isoformat()
+                        log('RESULT_NOT_READY', key, r['result_attempts'], r['result_next_at'][11:16])
                     changed = True
                 else:
                     timing = predict(reader, r, date.fromisoformat(day), edition, out, cards)
@@ -987,7 +992,7 @@ def pending_soon(day=None, minutes=12):
         have = [e['edition'] for e in r['editions']]
         if mins > CUTOFF_MIN and (not have or (mins <= FINAL_WINDOW_MIN + minutes and '直前版' not in have)):
             return True
-        if mins <= -RESULT_DELAY_MIN and r['editions'] and not r.get('settlement') and r.get('result_attempts', 0) < MAX_ATTEMPTS:
+        if mins <= -RESULT_DELAY_MIN and r['editions'] and not r.get('settlement') and r.get('result_attempts', 0) < RESULT_MAX_ATTEMPTS:
             return True
     return False
 
