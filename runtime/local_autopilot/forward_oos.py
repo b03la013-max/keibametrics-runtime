@@ -125,6 +125,22 @@ def evaluate(root, prereg_path=PREREG):
     pre3 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261118_R3.json')
     if pre3.exists():
         out['candidates'].update(evaluate_r3(root, json.loads(pre3.read_text())))
+    pre4 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261118_R4.json')
+    if pre4.exists():
+        from runtime.local_autopilot import aki_audit
+        p4 = json.loads(pre4.read_text())
+        days = {x['day'] for x in sm.load(root) if x['day'] >= p4['first_eligible_post'][:10]}
+        a = aki_audit.audit(root, days) if days else {'races': 0}
+        n = a.get('races', 0)
+        tf = a.get('trifecta_formation') or {}
+        au = a.get('auc') or {}
+        out['candidates']['C11-FIXED-2-4-8-VS-AKI-FORM'] = {
+            'races': n, 'stage': _stage(n, p4['stages']),
+            'pfs_fixed_248': (tf.get('2-4-8') or {}).get('pfs'), 'pfs_aki_chosen': (tf.get('AKI_CHOSEN') or {}).get('pfs')}
+        out['candidates']['C12-AKI-VS-MARKET-ROUGHNESS'] = {
+            'races': n, 'stage': _stage(n, p4['stages']),
+            'auc_aki': (au.get('AKI_total') or {}).get('fav_out_of_top3'),
+            'auc_market': (au.get('MARKET_fav_odds') or {}).get('fav_out_of_top3')}
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -197,6 +213,11 @@ def md(o):
            f"{c['C6-CHECK10-REVISION']['pfs_rev2']}%／1着順位 改善{c['C6-CHECK10-REVISION']['winner_rank_better']}・悪化"
            f"{c['C6-CHECK10-REVISION']['winner_rank_worse']}"] if 'C6-CHECK10-REVISION' in c else []),
         *(_md_r3(c) if 'C7-KAMETANI-BUY-MATCH' in c else []),
+        *([f"- C11 3連単 固定2-4-8 対 AKI選択：{c['C11-FIXED-2-4-8-VS-AKI-FORM']['stage']}／回収率 "
+           f"{c['C11-FIXED-2-4-8-VS-AKI-FORM']['pfs_fixed_248']}% 対 {c['C11-FIXED-2-4-8-VS-AKI-FORM']['pfs_aki_chosen']}%",
+           f"- C12 荒れ予測 AKI 対 1番人気オッズ（AUC）：{c['C12-AKI-VS-MARKET-ROUGHNESS']['stage']}／"
+           f"{c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_aki']} 対 {c['C12-AKI-VS-MARKET-ROUGHNESS']['auc_market']}"]
+          if 'C11-FIXED-2-4-8-VS-AKI-FORM' in c else []),
         '', f"<sub>{o['production_change']}</sub>", ''])
 
 

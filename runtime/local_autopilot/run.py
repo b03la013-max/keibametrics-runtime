@@ -1114,6 +1114,8 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     formal_eval.write_daily(out)          # per-day: KRS improved/worsened, 60-point cap effect
                     from runtime.local_autopilot import forward_oos
                     forward_oos.write(ROOT)               # pre-registered candidates, post-freeze races only
+                    from runtime.local_autopilot import aki_audit
+                    aki_audit.write(ROOT)                 # AKI roughness vs outcome, formation PFS (cumulative)
                 except Exception as exc:
                     log('SHADOW_MEASURE_FAIL', type(exc).__name__, str(exc)[:120])
             try:

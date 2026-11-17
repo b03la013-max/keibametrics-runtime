@@ -1,0 +1,16 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261118-R4",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-18T08:25:39+09:00 (before the first 11/18 post, 10:25)",
+ "first_eligible_post": "2026-11-18T00:00:00+09:00",
+ "extends": "R1-R3 unchanged",
+ "learning_races": "2026-11-13..17 PAPER 152R (aki_audit) - in-sample",
+ "in_sample": {"AKI_total_auc_fav_out3": 0.608, "MARKET_fav_odds_auc_fav_out3": 0.644, "pfs_AKI_CHOSEN": 17.9, "pfs_fixed_2-4-8": 97.4, "pfs_fixed_2-2-6": 110.8},
+ "production_change": "NONE. PAPER and formal tickets, KRS, MEC, cap and capital unchanged.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {"id": "C11-FIXED-2-4-8-VS-AKI-FORM", "hypothesis": "A fixed 三連単 formation 2-4-8 on the PAPER order reaches a higher PFS than the AKI-chosen formation on the same races.", "unit": "race", "primary_metric": "PFS difference, top-1 race payout share", "reject_if": "at 100 races 2-4-8 PFS <= AKI-chosen PFS, or its top-1 race supplies >= 40% of its payout", "promote_if": "report to the Owner (formation rule change needs approval)"},
+  {"id": "C12-AKI-VS-MARKET-ROUGHNESS", "hypothesis": "AKI total predicts 'favourite out of the top 3' better than the favourite's win odds (AUC).", "unit": "race", "primary_metric": "AUC AKI_total minus AUC MARKET_fav_odds", "reject_if": "at 100 races the AKI AUC is not above the market AUC", "promote_if": "report only"}
+ ]
+}
