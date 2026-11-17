@@ -108,6 +108,8 @@ def race_entry(q, key, r, acks, now, cutoff_min, max_attempts):
     return {'race': key, 'venue': r.get('venue_name'), 'race_no': r.get('race_no'), 'status': status,
             'official_post': _iso(post), 'post_changes': r.get('post_changes') or [], 'cutoff': _iso(cut),
             'paper': paper, 'formal': formal, 'first_stop': stop, 'waiting_for': waiting, 'recovery': retry,
+            'check10': {k: (r.get('check10') or {}).get(k) for k in ('checked_at', 'material', 'reasons', 'decision')}
+            if r.get('check10') else None, 'formal_revision': (r.get('formal') or {}).get('revision', 1 if f else None),
             'delivery_attempts': r.get('delivery_attempts', 0)}
 
 
@@ -140,6 +142,9 @@ def build(q, day_dir, now=None, cutoff_min=3, max_attempts=3):
                          for x in rows if x['formal'] and not x['formal']['prestart_delivery']},
         'first_stops': {x['race']: x['first_stop'] for x in rows if x['first_stop']},
         'duplicate_attempts': [x['race'] for x in rows if x['delivery_attempts'] > 1],
+        'check10': {'checked': sum(1 for x in rows if x['check10']),
+                    'material': sum(1 for x in rows if (x['check10'] or {}).get('material')),
+                    'revision2_signed': sum(1 for x in rows if x['formal_revision'] == 2)},
     }
     return {'profile': PROFILE, 'race_date': q.get('race_date'), 'generated_at': now.isoformat(),
             'note': 'USER_REACHED counts only the Owner\'s own confirmation; GitHub post/read-back is not proof of reading.',
@@ -166,6 +171,7 @@ def md(L):
            f"- 発走前PAPER配送なしで発走：{s['posted_without_prestart_paper_delivery'] or 'なし'}",
            f"- 発走前の正式配送なしで発走（未試行を含む）：{s['posted_without_prestart_formal'] or 'なし'}",
            f"- 正式の停止工程：{s['formal_stops'] or 'なし'}",
+           f"- 10分前チェック：確認 {s['check10']['checked']}／重要変更 {s['check10']['material']}／Revision 2署名 {s['check10']['revision2_signed']}",
            f"- 停止工程：{s['first_stops'] or 'なし'}／配送再試行：{s['duplicate_attempts'] or 'なし'}", '',
            '| Race | 発走 | 状態 | PAPER送信 | 発走前 | 正式 | 正式送信 | 発走前 | 停止工程 |', '|---|---|---|---|---|---|---|---|---|']
     for x in L['races']:

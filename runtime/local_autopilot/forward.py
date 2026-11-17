@@ -130,14 +130,16 @@ def formal_oos(root):
                        result_receipt_verified=bool(fs.get('result_receipt_verified')),
                        first_material_failure=fs.get('first_material_failure'))
             try:
-                sm = json.loads((day / 'formal' / f'{key}.summary.json').read_text())
+                from runtime.local_autopilot.checkpoint10 import effective_dir
+                fdir = effective_dir(day, key)
+                sm = json.loads((fdir / f'{key}.summary.json').read_text())
                 rank = [int(x) for x in sm.get('ranking') or []]
                 row['formal_win'] = int(bool(rank) and rank[0] == order[0])
                 row['formal_top3_capture'] = len(set(rank[:3]) & set(order[:3]))
             except (OSError, ValueError):
                 pass
             try:
-                fz = json.loads((day / 'formal' / f'{key}.full29.json').read_text())
+                fz = json.loads((effective_dir(day, key) / f'{key}.full29.json').read_text())
                 n29 = [x['no'] for x in sorted(fz['runners'], key=lambda x: -(x['indices'].get('F3S-L') or 0))]
                 row['num_win'] = int(bool(n29) and n29[0] == order[0])
                 row['num_top3_capture'] = len(set(n29[:3]) & set(order[:3]))

@@ -80,11 +80,46 @@ def krs_eval(sm, util, res):
             'utility_class': (util or {}).get('utility_class')}
 
 
+SMALL = (5, 10, 20, 30)   # research caps (C05/C10/C20/C30); Control = R54 60 (Production unchanged)
+
+
+def small_eval(sm, res):
+    """Same frozen prediction, same KRS/MEC output, same selection order as the R54 cap (tier, rank sum, MEC
+    order); only the point limit differs. 100-yen flat stakes, so equal points = equal budget."""
+    from runtime.local_autopilot import formal_rakuten as fr
+    full = sm.get('signed_final_tickets') or sm.get('tickets') or []
+    ranking = [str(x) for x in sm.get('ranking') or []]
+    out = {}
+    for n in SMALL:
+        kept = fr.cap_tickets(full, ranking, n)['tickets'] if len(full) > n else full
+        s = settle(kept, res)
+        out[f'C{n:02d}'] = {'tickets': len(kept), **{k: s[k] for k in ('invest', 'payout', 'pfs')},
+                            'hit': bool(s['hits'])}
+    return out
+
+
+def mec_composition(sm):
+    """Why tickets multiply: role sizes, the P3 label spread vs material thirds, MEC bet-type mix."""
+    roles = sm.get('roles') or {}
+    cnt = lambda r: sum(1 for v in roles.values() if r in v)
+    full = sm.get('signed_final_tickets') or sm.get('tickets') or []
+    mix = {}
+    for t in full:
+        mix[t['bet_type']] = mix.get(t['bet_type'], 0) + 1
+    thirds = {str(t['selection'][-1]) for t in full if t['bet_type'] in ('TRIFECTA',)}
+    return {'W': cnt('W'), 'P2': cnt('P2'), 'P3_label': cnt('P3'), 'active': len(roles),
+            'material_third_in_trifecta': len(thirds), 'mec_tickets': len(full), 'bet_mix': mix,
+            'recommended_tickets': len(sm.get('tickets') or [])}
+
+
 def evaluate_day(day_dir):
-    fdir = Path(day_dir) / 'formal'
+    from runtime.local_autopilot.checkpoint10 import effective_dir
+    base = Path(day_dir) / 'formal'
     rows = []
-    for sp in sorted(fdir.glob('*.summary.json')) if fdir.exists() else []:
+    for sp in sorted(base.glob('*.summary.json')) if base.exists() else []:
         key = sp.name.split('.')[0]
+        fdir = effective_dir(day_dir, key)
+        sp = fdir / f'{key}.summary.json'
         rp = fdir / f'{key}.result.json'
         if not rp.exists():
             continue
@@ -92,8 +127,19 @@ def evaluate_day(day_dir):
         if sm.get('status') != 'SIGNED_FINAL' or not res.get('payouts'):
             continue
         ld = lambda n: json.loads((fdir / f'{key}.{n}.json').read_text()) if (fdir / f'{key}.{n}.json').exists() else None
-        rows.append({'race': key, 'krs': krs_eval(sm, ld('krs_prediction_utility'), res),
-                     'cap': cap_eval(sm, res, ld('full29'))})
+        rev1 = None
+        if sm.get('revision') == 2:   # T-10 effect: the superseded Revision 1 tickets on the same result
+            sm1 = json.loads((base / f'{key}.summary.json').read_text())
+            s1, s2 = settle(sm1.get('tickets') or [], res), settle(sm.get('tickets') or [], res)
+            rev1 = {'rev1': {k: s1[k] for k in ('invest', 'payout', 'pfs')}, 'rev2': {k: s2[k] for k in ('invest', 'payout', 'pfs')},
+                    'winner_rank_rev1': ([str(x) for x in sm1.get('ranking') or []].index(str(res['order'][0])) + 1
+                                         if str(res['order'][0]) in [str(x) for x in sm1.get('ranking') or []] else None),
+                    'winner_rank_rev2': ([str(x) for x in sm.get('ranking') or []].index(str(res['order'][0])) + 1
+                                         if str(res['order'][0]) in [str(x) for x in sm.get('ranking') or []] else None)}
+        rows.append({'race': key, 'revision': sm.get('revision', 1), 'check10_vs_rev1': rev1,
+                     'krs': krs_eval(sm, ld('krs_prediction_utility'), res),
+                     'cap': cap_eval(sm, res, ld('full29')), 'small': small_eval(sm, res),
+                     'mec': mec_composition(sm)})
     agg = {'races': len(rows),
            'krs_verdicts': {v: sum(1 for r in rows if r['krs']['verdict'] == v)
                             for v in ('IMPROVED', 'NEUTRAL', 'WORSENED', 'NOT_AVAILABLE')}}
@@ -106,6 +152,26 @@ def evaluate_day(day_dir):
                          'pfs_full': round(100 * s('payout_full') / s('invest_full'), 1) if s('invest_full') else None,
                          'pfs_capped': round(100 * s('payout_capped') / s('invest_capped'), 1) if s('invest_capped') else None,
                          'races_with_lost_hits': sum(1 for x in c if x['hits_lost']), 'loss_avoided': s('loss_avoided')}
+    if rows:
+        sm_ = {}
+        for c in [f'C{n:02d}' for n in SMALL]:
+            xs = [r['small'][c] for r in rows]
+            iv, py = sum(x['invest'] for x in xs), sum(x['payout'] for x in xs)
+            sm_[c] = {'invest': iv, 'payout': py, 'pfs': round(100 * py / iv, 1) if iv else None,
+                      'hit_races': sum(1 for x in xs if x['hit']),
+                      'top1_payout_share': round(100 * max(x['payout'] for x in xs) / py, 1) if py else None}
+        live = [r['cap'] for r in rows]
+        sm_['R54_60'] = {'invest': sum(x['invest_capped'] for x in live), 'payout': sum(x['payout_capped'] for x in live)}
+        sm_['MEC_FULL'] = {'invest': sum(x['invest_full'] for x in live), 'payout': sum(x['payout_full'] for x in live)}
+        for k in ('R54_60', 'MEC_FULL'):
+            v = sm_[k]
+            v['pfs'] = round(100 * v['payout'] / v['invest'], 1) if v['invest'] else None
+        agg['small_point_comparison'] = sm_
+        m = [r['mec'] for r in rows]
+        agg['mec_composition_mean'] = {k: round(sum(x[k] for x in m) / len(m), 1)
+                                       for k in ('W', 'P2', 'P3_label', 'active', 'material_third_in_trifecta',
+                                                 'mec_tickets', 'recommended_tickets')}
+        agg['revisions'] = sum(1 for r in rows if r['revision'] == 2)
     return {'profile': PROFILE, 'race_date': Path(day_dir).name,
             'note': 'REPLAY_CAP_ONLY applies the R54 cap to a pre-R54 MEC set on known results: research, not OOS.',
             'aggregate': agg, 'races': rows}
@@ -120,6 +186,17 @@ def md(o):
             L.append(f"- {label} {m['races']}R：全MEC {m['invest_full']:,}円→{m['payout_full']:,}円（{m['pfs_full']}%）／"
                      f"上限後 {m['invest_capped']:,}円→{m['payout_capped']:,}円（{m['pfs_capped']}%）／"
                      f"的中を失ったRace {m['races_with_lost_hits']}／回避損失 {m['loss_avoided']:,}円")
+    sc = a.get('small_point_comparison')
+    if sc:
+        L += ['', '## 少点数Candidate比較（研究・同一予測/KRS/MEC、選択順はR54上限と同じ、100円均等）', '',
+              '| 方式 | 投資 | 払戻 | 回収率 | 的中Race | 最大1R依存 |', '|---|---|---|---|---|---|']
+        for k in ('C05', 'C10', 'C20', 'C30', 'R54_60', 'MEC_FULL'):
+            v = sc[k]
+            L.append(f"| {k} | {v['invest']:,} | {v['payout']:,} | {v['pfs']}% | {v.get('hit_races', '-')} | "
+                     f"{v.get('top1_payout_share', '-')} |")
+        mc = a['mec_composition_mean']
+        L += ['', f"- MEC構成の平均：W {mc['W']}頭・P2 {mc['P2']}頭・P3ラベル {mc['P3_label']}頭（出走 {mc['active']}頭）"
+                  f"・三連単の3着候補 {mc['material_third_in_trifecta']}頭・MEC {mc['mec_tickets']}点→推薦 {mc['recommended_tickets']}点"]
     L += ['', '| Race | KRS判定 | 1着順位 Static→KRS | Top3捕捉 Static→KRS | 方式 | 券数 全→上限後 | 回収 全→上限後 | 失った的中 |',
           '|---|---|---|---|---|---|---|---|']
     for r in o['races']:

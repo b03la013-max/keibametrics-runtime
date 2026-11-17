@@ -94,6 +94,34 @@ def evaluate(root, prereg_path=PREREG):
         'pfs_capped': round(100 * s('payout_capped') / s('invest_capped'), 1) if live and s('invest_capped') else None,
         'invest_saved': s('invest_saved') if live else 0,
         'races_with_lost_hits': sum(1 for x in live if x['hits_lost'])}
+    pre2 = PREREG.with_name('KM_LOCAL_FORWARD_OOS_PREREG_20261117_R2.json')
+    if pre2.exists():
+        p2 = json.loads(pre2.read_text())
+        start2 = p2['first_eligible_post'][:10]
+        small, revs = {}, []
+        for p in sorted(Path(root).glob('20*/review/formal_eval.json')):
+            if p.parent.parent.name < start2:
+                continue
+            try:
+                rows_ = json.loads(p.read_text())['races']
+            except (ValueError, KeyError):
+                continue
+            for r in rows_:
+                for c, v in (r.get('small') or {}).items():
+                    small.setdefault(c, []).append((v['invest'], v['payout']))
+                small.setdefault('R54_60', []).append((r['cap']['invest_capped'], r['cap']['payout_capped']))
+                if r.get('check10_vs_rev1'):
+                    revs.append(r['check10_vs_rev1'])
+        pf = lambda xs: round(100 * sum(b for _, b in xs) / sum(a for a, _ in xs), 1) if xs and sum(a for a, _ in xs) else None
+        n = len(small.get('R54_60', []))
+        out['candidates']['C5-SMALL-POINTS'] = {'races': n, 'stage': _stage(n, p2['stages']),
+                                                 'pfs': {c: pf(v) for c, v in small.items()}}
+        out['candidates']['C6-CHECK10-REVISION'] = {
+            'revised_races': len(revs), 'stage': _stage(len(revs), p2['stages']),
+            'pfs_rev1': pf([(x['rev1']['invest'], x['rev1']['payout']) for x in revs]),
+            'pfs_rev2': pf([(x['rev2']['invest'], x['rev2']['payout']) for x in revs]),
+            'winner_rank_better': sum(1 for x in revs if (x['winner_rank_rev2'] or 99) < (x['winner_rank_rev1'] or 99)),
+            'winner_rank_worse': sum(1 for x in revs if (x['winner_rank_rev2'] or 99) > (x['winner_rank_rev1'] or 99))}
     out['production_change'] = 'NONE (Owner approval required for any promotion)'
     return out
 
@@ -111,6 +139,10 @@ def md(o):
         f"- C3 ◎≠1番人気：{c3['stage']}／勝率 1番人気 {r(c3['favorite'], 'win_rate')}% 対 ◎ {r(c3['honmei'], 'win_rate')}%",
         f"- C4 60点上限（実運用）：{c4['stage']}／全MEC {c4['pfs_full']}% 対 上限後 {c4['pfs_capped']}%"
         f"／投資削減 {c4['invest_saved']:,}円／的中を失ったRace {c4['races_with_lost_hits']}",
+        *([f"- C5 少点数：{c.get('C5-SMALL-POINTS', {}).get('stage')}／回収率 {c.get('C5-SMALL-POINTS', {}).get('pfs')}"] if 'C5-SMALL-POINTS' in c else []),
+        *([f"- C6 10分前改訂：{c['C6-CHECK10-REVISION']['stage']}／Rev1 {c['C6-CHECK10-REVISION']['pfs_rev1']}% 対 Rev2 "
+           f"{c['C6-CHECK10-REVISION']['pfs_rev2']}%／1着順位 改善{c['C6-CHECK10-REVISION']['winner_rank_better']}・悪化"
+           f"{c['C6-CHECK10-REVISION']['winner_rank_worse']}"] if 'C6-CHECK10-REVISION' in c else []),
         '', f"<sub>{o['production_change']}</sub>", ''])
 
 

@@ -57,6 +57,7 @@ RESULT_MAX_ATTEMPTS = 8          # official results can lag; retries back off 15
 RESEARCH_KRS = os.environ.get('KM_LOCAL_RESEARCH_KRS', '1') == '1'  # non-production research KRS (5,000 / seed 1)
 # Formal Production on the Runtime-signed Rakuten card (Owner instructions 2026-11-16).
 FORMAL = os.environ.get('KM_LOCAL_FORMAL', '1') == '1'
+CHECK10_MIN = 10           # T-10 final-prediction checkpoint (formal Revision 2 only on a material change)
 FORMAL_MIN_LEAD_MIN = 4   # SOURCE waits out Rakuten's 60 s Crawl-delay; never start closer to cutoff
 CODE_VERSION = hashlib.sha256(b''.join(
     (Path(__file__).resolve().parent / f).read_bytes() for f in ('engine.py', 'run.py', 'rakuten.py', 'settle.py', 'sbo.py'))).hexdigest()[:12]
@@ -514,7 +515,7 @@ def settle_formal(r, key, out, html):
         return
     r['formal_result_attempts'] = r.get('formal_result_attempts', 0) + 1
     try:
-        fdir = out / 'formal'
+        fdir = formal_dir(out, r, key)    # latest effective revision (Revision 2 when the T-10 check re-signed)
         sm = json.loads((fdir / f'{key}.summary.json').read_text())
         fin = json.loads((fdir / f'{key}.final_receipt.json').read_text())
         fp = {'edition': 'FORMAL_SIGNED_FINAL', 'revision_id': 'FORMAL:' + f['final_receipt_sha256'][:16],
@@ -576,13 +577,85 @@ def settle_formal(r, key, out, html):
         log('FORMAL_RESULT_FAIL', key, f'{type(exc).__name__}:{str(exc)[:160]}')
 
 
-def deliver_formal(r, key, sm, now):
+def check10(reader, r, key, out):
+    """T-10 checkpoint: compare with Revision 1; on a material change re-run the existing formal pipeline
+    (Revision 2 in formal/rev2/, Revision 1 kept) only if it can finish before the cutoff."""
+    from runtime.local_autopilot import checkpoint10 as c10, formal_rakuten
+    rec = {'started_at': now_jst().isoformat(), 'decision': None}
+    r['check10'] = rec
+    try:
+        html = reader.card_page(r['rid'])
+        fetched = now_jst().isoformat()
+        sm1 = json.loads((out / 'formal' / f'{key}.summary.json').read_text())
+        cmp = c10.compare(r, out / 'formal', key, html, fetched, [str(x) for x in sm1.get('ranking') or []])
+        rec.update({k: cmp[k] for k in ('checked_at', 'material', 'reasons', 'identity', 'observed', 'role_diff',
+                                         'rank_up', 'rank_down', 'rev1_source_raw_sha256', 'new_source_raw_sha256')})
+        dump(out / 'formal' / f'{key}.check10.json', cmp)
+        if not cmp['material']:
+            rec['decision'] = 'KEEP_REVISION_1 (再計算を要する変更なし)'
+        elif (cutoff(r) - now_jst()).total_seconds() < c10.REV2_BUDGET_S:
+            rec['decision'] = 'KEEP_REVISION_1 (MATERIAL_BUT_NO_TIME_BEFORE_CUTOFF)'
+        else:
+            sm, arts = formal_rakuten.run_formal(r, out, cutoff(r))
+            d2 = out / 'formal' / 'rev2'
+            d2.mkdir(parents=True, exist_ok=True)
+            for name, obj in arts.items():
+                dump(d2 / f'{key}.{name}.json', obj)
+            sm['revision'] = 2
+            sm['previous_revision_final_receipt_sha256'] = r['formal'].get('final_receipt_sha256')
+            sm['revision_reasons'] = cmp['reasons']
+            dump(d2 / f'{key}.summary.json', sm)
+            if sm['status'] == 'SIGNED_FINAL' and sm.get('before_cutoff'):
+                r['formal_r1'] = r['formal']
+                r['formal'] = {k: sm.get(k) for k in ('status', 'first_failed_stage', 'error', 'race_id',
+                                                       'final_receipt_sha256', 'final_verified_remote',
+                                                       'final_verified_local', 'ticket_count', 'total_investment',
+                                                       'no_bet', 'krs_actual_run_count', 'before_cutoff',
+                                                       'elapsed_s')} | {'stages': list(sm.get('stages') or {}),
+                                                                        'revision': 2}
+                r['formal_effective'] = 'rev2'
+                rec['decision'] = 'REVISION_2_SIGNED'
+                diff = {'reasons': cmp['reasons'], 'identity': cmp['identity'], 'role_diff': cmp['role_diff'],
+                        'rank_up': cmp['rank_up'], 'rank_down': cmp['rank_down'],
+                        'tickets': c10.ticket_diff(sm1.get('tickets') or [], sm.get('tickets') or []),
+                        'investment': [sm1.get('total_investment'), sm.get('total_investment')]}
+                rec['diff'] = diff
+                deliver_formal(r, key, sm, now_jst(), revision_diff=diff)
+            else:
+                rec['decision'] = f"KEEP_REVISION_1 (REVISION_2_{sm['status']}:{sm.get('first_failed_stage')})"
+    except Exception as exc:   # SOURCE failure etc.: Revision 1 stays valid and delivered
+        rec['decision'] = f'KEEP_REVISION_1 (CHECK_FAILED:{type(exc).__name__}:{str(exc)[:100]})'
+    rec['finished_at'] = now_jst().isoformat()
+    log('CHECK10', key, rec['decision'], rec.get('reasons'))
+
+
+def formal_dir(out, r, key):
+    return out / 'formal' / 'rev2' if r.get('formal_effective') == 'rev2' else out / 'formal'
+
+
+def deliver_formal(r, key, sm, now, revision_diff=None):
     issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
     if not issue or now >= cutoff(r):
         return
-    lines = [f"### 【地方版 正式 Signed FINAL】{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
-             f"（予測締切 {cutoff(r).strftime('%H:%M')}）", '',
-             '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
+    tag = '【地方版 正式 Signed FINAL 改訂 Revision 2（最新有効版）】' if revision_diff else '【地方版 正式 Signed FINAL】'
+    lines = [f"### {tag}{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
+             f"（予測締切 {cutoff(r).strftime('%H:%M')}）", '']
+    if revision_diff:
+        d = revision_diff
+        idn = d['identity']
+        lines += ['**10分前チェックで重要な変更を検出し再計算しました（Revision 1は保存済み・失効）**',
+                  '- 変更：' + '、'.join(filter(None, [
+                      f"取消/除外 {idn['active_removed']}" if idn.get('active_removed') else '',
+                      f"騎手変更 {idn['jockey_changed']}" if idn.get('jockey_changed') else '',
+                      f"馬場 {idn['going'][0]}→{idn['going'][1]}" if idn.get('going') else '',
+                      f"発走 {idn['post'][0]}→{idn['post'][1]}" if idn.get('post') else '',
+                      '役割の入れ替わり' if d.get('role_diff') else ''])),
+                  f"- 上昇 {d['rank_up'] or '-'}／下降 {d['rank_down'] or '-'}",
+                  '- 役割 ' + '；'.join(f"{k} +{v['in']} -{v['out']}" for k, v in d['role_diff'].items()) if d['role_diff'] else '- 役割変化なし',
+                  f"- 券面 追加{d['tickets']['added_count']}・削除{d['tickets']['removed_count']}／投資 "
+                  f"{d['investment'][0]:,}円→{d['investment'][1]:,}円", '']
+    lines += [
+              '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
              '**役割** ' + ' / '.join(f"{c}: " + ','.join(x for x in sm['ranking'] if c in sm['roles'][x])
                                       for c in ('W', 'P2')),
              f"**買い目（MEC・推薦試算、実購入なし）** {sm['ticket_count']}点 {sm['total_investment']:,}円"
@@ -803,6 +876,9 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     continue
                 r['attempts'] = 0  # code changed since the failure: retry automatically
                 log('RETRY_AFTER_CODE_CHANGE', key, r.get('last_error'))
+            if FORMAL and (r.get('formal') or {}).get('status') == 'SIGNED_FINAL' and not r.get('check10') \
+                    and r.get('rid') and mins <= CHECK10_MIN and mins > CUTOFF_MIN + 1:
+                jobs.append((1.2, mins, key, 'CHECK10'))   # T-10 final check (cutoff-ordered by mins)
             if mins <= FINAL_WINDOW_MIN and '直前版' not in have:
                 jobs.append((1, mins, key, '直前版'))
             elif not have:
@@ -841,6 +917,10 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                     log('FORMAL', key, sm['status'], sm.get('first_failed_stage'), sm.get('error', '')[:120], sm['elapsed_s'])
                     if sm['status'] == 'SIGNED_FINAL':
                         deliver_formal(r, key, sm, now_jst())
+                    changed = True
+                    continue
+                if edition == 'CHECK10':
+                    check10(reader, r, key, out)
                     changed = True
                     continue
                 if edition == 'KRS':
@@ -993,6 +1073,9 @@ def pending_soon(day=None, minutes=12):
         if mins > CUTOFF_MIN and (not have or (mins <= FINAL_WINDOW_MIN + minutes and '直前版' not in have)):
             return True
         if mins <= -RESULT_DELAY_MIN and r['editions'] and not r.get('settlement') and r.get('result_attempts', 0) < RESULT_MAX_ATTEMPTS:
+            return True
+        if FORMAL and (r.get('formal') or {}).get('status') == 'SIGNED_FINAL' and not r.get('check10') \
+                and CUTOFF_MIN + 1 < mins <= CHECK10_MIN + minutes:
             return True
     return False
 

@@ -147,8 +147,10 @@ def build(day_dir, key, r):
         return None
     venue = r.get('venue_id') or key[:3]
     f = r.get('formal') or {}
-    sm = _load(day_dir / 'formal' / f'{key}.summary.json') if f.get('status') == 'SIGNED_FINAL' else None
-    src = _load(day_dir / 'formal' / f'{key}.source_receipt.json') if sm else None
+    from runtime.local_autopilot.checkpoint10 import effective_dir
+    fdir = effective_dir(day_dir, key)    # Revision 2 when the T-10 check re-signed, else Revision 1
+    sm = _load(fdir / f'{key}.summary.json') if f.get('status') == 'SIGNED_FINAL' else None
+    src = _load(fdir / f'{key}.source_receipt.json') if sm else None
     head = ((src or {}).get('artifact') or {}).get('rakuten_card_header') or {}
     distance = head.get('distance') or r.get('distance')
     scope = {'venue': venue, 'distance': distance, 'distance_band': _band(distance), 'surface': head.get('surface')}
@@ -177,8 +179,8 @@ def build(day_dir, key, r):
     # FORMAL (Signed FINAL + signed RESULT)
     formal, auto, learning, rr = None, None, None, None
     if sm:
-        fr = _load(day_dir / 'formal' / f'{key}.result.json') or {}
-        rr = _load(day_dir / 'formal' / f'{key}.result_receipt.json') or {}
+        fr = _load(fdir / f'{key}.result.json') or {}
+        rr = _load(fdir / f'{key}.result_receipt.json') or {}
         art = rr.get('artifact') or {}
         auto = art.get('automatic_post_result_review')
         learning = art.get('automatic_next_race_learning_state')
@@ -198,7 +200,7 @@ def build(day_dir, key, r):
                           'signed_final_total_investment': sm.get('signed_final_total_investment'),
                           'signed_final_settlement': fr.get('signed_final_settlement')}
         formal['first_material_failure'] = ((auto or {}).get('failure_localization') or {}).get('first_material_failure')
-    full29 = _load(day_dir / 'formal' / f'{key}.full29.json') if sm else None
+    full29 = _load(fdir / f'{key}.full29.json') if sm else None
     idx_ev = _index_evidence(full29, order)
 
     # layer analysis

@@ -1,0 +1,35 @@
+{
+ "profile": "KM-LOCAL-FORWARD-OOS-PREREG-20261117-R2",
+ "family": "LOCAL (NAR flat)",
+ "frozen_at": "2026-11-17T23:15:00+09:00 (this commit)",
+ "first_eligible_post": "2026-11-18T00:00:00+09:00",
+ "extends": "KM-LOCAL-FORWARD-OOS-PREREG-20261117-R1 (C1-C4 unchanged)",
+ "learning_races": "2026-11-17 formal 35R (review/formal_eval.md) - research replay only",
+ "production_change": "NONE. R54 60-point cap and MEC R3 stay Production; promotion needs a separate explicit Owner approval.",
+ "stages": [30, 100, 300],
+ "decision_stage": 100,
+ "candidates": [
+  {
+   "id": "C5-SMALL-POINTS",
+   "hypothesis": "With the same frozen prediction, KRS and MEC output and the same selection order as the R54 cap, a smaller point limit (C05 / C10 / C20 / C30) reaches a PFS at least as high as Control R54-60 with less stake.",
+   "change": "ticket selection only (point limit); no prediction change",
+   "scope": "formal LOCAL races with a settled result",
+   "control": "R54 60-point recommendation",
+   "population": "same races, same Signed FINAL, same payouts; 100-yen flat stakes so equal points = equal budget",
+   "primary_metric": "PFS per candidate vs Control",
+   "secondary_metrics": ["hit races", "invest", "max single-race loss", "top-1 race payout share", "hits lost vs Control"],
+   "reject_if": "at 100R the candidate PFS is below Control, or its top-1 race supplies >= 40% of its payout",
+   "promote_if": "at 100R PFS >= Control + 10 points with top-1 share < 40%, re-confirmed at 300R; then an Owner decision"
+  },
+  {
+   "id": "C6-CHECK10-REVISION",
+   "hypothesis": "Revision 2 from the T-10 check (material change only) predicts and pays at least as well as the superseded Revision 1 on the same race.",
+   "change": "none (measures the Production T-10 checkpoint)",
+   "scope": "races with a Revision 2 Signed FINAL",
+   "control": "Revision 1 tickets and ranking of the same race",
+   "primary_metric": "winner rank and PFS, Revision 2 vs Revision 1",
+   "reject_if": "at 30 revised races Revision 2 is worse on both winner rank and PFS (report to the Owner)",
+   "promote_if": "not applicable; report the measured effect"
+  }
+ ]
+}
