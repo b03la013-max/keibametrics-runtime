@@ -55,6 +55,7 @@ window.__kmLocalCollect = async function (date8, opts) {
     const pages = { "出馬表": { url: s.url, ...extract(s.doc) } };
     for (const [name, href] of links) {
       if (pages[name]) continue;
+      if (opts.only && !opts.only.includes(name)) continue;   // e.g. {only:["パドック情報"]} near post time
       await sleep(gap);
       const p = await get(href);
       if (p.status !== 200 || /表示できません|存在しません/.test(p.doc.title + (p.doc.body.innerText || p.doc.body.textContent || ""))) {
@@ -63,7 +64,7 @@ window.__kmLocalCollect = async function (date8, opts) {
     }
     races.push({ kb_id: id, venue: m[4], race_no: +m[5], title: s.doc.title, pages });
   }
-  const bands = window.__kmLocalBands ? await window.__kmLocalBands(date8, { gapMs: gap }) : null;
+  const bands = window.__kmLocalBands && !opts.only ? await window.__kmLocalBands(date8, { gapMs: gap }) : null;
   const out = { date: date8, source: "s.keibabook.co.jp (Owner session)", collected_at: new Date().toISOString(),
                 races, bands };
   const json = JSON.stringify(out);
@@ -71,7 +72,7 @@ window.__kmLocalCollect = async function (date8, opts) {
     .map(x => x.toString(16).padStart(2, "0")).join("");
   const gz = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream("gzip"))).blob();
   const hhmm = new Date().toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }).replace(":", "");
-  const name = `km_local_kb_${date8}_${hhmm}.json.gz`;
+  const name = `km_local_kb_${date8}_${opts.only ? "PD" : ""}${hhmm}.json.gz`;   // PD = paddock-only capture
   // keep: no download button at all — Claude reads the gzip back in base64 chunks from the page
   // (window.__kmLocalLast) and stores it in the private repo (Owner request 2026-11-17 22:21).
   if (opts.keep) {

@@ -84,6 +84,13 @@ def evidence(race):
             if len(row) == 3 and row[1].isdigit() and i + 1 < len(rows) and rows[i + 1] and rows[i + 1][0]:
                 txt = rows[i + 1][0]
                 H.setdefault(int(row[1]), {})['stable_comment'] = {'mark': txt[:1], 'text': txt}
+    pd = pg.get('パドック情報') or {}
+    for t in pd.get('tables') or []:          # パドック情報 (race day, near the post): kept verbatim, private
+        for row in t['rows']:
+            if len(row) >= 3 and row[1].isdigit():
+                H.setdefault(int(row[1]), {})['paddock'] = {'cells': row, 'table': t['cls']}
+    if pd.get('text'):
+        H.setdefault(0, {})['paddock_text'] = pd['text'][:4000]
     no_t = next((t for t in (pg.get('能力表HTML') or {}).get('tables') or [] if 'nouryoku' in t['cls']), None)
     if no_t:
         for row in no_t['rows']:
@@ -177,7 +184,7 @@ def main(argv=None):
            'private_file': str(priv.relative_to(a.private)), 'private_evidence': str(evp.relative_to(a.private)),
            'evidence_horses': sum(len(r['horses']) for r in ev['races']), 'sha256': sha}
     bands = doc.get('bands') or {}
-    if a.data:
+    if a.data and '_PD' not in src.name:   # paddock-only captures carry no bands: never overwrite the day's bands
         pub = Path(a.data) / 'output' / day / 'external' / 'keibabook_bands.json'
         pub.parent.mkdir(parents=True, exist_ok=True)
         cb = {(r['venue'], r['race_no']): r['horses'] for r in bands.get('races') or []}

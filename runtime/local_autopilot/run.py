@@ -319,6 +319,13 @@ def predict(reader, r, today, edition, out, cards):
         slim['prior_runs'] = {str(x['horse_no']): danger_fav.prior_record(x) for x in runners}
     except Exception as exc:
         slim['danger_fav'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
+    if edition == '直前版':   # current-state evidence at the T-45 edition (evidence only, no numeric consumer)
+        try:
+            from runtime.local_autopilot import weather, day_trend
+            slim['weather'] = weather.observe(r['venue_id'], now_jst(), Path(os.environ.get('RUNNER_TEMP') or '/tmp') / 'km_weather_cache')
+            slim['day_trend'] = day_trend.build(out, r['venue_id'], now_jst())
+        except Exception as exc:
+            slim['weather'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
     saved_at = now_jst().isoformat()
     src_sha = hashlib.sha256(html.encode()).hexdigest()
     ticket_sha = hashlib.sha256(json.dumps(slim['tickets'], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
@@ -590,6 +597,15 @@ def check10(reader, r, key, out):
         cmp = c10.compare(r, out / 'formal', key, html, fetched, [str(x) for x in sm1.get('ranking') or []])
         rec.update({k: cmp[k] for k in ('checked_at', 'material', 'reasons', 'identity', 'observed', 'role_diff',
                                          'rank_up', 'rank_down', 'rev1_source_raw_sha256', 'new_source_raw_sha256')})
+        try:   # Test D: weather change is recorded, never material by itself (no approved numeric rule)
+            from runtime.local_autopilot import weather
+            w10 = weather.observe(r['venue_id'], now_jst(), Path(os.environ.get('RUNNER_TEMP') or '/tmp') / 'km_weather_cache')
+            prev = json.loads((out / 'rev' / f"{r['editions'][-1]['rev']}.json").read_text())['prediction'].get('weather')
+            cmp['weather_t10'] = w10
+            cmp['weather_change_since_t45'] = weather.diff(prev, w10)
+            rec['weather_change_since_t45'] = cmp['weather_change_since_t45']
+        except Exception as exc:
+            cmp['weather_t10'] = {'status': 'ERROR', 'error': f'{type(exc).__name__}:{str(exc)[:120]}'}
         dump(out / 'formal' / f'{key}.check10.json', cmp)
         if not cmp['material']:
             rec['decision'] = 'KEEP_REVISION_1 (再計算を要する変更なし)'
