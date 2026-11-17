@@ -1,6 +1,6 @@
-# 地方版 配送台帳 2026-11-17（20:32時点）
+# 地方版 配送台帳 2026-11-17（21:00時点）
 
-- 管理Race 36／発走済み 34
+- 管理Race 36／発走済み 36
 - PAPER：凍結 36・Push検証 36・送信 36（発走前 36）・読み戻し一致 36・本人確認 0
 - 正式：試行 36・Signed FINAL 36（NO-BET 0）・発走前送信 36・読み戻し一致 36・本人確認 0
 - 発走前PAPER配送なしで発走：なし
@@ -21,7 +21,7 @@
 | KNZ_09 | 18:50 | POSTRESULT_DIAGNOSTIC | 18:06 | ○ | SIGNED_FINAL | 18:07 | ○ |  |
 | KNZ_10 | 19:25 | POSTRESULT_DIAGNOSTIC | 18:41 | ○ | SIGNED_FINAL | 18:42 | ○ |  |
 | KNZ_11 | 20:00 | POSTRESULT_DIAGNOSTIC | 19:16 | ○ | SIGNED_FINAL | 19:17 | ○ |  |
-| KNZ_12 | 20:40 | PRESTART_PUSH_VERIFIED | 19:55 | ○ | SIGNED_FINAL | 19:56 | ○ |  |
+| KNZ_12 | 20:40 | POSTRESULT_DIAGNOSTIC | 19:55 | ○ | SIGNED_FINAL | 19:56 | ○ |  |
 | MIZ_01 | 11:35 | POSTRESULT_DIAGNOSTIC | 10:52 | ○ | SIGNED_FINAL | 10:53 | ○ |  |
 | MIZ_02 | 12:10 | POSTRESULT_DIAGNOSTIC | 11:27 | ○ | SIGNED_FINAL | 11:28 | ○ |  |
 | MIZ_03 | 12:45 | POSTRESULT_DIAGNOSTIC | 12:02 | ○ | SIGNED_FINAL | 12:03 | ○ |  |
