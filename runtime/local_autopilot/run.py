@@ -708,6 +708,54 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
         log('FORMAL_DELIVERY_FAIL', key, f'{type(exc).__name__}:{str(exc)[:120]}')
 
 
+def triple_step(q, out, now):
+    """SPAT4 LOTO トリプル馬単 (南関東): build once inside the window before the 5-minute close of the first
+    leg, deliver to the LOCAL issue, settle hit/miss after the third leg (PAPER, no purchase)."""
+    from runtime.local_autopilot import triple_umatan as tu
+    changed = False
+    for v in tu.VENUES:
+        ks = tu.legs(q, v)
+        if not ks:
+            continue
+        t = q.setdefault('triple', {}).setdefault(v, {})
+        try:
+            mins = (datetime.fromisoformat(q['races'][ks[0]]['post_current']) - now).total_seconds() / 60
+            if not t.get('sha256') and t.get('attempts', 0) < 3 and tu.BUILD_WINDOW_MIN[0] < mins <= tu.BUILD_WINDOW_MIN[1]:
+                t['attempts'] = t.get('attempts', 0) + 1
+                rec = tu.build(q, v, out, now)
+                changed = True
+                if rec and rec.get('status') == 'BUILT':
+                    (out / 'triple').mkdir(exist_ok=True)
+                    dump(out / 'triple' / f'{v}.json', rec)
+                    body = tu.md(rec)
+                    (out / 'triple' / f'{v}.md').write_text(body + '\n')
+                    t.update(sha256=rec['sha256'], built_at=rec['built_at'], deadline=rec['deadline'],
+                             legs=[x['revision'] for x in rec['legs']])
+                    issue = os.environ.get('KM_LOCAL_DELIVERY_ISSUE')
+                    if issue and now < datetime.fromisoformat(rec['deadline']):
+                        c = _gh('POST', f'/repos/{DELIVERY_REPO}/issues/{issue}/comments', {'body': body})
+                        back = _gh('GET', f"/repos/{DELIVERY_REPO}/issues/comments/{c['id']}")
+                        t['delivery'] = {'USER_DELIVERY_SENT': c['created_at'], 'url': c['html_url'],
+                                         'DELIVERY_READBACK_VERIFIED': (back.get('body') or '') == body,
+                                         'before_deadline': datetime.fromisoformat(c['created_at'].replace('Z', '+00:00')) < datetime.fromisoformat(rec['deadline'])}
+                    log('TRIPLE', v, rec['status'], rec['sha256'][:12], t.get('delivery', {}).get('url'))
+                else:
+                    t['last_status'] = (rec or {}).get('status')
+            elif t.get('sha256') and not t.get('settlement'):
+                rec = json.loads((out / 'triple' / f'{v}.json').read_text())
+                st = tu.settle(rec, q)
+                if st:
+                    t['settlement'] = st
+                    dump(out / 'triple' / f'{v}.result.json', st)
+                    log('TRIPLE_RESULT', v, {k: x['hit'] for k, x in st['tiers'].items()})
+                    changed = True
+        except Exception as exc:
+            t['error'] = f'{type(exc).__name__}:{str(exc)[:120]}'
+            log('TRIPLE_FAIL', v, t['error'])
+            changed = True
+    return changed
+
+
 def frozen_prediction(r, out, key):
     """The last revision frozen before cutoff (immutable rev file), else the
     legacy latest file if it was saved before cutoff (13 Nov races)."""
@@ -1024,6 +1072,7 @@ def tick(day=None, now=None, budget_seconds=480, only=None, reader=None, results
                                                   'at': now_jst().isoformat(), 'trace': traceback.format_exc()[-1500:]})
                 log('FAIL', key, edition, r['last_error'])
                 changed = True
+        changed |= triple_step(q, out, now_jst())
         if not q['timings'].get('all_first_editions_at') and all(r['editions'] or r['status'] == 'MISSED_DEADLINE'
                                                                  for r in q['races'].values()):
             q['timings']['all_first_editions_at'] = now_jst().isoformat()
@@ -1088,6 +1137,13 @@ def pending_soon(day=None, minutes=12):
     q = load_queue(ROOT / (day or now.date().isoformat()))
     if q is None:
         return True
+    from runtime.local_autopilot import triple_umatan as tu
+    for v in tu.VENUES:
+        ks = tu.legs(q, v)
+        if ks and not (q.get('triple') or {}).get(v, {}).get('sha256'):
+            m = (datetime.fromisoformat(q['races'][ks[0]]['post_current']) - now).total_seconds() / 60
+            if tu.BUILD_WINDOW_MIN[0] < m <= tu.BUILD_WINDOW_MIN[1] + minutes:
+                return True
     for r in q['races'].values():
         mins = (datetime.fromisoformat(r['post_current']) - now).total_seconds() / 60
         have = [e['edition'] for e in r['editions']]
