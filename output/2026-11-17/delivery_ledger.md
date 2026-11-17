@@ -1,8 +1,8 @@
-# 地方版 配送台帳 2026-11-17（14:17時点）
+# 地方版 配送台帳 2026-11-17（14:18時点）
 
 - 管理Race 36／発走済み 6
-- PAPER：凍結 36・Push検証 35・送信 9（発走前 9）・読み戻し一致 9・本人確認 0
-- 正式：試行 9・Signed FINAL 9（NO-BET 0）・発走前送信 9・読み戻し一致 9・本人確認 0
+- PAPER：凍結 36・Push検証 36・送信 10（発走前 10）・読み戻し一致 10・本人確認 0
+- 正式：試行 10・Signed FINAL 10（NO-BET 0）・発走前送信 10・読み戻し一致 10・本人確認 0
 - 発走前PAPER配送なしで発走：なし
 - 発走前の正式配送なしで発走（未試行を含む）：なし
 - 正式の停止工程：なし
@@ -35,7 +35,7 @@
 | MIZ_11 | 17:30 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | MIZ_12 | 18:05 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_01 | 14:30 | PRESTART_PUSH_VERIFIED | 13:45 | ○ | SIGNED_FINAL | 13:46 | ○ |  |
-| OHI_02 | 15:02 | PREDICTION_COMPLETE |  | … | - | - | - |  |
+| OHI_02 | 15:02 | PRESTART_PUSH_VERIFIED | 14:17 | ○ | SIGNED_FINAL | 14:18 | ○ |  |
 | OHI_03 | 15:35 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_04 | 16:07 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
 | OHI_05 | 16:40 | PRESTART_PUSH_VERIFIED |  | … | - | - | - |  |
