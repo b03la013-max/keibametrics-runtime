@@ -3030,7 +3030,7 @@
    "post_initial": "2026-11-17T16:07:00+09:00",
    "post_current": "2026-11-17T16:07:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "POSTRESULT_DIAGNOSTIC",
    "editions": [
     {
      "edition": "朝版",
@@ -3187,6 +3187,69 @@
       "RECEIPT_VERIFIED"
      ]
     }
+   },
+   "result_attempts": 1,
+   "settlement": {
+    "order": [
+     8,
+     2,
+     3,
+     1,
+     11,
+     9,
+     7,
+     5,
+     12,
+     6,
+     10,
+     4
+    ],
+    "invest": 700,
+    "refund": 0,
+    "effective_invest": 700,
+    "payout": 0,
+    "win_hit": 0,
+    "top_in3": 1,
+    "top3_capture": 1,
+    "ordered_pair": 0,
+    "exact_triple": 0,
+    "settled_at": "2026-11-17T16:28:05.065706+09:00",
+    "revision": "OHI_04.r2",
+    "ticket_sha256": "a524e0e83d3e95593b987648959951e678aa47fa61b96ced3bc53177ab5125e2",
+    "diagnosis": {
+     "winner_rank": 6,
+     "second_rank": 4,
+     "third_rank": 1,
+     "first_failure": "WINNER_DISCOVERED_LOW"
+    }
+   },
+   "formal_result_attempts": 1,
+   "formal_settlement": {
+    "invest": 6000,
+    "refund": 0,
+    "effective_invest": 6000,
+    "payout": 0,
+    "pfs": 0.0,
+    "win_hit": 0,
+    "diagnosis": {
+     "winner_rank": 7,
+     "second_rank": 10,
+     "third_rank": 1,
+     "first_failure": "WINNER_NOT_DISCOVERED"
+    },
+    "signed_final_settlement": {
+     "invest": 15600,
+     "refund": 0,
+     "effective_invest": 15600,
+     "payout": 0,
+     "pfs": 0.0
+    },
+    "result_receipt_sha256": "1feedaa318cf5db8123d58ed8e1ddcf8d4ecd423d2e7e8bf12494e1321819e6c",
+    "result_receipt_verified": true,
+    "runtime_pfs": 0.0,
+    "first_material_failure": "PREDICTION_ROLE_W",
+    "learning_state_id": "KM-LOCAL-OHI-20261117-R04-RKT-LEARNING-NEXT",
+    "learning_production_change_authorized": false
    }
   },
   "OHI_05": {
@@ -3366,7 +3429,7 @@
    "post_initial": "2026-11-17T17:12:00+09:00",
    "post_current": "2026-11-17T17:12:00+09:00",
    "post_changes": [],
-   "status": "PRESTART_PUSH_VERIFIED",
+   "status": "PREDICTION_COMPLETE",
    "editions": [
     {
      "edition": "朝版",
@@ -3403,11 +3466,56 @@
      "keibabook": {
       "status": "NOT_CAPTURED"
      }
+    },
+    {
+     "edition": "直前版",
+     "rev": "OHI_06.r2",
+     "source_sha256": "049fd9ed262550363650e5febd41ce7510a3bed68b5bae683eaae7f95ecb07aa",
+     "ticket_sha256": "8fa2e143726287232b05677eaaacf35ed8cd034a3f381315b0c4e2f8de268ebc",
+     "source_fetched_at": "2026-11-17T16:27:04.187231+09:00",
+     "saved_at": "2026-11-17T16:27:04.898307+09:00",
+     "frozen_at": "2026-11-17T16:27:04.898307+09:00",
+     "revision": "直前の馬体重・オッズ・騎手を反映して再予測",
+     "delivery": {
+      "GENERATED": "2026-11-17T16:27:04.898307+09:00",
+      "FROZEN": "2026-11-17T16:27:04.898307+09:00",
+      "COMMITTED": null,
+      "PUSH_VERIFIED": null,
+      "LINK_AVAILABLE": null,
+      "USER_DELIVERY_SENT": "NOT_CONNECTED",
+      "USER_REACHED": "NOT_CONNECTED",
+      "USER_ACK_VERIFIED": "NOT_CONNECTED"
+     },
+     "before_cutoff": true,
+     "top": 5,
+     "quad": 3,
+     "aki_form": "1-2-4",
+     "sbo": {
+      "status": "USED",
+      "fetched_at": "2026-11-17T16:27:04.844822+09:00",
+      "sha256": "ec1c6c8368103e701dfbf2e1dde8463ddc0ee1d3b6d0aa58ead39b548e9f9052",
+      "coverage": 11,
+      "active": 11
+     },
+     "keibabook": {
+      "status": "USED",
+      "captured_at": "2026-11-16T10:54:27.074Z",
+      "sha256": "7322d40a8253c304f45f5d12d688fbf4bda6766981510841f2a4917c74ea2b65",
+      "coverage": 11,
+      "signals": {
+       "cci": 11,
+       "tri": 11,
+       "tm": 11,
+       "pace": 11,
+       "rt": 0,
+       "cpu": 0
+      }
+     }
     }
    ],
    "attempts": 0,
    "last_error": null,
-   "source_fetched_at": "2026-11-16T21:33:28.723387+09:00",
+   "source_fetched_at": "2026-11-17T16:27:04.187231+09:00",
    "active_runners": 11,
    "scratched": [],
    "push_verified_at": "2026-11-16T12:39:35Z"
@@ -5318,8 +5426,8 @@
   "plan_complete_at": "2026-11-16T21:11:06.743947+09:00",
   "first_tick_at": "2026-11-16T21:08:03.521859+09:00",
   "first_prediction_at": "2026-11-16T21:11:07.612602+09:00",
-  "requests": 78,
-  "wait_seconds": 2520.2310512065887,
+  "requests": 80,
+  "wait_seconds": 2580.0385229587555,
   "all_first_editions_at": "2026-11-16T21:47:44.094256+09:00",
   "rediscovered_at": "2026-11-17T06:01:20.005277+09:00"
  }
