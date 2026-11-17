@@ -1,7 +1,7 @@
 # 地方版 正式評価 2026-11-17（KRS改善/悪化・60点上限）
 
-- 対象 21R／KRS判定 {'IMPROVED': 7, 'NEUTRAL': 5, 'WORSENED': 9, 'NOT_AVAILABLE': 0}
-- 実運用（R54） 21R：全MEC 292,200円→92,750円（31.7%）／上限後 126,000円→70,920円（56.3%）／的中を失ったRace 4／回避損失 144,730円
+- 対象 22R／KRS判定 {'IMPROVED': 8, 'NEUTRAL': 5, 'WORSENED': 9, 'NOT_AVAILABLE': 0}
+- 実運用（R54） 22R：全MEC 306,600円→92,750円（30.3%）／上限後 132,000円→70,920円（53.7%）／的中を失ったRace 4／回避損失 153,130円
 
 | Race | KRS判定 | 1着順位 Static→KRS | Top3捕捉 Static→KRS | 方式 | 券数 全→上限後 | 回収 全→上限後 | 失った的中 |
 |---|---|---|---|---|---|---|---|
@@ -26,5 +26,6 @@
 | OHI_03 | WORSENED | 4→7 | 0→0 | LIVE_R54 | 105→60 | 0.0%→0.0% | - |
 | OHI_04 | WORSENED | 7→10 | 1→1 | LIVE_R54 | 156→60 | 0.0%→0.0% | - |
 | OHI_05 | IMPROVED | 3→2 | 1→2 | LIVE_R54 | 156→60 | 80.8%→44.0% | TRIFECTA:12-8-11 |
+| OHI_06 | IMPROVED | 8→7 | 1→1 | LIVE_R54 | 144→60 | 0.0%→0.0% | - |
 
 <sub>REPLAY_CAP_ONLY applies the R54 cap to a pre-R54 MEC set on known results: research, not OOS.</sub>
