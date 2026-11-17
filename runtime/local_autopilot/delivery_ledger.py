@@ -146,6 +146,14 @@ def build(q, day_dir, now=None, cutoff_min=3, max_attempts=3):
             'summary': summary, 'races': rows}
 
 
+def _mark(x, track):
+    """○ delivered before the post, × post passed without it, … not yet due."""
+    if track['prestart_delivery']:
+        return '○'
+    post = _t(x['official_post'])
+    return '×' if post and datetime.now(JST) >= post else '…'
+
+
 def md(L):
     s = L['summary']
     p, f = s['paper'], s['formal']
@@ -164,10 +172,10 @@ def md(L):
         ps = x['paper']['states']['DELIVERY_SUBMITTED']['at']
         fo = x['formal']
         out.append(f"| {x['race']} | {(x['official_post'] or '')[11:16]} | {x['status']} | {(_iso(_t(ps)) or '-')[11:16]} | "
-                   f"{'○' if x['paper']['prestart_delivery'] else '×'} | "
+                   f"{_mark(x, x['paper'])} | "
                    f"{(fo['states']['SIGNED_FINAL_VERIFIED'].get('status') if fo else '-')} | "
                    f"{((_iso(_t(fo['states']['DELIVERY_SUBMITTED']['at'])) or '-')[11:16]) if fo else '-'} | "
-                   f"{('○' if fo['prestart_delivery'] else '×') if fo else '-'} | {x['first_stop'] or ''} |")
+                   f"{_mark(x, fo) if fo else '-'} | {x['first_stop'] or ''} |")
     out += ['', f"<sub>{L['note']}</sub>", '']
     return '\n'.join(out)
 
