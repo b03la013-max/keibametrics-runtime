@@ -42,7 +42,7 @@ on:
       runner:
         description: "mac = Owner's Mac (self-hosted, default, no Actions minutes) / github = GitHub-hosted fallback"
         required: false
-        default: github
+        default: mac
         type: choice
         options: [mac, github]
 
@@ -54,7 +54,7 @@ jobs:
   autopilot:
     # Owner decision 2026-11-18: run on the Owner's Mac (self-hosted runner, no billed minutes).
     # Fallback: dispatch with -f runner=github.
-    runs-on: ${{ (inputs.runner || 'github') == 'github' && 'ubuntu-latest' || 'self-hosted' }}
+    runs-on: ${{ (inputs.runner || 'mac') == 'github' && 'ubuntu-latest' || 'self-hosted' }}
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
@@ -101,7 +101,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           KM_LOCAL_DELIVERY_ISSUE: "424"
           RACE_DATE: ${{ inputs.race_date }}
-          RUNNER_CHOICE: ${{ inputs.runner || 'github' }}
+          RUNNER_CHOICE: ${{ inputs.runner || 'mac' }}
           MODE: ${{ inputs.mode || 'loop' }}
         run: |
           set -uo pipefail
