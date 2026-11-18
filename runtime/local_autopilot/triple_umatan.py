@@ -106,18 +106,20 @@ def build(q, venue_id, root_day, now):
 
 
 def md(rec):
-    L = [f"### 【地方版PAPER トリプル馬単】{rec['venue_name']} "
+    L = [f"### 🎯 トリプル馬単｜{rec['venue_name']} "
          + '・'.join(f"{x['race_no']}R" for x in rec['legs'])
          + f"（SPAT4締切 {rec['deadline'][11:16]}＝{rec['legs'][0]['race_no']}R発走5分前）", '']
     for x in rec['legs']:
         L.append(f"- {x['race_no']}R {x['post'][11:16]}（{x['edition']}）上位確率 "
                  + ' '.join(f"{n}:{int(v * 100)}%" for n, v in x['top'][:4]))
-    L += ['', '| 案 | 1レース目 | 2レース目 | 3レース目 | 組数 | 50円/組 | モデル的中確率 |', '|---|---|---|---|---|---|---|']
+    from runtime.local_autopilot import ticket_tree
     for name, t in rec['tiers'].items():
-        cell = lambda l: (f"1着{','.join(map(str, l['first']))}→2着"
-                          f"{','.join(str(x) for x in l['second'] if len(l['first']) > 1 or x not in l['first'])}（{l['points']}組）")
-        L.append(f"| {name} | {cell(t['legs'][0])} | {cell(t['legs'][1])} | {cell(t['legs'][2])} | {t['points']} | "
-                 f"{t['stake_yen']:,}円 | {t['model_hit_prob'] * 100:.2f}% |")
+        L += ['', f"**{name}案** {t['points']}組・{t['stake_yen']:,}円（50円/組）・モデル的中確率 {t['model_hit_prob'] * 100:.2f}%", '', '```']
+        for leg, l in zip(rec['legs'], t['legs']):
+            pairs = [(i, j) for i in l['first'] for j in l['second'] if i != j]
+            lines, _ = ticket_tree.render('馬単', pairs, f"{leg['race_no']}R")
+            L += lines
+        L += ['総組数', f"└─ {' × '.join(str(l['points']) for l in t['legs'])} ＝ {t['points']}組", '```']
     if rec.get('skip_advice'):
         L += ['', '**見送り検討**：どのレースも1〜3点に絞れません（M案で最少の脚でも4点以上）。']
     L += ['', '<sub>入力：SPAT4 LOTO「セレクト」で各レース 1着→2着 のフォーメーション（同じ馬は1着・2着同時不可）。'

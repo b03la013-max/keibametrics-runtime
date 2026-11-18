@@ -89,11 +89,28 @@ def f0(x):
 
 # --------------------------------------------------------------------- render
 def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None):
+    """PAPER race report. Mobile-first: 印 → 買い目（買い目表記規格のツリー）→ 判断 → 詳細（折りたたみ）."""
+    from runtime.local_autopilot import ticket_tree
     a = res['aki']
     L = [f"## {race['venue_name']}{race['race_no']}R {race['post_current'][11:16]}発走　{race.get('race_name', '')}",
-         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭　**{edition}**（出馬表・オッズ取得 {src_at[11:16]}）"
-         + (f"　改訂理由：{revision}" if revision else ''),
-         '', f"- 展開：{res['pace']}", f"- レース型（§30）：**{res['race_type']}**"]
+         f"{race.get('distance') or '?'}m／{len(res['rows'])}頭／馬場 {race.get('going') or '不明'}　**{edition}**"
+         f"（出馬表・オッズ取得 {src_at[11:16]}）" + (f"　改訂理由：{revision}" if revision else '')]
+    if race.get('scratched'):
+        L.append(f"取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
+    L += ['', '**印と役割**', '', '| 印 | 馬番 | 馬名 | 単勝 | 人気 | 勝率※ | 役割 |', '|:-:|:-:|---|--:|:-:|--:|---|']
+    for x in res['order']:
+        if x['mark'] or x['role'] not in ('×', ''):
+            L.append(f"| {x['mark'] or ''} | {x['no']} | {x['name']} | {'' if not x['win'] else x['win']} | "
+                     f"{x.get('pop', '')} | {x['p_win'] * 100:.0f}% | {x['role']} |")
+    tk = [(t['k'], ticket_tree.parse(t['k'], t['b']), None) for t in res['tickets']]
+    tree, total = ticket_tree.block(tk)
+    L += ['', f"**買い目**（ペーパー・1点100円・実購入なし）", '', '```', tree, '```']
+    ev = '–' if res['tan_ev'] is None else f"{res['tan_ev']:+.2f}"
+    L += ['', '**判断**', '',
+          f"- 展開 {res['pace']}／レース型 {res['race_type']}",
+          f"- 本命 信頼ゲート **{res['gate']}**／{QUAD[res['quad']]}",
+          f"- 荒れ具合 AKI {a['total']}（タイプ{a['type']}・{a['form']}型）：W-AKI {a['W']}・P-AKI {a['P']}・ASI {a['ASI']}・RSI {a['RSI']}",
+          '', '<details><summary>指数・判定の詳細</summary>', '']
     if sbo_meta:
         L.append(f"- 外部補助指標VMI-L（水分ボンバー・F3Sへ{engine.VMI_WEIGHT:.0%}）：" + (
             f"使用 {sbo_meta['coverage']}/{sbo_meta['active']}頭（取得 {sbo_meta['fetched_at'][11:16]}）" if sbo_meta['status'] == 'USED'
@@ -104,8 +121,6 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
             f"使用 {kbm['coverage']}頭［CCI {sg.get('cci', 0)}／TRI {sg.get('tri', 0)}／印 {sg.get('tm', 0)}／展開 {sg.get('pace', 0)}"
             f"／RT・CPU {max(sg.get('rt', 0), sg.get('cpu', 0))}］（取得 {str(kbm['captured_at'])[11:16]}UTC）"
             if kbm.get('status') == 'USED' else f"未使用（{kbm.get('status')}）"))
-    if race.get('scratched'):
-        L.append(f"- 取消・除外：{'、'.join(race['scratched'])}（予測・買い目から除外済み）")
     if race.get('newcomers'):
         L.append(f"- 過去走なし（新馬等）：{race['newcomers']}頭 → 能力・展開系は UNKNOWN（中立52）で計算")
     L += ['', '| 印 | 馬番 | 馬名 | 騎手 | 単勝 | 人気 | TPI-L | SRI-L | EVI | NCI | T3I | F3S | OPI-V | VMI | CCI | TRI | 印 | 展開 | p勝(暫定) | 役割 |',
@@ -115,28 +130,21 @@ def render(race, res, edition, src_at, shadow=None, revision=None, sbo_meta=None
                  f"{'' if not x['win'] else x['win']} | {x.get('pop', '')} | {f0(x['TPIF'])} | {f0(x['SRI'])} | "
                  f"{f0(x['EVI'])} | {f0(x['NCI'])} | {f0(x['T3I'])} | {f0(x['F3S'])} | {f0(x['OPI'])} | {f0(x.get('VMI'))} | {f0(x.get('CCI'))} | {f0(x.get('TRI'))} | {f0(x.get('TMI'))} | {x.get('PACE') or ''} | "
                  f"{x['p_win'] * 100:.0f}% | {x['role']} |")
-    ev = '–' if res['tan_ev'] is None else f"{res['tan_ev']:+.2f}"
-    L += ['', '**本命判定エンジン（§12）**', '',
-          f"- WCI {res['wci']}／本命不安 {res['fuan']}（{'、'.join(res['fuan_reasons']) or 'なし'}）／逆転候補 {res['reversal']}頭",
-          f"- 信頼ゲート：**{res['gate']}**　単勝EV（暫定・未較正。資金判断に使わない）：{ev}",
-          f"- 象限：**{QUAD[res['quad']]}**", '',
-          f"**AKI-v2（§19）** W-AKI {a['W']}／P-AKI {a['P']}／ASI {a['ASI']}／RSI {a['RSI']}／堅決着補正 −{a['katai']} → "
-          f"総合 {a['total']}（タイプ{a['type']}・{a['form']}型）", '',
-          '必須チェック：' + '／'.join(f"{k} {'YES' if v else 'NO'}" for k, v in res['checks'].items()), '',
-          '**買い目（ペーパー・PAPER試算は1点100円固定。資金配分ではない）**', '',
-          '| 券種 | 買い目 | 点数 | 水準 | 備考 |', '|---|---|---|---|---|']
-    for t in res['tickets']:
-        L.append(f"| {t['k']} | {t['b']} | {t['pt']} | {t['st']} | {t.get('note', '')} |")
+    L += ['', f"- 本命判定（§12）：WCI {res['wci']}／本命不安 {res['fuan']}（{'、'.join(res['fuan_reasons']) or 'なし'}）／逆転候補 {res['reversal']}頭"
+              f"／単勝EV（暫定・未較正。資金判断に使わない）{ev}",
+          f"- AKI-v2（§19）：堅決着補正 −{a['katai']}",
+          '- 必須チェック：' + '／'.join(f"{k} {'YES' if v else 'NO'}" for k, v in res['checks'].items()),
+          '- 券種の判断：' + '／'.join(f"{t['k']} {t['pt']}点 {t['st']}" + (f"（{t['note']}）" if t.get('note') else '') for t in res['tickets'])]
     if shadow and not shadow.get('error'):
         tc = shadow['terminal_counts']
-        L += ['', f"**公式29指数シャドー（FULL29_SHADOW_PAPER・正式SOURCE不成立・消費権限なし）** "
-                  f"{shadow['runner_count']}頭×29＝{shadow['cells']}セル：CALCULATED {tc['CALCULATED']}／RULED-NEUTRAL {tc['RULED-NEUTRAL']}"
-                  f"／未解決 {tc['UNRESOLVED'] + tc['RULED-HOLD'] + tc['NOT-APPLICABLE']}。F3S-L順：{'-'.join(map(str, shadow['f3s_order'][:6]))}。"
-                  f"KRS：入力構築{'済' if shadow['krs']['input_built'] else '不可'}・実試行0（外部Engine未接続）"]
+        L += [f"- 公式29指数シャドー（FULL29_SHADOW_PAPER・消費権限なし） "
+              f"{shadow['runner_count']}頭×29＝{shadow['cells']}セル：CALCULATED {tc['CALCULATED']}／RULED-NEUTRAL {tc['RULED-NEUTRAL']}"
+              f"／未解決 {tc['UNRESOLVED'] + tc['RULED-HOLD'] + tc['NOT-APPLICABLE']}。F3S-L順 {'-'.join(map(str, shadow['f3s_order'][:6]))}"]
     elif shadow:
-        L += ['', f"公式29指数シャドー：実行不可（{shadow['error']}）"]
+        L += [f"- 公式29指数シャドー：実行不可（{shadow['error']}）"]
+    L += ['', '</details>']
     notes = sorted({f for x in res['rows'] for f in x['flags'] if 'NEUTRAL' in f})
-    L += ['', f"<sub>未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎の話）・TRI（調教）は"
+    L += ['', f"<sub>※勝率・p勝は暫定値。未較正ペーパー。p勝はF3Sのsoftmaxと単勝人気の50:50合成（実勝率ではない）。CCI（厩舎の話）・TRI（調教）は"
               f"競馬ブック帯域が無い馬・場では中立52。複勝オッズ未取得のため複勝はワイドへルーティング。馬場：{race.get('going') or '不明'}。{' '.join(notes)}</sub>", '']
     return '\n'.join(L)
 
@@ -451,9 +459,8 @@ def delivery_body(q, r, e, out):
     rk_ = fr['prediction']['ranking']
     marks = ' '.join(f"{x['mark']}{x['no']}" for x in rk_ if x.get('mark'))
     tree = [f"W {fr['roles']['W']}", f"└ P2 {fr['roles']['P2']}", f"   └ P3 {fr['roles']['P3']}"]
-    head = (f"### 【地方版PAPER】{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
-            f"（予測締切 {cutoff(r).strftime('%H:%M')}）— {e['edition']} `{e['rev']}`\n\n"
-            f"**印** {marks}\n\n```\n" + '\n'.join(tree) + "\n```\n")
+    head = (f"### 🏇 {r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走｜PAPER {e['edition']}\n"
+            f"予測締切 {cutoff(r).strftime('%H:%M')}／印 {marks}\n")
     foot = (f"\n---\n<sub>Claude v4.3 PAPER（研究実装・毎レース購入方針の推薦試算）。正式Signed FINALではありません。"
             f"実購入なし。凍結 {e['frozen_at'][11:19]}／券面SHA `{e['ticket_sha256'][:12]}`／SOURCE SHA `{e['source_sha256'][:12]}`"
             f"／原本 {e['delivery'].get('LINK_AVAILABLE') or ''}</sub>")
@@ -659,8 +666,8 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
     if not issue or now >= cutoff(r):
         return
     tag = '【地方版 正式 Signed FINAL 改訂 Revision 2（最新有効版）】' if revision_diff else '【地方版 正式 Signed FINAL】'
-    lines = [f"### {tag}{r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走"
-             f"（予測締切 {cutoff(r).strftime('%H:%M')}）", '']
+    lines = [f"### 🏇 {r['venue_name']}{r['race_no']}R {r['post_current'][11:16]}発走｜{tag.strip('【】')}",
+             f"予測締切 {cutoff(r).strftime('%H:%M')}", '']
     if revision_diff:
         d = revision_diff
         idn = d['identity']
@@ -675,19 +682,24 @@ def deliver_formal(r, key, sm, now, revision_diff=None):
                   '- 役割 ' + '；'.join(f"{k} +{v['in']} -{v['out']}" for k, v in d['role_diff'].items()) if d['role_diff'] else '- 役割変化なし',
                   f"- 券面 追加{d['tickets']['added_count']}・削除{d['tickets']['removed_count']}／投資 "
                   f"{d['investment'][0]:,}円→{d['investment'][1]:,}円", '']
+    from runtime.local_autopilot import ticket_tree
     lines += [
               '**印** ' + ' '.join(f"{sm['marks'][x]}{x}" for x in sm['ranking'][:6]),
-             '**役割** ' + ' / '.join(f"{c}: " + ','.join(x for x in sm['ranking'] if c in sm['roles'][x])
-                                      for c in ('W', 'P2')),
-             f"**買い目（MEC・推薦試算、実購入なし）** {sm['ticket_count']}点 {sm['total_investment']:,}円"
-             + (f"（地方版上限{sm['ticket_count']}点適用／署名FINALのMEC全体 {sm['signed_final_ticket_count']}点 "
-                f"{sm['signed_final_total_investment']:,}円）" if sm.get('local_ticket_cap_sha256') else ''), '']
+             '**役割** ' + '／'.join(f"{c} " + '・'.join(x for x in sm['ranking'] if c in sm['roles'][x])
+                                      for c in ('W', 'P2')), '',
+             f"**買い目**（推薦試算・1点100円・実購入なし）"
+             + (f"　地方版上限{sm['ticket_count']}点適用（MEC全体 {sm['signed_final_ticket_count']}点）"
+                if sm.get('local_ticket_cap_sha256') else ''), '']
     by = {}
     for t in sm.get('tickets') or []:
-        by.setdefault(t.get('bet_type'), []).append('-'.join(map(str, t.get('selection') or [])) + (
-            f"({t.get('stake')}円)" if int(t.get('stake') or 100) != 100 else ''))
-    for k, v in by.items():
-        lines.append(f"- {FORMAL_KIND.get(k, k)}：" + ' '.join(v[:60]) + (' …' if len(v) > 60 else ''))
+        by.setdefault(FORMAL_KIND.get(t.get('bet_type'), t.get('bet_type')), []).append(tuple(int(x) for x in t.get('selection') or []))
+    odd = [t for t in sm.get('tickets') or [] if int(t.get('stake') or 100) != 100]
+    pos = {int(x): i for i, x in enumerate(sm['ranking'])}           # 買い目表記規格 2.4: evaluation order
+    tree, _ = ticket_tree.block([(k, sorted(v, key=lambda c: [pos.get(h, 99) for h in c]), None) for k, v in by.items()])
+    lines += ['```', tree, '```']
+    if odd:
+        lines.append('（100円以外の点：' + '、'.join(f"{FORMAL_KIND.get(t['bet_type'], t['bet_type'])} "
+                                              + '・'.join(map(str, t['selection'])) + f" {t['stake']}円" for t in odd) + '）')
     lines += ['', f"<sub>SOURCE=Runtime署名の楽天出馬表／KRS {sm['krs_actual_run_count']}回（未較正・技術Proxy）／"
                   f"Static Owner v1.1（未検証の順序規則）／FINAL Receipt `{sm['final_receipt_sha256'][:16]}`"
                   f"（署名検証 local={sm['final_verified_local']} remote={sm['final_verified_remote']}）</sub>"]
