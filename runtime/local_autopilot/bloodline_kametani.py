@@ -151,12 +151,41 @@ def evaluate(runner, race):
     return out
 
 
+NANKAN = Path(__file__).resolve().parents[2] / 'research' / 'nankan' / 'sire_course_rules.json'
+
+
+def nankan(runner, race):
+    """南関東 sire x venue x distance (x going) claims from the Owner library (YouTube transcript)."""
+    if 'nk' not in _CACHE:
+        _CACHE['nk'] = json.loads(NANKAN.read_text()) if NANKAN.exists() else {'rules': [], 'lines': {}}
+    doc = _CACHE['nk']
+    sire, v = _n(runner.get('sire')), race.get('venue_id')
+    d, g = int(race.get('distance') or 0), race.get('going')
+    hits = []
+    for r in doc['rules']:
+        names = doc['lines'].get(r.get('sire_line'), []) if r.get('sire_line') else [r['sire']]
+        if sire not in {_n(x) for x in names} or v not in r['venues']:
+            continue
+        if 'd' in r and not (r['d'][0] <= d <= r['d'][1]):
+            continue
+        if 'going' in r and g not in r['going']:
+            continue
+        hits.append({'id': r['id'], 'side': r['side'], 'claim': r['claim']})
+    return hits
+
+
 def race_evidence(race, runners):
     out = {}
+    nk = {}
+    for x in runners:
+        h = nankan(x, race)
+        if h:
+            nk[str(x['horse_no'])] = h
     for x in runners:
         ev = evaluate(x, race)
         if ev:
             out[str(x['horse_no'])] = ev
     _load()
     return {'profile': PROFILE, 'rules_source_sha256': _CACHE.get('sha'), 'covered_runners': len(out),
-            'runners': len(runners), 'production_effect': 'NONE (author claims, unvalidated on NAR)', 'by_horse': out}
+            'runners': len(runners), 'production_effect': 'NONE (author claims, unvalidated on NAR)', 'by_horse': out,
+            'nankan_sire_course': nk, 'nankan_profile': 'KM-NANKAN-SIRE-COURSE-RULES-v1.0-20261118'}

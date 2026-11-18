@@ -20,7 +20,7 @@ VENUES = ('URW', 'FNB', 'OHI', 'KAW')          # 南関東4場 (門別も発売�
 CLOSE_BEFORE_MIN = 5
 BUILD_WINDOW_MIN = (7, 20)                      # build when the first leg is 7-20 minutes from post
 UNIT_YEN = 50                                   # 1組 50円 (minimum)
-TIERS = (('S', 8), ('M', 36), ('L', 144))      # point caps
+TIERS = (('S', 8), ('M', 36), ('L', 120))      # point caps; SPAT4 accepts at most 120 combinations per vote
 A_MAX, B_MAX = 3, 6
 
 
@@ -97,6 +97,9 @@ def build(q, venue_id, root_day, now):
                               'model_hit_prob': round(hit, 5),
                               'legs': [{'first': c['first'], 'second': c['second'], 'points': c['points'],
                                         'leg_cover': c['cover']} for c in combo]}
+    # Owner library「トリプル馬単攻略法」§22: skip when no leg can be narrowed to 1-3 points
+    m = rec['tiers']['M']['legs']
+    rec['skip_advice'] = None if min(l['points'] for l in m) <= 3 else 'NO_NARROW_LEG'
     rec['status'] = 'BUILT' if now < deadline(q, ks) else 'BUILT_AFTER_DEADLINE'
     rec['sha256'] = hashlib.sha256(json.dumps(rec['tiers'], sort_keys=True).encode()).hexdigest()
     return rec
@@ -115,8 +118,10 @@ def md(rec):
                           f"{','.join(str(x) for x in l['second'] if len(l['first']) > 1 or x not in l['first'])}（{l['points']}組）")
         L.append(f"| {name} | {cell(t['legs'][0])} | {cell(t['legs'][1])} | {cell(t['legs'][2])} | {t['points']} | "
                  f"{t['stake_yen']:,}円 | {t['model_hit_prob'] * 100:.2f}% |")
+    if rec.get('skip_advice'):
+        L += ['', '**見送り検討**：どのレースも1〜3点に絞れません（M案で最少の脚でも4点以上）。']
     L += ['', '<sub>入力：SPAT4 LOTO「セレクト」で各レース 1着→2着 のフォーメーション（同じ馬は1着・2着同時不可）。'
-          '払戻率70%・1組50円以上10円単位・発売後の取消/除外馬を含む組は全額返還。確率はPAPERの未較正値（期待値・資金配分には使わない）。'
+          '払戻率70%・1組50円（10円×5口）以上10円単位・1回最大120組・発売後の取消/除外馬を含む組は全額返還。確率はPAPERの未較正値（期待値・資金配分には使わない）。'
           f"2・3レース目は締切時点で最新の版（朝版の場合あり）。実購入なし。SHA `{rec['sha256'][:12]}`</sub>"]
     return '\n'.join(L)
 

@@ -57,3 +57,11 @@ def test_combine_and_harville_discount():
     plain = sm._harville_ll(q, [1, 2, 3], 1, 1)
     assert abs(plain - (math.log(0.3 / 0.5) + math.log(1.0))) < 1e-9
     assert sm._harville_ll(q, [1, 3, 2], 0.81, 0.65) > sm._harville_ll(q, [1, 3, 2], 1, 1)
+
+
+def test_nankan_sire_course_claims():
+    r = {'horse_no': 3, 'sire': 'ホッコータルマエ'}
+    assert [h['id'] for h in bk.nankan(r, {'venue_id': 'FNB', 'distance': 1200})] == ['N3']
+    assert [h['side'] for h in bk.nankan(r, {'venue_id': 'OHI', 'distance': 1200})] == ['caution']
+    assert bk.nankan({'sire': 'パイロ'}, {'venue_id': 'URW', 'distance': 1400, 'going': '不良'})[0]['id'] == 'N9'
+    assert bk.nankan({'sire': 'パイロ'}, {'venue_id': 'URW', 'distance': 1400, 'going': '良'}) == []
