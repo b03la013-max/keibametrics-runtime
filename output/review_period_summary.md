@@ -1,7 +1,7 @@
 # 地方版 週次 2026-W47（自動・推薦試算・実購入なし）
 
-- 反省済みRace 96／PAPER PFS 70.9%／正式推薦 PFS 47.6%
-- 第一失敗：{'NONE': 11, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 17, 'PREDICTION_ROLE_W': 31, 'PREDICTION_ROLE_P2': 8, 'EXACT_ORIENTATION': 3}
+- 反省済みRace 97／PAPER PFS 72.6%／正式推薦 PFS 48.4%
+- 第一失敗：{'NONE': 11, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 18, 'PREDICTION_ROLE_W': 31, 'PREDICTION_ROLE_P2': 8, 'EXACT_ORIENTATION': 3}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -9,14 +9,14 @@
 | KSM | 11 | 56.0 | 8.5 | {'PREDICTION_ROLE_W': 6, 'PREDICTION_ROLE_P2': 2, 'CAPITAL_EFFICIENCY': 2, 'NONE': 1} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 27 | 107.5 | 56.0 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 4, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 11, 'CAPITAL_EFFICIENCY': 3, 'EXACT_ORIENTATION': 1} |
-| SON | 10 | 5.2 | 104.3 | {'PREDICTION_ROLE_W': 5, 'CAPITAL_EFFICIENCY': 3, 'PREDICTION_ROLE_P2': 1, 'NONE': 1} |
+| SON | 11 | 24.9 | 104.2 | {'PREDICTION_ROLE_W': 5, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 1, 'NONE': 1} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 96 | 28.1% | 65.6% | 28.1% | 17.7% | 15.6% | 7.3% | 26.0% | 1.58 |
-| 正式推薦 | 65 | 30.8% | 52.3% | 52.3% | 73.8% | 100.0% | 52.3% | 23.1% | 1.26 |
+| PAPER | 97 | 27.8% | 66.0% | 27.8% | 17.5% | 15.5% | 7.2% | 26.8% | 1.59 |
+| 正式推薦 | 66 | 31.8% | 53.0% | 53.0% | 74.2% | 100.0% | 53.0% | 24.2% | 1.27 |
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -28,15 +28,15 @@
 | P1:HIT_BUT_LOSS | P1 | 26 | 98,600 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 17 | 60,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 96 | 351,200 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 97 | 351,200 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 2 | 12,000 | SINGLE_OR_FEW (過大評価しない) |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
 
 # 地方版 月次 2026-11（自動・推薦試算・実購入なし）
 
-- 反省済みRace 96／PAPER PFS 70.9%／正式推薦 PFS 47.6%
-- 第一失敗：{'NONE': 11, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 17, 'PREDICTION_ROLE_W': 31, 'PREDICTION_ROLE_P2': 8, 'EXACT_ORIENTATION': 3}
+- 反省済みRace 97／PAPER PFS 72.6%／正式推薦 PFS 48.4%
+- 第一失敗：{'NONE': 11, 'WINNER_DISCOVERED_LOW': 5, 'THIRD_MISS': 3, 'P2_MISS': 6, 'WINNER_NOT_DISCOVERED': 3, 'W_WIDTH_OR_ROLE': 9, 'CAPITAL_EFFICIENCY': 18, 'PREDICTION_ROLE_W': 31, 'PREDICTION_ROLE_P2': 8, 'EXACT_ORIENTATION': 3}
 
 | 場 | Race | PAPER PFS | 正式 PFS | 第一失敗 |
 |---|---|---|---|---|
@@ -44,14 +44,14 @@
 | KSM | 11 | 56.0 | 8.5 | {'PREDICTION_ROLE_W': 6, 'PREDICTION_ROLE_P2': 2, 'CAPITAL_EFFICIENCY': 2, 'NONE': 1} |
 | MIZ | 24 | 34.4 | 21.9 | {'P2_MISS': 3, 'WINNER_DISCOVERED_LOW': 1, 'W_WIDTH_OR_ROLE': 5, 'NONE': 1, 'THIRD_MISS': 1, 'WINNER_NOT_DISCOVERED': 1, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_W': 5, 'PREDICTION_ROLE_P2': 2, 'EXACT_ORIENTATION': 1} |
 | OHI | 27 | 107.5 | 56.0 | {'THIRD_MISS': 1, 'WINNER_DISCOVERED_LOW': 2, 'NONE': 4, 'W_WIDTH_OR_ROLE': 2, 'WINNER_NOT_DISCOVERED': 1, 'P2_MISS': 1, 'PREDICTION_ROLE_P2': 1, 'PREDICTION_ROLE_W': 11, 'CAPITAL_EFFICIENCY': 3, 'EXACT_ORIENTATION': 1} |
-| SON | 10 | 5.2 | 104.3 | {'PREDICTION_ROLE_W': 5, 'CAPITAL_EFFICIENCY': 3, 'PREDICTION_ROLE_P2': 1, 'NONE': 1} |
+| SON | 11 | 24.9 | 104.2 | {'PREDICTION_ROLE_W': 5, 'CAPITAL_EFFICIENCY': 4, 'PREDICTION_ROLE_P2': 1, 'NONE': 1} |
 
 ## 精度（回収とは別に測定）
 
 | 系統 | Race | ◎1着率 | 1着が事前3位以内 | W的中 | P2的中 | P3的中 | 1着が買い目頭 | 3連複組合せ含有 | 平均Top3捕捉 |
 |---|---|---|---|---|---|---|---|---|---|
-| PAPER | 96 | 28.1% | 65.6% | 28.1% | 17.7% | 15.6% | 7.3% | 26.0% | 1.58 |
-| 正式推薦 | 65 | 30.8% | 52.3% | 52.3% | 73.8% | 100.0% | 52.3% | 23.1% | 1.26 |
+| PAPER | 97 | 27.8% | 66.0% | 27.8% | 17.5% | 15.5% | 7.2% | 26.8% | 1.59 |
+| 正式推薦 | 66 | 31.8% | 53.0% | 53.0% | 74.2% | 100.0% | 53.0% | 24.2% | 1.27 |
 
 ## 改善優先順位（P0→P1→P2、件数・影響額順）
 
@@ -63,7 +63,7 @@
 | P1:HIT_BUT_LOSS | P1 | 26 | 98,600 | RECURRING |
 | P1:ROLE_P2_MISS | P1 | 17 | 60,660 | RECURRING |
 | P1:ROLE_P3_MISS | P1 | 3 | 880 | RECURRING |
-| P2:CALIBRATION_BACKLOG | P2 | 96 | 351,200 | RECURRING |
+| P2:CALIBRATION_BACKLOG | P2 | 97 | 351,200 | RECURRING |
 | P2:INDEX_OBSERVATION_COVERAGE | P2 | 2 | 12,000 | SINGLE_OR_FEW (過大評価しない) |
 
 <sub>PROPOSED_ONLY (adoption requires genuine forward OOS + Owner review; no automatic Production change)</sub>
