@@ -39,3 +39,13 @@ def test_formal_settle_ordered_and_refund():
          {'bet_type': 'TRIO', 'selection': [11, 5, 10]}, {'bet_type': 'TRIO', 'selection': [3, 5, 10]}]
     s = fe.settle(t, res)
     assert s['invest'] == 300 and s['payout'] == 2850 and len(s['hits']) == 2
+
+
+def test_formal_eval_concentration_1118_shape():
+    # 2026-11-18 全場反省 §3.4: one big race dominates; hit-but-loss counted separately from profit races
+    pairs = [(6000, 57270), (6000, 6200), (6000, 2590), (6000, 0), (6000, 0)]
+    c = fe.concentration(pairs)
+    assert c['hit_races'] == 3 and c['profit_races'] == 2 and c['hit_but_loss_races'] == 1
+    assert c['top1_payout_share'] == round(100 * 57270 / 66060, 1)
+    assert c['pfs_ex_top1'] == round(100 * 8790 / 24000, 1)
+    assert fe.concentration([(6000, 0)])['top1_payout_share'] is None

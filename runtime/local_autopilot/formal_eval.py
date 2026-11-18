@@ -112,6 +112,22 @@ def mec_composition(sm):
             'recommended_tickets': len(sm.get('tickets') or [])}
 
 
+def concentration(pairs):
+    """Per-race (invest, payout) -> hit / profit / hit-but-loss races, largest single-race payout share and the
+    PFS without that race (Drive 2026-11-18 全場反省 §3.4/§11: 的中赤字率・最大払戻依存). Descriptive only."""
+    py = sum(b for _, b in pairs)
+    hit = [(a, b) for a, b in pairs if b > 0]
+    out = {'hit_races': len(hit), 'profit_races': sum(1 for a, b in hit if b > a),
+           'hit_but_loss_races': sum(1 for a, b in hit if b <= a), 'top1_payout_share': None, 'pfs_ex_top1': None}
+    if py:
+        i = max(range(len(pairs)), key=lambda j: pairs[j][1])
+        rest = pairs[:i] + pairs[i + 1:]
+        ri, rp = sum(a for a, _ in rest), sum(b for _, b in rest)
+        out['top1_payout_share'] = round(100 * pairs[i][1] / py, 1)
+        out['pfs_ex_top1'] = round(100 * rp / ri, 1) if ri else None
+    return out
+
+
 def evaluate_day(day_dir):
     from runtime.local_autopilot.checkpoint10 import effective_dir
     base = Path(day_dir) / 'formal'
@@ -166,6 +182,8 @@ def evaluate_day(day_dir):
         for k in ('R54_60', 'MEC_FULL'):
             v = sm_[k]
             v['pfs'] = round(100 * v['payout'] / v['invest'], 1) if v['invest'] else None
+        sm_['R54_60'].update(concentration([(x['invest_capped'], x['payout_capped']) for x in live]))
+        sm_['MEC_FULL'].update(concentration([(x['invest_full'], x['payout_full']) for x in live]))
         agg['small_point_comparison'] = sm_
         m = [r['mec'] for r in rows]
         agg['mec_composition_mean'] = {k: round(sum(x[k] for x in m) / len(m), 1)
@@ -194,6 +212,11 @@ def md(o):
             v = sc[k]
             L.append(f"| {k} | {v['invest']:,} | {v['payout']:,} | {v['pfs']}% | {v.get('hit_races', '-')} | "
                      f"{v.get('top1_payout_share', '-')} |")
+        for k in ('R54_60', 'MEC_FULL'):
+            v = sc[k]
+            if 'hit_but_loss_races' in v:
+                L.append(f"- {k}：的中{v['hit_races']}R（黒字{v['profit_races']}R・的中赤字{v['hit_but_loss_races']}R）"
+                         f"／最大1R依存 {v['top1_payout_share']}%／最大1R除外の回収率 {v['pfs_ex_top1']}%（記述統計）")
         mc = a['mec_composition_mean']
         L += ['', f"- MEC構成の平均：W {mc['W']}頭・P2 {mc['P2']}頭・P3ラベル {mc['P3_label']}頭（出走 {mc['active']}頭）"
                   f"・三連単の3着候補 {mc['material_third_in_trifecta']}頭・MEC {mc['mec_tickets']}点→推薦 {mc['recommended_tickets']}点"]
